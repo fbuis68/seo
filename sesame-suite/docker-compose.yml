@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sesame
+      POSTGRES_PASSWORD: sesame
+      POSTGRES_DB: sesame_suite
+    ports:
+      - "5432:5432"
+    volumes:
+      - sesame_pg_data:/var/lib/postgresql/data
+
+volumes:
+  sesame_pg_data:

@@ -1,0 +1,344 @@
+// Sesame Technology — Suite Hôtelière
+// Schéma PostgreSQL — modèle inspiré des 7 tables "sesamelite" décrites dans
+// la documentation technique, étendu aux entités nécessaires au parcours
+// client complet (chambres, réservations, catalogue boutique, fidélité,
+// livret digital, ménage).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Multi-tenant : un Hôtel = une Entity (isolation par entityId partout,
+// principe 4 du framework fmk documenté).
+// ─────────────────────────────────────────────────────────────────────────
+model Entity {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  createdAt DateTime @default(now())
+
+  config              EntityModuleConfig?
+  rooms               Room[]
+  bookings            Booking[]
+  products            Product[]
+  orders              Order[]
+  taxeRecords         TaxeSejourRecord[]
+  clientPrefs         ClientPrefs[]
+  loyaltyAccounts     LoyaltyAccount[]
+  livretSections      LivretSection[]
+  housekeepingTasks   HousekeepingTask[]
+  housekeepingStaff   HousekeepingStaff[]
+}
+
+// Équivalent de entity_module_config (35 colonnes dans la doc) — regroupé en
+// colonnes JSON typées côté TypeScript pour rester proche de la structure
+// CFG consommée telle quelle par le front.
+model EntityModuleConfig {
+  id       String @id @default(cuid())
+  entityId String @unique
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  hotelName   String
+  hotelSlogan String?
+  stars       Int     @default(3)
+
+  colors     Json // {primary, primaryLight, accent, headerBg, headerText, bg, cardBg, border, text, btnNav}
+  radius     Int     @default(14)
+  radiusBtn  Int     @default(8)
+  shadow     Boolean @default(true)
+  fontTitle  String  @default("'Fraunces',serif")
+  fontBody   String  @default("'Sora',sans-serif")
+  logoMain   String?
+  msgEco     String?
+  btnLabel   String  @default("Continuer")
+  ptsLabel   String  @default("Sesame Points")
+  lang       String  @default("fr")
+  currency   String  @default("EUR")
+
+  tarifs    Json // number[5] — tarif taxe de séjour par catégorie d'étoiles
+  exoEnf    Boolean @default(true)
+  reducAdos Boolean @default(true)
+  exoHand   Boolean @default(false)
+
+  eauMenage Int   @default(15)
+  eauServ   Int   @default(40)
+  co2Factor Float @default(0.0003)
+  freqOpts  Json // number[] fréquences ménage proposées
+
+  gains         Json // {points:{...}, reduction:{...}, produit:{...}, financier:{...}}
+  checkinModules Json // {room:{active,mandatory}, taxe:{...}, kyc:{...}, eco:{...}, boutique:{...}, roomservice:{...}, rewards:{...}}
+  rewardCatalog Json?
+  loyaltyTiers  Json? // {gold, premium, perks:{Standard:[],Gold:[],Premium:[]}}
+
+  hotelPlan    String? // image du plan (base64 ou URL)
+  roomTags     Json?
+  accessPoints Json?
+
+  updatedAt DateTime @updatedAt
+}
+
+// Équivalent "facility" (chambre)
+model Room {
+  id       String @id @default(cuid())
+  entityId String
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  code      String
+  name      String
+  floor     Int     @default(0)
+  surface   Float?
+  category  String?
+  tags      Json // string[]
+  photos    Json // string[]
+  available Boolean @default(true)
+  x         Float? // position sur le plan (coordonnées 540x380)
+  y         Float?
+
+  createdAt DateTime @default(now())
+
+  bookings           Booking[]
+  housekeepingStatus RoomHousekeepingStatus?
+
+  @@unique([entityId, code])
+}
+
+model Booking {
+  id       String @id @default(cuid())
+  entityId String
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  code             String
+  personEmail      String
+  personFirstname  String
+  personLastname   String
+  personPhone      String?
+  startDate        DateTime
+  endDate          DateTime
+  roomId           String?
+  room             Room?    @relation(fields: [roomId], references: [id])
+  facilityCode     String? // dénormalisé — code chambre au moment de la réservation
+  facilityName     String?
+  status           String   @default("confirmed") // confirmed | checkin_done | completed | cancelled
+  otaId            String?
+  checkinDone      Boolean  @default(false)
+  selectedRoomCode String? // chambre choisie à l'étape 2 (peut différer de facilityCode)
+
+  createdAt DateTime @default(now())
+
+  occupants   Occupant[]
+  taxeRecords TaxeSejourRecord[]
+  kycRecords  KycRecord[]
+  orders      Order[]
+
+  @@unique([entityId, code])
+  @@index([personEmail])
+}
+
+model Occupant {
+  id          String  @id @default(cuid())
+  bookingId   String
+  booking     Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  ageCategory String // adulte | ado | enfant | bebe
+}
+
+// Équivalent taxe_sejour_record
+model TaxeSejourRecord {
+  id       String @id @default(cuid())
+  entityId String
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  bookingId    String?
+  booking      Booking? @relation(fields: [bookingId], references: [id])
+  bookingCode  String
+  facilityCode String?
+
+  checkinDate  DateTime
+  checkoutDate DateTime?
+  nights       Int
+
+  occupantsTotal   Int
+  occupantsAdultes Int
+  occupantsAdos    Int
+  occupantsEnfants Int
+  occupantsBebes   Int
+
+  tarifPerNightPerPerson Float
+  montantBrut            Float
+  montantDeduction       Float
+  montantNet             Float
+  devise                 String @default("EUR")
+
+  createdAt DateTime @default(now())
+}
+
+// Vérification d'identité (étape 4, optionnelle) — simulation OCR/selfie
+// côté client, seul le résultat final est persisté.
+model KycRecord {
+  id        String  @id @default(cuid())
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  docType        String?
+  fields         Json?
+  idVerified     Boolean @default(false)
+  selfieVerified Boolean @default(false)
+  matchScore     Int     @default(0)
+  skipped        Boolean @default(false)
+
+  createdAt DateTime @default(now())
+}
+
+// Catalogue boutique / room service — unifié (CFG.roomServiceCatalog)
+model Product {
+  id       String @id @default(cuid())
+  entityId String
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  category    String
+  label       String
+  description String?
+  price       Float
+  icon        String?
+  photo       String?
+  photos      Json?
+  videoUrl    String?
+  active      Boolean @default(true)
+  sortOrder   Int     @default(0)
+
+  createdAt DateTime @default(now())
+}
+
+// Commande — fusionne SCH_ORDERS (boutique) + SESAME_RS_ORDERS (room service)
+// de l'ancien prototype en une seule table, conformément à la cible
+// production décrite dans le dossier de lancement (endpoint /wa/roomservice/*).
+model Order {
+  id       String @id @default(cuid())
+  entityId String
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  bookingId   String?
+  booking     Booking? @relation(fields: [bookingId], references: [id])
+  bookingCode String?
+
+  source     String // checkin | roomservice | boutique_standalone
+  clientName String?
+  roomCode   String?
+  roomName   String?
+
+  items Json // [{id,label,price,qty}]
+  total Float
+  note  String?
+
+  status String @default("new") // new | preparing | delivering | delivered | cancelled
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Préférences client post check-in (ménage, tags de chambre)
+model ClientPrefs {
+  id       String @id @default(cuid())
+  entityId String
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  email      String
+  menageFreq Int?
+  servFreq   Int?
+  menageNote String?
+  tags       Json?
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([entityId, email])
+}
+
+model LoyaltyAccount {
+  id       String @id @default(cuid())
+  entityId String
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  email       String
+  totalPoints Int    @default(0)
+
+  transactions LoyaltyTransaction[]
+
+  @@unique([entityId, email])
+}
+
+model LoyaltyTransaction {
+  id        String         @id @default(cuid())
+  accountId String
+  account   LoyaltyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  earned      Int     @default(0)
+  spent       Int     @default(0)
+  bookingCode String?
+
+  createdAt DateTime @default(now())
+}
+
+// Livret digital — rubriques éditées par l'admin (phase 2), consultées par
+// le client dès maintenant.
+model LivretSection {
+  id       String @id @default(cuid())
+  entityId String
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  title     String
+  icon      String?
+  content   String // HTML riche
+  sortOrder Int     @default(0)
+  published Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model RoomHousekeepingStatus {
+  id     String @id @default(cuid())
+  roomId String @unique
+  room   Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  status       String  @default("libre") // libre | occupee | menage | action | hors_service
+  currentGuest String?
+  bookingCode  String?
+  ecoPrefs     Json?
+
+  updatedAt DateTime @updatedAt
+}
+
+model HousekeepingStaff {
+  id       String @id @default(cuid())
+  entityId String
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  name  String
+  color String?
+  team  String?
+
+  createdAt DateTime @default(now())
+}
+
+// Tâches planifiées — génération automatique depuis les préférences éco
+// client (HousekeepingTaskDao.createEcoAutoTasks() décrit dans la doc).
+model HousekeepingTask {
+  id       String @id @default(cuid())
+  entityId String
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  roomCode    String
+  taskDate    DateTime
+  type        String   @default("menage")
+  bookingCode String?
+  ecoAuto     Boolean  @default(false)
+  status      String   @default("planned") // planned | done | cancelled
+  notes       String?
+
+  createdAt DateTime @default(now())
+}
