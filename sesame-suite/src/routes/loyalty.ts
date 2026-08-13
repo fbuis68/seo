@@ -2,16 +2,31 @@ import { Router } from "express";
 import { prisma } from "../db";
 import { resolveEntity } from "../lib/entity";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
+import { requireAdmin } from "../middleware/requireAdmin";
 
 export const loyaltyRouter = Router();
 
-/** GET /wa/loyalty/list?entityCode=&email= — solde + historique fidélité. */
+/**
+ * GET /wa/loyalty/list?entityCode=&email=
+ * Avec `email` : solde + historique d'un client (espace client).
+ * Sans `email` : liste tous les comptes de l'entité (back-office, protégé).
+ */
 loyaltyRouter.get(
   "/loyalty/list",
+  (req, res, next) => {
+    const email = ((req.query.email as string) || "").trim().toLowerCase();
+    if (!email) requireAdmin(req, res, next);
+    else next();
+  },
   asyncHandler(async (req, res) => {
     const entity = await resolveEntity(req);
     const email = ((req.query.email as string) || "").trim().toLowerCase();
-    if (!email) throw new HttpError(400, "email requis");
+
+    if (!email) {
+      const accounts = await prisma.loyaltyAccount.findMany({ where: { entityId: entity.id }, orderBy: { totalPoints: "desc" } });
+      res.json(accounts.map((a) => ({ email: a.email, total: a.totalPoints })));
+      return;
+    }
 
     const account = await prisma.loyaltyAccount.findUnique({
       where: { entityId_email: { entityId: entity.id, email } },
@@ -28,6 +43,22 @@ loyaltyRouter.get(
         booking: t.bookingCode || "",
       })),
     });
+  })
+);
+
+/** POST /wa/loyalty/reset — body: { email } — remise à zéro (back-office). */
+loyaltyRouter.post(
+  "/loyalty/reset",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const email = ((req.body.email as string) || "").trim().toLowerCase();
+    if (!email) throw new HttpError(400, "email requis");
+    const account = await prisma.loyaltyAccount.update({
+      where: { entityId_email: { entityId: entity.id, email } },
+      data: { totalPoints: 0 },
+    });
+    res.json({ email, total: account.totalPoints });
   })
 );
 

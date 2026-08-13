@@ -8,9 +8,9 @@ boutique/room-service, espace client, programme de fidélité, livret digital)
 - `documentation_sesame_suite_1.docx` — documentation technique complète
 - `dossier_lancement_dev.docx` — dossier de lancement développement
 - `sesame_eco_checkin_boutique.html` — prototype HTML de référence (localStorage)
-- `sesame_admin.html` — prototype back-office (référence pour une itération future)
+- `sesame_admin.html` — prototype back-office
 
-## Ce qui a été construit (itération 1)
+## Ce qui a été construit
 
 **Fondations backend complètes** + **parcours client intégral**, pixel-identiques
 à la charte graphique et à l'ergonomie du prototype `sesame_eco_checkin_boutique.html` :
@@ -33,12 +33,34 @@ boutique/room-service, espace client, programme de fidélité, livret digital)
   (dont la démo `demo@sesame.fr` / `DEMO-2026-0001`), 14 produits / 5
   catégories, 4 rubriques de livret, soldes de fidélité.
 
-**Non couvert dans cette itération** (périmètre convenu — voir conversation) :
-le back-office admin (`sesame_admin.html`, 19 panneaux), l'app ménage
-(`sesame_menage.html`), le CRM/marketing, l'éditeur du livret. La base de
-données est déjà prête à les recevoir (tables `Product`, `LivretSection`,
-`HousekeepingTask/Staff`, `Order.status`, etc.) ; il reste à construire les
-écrans d'administration au-dessus.
+**Back-office admin complet**, même principe (HTML/CSS/JS d'origine conservés,
+couche de données rebranchée sur l'API) :
+
+- `public/admin.html`, servi sur `/admin`, avec authentification réelle
+  (email + mot de passe, JWT, `POST /wa/login/login`, middleware
+  `requireAdmin` sur tous les endpoints d'écriture).
+- Panneaux rebranchés : Accueil (KPI), Logo & Couleurs, Typographie & Textes,
+  Hôtel & Catégorie, Barèmes taxe (+ export/purge des déclarations), Gains
+  (paliers de fidélité), Paramètres éco, Base clients (CRM agrégé
+  réservations/fidélité/préférences), Actions marketing (campagnes
+  journalisées, sans envoi réel — comme le prototype), Catalogue produits
+  (CRUD), Commandes (statuts), Livret digital (CRUD des rubriques), Planning
+  ménage (tâches + agents + affectation chambres), Plan de l'hôtel et
+  Gestion des chambres (CRUD, canvas de plan).
+- Compte admin de démonstration : voir « Comptes de démonstration » ci-dessous.
+
+**Non couvert** (hors périmètre — panneaux du prototype `sesame_admin.html`
+gérant le SaaS multi-tenant de Sesame elle-même, pas l'hôtel Churchill : liste
+d'autres hôtels clients, facturation des souscriptions, CRM commercial
+interne de Sesame) : "Hôtels [Multi]", "Souscriptions", "CRM Sesame". Leurs
+panneaux et fonctions JS restent présents dans `admin.html` mais ne sont plus
+accessibles depuis le menu (retirés de la barre latérale) et ne sont pas
+rebranchés sur l'API.
+
+Également non couvert : l'app ménage (`sesame_menage.html`, application
+séparée pour les agents de ménage sur le terrain). La base de données est
+déjà prête à la recevoir (`RoomHousekeepingStatus`, `HousekeepingTask`,
+`HousekeepingStaff`).
 
 La simulation KYC (OCR / selfie / correspondance biométrique) reste
 volontairement côté client uniquement, comme dans le prototype d'origine —
@@ -121,6 +143,17 @@ L'app client est servie sur `http://localhost:3000/`.
 | camille.bernard@gmail.com | HCH-2026-1042 | Suite A12, 2 séjours dans l'historique |
 | thomas.moreau@email.fr | HCH-2026-1078 | B13, 2 séjours dans l'historique |
 
+### Compte de démonstration (back-office admin)
+
+Accès sur `http://localhost:3000/admin` :
+
+| Email | Mot de passe |
+|---|---|
+| admin@hotel-churchill.fr | churchill2026 |
+
+Personnalisable via les variables d'environnement `SEED_ADMIN_EMAIL` /
+`SEED_ADMIN_PASSWORD` avant de lancer le seed.
+
 ## Structure du projet
 
 ```
@@ -146,20 +179,22 @@ sesame-suite/
       clientPrefs.ts            # GET/POST /wa/clientPrefs/*
       loyalty.ts                 # GET /wa/loyalty/list, POST /wa/loyalty/credit
       livret.ts                   # GET /wa/livret/list
-      housekeepingTask.ts          # POST /wa/housekeepingTask/createEco
-      auth.ts                       # POST /api/auth/guest-login
+      housekeepingTask.ts          # GET/POST /wa/housekeepingTask/* (CRUD + createEco)
+      housekeepingStaff.ts          # GET/POST /wa/housekeepingStaff/*
+      crm.ts                         # GET /wa/crm/clients (agrégation)
+      campaign.ts                     # GET/POST /wa/campaign/* (marketing, journalisation)
+      login.ts                         # POST /wa/login/login (admin)
+      auth.ts                           # POST /api/auth/guest-login (client)
   public/
-    checkin.html          # prototype d'origine, rebranché sur l'API
+    checkin.html          # prototype d'origine (client), rebranché sur l'API
+    admin.html             # prototype d'origine (back-office), rebranché sur l'API
 ```
 
 ## Prochaine itération suggérée
 
-1. Back-office admin (`sesame_admin.html`) : mêmes principes — HTML/CSS
-   conservés, panneaux rebranchés un par un sur `/wa/*` (config, chambres,
-   catalogue, commandes, livret, planning ménage, CRM, marketing).
-2. Authentification admin (actuellement absente — le check-in client n'en a
-   jamais eu besoin, mais l'admin en aura besoin).
-3. App agent ménage (`sesame_menage.html`) branchée sur
+1. App agent ménage (`sesame_menage.html`) branchée sur
    `RoomHousekeepingStatus` / `HousekeepingTask` / `HousekeepingStaff`.
-4. Export CSV taxe de séjour (`TaxeSejourRecord.findByPeriod` côté doc)
+2. Export CSV taxe de séjour (`TaxeSejourRecord.findByPeriod` côté doc)
    et génération QR réelle (actuellement simulée, comme dans le prototype).
+3. Multi-tenant réel (autres hôtels que Churchill) si besoin un jour de
+   réactiver les panneaux "Hôtels [Multi]" / "Souscriptions" / "CRM Sesame".

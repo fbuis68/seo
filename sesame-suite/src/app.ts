@@ -10,14 +10,20 @@ import { clientPrefsRouter } from "./routes/clientPrefs";
 import { loyaltyRouter } from "./routes/loyalty";
 import { livretRouter } from "./routes/livret";
 import { housekeepingTaskRouter } from "./routes/housekeepingTask";
+import { housekeepingStaffRouter } from "./routes/housekeepingStaff";
+import { crmRouter } from "./routes/crm";
+import { campaignRouter } from "./routes/campaign";
 import { authRouter } from "./routes/auth";
+import { loginRouter } from "./routes/login";
 import { errorHandler } from "./middleware/errorHandler";
 
 export function createApp() {
   const app = express();
 
   app.use(cors());
-  app.use(express.json());
+  // Limite relevée : logos, photos de chambres et plan d'hôtel transitent en
+  // base64 dans le JSON (comme dans le prototype d'origine).
+  app.use(express.json({ limit: "15mb" }));
 
   // Surface API — endpoints nommés /wa/<entité>/<action> pour rester
   // fidèle à la convention chiefOrchester décrite dans la documentation
@@ -32,16 +38,21 @@ export function createApp() {
   app.use("/wa", loyaltyRouter);
   app.use("/wa", livretRouter);
   app.use("/wa", housekeepingTaskRouter);
+  app.use("/wa", housekeepingStaffRouter);
+  app.use("/wa", crmRouter);
+  app.use("/wa", campaignRouter);
+  app.use("/wa", loginRouter);
 
   // Authentification espace client (hors convention /wa — pas de DAO CRUD dédié)
   app.use("/api", authRouter);
 
   app.get("/health", (_req, res) => res.json({ ok: true }));
 
-  // App client statique (sesame_eco_checkin_boutique.html rebranché sur l'API)
+  // Apps statiques (HTML/CSS/JS d'origine, rebranchées sur l'API)
   const publicDir = path.join(__dirname, "..", "public");
   app.use(express.static(publicDir));
   app.get("/", (_req, res) => res.sendFile(path.join(publicDir, "checkin.html")));
+  app.get("/admin", (_req, res) => res.sendFile(path.join(publicDir, "admin.html")));
 
   app.use(errorHandler);
 

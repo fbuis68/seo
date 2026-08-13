@@ -34,6 +34,25 @@ model Entity {
   livretSections      LivretSection[]
   housekeepingTasks   HousekeepingTask[]
   housekeepingStaff   HousekeepingStaff[]
+  adminUsers          AdminUser[]
+  campaigns           Campaign[]
+}
+
+// Compte back-office (panneau admin) — un seul rôle pour cette itération,
+// pas encore de profils Admin/Operator/Reception/GuestAgent distincts
+// (§6.7 H8 de la documentation technique).
+model AdminUser {
+  id           String @id @default(cuid())
+  entityId     String
+  entity       Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  email        String
+  passwordHash String
+  name         String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([entityId, email])
 }
 
 // Équivalent de entity_module_config (35 colonnes dans la doc) — regroupé en
@@ -46,6 +65,8 @@ model EntityModuleConfig {
 
   hotelName   String
   hotelSlogan String?
+  hotelAddr   String?
+  hotelEmail  String?
   stars       Int     @default(3)
 
   colors     Json // {primary, primaryLight, accent, headerBg, headerText, bg, cardBg, border, text, btnNav}
@@ -54,10 +75,14 @@ model EntityModuleConfig {
   shadow     Boolean @default(true)
   fontTitle  String  @default("'Fraunces',serif")
   fontBody   String  @default("'Sora',sans-serif")
+  darkH      Boolean @default(true)
   logoMain   String?
+  logoIcon   String?
   msgEco     String?
+  msgWelcome String?
   btnLabel   String  @default("Continuer")
   ptsLabel   String  @default("Sesame Points")
+  progName   String? @default("Mon programme éco")
   lang       String  @default("fr")
   currency   String  @default("EUR")
 
@@ -79,6 +104,7 @@ model EntityModuleConfig {
   hotelPlan    String? // image du plan (base64 ou URL)
   roomTags     Json?
   accessPoints Json?
+  kpi          Json? // {minPerClean, minPerTowel, hourlyRate, annualStays, checkinMin, checkinAdoption}
 
   updatedAt DateTime @updatedAt
 }
@@ -89,16 +115,23 @@ model Room {
   entityId String
   entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  code      String
-  name      String
-  floor     Int     @default(0)
-  surface   Float?
-  category  String?
-  tags      Json // string[]
-  photos    Json // string[]
-  available Boolean @default(true)
-  x         Float? // position sur le plan (coordonnées 540x380)
-  y         Float?
+  code        String
+  name        String
+  floor       Int     @default(0)
+  surface     Float?
+  category    String?
+  type        String?
+  capacity    Int?
+  rate        Float?
+  description String?
+  pmr         Boolean @default(false)
+  nosmoking   Boolean @default(true)
+  connected   Boolean @default(false)
+  tags        Json // string[]
+  photos      Json // string[]
+  available   Boolean @default(true)
+  x           Float? // position sur le plan (coordonnées 540x380)
+  y           Float?
 
   createdAt DateTime @default(now())
 
@@ -321,24 +354,51 @@ model HousekeepingStaff {
   name  String
   color String?
   team  String?
+  // Codes des chambres assignées — cf. principe "joins/extras XML" de la doc,
+  // ici simplifié en tableau JSON plutôt qu'une table de liaison dédiée.
+  assignedRoomCodes Json @default("[]")
 
   createdAt DateTime @default(now())
 }
 
 // Tâches planifiées — génération automatique depuis les préférences éco
-// client (HousekeepingTaskDao.createEcoAutoTasks() décrit dans la doc).
+// client (HousekeepingTaskDao.createEcoAutoTasks() décrit dans la doc) ou
+// création manuelle depuis le planning admin.
 model HousekeepingTask {
   id       String @id @default(cuid())
   entityId String
   entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  roomCode    String
-  taskDate    DateTime
-  type        String   @default("menage")
-  bookingCode String?
-  ecoAuto     Boolean  @default(false)
-  status      String   @default("planned") // planned | done | cancelled
-  notes       String?
+  roomCode        String
+  taskDate        DateTime
+  type            String  @default("menage") // menage | linge | entretien | controle | autre
+  subtype         String?
+  bookingCode     String?
+  ecoAuto         Boolean @default(false)
+  status          String  @default("planned") // planned | done | cancelled
+  priority        String  @default("normal") // normal | urgent
+  durationMinutes Int?
+  assignedStaffId String?
+  notes           String?
+
+  createdAt DateTime @default(now())
+}
+
+// Campagnes marketing (email/SMS) — segmentation calculée à l'envoi depuis
+// la base clients (réservations + fidélité), pas de table de destinataires
+// dédiée pour cette itération.
+model Campaign {
+  id       String @id @default(cuid())
+  entityId String
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  channel      String // email | sms
+  templateKey  String?
+  subject      String?
+  content      String?
+  audienceDesc String? // description lisible du segment ciblé
+  audienceSize Int     @default(0)
+  status       String  @default("sent") // draft | sent
 
   createdAt DateTime @default(now())
 }

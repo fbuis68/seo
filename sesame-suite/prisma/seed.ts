@@ -8,10 +8,13 @@
  * Thomas comme annoncé dans la doc.
  */
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
 const ENTITY_CODE = process.env.DEFAULT_ENTITY_CODE || "E00000001";
+const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL || "admin@hotel-churchill.fr";
+const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || "churchill2026";
 
 async function main() {
   console.log(`Seeding entity ${ENTITY_CODE} (Hôtel Churchill)…`);
@@ -292,6 +295,30 @@ async function main() {
     if (hasTx === 0 && l.points > 0) {
       await prisma.loyaltyTransaction.create({
         data: { accountId: account.id, earned: l.points, spent: 0, bookingCode: null },
+      });
+    }
+  }
+
+  // ── Compte admin back-office ──
+  const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
+  await prisma.adminUser.upsert({
+    where: { entityId_email: { entityId: entity.id, email: ADMIN_EMAIL } },
+    update: {},
+    create: { entityId: entity.id, email: ADMIN_EMAIL, passwordHash, name: "Direction Hôtel Churchill" },
+  });
+  console.log(`Admin seedé : ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
+
+  // ── Agents de ménage de démonstration (Planning) ──
+  const STAFF: Array<{ name: string; color: string; team: string; rooms: string[] }> = [
+    { name: "Fatou N.", color: "#2ECC71", team: "Matin", rooms: ["A11", "A12", "A23"] },
+    { name: "Karim B.", color: "#3A9BD5", team: "Matin", rooms: ["B13", "B14", "B43"] },
+    { name: "Elena R.", color: "#E67E22", team: "Après-midi", rooms: ["C16", "C17", "A42", "A43"] },
+  ];
+  const existingStaff = await prisma.housekeepingStaff.count({ where: { entityId: entity.id } });
+  if (existingStaff === 0) {
+    for (const s of STAFF) {
+      await prisma.housekeepingStaff.create({
+        data: { entityId: entity.id, name: s.name, color: s.color, team: s.team, assignedRoomCodes: s.rooms },
       });
     }
   }

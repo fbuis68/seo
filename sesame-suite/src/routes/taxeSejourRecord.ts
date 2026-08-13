@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../db";
 import { resolveEntity } from "../lib/entity";
 import { asyncHandler } from "../lib/asyncHandler";
+import { requireAdmin } from "../middleware/requireAdmin";
 
 export const taxeSejourRecordRouter = Router();
 
@@ -59,5 +60,56 @@ taxeSejourRecordRouter.post(
     });
 
     res.status(201).json({ id: record.id });
+  })
+);
+
+/**
+ * GET /wa/taxeSejourRecord/list — export CSV mairie (back-office, panneau
+ * "Barèmes taxe"). TaxeSejourRecordDao.findByPeriod() décrit dans la doc.
+ */
+taxeSejourRecordRouter.get(
+  "/taxeSejourRecord/list",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const cfg = await prisma.entityModuleConfig.findUnique({ where: { entityId: entity.id } });
+    const records = await prisma.taxeSejourRecord.findMany({
+      where: { entityId: entity.id },
+      orderBy: { checkinDate: "asc" },
+    });
+    res.json(
+      records.map((r) => ({
+        hotelName: cfg?.hotelName || "",
+        entityId: entity.code,
+        stars: cfg?.stars || 0,
+        facilityCode: r.facilityCode || "",
+        bookingCode: r.bookingCode,
+        checkinDate: r.checkinDate.toISOString().slice(0, 10),
+        checkoutDate: r.checkoutDate ? r.checkoutDate.toISOString().slice(0, 10) : "",
+        nights: r.nights,
+        occupantsTotal: r.occupantsTotal,
+        occupantsAdultes: r.occupantsAdultes,
+        occupantsAdos: r.occupantsAdos,
+        occupantsEnfants: r.occupantsEnfants,
+        occupantsBebes: r.occupantsBebes,
+        tarifPerNightPerPerson: r.tarifPerNightPerPerson,
+        montantBrut: r.montantBrut,
+        montantDeduction: r.montantDeduction,
+        montantNet: r.montantNet,
+        devise: r.devise,
+        createdAt: r.createdAt.toISOString(),
+      }))
+    );
+  })
+);
+
+/** POST /wa/taxeSejourRecord/clear — vide l'historique (back-office). */
+taxeSejourRecordRouter.post(
+  "/taxeSejourRecord/clear",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    await prisma.taxeSejourRecord.deleteMany({ where: { entityId: entity.id } });
+    res.json({ ok: true });
   })
 );
