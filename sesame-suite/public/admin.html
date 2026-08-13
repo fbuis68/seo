@@ -3555,7 +3555,7 @@ function rmCloseModal(){
 // Rafraîchit CFG.rooms depuis l'API (GET /wa/facility/list)
 async function refreshRooms(){
   try{
-    var r = await fetch(API_BASE+'/wa/facility/list');
+    var r = await adminFetch('/wa/facility/list');
     if(r.ok) CFG.rooms = await r.json();
   }catch(e){ console.error('refreshRooms error', e); }
 }
@@ -4980,6 +4980,11 @@ async function bootAdminApp(){
     console.error('Impossible de charger la configuration depuis l\'API', e);
     toast('Erreur de connexion au serveur');
   }
+  // Chambres chargées ici (pas seulement après une action CRUD) — sinon
+  // CFG.rooms garde les données du dernier établissement consulté et
+  // "fuite" vers l'établissement nouvellement activé (Dashboard, Plan,
+  // Gestion des chambres, Planning en dépendent tous).
+  await refreshRooms();
   populateAll();
   renderDash();
   updateHotelInitials();
@@ -5045,7 +5050,7 @@ async function loadPlanTasks(){
 // GET /wa/booking/list — remplace MOCK_BOOKINGS_FULL (mock Sesame)
 async function fetchPlanBookings(){
   try{
-    var r = await fetch(API_BASE+'/wa/booking/list');
+    var r = await adminFetch('/wa/booking/list');
     if(r.ok){
       var data = await r.json();
       PLAN.bookings = data.map(function(b){
@@ -6050,8 +6055,10 @@ function rsCloseModal(){
 async function rsSaveProduct(){
   var label = document.getElementById('rs-label').value.trim();
   if(!label){ toast('Le nom du produit est obligatoire'); return; }
-  var product = {
-    cat:   document.getElementById('rs-cat').value.trim()||'Autre',
+  // Note : l'API attend "category" (pas "cat", utilisé côté rendu/lecture —
+  // cf. shapeProduct() côté serveur qui mappe category -> cat en sortie).
+  var payload = {
+    category: document.getElementById('rs-cat').value.trim()||'Autre',
     label: label,
     desc:  document.getElementById('rs-desc').value.trim(),
     ico:   document.getElementById('rs-ico').value,
@@ -6061,11 +6068,17 @@ async function rsSaveProduct(){
     active:document.getElementById('rs-active').checked
   };
   try{
+    var saveResp;
     if(RS_EDITING!=null){
-      product.id = CFG.roomServiceCatalog[RS_EDITING].id;
-      await adminFetch('/wa/roomservice/product/update', {method:'POST', body:JSON.stringify(product)});
+      payload.id = CFG.roomServiceCatalog[RS_EDITING].id;
+      saveResp = await adminFetch('/wa/roomservice/product/update', {method:'POST', body:JSON.stringify(payload)});
     } else {
-      await adminFetch('/wa/roomservice/product/create', {method:'POST', body:JSON.stringify(product)});
+      saveResp = await adminFetch('/wa/roomservice/product/create', {method:'POST', body:JSON.stringify(payload)});
+    }
+    if(!saveResp.ok){
+      var err = await saveResp.json().catch(function(){return{};});
+      toast(err.error||'Erreur lors de l\'enregistrement du produit');
+      return;
     }
   }catch(e){ toast('Erreur serveur'); return; }
   var r = await adminFetch('/wa/roomservice/product/list');
