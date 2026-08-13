@@ -55,13 +55,34 @@ aucun service de vérification d'identité réel n'a été demandé ni intégré
   technique), pour rester compatible avec un futur remplacement par le vrai
   backend Java `com.alphacent.fmk` sans changer le contrat front-end.
 
-## Démarrage
+## Démarrage rapide — une seule commande (Docker)
+
+Aucune installation de Node, npm ou PostgreSQL n'est nécessaire — seul
+Docker (avec le plugin `compose`) est requis :
+
+```bash
+docker compose up --build
+```
+
+Cette commande lance PostgreSQL, construit l'image du serveur, applique les
+migrations, insère les données de démo Hôtel Churchill, puis démarre l'API
+et l'app client sur **http://localhost:3000**. Comptez ~1 minute au premier
+lancement (build de l'image). Les lancements suivants sont quasi instantanés.
+
+Pour arrêter : `Ctrl+C` puis `docker compose down` (ajouter `-v` pour aussi
+supprimer les données PostgreSQL et repartir d'une base vierge).
+
+> Le service `app` du `docker-compose.yml` construit l'image à partir du
+> `Dockerfile` du dépôt et exécute `docker-entrypoint.sh` au démarrage
+> (migrations → seed → serveur). Voir ces deux fichiers pour le détail.
+
+## Démarrage manuel (sans Docker pour l'app)
 
 ### 1. Base de données PostgreSQL
 
 ```bash
-# Option A — Docker (recommandé sur poste de dev classique)
-docker compose up -d
+# Option A — Docker, PostgreSQL seul
+docker compose up -d postgres
 
 # Option B — PostgreSQL local déjà installé
 # créer un rôle/DB "sesame"/"sesame_suite" correspondant à DATABASE_URL

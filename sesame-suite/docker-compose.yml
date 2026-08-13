@@ -10,6 +10,28 @@ services:
       - "5432:5432"
     volumes:
       - sesame_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sesame -d sesame_suite"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # Serveur Node/Express + migrations + seed — construit depuis le Dockerfile
+  # local. Avec ce service, `docker compose up --build` suffit à tout lancer :
+  # pas besoin d'installer Node, npm ou PostgreSQL sur la machine hôte.
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://sesame:sesame@postgres:5432/sesame_suite?schema=public
+      PORT: 3000
+      JWT_SECRET: change-me-in-production
+      DEFAULT_ENTITY_CODE: E00000001
+    ports:
+      - "3000:3000"
 
 volumes:
   sesame_pg_data:
