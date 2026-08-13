@@ -20,7 +20,10 @@ COPY public ./public
 RUN npx prisma generate
 
 COPY docker-entrypoint.sh ./
-RUN chmod +x docker-entrypoint.sh
+# Normalise les fins de ligne (CRLF -> LF) au cas où le fichier aurait été
+# récupéré avec des fins de ligne Windows (ex: git core.autocrlf=true) —
+# sinon le shebang casse avec "no such file or directory" au démarrage.
+RUN sed -i 's/\r$//' docker-entrypoint.sh && chmod +x docker-entrypoint.sh
 
 EXPOSE 3000
 ENTRYPOINT ["./docker-entrypoint.sh"]
