@@ -22,3 +22,17 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   req.admin = admin;
   next();
 }
+
+/** À enchaîner après requireAdmin — réserve l'accès aux comptes Sesame
+ * (role="sesame"), ex : création/gestion des établissements, souscriptions. */
+export function requireSesame(req: Request, res: Response, next: NextFunction) {
+  if (!req.admin) {
+    res.status(401).json({ error: "Authentification admin requise" });
+    return;
+  }
+  if (req.admin.role !== "sesame") {
+    res.status(403).json({ error: "Réservé aux comptes Sesame" });
+    return;
+  }
+  next();
+}

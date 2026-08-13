@@ -49,13 +49,38 @@ couche de données rebranchée sur l'API) :
   Gestion des chambres (CRUD, canvas de plan).
 - Compte admin de démonstration : voir « Comptes de démonstration » ci-dessous.
 
-**Non couvert** (hors périmètre — panneaux du prototype `sesame_admin.html`
-gérant le SaaS multi-tenant de Sesame elle-même, pas l'hôtel Churchill : liste
-d'autres hôtels clients, facturation des souscriptions, CRM commercial
-interne de Sesame) : "Hôtels [Multi]", "Souscriptions", "CRM Sesame". Leurs
-panneaux et fonctions JS restent présents dans `admin.html` mais ne sont plus
-accessibles depuis le menu (retirés de la barre latérale) et ne sont pas
-rebranchés sur l'API.
+**Multi-tenant réel — comptes Sesame vs comptes hôtel** : deux rôles
+`AdminUser.role` :
+
+- **`hotel`** (compte par défaut, ex. `admin@hotel-churchill.fr`) : géranté
+  par un seul établissement. Le serveur verrouille chaque requête sur son
+  `entityId` (`resolveEntity()`), même si un autre `entityCode` est passé en
+  paramètre — impossible d'accéder aux données d'un autre hôtel.
+- **`sesame`** (compte Sesame Technology, ex. `super-admin@sesame.technology`)
+  : accès à deux panneaux réservés (masqués du menu pour les comptes
+  `hotel`) —
+  - **"Hôtels"** : liste tous les établissements, en crée de nouveaux
+    (`POST /wa/entity/create` — provisionne l'`Entity`, sa configuration par
+    défaut et son compte admin `hotel`, identifiants affichés une seule
+    fois), les active (bascule le contexte de *tous* les autres panneaux —
+    chambres, livret, planning, etc. — sur l'établissement choisi, via un
+    `entityCode` injecté automatiquement dans chaque appel API), les
+    supprime, ou règle leurs paramètres opérationnels sans les activer.
+  - **"Souscriptions"** : grille tarifaire globale + suivi des demandes
+    d'essai. Une souscription peut être créée manuellement par Sesame et
+    suit `trial → active → expired/cancelled`. **L'activation d'une
+    souscription en essai provisionne automatiquement l'établissement**
+    (même mécanisme que la création manuelle) — les deux chemins de
+    création de compte demandés (direct, ou via souscription) aboutissent
+    au même `provisionEntity()`.
+- Voir « Comptes de démonstration » ci-dessous pour se connecter en tant que
+  Sesame et tester ces deux panneaux.
+
+**Non couvert** (hors périmètre — panneau du prototype `sesame_admin.html`
+gérant le CRM commercial interne de Sesame, sans rapport avec la gestion
+d'un établissement) : "CRM Sesame". Son code JS reste présent dans
+`admin.html` mais n'est plus accessible depuis le menu et n'est pas
+rebranché sur l'API.
 
 Également non couvert : l'app ménage (`sesame_menage.html`, application
 séparée pour les agents de ménage sur le terrain). La base de données est
@@ -154,6 +179,17 @@ Accès sur `http://localhost:3000/admin` :
 Personnalisable via les variables d'environnement `SEED_ADMIN_EMAIL` /
 `SEED_ADMIN_PASSWORD` avant de lancer le seed.
 
+### Compte de démonstration (Sesame — multi-établissements)
+
+Même URL `http://localhost:3000/admin`, ce compte donne accès aux panneaux
+"Hôtels" et "Souscriptions" (voir ci-dessus) :
+
+| Email | Mot de passe |
+|---|---|
+| super-admin@sesame.technology | sesame2026 |
+
+Personnalisable via `SEED_SESAME_ADMIN_EMAIL` / `SEED_SESAME_ADMIN_PASSWORD`.
+
 ## Structure du projet
 
 ```
@@ -183,8 +219,11 @@ sesame-suite/
       housekeepingStaff.ts          # GET/POST /wa/housekeepingStaff/*
       crm.ts                         # GET /wa/crm/clients (agrégation)
       campaign.ts                     # GET/POST /wa/campaign/* (marketing, journalisation)
-      login.ts                         # POST /wa/login/login (admin)
-      auth.ts                           # POST /api/auth/guest-login (client)
+      login.ts                         # POST /wa/login/login (admin, tous rôles)
+      entity.ts                         # GET/POST /wa/entity/* (compte sesame uniquement)
+      subscription.ts                    # GET/POST /wa/subscription/*, /wa/pricingConfig/* (sesame)
+      auth.ts                             # POST /api/auth/guest-login (client)
+    lib/provisionEntity.ts                # provisionne Entity + config + AdminUser hotel
   public/
     checkin.html          # prototype d'origine (client), rebranché sur l'API
     admin.html             # prototype d'origine (back-office), rebranché sur l'API
@@ -196,5 +235,11 @@ sesame-suite/
    `RoomHousekeepingStatus` / `HousekeepingTask` / `HousekeepingStaff`.
 2. Export CSV taxe de séjour (`TaxeSejourRecord.findByPeriod` côté doc)
    et génération QR réelle (actuellement simulée, comme dans le prototype).
-3. Multi-tenant réel (autres hôtels que Churchill) si besoin un jour de
-   réactiver les panneaux "Hôtels [Multi]" / "Souscriptions" / "CRM Sesame".
+3. Panneau "CRM Sesame" (suivi commercial interne de Sesame — prospects,
+   devis/factures, tickets support), laissé hors périmètre.
+4. Paiement réel du mandat GoCardless sur les souscriptions (actuellement
+   simulé — champs IBAN informatifs uniquement, comme le prototype
+   d'origine) ; page publique d'inscription en libre-service (le prototype
+   y fait référence sous le nom `sesame_onboarding.html` mais ce fichier
+   n'a pas été fourni) — pour l'instant Sesame crée les souscriptions et
+   les hôtels depuis le back-office.

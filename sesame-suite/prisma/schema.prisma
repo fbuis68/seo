@@ -36,23 +36,25 @@ model Entity {
   housekeepingStaff   HousekeepingStaff[]
   adminUsers          AdminUser[]
   campaigns           Campaign[]
+  subscriptions       Subscription[]
 }
 
-// Compte back-office (panneau admin) — un seul rôle pour cette itération,
-// pas encore de profils Admin/Operator/Reception/GuestAgent distincts
-// (§6.7 H8 de la documentation technique).
+// Compte back-office (panneau admin). role="hotel" : géranté par un seul
+// établissement (son entityId). role="sesame" : compte Sesame, rattaché à
+// une entité technique interne ("Sesame HQ") mais peut agir sur n'importe
+// quel établissement via entityCode (cf. resolveEntity côté serveur) —
+// c'est le compte qui crée/gère les autres établissements.
 model AdminUser {
   id           String @id @default(cuid())
   entityId     String
   entity       Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  email        String
+  email        String @unique
   passwordHash String
   name         String?
+  role         String @default("hotel") // sesame | hotel
 
   createdAt DateTime @default(now())
-
-  @@unique([entityId, email])
 }
 
 // Équivalent de entity_module_config (35 colonnes dans la doc) — regroupé en
@@ -401,4 +403,45 @@ model Campaign {
   status       String  @default("sent") // draft | sent
 
   createdAt DateTime @default(now())
+}
+
+// Demande/contrat de souscription — panneau "Souscriptions" (back-office
+// Sesame). entityId reste null tant que l'abonnement est en essai et n'a
+// pas encore été activé (l'établissement n'existe pas encore en base) ;
+// l'activation provisionne l'Entity + son AdminUser (cf. provisionEntity()).
+model Subscription {
+  id       String  @id @default(cuid())
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: SetNull)
+
+  hotelName    String
+  stars        Int     @default(3)
+  contactEmail String
+  contactPhone String?
+  pmsLabel     String?
+
+  modules      Json  @default("[]") // string[] clés de modules souscrits
+  basePrice    Float
+  modulePrices Json  @default("{}") // {moduleKey: prix} — snapshot à la souscription
+  monthlyTotal Float
+
+  paymentIbanHolder String?
+  paymentIbanLast4  String?
+
+  status      String    @default("trial") // trial | active | expired | cancelled
+  trialDays   Int       @default(30)
+  trialEnd    DateTime?
+  activatedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Grille tarifaire globale du wizard d'inscription (ligne unique id="global").
+model PricingConfig {
+  id           String   @id @default("global")
+  basePrice    Float    @default(49)
+  trialDays    Int      @default(30)
+  modulePrices Json     @default("{}") // {moduleKey: prix}
+  updatedAt    DateTime @updatedAt
 }

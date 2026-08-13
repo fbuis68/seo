@@ -241,6 +241,8 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 <aside class="sb">
   <div class="ns">Accueil</div>
   <div class="ni on" data-pan="dash" onclick="showPan('dash')"><i class="ti ti-layout-dashboard"></i>Accueil</div>
+  <div class="ni sesame-only" data-pan="hotels" onclick="showPan('hotels')" style="display:none;background:rgba(46,204,113,.06);border-left:3px solid var(--a)"><i class="ti ti-building-skyscraper"></i>Hôtels <span class="nibadge">Multi</span></div>
+  <div class="ni sesame-only" data-pan="subscriptions" onclick="showPan('subscriptions')" style="display:none"><i class="ti ti-rocket"></i>Souscriptions</div>
   <div class="ns">Identité &amp; Charte</div>
   <div class="ni" data-pan="charte" onclick="showPan('charte')"><i class="ti ti-palette"></i>Logo &amp; Couleurs</div>
   <div class="ni" data-pan="typo" onclick="showPan('typo')"><i class="ti ti-typography"></i>Typographie &amp; Textes</div>
@@ -1458,9 +1460,6 @@ https://votre-site.fr/<span class="cv">sesame_proxy.php</span></div>
   <!-- Actions bar -->
   <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
     <button class="btn btn-p" onclick="hmCreateHotel()"><i class="ti ti-plus"></i> Nouvel hôtel</button>
-    <button class="btn btn-s" onclick="hmImportPrompt()"><i class="ti ti-upload"></i> Importer JSON</button>
-    <button class="btn btn-s" onclick="hmExportAll()"><i class="ti ti-database-export"></i> Tout exporter</button>
-    <input type="file" id="hm-import-input" accept=".json" onchange="hmImportFile(this)" style="display:none">
   </div>
 
   <!-- Hotel grid -->
@@ -1480,7 +1479,7 @@ https://votre-site.fr/<span class="cv">sesame_proxy.php</span></div>
 
 <!-- ════════════════ SOUSCRIPTIONS ════════════════ -->
 <div id="pan-subscriptions" class="pan">
-  <div class="ph"><h2>Souscriptions</h2><p>Grille tarifaire du wizard d'inscription et suivi des essais en cours</p></div>
+  <div class="ph"><h2>Souscriptions</h2><p>Grille tarifaire et suivi des essais — l'activation d'une souscription provisionne automatiquement l'établissement et son compte admin</p></div>
 
   <!-- Stats -->
   <div class="g4" style="margin-bottom:16px">
@@ -1496,7 +1495,7 @@ https://votre-site.fr/<span class="cv">sesame_proxy.php</span></div>
       <button class="chact" onclick="subSavePricing()"><i class="ti ti-device-floppy" style="font-size:12px"></i> Enregistrer</button>
     </div>
     <div class="alt alt-b" style="margin-bottom:14px"><i class="ti ti-info-circle"></i>
-      <span>Ces tarifs s'affichent sur la page d'inscription publique (<code>sesame_onboarding.html</code>) et déterminent le montant du prélèvement GoCardless à l'issue de la période d'essai.</span>
+      <span>Ces tarifs servent de base au montant mensuel affiché sur chaque souscription et au prélèvement GoCardless simulé à l'issue de la période d'essai.</span>
     </div>
 
     <div class="g2" style="margin-bottom:14px">
@@ -1520,7 +1519,8 @@ https://votre-site.fr/<span class="cv">sesame_proxy.php</span></div>
       <div class="ptab" data-status="cancelled" onclick="subSetFilter('cancelled')">Annulés</div>
     </div>
     <div style="flex:1"></div>
-    <button class="btn btn-s" onclick="renderSubscriptions()"><i class="ti ti-refresh"></i> Actualiser</button>
+    <button class="btn btn-p btn-s" onclick="subOpenNew()"><i class="ti ti-plus"></i> Nouvelle souscription</button>
+    <button class="btn btn-s" onclick="subInit()"><i class="ti ti-refresh"></i> Actualiser</button>
   </div>
 
   <div id="sub-list"></div>
@@ -1528,8 +1528,8 @@ https://votre-site.fr/<span class="cv">sesame_proxy.php</span></div>
     <div class="alt alt-b" style="text-align:center;padding:24px">
       <i class="ti ti-rocket" style="font-size:32px;display:block;margin-bottom:10px;opacity:.4"></i>
       <div style="font-size:15px;font-weight:600;margin-bottom:6px">Aucune demande de souscription</div>
-      <div style="font-size:13px;color:var(--mu);margin-bottom:14px">Les nouvelles inscriptions via le wizard apparaîtront ici.</div>
-      <a href="sesame_onboarding.html" target="_blank" class="btn btn-p btn-s" style="display:inline-flex"><i class="ti ti-external-link"></i> Voir le wizard d'inscription</a>
+      <div style="font-size:13px;color:var(--mu);margin-bottom:14px">Créez la première souscription à la main, ou créez directement un hôtel depuis le panneau "Hôtels".</div>
+      <button class="btn btn-p btn-s" onclick="subOpenNew()" style="display:inline-flex"><i class="ti ti-plus"></i> Nouvelle souscription</button>
     </div>
   </div>
 
@@ -1541,6 +1541,17 @@ https://votre-site.fr/<span class="cv">sesame_proxy.php</span></div>
         <button onclick="document.getElementById('subModal').style.display='none'" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
       </div>
       <div id="subModalBody" style="padding:18px 20px"></div>
+    </div>
+  </div>
+
+  <!-- ════ MODAL NOUVELLE SOUSCRIPTION ════ -->
+  <div id="subNewModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center;padding:16px">
+    <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:540px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.3)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--bdr)">
+        <h2 style="font-size:17px">Nouvelle souscription</h2>
+        <button onclick="document.getElementById('subNewModal').style.display='none'" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
+      </div>
+      <div id="subNewModalBody" style="padding:18px 20px"></div>
     </div>
   </div>
 </div>
@@ -2430,11 +2441,40 @@ var CFG = JSON.parse(JSON.stringify(DEFAULT));
 // Session admin en mémoire (sessionStorage) — POST /wa/login/login.
 var API_BASE = '';
 var ADMIN_TOKEN = sessionStorage.getItem('SESAME_ADMIN_TOKEN') || null;
+var ADMIN_ROLE  = sessionStorage.getItem('SESAME_ADMIN_ROLE') || null;   // 'sesame' | 'hotel'
+var HOME_ENTITY_CODE = sessionStorage.getItem('SESAME_HOME_ENTITY') || null;
+// Établissement actuellement affiché dans tous les panneaux. Pour un compte
+// "hotel", c'est toujours HOME_ENTITY_CODE (le serveur l'impose de toute
+// façon — cf. resolveEntity). Pour un compte "sesame", c'est l'hôtel activé
+// depuis le panneau "Hôtels" (bascule de contexte multi-établissements).
+var ACTIVE_ENTITY_CODE = sessionStorage.getItem('SESAME_ACTIVE_ENTITY') || null;
+
+function setActiveEntity(code){
+  ACTIVE_ENTITY_CODE = code;
+  try{ sessionStorage.setItem('SESAME_ACTIVE_ENTITY', code); }catch(e){}
+}
+
+function withEntityCode(url, opts){
+  if(!(ADMIN_ROLE==='sesame' && ACTIVE_ENTITY_CODE)) return {url:url, opts:opts};
+  opts = opts || {};
+  var method = (opts.method||'GET').toUpperCase();
+  if(method!=='GET' && opts.body){
+    try{
+      var b = JSON.parse(opts.body);
+      if(!b.entityCode) b.entityCode = ACTIVE_ENTITY_CODE;
+      opts.body = JSON.stringify(b);
+    }catch(e){}
+  } else if(url.indexOf('entityCode=')===-1){
+    url += (url.indexOf('?')>-1?'&':'?') + 'entityCode=' + encodeURIComponent(ACTIVE_ENTITY_CODE);
+  }
+  return {url:url, opts:opts};
+}
 
 function adminFetch(url, opts){
   opts = opts || {};
   opts.headers = Object.assign({'Content-Type':'application/json'}, opts.headers||{}, {Authorization:'Bearer '+ADMIN_TOKEN});
-  return fetch(API_BASE+url, opts);
+  var w = withEntityCode(url, opts);
+  return fetch(API_BASE+w.url, w.opts);
 }
 
 async function adminLogin(){
@@ -2453,7 +2493,12 @@ async function adminLogin(){
     }
     var data = await r.json();
     ADMIN_TOKEN = data.token;
+    ADMIN_ROLE  = data.admin.role;
+    HOME_ENTITY_CODE = data.admin.entityCode;
     sessionStorage.setItem('SESAME_ADMIN_TOKEN', ADMIN_TOKEN);
+    sessionStorage.setItem('SESAME_ADMIN_ROLE', ADMIN_ROLE);
+    sessionStorage.setItem('SESAME_HOME_ENTITY', HOME_ENTITY_CODE);
+    setActiveEntity(HOME_ENTITY_CODE);
     document.getElementById('loginGate').style.display='none';
     await bootAdminApp();
   }catch(e){
@@ -2463,12 +2508,16 @@ async function adminLogin(){
 }
 function adminLogout(){
   sessionStorage.removeItem('SESAME_ADMIN_TOKEN');
+  sessionStorage.removeItem('SESAME_ADMIN_ROLE');
+  sessionStorage.removeItem('SESAME_HOME_ENTITY');
+  sessionStorage.removeItem('SESAME_ACTIVE_ENTITY');
   location.reload();
 }
 
 // ── Config — chargée/écrite via l'API (remplace loadCfg()/saveCfg() localStorage) ──
 async function loadCfg(){
-  var r = await fetch(API_BASE+'/wa/entityModuleConfig/list');
+  var w = withEntityCode('/wa/entityModuleConfig/list');
+  var r = await fetch(API_BASE+w.url);
   if(!r.ok) throw new Error('HTTP '+r.status);
   var data = await r.json();
   deepMerge(CFG, data);
@@ -2478,6 +2527,14 @@ async function saveCfg(){
     var r = await adminFetch('/wa/entityModuleConfig/update', {method:'POST', body:JSON.stringify(CFG)});
     return r.ok;
   }catch(e){ return false; }
+}
+
+/** Bascule le contexte "établissement actif" (compte sesame uniquement) et
+ * recharge tous les panneaux avec les données du nouvel établissement. */
+async function activateEntity(code){
+  setActiveEntity(code);
+  await bootAdminApp();
+  try{ hmRenderGrid(); }catch(e){}
 }
 function deepMerge(target,src){
   Object.keys(src).forEach(function(k){
@@ -2505,6 +2562,8 @@ function showPan(id){
   if(id==='rooms'){ renderRoomGrid(); fetchStaffList().then(renderRoomGrid); }
   if(id==='preview'){try{renderFullPreview();renderPrevSummary();}catch(e){}}
   if(id==='dash'){try{renderDash();}catch(e){}}
+  if(id==='hotels'){ hmRenderGrid(); }
+  if(id==='subscriptions'){ subInit(); }
   if(id==='planning'){
     Promise.all([loadPlanTasks(), fetchPlanBookings(), fetchStaffList()]).then(function(){
       try{ renderPlanGrid(); }catch(e){ console.warn('planning render error:', e); }
@@ -2690,7 +2749,7 @@ function buildPhoneHTML(){
     +'<div style="font-size:10px;color:'+c.accent+';font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px">Votre réservation</div>'
     +'<div style="font-size:13px;font-weight:500;color:'+c.text+'">RES-2024-8812</div>'
     +'<div style="font-size:11px;color:#888;margin-top:2px">room214 · 3 nuits · 15–18 nov.</div></div>'
-    +'<div style="background:'+c.primaryLight+';border-left:3px solid '+c.primary+';border-radius:'+rs(r)+'px;padding:10px;font-size:11px;color:'+c.primary+';margin-bottom:9px">🌿 '+CFG.msgEco.slice(0,60)+'…</div>'
+    +'<div style="background:'+c.primaryLight+';border-left:3px solid '+c.primary+';border-radius:'+rs(r)+'px;padding:10px;font-size:11px;color:'+c.primary+';margin-bottom:9px">🌿 '+(CFG.msgEco||'').slice(0,60)+'…</div>'
     +'<div style="background:'+c.cardBg+';border-radius:'+r+'px;padding:13px;border:1px solid '+c.border+';margin-bottom:9px;'+shadow+'">'
     +'<div style="font-size:10px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Ménage</div>'
     +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
@@ -4892,7 +4951,29 @@ showPan = function(id){
 };
 
 // ═══════════════════════════════════════════════ INIT
+function applyRoleVisibility(){
+  document.querySelectorAll('.sesame-only').forEach(function(el){
+    el.style.display = (ADMIN_ROLE==='sesame') ? '' : 'none';
+  });
+}
+
+/** Compte sesame fraîchement connecté : "Sesame HQ" (son entité de rattachement)
+ * n'a pas de données hôtelières — on bascule automatiquement sur le premier
+ * établissement réel disponible, s'il y en a un. */
+async function ensureActiveEntityForSesame(){
+  if(ADMIN_ROLE!=='sesame') return;
+  if(ACTIVE_ENTITY_CODE && ACTIVE_ENTITY_CODE!=='SESAME-HQ') return;
+  try{
+    var r = await adminFetch('/wa/entity/list');
+    if(!r.ok) return;
+    var list = await r.json();
+    if(list.length) setActiveEntity(list[0].code);
+  }catch(e){}
+}
+
 async function bootAdminApp(){
+  applyRoleVisibility();
+  await ensureActiveEntityForSesame();
   try{
     await loadCfg();
   }catch(e){
@@ -5575,54 +5656,30 @@ function agentColor2(i){return ['#2ECC71','#3A9BD5','#E67E22','#9B59B6','#E74C3C
 
 // ═══════════════════════════════════════════════ HOTEL MANAGER (multi-hôtels simple)
 
-var HM_KEY    = 'SESAME_HOTELS_V2';   // [{id, name, stars, color, entityId, cfg:{...complet}}]
-var HM_ACTIVE = 'SESAME_ACTIVE_V2';
+// Panneau "Hôtels" (compte Sesame uniquement) — chaque hôtel est une Entity
+// réelle en base (GET/POST /wa/entity/*). "Activer" bascule ACTIVE_ENTITY_CODE,
+// ce qui fait pointer TOUS les autres panneaux (rooms, livret, planning…) sur
+// cet établissement via adminFetch()/withEntityCode().
 
-var HM_COLORS = ['#8B1A2E','#1A4880','#9B59B6','#E67E22','#E74C3C','#16A085','#F39C12','#2980B9'];
+var HM_LIST = []; // cache local — résultat de GET /wa/entity/list
 
-function hmLoad(){
-  try{var s=localStorage.getItem(HM_KEY);if(s)return JSON.parse(s);}catch(e){}
-  return [];
-}
-function hmSave(list){ try{localStorage.setItem(HM_KEY,JSON.stringify(list));}catch(e){} }
-function hmGetActiveId(){ return localStorage.getItem(HM_ACTIVE)||null; }
-function hmSetActiveId(id){ localStorage.setItem(HM_ACTIVE,id); }
-
-// ── CFG sections bundled per hotel ──
-// Each hotel stores its full CFG (all sections: charte, eco, gains, modules, plan, rooms, etc.)
-// When switching, we save current CFG into current hotel then load target hotel's CFG
-
-function hmSaveCurrent(){
-  collectAll();
-  var id = hmGetActiveId();
-  if(!id) return;
-  var list = hmLoad();
-  var hotel = list.find(function(h){return h.id===id;});
-  if(hotel){
-    hotel.name  = CFG.hotelName || hotel.name;
-    hotel.stars = CFG.stars     || hotel.stars;
-    hotel.cfg   = JSON.parse(JSON.stringify(CFG));
-  }
-  hmSave(list);
+async function hmFetchList(){
+  try{
+    var r = await adminFetch('/wa/entity/list');
+    if(r.ok) HM_LIST = await r.json();
+  }catch(e){}
+  return HM_LIST;
 }
 
-function hmLoadCfg(hotel){
-  // Full CFG stored in hotel.cfg — merge with DEFAULT to fill any missing keys
-  return Object.assign({}, JSON.parse(JSON.stringify(DEFAULT)), hotel.cfg||{});
-}
-
-// ── Render the hotel grid ──
-function hmRenderGrid(){
-  var list    = hmLoad();
-  var activeId= hmGetActiveId();
-  var grid    = document.getElementById('hm-grid');
+async function hmRenderGrid(){
+  await hmFetchList();
+  var grid = document.getElementById('hm-grid');
   if(!grid) return;
 
-  // Update active banner
   var banner = document.getElementById('hm-active-banner');
   if(banner){
-    var active = list.find(function(h){return h.id===activeId;});
-    var aName  = active ? active.name : CFG.hotelName;
+    var active = HM_LIST.find(function(h){return h.code===ACTIVE_ENTITY_CODE;});
+    var aName  = active ? active.hotelName : CFG.hotelName;
     banner.innerHTML = '<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;'
       +'background:var(--al);border-radius:var(--rs);border:1px solid rgba(46,204,113,.3)">'
       +'<i class="ti ti-check-circle" style="font-size:18px;color:var(--a)"></i>'
@@ -5630,59 +5687,40 @@ function hmRenderGrid(){
       +'<div style="font-size:11px;color:var(--mu)">Les modifications dans tous les panneaux s\'appliquent à cet hôtel</div></div></div>';
   }
 
-  if(!list.length){
+  if(!HM_LIST.length){
     grid.innerHTML = '<div style="grid-column:1/-1">'
       +'<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Aucun hôtel. Cliquez sur "Nouvel hôtel" pour commencer.</span></div></div>';
     return;
   }
 
-  grid.innerHTML = list.map(function(hotel){
-    var isActive = hotel.id === activeId;
+  grid.innerHTML = HM_LIST.map(function(hotel){
+    var isActive = hotel.code === ACTIVE_ENTITY_CODE;
     var color    = hotel.color || '#8B1A2E';
-    var cfg      = hotel.cfg  || {};
-    var rooms    = (cfg.rooms||[]).length;
-    var modules  = cfg.checkinModules ? Object.keys(cfg.checkinModules).filter(function(k){return cfg.checkinModules[k]&&cfg.checkinModules[k].active;}).length : 6;
-    var lang     = cfg.lang || 'fr';
-    var cur      = cfg.currency || 'EUR';
-    var sym      = {EUR:'€',USD:'$',GBP:'£',CHF:'CHF',MAD:'MAD',JPY:'¥'}[cur]||cur;
-    var stars    = hotel.stars || cfg.stars || 3;
+    var sym      = {EUR:'€',USD:'$',GBP:'£',CHF:'CHF',MAD:'MAD',JPY:'¥'}[hotel.currency]||hotel.currency;
 
     return '<div style="border:2px solid '+(isActive?color:'var(--bdr)')+';border-radius:var(--r);background:var(--card);overflow:hidden;position:relative;transition:all .15s">'
-      // Color strip top
       +'<div style="height:4px;background:'+color+'"></div>'
       +'<div style="padding:16px">'
-      // Header
       +'<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px">'
       +'<div style="width:42px;height:42px;border-radius:10px;background:'+color+'22;display:flex;align-items:center;justify-content:center;font-size:20px;color:'+color+';flex-shrink:0"><i class="ti ti-building"></i></div>'
       +'<div style="flex:1;min-width:0">'
-      +'<div style="font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+hotel.name+'</div>'
-      +'<div style="font-size:12px;color:var(--mu)">'+stars+'★'+(cfg.entityId?' · '+cfg.entityId:'')+' · '+lang.toUpperCase()+' · '+sym+'</div>'
+      +'<div style="font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(hotel.hotelName)+'</div>'
+      +'<div style="font-size:12px;color:var(--mu)">'+hotel.stars+'★ · '+esc(hotel.code)+' · '+(hotel.lang||'fr').toUpperCase()+' · '+sym+'</div>'
       +'</div>'
       +(isActive?'<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:'+color+'22;color:'+color+';flex-shrink:0">ACTIF</span>':'')
       +'</div>'
-      // Stats
-      +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">'
-      +hmStatChip(rooms,'chambres','ti-door')
-      +hmStatChip(modules+'/6','modules','ti-toggle-right')
-      +hmStatChip((cfg.gains&&cfg.gains.points&&cfg.gains.points.name)||'Points','points','ti-star')
+      +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">'
+      +hmStatChip(hotel.roomsCount,'chambres','ti-door')
+      +hmStatChip(hotel.modulesActive+'/6','modules','ti-toggle-right')
+      +hmStatChip(hotel.adminsCount,'admin(s)','ti-users')
       +'</div>'
-      // Sections indicator
-      +'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px">'
-      +hmSectionBadge(cfg.colors,'Charte','ti-palette')
-      +hmSectionBadge(cfg.gains,'Éco-Séjour','ti-leaf')
-      +hmSectionBadge(cfg.hotelPlan,'Plan','ti-map')
-      +hmSectionBadge(cfg.apiToken&&cfg.apiToken!=='UPT_DEMO_TOKEN_1234','API','ti-api')
-      +hmSectionBadge(cfg.kpi,'KPIs','ti-chart-bar')
-      +'</div>'
-      // Buttons
       +'<div style="display:flex;gap:6px">'
       +(isActive
-        ?('<button class="btn btn-s" style="flex:1;background:var(--al);color:'+color+';border-color:'+color+'" onclick="hmOpenEdit(\'' + hotel.id + '\')">' + '<i class="ti ti-settings"></i> Configurer</button>')
-        :('<button class="btn btn-p btn-s" style="flex:1;background:'+color+';border-color:'+color+'" onclick="hmActivate(\'' + hotel.id + '\')">' + '<i class="ti ti-toggle-right"></i> Activer</button>')
+        ?('<button class="btn btn-s" style="flex:1;background:var(--al);color:'+color+';border-color:'+color+'" onclick="hmOpenEdit(\'' + hotel.code + '\')">' + '<i class="ti ti-settings"></i> Configurer</button>')
+        :('<button class="btn btn-p btn-s" style="flex:1;background:'+color+';border-color:'+color+'" onclick="hmActivate(\'' + hotel.code + '\')">' + '<i class="ti ti-toggle-right"></i> Activer</button>')
        )
-      +('<button class="btn btn-s" onclick="hmOpenEdit(\'' + hotel.id + '\')" style="width:auto;padding:6px 10px" title="Modifier"><i class="ti ti-pencil"></i></button>')
-      +('<button class="btn btn-s" onclick="hmDuplicate(\'' + hotel.id + '\')" style="width:auto;padding:6px 10px" title="Dupliquer"><i class="ti ti-copy"></i></button>')
-      +(isActive?'':('<button class="btn btn-s" onclick="hmDelete(\'' + hotel.id + '\')" style="width:auto;padding:6px 10px;color:var(--re)" title="Supprimer"><i class="ti ti-trash"></i></button>'))
+      +('<button class="btn btn-s" onclick="hmOpenEdit(\'' + hotel.code + '\')" style="width:auto;padding:6px 10px" title="Modifier"><i class="ti ti-pencil"></i></button>')
+      +(isActive?'':('<button class="btn btn-s" onclick="hmDelete(\'' + hotel.code + '\')" style="width:auto;padding:6px 10px;color:var(--re)" title="Supprimer"><i class="ti ti-trash"></i></button>'))
       +'</div>'
       +'</div>'
       +'</div>';
@@ -5695,127 +5733,74 @@ function hmStatChip(val, lbl, ico){
     +'<div style="font-size:10px;color:var(--mu)">'+lbl+'</div>'
     +'</div>';
 }
-function hmSectionBadge(hasData, lbl, ico){
-  var on = !!hasData;
-  return '<span style="font-size:10px;padding:2px 7px;border-radius:8px;display:inline-flex;align-items:center;gap:3px;'
-    +'background:'+(on?'var(--al)':'rgba(0,0,0,.04)')+';color:'+(on?'var(--a)':'var(--mu)')+'">'
-    +'<i class="ti '+ico+'" style="font-size:10px"></i>'+lbl+'</span>';
-}
+function esc(s){ return String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
-// ── Create ──
-function hmCreateHotel(){
+// ── Create — provisionne un vrai établissement + son compte admin ──
+async function hmCreateHotel(){
   var name = prompt('Nom du nouvel hôtel :');
   if(!name) return;
-  hmSaveCurrent(); // save current hotel
-  var id    = 'h_'+Date.now();
-  var color = HM_COLORS[hmLoad().length % HM_COLORS.length];
-  var newCfg= JSON.parse(JSON.stringify(DEFAULT));
-  newCfg.hotelName = name;
-  var list  = hmLoad();
-  list.push({id:id, name:name, stars:3, color:color, entityId:'', cfg:newCfg});
-  hmSave(list);
-  hmActivate(id);
-  toast('Hôtel "'+name+'" créé et activé ✓');
+  try{
+    var r = await adminFetch('/wa/entity/create', {method:'POST', body:JSON.stringify({name:name})});
+    if(!r.ok){ var err=await r.json().catch(function(){return{};}); toast(err.error||'Erreur lors de la création'); return; }
+    var data = await r.json();
+    alert('Hôtel "'+name+'" créé ✓\n\nCompte admin de cet établissement :\nEmail : '+data.admin.email+'\nMot de passe : '+data.admin.password+'\n\nCommuniquez ces identifiants au client — le mot de passe ne sera plus jamais affiché.');
+    await hmActivate(data.entity.code);
+  }catch(e){ toast('Erreur de connexion au serveur'); }
 }
 
-// ── Activate ──
-function hmActivate(id){
-  hmSaveCurrent();
-  var list  = hmLoad();
-  var hotel = list.find(function(h){return h.id===id;});
-  if(!hotel){ toast('Hôtel introuvable'); return; }
-  CFG = hmLoadCfg(hotel);
-  try{ localStorage.setItem('SESAME_CFG', JSON.stringify(CFG)); }catch(e){}
-  hmSetActiveId(id);
-  populateAll(); renderDash(); hmRenderGrid();
-  toast('"'+hotel.name+'" activé ✓ — tous les panneaux ont été mis à jour');
+// ── Activate — bascule le contexte de TOUS les panneaux sur cet hôtel ──
+async function hmActivate(code){
+  await activateEntity(code);
+  toast('Hôtel activé ✓ — tous les panneaux ont été mis à jour');
   showPan('dash');
 }
 
-// ── Duplicate ──
-function hmDuplicate(id){
-  hmSaveCurrent();
-  var list  = hmLoad();
-  var orig  = list.find(function(h){return h.id===id;});
-  if(!orig) return;
-  var newId = 'h_'+Date.now();
-  var clone = JSON.parse(JSON.stringify(orig));
-  clone.id  = newId;
-  clone.name= orig.name+' (copie)';
-  clone.cfg.hotelName = clone.name;
-  clone.color = HM_COLORS[list.length % HM_COLORS.length];
-  list.push(clone);
-  hmSave(list);
-  hmRenderGrid();
-  toast('"'+clone.name+'" créé ✓');
-}
-
 // ── Delete ──
-function hmDelete(id){
-  if(!confirm('Supprimer cet hôtel ? Irréversible.')) return;
-  var list = hmLoad().filter(function(h){return h.id!==id;});
-  hmSave(list);
-  hmRenderGrid();
-  toast('Hôtel supprimé');
-}
-
-// ── Import / Export ──
-function hmImportPrompt(){ document.getElementById('hm-import-input').click(); }
-function hmImportFile(inp){
-  var f=inp.files[0]; if(!f) return;
-  var rd=new FileReader();
-  rd.onload=function(e){
-    try{
-      var data=JSON.parse(e.target.result);
-      // Support both single hotel CFG and full export {hotels:[...]}
-      var toImport = data.hotels ? data.hotels : [{id:'h_'+Date.now(), name:data.hotelName||'Importé', stars:data.stars||3, color:HM_COLORS[0], entityId:data.entityId||'', cfg:data}];
-      var list=hmLoad();
-      toImport.forEach(function(h){ if(!list.find(function(x){return x.id===h.id;})) list.push(h); });
-      hmSave(list);
+async function hmDelete(code){
+  if(!confirm('Supprimer cet hôtel et toutes ses données (chambres, réservations, commandes…) ? Irréversible.')) return;
+  try{
+    var r = await adminFetch('/wa/entity/delete', {method:'POST', body:JSON.stringify({code:code})});
+    if(!r.ok){ toast('Erreur lors de la suppression'); return; }
+    var wasActive = (code === ACTIVE_ENTITY_CODE);
+    await hmFetchList();
+    if(wasActive){
+      var next = HM_LIST[0];
+      if(next) await hmActivate(next.code);
+      else { setActiveEntity('SESAME-HQ'); hmRenderGrid(); }
+    } else {
       hmRenderGrid();
-      toast(toImport.length+' hôtel(s) importé(s) ✓');
-    }catch(ex){ toast('Erreur JSON : '+ex.message); }
-  };
-  rd.readAsText(f);
-}
-function hmExportAll(){
-  hmSaveCurrent();
-  var data={ hotels: hmLoad(), exportedAt: new Date().toISOString() };
-  var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-  var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='sesame_hotels.json'; a.click();
-  toast('Export téléchargé');
+    }
+    toast('Hôtel supprimé');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
 }
 
-// ── Edit modal — configure any section of a specific hotel ──
-var hmEditId = null;
-function hmOpenEdit(id){
-  hmSaveCurrent();
-  var list  = hmLoad();
-  var hotel = list.find(function(h){return h.id===id;});
-  if(!hotel){ toast('Hôtel introuvable'); return; }
-  hmEditId  = id;
-  var cfg   = hmLoadCfg(hotel);
-  var sym   = {EUR:'€',USD:'$',GBP:'£',CHF:'CHF',MAD:'MAD',JPY:'¥'}[cfg.currency||'EUR']||'€';
-  document.getElementById('hm-edit-title').textContent = hotel.name;
+// ── Edit modal — réglages opérationnels d'un hôtel sans l'activer ──
+// La charte graphique complète (couleurs, logo…) se règle depuis le panneau
+// "Logo & Couleurs" une fois l'hôtel activé — ce formulaire couvre les
+// réglages métier (modules actifs, taxe, points, KPIs).
+var hmEditCode = null;
+var hmEditCfg  = null;
 
-  // Build a compact config form for all sections
-  var h = ''; // hid='+id+'
+async function hmOpenEdit(code){
+  hmEditCode = code;
+  var hotel = HM_LIST.find(function(h){return h.code===code;});
+  document.getElementById('hm-edit-title').textContent = hotel ? hotel.hotelName : code;
+  var r = await adminFetch('/wa/entityModuleConfig/list?entityCode='+encodeURIComponent(code));
+  if(!r.ok){ toast('Impossible de charger la configuration de cet hôtel'); return; }
+  var cfg = await r.json();
+  hmEditCfg = cfg;
+  var sym = {EUR:'€',USD:'$',GBP:'£',CHF:'CHF',MAD:'MAD',JPY:'¥'}[cfg.currency||'EUR']||'€';
 
-  // ── Identité ──
-  h += hmSection('ti-building','Identité &amp; Charte');
+  var h = '';
+  h += hmSection('ti-building','Identité');
   h += '<div class="g2">';
-  h += hmFi('Nom', '<input type="text" id="hme-name" value="'+esc(cfg.hotelName||'')+'" onchange="hmEditSync(hmEditId)">');
-  h += hmFi('Étoiles', '<select id="hme-stars" onchange="hmEditSync(hmEditId)">'+[1,2,3,4,5].map(function(s){return '<option value="'+s+'"'+(cfg.stars===s?' selected':'')+'>'+s+'★</option>';}).join('')+'</select>');
+  h += hmFi('Nom', '<input type="text" id="hme-name" value="'+esc(cfg.hotelName||'')+'">');
+  h += hmFi('Étoiles', '<select id="hme-stars">'+[1,2,3,4,5].map(function(s){return '<option value="'+s+'"'+(cfg.stars===s?' selected':'')+'>'+s+'★</option>';}).join('')+'</select>');
   h += '</div><div class="g2">';
-  h += hmFi('Devise', '<select id="hme-currency" onchange="hmEditSync(hmEditId)">'+[['EUR','€ Euro'],['USD','$ Dollar'],['GBP','£ Livre'],['CHF','CHF Suisse'],['MAD','MAD Dirham'],['JPY','¥ Yen']].map(function(c){return '<option value="'+c[0]+'"'+(cfg.currency===c[0]?' selected':'')+'>'+c[1]+'</option>';}).join('')+'</select>');
-  h += hmFi('Langue', '<select id="hme-lang" onchange="hmEditSync(hmEditId)">'+[['fr','🇫🇷 Français'],['en','🇬🇧 English'],['de','🇩🇪 Deutsch'],['es','🇪🇸 Español'],['it','🇮🇹 Italiano'],['nl','🇳🇱 Nederlands'],['pt','🇵🇹 Português']].map(function(l){return '<option value="'+l[0]+'"'+(cfg.lang===l[0]?' selected':'')+'>'+l[1]+'</option>';}).join('')+'</select>');
-  h += '</div>';
-  h += '<div class="g2">';
-  h += hmFi('Couleur accentuation', '<input type="color" id="hme-color" value="'+(hotel.color||'#8B1A2E')+'" onchange="hmEditSync(hmEditId)" style="height:38px;cursor:pointer">');
-  h += hmFi('entityId Sesame', '<input type="text" id="hme-entityId" value="'+esc(cfg.entityId||'')+'" onchange="hmEditSync(hmEditId)">');
+  h += hmFi('Devise', '<select id="hme-currency">'+[['EUR','€ Euro'],['USD','$ Dollar'],['GBP','£ Livre'],['CHF','CHF Suisse'],['MAD','MAD Dirham'],['JPY','¥ Yen']].map(function(c){return '<option value="'+c[0]+'"'+(cfg.currency===c[0]?' selected':'')+'>'+c[1]+'</option>';}).join('')+'</select>');
+  h += hmFi('Langue', '<select id="hme-lang">'+[['fr','🇫🇷 Français'],['en','🇬🇧 English'],['de','🇩🇪 Deutsch'],['es','🇪🇸 Español'],['it','🇮🇹 Italiano'],['nl','🇳🇱 Nederlands'],['pt','🇵🇹 Português']].map(function(l){return '<option value="'+l[0]+'"'+(cfg.lang===l[0]?' selected':'')+'>'+l[1]+'</option>';}).join('')+'</select>');
   h += '</div>';
 
-  // ── Modules Éco-Séjour ──
   h += hmSection('ti-leaf','Modules Éco-Séjour actifs');
   var mods = cfg.checkinModules || {};
   var modDefs = [{k:'taxe',l:'Taxe de séjour'},{k:'room',l:'Choix chambre'},{k:'kyc',l:'Vérification ID'},{k:'eco',l:'Préf. éco'},{k:'rewards',l:'Récompenses'},{k:'payment',l:'Paiement'}];
@@ -5823,46 +5808,35 @@ function hmOpenEdit(id){
   modDefs.forEach(function(m){
     var on = !mods[m.k] || mods[m.k].active !== false;
     h += '<label style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid '+(on?'var(--a)':'var(--bdr)')+';border-radius:var(--rs);cursor:pointer;background:'+(on?'var(--al)':'var(--bg)')+'">'
-      +'<input type="checkbox" id="hme-mod-'+m.k+'" '+(on?'checked':'')+' onchange="hmEditSync(hmEditId)" style="accent-color:var(--am)">'
+      +'<input type="checkbox" id="hme-mod-'+m.k+'" '+(on?'checked':'')+' style="accent-color:var(--am)">'
       +'<span style="font-size:13px;font-weight:500">'+m.l+'</span></label>';
   });
   h += '</div>';
 
-  // ── Programme de points ──
-  h += hmSection('ti-star','Programme de points &amp; Récompenses');
-  var pts = (cfg.gains&&cfg.gains.points)||{name:'Green Points',perLiter:1,active:true};
+  h += hmSection('ti-star','Programme de points');
+  var pts = (cfg.gains&&cfg.gains.points)||{name:'Sesame Points',perLiter:1};
   h += '<div class="g2">';
-  h += hmFi('Nom du programme', '<input type="text" id="hme-ptsName" value="'+esc(pts.name||'Green Points')+'" onchange="hmEditSync(hmEditId)">');
-  h += hmFi('Points / litre eau', '<input type="number" id="hme-perLiter" value="'+((pts.perLiter)||1)+'" min="0" step="0.5" onchange="hmEditSync(hmEditId)">');
+  h += hmFi('Nom du programme', '<input type="text" id="hme-ptsName" value="'+esc(pts.name||'Sesame Points')+'">');
+  h += hmFi('Points / litre eau', '<input type="number" id="hme-perLiter" value="'+((pts.perLiter)||1)+'" min="0" step="0.5">');
   h += '</div>';
 
-  // ── Taxe de séjour ──
   h += hmSection('ti-receipt','Taxe de séjour');
   h += '<div class="g2">';
-  h += hmFi('Barème '+stars+' étoiles ('+sym+'/nuit/pers)', '<input type="number" id="hme-tarif" value="'+(cfg.tarifs&&cfg.tarifs[cfg.stars-1]||2.60)+'" min="0" step="0.01" onchange="hmEditSync(hmEditId)">');
-  h += hmFi('Exonération enfants &lt;13', '<label style="display:flex;align-items:center;gap:8px;height:38px"><input type="checkbox" id="hme-exoEnf" '+(cfg.exoEnf?'checked':'')+' onchange="hmEditSync(hmEditId)" style="accent-color:var(--am)"><span>Activé</span></label>');
+  h += hmFi('Barème '+cfg.stars+' étoiles ('+sym+'/nuit/pers)', '<input type="number" id="hme-tarif" value="'+((cfg.tarifs&&cfg.tarifs[cfg.stars-1])||2.60)+'" min="0" step="0.01">');
+  h += hmFi('Exonération enfants &lt;13', '<label style="display:flex;align-items:center;gap:8px;height:38px"><input type="checkbox" id="hme-exoEnf" '+(cfg.exoEnf?'checked':'')+' style="accent-color:var(--am)"><span>Activé</span></label>');
   h += '</div>';
 
-  // ── KPIs ménage ──
   h += hmSection('ti-clock','KPIs ménage');
   var kpi = cfg.kpi || {minPerClean:45,minPerTowel:10,hourlyRate:22,annualStays:500};
   h += '<div class="g2">';
-  h += hmFi('Min / ménage complet', '<input type="number" id="hme-minClean" value="'+kpi.minPerClean+'" min="5" onchange="hmEditSync(hmEditId)">');
-  h += hmFi('Taux horaire ('+sym+')', '<input type="number" id="hme-hourly" value="'+kpi.hourlyRate+'" min="1" step="0.5" onchange="hmEditSync(hmEditId)">');
-  h += hmFi('Séjours éco / an', '<input type="number" id="hme-annualStays" value="'+kpi.annualStays+'" min="1" onchange="hmEditSync(hmEditId)">');
-  h += hmFi('Paramètres eau (L/ménage)', '<input type="number" id="hme-eauMenage" value="'+(cfg.eauMenage||15)+'" min="1" onchange="hmEditSync(hmEditId)">');
-  h += '</div>';
-
-  // ── API Sesame ──
-  h += hmSection('ti-api','Connexion API Sesame');
-  h += '<div class="g2">';
-  h += hmFi('URL serveur', '<input type="text" id="hme-apiUrl" value="'+esc(cfg.apiUrl||'')+'" placeholder="https://..." onchange="hmEditSync(hmEditId)">');
-  h += hmFi('entityId', '<input type="text" id="hme-apiEntityId" value="'+esc(cfg.entityId||'')+'" placeholder="E00000XXX" onchange="hmEditSync(hmEditId)">');
+  h += hmFi('Min / ménage complet', '<input type="number" id="hme-minClean" value="'+(kpi.minPerClean||45)+'" min="5">');
+  h += hmFi('Taux horaire ('+sym+')', '<input type="number" id="hme-hourly" value="'+(kpi.hourlyRate||22)+'" min="1" step="0.5">');
+  h += hmFi('Séjours éco / an', '<input type="number" id="hme-annualStays" value="'+(kpi.annualStays||500)+'" min="1">');
+  h += hmFi('Paramètres eau (L/ménage)', '<input type="number" id="hme-eauMenage" value="'+(cfg.eauMenage||15)+'" min="1">');
   h += '</div>';
 
   h += '<div class="brow" style="margin-top:16px">'
-    +'<button class="btn btn-p" onclick="hmSaveEditAndApply(hmEditId)"><i class="ti ti-check"></i> Enregistrer</button>'
-    +'<button class="btn btn-s" onclick="hmExportSingle(hmEditId)"><i class="ti ti-download"></i></button>'
+    +'<button class="btn btn-p" onclick="hmSaveEditAndApply()"><i class="ti ti-check"></i> Enregistrer</button>'
     +'<button class="btn btn-s" onclick="hmCloseEdit()"><i class="ti ti-x"></i></button>'
     +'</div>';
 
@@ -5878,94 +5852,59 @@ function hmSection(ico, lbl){
 function hmFi(lbl, input){
   return '<div class="fi"><label class="lb">'+lbl+'</label>'+input+'</div>';
 }
-function esc(s){ return String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
-function hmEditSync(id){
-  // Live-sync edits into the hotel's config in the list
-  var list  = hmLoad();
-  var hotel = list.find(function(h){return h.id===id;});
-  if(!hotel) return;
-  if(!hotel.cfg) hotel.cfg = JSON.parse(JSON.stringify(DEFAULT));
-  var cfg = hotel.cfg;
-
-  // Read all form fields
+async function hmSaveEditAndApply(){
+  var code = hmEditCode;
+  if(!code) return;
   var gv = function(elId){ var el=document.getElementById(elId); return el?el.value:null; };
   var gc = function(elId){ var el=document.getElementById(elId); return el?el.checked:false; };
 
-  var name = gv('hme-name'); if(name!==null){ cfg.hotelName=name; hotel.name=name; }
-  var stars= parseInt(gv('hme-stars')); if(!isNaN(stars)){ cfg.stars=stars; hotel.stars=stars; }
+  var cfg = hmEditCfg || {};
+  var name = gv('hme-name'); if(name!==null) cfg.hotelName=name;
+  var stars= parseInt(gv('hme-stars')); if(!isNaN(stars)) cfg.stars=stars;
   var cur  = gv('hme-currency'); if(cur!==null) cfg.currency=cur;
   var lang = gv('hme-lang');     if(lang!==null) cfg.lang=lang;
-  var color= gv('hme-color');    if(color!==null) hotel.color=color;
-  var eid  = gv('hme-entityId'); if(eid!==null) cfg.entityId=eid;
 
-  // Modules
   if(!cfg.checkinModules) cfg.checkinModules={};
   ['taxe','room','kyc','eco','rewards','payment'].forEach(function(k){
     if(!cfg.checkinModules[k]) cfg.checkinModules[k]={};
     cfg.checkinModules[k].active = gc('hme-mod-'+k);
   });
 
-  // Points
-  if(!cfg.gains) cfg.gains={points:{active:true,name:'Green Points',perLiter:1}};
-  if(!cfg.gains.points) cfg.gains.points={active:true,name:'Green Points',perLiter:1};
+  if(!cfg.gains) cfg.gains={points:{active:true,name:'Sesame Points',perLiter:1}};
+  if(!cfg.gains.points) cfg.gains.points={active:true,name:'Sesame Points',perLiter:1};
   var pn=gv('hme-ptsName'); if(pn!==null) cfg.gains.points.name=pn;
   var pl=parseFloat(gv('hme-perLiter')); if(!isNaN(pl)) cfg.gains.points.perLiter=pl;
 
-  // Tarif
-  var tarif=parseFloat(gv('hme-tarif')); if(!isNaN(tarif)&&cfg.tarifs) cfg.tarifs[cfg.stars-1]=tarif;
+  var tarif=parseFloat(gv('hme-tarif')); if(!isNaN(tarif)){ if(!cfg.tarifs) cfg.tarifs=[0,0,0,0,0]; cfg.tarifs[cfg.stars-1]=tarif; }
   cfg.exoEnf = gc('hme-exoEnf');
 
-  // KPI
   if(!cfg.kpi) cfg.kpi={};
   var mc=parseInt(gv('hme-minClean')); if(!isNaN(mc)) cfg.kpi.minPerClean=mc;
   var hr=parseFloat(gv('hme-hourly')); if(!isNaN(hr)) cfg.kpi.hourlyRate=hr;
   var as=parseInt(gv('hme-annualStays')); if(!isNaN(as)) cfg.kpi.annualStays=as;
   var em=parseInt(gv('hme-eauMenage')); if(!isNaN(em)) cfg.eauMenage=em;
 
-  // API
-  var au=gv('hme-apiUrl'); if(au!==null) cfg.apiUrl=au;
-  var ae=gv('hme-apiEntityId'); if(ae!==null) cfg.entityId=ae;
+  cfg.entityCode = code; // cible explicite, indépendante de ACTIVE_ENTITY_CODE
+  try{
+    var r = await adminFetch('/wa/entityModuleConfig/update', {method:'POST', body:JSON.stringify(cfg)});
+    if(!r.ok){ toast('Erreur lors de l\'enregistrement'); return; }
+  }catch(e){ toast('Erreur de connexion au serveur'); return; }
 
-  hmSave(list);
-}
-
-function hmSaveEditAndApply(id){
-  hmEditSync(id);
-  var isActive = hmGetActiveId()===id;
-  if(isActive){
-    // Apply changes to live CFG immediately
-    var list  = hmLoad();
-    var hotel = list.find(function(h){return h.id===id;});
-    if(hotel){
-      CFG = hmLoadCfg(hotel);
-      try{ localStorage.setItem('SESAME_CFG',JSON.stringify(CFG)); }catch(e){}
-      populateAll(); renderDash();
-    }
-  }
+  var wasActive = (code===ACTIVE_ENTITY_CODE);
   hmCloseEdit();
+  await hmFetchList();
   hmRenderGrid();
-  toast('Hôtel enregistré ✓'+(isActive?' — configuration active mise à jour':''));
+  if(wasActive){ await loadCfg(); populateAll(); renderDash(); }
+  toast('Hôtel enregistré ✓'+(wasActive?' — configuration active mise à jour':''));
 }
 
 function hmCloseEdit(){
   document.getElementById('hm-edit-modal').style.display='none';
-  hmEditId=null;
-}
-function hmExportSingle(id){
-  var list  = hmLoad();
-  var hotel = list.find(function(h){return h.id===id;});
-  if(!hotel) return;
-  var blob=new Blob([JSON.stringify(hotel.cfg||{},null,2)],{type:'application/json'});
-  var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-  a.download=(hotel.name||'hotel').replace(/\s/g,'_')+'.json'; a.click();
-  toast('Export de "'+hotel.name+'" téléchargé');
+  hmEditCode=null; hmEditCfg=null;
 }
 
 // ── Compatibility aliases (old code used these) ──
-function loadHotelsList(){ return hmLoad(); }
-function getActiveHotelId(){ return hmGetActiveId(); }
-function setActiveHotelId(id){ hmSetActiveId(id); }
 function renderHotelsPanel(){ hmRenderGrid(); }
 
 
@@ -6301,7 +6240,7 @@ showPan=function(id){
   _prevShowPanRef(id);
   if(id==='dash'){ setTimeout(renderKpiPreview,50); }
   if(id==='tarifs'){ refreshTaxeExportCount(); }
-  if(id==='hotels'){ renderHotelsPanel();renderGroupsList(); }
+  if(id==='hotels'){ renderHotelsPanel(); }
   if(id==='crm'){ crmInit(); }
   if(id==='marketing'){ mktInit(); }
   if(id==='roomservice'){ rsInit(); }
@@ -6312,7 +6251,7 @@ showPan=function(id){
   try{ var orders=ordLoad(); var ac=orders.filter(o=>['new','preparing','delivering'].includes(o.status)).length;
     var b=document.getElementById('ordersBadge'); if(b){ if(ac>0){b.style.display='inline-block';b.textContent=ac;}else b.style.display='none'; } }catch(e){}
   // Maintenir le badge souscriptions à jour partout
-  try{ var subs=subLoad(); var pc=subs.filter(s=>s.status==='trial').length;
+  try{ var subs=SUB_CACHE; var pc=subs.filter(s=>s.status==='trial').length;
     var sb=document.getElementById('subsBadge'); if(sb){ if(pc>0){sb.style.display='inline-block';sb.textContent=pc;sb.style.background='var(--go)';}else sb.style.display='none'; } }catch(e){}
 };
 
@@ -6734,11 +6673,13 @@ document.addEventListener('input', function(e){
 
 // ═══════════════════════════════════════════════ SOUSCRIPTIONS
 
-var SUB_KEY = 'SESAME_SUBSCRIPTIONS';
-var SUB_PRICING_KEY = 'SESAME_PRICING_CONFIG';
+// Panneau "Souscriptions" (compte Sesame uniquement) — GET/POST /wa/subscription/*
+// et /wa/pricingConfig/*. Activer une souscription en essai provisionne
+// automatiquement l'établissement (Entity + compte admin), via le même
+// provisionEntity() que la création manuelle depuis le panneau "Hôtels".
+
 var SUB_FILTER = 'all';
 
-// Liste des modules — doit rester alignée avec OB_MODULES de sesame_onboarding.html
 var SUB_MODULES = [
   {k:'room',        label:'Choix de chambre & Plan',  required:true,  defaultPrice:0},
   {k:'taxe',        label:'Taxe de séjour',           required:false, defaultPrice:9},
@@ -6750,27 +6691,29 @@ var SUB_MODULES = [
   {k:'crm',         label:'CRM & Marketing',          required:false, defaultPrice:25},
 ];
 
-function subLoad(){
-  try{var s=localStorage.getItem(SUB_KEY);if(s)return JSON.parse(s);}catch(e){}
-  return [];
-}
-function subSave(list){ try{localStorage.setItem(SUB_KEY,JSON.stringify(list));}catch(e){} }
+var SUB_CACHE = [];
+var SUB_PRICING = {basePrice:49, trialDays:30, modulePrices:{}};
 
-function subLoadPricing(){
+async function subFetchPricing(){
   try{
-    var s=localStorage.getItem(SUB_PRICING_KEY);
-    if(s) return Object.assign({basePrice:49,trialDays:30,modulePrices:{}}, JSON.parse(s));
+    var r = await adminFetch('/wa/pricingConfig');
+    if(r.ok) SUB_PRICING = await r.json();
   }catch(e){}
-  return {basePrice:49, trialDays:30, modulePrices:{}};
+}
+async function subFetchList(){
+  try{
+    var r = await adminFetch('/wa/subscription/list');
+    if(r.ok) SUB_CACHE = await r.json();
+  }catch(e){}
 }
 
-function subInit(){
-  var pricing = subLoadPricing();
-  document.getElementById('sub-base-price').value = pricing.basePrice;
-  document.getElementById('sub-trial-days').value = pricing.trialDays;
+async function subInit(){
+  await subFetchPricing();
+  document.getElementById('sub-base-price').value = SUB_PRICING.basePrice;
+  document.getElementById('sub-trial-days').value = SUB_PRICING.trialDays;
 
   document.getElementById('sub-module-prices').innerHTML = SUB_MODULES.filter(function(m){return !m.required;}).map(function(m){
-    var price = (pricing.modulePrices && pricing.modulePrices[m.k]!=null) ? pricing.modulePrices[m.k] : m.defaultPrice;
+    var price = (SUB_PRICING.modulePrices && SUB_PRICING.modulePrices[m.k]!=null) ? SUB_PRICING.modulePrices[m.k] : m.defaultPrice;
     return '<div class="fi" style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
       + '<label class="lb" style="flex:1;margin-bottom:0;text-transform:none;font-size:13px;font-weight:500;color:var(--tx)">'+esc(m.label)+'</label>'
       + '<div style="width:120px"><input type="number" min="0" step="1" id="sub-price-'+m.k+'" value="'+price+'" style="text-align:right"></div>'
@@ -6778,22 +6721,27 @@ function subInit(){
       + '</div>';
   }).join('');
 
+  await subFetchList();
   renderSubscriptions();
 }
 
-function subSavePricing(){
+async function subSavePricing(){
   var modulePrices = {};
   SUB_MODULES.filter(function(m){return !m.required;}).forEach(function(m){
     var el = document.getElementById('sub-price-'+m.k);
     if(el) modulePrices[m.k] = parseFloat(el.value)||0;
   });
-  var cfg = {
+  var body = {
     basePrice: parseFloat(document.getElementById('sub-base-price').value)||49,
     trialDays: parseInt(document.getElementById('sub-trial-days').value)||30,
     modulePrices: modulePrices
   };
-  try{ localStorage.setItem(SUB_PRICING_KEY, JSON.stringify(cfg)); }catch(e){}
-  toast('Grille tarifaire enregistrée ✓');
+  try{
+    var r = await adminFetch('/wa/pricingConfig/update', {method:'POST', body:JSON.stringify(body)});
+    if(!r.ok){ toast('Erreur lors de l\'enregistrement'); return; }
+    SUB_PRICING = await r.json();
+    toast('Grille tarifaire enregistrée ✓');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
 }
 
 function subSetFilter(f){
@@ -6812,20 +6760,14 @@ var SUB_STATUS_INFO = {
 };
 
 function subDaysRemaining(sub){
+  if(!sub.trialEnd) return 0;
   var end = new Date(sub.trialEnd);
   var now = new Date();
   return Math.ceil((end-now)/(1000*60*60*24));
 }
 
 function renderSubscriptions(){
-  var subs = subLoad();
-
-  // Auto-update expired trials
-  var changed=false;
-  subs.forEach(function(s){
-    if(s.status==='trial' && subDaysRemaining(s)<0){ s.status='expired'; changed=true; }
-  });
-  if(changed) subSave(subs);
+  var subs = SUB_CACHE;
 
   // Stats
   document.getElementById('sub-total').textContent    = subs.length;
@@ -6878,8 +6820,7 @@ function renderSubscriptions(){
 }
 
 function subOpenDetail(id){
-  var subs = subLoad();
-  var s = subs.find(function(x){return x.id===id;});
+  var s = SUB_CACHE.find(function(x){return x.id===id;});
   if(!s) return;
 
   var st = SUB_STATUS_INFO[s.status] || SUB_STATUS_INFO.trial;
@@ -6898,7 +6839,7 @@ function subOpenDetail(id){
   h += '<div class="fi"><label class="lb">Téléphone</label><input type="text" value="'+esc(s.contact.phone||'—')+'" readonly></div>';
   h += '</div>';
   h += '<div class="g2" style="margin-bottom:14px">';
-  h += '<div class="fi"><label class="lb">Identifiant établissement</label><input type="text" value="'+esc(s.entityId)+'" readonly style="font-family:monospace"></div>';
+  h += '<div class="fi"><label class="lb">Identifiant établissement</label><input type="text" value="'+esc(s.entityCode||'Non provisionné')+'" readonly style="font-family:monospace"></div>';
   h += '<div class="fi"><label class="lb">PMS</label><input type="text" value="'+esc(s.pmsLabel||'—')+'" readonly></div>';
   h += '</div>';
 
@@ -6935,8 +6876,8 @@ function subOpenDetail(id){
   if(s.status==='expired' || s.status==='cancelled'){
     h += '<button class="btn btn-p btn-s" onclick="subActivate(\''+s.id+'\')"><i class="ti ti-refresh"></i> Réactiver</button>';
   }
-  if(s.hotelId){
-    h += '<button class="btn btn-s" onclick="subOpenHotel(\''+s.hotelId+'\')"><i class="ti ti-settings"></i> Configurer l\'hôtel</button>';
+  if(s.entityCode){
+    h += '<button class="btn btn-s" onclick="subOpenHotel(\''+s.entityCode+'\')"><i class="ti ti-settings"></i> Configurer l\'hôtel</button>';
   }
   h += '</div>';
 
@@ -6944,54 +6885,120 @@ function subOpenDetail(id){
   document.getElementById('subModal').style.display = 'flex';
 }
 
-function subSetStatus(id, status){
-  var subs = subLoad();
-  var s = subs.find(function(x){return x.id===id;});
-  if(!s) return;
-  s.status = status;
-  subSave(subs);
-  document.getElementById('subModal').style.display='none';
-  renderSubscriptions();
-  toast('Souscription '+esc(s.hotelName)+' → '+(SUB_STATUS_INFO[status]?SUB_STATUS_INFO[status].label:status));
+function subCacheUpdate(updated){
+  var idx = SUB_CACHE.findIndex(function(x){return x.id===updated.id;});
+  if(idx>-1) SUB_CACHE[idx]=updated; else SUB_CACHE.unshift(updated);
 }
 
-function subActivate(id){
-  var subs = subLoad();
-  var s = subs.find(function(x){return x.id===id;});
+async function subSetStatus(id, status){
+  try{
+    var r = await adminFetch('/wa/subscription/status', {method:'POST', body:JSON.stringify({id:id, status:status})});
+    if(!r.ok){ toast('Erreur lors du changement de statut'); return; }
+    var updated = await r.json();
+    subCacheUpdate(updated);
+    document.getElementById('subModal').style.display='none';
+    renderSubscriptions();
+    toast('Souscription '+esc(updated.hotelName)+' → '+(SUB_STATUS_INFO[status]?SUB_STATUS_INFO[status].label:status));
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+async function subActivate(id){
+  var s = SUB_CACHE.find(function(x){return x.id===id;});
   if(!s) return;
   if(!s.paymentMethod){
     if(!confirm('Aucun moyen de paiement n\'est renseigné pour cet établissement. Activer quand même l\'abonnement ?')) return;
   }
-  s.status = 'active';
-  s.activatedAt = new Date().toISOString();
-  subSave(subs);
-  document.getElementById('subModal').style.display='none';
-  renderSubscriptions();
-  toast('Abonnement '+esc(s.hotelName)+' activé ✓');
+  try{
+    var r = await adminFetch('/wa/subscription/status', {method:'POST', body:JSON.stringify({id:id, status:'active'})});
+    if(!r.ok){ toast('Erreur lors de l\'activation'); return; }
+    var updated = await r.json();
+    subCacheUpdate(updated);
+    document.getElementById('subModal').style.display='none';
+    renderSubscriptions();
+    if(updated.provisioned){
+      alert('Abonnement "'+updated.hotelName+'" activé ✓\n\nÉtablissement provisionné — compte admin :\nEmail : '+updated.provisioned.adminEmail+'\nMot de passe : '+updated.provisioned.adminPassword+'\n\nCommuniquez ces identifiants au client — le mot de passe ne sera plus jamais affiché.');
+    } else {
+      toast('Abonnement '+esc(updated.hotelName)+' activé ✓');
+    }
+  }catch(e){ toast('Erreur de connexion au serveur'); }
 }
 
-function subExtendTrial(id){
-  var subs = subLoad();
-  var s = subs.find(function(x){return x.id===id;});
-  if(!s) return;
+async function subExtendTrial(id){
   var days = parseInt(prompt('Prolonger l\'essai de combien de jours ?', '15'));
   if(!days || days<=0) return;
-  var end = new Date(s.trialEnd);
-  end.setDate(end.getDate()+days);
-  s.trialEnd = end.toISOString();
-  s.trialDays = (s.trialDays||0) + days;
-  subSave(subs);
-  document.getElementById('subModal').style.display='none';
-  renderSubscriptions();
-  toast('Essai prolongé de '+days+' jour(s) ✓');
+  try{
+    var r = await adminFetch('/wa/subscription/extendTrial', {method:'POST', body:JSON.stringify({id:id, days:days})});
+    if(!r.ok){ toast('Erreur lors de la prolongation'); return; }
+    var updated = await r.json();
+    subCacheUpdate(updated);
+    document.getElementById('subModal').style.display='none';
+    renderSubscriptions();
+    toast('Essai prolongé de '+days+' jour(s) ✓');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
 }
 
-function subOpenHotel(hotelId){
+function subOpenHotel(entityCode){
   document.getElementById('subModal').style.display='none';
-  var list = hmLoad();
-  var hotel = list.find(function(h){return h.id===hotelId;});
-  if(!hotel){ toast('Hôtel introuvable (peut-être supprimé)'); return; }
-  hmActivate(hotelId);
+  if(!entityCode){ toast('Hôtel introuvable (peut-être supprimé)'); return; }
+  showPan('hotels');
+  hmActivate(entityCode);
+}
+
+// ── Nouvelle souscription (Sesame crée la demande d'essai à la main) ──
+function subOpenNew(){
+  var h = '';
+  h += '<div class="g2">';
+  h += '<div class="fi"><label class="lb">Nom de l\'hôtel</label><input type="text" id="subn-hotelName" placeholder="Hôtel de la Paix"></div>';
+  h += '<div class="fi"><label class="lb">Étoiles</label><select id="subn-stars">'+[1,2,3,4,5].map(function(s){return '<option value="'+s+'"'+(s===3?' selected':'')+'>'+s+'★</option>';}).join('')+'</select></div>';
+  h += '</div><div class="g2">';
+  h += '<div class="fi"><label class="lb">Email de contact</label><input type="email" id="subn-email" placeholder="contact@hotel.fr"></div>';
+  h += '<div class="fi"><label class="lb">Téléphone</label><input type="text" id="subn-phone" placeholder="+33 ..."></div>';
+  h += '</div>';
+  h += '<div class="fi"><label class="lb">PMS actuel (optionnel)</label><input type="text" id="subn-pms" placeholder="Ex : Mews, Opera, aucun…"></div>';
+  h += '<div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin:14px 0 8px">Modules souscrits</div>';
+  h += '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">';
+  h += SUB_MODULES.map(function(m){
+    var price = (SUB_PRICING.modulePrices && SUB_PRICING.modulePrices[m.k]!=null) ? SUB_PRICING.modulePrices[m.k] : m.defaultPrice;
+    return '<label style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--bdr);border-radius:var(--rs);cursor:'+(m.required?'default':'pointer')+'">'
+      +'<input type="checkbox" class="subn-mod" value="'+m.k+'" '+(m.required?'checked disabled':'checked')+' style="accent-color:var(--am)">'
+      +'<span style="flex:1;font-size:13px">'+esc(m.label)+(m.required?' <span style="color:var(--mu);font-size:11px">(inclus)</span>':'')+'</span>'
+      +'<span style="font-size:12px;color:var(--mu)">'+(m.required?'Inclus':price+' €/mois')+'</span>'
+      +'</label>';
+  }).join('');
+  h += '</div>';
+  h += '<div class="brow"><button class="btn btn-p" onclick="subCreateFromForm()"><i class="ti ti-check"></i> Créer la souscription</button>'
+    +'<button class="btn btn-s" onclick="document.getElementById(\'subNewModal\').style.display=\'none\'">Annuler</button></div>';
+  document.getElementById('subNewModalBody').innerHTML = h;
+  document.getElementById('subNewModal').style.display = 'flex';
+}
+
+async function subCreateFromForm(){
+  var name = (document.getElementById('subn-hotelName').value||'').trim();
+  var email = (document.getElementById('subn-email').value||'').trim();
+  if(!name || !email){ toast('Nom de l\'hôtel et email de contact requis'); return; }
+  var stars = parseInt(document.getElementById('subn-stars').value)||3;
+  var phone = document.getElementById('subn-phone').value||'';
+  var pms   = document.getElementById('subn-pms').value||'';
+  var modules = Array.prototype.map.call(document.querySelectorAll('.subn-mod:checked'), function(el){return el.value;});
+  var modulePrices = SUB_PRICING.modulePrices||{};
+  var basePrice = SUB_PRICING.basePrice||49;
+  var monthlyTotal = basePrice;
+  modules.forEach(function(mk){
+    var m = SUB_MODULES.find(function(x){return x.k===mk;});
+    if(m && !m.required) monthlyTotal += (modulePrices[mk]!=null?modulePrices[mk]:m.defaultPrice);
+  });
+
+  try{
+    var r = await adminFetch('/wa/subscription/create', {method:'POST', body:JSON.stringify({
+      hotelName:name, stars:stars, contactEmail:email, contactPhone:phone, pmsLabel:pms,
+      modules:modules, basePrice:basePrice, modulePrices:modulePrices, monthlyTotal:monthlyTotal, trialDays:SUB_PRICING.trialDays
+    })});
+    if(!r.ok){ var err=await r.json().catch(function(){return{};}); toast(err.error||'Erreur lors de la création'); return; }
+    document.getElementById('subNewModal').style.display='none';
+    await subFetchList();
+    renderSubscriptions();
+    toast('Souscription "'+name+'" créée (essai '+(SUB_PRICING.trialDays||30)+' j.) ✓');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
 }
 
 

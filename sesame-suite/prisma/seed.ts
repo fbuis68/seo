@@ -16,6 +16,9 @@ const ENTITY_CODE = process.env.DEFAULT_ENTITY_CODE || "E00000001";
 const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL || "admin@hotel-churchill.fr";
 const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || "churchill2026";
 
+const SESAME_ADMIN_EMAIL = process.env.SEED_SESAME_ADMIN_EMAIL || "super-admin@sesame.technology";
+const SESAME_ADMIN_PASSWORD = process.env.SEED_SESAME_ADMIN_PASSWORD || "sesame2026";
+
 async function main() {
   console.log(`Seeding entity ${ENTITY_CODE} (Hôtel Churchill)…`);
 
@@ -299,14 +302,43 @@ async function main() {
     }
   }
 
-  // ── Compte admin back-office ──
+  // ── Compte admin back-office (établissement) ──
   const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
   await prisma.adminUser.upsert({
-    where: { entityId_email: { entityId: entity.id, email: ADMIN_EMAIL } },
+    where: { email: ADMIN_EMAIL },
     update: {},
-    create: { entityId: entity.id, email: ADMIN_EMAIL, passwordHash, name: "Direction Hôtel Churchill" },
+    create: { entityId: entity.id, email: ADMIN_EMAIL, passwordHash, name: "Direction Hôtel Churchill", role: "hotel" },
   });
-  console.log(`Admin seedé : ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
+  console.log(`Admin hôtel seedé : ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
+
+  // ── Entité technique "Sesame HQ" + compte super-admin Sesame ──
+  // Sert uniquement à rattacher les comptes role="sesame" (aucune donnée
+  // hôtelière) — ces comptes créent/gèrent les vrais établissements via le
+  // panneau "Hôtels" et ciblent n'importe quel entityCode (cf. resolveEntity).
+  const sesameHq = await prisma.entity.upsert({
+    where: { code: "SESAME-HQ" },
+    update: {},
+    create: { code: "SESAME-HQ", name: "Sesame Technology" },
+  });
+  const sesamePasswordHash = await bcrypt.hash(SESAME_ADMIN_PASSWORD, 10);
+  await prisma.adminUser.upsert({
+    where: { email: SESAME_ADMIN_EMAIL },
+    update: {},
+    create: { entityId: sesameHq.id, email: SESAME_ADMIN_EMAIL, passwordHash: sesamePasswordHash, name: "Sesame Technology", role: "sesame" },
+  });
+  console.log(`Admin Sesame seedé : ${SESAME_ADMIN_EMAIL} / ${SESAME_ADMIN_PASSWORD}`);
+
+  // ── Grille tarifaire par défaut (panneau Souscriptions) ──
+  await prisma.pricingConfig.upsert({
+    where: { id: "global" },
+    update: {},
+    create: {
+      id: "global",
+      basePrice: 49,
+      trialDays: 30,
+      modulePrices: { taxe: 9, kyc: 15, eco: 12, rewards: 19, payment: 15, roomservice: 12, crm: 25 },
+    },
+  });
 
   // ── Agents de ménage de démonstration (Planning) ──
   const STAFF: Array<{ name: string; color: string; team: string; rooms: string[] }> = [
