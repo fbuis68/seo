@@ -76,6 +76,27 @@ couche de données rebranchée sur l'API) :
 - Voir « Comptes de démonstration » ci-dessous pour se connecter en tant que
   Sesame et tester ces deux panneaux.
 
+**Groupes d'hôtels (chaînes)** — panneau "Groupes" (compte Sesame uniquement) :
+rattache plusieurs établissements à un `Group`, avec pour la fidélité et pour
+la politique éco un choix indépendant entre :
+
+- **Centralisée** : un seul réglage partagé, géré depuis le panneau
+  "Groupes". Pour la fidélité, cela va jusqu'au solde de points lui-même —
+  un client cumule ses points sur tous les hôtels du groupe (`LoyaltyAccount`
+  scopé par `groupId` au lieu de `entityId`, cf. `resolveLoyaltyScope()`) et
+  la base clients (panneau CRM) agrège réservations/préférences sur tous les
+  hôtels du groupe. Les établissements membres restent en lecture seule sur
+  ces champs (`GET /wa/entityModuleConfig/list` renvoie les valeurs du
+  groupe ; `POST /wa/entityModuleConfig/update` les ignore silencieusement
+  si un hôtel tente de les modifier — bannière d'avertissement côté front).
+- **Indépendante** : chaque hôtel garde ses propres réglages et son propre
+  solde de fidélité, comme s'il n'était pas dans un groupe.
+
+Rattacher un hôtel à un groupe à fidélité centralisée fusionne son solde
+existant (par email) dans le solde partagé du groupe. Détacher un hôtel ne
+« redescend » pas ce solde partagé — l'hôtel repart avec un historique
+propre, le solde du groupe restant intact pour les établissements restants.
+
 **Non couvert** (hors périmètre — panneau du prototype `sesame_admin.html`
 gérant le CRM commercial interne de Sesame, sans rapport avec la gestion
 d'un établissement) : "CRM Sesame". Son code JS reste présent dans
@@ -222,8 +243,10 @@ sesame-suite/
       login.ts                         # POST /wa/login/login (admin, tous rôles)
       entity.ts                         # GET/POST /wa/entity/* (compte sesame uniquement)
       subscription.ts                    # GET/POST /wa/subscription/*, /wa/pricingConfig/* (sesame)
-      auth.ts                             # POST /api/auth/guest-login (client)
+      group.ts                            # GET/POST /wa/group/* (chaînes d'hôtels, sesame uniquement)
+      auth.ts                              # POST /api/auth/guest-login (client)
     lib/provisionEntity.ts                # provisionne Entity + config + AdminUser hotel
+    lib/loyaltyScope.ts                    # résout le scope de fidélité (entité ou groupe centralisé)
   public/
     checkin.html          # prototype d'origine (client), rebranché sur l'API
     admin.html             # prototype d'origine (back-office), rebranché sur l'API

@@ -48,12 +48,22 @@ const UPDATABLE_FIELDS = [
   "kpi",
 ] as const;
 
+// Champs "fidélité" et "éco" pouvant être centralisés au niveau d'un Group
+// (cf. panneau "Groupes", Sesame uniquement) — cf. GROUP_ECO_FIELDS ci-dessous
+// pour le sous-ensemble éco exact.
+const LOYALTY_FIELDS = ["gains", "loyaltyTiers"] as const;
+const GROUP_ECO_FIELDS = ["eauMenage", "eauServ", "co2Factor", "freqOpts", "exoEnf", "reducAdos", "exoHand"] as const;
+
 /**
  * GET /wa/entityModuleConfig/list?entityCode=E00000001
  *
  * Retourne le bundle de configuration complet consommé par le front (CFG) :
  * charte graphique, tarifs, modules actifs, catalogue boutique, chambres…
  * Remplace la lecture localStorage('SESAME_CFG') de l'ancien prototype.
+ *
+ * Si l'établissement appartient à un Group avec une politique centralisée
+ * (fidélité et/ou éco), les champs correspondants sont remplacés par les
+ * valeurs partagées du groupe — cf. panneau "Groupes".
  */
 configRouter.get(
   "/entityModuleConfig/list",
@@ -67,6 +77,11 @@ configRouter.get(
       where: { entityId: entity.id, active: true },
       orderBy: { sortOrder: "asc" },
     });
+
+    const group = entity.groupId ? await prisma.group.findUnique({ where: { id: entity.groupId } }) : null;
+    const loyaltyCentralized = group?.loyaltyMode === "centralized";
+    const ecoCentralized = group?.ecoMode === "centralized";
+    const sharedEco = (group?.sharedEco as Record<string, unknown> | null) || {};
 
     res.json({
       entityId: entity.code,
@@ -92,17 +107,17 @@ configRouter.get(
       lang: cfg.lang,
       currency: cfg.currency,
       tarifs: cfg.tarifs,
-      exoEnf: cfg.exoEnf,
-      reducAdos: cfg.reducAdos,
-      exoHand: cfg.exoHand,
-      eauMenage: cfg.eauMenage,
-      eauServ: cfg.eauServ,
-      co2Factor: cfg.co2Factor,
-      freqOpts: cfg.freqOpts,
-      gains: cfg.gains,
+      exoEnf: ecoCentralized && sharedEco.exoEnf !== undefined ? sharedEco.exoEnf : cfg.exoEnf,
+      reducAdos: ecoCentralized && sharedEco.reducAdos !== undefined ? sharedEco.reducAdos : cfg.reducAdos,
+      exoHand: ecoCentralized && sharedEco.exoHand !== undefined ? sharedEco.exoHand : cfg.exoHand,
+      eauMenage: ecoCentralized && sharedEco.eauMenage !== undefined ? sharedEco.eauMenage : cfg.eauMenage,
+      eauServ: ecoCentralized && sharedEco.eauServ !== undefined ? sharedEco.eauServ : cfg.eauServ,
+      co2Factor: ecoCentralized && sharedEco.co2Factor !== undefined ? sharedEco.co2Factor : cfg.co2Factor,
+      freqOpts: ecoCentralized && sharedEco.freqOpts !== undefined ? sharedEco.freqOpts : cfg.freqOpts,
+      gains: loyaltyCentralized && group?.sharedGains ? group.sharedGains : cfg.gains,
       checkinModules: cfg.checkinModules,
       rewardCatalog: cfg.rewardCatalog,
-      loyaltyTiers: cfg.loyaltyTiers,
+      loyaltyTiers: loyaltyCentralized && group?.sharedLoyaltyTiers ? group.sharedLoyaltyTiers : cfg.loyaltyTiers,
       hotelPlan: cfg.hotelPlan,
       roomTags: cfg.roomTags,
       accessPoints: cfg.accessPoints,
@@ -120,6 +135,9 @@ configRouter.get(
         videoUrl: p.videoUrl || "",
         active: p.active,
       })),
+      groupPolicy: group
+        ? { groupCode: group.code, groupName: group.name, loyaltyCentralized, ecoCentralized }
+        : null,
     });
   })
 );
@@ -129,16 +147,31 @@ configRouter.get(
  * Écrit un sous-ensemble de champs de la config (charte, textes, tarifs,
  * gains, modules actifs, catalogues JSON…) — remplace saveCfg() en
  * localStorage. Protégé (back-office uniquement).
+ *
+ * Les panneaux du front envoient systématiquement le bundle CFG complet
+ * (cf. saveCfg()), y compris les champs fidélité/éco même quand ils
+ * n'ont pas été modifiés — si l'établissement appartient à un groupe à
+ * politique centralisée, ces champs sont donc silencieusement ignorés ici
+ * (seul le panneau "Groupes", Sesame uniquement, peut les modifier).
  */
 configRouter.post(
   "/entityModuleConfig/update",
   requireAdmin,
   asyncHandler(async (req, res) => {
     const entity = await resolveEntity(req);
+    const group = entity.groupId ? await prisma.group.findUnique({ where: { id: entity.groupId } }) : null;
+
     const data: Record<string, unknown> = {};
     for (const field of UPDATABLE_FIELDS) {
       if (req.body[field] !== undefined) data[field] = req.body[field];
     }
+    if (group?.loyaltyMode === "centralized") {
+      for (const field of LOYALTY_FIELDS) delete data[field];
+    }
+    if (group?.ecoMode === "centralized") {
+      for (const field of GROUP_ECO_FIELDS) delete data[field];
+    }
+
     const updated = await prisma.entityModuleConfig.update({
       where: { entityId: entity.id },
       data,

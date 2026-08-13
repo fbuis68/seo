@@ -23,20 +23,51 @@ model Entity {
   name      String
   createdAt DateTime @default(now())
 
-  config              EntityModuleConfig?
-  rooms               Room[]
-  bookings            Booking[]
-  products            Product[]
-  orders              Order[]
-  taxeRecords         TaxeSejourRecord[]
-  clientPrefs         ClientPrefs[]
-  loyaltyAccounts     LoyaltyAccount[]
-  livretSections      LivretSection[]
-  housekeepingTasks   HousekeepingTask[]
-  housekeepingStaff   HousekeepingStaff[]
-  adminUsers          AdminUser[]
-  campaigns           Campaign[]
-  subscriptions       Subscription[]
+  groupId String?
+  group   Group?  @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  config            EntityModuleConfig?
+  rooms             Room[]
+  bookings          Booking[]
+  products          Product[]
+  orders            Order[]
+  taxeRecords       TaxeSejourRecord[]
+  clientPrefs       ClientPrefs[]
+  loyaltyAccounts   LoyaltyAccount[]
+  livretSections    LivretSection[]
+  housekeepingTasks HousekeepingTask[]
+  housekeepingStaff HousekeepingStaff[]
+  adminUsers        AdminUser[]
+  campaigns         Campaign[]
+  subscriptions     Subscription[]
+}
+
+// Groupe d'établissements (ex : chaîne hôtelière) — gestion réservée aux
+// comptes Sesame. loyaltyMode/ecoMode déterminent si la politique
+// correspondante est centralisée (un seul réglage partagé, points de
+// fidélité cumulés sur tout le groupe) ou seulement "copiée" au moment du
+// rattachement puis gérée indépendamment par chaque établissement ensuite.
+model Group {
+  id   String @id @default(cuid())
+  code String @unique
+  name String
+
+  loyaltyMode String @default("independent") // centralized | independent
+  ecoMode     String @default("independent") // centralized | independent
+
+  // Utilisés uniquement quand le mode correspondant est "centralized" —
+  // mêmes formes que EntityModuleConfig.gains / .loyaltyTiers et le
+  // sous-ensemble de champs éco (eauMenage, eauServ, co2Factor, freqOpts,
+  // exoEnf, reducAdos, exoHand).
+  sharedGains        Json?
+  sharedLoyaltyTiers Json?
+  sharedEco          Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entities        Entity[]
+  loyaltyAccounts LoyaltyAccount[]
 }
 
 // Compte back-office (panneau admin). role="hotel" : géranté par un seul
@@ -45,14 +76,14 @@ model Entity {
 // quel établissement via entityCode (cf. resolveEntity côté serveur) —
 // c'est le compte qui crée/gère les autres établissements.
 model AdminUser {
-  id           String @id @default(cuid())
-  entityId     String
-  entity       Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  entityId String
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  email        String @unique
+  email        String  @unique
   passwordHash String
   name         String?
-  role         String @default("hotel") // sesame | hotel
+  role         String  @default("hotel") // sesame | hotel
 
   createdAt DateTime @default(now())
 }
@@ -98,10 +129,10 @@ model EntityModuleConfig {
   co2Factor Float @default(0.0003)
   freqOpts  Json // number[] fréquences ménage proposées
 
-  gains         Json // {points:{...}, reduction:{...}, produit:{...}, financier:{...}}
+  gains          Json // {points:{...}, reduction:{...}, produit:{...}, financier:{...}}
   checkinModules Json // {room:{active,mandatory}, taxe:{...}, kyc:{...}, eco:{...}, boutique:{...}, roomservice:{...}, rewards:{...}}
-  rewardCatalog Json?
-  loyaltyTiers  Json? // {gold, premium, perks:{Standard:[],Gold:[],Premium:[]}}
+  rewardCatalog  Json?
+  loyaltyTiers   Json? // {gold, premium, perks:{Standard:[],Gold:[],Premium:[]}}
 
   hotelPlan    String? // image du plan (base64 ou URL)
   roomTags     Json?
@@ -293,10 +324,17 @@ model ClientPrefs {
   @@unique([entityId, email])
 }
 
+// Solde de fidélité. Scope par établissement (entityId) normalement, ou par
+// groupe (groupId) quand le groupe de l'établissement a loyaltyMode =
+// "centralized" — un seul solde, cumulé, partagé par tous les hôtels du
+// groupe pour un même client (cf. resolveLoyaltyScope() côté serveur).
+// Exactement un des deux (entityId XOR groupId) est renseigné par ligne.
 model LoyaltyAccount {
-  id       String @id @default(cuid())
-  entityId String
-  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  id       String  @id @default(cuid())
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  groupId  String?
+  group    Group?  @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   email       String
   totalPoints Int    @default(0)
@@ -304,6 +342,7 @@ model LoyaltyAccount {
   transactions LoyaltyTransaction[]
 
   @@unique([entityId, email])
+  @@unique([groupId, email])
 }
 
 model LoyaltyTransaction {
@@ -353,12 +392,12 @@ model HousekeepingStaff {
   entityId String
   entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  name  String
-  color String?
-  team  String?
+  name              String
+  color             String?
+  team              String?
   // Codes des chambres assignées — cf. principe "joins/extras XML" de la doc,
   // ici simplifié en tableau JSON plutôt qu'une table de liaison dédiée.
-  assignedRoomCodes Json @default("[]")
+  assignedRoomCodes Json    @default("[]")
 
   createdAt DateTime @default(now())
 }
@@ -373,12 +412,12 @@ model HousekeepingTask {
 
   roomCode        String
   taskDate        DateTime
-  type            String  @default("menage") // menage | linge | entretien | controle | autre
+  type            String   @default("menage") // menage | linge | entretien | controle | autre
   subtype         String?
   bookingCode     String?
-  ecoAuto         Boolean @default(false)
-  status          String  @default("planned") // planned | done | cancelled
-  priority        String  @default("normal") // normal | urgent
+  ecoAuto         Boolean  @default(false)
+  status          String   @default("planned") // planned | done | cancelled
+  priority        String   @default("normal") // normal | urgent
   durationMinutes Int?
   assignedStaffId String?
   notes           String?

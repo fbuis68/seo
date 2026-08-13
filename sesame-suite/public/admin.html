@@ -242,6 +242,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   <div class="ns">Accueil</div>
   <div class="ni on" data-pan="dash" onclick="showPan('dash')"><i class="ti ti-layout-dashboard"></i>Accueil</div>
   <div class="ni sesame-only" data-pan="hotels" onclick="showPan('hotels')" style="display:none;background:rgba(46,204,113,.06);border-left:3px solid var(--a)"><i class="ti ti-building-skyscraper"></i>Hôtels <span class="nibadge">Multi</span></div>
+  <div class="ni sesame-only" data-pan="groups" onclick="showPan('groups')" style="display:none"><i class="ti ti-hierarchy-3"></i>Groupes</div>
   <div class="ni sesame-only" data-pan="subscriptions" onclick="showPan('subscriptions')" style="display:none"><i class="ti ti-rocket"></i>Souscriptions</div>
   <div class="ns">Identité &amp; Charte</div>
   <div class="ni" data-pan="charte" onclick="showPan('charte')"><i class="ti ti-palette"></i>Logo &amp; Couleurs</div>
@@ -732,6 +733,8 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 <div id="pan-gains" class="pan">
   <div class="ph"><h2>Programme de gains &amp; Récompenses</h2><p>Configurez le barème de points, les gains immédiats et le catalogue d'articles échangeables par les clients</p></div>
 
+  <div id="gains-group-banner" style="display:none;margin-bottom:16px"></div>
+
   <!-- ── SECTION 1 : TYPES DE GAINS ── -->
   <div class="alt alt-g"><i class="ti ti-info-circle"></i><span>Activez les types de gains souhaités. Chaque type est indépendant et cumulable.</span></div>
   <div class="gtiles" id="gainTiles"></div>
@@ -843,6 +846,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 <!-- ════════════════ ECO ════════════════ -->
 <div id="pan-eco" class="pan">
   <div class="ph"><h2>Paramètres éco</h2><p>Références de consommation et fréquences proposées aux clients</p></div>
+  <div id="eco-group-banner" style="display:none;margin-bottom:16px"></div>
   <div class="g2">
     <div class="ca">
       <div class="ch"><i class="ti ti-droplet"></i>Volumes de référence</div>
@@ -1477,6 +1481,38 @@ https://votre-site.fr/<span class="cv">sesame_proxy.php</span></div>
   </div>
 </div>
 
+<!-- ════════════════ GROUPES ════════════════ -->
+<div id="pan-groups" class="pan">
+  <div class="ph">
+    <h2>Groupes</h2>
+    <p>Regroupez plusieurs établissements (chaîne hôtelière) et choisissez, pour la fidélité comme pour la politique éco, si elle est centralisée (partagée et cumulée sur tout le groupe) ou seulement indépendante par hôtel.</p>
+  </div>
+
+  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+    <button class="btn btn-p" onclick="grpOpenCreate()"><i class="ti ti-plus"></i> Nouveau groupe</button>
+  </div>
+
+  <div id="grp-grid" style="display:flex;flex-direction:column;gap:14px"></div>
+  <div id="grp-empty" style="display:none">
+    <div class="alt alt-b" style="text-align:center;padding:24px">
+      <i class="ti ti-hierarchy-3" style="font-size:32px;display:block;margin-bottom:10px;opacity:.4"></i>
+      <div style="font-size:15px;font-weight:600;margin-bottom:6px">Aucun groupe</div>
+      <div style="font-size:13px;color:var(--mu)">Créez un groupe pour rattacher plusieurs hôtels et partager leur politique fidélité/éco.</div>
+    </div>
+  </div>
+
+  <!-- Modal création/édition groupe -->
+  <div id="grp-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center;padding:20px">
+    <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:640px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.3)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--bdr)">
+        <h2 style="font-size:18px" id="grp-modal-title">Groupe</h2>
+        <button onclick="grpCloseModal()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
+      </div>
+      <div id="grp-modal-body" style="padding:20px 22px"></div>
+    </div>
+  </div>
+</div>
+
 <!-- ════════════════ SOUSCRIPTIONS ════════════════ -->
 <div id="pan-subscriptions" class="pan">
   <div class="ph"><h2>Souscriptions</h2><p>Grille tarifaire et suivi des essais — l'activation d'une souscription provisionne automatiquement l'établissement et son compte admin</p></div>
@@ -1877,6 +1913,8 @@ https://votre-site.fr/<span class="cv">sesame_proxy.php</span></div>
 <!-- ════════════════ CRM — BASE CLIENTS ════════════════ -->
 <div id="pan-crm" class="pan">
   <div class="ph"><h2>Base clients</h2><p>Vue 360° des clients : points fidélité, séjours, statut, et coordonnées pour le marketing</p></div>
+
+  <div id="crm-group-banner" style="display:none;margin-bottom:16px"></div>
 
   <!-- Stats -->
   <div class="g4" style="margin-bottom:16px">
@@ -2558,11 +2596,13 @@ function showPan(id){
   if(id==='charte'){renderColorList();}
   if(id==='hotel'){try{renderModuleCards();renderAccessPoints();}catch(e){}}
   if(id==='gains'){renderGains();}
+  if(id==='eco'){renderEcoBanner();}
   if(id==='plan'){try{renderPlanCanvas();}catch(e){} try{renderAdminTags();}catch(e){}}
   if(id==='rooms'){ renderRoomGrid(); fetchStaffList().then(renderRoomGrid); }
   if(id==='preview'){try{renderFullPreview();renderPrevSummary();}catch(e){}}
   if(id==='dash'){try{renderDash();}catch(e){}}
   if(id==='hotels'){ hmRenderGrid(); }
+  if(id==='groups'){ grpRenderGrid(); }
   if(id==='subscriptions'){ subInit(); }
   if(id==='planning'){
     Promise.all([loadPlanTasks(), fetchPlanBookings(), fetchStaffList()]).then(function(){
@@ -2771,7 +2811,27 @@ var GAIN_DEFS=[
   {k:'produit', ico:'ti-gift', bg:'var(--wal)', tc:'var(--wa)', nm:'Produit offert', sb:'Service ou produit hôtel'},
   {k:'financier', ico:'ti-coin', bg:'var(--bul)', tc:'var(--bu)', nm:'Gain financier', sb:'€ par ménage évité'}
 ];
+// Bannière "géré par le groupe" — CFG.groupPolicy vient de
+// GET /wa/entityModuleConfig/list (cf. groupPolicy dans la réponse serveur).
+// Purement informatif : le serveur ignore de toute façon silencieusement
+// les champs centralisés à l'enregistrement (cf. entityModuleConfig/update).
+function renderGroupPolicyBanner(elId, active, label){
+  var el = document.getElementById(elId);
+  if(!el) return;
+  if(active && CFG.groupPolicy){
+    el.style.display='block';
+    el.innerHTML = '<div class="alt alt-b"><i class="ti ti-hierarchy-3"></i>'
+      +'<span>'+label+' géré(e) au niveau du groupe <strong>'+esc(CFG.groupPolicy.groupName)+'</strong> — les modifications faites ici ne seront pas enregistrées. Rendez-vous dans le panneau "Groupes" pour la modifier.</span></div>';
+  } else {
+    el.style.display='none';
+  }
+}
+function renderEcoBanner(){
+  renderGroupPolicyBanner('eco-group-banner', !!(CFG.groupPolicy&&CFG.groupPolicy.ecoCentralized), 'Politique éco');
+}
+
 function renderGains(){
+  renderGroupPolicyBanner('gains-group-banner', !!(CFG.groupPolicy&&CFG.groupPolicy.loyaltyCentralized), 'Programme de fidélité');
   var tiles='',tabs='',panels='';
   GAIN_DEFS.forEach(function(d,idx){
     var on=CFG.gains[d.k].active;
@@ -5710,7 +5770,7 @@ async function hmRenderGrid(){
       +'<div style="width:42px;height:42px;border-radius:10px;background:'+color+'22;display:flex;align-items:center;justify-content:center;font-size:20px;color:'+color+';flex-shrink:0"><i class="ti ti-building"></i></div>'
       +'<div style="flex:1;min-width:0">'
       +'<div style="font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(hotel.hotelName)+'</div>'
-      +'<div style="font-size:12px;color:var(--mu)">'+hotel.stars+'★ · '+esc(hotel.code)+' · '+(hotel.lang||'fr').toUpperCase()+' · '+sym+'</div>'
+      +'<div style="font-size:12px;color:var(--mu)">'+hotel.stars+'★ · '+esc(hotel.code)+' · '+(hotel.lang||'fr').toUpperCase()+' · '+sym+(hotel.groupName?' · <i class="ti ti-hierarchy-3" style="font-size:11px"></i> '+esc(hotel.groupName):'')+'</div>'
       +'</div>'
       +(isActive?'<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:'+color+'22;color:'+color+';flex-shrink:0">ACTIF</span>':'')
       +'</div>'
@@ -5911,6 +5971,207 @@ function hmCloseEdit(){
 
 // ── Compatibility aliases (old code used these) ──
 function renderHotelsPanel(){ hmRenderGrid(); }
+
+// ═══════════════════════════════════════════════ GROUPES (compte Sesame)
+// Panneau "Groupes" — GET/POST /wa/group/*. Un groupe rattache plusieurs
+// hôtels (Entity.groupId) et peut centraliser la fidélité et/ou la
+// politique éco (Group.loyaltyMode/ecoMode). Centralisé = un seul réglage
+// partagé, appliqué en lecture par le serveur à tous les hôtels membres
+// (cf. GET /wa/entityModuleConfig/list) ; indépendant = chaque hôtel garde
+// ses propres réglages.
+
+var GRP_LIST = [];
+
+async function grpFetchList(){
+  try{
+    var r = await adminFetch('/wa/group/list');
+    if(r.ok) GRP_LIST = await r.json();
+  }catch(e){}
+  return GRP_LIST;
+}
+
+async function grpRenderGrid(){
+  await Promise.all([grpFetchList(), hmFetchList()]);
+  var grid = document.getElementById('grp-grid');
+  var empty = document.getElementById('grp-empty');
+  if(!grid) return;
+
+  if(!GRP_LIST.length){ grid.innerHTML=''; if(empty) empty.style.display='block'; return; }
+  if(empty) empty.style.display='none';
+
+  grid.innerHTML = GRP_LIST.map(function(g){
+    var modeBadge = function(mode, label){
+      var on = mode==='centralized';
+      return '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:'+(on?'var(--al)':'rgba(0,0,0,.05)')+';color:'+(on?'var(--a)':'var(--mu)')+'">'
+        +label+' '+(on?'centralisée':'indépendante')+'</span>';
+    };
+    var hotelsList = g.hotels.length ? g.hotels.map(function(h){return esc(h.name);}).join(', ') : '<span style="color:var(--mu)">Aucun hôtel rattaché</span>';
+    return '<div style="border:1px solid var(--bdr);border-radius:var(--r);background:var(--card);padding:16px">'
+      +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">'
+      +'<div>'
+      +'<div style="font-size:15px;font-weight:700">'+esc(g.name)+'</div>'
+      +'<div style="font-size:11px;color:var(--mu);font-family:monospace">'+esc(g.code)+'</div>'
+      +'</div>'
+      +'<div style="display:flex;gap:6px;flex-wrap:wrap">'+modeBadge(g.loyaltyMode,'Fidélité')+modeBadge(g.ecoMode,'Éco')+'</div>'
+      +'</div>'
+      +'<div style="font-size:12px;color:var(--tx);margin-top:10px"><i class="ti ti-building" style="font-size:12px"></i> '+hotelsList+'</div>'
+      +'<div style="display:flex;gap:6px;margin-top:12px">'
+      +'<button class="btn btn-s" style="flex:1" onclick="grpOpenEdit(\''+g.code+'\')"><i class="ti ti-settings"></i> Gérer</button>'
+      +'<button class="btn btn-s" onclick="grpDelete(\''+g.code+'\')" style="width:auto;padding:6px 10px;color:var(--re)" title="Supprimer"><i class="ti ti-trash"></i></button>'
+      +'</div>'
+      +'</div>';
+  }).join('');
+}
+
+function grpOpenCreate(){
+  document.getElementById('grp-modal-title').textContent = 'Nouveau groupe';
+  var h = '<div class="fi"><label class="lb">Nom du groupe</label><input type="text" id="grpn-name" placeholder="Ex : Collection Riviera"></div>';
+  h += '<div class="brow" style="margin-top:16px">'
+    +'<button class="btn btn-p" onclick="grpCreateFromForm()"><i class="ti ti-check"></i> Créer</button>'
+    +'<button class="btn btn-s" onclick="grpCloseModal()">Annuler</button>'
+    +'</div>';
+  document.getElementById('grp-modal-body').innerHTML = h;
+  document.getElementById('grp-modal').style.display = 'flex';
+}
+
+async function grpCreateFromForm(){
+  var name = (document.getElementById('grpn-name').value||'').trim();
+  if(!name){ toast('Nom du groupe requis'); return; }
+  try{
+    var r = await adminFetch('/wa/group/create', {method:'POST', body:JSON.stringify({name:name})});
+    if(!r.ok){ toast('Erreur lors de la création'); return; }
+    var group = await r.json();
+    await grpRenderGrid();
+    toast('Groupe "'+name+'" créé ✓');
+    grpOpenEdit(group.code);
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+var grpEditCode = null;
+
+async function grpOpenEdit(code){
+  grpEditCode = code;
+  await grpRenderGrid(); // refresh caches (GRP_LIST + HM_LIST) before building the form
+  var g = GRP_LIST.find(function(x){return x.code===code;});
+  if(!g){ toast('Groupe introuvable'); return; }
+  document.getElementById('grp-modal-title').textContent = g.name;
+
+  var memberCodes = g.hotels.map(function(h){return h.code;});
+  var gains = g.sharedGains || {points:{name:'Sesame Points',perLiter:1}};
+  var tiers = g.sharedLoyaltyTiers || {gold:500,premium:1500};
+  var eco = g.sharedEco || {eauMenage:15,eauServ:40,co2Factor:0.0003,exoEnf:true,reducAdos:true,exoHand:false};
+
+  var h = '';
+  h += '<div class="fi"><label class="lb">Nom du groupe</label><input type="text" id="grpe-name" value="'+esc(g.name)+'"></div>';
+
+  h += hmSection('ti-building','Hôtels du groupe');
+  h += '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">';
+  h += HM_LIST.map(function(hotel){
+    var inThisGroup = memberCodes.indexOf(hotel.code)>-1;
+    var inOtherGroup = !inThisGroup && hotel.groupCode && hotel.groupCode!==code;
+    return '<label style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--bdr);border-radius:var(--rs);'+(inOtherGroup?'opacity:.5':'cursor:pointer')+'">'
+      +'<input type="checkbox" '+(inThisGroup?'checked':'')+' '+(inOtherGroup?'disabled':'')+' onchange="grpToggleHotel(\''+hotel.code+'\',this.checked)">'
+      +'<span style="flex:1;font-size:13px">'+esc(hotel.hotelName)+'</span>'
+      +(inOtherGroup?'<span style="font-size:11px;color:var(--mu)">déjà dans un autre groupe</span>':'')
+      +'</label>';
+  }).join('') || '<div style="font-size:12px;color:var(--mu)">Aucun hôtel existant — créez-en depuis le panneau "Hôtels".</div>';
+  h += '</div>';
+
+  h += hmSection('ti-star','Politique fidélité');
+  h += '<div class="g2" style="margin-bottom:10px">';
+  h += hmFi('Mode', '<select id="grpe-loyaltyMode">'
+    +'<option value="independent"'+(g.loyaltyMode==='independent'?' selected':'')+'>Indépendante par hôtel</option>'
+    +'<option value="centralized"'+(g.loyaltyMode==='centralized'?' selected':'')+'>Centralisée (points cumulés sur le groupe)</option>'
+    +'</select>');
+  h += '</div>';
+  h += '<div class="g2" style="margin-bottom:10px">';
+  h += hmFi('Nom du programme (partagé)', '<input type="text" id="grpe-ptsName" value="'+esc((gains.points&&gains.points.name)||'Sesame Points')+'">');
+  h += hmFi('Points / litre eau (partagé)', '<input type="number" id="grpe-perLiter" value="'+((gains.points&&gains.points.perLiter)||1)+'" min="0" step="0.5">');
+  h += '</div>';
+  h += '<div class="g2" style="margin-bottom:10px">';
+  h += hmFi('Seuil Gold (pts, partagé)', '<input type="number" id="grpe-tierGold" value="'+(tiers.gold||500)+'" min="0">');
+  h += hmFi('Seuil Premium (pts, partagé)', '<input type="number" id="grpe-tierPremium" value="'+(tiers.premium||1500)+'" min="0">');
+  h += '</div>';
+
+  h += hmSection('ti-leaf','Politique éco');
+  h += '<div class="g2" style="margin-bottom:10px">';
+  h += hmFi('Mode', '<select id="grpe-ecoMode">'
+    +'<option value="independent"'+(g.ecoMode==='independent'?' selected':'')+'>Indépendante par hôtel</option>'
+    +'<option value="centralized"'+(g.ecoMode==='centralized'?' selected':'')+'>Centralisée (mêmes réglages partout)</option>'
+    +'</select>');
+  h += '</div>';
+  h += '<div class="g2" style="margin-bottom:10px">';
+  h += hmFi('Eau / ménage complet (L, partagé)', '<input type="number" id="grpe-eauMenage" value="'+(eco.eauMenage!=null?eco.eauMenage:15)+'" min="1">');
+  h += hmFi('Eau / serviettes (L, partagé)', '<input type="number" id="grpe-eauServ" value="'+(eco.eauServ!=null?eco.eauServ:40)+'" min="1">');
+  h += '</div>';
+  h += '<div class="g2" style="margin-bottom:10px">';
+  h += hmFi('Exonération enfants &lt;13 (partagé)', '<label style="display:flex;align-items:center;gap:8px;height:38px"><input type="checkbox" id="grpe-exoEnf" '+(eco.exoEnf?'checked':'')+'><span>Activé</span></label>');
+  h += hmFi('Exonération PMR (partagé)', '<label style="display:flex;align-items:center;gap:8px;height:38px"><input type="checkbox" id="grpe-exoHand" '+(eco.exoHand?'checked':'')+'><span>Activé</span></label>');
+  h += '</div>';
+
+  h += '<div class="brow" style="margin-top:16px">'
+    +'<button class="btn btn-p" onclick="grpSavePolicy()"><i class="ti ti-check"></i> Enregistrer</button>'
+    +'<button class="btn btn-s" onclick="grpCloseModal()">Fermer</button>'
+    +'</div>';
+
+  document.getElementById('grp-modal-body').innerHTML = h;
+  document.getElementById('grp-modal').style.display = 'flex';
+}
+
+async function grpToggleHotel(entityCode, checked){
+  try{
+    var r = await adminFetch('/wa/group/assignEntity', {method:'POST', body:JSON.stringify({entityCode:entityCode, groupCode: checked ? grpEditCode : null})});
+    if(!r.ok){ toast('Erreur lors du rattachement'); return; }
+    toast(checked ? 'Hôtel rattaché au groupe ✓' : 'Hôtel détaché du groupe ✓');
+    await grpOpenEdit(grpEditCode);
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+async function grpSavePolicy(){
+  var code = grpEditCode;
+  if(!code) return;
+  var name = (document.getElementById('grpe-name').value||'').trim();
+  var loyaltyMode = document.getElementById('grpe-loyaltyMode').value;
+  var ecoMode = document.getElementById('grpe-ecoMode').value;
+  var sharedGains = {
+    points: { active:true, name: document.getElementById('grpe-ptsName').value||'Sesame Points', perLiter: parseFloat(document.getElementById('grpe-perLiter').value)||1 }
+  };
+  var sharedLoyaltyTiers = {
+    gold: parseInt(document.getElementById('grpe-tierGold').value)||500,
+    premium: parseInt(document.getElementById('grpe-tierPremium').value)||1500
+  };
+  var sharedEco = {
+    eauMenage: parseInt(document.getElementById('grpe-eauMenage').value)||15,
+    eauServ: parseInt(document.getElementById('grpe-eauServ').value)||40,
+    exoEnf: document.getElementById('grpe-exoEnf').checked,
+    exoHand: document.getElementById('grpe-exoHand').checked
+  };
+  try{
+    var r = await adminFetch('/wa/group/update', {method:'POST', body:JSON.stringify({
+      code:code, name:name, loyaltyMode:loyaltyMode, ecoMode:ecoMode,
+      sharedGains:sharedGains, sharedLoyaltyTiers:sharedLoyaltyTiers, sharedEco:sharedEco
+    })});
+    if(!r.ok){ toast('Erreur lors de l\'enregistrement'); return; }
+    await grpRenderGrid();
+    grpCloseModal();
+    toast('Groupe "'+name+'" enregistré ✓');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+function grpCloseModal(){
+  document.getElementById('grp-modal').style.display='none';
+  grpEditCode=null;
+}
+
+async function grpDelete(code){
+  if(!confirm('Supprimer ce groupe ? Les hôtels rattachés redeviennent indépendants (leurs données ne sont pas supprimées).')) return;
+  try{
+    var r = await adminFetch('/wa/group/delete', {method:'POST', body:JSON.stringify({code:code})});
+    if(!r.ok){ toast('Erreur lors de la suppression'); return; }
+    await grpRenderGrid();
+    toast('Groupe supprimé');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
 
 
 // ── Hook showPan for preview KPI and hotels panel ──
@@ -6308,17 +6569,21 @@ function crmTierBg(tier){
   return {Standard:'rgba(0,0,0,.05)', Gold:'rgba(245,200,76,.15)', Premium:'rgba(155,89,182,.15)'}[tier] || 'rgba(0,0,0,.05)';
 }
 
-// ── Source de données : GET /wa/crm/clients (agrège Booking + LoyaltyAccount + ClientPrefs) ──
+// ── Source de données : GET /wa/crm/clients (agrège Booking + LoyaltyAccount + ClientPrefs,
+// éventuellement sur tout le groupe si fidélité centralisée — cf. groupAggregated) ──
 var CRM_CLIENTS_CACHE = [];
+var CRM_GROUP_INFO = null; // {groupName} si vue agrégée groupe, sinon null
 async function fetchCrmClients(){
   try{
     var r = await adminFetch('/wa/crm/clients');
     if(r.ok){
       var data = await r.json();
-      CRM_CLIENTS_CACHE = data.map(function(c){
+      CRM_GROUP_INFO = data.groupAggregated ? {groupName: data.groupName} : null;
+      CRM_CLIENTS_CACHE = (data.clients||[]).map(function(c){
         return {
           key: c.email, email: c.email, nom: c.lastname, prenom: c.firstname, phone: c.phone,
-          points: c.points, sejours: c.stays, lastStayDate: c.lastStay, tier: c.tier, tags: c.tags||[]
+          points: c.points, sejours: c.stays, lastStayDate: c.lastStay, tier: c.tier, tags: c.tags||[],
+          hotels: c.hotels||null
         };
       });
     }
@@ -6340,6 +6605,16 @@ async function crmInit(){
   }
   CRM_SELECTION.clear();
   await fetchCrmClients();
+  var banner = document.getElementById('crm-group-banner');
+  if(banner){
+    if(CRM_GROUP_INFO){
+      banner.style.display='block';
+      banner.innerHTML = '<div class="alt alt-b"><i class="ti ti-building-community"></i>'
+        +'<span>Vue groupée — base clients partagée avec les autres hôtels du groupe <strong>'+esc(CRM_GROUP_INFO.groupName)+'</strong> (fidélité centralisée).</span></div>';
+    } else {
+      banner.style.display='none';
+    }
+  }
   renderCrmTable();
 }
 
@@ -6375,6 +6650,7 @@ function renderCrmTable(){
     var name = (c.prenom||c.nom) ? ((c.prenom||'')+' '+(c.nom||'')).trim() : '<span style="color:var(--mu)">Client anonyme</span>';
     var contact = [c.email, c.phone].filter(Boolean).join('<br>') || '<span style="color:var(--mu)">—</span>';
     var lastStay = c.lastStayDate ? new Date(c.lastStayDate).toLocaleDateString('fr-FR') : '—';
+    var hotelsLine = (c.hotels&&c.hotels.length) ? '<br><span style="font-size:10px;color:var(--mu)">'+c.hotels.map(esc).join(', ')+'</span>' : '';
     var checked = CRM_SELECTION.has(c.key) ? 'checked' : '';
     return '<tr>'
       +'<td><input type="checkbox" class="crm-row-check" data-key="'+esc(c.key)+'" '+checked+' onchange="crmToggleSelect(\''+esc(c.key)+'\',this.checked)"></td>'
@@ -6383,7 +6659,7 @@ function renderCrmTable(){
       +'<td><span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:'+crmTierBg(c.tier)+';color:'+crmTierColor(c.tier)+'">'+c.tier+'</span></td>'
       +'<td><strong style="color:var(--am)">'+c.points+'</strong> pts</td>'
       +'<td>'+c.sejours+'</td>'
-      +'<td style="font-size:12px;color:var(--mu)">'+lastStay+'</td>'
+      +'<td style="font-size:12px;color:var(--mu)">'+lastStay+hotelsLine+'</td>'
       +'<td><button class="btn btn-s" onclick="crmOpenClient(\''+esc(c.key)+'\')" style="padding:4px 8px"><i class="ti ti-eye"></i></button></td>'
       +'</tr>';
   }).join('');

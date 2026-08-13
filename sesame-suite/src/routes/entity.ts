@@ -14,7 +14,7 @@ entityRouter.get(
   asyncHandler(async (req, res) => {
     const entities = await prisma.entity.findMany({
       where: { NOT: { code: "SESAME-HQ" } },
-      include: { config: true, _count: { select: { rooms: true, adminUsers: true } } },
+      include: { config: true, group: true, _count: { select: { rooms: true, adminUsers: true } } },
       orderBy: { createdAt: "asc" },
     });
     res.json(
@@ -23,6 +23,8 @@ entityRouter.get(
         code: e.code,
         name: e.name,
         hotelName: e.config?.hotelName || e.name,
+        groupCode: e.group?.code || null,
+        groupName: e.group?.name || null,
         stars: e.config?.stars ?? 3,
         color: (e.config?.colors as any)?.primary || "#8B1A2E",
         lang: e.config?.lang || "fr",

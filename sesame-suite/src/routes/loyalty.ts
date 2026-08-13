@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../db";
 import { resolveEntity } from "../lib/entity";
+import { resolveLoyaltyScope } from "../lib/loyaltyScope";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
 
@@ -10,6 +11,10 @@ export const loyaltyRouter = Router();
  * GET /wa/loyalty/list?entityCode=&email=
  * Avec `email` : solde + historique d'un client (espace client).
  * Sans `email` : liste tous les comptes de l'entité (back-office, protégé).
+ *
+ * Si l'établissement appartient à un groupe à fidélité centralisée, le
+ * solde est celui du groupe (cumulé sur tous ses hôtels) — cf.
+ * resolveLoyaltyScope().
  */
 loyaltyRouter.get(
   "/loyalty/list",
@@ -21,15 +26,21 @@ loyaltyRouter.get(
   asyncHandler(async (req, res) => {
     const entity = await resolveEntity(req);
     const email = ((req.query.email as string) || "").trim().toLowerCase();
+    const scope = await resolveLoyaltyScope(entity);
 
     if (!email) {
-      const accounts = await prisma.loyaltyAccount.findMany({ where: { entityId: entity.id }, orderBy: { totalPoints: "desc" } });
+      const accounts = await prisma.loyaltyAccount.findMany({
+        where: scope.groupId ? { groupId: scope.groupId } : { entityId: scope.entityId },
+        orderBy: { totalPoints: "desc" },
+      });
       res.json(accounts.map((a) => ({ email: a.email, total: a.totalPoints })));
       return;
     }
 
     const account = await prisma.loyaltyAccount.findUnique({
-      where: { entityId_email: { entityId: entity.id, email } },
+      where: scope.groupId
+        ? { groupId_email: { groupId: scope.groupId, email } }
+        : { entityId_email: { entityId: scope.entityId as string, email } },
       include: { transactions: { orderBy: { createdAt: "desc" }, take: 20 } },
     });
 
@@ -54,8 +65,11 @@ loyaltyRouter.post(
     const entity = await resolveEntity(req);
     const email = ((req.body.email as string) || "").trim().toLowerCase();
     if (!email) throw new HttpError(400, "email requis");
+    const scope = await resolveLoyaltyScope(entity);
     const account = await prisma.loyaltyAccount.update({
-      where: { entityId_email: { entityId: entity.id, email } },
+      where: scope.groupId
+        ? { groupId_email: { groupId: scope.groupId, email } }
+        : { entityId_email: { entityId: scope.entityId as string, email } },
       data: { totalPoints: 0 },
     });
     res.json({ email, total: account.totalPoints });
@@ -78,11 +92,20 @@ loyaltyRouter.post(
 
     const earned = b.earned || 0;
     const spent = b.spent || 0;
+    const scope = await resolveLoyaltyScope(entity);
+    const where = scope.groupId
+      ? { groupId_email: { groupId: scope.groupId, email } }
+      : { entityId_email: { entityId: scope.entityId as string, email } };
 
     const account = await prisma.loyaltyAccount.upsert({
-      where: { entityId_email: { entityId: entity.id, email } },
+      where,
       update: { totalPoints: { increment: earned - spent } },
-      create: { entityId: entity.id, email, totalPoints: Math.max(0, earned - spent) },
+      create: {
+        entityId: scope.entityId,
+        groupId: scope.groupId,
+        email,
+        totalPoints: Math.max(0, earned - spent),
+      },
     });
 
     if (earned || spent) {

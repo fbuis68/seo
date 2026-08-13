@@ -22,18 +22,33 @@ function computeTier(points: number, tiers: LoyaltyTiers | null) {
 /**
  * GET /wa/crm/clients — fiches clients agrégées (panneau "Base clients") :
  * réservations (Booking), fidélité (LoyaltyAccount), préférences (ClientPrefs).
- * Pas de table CRM dédiée — cohérent avec le fait que ce sont les mêmes
- * données déjà exposées côté client, simplement recomposées ici.
+ *
+ * Si l'établissement appartient à un groupe à fidélité centralisée, les
+ * réservations et préférences sont agrégées sur TOUS les hôtels du groupe
+ * (base clients partagée, cf. panneau "Groupes") — jamais au-delà des
+ * frontières du groupe.
  */
 crmRouter.get(
   "/crm/clients",
   requireAdmin,
   asyncHandler(async (req, res) => {
     const entity = await resolveEntity(req);
+    const group = entity.groupId ? await prisma.group.findUnique({ where: { id: entity.groupId } }) : null;
+    const groupAggregated = group?.loyaltyMode === "centralized";
+
+    const entityIds = groupAggregated
+      ? (await prisma.entity.findMany({ where: { groupId: group!.id }, select: { id: true } })).map((e) => e.id)
+      : [entity.id];
+    const hotelsById = groupAggregated
+      ? new Map((await prisma.entity.findMany({ where: { id: { in: entityIds } }, select: { id: true, name: true } })).map((e) => [e.id, e.name]))
+      : new Map([[entity.id, entity.name]]);
+
     const [bookings, loyaltyAccounts, prefs, cfg] = await Promise.all([
-      prisma.booking.findMany({ where: { entityId: entity.id }, orderBy: { startDate: "desc" } }),
-      prisma.loyaltyAccount.findMany({ where: { entityId: entity.id } }),
-      prisma.clientPrefs.findMany({ where: { entityId: entity.id } }),
+      prisma.booking.findMany({ where: { entityId: { in: entityIds } }, orderBy: { startDate: "desc" } }),
+      groupAggregated
+        ? prisma.loyaltyAccount.findMany({ where: { groupId: group!.id } })
+        : prisma.loyaltyAccount.findMany({ where: { entityId: entity.id } }),
+      prisma.clientPrefs.findMany({ where: { entityId: { in: entityIds } } }),
       prisma.entityModuleConfig.findUnique({ where: { entityId: entity.id } }),
     ]);
 
@@ -43,13 +58,15 @@ crmRouter.get(
 
     const byEmail = new Map<
       string,
-      { email: string; firstname: string; lastname: string; phone: string; stays: number; lastStay: string }
+      { email: string; firstname: string; lastname: string; phone: string; stays: number; lastStay: string; hotels: Set<string> }
     >();
     for (const b of bookings) {
       const key = b.personEmail.toLowerCase();
       const existing = byEmail.get(key);
+      const hotelName = hotelsById.get(b.entityId) || "";
       if (existing) {
         existing.stays += 1;
+        if (hotelName) existing.hotels.add(hotelName);
         if (b.startDate.toISOString() > existing.lastStay) existing.lastStay = b.startDate.toISOString();
       } else {
         byEmail.set(key, {
@@ -59,6 +76,7 @@ crmRouter.get(
           phone: b.personPhone || "",
           stays: 1,
           lastStay: b.startDate.toISOString(),
+          hotels: new Set(hotelName ? [hotelName] : []),
         });
       }
     }
@@ -76,10 +94,15 @@ crmRouter.get(
         points,
         tier: computeTier(points, tiers),
         tags: (pref?.tags as string[]) || [],
+        hotels: groupAggregated ? Array.from(c.hotels) : undefined,
       };
     });
 
     clients.sort((a, b) => b.points - a.points);
-    res.json(clients);
+    res.json({
+      clients,
+      groupAggregated,
+      groupName: groupAggregated ? group!.name : null,
+    });
   })
 );
