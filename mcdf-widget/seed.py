@@ -182,7 +182,8 @@ def build(conn: sqlite3.Connection, rng: random.Random):
     conv_i = 0
     for cust in customers:
         for _ in range(rng.randint(1, 3)):
-            provisional = rand_date(rng, datetime.fromisoformat(cust[11]).date(), TODAY)
+            cust_created = datetime.fromisoformat(cust[11]).date()
+            provisional = min(cust_created + timedelta(days=rng.randint(0, 550)), TODAY)
             age = (TODAY - provisional).days
             if age < 10:
                 is_convention, signing_date, status = 0, None, "en_attente"
@@ -225,7 +226,8 @@ def build(conn: sqlite3.Connection, rng: random.Random):
         session = rng.choice(session_pool) if session_pool else None
         for _ in range(nb):
             actor = rng.choice(attendee_actors)
-            created = rand_date(rng, datetime.fromisoformat(conv[11]).date(), TODAY)
+            provisional = datetime.fromisoformat(conv[11]).date()
+            created = min(provisional + timedelta(days=rng.randint(0, 20)), TODAY)
             attendees.append((
                 seq_id("CA", 75400 + att_i), ENTITY_ID, conv[0], actor[0],
                 session[0] if session else None, iso(created, rng),
@@ -241,8 +243,8 @@ def build(conn: sqlite3.Connection, rng: random.Random):
         if not conv[16]:  # invoiced flag
             continue
         for _ in range(rng.randint(1, 2)):
-            billing = rand_date(
-                rng, datetime.fromisoformat(conv[11]).date(), TODAY)
+            provisional = datetime.fromisoformat(conv[11]).date()
+            billing = min(provisional + timedelta(days=rng.randint(15, 90)), TODAY)
             amount = round(rng.uniform(800, 9000), 2)
             age = (TODAY - billing).days
             status = "payee" if age > 45 or rng.random() > 0.15 else ("retard" if age > 30 else "en_attente")

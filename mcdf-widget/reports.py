@@ -177,6 +177,66 @@ def top_formateurs(conn, n=5):
     return rows
 
 
+# --------------------------------------------------------------------------
+# 7. Comparaison année en cours vs année précédente, à date égale (YTD)
+#    (miroir de la section 7 de live-reports.js)
+# --------------------------------------------------------------------------
+def comparaison_annuelle(conn, ref=TODAY):
+    year_n, year_n1 = ref.year, ref.year - 1
+
+    def ytd_bounds(year):
+        return date(year, 1, 1).isoformat(), date(year, ref.month, ref.day).isoformat()
+
+    def ca_ytd(year):
+        start, end = ytd_bounds(year)
+        return conn.execute(
+            "SELECT COALESCE(SUM(amount), 0) AS t FROM invoice WHERE billing_date BETWEEN ? AND ?",
+            (start, end),
+        ).fetchone()["t"]
+
+    def clients_ytd(year):
+        start, end = ytd_bounds(year)
+        return conn.execute(
+            "SELECT COUNT(*) AS n FROM customer WHERE substr(created,1,10) BETWEEN ? AND ?",
+            (start, end),
+        ).fetchone()["n"]
+
+    def stagiaires_ytd(year):
+        start, end = ytd_bounds(year)
+        return conn.execute(
+            "SELECT COUNT(DISTINCT actor_id) AS n FROM convention_attendee "
+            "WHERE substr(created,1,10) BETWEEN ? AND ?",
+            (start, end),
+        ).fetchone()["n"]
+
+    def devis_signes_ytd(year):
+        start, end = ytd_bounds(year)
+        return conn.execute(
+            "SELECT COUNT(*) AS n FROM convention WHERE is_proposal = 1 "
+            "AND signing_date IS NOT NULL AND substr(signing_date,1,10) BETWEEN ? AND ?",
+            (start, end),
+        ).fetchone()["n"]
+
+    def pct_delta(cur, prev):
+        if not prev:
+            return None  # pas de base de comparaison (division par zéro évitée, JSON-safe)
+        return round((cur - prev) / prev * 100, 1)
+
+    metrics = [
+        ("CA facturé (HT)", round(ca_ytd(year_n), 2), round(ca_ytd(year_n1), 2)),
+        ("Nouveaux clients", clients_ytd(year_n), clients_ytd(year_n1)),
+        ("Stagiaires inscrits", stagiaires_ytd(year_n), stagiaires_ytd(year_n1)),
+        ("Devis signés", devis_signes_ytd(year_n), devis_signes_ytd(year_n1)),
+    ]
+    return [
+        OrderedDict(
+            indicateur=nom, annee_courante=cur, annee_precedente=prev,
+            delta_pct=pct_delta(cur, prev),
+        )
+        for nom, cur, prev in metrics
+    ]
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--db", default="mcdf.db")
@@ -193,6 +253,7 @@ def main():
         devis_a_relancer=devis_a_relancer(conn, 10),
         taux_remplissage=taux_remplissage(conn, 6),
         top_formateurs=top_formateurs(conn, 5),
+        comparaison_annuelle=comparaison_annuelle(conn),
     )
 
     out_path = Path(__file__).parent / args.out
