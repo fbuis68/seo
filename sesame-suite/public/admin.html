@@ -267,6 +267,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   <div class="ni" data-pan="rooms" onclick="showPan('rooms')"><i class="ti ti-door"></i>Gestion des chambres</div>
   <div class="ns">Intégration</div>
   <div class="ni" data-pan="api" onclick="showPan('api')"><i class="ti ti-api"></i>Intégration réservations</div>
+  <div class="ni" data-pan="email" onclick="showPan('email')"><i class="ti ti-mail"></i>Serveur email</div>
   <div class="ni" data-pan="preview" onclick="showPan('preview')"><i class="ti ti-device-mobile"></i>Aperçu client</div>
 </aside>
 
@@ -1300,6 +1301,46 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     <div class="ch" id="bs-result-title"><i class="ti ti-list-check"></i>Résultat</div>
     <div id="bs-result-body"></div>
   </div>
+</div>
+<!-- ════════════════ SERVEUR EMAIL ════════════════ -->
+<div id="pan-email" class="pan">
+  <div class="ph">
+    <h2>Serveur email</h2>
+    <p>Paramétrez votre serveur SMTP sortant et vos modèles d'email pour envoyer des communications à vos clients directement depuis Sesame Suite.</p>
+  </div>
+
+  <div class="ca">
+    <div class="ch"><i class="ti ti-server"></i>Serveur SMTP sortant</div>
+    <div class="g2">
+      <div class="fi"><label class="lb">Hôte</label><input type="text" id="eml-host" placeholder="smtp.exemple.com"></div>
+      <div class="fi"><label class="lb">Port</label><input type="number" id="eml-port" placeholder="587"></div>
+    </div>
+    <div class="g2">
+      <div class="fi"><label class="lb">Sécurité</label>
+        <select id="eml-secure"><option value="0">STARTTLS (587/25)</option><option value="1">SSL/TLS (465)</option></select>
+      </div>
+      <div class="fi"><label class="lb">Identifiant</label><input type="text" id="eml-user" autocomplete="off"></div>
+    </div>
+    <div class="g2">
+      <div class="fi"><label class="lb">Mot de passe</label><input type="password" id="eml-pass" autocomplete="off"></div>
+      <div class="fi"><label class="lb">Nom d'expéditeur</label><input type="text" id="eml-fromname" placeholder="Hôtel Churchill"></div>
+    </div>
+    <div class="fi"><label class="lb">Email d'expéditeur</label><input type="email" id="eml-fromemail" placeholder="contact@monhotel.fr"></div>
+    <div class="brow" style="align-items:center;flex-wrap:wrap">
+      <button class="btn btn-p" onclick="emlSaveConfig()"><i class="ti ti-device-floppy"></i> Enregistrer</button>
+      <input type="email" id="eml-test-to" placeholder="destinataire@test.com" style="max-width:220px">
+      <button class="btn btn-s" onclick="emlTestConfig()"><i class="ti ti-send"></i> Envoyer un test</button>
+    </div>
+  </div>
+
+  <div class="ca">
+    <div class="ch"><i class="ti ti-mail"></i>Modèles d'email
+      <button class="chact" onclick="emlOpenTemplateModal(null)"><i class="ti ti-plus" style="font-size:12px"></i> Nouveau modèle</button>
+    </div>
+    <div id="eml-templates-list"></div>
+  </div>
+
+  <div id="eml-template-modal"></div>
 </div>
 <!-- ════════════════ PREVIEW ════════════════ -->
 <div id="pan-preview" class="pan">
@@ -2543,6 +2584,7 @@ function showPan(id){
   if(id==='preview'){try{renderFullPreview();renderPrevSummary();}catch(e){}}
   if(id==='dash'){try{renderDash();}catch(e){}}
   if(id==='api'){ bsInit(); }
+  if(id==='email'){ emlInit(); }
   if(id==='hotels'){ hmRenderGrid(); }
   if(id==='groups'){ grpRenderGrid(); }
   if(id==='subscriptions'){ subInit(); }
@@ -4263,6 +4305,138 @@ async function bsSave(){
     bsRenderStatusBanner();
     toast('Connecteur enregistré ✓');
   }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+// ═══════════════════════════════════════════════ SERVEUR EMAIL — SMTP sortant + modèles
+// Même mécanisme générique que le module CRM (public/crm.html, ?scope=crm) :
+// ici sans paramètre "scope", adminFetch cible l'entité courante de l'hôtel.
+var EML_TEMPLATES = [];
+
+async function emlInit(){
+  await emlLoadConfig();
+  await emlLoadTemplates();
+}
+
+async function emlLoadConfig(){
+  try{
+    var r = await adminFetch('/wa/smtpConfig/get');
+    var cfg = r.ok ? await r.json() : null;
+    cfg = cfg || {host:'',port:587,secure:false,username:'',password:'',fromName:'',fromEmail:''};
+    document.getElementById('eml-host').value = cfg.host||'';
+    document.getElementById('eml-port').value = cfg.port||587;
+    document.getElementById('eml-secure').value = cfg.secure?'1':'0';
+    document.getElementById('eml-user').value = cfg.username||'';
+    document.getElementById('eml-pass').value = cfg.password||'';
+    document.getElementById('eml-fromname').value = cfg.fromName||'';
+    document.getElementById('eml-fromemail').value = cfg.fromEmail||'';
+  }catch(e){ toast('Erreur de chargement de la configuration SMTP'); }
+}
+
+async function emlSaveConfig(){
+  var body = {
+    host: document.getElementById('eml-host').value.trim(),
+    port: +document.getElementById('eml-port').value || 587,
+    secure: document.getElementById('eml-secure').value === '1',
+    username: document.getElementById('eml-user').value.trim(),
+    password: document.getElementById('eml-pass').value,
+    fromName: document.getElementById('eml-fromname').value.trim(),
+    fromEmail: document.getElementById('eml-fromemail').value.trim(),
+  };
+  try{
+    var r = await adminFetch('/wa/smtpConfig/update', {method:'POST', body:JSON.stringify(body)});
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Erreur lors de l\'enregistrement'); return; }
+    toast('Configuration SMTP enregistrée ✓');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+async function emlTestConfig(){
+  var to = document.getElementById('eml-test-to').value.trim();
+  if(!to){ toast('Indiquez une adresse de test'); return; }
+  try{
+    var r = await adminFetch('/wa/smtpConfig/test', {method:'POST', body:JSON.stringify({to:to})});
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Échec de l\'envoi — vérifiez la configuration'); return; }
+    toast('Email de test envoyé à '+to+' ✓');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+async function emlLoadTemplates(){
+  try{
+    var r = await adminFetch('/wa/emailTemplate/list');
+    EML_TEMPLATES = r.ok ? await r.json() : [];
+  }catch(e){ EML_TEMPLATES = []; }
+  emlRenderTemplates();
+}
+
+function emlRenderTemplates(){
+  var el = document.getElementById('eml-templates-list');
+  if(!el) return;
+  if(!EML_TEMPLATES.length){
+    el.innerHTML = '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Aucun modèle. Créez-en un pour pouvoir envoyer des emails à vos clients.</span></div>';
+    return;
+  }
+  el.innerHTML = EML_TEMPLATES.map(function(t){
+    return '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--bdr)">'
+      + '<div style="flex:1"><strong style="font-size:13px">'+esc(t.name)+'</strong> <span style="color:var(--mu);font-size:11px">('+esc(t.key)+')</span>'
+      + '<div style="font-size:12px;color:var(--mu);margin-top:2px">Objet : '+esc(t.subject)+'</div></div>'
+      + '<button class="btn btn-s" onclick="emlOpenTemplateModal(\''+t.id+'\')"><i class="ti ti-edit"></i></button>'
+      + '<button class="btn btn-s btn-d" onclick="emlDeleteTemplate(\''+t.id+'\')"><i class="ti ti-trash"></i></button>'
+      + '</div>';
+  }).join('');
+}
+
+function emlOpenTemplateModal(id){
+  var t = id ? EML_TEMPLATES.find(function(t){return t.id===id;}) : {id:null,key:'',name:'',subject:'',bodyHtml:''};
+  if(!t) return;
+  document.getElementById('eml-template-modal').innerHTML =
+    '<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:28px 20px;overflow-y:auto" onclick="if(event.target===this)emlCloseTemplateModal()">'
+    + '<div class="ca" style="width:100%;max-width:560px">'
+    + '<div class="ch">'+(t.id?'Modifier le modèle':'Nouveau modèle')+'<button class="btn btn-g" style="margin-left:auto" onclick="emlCloseTemplateModal()"><i class="ti ti-x"></i></button></div>'
+    + '<div class="g2">'
+    + '<div class="fi"><label class="lb">Clé (identifiant technique)</label><input type="text" id="eml-tpl-key" value="'+esc(t.key)+'" placeholder="ex. bienvenue-client" '+(t.id?'disabled':'')+'></div>'
+    + '<div class="fi"><label class="lb">Nom affiché</label><input type="text" id="eml-tpl-name" value="'+esc(t.name)+'" placeholder="Email de bienvenue"></div>'
+    + '</div>'
+    + '<div class="fi"><label class="lb">Objet</label><input type="text" id="eml-tpl-subject" value="'+esc(t.subject)+'" placeholder="Bienvenue {{nom}} !"></div>'
+    + '<div class="fi"><label class="lb">Corps (HTML — variables disponibles selon contexte d\'envoi, ex. {{nom}} {{email}})</label><textarea id="eml-tpl-body" style="height:160px">'+(t.bodyHtml||'')+'</textarea></div>'
+    + '<div class="brow"><button class="btn btn-p" onclick="emlSaveTemplate('+(t.id?"'"+t.id+"'":'null')+')"><i class="ti ti-device-floppy"></i> Enregistrer</button>'
+    + '<button class="btn btn-s" onclick="emlCloseTemplateModal()">Annuler</button></div>'
+    + '</div></div>';
+}
+
+function emlCloseTemplateModal(){
+  document.getElementById('eml-template-modal').innerHTML = '';
+}
+
+async function emlSaveTemplate(id){
+  var body = {
+    key: document.getElementById('eml-tpl-key').value.trim().toLowerCase(),
+    name: document.getElementById('eml-tpl-name').value.trim(),
+    subject: document.getElementById('eml-tpl-subject').value.trim(),
+    bodyHtml: document.getElementById('eml-tpl-body').value,
+  };
+  if(!body.key || !body.name || !body.subject || !body.bodyHtml){ toast('Tous les champs sont requis'); return; }
+  try{
+    var r = await adminFetch('/wa/emailTemplate/upsert', {method:'POST', body:JSON.stringify(body)});
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Erreur lors de l\'enregistrement'); return; }
+    var i = EML_TEMPLATES.findIndex(function(t){return t.id===data.id;});
+    if(i>-1) EML_TEMPLATES[i]=data; else EML_TEMPLATES.push(data);
+  }catch(e){ toast('Erreur de connexion au serveur'); return; }
+  emlCloseTemplateModal();
+  toast('Modèle enregistré ✓');
+  emlRenderTemplates();
+}
+
+async function emlDeleteTemplate(id){
+  if(!confirm('Supprimer ce modèle ?')) return;
+  try{
+    var r = await adminFetch('/wa/emailTemplate/delete', {method:'POST', body:JSON.stringify({id:id})});
+    if(!r.ok){ toast('Erreur de suppression'); return; }
+  }catch(e){ toast('Erreur de connexion au serveur'); return; }
+  EML_TEMPLATES = EML_TEMPLATES.filter(function(t){return t.id!==id;});
+  toast('Modèle supprimé');
+  emlRenderTemplates();
 }
 
 function bsShowResult(title, html){

@@ -35,7 +35,7 @@ contactRouter.post(
     let prospect = await prisma.crmProspect.findFirst({ where: { email } });
     if (!prospect) {
       prospect = await prisma.crmProspect.create({
-        data: { nom, email, secteur: secteur || undefined, danger: "Modéré", contrat: "non" },
+        data: { nom, email, type: "Prospect", secteur: secteur || undefined, danger: "Modéré", contrat: "non" },
       });
     } else if (secteur && !prospect.secteur) {
       prospect = await prisma.crmProspect.update({ where: { id: prospect.id }, data: { secteur } });

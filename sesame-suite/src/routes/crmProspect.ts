@@ -29,6 +29,7 @@ function shapeProspect(p: {
   entityId: string | null;
   subscriptionId: string | null;
   nom: string;
+  type: string;
   groupe: string | null;
   secteur: string | null;
   ville: string | null;
@@ -66,6 +67,7 @@ function shapeProspect(p: {
     entityCode: p.entity ? p.entity.code : null,
     subscriptionId: p.subscriptionId,
     nom: p.nom,
+    type: p.type,
     groupe: p.groupe || "",
     secteur: p.secteur || "",
     ville: p.ville || "",
@@ -112,6 +114,7 @@ crmProspectRouter.get(
 
 interface ProspectBody {
   nom: string;
+  type?: string;
   groupe?: string;
   secteur?: string;
   ville?: string;
@@ -150,6 +153,7 @@ crmProspectRouter.post(
     const row = await prisma.crmProspect.create({
       data: {
         nom: b.nom.trim(),
+        type: b.type || "Client",
         groupe: b.groupe,
         secteur: b.secteur,
         ville: b.ville,
@@ -198,6 +202,7 @@ crmProspectRouter.post(
       where: { id },
       data: {
         nom: b.nom?.trim(),
+        type: b.type,
         groupe: b.groupe,
         secteur: b.secteur,
         ville: b.ville,

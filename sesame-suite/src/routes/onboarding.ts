@@ -184,6 +184,7 @@ onboardingRouter.post(
         entityId: entity.id,
         subscriptionId: subscription.id,
         nom: name,
+        type: "Prospect",
         secteur: "Hôtellerie",
         ville: b.city,
         etoiles: b.stars ? "★".repeat(Math.min(b.stars, 5)) : undefined,

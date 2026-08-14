@@ -22,6 +22,7 @@ import { bookingSourceRouter } from "./routes/bookingSource";
 import { onboardingRouter } from "./routes/onboarding";
 import { crmProspectRouter } from "./routes/crmProspect";
 import { contactRouter } from "./routes/contact";
+import { emailRouter } from "./routes/email";
 import { errorHandler } from "./middleware/errorHandler";
 
 export function createApp() {
@@ -54,6 +55,7 @@ export function createApp() {
   app.use("/wa", groupRouter);
   app.use("/wa", bookingSourceRouter);
   app.use("/wa", crmProspectRouter);
+  app.use("/wa", emailRouter);
 
   // Authentification espace client (hors convention /wa — pas de DAO CRUD dédié)
   app.use("/api", authRouter);

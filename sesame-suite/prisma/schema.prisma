@@ -42,6 +42,8 @@ model Entity {
   subscriptions     Subscription[]
   bookingSource     BookingSourceConfig?
   crmProspects      CrmProspect[]
+  smtpConfig        SmtpConfig?
+  emailTemplates    EmailTemplate[]
 }
 
 // Groupe d'établissements (ex : chaîne hôtelière) — gestion réservée aux
@@ -576,6 +578,7 @@ model CrmProspect {
   subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
 
   nom            String
+  type           String  @default("Client") // Prospect | Client — auto "Prospect" pour les arrivées onboarding/formulaire de contact
   groupe         String?
   secteur        String?
   ville          String?
@@ -621,4 +624,46 @@ model CrmActivity {
   done         Boolean   @default(false)
 
   createdAt DateTime @default(now())
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Envoi d'email générique — un serveur SMTP sortant + des modèles, réutilisés
+// tels quels par le module CRM (entityId=null, portée Sesame) et par le
+// back-office de chaque hôtel (entityId=<hôtel>, ses propres modèles/envois).
+// @unique sur entityId empêche deux configs pour un même hôtel ; côté null
+// (portée globale CRM), PostgreSQL traite chaque NULL comme distinct — la
+// route applique donc toujours un "findFirst puis create/update" plutôt que
+// de compter sur la contrainte pour ce cas précis.
+// ─────────────────────────────────────────────────────────────────────────
+model SmtpConfig {
+  id       String  @id @default(cuid())
+  entityId String? @unique
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  host     String
+  port     Int     @default(587)
+  secure   Boolean @default(false) // true = SMTPS (465), false = STARTTLS/plain (587/25)
+  username String
+  password String
+  fromName  String?
+  fromEmail String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EmailTemplate {
+  id       String  @id @default(cuid())
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  key      String // slug interne, ex: "prospect-relance" — cible du sendEmail()
+  name     String // libellé affiché dans le sélecteur de modèle
+  subject  String // supporte {{variable}}
+  bodyHtml String // supporte {{variable}}
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([entityId, key])
 }

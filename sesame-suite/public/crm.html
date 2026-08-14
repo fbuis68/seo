@@ -89,8 +89,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,san
 .alert-row{display:flex;gap:7px;align-items:center;flex-wrap:wrap;padding-top:4px}
 .apill{font-size:11px;padding:3px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:4px;background:#faeeda;color:#633806;border:0.5px solid #fac775}
 
-/* TWO COL */
+/* TWO COL / THREE COL */
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px}
 
 /* BARS */
 .bar-row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
@@ -249,6 +250,7 @@ input[type=checkbox]{accent-color:#8a2b2b;cursor:pointer;width:14px;height:14px}
     <div class="nav-item" id="n-fiche" onclick="goFiche()"><div class="nav-ico">◉</div> Fiche client</div>
     <div class="nav-item" id="n-activite" onclick="showActivites()"><div class="nav-ico">◈</div> Activités</div>
     <div class="nav-item" id="n-contrats" onclick="showContrats()"><div class="nav-ico">◻</div> Contrats</div>
+    <div class="nav-item" id="n-email" onclick="showEmailPanel()"><div class="nav-ico">✉</div> Email</div>
     <hr class="s-hr">
     <div class="nav-lbl">Filtres rapides</div>
     <div class="nav-item" onclick="qf('danger','Élevé !!')"><div class="nav-ico">!</div> Risque élevé <span class="nb nb-r" id="b-eleve">0</span></div>
@@ -318,6 +320,7 @@ document.addEventListener('DOMContentLoaded', function(){
 // DATA
 // ════════════════════════════════════════
 const DANGERS = ['Bon client','Modéré','Élevé !!'];
+const TYPES = ['Prospect','Client'];
 const SECTEURS = ['Hôtellerie','Location appartement','Appart Hotel','Location AirBnB','Bureaux','Sport','Garde meuble','Love hôtel','Location bureau','Agence gestion patrimoine'];
 const ACT_TYPES = ['Appel','Email','Visite','Proposition','Relance','Note interne','Autre'];
 const DOT_MAP = {Appel:'g',Email:'b',Visite:'g',Proposition:'b',Relance:'a','Note interne':'b',Autre:'b'};
@@ -326,7 +329,7 @@ const DOT_MAP = {Appel:'g',Email:'b',Visite:'g',Proposition:'b',Relance:'a','Not
 // STATE
 // ════════════════════════════════════════
 let clients=[], view='list', vmode='table', curId=null, sortC='nom', sortD=1;
-let srch='', fDanger='', fSecteur='', fContrat='', editingId=null, toastT=null;
+let srch='', fDanger='', fSecteur='', fContrat='', fType='', editingId=null, toastT=null;
 
 async function loadData(){
   var r = await apiFetch('/wa/crmProspect/list');
@@ -342,14 +345,14 @@ function ini(n){return(n||'?').split(' ').slice(0,2).map(w=>w[0]||'').join('').t
 function today(){const d=new Date();return d.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});}
 
 // ── NAV ──
-function setNav(id){['n-list','n-fiche','n-activite','n-contrats'].forEach(n=>document.getElementById(n).classList.remove('active'));document.getElementById(id).classList.add('active');}
+function setNav(id){['n-list','n-fiche','n-activite','n-contrats','n-email'].forEach(n=>document.getElementById(n).classList.remove('active'));document.getElementById(id).classList.add('active');}
 function setVMode(m){vmode=m;document.getElementById('vt-tbl').classList.toggle('active',m==='table');document.getElementById('vt-grd').classList.toggle('active',m==='grid');if(view==='list')renderList();}
 function goFiche(){if(curId)showFiche(curId);}
 function bc(parts){document.getElementById('bc').innerHTML=parts.map((p,i)=>i<parts.length-1?`<span class="bc-link" onclick="${p.fn}">${p.label}</span><span class="bc-sep"> / </span>`:`<span class="bc-cur">${p.label}</span>`).join('');}
 function tba(html){document.getElementById('tb-actions').innerHTML=html;}
 
 // ── QUICK FILTER ──
-function qf(f,v){srch='';fDanger='';fSecteur='';fContrat='';if(f==='danger')fDanger=v;else if(f==='contrat')fContrat=v;showList();}
+function qf(f,v){srch='';fDanger='';fSecteur='';fContrat='';fType='';if(f==='danger')fDanger=v;else if(f==='contrat')fContrat=v;showList();}
 
 // ════════════════════════════════════════
 // LIST VIEW
@@ -362,6 +365,7 @@ function filtered(){
     if(fDanger&&c.danger!==fDanger)return false;
     if(fSecteur&&c.secteur!==fSecteur)return false;
     if(fContrat&&c.contrat!==fContrat)return false;
+    if(fType&&c.type!==fType)return false;
     return true;
   }).sort((a,b)=>{let av=a[sortC]||'',bv=b[sortC]||'';if(typeof av==='string')av=av.toLowerCase();if(typeof bv==='string')bv=bv.toLowerCase();return av<bv?-sortD:av>bv?sortD:0;});
 }
@@ -369,6 +373,7 @@ function filtered(){
 function dBadge(d){if(d==='Élevé !!')return'<span class="badge bd">⚠ Élevé</span>';if(d==='Bon client')return'<span class="badge bg">✓ Bon client</span>';if(d==='Modéré')return'<span class="badge bw">Modéré</span>';return'<span class="badge bn">—</span>';}
 function pBadge(p){const c=['bn','bi','bw','bg'];return p?`<span class="badge ${c[p]||'bn'}">${p}/3</span>`:'<span class="badge bn">—</span>';}
 function cPill(v){const m={oui:'bg',non:'bd','en cours':'bw'};return`<span class="tpill ${m[v]||'bn'}">${v||'—'}</span>`;}
+function typeBadge(t){return t==='Prospect'?'<span class="tpill bi">Prospect</span>':'<span class="tpill bg">Client</span>';}
 function chk(v){return v?'<span class="tpill bg">oui</span>':'<span class="tpill" style="background:#f1efe8;color:#bbb">—</span>';}
 function esc(s){return String(s==null?'':s).replace(/"/g,'&quot;');}
 
@@ -446,9 +451,25 @@ function renderInsights(){
       +'</div>';
   }).join('');
 
-  return '<div class="two-col">'
+  // ── Taux d'usage cumulé des accès par type (NFC / QR / Mobile) — clients uniquement,
+  // les prospects n'ont pas encore d'usage réel et fausseraient la moyenne à la baisse ──
+  const ACCESS_TYPES=[['nfc','NFC'],['qr','QR Code'],['mobile','Mobile']];
+  const clientsOnly=clients.filter(c=>c.type==='Client');
+  const nClients=clientsOnly.length;
+  const accessHtml=ACCESS_TYPES.map(([k,lbl])=>{
+    const avg=nClients?Math.round(clientsOnly.reduce((s,c)=>s+(c[k]||0),0)/nClients):0;
+    return '<div class="bar-row" title="'+lbl+' : moyenne '+avg+'% sur '+nClients+' clients">'
+      +'<span class="bar-lbl-wide" style="width:80px">'+esc(lbl)+'</span>'
+      +'<div class="bar-track"><div class="bar-fill" style="width:'+avg+'%;background:#1baf7a"></div></div>'
+      +'<span class="bar-pct">'+avg+'%</span>'
+      +'</div>';
+  }).join('');
+
+  return '<div class="three-col">'
     + '<div class="card"><div class="card-head"><div class="ch-ico">◻</div><span class="ch-title">Répartition par secteur</span></div>'+secteurHtml+'</div>'
     + '<div class="card"><div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Usage des modules Sesame</span><span style="font-size:11px;color:#aaa;margin-left:8px">'+total+' fiches</span></div>'+moduleHtml+'</div>'
+    + '<div class="card"><div class="card-head"><div class="ch-ico">◉</div><span class="ch-title">Taux d\'usage des accès</span><span style="font-size:11px;color:#aaa;margin-left:8px">'+nClients+' clients</span></div>'+accessHtml
+      +(nClients?'':'<div style="font-size:12px;color:#bbb;padding:4px 0;font-style:italic">Aucune fiche de type Client</div>')+'</div>'
     + '</div>';
 }
 
@@ -466,6 +487,7 @@ function renderList(){
     <select class="lsel" onchange="fDanger=this.value;renderList()"><option value="">Tous risques</option>${DANGERS.map(d=>`<option value="${d}" ${fDanger===d?'selected':''}>${d}</option>`).join('')}</select>
     <select class="lsel" onchange="fSecteur=this.value;renderList()"><option value="">Tous secteurs</option>${sectAll.map(s=>`<option value="${s}" ${fSecteur===s?'selected':''}>${s}</option>`).join('')}</select>
     <select class="lsel" onchange="fContrat=this.value;renderList()"><option value="">Tous contrats</option><option value="oui" ${fContrat==='oui'?'selected':''}>oui</option><option value="non" ${fContrat==='non'?'selected':''}>non</option><option value="en cours" ${fContrat==='en cours'?'selected':''}>en cours</option></select>
+    <select class="lsel" onchange="fType=this.value;renderList()"><option value="">Tous types</option>${TYPES.map(t=>`<option value="${t}" ${fType===t?'selected':''}>${t}</option>`).join('')}</select>
     <span class="count-lbl">${data.length} résultat${data.length>1?'s':''}</span>
   </div>`;
 
@@ -480,7 +502,7 @@ function renderList(){
           <div class="avatar" style="width:36px;height:36px;font-size:12px">${ini(c.nom)}</div>
           <div class="gc-info"><div class="gc-name">${c.nom}</div><div class="gc-sub">${c.groupe||c.secteur||'—'}</div></div>
         </div>
-        <div class="gc-tags"><span class="badge ${dc}" style="font-size:10px">${c.danger||'—'}</span>${c.ville?`<span class="tag t-blue" style="font-size:10px">${c.ville}</span>`:''}</div>
+        <div class="gc-tags">${typeBadge(c.type)}<span class="badge ${dc}" style="font-size:10px">${c.danger||'—'}</span>${c.ville?`<span class="tag t-blue" style="font-size:10px">${c.ville}</span>`:''}</div>
         <hr class="gc-divider">
         <div class="gc-fields">
           <div class="gc-row"><span class="gc-rl">Contrat</span>${cPill(c.contrat)}</div>
@@ -509,7 +531,7 @@ function renderList(){
       </tr>`;
       return`<tr>
         <td><div class="avatar" style="width:26px;height:26px;font-size:10px;cursor:pointer" onclick="showFiche('${c.id}')">${ini(c.nom)}</div></td>
-        <td><div class="nom-cell" onclick="showFiche('${c.id}')">${c.nom}</div><div class="sub-cell">${c.groupe||'—'}</div></td>
+        <td><div class="nom-cell" onclick="showFiche('${c.id}')">${typeBadge(c.type)} ${c.nom}</div><div class="sub-cell">${c.groupe||'—'}</div></td>
         <td style="font-size:12px;color:#666">${c.secteur||'—'}</td>
         <td style="font-size:12px">${c.ville||'—'}</td>
         <td>${dBadge(c.danger)}</td>
@@ -557,7 +579,7 @@ function showFiche(id){
   const c=clients.find(c=>c.id===id);if(!c)return;
   curId=id;view='fiche';setNav('n-fiche');
   bc([{label:'Clients',fn:'showList()'},{label:c.nom}]);
-  tba(`<button class="btn btn-ghost" onclick="openModal('${id}')">✎ Modifier</button><button class="btn btn-primary" onclick="addActForm('${id}')">+ Activité</button>`);
+  tba(`<button class="btn btn-ghost" onclick="openModal('${id}')">✎ Modifier</button><button class="btn btn-ghost" onclick="openSendEmailModal('${id}')">✉ Email</button><button class="btn btn-primary" onclick="addActForm('${id}')">+ Activité</button><button class="btn btn-ghost" style="color:#a32d2d" onclick="deleteClient('${id}')">🗑 Supprimer</button>`);
   renderFiche(c);
 }
 
@@ -601,6 +623,7 @@ function renderFiche(c){
       <div style="flex:1">
         <div class="hero-name">${c.nom}</div>
         <div class="tags-row">
+          ${typeBadge(c.type)}
           <span class="tag t-gray">${c.secteur?sectorIcon(c.secteur):'◻'} ${c.secteur||'—'}${c.etoiles?' '+c.etoiles:''}</span>
           ${c.ville?`<span class="tag t-blue">◉ ${c.ville}</span>`:''}
           ${c.danger==='Bon client'?'<span class="tag t-green">Bon client</span>':c.danger==='Élevé !!'?'<span class="tag t-red">Élevé !!</span>':'<span class="tag t-amber">Modéré</span>'}
@@ -807,7 +830,7 @@ function updateBadges(){document.getElementById('b-eleve').textContent=clients.f
 // MODAL EDIT CLIENT
 // ════════════════════════════════════════
 function openModal(id){const c=clients.find(c=>c.id===id);if(c)renderModal({...c});}
-function openNewModal(){renderModal({id:null,nom:'',groupe:'',secteur:'Hôtellerie',ville:'',etoiles:'',danger:'Modéré',potentiel:2,contrat:'non',modules:0,pms:'',priorite:1,appel:'',referent:'',email:'',tel:'',site:'',nfc:0,qr:0,mobile:0,webApp:false,mobileV2:false,checkin:false,livret:false,gestionDemande:false,offline:false,messagerie:'Noreply',note:'',journal:[],_new:true});}
+function openNewModal(){renderModal({id:null,nom:'',type:'Client',groupe:'',secteur:'Hôtellerie',ville:'',etoiles:'',danger:'Modéré',potentiel:2,contrat:'non',modules:0,pms:'',priorite:1,appel:'',referent:'',email:'',tel:'',site:'',nfc:0,qr:0,mobile:0,webApp:false,mobileV2:false,checkin:false,livret:false,gestionDemande:false,offline:false,messagerie:'Noreply',note:'',journal:[],_new:true});}
 function closeModal(){document.getElementById('modal-ct').innerHTML='';}
 
 function renderModal(mc){
@@ -823,6 +846,7 @@ function renderModal(mc){
 
       <div class="modal-section">Identité &amp; contact</div>
       <div class="form-grid">
+        <div class="ff"><label>Type</label><select id="m-type">${TYPES.map(t=>`<option value="${t}" ${mc.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
         <div class="ff"><label>Groupe</label><input id="m-groupe" value="${esc(mc.groupe)}" placeholder="—"></div>
         <div class="ff"><label>Secteur</label><select id="m-secteur">${sectAll.map(s=>`<option value="${s}" ${mc.secteur===s?'selected':''}>${s}</option>`).join('')}</select></div>
         <div class="ff"><label>Ville</label><input id="m-ville" value="${esc(mc.ville)}" placeholder="—"></div>
@@ -876,7 +900,7 @@ function renderModal(mc){
 async function saveModal(id,isNew){
   const g=i=>(document.getElementById(i)||{value:''});
   const ch={
-    nom:g('m-nom').value.trim(),groupe:g('m-groupe').value,secteur:g('m-secteur').value,
+    nom:g('m-nom').value.trim(),type:g('m-type').value,groupe:g('m-groupe').value,secteur:g('m-secteur').value,
     ville:g('m-ville').value,etoiles:g('m-etoiles').value,referent:g('m-referent').value,
     email:g('m-email').value,tel:g('m-tel').value,site:g('m-site').value,
     pms:g('m-pms').value,messagerie:g('m-msg').value,danger:g('m-danger').value,
@@ -904,12 +928,202 @@ async function saveModal(id,isNew){
   if(view==='fiche'&&curId===id)showFiche(id);else renderList();
 }
 
+async function deleteClient(id){
+  const c=clients.find(c=>c.id===id);if(!c)return;
+  if(!confirm('Supprimer définitivement la fiche "'+c.nom+'" ? Cette action est irréversible.'))return;
+  try{
+    var r = await apiFetch('/wa/crmProspect/delete', {method:'POST', body:JSON.stringify({id:id})});
+    if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash('Erreur de suppression'); return; }
+  clients=clients.filter(c=>c.id!==id);
+  updateBadges();flash('Fiche supprimée');showList();
+}
+
+// ════════════════════════════════════════
+// EMAIL — serveur SMTP sortant + modèles + envoi (portée CRM/Sesame,
+// scope=crm — le même mécanisme générique est repris à l'identique côté
+// back-office de chaque hôtel, voir admin.html)
+// ════════════════════════════════════════
+let SMTP_CFG=null, EMAIL_TEMPLATES=[], EMAIL_TEMPLATES_LOADED=false;
+
+function showEmailPanel(){
+  view='email';setNav('n-email');
+  bc([{label:'Paramètres email'}]);tba('');
+  document.getElementById('main').innerHTML='<div class="card">Chargement…</div>';
+  loadEmailPanelData();
+}
+
+async function loadEmailPanelData(){
+  try{
+    const [cfgR, tplR] = await Promise.all([
+      apiFetch('/wa/smtpConfig/get?scope=crm'),
+      apiFetch('/wa/emailTemplate/list?scope=crm'),
+    ]);
+    SMTP_CFG = cfgR.ok ? await cfgR.json() : null;
+    EMAIL_TEMPLATES = tplR.ok ? await tplR.json() : [];
+    EMAIL_TEMPLATES_LOADED = true;
+  }catch(e){ flash('Erreur de chargement'); SMTP_CFG=null; EMAIL_TEMPLATES=[]; }
+  renderEmailPanel();
+}
+
+function renderEmailPanel(){
+  const s = SMTP_CFG || {host:'',port:587,secure:false,username:'',password:'',fromName:'',fromEmail:''};
+  document.getElementById('main').innerHTML = `
+  <div class="card">
+    <div class="card-head"><div class="ch-ico">⚙</div><span class="ch-title">Serveur SMTP sortant</span></div>
+    <div class="form-grid">
+      <div class="ff"><label>Hôte</label><input id="smtp-host" value="${esc(s.host)}" placeholder="smtp.exemple.com"></div>
+      <div class="ff"><label>Port</label><input type="number" id="smtp-port" value="${s.port||587}"></div>
+      <div class="ff"><label>Sécurité</label><select id="smtp-secure"><option value="0" ${!s.secure?'selected':''}>STARTTLS (587/25)</option><option value="1" ${s.secure?'selected':''}>SSL/TLS (465)</option></select></div>
+      <div class="ff"><label>Identifiant</label><input id="smtp-user" value="${esc(s.username)}"></div>
+      <div class="ff"><label>Mot de passe</label><input type="password" id="smtp-pass" value="${esc(s.password)}" placeholder="${s.password?'':'••••••••'}"></div>
+      <div class="ff"><label>Nom d'expéditeur</label><input id="smtp-fromname" value="${esc(s.fromName)}" placeholder="Sesame Technology"></div>
+      <div class="ff"><label>Email d'expéditeur</label><input id="smtp-fromemail" value="${esc(s.fromEmail)}" placeholder="contact@sesame.technology"></div>
+    </div>
+    <div class="modal-footer" style="border-top:none;padding-top:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="saveSmtpConfig()">Enregistrer</button>
+      <input type="email" id="smtp-test-to" placeholder="destinataire@test.com" style="width:200px;font-family:inherit;font-size:12px;height:31px;border:0.5px solid #d0cdc6;border-radius:8px;padding:0 8px">
+      <button class="btn btn-ghost" onclick="testSmtpConfig()">Envoyer un test</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><div class="ch-ico">✉</div><span class="ch-title">Modèles d'email</span><button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="openTemplateModal(null)">+ Nouveau modèle</button></div>
+    ${EMAIL_TEMPLATES.length===0?'<div class="log-empty">Aucun modèle. Créez-en un pour pouvoir envoyer des emails depuis une fiche.</div>':EMAIL_TEMPLATES.map(t=>`
+      <div class="log-item">
+        <div class="log-dot ld-b"></div>
+        <div class="log-body">
+          <div class="log-text"><strong>${esc(t.name)}</strong> <span style="color:#aaa;font-size:11px">(${esc(t.key)})</span></div>
+          <div class="log-meta">Objet : ${esc(t.subject)}</div>
+          <div class="log-acts">
+            <button class="btn btn-sm btn-ghost" onclick="openTemplateModal('${t.id}')">Modifier</button>
+            <button class="btn btn-sm btn-ghost" style="color:#a32d2d" onclick="deleteTemplate('${t.id}')">Supprimer</button>
+          </div>
+        </div>
+      </div>`).join('')}
+  </div>`;
+}
+
+async function saveSmtpConfig(){
+  const g=i=>(document.getElementById(i)||{value:''}).value;
+  const body={host:g('smtp-host').trim(),port:+g('smtp-port')||587,secure:g('smtp-secure')==='1',username:g('smtp-user').trim(),password:g('smtp-pass'),fromName:g('smtp-fromname').trim(),fromEmail:g('smtp-fromemail').trim(),scope:'crm'};
+  try{
+    var r = await apiFetch('/wa/smtpConfig/update', {method:'POST', body:JSON.stringify(body)});
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    SMTP_CFG=data;flash('Configuration SMTP enregistrée');
+  }catch(e){ flash(e.message||'Erreur d\'enregistrement'); }
+}
+
+async function testSmtpConfig(){
+  const to=(document.getElementById('smtp-test-to')||{value:''}).value.trim();
+  if(!to){flash('Indiquez une adresse de test');return;}
+  try{
+    var r = await apiFetch('/wa/smtpConfig/test', {method:'POST', body:JSON.stringify({to:to, scope:'crm'})});
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash('Email de test envoyé à '+to);
+  }catch(e){ flash(e.message||'Échec de l\'envoi — vérifiez la configuration'); }
+}
+
+function openTemplateModal(id){
+  const t = id ? EMAIL_TEMPLATES.find(t=>t.id===id) : {id:null,key:'',name:'',subject:'',bodyHtml:''};
+  if(!t)return;
+  document.getElementById('modal-ct').innerHTML=`
+  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+    <div class="modal-box">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">${t.id?'Modifier le modèle':'Nouveau modèle'}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div class="form-grid">
+        <div class="ff"><label>Clé (identifiant technique)</label><input id="tpl-key" value="${esc(t.key)}" placeholder="ex. prospect-relance" ${t.id?'disabled':''}></div>
+        <div class="ff"><label>Nom affiché</label><input id="tpl-name" value="${esc(t.name)}" placeholder="Relance prospect"></div>
+      </div>
+      <div class="ff" style="margin-top:8px"><label>Objet</label><input id="tpl-subject" value="${esc(t.subject)}" placeholder="Sesame Technology — {{nom}}"></div>
+      <div class="ff" style="margin-top:8px"><label>Corps (HTML — variables disponibles : {{nom}} {{secteur}} {{referent}} {{ville}})</label><textarea id="tpl-body" style="height:160px">${t.bodyHtml||''}</textarea></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="saveTemplate(${t.id?`'${t.id}'`:'null'})">Enregistrer</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function saveTemplate(id){
+  const g=i=>(document.getElementById(i)||{value:''}).value;
+  const body={key:g('tpl-key').trim().toLowerCase(),name:g('tpl-name').trim(),subject:g('tpl-subject').trim(),bodyHtml:g('tpl-body'),scope:'crm'};
+  if(!body.key||!body.name||!body.subject||!body.bodyHtml){flash('Tous les champs sont requis');return;}
+  try{
+    var r = await apiFetch('/wa/emailTemplate/upsert', {method:'POST', body:JSON.stringify(body)});
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    const i=EMAIL_TEMPLATES.findIndex(t=>t.id===data.id);
+    if(i>-1) EMAIL_TEMPLATES[i]=data; else EMAIL_TEMPLATES.push(data);
+  }catch(e){ flash(e.message||'Erreur d\'enregistrement'); return; }
+  closeModal();flash('Modèle enregistré');renderEmailPanel();
+}
+
+async function deleteTemplate(id){
+  if(!confirm('Supprimer ce modèle ?'))return;
+  try{
+    var r = await apiFetch('/wa/emailTemplate/delete', {method:'POST', body:JSON.stringify({id:id, scope:'crm'})});
+    if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash('Erreur de suppression'); return; }
+  EMAIL_TEMPLATES=EMAIL_TEMPLATES.filter(t=>t.id!==id);
+  flash('Modèle supprimé');renderEmailPanel();
+}
+
+async function ensureEmailTemplatesLoaded(){
+  if(EMAIL_TEMPLATES_LOADED)return;
+  try{
+    var r = await apiFetch('/wa/emailTemplate/list?scope=crm');
+    EMAIL_TEMPLATES = r.ok ? await r.json() : [];
+  }catch(e){ EMAIL_TEMPLATES=[]; }
+  EMAIL_TEMPLATES_LOADED=true;
+}
+
+async function openSendEmailModal(id){
+  const c=clients.find(c=>c.id===id);if(!c)return;
+  if(!c.email){flash('Aucune adresse email pour cette fiche');return;}
+  await ensureEmailTemplatesLoaded();
+  if(!EMAIL_TEMPLATES.length){flash('Aucun modèle disponible — créez-en un depuis "Email"');return;}
+  document.getElementById('modal-ct').innerHTML=`
+  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+    <div class="modal-box" style="max-width:480px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Envoyer un email à ${esc(c.nom)}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div class="ff"><label>Destinataire</label><input value="${esc(c.email)}" disabled></div>
+      <div class="ff" style="margin-top:8px"><label>Modèle</label><select id="send-tpl">${EMAIL_TEMPLATES.map(t=>`<option value="${esc(t.key)}">${esc(t.name)}</option>`).join('')}</select></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="sendClientEmail('${id}')">Envoyer</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function sendClientEmail(id){
+  const c=clients.find(c=>c.id===id);if(!c)return;
+  const key=(document.getElementById('send-tpl')||{value:''}).value;
+  if(!key){flash('Sélectionnez un modèle');return;}
+  try{
+    var r = await apiFetch('/wa/emailTemplate/send', {method:'POST', body:JSON.stringify({
+      scope:'crm', templateKey:key, to:c.email,
+      variables:{nom:c.nom, secteur:c.secteur||'', referent:c.referent||'', ville:c.ville||''}
+    })});
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    var ar = await apiFetch('/wa/crmProspect/activity/create', {method:'POST', body:JSON.stringify({
+      prospectId:id, type:'Email', text:'Email envoyé : "'+data.subject+'"', authorName:'CRM'
+    })});
+    if(ar.ok){ const entry=await ar.json(); if(!c.journal)c.journal=[]; c.journal.push(entry); }
+  }catch(e){ flash(e.message||'Échec de l\'envoi'); return; }
+  closeModal();flash('Email envoyé');
+  if(view==='fiche'&&curId===id) showFiche(id);
+}
+
 // ════════════════════════════════════════
 // CSV EXPORT
 // ════════════════════════════════════════
 function exportCSV(){
-  const h=['ID','Nom','Groupe','Secteur','Ville','Étoiles','Risque','Potentiel','Contrat','Modules','PMS','Priorité','Appel','Référent','Email','Tél','Site','NFC%','QR%','Mobile%','WebApp','MobileV2','Offline','Check-in','Livret','Gestion','Messagerie','Note','Nb activités'];
-  const rows=clients.map(c=>[c.id,c.nom,c.groupe,c.secteur,c.ville,c.etoiles,c.danger,c.potentiel,c.contrat,c.modules,c.pms,c.priorite,c.appel,c.referent,c.email,c.tel,c.site,c.nfc,c.qr,c.mobile,c.webApp?'oui':'non',c.mobileV2?'oui':'non',c.offline?'oui':'non',c.checkin?'oui':'non',c.livret?'oui':'non',c.gestionDemande?'oui':'non',c.messagerie,c.note,(c.journal||[]).length].map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`));
+  const h=['ID','Type','Nom','Groupe','Secteur','Ville','Étoiles','Risque','Potentiel','Contrat','Modules','PMS','Priorité','Appel','Référent','Email','Tél','Site','NFC%','QR%','Mobile%','WebApp','MobileV2','Offline','Check-in','Livret','Gestion','Messagerie','Note','Nb activités'];
+  const rows=clients.map(c=>[c.id,c.type,c.nom,c.groupe,c.secteur,c.ville,c.etoiles,c.danger,c.potentiel,c.contrat,c.modules,c.pms,c.priorite,c.appel,c.referent,c.email,c.tel,c.site,c.nfc,c.qr,c.mobile,c.webApp?'oui':'non',c.mobileV2?'oui':'non',c.offline?'oui':'non',c.checkin?'oui':'non',c.livret?'oui':'non',c.gestionDemande?'oui':'non',c.messagerie,c.note,(c.journal||[]).length].map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`));
   const csv='﻿'+[h,...rows].map(r=>r.join(';')).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='sesame_crm_export.csv';a.click();
 }

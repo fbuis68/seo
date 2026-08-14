@@ -252,6 +252,31 @@ formulaire de connexion dédié qui rejette explicitement tout compte `hotel`.
   "Site web", texte = message du formulaire) — visible immédiatement comme
   tâche à faire dans la fiche. Voir `docs/formulaire-contact-site-web.md`
   pour les instructions à transmettre à l'équipe qui gère le site web.
+- **Type Prospect / Client** (`CrmProspect.type`) : les fiches créées
+  manuellement depuis "+ Nouveau client" restent `Client` par défaut ; celles
+  créées automatiquement par l'inscription en ligne (`/onboarding/register`)
+  et par le formulaire de contact (`POST /contact`) sont taguées `Prospect` —
+  filtrable dans la vue liste, affiché en badge partout (liste, grille,
+  fiche).
+- **Taux d'usage des accès (troisième graphique de la vue liste)** :
+  moyenne NFC / QR / Mobile calculée en direct, **restreinte aux fiches de
+  type `Client`** — les prospects n'ont pas encore d'usage réel et
+  fausseraient la moyenne à la baisse. Troisième teinte validée `dataviz`
+  (aqua `#1baf7a`, CVD ΔE 9.2 / normal-vision ΔE 27.6 face au bleu/orange
+  déjà utilisés).
+- **Suppression d'une fiche** : bouton "🗑 Supprimer" dans la fiche détail
+  (`POST /wa/crmProspect/delete`, déjà existant côté serveur, maintenant
+  relié à l'interface) — confirmation requise, action irréversible.
+- **Serveur SMTP sortant + modèles d'email + envoi**, dans l'onglet "Email"
+  du CRM et dans "Serveur email" du back-office de chaque hôtel — même
+  mécanisme générique (`src/lib/email.ts`, `src/routes/email.ts`, endpoints
+  `/wa/smtpConfig/*` et `/wa/emailTemplate/*`), paramétré par portée : le CRM
+  cible la configuration Sesame globale (`?scope=crm`, réservé aux comptes
+  Sesame), le back-office cible l'hôtel courant (comportement par défaut,
+  comme les autres réglages par établissement). Modèles avec variables
+  `{{nom}}`, `{{secteur}}`, `{{referent}}`, `{{ville}}` ; bouton "Envoyer un
+  test" pour vérifier la configuration ; depuis une fiche CRM, "✉ Email"
+  envoie un modèle au client/prospect et journalise l'envoi automatiquement.
 
 Également non couvert : l'app ménage (`sesame_menage.html`, application
 séparée pour les agents de ménage sur le terrain). La base de données est
