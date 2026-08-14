@@ -25,10 +25,24 @@
  *   - Le CA par formateur est estimé via dailyRate*days sur les sessions
  *     qui lui sont assignées (trainerId), pas via les factures réelles
  *     (qui ne portent pas de trainerId direct).
+ *
+ * IMPORTANT : un compte peut avoir accès à plusieurs "entity" (agences /
+ * comptes clients) à la fois — les appels /wa/{entite}/list ne se
+ * limitent PAS automatiquement à celle sélectionnée dans le menu en haut
+ * de l'appli. Il faut filtrer explicitement par ENTITY_ID ci-dessous.
+ * Pour lister les entités accessibles et leurs id :
+ *
+ *   fetch(`/wa/entity/list?nopaging=1&_dc=${Date.now()}`)
+ *     .then(r => r.json())
+ *     .then(d => console.table(d.root.map(e => ({id: e.id, name: e.name}))));
  */
 (async function mcdfLiveReports() {
+  const ENTITY_ID = 'E00000361'; // DEMO — change pour cibler une autre entité
+
   async function fetchAll(entity) {
-    const res = await fetch(`/wa/${entity}/list?nopaging=1&_dc=${Date.now()}`);
+    const res = await fetch(
+      `/wa/${entity}/list?nopaging=1&entityId=${ENTITY_ID}&_dc=${Date.now()}`
+    );
     const data = await res.json();
     if (!data.success) {
       throw new Error(`${entity}: ${JSON.stringify(data).slice(0, 200)}`);
