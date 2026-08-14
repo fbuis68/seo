@@ -109,8 +109,11 @@ s'agisse ou non d'un client Sesame :
   token)** — ce dernier mode couvre le cas de la vraie API Sesame
   Technology, qui n'accepte pas de clé statique : `POST {serveur}/ws/login/
   login?login=email` avec le mot de passe en body renvoie un token
-  (`data.profiles.0.token`), à réutiliser tel quel dans l'en-tête
-  `Authorization` des appels suivants. Le serveur se reconnecte à chaque
+  (`data.token`, confirmé le 14/08/2026 contre `newtest.sesame.technology`
+  avec un compte de service — le chemin exact peut varier selon le type de
+  compte, d'où le champ configurable plutôt qu'un chemin figé), à réutiliser
+  tel quel dans l'en-tête `Authorization` des appels suivants. Le serveur se
+  reconnecte à chaque
   synchronisation (pas de cache de token, pour rester correct sans avoir à
   deviner sa durée de validité) — `src/lib/bookingSource.ts::performLogin()`.
   Ce mode est générique : email/mot de passe en query ou en body, noms de
