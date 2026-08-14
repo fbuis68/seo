@@ -158,6 +158,40 @@ s'agisse ou non d'un client Sesame :
   depuis le navigateur — aucun souci de CORS ni de proxy PHP à déployer,
   contrairement à l'ancien panneau.
 
+**Inscription en ligne (`public/onboarding.html`, accessible sur `/onboarding`)**
+— wizard public en 5 étapes ("Démarrer mon essai") permettant à un prospect
+de créer lui-même son établissement, sans intervention manuelle d'un compte
+Sesame :
+
+- `GET /onboarding/pricing` (public) sert la grille tarifaire et le
+  catalogue de modules — plus aucune valeur figée côté client, la source de
+  vérité reste la même `PricingConfig` que le panneau "Souscriptions".
+- `POST /onboarding/register` (public) provisionne directement
+  l'établissement + son compte admin (réutilise `provisionEntity()`, la
+  brique commune avec la création manuelle et l'activation d'une
+  souscription) et crée la fiche `Subscription` (statut `trial`), **déjà
+  reliée à l'entité créée** — visible immédiatement dans le panneau
+  "Souscriptions" du back-office Sesame, qui fait donc office de suivi
+  commercial interne (équivalent d'un CRM basique) tant qu'aucun outil
+  externe (HubSpot, Pipedrive…) n'est branché. Le tarif est toujours
+  recalculé côté serveur à partir de la grille publique — jamais depuis les
+  prix envoyés par le client.
+- Champ "Identifiant établissement (si connu)" (cas d'un client déjà
+  équipé de Sesame côté PMS) : **jamais rattaché automatiquement** à une
+  entité existante depuis ce point d'entrée public — ce serait une prise de
+  contrôle de compte triviale (n'importe qui pourrait saisir le code d'un
+  établissement tiers). La valeur est seulement notée dans la fiche
+  souscription pour vérification manuelle par l'équipe Sesame.
+- Mandat SEPA (GoCardless) : seuls le titulaire et les 4 derniers chiffres
+  de l'IBAN sont conservés en base — jamais l'IBAN ni le BIC complets, qui
+  n'ont pas leur place côté serveur tant qu'aucun vrai prestataire de
+  paiement ne les tokenise à la source. Le mandat reste à l'état
+  `pending_activation` (aucune vraie intégration GoCardless branchée à ce
+  stade — à faire quand le besoin sera confirmé).
+- Aucun envoi d'email n'est déclenché (pas de fournisseur SMTP configuré
+  dans ce projet) — le panneau "Souscriptions" ci-dessus est la source de
+  vérité pour l'équipe commerciale à ce stade.
+
 **Non couvert** (hors périmètre — panneau du prototype `sesame_admin.html`
 gérant le CRM commercial interne de Sesame, sans rapport avec la gestion
 d'un établissement) : "CRM Sesame". Son code JS reste présent dans

@@ -19,6 +19,7 @@ import { entityRouter } from "./routes/entity";
 import { subscriptionRouter } from "./routes/subscription";
 import { groupRouter } from "./routes/group";
 import { bookingSourceRouter } from "./routes/bookingSource";
+import { onboardingRouter } from "./routes/onboarding";
 import { errorHandler } from "./middleware/errorHandler";
 
 export function createApp() {
@@ -54,6 +55,10 @@ export function createApp() {
   // Authentification espace client (hors convention /wa — pas de DAO CRUD dédié)
   app.use("/api", authRouter);
 
+  // Parcours d'inscription public (hors /wa — pas d'authentification requise,
+  // c'est le point d'entrée qui en crée une)
+  app.use(onboardingRouter);
+
   app.get("/health", (_req, res) => res.json({ ok: true }));
 
   // Apps statiques (HTML/CSS/JS d'origine, rebranchées sur l'API)
@@ -61,6 +66,7 @@ export function createApp() {
   app.use(express.static(publicDir));
   app.get("/", (_req, res) => res.sendFile(path.join(publicDir, "checkin.html")));
   app.get("/admin", (_req, res) => res.sendFile(path.join(publicDir, "admin.html")));
+  app.get("/onboarding", (_req, res) => res.sendFile(path.join(publicDir, "onboarding.html")));
 
   app.use(errorHandler);
 

@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sesame — Démarrer mon essai</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.10.0/dist/tabler-icons.min.css">
+<style>
+:root{
+  --bg:#F5F4EF;--card:#FFF;--bdr:#E2DFD6;
+  --tx:#14130D;--mu:#7A7870;--hi:#B0ADA4;
+  --a:#1A6B47;--al:#E6F4EC;--am:#2D9B6A;
+  --bu:#1A4880;--bul:#EBF2FA;
+  --go:#9B6E0A;--gol:#FDF4D8;
+  --re:#B83030;--rel:#FDEAEA;
+  --wa:#A85A0A;--wal:#FEF0DC;
+  --r:12px;--rs:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{font-family:'DM Sans',sans-serif;font-size:15px;color:var(--tx);background:var(--bg);min-height:100%}
+::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:3px}
+
+/* ── HERO ── */
+.hero{background:linear-gradient(135deg,#111210 0%,#1A6B47 120%);color:#fff;padding:48px 24px 90px;text-align:center;position:relative;overflow:hidden}
+.hero::after{content:'';position:absolute;inset:0;background:radial-gradient(circle at 80% 0%,rgba(45,155,106,.35),transparent 60%)}
+.hero-content{position:relative;max-width:680px;margin:0 auto}
+.hero-badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:5px 14px;border-radius:20px;background:rgba(255,255,255,.12);margin-bottom:18px}
+.hero h1{font-family:'DM Serif Display',serif;font-size:clamp(28px,5vw,42px);font-weight:400;line-height:1.2;margin-bottom:12px}
+.hero p{font-size:16px;opacity:.85;max-width:520px;margin:0 auto}
+
+/* ── WIZARD CONTAINER ── */
+.wiz-wrap{max-width:640px;margin:-60px auto 60px;padding:0 16px;position:relative;z-index:5}
+.wiz-card{background:var(--card);border-radius:var(--r);box-shadow:0 20px 60px rgba(0,0,0,.12);overflow:hidden}
+
+/* ── PROGRESS ── */
+.wiz-progress{display:flex;padding:20px 24px 0}
+.wp-step{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;position:relative}
+.wp-dot{width:30px;height:30px;border-radius:50%;border:2px solid var(--bdr);background:var(--card);color:var(--mu);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;transition:all .2s;z-index:2}
+.wp-step.on .wp-dot{border-color:var(--a);background:var(--a);color:#fff}
+.wp-step.done .wp-dot{border-color:var(--a);background:var(--al);color:var(--a)}
+.wp-label{font-size:10px;color:var(--mu);text-align:center;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.wp-step.on .wp-label{color:var(--a)}
+.wp-line{position:absolute;top:14px;left:-50%;width:100%;height:2px;background:var(--bdr);z-index:1}
+.wp-step:first-child .wp-line{display:none}
+.wp-step.done .wp-line,.wp-step.on .wp-line{background:var(--a)}
+
+/* ── BODY ── */
+.wiz-body{padding:28px 24px}
+.wiz-section{display:none}
+.wiz-section.on{display:block;animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.wiz-h{font-family:'DM Serif Display',serif;font-size:22px;font-weight:400;margin-bottom:4px}
+.wiz-sub{font-size:13px;color:var(--mu);margin-bottom:20px}
+
+/* ── FORM ELEMENTS ── */
+.fi{margin-bottom:14px}.fi:last-child{margin-bottom:0}
+.lb{font-size:11px;font-weight:600;color:var(--mu);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em}
+input,select,textarea{width:100%;padding:10px 12px;border:1.5px solid var(--bdr);border-radius:var(--rs);font-family:inherit;font-size:14px;background:var(--card);color:var(--tx);transition:border-color .15s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--a)}
+textarea{resize:vertical;min-height:70px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media(max-width:480px){.g2,.g3{grid-template-columns:1fr}}
+
+/* ── BUTTONS ── */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:11px 20px;border-radius:var(--rs);border:1.5px solid var(--bdr);background:var(--card);color:var(--tx);cursor:pointer;font-family:inherit;font-size:14px;font-weight:600;transition:all .14s;width:100%}
+.btn:disabled{opacity:.6;cursor:not-allowed}
+.btn-p{background:var(--a);color:#fff;border-color:var(--a)}
+.btn-p:hover{background:var(--am)}
+.btn-out{background:transparent}
+.btn-out:hover{background:var(--al);border-color:var(--a);color:var(--a)}
+.brow{display:flex;gap:10px;margin-top:24px}
+.brow .btn-out{flex:0 0 auto;width:auto;padding:11px 16px}
+
+/* ── CARDS / OPTIONS ── */
+.opt{border:1.5px solid var(--bdr);border-radius:var(--rs);padding:14px;cursor:pointer;transition:all .15s;display:flex;align-items:flex-start;gap:12px;margin-bottom:10px}
+.opt:hover{border-color:var(--a)}
+.opt.on{border-color:var(--a);background:var(--al)}
+.opt-ico{width:38px;height:38px;border-radius:9px;background:var(--bg);color:var(--mu);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;transition:all .15s}
+.opt.on .opt-ico{background:var(--a);color:#fff}
+.opt-body{flex:1;min-width:0}
+.opt-title{font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
+.opt-desc{font-size:12px;color:var(--mu);margin-top:2px}
+.opt-check{width:22px;height:22px;border-radius:50%;border:2px solid var(--bdr);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;transition:all .15s}
+.opt.on .opt-check{border-color:var(--a);background:var(--a)}
+.opt-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;background:rgba(26,107,71,.1);color:var(--a)}
+.opt-price{font-size:13px;font-weight:700;color:var(--a);flex-shrink:0;text-align:right;white-space:nowrap}
+.opt-price small{display:block;font-size:10px;color:var(--mu);font-weight:500}
+
+/* ── PILLS (stars / category) ── */
+.pills{display:flex;flex-wrap:wrap;gap:8px}
+.pill{padding:9px 16px;border-radius:20px;border:1.5px solid var(--bdr);font-size:13px;font-weight:600;cursor:pointer;background:var(--card);color:var(--mu);transition:all .13s}
+.pill.on{border-color:var(--a);background:var(--al);color:var(--a)}
+
+/* ── ALERTS ── */
+.alt{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:var(--rs);font-size:12.5px;line-height:1.5;margin-bottom:14px}
+.alt i{font-size:16px;flex-shrink:0;margin-top:1px}
+.alt-g{background:var(--al);color:var(--a)}
+.alt-b{background:var(--bul);color:var(--bu)}
+.alt-w{background:var(--wal);color:var(--wa)}
+
+/* ── RECAP ── */
+.recap-card{border:1.5px solid var(--bdr);border-radius:var(--rs);padding:14px;margin-bottom:10px}
+.recap-row{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:5px 0}
+.recap-row+.recap-row{border-top:1px solid var(--bg)}
+.recap-total{display:flex;justify-content:space-between;align-items:center;padding-top:12px;margin-top:6px;border-top:2px solid var(--bdr);font-size:17px;font-weight:700}
+.recap-total span:last-child{color:var(--a)}
+
+/* ── TRIAL CHIP ── */
+.trial-chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px;background:var(--gol);color:var(--go)}
+
+/* ── SUCCESS ── */
+.success-icon{width:72px;height:72px;border-radius:50%;background:var(--al);color:var(--a);display:flex;align-items:center;justify-content:center;font-size:34px;margin:0 auto 16px}
+
+/* ── FOOTNOTE ── */
+.footnote{font-size:11px;color:var(--mu);text-align:center;margin-top:16px;line-height:1.6}
+.footnote a{color:var(--a);text-decoration:none;font-weight:600}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--tx);color:#fff;padding:10px 20px;border-radius:var(--rs);font-size:13px;font-weight:600;opacity:0;transition:all .25s;z-index:999;pointer-events:none}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ── GOCARDLESS BLOCK ── */
+.gc-logo{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:15px;color:#1F2937}
+.gc-logo i{color:#0F8C5D;font-size:20px}
+.iban-input{font-family:monospace;letter-spacing:1px}
+
+/* ── ECO IMPACT ── */
+.eco-impact{background:linear-gradient(135deg,#0D3320,#1A5C36);border-radius:var(--r);padding:20px;color:#fff;position:relative;overflow:hidden;margin-top:14px}
+.eco-impact::after{content:'';position:absolute;right:-20px;top:-20px;width:110px;height:110px;border-radius:50%;background:rgba(255,255,255,.04)}
+.eco-impact-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.09em;opacity:.65;margin-bottom:14px}
+.eco-row{display:flex;align-items:center;gap:14px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.12)}
+.eco-row:last-child{border-bottom:none;padding-bottom:0}
+.eco-row-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:21px}
+.eco-row-val{font-family:'DM Serif Display',serif;font-size:30px;font-weight:400;line-height:1}
+.eco-row-sub{font-size:12px;opacity:.7;margin-top:2px}
+
+/* ── SPINNER ── */
+.spin{width:18px;height:18px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── LOADING GATE ── */
+#wizLoading{max-width:640px;margin:-60px auto 60px;padding:40px 16px;text-align:center;position:relative;z-index:5;color:#fff}
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-content">
+    <div class="hero-badge"><i class="ti ti-sparkles"></i> Essai gratuit · Sans engagement</div>
+    <h1>Lancez votre check-in digital en quelques minutes</h1>
+    <p>Plan de chambres, room service, programme de fidélité, paiements... Configurez votre établissement et démarrez votre période d'essai dès aujourd'hui.</p>
+  </div>
+</div>
+
+<!-- Chargement de la grille tarifaire -->
+<div id="wizLoading"><div class="spin"></div></div>
+
+<!-- WIZARD -->
+<div class="wiz-wrap" id="wizWrap" style="display:none">
+  <div class="wiz-card">
+
+    <!-- Progress -->
+    <div class="wiz-progress" id="wizProgress"></div>
+
+    <div class="wiz-body">
+
+      <!-- ═══ STEP 1 : HÔTEL ═══ -->
+      <div class="wiz-section on" id="wstep-1">
+        <div class="wiz-h">Votre établissement</div>
+        <div class="wiz-sub">Quelques informations de base pour créer votre espace.</div>
+
+        <div class="fi"><label class="lb">Nom de l'établissement <span style="color:var(--re)">*</span></label>
+          <input type="text" id="ob-name" placeholder="Hôtel Les Jardins"></div>
+
+        <div class="g2">
+          <div class="fi"><label class="lb">Email de contact <span style="color:var(--re)">*</span></label>
+            <input type="email" id="ob-email" placeholder="contact@monhotel.fr"></div>
+          <div class="fi"><label class="lb">Téléphone</label>
+            <input type="tel" id="ob-phone" placeholder="+33 1 23 45 67 89"></div>
+        </div>
+
+        <div class="fi"><label class="lb">Adresse</label>
+          <input type="text" id="ob-addr" placeholder="12 rue de la Paix"></div>
+
+        <div class="g3">
+          <div class="fi"><label class="lb">Code postal</label>
+            <input type="text" id="ob-zipcode" placeholder="75002"></div>
+          <div class="fi"><label class="lb">Ville</label>
+            <input type="text" id="ob-city" placeholder="Paris"></div>
+          <div class="fi"><label class="lb">Pays</label>
+            <select id="ob-country">
+              <option value="FR">France</option>
+              <option value="BE">Belgique</option>
+              <option value="CH">Suisse</option>
+              <option value="LU">Luxembourg</option>
+              <option value="MA">Maroc</option>
+              <option value="ES">Espagne</option>
+              <option value="IT">Italie</option>
+              <option value="OTHER">Autre</option>
+            </select></div>
+        </div>
+
+        <div class="g2">
+          <div class="fi"><label class="lb">Devise</label>
+            <select id="ob-currency">
+              <option value="EUR">€ Euro</option>
+              <option value="CHF">CHF Franc suisse</option>
+              <option value="USD">$ Dollar US</option>
+              <option value="GBP">£ Livre sterling</option>
+              <option value="MAD">MAD Dirham</option>
+            </select></div>
+          <div class="fi"></div>
+        </div>
+
+        <div class="fi"><label class="lb">Catégorie</label>
+          <div class="pills" id="ob-stars">
+            <div class="pill" data-v="1">1 ★</div>
+            <div class="pill" data-v="2">2 ★</div>
+            <div class="pill on" data-v="3">3 ★</div>
+            <div class="pill" data-v="4">4 ★</div>
+            <div class="pill" data-v="5">5 ★</div>
+            <div class="pill" data-v="0">Sans étoile</div>
+          </div>
+        </div>
+
+        <div class="fi"><label class="lb">Nombre de chambres (approximatif)</label>
+          <input type="number" id="ob-rooms" min="1" placeholder="35"></div>
+
+        <div class="g2">
+          <div class="fi"><label class="lb">Durée moyenne de séjour (nuits)</label>
+            <input type="number" id="ob-avgstay" min="1" step="0.5" placeholder="2.5"></div>
+          <div class="fi"><label class="lb">Taux d'occupation moyen (%)</label>
+            <input type="number" id="ob-occupancy" min="1" max="100" placeholder="65"></div>
+        </div>
+
+        <div class="brow">
+          <div></div>
+          <button class="btn btn-p" onclick="wizNext()">Continuer <i class="ti ti-arrow-right"></i></button>
+        </div>
+      </div>
+
+      <!-- ═══ STEP 2 : PMS & TECHNIQUE ═══ -->
+      <div class="wiz-section" id="wstep-2">
+        <div class="wiz-h">Votre PMS</div>
+        <div class="wiz-sub">Indiquez le système de gestion hôtelière (PMS) utilisé pour que nous préparions la connexion adaptée.</div>
+
+        <div class="fi"><label class="lb">PMS utilisé</label>
+          <select id="ob-pms" onchange="wizPmsChange()">
+            <option value="">— Sélectionner —</option>
+            <option value="sesame">Sesame (Alphacent)</option>
+            <option value="mews">Mews</option>
+            <option value="opera">Oracle Opera / OPERA Cloud</option>
+            <option value="protel">Protel</option>
+            <option value="resaweb">ResaWeb</option>
+            <option value="thais">Thaïs</option>
+            <option value="other">Autre</option>
+            <option value="none">Je n'ai pas encore de PMS</option>
+          </select>
+        </div>
+
+        <div class="fi" id="ob-pms-other-wrap" style="display:none">
+          <label class="lb">Nom de votre PMS</label>
+          <input type="text" id="ob-pms-other" placeholder="Nom de votre logiciel">
+        </div>
+
+        <div class="alt alt-b" id="ob-pms-info"><i class="ti ti-info-circle"></i>
+          <span>Nos équipes vous contacteront pour configurer la connexion avec votre PMS pendant votre période d'essai.</span>
+        </div>
+
+        <div class="fi"><label class="lb">Identifiant établissement (si connu)</label>
+          <input type="text" id="ob-entityid" placeholder="Ex : E00000123 — laissez vide si inconnu"></div>
+
+        <div class="fi"><label class="lb">Combien de personnes utiliseront le back-office ?</label>
+          <select id="ob-users">
+            <option value="1">1 personne</option>
+            <option value="2-5" selected>2 à 5 personnes</option>
+            <option value="6-15">6 à 15 personnes</option>
+            <option value="15+">Plus de 15 personnes</option>
+          </select>
+        </div>
+
+        <div class="brow">
+          <button class="btn btn-out" onclick="wizPrev()"><i class="ti ti-arrow-left"></i> Retour</button>
+          <button class="btn btn-p" onclick="wizNext()">Continuer <i class="ti ti-arrow-right"></i></button>
+        </div>
+      </div>
+
+      <!-- ═══ STEP 3 : OPTIONS ═══ -->
+      <div class="wiz-section" id="wstep-3">
+        <div class="wiz-h">Choisissez vos options</div>
+        <div class="wiz-sub">Sélectionnez les fonctionnalités dont vous avez besoin. Vous pourrez en ajouter ou en retirer à tout moment.</div>
+
+        <div id="ob-modules-list"></div>
+
+        <!-- Projection impact éco (visible si module Éco-séjour sélectionné) -->
+        <div id="ob-eco-impact" style="display:none"></div>
+
+        <!-- Détail du temps de personnel économisé par module (Chambre, Taxe, KYC) -->
+        <div id="ob-staff-impact" style="display:none"></div>
+
+        <div class="brow">
+          <button class="btn btn-out" onclick="wizPrev()"><i class="ti ti-arrow-left"></i> Retour</button>
+          <button class="btn btn-p" onclick="wizNext()">Continuer <i class="ti ti-arrow-right"></i></button>
+        </div>
+      </div>
+
+      <!-- ═══ STEP 4 : RÉCAPITULATIF & TARIFICATION ═══ -->
+      <div class="wiz-section" id="wstep-4">
+        <div class="wiz-h">Récapitulatif</div>
+        <div class="wiz-sub">Voici votre configuration et l'estimation tarifaire associée.</div>
+
+        <div class="recap-card">
+          <div class="recap-row"><span>Établissement</span><strong id="rc-name">—</strong></div>
+          <div class="recap-row"><span>Catégorie</span><strong id="rc-stars">—</strong></div>
+          <div class="recap-row"><span>Chambres</span><strong id="rc-rooms">—</strong></div>
+          <div class="recap-row"><span>PMS</span><strong id="rc-pms">—</strong></div>
+        </div>
+
+        <div class="recap-card">
+          <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Options sélectionnées</div>
+          <div id="rc-modules"></div>
+        </div>
+
+        <div class="recap-card" id="rc-pricing">
+          <!-- filled by JS -->
+        </div>
+
+        <div class="alt alt-g"><i class="ti ti-gift"></i>
+          <span>Période d'essai de <strong id="rc-trial-days">30</strong> jours incluse. Aucun prélèvement ne sera effectué avant la fin de l'essai.</span>
+        </div>
+
+        <div class="brow">
+          <button class="btn btn-out" onclick="wizPrev()"><i class="ti ti-arrow-left"></i> Retour</button>
+          <button class="btn btn-p" onclick="wizNext()">Continuer <i class="ti ti-arrow-right"></i></button>
+        </div>
+      </div>
+
+      <!-- ═══ STEP 5 : PAIEMENT / GOCARDLESS ═══ -->
+      <div class="wiz-section" id="wstep-5">
+
+        <!-- ── Formulaire de paiement ── -->
+        <div id="wstep5-form">
+          <div class="wiz-h">Moyen de paiement</div>
+          <div class="wiz-sub">Renseignez vos coordonnées bancaires pour activer le prélèvement automatique à l'issue de votre période d'essai. <strong>Vous ne serez pas débité maintenant.</strong></div>
+
+          <div class="alt alt-b" style="align-items:center">
+            <span class="gc-logo"><i class="ti ti-building-bank"></i> GoCardless</span>
+            <span style="margin-left:auto;font-size:11px;color:var(--bu)">Paiement sécurisé par prélèvement SEPA</span>
+          </div>
+
+          <div class="fi"><label class="lb">Titulaire du compte <span style="color:var(--re)">*</span></label>
+            <input type="text" id="ob-iban-holder" placeholder="Nom de l'établissement ou du titulaire"></div>
+
+          <div class="fi"><label class="lb">IBAN <span style="color:var(--re)">*</span></label>
+            <input type="text" id="ob-iban" class="iban-input" placeholder="FR76 XXXX XXXX XXXX XXXX XXXX XXX" maxlength="34"></div>
+
+          <div class="g2">
+            <div class="fi"><label class="lb">BIC / SWIFT</label>
+              <input type="text" id="ob-bic" class="iban-input" placeholder="XXXXXXXX"></div>
+            <div class="fi"><label class="lb">Email de facturation</label>
+              <input type="email" id="ob-billing-email" placeholder="facturation@monhotel.fr"></div>
+          </div>
+
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-top:6px;font-size:12.5px;color:var(--mu)">
+            <input type="checkbox" id="ob-mandate-consent" style="width:auto;margin-top:2px;accent-color:var(--a)">
+            <span>J'autorise <strong>Sesame</strong> à envoyer des instructions à ma banque pour débiter mon compte, conformément aux conditions du mandat SEPA. Ce mandat ne sera activé qu'à l'issue de la période d'essai.</span>
+          </label>
+
+          <div class="brow">
+            <button class="btn btn-out" onclick="wizPrev()"><i class="ti ti-arrow-left"></i> Retour</button>
+            <button class="btn btn-p" onclick="wizSubmit()" id="wizSubmitBtn"><i class="ti ti-rocket"></i> Démarrer mon essai gratuit</button>
+          </div>
+
+          <div class="brow" style="margin-top:0">
+            <button class="btn btn-out" style="width:100%" onclick="wizSkipPayment()">
+              <i class="ti ti-clock"></i> Configurer le paiement plus tard
+            </button>
+          </div>
+        </div>
+
+        <!-- ── Confirmation (affichée après soumission) ── -->
+        <div id="wstep5-success" style="display:none">
+          <div style="text-align:center;padding:10px 0 20px">
+            <div class="success-icon"><i class="ti ti-check"></i></div>
+            <div class="wiz-h" style="margin-bottom:8px">Bienvenue à bord !</div>
+            <div class="wiz-sub" style="margin-bottom:0">Votre espace <strong id="conf-name">—</strong> est prêt.</div>
+          </div>
+
+          <div class="recap-card" style="text-align:center">
+            <div style="font-size:12px;color:var(--mu);margin-bottom:6px">Votre période d'essai</div>
+            <div class="trial-chip"><i class="ti ti-calendar-event"></i> <span id="conf-trial-dates">—</span></div>
+          </div>
+
+          <div class="alt alt-g"><i class="ti ti-mail"></i>
+            <span>Un récapitulatif a été envoyé à <strong id="conf-email">—</strong> avec vos accès au back-office et les prochaines étapes.</span>
+          </div>
+
+          <div class="recap-card">
+            <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Vos identifiants de démarrage</div>
+            <div class="recap-row"><span>Identifiant établissement</span><strong id="conf-entityid">—</strong></div>
+            <div class="recap-row"><span>Email de connexion</span><strong id="conf-adminemail">—</strong></div>
+            <div class="recap-row"><span>Mot de passe</span><strong id="conf-adminpass">—</strong></div>
+            <div class="recap-row"><span>Statut</span><strong style="color:var(--go)">Essai en cours</strong></div>
+          </div>
+
+          <div class="alt alt-w"><i class="ti ti-alert-triangle"></i>
+            <span>Notez bien ce mot de passe — il ne sera plus jamais affiché. Vous pourrez le changer une fois connecté(e).</span>
+          </div>
+
+          <button class="btn btn-p" onclick="wizGoToAdmin()"><i class="ti ti-settings"></i> Accéder à mon back-office</button>
+
+          <div class="footnote">
+            Une question ? Contactez-nous à <a href="mailto:support@sesame-app.fr">support@sesame-app.fr</a><br>
+            Vous pourrez modifier ou annuler votre abonnement à tout moment depuis votre back-office.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════ CONFIG
+
+var API_BASE = '';
+
+var WIZ_STEPS = [
+  {k:'hotel',   label:'Hôtel'},
+  {k:'pms',     label:'PMS'},
+  {k:'modules', label:'Options'},
+  {k:'recap',   label:'Récap'},
+  {k:'payment', label:'Paiement'}
+];
+
+// Chargés depuis GET /onboarding/pricing au démarrage — jamais de valeurs
+// figées côté client : le serveur reste seul juge des prix et durées d'essai
+// (modifiables par un compte Sesame depuis le panneau "Souscriptions").
+var OB_MODULES = [];
+var OB_BASE_PRICE = 0;
+var OB_TRIAL_DAYS = 30;
+
+var OB_SELECTED_MODULES = {};
+var OB_STARS = 3;
+var CURRENT_STEP = 1;
+
+function obModulePrice(k){
+  var def = OB_MODULES.find(function(m){return m.k===k;});
+  return def ? def.price : 0;
+}
+
+// ═══════════════════════════════════════════════ CHARGEMENT INITIAL (tarifs)
+async function obInit(){
+  try{
+    var r = await fetch(API_BASE+'/onboarding/pricing');
+    if(!r.ok) throw new Error('http '+r.status);
+    var data = await r.json();
+    OB_MODULES = data.modules;
+    OB_BASE_PRICE = data.basePrice;
+    OB_TRIAL_DAYS = data.trialDays;
+    OB_MODULES.forEach(function(m){ OB_SELECTED_MODULES[m.k] = !!m.required; });
+  }catch(e){
+    document.getElementById('wizLoading').innerHTML =
+      '<div class="alt alt-w" style="max-width:420px;margin:0 auto;text-align:left"><i class="ti ti-alert-triangle"></i>'
+      + '<span>Impossible de charger la grille tarifaire. Merci de réessayer dans quelques instants, ou de nous contacter à '
+      + '<a href="mailto:support@sesame-app.fr" style="color:inherit;text-decoration:underline">support@sesame-app.fr</a>.</span></div>';
+    return;
+  }
+  document.getElementById('wizLoading').style.display = 'none';
+  document.getElementById('wizWrap').style.display = 'block';
+  renderProgress();
+}
+
+// ═══════════════════════════════════════════════ TOAST
+function toast(msg){
+  var t=document.getElementById('toast');
+  t.textContent=msg;
+  t.classList.add('show');
+  setTimeout(function(){t.classList.remove('show');},2600);
+}
+
+// ═══════════════════════════════════════════════ PROGRESS BAR
+function renderProgress(){
+  var el = document.getElementById('wizProgress');
+  el.innerHTML = WIZ_STEPS.map(function(s,i){
+    var n=i+1;
+    var cls = n<CURRENT_STEP ? 'done' : n===CURRENT_STEP ? 'on' : '';
+    return '<div class="wp-step '+cls+'">'
+      + '<div class="wp-line"></div>'
+      + '<div class="wp-dot">'+(n<CURRENT_STEP?'<i class="ti ti-check" style="font-size:13px"></i>':n)+'</div>'
+      + '<div class="wp-label">'+s.label+'</div>'
+      + '</div>';
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════ NAVIGATION
+function wizGoto(n){
+  document.querySelectorAll('.wiz-section').forEach(function(s){s.classList.remove('on');});
+  var sec = document.getElementById('wstep-'+n);
+  if(sec) sec.classList.add('on');
+  CURRENT_STEP = n;
+  renderProgress();
+  window.scrollTo({top:0, behavior:'smooth'});
+
+  if(n===3) renderModulesList();
+  if(n===4) renderRecap();
+}
+
+function wizNext(){
+  if(!wizValidateStep(CURRENT_STEP)) return;
+  wizGoto(Math.min(CURRENT_STEP+1, WIZ_STEPS.length));
+}
+function wizPrev(){
+  wizGoto(Math.max(CURRENT_STEP-1, 1));
+}
+
+function wizValidateStep(n){
+  if(n===1){
+    var name = document.getElementById('ob-name').value.trim();
+    var email= document.getElementById('ob-email').value.trim();
+    if(!name){ toast('Merci d\'indiquer le nom de votre établissement'); return false; }
+    if(!email || !email.includes('@')){ toast('Merci d\'indiquer un email valide'); return false; }
+  }
+  if(n===2){
+    var pms = document.getElementById('ob-pms').value;
+    if(!pms){ toast('Merci de sélectionner votre PMS (ou « Je n\'ai pas encore de PMS »)'); return false; }
+  }
+  return true;
+}
+
+// ═══════════════════════════════════════════════ STEP 1 : STARS PILLS
+document.getElementById('ob-stars').addEventListener('click', function(e){
+  var pill = e.target.closest('.pill');
+  if(!pill) return;
+  document.querySelectorAll('#ob-stars .pill').forEach(function(p){p.classList.remove('on');});
+  pill.classList.add('on');
+  OB_STARS = parseInt(pill.getAttribute('data-v'))||0;
+});
+
+// ═══════════════════════════════════════════════ STEP 2 : PMS
+function wizPmsChange(){
+  var v = document.getElementById('ob-pms').value;
+  document.getElementById('ob-pms-other-wrap').style.display = (v==='other') ? 'block' : 'none';
+
+  var info = document.getElementById('ob-pms-info');
+  if(v==='sesame'){
+    info.innerHTML = '<i class="ti ti-plug-connected"></i><span>Parfait — votre établissement est déjà compatible. Notre équipe vérifiera votre identifiant existant pendant votre période d\'essai (nous ne rattachons jamais automatiquement un compte pour des raisons de sécurité).</span>';
+  } else if(v==='none'){
+    info.innerHTML = '<i class="ti ti-info-circle"></i><span>Aucun souci, vous pourrez gérer vos chambres et réservations directement depuis notre back-office.</span>';
+  } else if(v){
+    info.innerHTML = '<i class="ti ti-info-circle"></i><span>Nos équipes vous contacteront pour configurer la connexion avec votre PMS pendant votre période d\'essai.</span>';
+  } else {
+    info.innerHTML = '<i class="ti ti-info-circle"></i><span>Sélectionnez votre PMS pour plus d\'informations sur la connexion.</span>';
+  }
+}
+
+// ═══════════════════════════════════════════════ STEP 3 : MODULES
+function renderModulesList(){
+  var wrap = document.getElementById('ob-modules-list');
+  wrap.innerHTML = OB_MODULES.map(function(m){
+    var on = !!OB_SELECTED_MODULES[m.k];
+    var price = obModulePrice(m.k);
+    return '<div class="opt'+(on?' on':'')+'" onclick="obToggleModule(\''+m.k+'\','+(m.required?'true':'false')+')">'
+      + '<div class="opt-ico"><i class="ti '+m.ico+'"></i></div>'
+      + '<div class="opt-body">'
+      + '<div class="opt-title">'+m.label+(m.required?' <span class="opt-badge">Inclus</span>':'')+'</div>'
+      + '<div class="opt-desc">'+m.desc+'</div>'
+      + '</div>'
+      + '<div class="opt-price">'+(price>0?'+'+price+' €<small>/mois</small>':'<small>Inclus</small>')+'</div>'
+      + '<div class="opt-check">'+(on?'<i class="ti ti-check"></i>':'')+'</div>'
+      + '</div>';
+  }).join('');
+  renderEcoImpact();
+  renderStaffTimeImpact();
+}
+function obToggleModule(k, required){
+  if(required) return; // module obligatoire, non désélectionnable
+  OB_SELECTED_MODULES[k] = !OB_SELECTED_MODULES[k];
+  renderModulesList();
+}
+
+// ═══════════════════════════════════════════════ PROJECTION IMPACT ÉCO
+// Hypothèses calquées sur les paramètres par défaut du module Éco-Séjour
+// (CFG.eauMenage / CFG.eauServ / CFG.co2Factor dans sesame_eco_module.html)
+var ECO_ASSUMPTIONS = {
+  eauMenage: 15,      // litres d'eau économisés par ménage non effectué
+  eauServ: 40,        // litres d'eau économisés par changement de serviettes non effectué
+  co2Factor: 0.0003,  // kg CO₂ par litre d'eau (chauffage + traitement)
+  minMenage: 12,      // minutes de personnel économisées par ménage non effectué
+  minServ: 4,         // minutes de personnel économisées par changement de serviettes non effectué
+  adoptionRate: 0.5,  // part des séjours qui optent pour une fréquence éco réduite
+  ecoSkipRatio: 0.4   // part des ménages/changements "économisables" effectivement évités sur un séjour éco (ex: 1 sur 2-3 nuits)
+};
+
+// ═══════════════════════════════════════════════ TEMPS DE PERSONNEL ÉCONOMISÉ PAR MODULE
+// Alignés avec STAFF_TIME_DEFAULTS dans sesame_admin.html (Hôtel → Modules)
+var STAFF_TIME_DEFAULTS = {
+  room: {minutes:4, label:'Choix de chambre & Plan', ico:'ti-door',         desc:'Attribution de la chambre faite par le client lui-même'},
+  taxe: {minutes:3, label:'Taxe de séjour',          ico:'ti-receipt',      desc:'Calcul et encaissement automatisés de la taxe de séjour'},
+  kyc:  {minutes:5, label:'Vérification identité',   ico:'ti-shield-check', desc:'Scan pièce d\'identité effectué par le client, sans passage en caisse'}
+};
+
+// ── Picto bonhomme "équivalent temps plein" : se remplit de bas en haut selon le % ──
+// Génère une rangée de silhouettes : une par ETP complet, plus une dernière partiellement remplie
+// pour le reste. totalEtp peut dépasser 100% (ex: 2.4 ETP -> 2 bonhommes pleins + 1 à 40%).
+// ── Système générique de picto "multi-unités" : répète une silhouette pleine par
+// unité complète, plus une dernière silhouette partiellement remplie pour le reste.
+// totalUnits = valeur ÷ taille d'une unité (ex: 1234 L ÷ 25 L/unité = 49.36 unités).
+var UNIT_SHAPES = {
+  person: {
+    viewBox:'0 0 80 110', w:36, h:50,
+    path:'M40,28 C50,28 58,34 58,44 L58,60 C58,64 55,66 52,66 L52,92 C52,97 47,100 43,100 L41,100 C39,100 38,98 38,96 L38,70 L34,70 L34,96 C34,98 33,100 31,100 L29,100 C25,100 22,97 22,92 L22,66 C19,66 16,64 16,60 L16,44 C16,34 24,28 34,28 Z',
+    extra:'<circle cx="40" cy="14" r="13" fill="{color}"/>',
+    extraGhost:'<circle cx="40" cy="14" r="13" fill="rgba(255,255,255,.22)"/>'
+  },
+  waterJug: {
+    // Bidon d'eau stylisé : bouchon, col, corps arrondi, anse
+    viewBox:'0 0 80 110', w:34, h:46,
+    path:'M30,8 L42,8 L42,18 L46,18 C52,18 56,23 56,30 L56,92 C56,98 51,103 45,103 L27,103 C21,103 16,98 16,92 L16,30 C16,23 20,18 26,18 L30,18 Z',
+    extra:'<path d="M16,46 L10,46 C8,46 7,47 7,49 L7,68 C7,70 8,71 10,71 L16,71 Z" fill="{color}" opacity="0.85"/>',
+    extraGhost:'<path d="M16,46 L10,46 C8,46 7,47 7,49 L7,68 C7,70 8,71 10,71 L16,71 Z" fill="rgba(255,255,255,.22)"/>'
+  },
+  co2Cloud: {
+    // Nuage CO2 stylisé avec flèche descendante (évacuation/réduction)
+    viewBox:'0 0 100 100', w:42, h:42,
+    path:'M30,55 C20,55 13,48 13,39 C13,31 19,25 26,24 C27,13 36,5 47,5 C57,5 65,12 67,22 C76,22 84,29 84,39 C84,48 76,55 67,55 Z',
+    extra:'<path d="M44,62 L56,62 L56,76 L64,76 L50,92 L36,76 L44,76 Z" fill="{color}"/>',
+    extraGhost:'<path d="M44,62 L56,62 L56,76 L64,76 L50,92 L36,76 L44,76 Z" fill="rgba(255,255,255,.22)"/>'
+  }
+};
+
+// Convertit une valeur brute + taille d'unité en rangée de pictos répétés
+function multiUnitFigureSvg(value, unitSize, color, shapeKey){
+  var totalUnits = unitSize>0 ? value/unitSize : 0;
+  return unitFigureSvgByCount(totalUnits, color, shapeKey);
+}
+
+// Génère la rangée de pictos à partir d'un nombre d'unités déjà calculé (ex: ETP en %, divisé par 100)
+function unitFigureSvgByCount(totalUnits, color, shapeKey){
+  shapeKey = shapeKey || 'person';
+  var shape = UNIT_SHAPES[shapeKey];
+  totalUnits = Math.max(0, totalUnits);
+  var fullCount = Math.floor(totalUnits);
+  var remainder = (totalUnits - fullCount) * 100; // % de la dernière silhouette partielle
+
+  var MAX_FIGURES = 6; // au-delà, on affiche un badge "+N"
+  var figuresToShow = fullCount + (remainder > 0.5 ? 1 : 0);
+  var overflow = 0;
+  if(figuresToShow > MAX_FIGURES){
+    overflow = Math.ceil(totalUnits) - MAX_FIGURES;
+    figuresToShow = MAX_FIGURES;
+  }
+
+  var html = '<div style="display:flex;align-items:flex-end;gap:4px;flex-wrap:wrap;max-width:170px;justify-content:flex-end">';
+  for(var i=0; i<figuresToShow; i++){
+    var pct;
+    if(i < fullCount && (i < MAX_FIGURES-1 || overflow===0)) pct = 100;
+    else if(overflow>0 && i===figuresToShow-1) pct = 100; // dernier visible plein si overflow (le badge +N complète)
+    else pct = remainder;
+    html += singleUnitFigureSvg(pct, color, shapeKey, shapeKey+Math.random().toString(36).slice(2));
+  }
+  if(overflow>0){
+    html += '<div style="display:flex;align-items:center;justify-content:center;width:28px;height:38px;font-size:12px;font-weight:700;color:'+color+';background:rgba(255,255,255,.12);border-radius:6px;flex-shrink:0">+'+overflow+'</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+// Une silhouette unique (selon shapeKey), remplie de bas en haut à `pct`%
+function singleUnitFigureSvg(pct, color, shapeKey, idSuffix){
+  shapeKey = shapeKey || 'person';
+  var shape = UNIT_SHAPES[shapeKey];
+  var p = Math.max(0, Math.min(100, pct));
+
+  // Bornes verticales du dessin (déduites du path) pour caler le clip de remplissage
+  var vb = shape.viewBox.split(' ');
+  var vbH = parseFloat(vb[3]);
+  var fillY = vbH - (p/100)*vbH;
+  var clipId = 'clip_'+idSuffix;
+
+  var ghostExtra = shape.extraGhost ? shape.extraGhost : '';
+  var colorExtra = shape.extra ? shape.extra.replace('{color}', color) : '';
+
+  return '<svg viewBox="'+shape.viewBox+'" style="width:'+shape.w+'px;height:'+shape.h+'px;min-width:'+shape.w+'px;min-height:'+shape.h+'px;flex-shrink:0;display:block" xmlns="http://www.w3.org/2000/svg">'
+    + '<defs><clipPath id="'+clipId+'"><rect x="0" y="'+fillY+'" width="'+vb[2]+'" height="'+((p/100)*vbH)+'"/></clipPath></defs>'
+    // état "vide" en gris clair
+    + ghostExtra
+    + '<path d="'+shape.path+'" fill="rgba(255,255,255,.22)"/>'
+    // état rempli, rogné par le clip selon le %
+    + '<g clip-path="url(#'+clipId+')">'
+    + colorExtra
+    + '<path d="'+shape.path+'" fill="'+color+'"/>'
+    + '</g>'
+    + '</svg>';
+}
+
+// ── Rétrocompatibilité : anciennes fonctions ETP (bonhomme), redirigées vers le système générique ──
+function etpFigureSvg(totalEtpPct, color){
+  return unitFigureSvgByCount(totalEtpPct/100, color || '#6EE7A8', 'person');
+}
+function etpSingleFigureSvg(pct, color, idSuffix){
+  return singleUnitFigureSvg(pct, color, 'person', idSuffix);
+}
+
+// ── Jauge horizontale (CO2, eau...) : barre arrondie qui se remplit selon le % ──
+function gaugeSvg(pct, color, width){
+  width = width || 140;
+  var p = Math.max(0, Math.min(100, pct));
+  var fillW = (p/100) * width;
+  var h = 14;
+  return '<svg viewBox="0 0 '+width+' '+h+'" style="width:'+width+'px;height:'+h+'px;display:block" xmlns="http://www.w3.org/2000/svg">'
+    + '<rect x="0" y="0" width="'+width+'" height="'+h+'" rx="'+(h/2)+'" fill="rgba(255,255,255,.18)"/>'
+    + (fillW>0 ? '<rect x="0" y="0" width="'+Math.max(fillW,h)+'" height="'+h+'" rx="'+(h/2)+'" fill="'+color+'"/>' : '')
+    + '</svg>';
+}
+
+function renderStaffTimeImpact(){
+  var box = document.getElementById('ob-staff-impact');
+  if(!box) return;
+
+  var activeModules = Object.keys(STAFF_TIME_DEFAULTS).filter(function(k){return OB_SELECTED_MODULES[k];});
+  if(!activeModules.length){
+    box.style.display = 'none';
+    return;
+  }
+
+  var rooms      = parseInt(document.getElementById('ob-rooms').value)||0;
+  var avgStay    = parseFloat(document.getElementById('ob-avgstay').value)||0;
+  var occupancy  = parseFloat(document.getElementById('ob-occupancy').value)||0;
+
+  if(!rooms || !avgStay || !occupancy){
+    box.style.display = 'block';
+    box.innerHTML = '<div class="alt alt-b"><i class="ti ti-clock-hour-4"></i>'
+      + '<span>Renseignez le nombre de chambres, la durée moyenne de séjour et le taux d\'occupation à l\'étape 1 pour estimer le temps de personnel économisé par option.</span></div>';
+    return;
+  }
+  box.style.display = 'block';
+
+  // Nombre de check-ins par an : (chambres × 365 × occupation%) / durée moyenne du séjour
+  var roomNightsYear = rooms * 365 * (occupancy/100);
+  var checkinsYear = roomNightsYear / avgStay;
+
+  var rows = '';
+  var totalMinutes = 0;
+
+  activeModules.forEach(function(k){
+    var def = STAFF_TIME_DEFAULTS[k];
+    var minutesPerCheckin = def.minutes;
+    var minutesYear = checkinsYear * minutesPerCheckin;
+    totalMinutes += minutesYear;
+    var hoursYear = minutesYear/60;
+
+    rows += '<div class="eco-row">'
+      + '<div class="eco-row-icon" style="background:rgba(245,200,76,.25)"><i class="ti '+def.ico+'" style="color:#F5C84C"></i></div>'
+      + '<div style="flex:1">'
+      + '<div style="font-size:13px;font-weight:700">'+def.label+'</div>'
+      + '<div class="eco-row-sub" style="margin-top:2px">'+def.desc+' · '+minutesPerCheckin+' min / check-in</div>'
+      + '</div>'
+      + '<div style="text-align:right;flex-shrink:0">'
+      + '<div class="eco-row-val" style="color:#F5C84C;font-size:24px">'+Math.round(hoursYear).toLocaleString('fr-FR')+'<span style="font-size:13px;opacity:.8"> h</span></div>'
+      + '<div class="eco-row-sub">par an</div>'
+      + '</div>'
+      + '</div>';
+  });
+
+  var totalHours = totalMinutes/60;
+  var totalDays  = Math.round(totalHours/7); // ~7h/jour de travail
+  var ANNUAL_FULLTIME_HOURS = 1607; // durée légale annuelle du travail (France)
+  var etpPct = (totalHours/ANNUAL_FULLTIME_HOURS)*100;
+
+  box.innerHTML = '<div class="eco-impact">'
+    + '<div class="eco-impact-title"><i class="ti ti-clock-hour-4"></i> Temps de personnel économisé par option · sur 1 an</div>'
+    + rows
+    + '<div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.18);display:flex;align-items:center;gap:16px">'
+    + etpFigureSvg(etpPct, '#F5C84C')
+    + '<div style="flex:1">'
+    + '<div style="font-size:13px;font-weight:600;opacity:.85;margin-bottom:2px">Total cumulé</div>'
+    + '<div style="font-family:\'DM Serif Display\',serif;font-size:28px;color:#fff">'+Math.round(totalHours).toLocaleString('fr-FR')+' h <span style="font-size:14px;opacity:.7">(~'+totalDays+' j.)</span></div>'
+    + '<div style="font-size:12px;opacity:.65;margin-top:4px">soit <strong style="color:#fff">'+etpPct.toFixed(0)+'%</strong> d\'un équivalent temps plein (1607h/an)</div>'
+    + '</div>'
+    + '</div>'
+    + '</div>'
+    + '<div class="footnote" style="margin-top:8px">Estimation basée sur '+Math.round(checkinsYear).toLocaleString('fr-FR')+' check-in(s) par an, et les temps moyens économisés par check-in digital (ajustables ensuite option par option dans le back-office).</div>';
+}
+
+function renderEcoImpact(){
+  var box = document.getElementById('ob-eco-impact');
+  if(!box) return;
+
+  if(!OB_SELECTED_MODULES['eco']){
+    box.style.display = 'none';
+    return;
+  }
+
+  var rooms      = parseInt(document.getElementById('ob-rooms').value)||0;
+  var avgStay    = parseFloat(document.getElementById('ob-avgstay').value)||0;
+  var occupancy  = parseFloat(document.getElementById('ob-occupancy').value)||0;
+
+  if(!rooms || !avgStay || !occupancy){
+    box.style.display = 'block';
+    box.innerHTML = '<div class="alt alt-b"><i class="ti ti-leaf"></i>'
+      + '<span>Renseignez le nombre de chambres, la durée moyenne de séjour et le taux d\'occupation à l\'étape 1 pour estimer les économies générées par l\'option Éco-Séjour.</span></div>';
+    return;
+  }
+  box.style.display = 'block';
+
+  var A = ECO_ASSUMPTIONS;
+
+  // Nombre de séjours par an : (chambres × 365 × occupation%) / durée moyenne du séjour
+  var roomNightsYear = rooms * 365 * (occupancy/100);
+  var staysYear = roomNightsYear / avgStay;
+
+  // Séjours adoptant une fréquence éco
+  var ecoStays = staysYear * A.adoptionRate;
+
+  // Nombre de "services" (ménage / serviettes) évités par séjour éco
+  // = (durée du séjour - 1) × ratio d'évitement, plafonné par la durée du séjour
+  var skipsPerStay = Math.min(avgStay-1, Math.max(0, (avgStay-1) * A.ecoSkipRatio));
+
+  var totalSkips = ecoStays * skipsPerStay;
+
+  // Projections annuelles
+  var waterLitersYear = totalSkips * (A.eauMenage + A.eauServ) / 2; // moyenne ménage/serviettes
+  var co2KgYear = waterLitersYear * A.co2Factor;
+  var laborHoursYear = totalSkips * (A.minMenage + A.minServ) / 2 / 60;
+
+  // Équivalences pédagogiques
+  var bottles = Math.round(waterLitersYear/1.5);
+  var kmVoiture = Math.round(co2KgYear/0.12);
+  var workDays = Math.round(laborHoursYear/7); // ~7h/jour de travail
+
+  // ETP ménage (équivalent temps plein, base 1607h/an)
+  var ANNUAL_FULLTIME_HOURS = 1607;
+  var menageEtpPct = (laborHoursYear/ANNUAL_FULLTIME_HOURS)*100;
+
+  // Jauges eau/CO2 : remplissage = niveau atteint vs potentiel maximal (adoption 100%)
+  var maxTotalSkips = staysYear * skipsPerStay; // si 100% des séjours étaient éco
+  var waterLitersMax = maxTotalSkips * (A.eauMenage + A.eauServ) / 2;
+  var co2KgMax = waterLitersMax * A.co2Factor;
+  var waterGaugePct = waterLitersMax>0 ? (waterLitersYear/waterLitersMax)*100 : 0;
+  var co2GaugePct   = co2KgMax>0 ? (co2KgYear/co2KgMax)*100 : 0;
+
+  box.innerHTML = '<div class="eco-impact">'
+    + '<div class="eco-impact-title"><i class="ti ti-leaf"></i> Impact éco-responsable estimé · sur 1 an</div>'
+
+    + '<div class="eco-row" style="flex-wrap:wrap">'
+    + '<div class="eco-row-icon" style="background:rgba(58,155,213,.3)"><i class="ti ti-droplet-filled" style="color:#7EC8E3"></i></div>'
+    + '<div style="flex:1;min-width:140px">'
+    + '<div class="eco-row-val" style="color:#7EC8E3">'+Math.round(waterLitersYear).toLocaleString('fr-FR')+'<span style="font-size:15px;opacity:.8"> L</span></div>'
+    + '<div class="eco-row-sub">eau économisée · soit '+bottles.toLocaleString('fr-FR')+' bouteilles de 1,5 L</div>'
+    + '</div>'
+    + '<div style="flex-shrink:0;display:flex;align-items:center;min-height:50px">'+multiUnitFigureSvg(waterLitersYear, 25, '#7EC8E3', 'waterJug')+'</div>'
+    + '</div>'
+
+    + '<div class="eco-row" style="flex-wrap:wrap">'
+    + '<div class="eco-row-icon" style="background:rgba(46,204,113,.25)"><i class="ti ti-leaf" style="color:#6EE7A8"></i></div>'
+    + '<div style="flex:1;min-width:140px">'
+    + '<div class="eco-row-val" style="color:#6EE7A8">'+co2KgYear.toFixed(0)+'<span style="font-size:15px;opacity:.8"> kg</span></div>'
+    + '<div class="eco-row-sub">CO₂ évité · équivalent à '+kmVoiture.toLocaleString('fr-FR')+' km en voiture</div>'
+    + '</div>'
+    + '<div style="flex-shrink:0;display:flex;align-items:center;min-height:42px">'+multiUnitFigureSvg(co2KgYear, 1, '#6EE7A8', 'co2Cloud')+'</div>'
+    + '</div>'
+
+    + '<div class="eco-row" style="flex-wrap:wrap">'
+    + '<div class="eco-row-icon" style="background:rgba(245,200,76,.25)"><i class="ti ti-clock-hour-4" style="color:#F5C84C"></i></div>'
+    + '<div style="flex:1;min-width:140px">'
+    + '<div class="eco-row-val" style="color:#F5C84C">'+Math.round(laborHoursYear).toLocaleString('fr-FR')+'<span style="font-size:15px;opacity:.8"> h</span></div>'
+    + '<div class="eco-row-sub">temps de personnel (ménage/serviettes) économisé · soit environ '+workDays+' jour(s) de travail réaffectables</div>'
+    + '</div>'
+    + '<div style="flex-shrink:0;display:flex;align-items:center;min-height:50px">'+etpFigureSvg(menageEtpPct, '#F5C84C')+'</div>'
+    + '</div>'
+
+    + '</div>'
+    + '<div class="footnote" style="margin-top:8px">Estimation basée sur '+Math.round(ecoStays).toLocaleString('fr-FR')+' séjour(s) éco-responsables par an (sur '+Math.round(staysYear).toLocaleString('fr-FR')+' séjours estimés), un taux d\'adoption de '+(A.adoptionRate*100)+'% et les paramètres par défaut de l\'option Éco-Séjour (ajustables ensuite dans le back-office). Chaque picto représente une unité (25 L / 1 kg de CO₂ / 1 ETP), la dernière étant partiellement remplie selon le reste.</div>';
+}
+
+
+// ═══════════════════════════════════════════════ STEP 4 : RÉCAP & PRICING
+function renderRecap(){
+  document.getElementById('rc-name').textContent  = document.getElementById('ob-name').value.trim() || '—';
+  document.getElementById('rc-stars').textContent = OB_STARS>0 ? (OB_STARS+' étoiles') : 'Sans étoile';
+  document.getElementById('rc-rooms').textContent = document.getElementById('ob-rooms').value || '—';
+
+  var pmsSel = document.getElementById('ob-pms');
+  var pmsLabel = pmsSel.options[pmsSel.selectedIndex] ? pmsSel.options[pmsSel.selectedIndex].text : '—';
+  if(pmsSel.value==='other'){
+    var other = document.getElementById('ob-pms-other').value.trim();
+    if(other) pmsLabel = other;
+  }
+  document.getElementById('rc-pms').textContent = pmsLabel;
+
+  // Modules sélectionnés
+  var selected = OB_MODULES.filter(function(m){return OB_SELECTED_MODULES[m.k];});
+  document.getElementById('rc-modules').innerHTML = selected.map(function(m){
+    return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px">'
+      + '<i class="ti ti-check" style="color:var(--a)"></i>'
+      + '<span style="flex:1">'+m.label+'</span>'
+      + (m.required?'<span style="font-size:11px;color:var(--mu)">Inclus</span>':'<span style="font-size:12px;font-weight:700;color:var(--a)">+'+obModulePrice(m.k)+' €/mois</span>')
+      + '</div>';
+  }).join('');
+
+  // Tarification
+  var total = OB_BASE_PRICE;
+  var lines = '<div class="recap-row"><span>Abonnement de base</span><strong>'+OB_BASE_PRICE+' € / mois</strong></div>';
+  selected.forEach(function(m){
+    if(m.required) return;
+    var p = obModulePrice(m.k);
+    total += p;
+    lines += '<div class="recap-row"><span>Option — '+m.label+'</span><strong>+'+p+' € / mois</strong></div>';
+  });
+  lines += '<div class="recap-total"><span>Total mensuel estimé</span><span>'+total+' € HT</span></div>';
+  document.getElementById('rc-pricing').innerHTML = lines;
+
+  document.getElementById('rc-trial-days').textContent = OB_TRIAL_DAYS;
+}
+
+// ═══════════════════════════════════════════════ STEP 5/6 : SUBMIT & PROVISIONING
+
+function wizSkipPayment(){
+  wizSubmit(true);
+}
+
+async function wizSubmit(skipPayment){
+  var btn = document.getElementById('wizSubmitBtn');
+  var consent = document.getElementById('ob-mandate-consent').checked;
+  var iban = document.getElementById('ob-iban').value.trim();
+
+  if(!skipPayment){
+    if(!iban){ toast('Merci de renseigner un IBAN, ou cliquez sur "Configurer le paiement plus tard"'); return; }
+    if(!consent){ toast('Merci d\'accepter le mandat SEPA pour continuer'); return; }
+  }
+
+  var origBtnHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spin"></div> Création de votre espace…';
+
+  var payload = {
+    name: document.getElementById('ob-name').value.trim(),
+    email: document.getElementById('ob-email').value.trim(),
+    phone: document.getElementById('ob-phone').value.trim(),
+    addr: document.getElementById('ob-addr').value.trim(),
+    zipcode: document.getElementById('ob-zipcode').value.trim(),
+    city: document.getElementById('ob-city').value.trim(),
+    country: document.getElementById('ob-country').value,
+    currency: document.getElementById('ob-currency').value,
+    stars: OB_STARS,
+    rooms: parseInt(document.getElementById('ob-rooms').value)||0,
+    avgStay: parseFloat(document.getElementById('ob-avgstay').value)||0,
+    occupancy: parseFloat(document.getElementById('ob-occupancy').value)||0,
+    pms: document.getElementById('ob-pms').value,
+    pmsOther: document.getElementById('ob-pms-other').value.trim(),
+    existingEntityCode: document.getElementById('ob-entityid').value.trim(),
+    users: document.getElementById('ob-users').value,
+    modules: Object.keys(OB_SELECTED_MODULES).filter(function(k){return OB_SELECTED_MODULES[k];}),
+    skipPayment: !!skipPayment,
+    ibanHolder: document.getElementById('ob-iban-holder').value.trim(),
+    iban: iban,
+    bic: document.getElementById('ob-bic').value.trim(),
+    billingEmail: document.getElementById('ob-billing-email').value.trim(),
+    consentGiven: consent
+  };
+
+  var record;
+  try{
+    var r = await fetch(API_BASE+'/onboarding/register', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    var data = await r.json();
+    if(!r.ok){
+      toast(data.error || 'Une erreur est survenue — merci de réessayer');
+      btn.disabled = false; btn.innerHTML = origBtnHtml;
+      return;
+    }
+    record = data;
+  }catch(e){
+    toast('Erreur de connexion au serveur — merci de réessayer');
+    btn.disabled = false; btn.innerHTML = origBtnHtml;
+    return;
+  }
+
+  // Confirmation : bascule du formulaire vers l'état de succès, dans la même étape
+  document.getElementById('conf-name').textContent  = payload.name;
+  document.getElementById('conf-email').textContent = payload.email;
+  document.getElementById('conf-entityid').textContent = record.entityCode;
+  document.getElementById('conf-adminemail').textContent = record.admin.email;
+  document.getElementById('conf-adminpass').textContent = record.admin.password;
+  var start = new Date(record.subscription.trialStart);
+  var end   = new Date(record.subscription.trialEnd);
+  document.getElementById('conf-trial-dates').textContent =
+    start.toLocaleDateString('fr-FR') + ' → ' + end.toLocaleDateString('fr-FR')
+    + ' (' + record.subscription.trialDays + ' jours)';
+
+  document.getElementById('wstep5-form').style.display = 'none';
+  document.getElementById('wstep5-success').style.display = 'block';
+
+  // Marque toutes les étapes comme complétées
+  CURRENT_STEP = WIZ_STEPS.length + 1;
+  renderProgress();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+function wizGoToAdmin(){
+  window.location.href = 'admin.html';
+}
+
+// ═══════════════════════════════════════════════ INIT
+['ob-rooms','ob-avgstay','ob-occupancy'].forEach(function(id){
+  document.getElementById(id).addEventListener('input', function(){ renderEcoImpact(); renderStaffTimeImpact(); });
+});
+obInit();
+</script>
+</body>
+</html>
