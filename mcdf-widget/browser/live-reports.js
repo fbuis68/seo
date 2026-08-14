@@ -40,20 +40,21 @@
   const ENTITY_ID = 'E00000361'; // DEMO — change pour cibler une autre entité
 
   async function fetchAll(entity) {
-    const res = await fetch(
-      `/wa/${entity}/list?nopaging=1&entityId=${ENTITY_ID}&_dc=${Date.now()}`
-    );
+    const res = await fetch(`/wa/${entity}/list?nopaging=1&_dc=${Date.now()}`);
     const data = await res.json();
     if (!data.success) {
       throw new Error(`${entity}: ${JSON.stringify(data).slice(0, 200)}`);
     }
-    return data.root;
+    // Le serveur ne restreint pas forcément à l'entité affichée dans le
+    // menu de l'appli pour un compte multi-entités — on filtre donc
+    // nous-mêmes sur le champ entityId, présent sur chaque enregistrement.
+    return data.root.filter((r) => r.entityId === ENTITY_ID);
   }
 
   const monthKey = (iso) => (iso ? iso.slice(0, 7) : null);
   const daysAgo = (iso) => (iso ? Math.floor((Date.now() - new Date(iso)) / 86400000) : null);
 
-  console.log('Chargement des entités MCDF...');
+  console.log(`Chargement des entités MCDF (filtré sur entityId=${ENTITY_ID})...`);
   const [customers, conventions, invoices, attendees, sessions] = await Promise.all([
     fetchAll('customer'),
     fetchAll('convention'),
