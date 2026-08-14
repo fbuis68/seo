@@ -40,6 +40,7 @@ model Entity {
   adminUsers        AdminUser[]
   campaigns         Campaign[]
   subscriptions     Subscription[]
+  bookingSource     BookingSourceConfig?
 }
 
 // Groupe d'établissements (ex : chaîne hôtelière) — gestion réservée aux
@@ -194,6 +195,7 @@ model Booking {
   otaId            String?
   checkinDone      Boolean  @default(false)
   selectedRoomCode String? // chambre choisie à l'étape 2 (peut différer de facilityCode)
+  importedFrom     String? // nom de la source si créée par le connecteur externe (cf. BookingSourceConfig), sinon null
 
   createdAt DateTime @default(now())
 
@@ -204,6 +206,47 @@ model Booking {
 
   @@unique([entityId, code])
   @@index([personEmail])
+}
+
+// Connecteur générique de réservations externes — permet de récupérer les
+// réservations d'un PMS/système tiers quelconque (pas seulement un client
+// Sesame) via une API REST/JSON dont la forme est décrite par fieldMapping
+// (chemins "a.b.c" vers les champs Booking). Un connecteur par établissement.
+model BookingSourceConfig {
+  id       String @id @default(cuid())
+  entityId String @unique
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  enabled      Boolean @default(false)
+  sourceName   String? // libellé libre (ex: "Mews", "Opera", "PMS interne")
+  baseUrl      String?
+  endpointPath String? // ex: "/v1/bookings" — concaténé à baseUrl
+
+  authType          String  @default("none") // none | apiKey | bearer | basic
+  authApiKeyHeader  String? // ex: "X-API-Key"
+  authApiKeyValue   String?
+  authBearerToken   String?
+  authBasicUser     String?
+  authBasicPassword String?
+
+  // Chemin (dot-path) vers le tableau de réservations dans la réponse JSON —
+  // vide/null si la réponse EST déjà le tableau.
+  responseListPath String?
+  // {code, personEmail, personFirstname, personLastname, personPhone,
+  //  startDate, endDate, facilityCode, status} -> chemin dot-path dans
+  // chaque élément du tableau (ex: {"code":"id","personEmail":"guest.email"}).
+  fieldMapping     Json?
+
+  // null = synchronisation manuelle uniquement ("Importer maintenant").
+  syncIntervalMinutes Int?
+
+  lastSyncAt      DateTime?
+  lastSyncStatus  String? // success | error
+  lastSyncMessage String?
+  lastSyncCount   Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Occupant {

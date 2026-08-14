@@ -97,6 +97,34 @@ existant (par email) dans le solde partagé du groupe. Détacher un hôtel ne
 « redescend » pas ce solde partagé — l'hôtel repart avec un historique
 propre, le solde du groupe restant intact pour les établissements restants.
 
+**Intégration réservations (connecteur générique)** — panneau "Intégration
+réservations" (accessible à tout compte `hotel`, chaque établissement gère le
+sien) : remplace l'ancien panneau "API Sesame" du prototype, câblé
+uniquement sur l'API propriétaire de Sesame. Le nouveau connecteur parle à
+**n'importe quel système externe** — PMS, moteur de réservation — qu'il
+s'agisse ou non d'un client Sesame :
+
+- URL + authentification configurables (aucune, clé API en en-tête, Bearer
+  token, ou Basic auth).
+- Mapping des champs par chemin JSON libre (ex : `guest.email`,
+  `stay.check_in`) — aucune forme de réponse n'est supposée à l'avance,
+  contrairement à l'ancien panneau qui ne comprenait que le format Sesame.
+- Bouton **"Tester la connexion"** : aperçu à blanc (aucune écriture) des
+  réservations mappées, avec le détail des éléments ignorés (champ requis
+  manquant, date invalide…).
+- Bouton **"Importer maintenant"** : import réel, `upsert` par
+  `(entityId, code)` — relancer l'import met à jour les réservations déjà
+  importées plutôt que de les dupliquer. Les réservations importées portent
+  `Booking.importedFrom` (nom de la source).
+- **Synchronisation automatique** en plus du bouton manuel : un intervalle
+  (toutes les heures / 6h / jour) déclenche l'import tout seul —
+  `src/lib/bookingSourceScheduler.ts` vérifie toutes les minutes, côté
+  serveur, quels connecteurs actifs ont dépassé leur intervalle depuis leur
+  dernière synchronisation.
+- L'appel HTTP vers la source externe se fait **depuis le serveur**, pas
+  depuis le navigateur — aucun souci de CORS ni de proxy PHP à déployer,
+  contrairement à l'ancien panneau.
+
 **Non couvert** (hors périmètre — panneau du prototype `sesame_admin.html`
 gérant le CRM commercial interne de Sesame, sans rapport avec la gestion
 d'un établissement) : "CRM Sesame". Son code JS reste présent dans
@@ -244,9 +272,12 @@ sesame-suite/
       entity.ts                         # GET/POST /wa/entity/* (compte sesame uniquement)
       subscription.ts                    # GET/POST /wa/subscription/*, /wa/pricingConfig/* (sesame)
       group.ts                            # GET/POST /wa/group/* (chaînes d'hôtels, sesame uniquement)
-      auth.ts                              # POST /api/auth/guest-login (client)
+      bookingSource.ts                     # GET/POST /wa/bookingSource/* (connecteur réservations, par hôtel)
+      auth.ts                               # POST /api/auth/guest-login (client)
     lib/provisionEntity.ts                # provisionne Entity + config + AdminUser hotel
     lib/loyaltyScope.ts                    # résout le scope de fidélité (entité ou groupe centralisé)
+    lib/bookingSource.ts                   # mapping JSON générique + import de réservations externes
+    lib/bookingSourceScheduler.ts          # boucle de synchronisation automatique (vérifiée /60s)
   public/
     checkin.html          # prototype d'origine (client), rebranché sur l'API
     admin.html             # prototype d'origine (back-office), rebranché sur l'API

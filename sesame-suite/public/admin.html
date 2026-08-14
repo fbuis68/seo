@@ -264,6 +264,8 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   <div class="ns">Plan &amp; Chambres</div>
   <div class="ni" data-pan="plan" onclick="showPan('plan')"><i class="ti ti-map"></i>Plan de l'hôtel</div>
   <div class="ni" data-pan="rooms" onclick="showPan('rooms')"><i class="ti ti-door"></i>Gestion des chambres</div>
+  <div class="ns">Intégration</div>
+  <div class="ni" data-pan="api" onclick="showPan('api')"><i class="ti ti-api"></i>Intégration réservations</div>
   <div class="ni" data-pan="preview" onclick="showPan('preview')"><i class="ti ti-device-mobile"></i>Aperçu client</div>
 </aside>
 
@@ -1184,182 +1186,88 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 <!-- ════════════════ API ════════════════ -->
 <div id="pan-api" class="pan">
   <div class="ph">
-    <h2>Connexion API Sesame</h2>
-    <p>Authentification, récupération des chambres et des réservations depuis le serveur Sesame Technology</p>
+    <h2>Intégration réservations</h2>
+    <p>Récupérez automatiquement les réservations depuis n'importe quel système externe (PMS, moteur de réservation…) — client Sesame ou non. L'appel se fait depuis le serveur, pas depuis le navigateur : aucun problème de CORS ni de proxy à installer.</p>
   </div>
 
-  <!-- STEP 1: CREDENTIALS -->
-  <div class="ca" id="api-step-cred">
-    <div class="ch"><i class="ti ti-lock"></i>Étape 1 — Identifiants de connexion</div>
+  <!-- Réglages de connexion -->
+  <div class="ca" id="bs-status-banner" style="display:none;margin-bottom:16px"></div>
 
-    <!-- CORS NOTICE -->
-    <div class="alt alt-b" style="margin-bottom:14px">
-      <i class="ti ti-info-circle"></i>
-      <div>
-        <strong>Important — CORS :</strong> Le navigateur bloque les appels directs vers Sesame.
-        Le login fonctionne car Sesame l'autorise, mais <code>/ws/facility/list</code> et <code>/ws/booking/list</code> sont bloqués.<br><br>
-        <strong>Solution :</strong> déposez <code>sesame_proxy.php</code> sur votre serveur web,
-        puis renseignez l'URL du proxy dans le champ "URL du serveur" ci-dessous.<br>
-        <a href="#" onclick="downloadProxy();return false" style="color:var(--a);font-weight:600">⬇ Télécharger sesame_proxy.php</a>
-        — éditez <code>$SESAME_BASE</code> avec l'URL Sesame fournie par Sesame Technology (avec le port).
-      </div>
-    </div>
-
+  <div class="ca">
+    <div class="ch"><i class="ti ti-plug"></i>Connexion</div>
     <div class="g2">
       <div class="fi">
-        <label class="lb">URL du serveur (ou du proxy)</label>
-        <input type="text" id="api-url" placeholder="https://votre-site.fr/sesame_proxy.php" autocomplete="off">
-        <div style="font-size:11px;color:var(--mu);margin-top:4px">
-          Sans proxy : URL directe Sesame (ex: <code>http://sesame.technology:PORT</code>)<br>
-          Avec proxy : URL de votre sesame_proxy.php (recommandé)
-        </div>
+        <label class="lb">Nom de la source</label>
+        <input type="text" id="bs-sourceName" placeholder="Ex : Mews, Opera, PMS interne…">
       </div>
       <div class="fi">
-        <label class="lb">entityId de l'établissement</label>
-        <input type="text" id="api-entityId" placeholder="E00000521">
-        <div style="font-size:11px;color:var(--mu);margin-top:4px">Extrait automatiquement à la connexion</div>
+        <label class="lb">Activer la synchronisation</label>
+        <label style="display:flex;align-items:center;gap:8px;height:38px;cursor:pointer">
+          <input type="checkbox" id="bs-enabled" style="accent-color:var(--am)">
+          <span style="font-size:13px">Connecteur actif</span>
+        </label>
       </div>
     </div>
     <div class="g2">
       <div class="fi">
-        <label class="lb">Login (email)</label>
-        <input type="email" id="api-login" placeholder="api@hotel.com" autocomplete="username">
+        <label class="lb">URL de base</label>
+        <input type="text" id="bs-baseUrl" placeholder="https://api.mon-pms.com" autocomplete="off">
       </div>
       <div class="fi">
-        <label class="lb">Mot de passe</label>
-        <div style="position:relative">
-          <input type="password" id="api-password" placeholder="••••••••" autocomplete="current-password" style="padding-right:38px">
-          <button onclick="var e=document.getElementById('api-password');e.type=e.type==='password'?'text':'password';this.querySelector('i').className=e.type==='password'?'ti ti-eye':'ti ti-eye-off'"
-            style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--mu)">
-            <i class="ti ti-eye"></i>
-          </button>
-        </div>
+        <label class="lb">Chemin de l'endpoint</label>
+        <input type="text" id="bs-endpointPath" placeholder="/v1/bookings" autocomplete="off">
       </div>
     </div>
-    <div style="display:flex;gap:8px;margin-top:4px;align-items:center;flex-wrap:wrap">
-      <button class="btn btn-p" id="api-login-btn" onclick="apiLogin()" style="flex:1;max-width:280px">
-        <i class="ti ti-login"></i>Se connecter &amp; obtenir le token
-      </button>
-      <button class="btn btn-s" onclick="downloadProxy()" style="width:auto">
-        <i class="ti ti-download"></i> Proxy PHP
-      </button>
-      <div id="api-login-status"></div>
+    <div class="fi">
+      <label class="lb">Type d'authentification</label>
+      <select id="bs-authType" onchange="bsRenderAuthFields()">
+        <option value="none">Aucune</option>
+        <option value="apiKey">Clé API (en-tête HTTP)</option>
+        <option value="bearer">Bearer token</option>
+        <option value="basic">Basic auth (utilisateur / mot de passe)</option>
+      </select>
+    </div>
+    <div id="bs-auth-fields"></div>
+    <div class="fi">
+      <label class="lb">Chemin vers la liste des réservations dans la réponse</label>
+      <input type="text" id="bs-responseListPath" placeholder="Ex : data.bookings — laisser vide si la réponse est directement un tableau">
     </div>
   </div>
 
-  <!-- TOKEN DISPLAY -->
-  <div class="ca" id="api-token-card" style="display:none">
-    <div class="ch"><i class="ti ti-key"></i>Token d'authentification obtenu
-      <span id="api-token-status" class="nibadge" style="background:var(--am)">Actif</span>
-    </div>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-      <div id="api-token-display" style="font-family:monospace;font-size:12px;background:var(--bg);border:1px solid var(--bdr);border-radius:var(--rs);padding:8px 12px;flex:1;word-break:break-all;color:var(--am)"></div>
-      <button class="btn btn-s" onclick="copyToken()" title="Copier le token"><i class="ti ti-copy"></i></button>
-    </div>
-    <div style="font-size:11px;color:var(--mu);display:flex;align-items:center;gap:5px">
-      <i class="ti ti-clock" style="font-size:13px"></i>
-      <span id="api-token-time"></span>
-    </div>
-    <div style="margin-top:12px;display:flex;gap:8px">
-      <button class="btn btn-s" onclick="apiLogin()" style="width:auto"><i class="ti ti-refresh"></i> Renouveler</button>
-      <button class="btn btn-s btn-d" onclick="apiLogout()" style="width:auto"><i class="ti ti-logout"></i> Déconnecter</button>
-    </div>
-  </div>
-
-  <!-- STEP 2: FACILITIES -->
-  <div class="ca" id="api-step-facilities" style="display:none">
-    <div class="ch"><i class="ti ti-building"></i>Étape 2 — Chambres &amp; espaces (Facilities)
-      <button class="chact" onclick="apiFetchFacilities()"><i class="ti ti-refresh" style="font-size:12px"></i> Actualiser</button>
-    </div>
-    <div id="api-facilities-status" style="margin-bottom:10px"></div>
-    <div id="api-facilities-list"></div>
-    <div class="brow" style="border:none;padding-top:10px;margin-top:0">
-      <button class="btn btn-p" id="api-import-rooms-btn" onclick="importFacilitiesAsRooms()" style="display:none">
-        <i class="ti ti-download"></i>Importer dans la configuration
-      </button>
-    </div>
-  </div>
-
-  <!-- STEP 3: BOOKINGS -->
-  <div class="ca" id="api-step-bookings" style="display:none">
-    <div class="ch"><i class="ti ti-calendar-event"></i>Étape 3 — Réservations
-      <button class="chact" onclick="apiFetchBookings()"><i class="ti ti-refresh" style="font-size:12px"></i> Actualiser</button>
-    </div>
-    <!-- Filters -->
-    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:flex-end">
-      <div class="fi" style="margin-bottom:0">
-        <label class="lb">Du</label>
-        <input type="date" id="api-date-from" style="width:140px">
-      </div>
-      <div class="fi" style="margin-bottom:0">
-        <label class="lb">Au</label>
-        <input type="date" id="api-date-to" style="width:140px">
-      </div>
-      <div class="fi" style="margin-bottom:0">
-        <label class="lb">Email client</label>
-        <input type="text" id="api-filter-email" placeholder="Filtrer par email…" style="width:200px">
-      </div>
-      <button class="btn btn-p btn-s" onclick="apiFetchBookings()" style="width:auto;align-self:flex-end">
-        <i class="ti ti-search"></i> Rechercher
-      </button>
-    </div>
-    <div id="api-bookings-status" style="margin-bottom:10px"></div>
-    <div id="api-bookings-list"></div>
-    <div style="margin-top:10px;display:flex;gap:8px">
-      <button class="btn btn-p btn-s" id="api-sync-plan-btn" onclick="syncBookingsToPlan()" style="display:none">
-        <i class="ti ti-calendar-plus"></i> Synchroniser vers le planning
-      </button>
-      <button class="btn btn-s" id="api-export-btn" onclick="exportBookingsCSV()" style="display:none">
-        <i class="ti ti-table-export"></i> Export CSV
-      </button>
-    </div>
-  </div>
-
-  <!-- RAW TRACE -->
+  <!-- Mapping des champs -->
   <div class="ca">
-    <div class="ch"><i class="ti ti-terminal"></i>Journal des appels API
-      <button class="chact" onclick="document.getElementById('api-log').innerHTML='';apiLog=[]">Effacer</button>
+    <div class="ch"><i class="ti ti-arrows-exchange"></i>Correspondance des champs</div>
+    <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
+      <span>Pour chaque champ, indiquez le chemin vers la valeur dans un élément du tableau retourné par la source (ex : <code>guest.email</code> pour <code>{"guest":{"email":"..."}}</code>). Les champs marqués * sont obligatoires.</span>
     </div>
-    <div id="api-log" style="font-family:monospace;font-size:11px;color:var(--mu);max-height:200px;overflow-y:auto;line-height:1.8"></div>
+    <div id="bs-mapping-fields"></div>
   </div>
 
-  <!-- REFERENCE -->
+  <!-- Synchronisation -->
   <div class="ca">
-    <div class="ch"><i class="ti ti-code"></i>Référence API Sesame Technology (doc 2023-11-23)</div>
+    <div class="ch"><i class="ti ti-refresh"></i>Fréquence</div>
+    <div class="fi">
+      <label class="lb">Synchronisation automatique</label>
+      <select id="bs-syncInterval">
+        <option value="">Désactivée — import manuel uniquement</option>
+        <option value="60">Toutes les heures</option>
+        <option value="360">Toutes les 6 heures</option>
+        <option value="1440">Une fois par jour</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+      <button class="btn btn-s" onclick="bsTest()"><i class="ti ti-flask"></i> Tester la connexion</button>
+      <button class="btn btn-p" onclick="bsSave()"><i class="ti ti-device-floppy"></i> Enregistrer</button>
+      <button class="btn btn-p btn-s" onclick="bsImportNow()"><i class="ti ti-download"></i> Importer maintenant</button>
+    </div>
+  </div>
 
-    <div style="font-size:12px;font-weight:600;color:var(--mu);margin-bottom:4px">1. Login (POST)</div>
-    <div class="code"><span class="cu">POST</span> <span class="cv">{server}/ws/login/login?login=api@hotel.com</span>
-<span style="color:#888">Body JSON :</span> {"password":"mypassword"}
-
-<span style="color:#888">Réponse :</span> {"data":{"profileEntityId":"E00000521","name":"...","profiles":[{
-  "entityCode":"RAM", "entityId":"E00000521",
-  <span class="ck">"token"</span>:"<span class="cv">UPT_xxxxx</span>", ...
-}]}}</div>
-
-    <div style="font-size:12px;font-weight:600;color:var(--mu);margin:10px 0 4px">Extraction du token</div>
-    <div class="code"><span class="ck">token</span> = <span class="cv">data.profiles[n].token</span>
-<span style="color:#888">→ choisir le profil dont entityCode correspond à votre hôtel</span>
-<span class="ck">Authorization:</span> <span class="cv">UPT_TOKEN</span>  <span style="color:#888">(dans tous les headers suivants)</span></div>
-
-    <div style="font-size:12px;font-weight:600;color:var(--mu);margin:10px 0 4px">2. Liste des facilities (chambres)</div>
-    <div class="code"><span class="cu">POST</span> <span class="cv">{server}/ws/facility/list</span>
-<span class="ck">Authorization:</span> <span class="cv">UPT_TOKEN</span>
-<span style="color:#888">ou GET avec ?_token=UPT_TOKEN</span></div>
-
-    <div style="font-size:12px;font-weight:600;color:var(--mu);margin:10px 0 4px">3. Liste des réservations</div>
-    <div class="code"><span class="cu">POST</span> <span class="cv">{server}/ws/booking/list</span>
-<span class="ck">Authorization:</span> <span class="cv">UPT_TOKEN</span>
-<span style="color:#888">Filtres optionnels en body ou query string</span></div>
-
-    <div style="font-size:12px;font-weight:600;color:var(--mu);margin:10px 0 4px">4. Via proxy (recommandé pour éviter CORS)</div>
-    <div class="code"><span style="color:#888">// Dans $SESAME_BASE du proxy PHP :</span>
-$SESAME_BASE = "<span class="cv">http://sesame.technology:PORT</span>";
-
-<span style="color:#888">// Ensuite dans l'admin, URL du serveur :</span>
-https://votre-site.fr/<span class="cv">sesame_proxy.php</span></div>
+  <!-- Résultat du test / de l'import -->
+  <div class="ca" id="bs-result-card" style="display:none">
+    <div class="ch" id="bs-result-title"><i class="ti ti-list-check"></i>Résultat</div>
+    <div id="bs-result-body"></div>
   </div>
 </div>
-
 <!-- ════════════════ PREVIEW ════════════════ -->
 <div id="pan-preview" class="pan">
   <div class="ph"><h2>Aperçu interface client</h2><p>Rendu en temps réel de l'application web check-in</p></div>
@@ -2601,6 +2509,7 @@ function showPan(id){
   if(id==='rooms'){ renderRoomGrid(); fetchStaffList().then(renderRoomGrid); }
   if(id==='preview'){try{renderFullPreview();renderPrevSummary();}catch(e){}}
   if(id==='dash'){try{renderDash();}catch(e){}}
+  if(id==='api'){ bsInit(); }
   if(id==='hotels'){ hmRenderGrid(); }
   if(id==='groups'){ grpRenderGrid(); }
   if(id==='subscriptions'){ subInit(); }
@@ -2649,7 +2558,6 @@ function populateAll(){
   setVal('e-eauS',CFG.eauServ);document.getElementById('e-eauSV').textContent=CFG.eauServ+' L';
   setVal('e-co2',CFG.co2Factor);document.getElementById('e-co2V').textContent=CFG.co2Factor.toFixed(4);
   [0,2,3,7,1].forEach(function(v){setChk('e-f'+v,CFG.freqOpts.includes(v));});
-  setVal('api-url',CFG.apiUrl);
   // KPI fields
   if(CFG.kpi){
     setVal('kpi-minPerClean',CFG.kpi.minPerClean||45);
@@ -2710,8 +2618,6 @@ function collectAll(){
   var kAS=parseInt(getVal('kpi-annualStays'));if(!isNaN(kAS))CFG.kpi.annualStays=kAS;
   var kCM=parseInt(getVal('kpi-checkinMin'));if(!isNaN(kCM))CFG.kpi.checkinMin=kCM;
   var kCA=parseInt(getVal('kpi-checkinAdoption'));if(!isNaN(kCA))CFG.kpi.checkinAdoption=kCA;
-  var au=getVal('api-url');if(au)CFG.apiUrl=au;
-  var ae=getVal('api-entityId');if(ae)CFG.entityId=ae;
   // collect gains from rendered inputs
   collectGains();
 }
@@ -4108,676 +4014,196 @@ function updateHotelInitials(){
   el.textContent=ini.toUpperCase();
 }
 
-// ═══════════════════════════════════════════════ API TEST
-// ═══════════════════════════════════════════════ SESAME API ENGINE
+// ═══════════════════════════════════════════════ INTÉGRATION RÉSERVATIONS
+// Connecteur générique — GET/POST /wa/bookingSource/*. Récupère les
+// réservations de n'importe quel système externe (PMS, moteur de résa…),
+// pas seulement un client Sesame : URL + authentification configurables,
+// et un mapping "chemin JSON -> champ Booking" propre à chaque source.
+// L'appel HTTP se fait côté serveur (cf. src/lib/bookingSource.ts) — pas de
+// CORS côté navigateur, contrairement à l'ancien panneau "API Sesame".
 
-var SESAME = {
-  token: null,
-  tokenTime: null,
-  facilities: [],
-  bookings: [],
-  baseUrl: ''
-};
-var apiLog = [];
+var BS_MAPPING_FIELDS = [
+  {k:'code', label:'Code de réservation', required:true},
+  {k:'personEmail', label:'Email client', required:true},
+  {k:'personFirstname', label:'Prénom', required:false},
+  {k:'personLastname', label:'Nom', required:false},
+  {k:'personPhone', label:'Téléphone', required:false},
+  {k:'startDate', label:'Date d\'arrivée', required:true},
+  {k:'endDate', label:'Date de départ', required:true},
+  {k:'facilityCode', label:'Code chambre', required:false},
+  {k:'status', label:'Statut', required:false},
+];
 
-function logApi(method, url, status, detail) {
-  var t = new Date().toLocaleTimeString('fr-FR');
-  var color = status >= 400 ? '#E74C3C' : status === 0 ? '#F39C12' : '#2ECC71';
-  apiLog.unshift('<span style="color:var(--hi)">'+t+'</span> '
-    +'<span style="color:'+color+';font-weight:600">'+method+'</span> '
-    +'<span style="color:#A8D5B0">'+url.replace(SESAME.baseUrl||'','').slice(0,60)+'</span>'
-    +(detail?' <span style="color:var(--mu)">→ '+detail+'</span>':''));
-  if(apiLog.length>30)apiLog.pop();
-  var el=document.getElementById('api-log');
-  if(el)el.innerHTML=apiLog.join('<br>');
+var BS_CONFIG = null;
+
+function bsRenderAuthFields(){
+  var type = document.getElementById('bs-authType').value;
+  var el = document.getElementById('bs-auth-fields');
+  var h = '';
+  if(type==='apiKey'){
+    h += '<div class="g2">';
+    h += '<div class="fi"><label class="lb">Nom de l\'en-tête</label><input type="text" id="bs-authApiKeyHeader" placeholder="X-API-Key"></div>';
+    h += '<div class="fi"><label class="lb">Valeur de la clé</label><input type="text" id="bs-authApiKeyValue" placeholder="••••••••"></div>';
+    h += '</div>';
+  } else if(type==='bearer'){
+    h += '<div class="fi"><label class="lb">Bearer token</label><input type="text" id="bs-authBearerToken" placeholder="••••••••"></div>';
+  } else if(type==='basic'){
+    h += '<div class="g2">';
+    h += '<div class="fi"><label class="lb">Utilisateur</label><input type="text" id="bs-authBasicUser"></div>';
+    h += '<div class="fi"><label class="lb">Mot de passe</label><input type="password" id="bs-authBasicPassword"></div>';
+    h += '</div>';
+  }
+  el.innerHTML = h;
 }
 
-function sesameAlert(id, type, icon, msg) {
-  var el=document.getElementById(id);if(!el)return;
-  var colors={ok:'var(--al),var(--a)',err:'rgba(231,76,60,.12),#E74C3C',warn:'rgba(243,156,18,.12),#9B6E0A',info:'rgba(58,155,213,.12),#1A4880'};
-  var c=(colors[type]||colors.info).split(',');
-  el.innerHTML='<div class="alt" style="background:'+c[0]+';color:'+c[1]+';border-left:2px solid '+c[1]+';margin-bottom:0"><i class="ti ti-'+icon+'"></i><span>'+msg+'</span></div>';
-}
-function sesameLoading(id, msg) {
-  var el=document.getElementById(id);if(!el)return;
-  el.innerHTML='<div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mu);padding:6px 0"><div class="spin"></div>'+msg+'</div>';
-}
-
-// ── CORS PROXY strategy ──
-// Sesame doc v0.2: token passed as header "Authorization: MY_TOKEN"
-// OR as query param "_token=MY_TOKEN"
-// We try both, and fall back to CORS proxy, then simulation.
-async function sesameCall(path, params) {
-  var base = (getVal('api-url') || SESAME.baseUrl || '').replace(/\/$/, '');
-  SESAME.baseUrl = base;
-  var token = SESAME.token || '';
-  var isSim = token.startsWith('SIMULATED_');
-
-  // Build query string — pass _token as URL param (Sesame doc §3)
-  var qParts = [];
-  if (params) {
-    Object.keys(params).forEach(function(k) {
-      var v = params[k];
-      if (v !== '' && v !== null && v !== undefined)
-        qParts.push(encodeURIComponent(k) + '=' + encodeURIComponent(v));
-    });
-  }
-  if (token && !isSim) qParts.push('_token=' + encodeURIComponent(token));
-  var qs = qParts.length ? '?' + qParts.join('&') : '';
-  var url = base + path + qs;
-
-  var headers = { 'Content-Type': 'application/json', 'Origin': 'null' };
-  if (token && !isSim) {
-    headers['Authorization']  = token;  // correct
-    headers['Authoritation']  = token;  // doc typo — both
-  }
-
-  logApi('GET', path + (qs ? '?…' : ''), 0, 'envoi vers ' + base);
-
-  // ── Direct call ──
-  try {
-    var r = await fetch(url, { method: 'GET', headers: headers });
-    var raw = await r.text();
-    logApi('GET', path, r.status, raw.slice(0, 220));
-    if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + raw.slice(0, 200));
-    return { json: JSON.parse(raw), raw: raw };
-  } catch(e1) {
-    if (e1.message && e1.message.startsWith('HTTP')) throw e1;
-    logApi('CORS', path, 0, e1.message.slice(0, 80));
-
-    // ── CORS proxy — token embedded in URL via _token ──
-    try {
-      var proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
-      var r2 = await fetch(proxyUrl);
-      var raw2 = await r2.text();
-      var t2 = raw2.trim();
-      logApi('PROXY', path, r2.status, raw2.slice(0, 220));
-      if (r2.ok && (t2.startsWith('{') || t2.startsWith('['))) {
-        return { json: JSON.parse(raw2), raw: raw2 };
-      }
-    } catch(e2) {
-      logApi('PROXY', path, 0, e2.message.slice(0, 60));
-    }
-
-    throw { cors: true, message: e1.message };
-  }
+function bsRenderMappingFields(mapping){
+  mapping = mapping || {};
+  document.getElementById('bs-mapping-fields').innerHTML = BS_MAPPING_FIELDS.map(function(f){
+    return '<div class="fi" style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
+      + '<label class="lb" style="flex:0 0 200px;margin-bottom:0;text-transform:none;font-size:13px;font-weight:500;color:var(--tx)">'+f.label+(f.required?' <span style="color:var(--re)">*</span>':'')+'</label>'
+      + '<input type="text" id="bs-map-'+f.k+'" value="'+esc(mapping[f.k]||'')+'" placeholder="Ex : guest.email" style="flex:1">'
+      + '</div>';
+  }).join('');
 }
 
-// ── STEP 2: FACILITIES ──
-async function apiFetchFacilities() {
-  sesameLoading('api-facilities-status', 'Appel /ws/facility/list…');
-  document.getElementById('api-facilities-list').innerHTML = '';
-  document.getElementById('api-import-rooms-btn').style.display = 'none';
-
-  // Prefer entityId from login response (E00000521 for Ramery), then field, then CFG
-  var entityId = SESAME.entityId || (getVal('api-entityId')||'').trim() || CFG.entityId || '';
-
-  var endpoints = [
-    ['/ws/facility/list', entityId ? { entityId: entityId } : {}],
-    ['/ws/facility/list', {}],
-    ['/ws/access/list',   entityId ? { entityId: entityId } : {}],
-  ];
-
-  var result = null;
-  for (var i = 0; i < endpoints.length; i++) {
-    try {
-      result = await sesameCall(endpoints[i][0], endpoints[i][1]);
-      logApi('✓', endpoints[i][0], 200, 'réponse reçue');
-      break;
-    } catch(e) {
-      if (e.cors) {
-        sesameAlert('api-facilities-status', 'warn', 'info-circle',
-          'CORS bloque les appels directs depuis le navigateur. '
-          + 'Placez <strong>sesame_proxy.php</strong> sur votre serveur et renseignez son URL. '
-          + '<a href="#" onclick="downloadProxy();return false" style="color:var(--a);font-weight:600">⬇ Télécharger le proxy PHP</a>');
-        showRawDebug('api-facilities-list', null, null);
-        return;
-      }
-      logApi('✗', endpoints[i][0], 0, e.message ? e.message.slice(0,80) : '');
-    }
-  }
-
-  if (!result) {
-    sesameAlert('api-facilities-status', 'err', 'x-circle',
-      'Aucun endpoint ne répond avec ce token et cet entityId.');
-    return;
-  }
-
-  var list = extractList(result.json);
-  showRawDebug('api-facilities-list', result.raw, list.length);
-  if (!list.length) {
-    sesameAlert('api-facilities-status', 'warn', 'alert-circle',
-      'Réponse OK mais 0 facility extraite — voir la réponse brute ci-dessous.');
-    return;
-  }
-  SESAME.facilities = list;
-  renderFacilitiesList(list);
-  sesameAlert('api-facilities-status', 'ok', 'check-circle',
-    list.length + ' chambre(s) / espace(s) récupéré(s)');
-  document.getElementById('api-import-rooms-btn').style.display = '';
+function bsCollectMapping(){
+  var mapping = {};
+  BS_MAPPING_FIELDS.forEach(function(f){
+    var el = document.getElementById('bs-map-'+f.k);
+    if(el && el.value.trim()) mapping[f.k] = el.value.trim();
+  });
+  return mapping;
 }
 
-// ── STEP 3: BOOKINGS ──
-async function apiFetchBookings() {
-  sesameLoading('api-bookings-status', 'Appel /ws/booking/list…');
-  document.getElementById('api-bookings-list').innerHTML = '';
-  document.getElementById('api-sync-plan-btn').style.display = 'none';
-  document.getElementById('api-export-btn').style.display = 'none';
-
-  var from  = getVal('api-date-from') || '';
-  var to    = getVal('api-date-to')   || '';
-  var email = (getVal('api-filter-email') || '').trim();
-  var entityId = SESAME.entityId || (getVal('api-entityId') || CFG.entityId || '').trim();
-
-  // Build param variants — Sesame doc uses startDate.after / startDate.before
-  var params = {};
-  if (from)     params['startDate.after']  = from;
-  if (to)       params['startDate.before'] = to;
-  if (email)    params['personEmail']      = email;
-  if (entityId) params['entityId']         = entityId;
-
-  // Try endpoint variants
-  var endpoints = [
-    ['/ws/booking/list', params],
-    ['/ws/booking/list', email ? {personEmail: email} : (entityId ? {entityId: entityId} : {})],
-    ['/ws/booking/list', {}],
-  ];
-
-  var result = null;
-  for (var i = 0; i < endpoints.length; i++) {
-    try {
-      var res = await sesameCall(endpoints[i][0], endpoints[i][1]);
-      result = res;
-      logApi('✓', endpoints[i][0], 200, 'OK');
-      break;
-    } catch(e) {
-      if (e.cors) {
-        sesameAlert('api-bookings-status', 'warn', 'info-circle',
-          'CORS bloque les appels depuis le navigateur. '
-          + '<a href="#" onclick="downloadProxy();return false" style="color:var(--a);font-weight:600">⬇ Télécharger le proxy PHP</a>');
-        showRawDebug('api-bookings-list', null, null);
-        return;
-      }
-      logApi('✗', endpoints[i][0], 0, e.message ? e.message.slice(0,80) : '');
-    }
-  }
-
-  if (!result) {
-    sesameAlert('api-bookings-status', 'err', 'x-circle', 'Aucun endpoint ne répond.');
-    showRawDebug('api-bookings-list', null, null);
-    return;
-  }
-
-  var list = extractList(result.json);
-  showRawDebug('api-bookings-list', result.raw, list.length);
-
-  if (!list.length) {
-    sesameAlert('api-bookings-status', 'warn', 'alert-circle',
-      'Réponse reçue mais aucune réservation extraite — voir réponse brute.');
-    return;
-  }
-
-  SESAME.bookings = list;
-  renderBookingsList(list);
-  sesameAlert('api-bookings-status', 'ok', 'check-circle', list.length + ' réservation(s)');
-  document.getElementById('api-sync-plan-btn').style.display = '';
-  document.getElementById('api-export-btn').style.display = '';
+function bsCollectFormValues(){
+  return {
+    enabled: document.getElementById('bs-enabled').checked,
+    sourceName: document.getElementById('bs-sourceName').value.trim(),
+    baseUrl: document.getElementById('bs-baseUrl').value.trim(),
+    endpointPath: document.getElementById('bs-endpointPath').value.trim(),
+    authType: document.getElementById('bs-authType').value,
+    authApiKeyHeader: (document.getElementById('bs-authApiKeyHeader')||{}).value||'',
+    authApiKeyValue: (document.getElementById('bs-authApiKeyValue')||{}).value||'',
+    authBearerToken: (document.getElementById('bs-authBearerToken')||{}).value||'',
+    authBasicUser: (document.getElementById('bs-authBasicUser')||{}).value||'',
+    authBasicPassword: (document.getElementById('bs-authBasicPassword')||{}).value||'',
+    responseListPath: document.getElementById('bs-responseListPath').value.trim(),
+    fieldMapping: bsCollectMapping(),
+    syncIntervalMinutes: document.getElementById('bs-syncInterval').value ? parseInt(document.getElementById('bs-syncInterval').value) : null,
+  };
 }
 
-// ── HELPERS ──
-function extractList(d) {
-  if (!d) return [];
-  if (Array.isArray(d)) return d;
-  // ← Sesame réel : {"success":true,"root":[...]}
-  if (Array.isArray(d.root)) return d.root;
-  // Wrapper data.data
-  if (d.data) {
-    if (Array.isArray(d.data)) return d.data;
-    if (typeof d.data === 'object') {
-      var inner = d.data;
-      if (Array.isArray(inner.root)) return inner.root;
-      var c2 = ['items','list','bookings','facilities','passes','accesses','result','results','content'];
-      for (var j = 0; j < c2.length; j++) { if (Array.isArray(inner[c2[j]])) return inner[c2[j]]; }
-    }
-  }
-  // Standard wrappers
-  var candidates = ['items','list','bookings','facilities','passes','accesses','result','results','content'];
-  for (var i = 0; i < candidates.length; i++) { if (Array.isArray(d[candidates[i]])) return d[candidates[i]]; }
-  if (d.id || d.code) return [d];
-  return [];
+function bsRenderStatusBanner(){
+  var el = document.getElementById('bs-status-banner');
+  if(!BS_CONFIG || !BS_CONFIG.lastSyncAt){ el.style.display='none'; return; }
+  el.style.display='block';
+  var ok = BS_CONFIG.lastSyncStatus==='success';
+  var when = new Date(BS_CONFIG.lastSyncAt).toLocaleString('fr-FR');
+  el.innerHTML = '<div class="alt '+(ok?'alt-g':'alt-w')+'"><i class="ti '+(ok?'ti-check-circle':'ti-alert-triangle')+'"></i>'
+    +'<span>Dernière synchronisation : <strong>'+when+'</strong> — '+esc(BS_CONFIG.lastSyncMessage||'')+'</span></div>';
 }
 
-// ── PHP Proxy download ──
-function downloadProxy() {
-  var serverUrl = (getVal('api-url') || 'https://VOTRE-SERVEUR-SESAME').replace(/\/$/, '');
-  var php = '<?php\n'
-    + '// sesame_proxy.php — Proxy CORS pour l\'API Sesame Technology\n'
-    + '// 1. Éditez $SESAME_BASE ci-dessous avec l\'URL de votre serveur Sesame\n'
-    + '// 2. Déposez ce fichier sur votre serveur web (même domaine que sesame_admin.html)\n'
-    + '// 3. Dans l\'admin, renseignez l\'URL de ce proxy dans "URL du serveur Sesame"\n\n'
-    + 'header("Access-Control-Allow-Origin: *");\n'
-    + 'header("Access-Control-Allow-Headers: Authorization, Authoritation, Content-Type, Origin");\n'
-    + 'header("Access-Control-Allow-Methods: GET, POST, OPTIONS");\n'
-    + 'if ($_SERVER["REQUEST_METHOD"] === "OPTIONS") { http_response_code(200); exit; }\n\n'
-    + '$SESAME_BASE = "' + serverUrl + '"; // ← votre serveur Sesame\n\n'
-    + '// Reconstruit le chemin et les paramètres (le front envoie /ws/... directement)\n'
-    + '$uri = isset($_SERVER["REQUEST_URI"]) ? $_SERVER["REQUEST_URI"] : "/";\n'
-    + '$script = $_SERVER["SCRIPT_NAME"];\n'
-    + '$path = substr($uri, strlen(dirname($script)));\n'
-    + 'if (substr($path, 0, 1) !== "/") $path = "/" . $path;\n\n'
-    + '$url = $SESAME_BASE . $path;\n\n'
-    + '// Token depuis header ou query param\n'
-    + '$token = "";\n'
-    + 'if (!empty($_SERVER["HTTP_AUTHORIZATION"])) $token = $_SERVER["HTTP_AUTHORIZATION"];\n'
-    + 'elseif (!empty($_SERVER["HTTP_AUTHORITATION"])) $token = $_SERVER["HTTP_AUTHORITATION"];\n'
-    + 'elseif (!empty($_GET["_token"])) $token = $_GET["_token"];\n\n'
-    + '$headers = ["Content-Type: application/json"];\n'
-    + 'if ($token) { $headers[] = "Authorization: " . $token; $headers[] = "Authoritation: " . $token; }\n\n'
-    + '$ch = curl_init($url);\n'
-    + 'curl_setopt_array($ch, [\n'
-    + '  CURLOPT_RETURNTRANSFER => true,\n'
-    + '  CURLOPT_FOLLOWLOCATION => true,\n'
-    + '  CURLOPT_TIMEOUT        => 15,\n'
-    + '  CURLOPT_SSL_VERIFYPEER => false,\n'
-    + '  CURLOPT_HTTPHEADER     => $headers,\n'
-    + ']);\n'
-    + '$response = curl_exec($ch);\n'
-    + '$httpCode  = curl_getinfo($ch, CURLINFO_HTTP_CODE);\n'
-    + '$error     = curl_error($ch);\n'
-    + 'curl_close($ch);\n\n'
-    + 'if ($error) { http_response_code(502); echo json_encode(["error" => $error, "url" => $url]); exit; }\n'
-    + 'http_response_code($httpCode);\n'
-    + 'header("Content-Type: application/json; charset=utf-8");\n'
-    + 'echo $response;\n';
-  var blob = new Blob([php], { type: 'text/plain;charset=utf-8' });
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'sesame_proxy.php';
-  a.click();
-  toast('sesame_proxy.php téléchargé — éditez $SESAME_BASE et déployez');
+async function bsFetchConfig(){
+  try{
+    var r = await adminFetch('/wa/bookingSource/config');
+    if(r.ok) BS_CONFIG = await r.json();
+  }catch(e){ console.error('bsFetchConfig error', e); }
+  return BS_CONFIG;
 }
 
-function showRawDebug(containerId, raw, count) {
-  var el = document.getElementById(containerId);
-  if (!el) return;
-  var existing = el.innerHTML;
-  var summary = count !== null
-    ? (count > 0 ? count + ' élément(s) extrait(s)' : '0 élément extrait')
-    : 'Aucune réponse';
-  var safeRaw = raw ? raw.replace(/</g,'&lt;').slice(0, 1200) : '(aucune réponse)';
-  var id = 'raw_' + containerId;
-  var block = '<div style="margin-top:10px">'
-    + '<details style="font-size:12px"><summary style="cursor:pointer;color:var(--mu);user-select:none">'
-    + '🔍 Réponse brute Sesame (' + summary + ') — cliquer pour afficher</summary>'
-    + '<pre style="font-size:10px;white-space:pre-wrap;word-break:break-all;background:#0E1820;color:#A8D5B0;'
-    + 'border-radius:6px;padding:10px;margin-top:6px;max-height:200px;overflow-y:auto;line-height:1.5">'
-    + safeRaw + '</pre></details></div>';
-  el.innerHTML = existing + block;
+async function bsInit(){
+  await bsFetchConfig();
+  if(!BS_CONFIG) return;
+  document.getElementById('bs-enabled').checked = BS_CONFIG.enabled;
+  document.getElementById('bs-sourceName').value = BS_CONFIG.sourceName||'';
+  document.getElementById('bs-baseUrl').value = BS_CONFIG.baseUrl||'';
+  document.getElementById('bs-endpointPath').value = BS_CONFIG.endpointPath||'';
+  document.getElementById('bs-authType').value = BS_CONFIG.authType||'none';
+  document.getElementById('bs-responseListPath').value = BS_CONFIG.responseListPath||'';
+  document.getElementById('bs-syncInterval').value = BS_CONFIG.syncIntervalMinutes||'';
+  bsRenderAuthFields();
+  if(BS_CONFIG.authType==='apiKey'){
+    document.getElementById('bs-authApiKeyHeader').value = BS_CONFIG.authApiKeyHeader||'';
+    document.getElementById('bs-authApiKeyValue').value = BS_CONFIG.authApiKeyValue||'';
+  } else if(BS_CONFIG.authType==='bearer'){
+    document.getElementById('bs-authBearerToken').value = BS_CONFIG.authBearerToken||'';
+  } else if(BS_CONFIG.authType==='basic'){
+    document.getElementById('bs-authBasicUser').value = BS_CONFIG.authBasicUser||'';
+    document.getElementById('bs-authBasicPassword').value = BS_CONFIG.authBasicPassword||'';
+  }
+  bsRenderMappingFields(BS_CONFIG.fieldMapping);
+  bsRenderStatusBanner();
+  document.getElementById('bs-result-card').style.display='none';
 }
 
+async function bsSave(){
+  var body = bsCollectFormValues();
+  try{
+    var r = await adminFetch('/wa/bookingSource/config/update', {method:'POST', body:JSON.stringify(body)});
+    if(!r.ok){ toast('Erreur lors de l\'enregistrement'); return; }
+    BS_CONFIG = await r.json();
+    bsRenderStatusBanner();
+    toast('Connecteur enregistré ✓');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
 
-// ── STEP 1: LOGIN ──
-// Doc Sesame 2023-11-23:
-//   POST https://[server]/ws/login/login?login=api@company.com
-//   Body JSON: {"password":"mypassword"}
-//   Response: {"data":{"profileEntityId":"...","profiles":[{"token":"UPT_...","entityCode":"RAM",...}]}}
-async function apiLogin() {
-  var url = getVal('api-url');
-  var login = getVal('api-login');
-  var pwd = document.getElementById('api-password').value;
-  if (!url) { sesameAlert('api-login-status','err','alert-circle','URL du serveur requise'); return; }
-  if (!login || !pwd) { sesameAlert('api-login-status','err','alert-circle','Login et mot de passe requis'); return; }
-  var btn = document.getElementById('api-login-btn');
-  btn.innerHTML='<div class="spin" style="width:14px;height:14px;border-width:2px"></div> Connexion…';
-  btn.disabled=true;
-  sesameLoading('api-login-status', 'Connexion à Sesame…');
+function bsShowResult(title, html){
+  document.getElementById('bs-result-title').innerHTML = '<i class="ti ti-list-check"></i>'+title;
+  document.getElementById('bs-result-body').innerHTML = html;
+  document.getElementById('bs-result-card').style.display='block';
+}
 
-  var base = url.replace(/\/$/, '');
-  SESAME.baseUrl = base;
-
-  // Attempt 1: POST login in query + password in JSON body (doc officielle 2023)
-  var loginUrl1 = base + '/ws/login/login?login=' + encodeURIComponent(login);
-  // Attempt 2: GET with both in query (ancienne doc v0.2)
-  var loginUrl2 = base + '/ws/login/login?login=' + encodeURIComponent(login) + '&password=' + encodeURIComponent(pwd);
-  var rawJson = null;
-  var data = null;
-
-  var attempts = [
-    // Méthode 1 : POST query+body (doc 2023-11-23)
-    function() {
-      logApi('POST', '/ws/login/login?login=…', 0, 'méthode doc 2023…');
-      return fetch(loginUrl1, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pwd })
-      });
-    },
-    // Méthode 2 : GET tout en query (ancienne doc v0.2)
-    function() {
-      logApi('GET', '/ws/login/login?login=…&password=…', 0, 'méthode doc v0.2…');
-      return fetch(loginUrl2, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
-    },
-    // Méthode 3 : POST tout en body
-    function() {
-      logApi('POST', '/ws/login/login (body)', 0, 'tout en body…');
-      return fetch(base + '/ws/login/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ login: login, password: pwd })
-      });
-    }
-  ];
-
-  for (var ai = 0; ai < attempts.length; ai++) {
-    try {
-      var resp = await attempts[ai]();
-      rawJson = await resp.text();
-      logApi(ai===0?'POST':'GET', '/ws/login/login', resp.status, resp.status + ' · ' + rawJson.slice(0, 150));
-      if (resp.ok || rawJson.includes('token')) {
-        data = JSON.parse(rawJson);
-        break;
-      }
-    } catch(ex) {
-      logApi('ERR', '/ws/login/login', 0, ex.message.slice(0, 80));
-      if (ai === attempts.length - 1) {
-        // All attempts failed — likely CORS even on login
-        btn.innerHTML='<i class="ti ti-login"></i>Se connecter & obtenir le token';
-        btn.disabled=false;
-        sesameAlert('api-login-status','err','x-circle',
-          'Impossible de joindre le serveur Sesame depuis ce navigateur (CORS ou URL incorrecte).<br>'
-          + '<strong>Vérifiez l\'URL</strong> — elle doit inclure le port fourni par Sesame Technology.<br>'
-          + 'Ex: <code>http://sesame.technology:8080</code> ou utilisez le proxy PHP.');
-        return;
-      }
-    }
-  }
-
-  btn.innerHTML='<i class="ti ti-login"></i>Se connecter & obtenir le token';
-  btn.disabled=false;
-
-  if (!data) {
-    sesameAlert('api-login-status','err','x-circle',
-      'Réponse vide ou non-JSON. Vérifiez l\'URL du serveur.');
-    return;
-  }
-
-  logApi('RAW', 'response', 0, rawJson ? rawJson.slice(0, 200) : '(vide)');
-
-  // ── Exhaustive token extraction ──
-  // Réponse réelle Sesame : {"data":{"profileEntityId":"E00000521","name":"...","profiles":[{"token":"UP...","entityId":"E00000521",...}]}}
-  var token = null;
-  var entityIdFromResponse = null;
-  if (data) {
-    // PRIORITÉ 1 : data.data.profiles[0].token  ← structure réelle observée
-    if (data.data && data.data.profiles && Array.isArray(data.data.profiles) && data.data.profiles.length > 0) {
-      token = data.data.profiles[0].token || null;
-      entityIdFromResponse = data.data.profiles[0].entityId || data.data.profileEntityId || null;
-    }
-    // PRIORITÉ 2 : data.profiles[0].token  ← doc v0.2
-    if (!token && data.profiles && Array.isArray(data.profiles) && data.profiles.length > 0) {
-      token = data.profiles[0].token || null;
-      entityIdFromResponse = data.profiles[0].entityId || null;
-    }
-    // PRIORITÉ 3 : data.person.token
-    if (!token && data.person) token = data.person.token || null;
-    // PRIORITÉ 4 : data.data.token  (objet plat)
-    if (!token && data.data && data.data.token) token = data.data.token;
-    // PRIORITÉ 5 : racine
-    if (!token) token = data.token || data.authToken || data.accessToken || data.sessionToken || null;
-    // PRIORITÉ 6 : walk toutes les clés contenant "token"
-    if (!token) {
-      var walk = function(obj, depth) {
-        if (!obj || typeof obj !== 'object' || depth > 3) return;
-        Object.keys(obj).forEach(function(k) {
-          if (!token && typeof obj[k] === 'string' && obj[k].length > 8 && k.toLowerCase().includes('token')) {
-            token = obj[k];
-          } else if (!token && typeof obj[k] === 'object') {
-            walk(obj[k], depth + 1);
-          }
-        });
-      };
-      walk(data, 0);
-    }
-    // Erreur explicite Sesame
-    if (!token && data.success === false) {
-      var errMsg = data.message || (data.data && data.data.message) || data.error || 'Identifiants refusés';
-      sesameAlert('api-login-status','err','x-circle',
-        'Sesame a refusé la connexion : <strong>' + errMsg + '</strong>'
-        + '<br><small style="word-break:break-all">' + (rawJson||'').slice(0, 300) + '</small>');
+async function bsTest(){
+  var body = bsCollectFormValues();
+  bsShowResult('Test en cours…', '<div style="color:var(--mu);font-size:13px">Appel de la source externe…</div>');
+  try{
+    var r = await adminFetch('/wa/bookingSource/test', {method:'POST', body:JSON.stringify(body)});
+    var data = await r.json();
+    if(!r.ok){
+      bsShowResult('Échec du test', '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>'+esc(data.error||'Erreur inconnue')+'</span></div>');
       return;
     }
+    var h = '<div class="alt alt-g" style="margin-bottom:12px"><i class="ti ti-check-circle"></i><span>'
+      +data.totalReceived+' élément(s) reçu(s), '+data.validCount+' correctement mappé(s)'
+      +(data.errors.length?', '+data.errors.length+' ignoré(s)':'')+'.</span></div>';
+    if(data.preview.length){
+      h += '<table class="tbl"><tr><th>Code</th><th>Client</th><th>Email</th><th>Arrivée</th><th>Départ</th><th>Chambre</th></tr>';
+      h += data.preview.map(function(p){
+        return '<tr><td>'+esc(p.code)+'</td><td>'+esc((p.personFirstname+' '+p.personLastname).trim()||'—')+'</td><td>'+esc(p.personEmail)+'</td><td>'+p.startDate+'</td><td>'+p.endDate+'</td><td>'+esc(p.facilityCode||'—')+'</td></tr>';
+      }).join('');
+      h += '</table>';
+    }
+    if(data.errors.length){
+      h += '<div style="font-size:12px;color:var(--mu);margin-top:8px">Éléments ignorés : '
+        + data.errors.map(function(e){return '#'+e.index+' ('+esc(e.reason)+')';}).join(', ') + '</div>';
+    }
+    bsShowResult('Aperçu du test (10 premiers éléments)', h);
+  }catch(e){
+    bsShowResult('Échec du test', '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Erreur de connexion au serveur</span></div>');
   }
+}
 
-  if (!token) {
-    sesameAlert('api-login-status','err','x-circle',
-      'Token introuvable dans la réponse.<br>'
-      + '<pre style="font-size:10px;white-space:pre-wrap;word-break:break-all;margin-top:6px;padding:8px;background:rgba(0,0,0,.2);border-radius:4px;max-height:160px;overflow-y:auto">'
-      + (rawJson ? rawJson.replace(/</g,'&lt;').slice(0, 1000) : '(vide)') + '</pre>');
-    return;
+async function bsImportNow(){
+  bsShowResult('Import en cours…', '<div style="color:var(--mu);font-size:13px">Récupération et enregistrement des réservations…</div>');
+  try{
+    var r = await adminFetch('/wa/bookingSource/import', {method:'POST', body:JSON.stringify({})});
+    var data = await r.json();
+    if(!r.ok){
+      bsShowResult('Échec de l\'import', '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>'+esc(data.error||'Erreur inconnue')+'</span></div>');
+      await bsFetchConfig(); bsRenderStatusBanner();
+      return;
+    }
+    var h = '<div class="alt alt-g"><i class="ti ti-check-circle"></i><span>'
+      +data.created+' réservation(s) créée(s), '+data.updated+' mise(s) à jour'
+      +(data.errors.length?', '+data.errors.length+' ignorée(s)':'')+' sur '+data.total+' reçue(s).</span></div>';
+    bsShowResult('Import terminé', h);
+    await bsFetchConfig();
+    bsRenderStatusBanner();
+    toast('Import terminé ✓');
+  }catch(e){
+    bsShowResult('Échec de l\'import', '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Erreur de connexion au serveur</span></div>');
   }
-
-  // ── Token found — store everything useful ──
-  SESAME.token = token;
-  SESAME.tokenTime = new Date();
-  SESAME.entityId = entityIdFromResponse || getVal('api-entityId') || CFG.entityId || '';
-  CFG.apiUrl = url;
-  CFG.apiToken = token;
-  // Auto-fill entityId field if server returned it
-  if (entityIdFromResponse) {
-    var eif = document.getElementById('api-entityId');
-    if (eif && !eif.value) eif.value = entityIdFromResponse;
-    CFG.entityId = entityIdFromResponse;
-  }
-  saveCfg();
-  showTokenCard(token, entityIdFromResponse);
-  var tokenSource = data.data && data.data.profiles ? 'data.data.profiles[0].token'
-    : data.profiles ? 'data.profiles[0].token'
-    : data.person ? 'data.person.token' : 'token';
-  sesameAlert('api-login-status','ok','check-circle',
-    'Authentification réussie · <code>' + tokenSource + '</code>'
-    + (entityIdFromResponse ? ' · entityId : <strong>' + entityIdFromResponse + '</strong>' : ''));
-  apiFetchFacilities();
 }
-
-function showTokenCard(token, entityId) {
-  document.getElementById('api-token-card').style.display='block';
-  document.getElementById('api-token-display').textContent=token;
-  var timeStr = 'Obtenu le '+new Date().toLocaleString('fr-FR');
-  if (entityId) timeStr += ' · entityId : ' + entityId;
-  document.getElementById('api-token-time').textContent = timeStr;
-  document.getElementById('api-step-facilities').style.display='block';
-  document.getElementById('api-step-bookings').style.display='block';
-}
-function copyToken(){
-  var t=document.getElementById('api-token-display').textContent;
-  navigator.clipboard&&navigator.clipboard.writeText(t).then(function(){toast('Token copié ✓');});
-}
-function apiLogout(){
-  SESAME.token=null;SESAME.tokenTime=null;SESAME.facilities=[];SESAME.bookings=[];
-  document.getElementById('api-token-card').style.display='none';
-  document.getElementById('api-step-facilities').style.display='none';
-  document.getElementById('api-step-bookings').style.display='none';
-  document.getElementById('api-facilities-list').innerHTML='';
-  document.getElementById('api-bookings-list').innerHTML='';
-  document.getElementById('api-login-status').innerHTML='';
-  toast('Déconnecté');
-}
-
-// ── STEP 2 & 3 implemented above in sesameCall block ──
-
-
-function renderFacilitiesList(list) {
-  if (!list.length) {
-    document.getElementById('api-facilities-list').innerHTML='<div style="font-size:13px;color:var(--mu)">Aucune facility retournée</div>';
-    return;
-  }
-  var h='<div style="overflow-x:auto"><table class="tbl">';
-  h+='<tr><th>Code</th><th>Nom / Description</th><th>Statut device</th><th>Open</th><th>NFC only</th><th>ID Sesame</th></tr>';
-  list.forEach(function(f){
-    var code   = f.code || f.facilityCode || '—';
-    var name   = f.name || f.facilityName || f.description || '—';
-    var dev    = f.deviceStatus || '—';
-    var devCol = dev==='ONLINE'?'var(--a)':dev==='OFFLINE'?'#E74C3C':'var(--mu)';
-    var open   = f.openStatus ? '🟢 Ouvert' : '⚫ Fermé';
-    var nfc    = f.nfcOnly ? 'Oui' : 'Non';
-    var sid    = f.id || f.sesameId || '—';
-    h+='<tr>';
-    h+='<td style="font-weight:700;font-family:monospace">'+code+'</td>';
-    h+='<td>'+name+'</td>';
-    h+='<td><span style="font-size:11px;padding:2px 8px;border-radius:20px;background:'+devCol+'22;color:'+devCol+';font-weight:600">'+dev+'</span></td>';
-    h+='<td style="font-size:12px">'+open+'</td>';
-    h+='<td style="font-size:12px;color:var(--mu)">'+nfc+'</td>';
-    h+='<td style="font-family:monospace;font-size:11px;color:var(--mu)">'+sid+'</td>';
-    h+='</tr>';
-  });
-  h+='</table></div>';
-  document.getElementById('api-facilities-list').innerHTML=h;
-  document.getElementById('api-import-rooms-btn').style.display='';
-}
-function importFacilitiesAsRooms() {
-  if (!SESAME.facilities.length) { toast('Aucune facility à importer'); return; }
-  var imported=0, skipped=0;
-  var existing=CFG.rooms.map(function(r){return r.code;});
-  SESAME.facilities.forEach(function(f){
-    var code = f.code || f.facilityCode || ('F-'+f.id);
-    var name = f.name || f.facilityName || f.description || code;
-    if (!code || code === '—') { skipped++; return; }
-    if (existing.includes(code)) { skipped++; return; }
-    CFG.rooms.push({
-      code: code,
-      name: name,
-      floor: 0,
-      tags: [],
-      photos: [],
-      available: true,
-      sesameId: f.id || '',
-      sesameEntityId: f.entityId || '',
-      deviceStatus: f.deviceStatus || ''
-    });
-    imported++;
-  });
-  saveCfg();
-  toast(imported+' facility(ies) importée(s) · '+skipped+' ignorée(s) (déjà existantes ou sans code)');
-  renderDash();
-}
-
-// apiFetchBookings implemented above
-function renderBookingsList(list) {
-  if (!list.length) {
-    document.getElementById('api-bookings-list').innerHTML='<div style="font-size:13px;color:var(--mu)">Aucune réservation trouvée</div>';
-    return;
-  }
-  var h='<div style="overflow-x:auto"><table class="tbl">';
-  h+='<tr><th>Code PMS</th><th>Client</th><th>Email</th><th>Chambre</th><th>Arrivée</th><th>Départ</th><th>Statut</th></tr>';
-  list.forEach(function(b){
-    var code = b.code || b.bookingCode || b.id || '—';
-    var first= b.personFirstname || b.firstname || '';
-    var last = b.personLastname  || b.lastname  || '';
-    var email= b.personEmail     || b.email     || '—';
-    var room = b.facilityCode    || b.facility  || '—';
-    var start= b.startDate       || b.startingDate || b.checkIn || '—';
-    var end  = b.endDate         || b.endingDate   || b.checkOut|| '—';
-    var status=b.status || '—';
-    var stColor = status==='confirmed'?'var(--a)':status==='cancelled'?'#E74C3C':'var(--bu)';
-    h+='<tr>';
-    h+='<td style="font-weight:600;font-family:monospace;font-size:12px">'+code+'</td>';
-    h+='<td style="font-weight:500">'+first+' '+last+'</td>';
-    h+='<td style="font-size:12px;color:var(--mu)">'+email+'</td>';
-    h+='<td><span style="font-weight:600">'+room+'</span></td>';
-    h+='<td style="font-size:12px">'+fmtApiDate(start)+'</td>';
-    h+='<td style="font-size:12px">'+fmtApiDate(end)+'</td>';
-    h+='<td><span style="font-size:11px;padding:1px 7px;border-radius:20px;background:'+stColor+'22;color:'+stColor+'">'+status+'</span></td>';
-    h+='</tr>';
-  });
-  h+='</table></div>';
-  document.getElementById('api-bookings-list').innerHTML=h;
-}
-function fmtApiDate(d){
-  if(!d||d==='—')return'—';
-  try{return new Date(d).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'2-digit'});}
-  catch(e){return d;}
-}
-
-// ── Sync bookings → planning ──
-function syncBookingsToPlan(){
-  if(!SESAME.bookings.length){toast('Aucune réservation à synchroniser');return;}
-  // Transform into PLAN.bookings format
-  PLAN.bookings = SESAME.bookings.map(function(b, i){
-    var code=b.code||b.bookingCode||b.id||('B'+i);
-    var first=b.personFirstname||b.firstname||'Client';
-    var last=b.personLastname||b.lastname||code;
-    var room=b.facilityCode||b.facility||'?';
-    var start=(b.startDate||b.startingDate||b.checkIn||'').slice(0,10);
-    var end=(b.endDate||b.endingDate||b.checkOut||'').slice(0,10);
-    var nights=0;
-    if(start&&end){try{nights=Math.round((new Date(end)-new Date(start))/(864e5));}catch(e){}}
-    return {id:b.id||code,code:code,room:room,personFirstname:first,personLastname:last,
-      personEmail:b.personEmail||b.email||'',start:start,end:end,nights:nights,adults:b.adults||1,status:b.status||'confirmed'};
-  });
-  toast(PLAN.bookings.length+' réservations synchronisées vers le planning ✓');
-  showPan('planning');
-}
-
-// ── Export CSV ──
-function exportBookingsCSV(){
-  var rows=[['Code','Prénom','Nom','Email','Chambre','Arrivée','Départ','Statut']];
-  SESAME.bookings.forEach(function(b){
-    rows.push([b.code||'',b.personFirstname||'',b.personLastname||'',b.personEmail||'',
-      b.facilityCode||'',b.startDate||b.startingDate||'',b.endDate||b.endingDate||'',b.status||'']);
-  });
-  var csv=rows.map(function(r){return r.map(function(c){return'"'+(c||'').toString().replace(/"/g,'""')+'"';}).join(';');}).join('\n');
-  var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
-  var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='reservations-sesame.csv';a.click();
-  toast('Export CSV téléchargé');
-}
-
-// ── SIMULATION (CORS fallback) ──
-function simulateFacilitiesAndBookings(){
-  var simFacilities=[
-    {id:'F00000101',code:'room101',name:'Chambre 101 — Standard',type:'ROOM',entityId:'E00000001',active:true},
-    {id:'F00000102',code:'room102',name:'Chambre 102 — Standard',type:'ROOM',entityId:'E00000001',active:true},
-    {id:'F00000201',code:'room201',name:'Chambre 201 — Supérieure',type:'ROOM',entityId:'E00000001',active:true},
-    {id:'F00000214',code:'room214',name:'Chambre 214 — Supérieure',type:'ROOM',entityId:'E00000001',active:true},
-    {id:'F00000301',code:'suite101',name:'Suite Prestige 101',type:'SUITE',entityId:'E00000001',active:true},
-    {id:'F00000SPA',code:'spa',name:'Espace SPA & Bien-être',type:'AMENITY',entityId:'E00000001',active:true},
-  ];
-  SESAME.facilities=simFacilities;
-  renderFacilitiesList(simFacilities);
-  sesameAlert('api-facilities-status','warn','info-circle','<strong>Données simulées</strong> — Résultat fictif (CORS). Mêmes champs qu\'un vrai retour Sesame.');
-  document.getElementById('api-import-rooms-btn').style.display='';
-  var today=new Date();function dayStr(n){var d=new Date(today);d.setDate(d.getDate()+n);return d.toISOString().slice(0,10);}
-  var simBookings=[
-    {id:'B00000001',code:'RES-2024-8811',facilityCode:'room101',personFirstname:'Sophie', personLastname:'MARTIN',  personEmail:'sophie.martin@email.fr',  startDate:dayStr(-2),endDate:dayStr(1), status:'confirmed',adults:2},
-    {id:'B00000002',code:'RES-2024-8812',facilityCode:'room102',personFirstname:'Martin', personLastname:'DUPONT',  personEmail:'martin.dupont@gmail.com',  startDate:dayStr(0), endDate:dayStr(3), status:'confirmed',adults:1},
-    {id:'B00000003',code:'RES-2024-8813',facilityCode:'room201',personFirstname:'Claire', personLastname:'BERNARD', personEmail:'c.bernard@yahoo.fr',       startDate:dayStr(-1),endDate:dayStr(2), status:'confirmed',adults:2},
-    {id:'B00000004',code:'RES-2024-8814',facilityCode:'room214',personFirstname:'Pierre', personLastname:'LEFORT',  personEmail:'pierre.lefort@pro.com',    startDate:dayStr(1), endDate:dayStr(5), status:'confirmed',adults:3},
-    {id:'B00000005',code:'RES-2024-8815',facilityCode:'suite101',personFirstname:'Emma',  personLastname:'GARCIA',  personEmail:'emma.garcia@outlook.com',  startDate:dayStr(-3),endDate:dayStr(1), status:'confirmed',adults:2},
-    {id:'B00000006',code:'RES-2024-8816',facilityCode:'room201',personFirstname:'Lucas',  personLastname:'LAMBERT', personEmail:'lucas.lambert@free.fr',    startDate:dayStr(3), endDate:dayStr(7), status:'confirmed',adults:1},
-  ];
-  SESAME.bookings=simBookings;
-  renderBookingsList(simBookings);
-  sesameAlert('api-bookings-status','warn','info-circle','<strong>Données simulées</strong> — Résultat fictif (CORS).');
-  document.getElementById('api-sync-plan-btn').style.display='';
-  document.getElementById('api-export-btn').style.display='';
-}
-
-// ── Init API panel defaults ──
-document.addEventListener('DOMContentLoaded', function(){
-  var fromEl=document.getElementById('api-date-from');
-  var toEl=document.getElementById('api-date-to');
-  if(fromEl){var d=new Date();d.setDate(d.getDate()-7);fromEl.value=d.toISOString().slice(0,10);}
-  if(toEl){var d2=new Date();d2.setDate(d2.getDate()+30);toEl.value=d2.toISOString().slice(0,10);}
-  // Restore token if saved
-  if(CFG.apiToken&&CFG.apiToken!=='UPT_DEMO_TOKEN_1234'){
-    SESAME.token=CFG.apiToken;SESAME.baseUrl=CFG.apiUrl||'';
-    showTokenCard(CFG.apiToken);
-  }
-  if(CFG.apiUrl){var el=document.getElementById('api-url');if(el)el.value=CFG.apiUrl;}
-  if(CFG.entityId){var el2=document.getElementById('api-entityId');if(el2)el2.value=CFG.entityId;}
-});
-
-// replace old testApi reference
-function testApi(){ showPan('api'); }
 
 
 // ═══════════════════════════════════════════════ EXPORT CSS

@@ -18,6 +18,7 @@ import { loginRouter } from "./routes/login";
 import { entityRouter } from "./routes/entity";
 import { subscriptionRouter } from "./routes/subscription";
 import { groupRouter } from "./routes/group";
+import { bookingSourceRouter } from "./routes/bookingSource";
 import { errorHandler } from "./middleware/errorHandler";
 
 export function createApp() {
@@ -48,6 +49,7 @@ export function createApp() {
   app.use("/wa", entityRouter);
   app.use("/wa", subscriptionRouter);
   app.use("/wa", groupRouter);
+  app.use("/wa", bookingSourceRouter);
 
   // Authentification espace client (hors convention /wa — pas de DAO CRUD dédié)
   app.use("/api", authRouter);
