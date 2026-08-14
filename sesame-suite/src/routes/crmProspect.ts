@@ -1,0 +1,296 @@
+import { Router } from "express";
+import { prisma } from "../db";
+import { asyncHandler, HttpError } from "../lib/asyncHandler";
+import { requireAdmin, requireSesame } from "../middleware/requireAdmin";
+
+/**
+ * CRM commercial interne de Sesame — pipeline prospects/clients (à ne pas
+ * confondre avec /wa/crm/*, le module CRM de chaque hôtel qui gère SES
+ * propres clients finaux). Réservé aux comptes "sesame". Remplace l'ancien
+ * panneau "CRM Sesame" jamais branché de admin.html — nouvelle maquette,
+ * nouvelle app dédiée (public/crm.html).
+ */
+export const crmProspectRouter = Router();
+
+function shapeActivity(a: { id: string; type: string; text: string; authorName: string | null; activityDate: Date | null; done: boolean; createdAt: Date }) {
+  return {
+    id: a.id,
+    type: a.type,
+    text: a.text,
+    authorName: a.authorName || "",
+    activityDate: a.activityDate,
+    done: a.done,
+    createdAt: a.createdAt,
+  };
+}
+
+function shapeProspect(p: {
+  id: string;
+  entityId: string | null;
+  subscriptionId: string | null;
+  nom: string;
+  groupe: string | null;
+  secteur: string | null;
+  ville: string | null;
+  etoiles: string | null;
+  danger: string;
+  potentiel: number;
+  contrat: string;
+  modules: number;
+  pms: string | null;
+  priorite: number;
+  appel: string | null;
+  referent: string | null;
+  email: string | null;
+  tel: string | null;
+  site: string | null;
+  nfc: number;
+  qr: number;
+  mobile: number;
+  webApp: boolean;
+  mobileV2: boolean;
+  checkin: boolean;
+  livret: boolean;
+  gestionDemande: boolean;
+  offline: boolean;
+  messagerie: string;
+  note: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  entity?: { code: string } | null;
+  activities?: Parameters<typeof shapeActivity>[0][];
+}) {
+  return {
+    id: p.id,
+    entityId: p.entityId,
+    entityCode: p.entity ? p.entity.code : null,
+    subscriptionId: p.subscriptionId,
+    nom: p.nom,
+    groupe: p.groupe || "",
+    secteur: p.secteur || "",
+    ville: p.ville || "",
+    etoiles: p.etoiles || "",
+    danger: p.danger,
+    potentiel: p.potentiel,
+    contrat: p.contrat,
+    modules: p.modules,
+    pms: p.pms || "",
+    priorite: p.priorite,
+    appel: p.appel || "",
+    referent: p.referent || "",
+    email: p.email || "",
+    tel: p.tel || "",
+    site: p.site || "",
+    nfc: p.nfc,
+    qr: p.qr,
+    mobile: p.mobile,
+    webApp: p.webApp,
+    mobileV2: p.mobileV2,
+    checkin: p.checkin,
+    livret: p.livret,
+    gestionDemande: p.gestionDemande,
+    offline: p.offline,
+    messagerie: p.messagerie,
+    note: p.note || "",
+    createdAt: p.createdAt,
+    updatedAt: p.updatedAt,
+    journal: (p.activities || []).map(shapeActivity),
+  };
+}
+
+const PROSPECT_INCLUDE = { entity: { select: { code: true } }, activities: { orderBy: { createdAt: "asc" as const } } };
+
+crmProspectRouter.get(
+  "/crmProspect/list",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (_req, res) => {
+    const rows = await prisma.crmProspect.findMany({ include: PROSPECT_INCLUDE, orderBy: { nom: "asc" } });
+    res.json(rows.map(shapeProspect));
+  })
+);
+
+interface ProspectBody {
+  nom: string;
+  groupe?: string;
+  secteur?: string;
+  ville?: string;
+  etoiles?: string;
+  danger?: string;
+  potentiel?: number;
+  contrat?: string;
+  modules?: number;
+  pms?: string;
+  priorite?: number;
+  appel?: string;
+  referent?: string;
+  email?: string;
+  tel?: string;
+  site?: string;
+  nfc?: number;
+  qr?: number;
+  mobile?: number;
+  webApp?: boolean;
+  mobileV2?: boolean;
+  checkin?: boolean;
+  livret?: boolean;
+  gestionDemande?: boolean;
+  offline?: boolean;
+  messagerie?: string;
+  note?: string;
+}
+
+crmProspectRouter.post(
+  "/crmProspect/create",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const b = req.body as ProspectBody;
+    if (!b.nom || !b.nom.trim()) throw new HttpError(400, "Nom requis");
+    const row = await prisma.crmProspect.create({
+      data: {
+        nom: b.nom.trim(),
+        groupe: b.groupe,
+        secteur: b.secteur,
+        ville: b.ville,
+        etoiles: b.etoiles,
+        danger: b.danger || "Modéré",
+        potentiel: b.potentiel ?? 0,
+        contrat: b.contrat || "non",
+        modules: b.modules ?? 0,
+        pms: b.pms,
+        priorite: b.priorite ?? 0,
+        appel: b.appel,
+        referent: b.referent,
+        email: b.email,
+        tel: b.tel,
+        site: b.site,
+        nfc: b.nfc ?? 0,
+        qr: b.qr ?? 0,
+        mobile: b.mobile ?? 0,
+        webApp: !!b.webApp,
+        mobileV2: !!b.mobileV2,
+        checkin: !!b.checkin,
+        livret: !!b.livret,
+        gestionDemande: !!b.gestionDemande,
+        offline: !!b.offline,
+        messagerie: b.messagerie || "Noreply",
+        note: b.note,
+      },
+      include: PROSPECT_INCLUDE,
+    });
+    res.status(201).json(shapeProspect(row));
+  })
+);
+
+crmProspectRouter.post(
+  "/crmProspect/update",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const { id, ...rest } = req.body as ProspectBody & { id: string };
+    if (!id) throw new HttpError(400, "id requis");
+    const b = rest;
+    if (b.nom !== undefined && !b.nom.trim()) throw new HttpError(400, "Le nom ne peut pas être vide");
+    const existing = await prisma.crmProspect.findUnique({ where: { id } });
+    if (!existing) throw new HttpError(404, "Prospect introuvable");
+    const row = await prisma.crmProspect.update({
+      where: { id },
+      data: {
+        nom: b.nom?.trim(),
+        groupe: b.groupe,
+        secteur: b.secteur,
+        ville: b.ville,
+        etoiles: b.etoiles,
+        danger: b.danger,
+        potentiel: b.potentiel,
+        contrat: b.contrat,
+        modules: b.modules,
+        pms: b.pms,
+        priorite: b.priorite,
+        appel: b.appel,
+        referent: b.referent,
+        email: b.email,
+        tel: b.tel,
+        site: b.site,
+        nfc: b.nfc,
+        qr: b.qr,
+        mobile: b.mobile,
+        webApp: b.webApp,
+        mobileV2: b.mobileV2,
+        checkin: b.checkin,
+        livret: b.livret,
+        gestionDemande: b.gestionDemande,
+        offline: b.offline,
+        messagerie: b.messagerie,
+        note: b.note,
+      },
+      include: PROSPECT_INCLUDE,
+    });
+    res.json(shapeProspect(row));
+  })
+);
+
+crmProspectRouter.post(
+  "/crmProspect/delete",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const id = (req.body.id as string) || "";
+    const existing = await prisma.crmProspect.findUnique({ where: { id } });
+    if (!existing) throw new HttpError(404, "Prospect introuvable");
+    await prisma.crmProspect.delete({ where: { id } });
+    res.json({ ok: true });
+  })
+);
+
+// ── Journal d'activité ──
+
+crmProspectRouter.post(
+  "/crmProspect/activity/create",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const b = req.body as { prospectId: string; type?: string; text: string; authorName?: string; activityDate?: string };
+    if (!b.prospectId) throw new HttpError(400, "prospectId requis");
+    if (!b.text || !b.text.trim()) throw new HttpError(400, "Description de l'activité requise");
+    const prospect = await prisma.crmProspect.findUnique({ where: { id: b.prospectId } });
+    if (!prospect) throw new HttpError(404, "Prospect introuvable");
+    const activity = await prisma.crmActivity.create({
+      data: {
+        prospectId: b.prospectId,
+        type: b.type || "Note interne",
+        text: b.text.trim(),
+        authorName: b.authorName,
+        activityDate: b.activityDate ? new Date(b.activityDate) : new Date(),
+      },
+    });
+    res.status(201).json(shapeActivity(activity));
+  })
+);
+
+crmProspectRouter.post(
+  "/crmProspect/activity/markDone",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const id = (req.body.id as string) || "";
+    const existing = await prisma.crmActivity.findUnique({ where: { id } });
+    if (!existing) throw new HttpError(404, "Activité introuvable");
+    const activity = await prisma.crmActivity.update({ where: { id }, data: { done: true } });
+    res.json(shapeActivity(activity));
+  })
+);
+
+crmProspectRouter.post(
+  "/crmProspect/activity/delete",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const id = (req.body.id as string) || "";
+    const existing = await prisma.crmActivity.findUnique({ where: { id } });
+    if (!existing) throw new HttpError(404, "Activité introuvable");
+    await prisma.crmActivity.delete({ where: { id } });
+    res.json({ ok: true });
+  })
+);

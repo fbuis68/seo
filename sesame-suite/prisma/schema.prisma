@@ -41,6 +41,7 @@ model Entity {
   campaigns         Campaign[]
   subscriptions     Subscription[]
   bookingSource     BookingSourceConfig?
+  crmProspects      CrmProspect[]
 }
 
 // Groupe d'établissements (ex : chaîne hôtelière) — gestion réservée aux
@@ -524,6 +525,8 @@ model Subscription {
   entityId String?
   entity   Entity? @relation(fields: [entityId], references: [id], onDelete: SetNull)
 
+  crmProspect CrmProspect?
+
   hotelName    String
   stars        Int     @default(3)
   contactEmail String
@@ -554,4 +557,68 @@ model PricingConfig {
   trialDays    Int      @default(30)
   modulePrices Json     @default("{}") // {moduleKey: prix}
   updatedAt    DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// CRM commercial interne de Sesame — pipeline prospects/clients, distinct du
+// CRM par établissement (module clientPrefs/CrmProspect gère les hôtels eux-
+// mêmes en tant que comptes, pas leurs clients finaux). Réservé aux comptes
+// "sesame" (cf. requireSesame). Un enregistrement est créé automatiquement
+// à chaque inscription complétée via le wizard d'onboarding public.
+// ─────────────────────────────────────────────────────────────────────────
+model CrmProspect {
+  id String @id @default(cuid())
+
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: SetNull)
+
+  subscriptionId String?      @unique
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  nom            String
+  groupe         String?
+  secteur        String?
+  ville          String?
+  etoiles        String?
+  danger         String  @default("Modéré") // Bon client | Modéré | Élevé !!
+  potentiel      Int     @default(0) // 0-3
+  contrat        String  @default("non") // non | oui | en cours
+  modules        Int     @default(0)
+  pms            String?
+  priorite       Int     @default(0) // 0-3
+  appel          String? // date libre ("16/10/25") ou "Ne pas appeler"
+  referent       String?
+  email          String?
+  tel            String?
+  site           String?
+  nfc            Int     @default(0) // % d'usage
+  qr             Int     @default(0)
+  mobile         Int     @default(0)
+  webApp         Boolean @default(false)
+  mobileV2       Boolean @default(false)
+  checkin        Boolean @default(false)
+  livret         Boolean @default(false)
+  gestionDemande Boolean @default(false)
+  offline        Boolean @default(false)
+  messagerie     String  @default("Noreply") // Noreply | Client
+  note           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  activities CrmActivity[]
+}
+
+model CrmActivity {
+  id         String      @id @default(cuid())
+  prospectId String
+  prospect   CrmProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  type         String // Appel | Email | Visite | Proposition | Relance | Note interne | Autre
+  text         String
+  authorName   String?
+  activityDate DateTime?
+  done         Boolean   @default(false)
+
+  createdAt DateTime @default(now())
 }

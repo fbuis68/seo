@@ -175,6 +175,39 @@ onboardingRouter.post(
       },
     });
 
+    // Alimente automatiquement le CRM commercial interne — le prospect
+    // devient visible dans le pipeline (public/crm.html) sans ressaisie
+    // manuelle, avec la configuration de modules et les coordonnées
+    // récupérées telle quelles depuis l'inscription.
+    const prospect = await prisma.crmProspect.create({
+      data: {
+        entityId: entity.id,
+        subscriptionId: subscription.id,
+        nom: name,
+        secteur: "Hôtellerie",
+        ville: b.city,
+        etoiles: b.stars ? "★".repeat(Math.min(b.stars, 5)) : undefined,
+        danger: "Modéré",
+        contrat: "en cours",
+        modules: selectedKeys.length,
+        pms: pmsLabel,
+        email,
+        tel: b.phone,
+        site: undefined,
+        webApp: true,
+        checkin: true,
+        messagerie: "Noreply",
+      },
+    });
+    await prisma.crmActivity.create({
+      data: {
+        prospectId: prospect.id,
+        type: "Note interne",
+        text: `Inscription en ligne complétée — essai démarré (${trialDays} jours). Modules souscrits : ${selectedKeys.join(", ")}.`,
+        authorName: "Automatique",
+      },
+    });
+
     res.status(201).json({
       entityId: entity.id,
       entityCode: entity.code,

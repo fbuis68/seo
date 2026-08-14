@@ -20,6 +20,7 @@ import { subscriptionRouter } from "./routes/subscription";
 import { groupRouter } from "./routes/group";
 import { bookingSourceRouter } from "./routes/bookingSource";
 import { onboardingRouter } from "./routes/onboarding";
+import { crmProspectRouter } from "./routes/crmProspect";
 import { errorHandler } from "./middleware/errorHandler";
 
 export function createApp() {
@@ -51,6 +52,7 @@ export function createApp() {
   app.use("/wa", subscriptionRouter);
   app.use("/wa", groupRouter);
   app.use("/wa", bookingSourceRouter);
+  app.use("/wa", crmProspectRouter);
 
   // Authentification espace client (hors convention /wa — pas de DAO CRUD dédié)
   app.use("/api", authRouter);
@@ -67,6 +69,7 @@ export function createApp() {
   app.get("/", (_req, res) => res.sendFile(path.join(publicDir, "checkin.html")));
   app.get("/admin", (_req, res) => res.sendFile(path.join(publicDir, "admin.html")));
   app.get("/onboarding", (_req, res) => res.sendFile(path.join(publicDir, "onboarding.html")));
+  app.get("/crm", (_req, res) => res.sendFile(path.join(publicDir, "crm.html")));
 
   app.use(errorHandler);
 

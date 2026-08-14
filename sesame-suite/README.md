@@ -210,11 +210,28 @@ l'établissement par défaut du serveur). L'URL complète et prête à copier
 du PMS du client** (lien envoyé au client avant son séjour, etc.) — est
 affichée dans le panneau "Hôtel" du back-office, avec un bouton de copie.
 
-**Non couvert** (hors périmètre — panneau du prototype `sesame_admin.html`
-gérant le CRM commercial interne de Sesame, sans rapport avec la gestion
-d'un établissement) : "CRM Sesame". Son code JS reste présent dans
-`admin.html` mais n'est plus accessible depuis le menu et n'est pas
-rebranché sur l'API.
+**CRM commercial interne (`public/crm.html`, accessible sur `/crm`)** —
+remplace l'ancien panneau "CRM Sesame" du prototype (jamais branché, déjà
+retiré du menu) par une nouvelle application dédiée, à ne pas confondre avec
+`/wa/crm/*` qui gère les clients finaux **de chaque hôtel** : celle-ci gère
+le pipeline commercial de Sesame elle-même (prospects/clients hôteliers).
+Réservée aux comptes `sesame` — réutilise la session admin existante si déjà
+connecté (lien "CRM commercial" dans le menu du back-office), sinon
+formulaire de connexion dédié qui rejette explicitement tout compte `hotel`.
+
+- Fiche par établissement : coordonnées, score de risque de churn calculé,
+  usage des accès (NFC/QR/mobile), features actives, opportunités d'upsell,
+  **journal d'activité** (appels, emails, relances… avec statut fait/à
+  faire), vues Liste/Grille, vue Contrats (sans/en cours/signé), export CSV.
+- **Alimenté automatiquement par l'inscription en ligne** : chaque
+  soumission complétée du wizard `/onboarding` crée un enregistrement de
+  prospect (`CrmProspect`) directement relié à l'établissement et à la
+  souscription créés, avec les coordonnées et le nombre de modules
+  souscrits déjà renseignés, plus une première entrée de journal
+  ("Inscription en ligne complétée — modules : …") — le commercial n'a rien
+  à ressaisir pour démarrer le suivi.
+- CRUD complet côté serveur (`/wa/crmProspect/*`, `requireSesame`) —
+  plus aucune donnée en `localStorage` contrairement au prototype.
 
 Également non couvert : l'app ménage (`sesame_menage.html`, application
 séparée pour les agents de ménage sur le terrain). La base de données est
@@ -374,11 +391,10 @@ sesame-suite/
    `RoomHousekeepingStatus` / `HousekeepingTask` / `HousekeepingStaff`.
 2. Export CSV taxe de séjour (`TaxeSejourRecord.findByPeriod` côté doc)
    et génération QR réelle (actuellement simulée, comme dans le prototype).
-3. Panneau "CRM Sesame" (suivi commercial interne de Sesame — prospects,
-   devis/factures, tickets support), laissé hors périmètre.
-4. Paiement réel du mandat GoCardless sur les souscriptions (actuellement
-   simulé — champs IBAN informatifs uniquement, comme le prototype
-   d'origine) ; page publique d'inscription en libre-service (le prototype
-   y fait référence sous le nom `sesame_onboarding.html` mais ce fichier
-   n'a pas été fourni) — pour l'instant Sesame crée les souscriptions et
-   les hôtels depuis le back-office.
+3. Paiement réel du mandat GoCardless sur les souscriptions (actuellement
+   simulé — seuls titulaire + 4 derniers chiffres de l'IBAN sont conservés,
+   sans tokenisation ni prélèvement réel).
+4. CRM commercial (`/crm`) : le panneau "devis/factures/tickets support" du
+   prototype `sesame_admin.html` n'a pas été repris — la nouvelle version
+   couvre le pipeline prospects/clients (fiches, journal d'activité,
+   contrats) mais pas la facturation.
