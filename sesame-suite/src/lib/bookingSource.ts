@@ -32,6 +32,25 @@ export interface MapError {
   reason: string;
 }
 
+/** Champs Room que le mapping "facilities" peut renseigner. */
+export interface FacilityMapping {
+  code?: string;
+  name?: string;
+  floor?: string;
+  category?: string;
+  capacity?: string;
+  surface?: string;
+}
+
+export interface MappedFacility {
+  code: string;
+  name: string;
+  floor: number | null;
+  category: string;
+  capacity: number | null;
+  surface: number | null;
+}
+
 /** Lecture d'un chemin "a.b.c" (ou "a.0.b" pour un index de tableau) dans un objet. */
 export function getPath(obj: unknown, path: string): unknown {
   if (!path) return obj;
@@ -112,10 +131,10 @@ async function buildAuthHeaders(config: BookingSourceConfig): Promise<Record<str
   }
 }
 
-/** Appelle la source externe et renvoie le tableau brut de réservations (pas encore mappé). */
-export async function fetchExternalBookings(config: BookingSourceConfig): Promise<unknown[]> {
+/** Appelle un endpoint de la source externe et renvoie le tableau brut trouvé. */
+async function fetchExternalList(config: BookingSourceConfig, endpointPath: string | null, responseListPath: string | null, what: string): Promise<unknown[]> {
   if (!config.baseUrl) throw new BookingSourceError("URL de base non configurée");
-  const url = config.baseUrl.replace(/\/$/, "") + (config.endpointPath || "");
+  const url = config.baseUrl.replace(/\/$/, "") + (endpointPath || "");
   const authHeaders = await buildAuthHeaders(config);
   let res: Response;
   try {
@@ -132,15 +151,25 @@ export async function fetchExternalBookings(config: BookingSourceConfig): Promis
     throw new BookingSourceError("La réponse n'est pas un JSON valide");
   }
 
-  const list = config.responseListPath ? getPath(body, config.responseListPath) : body;
+  const list = responseListPath ? getPath(body, responseListPath) : body;
   if (!Array.isArray(list)) {
     throw new BookingSourceError(
-      config.responseListPath
-        ? `Le chemin "${config.responseListPath}" ne pointe pas vers un tableau`
-        : "La réponse n'est pas un tableau — précisez le chemin vers la liste des réservations"
+      responseListPath
+        ? `Le chemin "${responseListPath}" ne pointe pas vers un tableau`
+        : `La réponse n'est pas un tableau — précisez le chemin vers la liste des ${what}`
     );
   }
   return list;
+}
+
+/** Appelle la source externe et renvoie le tableau brut de réservations (pas encore mappé). */
+export async function fetchExternalBookings(config: BookingSourceConfig): Promise<unknown[]> {
+  return fetchExternalList(config, config.endpointPath, config.responseListPath, "réservations");
+}
+
+/** Appelle la source externe et renvoie le tableau brut de chambres/facilities (pas encore mappé). */
+export async function fetchExternalFacilities(config: BookingSourceConfig): Promise<unknown[]> {
+  return fetchExternalList(config, config.facilityEndpointPath, config.facilityResponseListPath, "chambres");
 }
 
 /** Applique le mapping de champs à la liste brute — sépare éléments valides et en erreur. */
@@ -175,6 +204,58 @@ export function mapBookings(items: unknown[], mapping: FieldMapping): { mapped: 
   });
 
   return { mapped, errors };
+}
+
+/** Applique le mapping de champs à la liste brute de chambres — sépare éléments valides et en erreur. */
+export function mapFacilities(items: unknown[], mapping: FacilityMapping): { mapped: MappedFacility[]; errors: MapError[] } {
+  const mapped: MappedFacility[] = [];
+  const errors: MapError[] = [];
+
+  const toNum = (v: unknown): number | null => {
+    if (v === undefined || v === null || v === "") return null;
+    const n = Number(v);
+    return isNaN(n) ? null : n;
+  };
+
+  items.forEach((item, index) => {
+    const code = mapping.code ? String(getPath(item, mapping.code) ?? "").trim() : "";
+    if (!code) { errors.push({ index, reason: "code de chambre manquant" }); return; }
+
+    mapped.push({
+      code,
+      name: mapping.name ? String(getPath(item, mapping.name) ?? "").trim() || code : code,
+      floor: mapping.floor ? toNum(getPath(item, mapping.floor)) : null,
+      category: mapping.category ? String(getPath(item, mapping.category) ?? "").trim() : "",
+      capacity: mapping.capacity ? toNum(getPath(item, mapping.capacity)) : null,
+      surface: mapping.surface ? toNum(getPath(item, mapping.surface)) : null,
+    });
+  });
+
+  return { mapped, errors };
+}
+
+/** Crée/met à jour les chambres mappées (upsert par entityId+code) — cf. panneau "Gestion des chambres". */
+export async function upsertMappedFacilities(entity: Entity, mapped: MappedFacility[]) {
+  let created = 0;
+  let updated = 0;
+  for (const f of mapped) {
+    const existing = await prisma.room.findUnique({ where: { entityId_code: { entityId: entity.id, code: f.code } } });
+    const data = {
+      name: f.name,
+      floor: f.floor ?? undefined,
+      category: f.category || undefined,
+      capacity: f.capacity ?? undefined,
+      surface: f.surface ?? undefined,
+    };
+    if (existing) {
+      await prisma.room.update({ where: { id: existing.id }, data });
+      updated++;
+    } else {
+      await prisma.room.create({ data: { entityId: entity.id, code: f.code, tags: [], photos: [], ...data } });
+      created++;
+    }
+  }
+  return { created, updated };
 }
 
 /** Crée/met à jour les réservations mappées (upsert par entityId+code). */

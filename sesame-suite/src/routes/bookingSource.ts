@@ -3,7 +3,17 @@ import { prisma } from "../db";
 import { resolveEntity } from "../lib/entity";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
-import { fetchExternalBookings, mapBookings, runImport, BookingSourceError, FieldMapping } from "../lib/bookingSource";
+import {
+  fetchExternalBookings,
+  fetchExternalFacilities,
+  mapBookings,
+  mapFacilities,
+  upsertMappedFacilities,
+  runImport,
+  BookingSourceError,
+  FieldMapping,
+  FacilityMapping,
+} from "../lib/bookingSource";
 
 export const bookingSourceRouter = Router();
 
@@ -29,6 +39,9 @@ function shapeConfig(c: {
   loginTokenPrefix: string | null;
   responseListPath: string | null;
   fieldMapping: unknown;
+  facilityEndpointPath: string | null;
+  facilityResponseListPath: string | null;
+  facilityFieldMapping: unknown;
   syncIntervalMinutes: number | null;
   lastSyncAt: Date | null;
   lastSyncStatus: string | null;
@@ -57,6 +70,9 @@ function shapeConfig(c: {
     loginTokenPrefix: c.loginTokenPrefix || "",
     responseListPath: c.responseListPath || "",
     fieldMapping: c.fieldMapping || {},
+    facilityEndpointPath: c.facilityEndpointPath || "",
+    facilityResponseListPath: c.facilityResponseListPath || "",
+    facilityFieldMapping: c.facilityFieldMapping || {},
     syncIntervalMinutes: c.syncIntervalMinutes,
     lastSyncAt: c.lastSyncAt,
     lastSyncStatus: c.lastSyncStatus,
@@ -102,6 +118,9 @@ interface ConfigBody {
   loginTokenPrefix?: string;
   responseListPath?: string;
   fieldMapping?: FieldMapping;
+  facilityEndpointPath?: string;
+  facilityResponseListPath?: string;
+  facilityFieldMapping?: FacilityMapping;
   syncIntervalMinutes?: number | null;
 }
 
@@ -134,6 +153,9 @@ bookingSourceRouter.post(
       loginTokenPrefix: b.loginTokenPrefix,
       responseListPath: b.responseListPath,
       fieldMapping: b.fieldMapping as never,
+      facilityEndpointPath: b.facilityEndpointPath,
+      facilityResponseListPath: b.facilityResponseListPath,
+      facilityFieldMapping: b.facilityFieldMapping as never,
       syncIntervalMinutes: b.syncIntervalMinutes ?? null,
     };
     const config = await prisma.bookingSourceConfig.upsert({
@@ -181,6 +203,9 @@ bookingSourceRouter.post(
       loginTokenPrefix: b.loginTokenPrefix ?? saved?.loginTokenPrefix ?? null,
       responseListPath: b.responseListPath ?? saved?.responseListPath ?? null,
       fieldMapping: (b.fieldMapping ?? saved?.fieldMapping ?? {}) as never,
+      facilityEndpointPath: b.facilityEndpointPath ?? saved?.facilityEndpointPath ?? null,
+      facilityResponseListPath: b.facilityResponseListPath ?? saved?.facilityResponseListPath ?? null,
+      facilityFieldMapping: (b.facilityFieldMapping ?? saved?.facilityFieldMapping ?? {}) as never,
       syncIntervalMinutes: null,
       lastSyncAt: null,
       lastSyncStatus: null,
@@ -219,5 +244,92 @@ bookingSourceRouter.post(
     const result = await runImport(entity, config);
     if (!result.ok) throw new HttpError(400, result.message);
     res.json(result);
+  })
+);
+
+/**
+ * POST /wa/bookingSource/testFacilities — aperçu à blanc des chambres
+ * (aucune écriture), mêmes réglages de connexion que les réservations mais
+ * endpoint/mapping dédiés (facilityEndpointPath, facilityFieldMapping).
+ */
+bookingSourceRouter.post(
+  "/bookingSource/testFacilities",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const saved = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
+    const b = req.body as ConfigBody;
+    const draft = {
+      id: saved?.id || "draft",
+      entityId: entity.id,
+      enabled: true,
+      sourceName: b.sourceName ?? saved?.sourceName ?? null,
+      baseUrl: b.baseUrl ?? saved?.baseUrl ?? null,
+      endpointPath: saved?.endpointPath ?? null,
+      authType: b.authType ?? saved?.authType ?? "none",
+      authApiKeyHeader: b.authApiKeyHeader ?? saved?.authApiKeyHeader ?? null,
+      authApiKeyValue: b.authApiKeyValue ?? saved?.authApiKeyValue ?? null,
+      authBearerToken: b.authBearerToken ?? saved?.authBearerToken ?? null,
+      authBasicUser: b.authBasicUser ?? saved?.authBasicUser ?? null,
+      authBasicPassword: b.authBasicPassword ?? saved?.authBasicPassword ?? null,
+      loginPath: b.loginPath ?? saved?.loginPath ?? null,
+      loginEmail: b.loginEmail ?? saved?.loginEmail ?? null,
+      loginPassword: b.loginPassword ?? saved?.loginPassword ?? null,
+      loginEmailField: b.loginEmailField ?? saved?.loginEmailField ?? "login",
+      loginPasswordField: b.loginPasswordField ?? saved?.loginPasswordField ?? "password",
+      loginEmailLocation: b.loginEmailLocation ?? saved?.loginEmailLocation ?? "body",
+      loginTokenPath: b.loginTokenPath ?? saved?.loginTokenPath ?? null,
+      loginTokenHeaderName: b.loginTokenHeaderName ?? saved?.loginTokenHeaderName ?? "Authorization",
+      loginTokenPrefix: b.loginTokenPrefix ?? saved?.loginTokenPrefix ?? null,
+      responseListPath: saved?.responseListPath ?? null,
+      fieldMapping: (saved?.fieldMapping ?? {}) as never,
+      facilityEndpointPath: b.facilityEndpointPath ?? saved?.facilityEndpointPath ?? null,
+      facilityResponseListPath: b.facilityResponseListPath ?? saved?.facilityResponseListPath ?? null,
+      facilityFieldMapping: (b.facilityFieldMapping ?? saved?.facilityFieldMapping ?? {}) as never,
+      syncIntervalMinutes: null,
+      lastSyncAt: null,
+      lastSyncStatus: null,
+      lastSyncMessage: null,
+      lastSyncCount: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    try {
+      const raw = await fetchExternalFacilities(draft as never);
+      const mapping = (draft.facilityFieldMapping as FacilityMapping) || {};
+      const { mapped, errors } = mapFacilities(raw, mapping);
+      res.json({
+        ok: true,
+        totalReceived: raw.length,
+        preview: mapped.slice(0, 10),
+        validCount: mapped.length,
+        errors: errors.slice(0, 10),
+      });
+    } catch (e) {
+      if (e instanceof BookingSourceError) throw new HttpError(400, e.message);
+      throw e;
+    }
+  })
+);
+
+/** POST /wa/bookingSource/importFacilities — synchronisation réelle des chambres (upsert en base), manuelle uniquement. */
+bookingSourceRouter.post(
+  "/bookingSource/importFacilities",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
+    if (!config || !config.baseUrl) throw new HttpError(400, "Connecteur non configuré — enregistrez d'abord les réglages");
+    try {
+      const raw = await fetchExternalFacilities(config);
+      const mapping = (config.facilityFieldMapping as FacilityMapping | null) || {};
+      const { mapped, errors } = mapFacilities(raw, mapping);
+      const { created, updated } = await upsertMappedFacilities(entity, mapped);
+      res.json({ ok: true, created, updated, errors, total: raw.length });
+    } catch (e) {
+      if (e instanceof BookingSourceError) throw new HttpError(400, e.message);
+      throw e;
+    }
   })
 );

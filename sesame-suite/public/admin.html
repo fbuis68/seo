@@ -1244,9 +1244,34 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     <div id="bs-mapping-fields"></div>
   </div>
 
+  <!-- Chambres / facilities -->
+  <div class="ca">
+    <div class="ch"><i class="ti ti-door"></i>Chambres (facilities)</div>
+    <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
+      <span>Optionnel, mais recommandé : importez les chambres avec leurs codes exacts de la source externe. Le mapping "code chambre" des réservations ci-dessus ne peut retrouver la bonne chambre que si son code correspond exactement — sinon la réservation est quand même importée, simplement sans nom de chambre associé.</span>
+    </div>
+    <div class="fi">
+      <label class="lb">Chemin de l'endpoint des chambres</label>
+      <input type="text" id="bs-facilityEndpointPath" placeholder="/ws/facility/list ou /v1/rooms" autocomplete="off">
+    </div>
+    <div class="fi">
+      <label class="lb">Chemin vers la liste des chambres dans la réponse</label>
+      <input type="text" id="bs-facilityResponseListPath" placeholder="Ex : data.facilities — laisser vide si la réponse est directement un tableau">
+    </div>
+    <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin:14px 0 8px">Correspondance des champs</div>
+    <div id="bs-facility-mapping-fields"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+      <button class="btn btn-s" onclick="bsTestFacilities()"><i class="ti ti-flask"></i> Tester les chambres</button>
+      <button class="btn btn-p btn-s" onclick="bsImportFacilitiesNow()"><i class="ti ti-download"></i> Importer les chambres</button>
+    </div>
+  </div>
+
   <!-- Synchronisation -->
   <div class="ca">
     <div class="ch"><i class="ti ti-refresh"></i>Fréquence</div>
+    <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
+      <span>S'applique uniquement aux réservations. Les chambres changent rarement — importez-les manuellement ci-dessus (au premier réglage, puis en cas de changement).</span>
+    </div>
     <div class="fi">
       <label class="lb">Synchronisation automatique</label>
       <select id="bs-syncInterval">
@@ -4035,6 +4060,15 @@ var BS_MAPPING_FIELDS = [
   {k:'status', label:'Statut', required:false},
 ];
 
+var BS_FACILITY_MAPPING_FIELDS = [
+  {k:'code', label:'Code chambre', required:true},
+  {k:'name', label:'Nom / libellé', required:false},
+  {k:'floor', label:'Étage', required:false},
+  {k:'category', label:'Catégorie', required:false},
+  {k:'capacity', label:'Capacité (pers.)', required:false},
+  {k:'surface', label:'Surface (m²)', required:false},
+];
+
 var BS_CONFIG = null;
 
 function bsRenderAuthFields(){
@@ -4096,6 +4130,25 @@ function bsCollectMapping(){
   return mapping;
 }
 
+function bsRenderFacilityMappingFields(mapping){
+  mapping = mapping || {};
+  document.getElementById('bs-facility-mapping-fields').innerHTML = BS_FACILITY_MAPPING_FIELDS.map(function(f){
+    return '<div class="fi" style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
+      + '<label class="lb" style="flex:0 0 200px;margin-bottom:0;text-transform:none;font-size:13px;font-weight:500;color:var(--tx)">'+f.label+(f.required?' <span style="color:var(--re)">*</span>':'')+'</label>'
+      + '<input type="text" id="bs-fmap-'+f.k+'" value="'+esc(mapping[f.k]||'')+'" placeholder="Ex : room_ref" style="flex:1">'
+      + '</div>';
+  }).join('');
+}
+
+function bsCollectFacilityMapping(){
+  var mapping = {};
+  BS_FACILITY_MAPPING_FIELDS.forEach(function(f){
+    var el = document.getElementById('bs-fmap-'+f.k);
+    if(el && el.value.trim()) mapping[f.k] = el.value.trim();
+  });
+  return mapping;
+}
+
 function bsCollectFormValues(){
   return {
     enabled: document.getElementById('bs-enabled').checked,
@@ -4119,6 +4172,9 @@ function bsCollectFormValues(){
     loginTokenPrefix: (document.getElementById('bs-loginTokenPrefix')||{}).value||'',
     responseListPath: document.getElementById('bs-responseListPath').value.trim(),
     fieldMapping: bsCollectMapping(),
+    facilityEndpointPath: document.getElementById('bs-facilityEndpointPath').value.trim(),
+    facilityResponseListPath: document.getElementById('bs-facilityResponseListPath').value.trim(),
+    facilityFieldMapping: bsCollectFacilityMapping(),
     syncIntervalMinutes: document.getElementById('bs-syncInterval').value ? parseInt(document.getElementById('bs-syncInterval').value) : null,
   };
 }
@@ -4172,6 +4228,9 @@ async function bsInit(){
     document.getElementById('bs-loginTokenPrefix').value = BS_CONFIG.loginTokenPrefix||'';
   }
   bsRenderMappingFields(BS_CONFIG.fieldMapping);
+  document.getElementById('bs-facilityEndpointPath').value = BS_CONFIG.facilityEndpointPath||'';
+  document.getElementById('bs-facilityResponseListPath').value = BS_CONFIG.facilityResponseListPath||'';
+  bsRenderFacilityMappingFields(BS_CONFIG.facilityFieldMapping);
   bsRenderStatusBanner();
   document.getElementById('bs-result-card').style.display='none';
 }
@@ -4240,6 +4299,56 @@ async function bsImportNow(){
     await bsFetchConfig();
     bsRenderStatusBanner();
     toast('Import terminé ✓');
+  }catch(e){
+    bsShowResult('Échec de l\'import', '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Erreur de connexion au serveur</span></div>');
+  }
+}
+
+async function bsTestFacilities(){
+  var body = bsCollectFormValues();
+  bsShowResult('Test en cours…', '<div style="color:var(--mu);font-size:13px">Appel de la source externe…</div>');
+  try{
+    var r = await adminFetch('/wa/bookingSource/testFacilities', {method:'POST', body:JSON.stringify(body)});
+    var data = await r.json();
+    if(!r.ok){
+      bsShowResult('Échec du test', '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>'+esc(data.error||'Erreur inconnue')+'</span></div>');
+      return;
+    }
+    var h = '<div class="alt alt-g" style="margin-bottom:12px"><i class="ti ti-check-circle"></i><span>'
+      +data.totalReceived+' élément(s) reçu(s), '+data.validCount+' correctement mappé(s)'
+      +(data.errors.length?', '+data.errors.length+' ignoré(s)':'')+'.</span></div>';
+    if(data.preview.length){
+      h += '<table class="tbl"><tr><th>Code</th><th>Nom</th><th>Étage</th><th>Catégorie</th><th>Capacité</th><th>Surface</th></tr>';
+      h += data.preview.map(function(p){
+        return '<tr><td>'+esc(p.code)+'</td><td>'+esc(p.name||'—')+'</td><td>'+(p.floor==null?'—':esc(String(p.floor)))+'</td><td>'+esc(p.category||'—')+'</td><td>'+(p.capacity==null?'—':esc(String(p.capacity)))+'</td><td>'+(p.surface==null?'—':esc(String(p.surface)))+'</td></tr>';
+      }).join('');
+      h += '</table>';
+    }
+    if(data.errors.length){
+      h += '<div style="font-size:12px;color:var(--mu);margin-top:8px">Éléments ignorés : '
+        + data.errors.map(function(e){return '#'+e.index+' ('+esc(e.reason)+')';}).join(', ') + '</div>';
+    }
+    bsShowResult('Aperçu du test — chambres (10 premières)', h);
+  }catch(e){
+    bsShowResult('Échec du test', '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Erreur de connexion au serveur</span></div>');
+  }
+}
+
+async function bsImportFacilitiesNow(){
+  bsShowResult('Import en cours…', '<div style="color:var(--mu);font-size:13px">Récupération et enregistrement des chambres…</div>');
+  try{
+    var r = await adminFetch('/wa/bookingSource/importFacilities', {method:'POST', body:JSON.stringify({})});
+    var data = await r.json();
+    if(!r.ok){
+      bsShowResult('Échec de l\'import', '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>'+esc(data.error||'Erreur inconnue')+'</span></div>');
+      return;
+    }
+    var h = '<div class="alt alt-g"><i class="ti ti-check-circle"></i><span>'
+      +data.created+' chambre(s) créée(s), '+data.updated+' mise(s) à jour'
+      +(data.errors.length?', '+data.errors.length+' ignorée(s)':'')+' sur '+data.total+' reçue(s).</span></div>';
+    bsShowResult('Import des chambres terminé', h);
+    if(typeof refreshRooms === 'function'){ await refreshRooms(); }
+    toast('Import des chambres terminé ✓');
   }catch(e){
     bsShowResult('Échec de l\'import', '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Erreur de connexion au serveur</span></div>');
   }

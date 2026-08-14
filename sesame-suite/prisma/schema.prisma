@@ -251,6 +251,15 @@ model BookingSourceConfig {
   // chaque élément du tableau (ex: {"code":"id","personEmail":"guest.email"}).
   fieldMapping     Json?
 
+  // Chambres / espaces (facilities) — même principe que les réservations
+  // ci-dessus, sur un endpoint séparé (même connexion/auth). Les importer
+  // avec les codes exacts de la source externe permet ensuite au mapping
+  // "facilityCode" des réservations de retrouver la bonne chambre.
+  facilityEndpointPath     String? // ex: "/ws/facility/list" — concaténé à baseUrl
+  facilityResponseListPath String?
+  // {code, name, floor, category, capacity, surface} -> chemin dot-path.
+  facilityFieldMapping     Json?
+
   // null = synchronisation manuelle uniquement ("Importer maintenant").
   syncIntervalMinutes Int?
 

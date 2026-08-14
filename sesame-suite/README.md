@@ -120,6 +120,20 @@ s'agisse ou non d'un client Sesame :
 - Mapping des champs par chemin JSON libre (ex : `guest.email`,
   `stay.check_in`) — aucune forme de réponse n'est supposée à l'avance,
   contrairement à l'ancien panneau qui ne comprenait que le format Sesame.
+- **Chambres (facilities)** : section dédiée, endpoint + mapping séparés
+  (`facilityEndpointPath`, `facilityFieldMapping` : code*, nom, étage,
+  catégorie, capacité, surface). Sert à résoudre le problème des codes de
+  chambre qui ne coïncident pas d'un système à l'autre (ex : la vraie API
+  Sesame utilise des codes du type `room214`, alors que les chambres de démo
+  de cette app utilisent des codes fictifs comme `A11`) : en important les
+  chambres avec leurs codes exacts de la source externe (`Room.code` en
+  `upsert`), le mapping `facilityCode` des réservations retrouve ensuite la
+  bonne chambre par correspondance exacte. Optionnel — une réservation dont
+  le `facilityCode` ne correspond à aucune chambre connue est quand même
+  importée, simplement sans chambre associée. Boutons **"Tester les
+  chambres"** / **"Importer les chambres"** dédiés ; import manuel
+  uniquement (les chambres changent rarement, contrairement aux
+  réservations — la synchronisation automatique ne porte que sur celles-ci).
 - Bouton **"Tester la connexion"** : aperçu à blanc (aucune écriture) des
   réservations mappées, avec le détail des éléments ignorés (champ requis
   manquant, date invalide…).
