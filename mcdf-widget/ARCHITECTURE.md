@@ -14,13 +14,17 @@ sur la même base technique déjà construite et validée contre l'API réelle
 
 Chaque module ci-dessous a son propre `NOTES.md` dans `modules/` avec le détail.
 
+**`production/`** contient le premier livrable réel : `widget-ia.html`
+(page autonome, données MCDF en direct, lecture seule) + `INTEGRATION.md`
+(instructions pour le développeur qui le branche dans l'appli).
+
 ## Vue d'ensemble
 
 | # | Module | État | Ce qui manque avant de coder |
 |---|--------|------|-------------------------------|
 | 1 | IA Conversationnelle | 🔴 à démarrer | les endpoints d'écriture (create/edit) — on n'a capturé que des lectures |
 | 2 | Assistant Qualiopi | 🟡 piste confirmée | tester les entités `sessionQualiopi`/`conventionExportQualiopi` déjà repérées dans le code source |
-| 3a | Génération de rapports | 🟢 fait | — (dashboard + comparaison N/N-1 livrés) |
+| 3a | Génération de rapports | 🟢 livrable | `production/widget-ia.html` — widget réel, données en direct, prêt à intégrer (voir `production/INTEGRATION.md`) |
 | 3b | Génération de documents | 🔴 à démarrer | trouver l'endpoint qui déclenche le pipeline XDocReport existant |
 | 4 | Recherche intelligente | 🟡 piste confirmée | trouver le paramètre HTTP qui active la recherche libre (`freeField`) déjà présente côté serveur |
 

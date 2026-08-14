@@ -1,0 +1,648 @@
+<title>Widget IA MCDF</title>
+<!--
+  Widget IA MCDF — restitutions en direct (lecture seule).
+
+  CE FICHIER EST FAIT POUR ÊTRE DÉPOSÉ TEL QUEL DANS WebContent/ ET OUVERT
+  DEPUIS L'APPLICATION MCDF (même origine) — voir INTEGRATION.md dans ce
+  même dossier pour les instructions d'intégration côté développeur.
+
+  Fonctionnement :
+  - Aucune dépendance externe, aucun build. Un seul fichier HTML/CSS/JS.
+  - S'appuie sur le cookie de session déjà actif dans l'onglet MCDF (même
+    mécanisme que l'appli elle-même) : aucune authentification séparée.
+  - Filtre les données sur une entité précise via le paramètre d'URL
+    ?entityId=E00000361 (à passer par l'appli hôte, cf. INTEGRATION.md).
+    Sans ce paramètre, affiche toutes les entités accessibles au compte
+    connecté (utile pour tester, à éviter en production).
+  - Lecture seule : aucun appel d'écriture (create/update) — cf.
+    modules/01-conversationnel/NOTES.md pour ce qui manque avant de coder
+    des actions.
+-->
+<style>
+  :root {
+    color-scheme: light;
+    --page:        #f9f9f7;
+    --surface:     #fcfcfb;
+    --surface-2:   #f2f1ec;
+    --ink:         #0b0b0b;
+    --ink-2:       #52514e;
+    --ink-muted:   #898781;
+    --grid:        #e1e0d9;
+    --border:      rgba(11,11,11,0.10);
+    --border-2:    rgba(11,11,11,0.16);
+    --accent:      #256abf;
+    --accent-tint: #dbe8f8;
+    --accent-300:  #6da7ec;
+    --good:        #0ca30c;
+    --good-text:   #006300;
+    --warning:     #b8860b;
+    --critical:    #b23327;
+    --critical-tint: #f6e2df;
+    --font-display: Charter, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322;
+      --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #8f8d86;
+      --grid: #2c2c2a; --border: rgba(255,255,255,0.10); --border-2: rgba(255,255,255,0.18);
+      --accent: #5b9bea; --accent-tint: #1c2e44; --accent-300: #3987e5;
+      --good: #3fc23f; --good-text: #4fd44f; --warning: #e0b03a;
+      --critical: #e2685c; --critical-tint: #3a201d;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322;
+    --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #8f8d86;
+    --grid: #2c2c2a; --border: rgba(255,255,255,0.10); --border-2: rgba(255,255,255,0.18);
+    --accent: #5b9bea; --accent-tint: #1c2e44; --accent-300: #3987e5;
+    --good: #3fc23f; --good-text: #4fd44f; --warning: #e0b03a;
+    --critical: #e2685c; --critical-tint: #3a201d;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink); font-family: var(--font-body); -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 32px 28px 80px; }
+
+  .eyebrow { text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px; font-weight: 600; color: var(--accent); margin: 0 0 10px; }
+  h1 { font-family: var(--font-display); font-size: clamp(24px, 3vw, 32px); font-weight: 500; letter-spacing: -0.01em; margin: 0 0 8px; text-wrap: balance; }
+  .lede { max-width: 62ch; color: var(--ink-2); font-size: 14px; line-height: 1.6; margin: 0; }
+  header.top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 20px; padding-bottom: 22px; margin-bottom: 24px; border-bottom: 1px solid var(--border); }
+  .status-tag { flex: none; display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--ink-muted); border: 1px solid var(--border-2); border-radius: 100px; padding: 6px 12px; white-space: nowrap; }
+  .status-tag .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .status-tag.warn .dot { background: var(--warning); }
+  .status-tag.warn { color: var(--warning); border-color: var(--warning); }
+
+  #banner { display: none; padding: 12px 16px; border-radius: 8px; font-size: 13.5px; margin-bottom: 24px; }
+  #banner.loading { display: block; background: var(--surface-2); color: var(--ink-2); }
+  #banner.error { display: block; background: var(--critical-tint); color: var(--critical); }
+  #banner.warn { display: block; background: var(--surface-2); color: var(--warning); border: 1px solid var(--warning); }
+  #app { display: none; }
+
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 36px; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
+  .kpi-label { font-size: 12px; color: var(--ink-muted); margin: 0 0 10px; }
+  .kpi-value { font-family: var(--font-display); font-size: 28px; font-weight: 500; line-height: 1; margin: 0 0 8px; font-variant-numeric: tabular-nums; }
+  .kpi-sub { font-size: 12.5px; color: var(--ink-2); display: flex; align-items: center; gap: 6px; }
+  .kpi-sub.up { color: var(--good-text); }
+  .kpi-sub.down { color: var(--critical); }
+
+  section { margin-bottom: 34px; }
+  .section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+  .section-head h2 { font-family: var(--font-display); font-size: 18px; font-weight: 500; margin: 0; }
+  .section-head .hint { font-size: 12px; color: var(--ink-muted); }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .two-col { display: grid; grid-template-columns: 0.8fr 1.2fr; gap: 16px; align-items: start; }
+  .three-col { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); font-weight: 600; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); white-space: nowrap; }
+  tbody td { padding: 9px 16px; border-bottom: 1px solid var(--border); color: var(--ink-2); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--surface-2); }
+  td.strong { color: var(--ink); font-weight: 500; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tight-table { table-layout: fixed; }
+  .tight-table th, .tight-table td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-left: 12px; padding-right: 8px; }
+  .tight-table td.bar-td, .tight-table td.badge-td { overflow: visible; }
+  .table-scroll { max-height: 420px; overflow-y: auto; overflow-x: auto; }
+  .tight-table { min-width: 420px; }
+
+  .bar-cell { display: flex; align-items: center; gap: 10px; }
+  .bar-track { flex: 1; height: 7px; background: var(--surface-2); border-radius: 4px; overflow: hidden; min-width: 60px; }
+  .bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
+  .bar-pct { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); width: 40px; text-align: right; flex: none; }
+
+  .compare-rows { display: flex; flex-direction: column; gap: 5px; padding: 4px 0; }
+  .compare-row { display: flex; align-items: center; gap: 8px; }
+  .compare-year { width: 34px; flex: none; font-size: 11px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+  .compare-track { flex: 1; height: 7px; min-width: 40px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .compare-fill { height: 100%; border-radius: 4px; background: var(--accent); }
+  .compare-fill.prev { background: var(--ink-muted); opacity: 0.55; }
+  .compare-val { width: 76px; flex: none; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+  .compare-delta { display: flex; align-items: center; gap: 4px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .compare-delta.up { color: var(--good-text); }
+  .compare-delta.down { color: var(--critical); }
+
+  .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 100px; white-space: nowrap; }
+  .badge .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .badge.age-ok { background: var(--surface-2); color: var(--ink-2); }
+  .badge.age-ok .dot { background: var(--ink-muted); }
+  .badge.age-warn { background: #f5ecd6; color: var(--warning); }
+  .badge.age-warn .dot { background: var(--warning); }
+  .badge.age-crit { background: var(--critical-tint); color: var(--critical); }
+  .badge.age-crit .dot { background: var(--critical); }
+
+  .chart-pad { padding: 18px 18px 6px; }
+  .mini-chart { display: flex; align-items: flex-end; gap: 6px; height: 120px; border-bottom: 1px solid var(--grid); padding-bottom: 2px; }
+  .mini-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 6px; position: relative; }
+  .mini-bar { width: 100%; max-width: 26px; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; }
+  .mini-labels { display: flex; gap: 6px; margin-top: 8px; padding: 0 2px; }
+  .mini-labels span { flex: 1; text-align: center; font-size: 10px; color: var(--ink-muted); }
+  .mini-tip { position: absolute; bottom: 100%; margin-bottom: 6px; background: var(--ink); color: var(--page); font-size: 11px; font-weight: 600; padding: 3px 7px; border-radius: 5px; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.12s ease; font-variant-numeric: tabular-nums; }
+  .mini-col:hover .mini-tip { opacity: 1; }
+  .mini-col:hover .mini-bar { background: var(--accent-300); }
+
+  .rank-list { padding: 4px 18px 18px; }
+  .rank-row { display: grid; grid-template-columns: 22px 1.4fr 1fr 90px; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--border); }
+  .rank-row:last-child { border-bottom: none; }
+  .rank-num { font-family: var(--font-display); color: var(--ink-muted); font-size: 13px; }
+  .rank-name { font-weight: 500; color: var(--ink); font-size: 13px; }
+  .rank-meta { font-size: 12px; color: var(--ink-muted); }
+  .rank-bar-track { grid-column: 2 / span 2; height: 6px; background: var(--surface-2); border-radius: 4px; overflow: hidden; margin-top: 2px; }
+  .rank-bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
+  .rank-value { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; font-size: 13px; }
+
+  footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 12px; color: var(--ink-muted); line-height: 1.7; max-width: 74ch; }
+  footer code { background: var(--surface-2); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+
+  @media (max-width: 880px) {
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .two-col, .three-col { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <p class="eyebrow">Widget IA · MCDF</p>
+      <h1>Restitutions Direction</h1>
+      <p class="lede">Données en direct, lecture seule — aucune action d'écriture n'est effectuée par ce widget.</p>
+    </div>
+    <span class="status-tag" id="status-tag"><span class="dot"></span> Connexion…</span>
+  </header>
+
+  <div id="banner"></div>
+
+  <div id="app">
+
+    <div class="kpis" id="kpis"></div>
+
+    <section>
+      <div class="section-head">
+        <h2 id="compare-title">Comparaison annuelle</h2>
+        <span class="hint">année en cours vs année précédente, à date égale (YTD)</span>
+      </div>
+      <div class="panel">
+        <div class="table-scroll" style="max-height:260px">
+          <table class="tight-table">
+            <colgroup><col style="width:32%"><col style="width:34%"><col style="width:18%"><col style="width:16%"></colgroup>
+            <thead><tr><th>Indicateur</th><th>Comparaison</th><th class="num">Écart</th><th class="num">vs N-1</th></tr></thead>
+            <tbody id="tbl-comparaison"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="two-col">
+        <div>
+          <div class="section-head"><h2>Nouveaux clients par mois</h2><span class="hint">clients créés dans le mois</span></div>
+          <div class="panel">
+            <div class="table-scroll">
+              <table class="tight-table">
+                <colgroup><col style="width:30%"><col style="width:70%"></colgroup>
+                <thead><tr><th>Mois</th><th>Nouveaux clients</th></tr></thead>
+                <tbody id="tbl-nouveaux"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="section-head"><h2>30 derniers stagiaires inscrits</h2><span class="hint" id="stagiaires-count"></span></div>
+          <div class="panel">
+            <div class="table-scroll">
+              <table class="tight-table">
+                <colgroup><col style="width:28%"><col style="width:50%"><col style="width:22%"></colgroup>
+                <thead><tr><th>Stagiaire</th><th>Convention</th><th>Inscrit le</th></tr></thead>
+                <tbody id="tbl-stagiaires"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="three-col">
+        <div>
+          <div class="section-head"><h2>CA facturé</h2><span class="hint">12 mois</span></div>
+          <div class="panel chart-pad">
+            <div class="mini-chart" id="chart-ca"></div>
+            <div class="mini-labels" id="labels-ca"></div>
+          </div>
+        </div>
+        <div>
+          <div class="section-head"><h2>Sessions programmées</h2><span class="hint">avec capacité déclarée, 6 mois</span></div>
+          <div class="panel chart-pad">
+            <div class="mini-chart" id="chart-sessions"></div>
+            <div class="mini-labels" id="labels-sessions"></div>
+          </div>
+        </div>
+        <div>
+          <div class="section-head"><h2>Devis à relancer</h2><span class="hint">&gt; 10 jours sans réponse</span></div>
+          <div class="panel">
+            <div class="table-scroll" style="max-height:180px"><table><tbody id="tbl-devis"></tbody></table></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head"><h2>Top formateurs</h2><span class="hint">par CA estimé (tarif jour × durée des sessions)</span></div>
+      <div class="panel"><div class="rank-list" id="rank-formateurs"></div></div>
+    </section>
+
+    <footer>
+      Widget IA MCDF — module « génération de rapports » (lecture seule).
+      Les données viennent de l'API MCDF en direct (<code>/wa/{entité}/list</code>),
+      pas d'un jeu de démonstration. Le remplissage réel par session n'est
+      pas encore calculable (le lien session↔inscrits n'a pas encore été
+      confirmé côté API — voir <code>modules/03-documents/NOTES.md</code> et
+      <code>ARCHITECTURE.md</code>) : le panneau « Sessions programmées »
+      montre un volume, pas un taux de remplissage réel. Le CA par
+      formateur est estimé (tarif jour × durée), pas facturé réellement.
+    </footer>
+
+  </div>
+</div>
+
+<script>
+function fmtDate(iso) {
+  const [y, m, d] = iso.slice(0, 10).split('-');
+  return `${d}/${m}/${y.slice(2)}`;
+}
+function fmtMonth(ym) {
+  const [y, m] = ym.split('-');
+  const noms = ['janv.','fév.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+  return `${noms[parseInt(m, 10) - 1]} ${y.slice(2)}`;
+}
+function fmtEUR(n) {
+  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+}
+function el(tag, cls, html) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html !== undefined) e.innerHTML = html;
+  return e;
+}
+function monthKey(iso) { return iso ? iso.slice(0, 7) : null; }
+function daysAgo(iso) { return iso ? Math.floor((Date.now() - new Date(iso)) / 86400000) : null; }
+function lastNMonths(n) {
+  const out = [];
+  const d = new Date();
+  for (let i = 0; i < n; i++) {
+    out.unshift(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    d.setMonth(d.getMonth() - 1);
+  }
+  return out;
+}
+function setBanner(kind, html) {
+  const b = document.getElementById('banner');
+  b.className = kind;
+  b.innerHTML = html;
+}
+function setStatus(kind, html) {
+  const s = document.getElementById('status-tag');
+  s.className = `status-tag ${kind}`.trim();
+  s.innerHTML = html;
+}
+
+// ------------------------------------------------------------------
+// Récupération des données en direct (même pattern que browser/live-reports.js)
+// ------------------------------------------------------------------
+async function fetchAll(entity, entityId) {
+  const res = await fetch(`/wa/${entity}/list?nopaging=1&_dc=${Date.now()}`, { credentials: 'same-origin' });
+  if (res.status === 401 || res.status === 403) throw new Error('AUTH');
+  let data;
+  try {
+    data = await res.json();
+  } catch (e) {
+    throw new Error('AUTH'); // la réponse n'est pas du JSON : probablement la page de login
+  }
+  if (!data.success) throw new Error(`Appel /wa/${entity}/list refusé : ${JSON.stringify(data).slice(0, 200)}`);
+  return entityId ? data.root.filter((r) => r.entityId === entityId) : data.root;
+}
+
+async function buildData(entityId) {
+  const [customers, conventions, invoices, attendees, sessions] = await Promise.all([
+    fetchAll('customer', entityId),
+    fetchAll('convention', entityId),
+    fetchAll('invoice', entityId),
+    fetchAll('conventionAttendee', entityId),
+    fetchAll('session', entityId),
+  ]);
+
+  const convById = new Map(conventions.map((c) => [c.id, c]));
+
+  const months12 = lastNMonths(12);
+  const ncMap = {};
+  customers.forEach((c) => { const m = monthKey(c.created); if (m) ncMap[m] = (ncMap[m] || 0) + 1; });
+  const nouveaux_clients_par_mois = months12.map((m) => ({ mois: m, nouveaux_clients: ncMap[m] || 0 }));
+
+  const latestByAttendee = new Map();
+  attendees.filter((a) => a.attendee).forEach((a) => {
+    const prev = latestByAttendee.get(a.attendeeId);
+    if (!prev || a.created > prev.created) latestByAttendee.set(a.attendeeId, a);
+  });
+  const derniers_stagiaires = [...latestByAttendee.values()]
+    .sort((a, b) => b.created.localeCompare(a.created))
+    .slice(0, 30)
+    .map((a) => ({
+      nom: a.fullname,
+      convention: (convById.get(a.conventionId) || {}).name || '—',
+      inscrit_le: a.created,
+    }));
+
+  const caMap = {};
+  invoices.forEach((i) => { const m = monthKey(i.billingDate); if (m) caMap[m] = (caMap[m] || 0) + (i.amount || 0); });
+  const ca_mensuel = months12.map((m) => ({ mois: m, ca: Math.round((caMap[m] || 0) * 100) / 100 }));
+
+  const devis_a_relancer = conventions
+    .filter((c) => c.isProposal && !c.signingDate)
+    .map((c) => ({ ...c, age: daysAgo(c.provisionalDate || c.created) }))
+    .filter((c) => c.age !== null && c.age > 10)
+    .sort((a, b) => b.age - a.age)
+    .map((c) => ({ id: c.id, name: c.name, proposal_code: c.proposalCode, proposal_status: c.proposalStatus, age_jours: c.age }));
+
+  const months6 = lastNMonths(6);
+  const sesMap = {};
+  sessions.filter((s) => s.numberMaxi).forEach((s) => {
+    const m = monthKey(s.startDate);
+    if (!m) return;
+    if (!sesMap[m]) sesMap[m] = { nb_sessions: 0, capacite_totale: 0 };
+    sesMap[m].nb_sessions += 1;
+    sesMap[m].capacite_totale += s.numberMaxi;
+  });
+  const sessions_programmees = months6.map((m) => ({
+    mois: m,
+    nb_sessions: (sesMap[m] || {}).nb_sessions || 0,
+    capacite_totale: (sesMap[m] || {}).capacite_totale || 0,
+  }));
+
+  const parFormateur = {};
+  sessions.filter((s) => s.trainerId).forEach((s) => {
+    const key = s.trainerId;
+    if (!parFormateur[key]) parFormateur[key] = { nom: s.trainerName || key, nb_sessions: 0, ca_estime: 0 };
+    parFormateur[key].nb_sessions += 1;
+    parFormateur[key].ca_estime += (s.dailyRate || 0) * (s.days || 0);
+  });
+  const top_formateurs = Object.values(parFormateur).sort((a, b) => b.ca_estime - a.ca_estime).slice(0, 5);
+
+  const now = new Date();
+  const yearN = now.getFullYear(), yearN1 = yearN - 1;
+  const cutoffMonth = now.getMonth(), cutoffDay = now.getDate();
+  const inYtd = (dateStr, year) => {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    if (d.getFullYear() !== year) return false;
+    return d.getMonth() < cutoffMonth || (d.getMonth() === cutoffMonth && d.getDate() <= cutoffDay);
+  };
+  const pctDelta = (cur, prev) => (prev ? Math.round(((cur - prev) / prev) * 1000) / 10 : null);
+
+  const caN = invoices.filter((i) => inYtd(i.billingDate, yearN)).reduce((s, i) => s + (i.amount || 0), 0);
+  const caN1 = invoices.filter((i) => inYtd(i.billingDate, yearN1)).reduce((s, i) => s + (i.amount || 0), 0);
+  const clientsN = customers.filter((c) => inYtd(c.created, yearN)).length;
+  const clientsN1 = customers.filter((c) => inYtd(c.created, yearN1)).length;
+  const stagN = new Set(attendees.filter((a) => a.attendee && inYtd(a.created, yearN)).map((a) => a.attendeeId)).size;
+  const stagN1 = new Set(attendees.filter((a) => a.attendee && inYtd(a.created, yearN1)).map((a) => a.attendeeId)).size;
+  const devisN = conventions.filter((c) => c.isProposal && inYtd(c.signingDate, yearN)).length;
+  const devisN1 = conventions.filter((c) => c.isProposal && inYtd(c.signingDate, yearN1)).length;
+
+  const comparaison_annuelle = [
+    { indicateur: 'CA facturé (HT)', annee_courante: Math.round(caN * 100) / 100, annee_precedente: Math.round(caN1 * 100) / 100, delta_pct: pctDelta(caN, caN1) },
+    { indicateur: 'Nouveaux clients', annee_courante: clientsN, annee_precedente: clientsN1, delta_pct: pctDelta(clientsN, clientsN1) },
+    { indicateur: 'Stagiaires inscrits', annee_courante: stagN, annee_precedente: stagN1, delta_pct: pctDelta(stagN, stagN1) },
+    { indicateur: 'Devis signés', annee_courante: devisN, annee_precedente: devisN1, delta_pct: pctDelta(devisN, devisN1) },
+  ];
+
+  return {
+    generated_at: new Date().toISOString().slice(0, 10),
+    counts: { customers: customers.length, conventions: conventions.length, invoices: invoices.length, attendees: attendees.length, sessions: sessions.length },
+    nouveaux_clients_par_mois, derniers_stagiaires, ca_mensuel, devis_a_relancer, sessions_programmees, top_formateurs, comparaison_annuelle,
+  };
+}
+
+// ------------------------------------------------------------------
+// Rendu (identique dans l'esprit au prototype dashboard.html, adapté
+// aux champs réellement disponibles en direct)
+// ------------------------------------------------------------------
+function renderKpis(DATA) {
+  const nc = DATA.nouveaux_clients_par_mois;
+  const cur = nc[nc.length - 1], prev = nc[nc.length - 2];
+  const delta = cur.nouveaux_clients - prev.nouveaux_clients;
+
+  const ca = DATA.ca_mensuel;
+  const caCur = ca[ca.length - 1].ca, caPrev = ca[ca.length - 2].ca;
+  const caDelta = caPrev ? ((caCur - caPrev) / caPrev * 100) : 0;
+
+  const sessions = DATA.sessions_programmees;
+  const sessionsCeMois = sessions[sessions.length - 1] ? sessions[sessions.length - 1].nb_sessions : 0;
+
+  const devis = DATA.devis_a_relancer;
+  const devisCritiques = devis.filter((d) => d.age_jours > 90).length;
+
+  const kpis = [
+    { label: `Nouveaux clients — ${fmtMonth(cur.mois)}`, value: String(cur.nouveaux_clients), sub: `${delta >= 0 ? '+' : ''}${delta} vs mois précédent`, delta },
+    { label: `CA facturé — ${fmtMonth(ca[ca.length - 1].mois)}`, value: fmtEUR(caCur), sub: `${caDelta >= 0 ? '+' : ''}${caDelta.toFixed(0)}% vs mois précédent`, delta: caDelta },
+    { label: 'Sessions programmées — ce mois', value: String(sessionsCeMois), sub: 'avec capacité déclarée', delta: null },
+    { label: 'Devis à relancer', value: String(devis.length), sub: devisCritiques > 0 ? `dont ${devisCritiques} en attente depuis +90j` : 'aucun de plus de 90 jours', delta: null, warnCount: devisCritiques },
+  ];
+
+  const wrap = document.getElementById('kpis');
+  kpis.forEach((k) => {
+    const card = el('div', 'kpi');
+    card.appendChild(el('p', 'kpi-label', k.label));
+    card.appendChild(el('p', 'kpi-value', k.value));
+    let subCls = 'kpi-sub';
+    if (k.delta !== null && k.delta !== undefined) subCls += k.delta >= 0 ? ' up' : ' down';
+    if (k.warnCount > 0) subCls += ' down';
+    card.appendChild(el('p', subCls, k.sub));
+    wrap.appendChild(card);
+  });
+}
+
+function renderNouveaux(DATA) {
+  const tbody = document.getElementById('tbl-nouveaux');
+  const max = Math.max(...DATA.nouveaux_clients_par_mois.map((r) => r.nouveaux_clients), 1);
+  DATA.nouveaux_clients_par_mois.forEach((r) => {
+    const tr = el('tr');
+    tr.appendChild(el('td', 'strong', fmtMonth(r.mois)));
+    const barTd = el('td', 'bar-td');
+    const cell = el('div', 'bar-cell');
+    const track = el('div', 'bar-track');
+    const fill = el('div', 'bar-fill');
+    fill.style.width = `${(r.nouveaux_clients / max * 100).toFixed(1)}%`;
+    track.appendChild(fill);
+    cell.appendChild(track);
+    cell.appendChild(el('span', 'bar-pct', String(r.nouveaux_clients)));
+    barTd.appendChild(cell);
+    tr.appendChild(barTd);
+    tbody.appendChild(tr);
+  });
+}
+
+function renderStagiaires(DATA) {
+  const tbody = document.getElementById('tbl-stagiaires');
+  const rows = DATA.derniers_stagiaires;
+  document.getElementById('stagiaires-count').textContent = `${rows.length} inscriptions`;
+  rows.forEach((r) => {
+    const tr = el('tr');
+    const nameTd = el('td', 'strong', r.nom); nameTd.title = r.nom;
+    tr.appendChild(nameTd);
+    const convTd = el('td', '', r.convention); convTd.title = r.convention;
+    tr.appendChild(convTd);
+    tr.appendChild(el('td', '', fmtDate(r.inscrit_le)));
+    tbody.appendChild(tr);
+  });
+}
+
+function renderMiniChart(chartId, labelsId, rows, valueKey, labelKey, fmt) {
+  const chart = document.getElementById(chartId);
+  const labels = document.getElementById(labelsId);
+  const max = Math.max(...rows.map((r) => r[valueKey]), 1);
+  rows.forEach((r) => {
+    const col = el('div', 'mini-col');
+    const tip = el('div', 'mini-tip', fmt(r[valueKey]));
+    const bar = el('div', 'mini-bar');
+    bar.style.height = `${Math.max((r[valueKey] / max * 100), 2)}%`;
+    col.appendChild(tip);
+    col.appendChild(bar);
+    chart.appendChild(col);
+    labels.appendChild(el('span', '', fmtMonth(r[labelKey]).replace(' ', '<br>')));
+  });
+}
+
+function renderDevis(DATA) {
+  const tbody = document.getElementById('tbl-devis');
+  DATA.devis_a_relancer.slice(0, 20).forEach((d) => {
+    const tr = el('tr');
+    const left = el('td');
+    left.appendChild(el('div', 'strong', d.name));
+    const meta = el('div', '', `${d.proposal_code || ''} · statut : ${d.proposal_status || 'inconnu'}`);
+    meta.style.fontSize = '12px';
+    meta.style.color = 'var(--ink-muted)';
+    left.appendChild(meta);
+    tr.appendChild(left);
+    const right = el('td', 'num');
+    let cls = 'age-ok';
+    if (d.age_jours > 90) cls = 'age-crit';
+    else if (d.age_jours > 30) cls = 'age-warn';
+    right.innerHTML = `<span class="badge ${cls}"><span class="dot"></span>${d.age_jours} j</span>`;
+    tr.appendChild(right);
+    tbody.appendChild(tr);
+  });
+}
+
+function renderFormateurs(DATA) {
+  const wrap = document.getElementById('rank-formateurs');
+  const rows = DATA.top_formateurs;
+  const max = Math.max(...rows.map((r) => r.ca_estime), 1);
+  rows.forEach((r, i) => {
+    const row = el('div', 'rank-row');
+    row.appendChild(el('div', 'rank-num', String(i + 1).padStart(2, '0')));
+    row.appendChild(el('div', 'rank-name', r.nom));
+    row.appendChild(el('div', 'rank-meta', `${r.nb_sessions} sessions`));
+    const track = el('div', 'rank-bar-track');
+    const fill = el('div', 'rank-bar-fill');
+    fill.style.width = `${(r.ca_estime / max * 100).toFixed(1)}%`;
+    track.appendChild(fill);
+    row.appendChild(track);
+    row.appendChild(el('div', 'rank-value', fmtEUR(r.ca_estime)));
+    wrap.appendChild(row);
+  });
+}
+
+function renderComparaison(DATA) {
+  const tbody = document.getElementById('tbl-comparaison');
+  const [gy, gm, gd] = DATA.generated_at.split('-').map(Number);
+  const yearN = gy, yearN1 = gy - 1;
+  const cutoff = `${String(gd).padStart(2, '0')}/${String(gm).padStart(2, '0')}`;
+  document.getElementById('compare-title').textContent = `Comparaison ${yearN} vs ${yearN1} (jusqu'au ${cutoff})`;
+  const isEUR = (nom) => /CA facturé/i.test(nom);
+
+  DATA.comparaison_annuelle.forEach((r) => {
+    const tr = el('tr');
+    tr.appendChild(el('td', 'strong', r.indicateur));
+
+    const max = Math.max(r.annee_courante, r.annee_precedente, 1);
+    const fmt = (v) => (isEUR(r.indicateur) ? fmtEUR(v) : String(v));
+    const compareTd = el('td');
+    const rows = el('div', 'compare-rows');
+    [[yearN, r.annee_courante, ''], [yearN1, r.annee_precedente, 'prev']].forEach(([year, val, mod]) => {
+      const row = el('div', 'compare-row');
+      row.appendChild(el('span', 'compare-year', String(year)));
+      const track = el('div', 'compare-track');
+      const fill = el('div', `compare-fill ${mod}`.trim());
+      fill.style.width = `${Math.max((val / max * 100), 2).toFixed(1)}%`;
+      track.appendChild(fill);
+      row.appendChild(track);
+      row.appendChild(el('span', 'compare-val', fmt(val)));
+      rows.appendChild(row);
+    });
+    compareTd.appendChild(rows);
+    tr.appendChild(compareTd);
+
+    const ecart = r.annee_courante - r.annee_precedente;
+    tr.appendChild(el('td', 'num', isEUR(r.indicateur) ? fmtEUR(ecart) : String(ecart)));
+
+    const deltaTd = el('td', 'num');
+    if (r.delta_pct === null || r.delta_pct === undefined) {
+      deltaTd.innerHTML = '<span class="compare-delta">—</span>';
+    } else {
+      const up = r.delta_pct >= 0;
+      deltaTd.innerHTML = `<span class="compare-delta ${up ? 'up' : 'down'}">${up ? '▲' : '▼'} ${Math.abs(r.delta_pct).toFixed(1)}%</span>`;
+    }
+    tr.appendChild(deltaTd);
+    tbody.appendChild(tr);
+  });
+}
+
+function renderAll(DATA) {
+  renderKpis(DATA);
+  renderComparaison(DATA);
+  renderNouveaux(DATA);
+  renderStagiaires(DATA);
+  renderMiniChart('chart-ca', 'labels-ca', DATA.ca_mensuel, 'ca', 'mois', (v) => fmtEUR(v));
+  renderMiniChart('chart-sessions', 'labels-sessions', DATA.sessions_programmees, 'nb_sessions', 'mois', (v) => `${v} session(s)`);
+  renderDevis(DATA);
+  renderFormateurs(DATA);
+}
+
+// ------------------------------------------------------------------
+// Bootstrap
+// ------------------------------------------------------------------
+(async () => {
+  const entityId = new URLSearchParams(location.search).get('entityId');
+
+  setBanner('loading', 'Chargement des données MCDF en direct…');
+  setStatus('', '<span class="dot"></span> Connexion…');
+
+  try {
+    const DATA = await buildData(entityId);
+
+    if (entityId) {
+      setStatus('', `<span class="dot"></span> Entité ${entityId} · lecture seule`);
+    } else {
+      setStatus('warn', '<span class="dot"></span> Toutes entités accessibles · pensez à passer ?entityId=…');
+    }
+
+    document.getElementById('banner').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    renderAll(DATA);
+  } catch (err) {
+    setStatus('warn', '<span class="dot"></span> Non connecté');
+    if (err && err.message === 'AUTH') {
+      setBanner('error',
+        'Session MCDF non détectée. Ce widget doit être ouvert depuis un onglet ' +
+        'déjà connecté à MCDF (même origine) — rechargez cette page après vous ' +
+        'être connecté à <code>portal.moncentredeformation.fr</code>.');
+    } else {
+      setBanner('error', `Erreur de chargement : ${(err && err.message) || err}`);
+      console.error(err);
+    }
+  }
+})();
+</script>
