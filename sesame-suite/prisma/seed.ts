@@ -12,6 +12,118 @@ import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
+/**
+ * Portefeuille de prospects/clients du CRM commercial interne — repris tel
+ * quel de la maquette fournie (sesame_crm_v3.html), insérés une seule fois
+ * (cf. garde `count === 0` dans main()) pour ne jamais écraser les
+ * modifications faites ensuite depuis l'app (statut, notes, journal…).
+ */
+interface CrmSeedRow {
+  nom: string;
+  groupe?: string;
+  secteur?: string;
+  ville?: string;
+  etoiles?: string;
+  danger: string;
+  potentiel: number;
+  contrat: string;
+  modules: number;
+  pms?: string;
+  priorite: number;
+  appel?: string;
+  referent?: string;
+  email?: string;
+  tel?: string;
+  site?: string;
+  nfc: number;
+  qr: number;
+  mobile: number;
+  webApp: boolean;
+  mobileV2: boolean;
+  checkin: boolean;
+  livret: boolean;
+  gestionDemande: boolean;
+  offline: boolean;
+  messagerie: string;
+  note?: string;
+  journal?: { type: string; text: string; authorName?: string; done?: boolean }[];
+}
+
+const CRM_SEED_PROSPECTS: CrmSeedRow[] = [
+  { nom: "1K", groupe: "Machefert", secteur: "Hôtellerie", ville: "Paris", etoiles: "****", danger: "Élevé !!", potentiel: 3, contrat: "non", modules: 51, pms: "Mews", priorite: 2, email: "1k-paris@machefert.com", tel: "01 42 71 20 00", nfc: 0, qr: 0, mobile: 0, webApp: true, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "ACGP93", secteur: "Agence gestion patrimoine", ville: "Paris", danger: "Modéré", potentiel: 3, contrat: "non", modules: 7, priorite: 0, appel: "Ne pas appeler", nfc: 0, qr: 0, mobile: 0, webApp: true, mobileV2: true, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "AKANTHA", secteur: "Appart Hotel", ville: "Nice", danger: "Modéré", potentiel: 3, contrat: "non", modules: 6, pms: "Thais", priorite: 0, nfc: 0, qr: 0, mobile: 0, webApp: true, mobileV2: true, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "Ambassadeur Lille", secteur: "Hôtellerie", ville: "Lille", etoiles: "**", danger: "Bon client", potentiel: 2, contrat: "non", modules: 30, pms: "MisterBooking", priorite: 2, appel: "16/10/25", referent: "Sébastien Besin", email: "manager@hotel-lille-ambassadeur.fr", tel: "06 88 83 33 13", site: "hotel-lille-ambassadeur.fr", nfc: 17, qr: 69, mobile: 14, webApp: true, mobileV2: true, checkin: false, livret: true, gestionDemande: false, offline: true, messagerie: "Client", note: "Client satisfait du livret digital",
+    journal: [
+      { type: "Appel", text: "Appel de suivi — client satisfait du livret digital, intéressé par check-in mobile", authorName: "Sébastien Besin", done: true },
+      { type: "Relance", text: "Rappeler pour proposition check-in mobile + devis boutique en ligne", done: false },
+      { type: "Note interne", text: "Contrat original non retrouvé — relance envoyée par mail", authorName: "automatique", done: true },
+    ] },
+  { nom: "Appartements de Lille", secteur: "Location appartement", ville: "Lille", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, priorite: 0, appel: "27/11/25", nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "Apparts de Marin", secteur: "Location appartement", danger: "Bon client", potentiel: 2, contrat: "non", modules: 0, priorite: 0, appel: "27/11/25", nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "ASEAT", secteur: "Bureaux", danger: "Modéré", potentiel: 2, contrat: "non", modules: 0, priorite: 0, appel: "16/10/25", nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "ASTORG", secteur: "Bureaux", ville: "Paris", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, priorite: 0, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "ASTREA", secteur: "Hôtellerie", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, priorite: 1, appel: "17/04/26", nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "AUBERG'INE", secteur: "Hôtellerie", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, priorite: 1, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "Auberge St Jacques", secteur: "Hôtellerie", danger: "Élevé !!", potentiel: 3, contrat: "non", modules: 0, priorite: 2, appel: "18/09/25", nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "Beaujour & Bonsoir", groupe: "Maison Glenn Anna", secteur: "Hôtellerie", danger: "Bon client", potentiel: 3, contrat: "non", modules: 0, priorite: 1, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "Bedzzz Apartments", secteur: "Location appartement", danger: "Élevé !!", potentiel: 3, contrat: "non", modules: 0, priorite: 2, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "BELLEVAL", groupe: "Elbros Developpement", secteur: "Hôtellerie", danger: "Élevé !!", potentiel: 3, contrat: "non", modules: 0, priorite: 2, appel: "09/12/25", nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "BUDA FITNESS", secteur: "Sport", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, priorite: 2, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "CITYZEN", secteur: "Location AirBnB", danger: "Bon client", potentiel: 3, contrat: "non", modules: 0, priorite: 0, appel: "08/09/25", nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "COEURMANDIE", secteur: "Hôtellerie", danger: "Élevé !!", potentiel: 2, contrat: "non", modules: 0, priorite: 2, appel: "30/10/25", nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "COLOMBYA", secteur: "Hôtellerie", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, priorite: 3, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "COPWELL – Fédé. Natation", groupe: "Copwell", secteur: "Sport", danger: "Bon client", potentiel: 3, contrat: "non", modules: 0, priorite: 0, appel: "Ne pas appeler", nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "COPWELL – HAVAS", groupe: "Copwell", secteur: "Bureaux", danger: "Élevé !!", potentiel: 3, contrat: "non", modules: 0, priorite: 0, appel: "Ne pas appeler", nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "COPWELL – LARCO", groupe: "Copwell", secteur: "Bureaux", danger: "Bon client", potentiel: 3, contrat: "non", modules: 0, priorite: 0, appel: "Ne pas appeler", nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "DOJO BORDEAUX", secteur: "Sport", ville: "Bordeaux", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, priorite: 1, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "DOMAINE DU BELVEDERE", secteur: "Hôtellerie", danger: "Élevé !!", potentiel: 3, contrat: "non", modules: 0, priorite: 2, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "DYNAMIC SEVRES", secteur: "Garde meuble", danger: "Modéré", potentiel: 2, contrat: "non", modules: 0, pms: "Easy Space", priorite: 2, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "ESCALE AU SOLEIL", secteur: "Hôtellerie", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, priorite: 1, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "FLORELLA", secteur: "Location appartement", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, pms: "Thais", priorite: 3, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "HOTEL DE FRANCE", secteur: "Hôtellerie", ville: "Paris", etoiles: "***", danger: "Bon client", potentiel: 3, contrat: "non", modules: 0, pms: "Mews", priorite: 1, appel: "30/10/25", nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: true, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "HOTEL DE LA GARE", secteur: "Hôtellerie", danger: "Modéré", potentiel: 1, contrat: "non", modules: 0, priorite: 0, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "HOTEL MARIE", secteur: "Hôtellerie", danger: "Bon client", potentiel: 1, contrat: "non", modules: 0, pms: "Medialog", priorite: 0, appel: "16/10/25", nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "KI SPACE", secteur: "Garde meuble", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, pms: "Easy Space", priorite: 2, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "KUBE", secteur: "Hôtellerie", ville: "Paris", etoiles: "****", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, pms: "Mews", priorite: 2, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "LA PENICHE AIGUES MORTES", groupe: "La peniche", secteur: "Hôtellerie", danger: "Modéré", potentiel: 1, contrat: "non", modules: 0, priorite: 2, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "LA PENICHE HISSEO", groupe: "La peniche", secteur: "Hôtellerie", danger: "Modéré", potentiel: 1, contrat: "non", modules: 0, priorite: 2, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "LA PENICHE TOURNON", groupe: "La peniche", secteur: "Hôtellerie", danger: "Modéré", potentiel: 1, contrat: "non", modules: 0, priorite: 2, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "LE BAIN SAUVAGE", secteur: "Hôtellerie", danger: "Bon client", potentiel: 3, contrat: "non", modules: 0, priorite: 1, appel: "08/09/25", nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "LE GROOM", secteur: "Hôtellerie", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, pms: "Medialog", priorite: 1, appel: "30/10/25", nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "LE MEURICE RIVIERA", secteur: "Hôtellerie", ville: "Nice", etoiles: "***", danger: "Bon client", potentiel: 3, contrat: "non", modules: 0, pms: "Thais", priorite: 1, nfc: 0, qr: 0, mobile: 0, webApp: true, mobileV2: true, checkin: true, livret: false, gestionDemande: true, offline: false, messagerie: "Client" },
+  { nom: "LE VICTOR", secteur: "Hôtellerie", danger: "Élevé !!", potentiel: 3, contrat: "non", modules: 0, priorite: 1, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "LES SUITES TOUR EIFFEL", secteur: "Hôtellerie", ville: "Paris", danger: "Bon client", potentiel: 3, contrat: "non", modules: 0, pms: "Mews", priorite: 1, nfc: 0, qr: 0, mobile: 0, webApp: true, mobileV2: true, checkin: true, livret: false, gestionDemande: false, offline: false, messagerie: "Client" },
+  { nom: "LocBox AVRANCHES", groupe: "Loc Box", secteur: "Location AirBnB", ville: "Avranches", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, priorite: 1, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "LocBox GRANVILLE", groupe: "LocBox", secteur: "Location AirBnB", ville: "Granville", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, priorite: 1, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "LocBox VIRE", groupe: "LocBox", secteur: "Location AirBnB", ville: "Vire", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, priorite: 1, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "LOUVRE PIEMONT", secteur: "Hôtellerie", ville: "Paris", etoiles: "***", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, pms: "Medialog", priorite: 2, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "LYONNAIS NICE", secteur: "Hôtellerie", ville: "Nice", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, pms: "Thais", priorite: 2, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "MAB BOX", secteur: "Garde meuble", danger: "Bon client", potentiel: 3, contrat: "non", modules: 0, pms: "Easy Space", priorite: 2, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "MAISON ROQUELONGUE", secteur: "Hôtellerie", danger: "Élevé !!", potentiel: 3, contrat: "non", modules: 0, priorite: 2, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "MINA MINA", secteur: "Love hôtel", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, priorite: 3, appel: "03/09/25", nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "MMIP CITE VERON", groupe: "My Maison in Paris", secteur: "Location appartement", ville: "Paris", danger: "Modéré", potentiel: 2, contrat: "non", modules: 0, priorite: 2, appel: "27/11/25", nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "MMIP CHAMP DE MARS", groupe: "My Maison in Paris", secteur: "Location appartement", ville: "Paris", danger: "Modéré", potentiel: 2, contrat: "non", modules: 0, priorite: 2, appel: "27/11/25", nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "MMIP INVALIDES", groupe: "My Maison in Paris", secteur: "Location appartement", ville: "Paris", danger: "Modéré", potentiel: 2, contrat: "non", modules: 0, priorite: 2, appel: "27/11/25", nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "MONTEFIORE", secteur: "Hôtellerie", danger: "Bon client", potentiel: 3, contrat: "non", modules: 0, pms: "Medialog", priorite: 1, appel: "27/11/25", nfc: 0, qr: 0, mobile: 0, webApp: true, mobileV2: true, checkin: true, livret: true, gestionDemande: true, offline: true, messagerie: "Client" },
+  { nom: "QUEENS HOTEL PARIS", secteur: "Hôtellerie", ville: "Paris", etoiles: "***", danger: "Élevé !!", potentiel: 3, contrat: "non", modules: 0, pms: "Medialog", priorite: 2, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "REGINA D'AVIGNON", secteur: "Hôtellerie", ville: "Avignon", etoiles: "**", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, pms: "MisterBooking", priorite: 2, appel: "19/09/25", nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "ROSA HOTEL", secteur: "Hôtellerie", danger: "Élevé !!", potentiel: 3, contrat: "non", modules: 0, priorite: 2, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "ROYAL HOTEL TULLE", secteur: "Hôtellerie", ville: "Tulle", etoiles: "**", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, pms: "MisterBooking", priorite: 3, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "SEROTEL", secteur: "Hôtellerie", ville: "Paris", etoiles: "***", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, pms: "Medialog", priorite: 2, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "TAC BOX", secteur: "Garde meuble", danger: "Bon client", potentiel: 3, contrat: "non", modules: 0, pms: "Easy Space", priorite: 1, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "VILLAGE D+ CORREZE", groupe: "Village D+", secteur: "Hôtellerie", ville: "Corrèze", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, pms: "TeamR", priorite: 2, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "VILLAGE D+ VALLOIRE", groupe: "Village D+", secteur: "Hôtellerie", ville: "Valloire", danger: "Élevé !!", potentiel: 3, contrat: "non", modules: 0, pms: "TeamR", priorite: 3, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "VILLA CADIERE", secteur: "Hôtellerie", danger: "Élevé !!", potentiel: 3, contrat: "non", modules: 0, priorite: 3, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "WELLBEE", secteur: "Sport", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, priorite: 2, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "YOU ARE DEAUVILLE", secteur: "Hôtellerie", ville: "Deauville", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, priorite: 3, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "CHÂTEAU DU SOUZY", secteur: "Hôtellerie", danger: "Élevé !!", potentiel: 3, contrat: "non", modules: 0, priorite: 2, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "LA RUCHE", secteur: "Bureaux", danger: "Bon client", potentiel: 3, contrat: "non", modules: 0, priorite: 1, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "LES SOURCES VICHY", secteur: "Hôtellerie", danger: "Bon client", potentiel: 3, contrat: "non", modules: 0, priorite: 1, nfc: 0, qr: 0, mobile: 0, webApp: true, mobileV2: true, checkin: true, livret: true, gestionDemande: true, offline: true, messagerie: "Client" },
+  { nom: "PUC", secteur: "Sport", danger: "Bon client", potentiel: 3, contrat: "non", modules: 0, priorite: 1, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+  { nom: "SEM PAU", secteur: "Bureaux", ville: "Pau", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, priorite: 1, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
+];
+
 const ENTITY_CODE = process.env.DEFAULT_ENTITY_CODE || "E00000001";
 const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL || "admin@hotel-churchill.fr";
 const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || "churchill2026";
@@ -353,6 +465,25 @@ async function main() {
         data: { entityId: entity.id, name: s.name, color: s.color, team: s.team, assignedRoomCodes: s.rooms },
       });
     }
+  }
+
+  // ── Portefeuille CRM commercial (prospects/clients Sesame) ──
+  // Garde count===0 : seedé une seule fois, jamais réécrasé ensuite (les
+  // commerciaux éditent statut/notes/journal directement depuis /crm).
+  const existingProspects = await prisma.crmProspect.count();
+  if (existingProspects === 0) {
+    for (const row of CRM_SEED_PROSPECTS) {
+      const { journal, ...data } = row;
+      const created = await prisma.crmProspect.create({ data });
+      if (journal) {
+        for (const j of journal) {
+          await prisma.crmActivity.create({
+            data: { prospectId: created.id, type: j.type, text: j.text, authorName: j.authorName, done: j.done ?? false },
+          });
+        }
+      }
+    }
+    console.log(`CRM : ${CRM_SEED_PROSPECTS.length} prospects/clients seedés ✓`);
   }
 
   console.log("Seed terminé ✓");

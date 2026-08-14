@@ -232,6 +232,18 @@ formulaire de connexion dédié qui rejette explicitement tout compte `hotel`.
   à ressaisir pour démarrer le suivi.
 - CRUD complet côté serveur (`/wa/crmProspect/*`, `requireSesame`) —
   plus aucune donnée en `localStorage` contrairement au prototype.
+- **Portefeuille de démarrage** : les 67 prospects/clients fournis avec la
+  maquette d'origine sont seedés (`prisma/seed.ts`, garde `count===0` — une
+  seule fois, jamais réécrasé ensuite pour ne pas perdre les modifications
+  faites depuis l'app).
+- **Vue liste** : deux graphiques calculés en direct sur les fiches réelles
+  — répartition par secteur (icône dédiée par secteur : hôtel, immeuble,
+  mallette, haltère, maison, carton, cœur, histogramme…) et taux d'adoption
+  des modules Sesame (WebApp, Mobile V2, check-in, livret, gestion demande,
+  offline) — palette validée avec le validateur `dataviz` (bleu/orange,
+  écarts CVD ≥ 24 ΔE). Chaque fiche/PMS affiche aussi un badge coloré
+  déterministe (initiales, couleur dérivée du nom) — pas de logo tiers
+  hébergé, pour ne reproduire aucune marque sans autorisation.
 
 Également non couvert : l'app ménage (`sesame_menage.html`, application
 séparée pour les agents de ménage sur le terrain). La base de données est
