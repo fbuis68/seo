@@ -43,36 +43,37 @@ class MCDFClient:
     # ------------------------------------------------------------------
     # Authentification
     # ------------------------------------------------------------------
-    def login(self, email: str, password: str) -> None:
+    def login(self, email: str, password: str) -> dict:
         """Authentifie la session.
 
-        TODO: implémentation provisoire — à ajuster une fois la vraie
-        requête de login capturée (DevTools, filtre "All", après un
-        "Déconnexion" puis reconnexion). Deux hypothèses possibles :
+        Confirmé par capture réseau réelle (DevTools) :
 
-        1. Formulaire classique (POST application/x-www-form-urlencoded
-           vers /login.html, avec redirection) :
+            POST /login.htm?controller=checkLogin
+            Content-Type: application/x-www-form-urlencoded
+            Form Data: email=..., password=...
 
-               self.session.post(f"{self.base_url}/login.html", data={
-                   "email": email, "password": password,
-               })
+        Le `requests.Session()` conserve automatiquement le cookie de
+        session renvoyé pour les appels suivants (list_entity, get_item).
 
-        2. Endpoint JSON généré par le même mécanisme que /wa/{entite}/list
-           (vu le bean `loginController` avec commande `checkLogin` dans
-           controller-beans.xml) :
-
-               resp = self.session.post(f"{self.base_url}/wa/login/checkLogin", json={
-                   "email": email, "password": password,
-               })
-
-        Une fois la vraie requête connue, remplacer le corps de cette
-        méthode en conséquence. Le `requests.Session()` conserve
-        automatiquement le cookie de session entre les appels suivants.
+        Réponse confirmée par capture réseau : `{"success": true}` en cas
+        de succès — même convention que /wa/{entite}/list.
         """
-        raise NotImplementedError(
-            "Login non implémenté : capture réseau du vrai formulaire de "
-            "connexion nécessaire (voir TODO dans login())."
+        resp = self.session.post(
+            f"{self.base_url}/login.htm",
+            params={"controller": "checkLogin"},
+            data={"email": email, "password": password},
         )
+        resp.raise_for_status()
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            raise MCDFAuthError(
+                f"Réponse de login non-JSON (status {resp.status_code}) : "
+                f"{resp.text[:300]!r}"
+            ) from exc
+        if data.get("success") is False:
+            raise MCDFAuthError(f"Échec de connexion : {data}")
+        return data
 
     # ------------------------------------------------------------------
     # Lecture générique — pattern confirmé par capture réseau réelle
