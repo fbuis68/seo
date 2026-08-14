@@ -119,7 +119,12 @@ s'agisse ou non d'un client Sesame :
   Ce mode est générique : email/mot de passe en query ou en body, noms de
   champs, chemin du token et en-tête cible sont tous configurables, donc il
   couvre aussi d'autres systèmes tiers utilisant ce même schéma
-  login-puis-token, pas seulement Sesame.
+  login-puis-token, pas seulement Sesame. Un **champ supplémentaire
+  optionnel** (nom + valeur, envoyé dans le même corps JSON que
+  email/mot de passe) couvre les systèmes qui exigent un troisième
+  paramètre de connexion — ex : le PMS Thaïs, dont les comptes
+  multi-établissements exigent un `"client":"<code groupe>"` en plus de
+  `username`/`password`.
 - Mapping des champs par chemin JSON libre (ex : `guest.email`,
   `stay.check_in`) — aucune forme de réponse n'est supposée à l'avance,
   contrairement à l'ancien panneau qui ne comprenait que le format Sesame.

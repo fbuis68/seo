@@ -80,6 +80,7 @@ async function performLogin(config: BookingSourceConfig): Promise<string> {
   if (inQuery) url += (url.includes("?") ? "&" : "?") + `${encodeURIComponent(emailField)}=${encodeURIComponent(config.loginEmail)}`;
   const body: Record<string, string> = { [passwordField]: config.loginPassword };
   if (!inQuery) body[emailField] = config.loginEmail;
+  if (config.loginExtraField) body[config.loginExtraField] = config.loginExtraValue || "";
 
   let res: Response;
   try {

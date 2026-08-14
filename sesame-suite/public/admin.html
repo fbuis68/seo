@@ -4107,6 +4107,12 @@ function bsRenderAuthFields(){
     h += '<div class="fi"><label class="lb">Nom de l\'en-tête du token</label><input type="text" id="bs-loginTokenHeaderName" placeholder="Authorization"></div>';
     h += '<div class="fi"><label class="lb">Préfixe du token (optionnel)</label><input type="text" id="bs-loginTokenPrefix" placeholder="Laisser vide pour Sesame — ou «Bearer » pour d\'autres systèmes"></div>';
     h += '</div>';
+    h += '<div class="alt alt-b" style="margin:12px 0"><i class="ti ti-info-circle"></i>'
+      +'<span>Optionnel : certains systèmes exigent un troisième champ dans le corps de connexion, en plus de l\'email et du mot de passe (ex : un identifiant de compte/groupe).</span></div>';
+    h += '<div class="g2">';
+    h += '<div class="fi"><label class="lb">Nom du champ supplémentaire (optionnel)</label><input type="text" id="bs-loginExtraField" placeholder="Ex : client"></div>';
+    h += '<div class="fi"><label class="lb">Valeur du champ supplémentaire</label><input type="text" id="bs-loginExtraValue" placeholder="Ex : monGroupe"></div>';
+    h += '</div>';
   }
   el.innerHTML = h;
 }
@@ -4170,6 +4176,8 @@ function bsCollectFormValues(){
     loginTokenPath: (document.getElementById('bs-loginTokenPath')||{}).value||'',
     loginTokenHeaderName: (document.getElementById('bs-loginTokenHeaderName')||{}).value||'',
     loginTokenPrefix: (document.getElementById('bs-loginTokenPrefix')||{}).value||'',
+    loginExtraField: (document.getElementById('bs-loginExtraField')||{}).value||'',
+    loginExtraValue: (document.getElementById('bs-loginExtraValue')||{}).value||'',
     responseListPath: document.getElementById('bs-responseListPath').value.trim(),
     fieldMapping: bsCollectMapping(),
     facilityEndpointPath: document.getElementById('bs-facilityEndpointPath').value.trim(),
@@ -4226,6 +4234,8 @@ async function bsInit(){
     document.getElementById('bs-loginTokenPath').value = BS_CONFIG.loginTokenPath||'';
     document.getElementById('bs-loginTokenHeaderName').value = BS_CONFIG.loginTokenHeaderName||'Authorization';
     document.getElementById('bs-loginTokenPrefix').value = BS_CONFIG.loginTokenPrefix||'';
+    document.getElementById('bs-loginExtraField').value = BS_CONFIG.loginExtraField||'';
+    document.getElementById('bs-loginExtraValue').value = BS_CONFIG.loginExtraValue||'';
   }
   bsRenderMappingFields(BS_CONFIG.fieldMapping);
   document.getElementById('bs-facilityEndpointPath').value = BS_CONFIG.facilityEndpointPath||'';

@@ -37,6 +37,8 @@ function shapeConfig(c: {
   loginTokenPath: string | null;
   loginTokenHeaderName: string | null;
   loginTokenPrefix: string | null;
+  loginExtraField: string | null;
+  loginExtraValue: string | null;
   responseListPath: string | null;
   fieldMapping: unknown;
   facilityEndpointPath: string | null;
@@ -68,6 +70,8 @@ function shapeConfig(c: {
     loginTokenPath: c.loginTokenPath || "",
     loginTokenHeaderName: c.loginTokenHeaderName || "Authorization",
     loginTokenPrefix: c.loginTokenPrefix || "",
+    loginExtraField: c.loginExtraField || "",
+    loginExtraValue: c.loginExtraValue || "",
     responseListPath: c.responseListPath || "",
     fieldMapping: c.fieldMapping || {},
     facilityEndpointPath: c.facilityEndpointPath || "",
@@ -116,6 +120,8 @@ interface ConfigBody {
   loginTokenPath?: string;
   loginTokenHeaderName?: string;
   loginTokenPrefix?: string;
+  loginExtraField?: string;
+  loginExtraValue?: string;
   responseListPath?: string;
   fieldMapping?: FieldMapping;
   facilityEndpointPath?: string;
@@ -151,6 +157,8 @@ bookingSourceRouter.post(
       loginTokenPath: b.loginTokenPath,
       loginTokenHeaderName: b.loginTokenHeaderName,
       loginTokenPrefix: b.loginTokenPrefix,
+      loginExtraField: b.loginExtraField,
+      loginExtraValue: b.loginExtraValue,
       responseListPath: b.responseListPath,
       fieldMapping: b.fieldMapping as never,
       facilityEndpointPath: b.facilityEndpointPath,
@@ -201,6 +209,8 @@ bookingSourceRouter.post(
       loginTokenPath: b.loginTokenPath ?? saved?.loginTokenPath ?? null,
       loginTokenHeaderName: b.loginTokenHeaderName ?? saved?.loginTokenHeaderName ?? "Authorization",
       loginTokenPrefix: b.loginTokenPrefix ?? saved?.loginTokenPrefix ?? null,
+      loginExtraField: b.loginExtraField ?? saved?.loginExtraField ?? null,
+      loginExtraValue: b.loginExtraValue ?? saved?.loginExtraValue ?? null,
       responseListPath: b.responseListPath ?? saved?.responseListPath ?? null,
       fieldMapping: (b.fieldMapping ?? saved?.fieldMapping ?? {}) as never,
       facilityEndpointPath: b.facilityEndpointPath ?? saved?.facilityEndpointPath ?? null,

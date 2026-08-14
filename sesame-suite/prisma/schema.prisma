@@ -242,6 +242,11 @@ model BookingSourceConfig {
   loginTokenPath       String? // dot-path du token dans la réponse de connexion (ex: "data.profiles.0.token")
   loginTokenHeaderName String? @default("Authorization")
   loginTokenPrefix     String? // ex: "Bearer " — laisser vide pour envoyer le token brut
+  // Champ optionnel supplémentaire envoyé dans le corps JSON de connexion, en
+  // plus de l'email et du mot de passe — ex: certains systèmes multi-comptes
+  // exigent un identifiant de client/groupe ("client": "monGroupe").
+  loginExtraField String?
+  loginExtraValue String?
 
   // Chemin (dot-path) vers le tableau de réservations dans la réponse JSON —
   // vide/null si la réponse EST déjà le tableau.
