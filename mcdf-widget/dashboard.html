@@ -441,17 +441,17 @@
 
       <div>
         <div class="section-head">
-          <h2>% de nouveaux clients par mois</h2>
-          <span class="hint">nouveaux ÷ clients actifs du mois</span>
+          <h2>Nouveaux clients par mois</h2>
+          <span class="hint">clients créés dans le mois</span>
         </div>
         <div class="panel">
           <div class="table-scroll">
             <table class="tight-table">
               <colgroup>
-                <col style="width:24%"><col style="width:17%"><col style="width:19%"><col style="width:40%">
+                <col style="width:30%"><col style="width:70%">
               </colgroup>
               <thead>
-                <tr><th>Mois</th><th class="num">Actifs</th><th class="num">Nouveaux</th><th>% nouveaux</th></tr>
+                <tr><th>Mois</th><th>Nouveaux clients</th></tr>
               </thead>
               <tbody id="tbl-nouveaux"></tbody>
             </table>
@@ -468,10 +468,10 @@
           <div class="table-scroll">
             <table class="tight-table">
               <colgroup>
-                <col style="width:18%"><col style="width:17%"><col style="width:24%"><col style="width:19%"><col style="width:22%">
+                <col style="width:22%"><col style="width:30%"><col style="width:26%"><col style="width:22%">
               </colgroup>
               <thead>
-                <tr><th>Stagiaire</th><th>Entreprise</th><th>Formation</th><th>Inscrit le</th><th>Statut</th></tr>
+                <tr><th>Stagiaire</th><th>Convention</th><th>Session</th><th>Inscrit le</th></tr>
               </thead>
               <tbody id="tbl-stagiaires"></tbody>
             </table>
@@ -516,7 +516,7 @@
   </section>
 
   <section>
-    <div class="section-head"><h2>Top formateurs</h2><span class="hint">par chiffre d'affaires généré</span></div>
+    <div class="section-head"><h2>Top formateurs</h2><span class="hint">par CA estimé (tarif jour × durée)</span></div>
     <div class="panel">
       <div class="rank-list" id="rank-formateurs"></div>
     </div>
@@ -538,7 +538,8 @@
 </div>
 
 <script>
-const DATA = {"generated_at": "2026-08-14", "pct_nouveaux_clients": [{"mois": "2025-09", "clients_actifs": 17, "nouveaux_clients": 2, "pourcentage_nouveaux": 11.8}, {"mois": "2025-10", "clients_actifs": 23, "nouveaux_clients": 4, "pourcentage_nouveaux": 17.4}, {"mois": "2025-11", "clients_actifs": 23, "nouveaux_clients": 2, "pourcentage_nouveaux": 8.7}, {"mois": "2025-12", "clients_actifs": 19, "nouveaux_clients": 1, "pourcentage_nouveaux": 5.3}, {"mois": "2026-01", "clients_actifs": 22, "nouveaux_clients": 4, "pourcentage_nouveaux": 18.2}, {"mois": "2026-02", "clients_actifs": 20, "nouveaux_clients": 1, "pourcentage_nouveaux": 5.0}, {"mois": "2026-03", "clients_actifs": 17, "nouveaux_clients": 2, "pourcentage_nouveaux": 11.8}, {"mois": "2026-04", "clients_actifs": 21, "nouveaux_clients": 1, "pourcentage_nouveaux": 4.8}, {"mois": "2026-05", "clients_actifs": 13, "nouveaux_clients": 1, "pourcentage_nouveaux": 7.7}, {"mois": "2026-06", "clients_actifs": 13, "nouveaux_clients": 3, "pourcentage_nouveaux": 23.1}, {"mois": "2026-07", "clients_actifs": 9, "nouveaux_clients": 1, "pourcentage_nouveaux": 11.1}, {"mois": "2026-08", "clients_actifs": 7, "nouveaux_clients": 3, "pourcentage_nouveaux": 42.9}], "derniers_stagiaires": [{"nom": "Martin", "prenom": "Marius", "entreprise": "David Technologies", "formation": "Prise de parole en public", "date_inscription": "2026-08-14", "statut_inscription": "inscrit", "date_session": "2026-09-19"}, {"nom": "Laurent", "prenom": "Zoé", "entreprise": "David Technologies", "formation": "Prise de parole en public", "date_inscription": "2026-08-14", "statut_inscription": "inscrit", "date_session": "2026-09-19"}, {"nom": "Thomas", "prenom": "Chloé", "entreprise": "David Technologies", "formation": "Prise de parole en public", "date_inscription": "2026-08-14", "statut_inscription": "inscrit", "date_session": "2026-09-19"}, {"nom": "Vincent", "prenom": "Louise", "entreprise": "Roux Solutions", "formation": "Excel Perfectionnement", "date_inscription": "2026-08-14", "statut_inscription": "inscrit", "date_session": "2026-09-04"}, {"nom": "Fontaine", "prenom": "Tom", "entreprise": "Roux Solutions", "formation": "Excel Perfectionnement", "date_inscription": "2026-08-14", "statut_inscription": "inscrit", "date_session": "2026-09-04"}, {"nom": "David", "prenom": "Enzo", "entreprise": "David Technologies", "formation": "Prise de parole en public", "date_inscription": "2026-08-13", "statut_inscription": "inscrit", "date_session": "2026-09-19"}, {"nom": "Lefebvre", "prenom": "Inès", "entreprise": "David Technologies", "formation": "Prise de parole en public", "date_inscription": "2026-08-13", "statut_inscription": "inscrit", "date_session": "2026-09-19"}, {"nom": "Roux", "prenom": "Adam", "entreprise": "David Technologies", "formation": "Prise de parole en public", "date_inscription": "2026-08-12", "statut_inscription": "inscrit", "date_session": "2026-09-19"}, {"nom": "Simon", "prenom": "Arthur", "entreprise": "David Technologies", "formation": "Prise de parole en public", "date_inscription": "2026-08-12", "statut_inscription": "inscrit", "date_session": "2026-09-19"}, {"nom": "Garcia", "prenom": "Manon", "entreprise": "David Technologies", "formation": "Prise de parole en public", "date_inscription": "2026-08-12", "statut_inscription": "inscrit", "date_session": "2026-09-19"}, {"nom": "Garcia", "prenom": "Paul", "entreprise": "Roux Solutions", "formation": "Excel Perfectionnement", "date_inscription": "2026-08-12", "statut_inscription": "inscrit", "date_session": "2026-09-04"}, {"nom": "Durand", "prenom": "Camille", "entreprise": "Garcia Partners", "formation": "Gestion du stress", "date_inscription": "2026-08-12", "statut_inscription": "inscrit", "date_session": "2026-08-14"}, {"nom": "Dubois", "prenom": "Julie", "entreprise": "Roux Solutions", "formation": "Anglais professionnel", "date_inscription": "2026-08-12", "statut_inscription": "inscrit", "date_session": "2026-08-12"}, {"nom": "Laurent", "prenom": "Nora", "entreprise": "Roux Solutions", "formation": "Anglais professionnel", "date_inscription": "2026-08-12", "statut_inscription": "inscrit", "date_session": "2026-08-12"}, {"nom": "Fontaine", "prenom": "Raphaël", "entreprise": "Roux Solutions", "formation": "Anglais professionnel", "date_inscription": "2026-08-12", "statut_inscription": "inscrit", "date_session": "2026-08-12"}, {"nom": "Moreau", "prenom": "Louis", "entreprise": "David Technologies", "formation": "PowerPoint Avancé", "date_inscription": "2026-08-12", "statut_inscription": "present", "date_session": "2026-02-14"}, {"nom": "Lefebvre", "prenom": "Lucas", "entreprise": "David Technologies", "formation": "PowerPoint Avancé", "date_inscription": "2026-08-12", "statut_inscription": "present", "date_session": "2026-02-14"}, {"nom": "Moreau", "prenom": "Marius", "entreprise": "David Technologies", "formation": "PowerPoint Avancé", "date_inscription": "2026-08-12", "statut_inscription": "present", "date_session": "2026-02-14"}, {"nom": "Roux", "prenom": "Zoé", "entreprise": "David Technologies", "formation": "PowerPoint Avancé", "date_inscription": "2026-08-12", "statut_inscription": "present", "date_session": "2026-02-14"}, {"nom": "Martin", "prenom": "Nathan", "entreprise": "David Technologies", "formation": "Management d'équipe", "date_inscription": "2026-08-12", "statut_inscription": "present", "date_session": "2025-12-21"}, {"nom": "Durand", "prenom": "Inès", "entreprise": "David Technologies", "formation": "Management d'équipe", "date_inscription": "2026-08-12", "statut_inscription": "annule", "date_session": "2025-12-21"}, {"nom": "Lefebvre", "prenom": "Sarah", "entreprise": "David Technologies", "formation": "Management d'équipe", "date_inscription": "2026-08-12", "statut_inscription": "present", "date_session": "2025-12-21"}, {"nom": "David", "prenom": "Nora", "entreprise": "David Technologies", "formation": "Management d'équipe", "date_inscription": "2026-08-12", "statut_inscription": "present", "date_session": "2025-12-21"}, {"nom": "Thomas", "prenom": "Paul", "entreprise": "David Technologies", "formation": "Management d'équipe", "date_inscription": "2026-08-12", "statut_inscription": "present", "date_session": "2025-12-21"}, {"nom": "Thomas", "prenom": "Sofia", "entreprise": "David Technologies", "formation": "Management d'équipe", "date_inscription": "2026-08-12", "statut_inscription": "present", "date_session": "2025-12-21"}, {"nom": "Thomas", "prenom": "Hugo", "entreprise": "David Technologies", "formation": "Management d'équipe", "date_inscription": "2026-08-12", "statut_inscription": "present", "date_session": "2025-12-21"}, {"nom": "Fontaine", "prenom": "Tom", "entreprise": "David Technologies", "formation": "Communication interpersonnelle", "date_inscription": "2026-08-12", "statut_inscription": "present", "date_session": "2025-11-10"}, {"nom": "Leroy", "prenom": "Noah", "entreprise": "David Technologies", "formation": "Communication interpersonnelle", "date_inscription": "2026-08-12", "statut_inscription": "present", "date_session": "2025-11-10"}, {"nom": "Moreau", "prenom": "Raphaël", "entreprise": "David Technologies", "formation": "Communication interpersonnelle", "date_inscription": "2026-08-12", "statut_inscription": "absent", "date_session": "2025-11-10"}, {"nom": "Roux", "prenom": "Gabriel", "entreprise": "David Technologies", "formation": "Communication interpersonnelle", "date_inscription": "2026-08-12", "statut_inscription": "present", "date_session": "2025-11-10"}], "taux_remplissage": [{"mois": "2026-03", "nb_sessions": 9, "taux_remplissage": 67.4}, {"mois": "2026-04", "nb_sessions": 11, "taux_remplissage": 66.3}, {"mois": "2026-05", "nb_sessions": 10, "taux_remplissage": 63.3}, {"mois": "2026-06", "nb_sessions": 11, "taux_remplissage": 64.2}, {"mois": "2026-07", "nb_sessions": 7, "taux_remplissage": 68.8}, {"mois": "2026-08", "nb_sessions": 12, "taux_remplissage": 62.0}], "ca_mensuel": [{"mois": "2025-09", "ca": 27720.0}, {"mois": "2025-10", "ca": 11700.0}, {"mois": "2025-11", "ca": 22680.0}, {"mois": "2025-12", "ca": 34560.0}, {"mois": "2026-01", "ca": 39420.0}, {"mois": "2026-02", "ca": 25200.0}, {"mois": "2026-03", "ca": 28080.0}, {"mois": "2026-04", "ca": 24840.0}, {"mois": "2026-05", "ca": 18360.0}, {"mois": "2026-06", "ca": 32220.0}, {"mois": "2026-07", "ca": 16380.0}, {"mois": "2026-08", "ca": 6120.0}], "devis_a_relancer": [{"id": 26, "client": "Petit Logistique", "montant": 8442.45, "date_creation": "2025-06-27", "age_jours": 413}, {"id": 59, "client": "Fontaine Partners", "montant": 1655.43, "date_creation": "2025-10-25", "age_jours": 293}, {"id": 52, "client": "Laurent Solutions", "montant": 4643.01, "date_creation": "2025-10-26", "age_jours": 292}, {"id": 65, "client": "Garcia Logistique", "montant": 1678.6, "date_creation": "2026-03-07", "age_jours": 160}, {"id": 54, "client": "Martin Groupe", "montant": 7162.14, "date_creation": "2026-05-24", "age_jours": 82}, {"id": 39, "client": "Leroy Solutions", "montant": 9019.37, "date_creation": "2026-05-31", "age_jours": 75}, {"id": 23, "client": "Fontaine Logistique", "montant": 1071.52, "date_creation": "2026-07-01", "age_jours": 44}, {"id": 44, "client": "Dubois Bâtiment", "montant": 6975.96, "date_creation": "2026-07-25", "age_jours": 20}], "top_formateurs": [{"nom": "David", "prenom": "Mathis", "specialite": "Management", "nb_sessions": 22, "ca_genere": 63540.0}, {"nom": "Durand", "prenom": "Nora", "specialite": "RH", "nb_sessions": 19, "ca_genere": 57780.0}, {"nom": "Vincent", "prenom": "Emma", "specialite": "Marketing", "nb_sessions": 22, "ca_genere": 53640.0}, {"nom": "Thomas", "prenom": "Camille", "specialite": "Informatique", "nb_sessions": 20, "ca_genere": 49140.0}, {"nom": "Martin", "prenom": "Nora", "specialite": "Sécurité", "nb_sessions": 21, "ca_genere": 48240.0}]};
+const DATA = {"generated_at": "2026-08-14", "nouveaux_clients_par_mois": [{"mois": "2025-09", "nouveaux_clients": 1}, {"mois": "2025-10", "nouveaux_clients": 2}, {"mois": "2025-11", "nouveaux_clients": 2}, {"mois": "2025-12", "nouveaux_clients": 1}, {"mois": "2026-01", "nouveaux_clients": 4}, {"mois": "2026-02", "nouveaux_clients": 4}, {"mois": "2026-03", "nouveaux_clients": 3}, {"mois": "2026-04", "nouveaux_clients": 2}, {"mois": "2026-05", "nouveaux_clients": 3}, {"mois": "2026-06", "nouveaux_clients": 2}, {"mois": "2026-07", "nouveaux_clients": 1}, {"mois": "2026-08", "nouveaux_clients": 2}], "derniers_stagiaires": [{"nom": "Martin Julie", "convention": "Formation Négociation commerciale — C00061016", "session": "Prise de parole en public", "inscrit_le": "2026-08-14T18:53:10"}, {"nom": "Roux Paul", "convention": "Formation Excel Perfectionnement — C00061011", "session": "Paie et administration RH", "inscrit_le": "2026-08-14T16:13:28"}, {"nom": "Robert Léa", "convention": "Formation Habilitation électrique — C00061027", "session": "Comptabilité générale", "inscrit_le": "2026-08-14T10:01:35"}, {"nom": "Michel Louis", "convention": "Formation Comptabilité générale — C00061017", "session": "Excel VBA", "inscrit_le": "2026-08-13T11:23:42"}, {"nom": "Laurent Léa", "convention": "Formation Habilitation électrique — C00061011", "session": "Anglais professionnel", "inscrit_le": "2026-08-12T16:11:25"}, {"nom": "Durand Mathis", "convention": "Formation Paie et administration RH — C00061001", "session": "Gestion de projet", "inscrit_le": "2026-08-12T14:25:10"}, {"nom": "Roux Noah", "convention": "Formation Comptabilité générale — C00061017", "session": "Excel VBA", "inscrit_le": "2026-08-12T13:38:27"}, {"nom": "Bertrand Inès", "convention": "Formation Gestion de projet — C00061004", "session": "Anglais professionnel", "inscrit_le": "2026-08-12T12:44:47"}, {"nom": "Michel Gabriel", "convention": "Formation Gestion de projet — C00061006", "session": "Communication interpersonnelle", "inscrit_le": "2026-08-12T11:57:36"}, {"nom": "Lefebvre Léa", "convention": "Formation Comptabilité générale — C00061017", "session": "Excel VBA", "inscrit_le": "2026-08-12T09:00:29"}, {"nom": "Robert Noah", "convention": "Formation Habilitation électrique — C00061022", "session": "CACES R489", "inscrit_le": "2026-08-11T16:45:52"}, {"nom": "Moreau Manon", "convention": "Formation Excel VBA — C00061017", "session": "Négociation commerciale", "inscrit_le": "2026-08-11T15:09:38"}, {"nom": "Bertrand Raphaël", "convention": "Formation Négociation commerciale — C00061016", "session": "Prise de parole en public", "inscrit_le": "2026-08-10T18:09:16"}, {"nom": "Chevalier Sarah", "convention": "Formation Prise de parole en public — C00061015", "session": "Anglais professionnel", "inscrit_le": "2026-08-10T16:48:29"}, {"nom": "Garcia Mathis", "convention": "Formation Habilitation électrique — C00061022", "session": "CACES R489", "inscrit_le": "2026-08-10T15:51:20"}, {"nom": "Moreau Arthur", "convention": "Formation Habilitation électrique — C00061029", "session": "Négociation commerciale", "inscrit_le": "2026-08-10T13:02:04"}, {"nom": "Thomas Sofia", "convention": "Formation Management d'équipe — C00061003", "session": "PowerPoint Avancé", "inscrit_le": "2026-08-10T11:58:00"}, {"nom": "Chevalier Lina", "convention": "Formation Excel Perfectionnement — C00061011", "session": "Paie et administration RH", "inscrit_le": "2026-08-10T10:04:42"}, {"nom": "David Adam", "convention": "Formation Paie et administration RH — C00061007", "session": "SST - Sauveteur Secouriste du Travail", "inscrit_le": "2026-08-10T08:42:37"}, {"nom": "Simon Mathis", "convention": "Formation Comptabilité générale — C00061021", "session": "Marketing digital", "inscrit_le": "2026-08-09T12:10:46"}, {"nom": "Lefebvre Paul", "convention": "Formation Excel Perfectionnement — C00061011", "session": "Paie et administration RH", "inscrit_le": "2026-08-09T10:13:45"}, {"nom": "Fontaine Arthur", "convention": "Formation Négociation commerciale — C00061024", "session": "Python pour l'analyse de données", "inscrit_le": "2026-08-09T08:54:59"}, {"nom": "Laurent Zoé", "convention": "Formation Négociation commerciale — C00061016", "session": "Prise de parole en public", "inscrit_le": "2026-08-08T17:57:05"}, {"nom": "Lefebvre Anna", "convention": "Formation Négociation commerciale — C00061010", "session": "Paie et administration RH", "inscrit_le": "2026-08-07T17:10:16"}, {"nom": "Lefebvre Nathan", "convention": "Formation Habilitation électrique — C00061022", "session": "CACES R489", "inscrit_le": "2026-08-07T16:10:27"}, {"nom": "Chevalier Inès", "convention": "Formation Habilitation électrique — C00061029", "session": "Négociation commerciale", "inscrit_le": "2026-08-07T12:49:38"}, {"nom": "Bernard Nathan", "convention": "Formation CACES R489 — C00061025", "session": "Comptabilité générale", "inscrit_le": "2026-08-07T10:33:42"}, {"nom": "Laurent Léo", "convention": "Formation Paie et administration RH — C00061007", "session": "SST - Sauveteur Secouriste du Travail", "inscrit_le": "2026-08-07T09:00:03"}, {"nom": "Roux Arthur", "convention": "Formation Prise de parole en public — C00061011", "session": "Python pour l'analyse de données", "inscrit_le": "2026-08-06T18:30:10"}, {"nom": "Roux Louise", "convention": "Formation Comptabilité générale — C00061017", "session": "Excel VBA", "inscrit_le": "2026-08-06T17:03:22"}], "ca_mensuel": [{"mois": "2025-09", "ca": 8561.38}, {"mois": "2025-10", "ca": 3930.61}, {"mois": "2025-11", "ca": 8704.95}, {"mois": "2025-12", "ca": 7628.92}, {"mois": "2026-01", "ca": 5137.47}, {"mois": "2026-02", "ca": 13476.84}, {"mois": "2026-03", "ca": 33697.03}, {"mois": "2026-04", "ca": 9149.33}, {"mois": "2026-05", "ca": 24772.27}, {"mois": "2026-06", "ca": 48192.73}, {"mois": "2026-07", "ca": 41833.14}, {"mois": "2026-08", "ca": 86928.64}], "devis_a_relancer": [{"id": "C00020300", "name": "Formation Marketing digital — C00061001", "proposal_code": "PR00000", "proposal_status": "expire", "age_jours": 641}, {"id": "C00020316", "name": "Formation Paie et administration RH — C00061017", "proposal_code": "PR00016", "proposal_status": "refuse", "age_jours": 520}, {"id": "C00020325", "name": "Formation Habilitation électrique — C00061011", "proposal_code": "PR00025", "proposal_status": "expire", "age_jours": 515}, {"id": "C00020301", "name": "Formation Négociation commerciale — C00061005", "proposal_code": "PR00001", "proposal_status": "en_attente", "age_jours": 497}, {"id": "C00020341", "name": "Formation Négociation commerciale — C00061008", "proposal_code": "PR00041", "proposal_status": "expire", "age_jours": 364}, {"id": "C00020349", "name": "Formation Communication interpersonnelle — C00061010", "proposal_code": "PR00049", "proposal_status": "en_attente", "age_jours": 325}, {"id": "C00020329", "name": "Formation Gestion de projet — C00061027", "proposal_code": "PR00029", "proposal_status": "refuse", "age_jours": 320}, {"id": "C00020320", "name": "Formation Python pour l'analyse de données — C00061008", "proposal_code": "PR00020", "proposal_status": "expire", "age_jours": 313}, {"id": "C00020313", "name": "Formation Gestion de projet — C00061026", "proposal_code": "PR00013", "proposal_status": "refuse", "age_jours": 300}, {"id": "C00020335", "name": "Formation Paie et administration RH — C00061011", "proposal_code": "PR00035", "proposal_status": "refuse", "age_jours": 283}, {"id": "C00020338", "name": "Formation Paie et administration RH — C00061010", "proposal_code": "PR00038", "proposal_status": "expire", "age_jours": 203}, {"id": "C00020364", "name": "Formation PowerPoint Avancé — C00061017", "proposal_code": "PR00064", "proposal_status": "expire", "age_jours": 197}, {"id": "C00020361", "name": "Formation Python pour l'analyse de données — C00061018", "proposal_code": "PR00061", "proposal_status": "refuse", "age_jours": 186}, {"id": "C00020348", "name": "Formation Communication interpersonnelle — C00061010", "proposal_code": "PR00048", "proposal_status": "en_attente", "age_jours": 185}, {"id": "C00020358", "name": "Formation Gestion de projet — C00061021", "proposal_code": "PR00058", "proposal_status": "expire", "age_jours": 164}, {"id": "C00020375", "name": "Formation Management d'équipe — C00061017", "proposal_code": "PR00075", "proposal_status": "refuse", "age_jours": 147}, {"id": "C00020362", "name": "Formation Management d'équipe — C00061027", "proposal_code": "PR00062", "proposal_status": "refuse", "age_jours": 141}, {"id": "C00020327", "name": "Formation Python pour l'analyse de données — C00061011", "proposal_code": "PR00027", "proposal_status": "expire", "age_jours": 134}, {"id": "C00020317", "name": "Formation Excel Perfectionnement — C00061015", "proposal_code": "PR00017", "proposal_status": "refuse", "age_jours": 110}, {"id": "C00020330", "name": "Formation Python pour l'analyse de données — C00061027", "proposal_code": "PR00030", "proposal_status": "expire", "age_jours": 104}, {"id": "C00020367", "name": "Formation Excel Perfectionnement — C00061013", "proposal_code": "PR00067", "proposal_status": "en_attente", "age_jours": 104}, {"id": "C00020360", "name": "Formation SST - Sauveteur Secouriste du Travail — C00061000", "proposal_code": "PR00060", "proposal_status": "expire", "age_jours": 98}, {"id": "C00020354", "name": "Formation Paie et administration RH — C00061009", "proposal_code": "PR00054", "proposal_status": "refuse", "age_jours": 92}, {"id": "C00020376", "name": "Formation CACES R489 — C00061017", "proposal_code": "PR00076", "proposal_status": "refuse", "age_jours": 90}, {"id": "C00020395", "name": "Formation SST - Sauveteur Secouriste du Travail — C00061020", "proposal_code": "PR00095", "proposal_status": "expire", "age_jours": 79}, {"id": "C00020347", "name": "Formation Négociation commerciale — C00061010", "proposal_code": "PR00047", "proposal_status": "refuse", "age_jours": 71}, {"id": "C00020383", "name": "Formation Excel Perfectionnement — C00061017", "proposal_code": "PR00083", "proposal_status": "expire", "age_jours": 52}, {"id": "C00020390", "name": "Formation Marketing digital — C00061000", "proposal_code": "PR00090", "proposal_status": "en_attente", "age_jours": 42}, {"id": "C00020357", "name": "Formation Habilitation électrique — C00061021", "proposal_code": "PR00057", "proposal_status": "refuse", "age_jours": 39}, {"id": "C00020389", "name": "Formation Anglais professionnel — C00061024", "proposal_code": "PR00089", "proposal_status": "en_attente", "age_jours": 36}, {"id": "C00020400", "name": "Formation Management d'équipe — C00061018", "proposal_code": "PR00100", "proposal_status": "en_attente", "age_jours": 34}, {"id": "C00020394", "name": "Formation Anglais professionnel — C00061020", "proposal_code": "PR00094", "proposal_status": "expire", "age_jours": 33}, {"id": "C00020369", "name": "Formation Négociation commerciale — C00061007", "proposal_code": "PR00069", "proposal_status": "refuse", "age_jours": 27}, {"id": "C00020373", "name": "Formation Excel Perfectionnement — C00061007", "proposal_code": "PR00073", "proposal_status": "en_attente", "age_jours": 24}, {"id": "C00020393", "name": "Formation Management d'équipe — C00061020", "proposal_code": "PR00093", "proposal_status": "expire", "age_jours": 19}], "taux_remplissage": [{"mois": "2026-03", "nb_sessions": 1, "taux_remplissage": 33.3}, {"mois": "2026-04", "nb_sessions": 3, "taux_remplissage": 58.3}, {"mois": "2026-05", "nb_sessions": 2, "taux_remplissage": 108.3}, {"mois": "2026-06", "nb_sessions": 0, "taux_remplissage": 0.0}, {"mois": "2026-07", "nb_sessions": 1, "taux_remplissage": 50.0}, {"mois": "2026-08", "nb_sessions": 0, "taux_remplissage": 0.0}], "top_formateurs": [{"trainer_id": "A00118408", "nom": "Simon Manon", "nb_sessions": 31, "ca_estime": 44100.0}, {"trainer_id": "A00118402", "nom": "Fontaine Enzo", "nb_sessions": 29, "ca_estime": 43400.0}, {"trainer_id": "A00118411", "nom": "Vincent Hugo", "nb_sessions": 28, "ca_estime": 43400.0}, {"trainer_id": "A00118410", "nom": "Simon Julie", "nb_sessions": 25, "ca_estime": 38500.0}, {"trainer_id": "A00118403", "nom": "David Julie", "nb_sessions": 24, "ca_estime": 37100.0}]}
+;
 
 function fmtDate(iso) {
   const [y, m, d] = iso.split('-');
@@ -561,9 +562,9 @@ function el(tag, cls, html) {
 
 // ---------- KPI row ----------
 (function renderKpis(){
-  const nc = DATA.pct_nouveaux_clients;
+  const nc = DATA.nouveaux_clients_par_mois;
   const cur = nc[nc.length - 1], prev = nc[nc.length - 2];
-  const delta = cur.pourcentage_nouveaux - prev.pourcentage_nouveaux;
+  const delta = cur.nouveaux_clients - prev.nouveaux_clients;
 
   const ca = DATA.ca_mensuel;
   const caCur = ca[ca.length - 1].ca, caPrev = ca[ca.length - 2].ca;
@@ -578,9 +579,9 @@ function el(tag, cls, html) {
   const kpis = [
     {
       label: `Nouveaux clients — ${fmtMonth(cur.mois)}`,
-      value: `${cur.pourcentage_nouveaux.toFixed(1)}%`,
-      sub: `${cur.nouveaux_clients} sur ${cur.clients_actifs} clients actifs`,
-      delta: delta, deltaSuffix: ' pt vs mois préc.'
+      value: String(cur.nouveaux_clients),
+      sub: `${delta >= 0 ? '+' : ''}${delta} vs mois précédent`,
+      delta: delta, deltaSuffix: ''
     },
     {
       label: `CA facturé — ${fmtMonth(ca[ca.length-1].mois)}`,
@@ -615,23 +616,21 @@ function el(tag, cls, html) {
   });
 })();
 
-// ---------- % nouveaux clients (table) ----------
+// ---------- Nouveaux clients par mois (table) ----------
 (function renderNouveaux(){
   const tbody = document.getElementById('tbl-nouveaux');
-  const maxPct = Math.max(...DATA.pct_nouveaux_clients.map(r => r.pourcentage_nouveaux), 1);
-  DATA.pct_nouveaux_clients.forEach(r => {
+  const max = Math.max(...DATA.nouveaux_clients_par_mois.map(r => r.nouveaux_clients), 1);
+  DATA.nouveaux_clients_par_mois.forEach(r => {
     const tr = el('tr');
     tr.appendChild(el('td', 'strong', fmtMonth(r.mois)));
-    tr.appendChild(el('td', 'num', String(r.clients_actifs)));
-    tr.appendChild(el('td', 'num', String(r.nouveaux_clients)));
     const barTd = el('td', 'bar-td');
     const cell = el('div', 'bar-cell');
     const track = el('div', 'bar-track');
     const fill = el('div', 'bar-fill');
-    fill.style.width = `${(r.pourcentage_nouveaux / maxPct * 100).toFixed(1)}%`;
+    fill.style.width = `${(r.nouveaux_clients / max * 100).toFixed(1)}%`;
     track.appendChild(fill);
     cell.appendChild(track);
-    cell.appendChild(el('span', 'bar-pct', `${r.pourcentage_nouveaux.toFixed(1)}%`));
+    cell.appendChild(el('span', 'bar-pct', String(r.nouveaux_clients)));
     barTd.appendChild(cell);
     tr.appendChild(barTd);
     tbody.appendChild(tr);
@@ -643,24 +642,15 @@ function el(tag, cls, html) {
   const tbody = document.getElementById('tbl-stagiaires');
   const rows = DATA.derniers_stagiaires;
   document.getElementById('stagiaires-count').textContent = `${rows.length} inscriptions`;
-  const labels = {
-    inscrit: ['st-inscrit', 'Inscrit'],
-    present: ['st-present', 'Présent'],
-    absent: ['st-absent', 'Absent'],
-    annule: ['st-annule', 'Annulé'],
-  };
   rows.forEach(r => {
     const tr = el('tr');
-    const nameTd = el('td', 'strong', `${r.prenom} ${r.nom}`);
-    nameTd.title = `${r.prenom} ${r.nom}`;
+    const nameTd = el('td', 'strong', r.nom); nameTd.title = r.nom;
     tr.appendChild(nameTd);
-    const entTd = el('td', '', r.entreprise); entTd.title = r.entreprise;
-    tr.appendChild(entTd);
-    const formTd = el('td', '', r.formation); formTd.title = r.formation;
-    tr.appendChild(formTd);
-    tr.appendChild(el('td', '', fmtDate(r.date_inscription)));
-    const [cls, label] = labels[r.statut_inscription] || ['st-inscrit', r.statut_inscription];
-    tr.appendChild(el('td', 'badge-td', `<span class="badge ${cls}"><span class="dot"></span>${label}</span>`));
+    const convTd = el('td', '', r.convention || '—'); convTd.title = r.convention || '';
+    tr.appendChild(convTd);
+    const sessTd = el('td', '', r.session || '—'); sessTd.title = r.session || '';
+    tr.appendChild(sessTd);
+    tr.appendChild(el('td', '', fmtDate(r.inscrit_le.slice(0, 10))));
     tbody.appendChild(tr);
   });
 })();
@@ -688,11 +678,11 @@ renderMiniChart('chart-remplissage', 'labels-remplissage', DATA.taux_remplissage
 // ---------- Devis à relancer ----------
 (function renderDevis(){
   const tbody = document.getElementById('tbl-devis');
-  DATA.devis_a_relancer.forEach(d => {
+  DATA.devis_a_relancer.slice(0, 20).forEach(d => {
     const tr = el('tr');
     const left = el('td');
-    left.appendChild(el('div', 'strong', d.client));
-    left.appendChild(el('div', '', `${fmtEUR(d.montant)} · devis du ${fmtDate(d.date_creation)}`));
+    left.appendChild(el('div', 'strong', d.name));
+    left.appendChild(el('div', '', `${d.proposal_code || ''} · statut : ${d.proposal_status || 'inconnu'}`));
     left.lastChild.style.fontSize = '12px';
     left.lastChild.style.color = 'var(--ink-muted)';
     tr.appendChild(left);
@@ -710,19 +700,19 @@ renderMiniChart('chart-remplissage', 'labels-remplissage', DATA.taux_remplissage
 (function renderFormateurs(){
   const wrap = document.getElementById('rank-formateurs');
   const rows = DATA.top_formateurs;
-  const max = Math.max(...rows.map(r => r.ca_genere), 1);
+  const max = Math.max(...rows.map(r => r.ca_estime), 1);
   rows.forEach((r, i) => {
     const row = el('div', 'rank-row');
     row.appendChild(el('div', 'rank-num', String(i + 1).padStart(2, '0')));
-    const name = el('div', 'rank-name', `${r.prenom} ${r.nom}`);
+    const name = el('div', 'rank-name', r.nom);
     row.appendChild(name);
-    row.appendChild(el('div', 'rank-meta', `${r.specialite} · ${r.nb_sessions} sessions`));
+    row.appendChild(el('div', 'rank-meta', `${r.nb_sessions} sessions`));
     const track = el('div', 'rank-bar-track');
     const fill = el('div', 'rank-bar-fill');
-    fill.style.width = `${(r.ca_genere / max * 100).toFixed(1)}%`;
+    fill.style.width = `${(r.ca_estime / max * 100).toFixed(1)}%`;
     track.appendChild(fill);
     row.appendChild(track);
-    row.appendChild(el('div', 'rank-value', fmtEUR(r.ca_genere)));
+    row.appendChild(el('div', 'rank-value', fmtEUR(r.ca_estime)));
     wrap.appendChild(row);
   });
 })();

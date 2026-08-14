@@ -1,17 +1,20 @@
-"""Génère un jeu de données réaliste pour le prototype MCDF (SQLite).
+"""Génère un jeu de données réaliste pour le prototype MCDF v2 (SQLite),
+suivant le VRAI schéma découvert par capture réseau (entity/customer/
+company/actor/convention/conventionAttendee/invoice/session).
 
 Usage:
     python3 seed.py [--db mcdf.db] [--seed 42]
 
-Ne dépend d'aucune librairie externe (pas de faker) pour rester exécutable
-sans installation. Les volumes et la répartition dans le temps sont choisis
-pour produire des restitutions crédibles (nouveaux clients, remplissage des
-sessions, etc.).
+Ne dépend d'aucune librairie externe. Les identifiants suivent les
+préfixes observés dans l'API réelle (A=actor, C=convention/customer/
+company, S=session, CA=conventionAttendee, F=invoice) et les dates sont
+au format ISO avec heure (ex: 2024-03-12T14:44:40), comme les vraies
+réponses JSON.
 """
 import argparse
 import random
 import sqlite3
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 PRENOMS = [
@@ -25,251 +28,239 @@ NOMS = [
     "Leroy", "Moreau", "Simon", "Laurent", "Lefebvre", "Michel", "Garcia",
     "David", "Bertrand", "Roux", "Vincent", "Fontaine", "Chevalier",
 ]
-SECTEURS = [
-    "Industrie", "BTP", "Commerce", "Santé", "Transport", "Informatique",
-    "Banque/Assurance", "Hôtellerie-Restauration", "Public", "Logistique",
+RAISONS_SOCIALES = [
+    "Solutions", "Groupe", "Industries", "Services", "Consulting",
+    "Distribution", "Logistique", "Bâtiment", "Technologies", "Partners",
+]
+DISCIPLINES = [
+    "Bureautique", "Management", "Sécurité", "Langues", "Informatique",
+    "RH", "Finance", "Commercial", "Marketing", "Développement personnel",
+]
+SESSION_NAMES = [
+    "Excel Perfectionnement", "PowerPoint Avancé", "Management d'équipe",
+    "Gestion de projet", "Communication interpersonnelle",
+    "Anglais professionnel", "SST - Sauveteur Secouriste du Travail",
+    "Habilitation électrique", "CACES R489", "Prise de parole en public",
+    "Excel VBA", "Négociation commerciale", "Comptabilité générale",
+    "Paie et administration RH", "Cybersécurité - Sensibilisation",
+    "Python pour l'analyse de données", "Marketing digital",
 ]
 VILLES = [
     "Paris", "Lyon", "Marseille", "Toulouse", "Nantes", "Lille", "Bordeaux",
     "Strasbourg", "Rennes", "Montpellier",
 ]
-RAISONS_SOCIALES = [
-    "Solutions", "Groupe", "Industries", "Services", "Consulting",
-    "Distribution", "Logistique", "Bâtiment", "Technologies", "Partners",
-]
-FORMATIONS = [
-    ("Excel Perfectionnement", "Bureautique", 14),
-    ("Excel Initiation", "Bureautique", 14),
-    ("PowerPoint Avancé", "Bureautique", 7),
-    ("Management d'équipe", "Management", 21),
-    ("Gestion de projet", "Management", 21),
-    ("Communication interpersonnelle", "Développement personnel", 14),
-    ("Anglais professionnel", "Langues", 30),
-    ("SST - Sauveteur Secouriste du Travail", "Sécurité", 14),
-    ("Habilitation électrique", "Sécurité", 21),
-    ("CACES R489", "Sécurité", 21),
-    ("Prise de parole en public", "Développement personnel", 7),
-    ("Excel VBA", "Bureautique", 14),
-    ("Négociation commerciale", "Commercial", 14),
-    ("Comptabilité générale", "Finance", 21),
-    ("Paie et administration RH", "RH", 21),
-    ("Cybersécurité - Sensibilisation", "Informatique", 7),
-    ("Python pour l'analyse de données", "Informatique", 21),
-    ("Marketing digital", "Marketing", 14),
-    ("Gestion du stress", "Développement personnel", 7),
-    ("Droit du travail", "RH", 14),
-]
-SPECIALITES = [
-    "Bureautique", "Management", "Sécurité", "Langues", "Informatique",
-    "RH", "Finance", "Commercial", "Marketing", "Développement personnel",
-]
 SALLES = ["Salle A", "Salle B", "Salle C", "Salle Visio", "Salle D"]
 
 TODAY = date(2026, 8, 14)
+ENTITY_ID = "E00000361"
+ENTITY_NAME = "DEMO"
 
 
-def daterange_days(rng: random.Random, start: date, end: date):
+def iso(d, rng):
+    """Convertit une date en timestamp ISO avec heure aléatoire, comme l'API réelle."""
+    h, m, s = rng.randint(8, 18), rng.randint(0, 59), rng.randint(0, 59)
+    return datetime(d.year, d.month, d.day, h, m, s).isoformat()
+
+
+def rand_date(rng, start: date, end: date) -> date:
     if end <= start:
         return start
-    n = (end - start).days
-    return start + timedelta(days=rng.randint(0, n))
+    return start + timedelta(days=rng.randint(0, (end - start).days))
+
+
+def seq_id(prefix, n, width=8):
+    return f"{prefix}{n:0{width}d}"
 
 
 def build(conn: sqlite3.Connection, rng: random.Random):
     cur = conn.cursor()
+    cur.execute("INSERT INTO entity VALUES (?,?)", (ENTITY_ID, ENTITY_NAME))
 
-    # --- Formateurs ---------------------------------------------------
-    formateurs = []
-    for i in range(15):
-        formateurs.append((
-            i + 1, rng.choice(NOMS), rng.choice(PRENOMS),
-            rng.choice(SPECIALITES), rng.choice([350, 400, 450, 500, 550, 600]),
+    # --- Companies -------------------------------------------------------
+    companies = []
+    for i in range(30):
+        raison = f"{rng.choice(NOMS)} {rng.choice(RAISONS_SOCIALES)}"
+        created = rand_date(rng, TODAY - timedelta(days=1000), TODAY)
+        companies.append((
+            seq_id("C", 61000 + i), ENTITY_ID, raison,
+            f"{rng.randint(100000000,999999999):09d}00010",
+            f"{rng.randint(1,150)} rue de la République", rng.choice(VILLES),
+            f"{rng.randint(10000,95999):05d}", f"contact@{raison.lower().replace(' ','')}.fr",
+            f"0{rng.randint(100000000,999999999)}", iso(created, rng), None,
         ))
-    cur.executemany(
-        "INSERT INTO formateurs VALUES (?,?,?,?,?)", formateurs)
+    cur.executemany("INSERT INTO company VALUES (?,?,?,?,?,?,?,?,?,?,?)", companies)
 
-    # --- Formations (catalogue) ---------------------------------------
-    formations = [(i + 1, t, c, d) for i, (t, c, d) in enumerate(FORMATIONS)]
-    cur.executemany("INSERT INTO formations VALUES (?,?,?,?)", formations)
-
-    # --- Clients : 24 mois d'historique, avec un flux régulier de
-    #     nouveaux clients chaque mois (utile pour le KPI "% nouveaux clients")
-    clients = []
-    client_id = 1
+    # --- Customers : flux régulier de nouveaux chaque mois sur 24 mois ---
+    customers = []
+    customer_id = 0
     start_history = TODAY - timedelta(days=730)
     month_cursor = date(start_history.year, start_history.month, 1)
     while month_cursor <= TODAY:
-        nb_nouveaux_ce_mois = rng.randint(1, 4)
-        max_day = 28
-        if month_cursor.year == TODAY.year and month_cursor.month == TODAY.month:
-            max_day = TODAY.day
-        for _ in range(nb_nouveaux_ce_mois):
-            nom = f"{rng.choice(NOMS)} {rng.choice(RAISONS_SOCIALES)}"
-            day = rng.randint(1, max_day)
-            d = date(month_cursor.year, month_cursor.month, day)
-            clients.append((
-                client_id, nom, rng.choice(SECTEURS), rng.choice(VILLES),
-                d.isoformat(),
+        max_day = TODAY.day if (month_cursor.year, month_cursor.month) == (TODAY.year, TODAY.month) else 28
+        for _ in range(rng.randint(1, 4)):
+            d = date(month_cursor.year, month_cursor.month, rng.randint(1, max_day))
+            company = rng.choice(companies)
+            customers.append((
+                seq_id("C", 112000 + customer_id), ENTITY_ID, company[0], company[2],
+                "company", 1 if rng.random() < 0.15 else 0, 1 if rng.random() < 0.1 else 0,
+                rng.choice(["active", "active", "active", "inactive"]),
+                company[7], company[5], None, iso(d, rng), None,
             ))
-            client_id += 1
-        # mois suivant
-        if month_cursor.month == 12:
-            month_cursor = date(month_cursor.year + 1, 1, 1)
-        else:
-            month_cursor = date(month_cursor.year, month_cursor.month + 1, 1)
-    cur.executemany("INSERT INTO clients VALUES (?,?,?,?,?)", clients)
+            customer_id += 1
+        month_cursor = date(month_cursor.year + 1, 1, 1) if month_cursor.month == 12 \
+            else date(month_cursor.year, month_cursor.month + 1, 1)
+    cur.executemany("INSERT INTO customer VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", customers)
 
-    # --- Sessions : réparties sur 24 mois, dont quelques-unes à venir ---
+    # --- Actors : formateurs (fixe) + chargés de compte + stagiaires -----
+    actors = []
+    trainers = []
+    for i in range(12):
+        d = rand_date(rng, TODAY - timedelta(days=1500), TODAY - timedelta(days=200))
+        prenom, nom = rng.choice(PRENOMS), rng.choice(NOMS)
+        a = (
+            seq_id("A", 118400 + i), ENTITY_ID, None, rng.choice(["M.", "Mme"]),
+            prenom, nom, f"{nom} {prenom}", f"{prenom.lower()}.{nom.lower()}@demo-mcdf.fr",
+            f"06{rng.randint(10000000,99999999)}", 0, 1, 0, 0, 0, 1, 0,
+            iso(d, rng), None,
+        )
+        actors.append(a)
+        trainers.append(a)
+
+    account_managers = []
+    for i in range(4):
+        d = rand_date(rng, TODAY - timedelta(days=1500), TODAY - timedelta(days=400))
+        prenom, nom = rng.choice(PRENOMS), rng.choice(NOMS)
+        a = (
+            seq_id("A", 118500 + i), ENTITY_ID, None, rng.choice(["M.", "Mme"]),
+            prenom, nom, f"{nom} {prenom}", f"{prenom.lower()}.{nom.lower()}@demo-mcdf.fr",
+            f"06{rng.randint(10000000,99999999)}", 0, 0, 0, 1, 0, 1, 0,
+            iso(d, rng), None,
+        )
+        actors.append(a)
+        account_managers.append(a)
+
+    attendee_actors = []
+    for i in range(400):
+        company = rng.choice(companies)
+        d = rand_date(rng, datetime.fromisoformat(company[9]).date(), TODAY)
+        prenom, nom = rng.choice(PRENOMS), rng.choice(NOMS)
+        a = (
+            seq_id("A", 200000 + i), ENTITY_ID, company[0], rng.choice(["M.", "Mme"]),
+            prenom, nom, f"{nom} {prenom}", f"{prenom.lower()}.{nom.lower()}{i}@example.com",
+            f"06{rng.randint(10000000,99999999)}", 1, 0, 0, 0, 0, 1, 0,
+            iso(d, rng), None,
+        )
+        actors.append(a)
+        attendee_actors.append(a)
+    cur.executemany("INSERT INTO actor VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", actors)
+
+    # --- Sessions : réparties sur 24 mois -----------------------------
     sessions = []
-    session_id = 1
     d = start_history
+    session_i = 0
     while d <= TODAY + timedelta(days=45):
-        if rng.random() < 0.35:  # ~ une session tous les ~3 jours en moyenne
-            formation = rng.choice(formations)
-            formateur = rng.choice(formateurs)
-            duree_jours = max(1, formation[3] // 7)
-            date_debut = d
-            date_fin = d + timedelta(days=duree_jours - 1)
-            capacite = rng.choice([6, 8, 10, 12])
-            if date_fin < TODAY:
-                statut = "realisee" if rng.random() > 0.05 else "annulee"
-            elif date_debut <= TODAY <= date_fin:
-                statut = "confirmee"
-            else:
-                statut = rng.choice(["planifiee", "confirmee"])
+        if rng.random() < 0.35:
+            trainer = rng.choice(trainers)
+            days_n = rng.choice([1, 2, 3])
+            end = d + timedelta(days=days_n - 1)
+            number_maxi = rng.choice([6, 8, 10, 12])
+            number_mini = max(2, number_maxi - rng.choice([2, 4, 6]))
             sessions.append((
-                session_id, formation[0], formateur[0],
-                rng.choice(SALLES), date_debut.isoformat(), date_fin.isoformat(),
-                capacite, statut,
+                seq_id("S", 33600 + session_i), ENTITY_ID, rng.choice(SESSION_NAMES),
+                seq_id("AC", session_i, width=5), rng.choice(DISCIPLINES),
+                trainer[0], trainer[6], rng.choice(SALLES),
+                d.isoformat(), end.isoformat(), days_n * 7, days_n,
+                700, 100, number_mini, number_maxi,
+                0 if end < TODAY else 1, 1, iso(d - timedelta(days=rng.randint(5, 40)), rng), None,
             ))
-            session_id += 1
+            session_i += 1
         d += timedelta(days=1)
-    cur.executemany("INSERT INTO sessions VALUES (?,?,?,?,?,?,?,?)", sessions)
+    cur.executemany("INSERT INTO session VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", sessions)
 
-    # --- Stagiaires + inscriptions --------------------------------------
-    stagiaires = []
-    inscriptions = []
-    stagiaire_id = 1
-    inscription_id = 1
-    for sess in sessions:
-        (sid, _formation_id, _formateur_id, _salle, date_debut_s,
-         date_fin_s, capacite, statut) = sess
-        if statut == "annulee":
-            continue
-        date_debut = date.fromisoformat(date_debut_s)
-        date_fin = date.fromisoformat(date_fin_s)
-        # taux de remplissage variable, légèrement moins bon sur les sessions
-        # les plus récentes / à venir (histoire réaliste à raconter au copilote)
-        taux_cible = rng.uniform(0.4, 1.0)
-        nb_inscrits = max(1, round(capacite * taux_cible))
-        client = rng.choice(clients)
-        for _ in range(nb_inscrits):
-            date_creation_stagiaire = daterange_days(
-                rng, date.fromisoformat(client[4]), min(date_debut, TODAY))
-            stagiaires.append((
-                stagiaire_id, client[0], rng.choice(NOMS), rng.choice(PRENOMS),
-                f"stagiaire{stagiaire_id}@example.com",
-                date_creation_stagiaire.isoformat(),
-            ))
-            date_inscription = daterange_days(
-                rng, date.fromisoformat(client[4]), min(date_debut, TODAY))
-            if date_fin < TODAY:
-                statut_inscription = rng.choices(
-                    ["present", "absent", "annule"], weights=[85, 10, 5])[0]
-                note = (round(rng.uniform(3.0, 5.0), 1)
-                        if statut_inscription == "present" and rng.random() > 0.15
-                        else None)
-            else:
-                statut_inscription = "inscrit"
-                note = None
-            inscriptions.append((
-                inscription_id, sid, stagiaire_id,
-                date_inscription.isoformat(), statut_inscription, note,
-            ))
-            stagiaire_id += 1
-            inscription_id += 1
-    cur.executemany("INSERT INTO stagiaires VALUES (?,?,?,?,?,?)", stagiaires)
-    cur.executemany(
-        "INSERT INTO inscriptions VALUES (?,?,?,?,?,?)", inscriptions)
-
-    # --- Devis -----------------------------------------------------------
-    devis = []
-    for i, c in enumerate(clients):
-        nb_devis = rng.randint(1, 3)
-        for _ in range(nb_devis):
-            dc = daterange_days(rng, date.fromisoformat(c[4]), TODAY)
-            montant = round(rng.uniform(800, 12000), 2)
-            age_jours = (TODAY - dc).days
-            if age_jours < 10:
-                statut, dr = "en_attente", None
-            else:
-                statut = rng.choices(
-                    ["signe", "refuse", "expire", "en_attente"],
-                    weights=[55, 20, 15, 10])[0]
-                dr = (dc + timedelta(days=rng.randint(1, 20))).isoformat() \
-                    if statut != "en_attente" else None
-            devis.append((
-                len(devis) + 1, c[0], montant, dc.isoformat(), statut, dr,
-            ))
-    cur.executemany("INSERT INTO devis VALUES (?,?,?,?,?,?)", devis)
-
-    # --- Factures (une par session réalisée, au client tiré parmi ses
-    #     stagiaires inscrits) -------------------------------------------
-    factures = []
-    inscriptions_by_session = {}
-    for ins in inscriptions:
-        inscriptions_by_session.setdefault(ins[1], []).append(ins)
-    stagiaire_client = {s[0]: s[1] for s in stagiaires}
-    for sess in sessions:
-        sid, formation_id, _f, _s, date_debut_s, date_fin_s, capacite, statut = sess
-        if statut != "realisee":
-            continue
-        session_inscriptions = inscriptions_by_session.get(sid, [])
-        if not session_inscriptions:
-            continue
-        client_ids = {stagiaire_client[i[2]] for i in session_inscriptions}
-        prix_jour_moyen = 180
-        duree = next(f[3] for f in formations if f[0] == formation_id) // 7
-        for cid in client_ids:
-            nb = sum(1 for i in session_inscriptions
-                     if stagiaire_client[i[2]] == cid)
-            montant = round(nb * duree * prix_jour_moyen, 2)
-            date_emission = date.fromisoformat(date_fin_s) + timedelta(days=rng.randint(1, 5))
-            age = (TODAY - date_emission).days
-            if age < 0:
-                continue
-            statut_p = "payee" if age > 45 or rng.random() > 0.15 else (
-                "retard" if age > 30 else "en_attente")
-            factures.append((
-                len(factures) + 1, cid, sid, montant, date_emission.isoformat(),
-                statut_p,
-            ))
-    cur.executemany("INSERT INTO factures VALUES (?,?,?,?,?,?)", factures)
-
-    # --- Conventions (une par session x client, corrélée aux factures) --
+    # --- Conventions (devis + dossiers) ----------------------------------
     conventions = []
-    seen = set()
-    for f in factures:
-        _id, cid, sid, *_ = f
-        key = (sid, cid)
-        if key in seen:
+    conv_i = 0
+    for cust in customers:
+        for _ in range(rng.randint(1, 3)):
+            provisional = rand_date(rng, datetime.fromisoformat(cust[11]).date(), TODAY)
+            age = (TODAY - provisional).days
+            if age < 10:
+                is_convention, signing_date, status = 0, None, "en_attente"
+            else:
+                r = rng.random()
+                if r < 0.55:
+                    is_convention = 1
+                    signing_date = iso(provisional + timedelta(days=rng.randint(1, 20)), rng)
+                    status = "signe"
+                elif r < 0.75:
+                    is_convention, signing_date, status = 0, None, "refuse"
+                elif r < 0.9:
+                    is_convention, signing_date, status = 0, None, "expire"
+                else:
+                    is_convention, signing_date, status = 0, None, "en_attente"
+            start = provisional + timedelta(days=rng.randint(5, 30))
+            manager = rng.choice(account_managers)
+            conventions.append((
+                seq_id("C", 20300 + conv_i), ENTITY_ID,
+                f"Formation {rng.choice(SESSION_NAMES)} — {cust[2]}",
+                seq_id("C", 20300 + conv_i), seq_id("PR", conv_i, width=5),
+                cust[0], manager[0], 1, is_convention, status, status,
+                iso(provisional, rng), signing_date,
+                start.isoformat(), (start + timedelta(days=rng.choice([1, 2, 3]))).isoformat(),
+                rng.choice([7, 14, 21]), 1 if is_convention and rng.random() > 0.2 else 0,
+                rng.choice([7, 14, 21]) if is_convention else 0,
+                iso(provisional, rng), None,
+            ))
+            conv_i += 1
+    cur.executemany(
+        "INSERT INTO convention VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", conventions)
+
+    # --- Convention attendees (inscriptions) ------------------------------
+    dossiers = [c for c in conventions if c[8] == 1]  # is_convention=1
+    attendees = []
+    att_i = 0
+    for conv in dossiers:
+        nb = rng.randint(1, 8)
+        session_pool = [s for s in sessions if s[8] <= conv[13]] or sessions  # sessions démarrées avant la fin du dossier
+        session = rng.choice(session_pool) if session_pool else None
+        for _ in range(nb):
+            actor = rng.choice(attendee_actors)
+            created = rand_date(rng, datetime.fromisoformat(conv[11]).date(), TODAY)
+            attendees.append((
+                seq_id("CA", 75400 + att_i), ENTITY_ID, conv[0], actor[0],
+                session[0] if session else None, iso(created, rng),
+            ))
+            att_i += 1
+    cur.executemany("INSERT INTO convention_attendee VALUES (?,?,?,?,?,?)", attendees)
+
+    # --- Invoices ----------------------------------------------------------
+    customer_name_by_id = {c[0]: c[3] for c in customers}
+    invoices = []
+    inv_i = 0
+    for conv in dossiers:
+        if not conv[16]:  # invoiced flag
             continue
-        seen.add(key)
-        r = rng.random()
-        statut = "signee" if r > 0.15 else ("en_attente" if r > 0.05 else "absente")
-        ds = None
-        if statut == "signee":
-            sess_fin = date.fromisoformat(
-                next(s[5] for s in sessions if s[0] == sid))
-            ds = (sess_fin - timedelta(days=rng.randint(1, 15))).isoformat()
-        conventions.append((len(conventions) + 1, sid, cid, statut, ds))
-    cur.executemany("INSERT INTO conventions VALUES (?,?,?,?,?)", conventions)
+        for _ in range(rng.randint(1, 2)):
+            billing = rand_date(
+                rng, datetime.fromisoformat(conv[11]).date(), TODAY)
+            amount = round(rng.uniform(800, 9000), 2)
+            age = (TODAY - billing).days
+            status = "payee" if age > 45 or rng.random() > 0.15 else ("retard" if age > 30 else "en_attente")
+            invoices.append((
+                f"F{inv_i+1:05d}", ENTITY_ID, conv[0], customer_name_by_id.get(conv[5], ""),
+                amount, round(amount * 1.2, 2), 0.0 if status == "payee" else round(amount * 1.2, 2),
+                billing.isoformat(), billing.isoformat() if status == "payee" else None,
+                status, iso(billing, rng), None,
+            ))
+            inv_i += 1
+    cur.executemany("INSERT INTO invoice VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", invoices)
 
     conn.commit()
-    print(f"Clients: {len(clients)} | Stagiaires: {len(stagiaires)} | "
-          f"Sessions: {len(sessions)} | Inscriptions: {len(inscriptions)} | "
-          f"Devis: {len(devis)} | Factures: {len(factures)} | "
-          f"Conventions: {len(conventions)}")
+    print(f"Companies: {len(companies)} | Customers: {len(customers)} | "
+          f"Actors: {len(actors)} (dont {len(trainers)} formateurs) | "
+          f"Sessions: {len(sessions)} | Conventions: {len(conventions)} "
+          f"(dont {len(dossiers)} dossiers) | Inscriptions: {len(attendees)} | "
+          f"Factures: {len(invoices)}")
 
 
 def main():
@@ -283,11 +274,9 @@ def main():
         db_path.unlink()
 
     conn = sqlite3.connect(db_path)
-    schema = (Path(__file__).parent / "schema.sql").read_text()
-    conn.executescript(schema)
+    conn.executescript((Path(__file__).parent / "schema.sql").read_text())
 
-    rng = random.Random(args.seed)
-    build(conn, rng)
+    build(conn, random.Random(args.seed))
     conn.close()
     print(f"Base générée : {db_path}")
 
