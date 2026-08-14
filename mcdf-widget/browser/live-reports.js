@@ -157,6 +157,50 @@
   console.log('--- 6. Top formateurs (CA estimé via dailyRate x days) ---');
   console.table(topFormateurs);
 
+  // -------------------------------------------------------------------
+  // 7. Comparaison année en cours vs année précédente, à date égale (YTD)
+  // -------------------------------------------------------------------
+  const now = new Date();
+  const yearN = now.getFullYear();
+  const yearN1 = yearN - 1;
+  const cutoffMonth = now.getMonth(); // 0-indexé
+  const cutoffDay = now.getDate();
+
+  const inYtd = (dateStr, year) => {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    if (d.getFullYear() !== year) return false;
+    return d.getMonth() < cutoffMonth || (d.getMonth() === cutoffMonth && d.getDate() <= cutoffDay);
+  };
+  const pctDelta = (cur, prev) => {
+    if (!prev) return cur ? Infinity : 0;
+    return Math.round(((cur - prev) / prev) * 1000) / 10;
+  };
+
+  const caN = invoices.filter((i) => inYtd(i.billingDate, yearN)).reduce((s, i) => s + (i.amount || 0), 0);
+  const caN1 = invoices.filter((i) => inYtd(i.billingDate, yearN1)).reduce((s, i) => s + (i.amount || 0), 0);
+
+  const clientsN = customers.filter((c) => inYtd(c.created, yearN)).length;
+  const clientsN1 = customers.filter((c) => inYtd(c.created, yearN1)).length;
+
+  const stagiairesN = new Set(
+    attendees.filter((a) => a.attendee && inYtd(a.created, yearN)).map((a) => a.attendeeId)
+  ).size;
+  const stagiairesN1 = new Set(
+    attendees.filter((a) => a.attendee && inYtd(a.created, yearN1)).map((a) => a.attendeeId)
+  ).size;
+
+  const devisSignesN = conventions.filter((c) => c.isProposal && inYtd(c.signingDate, yearN)).length;
+  const devisSignesN1 = conventions.filter((c) => c.isProposal && inYtd(c.signingDate, yearN1)).length;
+
+  console.log(`--- 7. Comparaison ${yearN} vs ${yearN1}, jusqu'au ${cutoffDay}/${cutoffMonth + 1} (YTD) ---`);
+  console.table({
+    'CA facturé (HT)': { [yearN]: caN.toFixed(2), [yearN1]: caN1.toFixed(2), 'delta %': pctDelta(caN, caN1) },
+    'Nouveaux clients': { [yearN]: clientsN, [yearN1]: clientsN1, 'delta %': pctDelta(clientsN, clientsN1) },
+    'Stagiaires inscrits': { [yearN]: stagiairesN, [yearN1]: stagiairesN1, 'delta %': pctDelta(stagiairesN, stagiairesN1) },
+    'Devis signés': { [yearN]: devisSignesN, [yearN1]: devisSignesN1, 'delta %': pctDelta(devisSignesN, devisSignesN1) },
+  });
+
   window.__mcdf = { customers, conventions, invoices, attendees, sessions };
   console.log('Données complètes disponibles dans window.__mcdf pour exploration libre.');
 })();
