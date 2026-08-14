@@ -1007,6 +1007,16 @@ async function wizSubmit(skipPayment){
 }
 
 function wizGoToAdmin(){
+  // Si ce navigateur a déjà une session admin ouverte (ex : un autre
+  // établissement testé plus tôt dans le même onglet), admin.html la
+  // reprendrait telle quelle et ignorerait silencieusement les nouveaux
+  // identifiants affichés ci-dessus. On force une connexion fraîche.
+  try{
+    sessionStorage.removeItem('SESAME_ADMIN_TOKEN');
+    sessionStorage.removeItem('SESAME_ADMIN_ROLE');
+    sessionStorage.removeItem('SESAME_HOME_ENTITY');
+    sessionStorage.removeItem('SESAME_ACTIVE_ENTITY');
+  }catch(e){}
   window.location.href = 'admin.html';
 }
 

@@ -191,6 +191,24 @@ Sesame :
 - Aucun envoi d'email n'est déclenché (pas de fournisseur SMTP configuré
   dans ce projet) — le panneau "Souscriptions" ci-dessus est la source de
   vérité pour l'équipe commerciale à ce stade.
+- Après soumission, `wizGoToAdmin()` **efface toute session admin déjà
+  présente dans le navigateur** (`sessionStorage`) avant de rediriger vers
+  `admin.html` — sinon une session encore ouverte (ex : un autre
+  établissement testé plus tôt dans le même onglet) serait reprise telle
+  quelle, et les identifiants tout juste affichés à l'écran seraient
+  ignorés silencieusement.
+
+**Parcours client réellement multi-tenant (`public/checkin.html`)** — corrige
+une limite du prototype d'origine, qui restait mono-tenant côté client (tous
+les appels API omettaient `entityCode`, résolu par défaut sur un unique
+établissement serveur). Un paramètre d'URL `?entityCode=E0000000X` cible
+maintenant l'établissement voulu, propagé automatiquement à tous les appels
+API via un petit wrapper (`apiFetch()`, même principe que `adminFetch()`
+côté back-office) — sans lui, comportement historique inchangé (repli sur
+l'établissement par défaut du serveur). L'URL complète et prête à copier
+(`https://.../?entityCode=...`) — **à insérer dans la procédure de check-in
+du PMS du client** (lien envoyé au client avant son séjour, etc.) — est
+affichée dans le panneau "Hôtel" du back-office, avec un bouton de copie.
 
 **Non couvert** (hors périmètre — panneau du prototype `sesame_admin.html`
 gérant le CRM commercial interne de Sesame, sans rapport avec la gestion

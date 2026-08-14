@@ -1054,6 +1054,26 @@ input:focus,select:focus{border-color:var(--accent)}
 // ═══════════════════ CONFIG — chargée depuis l'API TypeScript/PostgreSQL
 // (remplace la lecture localStorage('SESAME_CFG') de l'ancien prototype)
 var API_BASE = '';
+// Établissement ciblé par cette page — présent dans l'URL fournie à chaque
+// client (ex: https://.../?entityCode=E00000002) pour que le check-in
+// pointe vers le bon hôtel. Sans ce paramètre, le serveur applique son
+// tenant par défaut (comportement historique mono-tenant).
+var ENTITY_CODE = new URLSearchParams(window.location.search).get('entityCode') || '';
+function apiFetch(url, opts){
+  if(!ENTITY_CODE) return fetch(url, opts);
+  opts = opts || {};
+  var method = (opts.method||'GET').toUpperCase();
+  if(method!=='GET' && opts.body){
+    try{
+      var b = JSON.parse(opts.body);
+      if(!b.entityCode) b.entityCode = ENTITY_CODE;
+      opts.body = JSON.stringify(b);
+    }catch(e){}
+  } else if(url.indexOf('entityCode=')===-1){
+    url += (url.indexOf('?')>-1?'&':'?') + 'entityCode=' + encodeURIComponent(ENTITY_CODE);
+  }
+  return fetch(url, opts);
+}
 var DEFAULT_CFG={
   hotelName:'Éco-Séjour',hotelSlogan:'',entityId:'E00000001',stars:3,
   colors:{primary:'#8B1A2E',primaryLight:'#FDEDF0',accent:'#8B1A2E',headerBg:'#8B1A2E',
@@ -1074,7 +1094,7 @@ var DEFAULT_CFG={
 var CFG = JSON.parse(JSON.stringify(DEFAULT_CFG));
 async function loadCfg(){
   try{
-    var r = await fetch(API_BASE+'/wa/entityModuleConfig/list');
+    var r = await apiFetch(API_BASE+'/wa/entityModuleConfig/list');
     if(!r.ok) throw new Error('HTTP '+r.status);
     var data = await r.json();
     CFG = Object.assign({}, DEFAULT_CFG, data);
@@ -1259,7 +1279,7 @@ async function fetchBookings() {
   res.innerHTML = '<div class="loading"><div class="spin"></div>Recherche…</div>';
   document.getElementById('step1next').style.display = 'none';
   try {
-    var r = await fetch(API_BASE+'/wa/booking/list'+(q?('?q='+encodeURIComponent(q)):''));
+    var r = await apiFetch(API_BASE+'/wa/booking/list'+(q?('?q='+encodeURIComponent(q)):''));
     if (!r.ok) throw new Error('HTTP '+r.status);
     var list = await r.json();
     SESAME_CACHE.bookings = list;
@@ -1734,7 +1754,7 @@ var LOYALTY_CACHE = {};
 async function fetchLoyalty(email){
   if(!email) return {total:0,history:[]};
   try{
-    var r = await fetch(API_BASE+'/wa/loyalty/list?email='+encodeURIComponent(email));
+    var r = await apiFetch(API_BASE+'/wa/loyalty/list?email='+encodeURIComponent(email));
     if(r.ok){ var d = await r.json(); LOYALTY_CACHE[email]=d; return d; }
   }catch(e){ console.error('fetchLoyalty error', e); }
   return LOYALTY_CACHE[email] || {total:0,history:[]};
@@ -1881,7 +1901,7 @@ function unredeemItem(id){
 async function pushEcoToPlanning(roomCode, booking){
   if(!roomCode||!booking) return;
   try{
-    await fetch(API_BASE+'/wa/housekeepingTask/createEco', {
+    await apiFetch(API_BASE+'/wa/housekeepingTask/createEco', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         roomCode: roomCode,
@@ -1906,7 +1926,7 @@ async function creditPointsAfterStay(){
   var spent=S.redeemedItems.reduce(function(acc,id){var it=getRewardCatalog().find(function(c){return c.id===id;});return acc+(it?it.pts:0);},0);
   if(!earned && !spent)return;
   try{
-    var r = await fetch(API_BASE+'/wa/loyalty/credit', {
+    var r = await apiFetch(API_BASE+'/wa/loyalty/credit', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({email:email, earned:earned, spent:spent, bookingCode:S.booking?S.booking.code:''})
     });
@@ -1935,7 +1955,7 @@ var ORDERS_CACHE = [];
 async function fetchOrders(bookingCode){
   if(!bookingCode){ ORDERS_CACHE=[]; return ORDERS_CACHE; }
   try{
-    var r = await fetch(API_BASE+'/wa/roomservice/list?bookingCode='+encodeURIComponent(bookingCode));
+    var r = await apiFetch(API_BASE+'/wa/roomservice/list?bookingCode='+encodeURIComponent(bookingCode));
     if(r.ok) ORDERS_CACHE = await r.json();
   }catch(e){ console.error('fetchOrders error', e); }
   return ORDERS_CACHE;
@@ -1954,7 +1974,7 @@ async function espDoLogin(){
   errEl.style.display = 'none';
 
   try{
-    var r = await fetch(API_BASE+'/api/auth/guest-login', {
+    var r = await apiFetch(API_BASE+'/api/auth/guest-login', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({email:email, code:code})
     });
@@ -2217,7 +2237,7 @@ async function espRenderHisto(){
   var mine = [];
   if(email){
     try{
-      var r = await fetch(API_BASE+'/wa/booking/list?email='+encodeURIComponent(email));
+      var r = await apiFetch(API_BASE+'/wa/booking/list?email='+encodeURIComponent(email));
       if(r.ok) mine = await r.json();
     }catch(e){ console.error('espRenderHisto error', e); }
   }
@@ -2262,7 +2282,7 @@ async function espRenderLivret(){
 
   var livret = [];
   try{
-    var r = await fetch(API_BASE+'/wa/livret/list');
+    var r = await apiFetch(API_BASE+'/wa/livret/list');
     if(r.ok) livret = await r.json();
   }catch(e){ console.error('espRenderLivret error', e); }
 
@@ -2410,7 +2430,7 @@ var CLIENT_PREFS_CACHE = {};
 async function fetchClientPrefs(email){
   if(!email) return {tags:[]};
   try{
-    var r = await fetch(API_BASE+'/wa/clientPrefs/list?email='+encodeURIComponent(email));
+    var r = await apiFetch(API_BASE+'/wa/clientPrefs/list?email='+encodeURIComponent(email));
     if(r.ok){ var d = await r.json(); CLIENT_PREFS_CACHE[email]=d; return d; }
   }catch(e){ console.error('fetchClientPrefs error', e); }
   return CLIENT_PREFS_CACHE[email] || {tags:[]};
@@ -2421,7 +2441,7 @@ function espLoadPrefs(email){
 async function espSavePrefsData(email, data){
   CLIENT_PREFS_CACHE[email||'guest'] = Object.assign({}, CLIENT_PREFS_CACHE[email||'guest'], data);
   try{
-    await fetch(API_BASE+'/wa/clientPrefs/update', {
+    await apiFetch(API_BASE+'/wa/clientPrefs/update', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify(Object.assign({email:email}, data))
     });
@@ -2763,7 +2783,7 @@ async function rsPlaceOrder(){
   };
 
   try{
-    var r = await fetch(API_BASE+'/wa/roomservice/create', {
+    var r = await apiFetch(API_BASE+'/wa/roomservice/create', {
       method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
     });
     if(!r.ok) throw new Error('HTTP '+r.status);
@@ -2942,7 +2962,7 @@ async function finalizeCheckin(syncStatus){
   var result = '';
   if (S.booking) {
     try {
-      var r2 = await fetch(API_BASE+'/wa/booking/checkin', {
+      var r2 = await apiFetch(API_BASE+'/wa/booking/checkin', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({
           code: S.booking.code,
@@ -2993,7 +3013,7 @@ async function pushTaxeRecord(){
   };
 
   try{
-    await fetch(API_BASE+'/wa/taxeSejourRecord/create', {
+    await apiFetch(API_BASE+'/wa/taxeSejourRecord/create', {
       method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(record)
     });
   }catch(e){ console.error('pushTaxeRecord error:', e.message); }
@@ -3748,7 +3768,7 @@ async function bqPlaceOrder(){
   // POST /wa/roomservice/create — remplace l'écriture localStorage('SCH_ORDERS')
   var order;
   try{
-    var r = await fetch(API_BASE+'/wa/roomservice/create', {
+    var r = await apiFetch(API_BASE+'/wa/roomservice/create', {
       method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
     });
     if(!r.ok) throw new Error('HTTP '+r.status);

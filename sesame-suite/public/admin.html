@@ -535,6 +535,12 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       <div class="ch"><i class="ti ti-building"></i>Informations</div>
       <div class="fi"><label class="lb">Nom de l'hôtel</label><input type="text" id="h-name" oninput="liveSync()"></div>
       <div class="fi"><label class="lb">entityId Sesame</label><input type="text" id="h-entityId"></div>
+      <div class="fi"><label class="lb">URL de check-in (à insérer dans votre PMS)</label>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="h-checkinUrl" readonly style="flex:1;background:var(--bg);color:var(--mu);cursor:text" onclick="this.select()">
+          <button class="btn btn-s" type="button" onclick="copyCheckinUrl()" style="width:auto;flex:0 0 auto;padding:10px 14px" title="Copier"><i class="ti ti-copy"></i></button>
+        </div>
+      </div>
       <div class="fi"><label class="lb">Adresse</label><input type="text" id="h-addr" placeholder="12 rue des Lilas, 44000 Nantes"></div>
       <div class="fi"><label class="lb">Email contact</label><input type="email" id="h-email"></div>
       <div class="g2">
@@ -2574,6 +2580,8 @@ function populateAll(){
   setVal('c-radiusBtn',CFG.radiusBtn);document.getElementById('c-radiusBtnV').textContent=CFG.radiusBtn+'px';
   setChk('c-shadow',CFG.shadow);setChk('c-darkH',CFG.darkH);
   setVal('h-name',CFG.hotelName);setVal('h-entityId',CFG.entityId);
+  var checkinCode = (ADMIN_ROLE==='sesame' && ACTIVE_ENTITY_CODE) ? ACTIVE_ENTITY_CODE : HOME_ENTITY_CODE;
+  setVal('h-checkinUrl', checkinCode ? (window.location.origin+'/?entityCode='+checkinCode) : '');
   setVal('h-addr',CFG.hotelAddr||'');setVal('h-email',CFG.hotelEmail||'');
   setVal('h-stars',CFG.stars);
   setVal('h-currency',CFG.currency||'EUR');
@@ -4378,6 +4386,17 @@ function exportCSS(){
 function toast(msg){
   var t=document.getElementById('notif');t.textContent=msg;t.classList.add('show');
   setTimeout(function(){t.classList.remove('show');},2200);
+}
+function copyCheckinUrl(){
+  var el = document.getElementById('h-checkinUrl');
+  if(!el.value) return;
+  el.select();
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(el.value).then(function(){ toast('URL copiée ✓'); }, function(){ document.execCommand('copy'); toast('URL copiée ✓'); });
+  } else {
+    document.execCommand('copy');
+    toast('URL copiée ✓');
+  }
 }
 var stEl=document.createElement('style');stEl.textContent='@keyframes spin{to{transform:rotate(360deg)}}.spin{width:14px;height:14px;border:2px solid var(--bdr);border-top-color:var(--am);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}';document.head.appendChild(stEl);
 
