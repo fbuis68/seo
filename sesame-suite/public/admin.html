@@ -1225,6 +1225,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         <option value="apiKey">Clé API (en-tête HTTP)</option>
         <option value="bearer">Bearer token</option>
         <option value="basic">Basic auth (utilisateur / mot de passe)</option>
+        <option value="login">Connexion (login + mot de passe → token) — ex : API Sesame</option>
       </select>
     </div>
     <div id="bs-auth-fields"></div>
@@ -4052,6 +4053,26 @@ function bsRenderAuthFields(){
     h += '<div class="fi"><label class="lb">Utilisateur</label><input type="text" id="bs-authBasicUser"></div>';
     h += '<div class="fi"><label class="lb">Mot de passe</label><input type="password" id="bs-authBasicPassword"></div>';
     h += '</div>';
+  } else if(type==='login'){
+    h += '<div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>'
+      +'<span>Le serveur se connecte lui-même avant chaque synchronisation (POST des identifiants, puis extraction du token de la réponse). Exemple API Sesame Technology ci-dessous en placeholder.</span></div>';
+    h += '<div class="g2">';
+    h += '<div class="fi"><label class="lb">Chemin de connexion</label><input type="text" id="bs-loginPath" placeholder="/ws/login/login"></div>';
+    h += '<div class="fi"><label class="lb">Où mettre l\'email</label><select id="bs-loginEmailLocation"><option value="body">Corps JSON</option><option value="query">Paramètre d\'URL</option></select></div>';
+    h += '</div>';
+    h += '<div class="g2">';
+    h += '<div class="fi"><label class="lb">Email / login</label><input type="email" id="bs-loginEmail" placeholder="api@hotel.com"></div>';
+    h += '<div class="fi"><label class="lb">Mot de passe</label><input type="password" id="bs-loginPassword" placeholder="••••••••"></div>';
+    h += '</div>';
+    h += '<div class="g2">';
+    h += '<div class="fi"><label class="lb">Nom du champ email</label><input type="text" id="bs-loginEmailField" placeholder="login"></div>';
+    h += '<div class="fi"><label class="lb">Nom du champ mot de passe</label><input type="text" id="bs-loginPasswordField" placeholder="password"></div>';
+    h += '</div>';
+    h += '<div class="fi"><label class="lb">Chemin du token dans la réponse de connexion</label><input type="text" id="bs-loginTokenPath" placeholder="data.profiles.0.token"></div>';
+    h += '<div class="g2">';
+    h += '<div class="fi"><label class="lb">Nom de l\'en-tête du token</label><input type="text" id="bs-loginTokenHeaderName" placeholder="Authorization"></div>';
+    h += '<div class="fi"><label class="lb">Préfixe du token (optionnel)</label><input type="text" id="bs-loginTokenPrefix" placeholder="Laisser vide pour Sesame — ou «Bearer » pour d\'autres systèmes"></div>';
+    h += '</div>';
   }
   el.innerHTML = h;
 }
@@ -4087,6 +4108,15 @@ function bsCollectFormValues(){
     authBearerToken: (document.getElementById('bs-authBearerToken')||{}).value||'',
     authBasicUser: (document.getElementById('bs-authBasicUser')||{}).value||'',
     authBasicPassword: (document.getElementById('bs-authBasicPassword')||{}).value||'',
+    loginPath: (document.getElementById('bs-loginPath')||{}).value||'',
+    loginEmail: (document.getElementById('bs-loginEmail')||{}).value||'',
+    loginPassword: (document.getElementById('bs-loginPassword')||{}).value||'',
+    loginEmailField: (document.getElementById('bs-loginEmailField')||{}).value||'',
+    loginPasswordField: (document.getElementById('bs-loginPasswordField')||{}).value||'',
+    loginEmailLocation: (document.getElementById('bs-loginEmailLocation')||{}).value||'',
+    loginTokenPath: (document.getElementById('bs-loginTokenPath')||{}).value||'',
+    loginTokenHeaderName: (document.getElementById('bs-loginTokenHeaderName')||{}).value||'',
+    loginTokenPrefix: (document.getElementById('bs-loginTokenPrefix')||{}).value||'',
     responseListPath: document.getElementById('bs-responseListPath').value.trim(),
     fieldMapping: bsCollectMapping(),
     syncIntervalMinutes: document.getElementById('bs-syncInterval').value ? parseInt(document.getElementById('bs-syncInterval').value) : null,
@@ -4130,6 +4160,16 @@ async function bsInit(){
   } else if(BS_CONFIG.authType==='basic'){
     document.getElementById('bs-authBasicUser').value = BS_CONFIG.authBasicUser||'';
     document.getElementById('bs-authBasicPassword').value = BS_CONFIG.authBasicPassword||'';
+  } else if(BS_CONFIG.authType==='login'){
+    document.getElementById('bs-loginPath').value = BS_CONFIG.loginPath||'';
+    document.getElementById('bs-loginEmail').value = BS_CONFIG.loginEmail||'';
+    document.getElementById('bs-loginPassword').value = BS_CONFIG.loginPassword||'';
+    document.getElementById('bs-loginEmailField').value = BS_CONFIG.loginEmailField||'login';
+    document.getElementById('bs-loginPasswordField').value = BS_CONFIG.loginPasswordField||'password';
+    document.getElementById('bs-loginEmailLocation').value = BS_CONFIG.loginEmailLocation||'body';
+    document.getElementById('bs-loginTokenPath').value = BS_CONFIG.loginTokenPath||'';
+    document.getElementById('bs-loginTokenHeaderName').value = BS_CONFIG.loginTokenHeaderName||'Authorization';
+    document.getElementById('bs-loginTokenPrefix').value = BS_CONFIG.loginTokenPrefix||'';
   }
   bsRenderMappingFields(BS_CONFIG.fieldMapping);
   bsRenderStatusBanner();

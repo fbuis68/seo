@@ -18,6 +18,15 @@ function shapeConfig(c: {
   authBearerToken: string | null;
   authBasicUser: string | null;
   authBasicPassword: string | null;
+  loginPath: string | null;
+  loginEmail: string | null;
+  loginPassword: string | null;
+  loginEmailField: string | null;
+  loginPasswordField: string | null;
+  loginEmailLocation: string | null;
+  loginTokenPath: string | null;
+  loginTokenHeaderName: string | null;
+  loginTokenPrefix: string | null;
   responseListPath: string | null;
   fieldMapping: unknown;
   syncIntervalMinutes: number | null;
@@ -37,6 +46,15 @@ function shapeConfig(c: {
     authBearerToken: c.authBearerToken || "",
     authBasicUser: c.authBasicUser || "",
     authBasicPassword: c.authBasicPassword || "",
+    loginPath: c.loginPath || "",
+    loginEmail: c.loginEmail || "",
+    loginPassword: c.loginPassword || "",
+    loginEmailField: c.loginEmailField || "login",
+    loginPasswordField: c.loginPasswordField || "password",
+    loginEmailLocation: c.loginEmailLocation || "body",
+    loginTokenPath: c.loginTokenPath || "",
+    loginTokenHeaderName: c.loginTokenHeaderName || "Authorization",
+    loginTokenPrefix: c.loginTokenPrefix || "",
     responseListPath: c.responseListPath || "",
     fieldMapping: c.fieldMapping || {},
     syncIntervalMinutes: c.syncIntervalMinutes,
@@ -73,6 +91,15 @@ interface ConfigBody {
   authBearerToken?: string;
   authBasicUser?: string;
   authBasicPassword?: string;
+  loginPath?: string;
+  loginEmail?: string;
+  loginPassword?: string;
+  loginEmailField?: string;
+  loginPasswordField?: string;
+  loginEmailLocation?: string;
+  loginTokenPath?: string;
+  loginTokenHeaderName?: string;
+  loginTokenPrefix?: string;
   responseListPath?: string;
   fieldMapping?: FieldMapping;
   syncIntervalMinutes?: number | null;
@@ -96,6 +123,15 @@ bookingSourceRouter.post(
       authBearerToken: b.authBearerToken,
       authBasicUser: b.authBasicUser,
       authBasicPassword: b.authBasicPassword,
+      loginPath: b.loginPath,
+      loginEmail: b.loginEmail,
+      loginPassword: b.loginPassword,
+      loginEmailField: b.loginEmailField,
+      loginPasswordField: b.loginPasswordField,
+      loginEmailLocation: b.loginEmailLocation,
+      loginTokenPath: b.loginTokenPath,
+      loginTokenHeaderName: b.loginTokenHeaderName,
+      loginTokenPrefix: b.loginTokenPrefix,
       responseListPath: b.responseListPath,
       fieldMapping: b.fieldMapping as never,
       syncIntervalMinutes: b.syncIntervalMinutes ?? null,
@@ -134,6 +170,15 @@ bookingSourceRouter.post(
       authBearerToken: b.authBearerToken ?? saved?.authBearerToken ?? null,
       authBasicUser: b.authBasicUser ?? saved?.authBasicUser ?? null,
       authBasicPassword: b.authBasicPassword ?? saved?.authBasicPassword ?? null,
+      loginPath: b.loginPath ?? saved?.loginPath ?? null,
+      loginEmail: b.loginEmail ?? saved?.loginEmail ?? null,
+      loginPassword: b.loginPassword ?? saved?.loginPassword ?? null,
+      loginEmailField: b.loginEmailField ?? saved?.loginEmailField ?? "login",
+      loginPasswordField: b.loginPasswordField ?? saved?.loginPasswordField ?? "password",
+      loginEmailLocation: b.loginEmailLocation ?? saved?.loginEmailLocation ?? "body",
+      loginTokenPath: b.loginTokenPath ?? saved?.loginTokenPath ?? null,
+      loginTokenHeaderName: b.loginTokenHeaderName ?? saved?.loginTokenHeaderName ?? "Authorization",
+      loginTokenPrefix: b.loginTokenPrefix ?? saved?.loginTokenPrefix ?? null,
       responseListPath: b.responseListPath ?? saved?.responseListPath ?? null,
       fieldMapping: (b.fieldMapping ?? saved?.fieldMapping ?? {}) as never,
       syncIntervalMinutes: null,

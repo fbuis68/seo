@@ -43,7 +43,56 @@ export function getPath(obj: unknown, path: string): unknown {
 
 export class BookingSourceError extends Error {}
 
-function buildAuthHeaders(config: BookingSourceConfig): Record<string, string> {
+/**
+ * Flux "login" (ex : API Sesame Technology) — POST des identifiants vers
+ * loginPath, extraction du token via loginTokenPath. Relancé à chaque appel
+ * (pas de cache de token) : plus simple et plus sûr qu'une expiration mal
+ * estimée, et les synchronisations restent peu fréquentes (≥1h).
+ */
+async function performLogin(config: BookingSourceConfig): Promise<string> {
+  if (!config.baseUrl) throw new BookingSourceError("URL de base non configurée");
+  if (!config.loginEmail || !config.loginPassword) throw new BookingSourceError("Email et mot de passe de connexion requis");
+
+  const emailField = config.loginEmailField || "login";
+  const passwordField = config.loginPasswordField || "password";
+  const inQuery = (config.loginEmailLocation || "body") === "query";
+
+  let url = config.baseUrl.replace(/\/$/, "") + (config.loginPath || "");
+  if (inQuery) url += (url.includes("?") ? "&" : "?") + `${encodeURIComponent(emailField)}=${encodeURIComponent(config.loginEmail)}`;
+  const body: Record<string, string> = { [passwordField]: config.loginPassword };
+  if (!inQuery) body[emailField] = config.loginEmail;
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    throw new BookingSourceError(`Connexion (login) impossible : ${e instanceof Error ? e.message : "erreur réseau"}`);
+  }
+  if (!res.ok) throw new BookingSourceError(`La connexion a échoué : ${res.status} ${res.statusText}`);
+
+  let responseBody: unknown;
+  try {
+    responseBody = await res.json();
+  } catch {
+    throw new BookingSourceError("La réponse de connexion n'est pas un JSON valide");
+  }
+
+  const token = config.loginTokenPath ? getPath(responseBody, config.loginTokenPath) : undefined;
+  if (!token || typeof token !== "string") {
+    throw new BookingSourceError(
+      config.loginTokenPath
+        ? `Aucun token trouvé au chemin "${config.loginTokenPath}" dans la réponse de connexion`
+        : "Chemin du token de connexion non configuré"
+    );
+  }
+  return token;
+}
+
+async function buildAuthHeaders(config: BookingSourceConfig): Promise<Record<string, string>> {
   switch (config.authType) {
     case "apiKey":
       if (!config.authApiKeyHeader || !config.authApiKeyValue) return {};
@@ -53,6 +102,11 @@ function buildAuthHeaders(config: BookingSourceConfig): Record<string, string> {
     case "basic":
       if (!config.authBasicUser) return {};
       return { Authorization: "Basic " + Buffer.from(`${config.authBasicUser}:${config.authBasicPassword || ""}`).toString("base64") };
+    case "login": {
+      const token = await performLogin(config);
+      const headerName = config.loginTokenHeaderName || "Authorization";
+      return { [headerName]: (config.loginTokenPrefix || "") + token };
+    }
     default:
       return {};
   }
@@ -62,9 +116,10 @@ function buildAuthHeaders(config: BookingSourceConfig): Record<string, string> {
 export async function fetchExternalBookings(config: BookingSourceConfig): Promise<unknown[]> {
   if (!config.baseUrl) throw new BookingSourceError("URL de base non configurée");
   const url = config.baseUrl.replace(/\/$/, "") + (config.endpointPath || "");
+  const authHeaders = await buildAuthHeaders(config);
   let res: Response;
   try {
-    res = await fetch(url, { headers: { Accept: "application/json", ...buildAuthHeaders(config) } });
+    res = await fetch(url, { headers: { Accept: "application/json", ...authHeaders } });
   } catch (e) {
     throw new BookingSourceError(`Connexion impossible : ${e instanceof Error ? e.message : "erreur réseau"}`);
   }

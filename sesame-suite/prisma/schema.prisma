@@ -222,12 +222,26 @@ model BookingSourceConfig {
   baseUrl      String?
   endpointPath String? // ex: "/v1/bookings" — concaténé à baseUrl
 
-  authType          String  @default("none") // none | apiKey | bearer | basic
+  authType          String  @default("none") // none | apiKey | bearer | basic | login
   authApiKeyHeader  String? // ex: "X-API-Key"
   authApiKeyValue   String?
   authBearerToken   String?
   authBasicUser     String?
   authBasicPassword String?
+
+  // authType="login" — flux en deux temps (ex : API Sesame Technology) :
+  // POST identifiants vers loginPath, extraction du token via
+  // loginTokenPath, puis ce token est envoyé en en-tête sur chaque appel
+  // suivant. Relancé à chaque synchronisation (pas de cache de token).
+  loginPath            String? // ex: "/ws/login/login" — concaténé à baseUrl
+  loginEmail           String?
+  loginPassword        String?
+  loginEmailField      String? @default("login") // nom du champ email (body ou query selon loginEmailLocation)
+  loginPasswordField   String? @default("password") // nom du champ mot de passe (toujours en body JSON)
+  loginEmailLocation   String? @default("body") // query | body
+  loginTokenPath       String? // dot-path du token dans la réponse de connexion (ex: "data.profiles.0.token")
+  loginTokenHeaderName String? @default("Authorization")
+  loginTokenPrefix     String? // ex: "Bearer " — laisser vide pour envoyer le token brut
 
   // Chemin (dot-path) vers le tableau de réservations dans la réponse JSON —
   // vide/null si la réponse EST déjà le tableau.

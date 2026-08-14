@@ -104,8 +104,19 @@ uniquement sur l'API propriétaire de Sesame. Le nouveau connecteur parle à
 **n'importe quel système externe** — PMS, moteur de réservation — qu'il
 s'agisse ou non d'un client Sesame :
 
-- URL + authentification configurables (aucune, clé API en en-tête, Bearer
-  token, ou Basic auth).
+- URL + authentification configurables : aucune, clé API en en-tête, Bearer
+  token, Basic auth, **ou connexion en deux temps (login + mot de passe →
+  token)** — ce dernier mode couvre le cas de la vraie API Sesame
+  Technology, qui n'accepte pas de clé statique : `POST {serveur}/ws/login/
+  login?login=email` avec le mot de passe en body renvoie un token
+  (`data.profiles.0.token`), à réutiliser tel quel dans l'en-tête
+  `Authorization` des appels suivants. Le serveur se reconnecte à chaque
+  synchronisation (pas de cache de token, pour rester correct sans avoir à
+  deviner sa durée de validité) — `src/lib/bookingSource.ts::performLogin()`.
+  Ce mode est générique : email/mot de passe en query ou en body, noms de
+  champs, chemin du token et en-tête cible sont tous configurables, donc il
+  couvre aussi d'autres systèmes tiers utilisant ce même schéma
+  login-puis-token, pas seulement Sesame.
 - Mapping des champs par chemin JSON libre (ex : `guest.email`,
   `stay.check_in`) — aucune forme de réponse n'est supposée à l'avance,
   contrairement à l'ancien panneau qui ne comprenait que le format Sesame.
