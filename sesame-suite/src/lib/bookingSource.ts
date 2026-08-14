@@ -62,6 +62,19 @@ export function getPath(obj: unknown, path: string): unknown {
 
 export class BookingSourceError extends Error {}
 
+/** Parse le corps JSON d'une réponse ; sur échec, inclut un extrait du texte
+ * brut reçu (page HTML, message d'erreur texte…) pour rendre l'erreur
+ * diagnosticable au lieu d'un simple "pas du JSON". */
+async function parseJsonResponse(res: Response, context: string): Promise<unknown> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    const snippet = text.trim().slice(0, 200) || "(réponse vide)";
+    throw new BookingSourceError(`${context} n'est pas un JSON valide — début de la réponse reçue : "${snippet}"`);
+  }
+}
+
 /**
  * Flux "login" (ex : API Sesame Technology) — POST des identifiants vers
  * loginPath, extraction du token via loginTokenPath. Relancé à chaque appel
@@ -94,12 +107,7 @@ async function performLogin(config: BookingSourceConfig): Promise<string> {
   }
   if (!res.ok) throw new BookingSourceError(`La connexion a échoué : ${res.status} ${res.statusText}`);
 
-  let responseBody: unknown;
-  try {
-    responseBody = await res.json();
-  } catch {
-    throw new BookingSourceError("La réponse de connexion n'est pas un JSON valide");
-  }
+  const responseBody = await parseJsonResponse(res, "La réponse de connexion");
 
   const token = config.loginTokenPath ? getPath(responseBody, config.loginTokenPath) : undefined;
   if (!token || typeof token !== "string") {
@@ -145,12 +153,7 @@ async function fetchExternalList(config: BookingSourceConfig, endpointPath: stri
   }
   if (!res.ok) throw new BookingSourceError(`Le serveur distant a répondu ${res.status} ${res.statusText}`);
 
-  let body: unknown;
-  try {
-    body = await res.json();
-  } catch {
-    throw new BookingSourceError("La réponse n'est pas un JSON valide");
-  }
+  const body = await parseJsonResponse(res, "La réponse");
 
   const list = responseListPath ? getPath(body, responseListPath) : body;
   if (!Array.isArray(list)) {
