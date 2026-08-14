@@ -72,6 +72,9 @@ export async function provisionEntity(opts: { name: string; stars?: number; admi
         rewards: { active: true, mandatory: true },
         roomservice: { active: true, mandatory: false },
       },
+      roomTags: [],
+      rewardCatalog: [],
+      accessPoints: [{ id: "room", label: "Chambre", ico: "ti-door", facilityCode: "", auto: true }],
     },
   });
 
