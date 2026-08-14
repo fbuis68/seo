@@ -244,6 +244,14 @@ formulaire de connexion dédié qui rejette explicitement tout compte `hotel`.
   écarts CVD ≥ 24 ΔE). Chaque fiche/PMS affiche aussi un badge coloré
   déterministe (initiales, couleur dérivée du nom) — pas de logo tiers
   hébergé, pour ne reproduire aucune marque sans autorisation.
+- **Alimenté aussi par le formulaire de contact du site web public** :
+  `POST /contact` (public, hors `/wa`) reçoit `{nom, email, secteur,
+  message}`, crée (ou réutilise, retrouvé par email — pas de doublon sur des
+  soumissions répétées) une fiche `CrmProspect`, et y ajoute systématiquement
+  une entrée de journal non traitée (`CrmActivity`, type "Relance", auteur
+  "Site web", texte = message du formulaire) — visible immédiatement comme
+  tâche à faire dans la fiche. Voir `docs/formulaire-contact-site-web.md`
+  pour les instructions à transmettre à l'équipe qui gère le site web.
 
 Également non couvert : l'app ménage (`sesame_menage.html`, application
 séparée pour les agents de ménage sur le terrain). La base de données est

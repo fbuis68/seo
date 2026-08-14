@@ -21,6 +21,7 @@ import { groupRouter } from "./routes/group";
 import { bookingSourceRouter } from "./routes/bookingSource";
 import { onboardingRouter } from "./routes/onboarding";
 import { crmProspectRouter } from "./routes/crmProspect";
+import { contactRouter } from "./routes/contact";
 import { errorHandler } from "./middleware/errorHandler";
 
 export function createApp() {
@@ -60,6 +61,10 @@ export function createApp() {
   // Parcours d'inscription public (hors /wa — pas d'authentification requise,
   // c'est le point d'entrée qui en crée une)
   app.use(onboardingRouter);
+
+  // Formulaire de contact du site web public (hors /wa — pas d'authentification,
+  // alimente le CRM commercial interne)
+  app.use(contactRouter);
 
   app.get("/health", (_req, res) => res.json({ ok: true }));
 
