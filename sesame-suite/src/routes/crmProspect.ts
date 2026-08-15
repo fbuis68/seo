@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../db";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin, requireSesame } from "../middleware/requireAdmin";
+import { fireTrigger } from "../lib/automation";
 
 /**
  * CRM commercial interne de Sesame — pipeline prospects/clients (à ne pas
@@ -183,6 +184,13 @@ crmProspectRouter.post(
       },
       include: PROSPECT_INCLUDE,
     });
+    fireTrigger("crm.prospect_created", {
+      entityId: null,
+      targetType: "crmProspect",
+      targetId: row.id,
+      recipient: { email: row.email, phone: row.tel },
+      variables: { nom: row.nom, secteur: row.secteur || "" },
+    }).catch((e) => console.error("[automation] crm.prospect_created:", e));
     res.status(201).json(shapeProspect(row));
   })
 );
@@ -232,6 +240,15 @@ crmProspectRouter.post(
       },
       include: PROSPECT_INCLUDE,
     });
+    if (b.contrat === "oui" && existing.contrat !== "oui") {
+      fireTrigger("crm.contract_signed", {
+        entityId: null,
+        targetType: "crmProspect",
+        targetId: row.id,
+        recipient: { email: row.email, phone: row.tel },
+        variables: { nom: row.nom, secteur: row.secteur || "" },
+      }).catch((e) => console.error("[automation] crm.contract_signed:", e));
+    }
     res.json(shapeProspect(row));
   })
 );

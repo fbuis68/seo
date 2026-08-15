@@ -30,10 +30,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,san
 .btn-icon{width:30px;padding:0;justify-content:center;font-size:14px}
 
 /* ── LAYOUT ── */
-.layout{display:flex;flex:1;overflow:hidden}
+.layout{display:flex;flex:1;overflow:hidden;position:relative}
+
+/* ── MENU TOGGLE (mobile) ── */
+.menu-toggle{display:none;background:none;border:none;font-size:19px;cursor:pointer;color:#444;padding:2px 6px;line-height:1}
 
 /* ── SIDEBAR ── */
 .sidebar{width:210px;flex-shrink:0;background:#fff;border-right:0.5px solid #e2dfd9;display:flex;flex-direction:column;overflow-y:auto}
+.sidebar-overlay{display:none}
 .nav-lbl{font-size:10px;font-weight:500;color:#c0bdb8;padding:14px 16px 3px;letter-spacing:.07em;text-transform:uppercase;user-select:none}
 .nav-item{display:flex;align-items:center;gap:8px;padding:7px 16px;font-size:13px;color:#666;cursor:pointer;transition:background .1s;user-select:none}
 .nav-item:hover{background:#f7f6f3;color:#1a1a1a}
@@ -210,6 +214,12 @@ tr.erow td{background:#f5f3ff}
 input[type=checkbox]{accent-color:#8a2b2b;cursor:pointer;width:14px;height:14px}
 .modal-footer{display:flex;gap:8px;margin-top:16px;align-items:center;padding-top:12px;border-top:0.5px solid #eeece8}
 
+/* ── CANAUX / TEMPLATES ── */
+.test-inp{font-family:inherit;font-size:12px;padding:0 8px;height:31px;border:0.5px solid #d0cdc6;border-radius:8px;background:#fff;color:#1a1a1a;outline:none;width:170px}
+.chan-tabs{display:flex;gap:6px;margin-bottom:10px}
+.chan-tab{font-family:inherit;font-size:11px;padding:4px 12px;border-radius:20px;border:0.5px solid #d0cdc6;background:#fff;color:#666;cursor:pointer}
+.chan-tab.active{background:#1a1a1a;border-color:#1a1a1a;color:#fff}
+
 /* ── TOAST ── */
 .toast{position:fixed;bottom:22px;right:22px;background:#1a1a1a;color:#fff;padding:9px 16px;border-radius:10px;font-size:13px;z-index:300;display:none;animation:slideup .2s ease}
 @keyframes slideup{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
@@ -221,6 +231,42 @@ input[type=checkbox]{accent-color:#8a2b2b;cursor:pointer;width:14px;height:14px}
 .lg-sub{font-size:12px;color:#999;margin-bottom:18px}
 .lg-box .ff{margin-bottom:10px}
 .lg-err{font-size:12px;color:#a32d2d;margin-top:6px;display:none}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 900px){
+  .menu-toggle{display:inline-flex;align-items:center}
+  .sidebar{position:absolute;top:0;left:0;bottom:0;z-index:120;transform:translateX(-100%);transition:transform .2s ease;box-shadow:2px 0 16px rgba(0,0,0,.15)}
+  .sidebar.open{transform:translateX(0)}
+  .sidebar-overlay{display:block;position:absolute;inset:0;background:rgba(0,0,0,.3);z-index:110;opacity:0;pointer-events:none;transition:opacity .2s ease}
+  .sidebar-overlay.show{opacity:1;pointer-events:auto}
+  .stats-row{grid-template-columns:repeat(2,1fr)}
+  .three-col{grid-template-columns:1fr}
+  .two-col{grid-template-columns:1fr}
+  .grid-view{grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
+  .form-grid{grid-template-columns:1fr}
+}
+
+@media (max-width: 560px){
+  body{font-size:12.5px}
+  .topbar{padding:0 10px;gap:7px}
+  .logo{font-size:13px}
+  .breadcrumb{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  .tb-right{gap:5px}
+  .main{padding:10px}
+  .stats-row{grid-template-columns:1fr 1fr;gap:6px}
+  .list-toolbar{flex-direction:column;align-items:stretch}
+  .list-toolbar>*{width:100%!important;max-width:none!important}
+  .count-lbl{margin-left:0;text-align:right}
+  .modal-bg{padding:10px}
+  .modal-box{max-width:100%;padding:1rem}
+  .hero-row{flex-wrap:wrap;gap:10px}
+  .score-box{margin-left:0;text-align:left;width:100%;display:flex;align-items:center;gap:8px}
+  .score-num{font-size:20px}
+  .fgrid{grid-template-columns:1fr}
+  .tbl-wrap{overflow-x:auto}
+  table{min-width:680px}
+  .two-col,.three-col{gap:8px}
+}
 </style>
 </head>
 <body>
@@ -237,6 +283,7 @@ input[type=checkbox]{accent-color:#8a2b2b;cursor:pointer;width:14px;height:14px}
 </div>
 
 <div class="topbar" style="display:none" id="topbar">
+  <button class="menu-toggle" id="menu-toggle" onclick="toggleSidebar()" aria-label="Menu">☰</button>
   <div class="logo">Sesame <em>CRM</em></div>
   <span class="tb-sep">/</span>
   <div class="breadcrumb" id="bc"></div>
@@ -244,13 +291,15 @@ input[type=checkbox]{accent-color:#8a2b2b;cursor:pointer;width:14px;height:14px}
 </div>
 
 <div class="layout" style="display:none" id="layout">
-  <div class="sidebar">
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+  <div class="sidebar" id="sidebar" onclick="if(event.target.closest('.nav-item,.vt'))closeSidebar()">
     <div class="nav-lbl">Navigation</div>
     <div class="nav-item" id="n-list" onclick="showList()"><div class="nav-ico">≡</div> Vue liste</div>
     <div class="nav-item" id="n-fiche" onclick="goFiche()"><div class="nav-ico">◉</div> Fiche client</div>
     <div class="nav-item" id="n-activite" onclick="showActivites()"><div class="nav-ico">◈</div> Activités</div>
     <div class="nav-item" id="n-contrats" onclick="showContrats()"><div class="nav-ico">◻</div> Contrats</div>
-    <div class="nav-item" id="n-email" onclick="showEmailPanel()"><div class="nav-ico">✉</div> Email</div>
+    <div class="nav-item" id="n-canaux" onclick="showCanauxPanel()"><div class="nav-ico">✉</div> Canaux</div>
+    <div class="nav-item" id="n-auto" onclick="showAutomationPanel()"><div class="nav-ico">◈</div> Automatisations</div>
     <hr class="s-hr">
     <div class="nav-lbl">Filtres rapides</div>
     <div class="nav-item" onclick="qf('danger','Élevé !!')"><div class="nav-ico">!</div> Risque élevé <span class="nb nb-r" id="b-eleve">0</span></div>
@@ -311,6 +360,16 @@ function enterApp(){
   init();
 }
 
+// ── RESPONSIVE — tiroir latéral sur écran étroit ──
+function toggleSidebar(){
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebar-overlay').classList.toggle('show');
+}
+function closeSidebar(){
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('show');
+}
+
 document.addEventListener('DOMContentLoaded', function(){
   if(ADMIN_TOKEN && ADMIN_ROLE==='sesame') enterApp();
   // sinon : le login gate reste affiché
@@ -345,7 +404,7 @@ function ini(n){return(n||'?').split(' ').slice(0,2).map(w=>w[0]||'').join('').t
 function today(){const d=new Date();return d.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});}
 
 // ── NAV ──
-function setNav(id){['n-list','n-fiche','n-activite','n-contrats','n-email'].forEach(n=>document.getElementById(n).classList.remove('active'));document.getElementById(id).classList.add('active');}
+function setNav(id){['n-list','n-fiche','n-activite','n-contrats','n-canaux','n-auto'].forEach(n=>document.getElementById(n).classList.remove('active'));document.getElementById(id).classList.add('active');}
 function setVMode(m){vmode=m;document.getElementById('vt-tbl').classList.toggle('active',m==='table');document.getElementById('vt-grd').classList.toggle('active',m==='grid');if(view==='list')renderList();}
 function goFiche(){if(curId)showFiche(curId);}
 function bc(parts){document.getElementById('bc').innerHTML=parts.map((p,i)=>i<parts.length-1?`<span class="bc-link" onclick="${p.fn}">${p.label}</span><span class="bc-sep"> / </span>`:`<span class="bc-cur">${p.label}</span>`).join('');}
@@ -940,37 +999,47 @@ async function deleteClient(id){
 }
 
 // ════════════════════════════════════════
-// EMAIL — serveur SMTP sortant + modèles + envoi (portée CRM/Sesame,
-// scope=crm — le même mécanisme générique est repris à l'identique côté
-// back-office de chaque hôtel, voir admin.html)
+// CANAUX — SMTP (email) + Twilio (SMS/WhatsApp) + modèles multi-canal
+// (portée CRM/Sesame, scope=crm — même mécanisme générique repris à
+// l'identique côté back-office de chaque hôtel, voir admin.html)
 // ════════════════════════════════════════
-let SMTP_CFG=null, EMAIL_TEMPLATES=[], EMAIL_TEMPLATES_LOADED=false;
+const CHANNEL_LABEL = {email:'Email', sms:'SMS', whatsapp:'WhatsApp'};
+let SMTP_CFG=null, SMS_CFG=null, WA_CFG=null;
+let MSG_TEMPLATES=[], MSG_TEMPLATES_LOADED=false;
+let tplChannelTab='email';
 
-function showEmailPanel(){
-  view='email';setNav('n-email');
-  bc([{label:'Paramètres email'}]);tba('');
+function showCanauxPanel(){
+  view='canaux';setNav('n-canaux');
+  bc([{label:'Canaux'}]);tba('');
   document.getElementById('main').innerHTML='<div class="card">Chargement…</div>';
-  loadEmailPanelData();
+  loadCanauxPanelData();
 }
 
-async function loadEmailPanelData(){
+async function loadCanauxPanelData(){
   try{
-    const [cfgR, tplR] = await Promise.all([
+    const [smtpR, smsR, waR, tplR] = await Promise.all([
       apiFetch('/wa/smtpConfig/get?scope=crm'),
-      apiFetch('/wa/emailTemplate/list?scope=crm'),
+      apiFetch('/wa/channelConfig/get?scope=crm&channel=sms'),
+      apiFetch('/wa/channelConfig/get?scope=crm&channel=whatsapp'),
+      apiFetch('/wa/messageTemplate/list?scope=crm'),
     ]);
-    SMTP_CFG = cfgR.ok ? await cfgR.json() : null;
-    EMAIL_TEMPLATES = tplR.ok ? await tplR.json() : [];
-    EMAIL_TEMPLATES_LOADED = true;
-  }catch(e){ flash('Erreur de chargement'); SMTP_CFG=null; EMAIL_TEMPLATES=[]; }
-  renderEmailPanel();
+    SMTP_CFG = smtpR.ok ? await smtpR.json() : null;
+    SMS_CFG = smsR.ok ? await smsR.json() : null;
+    WA_CFG = waR.ok ? await waR.json() : null;
+    MSG_TEMPLATES = tplR.ok ? await tplR.json() : [];
+    MSG_TEMPLATES_LOADED = true;
+  }catch(e){ flash('Erreur de chargement'); }
+  renderCanauxPanel();
 }
 
-function renderEmailPanel(){
+function renderCanauxPanel(){
   const s = SMTP_CFG || {host:'',port:587,secure:false,username:'',password:'',fromName:'',fromEmail:''};
+  const sms = SMS_CFG || {accountSid:'',authToken:'',fromNumber:''};
+  const wa = WA_CFG || {accountSid:'',authToken:'',fromNumber:''};
+  const tpls = MSG_TEMPLATES.filter(t=>t.channel===tplChannelTab);
   document.getElementById('main').innerHTML = `
   <div class="card">
-    <div class="card-head"><div class="ch-ico">⚙</div><span class="ch-title">Serveur SMTP sortant</span></div>
+    <div class="card-head"><div class="ch-ico">⚙</div><span class="ch-title">Serveur SMTP sortant (Email)</span></div>
     <div class="form-grid">
       <div class="ff"><label>Hôte</label><input id="smtp-host" value="${esc(s.host)}" placeholder="smtp.exemple.com"></div>
       <div class="ff"><label>Port</label><input type="number" id="smtp-port" value="${s.port||587}"></div>
@@ -982,18 +1051,43 @@ function renderEmailPanel(){
     </div>
     <div class="modal-footer" style="border-top:none;padding-top:8px;flex-wrap:wrap">
       <button class="btn btn-primary" onclick="saveSmtpConfig()">Enregistrer</button>
-      <input type="email" id="smtp-test-to" placeholder="destinataire@test.com" style="width:200px;font-family:inherit;font-size:12px;height:31px;border:0.5px solid #d0cdc6;border-radius:8px;padding:0 8px">
+      <input type="email" id="smtp-test-to" placeholder="destinataire@test.com" class="test-inp">
       <button class="btn btn-ghost" onclick="testSmtpConfig()">Envoyer un test</button>
     </div>
   </div>
+  <div class="two-col">
+    <div class="card">
+      <div class="card-head"><div class="ch-ico">✆</div><span class="ch-title">SMS (Twilio)</span></div>
+      <div class="ff"><label>Account SID</label><input id="sms-sid" value="${esc(sms.accountSid)}" placeholder="ACxxxxxxxxxxxxxxxx"></div>
+      <div class="ff" style="margin-top:8px"><label>Auth Token</label><input type="password" id="sms-token" value="${esc(sms.authToken)}" placeholder="${sms.authToken?'':'••••••••'}"></div>
+      <div class="ff" style="margin-top:8px"><label>Numéro expéditeur</label><input id="sms-from" value="${esc(sms.fromNumber)}" placeholder="+33612345678"></div>
+      <div class="modal-footer" style="border-top:none;padding-top:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="saveChannelConfig('sms')">Enregistrer</button>
+        <input id="sms-test-to" placeholder="+33612345678" class="test-inp">
+        <button class="btn btn-ghost btn-sm" onclick="testChannelConfig('sms')">Tester</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">WhatsApp (Twilio)</span></div>
+      <div class="ff"><label>Account SID</label><input id="wa-sid" value="${esc(wa.accountSid)}" placeholder="ACxxxxxxxxxxxxxxxx"></div>
+      <div class="ff" style="margin-top:8px"><label>Auth Token</label><input type="password" id="wa-token" value="${esc(wa.authToken)}" placeholder="${wa.authToken?'':'••••••••'}"></div>
+      <div class="ff" style="margin-top:8px"><label>Numéro expéditeur</label><input id="wa-from" value="${esc(wa.fromNumber)}" placeholder="+14155238886"></div>
+      <div class="modal-footer" style="border-top:none;padding-top:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="saveChannelConfig('whatsapp')">Enregistrer</button>
+        <input id="whatsapp-test-to" placeholder="+33612345678" class="test-inp">
+        <button class="btn btn-ghost btn-sm" onclick="testChannelConfig('whatsapp')">Tester</button>
+      </div>
+    </div>
+  </div>
   <div class="card">
-    <div class="card-head"><div class="ch-ico">✉</div><span class="ch-title">Modèles d'email</span><button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="openTemplateModal(null)">+ Nouveau modèle</button></div>
-    ${EMAIL_TEMPLATES.length===0?'<div class="log-empty">Aucun modèle. Créez-en un pour pouvoir envoyer des emails depuis une fiche.</div>':EMAIL_TEMPLATES.map(t=>`
+    <div class="card-head"><div class="ch-ico">✉</div><span class="ch-title">Modèles de message</span><button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="openTemplateModal(null)">+ Nouveau modèle</button></div>
+    <div class="chan-tabs">${['email','sms','whatsapp'].map(c=>`<button class="chan-tab ${tplChannelTab===c?'active':''}" onclick="tplChannelTab='${c}';renderCanauxPanel()">${CHANNEL_LABEL[c]}</button>`).join('')}</div>
+    ${tpls.length===0?'<div class="log-empty">Aucun modèle '+CHANNEL_LABEL[tplChannelTab]+', créez-en un pour pouvoir l\'utiliser dans une règle ou un envoi depuis une fiche.</div>':tpls.map(t=>`
       <div class="log-item">
         <div class="log-dot ld-b"></div>
         <div class="log-body">
           <div class="log-text"><strong>${esc(t.name)}</strong> <span style="color:#aaa;font-size:11px">(${esc(t.key)})</span></div>
-          <div class="log-meta">Objet : ${esc(t.subject)}</div>
+          <div class="log-meta">${t.channel==='email'?'Objet : '+esc(t.subject):esc(t.bodyHtml).slice(0,80)}</div>
           <div class="log-acts">
             <button class="btn btn-sm btn-ghost" onclick="openTemplateModal('${t.id}')">Modifier</button>
             <button class="btn btn-sm btn-ghost" style="color:#a32d2d" onclick="deleteTemplate('${t.id}')">Supprimer</button>
@@ -1025,97 +1119,353 @@ async function testSmtpConfig(){
   }catch(e){ flash(e.message||'Échec de l\'envoi — vérifiez la configuration'); }
 }
 
+async function saveChannelConfig(channel){
+  const p = channel==='sms'?'sms':'wa';
+  const g=i=>(document.getElementById(i)||{value:''}).value;
+  const body={channel:channel, accountSid:g(p+'-sid').trim(), authToken:g(p+'-token'), fromNumber:g(p+'-from').trim(), scope:'crm'};
+  try{
+    var r = await apiFetch('/wa/channelConfig/update', {method:'POST', body:JSON.stringify(body)});
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    if(channel==='sms') SMS_CFG=data; else WA_CFG=data;
+    flash('Configuration '+CHANNEL_LABEL[channel]+' enregistrée');
+  }catch(e){ flash(e.message||'Erreur d\'enregistrement'); }
+}
+
+async function testChannelConfig(channel){
+  const to=(document.getElementById(channel+'-test-to')||{value:''}).value.trim();
+  if(!to){flash('Indiquez un destinataire de test');return;}
+  try{
+    var r = await apiFetch('/wa/channelConfig/test', {method:'POST', body:JSON.stringify({channel:channel, to:to, scope:'crm'})});
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash('Message de test envoyé à '+to);
+  }catch(e){ flash(e.message||'Échec de l\'envoi — vérifiez la configuration'); }
+}
+
 function openTemplateModal(id){
-  const t = id ? EMAIL_TEMPLATES.find(t=>t.id===id) : {id:null,key:'',name:'',subject:'',bodyHtml:''};
+  const t = id ? MSG_TEMPLATES.find(t=>t.id===id) : {id:null,channel:tplChannelTab,key:'',name:'',subject:'',bodyHtml:''};
   if(!t)return;
   document.getElementById('modal-ct').innerHTML=`
   <div class="modal-bg" onclick="if(event.target===this)closeModal()">
     <div class="modal-box">
       <div class="modal-head"><div style="font-size:16px;font-weight:500">${t.id?'Modifier le modèle':'Nouveau modèle'}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
       <div class="form-grid">
+        <div class="ff"><label>Canal</label><select id="tpl-channel" ${t.id?'disabled':''} onchange="renderTplSubjectVisibility()">${['email','sms','whatsapp'].map(c=>`<option value="${c}" ${t.channel===c?'selected':''}>${CHANNEL_LABEL[c]}</option>`).join('')}</select></div>
         <div class="ff"><label>Clé (identifiant technique)</label><input id="tpl-key" value="${esc(t.key)}" placeholder="ex. prospect-relance" ${t.id?'disabled':''}></div>
-        <div class="ff"><label>Nom affiché</label><input id="tpl-name" value="${esc(t.name)}" placeholder="Relance prospect"></div>
       </div>
-      <div class="ff" style="margin-top:8px"><label>Objet</label><input id="tpl-subject" value="${esc(t.subject)}" placeholder="Sesame Technology — {{nom}}"></div>
-      <div class="ff" style="margin-top:8px"><label>Corps (HTML — variables disponibles : {{nom}} {{secteur}} {{referent}} {{ville}})</label><textarea id="tpl-body" style="height:160px">${t.bodyHtml||''}</textarea></div>
+      <div class="ff" style="margin-top:8px"><label>Nom affiché</label><input id="tpl-name" value="${esc(t.name)}" placeholder="Relance prospect"></div>
+      <div class="ff" id="tpl-subject-wrap" style="margin-top:8px"><label>Objet (email uniquement)</label><input id="tpl-subject" value="${esc(t.subject)}" placeholder="Sesame Technology — {{nom}}"></div>
+      <div class="ff" style="margin-top:8px"><label>Corps (email : HTML ; SMS/WhatsApp : texte — variables : {{nom}} {{secteur}} {{referent}} {{ville}})</label><textarea id="tpl-body" style="height:160px">${t.bodyHtml||''}</textarea></div>
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="saveTemplate(${t.id?`'${t.id}'`:'null'})">Enregistrer</button>
         <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
       </div>
     </div>
   </div>`;
+  renderTplSubjectVisibility();
+}
+
+function renderTplSubjectVisibility(){
+  const sel=document.getElementById('tpl-channel');
+  const wrap=document.getElementById('tpl-subject-wrap');
+  if(sel&&wrap) wrap.style.display = sel.value==='email' ? '' : 'none';
 }
 
 async function saveTemplate(id){
   const g=i=>(document.getElementById(i)||{value:''}).value;
-  const body={key:g('tpl-key').trim().toLowerCase(),name:g('tpl-name').trim(),subject:g('tpl-subject').trim(),bodyHtml:g('tpl-body'),scope:'crm'};
-  if(!body.key||!body.name||!body.subject||!body.bodyHtml){flash('Tous les champs sont requis');return;}
+  const body={channel:g('tpl-channel'),key:g('tpl-key').trim().toLowerCase(),name:g('tpl-name').trim(),subject:g('tpl-subject').trim(),bodyHtml:g('tpl-body'),scope:'crm'};
+  if(!body.key||!body.name||!body.bodyHtml||(body.channel==='email'&&!body.subject)){flash('Tous les champs sont requis');return;}
   try{
-    var r = await apiFetch('/wa/emailTemplate/upsert', {method:'POST', body:JSON.stringify(body)});
+    var r = await apiFetch('/wa/messageTemplate/upsert', {method:'POST', body:JSON.stringify(body)});
     var data = await r.json();
     if(!r.ok) throw new Error(data.error||'http '+r.status);
-    const i=EMAIL_TEMPLATES.findIndex(t=>t.id===data.id);
-    if(i>-1) EMAIL_TEMPLATES[i]=data; else EMAIL_TEMPLATES.push(data);
+    const i=MSG_TEMPLATES.findIndex(t=>t.id===data.id);
+    if(i>-1) MSG_TEMPLATES[i]=data; else MSG_TEMPLATES.push(data);
+    tplChannelTab=data.channel;
   }catch(e){ flash(e.message||'Erreur d\'enregistrement'); return; }
-  closeModal();flash('Modèle enregistré');renderEmailPanel();
+  closeModal();flash('Modèle enregistré');renderCanauxPanel();
 }
 
 async function deleteTemplate(id){
   if(!confirm('Supprimer ce modèle ?'))return;
   try{
-    var r = await apiFetch('/wa/emailTemplate/delete', {method:'POST', body:JSON.stringify({id:id, scope:'crm'})});
+    var r = await apiFetch('/wa/messageTemplate/delete', {method:'POST', body:JSON.stringify({id:id, scope:'crm'})});
     if(!r.ok) throw new Error('http '+r.status);
   }catch(e){ flash('Erreur de suppression'); return; }
-  EMAIL_TEMPLATES=EMAIL_TEMPLATES.filter(t=>t.id!==id);
-  flash('Modèle supprimé');renderEmailPanel();
+  MSG_TEMPLATES=MSG_TEMPLATES.filter(t=>t.id!==id);
+  flash('Modèle supprimé');renderCanauxPanel();
 }
 
-async function ensureEmailTemplatesLoaded(){
-  if(EMAIL_TEMPLATES_LOADED)return;
+async function ensureTemplatesLoaded(){
+  if(MSG_TEMPLATES_LOADED)return;
   try{
-    var r = await apiFetch('/wa/emailTemplate/list?scope=crm');
-    EMAIL_TEMPLATES = r.ok ? await r.json() : [];
-  }catch(e){ EMAIL_TEMPLATES=[]; }
-  EMAIL_TEMPLATES_LOADED=true;
+    var r = await apiFetch('/wa/messageTemplate/list?scope=crm');
+    MSG_TEMPLATES = r.ok ? await r.json() : [];
+  }catch(e){ MSG_TEMPLATES=[]; }
+  MSG_TEMPLATES_LOADED=true;
 }
 
 async function openSendEmailModal(id){
   const c=clients.find(c=>c.id===id);if(!c)return;
-  if(!c.email){flash('Aucune adresse email pour cette fiche');return;}
-  await ensureEmailTemplatesLoaded();
-  if(!EMAIL_TEMPLATES.length){flash('Aucun modèle disponible — créez-en un depuis "Email"');return;}
+  await ensureTemplatesLoaded();
+  const available=['email','sms','whatsapp'].filter(ch=>MSG_TEMPLATES.some(t=>t.channel===ch));
+  if(!available.length){flash('Aucun modèle disponible — créez-en un depuis "Canaux"');return;}
+  const chan=available.includes('email')?'email':available[0];
   document.getElementById('modal-ct').innerHTML=`
   <div class="modal-bg" onclick="if(event.target===this)closeModal()">
     <div class="modal-box" style="max-width:480px">
-      <div class="modal-head"><div style="font-size:16px;font-weight:500">Envoyer un email à ${esc(c.nom)}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
-      <div class="ff"><label>Destinataire</label><input value="${esc(c.email)}" disabled></div>
-      <div class="ff" style="margin-top:8px"><label>Modèle</label><select id="send-tpl">${EMAIL_TEMPLATES.map(t=>`<option value="${esc(t.key)}">${esc(t.name)}</option>`).join('')}</select></div>
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Envoyer un message à ${esc(c.nom)}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div class="ff"><label>Canal</label><select id="send-channel" onchange="renderSendTplOptions('${id}')">${available.map(ch=>`<option value="${ch}" ${ch===chan?'selected':''}>${CHANNEL_LABEL[ch]}</option>`).join('')}</select></div>
+      <div class="ff" style="margin-top:8px"><label>Destinataire</label><input id="send-to" value="${esc(chan==='email'?(c.email||''):(c.tel||''))}"></div>
+      <div class="ff" style="margin-top:8px"><label>Modèle</label><select id="send-tpl"></select></div>
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="sendClientEmail('${id}')">Envoyer</button>
         <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
       </div>
     </div>
   </div>`;
+  renderSendTplOptions(id);
+}
+
+function renderSendTplOptions(id){
+  const c=clients.find(c=>c.id===id);
+  const chan=(document.getElementById('send-channel')||{value:'email'}).value;
+  const toInp=document.getElementById('send-to');
+  if(toInp&&c) toInp.value = chan==='email' ? (c.email||'') : (c.tel||'');
+  const sel=document.getElementById('send-tpl');
+  if(!sel)return;
+  const opts=MSG_TEMPLATES.filter(t=>t.channel===chan);
+  sel.innerHTML = opts.length ? opts.map(t=>`<option value="${esc(t.key)}">${esc(t.name)}</option>`).join('') : '<option value="">— aucun modèle —</option>';
 }
 
 async function sendClientEmail(id){
   const c=clients.find(c=>c.id===id);if(!c)return;
+  const channel=(document.getElementById('send-channel')||{value:'email'}).value;
+  const to=(document.getElementById('send-to')||{value:''}).value.trim();
   const key=(document.getElementById('send-tpl')||{value:''}).value;
+  if(!to){flash('Destinataire requis');return;}
   if(!key){flash('Sélectionnez un modèle');return;}
   try{
-    var r = await apiFetch('/wa/emailTemplate/send', {method:'POST', body:JSON.stringify({
-      scope:'crm', templateKey:key, to:c.email,
+    var r = await apiFetch('/wa/message/send', {method:'POST', body:JSON.stringify({
+      scope:'crm', channel:channel, templateKey:key, to:to,
       variables:{nom:c.nom, secteur:c.secteur||'', referent:c.referent||'', ville:c.ville||''}
     })});
     var data = await r.json();
     if(!r.ok) throw new Error(data.error||'http '+r.status);
     var ar = await apiFetch('/wa/crmProspect/activity/create', {method:'POST', body:JSON.stringify({
-      prospectId:id, type:'Email', text:'Email envoyé : "'+data.subject+'"', authorName:'CRM'
+      prospectId:id, type: channel==='email'?'Email':'Autre', text: CHANNEL_LABEL[channel]+' envoyé : "'+(data.subject||data.body||'')+'"', authorName:'CRM'
     })});
     if(ar.ok){ const entry=await ar.json(); if(!c.journal)c.journal=[]; c.journal.push(entry); }
   }catch(e){ flash(e.message||'Échec de l\'envoi'); return; }
-  closeModal();flash('Email envoyé');
+  closeModal();flash(CHANNEL_LABEL[channel]+' envoyé');
   if(view==='fiche'&&curId===id) showFiche(id);
+}
+
+// ════════════════════════════════════════
+// AUTOMATISATIONS — règles déclenchées par un événement métier ou une
+// récurrence programmée (portée CRM/Sesame, scope=crm)
+// ════════════════════════════════════════
+const TRIGGERS_CRM = [
+  {key:'crm.prospect_created', label:'Nouveau prospect CRM', timingModes:['immediate']},
+  {key:'crm.contract_signed', label:'Contrat signé', timingModes:['immediate']},
+  {key:'crm.newsletter', label:'Newsletter récurrente', timingModes:['recurring']},
+];
+let AUTO_RULES=[];
+
+function showAutomationPanel(){
+  view='auto';setNav('n-auto');
+  bc([{label:'Automatisations'}]);tba('');
+  document.getElementById('main').innerHTML='<div class="card">Chargement…</div>';
+  loadAutomationPanelData();
+}
+
+async function loadAutomationPanelData(){
+  await ensureTemplatesLoaded();
+  try{
+    var r = await apiFetch('/wa/automationRule/list?scope=crm');
+    AUTO_RULES = r.ok ? await r.json() : [];
+  }catch(e){ AUTO_RULES=[]; }
+  renderAutomationPanel();
+}
+
+function triggerLabel(key){ const t=TRIGGERS_CRM.find(t=>t.key===key); return t?t.label:key; }
+function timingSummary(r){
+  if(r.timingMode==='immediate') return 'Immédiat';
+  if(r.timingMode==='before') return (r.offsetValue||0)+' '+unitLabel(r.offsetUnit)+' avant';
+  if(r.timingMode==='after') return (r.offsetValue||0)+' '+unitLabel(r.offsetUnit)+' après';
+  if(r.timingMode==='recurring'){
+    const rec={daily:'Tous les jours',weekly:'Toutes les semaines',monthly:'Tous les mois'}[r.recurrence]||r.recurrence;
+    return rec+' à '+(r.atTime||'—');
+  }
+  return r.timingMode;
+}
+function unitLabel(u){ return {minutes:'min',hours:'h',days:'j'}[u]||u||''; }
+
+function renderAutomationPanel(){
+  document.getElementById('main').innerHTML=`
+  <div class="card">
+    <div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Règles d'automatisation</span><button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="openRuleModal(null)">+ Nouvelle règle</button></div>
+    ${AUTO_RULES.length===0?'<div class="log-empty">Aucune règle. Ex : envoyer une newsletter tous les mois à 11h00, ou relancer automatiquement un nouveau prospect.</div>':AUTO_RULES.map(r=>`
+      <div class="log-item">
+        <div class="log-dot ${r.enabled?'ld-g':'ld-r'}"></div>
+        <div class="log-body">
+          <div class="log-text"><strong>${esc(r.name)}</strong> <span class="tag t-gray" style="font-size:10px;padding:1px 7px">${triggerLabel(r.trigger)}</span> <span class="tag t-blue" style="font-size:10px;padding:1px 7px">${CHANNEL_LABEL[r.channel]}</span></div>
+          <div class="log-meta">${timingSummary(r)} — modèle : ${esc(r.templateKey)}${r.lastRunAt?' — dernier envoi : '+new Date(r.lastRunAt).toLocaleString('fr-FR'):''}</div>
+          <div class="log-acts">
+            <button class="btn btn-sm btn-ghost" onclick="openRuleModal('${r.id}')">Modifier</button>
+            <button class="btn btn-sm btn-ghost" onclick="toggleRule('${r.id}')">${r.enabled?'Désactiver':'Activer'}</button>
+            <button class="btn btn-sm btn-ghost" style="color:#a32d2d" onclick="deleteRule('${r.id}')">Supprimer</button>
+          </div>
+        </div>
+      </div>`).join('')}
+  </div>`;
+}
+
+function openRuleModal(id){
+  const r = id ? AUTO_RULES.find(r=>r.id===id) : {id:null,name:'',trigger:TRIGGERS_CRM[0].key,enabled:true,timingMode:'immediate',offsetValue:1,offsetUnit:'days',recurrence:'monthly',atTime:'11:00',dayOfWeek:1,dayOfMonth:1,channel:'email',templateKey:'',audienceFilter:{type:'all',secteur:''}};
+  if(!r)return;
+  const af = r.audienceFilter || {type:'all',secteur:''};
+  document.getElementById('modal-ct').innerHTML=`
+  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+    <div class="modal-box">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">${r.id?'Modifier la règle':'Nouvelle règle'}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div class="ff"><label>Nom</label><input id="rule-name" value="${esc(r.name)}" placeholder="Ex. Newsletter mensuelle"></div>
+      <div class="form-grid" style="margin-top:8px">
+        <div class="ff"><label>Déclencheur</label><select id="rule-trigger" onchange="renderRuleTimingFields()">${TRIGGERS_CRM.map(t=>`<option value="${t.key}" ${r.trigger===t.key?'selected':''}>${t.label}</option>`).join('')}</select></div>
+        <div class="ff"><label>Canal</label><select id="rule-channel" onchange="renderRuleTplOptions()">${['email','sms','whatsapp'].map(c=>`<option value="${c}" ${r.channel===c?'selected':''}>${CHANNEL_LABEL[c]}</option>`).join('')}</select></div>
+      </div>
+      <div id="rule-timing-fields"></div>
+      <div class="form-grid" style="margin-top:8px">
+        <div class="ff"><label>Modèle</label><select id="rule-template"></select></div>
+        <div class="ff"><label>Actif</label><select id="rule-enabled"><option value="1" ${r.enabled!==false?'selected':''}>Oui</option><option value="0" ${r.enabled===false?'selected':''}>Non</option></select></div>
+      </div>
+      <div id="rule-audience-fields"></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="saveRule(${r.id?`'${r.id}'`:'null'})">Enregistrer</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+  window._ruleEditing = r;
+  renderRuleTimingFields();
+  renderRuleTplOptions();
+}
+
+function renderRuleTimingFields(){
+  const r = window._ruleEditing || {};
+  const triggerKey = (document.getElementById('rule-trigger')||{value:r.trigger}).value;
+  const trig = TRIGGERS_CRM.find(t=>t.key===triggerKey);
+  const mode = trig ? trig.timingModes[0] : 'immediate';
+  const el = document.getElementById('rule-timing-fields');
+  if(!el)return;
+  if(mode==='immediate'){
+    el.innerHTML = '<input type="hidden" id="rule-timingMode" value="immediate">';
+  } else if(mode==='before'||mode==='after'){
+    el.innerHTML = `<input type="hidden" id="rule-timingMode" value="${mode}">
+      <div class="form-grid" style="margin-top:8px">
+        <div class="ff"><label>Délai</label><input type="number" id="rule-offsetValue" value="${r.offsetValue||1}" min="1"></div>
+        <div class="ff"><label>Unité</label><select id="rule-offsetUnit"><option value="minutes" ${r.offsetUnit==='minutes'?'selected':''}>minutes</option><option value="hours" ${r.offsetUnit==='hours'?'selected':''}>heures</option><option value="days" ${!r.offsetUnit||r.offsetUnit==='days'?'selected':''}>jours</option></select></div>
+      </div>`;
+  } else if(mode==='recurring'){
+    el.innerHTML = `<input type="hidden" id="rule-timingMode" value="recurring">
+      <div class="form-grid" style="margin-top:8px">
+        <div class="ff"><label>Récurrence</label><select id="rule-recurrence" onchange="renderRuleRecurrenceDetail()"><option value="daily" ${r.recurrence==='daily'?'selected':''}>Tous les jours</option><option value="weekly" ${r.recurrence==='weekly'?'selected':''}>Toutes les semaines</option><option value="monthly" ${!r.recurrence||r.recurrence==='monthly'?'selected':''}>Tous les mois</option></select></div>
+        <div class="ff"><label>Heure</label><input type="time" id="rule-atTime" value="${r.atTime||'11:00'}"></div>
+      </div>
+      <div id="rule-recurrence-detail"></div>`;
+    renderRuleRecurrenceDetail();
+  }
+  renderRuleAudienceFields(triggerKey);
+}
+
+function renderRuleRecurrenceDetail(){
+  const r = window._ruleEditing || {};
+  const rec = (document.getElementById('rule-recurrence')||{value:r.recurrence}).value;
+  const el = document.getElementById('rule-recurrence-detail');
+  if(!el)return;
+  if(rec==='weekly'){
+    const days=['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+    el.innerHTML = `<div class="ff" style="margin-top:8px"><label>Jour de la semaine</label><select id="rule-dayOfWeek">${days.map((d,i)=>`<option value="${i}" ${(r.dayOfWeek??1)===i?'selected':''}>${d}</option>`).join('')}</select></div>`;
+  } else if(rec==='monthly'){
+    el.innerHTML = `<div class="ff" style="margin-top:8px"><label>Jour du mois</label><input type="number" id="rule-dayOfMonth" min="1" max="31" value="${r.dayOfMonth||1}"></div>`;
+  } else {
+    el.innerHTML='';
+  }
+}
+
+function renderRuleAudienceFields(triggerKey){
+  const r = window._ruleEditing || {};
+  const af = r.audienceFilter || {type:'all',secteur:''};
+  const el = document.getElementById('rule-audience-fields');
+  if(!el)return;
+  if(triggerKey!=='crm.newsletter'){ el.innerHTML=''; return; }
+  el.innerHTML = `<div class="modal-section">Audience</div>
+    <div class="form-grid">
+      <div class="ff"><label>Type de fiche</label><select id="rule-aud-type"><option value="all" ${!af.type||af.type==='all'?'selected':''}>Toutes</option><option value="Prospect" ${af.type==='Prospect'?'selected':''}>Prospects</option><option value="Client" ${af.type==='Client'?'selected':''}>Clients</option></select></div>
+      <div class="ff"><label>Secteur (optionnel)</label><input id="rule-aud-secteur" value="${esc(af.secteur||'')}" placeholder="Tous secteurs"></div>
+    </div>`;
+}
+
+function renderRuleTplOptions(){
+  const r = window._ruleEditing || {};
+  const chan = (document.getElementById('rule-channel')||{value:r.channel}).value;
+  const sel = document.getElementById('rule-template');
+  if(!sel)return;
+  const opts = MSG_TEMPLATES.filter(t=>t.channel===chan);
+  sel.innerHTML = opts.length ? opts.map(t=>`<option value="${esc(t.key)}" ${r.templateKey===t.key?'selected':''}>${esc(t.name)}</option>`).join('') : '<option value="">— aucun modèle pour ce canal —</option>';
+}
+
+async function saveRule(id){
+  const g=i=>(document.getElementById(i)||{value:''}).value;
+  const triggerKey=g('rule-trigger');
+  const body={
+    name:g('rule-name').trim(), trigger:triggerKey, enabled:g('rule-enabled')==='1',
+    timingMode:g('rule-timingMode'), channel:g('rule-channel'), templateKey:g('rule-template'),
+    offsetValue: document.getElementById('rule-offsetValue') ? +g('rule-offsetValue') : null,
+    offsetUnit: document.getElementById('rule-offsetUnit') ? g('rule-offsetUnit') : null,
+    recurrence: document.getElementById('rule-recurrence') ? g('rule-recurrence') : null,
+    atTime: document.getElementById('rule-atTime') ? g('rule-atTime') : null,
+    dayOfWeek: document.getElementById('rule-dayOfWeek') ? +g('rule-dayOfWeek') : null,
+    dayOfMonth: document.getElementById('rule-dayOfMonth') ? +g('rule-dayOfMonth') : null,
+    scope:'crm',
+  };
+  if(triggerKey==='crm.newsletter'){
+    body.audienceFilter = { type: g('rule-aud-type')||'all', secteur: g('rule-aud-secteur')||'' };
+  }
+  if(!body.name){flash('Le nom est requis');return;}
+  if(!body.templateKey){flash('Sélectionnez un modèle pour ce canal');return;}
+  try{
+    var r;
+    if(id) r = await apiFetch('/wa/automationRule/update', {method:'POST', body:JSON.stringify({id:id, ...body})});
+    else r = await apiFetch('/wa/automationRule/create', {method:'POST', body:JSON.stringify(body)});
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    const i=AUTO_RULES.findIndex(x=>x.id===data.id);
+    if(i>-1) AUTO_RULES[i]=data; else AUTO_RULES.push(data);
+  }catch(e){ flash(e.message||'Erreur d\'enregistrement'); return; }
+  closeModal();flash('Règle enregistrée');renderAutomationPanel();
+}
+
+async function toggleRule(id){
+  const r=AUTO_RULES.find(r=>r.id===id);if(!r)return;
+  try{
+    var res = await apiFetch('/wa/automationRule/update', {method:'POST', body:JSON.stringify({id:id, ...r, enabled:!r.enabled, scope:'crm'})});
+    var data = await res.json();
+    if(!res.ok) throw new Error(data.error||'http '+res.status);
+    Object.assign(r, data);
+  }catch(e){ flash('Erreur'); return; }
+  flash(r.enabled?'Règle activée':'Règle désactivée');renderAutomationPanel();
+}
+
+async function deleteRule(id){
+  if(!confirm('Supprimer cette règle ?'))return;
+  try{
+    var r = await apiFetch('/wa/automationRule/delete', {method:'POST', body:JSON.stringify({id:id, scope:'crm'})});
+    if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash('Erreur de suppression'); return; }
+  AUTO_RULES=AUTO_RULES.filter(r=>r.id!==id);
+  flash('Règle supprimée');renderAutomationPanel();
 }
 
 // ════════════════════════════════════════

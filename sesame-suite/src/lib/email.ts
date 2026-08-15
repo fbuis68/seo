@@ -3,16 +3,10 @@ import { prisma } from "../db";
 import { HttpError } from "./asyncHandler";
 
 /**
- * Envoi d'email générique — un seul mécanisme (config SMTP + modèles +
- * rendu de variables) réutilisé à l'identique par le CRM commercial
- * (entityId=null, portée Sesame) et par le back-office de chaque hôtel
- * (entityId=<hôtel>). Les routes (src/routes/email.ts) ne font que
- * résoudre le bon entityId puis appellent ces fonctions.
+ * Canal email — config SMTP + envoi brut. Le rendu de modèle et le choix du
+ * canal (email/sms/whatsapp) sont gérés en amont par src/lib/messaging.ts ;
+ * ce module ne connaît que l'envoi SMTP proprement dit.
  */
-
-function renderTemplate(str: string, vars: Record<string, string>): string {
-  return str.replace(/\{\{\s*(\w+)\s*\}\}/g, (_match, key) => vars[key] ?? "");
-}
 
 function buildTransporter(smtp: { host: string; port: number; secure: boolean; username: string; password: string }) {
   return nodemailer.createTransport({
@@ -71,45 +65,14 @@ export async function sendTestEmail(entityId: string | null, to: string) {
   }
 }
 
-export async function listEmailTemplates(entityId: string | null) {
-  return prisma.emailTemplate.findMany({ where: { entityId }, orderBy: { name: "asc" } });
-}
-
-export async function upsertEmailTemplate(
-  entityId: string | null,
-  key: string,
-  data: { name: string; subject: string; bodyHtml: string }
-) {
-  if (!key || !/^[a-z0-9-]+$/.test(key)) throw new HttpError(400, "Clé de modèle invalide (minuscules, chiffres, tirets)");
-  const existing = await prisma.emailTemplate.findFirst({ where: { entityId, key } });
-  if (existing) return prisma.emailTemplate.update({ where: { id: existing.id }, data });
-  return prisma.emailTemplate.create({ data: { entityId, key, ...data } });
-}
-
-export async function deleteEmailTemplate(entityId: string | null, id: string) {
-  const existing = await prisma.emailTemplate.findFirst({ where: { id, entityId } });
-  if (!existing) throw new HttpError(404, "Modèle introuvable");
-  await prisma.emailTemplate.delete({ where: { id } });
-}
-
-export async function sendTemplatedEmail(opts: {
-  entityId: string | null;
-  templateKey: string;
-  to: string;
-  variables?: Record<string, string>;
-}) {
-  const smtp = await getSmtpConfig(opts.entityId);
+/** Envoi brut, appelé par messaging.ts après rendu du modèle. */
+export async function sendEmailRaw(entityId: string | null, to: string, subject: string, html: string) {
+  const smtp = await getSmtpConfig(entityId);
   if (!smtp) throw new HttpError(400, "Aucun serveur SMTP configuré pour cette portée");
-  const template = await prisma.emailTemplate.findFirst({ where: { entityId: opts.entityId, key: opts.templateKey } });
-  if (!template) throw new HttpError(404, "Modèle d'email introuvable");
-  const vars = opts.variables || {};
-  const subject = renderTemplate(template.subject, vars);
-  const html = renderTemplate(template.bodyHtml, vars);
   const transporter = buildTransporter(smtp);
   try {
-    await transporter.sendMail({ from: fromHeader(smtp), to: opts.to, subject, html });
+    await transporter.sendMail({ from: fromHeader(smtp), to, subject, html });
   } catch (err) {
     throw new HttpError(502, "Échec de connexion au serveur SMTP : " + smtpErrorMessage(err));
   }
-  return { subject, html };
 }

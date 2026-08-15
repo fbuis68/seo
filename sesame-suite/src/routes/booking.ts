@@ -3,6 +3,7 @@ import { prisma } from "../db";
 import { resolveEntity } from "../lib/entity";
 import { normaliseBooking } from "../lib/normalize";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
+import { fireTrigger } from "../lib/automation";
 
 export const bookingRouter = Router();
 
@@ -73,6 +74,14 @@ bookingRouter.post(
         selectedRoomCode: selectedRoomCode || booking.selectedRoomCode,
       },
     });
+
+    fireTrigger("checkin.completed", {
+      entityId: entity.id,
+      targetType: "booking",
+      targetId: updated.id,
+      recipient: { email: updated.personEmail, phone: updated.personPhone },
+      variables: { prenom: updated.personFirstname, nom: updated.personLastname, code: updated.code },
+    }).catch((e) => console.error("[automation] checkin.completed:", e));
 
     res.json(normaliseBooking(updated));
   })

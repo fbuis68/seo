@@ -216,8 +216,11 @@ retiré du menu) par une nouvelle application dédiée, à ne pas confondre avec
 `/wa/crm/*` qui gère les clients finaux **de chaque hôtel** : celle-ci gère
 le pipeline commercial de Sesame elle-même (prospects/clients hôteliers).
 Réservée aux comptes `sesame` — réutilise la session admin existante si déjà
-connecté (lien "CRM commercial" dans le menu du back-office), sinon
-formulaire de connexion dédié qui rejette explicitement tout compte `hotel`.
+connecté (accès direct par l'URL `/crm`, plus de lien dans le menu du
+back-office), sinon formulaire de connexion dédié qui rejette explicitement
+tout compte `hotel`. Interface responsive : la barre latérale devient un
+tiroir accessible par un bouton ☰ sous 900px de large, les grilles de
+graphiques passent en une colonne, les tableaux défilent horizontalement.
 
 - Fiche par établissement : coordonnées, score de risque de churn calculé,
   usage des accès (NFC/QR/mobile), features actives, opportunités d'upsell,
@@ -267,16 +270,44 @@ formulaire de connexion dédié qui rejette explicitement tout compte `hotel`.
 - **Suppression d'une fiche** : bouton "🗑 Supprimer" dans la fiche détail
   (`POST /wa/crmProspect/delete`, déjà existant côté serveur, maintenant
   relié à l'interface) — confirmation requise, action irréversible.
-- **Serveur SMTP sortant + modèles d'email + envoi**, dans l'onglet "Email"
-  du CRM et dans "Serveur email" du back-office de chaque hôtel — même
-  mécanisme générique (`src/lib/email.ts`, `src/routes/email.ts`, endpoints
-  `/wa/smtpConfig/*` et `/wa/emailTemplate/*`), paramétré par portée : le CRM
-  cible la configuration Sesame globale (`?scope=crm`, réservé aux comptes
-  Sesame), le back-office cible l'hôtel courant (comportement par défaut,
-  comme les autres réglages par établissement). Modèles avec variables
-  `{{nom}}`, `{{secteur}}`, `{{referent}}`, `{{ville}}` ; bouton "Envoyer un
-  test" pour vérifier la configuration ; depuis une fiche CRM, "✉ Email"
-  envoie un modèle au client/prospect et journalise l'envoi automatiquement.
+- **Canaux convergents (Email / SMS / WhatsApp) + modèles multi-canal**,
+  dans l'onglet "Canaux" du CRM et du back-office de chaque hôtel — même
+  mécanisme générique paramétré par portée (`?scope=crm` = Sesame global,
+  sinon l'hôtel courant, comme partout ailleurs) :
+  - **Email** : SMTP classique (`src/lib/email.ts`, endpoints
+    `/wa/smtpConfig/*`).
+  - **SMS et WhatsApp** : un seul fournisseur, **Twilio**, dont l'API REST
+    couvre les deux canaux avec les mêmes identifiants de compte — c'est ce
+    qui permet la convergence (`src/lib/sms.ts`, endpoints
+    `/wa/channelConfig/*`, appel HTTP direct, sans SDK).
+  - **Modèles** : un seul modèle de gabarit `{{variable}}` par canal
+    (`MessageTemplate`, endpoints `/wa/messageTemplate/*`) — objet+HTML pour
+    l'email, texte brut pour SMS/WhatsApp.
+  - **Envoi** : `POST /wa/message/send` (`src/lib/messaging.ts`) est le point
+    de convergence unique — il choisit le transport (SMTP ou Twilio) selon
+    le canal demandé. Depuis une fiche CRM, "✉ Email" (canal choisi dans la
+    modale) envoie un modèle au client/prospect et journalise l'envoi.
+  - Chaque canal a son bouton "Tester" pour vérifier sa configuration
+    indépendamment.
+- **Automatisations** (onglet dédié, CRM et back-office) : des règles qui
+  envoient un message sur un déclencheur métier ou une récurrence
+  programmée (`src/lib/automation.ts`, `AutomationRule`, endpoints
+  `/wa/automationRule/*`). Déclencheurs disponibles :
+  - Hôtel : réservation créée, check-in effectué, commande créée, commande
+    livrée (immédiats) ; avant l'arrivée, avant le départ, après le départ
+    (délai paramétrable en minutes/heures/jours, ex. "1 jour avant la date
+    de fin de séjour").
+  - CRM : nouveau prospect, contrat signé (immédiats) ; newsletter
+    récurrente (jour/heure paramétrables, ex. "tous les mois à 11h00",
+    avec segment d'audience Prospect/Client/secteur).
+  - Les déclencheurs immédiats sont câblés en synchrone dans les routes
+    concernées (`booking.ts`, `roomservice.ts`, `bookingSource.ts`,
+    `crmProspect.ts`, `onboarding.ts`, `contact.ts`) via `fireTrigger()` —
+    fire-and-forget, un échec d'envoi n'interrompt jamais la requête
+    métier appelante. Les déclencheurs à délai/récurrence sont balayés
+    toutes les 15 min par `automationScheduler.ts` (même pattern que le
+    planificateur de synchronisation réservations). `AutomationRuleLog`
+    déduplique les envois (une ligne par règle × cible déjà notifiée).
 
 Également non couvert : l'app ménage (`sesame_menage.html`, application
 séparée pour les agents de ménage sur le terrain). La base de données est

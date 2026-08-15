@@ -3,6 +3,7 @@ import { prisma } from "../db";
 import { resolveEntity } from "../lib/entity";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
+import { fireTrigger } from "../lib/automation";
 
 export const roomserviceRouter = Router();
 
@@ -123,6 +124,16 @@ roomserviceRouter.post(
       },
     });
 
+    if (booking) {
+      fireTrigger("order.created", {
+        entityId: entity.id,
+        targetType: "order",
+        targetId: order.id,
+        recipient: { email: booking.personEmail, phone: booking.personPhone },
+        variables: { prenom: booking.personFirstname, nom: booking.personLastname, total: String(order.total) },
+      }).catch((e) => console.error("[automation] order.created:", e));
+    }
+
     res.status(201).json(shapeOrder(order));
   })
 );
@@ -140,6 +151,20 @@ roomserviceRouter.post(
     if (!order) throw new HttpError(404, "Commande introuvable");
 
     const updated = await prisma.order.update({ where: { id }, data: { status } });
+
+    if (status === "delivered" && order.status !== "delivered" && updated.bookingId) {
+      const booking = await prisma.booking.findUnique({ where: { id: updated.bookingId } });
+      if (booking) {
+        fireTrigger("order.delivered", {
+          entityId: entity.id,
+          targetType: "order",
+          targetId: updated.id,
+          recipient: { email: booking.personEmail, phone: booking.personPhone },
+          variables: { prenom: booking.personFirstname, nom: booking.personLastname, total: String(updated.total) },
+        }).catch((e) => console.error("[automation] order.delivered:", e));
+      }
+    }
+
     res.json(shapeOrder(updated));
   })
 );

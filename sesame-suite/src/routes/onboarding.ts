@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../db";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { provisionEntity } from "../lib/provisionEntity";
+import { fireTrigger } from "../lib/automation";
 
 /**
  * Parcours d'inscription en ligne (wizard public "Démarrer mon essai"),
@@ -200,6 +201,13 @@ onboardingRouter.post(
         messagerie: "Noreply",
       },
     });
+    fireTrigger("crm.prospect_created", {
+      entityId: null,
+      targetType: "crmProspect",
+      targetId: prospect.id,
+      recipient: { email: prospect.email, phone: prospect.tel },
+      variables: { nom: prospect.nom, secteur: prospect.secteur || "" },
+    }).catch((e) => console.error("[automation] crm.prospect_created:", e));
     await prisma.crmActivity.create({
       data: {
         prospectId: prospect.id,

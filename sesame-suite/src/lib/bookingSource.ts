@@ -1,5 +1,6 @@
 import { prisma } from "../db";
 import type { BookingSourceConfig, Entity } from "@prisma/client";
+import { fireTrigger } from "./automation";
 
 /** Champs Booking que le mapping peut renseigner — valeur = dot-path dans
  * chaque élément du tableau JSON retourné par la source externe. */
@@ -288,8 +289,15 @@ export async function upsertMappedBookings(entity: Entity, mapped: MappedBooking
       await prisma.booking.update({ where: { id: existing.id }, data });
       updated++;
     } else {
-      await prisma.booking.create({ data: { entityId: entity.id, code: b.code, ...data } });
+      const row = await prisma.booking.create({ data: { entityId: entity.id, code: b.code, ...data } });
       created++;
+      fireTrigger("booking.created", {
+        entityId: entity.id,
+        targetType: "booking",
+        targetId: row.id,
+        recipient: { email: row.personEmail, phone: row.personPhone },
+        variables: { prenom: row.personFirstname, nom: row.personLastname, code: row.code },
+      }).catch((e) => console.error("[automation] booking.created:", e));
     }
   }
   return { created, updated };

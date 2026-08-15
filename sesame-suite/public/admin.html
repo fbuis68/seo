@@ -266,7 +266,8 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   <div class="ni" data-pan="rooms" onclick="showPan('rooms')"><i class="ti ti-door"></i>Gestion des chambres</div>
   <div class="ns">Intégration</div>
   <div class="ni" data-pan="api" onclick="showPan('api')"><i class="ti ti-api"></i>Intégration réservations</div>
-  <div class="ni" data-pan="email" onclick="showPan('email')"><i class="ti ti-mail"></i>Serveur email</div>
+  <div class="ni" data-pan="email" onclick="showPan('email')"><i class="ti ti-mail"></i>Canaux</div>
+  <div class="ni" data-pan="automation" onclick="showPan('automation')"><i class="ti ti-bolt"></i>Automatisations</div>
   <div class="ni" data-pan="preview" onclick="showPan('preview')"><i class="ti ti-device-mobile"></i>Aperçu client</div>
 </aside>
 
@@ -1304,12 +1305,12 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 <!-- ════════════════ SERVEUR EMAIL ════════════════ -->
 <div id="pan-email" class="pan">
   <div class="ph">
-    <h2>Serveur email</h2>
-    <p>Paramétrez votre serveur SMTP sortant et vos modèles d'email pour envoyer des communications à vos clients directement depuis Sesame Suite.</p>
+    <h2>Canaux</h2>
+    <p>Paramétrez vos canaux d'envoi (email, SMS, WhatsApp) et vos modèles de message pour communiquer avec vos clients directement depuis Sesame Suite.</p>
   </div>
 
   <div class="ca">
-    <div class="ch"><i class="ti ti-server"></i>Serveur SMTP sortant</div>
+    <div class="ch"><i class="ti ti-server"></i>Serveur SMTP sortant (Email)</div>
     <div class="g2">
       <div class="fi"><label class="lb">Hôte</label><input type="text" id="eml-host" placeholder="smtp.exemple.com"></div>
       <div class="fi"><label class="lb">Port</label><input type="number" id="eml-port" placeholder="587"></div>
@@ -1332,14 +1333,54 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     </div>
   </div>
 
+  <div class="g2">
+    <div class="ca">
+      <div class="ch"><i class="ti ti-message"></i>SMS (Twilio)</div>
+      <div class="fi"><label class="lb">Account SID</label><input type="text" id="sms-sid" placeholder="ACxxxxxxxxxxxxxxxx" autocomplete="off"></div>
+      <div class="fi"><label class="lb">Auth Token</label><input type="password" id="sms-token" autocomplete="off"></div>
+      <div class="fi"><label class="lb">Numéro expéditeur</label><input type="text" id="sms-from" placeholder="+33612345678"></div>
+      <div class="brow" style="align-items:center;flex-wrap:wrap">
+        <button class="btn btn-p btn-s" onclick="chanSaveConfig('sms')"><i class="ti ti-device-floppy"></i> Enregistrer</button>
+        <input type="text" id="sms-test-to" placeholder="+33612345678" style="max-width:150px">
+        <button class="btn btn-s" onclick="chanTestConfig('sms')"><i class="ti ti-send"></i> Tester</button>
+      </div>
+    </div>
+    <div class="ca">
+      <div class="ch"><i class="ti ti-brand-whatsapp"></i>WhatsApp (Twilio)</div>
+      <div class="fi"><label class="lb">Account SID</label><input type="text" id="wa-sid" placeholder="ACxxxxxxxxxxxxxxxx" autocomplete="off"></div>
+      <div class="fi"><label class="lb">Auth Token</label><input type="password" id="wa-token" autocomplete="off"></div>
+      <div class="fi"><label class="lb">Numéro expéditeur</label><input type="text" id="wa-from" placeholder="+14155238886"></div>
+      <div class="brow" style="align-items:center;flex-wrap:wrap">
+        <button class="btn btn-p btn-s" onclick="chanSaveConfig('whatsapp')"><i class="ti ti-device-floppy"></i> Enregistrer</button>
+        <input type="text" id="whatsapp-test-to" placeholder="+33612345678" style="max-width:150px">
+        <button class="btn btn-s" onclick="chanTestConfig('whatsapp')"><i class="ti ti-send"></i> Tester</button>
+      </div>
+    </div>
+  </div>
+
   <div class="ca">
-    <div class="ch"><i class="ti ti-mail"></i>Modèles d'email
+    <div class="ch"><i class="ti ti-mail"></i>Modèles de message
       <button class="chact" onclick="emlOpenTemplateModal(null)"><i class="ti ti-plus" style="font-size:12px"></i> Nouveau modèle</button>
     </div>
+    <div id="eml-tpl-tabs" style="display:flex;gap:6px;margin-bottom:12px"></div>
     <div id="eml-templates-list"></div>
   </div>
 
   <div id="eml-template-modal"></div>
+</div>
+<!-- ════════════════ AUTOMATISATIONS ════════════════ -->
+<div id="pan-automation" class="pan">
+  <div class="ph">
+    <h2>Automatisations</h2>
+    <p>Envoyez automatiquement un message (email, SMS, WhatsApp) déclenché par un événement métier — nouvelle réservation, check-in, commande — ou selon un délai avant/après le séjour du client.</p>
+  </div>
+  <div class="ca">
+    <div class="ch"><i class="ti ti-bolt"></i>Règles d'automatisation
+      <button class="chact" onclick="autoOpenRuleModal(null)"><i class="ti ti-plus" style="font-size:12px"></i> Nouvelle règle</button>
+    </div>
+    <div id="auto-rules-list"></div>
+  </div>
+  <div id="auto-rule-modal"></div>
 </div>
 <!-- ════════════════ PREVIEW ════════════════ -->
 <div id="pan-preview" class="pan">
@@ -2584,6 +2625,7 @@ function showPan(id){
   if(id==='dash'){try{renderDash();}catch(e){}}
   if(id==='api'){ bsInit(); }
   if(id==='email'){ emlInit(); }
+  if(id==='automation'){ autoInit(); }
   if(id==='hotels'){ hmRenderGrid(); }
   if(id==='groups'){ grpRenderGrid(); }
   if(id==='subscriptions'){ subInit(); }
@@ -4311,9 +4353,53 @@ async function bsSave(){
 // ici sans paramètre "scope", adminFetch cible l'entité courante de l'hôtel.
 var EML_TEMPLATES = [];
 
+var EML_TPL_TAB = 'email';
+var CHAN_LABEL = {email:'Email', sms:'SMS', whatsapp:'WhatsApp'};
+
 async function emlInit(){
   await emlLoadConfig();
+  await chanLoadConfig('sms');
+  await chanLoadConfig('whatsapp');
   await emlLoadTemplates();
+}
+
+async function chanLoadConfig(channel){
+  var p = channel==='sms' ? 'sms' : 'wa';
+  try{
+    var r = await adminFetch('/wa/channelConfig/get?channel='+channel);
+    var cfg = r.ok ? await r.json() : null;
+    cfg = cfg || {accountSid:'',authToken:'',fromNumber:''};
+    document.getElementById(p+'-sid').value = cfg.accountSid||'';
+    document.getElementById(p+'-token').value = cfg.authToken||'';
+    document.getElementById(p+'-from').value = cfg.fromNumber||'';
+  }catch(e){ toast('Erreur de chargement de la configuration '+CHAN_LABEL[channel]); }
+}
+
+async function chanSaveConfig(channel){
+  var p = channel==='sms' ? 'sms' : 'wa';
+  var body = {
+    channel: channel,
+    accountSid: document.getElementById(p+'-sid').value.trim(),
+    authToken: document.getElementById(p+'-token').value,
+    fromNumber: document.getElementById(p+'-from').value.trim(),
+  };
+  try{
+    var r = await adminFetch('/wa/channelConfig/update', {method:'POST', body:JSON.stringify(body)});
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Erreur lors de l\'enregistrement'); return; }
+    toast('Configuration '+CHAN_LABEL[channel]+' enregistrée ✓');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+async function chanTestConfig(channel){
+  var to = document.getElementById(channel+'-test-to').value.trim();
+  if(!to){ toast('Indiquez un destinataire de test'); return; }
+  try{
+    var r = await adminFetch('/wa/channelConfig/test', {method:'POST', body:JSON.stringify({channel:channel, to:to})});
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Échec de l\'envoi — vérifiez la configuration'); return; }
+    toast('Message de test envoyé à '+to+' ✓');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
 }
 
 async function emlLoadConfig(){
@@ -4362,23 +4448,31 @@ async function emlTestConfig(){
 
 async function emlLoadTemplates(){
   try{
-    var r = await adminFetch('/wa/emailTemplate/list');
+    var r = await adminFetch('/wa/messageTemplate/list');
     EML_TEMPLATES = r.ok ? await r.json() : [];
   }catch(e){ EML_TEMPLATES = []; }
   emlRenderTemplates();
 }
 
 function emlRenderTemplates(){
+  var tabsEl = document.getElementById('eml-tpl-tabs');
+  if(tabsEl){
+    tabsEl.innerHTML = ['email','sms','whatsapp'].map(function(c){
+      return '<button class="btn btn-s'+(EML_TPL_TAB===c?' btn-p':'')+'" onclick="EML_TPL_TAB=\''+c+'\';emlRenderTemplates()">'+CHAN_LABEL[c]+'</button>';
+    }).join('');
+  }
   var el = document.getElementById('eml-templates-list');
   if(!el) return;
-  if(!EML_TEMPLATES.length){
-    el.innerHTML = '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Aucun modèle. Créez-en un pour pouvoir envoyer des emails à vos clients.</span></div>';
+  var tpls = EML_TEMPLATES.filter(function(t){return t.channel===EML_TPL_TAB;});
+  if(!tpls.length){
+    el.innerHTML = '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Aucun modèle '+CHAN_LABEL[EML_TPL_TAB]+'. Créez-en un pour pouvoir l\'utiliser dans une règle ou un envoi.</span></div>';
     return;
   }
-  el.innerHTML = EML_TEMPLATES.map(function(t){
+  el.innerHTML = tpls.map(function(t){
+    var detail = t.channel==='email' ? ('Objet : '+esc(t.subject)) : esc(t.bodyHtml).slice(0,80);
     return '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--bdr)">'
       + '<div style="flex:1"><strong style="font-size:13px">'+esc(t.name)+'</strong> <span style="color:var(--mu);font-size:11px">('+esc(t.key)+')</span>'
-      + '<div style="font-size:12px;color:var(--mu);margin-top:2px">Objet : '+esc(t.subject)+'</div></div>'
+      + '<div style="font-size:12px;color:var(--mu);margin-top:2px">'+detail+'</div></div>'
       + '<button class="btn btn-s" onclick="emlOpenTemplateModal(\''+t.id+'\')"><i class="ti ti-edit"></i></button>'
       + '<button class="btn btn-s btn-d" onclick="emlDeleteTemplate(\''+t.id+'\')"><i class="ti ti-trash"></i></button>'
       + '</div>';
@@ -4386,21 +4480,29 @@ function emlRenderTemplates(){
 }
 
 function emlOpenTemplateModal(id){
-  var t = id ? EML_TEMPLATES.find(function(t){return t.id===id;}) : {id:null,key:'',name:'',subject:'',bodyHtml:''};
+  var t = id ? EML_TEMPLATES.find(function(t){return t.id===id;}) : {id:null,channel:EML_TPL_TAB,key:'',name:'',subject:'',bodyHtml:''};
   if(!t) return;
   document.getElementById('eml-template-modal').innerHTML =
     '<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:28px 20px;overflow-y:auto" onclick="if(event.target===this)emlCloseTemplateModal()">'
     + '<div class="ca" style="width:100%;max-width:560px">'
     + '<div class="ch">'+(t.id?'Modifier le modèle':'Nouveau modèle')+'<button class="btn btn-g" style="margin-left:auto" onclick="emlCloseTemplateModal()"><i class="ti ti-x"></i></button></div>'
     + '<div class="g2">'
+    + '<div class="fi"><label class="lb">Canal</label><select id="eml-tpl-channel" '+(t.id?'disabled':'')+' onchange="emlRenderTplSubjectVisibility()">'+['email','sms','whatsapp'].map(function(c){return '<option value="'+c+'" '+(t.channel===c?'selected':'')+'>'+CHAN_LABEL[c]+'</option>';}).join('')+'</select></div>'
     + '<div class="fi"><label class="lb">Clé (identifiant technique)</label><input type="text" id="eml-tpl-key" value="'+esc(t.key)+'" placeholder="ex. bienvenue-client" '+(t.id?'disabled':'')+'></div>'
-    + '<div class="fi"><label class="lb">Nom affiché</label><input type="text" id="eml-tpl-name" value="'+esc(t.name)+'" placeholder="Email de bienvenue"></div>'
     + '</div>'
-    + '<div class="fi"><label class="lb">Objet</label><input type="text" id="eml-tpl-subject" value="'+esc(t.subject)+'" placeholder="Bienvenue {{nom}} !"></div>'
-    + '<div class="fi"><label class="lb">Corps (HTML — variables disponibles selon contexte d\'envoi, ex. {{nom}} {{email}})</label><textarea id="eml-tpl-body" style="height:160px">'+(t.bodyHtml||'')+'</textarea></div>'
+    + '<div class="fi"><label class="lb">Nom affiché</label><input type="text" id="eml-tpl-name" value="'+esc(t.name)+'" placeholder="Email de bienvenue"></div>'
+    + '<div class="fi" id="eml-tpl-subject-wrap"><label class="lb">Objet (email uniquement)</label><input type="text" id="eml-tpl-subject" value="'+esc(t.subject)+'" placeholder="Bienvenue {{nom}} !"></div>'
+    + '<div class="fi"><label class="lb">Corps (email : HTML ; SMS/WhatsApp : texte — variables selon contexte d\'envoi, ex. {{prenom}} {{nom}} {{code}})</label><textarea id="eml-tpl-body" style="height:160px">'+(t.bodyHtml||'')+'</textarea></div>'
     + '<div class="brow"><button class="btn btn-p" onclick="emlSaveTemplate('+(t.id?"'"+t.id+"'":'null')+')"><i class="ti ti-device-floppy"></i> Enregistrer</button>'
     + '<button class="btn btn-s" onclick="emlCloseTemplateModal()">Annuler</button></div>'
     + '</div></div>';
+  emlRenderTplSubjectVisibility();
+}
+
+function emlRenderTplSubjectVisibility(){
+  var sel = document.getElementById('eml-tpl-channel');
+  var wrap = document.getElementById('eml-tpl-subject-wrap');
+  if(sel && wrap) wrap.style.display = sel.value==='email' ? '' : 'none';
 }
 
 function emlCloseTemplateModal(){
@@ -4409,18 +4511,20 @@ function emlCloseTemplateModal(){
 
 async function emlSaveTemplate(id){
   var body = {
+    channel: document.getElementById('eml-tpl-channel').value,
     key: document.getElementById('eml-tpl-key').value.trim().toLowerCase(),
     name: document.getElementById('eml-tpl-name').value.trim(),
     subject: document.getElementById('eml-tpl-subject').value.trim(),
     bodyHtml: document.getElementById('eml-tpl-body').value,
   };
-  if(!body.key || !body.name || !body.subject || !body.bodyHtml){ toast('Tous les champs sont requis'); return; }
+  if(!body.key || !body.name || !body.bodyHtml || (body.channel==='email' && !body.subject)){ toast('Tous les champs sont requis'); return; }
   try{
-    var r = await adminFetch('/wa/emailTemplate/upsert', {method:'POST', body:JSON.stringify(body)});
+    var r = await adminFetch('/wa/messageTemplate/upsert', {method:'POST', body:JSON.stringify(body)});
     var data = await r.json();
     if(!r.ok){ toast(data.error||'Erreur lors de l\'enregistrement'); return; }
     var i = EML_TEMPLATES.findIndex(function(t){return t.id===data.id;});
     if(i>-1) EML_TEMPLATES[i]=data; else EML_TEMPLATES.push(data);
+    EML_TPL_TAB = data.channel;
   }catch(e){ toast('Erreur de connexion au serveur'); return; }
   emlCloseTemplateModal();
   toast('Modèle enregistré ✓');
@@ -4430,12 +4534,177 @@ async function emlSaveTemplate(id){
 async function emlDeleteTemplate(id){
   if(!confirm('Supprimer ce modèle ?')) return;
   try{
-    var r = await adminFetch('/wa/emailTemplate/delete', {method:'POST', body:JSON.stringify({id:id})});
+    var r = await adminFetch('/wa/messageTemplate/delete', {method:'POST', body:JSON.stringify({id:id})});
     if(!r.ok){ toast('Erreur de suppression'); return; }
   }catch(e){ toast('Erreur de connexion au serveur'); return; }
   EML_TEMPLATES = EML_TEMPLATES.filter(function(t){return t.id!==id;});
   toast('Modèle supprimé');
   emlRenderTemplates();
+}
+
+// ═══════════════════════════════════════════════ AUTOMATISATIONS (déclencheurs métier hôtel)
+var TRIGGERS_HOTEL = [
+  {key:'booking.created', label:'Réservation créée', timingModes:['immediate']},
+  {key:'checkin.completed', label:'Check-in effectué', timingModes:['immediate']},
+  {key:'order.created', label:'Commande créée (room service / boutique)', timingModes:['immediate']},
+  {key:'order.delivered', label:'Commande livrée', timingModes:['immediate']},
+  {key:'stay.before_checkin', label:'Avant l\'arrivée', timingModes:['before']},
+  {key:'stay.before_checkout', label:'Avant le départ', timingModes:['before']},
+  {key:'stay.after_checkout', label:'Après le départ', timingModes:['after']},
+];
+var AUTO_RULES = [];
+var AUTO_RULE_EDITING = null;
+
+function autoTriggerLabel(key){ var t=TRIGGERS_HOTEL.find(function(t){return t.key===key;}); return t?t.label:key; }
+function autoUnitLabel(u){ return {minutes:'min',hours:'h',days:'j'}[u]||u||''; }
+function autoTimingSummary(r){
+  if(r.timingMode==='immediate') return 'Immédiat';
+  if(r.timingMode==='before') return (r.offsetValue||0)+' '+autoUnitLabel(r.offsetUnit)+' avant';
+  if(r.timingMode==='after') return (r.offsetValue||0)+' '+autoUnitLabel(r.offsetUnit)+' après';
+  return r.timingMode;
+}
+
+async function autoInit(){
+  try{
+    var r = await adminFetch('/wa/automationRule/list');
+    AUTO_RULES = r.ok ? await r.json() : [];
+  }catch(e){ AUTO_RULES = []; }
+  if(!EML_TEMPLATES.length){ try{ var tr = await adminFetch('/wa/messageTemplate/list'); EML_TEMPLATES = tr.ok ? await tr.json() : []; }catch(e){} }
+  autoRenderRules();
+}
+
+function autoRenderRules(){
+  var el = document.getElementById('auto-rules-list');
+  if(!el) return;
+  if(!AUTO_RULES.length){
+    el.innerHTML = '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Aucune règle. Ex : un email dès la réception d\'une commande, ou un rappel 1 jour avant le départ.</span></div>';
+    return;
+  }
+  el.innerHTML = AUTO_RULES.map(function(r){
+    return '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--bdr)">'
+      + '<div style="flex:1">'
+      + '<strong style="font-size:13px">'+esc(r.name)+'</strong> '
+      + '<span class="nibadge" style="background:var(--mu)">'+autoTriggerLabel(r.trigger)+'</span> '
+      + '<span class="nibadge" style="background:var(--a)">'+CHAN_LABEL[r.channel]+'</span>'
+      + '<div style="font-size:12px;color:var(--mu);margin-top:2px">'+autoTimingSummary(r)+' — modèle : '+esc(r.templateKey)+(r.lastRunAt?' — dernier envoi : '+new Date(r.lastRunAt).toLocaleString('fr-FR'):'')+'</div>'
+      + '</div>'
+      + '<button class="btn btn-s" onclick="autoOpenRuleModal(\''+r.id+'\')"><i class="ti ti-edit"></i></button>'
+      + '<button class="btn btn-s" onclick="autoToggleRule(\''+r.id+'\')"><i class="ti ti-power"></i></button>'
+      + '<button class="btn btn-s btn-d" onclick="autoDeleteRule(\''+r.id+'\')"><i class="ti ti-trash"></i></button>'
+      + '</div>';
+  }).join('');
+}
+
+function autoOpenRuleModal(id){
+  var r = id ? AUTO_RULES.find(function(r){return r.id===id;}) : {id:null,name:'',trigger:TRIGGERS_HOTEL[0].key,enabled:true,timingMode:'immediate',offsetValue:1,offsetUnit:'days',channel:'email',templateKey:''};
+  if(!r) return;
+  AUTO_RULE_EDITING = r;
+  document.getElementById('auto-rule-modal').innerHTML =
+    '<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:28px 20px;overflow-y:auto" onclick="if(event.target===this)autoCloseRuleModal()">'
+    + '<div class="ca" style="width:100%;max-width:560px">'
+    + '<div class="ch">'+(r.id?'Modifier la règle':'Nouvelle règle')+'<button class="btn btn-g" style="margin-left:auto" onclick="autoCloseRuleModal()"><i class="ti ti-x"></i></button></div>'
+    + '<div class="fi"><label class="lb">Nom</label><input type="text" id="auto-name" value="'+esc(r.name)+'" placeholder="Ex. Rappel avant départ"></div>'
+    + '<div class="g2">'
+    + '<div class="fi"><label class="lb">Déclencheur</label><select id="auto-trigger" onchange="autoRenderTimingFields()">'+TRIGGERS_HOTEL.map(function(t){return '<option value="'+t.key+'" '+(r.trigger===t.key?'selected':'')+'>'+t.label+'</option>';}).join('')+'</select></div>'
+    + '<div class="fi"><label class="lb">Canal</label><select id="auto-channel" onchange="autoRenderTplOptions()">'+['email','sms','whatsapp'].map(function(c){return '<option value="'+c+'" '+(r.channel===c?'selected':'')+'>'+CHAN_LABEL[c]+'</option>';}).join('')+'</select></div>'
+    + '</div>'
+    + '<div id="auto-timing-fields"></div>'
+    + '<div class="g2">'
+    + '<div class="fi"><label class="lb">Modèle</label><select id="auto-template"></select></div>'
+    + '<div class="fi"><label class="lb">Actif</label><select id="auto-enabled"><option value="1" '+(r.enabled!==false?'selected':'')+'>Oui</option><option value="0" '+(r.enabled===false?'selected':'')+'>Non</option></select></div>'
+    + '</div>'
+    + '<div class="brow"><button class="btn btn-p" onclick="autoSaveRule('+(r.id?"'"+r.id+"'":'null')+')"><i class="ti ti-device-floppy"></i> Enregistrer</button>'
+    + '<button class="btn btn-s" onclick="autoCloseRuleModal()">Annuler</button></div>'
+    + '</div></div>';
+  autoRenderTimingFields();
+  autoRenderTplOptions();
+}
+
+function autoRenderTimingFields(){
+  var r = AUTO_RULE_EDITING || {};
+  var triggerKey = (document.getElementById('auto-trigger')||{value:r.trigger}).value;
+  var trig = TRIGGERS_HOTEL.find(function(t){return t.key===triggerKey;});
+  var mode = trig ? trig.timingModes[0] : 'immediate';
+  var el = document.getElementById('auto-timing-fields');
+  if(!el) return;
+  if(mode==='immediate'){
+    el.innerHTML = '<input type="hidden" id="auto-timingMode" value="immediate">';
+  } else {
+    el.innerHTML = '<input type="hidden" id="auto-timingMode" value="'+mode+'">'
+      + '<div class="g2">'
+      + '<div class="fi"><label class="lb">Délai</label><input type="number" id="auto-offsetValue" value="'+(r.offsetValue||1)+'" min="1"></div>'
+      + '<div class="fi"><label class="lb">Unité</label><select id="auto-offsetUnit">'
+      + '<option value="minutes" '+(r.offsetUnit==='minutes'?'selected':'')+'>minutes</option>'
+      + '<option value="hours" '+(r.offsetUnit==='hours'?'selected':'')+'>heures</option>'
+      + '<option value="days" '+(!r.offsetUnit||r.offsetUnit==='days'?'selected':'')+'>jours</option>'
+      + '</select></div></div>';
+  }
+}
+
+function autoRenderTplOptions(){
+  var r = AUTO_RULE_EDITING || {};
+  var chan = (document.getElementById('auto-channel')||{value:r.channel}).value;
+  var sel = document.getElementById('auto-template');
+  if(!sel) return;
+  var opts = EML_TEMPLATES.filter(function(t){return t.channel===chan;});
+  sel.innerHTML = opts.length
+    ? opts.map(function(t){return '<option value="'+esc(t.key)+'" '+(r.templateKey===t.key?'selected':'')+'>'+esc(t.name)+'</option>';}).join('')
+    : '<option value="">— aucun modèle pour ce canal —</option>';
+}
+
+function autoCloseRuleModal(){
+  document.getElementById('auto-rule-modal').innerHTML = '';
+}
+
+async function autoSaveRule(id){
+  var body = {
+    name: document.getElementById('auto-name').value.trim(),
+    trigger: document.getElementById('auto-trigger').value,
+    enabled: document.getElementById('auto-enabled').value === '1',
+    timingMode: document.getElementById('auto-timingMode').value,
+    channel: document.getElementById('auto-channel').value,
+    templateKey: document.getElementById('auto-template').value,
+    offsetValue: document.getElementById('auto-offsetValue') ? +document.getElementById('auto-offsetValue').value : null,
+    offsetUnit: document.getElementById('auto-offsetUnit') ? document.getElementById('auto-offsetUnit').value : null,
+  };
+  if(!body.name){ toast('Le nom est requis'); return; }
+  if(!body.templateKey){ toast('Sélectionnez un modèle pour ce canal'); return; }
+  try{
+    var r;
+    if(id) r = await adminFetch('/wa/automationRule/update', {method:'POST', body:JSON.stringify(Object.assign({id:id}, body))});
+    else r = await adminFetch('/wa/automationRule/create', {method:'POST', body:JSON.stringify(body)});
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Erreur lors de l\'enregistrement'); return; }
+    var i = AUTO_RULES.findIndex(function(x){return x.id===data.id;});
+    if(i>-1) AUTO_RULES[i]=data; else AUTO_RULES.push(data);
+  }catch(e){ toast('Erreur de connexion au serveur'); return; }
+  autoCloseRuleModal();
+  toast('Règle enregistrée ✓');
+  autoRenderRules();
+}
+
+async function autoToggleRule(id){
+  var r = AUTO_RULES.find(function(r){return r.id===id;});
+  if(!r) return;
+  try{
+    var res = await adminFetch('/wa/automationRule/update', {method:'POST', body:JSON.stringify(Object.assign({}, r, {id:id, enabled:!r.enabled}))});
+    var data = await res.json();
+    if(!res.ok){ toast(data.error||'Erreur'); return; }
+    Object.assign(r, data);
+  }catch(e){ toast('Erreur de connexion au serveur'); return; }
+  toast(r.enabled?'Règle activée':'Règle désactivée');
+  autoRenderRules();
+}
+
+async function autoDeleteRule(id){
+  if(!confirm('Supprimer cette règle ?')) return;
+  try{
+    var r = await adminFetch('/wa/automationRule/delete', {method:'POST', body:JSON.stringify({id:id})});
+    if(!r.ok){ toast('Erreur de suppression'); return; }
+  }catch(e){ toast('Erreur de connexion au serveur'); return; }
+  AUTO_RULES = AUTO_RULES.filter(function(r){return r.id!==id;});
+  toast('Règle supprimée');
+  autoRenderRules();
 }
 
 function bsShowResult(title, html){

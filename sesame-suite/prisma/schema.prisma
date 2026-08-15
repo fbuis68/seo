@@ -43,7 +43,9 @@ model Entity {
   bookingSource     BookingSourceConfig?
   crmProspects      CrmProspect[]
   smtpConfig        SmtpConfig?
-  emailTemplates    EmailTemplate[]
+  messageTemplates  MessageTemplate[]
+  channelConfigs    ChannelConfig[]
+  automationRules   AutomationRule[]
 }
 
 // Groupe d'établissements (ex : chaîne hôtelière) — gestion réservée aux
@@ -652,18 +654,94 @@ model SmtpConfig {
   updatedAt DateTime @updatedAt
 }
 
-model EmailTemplate {
+// Modèle de message multi-canal — un seul mécanisme de gabarit ({{variable}})
+// partagé par l'email (subject+bodyHtml), le SMS et le WhatsApp (bodyHtml
+// sert alors de texte brut, subject ignoré). C'est cette convergence de
+// modèles, combinée à ChannelConfig et sendMessage() (src/lib/messaging.ts),
+// qui permet aux règles d'automatisation de cibler indifféremment l'un des
+// trois canaux pour un même déclencheur métier.
+model MessageTemplate {
   id       String  @id @default(cuid())
   entityId String?
   entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  key      String // slug interne, ex: "prospect-relance" — cible du sendEmail()
+  channel  String  @default("email") // email | sms | whatsapp
+  key      String // slug interne, ex: "prospect-relance" — cible de sendMessage()
   name     String // libellé affiché dans le sélecteur de modèle
-  subject  String // supporte {{variable}}
-  bodyHtml String // supporte {{variable}}
+  subject  String // email uniquement ; supporte {{variable}}
+  bodyHtml String // email : HTML ; sms/whatsapp : texte brut — supporte {{variable}}
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([entityId, key])
+  @@unique([entityId, channel, key])
+}
+
+// Identifiants Twilio pour SMS et WhatsApp — même principe de portée que
+// SmtpConfig (entityId=null : CRM/Sesame ; entityId=<hôtel> : back-office).
+// Un provider unique (Twilio) couvre les deux canaux avec un seul compte,
+// ce qui est la brique qui permet la convergence email/SMS/WhatsApp.
+model ChannelConfig {
+  id       String  @id @default(cuid())
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  channel    String // sms | whatsapp
+  provider   String  @default("twilio")
+  accountSid String?
+  authToken  String?
+  fromNumber String? // numéro Twilio (SMS) ou "whatsapp:+14155238886" (WhatsApp)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([entityId, channel])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Règles d'automatisation — déclenchées soit immédiatement par un événement
+// métier (fireTrigger(), appelé depuis les routes concernées), soit par un
+// balayage périodique (automationScheduler.ts) pour les déclencheurs relatifs
+// à une date (avant/après séjour) ou récurrents (newsletter). AutomationRuleLog
+// évite les doublons d'envoi : une ligne par (règle, cible) déjà notifiée.
+// ─────────────────────────────────────────────────────────────────────────
+model AutomationRule {
+  id       String  @id @default(cuid())
+  entityId String? // null = portée CRM/Sesame
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  name    String
+  trigger String // clé du catalogue TRIGGERS (src/lib/automation.ts), ex: "booking.created"
+  enabled Boolean @default(true)
+
+  timingMode  String  @default("immediate") // immediate | before | after | recurring
+  offsetValue Int? // ex: 1 (timingMode="before"|"after")
+  offsetUnit  String? // minutes | hours | days
+  recurrence  String? // daily | weekly | monthly (timingMode="recurring")
+  atTime      String? // "HH:mm" (timingMode="recurring")
+  dayOfWeek   Int? // 0(dim)-6, recurrence="weekly"
+  dayOfMonth  Int? // 1-31, recurrence="monthly"
+
+  channel     String // email | sms | whatsapp
+  templateKey String
+
+  audienceFilter Json? // segment cible pour les règles sans record source unique (ex: crm.newsletter)
+
+  lastRunAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  logs AutomationRuleLog[]
+}
+
+model AutomationRuleLog {
+  id         String         @id @default(cuid())
+  ruleId     String
+  rule       AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  targetType String // "booking" | "order" | "crmProspect" | "period" (newsletter)…
+  targetId   String
+  sentAt     DateTime       @default(now())
+
+  @@unique([ruleId, targetType, targetId])
 }

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../db";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
+import { fireTrigger } from "../lib/automation";
 
 /**
  * Formulaire de contact public (site web) — hors convention /wa, pas
@@ -37,6 +38,13 @@ contactRouter.post(
       prospect = await prisma.crmProspect.create({
         data: { nom, email, type: "Prospect", secteur: secteur || undefined, danger: "Modéré", contrat: "non" },
       });
+      fireTrigger("crm.prospect_created", {
+        entityId: null,
+        targetType: "crmProspect",
+        targetId: prospect.id,
+        recipient: { email: prospect.email, phone: prospect.tel },
+        variables: { nom: prospect.nom, secteur: prospect.secteur || "" },
+      }).catch((e) => console.error("[automation] crm.prospect_created:", e));
     } else if (secteur && !prospect.secteur) {
       prospect = await prisma.crmProspect.update({ where: { id: prospect.id }, data: { secteur } });
     }
