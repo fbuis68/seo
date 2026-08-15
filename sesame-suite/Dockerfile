@@ -8,6 +8,17 @@ RUN apk add --no-cache openssl
 
 WORKDIR /app
 
+# Numéro de version affiché dans l'interface (bas de la barre latérale du
+# CRM/admin) et exposé sur GET /version — permet de vérifier depuis
+# l'appli quel build tourne réellement après un déploiement. Reçu en
+# argument de build (voir docker-compose.yml) plutôt que lu depuis .git :
+# le contexte de build de ce Dockerfile est le dossier sesame-suite/, qui
+# ne contient PAS .git (situé un niveau au-dessus, à la racine du dépôt) —
+# on ne peut donc pas le COPY ici.
+ARG GIT_SHA=inconnu
+ARG GIT_TIME=""
+RUN echo "$GIT_SHA" > BUILD_SHA.txt && echo "$GIT_TIME" > BUILD_TIME.txt
+
 COPY package.json package-lock.json ./
 RUN npm ci
 

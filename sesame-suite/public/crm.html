@@ -231,6 +231,7 @@ input[type=checkbox]{accent-color:#8a2b2b;cursor:pointer;width:14px;height:14px}
 .lg-sub{font-size:12px;color:#999;margin-bottom:18px}
 .lg-box .ff{margin-bottom:10px}
 .lg-err{font-size:12px;color:#a32d2d;margin-top:6px;display:none}
+.version-badge{margin-top:auto;padding:10px 16px;font-size:10px;color:#c0bdb8;font-family:monospace}
 
 /* ── RESPONSIVE ── */
 @media (max-width: 900px){
@@ -314,6 +315,7 @@ input[type=checkbox]{accent-color:#8a2b2b;cursor:pointer;width:14px;height:14px}
     </div>
     <hr class="s-hr">
     <div class="nav-item" onclick="window.location.href='admin.html'"><div class="nav-ico">←</div> Retour au back-office</div>
+    <div class="version-badge" id="version-badge">—</div>
   </div>
   <div class="main" id="main"></div>
 </div>
@@ -399,6 +401,20 @@ async function init(){
   try{ clients = await loadData(); }
   catch(e){ flash('Erreur de chargement — rechargez la page'); clients = []; }
   updateBadges();showList();
+  loadVersionBadge();
+}
+
+async function loadVersionBadge(){
+  const el = document.getElementById('version-badge');
+  if(!el) return;
+  try{
+    const r = await fetch('/version');
+    const v = await r.json();
+    const d = new Date(v.buildTime);
+    const dateStr = isNaN(d) ? v.buildTime : d.toLocaleDateString('fr-FR')+' '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+    el.textContent = 'v '+v.sha+' — '+dateStr;
+    el.title = 'Build du '+v.buildTime;
+  }catch(e){ el.textContent=''; }
 }
 function ini(n){return(n||'?').split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase().slice(0,2)||'?';}
 function today(){const d=new Date();return d.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});}

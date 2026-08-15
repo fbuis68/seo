@@ -269,6 +269,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   <div class="ni" data-pan="email" onclick="showPan('email')"><i class="ti ti-mail"></i>Canaux</div>
   <div class="ni" data-pan="automation" onclick="showPan('automation')"><i class="ti ti-bolt"></i>Automatisations</div>
   <div class="ni" data-pan="preview" onclick="showPan('preview')"><i class="ti ti-device-mobile"></i>Aperçu client</div>
+  <div id="version-badge" style="margin-top:20px;padding:12px 16px;font-size:10px;color:var(--mu);font-family:monospace">—</div>
 </aside>
 
 <!-- MAIN -->
@@ -8364,6 +8365,20 @@ async function clearTaxeRecords(){
   toast('Historique vidé');
 }
 
+// ═══════════════════════════════════════════════ VERSION (endpoint public, pas d'auth requise)
+async function loadVersionBadge(){
+  var el = document.getElementById('version-badge');
+  if(!el) return;
+  try{
+    var r = await fetch('/version');
+    var v = await r.json();
+    var d = new Date(v.buildTime);
+    var dateStr = isNaN(d) ? v.buildTime : d.toLocaleDateString('fr-FR')+' '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+    el.textContent = 'v '+v.sha+' — '+dateStr;
+    el.title = 'Build du '+v.buildTime;
+  }catch(e){ el.textContent=''; }
+}
+document.addEventListener('DOMContentLoaded', loadVersionBadge);
 
 </script>
 </body>

@@ -350,6 +350,22 @@ supprimer les données PostgreSQL et repartir d'une base vierge).
 > `Dockerfile` du dépôt et exécute `docker-entrypoint.sh` au démarrage
 > (migrations → seed → serveur). Voir ces deux fichiers pour le détail.
 
+### Vérifier quelle version tourne après un déploiement
+
+Chaque build est identifié par le commit et sa date, affichés en bas de la
+barre latérale du CRM (`/crm`) et du back-office (`/admin`), et exposés sur
+`GET /version`. Comme le `.git` du dépôt n'est pas accessible depuis
+l'image (le contexte de build est `sesame-suite/`, `.git` est un niveau
+au-dessus), ces informations doivent être passées en argument de build —
+sinon la version affichée reste `inconnu` :
+
+```bash
+GIT_SHA=$(git rev-parse --short HEAD) GIT_TIME=$(git log -1 --format=%cI) docker compose up --build -d
+```
+
+Utile en particulier après un `git pull` sur un serveur distant, pour
+confirmer que le nouveau code tourne bien avant de retester.
+
 ## Démarrage manuel (sans Docker pour l'app)
 
 ### 1. Base de données PostgreSQL

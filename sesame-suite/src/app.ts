@@ -26,6 +26,7 @@ import { emailRouter } from "./routes/email";
 import { messagingRouter } from "./routes/messaging";
 import { automationRuleRouter } from "./routes/automationRule";
 import { errorHandler } from "./middleware/errorHandler";
+import { VERSION } from "./lib/version";
 
 export function createApp() {
   const app = express();
@@ -72,7 +73,10 @@ export function createApp() {
   // alimente le CRM commercial interne)
   app.use(contactRouter);
 
-  app.get("/health", (_req, res) => res.json({ ok: true }));
+  app.get("/health", (_req, res) => res.json({ ok: true, ...VERSION }));
+  // Numéro de version (commit + date du build) — permet de vérifier depuis
+  // le navigateur quel build tourne réellement après un déploiement.
+  app.get("/version", (_req, res) => res.json(VERSION));
 
   // Apps statiques (HTML/CSS/JS d'origine, rebranchées sur l'API)
   const publicDir = path.join(__dirname, "..", "public");

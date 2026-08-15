@@ -20,7 +20,17 @@ services:
   # local. Avec ce service, `docker compose up --build` suffit à tout lancer :
   # pas besoin d'installer Node, npm ou PostgreSQL sur la machine hôte.
   app:
-    build: .
+    build:
+      context: .
+      # Numéro de version (commit + date) affiché dans l'interface — passé
+      # en argument de build faute de pouvoir lire .git depuis l'image (voir
+      # le commentaire dans le Dockerfile). Sans ces variables d'environnement
+      # définies avant `docker compose up --build`, la version affichée est
+      # simplement "inconnu" — inoffensif, mais moins pratique pour vérifier
+      # qu'un déploiement a bien pris effet.
+      args:
+        GIT_SHA: ${GIT_SHA:-inconnu}
+        GIT_TIME: ${GIT_TIME:-}
     restart: unless-stopped
     depends_on:
       postgres:
