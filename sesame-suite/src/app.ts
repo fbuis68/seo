@@ -25,6 +25,7 @@ import { contactRouter } from "./routes/contact";
 import { emailRouter } from "./routes/email";
 import { messagingRouter } from "./routes/messaging";
 import { automationRuleRouter } from "./routes/automationRule";
+import { adminUserRouter } from "./routes/adminUser";
 import { errorHandler } from "./middleware/errorHandler";
 import { VERSION } from "./lib/version";
 
@@ -61,6 +62,7 @@ export function createApp() {
   app.use("/wa", emailRouter);
   app.use("/wa", messagingRouter);
   app.use("/wa", automationRuleRouter);
+  app.use("/wa", adminUserRouter);
 
   // Authentification espace client (hors convention /wa — pas de DAO CRUD dédié)
   app.use("/api", authRouter);

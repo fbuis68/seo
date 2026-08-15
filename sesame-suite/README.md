@@ -273,6 +273,25 @@ certains OS/navigateurs — ce qui rendait le défilement peu évident).
 - **Suppression d'une fiche** : bouton "🗑 Supprimer" dans la fiche détail
   (`POST /wa/crmProspect/delete`, déjà existant côté serveur, maintenant
   relié à l'interface) — confirmation requise, action irréversible.
+- **Accès admin basé sur les contacts CRM** (carte "Accès admin" dans la
+  fiche, `src/routes/adminUser.ts`, réservé aux comptes Sesame) : la fiche
+  CRM devient la source de vérité de "qui a le droit d'entrer dans le
+  back-office" d'un établissement.
+  - N'apparaît en mode actionnable que si le contact est rattaché à un
+    établissement Sesame déjà provisionné (`CrmProspect.entityId` non nul —
+    ce qui arrive automatiquement pour toute inscription en ligne via
+    `/onboarding/register`, ou manuellement en activant une souscription).
+    Sinon, la carte l'explique et ne propose aucune action.
+  - **Créer un accès** (`POST /wa/adminUser/create`) : crée un `AdminUser`
+    (rôle "Établissement" ou "Sesame") sur l'email de la fiche, génère un
+    mot de passe temporaire affiché **une seule fois**.
+  - **Réinitialiser le mot de passe** / **Révoquer l'accès**
+    (`/wa/adminUser/resetPassword`, `/wa/adminUser/delete`) une fois le
+    compte créé.
+  - Un même email ne peut avoir qu'un seul compte admin (contrainte
+    d'unicité déjà existante sur `AdminUser.email`) — la fiche interroge
+    `GET /wa/adminUser/status?entityId=&email=` pour savoir si un compte
+    existe déjà avant de proposer "Créer" ou "Réinitialiser/Révoquer".
 - **Canaux convergents (Email / SMS / WhatsApp) + modèles multi-canal**,
   dans l'onglet "Canaux" du CRM et du back-office de chaque hôtel — même
   mécanisme générique paramétré par portée (`?scope=crm` = Sesame global,

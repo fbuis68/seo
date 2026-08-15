@@ -660,6 +660,7 @@ function showFiche(id){
   bc([{label:'Clients',fn:'showList()'},{label:c.nom}]);
   tba(`<button class="btn btn-ghost" onclick="openModal('${id}')">✎ Modifier</button><button class="btn btn-ghost" onclick="openSendEmailModal('${id}')">✉ Email</button><button class="btn btn-primary" onclick="addActForm('${id}')">+ Activité</button><button class="btn btn-ghost" style="color:#a32d2d" onclick="deleteClient('${id}')">🗑 Supprimer</button>`);
   renderFiche(c);
+  loadAdminAccessCard(c);
 }
 
 function riskScore(c){let s=0;if(c.danger==='Élevé !!')s+=5;else if(c.danger==='Modéré')s+=3;if(c.contrat==='non')s+=2;if(!c.webApp&&!c.mobileV2)s+=1;if(!c.nfc&&!c.qr&&!c.mobile)s+=1;return Math.min(s,10);}
@@ -732,6 +733,11 @@ function renderFiche(c){
     </div>
   </div>
 
+  <div class="card" id="admin-access-card">
+    <div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Accès admin</span></div>
+    <div class="log-empty">Chargement…</div>
+  </div>
+
   <div class="two-col">
     <div class="card">
       <div class="card-head"><div class="ch-ico">◉</div><span class="ch-title">Usage des accès</span></div>
@@ -766,6 +772,91 @@ function renderFiche(c){
     <div id="act-form-slot"></div>
     <div id="journal-items">${journalHtml}</div>
   </div>`;
+}
+
+// ════════════════════════════════════════
+// ACCÈS ADMIN — provisionné à partir d'un contact CRM déjà rattaché à un
+// établissement Sesame (entityId non nul, cf. souscription activée)
+// ════════════════════════════════════════
+async function loadAdminAccessCard(c){
+  const el=document.getElementById('admin-access-card');
+  if(!el)return;
+  if(!c.entityId){
+    el.innerHTML=`<div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Accès admin</span></div>
+      <div class="log-empty">Aucun établissement Sesame rattaché à ce contact — l'accès admin nécessite une souscription activée (panneau Souscriptions) pour provisionner l'établissement.</div>`;
+    return;
+  }
+  if(!c.email){
+    el.innerHTML=`<div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Accès admin</span></div>
+      <div class="log-empty">Renseignez une adresse email sur la fiche pour pouvoir créer un accès admin.</div>`;
+    return;
+  }
+  try{
+    var r = await apiFetch('/wa/adminUser/status?entityId='+encodeURIComponent(c.entityId)+'&email='+encodeURIComponent(c.email));
+    var data = r.ok ? await r.json() : {exists:false};
+  }catch(e){ data={exists:false}; }
+  renderAdminAccessCard(c, data);
+}
+
+function renderAdminAccessCard(c, data){
+  const el=document.getElementById('admin-access-card');
+  if(!el)return;
+  if(data.exists){
+    const u=data.user;
+    el.innerHTML=`<div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Accès admin</span></div>
+      <div class="log-item">
+        <div class="log-dot ld-g"></div>
+        <div class="log-body">
+          <div class="log-text"><strong>Compte actif</strong> — ${esc(u.email)} <span class="tag t-gray" style="font-size:10px;padding:1px 7px">${u.role==='sesame'?'Sesame':'Établissement'}</span></div>
+          <div class="log-meta">Créé le ${new Date(u.createdAt).toLocaleDateString('fr-FR')}</div>
+          <div class="log-acts">
+            <button class="btn btn-sm btn-ghost" onclick="resetAdminAccess('${c.id}','${u.id}')">Réinitialiser le mot de passe</button>
+            <button class="btn btn-sm btn-ghost" style="color:#a32d2d" onclick="revokeAdminAccess('${c.id}','${u.id}')">Révoquer l'accès</button>
+          </div>
+        </div>
+      </div>`;
+  } else {
+    el.innerHTML=`<div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Accès admin</span></div>
+      <div class="log-empty">Ce contact n'a pas encore d'accès à l'espace admin de son établissement.</div>
+      <div class="form-grid" style="margin-top:8px">
+        <div class="ff"><label>Rôle</label><select id="admin-access-role"><option value="hotel" selected>Établissement</option><option value="sesame">Sesame (accès complet)</option></select></div>
+      </div>
+      <div class="log-acts" style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="createAdminAccess('${c.id}')">Créer un accès admin</button></div>`;
+  }
+}
+
+async function createAdminAccess(id){
+  const c=clients.find(c=>c.id===id);if(!c)return;
+  const role=(document.getElementById('admin-access-role')||{value:'hotel'}).value;
+  try{
+    var r = await apiFetch('/wa/adminUser/create', {method:'POST', body:JSON.stringify({entityId:c.entityId, email:c.email, name:c.nom, role:role})});
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+  }catch(e){ flash(e.message||'Erreur de création'); return; }
+  alert('Accès admin créé.\n\nEmail : '+data.email+'\nMot de passe temporaire : '+data.password+'\n\nCe mot de passe ne sera plus jamais affiché — transmettez-le au contact dès maintenant.');
+  loadAdminAccessCard(c);
+}
+
+async function resetAdminAccess(id,userId){
+  if(!confirm("Réinitialiser le mot de passe de ce compte ?"))return;
+  const c=clients.find(c=>c.id===id);if(!c)return;
+  try{
+    var r = await apiFetch('/wa/adminUser/resetPassword', {method:'POST', body:JSON.stringify({id:userId})});
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+  }catch(e){ flash('Erreur de réinitialisation'); return; }
+  alert('Nouveau mot de passe temporaire : '+data.password+'\n\nCe mot de passe ne sera plus jamais affiché — transmettez-le au contact dès maintenant.');
+}
+
+async function revokeAdminAccess(id,userId){
+  if(!confirm("Révoquer l'accès admin de ce contact ?"))return;
+  const c=clients.find(c=>c.id===id);if(!c)return;
+  try{
+    var r = await apiFetch('/wa/adminUser/delete', {method:'POST', body:JSON.stringify({id:userId})});
+    if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash('Erreur de révocation'); return; }
+  flash('Accès révoqué');
+  loadAdminAccessCard(c);
 }
 
 // ════════════════════════════════════════
