@@ -4587,7 +4587,7 @@ function autoRenderRules(){
       + '<strong style="font-size:13px">'+esc(r.name)+'</strong> '
       + '<span class="nibadge" style="background:var(--mu)">'+autoTriggerLabel(r.trigger)+'</span> '
       + '<span class="nibadge" style="background:var(--a)">'+CHAN_LABEL[r.channel]+'</span>'
-      + '<div style="font-size:12px;color:var(--mu);margin-top:2px">'+autoTimingSummary(r)+' — modèle : '+esc(r.templateKey)+(r.lastRunAt?' — dernier envoi : '+new Date(r.lastRunAt).toLocaleString('fr-FR'):'')+'</div>'
+      + '<div style="font-size:12px;color:var(--mu);margin-top:2px">'+autoTimingSummary(r)+' — modèle : '+esc(r.templateKey)+' — destinataire : '+(r.recipientMode==='custom'?esc(r.recipientOverride):'automatique')+(r.senderName?' — expéditeur : '+esc(r.senderName):'')+(r.lastRunAt?' — dernier envoi : '+new Date(r.lastRunAt).toLocaleString('fr-FR'):'')+'</div>'
       + '</div>'
       + '<button class="btn btn-s" onclick="autoOpenRuleModal(\''+r.id+'\')"><i class="ti ti-edit"></i></button>'
       + '<button class="btn btn-s" onclick="autoToggleRule(\''+r.id+'\')"><i class="ti ti-power"></i></button>'
@@ -4597,7 +4597,7 @@ function autoRenderRules(){
 }
 
 function autoOpenRuleModal(id){
-  var r = id ? AUTO_RULES.find(function(r){return r.id===id;}) : {id:null,name:'',trigger:TRIGGERS_HOTEL[0].key,enabled:true,timingMode:'immediate',offsetValue:1,offsetUnit:'days',channel:'email',templateKey:''};
+  var r = id ? AUTO_RULES.find(function(r){return r.id===id;}) : {id:null,name:'',trigger:TRIGGERS_HOTEL[0].key,enabled:true,timingMode:'immediate',offsetValue:1,offsetUnit:'days',channel:'email',templateKey:'',recipientMode:'event',recipientOverride:'',senderName:''};
   if(!r) return;
   AUTO_RULE_EDITING = r;
   document.getElementById('auto-rule-modal').innerHTML =
@@ -4607,18 +4607,43 @@ function autoOpenRuleModal(id){
     + '<div class="fi"><label class="lb">Nom</label><input type="text" id="auto-name" value="'+esc(r.name)+'" placeholder="Ex. Rappel avant départ"></div>'
     + '<div class="g2">'
     + '<div class="fi"><label class="lb">Déclencheur</label><select id="auto-trigger" onchange="autoRenderTimingFields()">'+TRIGGERS_HOTEL.map(function(t){return '<option value="'+t.key+'" '+(r.trigger===t.key?'selected':'')+'>'+t.label+'</option>';}).join('')+'</select></div>'
-    + '<div class="fi"><label class="lb">Canal</label><select id="auto-channel" onchange="autoRenderTplOptions()">'+['email','sms','whatsapp'].map(function(c){return '<option value="'+c+'" '+(r.channel===c?'selected':'')+'>'+CHAN_LABEL[c]+'</option>';}).join('')+'</select></div>'
+    + '<div class="fi"><label class="lb">Canal</label><select id="auto-channel" onchange="autoRenderTplOptions();autoRenderRecipientFields();autoRenderSenderField()">'+['email','sms','whatsapp'].map(function(c){return '<option value="'+c+'" '+(r.channel===c?'selected':'')+'>'+CHAN_LABEL[c]+'</option>';}).join('')+'</select></div>'
     + '</div>'
     + '<div id="auto-timing-fields"></div>'
     + '<div class="g2">'
     + '<div class="fi"><label class="lb">Modèle</label><select id="auto-template"></select></div>'
     + '<div class="fi"><label class="lb">Actif</label><select id="auto-enabled"><option value="1" '+(r.enabled!==false?'selected':'')+'>Oui</option><option value="0" '+(r.enabled===false?'selected':'')+'>Non</option></select></div>'
     + '</div>'
+    + '<div class="fi"><label class="lb">Destinataire</label><select id="auto-recipientMode" onchange="autoRenderRecipientFields()"><option value="event" '+(r.recipientMode!=='custom'?'selected':'')+'>Automatique (client de l\'événement)</option><option value="custom" '+(r.recipientMode==='custom'?'selected':'')+'>Personnalisé (ex. équipe interne)</option></select></div>'
+    + '<div id="auto-recipient-fields"></div>'
+    + '<div id="auto-sender-fields"></div>'
     + '<div class="brow"><button class="btn btn-p" onclick="autoSaveRule('+(r.id?"'"+r.id+"'":'null')+')"><i class="ti ti-device-floppy"></i> Enregistrer</button>'
     + '<button class="btn btn-s" onclick="autoCloseRuleModal()">Annuler</button></div>'
     + '</div></div>';
   autoRenderTimingFields();
   autoRenderTplOptions();
+  autoRenderRecipientFields();
+  autoRenderSenderField();
+}
+
+function autoRenderRecipientFields(){
+  var r = AUTO_RULE_EDITING || {};
+  var mode = (document.getElementById('auto-recipientMode')||{value:r.recipientMode||'event'}).value;
+  var chan = (document.getElementById('auto-channel')||{value:r.channel}).value;
+  var el = document.getElementById('auto-recipient-fields');
+  if(!el) return;
+  if(mode!=='custom'){ el.innerHTML=''; return; }
+  var placeholder = chan==='email' ? 'reception@monhotel.fr' : '+33612345678 (numéro mobile)';
+  el.innerHTML = '<div class="fi"><label class="lb">'+(chan==='email'?'Adresse email':'Numéro mobile')+' du destinataire</label><input type="text" id="auto-recipientOverride" value="'+esc(r.recipientOverride||'')+'" placeholder="'+placeholder+'"></div>';
+}
+
+function autoRenderSenderField(){
+  var r = AUTO_RULE_EDITING || {};
+  var chan = (document.getElementById('auto-channel')||{value:r.channel}).value;
+  var el = document.getElementById('auto-sender-fields');
+  if(!el) return;
+  if(chan!=='email'){ el.innerHTML=''; return; }
+  el.innerHTML = '<div class="fi"><label class="lb">Nom d\'expéditeur (optionnel — remplace celui du canal Email pour cette règle)</label><input type="text" id="auto-senderName" value="'+esc(r.senderName||'')+'" placeholder="Ex. Réception Hôtel Churchill"></div>';
 }
 
 function autoRenderTimingFields(){
@@ -4658,6 +4683,7 @@ function autoCloseRuleModal(){
 }
 
 async function autoSaveRule(id){
+  var recipientMode = document.getElementById('auto-recipientMode') ? document.getElementById('auto-recipientMode').value : 'event';
   var body = {
     name: document.getElementById('auto-name').value.trim(),
     trigger: document.getElementById('auto-trigger').value,
@@ -4667,9 +4693,13 @@ async function autoSaveRule(id){
     templateKey: document.getElementById('auto-template').value,
     offsetValue: document.getElementById('auto-offsetValue') ? +document.getElementById('auto-offsetValue').value : null,
     offsetUnit: document.getElementById('auto-offsetUnit') ? document.getElementById('auto-offsetUnit').value : null,
+    recipientMode: recipientMode,
+    recipientOverride: document.getElementById('auto-recipientOverride') ? document.getElementById('auto-recipientOverride').value.trim() : null,
+    senderName: document.getElementById('auto-senderName') ? document.getElementById('auto-senderName').value.trim() : null,
   };
   if(!body.name){ toast('Le nom est requis'); return; }
   if(!body.templateKey){ toast('Sélectionnez un modèle pour ce canal'); return; }
+  if(recipientMode==='custom' && !body.recipientOverride){ toast('Indiquez le destinataire personnalisé'); return; }
   try{
     var r;
     if(id) r = await adminFetch('/wa/automationRule/update', {method:'POST', body:JSON.stringify(Object.assign({id:id}, body))});

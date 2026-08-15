@@ -53,7 +53,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,san
 .vt.active{background:#1a1a1a;border-color:#1a1a1a;color:#fff}
 
 /* ── MAIN ── */
-.main{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column}
+.main{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;scrollbar-width:thin;scrollbar-color:#c7c4bd #f5f4f0}
+.main::-webkit-scrollbar{width:10px}
+.main::-webkit-scrollbar-track{background:#f5f4f0}
+.main::-webkit-scrollbar-thumb{background:#c7c4bd;border-radius:5px;border:2px solid #f5f4f0}
+.main::-webkit-scrollbar-thumb:hover{background:#a8a49c}
 
 /* ── CARDS ── */
 .card{background:#fff;border:0.5px solid #e2dfd9;border-radius:12px;padding:1rem 1.25rem;margin-bottom:12px}
@@ -1327,7 +1331,7 @@ function renderAutomationPanel(){
         <div class="log-dot ${r.enabled?'ld-g':'ld-r'}"></div>
         <div class="log-body">
           <div class="log-text"><strong>${esc(r.name)}</strong> <span class="tag t-gray" style="font-size:10px;padding:1px 7px">${triggerLabel(r.trigger)}</span> <span class="tag t-blue" style="font-size:10px;padding:1px 7px">${CHANNEL_LABEL[r.channel]}</span></div>
-          <div class="log-meta">${timingSummary(r)} — modèle : ${esc(r.templateKey)}${r.lastRunAt?' — dernier envoi : '+new Date(r.lastRunAt).toLocaleString('fr-FR'):''}</div>
+          <div class="log-meta">${timingSummary(r)} — modèle : ${esc(r.templateKey)} — destinataire : ${r.recipientMode==='custom'?esc(r.recipientOverride):'automatique'}${r.senderName?' — expéditeur : '+esc(r.senderName):''}${r.lastRunAt?' — dernier envoi : '+new Date(r.lastRunAt).toLocaleString('fr-FR'):''}</div>
           <div class="log-acts">
             <button class="btn btn-sm btn-ghost" onclick="openRuleModal('${r.id}')">Modifier</button>
             <button class="btn btn-sm btn-ghost" onclick="toggleRule('${r.id}')">${r.enabled?'Désactiver':'Activer'}</button>
@@ -1339,9 +1343,8 @@ function renderAutomationPanel(){
 }
 
 function openRuleModal(id){
-  const r = id ? AUTO_RULES.find(r=>r.id===id) : {id:null,name:'',trigger:TRIGGERS_CRM[0].key,enabled:true,timingMode:'immediate',offsetValue:1,offsetUnit:'days',recurrence:'monthly',atTime:'11:00',dayOfWeek:1,dayOfMonth:1,channel:'email',templateKey:'',audienceFilter:{type:'all',secteur:''}};
+  const r = id ? AUTO_RULES.find(r=>r.id===id) : {id:null,name:'',trigger:TRIGGERS_CRM[0].key,enabled:true,timingMode:'immediate',offsetValue:1,offsetUnit:'days',recurrence:'monthly',atTime:'11:00',dayOfWeek:1,dayOfMonth:1,channel:'email',templateKey:'',recipientMode:'event',recipientOverride:'',senderName:'',audienceFilter:{type:'all',secteur:''}};
   if(!r)return;
-  const af = r.audienceFilter || {type:'all',secteur:''};
   document.getElementById('modal-ct').innerHTML=`
   <div class="modal-bg" onclick="if(event.target===this)closeModal()">
     <div class="modal-box">
@@ -1349,13 +1352,17 @@ function openRuleModal(id){
       <div class="ff"><label>Nom</label><input id="rule-name" value="${esc(r.name)}" placeholder="Ex. Newsletter mensuelle"></div>
       <div class="form-grid" style="margin-top:8px">
         <div class="ff"><label>Déclencheur</label><select id="rule-trigger" onchange="renderRuleTimingFields()">${TRIGGERS_CRM.map(t=>`<option value="${t.key}" ${r.trigger===t.key?'selected':''}>${t.label}</option>`).join('')}</select></div>
-        <div class="ff"><label>Canal</label><select id="rule-channel" onchange="renderRuleTplOptions()">${['email','sms','whatsapp'].map(c=>`<option value="${c}" ${r.channel===c?'selected':''}>${CHANNEL_LABEL[c]}</option>`).join('')}</select></div>
+        <div class="ff"><label>Canal</label><select id="rule-channel" onchange="renderRuleTplOptions();renderRuleRecipientFields();renderRuleSenderField()">${['email','sms','whatsapp'].map(c=>`<option value="${c}" ${r.channel===c?'selected':''}>${CHANNEL_LABEL[c]}</option>`).join('')}</select></div>
       </div>
       <div id="rule-timing-fields"></div>
       <div class="form-grid" style="margin-top:8px">
         <div class="ff"><label>Modèle</label><select id="rule-template"></select></div>
         <div class="ff"><label>Actif</label><select id="rule-enabled"><option value="1" ${r.enabled!==false?'selected':''}>Oui</option><option value="0" ${r.enabled===false?'selected':''}>Non</option></select></div>
       </div>
+      <div class="modal-section">Destinataire</div>
+      <div class="ff"><label>Qui reçoit le message</label><select id="rule-recipientMode" onchange="renderRuleRecipientFields()"><option value="event" ${r.recipientMode!=='custom'?'selected':''}>Automatique (client/prospect de l'événement)</option><option value="custom" ${r.recipientMode==='custom'?'selected':''}>Personnalisé (ex. équipe interne)</option></select></div>
+      <div id="rule-recipient-fields"></div>
+      <div id="rule-sender-fields"></div>
       <div id="rule-audience-fields"></div>
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="saveRule(${r.id?`'${r.id}'`:'null'})">Enregistrer</button>
@@ -1366,6 +1373,28 @@ function openRuleModal(id){
   window._ruleEditing = r;
   renderRuleTimingFields();
   renderRuleTplOptions();
+  renderRuleRecipientFields();
+  renderRuleSenderField();
+}
+
+function renderRuleRecipientFields(){
+  const r = window._ruleEditing || {};
+  const mode = (document.getElementById('rule-recipientMode')||{value:r.recipientMode||'event'}).value;
+  const chan = (document.getElementById('rule-channel')||{value:r.channel}).value;
+  const el = document.getElementById('rule-recipient-fields');
+  if(!el)return;
+  if(mode!=='custom'){ el.innerHTML=''; return; }
+  const placeholder = chan==='email' ? 'reception@monhotel.fr' : '+33612345678 (numéro mobile)';
+  el.innerHTML = `<div class="ff"><label>${chan==='email'?'Adresse email':'Numéro mobile'} du destinataire</label><input id="rule-recipientOverride" value="${esc(r.recipientOverride||'')}" placeholder="${placeholder}"></div>`;
+}
+
+function renderRuleSenderField(){
+  const r = window._ruleEditing || {};
+  const chan = (document.getElementById('rule-channel')||{value:r.channel}).value;
+  const el = document.getElementById('rule-sender-fields');
+  if(!el)return;
+  if(chan!=='email'){ el.innerHTML=''; return; }
+  el.innerHTML = `<div class="ff" style="margin-top:8px"><label>Nom d'expéditeur (optionnel — remplace celui du canal Email pour cette règle)</label><input id="rule-senderName" value="${esc(r.senderName||'')}" placeholder="Ex. Réception Hôtel Churchill"></div>`;
 }
 
 function renderRuleTimingFields(){
@@ -1435,6 +1464,7 @@ function renderRuleTplOptions(){
 async function saveRule(id){
   const g=i=>(document.getElementById(i)||{value:''}).value;
   const triggerKey=g('rule-trigger');
+  const recipientMode = g('rule-recipientMode')||'event';
   const body={
     name:g('rule-name').trim(), trigger:triggerKey, enabled:g('rule-enabled')==='1',
     timingMode:g('rule-timingMode'), channel:g('rule-channel'), templateKey:g('rule-template'),
@@ -1444,6 +1474,9 @@ async function saveRule(id){
     atTime: document.getElementById('rule-atTime') ? g('rule-atTime') : null,
     dayOfWeek: document.getElementById('rule-dayOfWeek') ? +g('rule-dayOfWeek') : null,
     dayOfMonth: document.getElementById('rule-dayOfMonth') ? +g('rule-dayOfMonth') : null,
+    recipientMode: recipientMode,
+    recipientOverride: document.getElementById('rule-recipientOverride') ? g('rule-recipientOverride').trim() : null,
+    senderName: document.getElementById('rule-senderName') ? g('rule-senderName').trim() : null,
     scope:'crm',
   };
   if(triggerKey==='crm.newsletter'){
@@ -1451,6 +1484,7 @@ async function saveRule(id){
   }
   if(!body.name){flash('Le nom est requis');return;}
   if(!body.templateKey){flash('Sélectionnez un modèle pour ce canal');return;}
+  if(recipientMode==='custom' && !body.recipientOverride){flash('Indiquez le destinataire personnalisé');return;}
   try{
     var r;
     if(id) r = await apiFetch('/wa/automationRule/update', {method:'POST', body:JSON.stringify({id:id, ...body})});

@@ -26,6 +26,9 @@ function shapeRule(r: {
   dayOfMonth: number | null;
   channel: string;
   templateKey: string;
+  recipientMode: string;
+  recipientOverride: string | null;
+  senderName: string | null;
   audienceFilter: unknown;
   lastRunAt: Date | null;
   updatedAt: Date;
@@ -44,6 +47,9 @@ function shapeRule(r: {
     dayOfMonth: r.dayOfMonth,
     channel: r.channel,
     templateKey: r.templateKey,
+    recipientMode: r.recipientMode,
+    recipientOverride: r.recipientOverride || "",
+    senderName: r.senderName || "",
     audienceFilter: r.audienceFilter || null,
     lastRunAt: r.lastRunAt,
     updatedAt: r.updatedAt,
@@ -73,11 +79,15 @@ interface RuleBody {
   dayOfMonth?: number | null;
   channel: string;
   templateKey: string;
+  recipientMode?: string;
+  recipientOverride?: string | null;
+  senderName?: string | null;
   audienceFilter?: unknown;
 }
 
 const TIMING_MODES = ["immediate", "before", "after", "recurring"];
 const CHANNELS = ["email", "sms", "whatsapp"];
+const RECIPIENT_MODES = ["event", "custom"];
 
 function validateRuleBody(b: RuleBody) {
   if (!b.name || !b.name.trim()) throw new HttpError(400, "Nom requis");
@@ -95,6 +105,19 @@ function validateRuleBody(b: RuleBody) {
   }
   if (!CHANNELS.includes(b.channel)) throw new HttpError(400, "Canal invalide");
   if (!b.templateKey) throw new HttpError(400, "Modèle requis");
+
+  const recipientMode = b.recipientMode || "event";
+  if (!RECIPIENT_MODES.includes(recipientMode)) throw new HttpError(400, "Mode de destinataire invalide");
+  if (recipientMode === "custom") {
+    const override = (b.recipientOverride || "").trim();
+    if (!override) throw new HttpError(400, "Destinataire personnalisé requis pour ce mode");
+    if (b.channel === "email" && !override.includes("@")) {
+      throw new HttpError(400, "Adresse email invalide pour le destinataire personnalisé");
+    }
+    if (b.channel !== "email" && override.includes("@")) {
+      throw new HttpError(400, "Un numéro de mobile est attendu pour ce canal (SMS/WhatsApp), pas une adresse email");
+    }
+  }
 }
 
 automationRuleRouter.post(
@@ -119,6 +142,9 @@ automationRuleRouter.post(
         dayOfMonth: b.dayOfMonth ?? null,
         channel: b.channel,
         templateKey: b.templateKey,
+        recipientMode: b.recipientMode || "event",
+        recipientOverride: b.recipientMode === "custom" ? (b.recipientOverride || "").trim() : null,
+        senderName: b.senderName?.trim() || null,
         audienceFilter: b.audienceFilter ?? undefined,
       },
     });
@@ -152,6 +178,9 @@ automationRuleRouter.post(
         dayOfMonth: b.dayOfMonth ?? null,
         channel: b.channel,
         templateKey: b.templateKey,
+        recipientMode: b.recipientMode || "event",
+        recipientOverride: b.recipientMode === "custom" ? (b.recipientOverride || "").trim() : null,
+        senderName: b.senderName?.trim() || null,
         audienceFilter: b.audienceFilter ?? undefined,
       },
     });

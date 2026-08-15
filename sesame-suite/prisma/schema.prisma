@@ -725,6 +725,18 @@ model AutomationRule {
   channel     String // email | sms | whatsapp
   templateKey String
 
+  // Destinataire : par défaut celui de l'événement (client de la réservation,
+  // prospect du CRM…) ; "custom" permet de cibler une adresse/numéro fixe à
+  // la place — utile pour notifier l'équipe (ex: réception) plutôt que le
+  // client sur "order.created".
+  recipientMode     String  @default("event") // event | custom
+  recipientOverride String? // email ou numéro selon channel, requis si recipientMode="custom"
+
+  // Nom d'expéditeur affiché pour cette règle (email uniquement) — remplace
+  // celui de la config SMTP de la portée si renseigné, sinon comportement
+  // inchangé (nom de la config).
+  senderName String?
+
   audienceFilter Json? // segment cible pour les règles sans record source unique (ex: crm.newsletter)
 
   lastRunAt DateTime?

@@ -221,6 +221,9 @@ back-office), sinon formulaire de connexion dédié qui rejette explicitement
 tout compte `hotel`. Interface responsive : la barre latérale devient un
 tiroir accessible par un bouton ☰ sous 900px de large, les grilles de
 graphiques passent en une colonne, les tableaux défilent horizontalement.
+Ascenseur de la zone principale (`.main`, y compris la vue Grille) toujours
+visible et stylé (au lieu de l'ascenseur système, masqué par défaut sur
+certains OS/navigateurs — ce qui rendait le défilement peu évident).
 
 - Fiche par établissement : coordonnées, score de risque de churn calculé,
   usage des accès (NFC/QR/mobile), features actives, opportunités d'upsell,
@@ -308,6 +311,17 @@ graphiques passent en une colonne, les tableaux défilent horizontalement.
     toutes les 15 min par `automationScheduler.ts` (même pattern que le
     planificateur de synchronisation réservations). `AutomationRuleLog`
     déduplique les envois (une ligne par règle × cible déjà notifiée).
+  - **Destinataire par règle** : par défaut celui de l'événement (email/tel
+    de la réservation ou du prospect selon le canal) ; "Personnalisé"
+    permet de cibler une adresse ou un **numéro mobile** fixe à la place —
+    ex. notifier la réception plutôt que le client sur "Commande créée".
+    Validé à la création : une adresse email est refusée sur un canal
+    SMS/WhatsApp (et inversement), pour éviter d'envoyer un SMS vers un
+    champ qui contient en réalité une adresse email.
+  - **Expéditeur par règle** (email uniquement) : nom d'expéditeur affiché,
+    remplace celui de la config SMTP pour cette règle précise sans avoir à
+    multiplier les configurations SMTP (ex. "Réception Hôtel Churchill"
+    pour une règle, nom de la config par défaut pour les autres).
 
 Également non couvert : l'app ménage (`sesame_menage.html`, application
 séparée pour les agents de ménage sur le terrain). La base de données est

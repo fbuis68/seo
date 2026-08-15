@@ -44,6 +44,21 @@ interface FireContext {
 }
 
 /**
+ * Destinataire réel d'un envoi : par défaut celui de l'événement (client de
+ * la réservation, prospect du CRM…) ; "custom" cible une adresse/numéro fixe
+ * saisi sur la règle — utile pour notifier l'équipe (ex: réception) plutôt
+ * que le client sur un déclencheur comme "order.created".
+ */
+function resolveRecipient(
+  rule: { channel: string; recipientMode: string; recipientOverride: string | null },
+  eventEmail?: string | null,
+  eventPhone?: string | null
+): string | null {
+  if (rule.recipientMode === "custom") return rule.recipientOverride || null;
+  return rule.channel === "email" ? eventEmail || null : eventPhone || null;
+}
+
+/**
  * Déclenchement immédiat — appelé depuis les routes métier (booking.ts,
  * roomservice.ts, crmProspect.ts…). Ne doit JAMAIS faire échouer l'appelant :
  * chaque règle est traitée dans son propre try/catch, une erreur d'envoi est
@@ -63,14 +78,21 @@ export async function fireTrigger(triggerKey: string, ctx: FireContext): Promise
   }
 
   for (const rule of rules) {
-    const to = rule.channel === "email" ? ctx.recipient.email : ctx.recipient.phone;
+    const to = resolveRecipient(rule, ctx.recipient.email, ctx.recipient.phone);
     if (!to) continue; // pas de coordonnée pour ce canal sur cette cible — ignoré silencieusement
     try {
       const already = await prisma.automationRuleLog.findUnique({
         where: { ruleId_targetType_targetId: { ruleId: rule.id, targetType: ctx.targetType, targetId: ctx.targetId } },
       });
       if (already) continue;
-      await sendMessage({ entityId: ctx.entityId, channel: rule.channel as Channel, templateKey: rule.templateKey, to, variables: ctx.variables });
+      await sendMessage({
+        entityId: ctx.entityId,
+        channel: rule.channel as Channel,
+        templateKey: rule.templateKey,
+        to,
+        variables: ctx.variables,
+        fromNameOverride: rule.senderName || undefined,
+      });
       await prisma.automationRuleLog.create({ data: { ruleId: rule.id, targetType: ctx.targetType, targetId: ctx.targetId } });
       await prisma.automationRule.update({ where: { id: rule.id }, data: { lastRunAt: new Date() } });
     } catch (err) {
@@ -94,6 +116,9 @@ async function sweepDateRule(rule: {
   offsetUnit: string | null;
   channel: string;
   templateKey: string;
+  recipientMode: string;
+  recipientOverride: string | null;
+  senderName: string | null;
 }) {
   const trigger = getTrigger(rule.trigger);
   if (!trigger?.dateField) return;
@@ -114,7 +139,7 @@ async function sweepDateRule(rule: {
   }
 
   for (const b of bookings) {
-    const to = rule.channel === "email" ? b.personEmail : b.personPhone;
+    const to = resolveRecipient(rule, b.personEmail, b.personPhone);
     if (!to) continue;
     try {
       const already = await prisma.automationRuleLog.findUnique({
@@ -127,6 +152,7 @@ async function sweepDateRule(rule: {
         templateKey: rule.templateKey,
         to,
         variables: { prenom: b.personFirstname, nom: b.personLastname, code: b.code },
+        fromNameOverride: rule.senderName || undefined,
       });
       await prisma.automationRuleLog.create({ data: { ruleId: rule.id, targetType: "booking", targetId: b.id } });
       await prisma.automationRule.update({ where: { id: rule.id }, data: { lastRunAt: new Date() } });
@@ -167,6 +193,9 @@ async function sweepRecurringRule(rule: {
   channel: string;
   templateKey: string;
   audienceFilter: unknown;
+  recipientMode: string;
+  recipientOverride: string | null;
+  senderName: string | null;
 }) {
   const now = new Date();
   if (!isRecurringDueThisHour(rule, now)) return;
@@ -176,6 +205,30 @@ async function sweepRecurringRule(rule: {
     where: { ruleId_targetType_targetId: { ruleId: rule.id, targetType: "period", targetId: periodKey } },
   });
   if (already) return;
+
+  // "custom" ici = envoi de test à une adresse/numéro fixe plutôt qu'à toute
+  // l'audience — pratique pour vérifier une newsletter avant de l'ouvrir au
+  // segment réel.
+  if (rule.recipientMode === "custom") {
+    const to = rule.recipientOverride;
+    if (to) {
+      try {
+        await sendMessage({
+          entityId: null,
+          channel: rule.channel as Channel,
+          templateKey: rule.templateKey,
+          to,
+          variables: { nom: "", secteur: "" },
+          fromNameOverride: rule.senderName || undefined,
+        });
+      } catch (err) {
+        console.error(`[automation] échec d'envoi (destinataire personnalisé) pour la règle "${rule.name}":`, err);
+      }
+    }
+    await prisma.automationRuleLog.create({ data: { ruleId: rule.id, targetType: "period", targetId: periodKey } });
+    await prisma.automationRule.update({ where: { id: rule.id }, data: { lastRunAt: now } });
+    return;
+  }
 
   const filter = (rule.audienceFilter || {}) as AudienceFilter;
   const where: Record<string, unknown> = rule.channel === "email" ? { email: { not: null } } : { tel: { not: null } };
@@ -194,7 +247,14 @@ async function sweepRecurringRule(rule: {
     const to = rule.channel === "email" ? p.email : p.tel;
     if (!to) continue;
     try {
-      await sendMessage({ entityId: null, channel: rule.channel as Channel, templateKey: rule.templateKey, to, variables: { nom: p.nom, secteur: p.secteur || "" } });
+      await sendMessage({
+        entityId: null,
+        channel: rule.channel as Channel,
+        templateKey: rule.templateKey,
+        to,
+        variables: { nom: p.nom, secteur: p.secteur || "" },
+        fromNameOverride: rule.senderName || undefined,
+      });
     } catch (err) {
       console.error(`[automation] échec d'envoi newsletter à ${p.nom} (règle "${rule.name}"):`, err);
     }

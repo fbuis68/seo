@@ -17,8 +17,9 @@ function buildTransporter(smtp: { host: string; port: number; secure: boolean; u
   });
 }
 
-function fromHeader(smtp: { fromName: string | null; fromEmail: string }) {
-  return smtp.fromName ? `"${smtp.fromName.replace(/"/g, "")}" <${smtp.fromEmail}>` : smtp.fromEmail;
+function fromHeader(smtp: { fromName: string | null; fromEmail: string }, fromNameOverride?: string) {
+  const name = fromNameOverride || smtp.fromName;
+  return name ? `"${name.replace(/"/g, "")}" <${smtp.fromEmail}>` : smtp.fromEmail;
 }
 
 /**
@@ -82,13 +83,18 @@ export async function sendTestEmail(entityId: string | null, to: string) {
   }
 }
 
-/** Envoi brut, appelé par messaging.ts après rendu du modèle. */
-export async function sendEmailRaw(entityId: string | null, to: string, subject: string, html: string) {
+/**
+ * Envoi brut, appelé par messaging.ts après rendu du modèle. `fromNameOverride`
+ * permet à une règle d'automatisation d'afficher un nom d'expéditeur différent
+ * de celui de la config SMTP (ex: "Réception Hôtel Churchill" pour une règle,
+ * "Sesame Technology" pour une autre) sans multiplier les configurations SMTP.
+ */
+export async function sendEmailRaw(entityId: string | null, to: string, subject: string, html: string, fromNameOverride?: string) {
   const smtp = await getSmtpConfig(entityId);
   if (!smtp) throw new HttpError(400, "Aucun serveur SMTP configuré pour cette portée");
   const transporter = buildTransporter(smtp);
   try {
-    await transporter.sendMail({ from: fromHeader(smtp), to, subject, html });
+    await transporter.sendMail({ from: fromHeader(smtp, fromNameOverride), to, subject, html });
   } catch (err) {
     throw new HttpError(502, "Échec de connexion au serveur SMTP : " + smtpErrorMessage(err));
   }

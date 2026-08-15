@@ -21,6 +21,8 @@ export async function sendMessage(opts: {
   templateKey: string;
   to: string;
   variables?: Record<string, string>;
+  /** Email uniquement — nom d'expéditeur affiché, remplace celui de la config SMTP pour cet envoi. */
+  fromNameOverride?: string;
 }) {
   const template = await prisma.messageTemplate.findFirst({
     where: { entityId: opts.entityId, channel: opts.channel, key: opts.templateKey },
@@ -32,7 +34,7 @@ export async function sendMessage(opts: {
   const body = renderTemplate(template.bodyHtml, vars);
 
   if (opts.channel === "email") {
-    await sendEmailRaw(opts.entityId, opts.to, subject, body);
+    await sendEmailRaw(opts.entityId, opts.to, subject, body, opts.fromNameOverride);
   } else {
     await sendChannelRaw(opts.entityId, opts.channel, opts.to, body);
   }
