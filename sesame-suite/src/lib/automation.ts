@@ -7,16 +7,24 @@ import { Channel } from "./messageTemplate";
  * (le front-end CRM/admin lit cette même liste, dupliquée côté client pour
  * peupler les menus déroulants ; toute évolution doit être répercutée aux
  * deux endroits). "immediate" est déclenché en synchrone depuis la route
- * concernée via fireTrigger() ; "before"/"after"/"recurring" sont balayés
+ * concernée via fireTrigger() ; "offset"/"recurring" sont balayés
  * périodiquement par automationScheduler.ts.
+ *
+ * "offset" remplace les anciens modes séparés "before"/"after" : un seul
+ * déclencheur par date pivot (ex. "Début de séjour"), le sens
+ * avant/après étant porté par le SIGNE d'AutomationRule.offsetValue
+ * (négatif = avant, positif = après — ex. "J-5", "H-10", "M+1") plutôt que
+ * fixé dans le catalogue. C'est ce qui permet d'harmoniser la
+ * paramétrisation temporelle entre hôtel et CRM alors que les déclencheurs
+ * eux-mêmes restent différents (dates de séjour vs fin d'essai).
  */
 export interface TriggerDef {
   key: string;
   label: string;
   scope: "hotel" | "crm";
-  timingModes: Array<"immediate" | "before" | "after" | "recurring">;
-  dateField?: "startDate" | "endDate" | "trialEnd"; // requis pour before/after
-  targetModel?: "booking" | "subscription"; // source balayée pour before/after — défaut "booking"
+  timingModes: Array<"immediate" | "offset" | "recurring">;
+  dateField?: "startDate" | "endDate" | "trialEnd"; // requis pour "offset"
+  targetModel?: "booking" | "subscription"; // source balayée pour "offset" — défaut "booking"
 }
 
 export const TRIGGERS: TriggerDef[] = [
@@ -25,18 +33,17 @@ export const TRIGGERS: TriggerDef[] = [
   { key: "order.created", label: "Commande créée (room service / boutique)", scope: "hotel", timingModes: ["immediate"] },
   { key: "order.delivered", label: "Commande livrée", scope: "hotel", timingModes: ["immediate"] },
   { key: "order.cancelled", label: "Commande annulée", scope: "hotel", timingModes: ["immediate"] },
-  { key: "stay.before_checkin", label: "Avant l'arrivée", scope: "hotel", timingModes: ["before"], dateField: "startDate" },
-  { key: "stay.before_checkout", label: "Avant le départ", scope: "hotel", timingModes: ["before"], dateField: "endDate" },
-  { key: "stay.after_checkout", label: "Après le départ", scope: "hotel", timingModes: ["after"], dateField: "endDate" },
+  { key: "stay.start", label: "Début de séjour", scope: "hotel", timingModes: ["offset"], dateField: "startDate" },
+  { key: "stay.end", label: "Fin de séjour", scope: "hotel", timingModes: ["offset"], dateField: "endDate" },
   { key: "crm.prospect_created", label: "Nouveau prospect CRM", scope: "crm", timingModes: ["immediate"] },
   { key: "crm.contract_signed", label: "Contrat signé", scope: "crm", timingModes: ["immediate"] },
   { key: "crm.subscription_activated", label: "Souscription activée", scope: "crm", timingModes: ["immediate"] },
   { key: "crm.subscription_cancelled", label: "Souscription annulée", scope: "crm", timingModes: ["immediate"] },
   {
     key: "crm.subscription_trial_ending",
-    label: "Avant la fin d'essai (souscription)",
+    label: "Fin d'essai souscription",
     scope: "crm",
-    timingModes: ["before"],
+    timingModes: ["offset"],
     dateField: "trialEnd",
     targetModel: "subscription",
   },
@@ -151,10 +158,40 @@ export async function fireTrigger(triggerKey: string, ctx: FireContext): Promise
   }
 }
 
-// ── Balayage périodique — before/after (dates de séjour) + recurring (newsletter) ──
+// ── Balayage périodique — offset (dates pivot) + recurring (newsletter) ──
 
 const MS = { minutes: 60_000, hours: 3_600_000, days: 86_400_000 } as const;
 const LOOKBACK_MS = 7 * MS.days; // fenêtre de sécurité : on ne rebalaye jamais tout l'historique
+
+/**
+ * Décale une date d'une valeur signée dans l'unité donnée — "months" utilise
+ * l'arithmétique calendaire (durée variable selon le mois), les autres
+ * unités des millisecondes fixes.
+ */
+function applyOffset(date: Date, value: number, unit: string | null): Date {
+  if (unit === "months") {
+    const d = new Date(date);
+    d.setMonth(d.getMonth() + value);
+    return d;
+  }
+  const ms = MS[(unit as keyof typeof MS) || "days"] ?? MS.days;
+  return new Date(date.getTime() + value * ms);
+}
+
+/**
+ * Offset signé de la règle — négatif = avant la date pivot, positif =
+ * après (ex. "J-5" → -5, "M+1" → +1). Rétro-compatibilité : d'anciennes
+ * règles peuvent encore porter timingMode "before"/"after" (ancien système
+ * à deux modes séparés, remplacé par "offset" au signe porté par
+ * offsetValue) — on les ramène ici à un offset signé équivalent sans avoir
+ * à les migrer en base.
+ */
+function signedOffset(rule: { timingMode: string; offsetValue: number | null }): number {
+  const v = rule.offsetValue ?? 0;
+  if (rule.timingMode === "before") return -Math.abs(v);
+  if (rule.timingMode === "after") return Math.abs(v);
+  return v;
+}
 
 async function sweepDateRule(rule: {
   id: string;
@@ -172,13 +209,11 @@ async function sweepDateRule(rule: {
 }) {
   const trigger = getTrigger(rule.trigger);
   if (!trigger?.dateField) return;
-  const offsetMs = (rule.offsetValue ?? 0) * (MS[(rule.offsetUnit as keyof typeof MS) || "days"] ?? MS.days);
-  const now = Date.now();
-
-  const range =
-    rule.timingMode === "before"
-      ? { lte: new Date(now + offsetMs), gte: new Date(now - LOOKBACK_MS) }
-      : { lte: new Date(now - offsetMs), gte: new Date(now - offsetMs - LOOKBACK_MS) };
+  const now = new Date();
+  // La règle se déclenche dès que la date pivot atteint "target" — cible
+  // unique quel que soit le signe de l'offset (avant/après unifiés).
+  const target = applyOffset(now, -signedOffset(rule), rule.offsetUnit);
+  const range = { lte: target, gte: new Date(target.getTime() - LOOKBACK_MS) };
 
   let bookings;
   try {
@@ -231,12 +266,9 @@ async function sweepSubscriptionTrialRule(rule: {
   recipientOverride: string | null;
   senderName: string | null;
 }) {
-  const offsetMs = (rule.offsetValue ?? 0) * (MS[(rule.offsetUnit as keyof typeof MS) || "days"] ?? MS.days);
-  const now = Date.now();
-  const range =
-    rule.timingMode === "before"
-      ? { lte: new Date(now + offsetMs), gte: new Date(now - LOOKBACK_MS) }
-      : { lte: new Date(now - offsetMs), gte: new Date(now - offsetMs - LOOKBACK_MS) };
+  const now = new Date();
+  const target = applyOffset(now, -signedOffset(rule), rule.offsetUnit);
+  const range = { lte: target, gte: new Date(target.getTime() - LOOKBACK_MS) };
 
   let subs;
   try {
@@ -389,7 +421,9 @@ async function sweepRecurringRule(rule: {
 export async function runAutomationSweep() {
   let rules;
   try {
-    rules = await prisma.automationRule.findMany({ where: { enabled: true, timingMode: { in: ["before", "after", "recurring"] } } });
+    // "before"/"after" restent listés pour rester compatibles avec d'éventuelles
+    // règles déjà enregistrées sous l'ancien système à deux modes séparés.
+    rules = await prisma.automationRule.findMany({ where: { enabled: true, timingMode: { in: ["before", "after", "offset", "recurring"] } } });
   } catch (err) {
     console.error("[automation] lecture des règles échouée pendant le balayage:", err);
     return;

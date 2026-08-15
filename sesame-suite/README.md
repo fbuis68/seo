@@ -316,24 +316,31 @@ certains OS/navigateurs — ce qui rendait le défilement peu évident).
   programmée (`src/lib/automation.ts`, `AutomationRule`, endpoints
   `/wa/automationRule/*`). Déclencheurs disponibles :
   - Hôtel : réservation créée, check-in effectué, commande créée, commande
-    livrée, commande annulée (immédiats) ; avant l'arrivée, avant le départ,
-    après le départ (délai paramétrable en minutes/heures/jours, ex. "1 jour
-    avant la date de fin de séjour").
+    livrée, commande annulée (immédiats) ; **début de séjour**, **fin de
+    séjour** (date pivot + délai paramétrable, voir ci-dessous).
   - CRM : nouveau prospect, contrat signé, souscription activée, souscription
-    annulée (immédiats) ; avant la fin d'essai d'une souscription (délai
-    paramétrable, ex. "3 jours avant la fin de l'essai") ; newsletter
-    récurrente (jour/heure paramétrables, ex. "tous les mois à 11h00",
-    avec segment d'audience Prospect/Client/secteur).
+    annulée (immédiats) ; **fin d'essai souscription** (date pivot + délai) ;
+    newsletter récurrente (jour/heure paramétrables, ex. "tous les mois à
+    11h00", avec segment d'audience Prospect/Client/secteur).
+  - **Paramétrage temporel harmonisé** — un même mécanisme "Sens / Délai /
+    Unité" pour tous les déclencheurs à date pivot, côté hôtel comme côté
+    CRM (seuls les déclencheurs eux-mêmes diffèrent, pas la façon de régler
+    "quand") : Avant/Après × une valeur × Minutes/Heures/Jours/Mois — ex.
+    "J-5" (5 jours avant), "H-10" (10 heures avant), "M+1" (1 mois après).
+    En base, le sens est porté par le signe d'`AutomationRule.offsetValue`
+    (négatif = avant, positif = après) plutôt que par deux modes séparés ;
+    les mois utilisent une arithmétique calendaire (`applyOffset()` dans
+    `src/lib/automation.ts`), pas une durée fixe.
   - Les déclencheurs immédiats sont câblés en synchrone dans les routes
     concernées (`booking.ts`, `roomservice.ts`, `bookingSource.ts`,
     `crmProspect.ts`, `onboarding.ts`, `contact.ts`, `subscription.ts`) via
     `fireTrigger()` — fire-and-forget, un échec d'envoi n'interrompt jamais
-    la requête métier appelante. Les déclencheurs à délai/récurrence sont
-    balayés toutes les 15 min par `automationScheduler.ts` (même pattern que
-    le planificateur de synchronisation réservations) ; celui sur la fin
-    d'essai lit le modèle `Subscription` (les autres délais lisent
-    `Booking`). `AutomationRuleLog` déduplique les envois (une ligne par
-    règle × cible déjà notifiée).
+    la requête métier appelante. Les déclencheurs à date pivot/récurrence
+    sont balayés toutes les 15 min par `automationScheduler.ts` (même
+    pattern que le planificateur de synchronisation réservations) ; "fin
+    d'essai souscription" lit le modèle `Subscription`, "début/fin de
+    séjour" lit `Booking`. `AutomationRuleLog` déduplique les envois (une
+    ligne par règle × cible déjà notifiée).
   - **Diagnostic d'une règle** : chaque règle affiche la date/l'heure de son
     dernier envoi réussi, et — en rouge — le dernier problème rencontré
     (`lastError`/`lastErrorAt`), y compris le cas silencieux où la fiche à

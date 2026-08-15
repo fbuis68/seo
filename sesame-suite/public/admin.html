@@ -4550,17 +4550,22 @@ var TRIGGERS_HOTEL = [
   {key:'order.created', label:'Commande créée (room service / boutique)', timingModes:['immediate']},
   {key:'order.delivered', label:'Commande livrée', timingModes:['immediate']},
   {key:'order.cancelled', label:'Commande annulée', timingModes:['immediate']},
-  {key:'stay.before_checkin', label:'Avant l\'arrivée', timingModes:['before']},
-  {key:'stay.before_checkout', label:'Avant le départ', timingModes:['before']},
-  {key:'stay.after_checkout', label:'Après le départ', timingModes:['after']},
+  {key:'stay.start', label:'Début de séjour', timingModes:['offset']},
+  {key:'stay.end', label:'Fin de séjour', timingModes:['offset']},
 ];
 var AUTO_RULES = [];
 var AUTO_RULE_EDITING = null;
 
 function autoTriggerLabel(key){ var t=TRIGGERS_HOTEL.find(function(t){return t.key===key;}); return t?t.label:key; }
-function autoUnitLabel(u){ return {minutes:'min',hours:'h',days:'j'}[u]||u||''; }
+function autoUnitLabel(u){ return {minutes:'min',hours:'h',days:'j',months:'mois'}[u]||u||''; }
 function autoTimingSummary(r){
   if(r.timingMode==='immediate') return 'Immédiat';
+  if(r.timingMode==='offset'){
+    var v=r.offsetValue||0;
+    return Math.abs(v)+' '+autoUnitLabel(r.offsetUnit)+' '+(v<0?'avant':'après');
+  }
+  // Rétro-compatibilité d'affichage pour d'éventuelles règles créées sous
+  // l'ancien système à deux modes séparés (avant remplacement par "offset").
   if(r.timingMode==='before') return (r.offsetValue||0)+' '+autoUnitLabel(r.offsetUnit)+' avant';
   if(r.timingMode==='after') return (r.offsetValue||0)+' '+autoUnitLabel(r.offsetUnit)+' après';
   return r.timingMode;
@@ -4658,15 +4663,25 @@ function autoRenderTimingFields(){
   if(!el) return;
   if(mode==='immediate'){
     el.innerHTML = '<input type="hidden" id="auto-timingMode" value="immediate">';
-  } else {
-    el.innerHTML = '<input type="hidden" id="auto-timingMode" value="'+mode+'">'
+  } else if(mode==='offset'){
+    var v = r.timingMode==='offset' ? (r.offsetValue||1) : Math.abs(r.offsetValue||1);
+    var mag = Math.abs(v)||1;
+    var sign = (r.timingMode==='before'||v<0) ? 'before' : 'after';
+    el.innerHTML = '<input type="hidden" id="auto-timingMode" value="offset">'
       + '<div class="g2">'
-      + '<div class="fi"><label class="lb">Délai</label><input type="number" id="auto-offsetValue" value="'+(r.offsetValue||1)+'" min="1"></div>'
+      + '<div class="fi"><label class="lb">Sens</label><select id="auto-offsetSign">'
+      + '<option value="before" '+(sign==='before'?'selected':'')+'>Avant</option>'
+      + '<option value="after" '+(sign==='after'?'selected':'')+'>Après</option>'
+      + '</select></div>'
+      + '<div class="fi"><label class="lb">Délai</label><input type="number" id="auto-offsetValue" value="'+mag+'" min="1"></div>'
+      + '</div>'
       + '<div class="fi"><label class="lb">Unité</label><select id="auto-offsetUnit">'
-      + '<option value="minutes" '+(r.offsetUnit==='minutes'?'selected':'')+'>minutes</option>'
-      + '<option value="hours" '+(r.offsetUnit==='hours'?'selected':'')+'>heures</option>'
-      + '<option value="days" '+(!r.offsetUnit||r.offsetUnit==='days'?'selected':'')+'>jours</option>'
-      + '</select></div></div>';
+      + '<option value="minutes" '+(r.offsetUnit==='minutes'?'selected':'')+'>Minutes</option>'
+      + '<option value="hours" '+(r.offsetUnit==='hours'?'selected':'')+'>Heures</option>'
+      + '<option value="days" '+(!r.offsetUnit||r.offsetUnit==='days'?'selected':'')+'>Jours</option>'
+      + '<option value="months" '+(r.offsetUnit==='months'?'selected':'')+'>Mois</option>'
+      + '</select></div>'
+      + '<div style="font-size:11px;color:var(--mu);margin-top:4px">Ex. J-5 = 5 jours avant · H-10 = 10 heures avant · M+1 = 1 mois après</div>';
   }
 }
 
@@ -4694,7 +4709,11 @@ async function autoSaveRule(id){
     timingMode: document.getElementById('auto-timingMode').value,
     channel: document.getElementById('auto-channel').value,
     templateKey: document.getElementById('auto-template').value,
-    offsetValue: document.getElementById('auto-offsetValue') ? +document.getElementById('auto-offsetValue').value : null,
+    offsetValue: document.getElementById('auto-offsetValue') ? (function(){
+      var mag = +document.getElementById('auto-offsetValue').value;
+      var sign = document.getElementById('auto-offsetSign') ? document.getElementById('auto-offsetSign').value : 'after';
+      return sign === 'before' ? -mag : mag;
+    })() : null,
     offsetUnit: document.getElementById('auto-offsetUnit') ? document.getElementById('auto-offsetUnit').value : null,
     recipientMode: recipientMode,
     recipientOverride: document.getElementById('auto-recipientOverride') ? document.getElementById('auto-recipientOverride').value.trim() : null,

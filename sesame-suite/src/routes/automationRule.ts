@@ -91,7 +91,8 @@ interface RuleBody {
   audienceFilter?: unknown;
 }
 
-const TIMING_MODES = ["immediate", "before", "after", "recurring"];
+const TIMING_MODES = ["immediate", "offset", "recurring"];
+const OFFSET_UNITS = ["minutes", "hours", "days", "months"];
 const CHANNELS = ["email", "sms", "whatsapp"];
 const RECIPIENT_MODES = ["event", "custom"];
 
@@ -103,8 +104,11 @@ function validateRuleBody(b: RuleBody) {
   if (!trigger.timingModes.includes(b.timingMode as (typeof trigger.timingModes)[number])) {
     throw new HttpError(400, `Le déclencheur "${trigger.label}" ne supporte pas le mode "${b.timingMode}"`);
   }
-  if ((b.timingMode === "before" || b.timingMode === "after") && (!b.offsetValue || b.offsetValue <= 0)) {
-    throw new HttpError(400, "Une durée (offsetValue) positive est requise pour ce mode");
+  if (b.timingMode === "offset") {
+    // Le signe porte le sens avant/après (ex. "J-5" = -5, "M+1" = +1) —
+    // seule une valeur non nulle a un sens ici.
+    if (!b.offsetValue) throw new HttpError(400, "Une durée non nulle est requise pour ce mode (ex. J-5, H-10, M+1)");
+    if (b.offsetUnit && !OFFSET_UNITS.includes(b.offsetUnit)) throw new HttpError(400, "Unité de durée invalide");
   }
   if (b.timingMode === "recurring" && !b.recurrence) {
     throw new HttpError(400, "Une récurrence (daily/weekly/monthly) est requise pour ce mode");

@@ -1382,7 +1382,7 @@ const TRIGGERS_CRM = [
   {key:'crm.contract_signed', label:'Contrat signé', timingModes:['immediate']},
   {key:'crm.subscription_activated', label:'Souscription activée', timingModes:['immediate']},
   {key:'crm.subscription_cancelled', label:'Souscription annulée', timingModes:['immediate']},
-  {key:'crm.subscription_trial_ending', label:"Avant la fin d'essai (souscription)", timingModes:['before']},
+  {key:'crm.subscription_trial_ending', label:"Fin d'essai souscription", timingModes:['offset']},
   {key:'crm.newsletter', label:'Newsletter récurrente', timingModes:['recurring']},
 ];
 let AUTO_RULES=[];
@@ -1406,6 +1406,12 @@ async function loadAutomationPanelData(){
 function triggerLabel(key){ const t=TRIGGERS_CRM.find(t=>t.key===key); return t?t.label:key; }
 function timingSummary(r){
   if(r.timingMode==='immediate') return 'Immédiat';
+  if(r.timingMode==='offset'){
+    const v=r.offsetValue||0;
+    return Math.abs(v)+' '+unitLabel(r.offsetUnit)+' '+(v<0?'avant':'après');
+  }
+  // Rétro-compatibilité d'affichage pour d'éventuelles règles créées sous
+  // l'ancien système à deux modes séparés (avant remplacement par "offset").
   if(r.timingMode==='before') return (r.offsetValue||0)+' '+unitLabel(r.offsetUnit)+' avant';
   if(r.timingMode==='after') return (r.offsetValue||0)+' '+unitLabel(r.offsetUnit)+' après';
   if(r.timingMode==='recurring'){
@@ -1414,7 +1420,7 @@ function timingSummary(r){
   }
   return r.timingMode;
 }
-function unitLabel(u){ return {minutes:'min',hours:'h',days:'j'}[u]||u||''; }
+function unitLabel(u){ return {minutes:'min',hours:'h',days:'j',months:'mois'}[u]||u||''; }
 
 function renderAutomationPanel(){
   document.getElementById('main').innerHTML=`
@@ -1502,12 +1508,22 @@ function renderRuleTimingFields(){
   if(!el)return;
   if(mode==='immediate'){
     el.innerHTML = '<input type="hidden" id="rule-timingMode" value="immediate">';
-  } else if(mode==='before'||mode==='after'){
-    el.innerHTML = `<input type="hidden" id="rule-timingMode" value="${mode}">
+  } else if(mode==='offset'){
+    const v=r.timingMode==='offset'?(r.offsetValue||1):Math.abs(r.offsetValue||1);
+    const mag=Math.abs(v)||1;
+    const sign=(r.timingMode==='before'||v<0)?'before':'after';
+    el.innerHTML = `<input type="hidden" id="rule-timingMode" value="offset">
       <div class="form-grid" style="margin-top:8px">
-        <div class="ff"><label>Délai</label><input type="number" id="rule-offsetValue" value="${r.offsetValue||1}" min="1"></div>
-        <div class="ff"><label>Unité</label><select id="rule-offsetUnit"><option value="minutes" ${r.offsetUnit==='minutes'?'selected':''}>minutes</option><option value="hours" ${r.offsetUnit==='hours'?'selected':''}>heures</option><option value="days" ${!r.offsetUnit||r.offsetUnit==='days'?'selected':''}>jours</option></select></div>
-      </div>`;
+        <div class="ff"><label>Sens</label><select id="rule-offsetSign"><option value="before" ${sign==='before'?'selected':''}>Avant</option><option value="after" ${sign==='after'?'selected':''}>Après</option></select></div>
+        <div class="ff"><label>Délai</label><input type="number" id="rule-offsetValue" value="${mag}" min="1"></div>
+        <div class="ff"><label>Unité</label><select id="rule-offsetUnit">
+          <option value="minutes" ${r.offsetUnit==='minutes'?'selected':''}>Minutes</option>
+          <option value="hours" ${r.offsetUnit==='hours'?'selected':''}>Heures</option>
+          <option value="days" ${!r.offsetUnit||r.offsetUnit==='days'?'selected':''}>Jours</option>
+          <option value="months" ${r.offsetUnit==='months'?'selected':''}>Mois</option>
+        </select></div>
+      </div>
+      <div style="font-size:11px;color:#999;margin-top:4px">Ex. J-5 = 5 jours avant · H-10 = 10 heures avant · M+1 = 1 mois après</div>`;
   } else if(mode==='recurring'){
     el.innerHTML = `<input type="hidden" id="rule-timingMode" value="recurring">
       <div class="form-grid" style="margin-top:8px">
@@ -1564,7 +1580,11 @@ async function saveRule(id){
   const body={
     name:g('rule-name').trim(), trigger:triggerKey, enabled:g('rule-enabled')==='1',
     timingMode:g('rule-timingMode'), channel:g('rule-channel'), templateKey:g('rule-template'),
-    offsetValue: document.getElementById('rule-offsetValue') ? +g('rule-offsetValue') : null,
+    offsetValue: document.getElementById('rule-offsetValue') ? (function(){
+      const mag=+g('rule-offsetValue');
+      const sign=document.getElementById('rule-offsetSign') ? g('rule-offsetSign') : 'after';
+      return sign==='before' ? -mag : mag;
+    })() : null,
     offsetUnit: document.getElementById('rule-offsetUnit') ? g('rule-offsetUnit') : null,
     recurrence: document.getElementById('rule-recurrence') ? g('rule-recurrence') : null,
     atTime: document.getElementById('rule-atTime') ? g('rule-atTime') : null,
