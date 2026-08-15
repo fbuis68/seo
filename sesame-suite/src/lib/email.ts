@@ -36,16 +36,33 @@ function smtpErrorMessage(err: unknown): string {
   return parts.length ? parts.join(" — ") : String(err);
 }
 
+/**
+ * PostgreSQL ne garantit pas l'unicité entre plusieurs lignes entityId=NULL
+ * (portée CRM globale) : un double-clic sur "Enregistrer", ou deux requêtes
+ * concurrentes, peuvent créer deux lignes de config avant que la première
+ * ne soit visible du find-then-create. Sans ORDER BY, une lecture peut alors
+ * renvoyer une ligne différente de celle qui vient d'être mise à jour — la
+ * config semble "ne pas s'enregistrer". orderBy: updatedAt desc rend la
+ * lecture déterministe (toujours la plus récente), et upsertSmtpConfig
+ * nettoie les doublons dès la prochaine sauvegarde pour repasser à une
+ * seule ligne.
+ */
 export async function getSmtpConfig(entityId: string | null) {
-  return prisma.smtpConfig.findFirst({ where: { entityId } });
+  return prisma.smtpConfig.findFirst({ where: { entityId }, orderBy: { updatedAt: "desc" } });
 }
 
 export async function upsertSmtpConfig(
   entityId: string | null,
   data: { host: string; port: number; secure: boolean; username: string; password: string; fromName?: string; fromEmail: string }
 ) {
-  const existing = await prisma.smtpConfig.findFirst({ where: { entityId } });
-  if (existing) return prisma.smtpConfig.update({ where: { id: existing.id }, data });
+  const existingRows = await prisma.smtpConfig.findMany({ where: { entityId }, orderBy: { updatedAt: "desc" } });
+  if (existingRows.length > 0) {
+    const [primary, ...duplicates] = existingRows;
+    if (duplicates.length) {
+      await prisma.smtpConfig.deleteMany({ where: { id: { in: duplicates.map((d) => d.id) } } });
+    }
+    return prisma.smtpConfig.update({ where: { id: primary.id }, data });
+  }
   return prisma.smtpConfig.create({ data: { entityId, ...data } });
 }
 

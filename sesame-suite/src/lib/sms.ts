@@ -14,8 +14,12 @@ const TWILIO_API_BASE = "https://api.twilio.com/2010-04-01";
 
 export type SmsChannel = "sms" | "whatsapp";
 
+// Voir le commentaire équivalent dans src/lib/email.ts : PostgreSQL ne
+// garantit pas l'unicité entre lignes entityId=NULL (portée CRM globale),
+// donc lecture/écriture doivent être déterministes (orderBy) et l'upsert
+// doit nettoyer les doublons éventuels plutôt que de risquer d'en créer.
 export async function getChannelConfig(entityId: string | null, channel: SmsChannel) {
-  return prisma.channelConfig.findFirst({ where: { entityId, channel } });
+  return prisma.channelConfig.findFirst({ where: { entityId, channel }, orderBy: { updatedAt: "desc" } });
 }
 
 export async function upsertChannelConfig(
@@ -23,8 +27,14 @@ export async function upsertChannelConfig(
   channel: SmsChannel,
   data: { accountSid: string; authToken: string; fromNumber: string }
 ) {
-  const existing = await prisma.channelConfig.findFirst({ where: { entityId, channel } });
-  if (existing) return prisma.channelConfig.update({ where: { id: existing.id }, data });
+  const existingRows = await prisma.channelConfig.findMany({ where: { entityId, channel }, orderBy: { updatedAt: "desc" } });
+  if (existingRows.length > 0) {
+    const [primary, ...duplicates] = existingRows;
+    if (duplicates.length) {
+      await prisma.channelConfig.deleteMany({ where: { id: { in: duplicates.map((d) => d.id) } } });
+    }
+    return prisma.channelConfig.update({ where: { id: primary.id }, data });
+  }
   return prisma.channelConfig.create({ data: { entityId, channel, provider: "twilio", ...data } });
 }
 
