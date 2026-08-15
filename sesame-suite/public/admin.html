@@ -4549,6 +4549,7 @@ var TRIGGERS_HOTEL = [
   {key:'checkin.completed', label:'Check-in effectué', timingModes:['immediate']},
   {key:'order.created', label:'Commande créée (room service / boutique)', timingModes:['immediate']},
   {key:'order.delivered', label:'Commande livrée', timingModes:['immediate']},
+  {key:'order.cancelled', label:'Commande annulée', timingModes:['immediate']},
   {key:'stay.before_checkin', label:'Avant l\'arrivée', timingModes:['before']},
   {key:'stay.before_checkout', label:'Avant le départ', timingModes:['before']},
   {key:'stay.after_checkout', label:'Après le départ', timingModes:['after']},
@@ -4588,8 +4589,10 @@ function autoRenderRules(){
       + '<span class="nibadge" style="background:var(--mu)">'+autoTriggerLabel(r.trigger)+'</span> '
       + '<span class="nibadge" style="background:var(--a)">'+CHAN_LABEL[r.channel]+'</span>'
       + '<div style="font-size:12px;color:var(--mu);margin-top:2px">'+autoTimingSummary(r)+' — modèle : '+esc(r.templateKey)+' — destinataire : '+(r.recipientMode==='custom'?esc(r.recipientOverride):'automatique')+(r.senderName?' — expéditeur : '+esc(r.senderName):'')+(r.lastRunAt?' — dernier envoi : '+new Date(r.lastRunAt).toLocaleString('fr-FR'):'')+'</div>'
+      + (r.lastError?'<div style="font-size:12px;color:#a32d2d;margin-top:2px">⚠ Problème lors du dernier déclenchement ('+(r.lastErrorAt?new Date(r.lastErrorAt).toLocaleString('fr-FR'):'')+') : '+esc(r.lastError)+'</div>':'')
       + '</div>'
       + '<button class="btn btn-s" onclick="autoOpenRuleModal(\''+r.id+'\')"><i class="ti ti-edit"></i></button>'
+      + '<button class="btn btn-s" onclick="autoTestRule(\''+r.id+'\')"><i class="ti ti-send"></i></button>'
       + '<button class="btn btn-s" onclick="autoToggleRule(\''+r.id+'\')"><i class="ti ti-power"></i></button>'
       + '<button class="btn btn-s btn-d" onclick="autoDeleteRule(\''+r.id+'\')"><i class="ti ti-trash"></i></button>'
       + '</div>';
@@ -4736,6 +4739,22 @@ async function autoDeleteRule(id){
   AUTO_RULES = AUTO_RULES.filter(function(r){return r.id!==id;});
   toast('Règle supprimée');
   autoRenderRules();
+}
+
+async function autoTestRule(id){
+  var r = AUTO_RULES.find(function(r){return r.id===id;});
+  if(!r) return;
+  var suggestion = r.recipientMode==='custom' ? r.recipientOverride : '';
+  var label = r.channel==='email' ? 'adresse email' : 'numéro de mobile';
+  var to = prompt('Envoyer un test à quel '+label+' ?', suggestion||'');
+  if(!to) return;
+  try{
+    var res = await adminFetch('/wa/automationRule/test', {method:'POST', body:JSON.stringify({id:id, to:to})});
+    var data = await res.json();
+    if(!res.ok){ toast(data.error||'Échec du test'); return; }
+    toast('Test envoyé à '+to+' ✓');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+  await autoInit();
 }
 
 function bsShowResult(title, html){

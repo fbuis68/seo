@@ -1289,6 +1289,9 @@ async function sendClientEmail(id){
 const TRIGGERS_CRM = [
   {key:'crm.prospect_created', label:'Nouveau prospect CRM', timingModes:['immediate']},
   {key:'crm.contract_signed', label:'Contrat signé', timingModes:['immediate']},
+  {key:'crm.subscription_activated', label:'Souscription activée', timingModes:['immediate']},
+  {key:'crm.subscription_cancelled', label:'Souscription annulée', timingModes:['immediate']},
+  {key:'crm.subscription_trial_ending', label:"Avant la fin d'essai (souscription)", timingModes:['before']},
   {key:'crm.newsletter', label:'Newsletter récurrente', timingModes:['recurring']},
 ];
 let AUTO_RULES=[];
@@ -1332,8 +1335,10 @@ function renderAutomationPanel(){
         <div class="log-body">
           <div class="log-text"><strong>${esc(r.name)}</strong> <span class="tag t-gray" style="font-size:10px;padding:1px 7px">${triggerLabel(r.trigger)}</span> <span class="tag t-blue" style="font-size:10px;padding:1px 7px">${CHANNEL_LABEL[r.channel]}</span></div>
           <div class="log-meta">${timingSummary(r)} — modèle : ${esc(r.templateKey)} — destinataire : ${r.recipientMode==='custom'?esc(r.recipientOverride):'automatique'}${r.senderName?' — expéditeur : '+esc(r.senderName):''}${r.lastRunAt?' — dernier envoi : '+new Date(r.lastRunAt).toLocaleString('fr-FR'):''}</div>
+          ${r.lastError?`<div class="log-meta" style="color:#a32d2d">⚠ Problème lors du dernier déclenchement (${r.lastErrorAt?new Date(r.lastErrorAt).toLocaleString('fr-FR'):''}) : ${esc(r.lastError)}</div>`:''}
           <div class="log-acts">
             <button class="btn btn-sm btn-ghost" onclick="openRuleModal('${r.id}')">Modifier</button>
+            <button class="btn btn-sm btn-ghost" onclick="testRule('${r.id}')">Tester</button>
             <button class="btn btn-sm btn-ghost" onclick="toggleRule('${r.id}')">${r.enabled?'Désactiver':'Activer'}</button>
             <button class="btn btn-sm btn-ghost" style="color:#a32d2d" onclick="deleteRule('${r.id}')">Supprimer</button>
           </div>
@@ -1516,6 +1521,21 @@ async function deleteRule(id){
   }catch(e){ flash('Erreur de suppression'); return; }
   AUTO_RULES=AUTO_RULES.filter(r=>r.id!==id);
   flash('Règle supprimée');renderAutomationPanel();
+}
+
+async function testRule(id){
+  const r=AUTO_RULES.find(r=>r.id===id);if(!r)return;
+  const suggestion = r.recipientMode==='custom' ? r.recipientOverride : '';
+  const label = r.channel==='email' ? 'adresse email' : 'numéro de mobile';
+  const to = prompt('Envoyer un test à quel '+label+' ?', suggestion||'');
+  if(!to)return;
+  try{
+    var res = await apiFetch('/wa/automationRule/test', {method:'POST', body:JSON.stringify({id:id, to:to, scope:'crm'})});
+    var data = await res.json();
+    if(!res.ok) throw new Error(data.error||'http '+res.status);
+    flash('Test envoyé à '+to);
+  }catch(e){ flash('Échec du test : '+(e.message||'erreur')); }
+  await loadAutomationPanelData();
 }
 
 // ════════════════════════════════════════

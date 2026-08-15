@@ -15,7 +15,8 @@ export interface TriggerDef {
   label: string;
   scope: "hotel" | "crm";
   timingModes: Array<"immediate" | "before" | "after" | "recurring">;
-  dateField?: "startDate" | "endDate"; // Booking — requis pour before/after
+  dateField?: "startDate" | "endDate" | "trialEnd"; // requis pour before/after
+  targetModel?: "booking" | "subscription"; // source balayée pour before/after — défaut "booking"
 }
 
 export const TRIGGERS: TriggerDef[] = [
@@ -23,11 +24,22 @@ export const TRIGGERS: TriggerDef[] = [
   { key: "checkin.completed", label: "Check-in effectué", scope: "hotel", timingModes: ["immediate"] },
   { key: "order.created", label: "Commande créée (room service / boutique)", scope: "hotel", timingModes: ["immediate"] },
   { key: "order.delivered", label: "Commande livrée", scope: "hotel", timingModes: ["immediate"] },
+  { key: "order.cancelled", label: "Commande annulée", scope: "hotel", timingModes: ["immediate"] },
   { key: "stay.before_checkin", label: "Avant l'arrivée", scope: "hotel", timingModes: ["before"], dateField: "startDate" },
   { key: "stay.before_checkout", label: "Avant le départ", scope: "hotel", timingModes: ["before"], dateField: "endDate" },
   { key: "stay.after_checkout", label: "Après le départ", scope: "hotel", timingModes: ["after"], dateField: "endDate" },
   { key: "crm.prospect_created", label: "Nouveau prospect CRM", scope: "crm", timingModes: ["immediate"] },
   { key: "crm.contract_signed", label: "Contrat signé", scope: "crm", timingModes: ["immediate"] },
+  { key: "crm.subscription_activated", label: "Souscription activée", scope: "crm", timingModes: ["immediate"] },
+  { key: "crm.subscription_cancelled", label: "Souscription annulée", scope: "crm", timingModes: ["immediate"] },
+  {
+    key: "crm.subscription_trial_ending",
+    label: "Avant la fin d'essai (souscription)",
+    scope: "crm",
+    timingModes: ["before"],
+    dateField: "trialEnd",
+    targetModel: "subscription",
+  },
   { key: "crm.newsletter", label: "Newsletter récurrente", scope: "crm", timingModes: ["recurring"] },
 ];
 
@@ -58,6 +70,29 @@ function resolveRecipient(
   return rule.channel === "email" ? eventEmail || null : eventPhone || null;
 }
 
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * Sans ça, un échec d'envoi (SMTP mal configuré, modèle introuvable…)
+ * n'était visible que dans les logs serveur — la règle semblait "ne rien
+ * faire" côté utilisateur, sans aucun moyen de savoir pourquoi. Appelé dans
+ * chaque catch ; recordRuleSuccess efface l'erreur à la prochaine réussite
+ * pour ne jamais afficher un échec périmé.
+ */
+async function recordRuleError(ruleId: string, err: unknown) {
+  try {
+    await prisma.automationRule.update({ where: { id: ruleId }, data: { lastError: errMessage(err), lastErrorAt: new Date() } });
+  } catch (e) {
+    console.error(`[automation] échec de l'enregistrement de l'erreur pour la règle ${ruleId}:`, e);
+  }
+}
+
+async function recordRuleSuccess(ruleId: string) {
+  await prisma.automationRule.update({ where: { id: ruleId }, data: { lastRunAt: new Date(), lastError: null, lastErrorAt: null } });
+}
+
 /**
  * Déclenchement immédiat — appelé depuis les routes métier (booking.ts,
  * roomservice.ts, crmProspect.ts…). Ne doit JAMAIS faire échouer l'appelant :
@@ -79,7 +114,21 @@ export async function fireTrigger(triggerKey: string, ctx: FireContext): Promise
 
   for (const rule of rules) {
     const to = resolveRecipient(rule, ctx.recipient.email, ctx.recipient.phone);
-    if (!to) continue; // pas de coordonnée pour ce canal sur cette cible — ignoré silencieusement
+    if (!to) {
+      // Cas fréquent et jusqu'ici invisible : la fiche à l'origine de l'événement
+      // n'a pas d'email/téléphone renseigné pour le canal choisi — la règle
+      // "ne fait rien" sans qu'aucune erreur d'envoi ne se produise. On le
+      // signale quand même via lastError pour que ça reste diagnosticable.
+      await recordRuleError(
+        rule.id,
+        new Error(
+          rule.channel === "email"
+            ? "Aucun envoi : l'adresse email est vide sur la fiche à l'origine de l'événement."
+            : "Aucun envoi : le numéro de mobile est vide sur la fiche à l'origine de l'événement."
+        )
+      );
+      continue;
+    }
     try {
       const already = await prisma.automationRuleLog.findUnique({
         where: { ruleId_targetType_targetId: { ruleId: rule.id, targetType: ctx.targetType, targetId: ctx.targetId } },
@@ -94,9 +143,10 @@ export async function fireTrigger(triggerKey: string, ctx: FireContext): Promise
         fromNameOverride: rule.senderName || undefined,
       });
       await prisma.automationRuleLog.create({ data: { ruleId: rule.id, targetType: ctx.targetType, targetId: ctx.targetId } });
-      await prisma.automationRule.update({ where: { id: rule.id }, data: { lastRunAt: new Date() } });
+      await recordRuleSuccess(rule.id);
     } catch (err) {
       console.error(`[automation] échec de la règle "${rule.name}" (${triggerKey}):`, err);
+      await recordRuleError(rule.id, err);
     }
   }
 }
@@ -155,9 +205,68 @@ async function sweepDateRule(rule: {
         fromNameOverride: rule.senderName || undefined,
       });
       await prisma.automationRuleLog.create({ data: { ruleId: rule.id, targetType: "booking", targetId: b.id } });
-      await prisma.automationRule.update({ where: { id: rule.id }, data: { lastRunAt: new Date() } });
+      await recordRuleSuccess(rule.id);
     } catch (err) {
       console.error(`[automation] échec de la règle "${rule.name}" pour la réservation ${b.code}:`, err);
+      await recordRuleError(rule.id, err);
+    }
+  }
+}
+
+/**
+ * Variante de sweepDateRule() pour les règles CRM portant sur la date de fin
+ * d'essai d'une souscription (ex: relance 1 jour avant la fin d'essai) —
+ * modèle Subscription, pas Booking, donc mapping de champs différent
+ * (contactEmail/contactPhone) et filtré sur les essais encore en cours.
+ */
+async function sweepSubscriptionTrialRule(rule: {
+  id: string;
+  name: string;
+  timingMode: string;
+  offsetValue: number | null;
+  offsetUnit: string | null;
+  channel: string;
+  templateKey: string;
+  recipientMode: string;
+  recipientOverride: string | null;
+  senderName: string | null;
+}) {
+  const offsetMs = (rule.offsetValue ?? 0) * (MS[(rule.offsetUnit as keyof typeof MS) || "days"] ?? MS.days);
+  const now = Date.now();
+  const range =
+    rule.timingMode === "before"
+      ? { lte: new Date(now + offsetMs), gte: new Date(now - LOOKBACK_MS) }
+      : { lte: new Date(now - offsetMs), gte: new Date(now - offsetMs - LOOKBACK_MS) };
+
+  let subs;
+  try {
+    subs = await prisma.subscription.findMany({ where: { status: "trial", trialEnd: range } });
+  } catch (err) {
+    console.error(`[automation] lecture des souscriptions échouée pour la règle "${rule.name}":`, err);
+    return;
+  }
+
+  for (const s of subs) {
+    const to = resolveRecipient(rule, s.contactEmail, s.contactPhone);
+    if (!to) continue;
+    try {
+      const already = await prisma.automationRuleLog.findUnique({
+        where: { ruleId_targetType_targetId: { ruleId: rule.id, targetType: "subscription", targetId: s.id } },
+      });
+      if (already) continue;
+      await sendMessage({
+        entityId: null,
+        channel: rule.channel as Channel,
+        templateKey: rule.templateKey,
+        to,
+        variables: { nom: s.hotelName, secteur: "" },
+        fromNameOverride: rule.senderName || undefined,
+      });
+      await prisma.automationRuleLog.create({ data: { ruleId: rule.id, targetType: "subscription", targetId: s.id } });
+      await recordRuleSuccess(rule.id);
+    } catch (err) {
+      console.error(`[automation] échec de la règle "${rule.name}" pour la souscription ${s.hotelName}:`, err);
+      await recordRuleError(rule.id, err);
     }
   }
 }
@@ -221,12 +330,13 @@ async function sweepRecurringRule(rule: {
           variables: { nom: "", secteur: "" },
           fromNameOverride: rule.senderName || undefined,
         });
+        await recordRuleSuccess(rule.id);
       } catch (err) {
         console.error(`[automation] échec d'envoi (destinataire personnalisé) pour la règle "${rule.name}":`, err);
+        await recordRuleError(rule.id, err);
       }
     }
     await prisma.automationRuleLog.create({ data: { ruleId: rule.id, targetType: "period", targetId: periodKey } });
-    await prisma.automationRule.update({ where: { id: rule.id }, data: { lastRunAt: now } });
     return;
   }
 
@@ -243,6 +353,8 @@ async function sweepRecurringRule(rule: {
     return;
   }
 
+  let anySent = false;
+  let lastErr: unknown = null;
   for (const p of prospects) {
     const to = rule.channel === "email" ? p.email : p.tel;
     if (!to) continue;
@@ -255,13 +367,22 @@ async function sweepRecurringRule(rule: {
         variables: { nom: p.nom, secteur: p.secteur || "" },
         fromNameOverride: rule.senderName || undefined,
       });
+      anySent = true;
     } catch (err) {
       console.error(`[automation] échec d'envoi newsletter à ${p.nom} (règle "${rule.name}"):`, err);
+      lastErr = err;
     }
   }
 
+  // Newsletter = plusieurs envois individuels : on ne fait pas remonter
+  // l'échec d'un seul destinataire (adresse invalide isolée), seulement si
+  // AUCUN envoi n'a abouti alors qu'il y avait une audience à contacter —
+  // sinon "lastError" masquerait une campagne qui a globalement réussi (ou
+  // une audience simplement vide, qui n'est pas un échec).
+  if (lastErr && !anySent && prospects.length > 0) await recordRuleError(rule.id, lastErr);
+  else await recordRuleSuccess(rule.id);
+
   await prisma.automationRuleLog.create({ data: { ruleId: rule.id, targetType: "period", targetId: periodKey } });
-  await prisma.automationRule.update({ where: { id: rule.id }, data: { lastRunAt: now } });
 }
 
 /** Appelé périodiquement par automationScheduler.ts. */
@@ -275,6 +396,7 @@ export async function runAutomationSweep() {
   }
   for (const rule of rules) {
     if (rule.timingMode === "recurring") await sweepRecurringRule(rule);
+    else if (getTrigger(rule.trigger)?.targetModel === "subscription") await sweepSubscriptionTrialRule(rule);
     else await sweepDateRule(rule);
   }
 }

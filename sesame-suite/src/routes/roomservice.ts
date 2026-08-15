@@ -165,6 +165,19 @@ roomserviceRouter.post(
       }
     }
 
+    if (status === "cancelled" && order.status !== "cancelled" && updated.bookingId) {
+      const booking = await prisma.booking.findUnique({ where: { id: updated.bookingId } });
+      if (booking) {
+        fireTrigger("order.cancelled", {
+          entityId: entity.id,
+          targetType: "order",
+          targetId: updated.id,
+          recipient: { email: booking.personEmail, phone: booking.personPhone },
+          variables: { prenom: booking.personFirstname, nom: booking.personLastname, total: String(updated.total) },
+        }).catch((e) => console.error("[automation] order.cancelled:", e));
+      }
+    }
+
     res.json(shapeOrder(updated));
   })
 );

@@ -297,20 +297,33 @@ certains OS/navigateurs — ce qui rendait le défilement peu évident).
   programmée (`src/lib/automation.ts`, `AutomationRule`, endpoints
   `/wa/automationRule/*`). Déclencheurs disponibles :
   - Hôtel : réservation créée, check-in effectué, commande créée, commande
-    livrée (immédiats) ; avant l'arrivée, avant le départ, après le départ
-    (délai paramétrable en minutes/heures/jours, ex. "1 jour avant la date
-    de fin de séjour").
-  - CRM : nouveau prospect, contrat signé (immédiats) ; newsletter
+    livrée, commande annulée (immédiats) ; avant l'arrivée, avant le départ,
+    après le départ (délai paramétrable en minutes/heures/jours, ex. "1 jour
+    avant la date de fin de séjour").
+  - CRM : nouveau prospect, contrat signé, souscription activée, souscription
+    annulée (immédiats) ; avant la fin d'essai d'une souscription (délai
+    paramétrable, ex. "3 jours avant la fin de l'essai") ; newsletter
     récurrente (jour/heure paramétrables, ex. "tous les mois à 11h00",
     avec segment d'audience Prospect/Client/secteur).
   - Les déclencheurs immédiats sont câblés en synchrone dans les routes
     concernées (`booking.ts`, `roomservice.ts`, `bookingSource.ts`,
-    `crmProspect.ts`, `onboarding.ts`, `contact.ts`) via `fireTrigger()` —
-    fire-and-forget, un échec d'envoi n'interrompt jamais la requête
-    métier appelante. Les déclencheurs à délai/récurrence sont balayés
-    toutes les 15 min par `automationScheduler.ts` (même pattern que le
-    planificateur de synchronisation réservations). `AutomationRuleLog`
-    déduplique les envois (une ligne par règle × cible déjà notifiée).
+    `crmProspect.ts`, `onboarding.ts`, `contact.ts`, `subscription.ts`) via
+    `fireTrigger()` — fire-and-forget, un échec d'envoi n'interrompt jamais
+    la requête métier appelante. Les déclencheurs à délai/récurrence sont
+    balayés toutes les 15 min par `automationScheduler.ts` (même pattern que
+    le planificateur de synchronisation réservations) ; celui sur la fin
+    d'essai lit le modèle `Subscription` (les autres délais lisent
+    `Booking`). `AutomationRuleLog` déduplique les envois (une ligne par
+    règle × cible déjà notifiée).
+  - **Diagnostic d'une règle** : chaque règle affiche la date/l'heure de son
+    dernier envoi réussi, et — en rouge — le dernier problème rencontré
+    (`lastError`/`lastErrorAt`), y compris le cas silencieux où la fiche à
+    l'origine de l'événement n'a pas d'email/téléphone renseigné pour le
+    canal choisi (ce n'est pas un échec d'envoi, mais rien n'est parti non
+    plus — l'ancien comportement ne l'indiquait nulle part). Un bouton
+    "Tester" (`POST /wa/automationRule/test`) envoie immédiatement un essai
+    à une adresse/numéro donné et affiche l'erreur réelle en cas d'échec,
+    sans attendre un vrai événement métier.
   - **Destinataire par règle** : par défaut celui de l'événement (email/tel
     de la réservation ou du prospect selon le canal) ; "Personnalisé"
     permet de cibler une adresse ou un **numéro mobile** fixe à la place —

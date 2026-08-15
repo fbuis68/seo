@@ -741,6 +741,13 @@ model AutomationRule {
 
   lastRunAt DateTime?
 
+  // Visibilité des échecs — sans ça, un envoi qui échoue (SMTP mal
+  // configuré, modèle introuvable…) n'était visible que dans les logs
+  // serveur : la règle semblait "ne rien faire" sans qu'on sache pourquoi.
+  // Effacé à la prochaine réussite (n'affiche jamais un échec périmé).
+  lastError   String?
+  lastErrorAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

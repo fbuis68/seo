@@ -3,6 +3,7 @@ import { prisma } from "../db";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin, requireSesame } from "../middleware/requireAdmin";
 import { provisionEntity } from "../lib/provisionEntity";
+import { fireTrigger } from "../lib/automation";
 
 export const subscriptionRouter = Router();
 
@@ -139,6 +140,17 @@ subscriptionRouter.post(
       data: { status, entityId, activatedAt: status === "active" ? new Date() : sub.activatedAt },
       include: { entity: true },
     });
+
+    if (status !== sub.status && (status === "active" || status === "cancelled")) {
+      fireTrigger(status === "active" ? "crm.subscription_activated" : "crm.subscription_cancelled", {
+        entityId: null,
+        targetType: "subscription",
+        targetId: updated.id,
+        recipient: { email: updated.contactEmail, phone: updated.contactPhone },
+        variables: { nom: updated.hotelName, secteur: "" },
+      }).catch((e) => console.error(`[automation] crm.subscription_${status}:`, e));
+    }
+
     res.json({ ...shapeSub(updated), provisioned });
   })
 );

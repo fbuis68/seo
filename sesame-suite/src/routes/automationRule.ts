@@ -4,6 +4,8 @@ import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { resolveScope } from "../lib/scope";
 import { getTrigger } from "../lib/automation";
+import { sendMessage } from "../lib/messaging";
+import { Channel } from "../lib/messageTemplate";
 
 /**
  * CRUD des règles d'automatisation — mêmes endpoints partagés par le CRM
@@ -31,6 +33,8 @@ function shapeRule(r: {
   senderName: string | null;
   audienceFilter: unknown;
   lastRunAt: Date | null;
+  lastError: string | null;
+  lastErrorAt: Date | null;
   updatedAt: Date;
 }) {
   return {
@@ -52,6 +56,8 @@ function shapeRule(r: {
     senderName: r.senderName || "",
     audienceFilter: r.audienceFilter || null,
     lastRunAt: r.lastRunAt,
+    lastError: r.lastError,
+    lastErrorAt: r.lastErrorAt,
     updatedAt: r.updatedAt,
   };
 }
@@ -185,6 +191,36 @@ automationRuleRouter.post(
       },
     });
     res.json(shapeRule(row));
+  })
+);
+
+/**
+ * Envoi de test synchrone — contrairement à fireTrigger() (fire-and-forget,
+ * pensé pour ne jamais bloquer/faire échouer la requête métier appelante),
+ * ce endpoint attend l'envoi et propage l'erreur réelle telle quelle (via
+ * sendMessage(), qui lève déjà une HttpError explicite) : c'est le moyen le
+ * plus rapide de diagnostiquer une règle "qui ne fonctionne pas" sans
+ * attendre un vrai événement (nouveau prospect, réservation…).
+ */
+automationRuleRouter.post(
+  "/automationRule/test",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const id = (req.body.id as string) || "";
+    const rule = await prisma.automationRule.findFirst({ where: { id, entityId } });
+    if (!rule) throw new HttpError(404, "Règle introuvable");
+    const to = ((req.body.to as string) || (rule.recipientMode === "custom" ? rule.recipientOverride : "") || "").trim();
+    if (!to) throw new HttpError(400, "Indiquez un destinataire de test");
+    const sent = await sendMessage({
+      entityId,
+      channel: rule.channel as Channel,
+      templateKey: rule.templateKey,
+      to,
+      variables: { nom: "Test", prenom: "Test", secteur: "Test", code: "TEST-0001", ville: "Test" },
+      fromNameOverride: rule.senderName || undefined,
+    });
+    res.json({ ok: true, ...sent });
   })
 );
 
