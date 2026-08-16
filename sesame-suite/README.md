@@ -39,14 +39,27 @@ couche de données rebranchée sur l'API) :
 - `public/admin.html`, servi sur `/admin`, avec authentification réelle
   (email + mot de passe, JWT, `POST /wa/login/login`, middleware
   `requireAdmin` sur tous les endpoints d'écriture).
-- Panneaux rebranchés : Accueil (KPI), Logo & Couleurs, Typographie & Textes,
-  Hôtel & Catégorie, Barèmes taxe (+ export/purge des déclarations), Gains
-  (paliers de fidélité), Paramètres éco, Base clients (CRM agrégé
+- Panneaux rebranchés : Accueil (KPI), **Arrivées du jour** (voir
+  ci-dessous), Logo & Couleurs, Typographie & Textes, Hôtel & Catégorie,
+  Barèmes taxe (+ export/purge des déclarations), Gains (paliers de
+  fidélité), Paramètres éco, Base clients (CRM agrégé
   réservations/fidélité/préférences), Actions marketing (campagnes
   journalisées, sans envoi réel — comme le prototype), Catalogue produits
   (CRUD), Commandes (statuts), Livret digital (CRUD des rubriques), Planning
   ménage (tâches + agents + affectation chambres), Plan de l'hôtel et
   Gestion des chambres (CRUD, canvas de plan).
+- **Arrivées du jour** (`data-pan="reservations"`) : liste les réservations
+  dont l'arrivée est prévue aujourd'hui (`Booking.startDate`), avec pour
+  chacune les options retenues par le client au check-in éco — ménage
+  (`ClientPrefs.menageFreq`, lié par email), boutique/room service
+  (`Order[]` liés par `bookingCode`, nombre + montant total), taxe de
+  séjour (`TaxeSejourRecord` lié par `bookingCode`, montant net calculé) —
+  en un coup d'œil plutôt qu'en ouvrant chaque réservation une par une.
+  Statut check-in (fait / pas encore arrivé) visible directement.
+- **Interface responsive** : comme le CRM, la barre latérale devient un
+  tiroir accessible par un bouton ☰ sous 900px de large (fermé
+  automatiquement à la navigation), les grilles de cartes passent à 2 puis
+  1 colonne selon la largeur d'écran.
 - Compte admin de démonstration : voir « Comptes de démonstration » ci-dessous.
 
 **Multi-tenant réel — comptes Sesame vs comptes hôtel** : deux rôles

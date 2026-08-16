@@ -21,6 +21,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    panel: "reservations",
+    date: "2026-08-16",
+    title: "Nouveau : arrivées du jour",
+    body: "Nouvelle rubrique listant les réservations qui arrivent aujourd'hui, avec les options retenues par chaque client au check-in éco (ménage, boutique/room service, taxe de séjour).",
+  },
+  {
+    panel: "dash",
+    date: "2026-08-16",
+    title: "Back-office responsive",
+    body: "Le back-office s'adapte maintenant aux écrans étroits (mobile/tablette) : menu latéral en tiroir accessible depuis l'icône ☰.",
+  },
+  {
     panel: "automation",
     date: "2026-08-16",
     title: "Réglage temporel harmonisé",

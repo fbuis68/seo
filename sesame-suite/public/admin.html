@@ -26,6 +26,8 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;font-size:14px;color:var(
 .sh{display:grid;grid-template-columns:220px 1fr;grid-template-rows:52px 1fr;height:100vh;overflow:hidden}
 /* TOPBAR */
 .tb{grid-column:1/-1;background:var(--sb);display:flex;align-items:center;padding:0 18px;gap:12px;z-index:30;flex-shrink:0}
+.menu-toggle{display:none;background:none;border:none;font-size:19px;cursor:pointer;color:rgba(255,255,255,.7);padding:2px 4px;line-height:1}
+.sidebar-overlay{display:none}
 .tbmk{width:26px;height:26px;background:#8B1A2E;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;font-family:'DM Serif Display',serif;flex-shrink:0}
 .tbtl{font-family:'DM Serif Display',serif;font-size:16px;color:#fff;font-weight:400}
 .tbsp{flex:1}
@@ -213,6 +215,31 @@ input[type=checkbox]{accent-color:var(--am);width:15px;height:15px;cursor:pointe
 /* Table inside planning */
 table.pgrid{border-collapse:collapse;min-width:100%}
 table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(--bdr)}
+/* Réservations */
+.resa-card{border:1px solid var(--bdr);border-left:4px solid var(--a);border-radius:var(--r);background:var(--card);padding:14px 16px;margin-bottom:10px}
+.resa-opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--bdr)}
+.resa-opt{font-size:12px}
+.resa-opt .ro-lbl{color:var(--mu);display:flex;align-items:center;gap:5px;margin-bottom:2px}
+.resa-opt .ro-val{font-weight:600}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 900px){
+  .menu-toggle{display:inline-flex;align-items:center}
+  .sh{grid-template-columns:1fr}
+  .sb{position:fixed;top:52px;left:0;bottom:0;width:220px;z-index:120;transform:translateX(-100%);transition:transform .2s ease;box-shadow:2px 0 16px rgba(0,0,0,.3)}
+  .sb.open{transform:translateX(0)}
+  .sidebar-overlay{display:block;position:fixed;top:52px;left:0;right:0;bottom:0;background:rgba(0,0,0,.35);z-index:110;opacity:0;pointer-events:none;transition:opacity .2s ease}
+  .sidebar-overlay.show{opacity:1;pointer-events:auto}
+  .ct{padding:16px}
+  .g2,.g3,.g4,.gtiles{grid-template-columns:1fr 1fr}
+  .resa-opts{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width: 560px){
+  .ct{padding:12px}
+  .tbtl{font-size:14px}
+  .g2,.g3,.g4,.gtiles{grid-template-columns:1fr}
+  .resa-opts{grid-template-columns:1fr 1fr}
+}
 </style>
 </head>
 <body>
@@ -226,6 +253,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 
 <!-- TOPBAR -->
 <header class="tb">
+  <button class="menu-toggle" id="menu-toggle" onclick="toggleSidebar()" aria-label="Menu"><i class="ti ti-menu-2"></i></button>
   <div class="tbmk">S</div>
   <span class="tbtl">Sesame Éco</span>
   <span style="color:rgba(255,255,255,.2);margin:0 4px">·</span>
@@ -243,6 +271,8 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   <div class="ni sesame-only" data-pan="hotels" onclick="showPan('hotels')" style="display:none;background:rgba(46,204,113,.06);border-left:3px solid var(--a)"><i class="ti ti-building-skyscraper"></i>Hôtels <span class="nibadge">Multi</span></div>
   <div class="ni sesame-only" data-pan="groups" onclick="showPan('groups')" style="display:none"><i class="ti ti-hierarchy-3"></i>Groupes</div>
   <div class="ni sesame-only" data-pan="subscriptions" onclick="showPan('subscriptions')" style="display:none"><i class="ti ti-rocket"></i>Souscriptions</div>
+  <div class="ns">Réservations</div>
+  <div class="ni" data-pan="reservations" onclick="showPan('reservations')"><i class="ti ti-calendar-check"></i>Arrivées du jour</div>
   <div class="ns">Identité &amp; Charte</div>
   <div class="ni" data-pan="charte" onclick="showPan('charte')"><i class="ti ti-palette"></i>Logo &amp; Couleurs</div>
   <div class="ni" data-pan="typo" onclick="showPan('typo')"><i class="ti ti-typography"></i>Typographie &amp; Textes</div>
@@ -270,9 +300,24 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   <div class="ni" data-pan="preview" onclick="showPan('preview')"><i class="ti ti-device-mobile"></i>Aperçu client</div>
   <div id="version-badge" style="margin-top:20px;padding:12px 16px;font-size:10px;color:var(--mu);font-family:monospace">—</div>
 </aside>
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
 
 <!-- MAIN -->
 <main class="mn"><div class="ct">
+
+<!-- ════════════════ RÉSERVATIONS ════════════════ -->
+<div id="pan-reservations" class="pan">
+  <div class="ph">
+    <h2>Arrivées du jour</h2>
+    <p>Réservations dont l'arrivée est prévue aujourd'hui, avec les options retenues par le client au check-in éco (ménage, boutique, taxe de séjour…).</p>
+  </div>
+  <div class="ca">
+    <div class="ch"><i class="ti ti-calendar-check"></i>Arrivées — <span id="resa-count">0</span>
+      <button class="chact" onclick="loadReservations()"><i class="ti ti-refresh" style="font-size:12px"></i> Actualiser</button>
+    </div>
+    <div id="resa-list"></div>
+  </div>
+</div>
 
 <!-- ════════════════ DASHBOARD ════════════════ -->
 <div id="pan-dash" class="pan on">
@@ -2642,6 +2687,16 @@ function adminLogout(){
   location.reload();
 }
 
+// ── RESPONSIVE — tiroir latéral sur écran étroit ──
+function toggleSidebar(){
+  document.querySelector('.sb').classList.toggle('open');
+  document.getElementById('sidebar-overlay').classList.toggle('show');
+}
+function closeSidebar(){
+  document.querySelector('.sb').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('show');
+}
+
 // ── Config — chargée/écrite via l'API (remplace loadCfg()/saveCfg() localStorage) ──
 async function loadCfg(){
   var w = withEntityCode('/wa/entityModuleConfig/list');
@@ -2682,6 +2737,7 @@ function showPan(id){
   document.querySelectorAll('.ni').forEach(function(el){el.classList.remove('on')});
   target.classList.add('on');
   document.querySelectorAll('.ni[data-pan="'+id+'"]').forEach(function(el){el.classList.add('on')});
+  closeSidebar();
   // Panel-specific init
   if(id==='charte'){renderColorList();}
   if(id==='hotel'){try{renderModuleCards();renderAccessPoints();}catch(e){}}
@@ -2691,6 +2747,7 @@ function showPan(id){
   if(id==='rooms'){ renderRoomGrid(); fetchStaffList().then(renderRoomGrid); }
   if(id==='preview'){try{renderFullPreview();renderPrevSummary();}catch(e){}}
   if(id==='dash'){try{renderDash();}catch(e){}}
+  if(id==='reservations'){ loadReservations(); }
   if(id==='api'){ bsInit(); }
   if(id==='email'){ emlInit(); }
   if(id==='automation'){ autoInit(); }
@@ -8537,6 +8594,100 @@ async function loadVersionBadge(){
 }
 document.addEventListener('DOMContentLoaded', loadVersionBadge);
 
+// ═══════════════════════════════════════════════ RÉSERVATIONS — ARRIVÉES DU JOUR
+// Réunit, pour chaque arrivée du jour, les options retenues par le client
+// pendant le check-in éco : ménage (ClientPrefs, lié par email — pas de
+// bookingId), boutique/room service (Order[], lié par bookingCode), taxe de
+// séjour (TaxeSejourRecord[], lié par bookingCode), vérification d'identité
+// (KycRecord, inclus dans booking.kycRecords si présent côté API). Ces
+// endpoints n'ont pas de filtre par date/entité combiné : on récupère tout
+// pour l'établissement et on filtre côté client (volume journalier faible).
+var RESA_CACHE = [];
+
+async function loadReservations(){
+  var listEl = document.getElementById('resa-list');
+  if(!listEl) return;
+  listEl.innerHTML = '<div class="alt alt-b"><i class="ti ti-loader"></i><span>Chargement…</span></div>';
+  try{
+    var results = await Promise.all([
+      adminFetch('/wa/booking/list'),
+      adminFetch('/wa/roomservice/list'),
+      adminFetch('/wa/taxeSejourRecord/list'),
+    ]);
+    var bookings = results[0].ok ? await results[0].json() : [];
+    var orders = results[1].ok ? await results[1].json() : [];
+    var taxeRecords = results[2].ok ? await results[2].json() : [];
+
+    var todayStr = new Date().toISOString().slice(0,10);
+    var todays = bookings.filter(function(b){
+      return (b.startDate||'').slice(0,10) === todayStr && b.status !== 'cancelled';
+    });
+
+    var emails = Array.from(new Set(todays.map(function(b){ return (b.personEmail||'').trim().toLowerCase(); }).filter(Boolean)));
+    var prefsByEmail = {};
+    await Promise.all(emails.map(async function(email){
+      try{
+        var r = await adminFetch('/wa/clientPrefs/list?email='+encodeURIComponent(email));
+        prefsByEmail[email] = r.ok ? await r.json() : null;
+      }catch(e){ prefsByEmail[email] = null; }
+    }));
+
+    RESA_CACHE = todays.map(function(b){
+      return {
+        booking: b,
+        orders: orders.filter(function(o){ return o.bookingCode === b.code; }),
+        taxe: taxeRecords.find(function(t){ return t.bookingCode === b.code; }) || null,
+        prefs: prefsByEmail[(b.personEmail||'').trim().toLowerCase()] || null,
+      };
+    }).sort(function(a,b){ return (a.booking.selectedRoomCode||a.booking.facilityCode||'').localeCompare(b.booking.selectedRoomCode||b.booking.facilityCode||''); });
+
+    renderReservations();
+  }catch(e){
+    listEl.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Erreur de chargement des arrivées.</span></div>';
+  }
+}
+
+function renderReservations(){
+  var listEl = document.getElementById('resa-list');
+  var countEl = document.getElementById('resa-count');
+  if(!listEl) return;
+  if(countEl) countEl.textContent = RESA_CACHE.length;
+
+  if(!RESA_CACHE.length){
+    listEl.innerHTML = '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Aucune arrivée prévue aujourd\'hui.</span></div>';
+    return;
+  }
+
+  var sym = getCurrSym();
+  listEl.innerHTML = RESA_CACHE.map(function(r){
+    var b = r.booking;
+    var room = b.selectedRoomCode || b.facilityCode || '—';
+    var checkinBadge = b.checkinDone
+      ? '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:rgba(26,107,71,.1);color:#1A6B47"><i class="ti ti-check" style="font-size:11px"></i> Check-in fait</span>'
+      : '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:var(--gol);color:var(--go)"><i class="ti ti-clock" style="font-size:11px"></i> Pas encore arrivé</span>';
+
+    var menageVal = (r.prefs && r.prefs.menageFreq!=null) ? 'Tous les '+r.prefs.menageFreq+' jour(s)' : 'Non renseigné';
+    var ordersTotal = r.orders.reduce(function(s,o){ return s+(o.total||0); }, 0);
+    var boutiqueVal = r.orders.length ? r.orders.length+' commande(s) — '+ordersTotal.toFixed(2)+' '+sym : 'Aucune';
+    var taxeVal = r.taxe ? r.taxe.montantNet.toFixed(2)+' '+(r.taxe.devise||'EUR')+' ('+r.taxe.occupantsTotal+' pers.)' : 'Non calculée';
+
+    return '<div class="resa-card">'
+      + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">'
+      + '<div>'
+      + '<div style="font-size:15px;font-weight:700">'+esc(b.personFirstname)+' '+esc(b.personLastname)+' <span style="font-weight:400;color:var(--mu);font-size:12px">— Chambre '+esc(room)+'</span></div>'
+      + '<div style="font-size:12px;color:var(--mu);margin-top:2px"><i class="ti ti-ticket" style="font-size:11px"></i> '+esc(b.code)+' &nbsp;·&nbsp; <i class="ti ti-mail" style="font-size:11px"></i> '+esc(b.personEmail)+(b.personPhone?' &nbsp;·&nbsp; <i class="ti ti-phone" style="font-size:11px"></i> '+esc(b.personPhone):'')+'</div>'
+      + '</div>'
+      + checkinBadge
+      + '</div>'
+      + '<div class="resa-opts">'
+      + '<div class="resa-opt"><div class="ro-lbl"><i class="ti ti-spray"></i> Ménage</div><div class="ro-val">'+esc(menageVal)+'</div></div>'
+      + '<div class="resa-opt"><div class="ro-lbl"><i class="ti ti-shopping-bag"></i> Boutique / Room service</div><div class="ro-val">'+esc(boutiqueVal)+'</div></div>'
+      + '<div class="resa-opt"><div class="ro-lbl"><i class="ti ti-receipt"></i> Taxe de séjour</div><div class="ro-val">'+esc(taxeVal)+'</div></div>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
 // ═══════════════════════════════════════════════ AIDE, NOUVEAUTÉS & VERROUILLAGE DE MODULES
 // Trois briques indépendantes appliquées à la nav (chaque item = un data-pan) :
 // - bouton "?" (HELP_TEXT) : bénéfice en 1-2 phrases, sur chaque item.
@@ -8563,6 +8714,7 @@ var HELP_TEXT = {
   hotels: "Gérez tous les établissements Sesame depuis un seul endroit : création, configuration et supervision multi-hôtels.",
   groups: "Regroupez plusieurs établissements d'une même enseigne pour mutualiser la fidélité et les politiques communes.",
   subscriptions: "Suivez les demandes d'inscription, activez les essais et gérez les modules souscrits par chaque client.",
+  reservations: "Préparez la journée en un coup d'œil : qui arrive aujourd'hui et quelles options il a retenues au check-in (ménage, boutique, taxe de séjour), sans consulter chaque réservation une par une.",
   charte: "Personnalisez les couleurs et le logo pour que l'espace client reflète l'identité visuelle de votre établissement.",
   typo: "Adaptez les textes affichés aux clients sans toucher au code.",
   hotel: "Configurez les informations générales de l'hôtel et activez ou non chaque étape du parcours check-in.",
