@@ -21,6 +21,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    panel: "dash",
+    date: "2026-08-16",
+    title: "Nouveau : indicateurs réels par période",
+    body: "L'accueil affiche maintenant des indicateurs calculés sur vos vraies données (séjours, chiffre d'affaires, taxe collectée, ménages évités, eau économisée, CO₂ évité, temps homme check-in gagné) sur une période au choix, avec comparaison automatique à la période précédente.",
+  },
+  {
     panel: "reservations",
     date: "2026-08-16",
     title: "Nouveau : arrivées du jour",

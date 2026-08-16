@@ -60,6 +60,32 @@ couche de données rebranchée sur l'API) :
   tiroir accessible par un bouton ☰ sous 900px de large (fermé
   automatiquement à la navigation), les grilles de cartes passent à 2 puis
   1 colonne selon la largeur d'écran.
+- **Indicateurs réels par période, sur l'Accueil** (section "Indicateurs
+  réels", au-dessus des cartes d'estimation existantes) : séjours, chiffre
+  d'affaires généré, taxe de séjour collectée, ménages évités, eau
+  économisée, CO₂ évité, temps homme check-in gagné — calculés à partir des
+  vraies données historiques (`Booking`, `Order`, `TaxeSejourRecord`,
+  `HousekeepingTask`), pas d'une simulation.
+  - Période au choix : 7 jours, ce mois-ci, mois dernier, cette année, ou
+    plage personnalisée — avec comparaison automatique à la période
+    précédente de même durée (delta en %).
+  - **Ménages évités / eau / CO₂** : calculés uniquement sur les séjours
+    ayant réellement utilisé le check-in éco (tâches `HousekeepingTask`
+    `ecoAuto=true` réellement planifiées — écart entre nuits du séjour et
+    ménages effectivement programmés), pas une estimation par séjour type.
+  - **Chiffre d'affaires généré** : somme des commandes room service/boutique
+    (`Order.total`) sur la période — le seul revenu réel présent dans le
+    schéma (pas de tarif de chambre facturé enregistré par réservation),
+    précisé dans l'interface pour ne pas laisser croire à un CA hôtelier
+    complet.
+  - **Temps homme check-in gagné** : nombre réel de check-in effectués ×
+    minutes économisées par étape (`CFG.checkinModules[k].staffMinutesSaved`,
+    réglable dans "Hôtel & Catégorie" — jusqu'ici configuré mais jamais
+    utilisé nulle part).
+  - Les cartes "KPI hôtelier"/"KPI client" existantes (estimation à partir
+    d'un séjour type × un nombre de séjours/an saisi à la main) restent en
+    dessous, désormais explicitement libellées "(estimation)" pour ne pas
+    les confondre avec les indicateurs réels.
 - Compte admin de démonstration : voir « Comptes de démonstration » ci-dessous.
 
 **Multi-tenant réel — comptes Sesame vs comptes hôtel** : deux rôles

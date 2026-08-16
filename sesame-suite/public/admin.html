@@ -215,6 +215,17 @@ input[type=checkbox]{accent-color:var(--am);width:15px;height:15px;cursor:pointe
 /* Table inside planning */
 table.pgrid{border-collapse:collapse;min-width:100%}
 table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(--bdr)}
+/* KPI réels (Accueil) */
+.kpi-real-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.kreal-tile{background:var(--bg);border:1px solid var(--bdr);border-radius:var(--rs);padding:14px}
+.kreal-tile .kt-ico{font-size:16px;color:var(--a);margin-bottom:6px}
+.kreal-tile .kt-val{font-family:'DM Serif Display',serif;font-size:22px;margin-bottom:2px}
+.kreal-tile .kt-lbl{font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.kreal-tile .kt-delta{font-size:11px;font-weight:600;margin-top:6px;display:flex;align-items:center;gap:3px}
+.kreal-tile .kt-delta.up{color:#1A6B47}
+.kreal-tile .kt-delta.down{color:var(--re)}
+.kreal-tile .kt-delta.flat{color:var(--mu)}
+.kreal-tile .kt-caption{font-size:10px;color:var(--hi);margin-top:6px;line-height:1.3}
 /* Réservations */
 .resa-card{border:1px solid var(--bdr);border-left:4px solid var(--a);border-radius:var(--r);background:var(--card);padding:14px 16px;margin-bottom:10px}
 .resa-opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--bdr)}
@@ -330,9 +341,35 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     <div class="stat"><div class="sv" style="color:var(--am)" id="db-rooms">—</div><div class="sl">Chambres configurées</div></div>
   </div>
 
+  <!-- ══════════ KPI RÉELS — période sélectionnable ══════════ -->
+  <div class="ca" style="margin-bottom:20px">
+    <div class="ch"><i class="ti ti-chart-bar"></i>Indicateurs réels
+      <button class="chact" onclick="loadRealKpis(true)"><i class="ti ti-refresh" style="font-size:12px"></i> Actualiser</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+      <div style="display:flex;gap:3px;background:var(--bdr);border-radius:var(--rs);padding:3px">
+        <div class="ptab on" data-preset="7d" onclick="setKpiPreset('7d')">7 jours</div>
+        <div class="ptab" data-preset="month" onclick="setKpiPreset('month')">Ce mois-ci</div>
+        <div class="ptab" data-preset="lastmonth" onclick="setKpiPreset('lastmonth')">Mois dernier</div>
+        <div class="ptab" data-preset="year" onclick="setKpiPreset('year')">Cette année</div>
+        <div class="ptab" data-preset="custom" onclick="setKpiPreset('custom')">Personnalisé</div>
+      </div>
+      <div id="kpi-custom-range" style="display:none;gap:8px;align-items:center">
+        <input type="date" id="kpi-from" onchange="onKpiCustomChange()" style="font-size:12px;padding:5px 8px">
+        <span style="color:var(--mu);font-size:12px">→</span>
+        <input type="date" id="kpi-to" onchange="onKpiCustomChange()" style="font-size:12px;padding:5px 8px">
+      </div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);margin-left:auto;cursor:pointer;white-space:nowrap">
+        <input type="checkbox" id="kpi-compare" checked onchange="renderRealKpis()"> Comparer à la période précédente
+      </label>
+    </div>
+    <div id="kpi-period-label" style="font-size:12px;color:var(--mu);margin-bottom:12px"></div>
+    <div id="kpi-real-grid" class="kpi-real-grid"><div class="alt alt-b"><i class="ti ti-loader"></i><span>Chargement…</span></div></div>
+  </div>
+
   <!-- ══════════ KPI HÔTELIER ══════════ -->
   <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;display:flex;align-items:center;gap:6px">
-    <i class="ti ti-building-store"></i>KPI hôtelier — gains opérationnels
+    <i class="ti ti-building-store"></i>KPI hôtelier — gains opérationnels (estimation)
   </div>
   <div id="kpi-hero-hotelier" style="margin-bottom:20px">
     <div style="background:linear-gradient(135deg,#0A1628,#1A3A60);border-radius:var(--r);padding:24px;color:#fff;margin-bottom:14px;position:relative;overflow:hidden">
@@ -4069,6 +4106,7 @@ function renderDash(){
   }
   // KPI dashboard
   renderKpiDash();
+  loadRealKpis();
 }
 
 // ── KPI helpers ──
@@ -8593,6 +8631,206 @@ async function loadVersionBadge(){
   }catch(e){ el.textContent=''; }
 }
 document.addEventListener('DOMContentLoaded', loadVersionBadge);
+
+// ═══════════════════════════════════════════════ KPI RÉELS (Accueil) — période sélectionnable
+// Contrairement aux cartes "KPI hôtelier"/"KPI client" plus haut (estimation
+// à partir d'un séjour simulé × un nombre de séjours/an saisi à la main —
+// voir renderKpiPreview()), cette section calcule des chiffres réels à
+// partir des données historiques datées :
+// - Séjours / CA / Taxe : Booking, Order, TaxeSejourRecord (dates réelles).
+// - Ménage/eau/CO2 : HousekeepingTask (ecoAuto=true, type="menage") — un
+//   ménage réellement planifié = 1 tâche ; l'écart entre le nombre de nuits
+//   et le nombre de tâches planifiées pour un séjour est un ménage
+//   réellement évité (le calcul est fait par l'app check-in au moment du
+//   choix du client, pas simulé ici). Uniquement compté pour les séjours
+//   ayant au moins une tâche éco enregistrée (séjours n'ayant jamais utilisé
+//   le check-in éco exclus du calcul, pas comptés comme "tout évité").
+// - Temps homme check-in gagné : nombre réel de check-in effectués (bookings
+//   checkinDone=true) × minutes/étape configurées dans "Hôtel & Catégorie"
+//   (CFG.checkinModules[k].staffMinutesSaved, room/taxe/kyc — jusqu'ici
+//   configurées mais jamais utilisées par aucun panneau).
+// Aucun nouvel endpoint : réutilise booking/list, roomservice/list,
+// taxeSejourRecord/list, housekeepingTask/list (même convention que la
+// rubrique "Arrivées du jour" — filtrage par date côté client).
+var KPI_RAW = null; // {bookings, orders, taxe, tasks}
+var KPI_STATE = { preset: '7d', from: null, to: null };
+
+function kpiIso(d){ return d.toISOString().slice(0,10); }
+function kpiAddDays(d,n){ var r=new Date(d); r.setDate(r.getDate()+n); return r; }
+function kpiStartOfMonth(d){ return new Date(d.getFullYear(), d.getMonth(), 1); }
+function kpiEndOfMonth(d){ return new Date(d.getFullYear(), d.getMonth()+1, 0); }
+
+function kpiComputeRange(preset){
+  var now = new Date();
+  if(preset==='7d') return { from: kpiIso(kpiAddDays(now,-6)), to: kpiIso(now) };
+  if(preset==='month') return { from: kpiIso(kpiStartOfMonth(now)), to: kpiIso(now) };
+  if(preset==='lastmonth'){
+    var lm = new Date(now.getFullYear(), now.getMonth()-1, 1);
+    return { from: kpiIso(kpiStartOfMonth(lm)), to: kpiIso(kpiEndOfMonth(lm)) };
+  }
+  if(preset==='year') return { from: kpiIso(new Date(now.getFullYear(),0,1)), to: kpiIso(now) };
+  return { from: KPI_STATE.from, to: KPI_STATE.to };
+}
+
+function kpiPreviousPeriod(from, to){
+  var f = new Date(from+'T00:00:00'), t = new Date(to+'T00:00:00');
+  var lengthMs = t.getTime() - f.getTime();
+  var prevTo = kpiAddDays(f, -1);
+  var prevFrom = new Date(prevTo.getTime() - lengthMs);
+  return { from: kpiIso(prevFrom), to: kpiIso(prevTo) };
+}
+
+function setKpiPreset(preset){
+  KPI_STATE.preset = preset;
+  document.querySelectorAll('#pan-dash .ptab').forEach(function(el){ el.classList.toggle('on', el.getAttribute('data-preset')===preset); });
+  var customEl = document.getElementById('kpi-custom-range');
+  if(customEl) customEl.style.display = (preset==='custom') ? 'flex' : 'none';
+  if(preset==='custom'){
+    var r = kpiComputeRange(KPI_STATE.preset==='custom' && KPI_STATE.from ? 'custom' : '7d');
+    if(!KPI_STATE.from){ KPI_STATE.from = r.from; KPI_STATE.to = r.to; }
+    document.getElementById('kpi-from').value = KPI_STATE.from;
+    document.getElementById('kpi-to').value = KPI_STATE.to;
+  }
+  renderRealKpis();
+}
+
+function onKpiCustomChange(){
+  KPI_STATE.from = document.getElementById('kpi-from').value || KPI_STATE.from;
+  KPI_STATE.to = document.getElementById('kpi-to').value || KPI_STATE.to;
+  renderRealKpis();
+}
+
+async function loadRealKpis(force){
+  if(KPI_RAW && !force) { renderRealKpis(); return; }
+  var grid = document.getElementById('kpi-real-grid');
+  if(grid) grid.innerHTML = '<div class="alt alt-b"><i class="ti ti-loader"></i><span>Chargement…</span></div>';
+  try{
+    var results = await Promise.all([
+      adminFetch('/wa/booking/list'),
+      adminFetch('/wa/roomservice/list'),
+      adminFetch('/wa/taxeSejourRecord/list'),
+      adminFetch('/wa/housekeepingTask/list'),
+    ]);
+    KPI_RAW = {
+      bookings: results[0].ok ? await results[0].json() : [],
+      orders: results[1].ok ? await results[1].json() : [],
+      taxe: results[2].ok ? await results[2].json() : [],
+      tasks: results[3].ok ? await results[3].json() : [],
+    };
+    renderRealKpis();
+  }catch(e){
+    if(grid) grid.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Erreur de chargement des indicateurs.</span></div>';
+  }
+}
+
+function kpiComputeForRange(from, to){
+  var raw = KPI_RAW || { bookings:[], orders:[], taxe:[], tasks:[] };
+  var bookings = raw.bookings.filter(function(b){
+    var d = (b.startDate||'').slice(0,10);
+    return d>=from && d<=to && b.status!=='cancelled';
+  });
+  var orders = raw.orders.filter(function(o){
+    var d = (o.createdAt||'').slice(0,10);
+    return d>=from && d<=to && o.status!=='cancelled';
+  });
+  var taxeRecs = raw.taxe.filter(function(t){
+    var d = (t.checkinDate||t.createdAt||'').slice(0,10);
+    return d>=from && d<=to;
+  });
+
+  var revenue = orders.reduce(function(s,o){ return s+(o.total||0); }, 0);
+  var taxeCollected = taxeRecs.reduce(function(s,t){ return s+(t.montantNet||0); }, 0);
+
+  var skippedCleanings = 0, trackedStays = 0;
+  bookings.forEach(function(b){
+    var start = new Date(b.startDate), end = new Date(b.endDate);
+    var nights = Math.round((end-start)/86400000);
+    if(nights<=0) return;
+    var tasks = raw.tasks.filter(function(t){ return t.bookingCode===b.code && t.ecoAuto && t.type==='menage'; });
+    if(!tasks.length) return; // séjour n'ayant pas utilisé le check-in éco — exclu, pas compté comme "tout évité"
+    trackedStays++;
+    skippedCleanings += Math.max(0, nights - tasks.length);
+  });
+  var eauEconomisee = skippedCleanings * (CFG.eauMenage!=null?CFG.eauMenage:15);
+  var co2Evite = eauEconomisee * (CFG.co2Factor!=null?CFG.co2Factor:0.0003);
+
+  var checkinsDone = bookings.filter(function(b){ return b.checkinDone; }).length;
+  var minutesPerCheckin = ['room','taxe','kyc'].reduce(function(s,k){
+    var m = CFG.checkinModules && CFG.checkinModules[k];
+    if(!m || m.active===false) return s;
+    var mins = (m.staffMinutesSaved!=null) ? m.staffMinutesSaved : (STAFF_TIME_DEFAULTS[k]||0);
+    return s + mins;
+  }, 0);
+  var minutesGagnees = checkinsDone * minutesPerCheckin;
+
+  return {
+    stays: bookings.length,
+    revenue: revenue,
+    taxeCollected: taxeCollected,
+    skippedCleanings: skippedCleanings,
+    trackedStays: trackedStays,
+    eauEconomisee: eauEconomisee,
+    co2Evite: co2Evite,
+    checkinsDone: checkinsDone,
+    heuresGagnees: minutesGagnees/60,
+  };
+}
+
+function kpiDeltaHtml(curr, prev){
+  if(prev==null) return '';
+  if(!prev){
+    return curr>0 ? '<div class="kt-delta up"><i class="ti ti-arrow-up-right"></i> nouveau</div>' : '';
+  }
+  var pct = ((curr-prev)/prev)*100;
+  var cls = Math.abs(pct)<1 ? 'flat' : (pct>=0?'up':'down');
+  var ico = cls==='flat' ? 'ti-minus' : (cls==='up'?'ti-arrow-up-right':'ti-arrow-down-right');
+  return '<div class="kt-delta '+cls+'"><i class="ti '+ico+'"></i> '+(pct>=0?'+':'')+pct.toFixed(0)+'% vs période précédente</div>';
+}
+
+function renderRealKpis(){
+  var grid = document.getElementById('kpi-real-grid');
+  var labelEl = document.getElementById('kpi-period-label');
+  if(!grid || !KPI_RAW) return;
+
+  var range = kpiComputeRange(KPI_STATE.preset);
+  if(!range.from || !range.to){ grid.innerHTML = '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Choisissez une période.</span></div>'; return; }
+  KPI_STATE.from = range.from; KPI_STATE.to = range.to;
+
+  var compare = document.getElementById('kpi-compare') ? document.getElementById('kpi-compare').checked : true;
+  var curr = kpiComputeForRange(range.from, range.to);
+  var prev = null;
+  if(compare){
+    var prevRange = kpiPreviousPeriod(range.from, range.to);
+    prev = kpiComputeForRange(prevRange.from, prevRange.to);
+  }
+
+  if(labelEl){
+    var fmt = function(d){ return new Date(d+'T00:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'}); };
+    labelEl.textContent = 'Du '+fmt(range.from)+' au '+fmt(range.to)
+      + (compare ? ' — comparé au '+fmt(kpiPreviousPeriod(range.from,range.to).from)+' – '+fmt(kpiPreviousPeriod(range.from,range.to).to) : '');
+  }
+
+  var sym = getCurrSym();
+  var tiles = [
+    { ico:'ti-calendar-check', lbl:'Séjours', val:curr.stays, prevVal: prev?prev.stays:null, fmt:function(v){return v;} },
+    { ico:'ti-cash', lbl:'Chiffre d\'affaires généré', val:curr.revenue, prevVal: prev?prev.revenue:null, fmt:function(v){return v.toFixed(2)+' '+sym;}, caption:'Room service &amp; boutique — hors hébergement (non suivi dans l\'app)' },
+    { ico:'ti-receipt', lbl:'Taxe de séjour collectée', val:curr.taxeCollected, prevVal: prev?prev.taxeCollected:null, fmt:function(v){return v.toFixed(2)+' '+sym;} },
+    { ico:'ti-spray', lbl:'Ménages évités', val:curr.skippedCleanings, prevVal: prev?prev.skippedCleanings:null, fmt:function(v){return v;}, caption: curr.trackedStays ? (curr.trackedStays+' séjour(s) via check-in éco') : 'Aucun séjour avec check-in éco sur la période' },
+    { ico:'ti-droplet', lbl:'Eau économisée', val:curr.eauEconomisee, prevVal: prev?prev.eauEconomisee:null, fmt:function(v){return Math.round(v)+' L';} },
+    { ico:'ti-leaf', lbl:'CO₂ évité', val:curr.co2Evite, prevVal: prev?prev.co2Evite:null, fmt:function(v){return v.toFixed(2)+' kg';} },
+    { ico:'ti-clock', lbl:'Temps homme check-in gagné', val:curr.heuresGagnees, prevVal: prev?prev.heuresGagnees:null, fmt:function(v){return v.toFixed(1)+' h';}, caption:curr.checkinsDone+' check-in(s) effectué(s)' },
+  ];
+
+  grid.innerHTML = tiles.map(function(t){
+    return '<div class="kreal-tile">'
+      + '<div class="kt-ico"><i class="ti '+t.ico+'"></i></div>'
+      + '<div class="kt-lbl">'+t.lbl+'</div>'
+      + '<div class="kt-val">'+t.fmt(t.val)+'</div>'
+      + (compare ? kpiDeltaHtml(t.val, t.prevVal) : '')
+      + (t.caption ? '<div class="kt-caption">'+t.caption+'</div>' : '')
+      + '</div>';
+  }).join('');
+}
 
 // ═══════════════════════════════════════════════ RÉSERVATIONS — ARRIVÉES DU JOUR
 // Réunit, pour chaque arrivée du jour, les options retenues par le client
