@@ -41,6 +41,17 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;font-size:14px;color:var(
 .ni.on{color:#fff;border-left-color:var(--am);background:rgba(255,255,255,.07)}
 .ni i{font-size:15px;flex-shrink:0;pointer-events:none}
 .nibadge{margin-left:auto;font-size:10px;background:var(--am);color:#fff;padding:1px 6px;border-radius:10px;pointer-events:none}
+.ni-new{pointer-events:auto!important;cursor:pointer}
+.ni-help{margin-left:auto;flex-shrink:0;width:15px;height:15px;border-radius:50%;background:rgba(255,255,255,.1);color:rgba(255,255,255,.5);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;font-style:normal}
+.ni-help:hover{background:rgba(255,255,255,.22);color:#fff}
+.ni .nibadge+.ni-help{margin-left:6px}
+.ni-lock{margin-left:6px;flex-shrink:0;font-size:12px;color:rgba(255,255,255,.35)}
+.ni.locked{opacity:.5}
+.ni.locked:hover{opacity:.75}
+.info-popover{position:fixed;z-index:500;width:260px;background:var(--card);border:1px solid var(--bdr);border-radius:var(--rs);box-shadow:0 12px 32px rgba(0,0,0,.25);padding:12px 14px;font-size:12px;line-height:1.45;color:var(--tx)}
+.info-popover .ip-title{font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.info-popover.ip-new .ip-title{color:var(--a)}
+.info-popover .ip-body{color:var(--mu)}
 /* MAIN */
 .mn{overflow-y:auto;background:var(--bg)}
 .ct{padding:24px 28px;max-width:1080px}
@@ -248,7 +259,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   <div class="ni" data-pan="orders" onclick="showPan('orders')"><i class="ti ti-clipboard-list"></i>Commandes <span class="nibadge" id="ordersBadge" style="display:none">0</span></div>
   <div class="ni" data-pan="livret" onclick="showPan('livret')"><i class="ti ti-book"></i>Livret digital</div>
   <div class="ns">Planning</div>
-  <div class="ni" data-pan="planning" onclick="showPan('planning')"><i class="ti ti-calendar-event"></i>Planning <span class="nibadge">New</span></div>
+  <div class="ni" data-pan="planning" onclick="showPan('planning')"><i class="ti ti-calendar-event"></i>Planning</div>
   <div class="ns">Plan &amp; Chambres</div>
   <div class="ni" data-pan="plan" onclick="showPan('plan')"><i class="ti ti-map"></i>Plan de l'hôtel</div>
   <div class="ni" data-pan="rooms" onclick="showPan('rooms')"><i class="ti ti-door"></i>Gestion des chambres</div>
@@ -2414,6 +2425,7 @@ Accès au salon Premium</textarea>
 </div></main>
 </div><!-- /sh -->
 <div id="notif"></div>
+<div id="module-lock-modal"></div>
 
 <script>
 // ═══════════════════════════════════════════════ CONFIG ENGINE
@@ -7307,16 +7319,20 @@ function subOpenDetail(id){
   h += '<div class="fi"><label class="lb">PMS</label><input type="text" value="'+esc(s.pmsLabel||'—')+'" readonly></div>';
   h += '</div>';
 
-  h += '<div class="ch" style="margin-bottom:8px"><i class="ti ti-tags"></i>Tarification</div>';
-  h += '<table class="tbl" style="margin-bottom:14px"><tr><th>Élément</th><th>Prix</th></tr>';
-  h += '<tr><td>Abonnement de base</td><td>'+s.pricing.basePrice+' €/mois</td></tr>';
-  s.modules.forEach(function(mk){
-    var m = SUB_MODULES.find(x=>x.k===mk);
-    if(!m || m.required) return;
-    h += '<tr><td>'+esc(m.label)+'</td><td>'+(s.pricing.modulePrices[mk]||0)+' €/mois</td></tr>';
-  });
-  h += '<tr style="font-weight:700"><td>Total</td><td>'+s.pricing.monthlyTotal+' €/mois</td></tr>';
-  h += '</table>';
+  h += '<div class="ch" style="margin-bottom:8px"><i class="ti ti-tags"></i>Modules souscrits</div>';
+  h += '<div id="sub-modules-edit" style="margin-bottom:8px">';
+  h += SUB_MODULES.map(function(m){
+    var checked = s.modules.indexOf(m.k)!==-1;
+    var price = (s.pricing.modulePrices && s.pricing.modulePrices[m.k]!=null) ? s.pricing.modulePrices[m.k] : m.defaultPrice;
+    return '<label style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--bdr)">'
+      + '<input type="checkbox" data-mod="'+m.k+'" '+(checked?'checked ':'')+(m.required?'disabled ':'')+'>'
+      + '<span style="flex:1;font-size:13px">'+esc(m.label)+(m.required?' <span style="font-size:10px;color:var(--mu)">(inclus)</span>':'')+'</span>'
+      + '<span style="font-size:12px;color:var(--mu)">'+(m.required?'Gratuit':price+' €/mois')+'</span>'
+      + '</label>';
+  }).join('');
+  h += '</div>';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0 14px;font-weight:700;font-size:13px"><span>Total</span><span>'+s.pricing.monthlyTotal+' €/mois</span></div>';
+  h += '<div class="brow" style="margin-bottom:14px"><button class="btn btn-s" onclick="subSaveModules(\''+s.id+'\')"><i class="ti ti-device-floppy"></i> Enregistrer les modules</button></div>';
 
   h += '<div class="ch" style="margin-bottom:8px"><i class="ti ti-building-bank"></i>Mandat GoCardless</div>';
   if(s.paymentMethod){
@@ -7352,6 +7368,20 @@ function subOpenDetail(id){
 function subCacheUpdate(updated){
   var idx = SUB_CACHE.findIndex(function(x){return x.id===updated.id;});
   if(idx>-1) SUB_CACHE[idx]=updated; else SUB_CACHE.unshift(updated);
+}
+
+async function subSaveModules(id){
+  var checks = document.querySelectorAll('#sub-modules-edit input[type=checkbox]');
+  var modules = Array.prototype.slice.call(checks).filter(function(c){return c.checked;}).map(function(c){return c.getAttribute('data-mod');});
+  try{
+    var r = await adminFetch('/wa/subscription/updateModules', {method:'POST', body:JSON.stringify({id:id, modules:modules})});
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Erreur lors de la mise à jour des modules'); return; }
+    subCacheUpdate(data);
+    toast('Modules mis à jour ✓');
+    subOpenDetail(id);
+    renderSubscriptions();
+  }catch(e){ toast('Erreur de connexion au serveur'); }
 }
 
 async function subSetStatus(id, status){
@@ -8506,6 +8536,217 @@ async function loadVersionBadge(){
   }catch(e){ el.textContent=''; }
 }
 document.addEventListener('DOMContentLoaded', loadVersionBadge);
+
+// ═══════════════════════════════════════════════ AIDE, NOUVEAUTÉS & VERROUILLAGE DE MODULES
+// Trois briques indépendantes appliquées à la nav (chaque item = un data-pan) :
+// - bouton "?" (HELP_TEXT) : bénéfice en 1-2 phrases, sur chaque item.
+// - badge "New" dynamique (CHANGELOG_DATA, /changelog) : affiché tant que la
+//   dernière entrée d'un panneau a moins de 21 jours.
+// - verrouillage (MODULE_GATE_MAP + /wa/subscription/mine) : un item dont le
+//   module n'est pas souscrit reste visible mais grisé, avec un cadenas ; y
+//   cliquer ouvre une offre de souscription au lieu d'ouvrir le panneau.
+//   Purement une gate de navigation (UX) — les endpoints API du panneau ne
+//   sont pas verrouillés côté serveur, volontairement hors périmètre.
+
+var MODULE_GATE_MAP = {
+  tarifs: 'taxe',
+  gains: 'rewards',
+  eco: 'eco',
+  crm: 'crm',
+  marketing: 'crm',
+  roomservice: 'roomservice',
+  orders: 'roomservice',
+};
+
+var HELP_TEXT = {
+  dash: "Vue d'ensemble en temps réel de votre activité — réservations, taux d'usage des accès, alertes du jour — sans ouvrir chaque panneau séparément.",
+  hotels: "Gérez tous les établissements Sesame depuis un seul endroit : création, configuration et supervision multi-hôtels.",
+  groups: "Regroupez plusieurs établissements d'une même enseigne pour mutualiser la fidélité et les politiques communes.",
+  subscriptions: "Suivez les demandes d'inscription, activez les essais et gérez les modules souscrits par chaque client.",
+  charte: "Personnalisez les couleurs et le logo pour que l'espace client reflète l'identité visuelle de votre établissement.",
+  typo: "Adaptez les textes affichés aux clients sans toucher au code.",
+  hotel: "Configurez les informations générales de l'hôtel et activez ou non chaque étape du parcours check-in.",
+  tarifs: "Automatisez le calcul et l'encaissement de la taxe de séjour, avec export CSV prêt pour votre déclaration.",
+  gains: "Fidélisez vos clients avec un programme de points et de récompenses configurable, sans développement supplémentaire.",
+  eco: "Valorisez les gestes éco-responsables de vos clients (ménage allégé, économies d'eau) et suivez leur impact.",
+  crm: "Centralisez tous vos contacts clients avec leur historique pour mieux cibler vos relances et repérer les clients à risque de départ.",
+  marketing: "Lancez des campagnes ciblées et suivez leurs retombées directement depuis la fiche de chaque client.",
+  roomservice: "Vendez des produits et services additionnels depuis le mobile du client, sans passer par la réception.",
+  orders: "Suivez et traitez les commandes en temps réel, de la réception à la livraison en chambre.",
+  livret: "Remplacez le livret d'accueil papier par un guide digital personnalisable, toujours à jour.",
+  planning: "Organisez les tâches de ménage et de maintenance de votre équipe avec une vue calendrier claire.",
+  plan: "Visualisez et organisez le plan de votre établissement pour faciliter le choix de chambre par les clients.",
+  rooms: "Gérez l'inventaire de vos chambres (statut, catégorie, tags) au même endroit que le reste de la configuration.",
+  api: "Synchronisez automatiquement vos réservations depuis votre PMS existant, sans ressaisie manuelle.",
+  email: "Configurez vos canaux d'envoi (email, SMS, WhatsApp) une seule fois pour tous vos messages automatisés.",
+  automation: "Programmez des messages automatiques déclenchés par un événement ou une récurrence, sans intervention manuelle.",
+  preview: "Prévisualisez exactement ce que vos clients voient sur leur mobile, avant de publier vos changements.",
+};
+
+var MY_MODULES = null; // null = pas de restriction (établissement sans souscription formelle) ; sinon string[]
+var CHANGELOG_DATA = [];
+var NEW_BADGE_MAX_AGE_MS = 21 * 86400000;
+
+async function loadMySubscriptionModules(){
+  try{
+    var r = await adminFetch('/wa/subscription/mine');
+    if(!r.ok){ MY_MODULES = null; return; }
+    var data = await r.json();
+    MY_MODULES = data.modules;
+  }catch(e){ MY_MODULES = null; }
+}
+
+async function loadChangelog(){
+  try{
+    var r = await fetch('/changelog');
+    CHANGELOG_DATA = r.ok ? await r.json() : [];
+  }catch(e){ CHANGELOG_DATA = []; }
+}
+
+function showInfoPopover(anchorEl, title, body, cls){
+  var old = document.getElementById('info-popover'); if(old) old.remove();
+  var pop = document.createElement('div');
+  pop.id = 'info-popover';
+  pop.className = 'info-popover' + (cls?(' '+cls):'');
+  pop.innerHTML = '<div class="ip-title">'+title+'</div><div class="ip-body">'+body+'</div>';
+  document.body.appendChild(pop);
+  var rect = anchorEl.getBoundingClientRect();
+  var top = rect.bottom + 6;
+  var left = Math.min(rect.left, window.innerWidth - 276);
+  left = Math.max(8, left);
+  var popH = pop.offsetHeight || 100;
+  if(top + popH > window.innerHeight) top = Math.max(8, rect.top - 6 - popH);
+  pop.style.top = top+'px';
+  pop.style.left = left+'px';
+  function onDocClick(e){
+    if(pop.parentNode && !pop.contains(e.target)){ pop.remove(); document.removeEventListener('click', onDocClick); }
+  }
+  document.addEventListener('click', onDocClick);
+}
+
+function showHelp(id, anchorEl){
+  var text = HELP_TEXT[id];
+  if(!text) return;
+  showInfoPopover(anchorEl, 'À quoi ça sert ?', text, 'ip-help');
+}
+
+function decorateNav(){
+  document.querySelectorAll('.ni[data-pan]').forEach(function(el){
+    var id = el.getAttribute('data-pan');
+    if(HELP_TEXT[id] && !el.querySelector('.ni-help')){
+      var btn = document.createElement('span');
+      btn.className = 'ni-help';
+      btn.textContent = '?';
+      btn.title = 'En savoir plus';
+      btn.onclick = function(e){ e.stopPropagation(); showHelp(id, btn); };
+      el.appendChild(btn);
+    }
+    if(MODULE_GATE_MAP[id] && !el.querySelector('.ni-lock')){
+      var lock = document.createElement('i');
+      lock.className = 'ti ti-lock ni-lock';
+      lock.style.display = 'none';
+      el.appendChild(lock);
+    }
+  });
+}
+
+function refreshNavState(){
+  var now = Date.now();
+  document.querySelectorAll('.ni[data-pan]').forEach(function(el){
+    var id = el.getAttribute('data-pan');
+
+    var moduleKey = MODULE_GATE_MAP[id];
+    var locked = !!(moduleKey && MY_MODULES && MY_MODULES.indexOf(moduleKey)===-1);
+    el.classList.toggle('locked', locked);
+    var lockIcon = el.querySelector('.ni-lock');
+    if(lockIcon) lockIcon.style.display = locked ? '' : 'none';
+
+    var entry = null;
+    (CHANGELOG_DATA||[]).forEach(function(c){
+      if(c.panel===id && (!entry || new Date(c.date) > new Date(entry.date))) entry = c;
+    });
+    var existingBadge = el.querySelector('.ni-new');
+    var isRecent = entry && (now - new Date(entry.date).getTime()) < NEW_BADGE_MAX_AGE_MS;
+    if(isRecent){
+      if(!existingBadge){
+        var b = document.createElement('span');
+        b.className = 'nibadge ni-new';
+        b.textContent = 'New';
+        (function(entryCaptured){
+          b.onclick = function(e){ e.stopPropagation(); showInfoPopover(b, entryCaptured.title || 'Nouveauté', entryCaptured.body, 'ip-new'); };
+        })(entry);
+        var help = el.querySelector('.ni-help');
+        if(help) el.insertBefore(b, help); else el.appendChild(b);
+      }
+    } else if(existingBadge){ existingBadge.remove(); }
+  });
+}
+
+function showModuleLockedModal(panId){
+  var moduleKey = MODULE_GATE_MAP[panId];
+  var mod = (typeof SUB_MODULES!=='undefined') ? SUB_MODULES.find(function(m){ return m.k===moduleKey; }) : null;
+  if(!mod) return;
+  var price = (typeof SUB_PRICING!=='undefined' && SUB_PRICING.modulePrices && SUB_PRICING.modulePrices[moduleKey]!=null) ? SUB_PRICING.modulePrices[moduleKey] : mod.defaultPrice;
+  var benefit = HELP_TEXT[panId] || '';
+  var isSesame = ADMIN_ROLE === 'sesame';
+  document.getElementById('module-lock-modal').innerHTML =
+    '<div style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeModuleLockedModal()">'
+    + '<div class="ca" style="width:100%;max-width:420px;text-align:center">'
+    + '<div style="width:52px;height:52px;border-radius:50%;background:var(--al);color:var(--a);display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 14px"><i class="ti ti-lock"></i></div>'
+    + '<div style="font-size:16px;font-weight:700;margin-bottom:6px">'+esc(mod.label)+'</div>'
+    + '<div style="font-size:13px;color:var(--mu);margin-bottom:14px">'+esc(benefit)+'</div>'
+    + '<div style="font-size:20px;font-weight:700;color:var(--a);margin-bottom:18px">'+price+' € <span style="font-size:12px;font-weight:400;color:var(--mu)">/mois</span></div>'
+    + (isSesame
+        ? '<button class="btn btn-p" style="width:100%;justify-content:center" onclick="closeModuleLockedModal();goToSubscriptionForActiveEntity()"><i class="ti ti-settings"></i> Gérer dans Souscriptions</button>'
+        : '<button class="btn btn-p" style="width:100%;justify-content:center" id="module-request-btn" onclick="requestModuleActivation(\''+moduleKey+'\')"><i class="ti ti-send"></i> Demander l\'activation</button>')
+    + '<button class="btn btn-s" style="width:100%;justify-content:center;margin-top:8px" onclick="closeModuleLockedModal()">Fermer</button>'
+    + '</div></div>';
+}
+function closeModuleLockedModal(){
+  document.getElementById('module-lock-modal').innerHTML = '';
+}
+async function requestModuleActivation(moduleKey){
+  var btn = document.getElementById('module-request-btn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Envoi…'; }
+  try{
+    var r = await adminFetch('/wa/subscription/requestModule', {method:'POST', body:JSON.stringify({moduleKey:moduleKey})});
+    if(!r.ok) throw new Error('http');
+    closeModuleLockedModal();
+    toast('Demande envoyée — notre équipe vous recontacte rapidement.');
+  }catch(e){
+    if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-send"></i> Demander l\'activation'; }
+    toast('Erreur de connexion au serveur');
+  }
+}
+async function goToSubscriptionForActiveEntity(){
+  showPan('subscriptions');
+  await subInit();
+  var sub = SUB_CACHE.find(function(s){ return s.entityCode === ACTIVE_ENTITY_CODE; });
+  if(sub) subOpenDetail(sub.id);
+  else toast('Aucune souscription trouvée pour cet établissement');
+}
+
+var _gateOrigShowPan = showPan;
+showPan = function(id){
+  var moduleKey = MODULE_GATE_MAP[id];
+  if(moduleKey && MY_MODULES && MY_MODULES.indexOf(moduleKey)===-1){
+    showModuleLockedModal(id);
+    return;
+  }
+  _gateOrigShowPan(id);
+};
+
+var _gateOrigBootAdminApp = bootAdminApp;
+bootAdminApp = async function(){
+  await _gateOrigBootAdminApp();
+  await loadMySubscriptionModules();
+  refreshNavState();
+};
+
+document.addEventListener('DOMContentLoaded', function(){
+  decorateNav();
+  loadChangelog().then(refreshNavState);
+});
 
 </script>
 </body>

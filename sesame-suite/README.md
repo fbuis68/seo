@@ -388,6 +388,40 @@ certains OS/navigateurs — ce qui rendait le défilement peu évident).
     reste jamais bloqué hors de la page qui lui permettrait justement de le
     configurer.
 
+- **Verrouillage de modules dans la nav du back-office** (`public/admin.html`,
+  endpoints `/wa/subscription/mine`, `/wa/subscription/updateModules`,
+  `/wa/subscription/requestModule`) : un panneau dont le module associé
+  n'est pas souscrit reste **visible mais grisé**, avec un cadenas — cliquer
+  dessus ouvre une offre de souscription (bénéfice + prix) au lieu du
+  panneau.
+  - Mapping panneau → module : `tarifs`→taxe, `gains`→rewards, `eco`→eco,
+    `crm`/`marketing`→crm, `roomservice`/`orders`→roomservice. Les panneaux
+    sans module associé (Accueil, Charte, Planning, Livret, Intégration…)
+    ne sont jamais verrouillés.
+  - **Aucune régression sur les établissements existants** : un
+    établissement sans `Subscription` formelle (créé via le panneau Hôtels
+    ou le seed, plutôt que l'inscription en ligne) n'a **rien** de
+    verrouillé — le verrouillage ne s'active que si une souscription réelle
+    existe et exclut explicitement le module.
+  - CTA de l'offre : un compte **hôtel** envoie une demande d'activation
+    (journalisée sur la fiche CRM prospect liée, pour suivi manuel par
+    l'équipe Sesame — pas de paiement en ligne dans cette app) ; un compte
+    **sesame** est renvoyé directement sur la fiche Souscription de
+    l'établissement, où les modules sont maintenant **éditables** (cases à
+    cocher, avant : figés à la création de la souscription).
+  - C'est une gate de **navigation** uniquement — les endpoints API des
+    panneaux concernés ne sont pas verrouillés côté serveur.
+- **Bouton d'aide sur chaque panneau** (icône "?" dans la nav) : un
+  popover avec le bénéfice en une ou deux phrases, sans avoir à ouvrir le
+  panneau pour comprendre à quoi il sert.
+- **Badge "New" dynamique** (`GET /changelog`, `src/lib/changelog.ts`) :
+  affiché sur un panneau tant que sa dernière entrée de changelog a moins
+  de 21 jours ; cliquer dessus explique la correction/nouveauté. Remplace
+  l'ancien badge "New" codé en dur sur "Planning". Convention pour la
+  suite : ajouter une entrée dans `CHANGELOG` à chaque correction/amélioration
+  notable d'un panneau, rédigée pour l'utilisateur (le "quoi" et le
+  "pourquoi ça vous concerne"), pas un message de commit.
+
 Également non couvert : l'app ménage (`sesame_menage.html`, application
 séparée pour les agents de ménage sur le terrain). La base de données est
 déjà prête à la recevoir (`RoomHousekeepingStatus`, `HousekeepingTask`,

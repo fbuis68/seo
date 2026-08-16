@@ -28,6 +28,7 @@ import { automationRuleRouter } from "./routes/automationRule";
 import { adminUserRouter } from "./routes/adminUser";
 import { errorHandler } from "./middleware/errorHandler";
 import { VERSION } from "./lib/version";
+import { CHANGELOG } from "./lib/changelog";
 
 export function createApp() {
   const app = express();
@@ -79,6 +80,8 @@ export function createApp() {
   // Numéro de version (commit + date du build) — permet de vérifier depuis
   // le navigateur quel build tourne réellement après un déploiement.
   app.get("/version", (_req, res) => res.json(VERSION));
+  // Journal des nouveautés/corrections par panneau (badges "New" dans la nav admin).
+  app.get("/changelog", (_req, res) => res.json(CHANGELOG));
 
   // Apps statiques (HTML/CSS/JS d'origine, rebranchées sur l'API)
   const publicDir = path.join(__dirname, "..", "public");
