@@ -4,19 +4,76 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Sesame Éco · Administration</title>
+<script>try{document.documentElement.setAttribute('data-theme', localStorage.getItem('SESAME_UI_THEME')||'signature');}catch(e){}</script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.10.0/dist/tabler-icons.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
-:root{
+/*
+ * THÈMES D'INTERFACE — à ne pas confondre avec THEMES/CFG.colors plus bas
+ * (panneau "Logo & Couleurs" → charte de l'app client mobile, --brand-*).
+ * Ceci reskinne le back-office lui-même (admin + CRM, même mécanisme et
+ * même préférence partagée — voir applyUiTheme()/localStorage SESAME_UI_THEME
+ * en bas du fichier). Statuts (bu/go/re/wa = info/succès-gain/danger/alerte)
+ * volontairement CONSTANTS entre thèmes — seuls fond/carte/bordure/texte/
+ * accent changent, pour ne jamais faire dériver le sens des couleurs de
+ * statut. Les cartes KPI (Accueil) et la légende de statut chambres restent
+ * elles aussi fixes (couleurs de données, pas de chrome) — même principe
+ * que garder une palette de graphique stable indépendamment du thème.
+ */
+:root, html[data-theme="signature"]{
   --sb:#17121E;--sbb:rgba(255,255,255,.08);
   --bg:#F5F3F0;--card:#FFF;--bdr:#E3DED8;
   --tx:#14121E;--mu:#7A7870;--hi:#B0ADA4;
-  --a:#8B1A2E;--al:#FDEDF0;--am:#8B1A2E;
+  --a:#8B1A2E;--al:#FDEDF0;--am:#8B1A2E;--primary:#8B1A2E;--pl:#FDEDF0;
   --bu:#1A4880;--bul:#EBF2FA;
   --go:#9B6E0A;--gol:#FDF4D8;
   --re:#B83030;--rel:#FDEAEA;
   --wa:#A85A0A;--wal:#FEF0DC;
+  --r:10px;--rs:6px;
+}
+html[data-theme="emeraude"]{
+  --sb:#0F1F17;--sbb:rgba(255,255,255,.08);
+  --bg:#F3F5F1;--card:#FFF;--bdr:#DCE3DC;
+  --tx:#12201A;--mu:#6E7C71;--hi:#A8B5AA;
+  --a:#1A6B47;--al:#E9F5EE;--am:#1A6B47;--primary:#1A6B47;--pl:#E9F5EE;
+  --bu:#1A4880;--bul:#EBF2FA;
+  --go:#9B6E0A;--gol:#FDF4D8;
+  --re:#B83030;--rel:#FDEAEA;
+  --wa:#A85A0A;--wal:#FEF0DC;
+  --r:10px;--rs:6px;
+}
+html[data-theme="ocean"]{
+  --sb:#0D1B2A;--sbb:rgba(255,255,255,.08);
+  --bg:#F2F4F7;--card:#FFF;--bdr:#DDE3EA;
+  --tx:#101C2B;--mu:#6B7A8C;--hi:#A9B7C6;
+  --a:#1A4880;--al:#EBF2FA;--am:#1A4880;--primary:#1A4880;--pl:#EBF2FA;
+  --bu:#1A4880;--bul:#EBF2FA;
+  --go:#9B6E0A;--gol:#FDF4D8;
+  --re:#B83030;--rel:#FDEAEA;
+  --wa:#A85A0A;--wal:#FEF0DC;
+  --r:10px;--rs:6px;
+}
+html[data-theme="ardoise"]{
+  --sb:#1C1F26;--sbb:rgba(255,255,255,.08);
+  --bg:#F4F4F5;--card:#FFF;--bdr:#E2E3E6;
+  --tx:#17181C;--mu:#74757D;--hi:#AEAFB6;
+  --a:#4F46E5;--al:#EEEDFC;--am:#4F46E5;--primary:#4F46E5;--pl:#EEEDFC;
+  --bu:#1A4880;--bul:#EBF2FA;
+  --go:#9B6E0A;--gol:#FDF4D8;
+  --re:#B83030;--rel:#FDEAEA;
+  --wa:#A85A0A;--wal:#FEF0DC;
+  --r:10px;--rs:6px;
+}
+html[data-theme="nuit"]{
+  --sb:#14151A;--sbb:rgba(255,255,255,.06);
+  --bg:#1B1C22;--card:#24262E;--bdr:#33353E;
+  --tx:#EDEDEF;--mu:#9A9CA8;--hi:#6B6D78;
+  --a:#E0536E;--al:rgba(224,83,110,.14);--am:#E0536E;--primary:#E0536E;--pl:rgba(224,83,110,.14);
+  --bu:#5B9BD5;--bul:rgba(91,155,213,.14);
+  --go:#E0A83E;--gol:rgba(224,168,62,.14);
+  --re:#E0605F;--rel:rgba(224,96,95,.14);
+  --wa:#E0935B;--wal:rgba(224,147,91,.14);
   --r:10px;--rs:6px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
@@ -215,6 +272,12 @@ input[type=checkbox]{accent-color:var(--am);width:15px;height:15px;cursor:pointe
 /* Table inside planning */
 table.pgrid{border-collapse:collapse;min-width:100%}
 table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(--bdr)}
+/* Sélecteur de thème d'interface */
+.ui-theme-pop{position:fixed;z-index:600;background:var(--card);border:1px solid var(--bdr);border-radius:var(--r);box-shadow:0 16px 40px rgba(0,0,0,.3);padding:10px;width:190px}
+.ui-theme-row{display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:var(--rs);cursor:pointer;font-size:12.5px;color:var(--tx)}
+.ui-theme-row:hover{background:var(--bg)}
+.ui-theme-dot{width:18px;height:18px;border-radius:50%;flex-shrink:0;border:1px solid rgba(0,0,0,.08);box-shadow:0 0 0 2px var(--card) inset}
+.ui-theme-row .ti-check{margin-left:auto;color:var(--a);font-size:13px}
 /* KPI réels (Accueil) */
 .kpi-real-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
 .kreal-tile{background:var(--bg);border:1px solid var(--bdr);border-radius:var(--rs);padding:14px}
@@ -272,6 +335,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   <div class="tbsp"></div>
   <div class="tbpl"><span class="dot"></span>En ligne</div>
   <div class="tbav" id="tbHotelInitials">HL</div>
+  <button class="btn btn-g" id="ui-theme-btn" style="color:rgba(255,255,255,.55)" onclick="toggleThemePicker(this)" title="Thème de l'interface"><i class="ti ti-palette"></i></button>
   <button class="btn btn-g" style="color:rgba(255,255,255,.55)" onclick="adminLogout()" title="Déconnexion"><i class="ti ti-logout"></i></button>
 </header>
 
@@ -2732,6 +2796,47 @@ function toggleSidebar(){
 function closeSidebar(){
   document.querySelector('.sb').classList.remove('open');
   document.getElementById('sidebar-overlay').classList.remove('show');
+}
+
+// ── THÈME D'INTERFACE — reskinne admin ET crm (préférence partagée, localStorage) ──
+var UI_THEMES = [
+  { id:'signature', label:'Signature', dot:'#8B1A2E' },
+  { id:'emeraude',  label:'Émeraude',  dot:'#1A6B47' },
+  { id:'ocean',     label:'Océan',     dot:'#1A4880' },
+  { id:'ardoise',   label:'Ardoise',   dot:'#4F46E5' },
+  { id:'nuit',      label:'Nuit',      dot:'#E0536E' },
+];
+function applyUiTheme(id){
+  document.documentElement.setAttribute('data-theme', id);
+  try{ localStorage.setItem('SESAME_UI_THEME', id); }catch(e){}
+  var pop = document.getElementById('ui-theme-pop'); if(pop) pop.remove();
+}
+function toggleThemePicker(anchorEl){
+  var existing = document.getElementById('ui-theme-pop');
+  if(existing){ existing.remove(); return; }
+  var current = document.documentElement.getAttribute('data-theme')||'signature';
+  var pop = document.createElement('div');
+  pop.id = 'ui-theme-pop';
+  pop.className = 'ui-theme-pop';
+  pop.innerHTML = UI_THEMES.map(function(t){
+    return '<div class="ui-theme-row" onclick="applyUiTheme(\''+t.id+'\')">'
+      + '<span class="ui-theme-dot" style="background:'+t.dot+'"></span>'
+      + '<span>'+t.label+'</span>'
+      + (t.id===current ? '<i class="ti ti-check"></i>' : '')
+      + '</div>';
+  }).join('');
+  document.body.appendChild(pop);
+  var rect = anchorEl.getBoundingClientRect();
+  pop.style.top = (rect.bottom+6)+'px';
+  pop.style.left = Math.max(8, rect.right-190)+'px';
+  setTimeout(function(){
+    document.addEventListener('click', function onDoc(e){
+      if(pop.parentNode && !pop.contains(e.target) && e.target!==anchorEl && !anchorEl.contains(e.target)){
+        pop.remove();
+        document.removeEventListener('click', onDoc);
+      }
+    });
+  },10);
 }
 
 // ── Config — chargée/écrite via l'API (remplace loadCfg()/saveCfg() localStorage) ──

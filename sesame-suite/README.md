@@ -461,6 +461,28 @@ certains OS/navigateurs — ce qui rendait le défilement peu évident).
   notable d'un panneau, rédigée pour l'utilisateur (le "quoi" et le
   "pourquoi ça vous concerne"), pas un message de commit.
 
+- **Thèmes d'interface**, sur le CRM et le back-office : bouton palette
+  dans la barre supérieure (`toggleThemePicker()`), 5 thèmes au choix —
+  Signature (par défaut, bordeaux), Émeraude, Océan, Ardoise, Nuit (sombre).
+  - **Préférence partagée entre les deux apps** : un seul réglage
+    `localStorage.SESAME_UI_THEME`, appliqué dès le chargement de la page
+    par un petit script inline placé avant la feuille de style (évite le
+    flash du mauvais thème) — changer de thème dans l'un se répercute
+    automatiquement dans l'autre à la prochaine ouverture.
+  - **Uniquement le "chrome"** (fond de page, cartes, bordures, texte,
+    couleur d'accent, survols) est thémé, via des variables CSS
+    (`html[data-theme="…"]`). Les couleurs sémantiques — badges de statut,
+    tags CRM (risque/contrat/secteur), points du journal d'activité,
+    pastilles de statut chambre, couleurs des cartes KPI — restent
+    volontairement fixes d'un thème à l'autre, pour ne jamais faire dériver
+    leur sens (même principe que la palette d'un graphique, jamais recolorée
+    selon le thème de l'appli).
+  - À ne pas confondre avec la **charte de marque** existante (panneau
+    "Logo & Couleurs" de l'admin, `THEMES`/`applyTheme()`) : celle-ci définit
+    les couleurs de l'app mobile de check-in **destinée aux clients**
+    (`--brand-*`, stockées dans `CFG.colors`) — sujet totalement séparé du
+    thème visuel du back-office/CRM lui-même.
+
 Également non couvert : l'app ménage (`sesame_menage.html`, application
 séparée pour les agents de ménage sur le terrain). La base de données est
 déjà prête à la recevoir (`RoomHousekeepingStatus`, `HousekeepingTask`,
