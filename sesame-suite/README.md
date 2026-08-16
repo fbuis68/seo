@@ -362,6 +362,32 @@ certains OS/navigateurs — ce qui rendait le défilement peu évident).
     multiplier les configurations SMTP (ex. "Réception Hôtel Churchill"
     pour une règle, nom de la config par défaut pour les autres).
 
+- **Mot de passe oublié**, harmonisé entre le CRM (`crm.html`, comptes
+  `role="sesame"`) et le back-office hôtel (`admin.html`, comptes
+  `role="hotel"`) — même flux, même écran de connexion, seule la portée du
+  compte concerné diffère :
+  - Lien "Mot de passe oublié ?" sur l'écran de connexion → email → si un
+    compte existe, un lien de réinitialisation valable 1h est envoyé
+    (`POST /wa/login/forgotPassword`). Réponse strictement identique que le
+    compte existe ou non, et même en cas d'échec d'envoi (uniquement
+    journalisé côté serveur) — empêche l'énumération des comptes existants.
+  - Le lien pointe vers `admin.html?resetToken=…` ou `crm.html?resetToken=…`
+    selon le rôle du compte, et affiche un formulaire de nouveau mot de
+    passe (`POST /wa/login/resetPassword`, minimum 8 caractères).
+  - **Sécurité du token** (`src/lib/passwordReset.ts`,
+    `PasswordResetToken`) : généré aléatoirement (32 octets), seul son hash
+    SHA-256 est stocké en base (comme un mot de passe — une fuite de la
+    base ne permet pas de reconstituer les tokens envoyés par email) ; à
+    usage unique (marqué utilisé dès la première consommation, un rejeu du
+    même lien échoue) ; expire après 1h.
+  - **Envoi de l'email** : réutilise la config SMTP déjà en place pour le
+    compte (celle de son établissement pour un compte hôtel, celle du CRM
+    pour un compte Sesame) via `sendEmailRaw()` — avec repli automatique
+    sur la config SMTP globale Sesame si celle de l'établissement n'est pas
+    configurée, pour qu'un hôtel n'ayant pas encore paramétré son SMTP ne
+    reste jamais bloqué hors de la page qui lui permettrait justement de le
+    configurer.
+
 Également non couvert : l'app ménage (`sesame_menage.html`, application
 séparée pour les agents de ménage sur le terrain). La base de données est
 déjà prête à la recevoir (`RoomHousekeepingStatus`, `HousekeepingTask`,

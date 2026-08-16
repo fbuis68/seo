@@ -208,19 +208,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 
 <!-- ════════════════ LOGIN GATE (back-office) ════════════════ -->
 <div id="loginGate" style="position:fixed;inset:0;z-index:1000;background:var(--sb);display:flex;align-items:center;justify-content:center;padding:20px">
-  <div style="width:100%;max-width:360px;background:var(--card);border-radius:var(--r);padding:32px 28px;box-shadow:0 24px 60px rgba(0,0,0,.35)">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:24px">
-      <div class="tbmk">S</div>
-      <div>
-        <div style="font-family:'DM Serif Display',serif;font-size:17px">Sesame Éco</div>
-        <div style="font-size:11px;color:var(--mu)">Administration</div>
-      </div>
-    </div>
-    <div class="fi"><label class="lb">Email</label><input type="email" id="login-email" placeholder="admin@hotel-churchill.fr" onkeydown="if(event.key==='Enter')adminLogin()"></div>
-    <div class="fi" style="margin-top:12px"><label class="lb">Mot de passe</label><input type="password" id="login-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')adminLogin()"></div>
-    <button class="btn btn-p" style="width:100%;justify-content:center;margin-top:18px" onclick="adminLogin()"><i class="ti ti-login"></i> Se connecter</button>
-    <div id="login-err" style="display:none;color:var(--re);font-size:12px;margin-top:10px;text-align:center"></div>
-  </div>
+  <div id="login-box" style="width:100%;max-width:360px;background:var(--card);border-radius:var(--r);padding:32px 28px;box-shadow:0 24px 60px rgba(0,0,0,.35)"></div>
 </div>
 
 <div class="sh">
@@ -2536,6 +2524,73 @@ function adminFetch(url, opts){
   opts.headers = Object.assign({'Content-Type':'application/json'}, opts.headers||{}, {Authorization:'Bearer '+ADMIN_TOKEN});
   var w = withEntityCode(url, opts);
   return fetch(API_BASE+w.url, w.opts);
+}
+
+function renderLoginBox(okMsg){
+  document.getElementById('login-box').innerHTML =
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:24px">'
+    + '<div class="tbmk">S</div>'
+    + '<div><div style="font-family:\'DM Serif Display\',serif;font-size:17px">Sesame Éco</div>'
+    + '<div style="font-size:11px;color:var(--mu)">Administration</div></div></div>'
+    + '<div class="fi"><label class="lb">Email</label><input type="email" id="login-email" placeholder="admin@hotel-churchill.fr" onkeydown="if(event.key===\'Enter\')adminLogin()"></div>'
+    + '<div class="fi" style="margin-top:12px"><label class="lb">Mot de passe</label><input type="password" id="login-password" placeholder="••••••••" onkeydown="if(event.key===\'Enter\')adminLogin()"></div>'
+    + '<button class="btn btn-p" style="width:100%;justify-content:center;margin-top:18px" onclick="adminLogin()"><i class="ti ti-login"></i> Se connecter</button>'
+    + '<div style="text-align:center;margin-top:10px"><a href="#" onclick="renderForgotBox();return false;" style="font-size:12px;color:var(--a)">Mot de passe oublié ?</a></div>'
+    + '<div id="login-err" style="display:none;color:var(--re);font-size:12px;margin-top:10px;text-align:center"></div>'
+    + (okMsg ? '<div style="color:#1A6B47;font-size:12px;margin-top:10px;text-align:center">'+okMsg+'</div>' : '');
+}
+
+function renderForgotBox(){
+  document.getElementById('login-box').innerHTML =
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:24px">'
+    + '<div class="tbmk">S</div>'
+    + '<div><div style="font-family:\'DM Serif Display\',serif;font-size:17px">Mot de passe oublié</div>'
+    + '<div style="font-size:11px;color:var(--mu)">Administration</div></div></div>'
+    + '<div class="fi"><label class="lb">Email</label><input type="email" id="fg-email" placeholder="admin@hotel-churchill.fr" onkeydown="if(event.key===\'Enter\')sendForgotEmailAdmin()"></div>'
+    + '<button class="btn btn-p" style="width:100%;justify-content:center;margin-top:18px" onclick="sendForgotEmailAdmin()">Envoyer le lien</button>'
+    + '<div style="text-align:center;margin-top:10px"><a href="#" onclick="renderLoginBox();return false;" style="font-size:12px;color:var(--a)">Retour à la connexion</a></div>'
+    + '<div id="login-err" style="display:none;color:var(--re);font-size:12px;margin-top:10px;text-align:center"></div>'
+    + '<div id="login-ok" style="display:none;color:#1A6B47;font-size:12px;margin-top:10px;text-align:center"></div>';
+}
+
+async function sendForgotEmailAdmin(){
+  var email = (document.getElementById('fg-email').value||'').trim();
+  var errEl = document.getElementById('login-err'), okEl = document.getElementById('login-ok');
+  errEl.style.display='none';
+  if(!email){ errEl.textContent='Email requis'; errEl.style.display='block'; return; }
+  try{
+    await fetch(API_BASE+'/wa/login/forgotPassword', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email:email})});
+  }catch(e){}
+  okEl.textContent = "Si un compte existe avec cette adresse, un email de réinitialisation vient d'être envoyé.";
+  okEl.style.display='block';
+}
+
+function renderResetBox(token){
+  document.getElementById('login-box').innerHTML =
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:24px">'
+    + '<div class="tbmk">S</div>'
+    + '<div><div style="font-family:\'DM Serif Display\',serif;font-size:17px">Nouveau mot de passe</div>'
+    + '<div style="font-size:11px;color:var(--mu)">Administration</div></div></div>'
+    + '<div class="fi"><label class="lb">Nouveau mot de passe</label><input type="password" id="rp-password" placeholder="••••••••"></div>'
+    + '<div class="fi" style="margin-top:12px"><label class="lb">Confirmer</label><input type="password" id="rp-password2" placeholder="••••••••" onkeydown="if(event.key===\'Enter\')submitResetPasswordAdmin(\''+token+'\')"></div>'
+    + '<button class="btn btn-p" style="width:100%;justify-content:center;margin-top:18px" onclick="submitResetPasswordAdmin(\''+token+'\')">Valider</button>'
+    + '<div id="login-err" style="display:none;color:var(--re);font-size:12px;margin-top:10px;text-align:center"></div>';
+}
+
+async function submitResetPasswordAdmin(token){
+  var p1 = document.getElementById('rp-password').value||'';
+  var p2 = document.getElementById('rp-password2').value||'';
+  var errEl = document.getElementById('login-err');
+  errEl.style.display='none';
+  if(p1.length<8){ errEl.textContent='8 caractères minimum'; errEl.style.display='block'; return; }
+  if(p1!==p2){ errEl.textContent='Les deux mots de passe ne correspondent pas'; errEl.style.display='block'; return; }
+  try{
+    var r = await fetch(API_BASE+'/wa/login/resetPassword', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({token:token,password:p1})});
+    var data = await r.json();
+    if(!r.ok){ errEl.textContent = data.error || 'Lien invalide ou expiré'; errEl.style.display='block'; return; }
+  }catch(e){ errEl.textContent='Erreur de connexion au serveur'; errEl.style.display='block'; return; }
+  history.replaceState(null,'',location.pathname);
+  renderLoginBox('Mot de passe mis à jour — vous pouvez vous connecter.');
 }
 
 async function adminLogin(){
@@ -5174,8 +5229,12 @@ window.addEventListener('DOMContentLoaded',function(){
   if(ADMIN_TOKEN){
     document.getElementById('loginGate').style.display='none';
     bootAdminApp();
+    return;
   }
-  // sinon : le loginGate reste affiché, bootAdminApp() sera appelé après adminLogin()
+  var resetToken = new URLSearchParams(location.search).get('resetToken');
+  if(resetToken) renderResetBox(resetToken);
+  else renderLoginBox();
+  // bootAdminApp() sera appelé après adminLogin()
 });
 
 // ═══════════════════════════════════════════════ PLANNING D'INTERVENTIONS

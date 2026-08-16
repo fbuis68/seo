@@ -91,7 +91,22 @@ model AdminUser {
   name         String?
   role         String  @default("hotel") // sesame | hotel
 
+  resetTokens PasswordResetToken[]
+
   createdAt DateTime @default(now())
+}
+
+// Mot de passe oublié — token à usage unique, seul son hash est stocké (le
+// token en clair ne transite que dans l'email envoyé, jamais en base ni
+// dans les logs), avec expiration courte (1h, imposée côté application).
+model PasswordResetToken {
+  id          String    @id @default(cuid())
+  adminUserId String
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
 }
 
 // Équivalent de entity_module_config (35 colonnes dans la doc) — regroupé en
