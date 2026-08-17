@@ -124,6 +124,112 @@ const CRM_SEED_PROSPECTS: CrmSeedRow[] = [
   { nom: "SEM PAU", secteur: "Bureaux", ville: "Pau", danger: "Modéré", potentiel: 3, contrat: "non", modules: 0, priorite: 1, nfc: 0, qr: 0, mobile: 0, webApp: false, mobileV2: false, checkin: false, livret: false, gestionDemande: false, offline: false, messagerie: "Noreply" },
 ];
 
+/**
+ * Vrais taux d'usage par type d'accès (NFC/Mobile/Code/QR, se totalisant à
+ * ~100% par fiche), extraits de l'audit clients Sesame (AUDIT_CLIENTS_SESAME
+ * 2025.xlsx, lignes "Taux d'utilisation NFC/Mobile/Code/QR Code") pour les
+ * clients identifiés dans ce portefeuille — remplace les placeholders à 0
+ * ci-dessus. Les clients sans ligne d'audit correspondante gardent leurs
+ * valeurs à 0 (pas encore de données d'usage réel), plutôt que d'inventer un
+ * chiffre.
+ */
+const AUDIT_USAGE: Record<string, { nfc: number; mobile: number; code: number; qr: number }> = {
+  "1K": { nfc: 100, mobile: 0, code: 0, qr: 0 },
+  "ACGP93": { nfc: 0, mobile: 71, code: 0, qr: 29 },
+  "AKANTHA": { nfc: 0, mobile: 76, code: 0, qr: 24 },
+  "ASEAT": { nfc: 20, mobile: 0, code: 0, qr: 80 },
+  "ASTORG": { nfc: 0, mobile: 0, code: 100, qr: 0 },
+  "ASTREA": { nfc: 0, mobile: 15, code: 0, qr: 85 },
+  "AUBERG'INE": { nfc: 0, mobile: 18, code: 82, qr: 0 },
+  "Ambassadeur Lille": { nfc: 17, mobile: 14, code: 0, qr: 69 },
+  "Appartements de Lille": { nfc: 0, mobile: 32, code: 0, qr: 68 },
+  "Apparts de Marin": { nfc: 0, mobile: 18, code: 0, qr: 82 },
+  "Auberge St Jacques": { nfc: 87, mobile: 0, code: 8, qr: 5 },
+  "BELLEVAL": { nfc: 100, mobile: 0, code: 0, qr: 0 },
+  "BUDA FITNESS": { nfc: 0, mobile: 0, code: 0, qr: 100 },
+  "Beaujour & Bonsoir": { nfc: 0, mobile: 14, code: 86, qr: 0 },
+  "Bedzzz Apartments": { nfc: 55, mobile: 23, code: 0, qr: 22 },
+  "CHÂTEAU DU SOUZY": { nfc: 81, mobile: 0, code: 0, qr: 19 },
+  "CITYZEN": { nfc: 0, mobile: 0, code: 100, qr: 0 },
+  "COEURMANDIE": { nfc: 99, mobile: 0, code: 0, qr: 1 },
+  "COLOMBYA": { nfc: 0, mobile: 30, code: 0, qr: 70 },
+  "COPWELL – Fédé. Natation": { nfc: 0, mobile: 59, code: 0, qr: 41 },
+  "COPWELL – HAVAS": { nfc: 99, mobile: 0, code: 0, qr: 1 },
+  "COPWELL – LARCO": { nfc: 0, mobile: 98, code: 0, qr: 2 },
+  "DOJO BORDEAUX": { nfc: 0, mobile: 0, code: 0, qr: 100 },
+  "DOMAINE DU BELVEDERE": { nfc: 98, mobile: 0, code: 0, qr: 2 },
+  "DYNAMIC SEVRES": { nfc: 0, mobile: 0, code: 0, qr: 100 },
+  "ESCALE AU SOLEIL": { nfc: 1, mobile: 0, code: 99, qr: 0 },
+  "FLORELLA": { nfc: 0, mobile: 1, code: 99, qr: 0 },
+  "HOTEL DE FRANCE": { nfc: 99, mobile: 0, code: 0, qr: 1 },
+  "HOTEL MARIE": { nfc: 0, mobile: 3, code: 97, qr: 0 },
+  "KI SPACE": { nfc: 20, mobile: 0, code: 0, qr: 80 },
+  "KUBE": { nfc: 100, mobile: 0, code: 0, qr: 0 },
+  "LA PENICHE AIGUES MORTES": { nfc: 3, mobile: 20, code: 0, qr: 77 },
+  "LA PENICHE HISSEO": { nfc: 15, mobile: 45, code: 0, qr: 40 },
+  "LA PENICHE TOURNON": { nfc: 22, mobile: 22, code: 0, qr: 56 },
+  "LA RUCHE": { nfc: 0, mobile: 92, code: 0, qr: 8 },
+  "LE VICTOR": { nfc: 0, mobile: 97, code: 0, qr: 3 },
+  "LOUVRE PIEMONT": { nfc: 100, mobile: 0, code: 0, qr: 0 },
+  "LYONNAIS NICE": { nfc: 90, mobile: 4, code: 0, qr: 6 },
+  "LocBox AVRANCHES": { nfc: 0, mobile: 11, code: 89, qr: 0 },
+  "LocBox GRANVILLE": { nfc: 0, mobile: 39, code: 61, qr: 0 },
+  "MAB BOX": { nfc: 0, mobile: 9, code: 0, qr: 91 },
+  "MAISON ROQUELONGUE": { nfc: 0, mobile: 0, code: 0, qr: 100 },
+  "MINA MINA": { nfc: 0, mobile: 4, code: 0, qr: 96 },
+  "MMIP CHAMP DE MARS": { nfc: 12, mobile: 1, code: 0, qr: 87 },
+  "MMIP CITE VERON": { nfc: 7, mobile: 3, code: 0, qr: 90 },
+  "MMIP INVALIDES": { nfc: 14, mobile: 1, code: 0, qr: 85 },
+  "MONTEFIORE": { nfc: 0, mobile: 62, code: 0, qr: 38 },
+  "PUC": { nfc: 28, mobile: 0, code: 0, qr: 72 },
+  "QUEENS HOTEL PARIS": { nfc: 99, mobile: 0, code: 0, qr: 1 },
+  "REGINA D'AVIGNON": { nfc: 56, mobile: 0, code: 0, qr: 44 },
+  "ROSA HOTEL": { nfc: 15, mobile: 10, code: 0, qr: 75 },
+  "ROYAL HOTEL TULLE": { nfc: 90, mobile: 0, code: 10, qr: 0 },
+  "SEM PAU": { nfc: 87, mobile: 8, code: 0, qr: 5 },
+  "SEROTEL": { nfc: 0, mobile: 0, code: 100, qr: 0 },
+  "VILLA CADIERE": { nfc: 0, mobile: 17, code: 0, qr: 83 },
+  "VILLAGE D+ CORREZE": { nfc: 98, mobile: 0, code: 0, qr: 2 },
+  "VILLAGE D+ VALLOIRE": { nfc: 96, mobile: 0, code: 0, qr: 4 },
+  "WELLBEE": { nfc: 0, mobile: 20, code: 0, qr: 80 },
+  "YOU ARE DEAUVILLE": { nfc: 100, mobile: 0, code: 0, qr: 0 },
+};
+
+/**
+ * Parcours activés par défaut selon le secteur d'activité — cf. matrice
+ * fournie (Hôtel/Sport/Stockage/Bureaux × étapes d'onboarding et rubriques
+ * de l'espace client). Le choix des chambres, la déclaration d'occupants et
+ * les préférences ménage ne concernent que l'hébergement ; l'identité et les
+ * rubriques de l'espace client (boutique, points, évènements) sont
+ * universelles. Sert de valeur initiale, éditable ensuite par fiche.
+ */
+type SectorGroup = "hotel" | "sport" | "stockage" | "work";
+function sectorGroupFor(secteur?: string): SectorGroup {
+  switch (secteur) {
+    case "Sport":
+      return "sport";
+    case "Garde meuble":
+      return "stockage";
+    case "Bureaux":
+    case "Agence gestion patrimoine":
+      return "work";
+    default:
+      return "hotel"; // Hôtellerie, Appart Hotel, Location appartement/AirBnB, Love hôtel, secteur non renseigné
+  }
+}
+function journeyFlagsFor(secteur?: string) {
+  const g = sectorGroupFor(secteur);
+  return {
+    onbChoixChambres: g === "hotel",
+    onbOccupant: g === "hotel" || g === "sport",
+    onbIdentite: true,
+    onbMenage: g === "hotel",
+    espBoutique: true,
+    espPoint: true,
+    espEvenement: true,
+  };
+}
+
 const ENTITY_CODE = process.env.DEFAULT_ENTITY_CODE || "E00000001";
 const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL || "admin@hotel-churchill.fr";
 const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || "churchill2026";
@@ -474,7 +580,10 @@ async function main() {
   if (existingProspects === 0) {
     for (const row of CRM_SEED_PROSPECTS) {
       const { journal, ...data } = row;
-      const created = await prisma.crmProspect.create({ data });
+      const usage = AUDIT_USAGE[row.nom];
+      const created = await prisma.crmProspect.create({
+        data: { ...data, ...(usage || {}), ...journeyFlagsFor(row.secteur) },
+      });
       if (journal) {
         for (const j of journal) {
           await prisma.crmActivity.create({

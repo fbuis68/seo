@@ -86,6 +86,13 @@ couche de données rebranchée sur l'API) :
     d'un séjour type × un nombre de séjours/an saisi à la main) restent en
     dessous, désormais explicitement libellées "(estimation)" pour ne pas
     les confondre avec les indicateurs réels.
+  - **Correction** : sur un compte Sesame, changer d'établissement actif
+    (panneau "Hôtels") ne rafraîchissait pas ces indicateurs — le cache
+    `KPI_RAW` (rempli une seule fois par page) n'était jamais réinitialisé à
+    l'activation d'un nouvel hôtel, si bien que l'Accueil pouvait continuer
+    d'afficher les indicateurs de l'hôtel précédemment consulté. `KPI_RAW`
+    est maintenant remis à `null` dans `bootAdminApp()`, comme c'était déjà
+    le cas pour `CFG.rooms` pour la même raison.
 - Compte admin de démonstration : voir « Comptes de démonstration » ci-dessous.
 
 **Multi-tenant réel — comptes Sesame vs comptes hôtel** : deux rôles
@@ -265,9 +272,12 @@ visible et stylé (au lieu de l'ascenseur système, masqué par défaut sur
 certains OS/navigateurs — ce qui rendait le défilement peu évident).
 
 - Fiche par établissement : coordonnées, score de risque de churn calculé,
-  usage des accès (NFC/QR/mobile), features actives, opportunités d'upsell,
-  **journal d'activité** (appels, emails, relances… avec statut fait/à
-  faire), vues Liste/Grille, vue Contrats (sans/en cours/signé), export CSV.
+  usage des accès (NFC/Mobile/Code/QR — les 4 se totalisent à 100% par
+  fiche), features actives Sesame, **parcours client activés** (étapes
+  d'onboarding et rubriques de l'espace client, voir ci-dessous),
+  opportunités d'upsell, **journal d'activité** (appels, emails, relances…
+  avec statut fait/à faire), vues Liste/Grille, vue Contrats (sans/en
+  cours/signé), export CSV.
 - **Alimenté automatiquement par l'inscription en ligne** : chaque
   soumission complétée du wizard `/onboarding` crée un enregistrement de
   prospect (`CrmProspect`) directement relié à l'établissement et à la
@@ -281,14 +291,36 @@ certains OS/navigateurs — ce qui rendait le défilement peu évident).
   maquette d'origine sont seedés (`prisma/seed.ts`, garde `count===0` — une
   seule fois, jamais réécrasé ensuite pour ne pas perdre les modifications
   faites depuis l'app).
-- **Vue liste** : deux graphiques calculés en direct sur les fiches réelles
-  — répartition par secteur (icône dédiée par secteur : hôtel, immeuble,
-  mallette, haltère, maison, carton, cœur, histogramme…) et taux d'adoption
-  des modules Sesame (WebApp, Mobile V2, check-in, livret, gestion demande,
-  offline) — palette validée avec le validateur `dataviz` (bleu/orange,
-  écarts CVD ≥ 24 ΔE). Chaque fiche/PMS affiche aussi un badge coloré
-  déterministe (initiales, couleur dérivée du nom) — pas de logo tiers
-  hébergé, pour ne reproduire aucune marque sans autorisation.
+  - **Taux d'usage des accès (NFC/Mobile/Code/QR)** : valeurs réelles
+    importées de l'audit clients Sesame (`AUDIT_CLIENTS_SESAME_2025.xlsx`,
+    lignes "Taux d'utilisation…") pour 59 des 67 fiches — remplace les
+    placeholders à 0 précédemment affichés pour la quasi-totalité du
+    portefeuille (`AUDIT_USAGE` dans `seed.ts`, appliqué par nom de
+    fiche). Les 8 fiches sans ligne d'audit correspondante gardent leurs
+    valeurs à 0 plutôt qu'une valeur inventée.
+  - **Parcours client activés** : 7 nouveaux indicateurs par fiche —
+    onboarding (choix de la chambre, déclaration occupant, vérification
+    d'identité, préférences ménage) et rubriques de l'espace client
+    (boutique, points fidélité, évènements — livret digital et gestion de
+    demande existaient déjà). Pré-cochés à la création selon le secteur du
+    client (`sectorGroupFor()`/`journeyFlagsFor()` dans `seed.ts`) : les
+    étapes propres à l'hébergement (chambre, ménage) ne s'appliquent qu'aux
+    secteurs hôteliers, l'identité et les rubriques de l'espace client sont
+    universelles — éditable ensuite fiche par fiche comme les autres
+    indicateurs.
+- **Vue liste** : quatre graphiques calculés en direct sur les fiches
+  réelles — répartition par secteur (icône dédiée par secteur : hôtel,
+  immeuble, mallette, haltère, maison, carton, cœur, histogramme…), taux
+  d'adoption des modules Sesame (WebApp, Mobile V2, check-in, livret,
+  gestion demande, offline), parcours client activés (onboarding + espace
+  client, cf. ci-dessus), et taux d'usage des accès (NFC/Mobile/Code/QR,
+  moyenné sur les fiches de type Client uniquement — un total "tout support
+  confondu" est affiché en pied de carte, permettant de vérifier d'un coup
+  d'œil qu'il avoisine 100%) — palette validée avec le validateur `dataviz`
+  (bleu/orange/violet/vert, écarts CVD ≥ 24 ΔE). Chaque fiche/PMS affiche
+  aussi un badge coloré déterministe (initiales, couleur dérivée du nom) —
+  pas de logo tiers hébergé, pour ne reproduire aucune marque sans
+  autorisation.
 - **Alimenté aussi par le formulaire de contact du site web public** :
   `POST /contact` (public, hors `/wa`) reçoit `{nom, email, secteur,
   message}`, crée (ou réutilise, retrouvé par email — pas de doublon sur des

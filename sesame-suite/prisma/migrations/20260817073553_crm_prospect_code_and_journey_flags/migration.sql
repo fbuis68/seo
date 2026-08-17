@@ -1,0 +1,9 @@
+-- AlterTable
+ALTER TABLE "CrmProspect" ADD COLUMN     "code" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "espBoutique" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "espEvenement" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "espPoint" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "onbChoixChambres" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "onbIdentite" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "onbMenage" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "onbOccupant" BOOLEAN NOT NULL DEFAULT false;

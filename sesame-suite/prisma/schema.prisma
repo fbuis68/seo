@@ -611,15 +611,25 @@ model CrmProspect {
   email          String?
   tel            String?
   site           String?
-  nfc            Int     @default(0) // % d'usage
+  nfc            Int     @default(0) // % d'usage — les 4 se totalisent à 100% par fiche
   qr             Int     @default(0)
   mobile         Int     @default(0)
+  code           Int     @default(0)
   webApp         Boolean @default(false)
   mobileV2       Boolean @default(false)
   checkin        Boolean @default(false)
   livret         Boolean @default(false)
   gestionDemande Boolean @default(false)
   offline        Boolean @default(false)
+  // Parcours activés côté client final — par défaut selon le secteur
+  // (cf. sectorGroupFor() côté seed/front), éditables ensuite par fiche.
+  onbChoixChambres Boolean @default(false) // Onboarding : choix de la chambre
+  onbOccupant      Boolean @default(false) // Onboarding : déclaration des occupants
+  onbIdentite      Boolean @default(false) // Onboarding : vérification d'identité
+  onbMenage        Boolean @default(false) // Onboarding : préférences ménage
+  espBoutique      Boolean @default(false) // Espace client : boutique / room service
+  espPoint         Boolean @default(false) // Espace client : solde de points fidélité
+  espEvenement     Boolean @default(false) // Espace client : évènements/offres de l'établissement
   messagerie     String  @default("Noreply") // Noreply | Client
   note           String?
 

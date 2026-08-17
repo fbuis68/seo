@@ -5428,6 +5428,11 @@ async function bootAdminApp(){
   // "fuite" vers l'établissement nouvellement activé (Dashboard, Plan,
   // Gestion des chambres, Planning en dépendent tous).
   await refreshRooms();
+  // Même fuite pour les indicateurs réels : loadRealKpis() ne refetch pas
+  // si KPI_RAW est déjà rempli, donc sans ce reset l'Accueil d'un hôtel
+  // nouvellement activé continuait d'afficher les indicateurs de l'hôtel
+  // précédemment consulté.
+  KPI_RAW = null;
   populateAll();
   renderDash();
   updateHotelInitials();

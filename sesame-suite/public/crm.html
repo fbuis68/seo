@@ -136,9 +136,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,san
 .alert-row{display:flex;gap:7px;align-items:center;flex-wrap:wrap;padding-top:4px}
 .apill{font-size:11px;padding:3px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:4px;background:#faeeda;color:#633806;border:0.5px solid #fac775}
 
-/* TWO COL / THREE COL */
+/* TWO COL / THREE COL / GRID FLUIDE (cartes d'insights) */
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
 .three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px}
+.insight-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:12px}
 
 /* BARS */
 .bar-row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
@@ -316,7 +317,7 @@ input[type=checkbox]{accent-color:var(--a);cursor:pointer;width:14px;height:14px
   .fgrid{grid-template-columns:1fr}
   .tbl-wrap{overflow-x:auto}
   table{min-width:680px}
-  .two-col,.three-col{gap:8px}
+  .two-col,.three-col,.insight-grid{gap:8px}
 }
 </style>
 </head>
@@ -677,23 +678,52 @@ function renderInsights(){
       +'</div>';
   }).join('');
 
-  // ── Taux d'usage cumulé des accès par type (NFC / QR / Mobile) — clients uniquement,
-  // les prospects n'ont pas encore d'usage réel et fausseraient la moyenne à la baisse ──
-  const ACCESS_TYPES=[['nfc','NFC'],['qr','QR Code'],['mobile','Mobile']];
+  // ── Taux d'usage cumulé des accès par type (NFC / Mobile / Code / QR) — clients
+  // uniquement, les prospects n'ont pas encore d'usage réel et fausseraient la
+  // moyenne à la baisse. Sur CHAQUE fiche les 4 taux se totalisent à 100% (ce
+  // sont les 4 façons dont un client final peut s'identifier, pas 4 mesures
+  // indépendantes) : la moyenne des 4 barres totalise donc elle aussi ~100%,
+  // affiché en pied de carte pour le vérifier d'un coup d'œil plutôt que
+  // d'avoir à additionner soi-même les 4 pourcentages affichés. ──
+  const ACCESS_TYPES=[['nfc','NFC'],['mobile','Mobile'],['code','Code'],['qr','QR Code']];
   const clientsOnly=clients.filter(c=>c.type==='Client');
   const nClients=clientsOnly.length;
-  const accessHtml=ACCESS_TYPES.map(([k,lbl])=>{
-    const avg=nClients?Math.round(clientsOnly.reduce((s,c)=>s+(c[k]||0),0)/nClients):0;
-    return '<div class="bar-row" title="'+lbl+' : moyenne '+avg+'% sur '+nClients+' clients">'
+  const accessAvgs=ACCESS_TYPES.map(([k,lbl])=>[lbl,nClients?Math.round(clientsOnly.reduce((s,c)=>s+(c[k]||0),0)/nClients):0]);
+  const accessTotal=accessAvgs.reduce((s,[,v])=>s+v,0);
+  const accessHtml=accessAvgs.map(([lbl,avg])=>
+    '<div class="bar-row" title="'+lbl+' : moyenne '+avg+'% sur '+nClients+' clients">'
       +'<span class="bar-lbl-wide" style="width:80px">'+esc(lbl)+'</span>'
       +'<div class="bar-track"><div class="bar-fill" style="width:'+avg+'%;background:#1baf7a"></div></div>'
       +'<span class="bar-pct">'+avg+'%</span>'
-      +'</div>';
-  }).join('');
+      +'</div>'
+  ).join('')
+  + (nClients?'<div style="font-size:11px;color:#aaa;margin-top:6px;padding-top:6px;border-top:0.5px solid #eeece8">Total tout support confondu : <b style="color:#1a1a1a">'+accessTotal+'%</b></div>':'');
 
-  return '<div class="three-col">'
+  // ── Parcours client activés — étapes d'onboarding et rubriques de l'espace
+  // client, cf. matrice sectorielle (Hôtel/Sport/Stockage/Bureaux) appliquée
+  // par défaut à la création de la fiche puis éditable individuellement ──
+  const ONBOARDING_STEPS=[['onbChoixChambres','Choix chambre'],['onbOccupant','Occupant'],['onbIdentite','Identité'],['onbMenage','Ménage']];
+  const ESPACE_SECTIONS=[['espBoutique','Boutique'],['espPoint','Points fidélité'],['livret','Livret digital'],['gestionDemande','Demande'],['espEvenement','Évènements']];
+  function journeyRows(items){
+    return items.map(([k,lbl])=>{
+      const n=clients.filter(c=>c[k]).length;
+      const pct=total?Math.round(n/total*100):0;
+      return '<div class="bar-row" title="'+lbl+' : '+n+'/'+total+'">'
+        +'<span class="bar-lbl-wide" style="width:110px">'+esc(lbl)+'</span>'
+        +'<div class="bar-track"><div class="bar-fill" style="width:'+pct+'%;background:#8a5fd6"></div></div>'
+        +'<span class="bar-pct">'+pct+'%</span>'
+        +'</div>';
+    }).join('');
+  }
+  const journeyHtml='<div style="font-size:10px;font-weight:500;color:#bbb;letter-spacing:.05em;text-transform:uppercase;margin-bottom:4px">Onboarding</div>'
+    + journeyRows(ONBOARDING_STEPS)
+    + '<div style="font-size:10px;font-weight:500;color:#bbb;letter-spacing:.05em;text-transform:uppercase;margin:9px 0 4px">Espace client</div>'
+    + journeyRows(ESPACE_SECTIONS);
+
+  return '<div class="insight-grid">'
     + '<div class="card"><div class="card-head"><div class="ch-ico">◻</div><span class="ch-title">Répartition par secteur</span></div>'+secteurHtml+'</div>'
     + '<div class="card"><div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Usage des modules Sesame</span><span style="font-size:11px;color:#aaa;margin-left:8px">'+total+' fiches</span></div>'+moduleHtml+'</div>'
+    + '<div class="card"><div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Parcours client activés</span><span style="font-size:11px;color:#aaa;margin-left:8px">'+total+' fiches</span></div>'+journeyHtml+'</div>'
     + '<div class="card"><div class="card-head"><div class="ch-ico">◉</div><span class="ch-title">Taux d\'usage des accès</span><span style="font-size:11px;color:#aaa;margin-left:8px">'+nClients+' clients</span></div>'+accessHtml
       +(nClients?'':'<div style="font-size:12px;color:#bbb;padding:4px 0;font-style:italic">Aucune fiche de type Client</div>')+'</div>'
     + '</div>';
@@ -810,13 +840,14 @@ function showFiche(id){
   loadAdminAccessCard(c);
 }
 
-function riskScore(c){let s=0;if(c.danger==='Élevé !!')s+=5;else if(c.danger==='Modéré')s+=3;if(c.contrat==='non')s+=2;if(!c.webApp&&!c.mobileV2)s+=1;if(!c.nfc&&!c.qr&&!c.mobile)s+=1;return Math.min(s,10);}
+function riskScore(c){let s=0;if(c.danger==='Élevé !!')s+=5;else if(c.danger==='Modéré')s+=3;if(c.contrat==='non')s+=2;if(!c.webApp&&!c.mobileV2)s+=1;if(!c.nfc&&!c.qr&&!c.mobile&&!c.code)s+=1;return Math.min(s,10);}
 function scoreColor(s){return s<=3?'#27500a':s<=6?'#854f0b':'#a32d2d';}
 function scoreLbl(s){return s<=3?'Faible':s<=6?'Modéré':'Élevé';}
 
 function renderFiche(c){
   const sc=riskScore(c);
   const featDef=[['WebApp',c.webApp],['Mobile V2',c.mobileV2],['Offline',c.offline],['Livret digital',c.livret],['Check-in mobile',c.checkin],['Gestion demande',c.gestionDemande]];
+  const journeyDef=[['Choix chambre',c.onbChoixChambres],['Occupant',c.onbOccupant],['Identité',c.onbIdentite],['Ménage',c.onbMenage],['Boutique',c.espBoutique],['Points fidélité',c.espPoint],['Évènements',c.espEvenement]];
   const upsells=[
     {show:!c.checkin,ico:'◉',bg:'#eeedfe',name:'Check-in mobile',price:'+90€/mois',pcl:'t-purple'},
     {show:!c.gestionDemande,ico:'◈',bg:'#eaf3de',name:'Gestion demande',price:'',pcl:'t-green'},
@@ -888,14 +919,19 @@ function renderFiche(c){
   <div class="two-col">
     <div class="card">
       <div class="card-head"><div class="ch-ico">◉</div><span class="ch-title">Usage des accès</span></div>
-      ${c.nfc||c.qr||c.mobile
+      ${c.nfc||c.qr||c.mobile||c.code
         ?`<div class="bar-row"><span class="bar-lbl">NFC</span><div class="bar-track"><div class="bar-fill" style="width:${c.nfc}%;background:#185fa5"></div></div><span class="bar-pct">${c.nfc}%</span></div>
-           <div class="bar-row"><span class="bar-lbl">QR Code</span><div class="bar-track"><div class="bar-fill" style="width:${c.qr}%;background:#1d9e75"></div></div><span class="bar-pct">${c.qr}%</span></div>
-           <div class="bar-row"><span class="bar-lbl">Mobile</span><div class="bar-track"><div class="bar-fill" style="width:${c.mobile}%;background:#d4537e"></div></div><span class="bar-pct">${c.mobile}%</span></div>`
+           <div class="bar-row"><span class="bar-lbl">Mobile</span><div class="bar-track"><div class="bar-fill" style="width:${c.mobile}%;background:#d4537e"></div></div><span class="bar-pct">${c.mobile}%</span></div>
+           <div class="bar-row"><span class="bar-lbl">Code</span><div class="bar-track"><div class="bar-fill" style="width:${c.code}%;background:#ef9f27"></div></div><span class="bar-pct">${c.code}%</span></div>
+           <div class="bar-row"><span class="bar-lbl">QR Code</span><div class="bar-track"><div class="bar-fill" style="width:${c.qr}%;background:#1d9e75"></div></div><span class="bar-pct">${c.qr}%</span></div>`
         :`<div style="font-size:12px;color:#bbb;padding:4px 0;font-style:italic">Données non renseignées</div>`}
       <div class="feat-lbl">Features actives</div>
       <div class="feat-pills">
         ${featDef.map(([n,v])=>`<span class="fp ${v?'fp-on':'fp-off'}"><span class="fp-ico">${v?'✓':'✕'}</span>${n}</span>`).join('')}
+      </div>
+      <div class="feat-lbl">Parcours activés</div>
+      <div class="feat-pills">
+        ${journeyDef.map(([n,v])=>`<span class="fp ${v?'fp-on':'fp-off'}"><span class="fp-ico">${v?'✓':'✕'}</span>${n}</span>`).join('')}
       </div>
     </div>
     <div class="card">
@@ -1186,11 +1222,12 @@ function renderModal(mc){
         <div class="ff"><label>Statut appel</label><input id="m-appel" value="${esc(mc.appel)}" placeholder="date ou Ne pas appeler"></div>
       </div>
 
-      <div class="modal-section">Taux d'usage (%)</div>
+      <div class="modal-section">Taux d'usage (%) — les 4 se totalisent à 100%</div>
       <div class="form-grid">
         <div class="ff"><label>NFC %</label><input type="number" id="m-nfc" value="${mc.nfc||0}" min="0" max="100"></div>
-        <div class="ff"><label>QR Code %</label><input type="number" id="m-qr" value="${mc.qr||0}" min="0" max="100"></div>
         <div class="ff"><label>Mobile %</label><input type="number" id="m-mob" value="${mc.mobile||0}" min="0" max="100"></div>
+        <div class="ff"><label>Code %</label><input type="number" id="m-code" value="${mc.code||0}" min="0" max="100"></div>
+        <div class="ff"><label>QR Code %</label><input type="number" id="m-qr" value="${mc.qr||0}" min="0" max="100"></div>
       </div>
 
       <div class="modal-section">Features actives</div>
@@ -1199,8 +1236,23 @@ function renderModal(mc){
         <label><input type="checkbox" id="m-v2" ${mc.mobileV2?'checked':''}> Mobile V2</label>
         <label><input type="checkbox" id="m-offline" ${mc.offline?'checked':''}> Offline</label>
         <label><input type="checkbox" id="m-checkin" ${mc.checkin?'checked':''}> Check-in mobile</label>
+      </div>
+
+      <div class="modal-section">Parcours — Onboarding</div>
+      <div class="feat-checks">
+        <label><input type="checkbox" id="m-onb-chambres" ${mc.onbChoixChambres?'checked':''}> Choix chambre</label>
+        <label><input type="checkbox" id="m-onb-occupant" ${mc.onbOccupant?'checked':''}> Occupant</label>
+        <label><input type="checkbox" id="m-onb-identite" ${mc.onbIdentite?'checked':''}> Identité</label>
+        <label><input type="checkbox" id="m-onb-menage" ${mc.onbMenage?'checked':''}> Ménage</label>
+      </div>
+
+      <div class="modal-section">Parcours — Espace client</div>
+      <div class="feat-checks">
+        <label><input type="checkbox" id="m-esp-boutique" ${mc.espBoutique?'checked':''}> Boutique</label>
+        <label><input type="checkbox" id="m-esp-point" ${mc.espPoint?'checked':''}> Points fidélité</label>
         <label><input type="checkbox" id="m-livret" ${mc.livret?'checked':''}> Livret digital</label>
-        <label><input type="checkbox" id="m-gd" ${mc.gestionDemande?'checked':''}> Gestion demande</label>
+        <label><input type="checkbox" id="m-gd" ${mc.gestionDemande?'checked':''}> Demande</label>
+        <label><input type="checkbox" id="m-esp-evenement" ${mc.espEvenement?'checked':''}> Évènements</label>
       </div>
 
       <div class="modal-section">Note interne</div>
@@ -1223,9 +1275,12 @@ async function saveModal(id,isNew){
     pms:g('m-pms').value,messagerie:g('m-msg').value,danger:g('m-danger').value,
     potentiel:+g('m-pot').value,modules:+g('m-mod').value,contrat:g('m-contrat').value,
     priorite:+g('m-prio').value,appel:g('m-appel').value,
-    nfc:+g('m-nfc').value,qr:+g('m-qr').value,mobile:+g('m-mob').value,
+    nfc:+g('m-nfc').value,qr:+g('m-qr').value,mobile:+g('m-mob').value,code:+g('m-code').value,
     webApp:g('m-webapp').checked,mobileV2:g('m-v2').checked,offline:g('m-offline').checked,
     checkin:g('m-checkin').checked,livret:g('m-livret').checked,gestionDemande:g('m-gd').checked,
+    onbChoixChambres:g('m-onb-chambres').checked,onbOccupant:g('m-onb-occupant').checked,
+    onbIdentite:g('m-onb-identite').checked,onbMenage:g('m-onb-menage').checked,
+    espBoutique:g('m-esp-boutique').checked,espPoint:g('m-esp-point').checked,espEvenement:g('m-esp-evenement').checked,
     note:g('m-note').value
   };
   if(!ch.nom){flash('Le nom est obligatoire');return;}
@@ -1800,8 +1855,8 @@ async function testRule(id){
 // CSV EXPORT
 // ════════════════════════════════════════
 function exportCSV(){
-  const h=['ID','Type','Nom','Groupe','Secteur','Ville','Étoiles','Risque','Potentiel','Contrat','Modules','PMS','Priorité','Appel','Référent','Email','Tél','Site','NFC%','QR%','Mobile%','WebApp','MobileV2','Offline','Check-in','Livret','Gestion','Messagerie','Note','Nb activités'];
-  const rows=clients.map(c=>[c.id,c.type,c.nom,c.groupe,c.secteur,c.ville,c.etoiles,c.danger,c.potentiel,c.contrat,c.modules,c.pms,c.priorite,c.appel,c.referent,c.email,c.tel,c.site,c.nfc,c.qr,c.mobile,c.webApp?'oui':'non',c.mobileV2?'oui':'non',c.offline?'oui':'non',c.checkin?'oui':'non',c.livret?'oui':'non',c.gestionDemande?'oui':'non',c.messagerie,c.note,(c.journal||[]).length].map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`));
+  const h=['ID','Type','Nom','Groupe','Secteur','Ville','Étoiles','Risque','Potentiel','Contrat','Modules','PMS','Priorité','Appel','Référent','Email','Tél','Site','NFC%','Mobile%','Code%','QR%','WebApp','MobileV2','Offline','Check-in','Onb. Choix chambre','Onb. Occupant','Onb. Identité','Onb. Ménage','Esp. Boutique','Esp. Points','Esp. Livret','Esp. Demande','Esp. Évènements','Messagerie','Note','Nb activités'];
+  const rows=clients.map(c=>[c.id,c.type,c.nom,c.groupe,c.secteur,c.ville,c.etoiles,c.danger,c.potentiel,c.contrat,c.modules,c.pms,c.priorite,c.appel,c.referent,c.email,c.tel,c.site,c.nfc,c.mobile,c.code,c.qr,c.webApp?'oui':'non',c.mobileV2?'oui':'non',c.offline?'oui':'non',c.checkin?'oui':'non',c.onbChoixChambres?'oui':'non',c.onbOccupant?'oui':'non',c.onbIdentite?'oui':'non',c.onbMenage?'oui':'non',c.espBoutique?'oui':'non',c.espPoint?'oui':'non',c.livret?'oui':'non',c.gestionDemande?'oui':'non',c.espEvenement?'oui':'non',c.messagerie,c.note,(c.journal||[]).length].map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`));
   const csv='﻿'+[h,...rows].map(r=>r.join(';')).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='sesame_crm_export.csv';a.click();
 }

@@ -49,12 +49,20 @@ function shapeProspect(p: {
   nfc: number;
   qr: number;
   mobile: number;
+  code: number;
   webApp: boolean;
   mobileV2: boolean;
   checkin: boolean;
   livret: boolean;
   gestionDemande: boolean;
   offline: boolean;
+  onbChoixChambres: boolean;
+  onbOccupant: boolean;
+  onbIdentite: boolean;
+  onbMenage: boolean;
+  espBoutique: boolean;
+  espPoint: boolean;
+  espEvenement: boolean;
   messagerie: string;
   note: string | null;
   createdAt: Date;
@@ -87,12 +95,20 @@ function shapeProspect(p: {
     nfc: p.nfc,
     qr: p.qr,
     mobile: p.mobile,
+    code: p.code,
     webApp: p.webApp,
     mobileV2: p.mobileV2,
     checkin: p.checkin,
     livret: p.livret,
     gestionDemande: p.gestionDemande,
     offline: p.offline,
+    onbChoixChambres: p.onbChoixChambres,
+    onbOccupant: p.onbOccupant,
+    onbIdentite: p.onbIdentite,
+    onbMenage: p.onbMenage,
+    espBoutique: p.espBoutique,
+    espPoint: p.espPoint,
+    espEvenement: p.espEvenement,
     messagerie: p.messagerie,
     note: p.note || "",
     createdAt: p.createdAt,
@@ -134,12 +150,20 @@ interface ProspectBody {
   nfc?: number;
   qr?: number;
   mobile?: number;
+  code?: number;
   webApp?: boolean;
   mobileV2?: boolean;
   checkin?: boolean;
   livret?: boolean;
   gestionDemande?: boolean;
   offline?: boolean;
+  onbChoixChambres?: boolean;
+  onbOccupant?: boolean;
+  onbIdentite?: boolean;
+  onbMenage?: boolean;
+  espBoutique?: boolean;
+  espPoint?: boolean;
+  espEvenement?: boolean;
   messagerie?: string;
   note?: string;
 }
@@ -173,12 +197,20 @@ crmProspectRouter.post(
         nfc: b.nfc ?? 0,
         qr: b.qr ?? 0,
         mobile: b.mobile ?? 0,
+        code: b.code ?? 0,
         webApp: !!b.webApp,
         mobileV2: !!b.mobileV2,
         checkin: !!b.checkin,
         livret: !!b.livret,
         gestionDemande: !!b.gestionDemande,
         offline: !!b.offline,
+        onbChoixChambres: !!b.onbChoixChambres,
+        onbOccupant: !!b.onbOccupant,
+        onbIdentite: !!b.onbIdentite,
+        onbMenage: !!b.onbMenage,
+        espBoutique: !!b.espBoutique,
+        espPoint: !!b.espPoint,
+        espEvenement: !!b.espEvenement,
         messagerie: b.messagerie || "Noreply",
         note: b.note,
       },
@@ -229,12 +261,20 @@ crmProspectRouter.post(
         nfc: b.nfc,
         qr: b.qr,
         mobile: b.mobile,
+        code: b.code,
         webApp: b.webApp,
         mobileV2: b.mobileV2,
         checkin: b.checkin,
         livret: b.livret,
         gestionDemande: b.gestionDemande,
         offline: b.offline,
+        onbChoixChambres: b.onbChoixChambres,
+        onbOccupant: b.onbOccupant,
+        onbIdentite: b.onbIdentite,
+        onbMenage: b.onbMenage,
+        espBoutique: b.espBoutique,
+        espPoint: b.espPoint,
+        espEvenement: b.espEvenement,
         messagerie: b.messagerie,
         note: b.note,
       },
