@@ -189,7 +189,7 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(port, '127.0.0.1', () => {
+server.listen(port, '0.0.0.0', () => {
   const counts = Object.fromEntries(Object.entries(DATA).map(([k, v]) => [k, v.length]));
   console.log('Données fictives générées :', counts);
   console.log(`→ http://127.0.0.1:${port}/widget-ia.html?entityId=${ENTITY_ID}`);
