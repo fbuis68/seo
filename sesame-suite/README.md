@@ -270,6 +270,11 @@ graphiques passent en une colonne, les tableaux défilent horizontalement.
 Ascenseur de la zone principale (`.main`, y compris la vue Grille) toujours
 visible et stylé (au lieu de l'ascenseur système, masqué par défaut sur
 certains OS/navigateurs — ce qui rendait le défilement peu évident).
+**Correction** : au-delà d'une poignée de fiches, la vue Liste restait
+tronquée sans aucun ascenseur — `.tbl-wrap` (conteneur du tableau) avait
+`overflow:hidden`, ce qui en flexbox lui donne un `min-height` automatique
+de 0 au lieu de la taille de son contenu ; il se faisait donc écraser par
+`.main` au lieu de le faire déborder. Corrigé avec `flex-shrink:0`.
 
 - Fiche par établissement : coordonnées, score de risque de churn calculé,
   usage des accès (NFC/Mobile/Code/QR — les 4 se totalisent à 100% par
@@ -319,12 +324,26 @@ certains OS/navigateurs — ce qui rendait le défilement peu évident).
     par base comme toute migration — sans risque d'écraser un indicateur
     modifié depuis dans l'app (les taux d'usage ne sont corrigés que sur
     les fiches encore à 0 sur les 4 colonnes).
+  - **Coordonnées et installation** (référent, téléphone, PMS, site web,
+    nombre de modules) : également importés du même audit (colonnes
+    "Référent du projet" — texte libre nom/rôle/email/téléphone sur des
+    lignes séparées, extrait par classification ligne à ligne plutôt que
+    par position fixe vu l'hétérogénéité du texte saisi —, "Interface
+    (PMS)", "Site internet", "Nombre module") pour 65 des 67 fiches.
+    Migration dédiée pour les bases déjà provisionnées
+    (`20260817120000_crm_prospect_backfill_contact_info`) — chacun des 5
+    champs est corrigé indépendamment des autres (jamais groupés en une
+    seule requête), pour ne jamais écraser un champ déjà édité juste parce
+    qu'un champ voisin est encore vide.
 - **Vue liste** : quatre graphiques calculés en direct sur les fiches
   réelles — répartition par secteur (icône dédiée par secteur : hôtel,
   immeuble, mallette, haltère, maison, carton, cœur, histogramme…), taux
-  d'adoption des modules Sesame (WebApp, Mobile V2, check-in, livret,
-  gestion demande, offline), parcours client activés (onboarding + espace
-  client, cf. ci-dessus), et **répartition des accès en camembert**
+  d'adoption des modules Sesame en tant qu'intégration technique (WebApp,
+  Mobile V2, check-in, offline — livret digital et gestion de demande
+  vivent uniquement dans "Parcours client activés" pour ne pas doubler le
+  même indicateur dans deux graphiques), parcours client activés
+  (onboarding + espace client, cf. ci-dessus), et **répartition des accès
+  en camembert**
   (NFC/Mobile/Code/QR — un anneau SVG plutôt que 4 barres, plus lisible
   pour une répartition qui se totalise à 100%), calculée uniquement sur les
   fiches Client ayant réellement des données d'usage (audit) — une fiche

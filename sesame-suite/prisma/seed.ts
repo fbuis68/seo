@@ -196,6 +196,86 @@ const AUDIT_USAGE: Record<string, { nfc: number; mobile: number; code: number; q
 };
 
 /**
+ * Coordonnées et installation — référent (nom), téléphone, PMS, site web et
+ * nombre de modules — extraits du même audit clients Sesame que AUDIT_USAGE
+ * ci-dessus (colonnes "Référent du projet", "Interface (PMS)", "Site
+ * internet", "Nombre module"). Le référent/téléphone sont en texte libre
+ * dans l'audit (nom, rôle, email, téléphone sur des lignes séparées, ordre et
+ * présence variables) — extraits par une classification ligne à ligne plutôt
+ * que par position fixe (une ligne qui contient des chiffres est un
+ * téléphone, une ligne avec un @ est ignorée, sinon la première ligne
+ * textuelle est le nom). 65 des 67 fiches ont au moins un champ ; les 2
+ * fiches sans ligne d'audit correspondante gardent leurs valeurs vides.
+ */
+const AUDIT_CONTACT: Record<string, Partial<{ referent: string; tel: string; pms: string; site: string; modules: number }>> = {
+  "1K": { tel: "01 42 71 20 00", pms: "Mews Intégration", site: "1k-paris.com", modules: 51 },
+  "ACGP93": { modules: 7 },
+  "AKANTHA": { pms: "Thais", site: "residence-akantha.nicehotelnice.com", modules: 6 },
+  "ASEAT": { referent: "Ciminato", tel: "06 65 09 63 89", pms: "TeamR", site: "aseat.fr", modules: 4 },
+  "ASTORG": { pms: "MyGuest Check", modules: 36 },
+  "ASTREA": { site: "hotel-astrea-nevers.fr" },
+  "AUBERG'INE": { pms: "Thais", site: "maisons-glenn-anna.fr", modules: 24 },
+  "Ambassadeur Lille": { referent: "Sébastien Besin", tel: "06 88 83 33 13", pms: "MisterBooking", site: "hotel-lille-ambassadeur.fr", modules: 30 },
+  "Appartements de Lille": { site: "appartementsdelille.com", modules: 8 },
+  "Apparts de Marin": { tel: "02 43 53 09 68", pms: "Chloé", site: "marin-hotel.fr", modules: 2 },
+  "Auberge St Jacques": { pms: "MisterBooking", site: "aubergestjacques.fr", modules: 14 },
+  "BELLEVAL": { tel: "01 85 73 36 45", pms: "Mews Intégration", site: "belleval-hotel-paris.com", modules: 67 },
+  "BUDA FITNESS": { referent: "Laurent Suys", tel: "+32472889835", modules: 1 },
+  "Beaujour & Bonsoir": { referent: "Mathilde Maniglier", pms: "Thais", site: "beaujour-bonsoir.fr", modules: 36 },
+  "Bedzzz Apartments": { site: "bedzzz.com", modules: 42 },
+  "CHÂTEAU DU SOUZY": { site: "chateaudusouzy.com", modules: 9 },
+  "CITYZEN": { pms: "MyGuest Check", modules: 24 },
+  "COEURMANDIE": { referent: "Damien Verhulst", tel: "06 79 44 46 76", pms: "Mews Intégration", site: "domaine-de-coeurmandie.fr", modules: 27 },
+  "COLOMBYA": { referent: "Laurent Dubernais", tel: "06 84 21 45 00", modules: 3 },
+  "COPWELL – Fédé. Natation": { modules: 2 },
+  "COPWELL – HAVAS": { modules: 5 },
+  "COPWELL – LARCO": { modules: 1 },
+  "DOJO BORDEAUX": { tel: "06 74 39 92 15", pms: "TeamR", site: "dojobordeauxmetropole.com", modules: 1 },
+  "DOMAINE DU BELVEDERE": { site: "domainedubelvedere.com", modules: 3 },
+  "DYNAMIC SEVRES": { referent: "Ambre Arena", tel: "06 08 84 02 29", pms: "TeamR", site: "dynamicsevres.com", modules: 2 },
+  "ESCALE AU SOLEIL": { referent: "Muriel Thomas", tel: "04 94 52 71 47", pms: "Reservit", site: "hotelescalesoleil.com", modules: 17 },
+  "FLORELLA": { referent: "Debora Lemasle", tel: "04 22 32 62 53", pms: "Mews Intégration", site: "florella.fr", modules: 17 },
+  "HOTEL DE FRANCE": { tel: "01 47 05 40 49", pms: "Thais", site: "hoteldefrance.com", modules: 61 },
+  "HOTEL DE LA GARE": { referent: "Thomas Dunoyer", tel: "03 85 52 17 90", pms: "Thais", site: "delagare.hotel-autun.fr", modules: 22 },
+  "HOTEL MARIE": { referent: "HAMMOUR Areslane", tel: "06 27 68 42 10", pms: "Thais", site: "hotelmarie.fr", modules: 25 },
+  "KI SPACE": { referent: "Pablo Got", tel: "06 98 79 80 12", pms: "Mews Intégration", site: "kispace-hotel.com/fr" },
+  "KUBE": { pms: "Mews Intégration", site: "kubehotel-paris.com", modules: 43 },
+  "LA PENICHE AIGUES MORTES": { referent: "David Faure", tel: "06 07 40 10 24", pms: "MisterBooking", site: "lapeniche.biz", modules: 8 },
+  "LA PENICHE HISSEO": { referent: "David Faure", tel: "06 07 40 10 24", site: "lapeniche.biz", modules: 4 },
+  "LA PENICHE TOURNON": { referent: "David Faure", tel: "06 07 40 10 24", pms: "MisterBooking", site: "lapeniche.biz", modules: 11 },
+  "LA RUCHE": { tel: "01 30 33 20 00", site: "hotel-laruche78.com", modules: 17 },
+  "LE BAIN SAUVAGE": { referent: "Roxane CASTEIGNAU", tel: "06 87 28 43 84", pms: "Thais", site: "lebainsauvage-pyrenees.com", modules: 18 },
+  "LE MEURICE RIVIERA": { referent: "Leroy Patricia", tel: "06 68 89 38 98", pms: "Medialog", site: "hotel-le-meurice.com", modules: 23 },
+  "LE VICTOR": { referent: "John Paquet", tel: "06 42 45 36 95", pms: "Lodgify", site: "levictor-paris.com", modules: 11 },
+  "LES SUITES TOUR EIFFEL": { referent: "Nathalie Chon", tel: "06 09 17 56 01", pms: "MisterBooking", site: "aucoeurparis.com/hotel-au-coeur-de-republique", modules: 12 },
+  "LOUVRE PIEMONT": { pms: "MisterBooking", site: "hotel-louvre-piemont.com", modules: 22 },
+  "LYONNAIS NICE": { pms: "Thais", site: "hotel-lyonnais-nice.pensionaussie.top", modules: 31 },
+  "LocBox AVRANCHES": { referent: "Joeffrey Leduc", tel: "06 50 94 83 17", pms: "Easy Space", site: "loc-box.com", modules: 2 },
+  "LocBox GRANVILLE": { referent: "Joeffrey Leduc", tel: "06 50 94 83 17", pms: "Easy Space", site: "loc-box.com", modules: 2 },
+  "LocBox VIRE": { referent: "Joeffrey Leduc", tel: "06 50 94 83 17", pms: "Easy Space", site: "loc-box.com", modules: 4 },
+  "MAB BOX": { referent: "Mathieu Hontas", tel: "06 71 39 42 87", modules: 2 },
+  "MAISON ROQUELONGUE": { pms: "Escobe", site: "maison-roquelongue.fr", modules: 1 },
+  "MINA MINA": { referent: "Nicolas Bonnaud", pms: "Thais", site: "minamina-chambreavecjacuzziprivatif.com", modules: 3 },
+  "MMIP CHAMP DE MARS": { pms: "Médialog", site: "mymaisoninparis.com", modules: 6 },
+  "MMIP CITE VERON": { pms: "Médialog", site: "mymaisoninparis.com", modules: 19 },
+  "MMIP INVALIDES": { pms: "Medialog", site: "mymaisoninparis.com", modules: 54 },
+  "MONTEFIORE": { referent: "Celine Montefiore", tel: "04 22 46 03 03", pms: "Mews Intégration", site: "montefiore-apartments.com", modules: 7 },
+  "PUC": { pms: "TeamR", site: "puc.paris", modules: 5 },
+  "QUEENS HOTEL PARIS": { referent: "Agathe Gibey", tel: "06 07 30 69 99", pms: "Medialog", site: "queens-hotel-paris.com", modules: 19 },
+  "REGINA D'AVIGNON": { referent: "Thomas LELIEUR", tel: "06 61 47 88 05", pms: "Medialog", site: "hotelregina-avignon.fr", modules: 29 },
+  "ROSA HOTEL": { pms: "MisterBooking", site: "rosa-hotel.com", modules: 35 },
+  "ROYAL HOTEL TULLE": { pms: "MisterBooking", site: "leroyal-hotel.com", modules: 27 },
+  "SEM PAU": { referent: "Mme Baudry Jambes", tel: "06 75 66 36 39", site: "paucitemultimedia.com", modules: 18 },
+  "SEROTEL": { pms: "Medialog", site: "hotellutece.com", modules: 17 },
+  "TAC BOX": { site: "tacbox.fr", modules: 2 },
+  "VILLA CADIERE": { modules: 5 },
+  "VILLAGE D+ CORREZE": { referent: "Johan Ducloux", tel: "0672613185", site: "village-dplus.com/fr/detente-correze", modules: 29 },
+  "VILLAGE D+ VALLOIRE": { referent: "Johan Ducloux", tel: "0672613185", pms: "Thais", site: "pulse-sports-agency.com", modules: 45 },
+  "WELLBEE": { referent: "Patrice Arsicaud", site: "wellbeespace.fr", modules: 56 },
+  "YOU ARE DEAUVILLE": { pms: "Mews Intégration", site: "youaredeauville.com", modules: 94 },
+};
+
+/**
  * Parcours activés par défaut selon le secteur d'activité — cf. matrice
  * fournie (Hôtel/Sport/Stockage/Bureaux × étapes d'onboarding et rubriques
  * de l'espace client). Le choix des chambres, la déclaration d'occupants et
@@ -581,8 +661,9 @@ async function main() {
     for (const row of CRM_SEED_PROSPECTS) {
       const { journal, ...data } = row;
       const usage = AUDIT_USAGE[row.nom];
+      const contact = AUDIT_CONTACT[row.nom];
       const created = await prisma.crmProspect.create({
-        data: { ...data, ...(usage || {}), ...journeyFlagsFor(row.secteur) },
+        data: { ...data, ...(usage || {}), ...(contact || {}), ...journeyFlagsFor(row.secteur) },
       });
       if (journal) {
         for (const j of journal) {
