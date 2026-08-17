@@ -98,12 +98,35 @@ async function parseJsonResponse(res: Response, context: string): Promise<unknow
 }
 
 /**
+ * Extrait les cookies "Set-Cookie" d'une réponse en un en-tête "Cookie:" prêt
+ * à renvoyer (ex : "JSESSIONID=abc; autre=xyz") — certains systèmes (ex :
+ * portail Sesame Technology) authentifient les appels suivants par cookie de
+ * session plutôt que (ou en plus) par le token renvoyé dans le corps JSON.
+ * `Headers.get("set-cookie")` fusionne plusieurs en-têtes avec ", ", ce qui
+ * casse le format des cookies (leur date d'expiration contient des virgules)
+ * — on utilise `getSetCookie()` (disponible sur le fetch de Node) quand elle
+ * existe, sinon on se rabat sur `get()` (suffisant s'il n'y a qu'un cookie).
+ */
+function extractCookieHeader(res: Response): string | undefined {
+  const headers = res.headers as Headers & { getSetCookie?: () => string[] };
+  const raw = typeof headers.getSetCookie === "function" ? headers.getSetCookie() : (() => {
+    const single = res.headers.get("set-cookie");
+    return single ? [single] : [];
+  })();
+  const pairs = raw.map((c) => c.split(";")[0].trim()).filter(Boolean);
+  return pairs.length ? pairs.join("; ") : undefined;
+}
+
+/**
  * Flux "login" (ex : API Sesame Technology) — POST des identifiants vers
  * loginPath, extraction du token via loginTokenPath. Relancé à chaque appel
  * (pas de cache de token) : plus simple et plus sûr qu'une expiration mal
- * estimée, et les synchronisations restent peu fréquentes (≥1h).
+ * estimée, et les synchronisations restent peu fréquentes (≥1h). Renvoie
+ * aussi le cookie de session éventuellement posé par la réponse de connexion
+ * (cf. extractCookieHeader), à renvoyer sur les appels suivants pour les
+ * systèmes qui authentifient par session plutôt que par token.
  */
-async function performLogin(config: BookingSourceConfig): Promise<string> {
+async function performLogin(config: BookingSourceConfig): Promise<{ token: string; cookie?: string }> {
   if (!config.baseUrl) throw new BookingSourceError("URL de base non configurée");
   if (!config.loginEmail || !config.loginPassword) throw new BookingSourceError("Email et mot de passe de connexion requis");
 
@@ -134,6 +157,7 @@ async function performLogin(config: BookingSourceConfig): Promise<string> {
   }
   if (!res.ok) throw new BookingSourceError(`La connexion a échoué : ${res.status} ${res.statusText}`);
 
+  const cookie = extractCookieHeader(res);
   const responseBody = await parseJsonResponse(res, "La réponse de connexion");
 
   let token: unknown;
@@ -172,7 +196,7 @@ async function performLogin(config: BookingSourceConfig): Promise<string> {
         : "Chemin du token de connexion non configuré"
     );
   }
-  return token;
+  return { token, cookie };
 }
 
 async function buildAuthHeaders(config: BookingSourceConfig): Promise<Record<string, string>> {
@@ -186,9 +210,12 @@ async function buildAuthHeaders(config: BookingSourceConfig): Promise<Record<str
       if (!config.authBasicUser) return {};
       return { Authorization: "Basic " + Buffer.from(`${config.authBasicUser}:${config.authBasicPassword || ""}`).toString("base64") };
     case "login": {
-      const token = await performLogin(config);
+      const { token, cookie } = await performLogin(config);
       const headerName = config.loginTokenHeaderName || "Authorization";
-      return { [headerName]: (config.loginTokenPrefix || "") + token };
+      return {
+        [headerName]: (config.loginTokenPrefix || "") + token,
+        ...(cookie ? { Cookie: cookie } : {}),
+      };
     }
     default:
       return {};
