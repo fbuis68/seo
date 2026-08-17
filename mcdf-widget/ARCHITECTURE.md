@@ -14,9 +14,15 @@ sur la même base technique déjà construite et validée contre l'API réelle
 
 Chaque module ci-dessous a son propre `NOTES.md` dans `modules/` avec le détail.
 
-**`production/`** contient le premier livrable réel : `widget-ia.html`
-(page autonome, données MCDF en direct, lecture seule) + `INTEGRATION.md`
-(instructions pour le développeur qui le branche dans l'appli).
+**`production/`** contient les livrables réels :
+- `widget-ia.html` (module rapports, page autonome, données MCDF en
+  direct, lecture seule) + `INTEGRATION.md` / `INSTALL-SERVEUR-TEST.md`
+- `launcher.html` (bouton flottant + panneau donnant accès aux 4
+  modules) + `INSTALL-LAUNCHER.md` — point d'entrée unique une fois les
+  autres modules prêts, cf. capture d'écran du widget d'aide MCDF qui a
+  inspiré ce pattern.
+- `mock_server.py` / `mock_server.js` — validation locale sans accès à
+  MCDF, données fictives dans le même format que l'API réelle.
 
 ## Vue d'ensemble
 
