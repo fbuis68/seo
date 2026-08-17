@@ -241,6 +241,12 @@ model BookingSourceConfig {
   sourceName   String? // libellé libre (ex: "Mews", "Opera", "PMS interne")
   baseUrl      String?
   endpointPath String? // ex: "/v1/bookings" — concaténé à baseUrl
+  // La plupart des API répondent à un simple GET, mais certaines (ex : API
+  // Sesame Technology, /wa/booking/list) exigent un POST avec un corps
+  // application/x-www-form-urlencoded — souvent juste de la pagination
+  // (start/limit). endpointBodyParams n'est envoyé que si endpointMethod="POST".
+  endpointMethod     String? @default("GET") // GET | POST
+  endpointBodyParams Json? // ex: {"start":"0","limit":"1000"}
 
   authType          String  @default("none") // none | apiKey | bearer | basic | login
   authApiKeyHeader  String? // ex: "X-API-Key"
@@ -289,6 +295,8 @@ model BookingSourceConfig {
   // avec les codes exacts de la source externe permet ensuite au mapping
   // "facilityCode" des réservations de retrouver la bonne chambre.
   facilityEndpointPath     String? // ex: "/ws/facility/list" — concaténé à baseUrl
+  facilityEndpointMethod     String? @default("GET") // GET | POST — cf. endpointMethod
+  facilityEndpointBodyParams Json?
   facilityResponseListPath String?
   // {code, name, floor, category, capacity, surface} -> chemin dot-path.
   facilityFieldMapping     Json?

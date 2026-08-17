@@ -22,6 +22,8 @@ function shapeConfig(c: {
   sourceName: string | null;
   baseUrl: string | null;
   endpointPath: string | null;
+  endpointMethod: string | null;
+  endpointBodyParams: unknown;
   authType: string;
   authApiKeyHeader: string | null;
   authApiKeyValue: string | null;
@@ -45,6 +47,8 @@ function shapeConfig(c: {
   responseListPath: string | null;
   fieldMapping: unknown;
   facilityEndpointPath: string | null;
+  facilityEndpointMethod: string | null;
+  facilityEndpointBodyParams: unknown;
   facilityResponseListPath: string | null;
   facilityFieldMapping: unknown;
   syncIntervalMinutes: number | null;
@@ -58,6 +62,8 @@ function shapeConfig(c: {
     sourceName: c.sourceName || "",
     baseUrl: c.baseUrl || "",
     endpointPath: c.endpointPath || "",
+    endpointMethod: c.endpointMethod || "GET",
+    endpointBodyParams: c.endpointBodyParams || {},
     authType: c.authType,
     authApiKeyHeader: c.authApiKeyHeader || "",
     authApiKeyValue: c.authApiKeyValue || "",
@@ -81,6 +87,8 @@ function shapeConfig(c: {
     responseListPath: c.responseListPath || "",
     fieldMapping: c.fieldMapping || {},
     facilityEndpointPath: c.facilityEndpointPath || "",
+    facilityEndpointMethod: c.facilityEndpointMethod || "GET",
+    facilityEndpointBodyParams: c.facilityEndpointBodyParams || {},
     facilityResponseListPath: c.facilityResponseListPath || "",
     facilityFieldMapping: c.facilityFieldMapping || {},
     syncIntervalMinutes: c.syncIntervalMinutes,
@@ -111,6 +119,8 @@ interface ConfigBody {
   sourceName?: string;
   baseUrl?: string;
   endpointPath?: string;
+  endpointMethod?: string;
+  endpointBodyParams?: Record<string, string>;
   authType?: string;
   authApiKeyHeader?: string;
   authApiKeyValue?: string;
@@ -134,6 +144,8 @@ interface ConfigBody {
   responseListPath?: string;
   fieldMapping?: FieldMapping;
   facilityEndpointPath?: string;
+  facilityEndpointMethod?: string;
+  facilityEndpointBodyParams?: Record<string, string>;
   facilityResponseListPath?: string;
   facilityFieldMapping?: FacilityMapping;
   syncIntervalMinutes?: number | null;
@@ -151,6 +163,8 @@ bookingSourceRouter.post(
       sourceName: b.sourceName,
       baseUrl: b.baseUrl,
       endpointPath: b.endpointPath,
+      endpointMethod: b.endpointMethod,
+      endpointBodyParams: b.endpointBodyParams as never,
       authType: b.authType,
       authApiKeyHeader: b.authApiKeyHeader,
       authApiKeyValue: b.authApiKeyValue,
@@ -174,6 +188,8 @@ bookingSourceRouter.post(
       responseListPath: b.responseListPath,
       fieldMapping: b.fieldMapping as never,
       facilityEndpointPath: b.facilityEndpointPath,
+      facilityEndpointMethod: b.facilityEndpointMethod,
+      facilityEndpointBodyParams: b.facilityEndpointBodyParams as never,
       facilityResponseListPath: b.facilityResponseListPath,
       facilityFieldMapping: b.facilityFieldMapping as never,
       syncIntervalMinutes: b.syncIntervalMinutes ?? null,
@@ -206,6 +222,8 @@ bookingSourceRouter.post(
       sourceName: b.sourceName ?? saved?.sourceName ?? null,
       baseUrl: b.baseUrl ?? saved?.baseUrl ?? null,
       endpointPath: b.endpointPath ?? saved?.endpointPath ?? null,
+      endpointMethod: b.endpointMethod ?? saved?.endpointMethod ?? "GET",
+      endpointBodyParams: (b.endpointBodyParams ?? saved?.endpointBodyParams ?? {}) as never,
       authType: b.authType ?? saved?.authType ?? "none",
       authApiKeyHeader: b.authApiKeyHeader ?? saved?.authApiKeyHeader ?? null,
       authApiKeyValue: b.authApiKeyValue ?? saved?.authApiKeyValue ?? null,
@@ -229,6 +247,8 @@ bookingSourceRouter.post(
       responseListPath: b.responseListPath ?? saved?.responseListPath ?? null,
       fieldMapping: (b.fieldMapping ?? saved?.fieldMapping ?? {}) as never,
       facilityEndpointPath: b.facilityEndpointPath ?? saved?.facilityEndpointPath ?? null,
+      facilityEndpointMethod: b.facilityEndpointMethod ?? saved?.facilityEndpointMethod ?? "GET",
+      facilityEndpointBodyParams: (b.facilityEndpointBodyParams ?? saved?.facilityEndpointBodyParams ?? {}) as never,
       facilityResponseListPath: b.facilityResponseListPath ?? saved?.facilityResponseListPath ?? null,
       facilityFieldMapping: (b.facilityFieldMapping ?? saved?.facilityFieldMapping ?? {}) as never,
       syncIntervalMinutes: null,
@@ -291,6 +311,8 @@ bookingSourceRouter.post(
       sourceName: b.sourceName ?? saved?.sourceName ?? null,
       baseUrl: b.baseUrl ?? saved?.baseUrl ?? null,
       endpointPath: saved?.endpointPath ?? null,
+      endpointMethod: saved?.endpointMethod ?? "GET",
+      endpointBodyParams: (saved?.endpointBodyParams ?? {}) as never,
       authType: b.authType ?? saved?.authType ?? "none",
       authApiKeyHeader: b.authApiKeyHeader ?? saved?.authApiKeyHeader ?? null,
       authApiKeyValue: b.authApiKeyValue ?? saved?.authApiKeyValue ?? null,
@@ -314,6 +336,8 @@ bookingSourceRouter.post(
       responseListPath: saved?.responseListPath ?? null,
       fieldMapping: (saved?.fieldMapping ?? {}) as never,
       facilityEndpointPath: b.facilityEndpointPath ?? saved?.facilityEndpointPath ?? null,
+      facilityEndpointMethod: b.facilityEndpointMethod ?? saved?.facilityEndpointMethod ?? "GET",
+      facilityEndpointBodyParams: (b.facilityEndpointBodyParams ?? saved?.facilityEndpointBodyParams ?? {}) as never,
       facilityResponseListPath: b.facilityResponseListPath ?? saved?.facilityResponseListPath ?? null,
       facilityFieldMapping: (b.facilityFieldMapping ?? saved?.facilityFieldMapping ?? {}) as never,
       syncIntervalMinutes: null,

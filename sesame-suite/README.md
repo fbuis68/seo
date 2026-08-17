@@ -183,6 +183,13 @@ s'agisse ou non d'un client Sesame :
     sont renseignés, `loginTokenPath` s'applique au profil trouvé plutôt
     qu'à la réponse entière (ex : juste `token`). Erreur explicite listant
     les valeurs disponibles si aucun profil ne correspond.
+- **Méthode HTTP configurable** (`endpointMethod`/`facilityEndpointMethod`,
+  GET par défaut) : la plupart des API répondent à un simple GET, mais
+  l'API Sesame Technology (`POST /wa/booking/list`, confirmé le 17/08/2026)
+  exige un POST avec un corps `application/x-www-form-urlencoded` — souvent
+  juste de la pagination (`start`/`limit`). `endpointBodyParams`/
+  `facilityEndpointBodyParams` (paires clé=valeur, une par ligne dans
+  l'interface) ne sont envoyés que si la méthode est POST.
 - Mapping des champs par chemin JSON libre (ex : `guest.email`,
   `stay.check_in`) — aucune forme de réponse n'est supposée à l'avance,
   contrairement à l'ancien panneau qui ne comprenait que le format Sesame.

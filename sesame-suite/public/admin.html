@@ -1372,6 +1372,16 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         <input type="text" id="bs-endpointPath" placeholder="/v1/bookings" autocomplete="off">
       </div>
     </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Méthode HTTP de l'endpoint</label>
+        <select id="bs-endpointMethod"><option value="GET">GET</option><option value="POST">POST (formulaire)</option></select>
+      </div>
+      <div class="fi">
+        <label class="lb">Paramètres du corps si POST (un par ligne : clé=valeur)</label>
+        <textarea id="bs-endpointBodyParams" rows="2" placeholder="start=0&#10;limit=1000"></textarea>
+      </div>
+    </div>
     <div class="fi">
       <label class="lb">Type d'authentification</label>
       <select id="bs-authType" onchange="bsRenderAuthFields()">
@@ -1407,6 +1417,16 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     <div class="fi">
       <label class="lb">Chemin de l'endpoint des chambres</label>
       <input type="text" id="bs-facilityEndpointPath" placeholder="/ws/facility/list ou /v1/rooms" autocomplete="off">
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Méthode HTTP de l'endpoint</label>
+        <select id="bs-facilityEndpointMethod"><option value="GET">GET</option><option value="POST">POST (formulaire)</option></select>
+      </div>
+      <div class="fi">
+        <label class="lb">Paramètres du corps si POST (un par ligne : clé=valeur)</label>
+        <textarea id="bs-facilityEndpointBodyParams" rows="2" placeholder="start=0&#10;limit=1000"></textarea>
+      </div>
     </div>
     <div class="fi">
       <label class="lb">Chemin vers la liste des chambres dans la réponse</label>
@@ -4517,6 +4537,23 @@ function bsRenderAuthFields(){
   }
 }
 
+/** Convertit un objet {clé:valeur} en texte "clé=valeur" (une ligne par entrée), et inversement — pour le champ "Paramètres du corps si POST". */
+function bsParamsToText(obj){
+  if(!obj || typeof obj !== 'object') return '';
+  return Object.keys(obj).map(function(k){ return k+'='+obj[k]; }).join('\n');
+}
+function bsTextToParams(text){
+  var obj = {};
+  (text||'').split('\n').forEach(function(line){
+    line = line.trim();
+    if(!line) return;
+    var i = line.indexOf('=');
+    if(i<0) return;
+    obj[line.slice(0,i).trim()] = line.slice(i+1).trim();
+  });
+  return obj;
+}
+
 function bsRenderMappingFields(mapping){
   mapping = mapping || {};
   document.getElementById('bs-mapping-fields').innerHTML = BS_MAPPING_FIELDS.map(function(f){
@@ -4561,6 +4598,8 @@ function bsCollectFormValues(){
     sourceName: document.getElementById('bs-sourceName').value.trim(),
     baseUrl: document.getElementById('bs-baseUrl').value.trim(),
     endpointPath: document.getElementById('bs-endpointPath').value.trim(),
+    endpointMethod: document.getElementById('bs-endpointMethod').value,
+    endpointBodyParams: bsTextToParams(document.getElementById('bs-endpointBodyParams').value),
     authType: document.getElementById('bs-authType').value,
     authApiKeyHeader: (document.getElementById('bs-authApiKeyHeader')||{}).value||'',
     authApiKeyValue: (document.getElementById('bs-authApiKeyValue')||{}).value||'',
@@ -4584,6 +4623,8 @@ function bsCollectFormValues(){
     responseListPath: document.getElementById('bs-responseListPath').value.trim(),
     fieldMapping: bsCollectMapping(),
     facilityEndpointPath: document.getElementById('bs-facilityEndpointPath').value.trim(),
+    facilityEndpointMethod: document.getElementById('bs-facilityEndpointMethod').value,
+    facilityEndpointBodyParams: bsTextToParams(document.getElementById('bs-facilityEndpointBodyParams').value),
     facilityResponseListPath: document.getElementById('bs-facilityResponseListPath').value.trim(),
     facilityFieldMapping: bsCollectFacilityMapping(),
     syncIntervalMinutes: document.getElementById('bs-syncInterval').value ? parseInt(document.getElementById('bs-syncInterval').value) : null,
@@ -4615,12 +4656,16 @@ async function bsInit(){
   document.getElementById('bs-sourceName').value = BS_CONFIG.sourceName||'';
   document.getElementById('bs-baseUrl').value = BS_CONFIG.baseUrl||'';
   document.getElementById('bs-endpointPath').value = BS_CONFIG.endpointPath||'';
+  document.getElementById('bs-endpointMethod').value = BS_CONFIG.endpointMethod||'GET';
+  document.getElementById('bs-endpointBodyParams').value = bsParamsToText(BS_CONFIG.endpointBodyParams);
   document.getElementById('bs-authType').value = BS_CONFIG.authType||'none';
   document.getElementById('bs-responseListPath').value = BS_CONFIG.responseListPath||'';
   document.getElementById('bs-syncInterval').value = BS_CONFIG.syncIntervalMinutes||'';
   bsRenderAuthFields();
   bsRenderMappingFields(BS_CONFIG.fieldMapping);
   document.getElementById('bs-facilityEndpointPath').value = BS_CONFIG.facilityEndpointPath||'';
+  document.getElementById('bs-facilityEndpointMethod').value = BS_CONFIG.facilityEndpointMethod||'GET';
+  document.getElementById('bs-facilityEndpointBodyParams').value = bsParamsToText(BS_CONFIG.facilityEndpointBodyParams);
   document.getElementById('bs-facilityResponseListPath').value = BS_CONFIG.facilityResponseListPath||'';
   bsRenderFacilityMappingFields(BS_CONFIG.facilityFieldMapping);
   bsRenderStatusBanner();

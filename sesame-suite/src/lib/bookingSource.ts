@@ -195,14 +195,45 @@ async function buildAuthHeaders(config: BookingSourceConfig): Promise<Record<str
   }
 }
 
-/** Appelle un endpoint de la source externe et renvoie le tableau brut trouvé. */
-async function fetchExternalList(config: BookingSourceConfig, endpointPath: string | null, responseListPath: string | null, what: string): Promise<unknown[]> {
+/**
+ * Appelle un endpoint de la source externe et renvoie le tableau brut trouvé.
+ * La plupart des API répondent à un simple GET, mais certaines (ex : API
+ * Sesame Technology, /wa/booking/list) exigent un POST avec un corps
+ * application/x-www-form-urlencoded — souvent juste de la pagination
+ * (start/limit) — d'où le méthode/paramètres configurables.
+ */
+async function fetchExternalList(
+  config: BookingSourceConfig,
+  endpointPath: string | null,
+  responseListPath: string | null,
+  what: string,
+  method: string | null,
+  bodyParams: unknown
+): Promise<unknown[]> {
   if (!config.baseUrl) throw new BookingSourceError("URL de base non configurée");
   const url = config.baseUrl.replace(/\/$/, "") + (endpointPath || "");
   const authHeaders = await buildAuthHeaders(config);
+  const isPost = (method || "GET").toUpperCase() === "POST";
   let res: Response;
   try {
-    res = await fetch(url, { headers: { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...authHeaders } });
+    if (isPost) {
+      const form = new URLSearchParams();
+      if (bodyParams && typeof bodyParams === "object") {
+        for (const [k, v] of Object.entries(bodyParams as Record<string, unknown>)) form.set(k, String(v));
+      }
+      res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/x-www-form-urlencoded",
+          "User-Agent": "SesameSuite-BookingConnector/1.0",
+          ...authHeaders,
+        },
+        body: form.toString(),
+      });
+    } else {
+      res = await fetch(url, { headers: { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...authHeaders } });
+    }
   } catch (e) {
     throw new BookingSourceError(`Connexion impossible : ${describeFetchError(e)}`);
   }
@@ -223,12 +254,19 @@ async function fetchExternalList(config: BookingSourceConfig, endpointPath: stri
 
 /** Appelle la source externe et renvoie le tableau brut de réservations (pas encore mappé). */
 export async function fetchExternalBookings(config: BookingSourceConfig): Promise<unknown[]> {
-  return fetchExternalList(config, config.endpointPath, config.responseListPath, "réservations");
+  return fetchExternalList(config, config.endpointPath, config.responseListPath, "réservations", config.endpointMethod, config.endpointBodyParams);
 }
 
 /** Appelle la source externe et renvoie le tableau brut de chambres/facilities (pas encore mappé). */
 export async function fetchExternalFacilities(config: BookingSourceConfig): Promise<unknown[]> {
-  return fetchExternalList(config, config.facilityEndpointPath, config.facilityResponseListPath, "chambres");
+  return fetchExternalList(
+    config,
+    config.facilityEndpointPath,
+    config.facilityResponseListPath,
+    "chambres",
+    config.facilityEndpointMethod,
+    config.facilityEndpointBodyParams
+  );
 }
 
 /** Applique le mapping de champs à la liste brute — sépare éléments valides et en erreur. */
