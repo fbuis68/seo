@@ -121,7 +121,12 @@ async function performLogin(config: BookingSourceConfig): Promise<string> {
   try {
     res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      // Node/undici n'envoie aucun User-Agent par défaut (contrairement aux
+      // navigateurs et à curl) — certains WAF/pare-feux applicatifs
+      // bloquent ou redirigent silencieusement vers une page HTML par
+      // défaut (souvent la page de login) les requêtes qui en sont
+      // dépourvues, d'où l'ajout explicite ci-dessous.
+      headers: { "Content-Type": "application/json", Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0" },
       body: JSON.stringify(body),
     });
   } catch (e) {
@@ -197,7 +202,7 @@ async function fetchExternalList(config: BookingSourceConfig, endpointPath: stri
   const authHeaders = await buildAuthHeaders(config);
   let res: Response;
   try {
-    res = await fetch(url, { headers: { Accept: "application/json", ...authHeaders } });
+    res = await fetch(url, { headers: { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...authHeaders } });
   } catch (e) {
     throw new BookingSourceError(`Connexion impossible : ${describeFetchError(e)}`);
   }
