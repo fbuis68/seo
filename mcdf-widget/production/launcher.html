@@ -1,0 +1,286 @@
+<meta charset="utf-8">
+<title>Copilote IA MCDF — lanceur</title>
+<!--
+  Lanceur flottant du Copilote IA MCDF — point d'entrée unique vers les
+  4 thématiques (voir ARCHITECTURE.md).
+
+  CECI EST UNE PAGE DE DÉMONSTRATION AUTONOME pour prévisualiser le
+  design. Pour l'intégration réelle dans MCDF (bouton visible sur TOUTES
+  les pages de l'appli, pas juste celle-ci) :
+    1. Copier le bloc <style> ci-dessous dans le CSS commun de l'appli
+       (ou dans un <link> chargé sur toutes les pages).
+    2. Copier les deux <div id="ia-launcher-btn"> et <div id="ia-launcher-modal">
+       juste avant la fermeture de </body> dans le template commun
+       (header/footer JSP inclus sur toutes les pages).
+    3. Copier le <script> de la même façon.
+    4. Définir window.MCDF_CURRENT_ENTITY_ID côté application (la valeur
+       déjà connue par le sélecteur d'entité dans le header) AVANT que ce
+       script ne s'exécute, pour que le lien vers le module Rapports
+       s'ouvre sur la bonne entité.
+
+  Le module "Génération de rapports" pointe vers widget-ia.html (déjà
+  livré). Les 3 autres thématiques sont marquées "Bientôt" tant que les
+  points bloquants listés dans modules/*/NOTES.md ne sont pas levés —
+  changer leur statut ici quand ils seront prêts (voir commentaire
+  MODULES plus bas dans le script).
+-->
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f4f3ef; --surface: #fcfcfb; --surface-2: #f2f1ec;
+    --ink: #0b0b0b; --ink-2: #52514e; --ink-muted: #898781;
+    --border: rgba(11,11,11,0.10); --border-2: rgba(11,11,11,0.16);
+    --accent: #256abf; --accent-ink: #ffffff; --accent-tint: #dbe8f8;
+    --good: #0ca30c; --good-text: #006300;
+    --warning: #b8860b; --warning-tint: #f5ecd6;
+    --font-display: Charter, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --shadow: 0 12px 32px rgba(11,11,11,0.18), 0 2px 8px rgba(11,11,11,0.10);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322;
+      --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #8f8d86;
+      --border: rgba(255,255,255,0.10); --border-2: rgba(255,255,255,0.18);
+      --accent: #5b9bea; --accent-ink: #06172c; --accent-tint: #1c2e44;
+      --good: #3fc23f; --good-text: #4fd44f;
+      --warning: #e0b03a; --warning-tint: #3a3120;
+      --shadow: 0 12px 32px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322;
+    --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #8f8d86;
+    --border: rgba(255,255,255,0.10); --border-2: rgba(255,255,255,0.18);
+    --accent: #5b9bea; --accent-ink: #06172c; --accent-tint: #1c2e44;
+    --good: #3fc23f; --good-text: #4fd44f;
+    --warning: #e0b03a; --warning-tint: #3a3120;
+    --shadow: 0 12px 32px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3);
+  }
+
+  /* ---------- Bouton flottant ---------- */
+  #ia-launcher-btn {
+    position: fixed; right: 22px; bottom: 22px; z-index: 2147483000;
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--accent); color: var(--accent-ink);
+    border: none; border-radius: 100px; padding: 13px 20px 13px 16px;
+    font-family: var(--font-body); font-size: 14px; font-weight: 600;
+    box-shadow: var(--shadow); cursor: pointer;
+    transition: transform 0.15s ease;
+  }
+  #ia-launcher-btn:hover { transform: translateY(-2px); }
+  #ia-launcher-btn svg { width: 20px; height: 20px; flex: none; }
+
+  /* ---------- Fond + panneau ---------- */
+  #ia-launcher-modal {
+    position: fixed; inset: 0; z-index: 2147483001;
+    display: none; align-items: flex-end; justify-content: flex-end;
+    padding: 22px; font-family: var(--font-body);
+  }
+  #ia-launcher-modal.open { display: flex; }
+  #ia-launcher-backdrop {
+    position: absolute; inset: 0; background: rgba(11,11,11,0.28);
+  }
+  :root[data-theme="dark"] #ia-launcher-backdrop,
+  :root:not([data-theme="light"]) #ia-launcher-backdrop { background: rgba(0,0,0,0.5); }
+
+  #ia-launcher-panel {
+    position: relative; width: 380px; max-width: calc(100vw - 44px);
+    max-height: calc(100vh - 100px);
+    background: var(--surface); border-radius: 16px; overflow: hidden;
+    box-shadow: var(--shadow); display: flex; flex-direction: column;
+  }
+  .ia-l-header {
+    background: var(--accent); color: var(--accent-ink);
+    padding: 22px 22px 20px;
+  }
+  .ia-l-header h2 {
+    font-family: var(--font-display); font-weight: 500; font-size: 20px;
+    margin: 0 0 4px; text-wrap: balance;
+  }
+  .ia-l-header p { margin: 0; font-size: 12.5px; opacity: 0.88; }
+  .ia-l-close {
+    position: absolute; top: 16px; right: 16px;
+    width: 28px; height: 28px; border-radius: 50%; border: none;
+    background: rgba(255,255,255,0.18); color: var(--accent-ink);
+    font-size: 15px; cursor: pointer; line-height: 1;
+  }
+  .ia-l-close:hover { background: rgba(255,255,255,0.28); }
+
+  .ia-l-body { padding: 16px 18px 6px; overflow-y: auto; flex: 1; }
+  .ia-l-ask {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px; margin-bottom: 16px;
+  }
+  .ia-l-ask input {
+    flex: 1; border: none; background: none; outline: none;
+    font-family: var(--font-body); font-size: 13.5px; color: var(--ink);
+  }
+  .ia-l-ask input::placeholder { color: var(--ink-muted); }
+  .ia-l-ask button {
+    flex: none; border: none; background: var(--accent); color: var(--accent-ink);
+    width: 28px; height: 28px; border-radius: 8px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ia-l-ask svg { width: 15px; height: 15px; }
+
+  .ia-l-section-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--ink-muted); font-weight: 600; margin: 0 0 10px;
+  }
+  .ia-l-cards { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  .ia-l-card {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 12px; border-radius: 10px; border: 1px solid var(--border);
+    text-decoration: none; color: inherit; cursor: pointer;
+    background: var(--surface); transition: background 0.12s ease, border-color 0.12s ease;
+  }
+  .ia-l-card:hover { background: var(--surface-2); border-color: var(--border-2); }
+  .ia-l-card[aria-disabled="true"] { cursor: default; opacity: 0.62; }
+  .ia-l-card[aria-disabled="true"]:hover { background: var(--surface); border-color: var(--border); }
+  .ia-l-icon {
+    flex: none; width: 34px; height: 34px; border-radius: 9px;
+    background: var(--accent-tint); color: var(--accent);
+    display: flex; align-items: center; justify-content: center; font-size: 16px;
+  }
+  .ia-l-card-body { flex: 1; min-width: 0; }
+  .ia-l-card-title {
+    display: flex; align-items: center; gap: 8px; margin: 0 0 2px;
+    font-weight: 600; font-size: 13.5px; color: var(--ink);
+  }
+  .ia-l-card-desc { margin: 0; font-size: 12px; color: var(--ink-muted); line-height: 1.4; }
+  .ia-l-badge {
+    flex: none; font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.03em; padding: 2px 8px; border-radius: 100px;
+  }
+  .ia-l-badge.ready { background: var(--accent-tint); color: var(--accent); }
+  .ia-l-badge.soon { background: var(--warning-tint); color: var(--warning); }
+
+  .ia-l-footer {
+    padding: 12px 18px 16px; border-top: 1px solid var(--border);
+    font-size: 11px; color: var(--ink-muted); display: flex; align-items: center; gap: 6px;
+  }
+  .ia-l-footer .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--good); flex: none; }
+
+  /* --- page de démo derrière le lanceur (à retirer en intégration réelle) --- */
+  body { margin: 0; background: var(--page); color: var(--ink); font-family: var(--font-body); }
+  .ia-demo-page { max-width: 720px; margin: 60px auto; padding: 0 24px; color: var(--ink-2); }
+  .ia-demo-page h1 { font-family: var(--font-display); color: var(--ink); font-weight: 500; }
+</style>
+
+<div class="ia-demo-page">
+  <h1>Page MCDF (simulation)</h1>
+  <p>Ceci représente n'importe quel écran de MCDF — le bouton "Copilote IA"
+  en bas à droite est destiné à apparaître sur toutes les pages une fois
+  intégré (voir le commentaire en tête de fichier).</p>
+</div>
+
+<button id="ia-launcher-btn" type="button" aria-haspopup="dialog">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-6 6c0 2.2 1.2 4 2.5 5.3.4.4.5.7.5 1.2V17h6v-1.5c0-.5.1-.8.5-1.2C16.8 13 18 11.2 18 9a6 6 0 0 0-6-6Z"/><path d="M9 21h6"/><path d="M10 17v1"/><path d="M14 17v1"/></svg>
+  Copilote IA
+</button>
+
+<div id="ia-launcher-modal" role="dialog" aria-label="Copilote IA MCDF" aria-modal="true">
+  <div id="ia-launcher-backdrop"></div>
+  <div id="ia-launcher-panel">
+    <div class="ia-l-header">
+      <button class="ia-l-close" type="button" aria-label="Fermer">✕</button>
+      <h2>Copilote IA MCDF</h2>
+      <p>Posez une question ou choisissez un module ci-dessous.</p>
+    </div>
+    <div class="ia-l-body">
+      <div class="ia-l-ask">
+        <input type="text" placeholder="Ex. « quels devis relancer cette semaine ? »" id="ia-l-ask-input">
+        <button type="button" id="ia-l-ask-btn" aria-label="Envoyer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+        </button>
+      </div>
+      <p class="ia-l-section-label">Modules</p>
+      <div class="ia-l-cards" id="ia-l-cards"></div>
+    </div>
+    <div class="ia-l-footer"><span class="dot"></span> Lecture seule — vos données restent dans MCDF</div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // ------------------------------------------------------------------
+  // MODULES — reflète l'état d'avancement décrit dans ARCHITECTURE.md.
+  // Mettre "ready" à true et renseigner "href" quand un module devient
+  // disponible (cf. modules/*/NOTES.md pour ce qui bloque chacun).
+  // ------------------------------------------------------------------
+  const ENTITY_ID = window.MCDF_CURRENT_ENTITY_ID || '';
+  const qs = ENTITY_ID ? `?entityId=${encodeURIComponent(ENTITY_ID)}` : '';
+
+  const MODULES = [
+    {
+      icon: '💬', title: 'IA Conversationnelle',
+      desc: 'Dialoguer en langage naturel pour interroger MCDF.',
+      ready: false, href: null,
+    },
+    {
+      icon: '✅', title: 'Assistant Qualiopi',
+      desc: 'Vérifier les indicateurs et les preuves manquantes.',
+      ready: false, href: null,
+    },
+    {
+      icon: '📊', title: 'Génération de rapports',
+      desc: 'Restitutions et KPI en direct (nouveaux clients, CA, devis...).',
+      ready: true, href: `widget-ia.html${qs}`,
+    },
+    {
+      icon: '🔍', title: 'Recherche intelligente',
+      desc: 'Chercher en langage naturel plutôt qu\'avec des filtres.',
+      ready: false, href: null,
+    },
+  ];
+
+  const cardsWrap = document.getElementById('ia-l-cards');
+  MODULES.forEach((m) => {
+    const isLink = m.ready && m.href;
+    const card = document.createElement(isLink ? 'a' : 'div');
+    card.className = 'ia-l-card';
+    if (isLink) { card.href = m.href; card.target = '_blank'; card.rel = 'noopener'; }
+    else { card.setAttribute('aria-disabled', 'true'); }
+    card.innerHTML = `
+      <div class="ia-l-icon">${m.icon}</div>
+      <div class="ia-l-card-body">
+        <p class="ia-l-card-title">${m.title}</p>
+        <p class="ia-l-card-desc">${m.desc}</p>
+      </div>
+      <span class="ia-l-badge ${m.ready ? 'ready' : 'soon'}">${m.ready ? 'Disponible' : 'Bientôt'}</span>
+    `;
+    cardsWrap.appendChild(card);
+  });
+
+  const btn = document.getElementById('ia-launcher-btn');
+  const modal = document.getElementById('ia-launcher-modal');
+  const backdrop = document.getElementById('ia-launcher-backdrop');
+  const closeBtn = document.querySelector('.ia-l-close');
+  const askInput = document.getElementById('ia-l-ask-input');
+  const askBtn = document.getElementById('ia-l-ask-btn');
+
+  function openModal() { modal.classList.add('open'); askInput.focus(); }
+  function closeModal() { modal.classList.remove('open'); }
+
+  btn.addEventListener('click', openModal);
+  closeBtn.addEventListener('click', closeModal);
+  backdrop.addEventListener('click', closeModal);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+  function handleAsk() {
+    // Le copilote conversationnel (module 1) n'est pas encore branché —
+    // voir modules/01-conversationnel/NOTES.md. En attendant, on guide
+    // vers les modules disponibles plutôt que de laisser croire que la
+    // question a été traitée.
+    if (!askInput.value.trim()) return;
+    askInput.placeholder = 'Bientôt disponible — essayez un module ci-dessous en attendant';
+    askInput.value = '';
+  }
+  askBtn.addEventListener('click', handleAsk);
+  askInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleAsk(); });
+})();
+</script>
