@@ -243,10 +243,16 @@ async function fetchExternalList(
 
   const list = responseListPath ? getPath(body, responseListPath) : body;
   if (!Array.isArray(list)) {
+    // Inclut un extrait de la réponse reçue (comme pour l'erreur "pas un JSON
+    // valide") — sans ça, un chemin correct sur le papier mais qui échoue en
+    // pratique (forme de réponse différente selon les paramètres envoyés,
+    // erreur applicative renvoyée avec un statut 200...) est impossible à
+    // diagnostiquer depuis ce seul message.
+    const snippet = JSON.stringify(body).slice(0, 300);
     throw new BookingSourceError(
-      responseListPath
+      (responseListPath
         ? `Le chemin "${responseListPath}" ne pointe pas vers un tableau`
-        : `La réponse n'est pas un tableau — précisez le chemin vers la liste des ${what}`
+        : `La réponse n'est pas un tableau — précisez le chemin vers la liste des ${what}`) + ` — réponse reçue : "${snippet}"`
     );
   }
   return list;
