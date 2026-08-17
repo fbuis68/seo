@@ -4482,6 +4482,39 @@ function bsRenderAuthFields(){
     h += '</div>';
   }
   el.innerHTML = h;
+  // Réinjecte les valeurs déjà enregistrées dans les champs qu'on vient de
+  // (re)générer — indispensable ici : cette fonction tourne aussi au
+  // changement du menu "Type d'authentification" (onchange), pas seulement
+  // au chargement initial de la page, et re-générer le HTML vide les champs.
+  // Sans ça, un champ affichant son placeholder (ex: "/ws/login/login")
+  // ressemble visuellement à une vraie valeur alors qu'il est en réalité
+  // vide côté formulaire — bug réel qui a fait échouer la connexion Sesame
+  // en silence malgré un champ visuellement "rempli".
+  if(!BS_CONFIG) return;
+  if(type==='apiKey'){
+    document.getElementById('bs-authApiKeyHeader').value = BS_CONFIG.authApiKeyHeader||'';
+    document.getElementById('bs-authApiKeyValue').value = BS_CONFIG.authApiKeyValue||'';
+  } else if(type==='bearer'){
+    document.getElementById('bs-authBearerToken').value = BS_CONFIG.authBearerToken||'';
+  } else if(type==='basic'){
+    document.getElementById('bs-authBasicUser').value = BS_CONFIG.authBasicUser||'';
+    document.getElementById('bs-authBasicPassword').value = BS_CONFIG.authBasicPassword||'';
+  } else if(type==='login'){
+    document.getElementById('bs-loginPath').value = BS_CONFIG.loginPath||'';
+    document.getElementById('bs-loginEmail').value = BS_CONFIG.loginEmail||'';
+    document.getElementById('bs-loginPassword').value = BS_CONFIG.loginPassword||'';
+    document.getElementById('bs-loginEmailField').value = BS_CONFIG.loginEmailField||'login';
+    document.getElementById('bs-loginPasswordField').value = BS_CONFIG.loginPasswordField||'password';
+    document.getElementById('bs-loginEmailLocation').value = BS_CONFIG.loginEmailLocation||'body';
+    document.getElementById('bs-loginTokenPath').value = BS_CONFIG.loginTokenPath||'';
+    document.getElementById('bs-loginTokenHeaderName').value = BS_CONFIG.loginTokenHeaderName||'Authorization';
+    document.getElementById('bs-loginTokenPrefix').value = BS_CONFIG.loginTokenPrefix||'';
+    document.getElementById('bs-loginExtraField').value = BS_CONFIG.loginExtraField||'';
+    document.getElementById('bs-loginExtraValue').value = BS_CONFIG.loginExtraValue||'';
+    document.getElementById('bs-loginProfileListPath').value = BS_CONFIG.loginProfileListPath||'';
+    document.getElementById('bs-loginProfileMatchField').value = BS_CONFIG.loginProfileMatchField||'';
+    document.getElementById('bs-loginProfileMatchValue').value = BS_CONFIG.loginProfileMatchValue||'';
+  }
 }
 
 function bsRenderMappingFields(mapping){
@@ -4586,30 +4619,6 @@ async function bsInit(){
   document.getElementById('bs-responseListPath').value = BS_CONFIG.responseListPath||'';
   document.getElementById('bs-syncInterval').value = BS_CONFIG.syncIntervalMinutes||'';
   bsRenderAuthFields();
-  if(BS_CONFIG.authType==='apiKey'){
-    document.getElementById('bs-authApiKeyHeader').value = BS_CONFIG.authApiKeyHeader||'';
-    document.getElementById('bs-authApiKeyValue').value = BS_CONFIG.authApiKeyValue||'';
-  } else if(BS_CONFIG.authType==='bearer'){
-    document.getElementById('bs-authBearerToken').value = BS_CONFIG.authBearerToken||'';
-  } else if(BS_CONFIG.authType==='basic'){
-    document.getElementById('bs-authBasicUser').value = BS_CONFIG.authBasicUser||'';
-    document.getElementById('bs-authBasicPassword').value = BS_CONFIG.authBasicPassword||'';
-  } else if(BS_CONFIG.authType==='login'){
-    document.getElementById('bs-loginPath').value = BS_CONFIG.loginPath||'';
-    document.getElementById('bs-loginEmail').value = BS_CONFIG.loginEmail||'';
-    document.getElementById('bs-loginPassword').value = BS_CONFIG.loginPassword||'';
-    document.getElementById('bs-loginEmailField').value = BS_CONFIG.loginEmailField||'login';
-    document.getElementById('bs-loginPasswordField').value = BS_CONFIG.loginPasswordField||'password';
-    document.getElementById('bs-loginEmailLocation').value = BS_CONFIG.loginEmailLocation||'body';
-    document.getElementById('bs-loginTokenPath').value = BS_CONFIG.loginTokenPath||'';
-    document.getElementById('bs-loginTokenHeaderName').value = BS_CONFIG.loginTokenHeaderName||'Authorization';
-    document.getElementById('bs-loginTokenPrefix').value = BS_CONFIG.loginTokenPrefix||'';
-    document.getElementById('bs-loginExtraField').value = BS_CONFIG.loginExtraField||'';
-    document.getElementById('bs-loginExtraValue').value = BS_CONFIG.loginExtraValue||'';
-    document.getElementById('bs-loginProfileListPath').value = BS_CONFIG.loginProfileListPath||'';
-    document.getElementById('bs-loginProfileMatchField').value = BS_CONFIG.loginProfileMatchField||'';
-    document.getElementById('bs-loginProfileMatchValue').value = BS_CONFIG.loginProfileMatchValue||'';
-  }
   bsRenderMappingFields(BS_CONFIG.fieldMapping);
   document.getElementById('bs-facilityEndpointPath').value = BS_CONFIG.facilityEndpointPath||'';
   document.getElementById('bs-facilityResponseListPath').value = BS_CONFIG.facilityResponseListPath||'';
