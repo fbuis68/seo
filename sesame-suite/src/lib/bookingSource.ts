@@ -63,6 +63,27 @@ export function getPath(obj: unknown, path: string): unknown {
 
 export class BookingSourceError extends Error {}
 
+/**
+ * fetch() ne rejette qu'avec "fetch failed" — la vraie cause (DNS introuvable,
+ * connexion refusée, certificat TLS invalide, timeout…) est dans `cause`,
+ * caché par défaut. On la remonte explicitement pour que l'erreur affichée
+ * dans le panneau "Intégration réservations" soit diagnosticable au lieu
+ * d'un "fetch failed" muet.
+ */
+function describeFetchError(e: unknown): string {
+  if (!(e instanceof Error)) return "erreur réseau";
+  const cause = (e as { cause?: unknown }).cause;
+  const causeCode = cause && typeof cause === "object" && "code" in cause ? String((cause as { code: unknown }).code) : null;
+  const causeMessage = cause instanceof Error ? cause.message : null;
+  if (causeCode === "ENOTFOUND") return `nom de domaine introuvable (DNS) — vérifiez l'URL de base`;
+  if (causeCode === "ECONNREFUSED") return `connexion refusée par le serveur distant — vérifiez l'URL et le port`;
+  if (causeCode === "ETIMEDOUT" || causeCode === "UND_ERR_CONNECT_TIMEOUT") return `délai de connexion dépassé — le serveur ne répond pas`;
+  if (causeCode === "ECONNRESET") return `connexion interrompue par le serveur distant`;
+  if (causeCode && /CERT|SSL|TLS/i.test(causeCode)) return `certificat TLS invalide (${causeCode})`;
+  if (causeMessage) return `${e.message} — ${causeMessage}`;
+  return e.message;
+}
+
 /** Parse le corps JSON d'une réponse ; sur échec, inclut un extrait du texte
  * brut reçu (page HTML, message d'erreur texte…) pour rendre l'erreur
  * diagnosticable au lieu d'un simple "pas du JSON". */
@@ -104,7 +125,7 @@ async function performLogin(config: BookingSourceConfig): Promise<string> {
       body: JSON.stringify(body),
     });
   } catch (e) {
-    throw new BookingSourceError(`Connexion (login) impossible : ${e instanceof Error ? e.message : "erreur réseau"}`);
+    throw new BookingSourceError(`Connexion (login) impossible : ${describeFetchError(e)}`);
   }
   if (!res.ok) throw new BookingSourceError(`La connexion a échoué : ${res.status} ${res.statusText}`);
 
@@ -150,7 +171,7 @@ async function fetchExternalList(config: BookingSourceConfig, endpointPath: stri
   try {
     res = await fetch(url, { headers: { Accept: "application/json", ...authHeaders } });
   } catch (e) {
-    throw new BookingSourceError(`Connexion impossible : ${e instanceof Error ? e.message : "erreur réseau"}`);
+    throw new BookingSourceError(`Connexion impossible : ${describeFetchError(e)}`);
   }
   if (!res.ok) throw new BookingSourceError(`Le serveur distant a répondu ${res.status} ${res.statusText}`);
 
