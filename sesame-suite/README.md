@@ -154,12 +154,13 @@ s'agisse ou non d'un client Sesame :
   token, Basic auth, **ou connexion en deux temps (login + mot de passe →
   token)** — ce dernier mode couvre le cas de la vraie API Sesame
   Technology, qui n'accepte pas de clé statique : `POST {serveur}/ws/login/
-  login?login=email` avec le mot de passe en body renvoie un token
-  (`data.token`, confirmé le 14/08/2026 contre `newtest.sesame.technology`
-  avec un compte de service — le chemin exact peut varier selon le type de
-  compte, d'où le champ configurable plutôt qu'un chemin figé), à réutiliser
-  tel quel dans l'en-tête `Authorization` des appels suivants. Le serveur se
-  reconnecte à chaque
+  login?login=email` (email en paramètre d'URL, mot de passe en body JSON)
+  renvoie un token, à réutiliser tel quel (sans préfixe) dans l'en-tête
+  `Authorization` des appels suivants. Vérifié en direct le 17/08/2026 contre
+  `newtest.sesame.technology` (curl brut, hors application) : la réponse est
+  `{"data":{"profiles":[{"entityCode":"...","token":"..."},...]}}` — **un
+  profil par établissement auquel le compte a accès**, pas un token unique
+  (`data.token` seul n'existe pas). Le serveur se reconnecte à chaque
   synchronisation (pas de cache de token, pour rester correct sans avoir à
   deviner sa durée de validité) — `src/lib/bookingSource.ts::performLogin()`.
   Ce mode est générique : email/mot de passe en query ou en body, noms de
@@ -171,6 +172,17 @@ s'agisse ou non d'un client Sesame :
   paramètre de connexion — ex : le PMS Thaïs, dont les comptes
   multi-établissements exigent un `"client":"<code groupe>"` en plus de
   `username`/`password`.
+  - **Sélection du profil dans un tableau** (`loginProfileListPath`,
+    `loginProfileMatchField`, `loginProfileMatchValue`) : pour l'API Sesame
+    (et tout système au même schéma), le compte utilisé pour la connexion
+    peut avoir accès à plusieurs établissements — la réponse contient alors
+    un tableau avec un profil par établissement, pas un token unique. Ces 3
+    champs retrouvent le bon profil par un champ de comparaison (ex :
+    `entityCode` = code de l'hôtel) au lieu de dépendre d'un index de
+    tableau fixe et fragile (l'ordre n'est pas garanti stable). Quand ils
+    sont renseignés, `loginTokenPath` s'applique au profil trouvé plutôt
+    qu'à la réponse entière (ex : juste `token`). Erreur explicite listant
+    les valeurs disponibles si aucun profil ne correspond.
 - Mapping des champs par chemin JSON libre (ex : `guest.email`,
   `stay.check_in`) — aucune forme de réponse n'est supposée à l'avance,
   contrairement à l'ancien panneau qui ne comprenait que le format Sesame.

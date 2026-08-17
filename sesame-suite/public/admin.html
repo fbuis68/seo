@@ -4462,7 +4462,14 @@ function bsRenderAuthFields(){
     h += '<div class="fi"><label class="lb">Nom du champ email</label><input type="text" id="bs-loginEmailField" placeholder="login"></div>';
     h += '<div class="fi"><label class="lb">Nom du champ mot de passe</label><input type="text" id="bs-loginPasswordField" placeholder="password"></div>';
     h += '</div>';
-    h += '<div class="fi"><label class="lb">Chemin du token dans la réponse de connexion</label><input type="text" id="bs-loginTokenPath" placeholder="data.profiles.0.token"></div>';
+    h += '<div class="alt alt-b" style="margin:12px 0"><i class="ti ti-info-circle"></i>'
+      +'<span>Optionnel — si la réponse de connexion contient un tableau avec un profil par établissement (ex : API Sesame Technology, un même compte peut avoir accès à plusieurs hôtels), indiquez ici comment retrouver celui du bon établissement plutôt que de dépendre de sa position dans le tableau. Laissez ces 3 champs vides si la réponse ne contient qu\'un seul token.</span></div>';
+    h += '<div class="g2">';
+    h += '<div class="fi"><label class="lb">Chemin vers le tableau de profils</label><input type="text" id="bs-loginProfileListPath" placeholder="data.profiles"></div>';
+    h += '<div class="fi"><label class="lb">Champ à comparer</label><input type="text" id="bs-loginProfileMatchField" placeholder="entityCode"></div>';
+    h += '</div>';
+    h += '<div class="fi"><label class="lb">Valeur recherchée (identifiant de cet établissement)</label><input type="text" id="bs-loginProfileMatchValue" placeholder="Ex : CHURCHILL"></div>';
+    h += '<div class="fi"><label class="lb">Chemin du token</label><input type="text" id="bs-loginTokenPath" placeholder="token si tableau de profils ci-dessus rempli — sinon data.token"></div>';
     h += '<div class="g2">';
     h += '<div class="fi"><label class="lb">Nom de l\'en-tête du token</label><input type="text" id="bs-loginTokenHeaderName" placeholder="Authorization"></div>';
     h += '<div class="fi"><label class="lb">Préfixe du token (optionnel)</label><input type="text" id="bs-loginTokenPrefix" placeholder="Laisser vide pour Sesame — ou «Bearer » pour d\'autres systèmes"></div>';
@@ -4538,6 +4545,9 @@ function bsCollectFormValues(){
     loginTokenPrefix: (document.getElementById('bs-loginTokenPrefix')||{}).value||'',
     loginExtraField: (document.getElementById('bs-loginExtraField')||{}).value||'',
     loginExtraValue: (document.getElementById('bs-loginExtraValue')||{}).value||'',
+    loginProfileListPath: (document.getElementById('bs-loginProfileListPath')||{}).value||'',
+    loginProfileMatchField: (document.getElementById('bs-loginProfileMatchField')||{}).value||'',
+    loginProfileMatchValue: (document.getElementById('bs-loginProfileMatchValue')||{}).value||'',
     responseListPath: document.getElementById('bs-responseListPath').value.trim(),
     fieldMapping: bsCollectMapping(),
     facilityEndpointPath: document.getElementById('bs-facilityEndpointPath').value.trim(),
@@ -4596,6 +4606,9 @@ async function bsInit(){
     document.getElementById('bs-loginTokenPrefix').value = BS_CONFIG.loginTokenPrefix||'';
     document.getElementById('bs-loginExtraField').value = BS_CONFIG.loginExtraField||'';
     document.getElementById('bs-loginExtraValue').value = BS_CONFIG.loginExtraValue||'';
+    document.getElementById('bs-loginProfileListPath').value = BS_CONFIG.loginProfileListPath||'';
+    document.getElementById('bs-loginProfileMatchField').value = BS_CONFIG.loginProfileMatchField||'';
+    document.getElementById('bs-loginProfileMatchValue').value = BS_CONFIG.loginProfileMatchValue||'';
   }
   bsRenderMappingFields(BS_CONFIG.fieldMapping);
   document.getElementById('bs-facilityEndpointPath').value = BS_CONFIG.facilityEndpointPath||'';

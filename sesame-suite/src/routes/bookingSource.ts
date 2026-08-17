@@ -39,6 +39,9 @@ function shapeConfig(c: {
   loginTokenPrefix: string | null;
   loginExtraField: string | null;
   loginExtraValue: string | null;
+  loginProfileListPath: string | null;
+  loginProfileMatchField: string | null;
+  loginProfileMatchValue: string | null;
   responseListPath: string | null;
   fieldMapping: unknown;
   facilityEndpointPath: string | null;
@@ -72,6 +75,9 @@ function shapeConfig(c: {
     loginTokenPrefix: c.loginTokenPrefix || "",
     loginExtraField: c.loginExtraField || "",
     loginExtraValue: c.loginExtraValue || "",
+    loginProfileListPath: c.loginProfileListPath || "",
+    loginProfileMatchField: c.loginProfileMatchField || "",
+    loginProfileMatchValue: c.loginProfileMatchValue || "",
     responseListPath: c.responseListPath || "",
     fieldMapping: c.fieldMapping || {},
     facilityEndpointPath: c.facilityEndpointPath || "",
@@ -122,6 +128,9 @@ interface ConfigBody {
   loginTokenPrefix?: string;
   loginExtraField?: string;
   loginExtraValue?: string;
+  loginProfileListPath?: string;
+  loginProfileMatchField?: string;
+  loginProfileMatchValue?: string;
   responseListPath?: string;
   fieldMapping?: FieldMapping;
   facilityEndpointPath?: string;
@@ -159,6 +168,9 @@ bookingSourceRouter.post(
       loginTokenPrefix: b.loginTokenPrefix,
       loginExtraField: b.loginExtraField,
       loginExtraValue: b.loginExtraValue,
+      loginProfileListPath: b.loginProfileListPath,
+      loginProfileMatchField: b.loginProfileMatchField,
+      loginProfileMatchValue: b.loginProfileMatchValue,
       responseListPath: b.responseListPath,
       fieldMapping: b.fieldMapping as never,
       facilityEndpointPath: b.facilityEndpointPath,
@@ -211,6 +223,9 @@ bookingSourceRouter.post(
       loginTokenPrefix: b.loginTokenPrefix ?? saved?.loginTokenPrefix ?? null,
       loginExtraField: b.loginExtraField ?? saved?.loginExtraField ?? null,
       loginExtraValue: b.loginExtraValue ?? saved?.loginExtraValue ?? null,
+      loginProfileListPath: b.loginProfileListPath ?? saved?.loginProfileListPath ?? null,
+      loginProfileMatchField: b.loginProfileMatchField ?? saved?.loginProfileMatchField ?? null,
+      loginProfileMatchValue: b.loginProfileMatchValue ?? saved?.loginProfileMatchValue ?? null,
       responseListPath: b.responseListPath ?? saved?.responseListPath ?? null,
       fieldMapping: (b.fieldMapping ?? saved?.fieldMapping ?? {}) as never,
       facilityEndpointPath: b.facilityEndpointPath ?? saved?.facilityEndpointPath ?? null,
@@ -291,6 +306,11 @@ bookingSourceRouter.post(
       loginTokenPath: b.loginTokenPath ?? saved?.loginTokenPath ?? null,
       loginTokenHeaderName: b.loginTokenHeaderName ?? saved?.loginTokenHeaderName ?? "Authorization",
       loginTokenPrefix: b.loginTokenPrefix ?? saved?.loginTokenPrefix ?? null,
+      loginExtraField: b.loginExtraField ?? saved?.loginExtraField ?? null,
+      loginExtraValue: b.loginExtraValue ?? saved?.loginExtraValue ?? null,
+      loginProfileListPath: b.loginProfileListPath ?? saved?.loginProfileListPath ?? null,
+      loginProfileMatchField: b.loginProfileMatchField ?? saved?.loginProfileMatchField ?? null,
+      loginProfileMatchValue: b.loginProfileMatchValue ?? saved?.loginProfileMatchValue ?? null,
       responseListPath: saved?.responseListPath ?? null,
       fieldMapping: (saved?.fieldMapping ?? {}) as never,
       facilityEndpointPath: b.facilityEndpointPath ?? saved?.facilityEndpointPath ?? null,

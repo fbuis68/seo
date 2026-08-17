@@ -131,11 +131,39 @@ async function performLogin(config: BookingSourceConfig): Promise<string> {
 
   const responseBody = await parseJsonResponse(res, "La réponse de connexion");
 
-  const token = config.loginTokenPath ? getPath(responseBody, config.loginTokenPath) : undefined;
+  let token: unknown;
+  if (config.loginProfileListPath && config.loginProfileMatchField && config.loginProfileMatchValue) {
+    // La réponse contient un tableau avec un profil par établissement (ex :
+    // API Sesame Technology, un même compte a accès à plusieurs hôtels) —
+    // on retrouve le bon profil par un champ (ex: entityCode) plutôt que de
+    // dépendre de sa position dans le tableau, qui n'est pas garantie stable.
+    const list = getPath(responseBody, config.loginProfileListPath);
+    if (!Array.isArray(list)) {
+      throw new BookingSourceError(`Le chemin "${config.loginProfileListPath}" ne pointe pas vers un tableau dans la réponse de connexion`);
+    }
+    const matchField = config.loginProfileMatchField;
+    const profile = list.find(
+      (item) => item && typeof item === "object" && String((item as Record<string, unknown>)[matchField]) === config.loginProfileMatchValue
+    );
+    if (!profile) {
+      const available = list
+        .map((item) => (item && typeof item === "object" ? (item as Record<string, unknown>)[matchField] : undefined))
+        .filter((v) => v !== undefined && v !== "")
+        .join(", ");
+      throw new BookingSourceError(
+        `Aucun profil avec ${matchField}="${config.loginProfileMatchValue}" trouvé dans "${config.loginProfileListPath}"` +
+          (available ? ` (valeurs disponibles : ${available})` : "")
+      );
+    }
+    token = getPath(profile, config.loginTokenPath || "token");
+  } else {
+    token = config.loginTokenPath ? getPath(responseBody, config.loginTokenPath) : undefined;
+  }
+
   if (!token || typeof token !== "string") {
     throw new BookingSourceError(
       config.loginTokenPath
-        ? `Aucun token trouvé au chemin "${config.loginTokenPath}" dans la réponse de connexion`
+        ? `Aucun token trouvé au chemin "${config.loginTokenPath}" ${config.loginProfileListPath ? "dans le profil sélectionné" : "dans la réponse de connexion"}`
         : "Chemin du token de connexion non configuré"
     );
   }

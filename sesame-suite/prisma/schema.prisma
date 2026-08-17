@@ -259,9 +259,17 @@ model BookingSourceConfig {
   loginEmailField      String? @default("login") // nom du champ email (body ou query selon loginEmailLocation)
   loginPasswordField   String? @default("password") // nom du champ mot de passe (toujours en body JSON)
   loginEmailLocation   String? @default("body") // query | body
-  loginTokenPath       String? // dot-path du token dans la réponse de connexion (ex: "data.profiles.0.token")
+  loginTokenPath       String? // dot-path du token — dans la réponse complète, ou dans le profil sélectionné ci-dessous si loginProfileListPath est renseigné (ex: "token")
   loginTokenHeaderName String? @default("Authorization")
   loginTokenPrefix     String? // ex: "Bearer " — laisser vide pour envoyer le token brut
+  // Optionnel — quand la réponse de connexion contient un tableau avec un
+  // profil par établissement (ex : API Sesame Technology, un même compte a
+  // accès à plusieurs hôtels), ces 3 champs retrouvent le bon profil au lieu
+  // de dépendre de sa position dans le tableau. loginTokenPath s'applique
+  // alors au profil trouvé, pas à la réponse entière.
+  loginProfileListPath   String? // dot-path du tableau de profils (ex: "data.profiles")
+  loginProfileMatchField String? // nom du champ à comparer dans chaque profil (ex: "entityCode")
+  loginProfileMatchValue String? // valeur recherchée (ex: "CHURCHILL")
   // Champ optionnel supplémentaire envoyé dans le corps JSON de connexion, en
   // plus de l'email et du mot de passe — ex: certains systèmes multi-comptes
   // exigent un identifiant de client/groupe ("client": "monGroupe").
