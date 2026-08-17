@@ -302,6 +302,19 @@ export async function fetchExternalFacilities(config: BookingSourceConfig): Prom
   );
 }
 
+/**
+ * Certaines sources (ex : API Sesame Technology) renvoient un seul
+ * enregistrement pour une réservation de groupe (plusieurs chambres/
+ * occupants liés) avec ces champs concaténés par une virgule (ex :
+ * personEmail = "a@x.com,b@y.com", facilityCode = "CH1,CH1") — notre
+ * schéma ne modélise qu'un occupant et une chambre par réservation, donc on
+ * ne garde que la première valeur plutôt que d'importer une chaîne agrégée
+ * invalide (ex : un "email" qui n'en est pas un).
+ */
+function firstOf(value: string): string {
+  return value.split(",")[0].trim();
+}
+
 /** Applique le mapping de champs à la liste brute — sépare éléments valides et en erreur. */
 export function mapBookings(items: unknown[], mapping: FieldMapping): { mapped: MappedBooking[]; errors: MapError[] } {
   const mapped: MappedBooking[] = [];
@@ -309,7 +322,7 @@ export function mapBookings(items: unknown[], mapping: FieldMapping): { mapped: 
 
   items.forEach((item, index) => {
     const code = mapping.code ? String(getPath(item, mapping.code) ?? "").trim() : "";
-    const personEmail = mapping.personEmail ? String(getPath(item, mapping.personEmail) ?? "").trim() : "";
+    const personEmail = mapping.personEmail ? firstOf(String(getPath(item, mapping.personEmail) ?? "")) : "";
     const startRaw = mapping.startDate ? getPath(item, mapping.startDate) : undefined;
     const endRaw = mapping.endDate ? getPath(item, mapping.endDate) : undefined;
 
@@ -323,12 +336,12 @@ export function mapBookings(items: unknown[], mapping: FieldMapping): { mapped: 
     mapped.push({
       code,
       personEmail,
-      personFirstname: mapping.personFirstname ? String(getPath(item, mapping.personFirstname) ?? "").trim() : "",
-      personLastname: mapping.personLastname ? String(getPath(item, mapping.personLastname) ?? "").trim() : "",
-      personPhone: mapping.personPhone ? String(getPath(item, mapping.personPhone) ?? "").trim() : "",
+      personFirstname: mapping.personFirstname ? firstOf(String(getPath(item, mapping.personFirstname) ?? "")) : "",
+      personLastname: mapping.personLastname ? firstOf(String(getPath(item, mapping.personLastname) ?? "")) : "",
+      personPhone: mapping.personPhone ? firstOf(String(getPath(item, mapping.personPhone) ?? "")) : "",
       startDate,
       endDate,
-      facilityCode: mapping.facilityCode ? String(getPath(item, mapping.facilityCode) ?? "").trim() : "",
+      facilityCode: mapping.facilityCode ? firstOf(String(getPath(item, mapping.facilityCode) ?? "")) : "",
       status: (mapping.status ? String(getPath(item, mapping.status) ?? "").trim() : "") || "confirmed",
     });
   });

@@ -22,7 +22,7 @@
  * que garder une palette de graphique stable indépendamment du thème.
  */
 :root, html[data-theme="signature"]{
-  --sb:#17121E;--sbb:rgba(255,255,255,.08);
+  --sb:#2B1420;--sbb:rgba(255,255,255,.08);
   --bg:#F5F3F0;--card:#FFF;--bdr:#E3DED8;
   --tx:#14121E;--mu:#7A7870;--hi:#B0ADA4;
   --a:#8B1A2E;--al:#FDEDF0;--am:#8B1A2E;--primary:#8B1A2E;--pl:#FDEDF0;
@@ -33,7 +33,7 @@
   --r:10px;--rs:6px;
 }
 html[data-theme="emeraude"]{
-  --sb:#0F1F17;--sbb:rgba(255,255,255,.08);
+  --sb:#0E2A1F;--sbb:rgba(255,255,255,.08);
   --bg:#F3F5F1;--card:#FFF;--bdr:#DCE3DC;
   --tx:#12201A;--mu:#6E7C71;--hi:#A8B5AA;
   --a:#1A6B47;--al:#E9F5EE;--am:#1A6B47;--primary:#1A6B47;--pl:#E9F5EE;
@@ -44,7 +44,7 @@ html[data-theme="emeraude"]{
   --r:10px;--rs:6px;
 }
 html[data-theme="ocean"]{
-  --sb:#0D1B2A;--sbb:rgba(255,255,255,.08);
+  --sb:#0E2942;--sbb:rgba(255,255,255,.08);
   --bg:#F2F4F7;--card:#FFF;--bdr:#DDE3EA;
   --tx:#101C2B;--mu:#6B7A8C;--hi:#A9B7C6;
   --a:#1A4880;--al:#EBF2FA;--am:#1A4880;--primary:#1A4880;--pl:#EBF2FA;
@@ -55,7 +55,7 @@ html[data-theme="ocean"]{
   --r:10px;--rs:6px;
 }
 html[data-theme="ardoise"]{
-  --sb:#1C1F26;--sbb:rgba(255,255,255,.08);
+  --sb:#211C3D;--sbb:rgba(255,255,255,.08);
   --bg:#F4F4F5;--card:#FFF;--bdr:#E2E3E6;
   --tx:#17181C;--mu:#74757D;--hi:#AEAFB6;
   --a:#4F46E5;--al:#EEEDFC;--am:#4F46E5;--primary:#4F46E5;--pl:#EEEDFC;
@@ -66,7 +66,7 @@ html[data-theme="ardoise"]{
   --r:10px;--rs:6px;
 }
 html[data-theme="nuit"]{
-  --sb:#14151A;--sbb:rgba(255,255,255,.06);
+  --sb:#1E1620;--sbb:rgba(255,255,255,.06);
   --bg:#1B1C22;--card:#24262E;--bdr:#33353E;
   --tx:#EDEDEF;--mu:#9A9CA8;--hi:#6B6D78;
   --a:#E0536E;--al:rgba(224,83,110,.14);--am:#E0536E;--primary:#E0536E;--pl:rgba(224,83,110,.14);
@@ -388,9 +388,43 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   </div>
   <div class="ca">
     <div class="ch"><i class="ti ti-calendar-check"></i>Arrivées — <span id="resa-count">0</span>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--mu);margin-left:14px;cursor:pointer;white-space:nowrap">
+        <input type="checkbox" id="resa-showAll" onchange="renderReservations()"> Toutes les réservations (y compris expirées)
+      </label>
       <button class="chact" onclick="loadReservations()"><i class="ti ti-refresh" style="font-size:12px"></i> Actualiser</button>
     </div>
     <div id="resa-list"></div>
+  </div>
+</div>
+
+<!-- ════ MODAL ÉDITION RÉSERVATION ════ -->
+<div id="resaEditModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.3)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--bdr)">
+      <h2 style="font-size:17px">Modifier la réservation</h2>
+      <button onclick="resaCloseEdit()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
+    </div>
+    <div style="padding:18px 20px">
+      <input type="hidden" id="resa-e-code">
+      <div class="g2">
+        <div class="fi"><label class="lb">Prénom</label><input type="text" id="resa-e-firstname"></div>
+        <div class="fi"><label class="lb">Nom</label><input type="text" id="resa-e-lastname"></div>
+      </div>
+      <div class="g2">
+        <div class="fi"><label class="lb">Email</label><input type="email" id="resa-e-email"></div>
+        <div class="fi"><label class="lb">Téléphone</label><input type="text" id="resa-e-phone"></div>
+      </div>
+      <div class="g2">
+        <div class="fi"><label class="lb">Date d'arrivée</label><input type="date" id="resa-e-start"></div>
+        <div class="fi"><label class="lb">Date de départ</label><input type="date" id="resa-e-end"></div>
+      </div>
+      <div class="fi"><label class="lb">Chambre (code)</label><input type="text" id="resa-e-room" placeholder="Ex : A11"></div>
+      <div id="resa-e-error" class="alt alt-w" style="display:none;margin-top:4px"><i class="ti ti-alert-triangle"></i><span id="resa-e-error-msg"></span></div>
+      <div style="display:flex;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--bdr)">
+        <button class="btn btn-p" onclick="resaSaveEdit()" style="flex:1"><i class="ti ti-check"></i> Enregistrer</button>
+        <button class="btn btn-s" onclick="resaCloseEdit()"><i class="ti ti-x"></i></button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -9016,7 +9050,10 @@ function renderRealKpis(){
 // séjour (TaxeSejourRecord[], lié par bookingCode), vérification d'identité
 // (KycRecord, inclus dans booking.kycRecords si présent côté API). Ces
 // endpoints n'ont pas de filtre par date/entité combiné : on récupère tout
-// pour l'établissement et on filtre côté client (volume journalier faible).
+// pour l'établissement et on filtre côté client. RESA_CACHE contient TOUTES
+// les réservations non annulées (chargées une fois) ; renderReservations()
+// applique ensuite le filtre "aujourd'hui seulement" vs "toutes, y compris
+// expirées" selon la case à cocher, sans recharger depuis le serveur.
 var RESA_CACHE = [];
 
 async function loadReservations(){
@@ -9033,12 +9070,9 @@ async function loadReservations(){
     var orders = results[1].ok ? await results[1].json() : [];
     var taxeRecords = results[2].ok ? await results[2].json() : [];
 
-    var todayStr = new Date().toISOString().slice(0,10);
-    var todays = bookings.filter(function(b){
-      return (b.startDate||'').slice(0,10) === todayStr && b.status !== 'cancelled';
-    });
+    var active = bookings.filter(function(b){ return b.status !== 'cancelled'; });
 
-    var emails = Array.from(new Set(todays.map(function(b){ return (b.personEmail||'').trim().toLowerCase(); }).filter(Boolean)));
+    var emails = Array.from(new Set(active.map(function(b){ return (b.personEmail||'').trim().toLowerCase(); }).filter(Boolean)));
     var prefsByEmail = {};
     await Promise.all(emails.map(async function(email){
       try{
@@ -9047,14 +9081,14 @@ async function loadReservations(){
       }catch(e){ prefsByEmail[email] = null; }
     }));
 
-    RESA_CACHE = todays.map(function(b){
+    RESA_CACHE = active.map(function(b){
       return {
         booking: b,
         orders: orders.filter(function(o){ return o.bookingCode === b.code; }),
         taxe: taxeRecords.find(function(t){ return t.bookingCode === b.code; }) || null,
         prefs: prefsByEmail[(b.personEmail||'').trim().toLowerCase()] || null,
       };
-    }).sort(function(a,b){ return (a.booking.selectedRoomCode||a.booking.facilityCode||'').localeCompare(b.booking.selectedRoomCode||b.booking.facilityCode||''); });
+    });
 
     renderReservations();
   }catch(e){
@@ -9065,22 +9099,34 @@ async function loadReservations(){
 function renderReservations(){
   var listEl = document.getElementById('resa-list');
   var countEl = document.getElementById('resa-count');
+  var showAllEl = document.getElementById('resa-showAll');
   if(!listEl) return;
-  if(countEl) countEl.textContent = RESA_CACHE.length;
+  var showAll = showAllEl && showAllEl.checked;
+  var todayStr = new Date().toISOString().slice(0,10);
 
-  if(!RESA_CACHE.length){
-    listEl.innerHTML = '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Aucune arrivée prévue aujourd\'hui.</span></div>';
+  var list = (showAll ? RESA_CACHE : RESA_CACHE.filter(function(r){ return (r.booking.startDate||'').slice(0,10) === todayStr; }))
+    .slice()
+    .sort(function(a,b){ return (b.booking.startDate||'').localeCompare(a.booking.startDate||''); });
+
+  if(countEl) countEl.textContent = list.length;
+
+  if(!list.length){
+    listEl.innerHTML = '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>'+(showAll?'Aucune réservation.':'Aucune arrivée prévue aujourd\'hui.')+'</span></div>';
     return;
   }
 
   var sym = getCurrSym();
-  listEl.innerHTML = RESA_CACHE.map(function(r){
+  listEl.innerHTML = list.map(function(r){
     var b = r.booking;
     var room = b.selectedRoomCode || b.facilityCode || '—';
+    var expired = (b.endDate||'').slice(0,10) < todayStr;
     var checkinBadge = b.checkinDone
       ? '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:rgba(26,107,71,.1);color:#1A6B47"><i class="ti ti-check" style="font-size:11px"></i> Check-in fait</span>'
-      : '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:var(--gol);color:var(--go)"><i class="ti ti-clock" style="font-size:11px"></i> Pas encore arrivé</span>';
+      : (expired
+        ? '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:var(--bdr);color:var(--mu)"><i class="ti ti-history" style="font-size:11px"></i> Expirée</span>'
+        : '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:var(--gol);color:var(--go)"><i class="ti ti-clock" style="font-size:11px"></i> Pas encore arrivé</span>');
 
+    var dates = fmtDMY(b.startDate)+' → '+fmtDMY(b.endDate);
     var menageVal = (r.prefs && r.prefs.menageFreq!=null) ? 'Tous les '+r.prefs.menageFreq+' jour(s)' : 'Non renseigné';
     var ordersTotal = r.orders.reduce(function(s,o){ return s+(o.total||0); }, 0);
     var boutiqueVal = r.orders.length ? r.orders.length+' commande(s) — '+ordersTotal.toFixed(2)+' '+sym : 'Aucune';
@@ -9091,8 +9137,12 @@ function renderReservations(){
       + '<div>'
       + '<div style="font-size:15px;font-weight:700">'+esc(b.personFirstname)+' '+esc(b.personLastname)+' <span style="font-weight:400;color:var(--mu);font-size:12px">— Chambre '+esc(room)+'</span></div>'
       + '<div style="font-size:12px;color:var(--mu);margin-top:2px"><i class="ti ti-ticket" style="font-size:11px"></i> '+esc(b.code)+' &nbsp;·&nbsp; <i class="ti ti-mail" style="font-size:11px"></i> '+esc(b.personEmail)+(b.personPhone?' &nbsp;·&nbsp; <i class="ti ti-phone" style="font-size:11px"></i> '+esc(b.personPhone):'')+'</div>'
+      + '<div style="font-size:12px;color:var(--mu);margin-top:2px"><i class="ti ti-calendar" style="font-size:11px"></i> '+esc(dates)+'</div>'
       + '</div>'
+      + '<div style="display:flex;align-items:center;gap:8px">'
       + checkinBadge
+      + '<button class="btn btn-s" style="padding:4px 10px;font-size:12px" onclick="resaOpenEdit(\''+esc(b.code)+'\')"><i class="ti ti-edit"></i> Modifier</button>'
+      + '</div>'
       + '</div>'
       + '<div class="resa-opts">'
       + '<div class="resa-opt"><div class="ro-lbl"><i class="ti ti-spray"></i> Ménage</div><div class="ro-val">'+esc(menageVal)+'</div></div>'
@@ -9101,6 +9151,59 @@ function renderReservations(){
       + '</div>'
       + '</div>';
   }).join('');
+}
+
+function fmtDMY(iso){
+  if(!iso) return '—';
+  var d = new Date(iso);
+  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('fr-FR');
+}
+
+function resaOpenEdit(code){
+  var r = RESA_CACHE.find(function(x){ return x.booking.code === code; });
+  if(!r) return;
+  var b = r.booking;
+  document.getElementById('resa-e-code').value = b.code;
+  document.getElementById('resa-e-firstname').value = b.personFirstname||'';
+  document.getElementById('resa-e-lastname').value = b.personLastname||'';
+  document.getElementById('resa-e-email').value = b.personEmail||'';
+  document.getElementById('resa-e-phone').value = b.personPhone||'';
+  document.getElementById('resa-e-start').value = (b.startDate||'').slice(0,10);
+  document.getElementById('resa-e-end').value = (b.endDate||'').slice(0,10);
+  document.getElementById('resa-e-room').value = b.selectedRoomCode || b.facilityCode || '';
+  document.getElementById('resa-e-error').style.display = 'none';
+  document.getElementById('resaEditModal').style.display = 'flex';
+}
+
+function resaCloseEdit(){
+  document.getElementById('resaEditModal').style.display = 'none';
+}
+
+async function resaSaveEdit(){
+  var errEl = document.getElementById('resa-e-error');
+  var errMsg = document.getElementById('resa-e-error-msg');
+  errEl.style.display = 'none';
+  var body = {
+    code: document.getElementById('resa-e-code').value,
+    personFirstname: document.getElementById('resa-e-firstname').value.trim(),
+    personLastname: document.getElementById('resa-e-lastname').value.trim(),
+    personEmail: document.getElementById('resa-e-email').value.trim(),
+    personPhone: document.getElementById('resa-e-phone').value.trim(),
+    startDate: document.getElementById('resa-e-start').value,
+    endDate: document.getElementById('resa-e-end').value,
+    facilityCode: document.getElementById('resa-e-room').value.trim(),
+  };
+  try{
+    var r = await adminFetch('/wa/booking/update', {method:'POST', body: JSON.stringify(body)});
+    var data = await r.json();
+    if(!r.ok){ errMsg.textContent = data.error||'Échec de la mise à jour'; errEl.style.display='block'; return; }
+    resaCloseEdit();
+    toast('Réservation mise à jour ✓');
+    loadReservations();
+  }catch(e){
+    errMsg.textContent = 'Erreur de connexion au serveur';
+    errEl.style.display='block';
+  }
 }
 
 // ═══════════════════════════════════════════════ AIDE, NOUVEAUTÉS & VERROUILLAGE DE MODULES

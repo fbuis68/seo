@@ -48,13 +48,21 @@ couche de données rebranchée sur l'API) :
   (CRUD), Commandes (statuts), Livret digital (CRUD des rubriques), Planning
   ménage (tâches + agents + affectation chambres), Plan de l'hôtel et
   Gestion des chambres (CRUD, canvas de plan).
-- **Arrivées du jour** (`data-pan="reservations"`) : liste les réservations
-  dont l'arrivée est prévue aujourd'hui (`Booking.startDate`), avec pour
-  chacune les options retenues par le client au check-in éco — ménage
-  (`ClientPrefs.menageFreq`, lié par email), boutique/room service
+- **Arrivées du jour** (`data-pan="reservations"`) : liste par défaut les
+  réservations dont l'arrivée est prévue aujourd'hui (`Booking.startDate`),
+  avec pour chacune les options retenues par le client au check-in éco —
+  ménage (`ClientPrefs.menageFreq`, lié par email), boutique/room service
   (`Order[]` liés par `bookingCode`, nombre + montant total), taxe de
   séjour (`TaxeSejourRecord` lié par `bookingCode`, montant net calculé) —
-  en un coup d'œil plutôt qu'en ouvrant chaque réservation une par une.
+  en un coup d'œil plutôt qu'en ouvrant chaque réservation une par une. Case
+  à cocher **"Toutes les réservations (y compris expirées)"** : bascule sans
+  rechargement serveur (`RESA_CACHE` contient déjà tout l'historique non
+  annulé) vers la liste complète, triée par date d'arrivée décroissante, avec
+  un badge "Expirée" distinct pour les séjours déjà terminés. Chaque carte
+  affiche désormais les dates d'arrivée/départ et un bouton **"Modifier"**
+  (modale : contact, dates, chambre) — `POST /wa/booking/update`
+  (`requireAdmin`, distinct de `/booking/checkin` qui reste accessible sans
+  auth pour le parcours check-in du client lui-même).
   Statut check-in (fait / pas encore arrivé) visible directement.
 - **Interface responsive** : comme le CRM, la barre latérale devient un
   tiroir accessible par un bouton ☰ sous 900px de large (fermé
@@ -190,6 +198,14 @@ s'agisse ou non d'un client Sesame :
   juste de la pagination (`start`/`limit`). `endpointBodyParams`/
   `facilityEndpointBodyParams` (paires clé=valeur, une par ligne dans
   l'interface) ne sont envoyés que si la méthode est POST.
+- **Nettoyage des réservations de groupe** (`mapBookings()::firstOf()`) :
+  l'API Sesame renvoie parfois un seul enregistrement pour plusieurs
+  chambres/occupants liés (réservation de groupe), avec les champs
+  concaténés par une virgule (ex : `personEmail` = `"a@x.com,b@y.com"`,
+  `facilityCode` = `"CH1,CH1"`). Notre schéma ne modélisant qu'un occupant
+  et une chambre par réservation, seule la première valeur est conservée
+  (email, prénom, nom, téléphone, code chambre) plutôt que d'importer une
+  chaîne agrégée invalide.
 - Mapping des champs par chemin JSON libre (ex : `guest.email`,
   `stay.check_in`) — aucune forme de réponse n'est supposée à l'avance,
   contrairement à l'ancien panneau qui ne comprenait que le format Sesame.
@@ -570,6 +586,12 @@ de 0 au lieu de la taille de son contenu ; il se faisait donc écraser par
     les couleurs de l'app mobile de check-in **destinée aux clients**
     (`--brand-*`, stockées dans `CFG.colors`) — sujet totalement séparé du
     thème visuel du back-office/CRM lui-même.
+  - **Barre latérale de l'admin** (`--sb`) : teintée par thème plutôt que
+    quasi noire partout — chaque thème a désormais un fond de sidebar dans
+    la même famille que sa couleur d'accent (bordeaux pour Signature, vert
+    pour Émeraude, bleu pour Océan, indigo pour Ardoise, prune pour Nuit),
+    en gardant une luminosité assez basse pour le contraste avec le texte
+    blanc de la navigation.
 
 Également non couvert : l'app ménage (`sesame_menage.html`, application
 séparée pour les agents de ménage sur le terrain). La base de données est

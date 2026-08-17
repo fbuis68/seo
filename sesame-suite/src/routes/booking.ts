@@ -4,6 +4,7 @@ import { resolveEntity } from "../lib/entity";
 import { normaliseBooking } from "../lib/normalize";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { fireTrigger } from "../lib/automation";
+import { requireAdmin } from "../middleware/requireAdmin";
 
 export const bookingRouter = Router();
 
@@ -83,6 +84,60 @@ bookingRouter.post(
       variables: { prenom: updated.personFirstname, nom: updated.personLastname, code: updated.code },
     }).catch((e) => console.error("[automation] checkin.completed:", e));
 
+    res.json(normaliseBooking(updated));
+  })
+);
+
+/**
+ * POST /wa/booking/update — édition admin d'une réservation (panneau
+ * "Arrivées du jour") : contact, dates de séjour, chambre. Réservé aux
+ * comptes admin (contrairement à /booking/checkin, appelé sans auth par le
+ * parcours check-in éco du client lui-même).
+ */
+bookingRouter.post(
+  "/booking/update",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const b = req.body as {
+      code: string;
+      startDate?: string;
+      endDate?: string;
+      facilityCode?: string;
+      personFirstname?: string;
+      personLastname?: string;
+      personEmail?: string;
+      personPhone?: string;
+    };
+    if (!b.code) throw new HttpError(400, "code requis");
+
+    const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code: b.code } } });
+    if (!booking) throw new HttpError(404, "Réservation introuvable");
+
+    const startDate = b.startDate ? new Date(b.startDate) : booking.startDate;
+    const endDate = b.endDate ? new Date(b.endDate) : booking.endDate;
+    if (isNaN(startDate.getTime())) throw new HttpError(400, "Date d'arrivée invalide");
+    if (isNaN(endDate.getTime())) throw new HttpError(400, "Date de départ invalide");
+    if (endDate <= startDate) throw new HttpError(400, "La date de départ doit être après la date d'arrivée");
+
+    const data: Record<string, unknown> = { startDate, endDate };
+    if (b.personFirstname !== undefined) data.personFirstname = b.personFirstname.trim();
+    if (b.personLastname !== undefined) data.personLastname = b.personLastname.trim();
+    if (b.personEmail !== undefined) {
+      if (!b.personEmail.trim()) throw new HttpError(400, "Email requis");
+      data.personEmail = b.personEmail.trim();
+    }
+    if (b.personPhone !== undefined) data.personPhone = b.personPhone.trim() || null;
+    if (b.facilityCode !== undefined) {
+      const code = b.facilityCode.trim();
+      const room = code ? await prisma.room.findUnique({ where: { entityId_code: { entityId: entity.id, code } } }) : null;
+      data.facilityCode = code || null;
+      data.facilityName = room?.name || null;
+      data.selectedRoomCode = code || null;
+      data.roomId = room?.id || null;
+    }
+
+    const updated = await prisma.booking.update({ where: { id: booking.id }, data });
     res.json(normaliseBooking(updated));
   })
 );
