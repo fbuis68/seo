@@ -117,11 +117,6 @@ async function performLogin(config: BookingSourceConfig): Promise<string> {
   if (!inQuery) body[emailField] = config.loginEmail;
   if (config.loginExtraField) body[config.loginExtraField] = config.loginExtraValue || "";
 
-  // DEBUG TEMPORAIRE — diagnostic de l'échec de connexion signalé sur le
-  // déploiement réel ; ne logue ni mot de passe ni token. À retirer une fois
-  // le problème résolu.
-  console.log("[bookingSource][debug] performLogin url=%s bodyKeys=%o inQuery=%s", url, Object.keys(body), inQuery);
-
   let res: Response;
   try {
     res = await fetch(url, {
@@ -135,15 +130,8 @@ async function performLogin(config: BookingSourceConfig): Promise<string> {
       body: JSON.stringify(body),
     });
   } catch (e) {
-    console.log("[bookingSource][debug] performLogin fetch threw:", e);
     throw new BookingSourceError(`Connexion (login) impossible : ${describeFetchError(e)}`);
   }
-  console.log(
-    "[bookingSource][debug] performLogin response status=%d statusText=%s content-type=%s",
-    res.status,
-    res.statusText,
-    res.headers.get("content-type")
-  );
   if (!res.ok) throw new BookingSourceError(`La connexion a échoué : ${res.status} ${res.statusText}`);
 
   const responseBody = await parseJsonResponse(res, "La réponse de connexion");
