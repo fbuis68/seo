@@ -295,9 +295,8 @@ certains OS/navigateurs — ce qui rendait le défilement peu évident).
     importées de l'audit clients Sesame (`AUDIT_CLIENTS_SESAME_2025.xlsx`,
     lignes "Taux d'utilisation…") pour 59 des 67 fiches — remplace les
     placeholders à 0 précédemment affichés pour la quasi-totalité du
-    portefeuille (`AUDIT_USAGE` dans `seed.ts`, appliqué par nom de
-    fiche). Les 8 fiches sans ligne d'audit correspondante gardent leurs
-    valeurs à 0 plutôt qu'une valeur inventée.
+    portefeuille. Les 8 fiches sans ligne d'audit correspondante gardent
+    leurs valeurs à 0 plutôt qu'une valeur inventée.
   - **Parcours client activés** : 7 nouveaux indicateurs par fiche —
     onboarding (choix de la chambre, déclaration occupant, vérification
     d'identité, préférences ménage) et rubriques de l'espace client
@@ -308,19 +307,38 @@ certains OS/navigateurs — ce qui rendait le défilement peu évident).
     secteurs hôteliers, l'identité et les rubriques de l'espace client sont
     universelles — éditable ensuite fiche par fiche comme les autres
     indicateurs.
+  - **Correction pour les bases déjà provisionnées** : sur un déploiement
+    ayant déjà des fiches en base avant cette fonctionnalité (volume
+    Postgres persistant, `docker compose up --build` sans repartir d'une
+    base vierge), `seed.ts` ne réinsère jamais les 67 fiches une fois
+    présentes (garde `count===0`) — les nouvelles colonnes y restaient donc
+    à leur valeur par défaut (`code`=0, indicateurs de parcours=`false`),
+    sans jamais recevoir les données ci-dessus. Corrigé par une migration
+    Prisma dédiée (`20260817090000_crm_prospect_backfill_usage_journey_data`)
+    qui applique les mêmes valeurs aux fiches existantes, une seule fois
+    par base comme toute migration — sans risque d'écraser un indicateur
+    modifié depuis dans l'app (les taux d'usage ne sont corrigés que sur
+    les fiches encore à 0 sur les 4 colonnes).
 - **Vue liste** : quatre graphiques calculés en direct sur les fiches
   réelles — répartition par secteur (icône dédiée par secteur : hôtel,
   immeuble, mallette, haltère, maison, carton, cœur, histogramme…), taux
   d'adoption des modules Sesame (WebApp, Mobile V2, check-in, livret,
   gestion demande, offline), parcours client activés (onboarding + espace
-  client, cf. ci-dessus), et taux d'usage des accès (NFC/Mobile/Code/QR,
-  moyenné sur les fiches de type Client uniquement — un total "tout support
-  confondu" est affiché en pied de carte, permettant de vérifier d'un coup
-  d'œil qu'il avoisine 100%) — palette validée avec le validateur `dataviz`
-  (bleu/orange/violet/vert, écarts CVD ≥ 24 ΔE). Chaque fiche/PMS affiche
-  aussi un badge coloré déterministe (initiales, couleur dérivée du nom) —
-  pas de logo tiers hébergé, pour ne reproduire aucune marque sans
-  autorisation.
+  client, cf. ci-dessus), et **répartition des accès en camembert**
+  (NFC/Mobile/Code/QR — un anneau SVG plutôt que 4 barres, plus lisible
+  pour une répartition qui se totalise à 100%), calculée uniquement sur les
+  fiches Client ayant réellement des données d'usage (audit) — une fiche
+  pas encore auditée n'est pas comptée comme "0% partout", ce qui
+  fausserait la répartition ; la couverture (ex. "59 / 67 fiches Client
+  avec données d'usage réelles") est affichée sous le graphique. Palette
+  catégorielle à 4 teintes validée avec le validateur `dataviz` en mode
+  "toutes paires" (contrainte plus stricte que les paires adjacentes,
+  nécessaire dès que les segments d'un même graphique peuvent tous se
+  toucher) — bleu/jaune/magenta/vert, définie par thème (`--dch-*` dans
+  `crm.html`) avec un jeu de teintes assombries dédié pour le thème Nuit,
+  validé séparément contre son fond sombre. Chaque fiche/PMS affiche aussi
+  un badge coloré déterministe (initiales, couleur dérivée du nom) — pas de
+  logo tiers hébergé, pour ne reproduire aucune marque sans autorisation.
 - **Alimenté aussi par le formulaire de contact du site web public** :
   `POST /contact` (public, hors `/wa`) reçoit `{nom, email, secteur,
   message}`, crée (ou réutilise, retrouvé par email — pas de doublon sur des

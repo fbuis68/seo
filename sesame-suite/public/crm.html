@@ -19,30 +19,35 @@
   --tx:#1a1a1a;--mu:#999;--hi:#bbb;
   --a:#8a2b2b;--ah:#711f1f;--al:rgba(138,43,43,.08);
   --scb:#c7c4bd;--scbh:#a8a49c;
+  --dch-nfc:#2a78d6;--dch-code:#eda100;--dch-mobile:#e87ba4;--dch-qr:#008300;
 }
 html[data-theme="emeraude"]{
   --bg:#f2f5f1;--card:#fff;--bdr:#dbe4dc;--bdr2:#c3d1c5;--div:#e8efe9;--hover:#eaf2ea;
   --tx:#12201a;--mu:#7c8a7e;--hi:#a9b6ab;
   --a:#1A6B47;--ah:#125236;--al:rgba(26,107,71,.08);
   --scb:#c0d0c2;--scbh:#9cb39f;
+  --dch-nfc:#2a78d6;--dch-code:#eda100;--dch-mobile:#e87ba4;--dch-qr:#008300;
 }
 html[data-theme="ocean"]{
   --bg:#f1f4f7;--card:#fff;--bdr:#d9e1e9;--bdr2:#c0ccd8;--div:#e7edf2;--hover:#e9f0f6;
   --tx:#101c2b;--mu:#7688a0;--hi:#a9b8c8;
   --a:#1A4880;--ah:#123561;--al:rgba(26,72,128,.08);
   --scb:#bfd0dd;--scbh:#9cb4c6;
+  --dch-nfc:#2a78d6;--dch-code:#eda100;--dch-mobile:#e87ba4;--dch-qr:#008300;
 }
 html[data-theme="ardoise"]{
   --bg:#f4f4f5;--card:#fff;--bdr:#e2e3e6;--bdr2:#cacbd0;--div:#ececee;--hover:#eeeef0;
   --tx:#17181c;--mu:#83848c;--hi:#b3b4bb;
   --a:#4F46E5;--ah:#3c34b8;--al:rgba(79,70,229,.08);
   --scb:#cfd0d6;--scbh:#aeb0b8;
+  --dch-nfc:#2a78d6;--dch-code:#eda100;--dch-mobile:#e87ba4;--dch-qr:#008300;
 }
 html[data-theme="nuit"]{
   --bg:#1B1C22;--card:#24262E;--bdr:#33353E;--bdr2:#3d3f4a;--div:#33353E;--hover:#2c2e37;
   --tx:#EDEDEF;--mu:#9A9CA8;--hi:#6B6D78;
   --a:#E0536E;--ah:#c73f59;--al:rgba(224,83,110,.14);
   --scb:#41434d;--scbh:#54565f;
+  --dch-nfc:#3987e5;--dch-code:#c98500;--dch-mobile:#d55181;--dch-qr:#008300;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;color:var(--tx);background:var(--bg);display:flex;flex-direction:column;height:100vh;overflow:hidden}
@@ -140,6 +145,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,san
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
 .three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px}
 .insight-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:12px}
+
+/* DONUT — répartition NFC/Mobile/Code/QR (palette catégorielle validée dataviz,
+   4 teintes qui passent le contrôle all-pairs CVD/normal-vision en clair ET
+   sombre — cf. --dch-* par thème) */
+.donut-wrap{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.donut-svg{flex-shrink:0}
+.donut-legend{flex:1;min-width:120px;display:flex;flex-direction:column;gap:7px}
+.donut-legend-row{display:flex;align-items:center;gap:7px;font-size:12px}
+.donut-swatch{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.donut-legend-lbl{flex:1;color:var(--mu)}
+.donut-legend-val{font-weight:500;color:var(--tx)}
+.donut-cov{font-size:11px;color:var(--mu);margin-top:8px;padding-top:8px;border-top:0.5px solid var(--div)}
 
 /* BARS */
 .bar-row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
@@ -649,6 +666,44 @@ function pmsBadge(name){
 // (calculés en direct depuis les fiches réelles, palette validée
 // dataviz : bleu #2a78d6 pour le secteur, orange #eb6834 pour les modules)
 // ════════════════════════════════════════
+
+/**
+ * Camembert SVG générique — segments = [{lbl, cv (nom de variable CSS
+ * --dch-*), pct}], pct se totalisant à ~100 (renormalisé si besoin, ex.
+ * arrondis qui ne totalisent pas exactement 100). Technique classique
+ * anneau via stroke-dasharray sur des <circle>, un espace de 3px entre
+ * segments (cf. règle "2px de respiration entre segments" dataviz, ajusté
+ * ici pour rester visible à cette taille), survol natif via <title> —
+ * même convention que les barres (title="...") utilisées ailleurs dans
+ * cette vue. Légende à droite avec libellé + valeur en encre texte (jamais
+ * la couleur de la série), pastille pour porter l'identité de couleur.
+ */
+function buildDonut(segments){
+  const size=132, sw=22, r=(size-sw)/2, cx=size/2, cy=size/2;
+  const circ=2*Math.PI*r;
+  const rawTotal=segments.reduce((s,x)=>s+x.pct,0)||1;
+  let cum=0;
+  const arcs=segments.filter(s=>s.pct>0).map(s=>{
+    const share=s.pct/rawTotal;
+    const arcLen=share*circ;
+    const gap=Math.min(3,arcLen*0.15);
+    const visible=Math.max(0,arcLen-gap);
+    const offset=-cum;
+    cum+=arcLen;
+    return '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="var('+s.cv+')" stroke-width="'+sw+'" '
+      +'stroke-dasharray="'+visible+' '+(circ-visible)+'" stroke-dashoffset="'+offset+'" transform="rotate(-90 '+cx+' '+cy+')">'
+      +'<title>'+esc(s.lbl)+' : '+s.pct+'%</title></circle>';
+  }).join('');
+  const svg='<svg class="donut-svg" width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'" role="img" aria-label="Répartition des accès par type">'
+    +'<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="var(--div)" stroke-width="'+sw+'"></circle>'
+    +arcs+'</svg>';
+  const legend='<div class="donut-legend">'+segments.map(s=>
+    '<div class="donut-legend-row"><span class="donut-swatch" style="background:var('+s.cv+')"></span>'
+    +'<span class="donut-legend-lbl">'+esc(s.lbl)+'</span><span class="donut-legend-val">'+s.pct+'%</span></div>'
+  ).join('')+'</div>';
+  return '<div class="donut-wrap">'+svg+legend+'</div>';
+}
+
 function renderInsights(){
   if(!clients.length) return '';
 
@@ -678,26 +733,30 @@ function renderInsights(){
       +'</div>';
   }).join('');
 
-  // ── Taux d'usage cumulé des accès par type (NFC / Mobile / Code / QR) — clients
-  // uniquement, les prospects n'ont pas encore d'usage réel et fausseraient la
-  // moyenne à la baisse. Sur CHAQUE fiche les 4 taux se totalisent à 100% (ce
-  // sont les 4 façons dont un client final peut s'identifier, pas 4 mesures
-  // indépendantes) : la moyenne des 4 barres totalise donc elle aussi ~100%,
-  // affiché en pied de carte pour le vérifier d'un coup d'œil plutôt que
-  // d'avoir à additionner soi-même les 4 pourcentages affichés. ──
-  const ACCESS_TYPES=[['nfc','NFC'],['mobile','Mobile'],['code','Code'],['qr','QR Code']];
+  // ── Répartition des accès par type (NFC / Mobile / Code / QR), en camembert
+  // — les 4 se totalisent à 100% par fiche (ce sont les 4 façons dont un
+  // client final s'identifie, pas 4 mesures indépendantes), donc calculés ici
+  // comme une part d'un tout plutôt que 4 barres séparées. Uniquement sur les
+  // fiches Client ayant réellement des données d'usage (audit) — une fiche
+  // sans donnée (0 partout) n'est pas "0% partout", elle est simplement pas
+  // encore auditée, et la mélanger aux autres déformerait la répartition
+  // plutôt que de simplement réduire la couverture affichée. Couleurs :
+  // palette catégorielle validée dataviz (4 teintes qui passent le contrôle
+  // all-pairs CVD/normal-vision en clair ET sombre, cf. --dch-* par thème). ──
+  const ACCESS_TYPES=[['nfc','NFC','--dch-nfc'],['mobile','Mobile','--dch-mobile'],['code','Code','--dch-code'],['qr','QR Code','--dch-qr']];
   const clientsOnly=clients.filter(c=>c.type==='Client');
   const nClients=clientsOnly.length;
-  const accessAvgs=ACCESS_TYPES.map(([k,lbl])=>[lbl,nClients?Math.round(clientsOnly.reduce((s,c)=>s+(c[k]||0),0)/nClients):0]);
-  const accessTotal=accessAvgs.reduce((s,[,v])=>s+v,0);
-  const accessHtml=accessAvgs.map(([lbl,avg])=>
-    '<div class="bar-row" title="'+lbl+' : moyenne '+avg+'% sur '+nClients+' clients">'
-      +'<span class="bar-lbl-wide" style="width:80px">'+esc(lbl)+'</span>'
-      +'<div class="bar-track"><div class="bar-fill" style="width:'+avg+'%;background:#1baf7a"></div></div>'
-      +'<span class="bar-pct">'+avg+'%</span>'
-      +'</div>'
-  ).join('')
-  + (nClients?'<div style="font-size:11px;color:#aaa;margin-top:6px;padding-top:6px;border-top:0.5px solid #eeece8">Total tout support confondu : <b style="color:#1a1a1a">'+accessTotal+'%</b></div>':'');
+  const clientsWithUsage=clientsOnly.filter(c=>(c.nfc||0)+(c.mobile||0)+(c.code||0)+(c.qr||0)>0);
+  const nWithUsage=clientsWithUsage.length;
+  const accessShares=ACCESS_TYPES.map(([k,lbl,cv])=>{
+    const sum=clientsWithUsage.reduce((s,c)=>s+(c[k]||0),0);
+    const pct=nWithUsage?Math.round(sum/nWithUsage):0;
+    return {k,lbl,cv,pct};
+  });
+  const accessHtml=nWithUsage
+    ? buildDonut(accessShares)
+      + '<div class="donut-cov">'+nWithUsage+' / '+nClients+' fiches Client avec données d\'usage réelles'+(nWithUsage<nClients?' — le reste n\'est pas encore audité':'')+'</div>'
+    : '';
 
   // ── Parcours client activés — étapes d'onboarding et rubriques de l'espace
   // client, cf. matrice sectorielle (Hôtel/Sport/Stockage/Bureaux) appliquée
@@ -725,7 +784,7 @@ function renderInsights(){
     + '<div class="card"><div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Usage des modules Sesame</span><span style="font-size:11px;color:#aaa;margin-left:8px">'+total+' fiches</span></div>'+moduleHtml+'</div>'
     + '<div class="card"><div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Parcours client activés</span><span style="font-size:11px;color:#aaa;margin-left:8px">'+total+' fiches</span></div>'+journeyHtml+'</div>'
     + '<div class="card"><div class="card-head"><div class="ch-ico">◉</div><span class="ch-title">Taux d\'usage des accès</span><span style="font-size:11px;color:#aaa;margin-left:8px">'+nClients+' clients</span></div>'+accessHtml
-      +(nClients?'':'<div style="font-size:12px;color:#bbb;padding:4px 0;font-style:italic">Aucune fiche de type Client</div>')+'</div>'
+      +(nWithUsage?'':'<div style="font-size:12px;color:#bbb;padding:4px 0;font-style:italic">Aucune donnée d\'usage réelle sur les fiches Client</div>')+'</div>'
     + '</div>';
 }
 
