@@ -13,6 +13,12 @@ export interface FieldMapping {
   startDate?: string;
   endDate?: string;
   facilityCode?: string;
+  // Optionnel — certaines sources (ex : API Sesame Technology) renvoient déjà
+  // le nom/libellé de la chambre directement dans la réservation (ex :
+  // "Chambre 3"), sans avoir besoin d'importer les chambres séparément via
+  // la section "Chambres (facilities)". Utilisé si renseigné, sinon repli
+  // sur le nom de la chambre importée correspondant à facilityCode.
+  facilityName?: string;
   status?: string;
 }
 
@@ -25,6 +31,7 @@ export interface MappedBooking {
   startDate: Date;
   endDate: Date;
   facilityCode: string;
+  facilityName: string;
   status: string;
 }
 
@@ -365,6 +372,7 @@ export function mapBookings(items: unknown[], mapping: FieldMapping): { mapped: 
       startDate,
       endDate,
       facilityCode: mapping.facilityCode ? firstOf(String(getPath(item, mapping.facilityCode) ?? "")) : "",
+      facilityName: mapping.facilityName ? firstOf(String(getPath(item, mapping.facilityName) ?? "")) : "",
       status: (mapping.status ? String(getPath(item, mapping.status) ?? "").trim() : "") || "confirmed",
     });
   });
@@ -441,7 +449,10 @@ export async function upsertMappedBookings(entity: Entity, mapped: MappedBooking
       startDate: b.startDate,
       endDate: b.endDate,
       facilityCode: b.facilityCode || undefined,
-      facilityName: room?.name || undefined,
+      // Priorité au nom fourni directement par la source (ex: API Sesame,
+      // qui renvoie "Chambre 3" dans la réservation elle-même) — sinon repli
+      // sur le nom de la chambre importée séparément via "Chambres".
+      facilityName: b.facilityName || room?.name || undefined,
       roomId: room?.id,
       status: b.status,
       importedFrom: sourceName,

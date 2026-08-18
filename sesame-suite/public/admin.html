@@ -4513,6 +4513,7 @@ var BS_MAPPING_FIELDS = [
   {k:'startDate', label:'Date d\'arrivée', required:true},
   {k:'endDate', label:'Date de départ', required:true},
   {k:'facilityCode', label:'Code chambre', required:false},
+  {k:'facilityName', label:'Nom de la chambre', required:false},
   {k:'status', label:'Statut', required:false},
 ];
 
@@ -4680,7 +4681,7 @@ var PMS_PRESETS = {
       document.getElementById('bs-loginProfileListPath').value = 'data.profiles';
       document.getElementById('bs-loginProfileMatchField').value = 'entityCode';
       document.getElementById('bs-responseListPath').value = 'root';
-      bsRenderMappingFields({code:'code', personEmail:'personEmail', personFirstname:'personFirstname', personLastname:'personLastname', personPhone:'', startDate:'startDate', endDate:'endDate', facilityCode:'facilityCode', status:'status'});
+      bsRenderMappingFields({code:'code', personEmail:'personEmail', personFirstname:'personFirstname', personLastname:'personLastname', personPhone:'', startDate:'startDate', endDate:'endDate', facilityCode:'facilityCode', facilityName:'facilityName', status:'status'});
     },
     vars: [
       {label:'URL du serveur Sesame', placeholder:'https://newtest.sesame.technology', target:'bs-baseUrl'},
@@ -5372,7 +5373,7 @@ async function bsTest(){
     if(data.preview.length){
       h += '<table class="tbl"><tr><th>Code</th><th>Client</th><th>Email</th><th>Arrivée</th><th>Départ</th><th>Chambre</th></tr>';
       h += data.preview.map(function(p){
-        return '<tr><td>'+esc(p.code)+'</td><td>'+esc((p.personFirstname+' '+p.personLastname).trim()||'—')+'</td><td>'+esc(p.personEmail)+'</td><td>'+p.startDate+'</td><td>'+p.endDate+'</td><td>'+esc(p.facilityCode||'—')+'</td></tr>';
+        return '<tr><td>'+esc(p.code)+'</td><td>'+esc((p.personFirstname+' '+p.personLastname).trim()||'—')+'</td><td>'+esc(p.personEmail)+'</td><td>'+p.startDate+'</td><td>'+p.endDate+'</td><td>'+esc(p.facilityName||p.facilityCode||'—')+'</td></tr>';
       }).join('');
       h += '</table>';
     }
@@ -9324,7 +9325,7 @@ function renderReservations(){
   var sym = getCurrSym();
   listEl.innerHTML = list.map(function(r){
     var b = r.booking;
-    var room = b.selectedRoomCode || b.facilityCode || '—';
+    var room = b.facilityName || b.selectedRoomCode || b.facilityCode || '—';
     var expired = (b.endDate||'').slice(0,10) < todayStr;
     var checkinBadge = b.checkinDone
       ? '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:rgba(26,107,71,.1);color:#1A6B47"><i class="ti ti-check" style="font-size:11px"></i> Check-in fait</span>'
