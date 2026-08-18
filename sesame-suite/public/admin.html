@@ -5096,7 +5096,7 @@ function emlOpenTemplateModal(id){
   var t = id ? EML_TEMPLATES.find(function(t){return t.id===id;}) : {id:null,channel:EML_TPL_TAB,key:'',name:'',subject:'',bodyHtml:''};
   if(!t) return;
   document.getElementById('eml-template-modal').innerHTML =
-    '<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:28px 20px;overflow-y:auto" onclick="if(event.target===this)emlCloseTemplateModal()">'
+    '<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:28px 20px;overflow-y:auto" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)emlCloseTemplateModal()">'
     + '<div class="ca" style="width:100%;max-width:560px">'
     + '<div class="ch">'+(t.id?'Modifier le modèle':'Nouveau modèle')+'<button class="btn btn-g" style="margin-left:auto" onclick="emlCloseTemplateModal()"><i class="ti ti-x"></i></button></div>'
     + '<div class="g2">'
@@ -5105,11 +5105,33 @@ function emlOpenTemplateModal(id){
     + '</div>'
     + '<div class="fi"><label class="lb">Nom affiché</label><input type="text" id="eml-tpl-name" value="'+esc(t.name)+'" placeholder="Email de bienvenue"></div>'
     + '<div class="fi" id="eml-tpl-subject-wrap"><label class="lb">Objet (email uniquement)</label><input type="text" id="eml-tpl-subject" value="'+esc(t.subject)+'" placeholder="Bienvenue {{nom}} !"></div>'
-    + '<div class="fi"><label class="lb">Corps (email : HTML ; SMS/WhatsApp : texte — variables selon contexte d\'envoi, ex. {{prenom}} {{nom}} {{code}})</label><textarea id="eml-tpl-body" style="height:160px">'+(t.bodyHtml||'')+'</textarea></div>'
+    + '<div class="fi"><label class="lb">Corps (email : HTML ; SMS/WhatsApp : texte)</label><textarea id="eml-tpl-body" style="height:160px">'+(t.bodyHtml||'')+'</textarea></div>'
+    + '<div style="font-size:11px;color:var(--mu);margin:-6px 0 12px">'
+    + 'Variables disponibles (cliquer pour insérer) — non fournies par le déclencheur choisi, elles restent vides à l\'envoi :<br>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'
+    + EML_TPL_VARS.map(function(v){return '<span class="bdg bgb" style="cursor:pointer" title="'+esc(v.desc)+'" onclick="emlInsertVar(\''+v.key+'\')">{{'+v.key+'}}</span>';}).join('')
+    + '</div></div>'
     + '<div class="brow"><button class="btn btn-p" onclick="emlSaveTemplate('+(t.id?"'"+t.id+"'":'null')+')"><i class="ti ti-device-floppy"></i> Enregistrer</button>'
     + '<button class="btn btn-s" onclick="emlCloseTemplateModal()">Annuler</button></div>'
     + '</div></div>';
   emlRenderTplSubjectVisibility();
+}
+
+var EML_TPL_VARS = [
+  {key:'prenom', desc:'Prénom du client (réservation)'},
+  {key:'nom', desc:'Nom du client, ou nom de l\'établissement/prospect selon le déclencheur'},
+  {key:'code', desc:'Code de réservation'},
+  {key:'secteur', desc:'Secteur d\'activité du prospect (déclencheurs CRM)'},
+  {key:'ville', desc:'Ville du prospect, si renseignée'},
+  {key:'total', desc:'Montant total de la commande (room service / boutique)'},
+];
+function emlInsertVar(key){
+  var el = document.getElementById('eml-tpl-body');
+  if(!el) return;
+  var start = el.selectionStart||0, end = el.selectionEnd||0, token = '{{'+key+'}}';
+  el.value = el.value.slice(0,start) + token + el.value.slice(end);
+  el.focus();
+  el.selectionStart = el.selectionEnd = start + token.length;
 }
 
 function emlRenderTplSubjectVisibility(){

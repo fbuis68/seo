@@ -9,6 +9,7 @@
  */
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { ROOMS, svgDataUri, hotelPlanSvg, roomPhotoSvg } from "./roomMedia";
 
 const prisma = new PrismaClient();
 
@@ -400,7 +401,7 @@ async function main() {
           Premium: ["Petit-déjeuner offert chaque matin", "Surclassement prioritaire", "Check-out tardif jusqu'à 16h", "Accès au salon Premium"],
         },
       },
-      hotelPlan: null,
+      hotelPlan: svgDataUri(hotelPlanSvg()),
       roomTags: ["Vue jardin", "Vue rue", "Étage élevé", "Calme", "Balcon"],
       accessPoints: [{ id: "room", label: "Chambre", ico: "ti-door", facilityCode: "", auto: true }],
     },
@@ -408,23 +409,6 @@ async function main() {
 
   // ── Chambres (documentation_sesame_suite.docx §10.2) ──
   // floor: RDC=0, R+1=1, R+2=2, R+3=3, R+4=4 (cf. flLbls dans le prototype)
-  const ROOMS: Array<{
-    code: string; name: string; floor: number; surface: number; category: string; available: boolean; tag: string;
-  }> = [
-    { code: "A11", name: "Chambre A11 — Supérieure", floor: 1, surface: 25.1, category: "A — Supérieure", available: true, tag: "Supérieure" },
-    { code: "A12", name: "Suite A12 — Supérieure", floor: 1, surface: 30.6, category: "A — Supérieure", available: true, tag: "Supérieure" },
-    { code: "A14", name: "Chambre A14 — Supérieure", floor: 1, surface: 26.6, category: "A — Supérieure", available: false, tag: "Supérieure" },
-    { code: "A23", name: "Chambre A23 — Supérieure", floor: 2, surface: 19.3, category: "A — Supérieure", available: true, tag: "Supérieure" },
-    { code: "A42", name: "Chambre A42 — Supérieure Attique", floor: 4, surface: 24.1, category: "A — Supérieure", available: true, tag: "Attique" },
-    { code: "A43", name: "Suite A43 — Attique", floor: 4, surface: 22.0, category: "A — Supérieure", available: true, tag: "Attique" },
-    { code: "B13", name: "Chambre B13 — Standard", floor: 1, surface: 14.1, category: "B — Standard", available: true, tag: "Standard" },
-    { code: "B14", name: "Chambre B14 — Standard", floor: 1, surface: 14.6, category: "B — Standard", available: true, tag: "Standard" },
-    { code: "B43", name: "Chambre B43 — Standard", floor: 4, surface: 14.1, category: "B — Standard", available: true, tag: "Standard" },
-    { code: "C16", name: "Chambre C16 — Compacte", floor: 1, surface: 15.3, category: "C — Compacte", available: true, tag: "Compacte" },
-    { code: "C17", name: "Chambre C17 — Compacte", floor: 1, surface: 15.3, category: "C — Compacte", available: true, tag: "Compacte" },
-    { code: "C19", name: "Chambre C19 — Compacte", floor: 1, surface: 15.2, category: "C — Compacte", available: false, tag: "Compacte" },
-  ];
-
   const roomByCode = new Map<string, string>(); // code -> room.id
   for (const r of ROOMS) {
     const room = await prisma.room.upsert({
@@ -438,8 +422,10 @@ async function main() {
         surface: r.surface,
         category: r.category,
         tags: [r.tag],
-        photos: [],
+        photos: [svgDataUri(roomPhotoSvg(r.name, r.category, "chambre")), svgDataUri(roomPhotoSvg(r.name, r.category, "sdb"))],
         available: r.available,
+        x: r.x,
+        y: r.y,
       },
     });
     roomByCode.set(r.code, room.id);

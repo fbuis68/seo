@@ -858,36 +858,14 @@ function renderInsights(){
       + '<div class="donut-cov">'+nWithUsage+' / '+nClients+' fiches Client avec données d\'usage réelles'+(nWithUsage<nClients?' — le reste n\'est pas encore audité':'')+'</div>'
     : '';
 
-  // ── Parcours client activés — étapes d'onboarding et rubriques de l'espace
-  // client, cf. matrice sectorielle (Hôtel/Sport/Stockage/Bureaux) appliquée
-  // par défaut à la création de la fiche puis éditable individuellement.
-  // Corrigé le 18/08/2026 : calculé sur les fiches type==='Client'
-  // uniquement (comme le donut "Taux d'usage des accès" juste au-dessus),
-  // pas sur clients.length qui inclut aussi les Prospects — un "parcours
-  // client activé" n'a de sens que pour un client réel, le mélange avec les
-  // prospects gonflait/faussait artificiellement le taux affiché. ──
-  const ONBOARDING_STEPS=[['onbChoixChambres','Choix chambre'],['onbOccupant','Occupant'],['onbIdentite','Identité'],['onbMenage','Ménage']];
-  const ESPACE_SECTIONS=[['espBoutique','Boutique'],['espPoint','Points fidélité'],['livret','Livret digital'],['gestionDemande','Demande'],['espEvenement','Évènements']];
-  function journeyRows(items){
-    return items.map(([k,lbl])=>{
-      const n=clientsOnly.filter(c=>c[k]).length;
-      const pct=nClients?Math.round(n/nClients*100):0;
-      return '<div class="bar-row" title="'+lbl+' : '+n+'/'+nClients+'">'
-        +'<span class="bar-lbl-wide" style="width:110px">'+esc(lbl)+'</span>'
-        +'<div class="bar-track"><div class="bar-fill" style="width:'+pct+'%;background:#8a5fd6"></div></div>'
-        +'<span class="bar-pct">'+pct+'%</span>'
-        +'</div>';
-    }).join('');
-  }
-  const journeyHtml='<div style="font-size:10px;font-weight:500;color:#bbb;letter-spacing:.05em;text-transform:uppercase;margin-bottom:4px">Onboarding</div>'
-    + journeyRows(ONBOARDING_STEPS)
-    + '<div style="font-size:10px;font-weight:500;color:#bbb;letter-spacing:.05em;text-transform:uppercase;margin:9px 0 4px">Espace client</div>'
-    + journeyRows(ESPACE_SECTIONS);
-
+  // La carte "Parcours client activés" (étapes d'onboarding + rubriques de
+  // l'espace client) a été retirée le 18/08/2026 : ce sont des modules
+  // Sesame comme les autres, désormais fusionnés dans "Features actives"
+  // sur la fiche client — la doubler ici avec un graphique dédié n'avait
+  // plus d'utilité.
   return '<div class="insight-grid">'
     + '<div class="card"><div class="card-head"><div class="ch-ico">◻</div><span class="ch-title">Répartition par secteur</span></div>'+secteurHtml+'</div>'
     + '<div class="card"><div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Usage des modules Sesame</span><span style="font-size:11px;color:#aaa;margin-left:8px">'+total+' fiches</span></div>'+moduleHtml+'</div>'
-    + '<div class="card"><div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Parcours client activés</span><span style="font-size:11px;color:#aaa;margin-left:8px">'+nClients+' clients</span></div>'+journeyHtml+'</div>'
     + '<div class="card"><div class="card-head"><div class="ch-ico">◉</div><span class="ch-title">Taux d\'usage des accès</span><span style="font-size:11px;color:#aaa;margin-left:8px">'+nClients+' clients</span></div>'+accessHtml
       +(nWithUsage?'':'<div style="font-size:12px;color:#bbb;padding:4px 0;font-style:italic">Aucune donnée d\'usage réelle sur les fiches Client</div>')+'</div>'
     + '</div>';
@@ -1011,8 +989,11 @@ function scoreLbl(s){return s<=3?'Faible':s<=6?'Modéré':'Élevé';}
 
 function renderFiche(c){
   const sc=riskScore(c);
-  const featDef=[['WebApp',c.webApp],['Mobile V2',c.mobileV2],['Offline',c.offline],['Livret digital',c.livret],['Check-in mobile',c.checkin],['Gestion demande',c.gestionDemande]];
-  const journeyDef=[['Choix chambre',c.onbChoixChambres],['Occupant',c.onbOccupant],['Identité',c.onbIdentite],['Ménage',c.onbMenage],['Boutique',c.espBoutique],['Points fidélité',c.espPoint],['Évènements',c.espEvenement]];
+  // Les "parcours" (onboarding + espace client) sont des modules Sesame au
+  // même titre que WebApp/Check-in/etc. — fusionnés dans une seule liste de
+  // features actives (18/08/2026), la distinction n'avait pas d'utilité
+  // pour la fiche client.
+  const featDef=[['WebApp',c.webApp],['Mobile V2',c.mobileV2],['Offline',c.offline],['Livret digital',c.livret],['Check-in mobile',c.checkin],['Gestion demande',c.gestionDemande],['Choix chambre',c.onbChoixChambres],['Occupant',c.onbOccupant],['Identité',c.onbIdentite],['Ménage',c.onbMenage],['Boutique',c.espBoutique],['Points fidélité',c.espPoint],['Évènements',c.espEvenement]];
   const upsells=[
     {show:!c.checkin,ico:'◉',bg:'#eeedfe',name:'Check-in mobile',price:'+90€/mois',pcl:'t-purple'},
     {show:!c.gestionDemande,ico:'◈',bg:'#eaf3de',name:'Gestion demande',price:'',pcl:'t-green'},
@@ -1107,10 +1088,6 @@ function renderFiche(c){
       <div class="feat-lbl">Features actives</div>
       <div class="feat-pills">
         ${featDef.map(([n,v])=>`<span class="fp ${v?'fp-on':'fp-off'}"><span class="fp-ico">${v?'✓':'✕'}</span>${n}</span>`).join('')}
-      </div>
-      <div class="feat-lbl">Parcours activés</div>
-      <div class="feat-pills">
-        ${journeyDef.map(([n,v])=>`<span class="fp ${v?'fp-on':'fp-off'}"><span class="fp-ico">${v?'✓':'✕'}</span>${n}</span>`).join('')}
       </div>
     </div>
     <div class="card">
@@ -1416,22 +1393,14 @@ function renderModal(mc){
         <label><input type="checkbox" id="m-v2" ${mc.mobileV2?'checked':''}> Mobile V2</label>
         <label><input type="checkbox" id="m-offline" ${mc.offline?'checked':''}> Offline</label>
         <label><input type="checkbox" id="m-checkin" ${mc.checkin?'checked':''}> Check-in mobile</label>
-      </div>
-
-      <div class="modal-section">Parcours — Onboarding</div>
-      <div class="feat-checks">
+        <label><input type="checkbox" id="m-livret" ${mc.livret?'checked':''}> Livret digital</label>
+        <label><input type="checkbox" id="m-gd" ${mc.gestionDemande?'checked':''}> Demande</label>
         <label><input type="checkbox" id="m-onb-chambres" ${mc.onbChoixChambres?'checked':''}> Choix chambre</label>
         <label><input type="checkbox" id="m-onb-occupant" ${mc.onbOccupant?'checked':''}> Occupant</label>
         <label><input type="checkbox" id="m-onb-identite" ${mc.onbIdentite?'checked':''}> Identité</label>
         <label><input type="checkbox" id="m-onb-menage" ${mc.onbMenage?'checked':''}> Ménage</label>
-      </div>
-
-      <div class="modal-section">Parcours — Espace client</div>
-      <div class="feat-checks">
         <label><input type="checkbox" id="m-esp-boutique" ${mc.espBoutique?'checked':''}> Boutique</label>
         <label><input type="checkbox" id="m-esp-point" ${mc.espPoint?'checked':''}> Points fidélité</label>
-        <label><input type="checkbox" id="m-livret" ${mc.livret?'checked':''}> Livret digital</label>
-        <label><input type="checkbox" id="m-gd" ${mc.gestionDemande?'checked':''}> Demande</label>
         <label><input type="checkbox" id="m-esp-evenement" ${mc.espEvenement?'checked':''}> Évènements</label>
       </div>
 
@@ -2092,7 +2061,8 @@ async function saveCrmUser(id){
       crmUsersList.push(data);
       const box = document.getElementById('u-pw-box');
       box.style.display='block';
-      box.innerHTML = 'Compte créé. Mot de passe temporaire (à communiquer, affiché une seule fois) :<br><strong style="font-size:14px;letter-spacing:.03em">'+esc(data.password)+'</strong>';
+      box.innerHTML = 'Compte créé. Mot de passe temporaire (à communiquer, affiché une seule fois) :<br><strong style="font-size:14px;letter-spacing:.03em">'+esc(data.password)+'</strong>'
+        + credentialsSendButtonHtml(data.email, data.name||data.email, data.password);
     }
   }catch(e){ flash('Erreur d\'enregistrement'); }
 }
@@ -2103,10 +2073,52 @@ async function resetCrmUserPassword(id){
     var r = await apiFetch('/wa/crmUser/resetPassword', {method:'POST', body:JSON.stringify({id:id})});
     var data = await r.json();
     if(!r.ok){ flash(data.error||'Erreur'); return; }
+    const u = crmUsersList.find(x=>x.id===id);
     const box = document.getElementById('u-pw-box');
     box.style.display='block';
-    box.innerHTML = 'Nouveau mot de passe temporaire (affiché une seule fois) :<br><strong style="font-size:14px;letter-spacing:.03em">'+esc(data.password)+'</strong>';
+    box.innerHTML = 'Nouveau mot de passe temporaire (affiché une seule fois) :<br><strong style="font-size:14px;letter-spacing:.03em">'+esc(data.password)+'</strong>'
+      + credentialsSendButtonHtml(u?u.email:'', u?(u.name||u.email):'', data.password);
   }catch(e){ flash('Erreur de connexion au serveur'); }
+}
+
+// Bouton "Envoyer par email" affiché sous un mot de passe temporaire fraîchement
+// généré (création de compte ou réinitialisation) — permet de transmettre les
+// identifiants via un modèle existant plutôt que de les recopier à la main.
+function credentialsSendButtonHtml(email, name, password){
+  return '<div style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="openSendCredentialsModal(\''+esc(email)+'\',\''+esc(name)+'\',\''+esc(password)+'\')">Envoyer par email</button></div>';
+}
+
+async function openSendCredentialsModal(email, name, password){
+  await ensureTemplatesLoaded();
+  const opts = MSG_TEMPLATES.filter(t=>t.channel==='email');
+  if(!opts.length){ flash('Aucun modèle email — créez-en un depuis "Canaux" (variables {{login}} {{password}} {{loginUrl}})'); return; }
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:480px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Envoyer les identifiants — ${esc(name)}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div class="ff"><label>Destinataire</label><input id="cred-to" value="${esc(email)}"></div>
+      <div class="ff" style="margin-top:8px"><label>Modèle</label><select id="cred-tpl">${opts.map(t=>`<option value="${esc(t.key)}">${esc(t.name)}</option>`).join('')}</select></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="sendCredentialsEmail('${esc(name)}','${esc(email)}','${esc(password)}')">Envoyer</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function sendCredentialsEmail(name, login, password){
+  const to=(document.getElementById('cred-to')||{value:''}).value.trim();
+  const key=(document.getElementById('cred-tpl')||{value:''}).value;
+  if(!to||!key){ flash('Destinataire et modèle requis'); return; }
+  try{
+    var r = await apiFetch('/wa/message/send', {method:'POST', body:JSON.stringify({
+      scope:'crm', channel:'email', templateKey:key, to:to,
+      variables:{nom:name, login:login, password:password, loginUrl:location.origin+'/crm.html'}
+    })});
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+  }catch(e){ flash(e.message||'Échec de l\'envoi'); return; }
+  closeModal(); flash('Identifiants envoyés');
 }
 
 // ════════════════════════════════════════
@@ -2279,7 +2291,7 @@ function openTemplateModal(id){
   const t = id ? MSG_TEMPLATES.find(t=>t.id===id) : {id:null,channel:tplChannelTab,key:'',name:'',subject:'',bodyHtml:''};
   if(!t)return;
   document.getElementById('modal-ct').innerHTML=`
-  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box">
       <div class="modal-head"><div style="font-size:16px;font-weight:500">${t.id?'Modifier le modèle':'Nouveau modèle'}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
       <div class="form-grid">
@@ -2288,7 +2300,8 @@ function openTemplateModal(id){
       </div>
       <div class="ff" style="margin-top:8px"><label>Nom affiché</label><input id="tpl-name" value="${esc(t.name)}" placeholder="Relance prospect"></div>
       <div class="ff" id="tpl-subject-wrap" style="margin-top:8px"><label>Objet (email uniquement)</label><input id="tpl-subject" value="${esc(t.subject)}" placeholder="Sesame Technology — {{nom}}"></div>
-      <div class="ff" style="margin-top:8px"><label>Corps (email : HTML ; SMS/WhatsApp : texte — variables : {{nom}} {{secteur}} {{referent}} {{ville}})</label><textarea id="tpl-body" style="height:160px">${t.bodyHtml||''}</textarea></div>
+      <div class="ff" style="margin-top:8px"><label>Corps (email : HTML ; SMS/WhatsApp : texte)</label><textarea id="tpl-body" style="height:160px">${t.bodyHtml||''}</textarea></div>
+      <div style="font-size:11px;color:var(--text-muted,#888);margin-top:-4px">Variables — envoi depuis une fiche prospect : {{nom}} {{secteur}} {{referent}} {{ville}} · envoi depuis "Utilisateurs CRM" (identifiants de connexion) : {{login}} {{password}} {{loginUrl}}</div>
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="saveTemplate(${t.id?`'${t.id}'`:'null'})">Enregistrer</button>
         <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>

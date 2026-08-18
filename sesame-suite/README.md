@@ -811,6 +811,57 @@ de 0 au lieu de la taille de son contenu ; il se faisait donc écraser par
     droite, particulièrement visible sur Accueil (la grille "Indicateurs
     réels" passe de 3-4 tuiles par ligne à 7 sur un écran 1920px).
 
+- **Corrections diverses + données réelles Churchill** (18/08/2026) :
+  - **Bug corrigé — bouton "Commander" du parcours éco-checkin mal aligné**
+    (`public/checkin.html`, étape Boutique) : quand le panier contenait au
+    moins un article, la barre du bas affichait 3 boutons (retour / Passer /
+    Commander & continuer), mais la règle CSS `.brow .btn` ne donnait
+    `flex:1` qu'au dernier bouton — le bouton "Passer" du milieu restait à sa
+    largeur de contenu, cassant l'alignement. Un `flex:1` par défaut sur
+    tous les boutons de la barre (sauf la flèche retour, toujours
+    `flex:0 0 auto`) corrige l'alignement dans tous les cas (1, 2 ou 3
+    boutons).
+  - **"Parcours client activés" fusionné dans "Features actives"** (fiche
+    CRM `public/crm.html`) : les étapes d'onboarding et les rubriques de
+    l'espace client sont des modules Sesame au même titre que WebApp/
+    Check-in/etc. — elles apparaissent désormais dans une seule liste de 13
+    pills (lecture et édition), et la carte KPI "Parcours client activés"
+    (avec son graphique dédié) a été retirée de la page Home, qui affiche
+    par ailleurs déjà "Usage des modules Sesame" et "Taux d'usage des accès".
+  - **Photos de chambres + plan de l'hôtel pour Hôtel Churchill**
+    (`prisma/roomMedia.ts`) : faute de plan architectural réel ou de
+    shooting photo pour cet hôtel de démonstration, un plan schématique
+    (SVG, 540×380) et deux photos par chambre (chambre + salle de bain,
+    palette selon la catégorie A/B/C) sont générés et encodés en data URI.
+    Les positions `Room.x`/`Room.y` sur le plan sont renseignées pour les 12
+    chambres. `seed.ts` les pose à la création ; la migration
+    `20260818180000_churchill_room_media_backfill` applique la même donnée
+    aux bases déjà provisionnées (chaque valeur uniquement si encore vide —
+    ne jamais écraser un plan ou des photos déjà mis en ligne depuis
+    l'admin).
+  - **Bug corrigé — la fenêtre de création d'un modèle d'email pouvait se
+    fermer seule** (`public/admin.html` et `public/crm.html`,
+    `emlOpenTemplateModal`/`openTemplateModal`) : le fond du modal se
+    fermait sur tout `click` dont la cible était le fond lui-même — or
+    sélectionner du texte dans le champ "Corps" (grand textarea) à la
+    souris puis relâcher le clic hors du modal déclenche un `click` dont la
+    cible remonte au fond (comportement standard du DOM quand `mousedown`
+    et `mouseup` n'ont pas la même cible), fermant le modal en pleine
+    saisie. Corrigé en ne fermant que si le `mousedown` **et** le `click`
+    ont tous les deux démarré exactement sur le fond.
+  - **Variables de modèle listées à l'écran** (`public/admin.html`) :
+    pastilles cliquables sous le champ "Corps" ({{prenom}}, {{nom}},
+    {{code}}, {{secteur}}, {{ville}}, {{total}} — celles réellement
+    fournies dépendent du déclencheur d'automatisation choisi) qui insèrent
+    la variable au curseur.
+  - **Variables {{login}} / {{password}} / {{loginUrl}}** (`public/crm.html`,
+    panneau "Utilisateurs CRM") : un bouton "Envoyer par email" apparaît
+    sous le mot de passe temporaire affiché à la création d'un compte ou à
+    une réinitialisation — il ouvre un envoi via un modèle email existant
+    avec ces trois variables réellement renseignées (`POST /wa/message/send`,
+    inchangé), pour transmettre les identifiants sans les recopier à la main.
+    Envoi manuel uniquement, à la demande : pas d'email automatique.
+
 - **Bug corrigé — config d'un compte hôtel affichant celle d'un autre
   établissement** (`loadCfg()`) : `GET /entityModuleConfig/list` est
   volontairement public côté serveur (le parcours client en a besoin sans
