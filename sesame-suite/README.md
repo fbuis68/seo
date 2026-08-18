@@ -589,6 +589,59 @@ de 0 au lieu de la taille de son contenu ; il se faisait donc écraser par
     rapprochement avec la base CRM, pas Power Automate. Deux flux à créer
     (un par boîte), tous deux pointant vers le même endpoint.
 
+- **Assignation d'un commercial** — chaque fiche CRM (`CrmProspect.commercialId`)
+  peut être rattachée à un compte Sesame (`role="sesame"`, via
+  `GET /wa/commercial/list`), éditable depuis la fiche (section "Installation
+  &amp; commercial" de la modale) ou à la création. Affiché en toutes lettres
+  dans la fiche détaillée et en pastille d'initiales (`.commercial-chip`) dans
+  la liste, la grille et les cartes du pipeline "Affaires" ci-dessous.
+
+- **Module "Gestion des affaires"** (18/08/2026) — pipeline commercial greffé
+  sur le CRM, nouvel onglet "Affaires" (`showAffaires()`), avec production de
+  devis souple et automatique :
+  - **CrmDeal** (`src/routes/crmDeal.ts`) : une affaire est rattachée à une
+    fiche `CrmProspect` (plusieurs affaires possibles par fiche — upsell,
+    renouvellement…), avec titre, étape (`Nouveau → Qualification → Devis
+    envoyé → Négociation → Gagné/Perdu`), valeur mensuelle estimée,
+    probabilité (0-100%) et date de clôture prévue. Vue Kanban par étape
+    (`.kanban-wrap`), filtrable par commercial, avec le total (nombre +
+    valeur) par colonne. Une carte "Affaires" sur chaque fiche liste les
+    opportunités de ce client avec un raccourci "+ Nouvelle affaire".
+  - **CrmQuote** (`src/routes/crmQuote.ts`) — devis rattaché à une affaire,
+    numéroté automatiquement (`DEV-{année}-{séquence}`, ex. `DEV-2026-0001`) :
+    - **Automatique** : `GET /wa/crmQuote/catalog` réexpose le même catalogue
+      de modules Sesame que le wizard d'inscription (`ONBOARDING_MODULES` +
+      `PricingConfig`, cf. section précédente) — une seule source de vérité
+      tarifaire dans toute l'app. Cliquer un module dans le constructeur de
+      devis ajoute une ligne pré-remplie à son prix courant.
+    - **Souple** : les lignes (`CrmQuote.lines`, JSON libre) mélangent
+      librement modules Sesame et lignes personnalisées (libellé, quantité,
+      prix unitaire, mensuel/ponctuel éditables), plus une remise globale en
+      %. Le total (mensuel récurrent + frais ponctuels, avant/après remise)
+      est recalculé à la volée à chaque modification.
+    - **Aperçu / impression** : `printQuote()` ouvre un document HTML autonome
+      dans un nouvel onglet (mise en page dédiée à l'impression/export PDF
+      via le navigateur, pas de dépendance PDF côté serveur) reprenant les
+      lignes, le total et les notes du devis.
+  - **Bug corrigé au passage** : `showFiche()` appelait `setNav('n-fiche')`,
+    id d'un nav-item supprimé lors du renommage "Fiche Client" → "Home" plus
+    tôt dans la session — `setNav()` levait alors une exception
+    (`Cannot read properties of null`) qui interrompait le rendu, rendant
+    **impossible l'ouverture de toute fiche client** depuis ce renommage.
+    `setNav()` protège désormais l'ajout de la classe `active` contre un id
+    sans nav-item correspondant (cas légitime : la vue fiche n'a pas
+    d'entrée dédiée dans la barre latérale).
+
+- **KPI de pipe sur Home, dédoublonnés de Vue liste** — `renderPipelineKpis()`
+  (affaires ouvertes, valeur du pipe, valeur pondérée par probabilité, taux
+  de conversion Gagné/(Gagné+Perdu)) affiché en tête de la page Home,
+  au-dessus des indicateurs déjà existants (`renderInsights()`). Cette
+  dernière carte était jusqu'ici dupliquée à l'identique sur Vue liste — son
+  appel y a été retiré (18/08/2026) pour ne garder qu'un seul endroit où
+  consulter ces indicateurs ; les 4 compteurs rapides propres à Vue liste
+  (Clients / Risque élevé / Sans contrat / Activités totales) restent en
+  place, ce ne sont pas des doublons.
+
 - **Mot de passe oublié**, harmonisé entre le CRM (`crm.html`, comptes
   `role="sesame"`) et le back-office hôtel (`admin.html`, comptes
   `role="hotel"`) — même flux, même écran de connexion, seule la portée du

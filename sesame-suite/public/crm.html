@@ -305,6 +305,33 @@ input[type=checkbox]{accent-color:var(--a);cursor:pointer;width:14px;height:14px
 .ui-theme-dot{width:18px;height:18px;border-radius:50%;flex-shrink:0;border:1px solid rgba(0,0,0,.08);box-shadow:0 0 0 2px var(--card) inset}
 .ui-theme-row .ui-theme-check{margin-left:auto;color:var(--a);font-size:13px}
 
+/* ── AFFAIRES (pipeline Kanban) ── */
+.kanban-wrap{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;align-items:flex-start}
+.kanban-col{background:var(--bg);border:0.5px solid var(--bdr);border-radius:12px;padding:10px;width:230px;flex-shrink:0}
+.kanban-col-head{display:flex;align-items:center;justify-content:space-between;padding:2px 4px 10px;font-size:12px;font-weight:500;color:var(--tx)}
+.kanban-col-total{font-size:10px;color:var(--mu);font-weight:400}
+.kanban-cards{display:flex;flex-direction:column;gap:8px;min-height:40px}
+.kanban-card{background:var(--card);border:0.5px solid var(--bdr);border-radius:10px;padding:10px;cursor:pointer;transition:box-shadow .15s,border-color .15s}
+.kanban-card:hover{box-shadow:0 4px 14px rgba(0,0,0,.08);border-color:var(--bdr2)}
+.kanban-card-title{font-size:12px;font-weight:500;margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kanban-card-client{font-size:11px;color:var(--mu);margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kanban-card-foot{display:flex;align-items:center;justify-content:space-between;font-size:11px}
+.kanban-card-amount{font-weight:600;color:var(--tx)}
+.kanban-empty{font-size:11px;color:var(--hi);text-align:center;padding:10px 4px}
+.commercial-chip{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--tx);color:var(--card);font-size:8px;font-weight:600;flex-shrink:0}
+
+/* ── DEVIS (constructeur + aperçu impression) ── */
+.quote-lines{display:flex;flex-direction:column;gap:6px;margin:10px 0}
+.quote-line{display:grid;grid-template-columns:1fr 60px 90px 70px 28px;gap:6px;align-items:center}
+.quote-line input[type=text]{font-family:inherit;font-size:12px;padding:0 8px;height:30px;border:0.5px solid var(--bdr2);border-radius:6px;background:var(--card);color:var(--tx)}
+.quote-line input[type=number]{font-family:inherit;font-size:12px;padding:0 6px;height:30px;border:0.5px solid var(--bdr2);border-radius:6px;background:var(--card);color:var(--tx)}
+.quote-line-head{display:grid;grid-template-columns:1fr 60px 90px 70px 28px;gap:6px;font-size:10px;color:var(--mu);text-transform:uppercase;letter-spacing:.03em}
+.quote-catalog-pick{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.quote-catalog-pick button{font-family:inherit;font-size:11px;padding:4px 10px;border-radius:20px;border:0.5px solid var(--bdr2);background:var(--card);color:var(--tx);cursor:pointer}
+.quote-catalog-pick button:hover{background:var(--hover)}
+.quote-total-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0}
+.quote-total-row.grand{font-size:14px;font-weight:600;border-top:0.5px solid var(--div);margin-top:6px;padding-top:8px}
+
 /* ── RESPONSIVE ── */
 @media (max-width: 900px){
   .menu-toggle{display:inline-flex;align-items:center}
@@ -365,6 +392,7 @@ input[type=checkbox]{accent-color:var(--a);cursor:pointer;width:14px;height:14px
     <div class="nav-lbl">Navigation</div>
     <div class="nav-item" id="n-home" onclick="showHome()"><div class="nav-ico">⌂</div> Home</div>
     <div class="nav-item" id="n-list" onclick="showList()"><div class="nav-ico">≡</div> Vue liste</div>
+    <div class="nav-item" id="n-affaires" onclick="showAffaires()"><div class="nav-ico">◆</div> Affaires</div>
     <div class="nav-item" id="n-activite" onclick="showActivites()"><div class="nav-ico">◈</div> Activités</div>
     <div class="nav-item" id="n-contrats" onclick="showContrats()"><div class="nav-ico">◻</div> Contrats</div>
     <div class="nav-item" id="n-canaux" onclick="showCanauxPanel()"><div class="nav-ico">✉</div> Canaux</div>
@@ -564,15 +592,29 @@ const DOT_MAP = {Appel:'g',Email:'b',Visite:'g',Proposition:'b',Relance:'a','Not
 // ════════════════════════════════════════
 let clients=[], view='list', vmode='table', curId=null, sortC='nom', sortD=1;
 let srch='', fDanger='', fSecteur='', fContrat='', fType='', editingId=null, toastT=null;
+let deals=[], COMMERCIALS=[];
 
 async function loadData(){
   var r = await apiFetch('/wa/crmProspect/list');
   if(!r.ok) throw new Error('http '+r.status);
   return await r.json();
 }
+async function loadDeals(){
+  var r = await apiFetch('/wa/crmDeal/list');
+  if(!r.ok) throw new Error('http '+r.status);
+  return await r.json();
+}
+async function loadCommercials(){
+  var r = await apiFetch('/wa/commercial/list');
+  if(!r.ok) throw new Error('http '+r.status);
+  return await r.json();
+}
 async function init(){
-  try{ clients = await loadData(); }
-  catch(e){ flash('Erreur de chargement — rechargez la page'); clients = []; }
+  try{
+    const [c, d, com] = await Promise.all([loadData(), loadDeals(), loadCommercials()]);
+    clients = c; deals = d; COMMERCIALS = com;
+  }
+  catch(e){ flash('Erreur de chargement — rechargez la page'); clients = []; deals = []; COMMERCIALS = []; }
   updateBadges();showList();
   loadVersionBadge();
 }
@@ -593,7 +635,7 @@ function ini(n){return(n||'?').split(' ').slice(0,2).map(w=>w[0]||'').join('').t
 function today(){const d=new Date();return d.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});}
 
 // ── NAV ──
-function setNav(id){['n-home','n-list','n-activite','n-contrats','n-canaux','n-auto'].forEach(n=>document.getElementById(n).classList.remove('active'));document.getElementById(id).classList.add('active');}
+function setNav(id){['n-home','n-list','n-affaires','n-activite','n-contrats','n-canaux','n-auto'].forEach(n=>document.getElementById(n).classList.remove('active'));var el=document.getElementById(id);if(el)el.classList.add('active');}
 function setVMode(m){vmode=m;document.getElementById('vt-tbl').classList.toggle('active',m==='table');document.getElementById('vt-grd').classList.toggle('active',m==='grid');if(view==='list')renderList();}
 function bc(parts){document.getElementById('bc').innerHTML=parts.map((p,i)=>i<parts.length-1?`<span class="bc-link" onclick="${p.fn}">${p.label}</span><span class="bc-sep"> / </span>`:`<span class="bc-cur">${p.label}</span>`).join('');}
 function tba(html){document.getElementById('tb-actions').innerHTML=html;}
@@ -607,8 +649,28 @@ function qf(f,v){srch='';fDanger='';fSecteur='';fContrat='';fType='';if(f==='dan
 function showHome(){
   view='home';editingId=null;setNav('n-home');bc([{label:'Home'}]);tba('');
   document.getElementById('main').innerHTML = clients.length
-    ? renderInsights()
+    ? renderPipelineKpis()+renderInsights()
     : '<div style="padding:40px;text-align:center;color:#999;font-size:13px">Aucune fiche client pour le moment.</div>';
+}
+
+// KPI de pipe (module "Gestion des affaires") — affichés sur Home
+// uniquement : la page Vue liste montre déjà renderInsights() en double
+// avant le 18/08/2026, retiré de là pour ne garder qu'un seul endroit où
+// consulter ces indicateurs (cf. demande explicite de dédoublonnage).
+function renderPipelineKpis(){
+  const open = deals.filter(d=>d.stage!=='Gagné'&&d.stage!=='Perdu');
+  const won = deals.filter(d=>d.stage==='Gagné');
+  const lost = deals.filter(d=>d.stage==='Perdu');
+  const pipelineValue = open.reduce((s,d)=>s+(d.amount||0),0);
+  const weightedValue = open.reduce((s,d)=>s+(d.amount||0)*(d.probability||0)/100,0);
+  const closedCount = won.length+lost.length;
+  const conversionRate = closedCount ? Math.round(won.length/closedCount*100) : 0;
+  return `<div class="stats-row" style="margin-bottom:12px">
+    <div class="stat-card"><div class="stat-lbl">Affaires ouvertes</div><div class="stat-val">${open.length}</div></div>
+    <div class="stat-card"><div class="stat-lbl">Valeur du pipe (mensuel)</div><div class="stat-val" style="color:#185fa5">${fmtEUR(pipelineValue)}</div></div>
+    <div class="stat-card"><div class="stat-lbl">Valeur pondérée</div><div class="stat-val" style="color:#3c3489">${fmtEUR(weightedValue)}</div></div>
+    <div class="stat-card"><div class="stat-lbl">Taux de conversion</div><div class="stat-val" style="color:${conversionRate>=50?'#1A6B47':'#854f0b'}">${conversionRate}%</div></div>
+  </div>`;
 }
 
 // ════════════════════════════════════════
@@ -846,6 +908,7 @@ function renderList(){
         <div class="gc-head">
           <div class="avatar" style="width:36px;height:36px;font-size:12px">${ini(c.nom)}</div>
           <div class="gc-info"><div class="gc-name">${c.nom}</div><div class="gc-sub">${c.groupe||c.secteur||'—'}</div></div>
+          ${c.commercialName?`<span class="commercial-chip" title="Commercial : ${esc(c.commercialName)}">${ini(c.commercialName)}</span>`:''}
         </div>
         <div class="gc-tags">${typeBadge(c.type)}<span class="badge ${dc}" style="font-size:10px">${c.danger||'—'}</span>${c.ville?`<span class="tag t-blue" style="font-size:10px">${c.ville}</span>`:''}${inboundBadge(c)}</div>
         <hr class="gc-divider">
@@ -876,7 +939,7 @@ function renderList(){
       </tr>`;
       return`<tr>
         <td><div class="avatar" style="width:26px;height:26px;font-size:10px;cursor:pointer" onclick="showFiche('${c.id}')">${ini(c.nom)}</div></td>
-        <td><div class="nom-cell" onclick="showFiche('${c.id}')">${typeBadge(c.type)} ${c.nom} ${inboundBadge(c)}</div><div class="sub-cell">${c.groupe||'—'}</div></td>
+        <td><div class="nom-cell" onclick="showFiche('${c.id}')">${typeBadge(c.type)} ${c.nom} ${inboundBadge(c)} ${c.commercialName?`<span class="commercial-chip" title="Commercial : ${esc(c.commercialName)}">${ini(c.commercialName)}</span>`:''}</div><div class="sub-cell">${c.groupe||'—'}</div></td>
         <td style="font-size:12px;color:#666">${c.secteur||'—'}</td>
         <td style="font-size:12px">${c.ville||'—'}</td>
         <td>${dBadge(c.danger)}</td>
@@ -901,7 +964,7 @@ function renderList(){
       <tbody>${rows}</tbody>
     </table></div>`;
   }
-  document.getElementById('main').innerHTML=stats+renderInsights()+toolbar+content;
+  document.getElementById('main').innerHTML=stats+toolbar+content;
 }
 
 function srt(c){if(sortC===c)sortD*=-1;else{sortC=c;sortD=1;}renderList();}
@@ -986,6 +1049,7 @@ function renderFiche(c){
     <hr class="divl">
     <div class="fgrid">
       <div class="field"><div class="fl"><span class="fl-ico">R</span> Référent</div><div class="fv">${c.referent||'—'}</div></div>
+      <div class="field"><div class="fl"><span class="fl-ico">◆</span> Commercial</div><div class="fv">${c.commercialName||'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">@</span> Email</div><div class="fv">${c.email?`<a href="mailto:${c.email}">${c.email}</a>`:'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">T</span> Téléphone</div><div class="fv">${c.tel||'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">W</span> Site web</div><div class="fv">${c.site?`<a href="https://${c.site}" target="_blank">${c.site}</a>`:'—'}</div></div>
@@ -1004,6 +1068,18 @@ function renderFiche(c){
   <div class="card" id="admin-access-card">
     <div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Accès admin</span></div>
     <div class="log-empty">Chargement…</div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><div class="ch-ico">◆</div><span class="ch-title">Affaires</span><button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="openNewDealModal('${c.id}')">+ Nouvelle affaire</button></div>
+    ${(deals.filter(d=>d.prospectId===c.id)).length===0?'<div class="log-empty">Aucune affaire en cours pour ce client.</div>':deals.filter(d=>d.prospectId===c.id).map(d=>`
+      <div class="log-item" style="cursor:pointer" onclick="openDealModal('${d.id}')">
+        <div class="log-dot ld-b"></div>
+        <div class="log-body">
+          <div class="log-text"><strong>${esc(d.title)}</strong> <span class="tag ${STAGE_TAG[d.stage]}" style="font-size:10px;margin-left:6px">${d.stage}</span></div>
+          <div class="log-meta">${fmtEUR(d.amount)}${d.amount?'/mois':''} — probabilité ${d.probability}%${d.quotes&&d.quotes.length?' — '+d.quotes.length+' devis':''}</div>
+        </div>
+      </div>`).join('')}
   </div>
 
   <div class="two-col">
@@ -1273,7 +1349,7 @@ function updateBadges(){document.getElementById('b-eleve').textContent=clients.f
 // MODAL EDIT CLIENT
 // ════════════════════════════════════════
 function openModal(id){const c=clients.find(c=>c.id===id);if(c)renderModal({...c});}
-function openNewModal(){renderModal({id:null,nom:'',type:'Client',groupe:'',secteur:'Hôtellerie',ville:'',etoiles:'',danger:'Modéré',potentiel:2,contrat:'non',modules:0,pms:'',priorite:1,appel:'',referent:'',email:'',tel:'',site:'',nfc:0,qr:0,mobile:0,webApp:false,mobileV2:false,checkin:false,livret:false,gestionDemande:false,offline:false,messagerie:'Noreply',note:'',journal:[],_new:true});}
+function openNewModal(){renderModal({id:null,nom:'',type:'Client',groupe:'',secteur:'Hôtellerie',ville:'',etoiles:'',danger:'Modéré',potentiel:2,contrat:'non',modules:0,pms:'',priorite:1,appel:'',referent:'',email:'',tel:'',site:'',nfc:0,qr:0,mobile:0,webApp:false,mobileV2:false,checkin:false,livret:false,gestionDemande:false,offline:false,messagerie:'Noreply',note:'',commercialId:'',journal:[],_new:true});}
 function closeModal(){document.getElementById('modal-ct').innerHTML='';}
 
 function renderModal(mc){
@@ -1310,6 +1386,7 @@ function renderModal(mc){
         <div class="ff"><label>Contrat</label><select id="m-contrat"><option value="non" ${mc.contrat==='non'?'selected':''}>non</option><option value="oui" ${mc.contrat==='oui'?'selected':''}>oui</option><option value="en cours" ${mc.contrat==='en cours'?'selected':''}>en cours</option></select></div>
         <div class="ff"><label>Priorité appel</label><select id="m-prio"><option value="0">—</option><option value="1" ${mc.priorite===1?'selected':''}>1</option><option value="2" ${mc.priorite===2?'selected':''}>2</option><option value="3" ${mc.priorite===3?'selected':''}>3</option></select></div>
         <div class="ff"><label>Statut appel</label><input id="m-appel" value="${esc(mc.appel)}" placeholder="date ou Ne pas appeler"></div>
+        <div class="ff"><label>Commercial</label><select id="m-commercial"><option value="">—</option>${COMMERCIALS.map(c=>`<option value="${c.id}" ${mc.commercialId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
       </div>
 
       <div class="modal-section">Taux d'usage (%) — les 4 se totalisent à 100%</div>
@@ -1362,7 +1439,7 @@ async function saveModal(id,isNew){
     nom:g('m-nom').value.trim(),type:g('m-type').value,groupe:g('m-groupe').value,secteur:g('m-secteur').value,
     ville:g('m-ville').value,etoiles:g('m-etoiles').value,referent:g('m-referent').value,
     email:g('m-email').value,tel:g('m-tel').value,site:g('m-site').value,
-    pms:g('m-pms').value,messagerie:g('m-msg').value,danger:g('m-danger').value,
+    pms:g('m-pms').value,messagerie:g('m-msg').value,danger:g('m-danger').value,commercialId:g('m-commercial').value||null,
     potentiel:+g('m-pot').value,modules:+g('m-mod').value,contrat:g('m-contrat').value,
     priorite:+g('m-prio').value,appel:g('m-appel').value,
     nfc:+g('m-nfc').value,qr:+g('m-qr').value,mobile:+g('m-mob').value,code:+g('m-code').value,
@@ -1399,6 +1476,346 @@ async function deleteClient(id){
   }catch(e){ flash('Erreur de suppression'); return; }
   clients=clients.filter(c=>c.id!==id);
   updateBadges();flash('Fiche supprimée');showList();
+}
+
+// ════════════════════════════════════════
+// AFFAIRES — module "Gestion des affaires" (pipeline commercial + devis),
+// greffé sur le CRM le 18/08/2026. Une affaire (deal) est rattachée à une
+// fiche CrmProspect ; les devis (souples : catalogue Sesame + lignes
+// personnalisées, remplis automatiquement depuis le même catalogue tarifaire
+// que le wizard d'inscription) sont rattachés à une affaire.
+// ════════════════════════════════════════
+const DEAL_STAGES = ['Nouveau','Qualification','Devis envoyé','Négociation','Gagné','Perdu'];
+const STAGE_TAG = {Nouveau:'t-gray',Qualification:'t-blue','Devis envoyé':'t-purple',Négociation:'t-amber',Gagné:'t-green',Perdu:'t-red'};
+let dealFilterCommercial = '';
+let DEAL_DRAFT = null;
+
+function fmtEUR(n){ return (n||0).toLocaleString('fr-FR',{maximumFractionDigits:0})+' €'; }
+
+function showAffaires(){
+  view='affaires';curId=null;setNav('n-affaires');bc([{label:'Affaires'}]);
+  tba('<button class="btn btn-primary btn-sm" onclick="openNewDealModal(null)">+ Nouvelle affaire</button>');
+  renderAffaires();
+}
+
+function renderAffaires(){
+  const filtered = dealFilterCommercial ? deals.filter(d=>d.commercialId===dealFilterCommercial) : deals;
+  const filterBar = `<div class="list-toolbar" style="margin-bottom:14px">
+    <select class="lsel" onchange="dealFilterCommercial=this.value;renderAffaires()">
+      <option value="">Tous commerciaux</option>
+      ${COMMERCIALS.map(c=>`<option value="${c.id}" ${dealFilterCommercial===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}
+    </select>
+    <span class="count-lbl">${filtered.length} affaire${filtered.length>1?'s':''}</span>
+  </div>`;
+  const cols = DEAL_STAGES.map(stage=>{
+    const items = filtered.filter(d=>d.stage===stage);
+    const total = items.reduce((s,d)=>s+(d.amount||0),0);
+    return `<div class="kanban-col">
+      <div class="kanban-col-head"><span class="tag ${STAGE_TAG[stage]}" style="font-size:10px">${stage}</span><span class="kanban-col-total">${items.length} · ${fmtEUR(total)}</span></div>
+      <div class="kanban-cards">
+        ${items.length===0?'<div class="kanban-empty">—</div>':items.map(d=>`
+          <div class="kanban-card" onclick="openDealModal('${d.id}')">
+            <div class="kanban-card-title">${esc(d.title)}</div>
+            <div class="kanban-card-client">${esc(d.prospectNom)}</div>
+            <div class="kanban-card-foot">
+              <span class="kanban-card-amount">${fmtEUR(d.amount)}${d.amount?'/mois':''}</span>
+              ${d.commercialName?`<span class="commercial-chip" title="${esc(d.commercialName)}">${ini(d.commercialName)}</span>`:''}
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('main').innerHTML = filterBar + `<div class="kanban-wrap">${cols}</div>`;
+}
+
+function openNewDealModal(prospectId){
+  DEAL_DRAFT = {id:null, prospectId: prospectId||(clients[0]?clients[0].id:''), commercialId:'', title:'', stage:'Nouveau', amount:0, probability:20, closeDate:'', lostReason:'', quotes:[], _new:true};
+  renderDealModal();
+}
+function openDealModal(id){
+  const d = deals.find(x=>x.id===id); if(!d) return;
+  DEAL_DRAFT = {...d};
+  renderDealModal();
+}
+function captureDealDraft(){
+  const g=i=>(document.getElementById(i)||{value:''}).value;
+  Object.assign(DEAL_DRAFT, {
+    title:g('d-title'), commercialId:g('d-commercial'), amount:+g('d-amount')||0,
+    probability:+g('d-proba')||0, closeDate:g('d-close'),
+    lostReason: document.getElementById('d-lost') ? g('d-lost') : DEAL_DRAFT.lostReason
+  });
+}
+function dealStageChanged(v){ captureDealDraft(); DEAL_DRAFT.stage=v; renderDealModal(); }
+
+function renderDealModal(){
+  const md = DEAL_DRAFT;
+  const prospectOptions = clients.slice().sort((a,b)=>a.nom.localeCompare(b.nom));
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+    <div class="modal-box">
+      <div class="modal-head">
+        <div style="font-size:16px;font-weight:500">${md._new?'Nouvelle affaire':esc(md.title)}</div>
+        <button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button>
+      </div>
+      <div class="form-grid">
+        <div class="ff"><label>Titre</label><input id="d-title" value="${esc(md.title)}" placeholder="Ex : Upsell module CRM"></div>
+        <div class="ff"><label>Client</label>
+          <select id="d-prospect" ${md._new?'':'disabled'}>${prospectOptions.map(c=>`<option value="${c.id}" ${md.prospectId===c.id?'selected':''}>${esc(c.nom)}</option>`).join('')}</select>
+        </div>
+        <div class="ff"><label>Commercial</label>
+          <select id="d-commercial"><option value="">—</option>${COMMERCIALS.map(c=>`<option value="${c.id}" ${md.commercialId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select>
+        </div>
+        <div class="ff"><label>Étape</label><select id="d-stage" onchange="dealStageChanged(this.value)">${DEAL_STAGES.map(s=>`<option value="${s}" ${md.stage===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div class="ff"><label>Valeur mensuelle (€)</label><input type="number" id="d-amount" value="${md.amount||0}" min="0"></div>
+        <div class="ff"><label>Probabilité (%)</label><input type="number" id="d-proba" value="${md.probability||0}" min="0" max="100"></div>
+        <div class="ff"><label>Date de clôture prévue</label><input type="date" id="d-close" value="${md.closeDate?String(md.closeDate).slice(0,10):''}"></div>
+        ${md.stage==='Perdu'?`<div class="ff"><label>Raison de la perte</label><input id="d-lost" value="${esc(md.lostReason)}"></div>`:''}
+      </div>
+
+      ${md._new?'':`
+      <div class="modal-section">Devis</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
+        ${(md.quotes||[]).length===0?'<div class="log-empty">Aucun devis pour cette affaire.</div>':md.quotes.map(q=>`
+          <div class="log-item" style="cursor:pointer" onclick="openQuoteModal('${md.id}','${q.id}')">
+            <div class="log-dot ld-b"></div>
+            <div class="log-body"><div class="log-text"><strong>${q.number}</strong> <span class="tpill ${q.status==='accepté'?'bg':q.status==='refusé'?'bd':q.status==='envoyé'?'bi':'bn'}" style="margin-left:6px">${q.status}</span></div></div>
+          </div>`).join('')}
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="openQuoteModal('${md.id}',null)">+ Nouveau devis</button>
+      `}
+
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="saveDeal(${md.id?`'${md.id}'`:'null'},${!!md._new})">Enregistrer</button>
+        ${md._new?'':`<button class="btn btn-ghost" style="color:#a32d2d" onclick="deleteDeal('${md.id}')">Supprimer</button>`}
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function saveDeal(id,isNew){
+  captureDealDraft();
+  const md = DEAL_DRAFT;
+  const prospectId = isNew ? (document.getElementById('d-prospect')||{value:''}).value : md.prospectId;
+  if(!md.title || !md.title.trim()){ flash('Le titre est obligatoire'); return; }
+  if(isNew && !prospectId){ flash('Sélectionnez un client'); return; }
+  const body = {
+    prospectId, commercialId: md.commercialId||null, title: md.title.trim(), stage: md.stage,
+    amount: +md.amount||0, probability: +md.probability||0, closeDate: md.closeDate||null, lostReason: md.lostReason||''
+  };
+  try{
+    var r = isNew
+      ? await apiFetch('/wa/crmDeal/create', {method:'POST', body:JSON.stringify(body)})
+      : await apiFetch('/wa/crmDeal/update', {method:'POST', body:JSON.stringify({id:id, ...body})});
+    if(!r.ok) throw new Error('http '+r.status);
+    var saved = await r.json();
+  }catch(e){ flash('Erreur d\'enregistrement'); return; }
+  if(isNew){ deals.push(saved); } else { const ex=deals.find(d=>d.id===id); if(ex) Object.assign(ex, saved); }
+  closeModal(); flash('Affaire enregistrée');
+  if(view==='affaires') renderAffaires();
+  if(view==='fiche'&&curId===saved.prospectId) showFiche(curId);
+}
+
+async function deleteDeal(id){
+  if(!confirm('Supprimer cette affaire et ses devis ? Cette action est irréversible.'))return;
+  const wasProspectId = (deals.find(d=>d.id===id)||{}).prospectId;
+  try{
+    var r = await apiFetch('/wa/crmDeal/delete', {method:'POST', body:JSON.stringify({id:id})});
+    if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash('Erreur de suppression'); return; }
+  deals = deals.filter(d=>d.id!==id);
+  closeModal(); flash('Affaire supprimée');
+  if(view==='affaires') renderAffaires();
+  if(view==='fiche'&&curId===wasProspectId) showFiche(curId);
+}
+
+// ── Devis ──
+let QUOTE_CATALOG = null;
+let QUOTE_DRAFT = null;
+
+async function openQuoteModal(dealId, quoteId){
+  if(!QUOTE_CATALOG){
+    try{ const r = await apiFetch('/wa/crmQuote/catalog'); QUOTE_CATALOG = r.ok ? await r.json() : {basePrice:0,modules:[]}; }
+    catch(e){ QUOTE_CATALOG = {basePrice:0,modules:[]}; }
+  }
+  if(quoteId){
+    try{
+      const r = await apiFetch('/wa/crmQuote/list?dealId='+dealId);
+      const list = r.ok ? await r.json() : [];
+      QUOTE_DRAFT = list.find(x=>x.id===quoteId) || {dealId, id:quoteId, number:'', status:'brouillon', lines:[], discountPct:0, notes:''};
+    }catch(e){ flash('Erreur de chargement du devis'); return; }
+  } else {
+    QUOTE_DRAFT = {dealId, id:null, number:'', status:'brouillon', lines:[], discountPct:0, notes:'', _new:true};
+  }
+  renderQuoteModal();
+}
+
+function quoteTotals(){
+  const q = QUOTE_DRAFT;
+  let mrr=0, oneoff=0;
+  (q.lines||[]).forEach(l=>{ const t=(+l.qty||0)*(+l.unitPrice||0); if(l.recurring) mrr+=t; else oneoff+=t; });
+  const discount = (q.discountPct||0)/100;
+  return { mrr, oneoff, mrrNet: mrr*(1-discount), oneoffNet: oneoff*(1-discount) };
+}
+
+function captureQuoteLines(){
+  const lines = QUOTE_DRAFT.lines||[];
+  lines.forEach((l,i)=>{
+    const gl=document.getElementById('ql-label-'+i), gq=document.getElementById('ql-qty-'+i), gp=document.getElementById('ql-price-'+i), gr=document.getElementById('ql-rec-'+i);
+    if(gl) l.label = gl.value;
+    if(gq) l.qty = +gq.value || 0;
+    if(gp) l.unitPrice = +gp.value || 0;
+    if(gr) l.recurring = gr.checked;
+  });
+  const gd=document.getElementById('q-discount'), gn=document.getElementById('q-notes'), gs=document.getElementById('q-status');
+  if(gd) QUOTE_DRAFT.discountPct = +gd.value || 0;
+  if(gn) QUOTE_DRAFT.notes = gn.value;
+  if(gs) QUOTE_DRAFT.status = gs.value;
+}
+
+function addQuoteLine(label, unitPrice, recurring){
+  captureQuoteLines();
+  QUOTE_DRAFT.lines = QUOTE_DRAFT.lines || [];
+  QUOTE_DRAFT.lines.push({label: label||'', qty:1, unitPrice: unitPrice||0, recurring: recurring!==false});
+  renderQuoteModal();
+}
+function removeQuoteLine(i){ captureQuoteLines(); QUOTE_DRAFT.lines.splice(i,1); renderQuoteModal(); }
+
+function renderQuoteModal(){
+  const q = QUOTE_DRAFT;
+  const totals = quoteTotals();
+  const catalogButtons = (QUOTE_CATALOG.modules||[]).map(m=>`<button type="button" onclick="addQuoteLine('${esc(m.label)}',${m.price},true)">+ ${esc(m.label)} (${fmtEUR(m.price)}/mois)</button>`).join('');
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+    <div class="modal-box">
+      <div class="modal-head">
+        <div style="font-size:16px;font-weight:500">${q._new?'Nouveau devis':q.number}</div>
+        <button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button>
+      </div>
+
+      <div class="modal-section">Ajouter depuis le catalogue Sesame</div>
+      <div class="quote-catalog-pick">${catalogButtons}<button type="button" onclick="addQuoteLine('',0,false)">+ Ligne personnalisée</button></div>
+
+      <div class="modal-section">Lignes du devis</div>
+      <div class="quote-line-head"><span>Libellé</span><span>Qté</span><span>Prix unit. €</span><span>Mensuel</span><span></span></div>
+      <div class="quote-lines">
+        ${(q.lines||[]).length===0?'<div class="log-empty">Aucune ligne — ajoutez un module ou une ligne personnalisée.</div>':(q.lines||[]).map((l,i)=>`
+          <div class="quote-line">
+            <input type="text" id="ql-label-${i}" value="${esc(l.label)}" placeholder="Libellé">
+            <input type="number" id="ql-qty-${i}" value="${l.qty}" min="0" onchange="captureQuoteLines();renderQuoteModal()">
+            <input type="number" id="ql-price-${i}" value="${l.unitPrice}" min="0" step="0.01" onchange="captureQuoteLines();renderQuoteModal()">
+            <label style="display:flex;align-items:center;justify-content:center"><input type="checkbox" id="ql-rec-${i}" ${l.recurring?'checked':''} onchange="captureQuoteLines();renderQuoteModal()"></label>
+            <button class="btn btn-ghost btn-icon" style="width:28px;height:28px" onclick="removeQuoteLine(${i})">✕</button>
+          </div>`).join('')}
+      </div>
+
+      <div class="form-grid">
+        <div class="ff"><label>Remise globale (%)</label><input type="number" id="q-discount" value="${q.discountPct||0}" min="0" max="100" onchange="captureQuoteLines();renderQuoteModal()"></div>
+        <div class="ff"><label>Statut</label><select id="q-status" onchange="captureQuoteLines()">${['brouillon','envoyé','accepté','refusé'].map(s=>`<option value="${s}" ${q.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      </div>
+      <div class="ff"><label>Notes / conditions</label><textarea id="q-notes" onchange="captureQuoteLines()">${q.notes||''}</textarea></div>
+
+      <div class="modal-section">Total</div>
+      <div class="quote-total-row"><span>Mensuel récurrent</span><span>${fmtEUR(totals.mrr)}${q.discountPct?' → '+fmtEUR(totals.mrrNet)+' après remise':''}</span></div>
+      <div class="quote-total-row"><span>Frais ponctuels</span><span>${fmtEUR(totals.oneoff)}${q.discountPct?' → '+fmtEUR(totals.oneoffNet)+' après remise':''}</span></div>
+      <div class="quote-total-row grand"><span>Total 1ère facture</span><span>${fmtEUR(totals.mrrNet+totals.oneoffNet)}</span></div>
+
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="saveQuote()">Enregistrer</button>
+        ${q._new?'':'<button class="btn btn-ghost" onclick="printQuote()">🖶 Aperçu / Imprimer</button>'}
+        ${q._new?'':'<button class="btn btn-ghost" style="color:#a32d2d" onclick="deleteQuote()">Supprimer</button>'}
+        <button class="btn btn-ghost" onclick="closeModal()">Fermer</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function saveQuote(){
+  captureQuoteLines();
+  const q = QUOTE_DRAFT;
+  const body = {
+    dealId: q.dealId,
+    lines: (q.lines||[]).map(l=>({label:l.label, qty:+l.qty||0, unitPrice:+l.unitPrice||0, recurring:!!l.recurring})),
+    discountPct: +q.discountPct||0, notes: q.notes||'', status: q.status||'brouillon'
+  };
+  try{
+    var r = q.id
+      ? await apiFetch('/wa/crmQuote/update', {method:'POST', body:JSON.stringify({id:q.id, ...body})})
+      : await apiFetch('/wa/crmQuote/create', {method:'POST', body:JSON.stringify(body)});
+    if(!r.ok) throw new Error('http '+r.status);
+    var saved = await r.json();
+  }catch(e){ flash('Erreur d\'enregistrement du devis'); return; }
+  QUOTE_DRAFT = {...saved, _new:false};
+  const deal = deals.find(d=>d.id===q.dealId);
+  if(deal){
+    deal.quotes = deal.quotes||[];
+    const idx = deal.quotes.findIndex(x=>x.id===saved.id);
+    const summary = {id:saved.id, number:saved.number, status:saved.status};
+    if(idx>=0) deal.quotes[idx]=summary; else deal.quotes.push(summary);
+  }
+  flash('Devis enregistré ✓');
+  renderQuoteModal();
+}
+
+async function deleteQuote(){
+  const q = QUOTE_DRAFT; if(!q || !q.id) return;
+  if(!confirm('Supprimer ce devis ? Cette action est irréversible.')) return;
+  try{
+    var r = await apiFetch('/wa/crmQuote/delete', {method:'POST', body:JSON.stringify({id:q.id})});
+    if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash('Erreur de suppression'); return; }
+  const deal = deals.find(d=>d.id===q.dealId);
+  if(deal) deal.quotes = (deal.quotes||[]).filter(x=>x.id!==q.id);
+  closeModal(); flash('Devis supprimé');
+  if(view==='affaires') renderAffaires();
+}
+
+function printQuote(){
+  const q = QUOTE_DRAFT;
+  const deal = deals.find(d=>d.id===q.dealId);
+  const totals = quoteTotals();
+  const rowsHtml = (q.lines||[]).map(l=>`
+    <tr>
+      <td>${esc(l.label)}${l.recurring?' <span style="color:#888;font-size:11px">(mensuel)</span>':' <span style="color:#888;font-size:11px">(ponctuel)</span>'}</td>
+      <td style="text-align:center">${l.qty}</td>
+      <td style="text-align:right">${fmtEUR(l.unitPrice)}</td>
+      <td style="text-align:right">${fmtEUR((+l.qty||0)*(+l.unitPrice||0))}</td>
+    </tr>`).join('');
+  const html = '<!doctype html><html><head><meta charset="utf-8"><title>'+esc(q.number)+'</title>'
+    +'<style>'
+    +'body{font-family:Arial,sans-serif;color:#1a1a1a;max-width:720px;margin:40px auto;padding:0 20px}'
+    +'h1{font-size:20px;margin-bottom:2px}'
+    +'.sub{color:#888;font-size:12px;margin-bottom:24px}'
+    +'.hd{display:flex;justify-content:space-between;margin-bottom:28px}'
+    +'table{width:100%;border-collapse:collapse;margin:16px 0}'
+    +'th{text-align:left;font-size:11px;text-transform:uppercase;color:#888;border-bottom:1px solid #ddd;padding:6px 4px}'
+    +'td{padding:8px 4px;border-bottom:1px solid #f0f0f0;font-size:13px}'
+    +'.totals{margin-top:12px;margin-left:auto;width:280px}'
+    +'.totals div{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}'
+    +'.totals .grand{font-weight:700;font-size:15px;border-top:1px solid #333;margin-top:6px;padding-top:8px}'
+    +'.notes{margin-top:28px;font-size:12px;color:#555;white-space:pre-wrap}'
+    +'@media print{ body{margin:0 auto} }'
+    +'</style></head><body>'
+    +'<div class="hd"><div><h1>Sesame Technology</h1><div class="sub">Devis commercial</div></div>'
+    +'<div style="text-align:right"><div><strong>'+esc(q.number)+'</strong></div><div class="sub">'+new Date(q.createdAt||Date.now()).toLocaleDateString('fr-FR')+'</div></div></div>'
+    +'<div><strong>Client :</strong> '+esc(deal?deal.prospectNom:'')+'</div>'
+    +'<div><strong>Affaire :</strong> '+esc(deal?deal.title:'')+'</div>'
+    +'<table><thead><tr><th>Prestation</th><th style="text-align:center">Qté</th><th style="text-align:right">Prix unitaire</th><th style="text-align:right">Total</th></tr></thead>'
+    +'<tbody>'+rowsHtml+'</tbody></table>'
+    +'<div class="totals">'
+    +'<div><span>Mensuel récurrent</span><span>'+fmtEUR(totals.mrrNet)+'</span></div>'
+    +'<div><span>Frais ponctuels</span><span>'+fmtEUR(totals.oneoffNet)+'</span></div>'
+    +(q.discountPct?'<div><span>Remise appliquée</span><span>'+q.discountPct+'%</span></div>':'')
+    +'<div class="grand"><span>Total 1ère facture</span><span>'+fmtEUR(totals.mrrNet+totals.oneoffNet)+'</span></div>'
+    +'</div>'
+    +(q.notes?'<div class="notes">'+esc(q.notes).replace(/\n/g,'<br>')+'</div>':'')
+    +'</body></html>';
+  const w = window.open('', '_blank');
+  if(!w){ flash('Autorisez les popups pour imprimer le devis'); return; }
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(function(){ w.print(); }, 300);
 }
 
 // ════════════════════════════════════════

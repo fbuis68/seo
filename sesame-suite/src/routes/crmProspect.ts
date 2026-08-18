@@ -68,9 +68,11 @@ function shapeProspect(p: {
   note: string | null;
   inboundReplyCount: number;
   lastInboundReplyAt: Date | null;
+  commercialId: string | null;
   createdAt: Date;
   updatedAt: Date;
   entity?: { code: string } | null;
+  commercial?: { id: string; name: string | null; email: string } | null;
   activities?: Parameters<typeof shapeActivity>[0][];
 }) {
   return {
@@ -116,13 +118,19 @@ function shapeProspect(p: {
     note: p.note || "",
     inboundReplyCount: p.inboundReplyCount,
     lastInboundReplyAt: p.lastInboundReplyAt,
+    commercialId: p.commercialId,
+    commercialName: p.commercial ? p.commercial.name || p.commercial.email : "",
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
     journal: (p.activities || []).map(shapeActivity),
   };
 }
 
-const PROSPECT_INCLUDE = { entity: { select: { code: true } }, activities: { orderBy: { createdAt: "asc" as const } } };
+const PROSPECT_INCLUDE = {
+  entity: { select: { code: true } },
+  activities: { orderBy: { createdAt: "asc" as const } },
+  commercial: { select: { id: true, name: true, email: true } },
+};
 
 crmProspectRouter.get(
   "/crmProspect/list",
@@ -171,6 +179,7 @@ interface ProspectBody {
   espEvenement?: boolean;
   messagerie?: string;
   note?: string;
+  commercialId?: string | null;
 }
 
 crmProspectRouter.post(
@@ -218,6 +227,7 @@ crmProspectRouter.post(
         espEvenement: !!b.espEvenement,
         messagerie: b.messagerie || "Noreply",
         note: b.note,
+        commercialId: b.commercialId || null,
       },
       include: PROSPECT_INCLUDE,
     });
@@ -282,6 +292,7 @@ crmProspectRouter.post(
         espEvenement: b.espEvenement,
         messagerie: b.messagerie,
         note: b.note,
+        commercialId: b.commercialId === undefined ? undefined : b.commercialId || null,
       },
       include: PROSPECT_INCLUDE,
     });

@@ -24,6 +24,25 @@ function shapeUser(u: { id: string; email: string; name: string | null; role: st
  * sur l'établissement qui lui est rattaché, avant d'afficher "Créer un
  * accès" ou "Compte actif".
  */
+/**
+ * GET /wa/commercial/list — comptes Sesame (role="sesame") pouvant être
+ * désignés comme commercial responsable d'une fiche/affaire CRM (module
+ * "Gestion des affaires", 18/08/2026).
+ */
+adminUserRouter.get(
+  "/commercial/list",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (_req, res) => {
+    const rows = await prisma.adminUser.findMany({
+      where: { role: "sesame" },
+      orderBy: { name: "asc" },
+      select: { id: true, email: true, name: true },
+    });
+    res.json(rows.map((u) => ({ id: u.id, email: u.email, name: u.name || u.email })));
+  })
+);
+
 adminUserRouter.get(
   "/adminUser/status",
   requireAdmin,

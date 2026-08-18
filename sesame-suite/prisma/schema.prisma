@@ -93,6 +93,11 @@ model AdminUser {
 
   resetTokens PasswordResetToken[]
 
+  // "Commercial" assigné — uniquement pertinent pour les comptes role="sesame"
+  // (l'équipe interne), cf. GET /wa/commercial/list.
+  crmProspectsAsCommercial CrmProspect[] @relation("ProspectCommercial")
+  crmDealsAsCommercial     CrmDeal[]     @relation("DealCommercial")
+
   createdAt DateTime @default(now())
 }
 
@@ -677,10 +682,67 @@ model CrmProspect {
   inboundReplyCount  Int       @default(0)
   lastInboundReplyAt DateTime?
 
+  // Commercial Sesame en charge de ce client/prospect (compte role="sesame").
+  commercialId String?
+  commercial   AdminUser? @relation("ProspectCommercial", fields: [commercialId], references: [id], onDelete: SetNull)
+
+  deals CrmDeal[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   activities CrmActivity[]
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Module "Gestion des affaires" — pipeline commercial greffé sur le CRM
+// Sesame (18/08/2026). Une "affaire" (deal) représente une opportunité de
+// vente pour un client/prospect donné ; plusieurs affaires possibles par
+// fiche (upsell, renouvellement...). Les devis (CrmQuote) sont rattachés à
+// une affaire, pas directement à la fiche, pour garder l'historique des
+// versions/négociations d'une même opportunité.
+// ─────────────────────────────────────────────────────────────────────────
+model CrmDeal {
+  id         String      @id @default(cuid())
+  prospectId String
+  prospect   CrmProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  commercialId String?
+  commercial   AdminUser? @relation("DealCommercial", fields: [commercialId], references: [id], onDelete: SetNull)
+
+  title       String
+  stage       String    @default("Nouveau") // Nouveau | Qualification | Devis envoyé | Négociation | Gagné | Perdu
+  amount      Float     @default(0) // valeur mensuelle estimée (MRR) de l'affaire
+  probability Int       @default(20) // 0-100 — pondère "amount" pour la valeur pondérée du pipeline
+  closeDate   DateTime? // date de clôture prévue/réelle selon l'étape
+  lostReason  String?
+
+  quotes CrmQuote[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Devis — lignes libres en JSON pour rester "souple" (catalogue de modules
+// Sesame ET lignes personnalisées mélangés) tout en restant "automatique"
+// (le constructeur de devis pré-remplit les lignes de modules depuis le même
+// catalogue de prix que le wizard d'inscription, cf. ONBOARDING_MODULES /
+// PricingConfig — une seule source de vérité tarifaire dans toute l'app).
+model CrmQuote {
+  id     String  @id @default(cuid())
+  dealId String
+  deal   CrmDeal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  number String @unique // ex: DEV-2026-0001
+  status String @default("brouillon") // brouillon | envoyé | accepté | refusé
+
+  lines       Json    @default("[]") // [{label, qty, unitPrice, recurring:bool}]
+  discountPct Float   @default(0)
+  notes       String?
+  sentAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model CrmActivity {
