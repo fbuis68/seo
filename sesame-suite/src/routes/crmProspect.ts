@@ -3,6 +3,7 @@ import { prisma } from "../db";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin, requireSesame } from "../middleware/requireAdmin";
 import { fireTrigger } from "../lib/automation";
+import { config } from "../config";
 
 /**
  * CRM commercial interne de Sesame — pipeline prospects/clients (à ne pas
@@ -65,6 +66,8 @@ function shapeProspect(p: {
   espEvenement: boolean;
   messagerie: string;
   note: string | null;
+  inboundReplyCount: number;
+  lastInboundReplyAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   entity?: { code: string } | null;
@@ -111,6 +114,8 @@ function shapeProspect(p: {
     espEvenement: p.espEvenement,
     messagerie: p.messagerie,
     note: p.note || "",
+    inboundReplyCount: p.inboundReplyCount,
+    lastInboundReplyAt: p.lastInboundReplyAt,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
     journal: (p.activities || []).map(shapeActivity),
@@ -354,5 +359,37 @@ crmProspectRouter.post(
     if (!existing) throw new HttpError(404, "Activité introuvable");
     await prisma.crmActivity.delete({ where: { id } });
     res.json({ ok: true });
+  })
+);
+
+/**
+ * Signal d'engagement entrant — appelé par un flux Power Automate générique
+ * sur les boîtes partagées Sesame (pas par contact, cf. discussion du
+ * 18/08/2026) à chaque nouvel email reçu. Pas de session admin possible côté
+ * Power Automate, donc auth par clé partagée (header) plutôt que JWT.
+ * L'email de l'expéditeur ne matchant pas forcément une fiche CRM (spam,
+ * échange interne, etc.), une absence de correspondance est une réponse
+ * normale (matched:false), pas une erreur.
+ */
+crmProspectRouter.post(
+  "/crmProspect/inboundSignal",
+  asyncHandler(async (req, res) => {
+    const secret = req.header("X-Inbound-Secret") || "";
+    if (secret !== config.inboundEmailSecret) throw new HttpError(401, "Clé invalide");
+
+    const email = ((req.body.email as string) || "").trim();
+    if (!email) throw new HttpError(400, "email requis");
+    const receivedAt = req.body.receivedAt ? new Date(req.body.receivedAt as string) : new Date();
+
+    const prospect = await prisma.crmProspect.findFirst({ where: { email: { equals: email, mode: "insensitive" } } });
+    if (!prospect) {
+      res.json({ ok: true, matched: false });
+      return;
+    }
+    const updated = await prisma.crmProspect.update({
+      where: { id: prospect.id },
+      data: { inboundReplyCount: { increment: 1 }, lastInboundReplyAt: receivedAt },
+    });
+    res.json({ ok: true, matched: true, prospectId: updated.id, inboundReplyCount: updated.inboundReplyCount });
   })
 );

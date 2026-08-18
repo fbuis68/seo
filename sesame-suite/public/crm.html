@@ -631,6 +631,15 @@ function dBadge(d){if(d==='Élevé !!')return'<span class="badge bd">⚠ Élevé
 function pBadge(p){const c=['bn','bi','bw','bg'];return p?`<span class="badge ${c[p]||'bn'}">${p}/3</span>`:'<span class="badge bn">—</span>';}
 function cPill(v){const m={oui:'bg',non:'bd','en cours':'bw'};return`<span class="tpill ${m[v]||'bn'}">${v||'—'}</span>`;}
 function typeBadge(t){return t==='Prospect'?'<span class="tpill bi">Prospect</span>':'<span class="tpill bg">Client</span>';}
+// Signal d'engagement entrant (POST /wa/crmProspect/inboundSignal) — nombre
+// d'emails reçus de ce contact, alimenté par le flux Power Automate sur les
+// boîtes partagées fbuis@/jtlod@sesame-technology.com. Masqué à 0 pour ne
+// pas surcharger les fiches qui n'ont simplement pas encore répondu.
+function inboundBadge(c){
+  if(!c.inboundReplyCount) return '';
+  const d = c.lastInboundReplyAt ? new Date(c.lastInboundReplyAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short'}) : '';
+  return `<span class="badge bg" title="${c.inboundReplyCount} email${c.inboundReplyCount>1?'s':''} reçu${c.inboundReplyCount>1?'s':''} de ce contact${d?' — dernier le '+d:''}">✉ ${c.inboundReplyCount}</span>`;
+}
 function chk(v){return v?'<span class="tpill bg">oui</span>':'<span class="tpill" style="background:#f1efe8;color:#bbb">—</span>';}
 function esc(s){return String(s==null?'':s).replace(/"/g,'&quot;');}
 
@@ -838,7 +847,7 @@ function renderList(){
           <div class="avatar" style="width:36px;height:36px;font-size:12px">${ini(c.nom)}</div>
           <div class="gc-info"><div class="gc-name">${c.nom}</div><div class="gc-sub">${c.groupe||c.secteur||'—'}</div></div>
         </div>
-        <div class="gc-tags">${typeBadge(c.type)}<span class="badge ${dc}" style="font-size:10px">${c.danger||'—'}</span>${c.ville?`<span class="tag t-blue" style="font-size:10px">${c.ville}</span>`:''}</div>
+        <div class="gc-tags">${typeBadge(c.type)}<span class="badge ${dc}" style="font-size:10px">${c.danger||'—'}</span>${c.ville?`<span class="tag t-blue" style="font-size:10px">${c.ville}</span>`:''}${inboundBadge(c)}</div>
         <hr class="gc-divider">
         <div class="gc-fields">
           <div class="gc-row"><span class="gc-rl">Contrat</span>${cPill(c.contrat)}</div>
@@ -867,7 +876,7 @@ function renderList(){
       </tr>`;
       return`<tr>
         <td><div class="avatar" style="width:26px;height:26px;font-size:10px;cursor:pointer" onclick="showFiche('${c.id}')">${ini(c.nom)}</div></td>
-        <td><div class="nom-cell" onclick="showFiche('${c.id}')">${typeBadge(c.type)} ${c.nom}</div><div class="sub-cell">${c.groupe||'—'}</div></td>
+        <td><div class="nom-cell" onclick="showFiche('${c.id}')">${typeBadge(c.type)} ${c.nom} ${inboundBadge(c)}</div><div class="sub-cell">${c.groupe||'—'}</div></td>
         <td style="font-size:12px;color:#666">${c.secteur||'—'}</td>
         <td style="font-size:12px">${c.ville||'—'}</td>
         <td>${dBadge(c.danger)}</td>
@@ -965,6 +974,7 @@ function renderFiche(c){
           <span class="tag t-gray">${c.secteur?sectorIcon(c.secteur):'◻'} ${c.secteur||'—'}${c.etoiles?' '+c.etoiles:''}</span>
           ${c.ville?`<span class="tag t-blue">◉ ${c.ville}</span>`:''}
           ${c.danger==='Bon client'?'<span class="tag t-green">Bon client</span>':c.danger==='Élevé !!'?'<span class="tag t-red">Élevé !!</span>':'<span class="tag t-amber">Modéré</span>'}
+          ${inboundBadge(c)}
         </div>
       </div>
       <div class="score-box">

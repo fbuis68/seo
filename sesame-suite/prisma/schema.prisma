@@ -670,6 +670,13 @@ model CrmProspect {
   messagerie     String  @default("Noreply") // Noreply | Client
   note           String?
 
+  // Signal d'engagement entrant — alimenté par POST /wa/crmProspect/inboundSignal
+  // (flux Power Automate générique sur les boîtes partagées fbuis@/jtlod@
+  // sesame-technology.com, cf. README) : incrémenté à chaque email reçu d'une
+  // adresse qui correspond à cette fiche, sans jamais stocker le contenu.
+  inboundReplyCount  Int       @default(0)
+  lastInboundReplyAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

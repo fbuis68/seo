@@ -565,6 +565,30 @@ de 0 au lieu de la taille de son contenu ; il se faisait donc écraser par
     multiplier les configurations SMTP (ex. "Réception Hôtel Churchill"
     pour une règle, nom de la config par défaut pour les autres).
 
+- **Signal d'engagement entrant** (CRM uniquement) — badge "✉ N" affiché sur
+  chaque fiche (liste, grille, fiche détaillée) dès qu'un prospect/client a
+  répondu par email, pour confirmer son intérêt sans dépendre d'une
+  déclaration manuelle. Ajouté le 18/08/2026 à la demande explicite de ne
+  **pas** avoir à créer une règle Power Automate par adresse email :
+  - `POST /wa/crmProspect/inboundSignal` (`src/routes/crmProspect.ts`) —
+    endpoint public (pas de session admin, appelé par un flux externe),
+    protégé par une clé partagée en header `X-Inbound-Secret` (comparée à
+    `INBOUND_EMAIL_SECRET`, cf. `.env.example`). Reçoit `{email,
+    receivedAt?}`, cherche la fiche `CrmProspect` dont l'email correspond
+    (comparaison insensible à la casse) et incrémente
+    `CrmProspect.inboundReplyCount` + met à jour `lastInboundReplyAt`. Une
+    adresse qui ne correspond à aucune fiche renvoie `{ok:true,
+    matched:false}` (pas une erreur — la plupart des emails entrants sur une
+    boîte partagée ne concernent aucun contact CRM). Le **contenu** des
+    emails n'est jamais stocké, uniquement un compteur.
+  - **Un seul flux Power Automate générique par boîte partagée** (pas un par
+    contact) : déclencheur "Quand un nouvel email arrive" sur chacune des
+    boîtes `fbuis@sesame-technology.com` et `jtlod@sesame-technology.com` →
+    action HTTP POST vers `/wa/crmProspect/inboundSignal` avec l'adresse de
+    l'expéditeur (`From`) dans le corps — c'est le backend qui fait le
+    rapprochement avec la base CRM, pas Power Automate. Deux flux à créer
+    (un par boîte), tous deux pointant vers le même endpoint.
+
 - **Mot de passe oublié**, harmonisé entre le CRM (`crm.html`, comptes
   `role="sesame"`) et le back-office hôtel (`admin.html`, comptes
   `role="hotel"`) — même flux, même écran de connexion, seule la portée du
