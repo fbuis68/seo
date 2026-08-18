@@ -632,6 +632,83 @@ de 0 au lieu de la taille de son contenu ; il se faisait donc écraser par
     sans nav-item correspondant (cas légitime : la vue fiche n'a pas
     d'entrée dédiée dans la barre latérale).
 
+- **Gestion des utilisateurs CRM + rôle "commercial"** (18/08/2026) —
+  `AdminUser.crmRole` (`admin` | `commercial`) et `AdminUser.active`
+  (désactivation sans suppression, pour garder l'historique). Nouvel onglet
+  "Utilisateurs CRM" (`src/routes/crmUser.ts`, `requireCrmAdmin`), masqué
+  dans la barre latérale si le compte connecté n'a pas `crmRole="admin"` —
+  côté serveur c'est `requireCrmAdmin` qui fait autorité, pas le masquage
+  côté client. Un compte désactivé ne peut plus se connecter
+  (`POST /wa/login/login`), avec le même message générique que pour un mot
+  de passe incorrect (pas d'énumération). La migration bascule tous les
+  comptes `role="sesame"` déjà existants sur `crmRole="admin"` pour ne
+  retirer aucun accès à personne. Comptes créés avec un mot de passe
+  temporaire affiché une seule fois (même mécanisme que
+  `adminUser.ts`) ; réinitialisable via `POST /wa/crmUser/resetPassword`.
+
+- **Catalogue produits Sesame (stockable / non-stockable)** — `CrmProduct`
+  (`src/routes/crmProduct.ts`, onglet "Produits") : matériel et prestations
+  facturables au devis (contrôles d'accès, gateway, formation…), distinct du
+  catalogue "modules" SaaS utilisé pour le pricing des souscriptions. Un
+  indicateur `stockable` prépare une gestion de stock à venir — `stockQty`
+  existe déjà en base mais n'est lu/écrit nulle part pour l'instant,
+  volontairement, tant que cette gestion de stock n'est pas construite.
+  Chaque produit porte une `description` (sous-texte verbeux) reprise
+  automatiquement sur la ligne de devis quand on l'ajoute depuis le
+  catalogue, pour coller au format réel des devis Sesame (étudié à partir de
+  deux devis réels fournis par l'utilisateur, dont un signé).
+
+- **Modèles de devis récurrents + duplication** — répond au besoin exprimé
+  de gagner du temps sur des devis verbeux et répétitifs :
+  - `CrmQuoteTemplate` (`src/routes/crmQuote.ts`) : un modèle porte déjà
+    toutes les lignes (libellés/descriptions/prix) ; "Charger un modèle"
+    dans le constructeur de devis les applique en un clic, il ne reste plus
+    qu'à ajuster les quantités à la marge. "Enregistrer comme modèle"
+    inverse le sens : capitaliser un devis déjà saisi en modèle réutilisable.
+  - `POST /wa/crmQuote/duplicate` clone un devis existant (même lignes/
+    remise/notes, nouveau numéro, statut réinitialisé à "brouillon") —
+    accessible depuis le constructeur de devis et directement depuis la
+    liste des devis d'une affaire.
+  - Chaque ligne de devis (`CrmQuote.lines`) porte désormais un champ
+    `description` optionnel, affiché comme sous-texte en italique sous le
+    libellé — sur l'écran, à l'impression (`printQuote()`) et sur la page de
+    signature — pour retrouver le niveau de détail des devis Sesame réels
+    (ex. "Technologies d'ouverture embarquées ; code dynamique, NFC/RFID,
+    Data" sous "Contrôle d'accès Sesame Oneway").
+  - **Bug corrigé au passage** : les libellés de modules/produits contenant
+    une apostrophe (très fréquent en français — "Contrôle d'accès",
+    "l'installation"…) cassaient l'attribut `onclick` généré pour les
+    boutons d'ajout rapide au catalogue, `esc()` n'échappant que pour l'HTML
+    et non pour un argument de chaîne JS entre guillemets simples. Nouvelle
+    fonction `jsStr()` dédiée à cet échappement, appliquée aux deux
+    catalogues (modules Sesame et produits) du constructeur de devis.
+
+- **Signature électronique des devis + passage automatique en "Gagné"**
+  (18/08/2026) — explicitement **une signature électronique simple, pas une
+  signature qualifiée eIDAS certifiée par un tiers de confiance** (type
+  Yousign/DocuSign) : nom saisi + tracé (canvas) + horodatage/IP/user-agent
+  enregistrés à titre de preuve de consentement (`CrmQuoteSignature`), à la
+  manière d'un "clic pour accepter". Ce choix est assumé et signalé
+  explicitement à l'utilisateur final sur la page de signature ainsi qu'au
+  commercial dans le constructeur de devis — si une valeur légale certifiée
+  est nécessaire, une intégration avec un vrai prestataire d'e-signature
+  serait à prévoir séparément.
+  - `POST /wa/crmQuote/requestSignature` génère un `signToken` unique
+    (aléatoire, 24 octets) et bascule le devis en statut "envoyé" ; le lien
+    public correspondant (`/devis-signature.html?token=…`) est affiché avec
+    un bouton "Copier" dans le constructeur de devis.
+  - `public/devis-signature.html` — page publique autonome (sans
+    authentification, le signataire n'a pas de compte CRM) : affiche le
+    devis en lecture seule (même mise en forme que l'aperçu d'impression,
+    descriptions incluses), capture nom + signature dessinée au doigt/à la
+    souris (Pointer Events, sans dépendance externe) + consentement
+    explicite, puis `POST /wa/crmQuote/sign`. Un lien déjà utilisé affiche
+    "Ce devis a déjà été signé" plutôt que de permettre une double signature.
+  - **Passage automatique en "Gagné"** : la signature met à jour en une
+    transaction (`prisma.$transaction`) le statut du devis (`accepté`) *et*
+    l'étape de l'affaire parente (`CrmDeal.stage = "Gagné"`) — comportement
+    explicitement demandé, sans étape manuelle intermédiaire.
+
 - **KPI de pipe sur Home, dédoublonnés de Vue liste** — `renderPipelineKpis()`
   (affaires ouvertes, valeur du pipe, valeur pondérée par probabilité, taux
   de conversion Gagné/(Gagné+Perdu)) affiché en tête de la page Home,

@@ -30,6 +30,9 @@ loginRouter.post(
 
     const ok = await bcrypt.compare(password, admin.passwordHash);
     if (!ok) throw new HttpError(401, "Identifiants incorrects");
+    // Message générique (pas "compte désactivé") : un compte désactivé ne
+    // doit pas se distinguer d'un mauvais mot de passe pour un tiers.
+    if (!admin.active) throw new HttpError(401, "Identifiants incorrects");
 
     const token = signAdminToken({
       entityId: admin.entityId,
@@ -37,6 +40,7 @@ loginRouter.post(
       adminId: admin.id,
       email: admin.email,
       role: admin.role as AdminRole,
+      crmRole: admin.crmRole,
     });
     res.json({
       token,
@@ -44,6 +48,7 @@ loginRouter.post(
         email: admin.email,
         name: admin.name || "",
         role: admin.role,
+        crmRole: admin.crmRole,
         entityCode: admin.entity.code,
         hotelName: admin.entity.config?.hotelName || admin.entity.name,
       },

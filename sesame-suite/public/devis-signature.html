@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Signature du devis — Sesame Technology</title>
+<style>
+  :root{--bg:#f5f4f0;--card:#fff;--bdr:#e2dfd9;--tx:#1a1a1a;--mu:#888;--a:#8a2b2b}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--tx);font-size:14px}
+  .wrap{max-width:640px;margin:0 auto;padding:32px 20px 60px}
+  .logo{font-size:18px;font-weight:700;margin-bottom:4px}
+  .logo em{color:var(--a);font-style:normal}
+  .card{background:var(--card);border:0.5px solid var(--bdr);border-radius:12px;padding:22px;margin-top:18px}
+  h1{font-size:18px;margin:0 0 4px}
+  .sub{color:var(--mu);font-size:12px;margin-bottom:18px}
+  table{width:100%;border-collapse:collapse;margin:14px 0}
+  th{text-align:left;font-size:10px;text-transform:uppercase;color:var(--mu);border-bottom:1px solid var(--bdr);padding:6px 4px}
+  td{padding:8px 4px;border-bottom:1px solid #f0eee9;font-size:13px;vertical-align:top}
+  .desc{color:var(--mu);font-size:11px;font-style:italic;margin-top:2px}
+  .totals{margin-top:10px;margin-left:auto;width:100%;max-width:280px}
+  .totals div{display:flex;justify-content:space-between;padding:3px 0;font-size:13px}
+  .totals .grand{font-weight:700;font-size:15px;border-top:1px solid var(--tx);margin-top:6px;padding-top:8px}
+  .notes{margin-top:16px;font-size:12px;color:#555;white-space:pre-wrap;background:var(--bg);padding:10px;border-radius:8px}
+  label{font-size:12px;color:var(--mu);display:block;margin-bottom:4px}
+  input[type=text],input[type=email]{width:100%;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--bdr);border-radius:8px;margin-bottom:12px}
+  .sig-box{border:1px solid var(--bdr);border-radius:8px;background:#fcfcfa;touch-action:none}
+  canvas{display:block;width:100%;height:160px;cursor:crosshair}
+  .sig-actions{display:flex;justify-content:space-between;align-items:center;margin:6px 0 14px}
+  .consent{display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--mu);margin-bottom:16px}
+  .consent input{margin-top:2px}
+  .disclaimer{font-size:11px;color:var(--mu);font-style:italic;background:var(--bg);padding:8px 10px;border-radius:8px;margin-bottom:16px}
+  .btn{font-family:inherit;font-size:13px;padding:10px 18px;border-radius:8px;border:none;background:var(--a);color:#fff;cursor:pointer;width:100%;font-weight:500}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn-ghost{background:transparent;color:var(--mu);border:1px solid var(--bdr);padding:5px 10px;width:auto;font-size:11px}
+  .err{color:#a32d2d;font-size:12px;margin-top:8px;display:none}
+  .ok-box{text-align:center;padding:30px 10px}
+  .ok-icon{font-size:36px;color:#1a6b47;margin-bottom:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">SESAME <em>TECHNOLOGY</em></div>
+  <div id="app"><div class="card">Chargement…</div></div>
+</div>
+
+<script>
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmtEUR(n){ return (n||0).toLocaleString('fr-FR',{maximumFractionDigits:0})+' €'; }
+
+const params = new URLSearchParams(location.search);
+const TOKEN = params.get('token') || '';
+let QUOTE = null;
+
+async function init(){
+  if(!TOKEN){ renderError('Lien invalide.'); return; }
+  try{
+    const r = await fetch('/wa/crmQuote/public?token='+encodeURIComponent(TOKEN));
+    const data = await r.json();
+    if(!r.ok){ renderError(data.error || 'Lien invalide ou expiré.'); return; }
+    QUOTE = data;
+    render();
+  }catch(e){ renderError('Erreur de connexion au serveur.'); }
+}
+
+function renderError(msg){
+  document.getElementById('app').innerHTML = '<div class="card"><h1>Lien de signature</h1><div class="sub">'+esc(msg)+'</div></div>';
+}
+
+function quoteRowsHtml(){
+  return QUOTE.lines.map(l=>`
+    <tr>
+      <td>${esc(l.label)}${l.recurring?' <span style="color:#888;font-size:11px">(mensuel)</span>':' <span style="color:#888;font-size:11px">(ponctuel)</span>'}${l.description?`<div class="desc">${esc(l.description)}</div>`:''}</td>
+      <td style="text-align:center">${l.qty}</td>
+      <td style="text-align:right">${fmtEUR(l.unitPrice)}</td>
+      <td style="text-align:right">${fmtEUR((+l.qty||0)*(+l.unitPrice||0))}</td>
+    </tr>`).join('');
+}
+
+function quoteSummaryHtml(){
+  const t = QUOTE.totals;
+  return `
+    <h1>Devis ${esc(QUOTE.number)}</h1>
+    <div class="sub">${esc(QUOTE.prospectNom)} — ${esc(QUOTE.dealTitle)}</div>
+    <table>
+      <thead><tr><th>Prestation</th><th style="text-align:center">Qté</th><th style="text-align:right">Prix unitaire</th><th style="text-align:right">Total</th></tr></thead>
+      <tbody>${quoteRowsHtml()}</tbody>
+    </table>
+    <div class="totals">
+      <div><span>Mensuel récurrent</span><span>${fmtEUR(t.mrrNet)}</span></div>
+      <div><span>Frais ponctuels</span><span>${fmtEUR(t.oneoffNet)}</span></div>
+      ${QUOTE.discountPct?`<div><span>Remise appliquée</span><span>${QUOTE.discountPct}%</span></div>`:''}
+      <div class="grand"><span>Total 1ère facture</span><span>${fmtEUR(t.mrrNet+t.oneoffNet)}</span></div>
+    </div>
+    ${QUOTE.notes?`<div class="notes">${esc(QUOTE.notes)}</div>`:''}
+  `;
+}
+
+function render(){
+  if(QUOTE.alreadySigned){
+    const d = QUOTE.signedAt ? new Date(QUOTE.signedAt).toLocaleString('fr-FR') : '';
+    document.getElementById('app').innerHTML = `
+    <div class="card">
+      ${quoteSummaryHtml()}
+      <div class="ok-box">
+        <div class="ok-icon">✓</div>
+        <div><strong>Ce devis a déjà été signé</strong></div>
+        <div class="sub">${esc(QUOTE.signerName||'')}${d?' — '+d:''}</div>
+      </div>
+    </div>`;
+    return;
+  }
+  document.getElementById('app').innerHTML = `
+    <div class="card">${quoteSummaryHtml()}</div>
+    <div class="card">
+      <h1 style="font-size:15px">Signature</h1>
+      <div class="disclaimer">Signature électronique simple : nous enregistrons votre nom saisi, votre tracé, ainsi que la date et l'heure, à titre de preuve de votre consentement. Il ne s'agit pas d'une signature électronique qualifiée (eIDAS) certifiée par un tiers de confiance.</div>
+      <label>Nom complet du signataire</label>
+      <input type="text" id="signerName" placeholder="Prénom Nom">
+      <label>Email (optionnel)</label>
+      <input type="email" id="signerEmail" placeholder="vous@exemple.com">
+      <label>Votre signature (dessinez ci-dessous)</label>
+      <div class="sig-box"><canvas id="sigCanvas"></canvas></div>
+      <div class="sig-actions"><span></span><button type="button" class="btn-ghost" onclick="clearSignature()">Effacer</button></div>
+      <div class="consent">
+        <input type="checkbox" id="consent">
+        <label for="consent" style="margin:0">Je reconnais avoir pris connaissance de ce devis et de ses conditions, et je l'accepte.</label>
+      </div>
+      <button class="btn" id="submitBtn" onclick="submitSignature()">Signer et accepter</button>
+      <div class="err" id="err"></div>
+    </div>
+  `;
+  setupCanvas();
+}
+
+let ctx, drawing=false, hasDrawn=false;
+function setupCanvas(){
+  const canvas = document.getElementById('sigCanvas');
+  const box = canvas.parentElement;
+  const ratio = window.devicePixelRatio || 1;
+  canvas.width = box.clientWidth * ratio;
+  canvas.height = 160 * ratio;
+  ctx = canvas.getContext('2d');
+  ctx.scale(ratio, ratio);
+  ctx.strokeStyle = '#1a1a1a';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  hasDrawn = false;
+
+  function pos(e){
+    const r = canvas.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+  canvas.addEventListener('pointerdown', e=>{
+    drawing = true; hasDrawn = true;
+    const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y);
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener('pointermove', e=>{
+    if(!drawing) return;
+    const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke();
+  });
+  canvas.addEventListener('pointerup', ()=>{ drawing = false; });
+  canvas.addEventListener('pointerleave', ()=>{ drawing = false; });
+}
+function clearSignature(){
+  const canvas = document.getElementById('sigCanvas');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  hasDrawn = false;
+}
+
+async function submitSignature(){
+  const errEl = document.getElementById('err');
+  errEl.style.display='none';
+  const signerName = document.getElementById('signerName').value.trim();
+  const signerEmail = document.getElementById('signerEmail').value.trim();
+  const consent = document.getElementById('consent').checked;
+  if(!signerName){ errEl.textContent='Indiquez votre nom complet.'; errEl.style.display='block'; return; }
+  if(!hasDrawn){ errEl.textContent='Veuillez dessiner votre signature.'; errEl.style.display='block'; return; }
+  if(!consent){ errEl.textContent='Vous devez accepter les conditions pour signer.'; errEl.style.display='block'; return; }
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true; btn.textContent = 'Envoi en cours…';
+  const signatureDataUrl = document.getElementById('sigCanvas').toDataURL('image/png');
+  try{
+    const r = await fetch('/wa/crmQuote/sign', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ token: TOKEN, signerName, signerEmail, signatureDataUrl, consent })
+    });
+    const data = await r.json();
+    if(!r.ok){ errEl.textContent = data.error || 'Erreur lors de la signature.'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Signer et accepter'; return; }
+  }catch(e){ errEl.textContent = 'Erreur de connexion au serveur.'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Signer et accepter'; return; }
+  document.getElementById('app').innerHTML = `
+    <div class="card">
+      <div class="ok-box">
+        <div class="ok-icon">✓</div>
+        <div><strong>Devis signé avec succès</strong></div>
+        <div class="sub">Merci ${esc(signerName)}, votre acceptation a bien été enregistrée.</div>
+      </div>
+    </div>`;
+}
+
+init();
+</script>
+</body>
+</html>

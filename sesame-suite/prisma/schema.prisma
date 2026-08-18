@@ -90,6 +90,12 @@ model AdminUser {
   passwordHash String
   name         String?
   role         String  @default("hotel") // sesame | hotel
+  // Rôle fonctionnel au sein de l'équipe Sesame — uniquement pertinent pour
+  // role="sesame" (un compte hôtel n'a pas de crmRole). "admin" = accès
+  // complet au CRM interne (dont la gestion des utilisateurs CRM eux-mêmes,
+  // cf. requireCrmAdmin) ; "commercial" = accès standard.
+  crmRole String  @default("commercial")
+  active  Boolean @default(true) // désactivation (départ, etc.) sans perdre l'historique — pas de suppression physique
 
   resetTokens PasswordResetToken[]
 
@@ -736,10 +742,71 @@ model CrmQuote {
   number String @unique // ex: DEV-2026-0001
   status String @default("brouillon") // brouillon | envoyé | accepté | refusé
 
-  lines       Json    @default("[]") // [{label, qty, unitPrice, recurring:bool}]
+  lines       Json    @default("[]") // [{label, description?, qty, unitPrice, recurring:bool}] — description = sous-texte verbeux affiché sous le libellé, comme sur les devis Sesame réels
   discountPct Float   @default(0)
   notes       String?
   sentAt      DateTime?
+
+  // Signature électronique simple (18/08/2026) — signToken donne accès à la
+  // page publique de signature (public/devis-signature.html), sans compte
+  // CRM. Volontairement PAS une signature électronique qualifiée (eIDAS) :
+  // capture nom saisi + tracé + horodatage/IP à titre de preuve de
+  // consentement, à la manière d'un "clic pour accepter" plutôt qu'une
+  // signature certifiée par un tiers de confiance (Yousign/DocuSign...).
+  signToken String?             @unique
+  signature CrmQuoteSignature?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CrmQuoteSignature {
+  id      String   @id @default(cuid())
+  quoteId String   @unique
+  quote   CrmQuote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  signerName       String
+  signerEmail      String?
+  signatureDataUrl String @db.Text // image PNG (canvas) encodée en base64
+  ip               String?
+  userAgent        String?
+
+  signedAt DateTime @default(now())
+}
+
+// Catalogue produits interne Sesame (18/08/2026) — distinct du catalogue
+// "modules" SaaS (ONBOARDING_MODULES/PricingConfig, utilisé pour le pricing
+// des souscriptions) : ici du matériel et des prestations facturables au
+// devis (contrôles d'accès, gateway, formation...), avec un indicateur
+// stockable/non-stockable en prévision d'une gestion de stock à venir —
+// stockQty existe déjà dans le modèle mais n'est lu/écrit nulle part pour
+// l'instant, volontairement, tant que cette gestion de stock n'est pas
+// construite.
+model CrmProduct {
+  id          String  @id @default(cuid())
+  sku         String?
+  label       String
+  description String? // sous-texte verbeux réutilisé sur les lignes de devis
+  unitPrice   Float   @default(0)
+  recurring   Boolean @default(false) // mensuel (true) ou ponctuel (false)
+  stockable   Boolean @default(false)
+  stockQty    Int? // réservé à la future gestion de stock — non utilisé pour l'instant
+  active      Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Modèles de devis récurrents (18/08/2026) — pour gagner le temps de
+// ressaisie sur des devis au contenu verbeux et répétitif : un modèle porte
+// déjà tous les libellés/descriptions/prix, il ne reste qu'à ajuster les
+// quantités à la marge lors de la création d'un devis à partir de ce
+// modèle (cf. POST /wa/crmQuote/create avec templateId).
+model CrmQuoteTemplate {
+  id    String @id @default(cuid())
+  name  String
+  lines Json   @default("[]") // même forme que CrmQuote.lines
+  notes String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

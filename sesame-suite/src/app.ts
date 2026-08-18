@@ -23,6 +23,8 @@ import { onboardingRouter } from "./routes/onboarding";
 import { crmProspectRouter } from "./routes/crmProspect";
 import { crmDealRouter } from "./routes/crmDeal";
 import { crmQuoteRouter } from "./routes/crmQuote";
+import { crmUserRouter } from "./routes/crmUser";
+import { crmProductRouter } from "./routes/crmProduct";
 import { contactRouter } from "./routes/contact";
 import { emailRouter } from "./routes/email";
 import { messagingRouter } from "./routes/messaging";
@@ -64,6 +66,8 @@ export function createApp() {
   app.use("/wa", crmProspectRouter);
   app.use("/wa", crmDealRouter);
   app.use("/wa", crmQuoteRouter);
+  app.use("/wa", crmUserRouter);
+  app.use("/wa", crmProductRouter);
   app.use("/wa", emailRouter);
   app.use("/wa", messagingRouter);
   app.use("/wa", automationRuleRouter);

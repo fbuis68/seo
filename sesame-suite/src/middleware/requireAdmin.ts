@@ -36,3 +36,17 @@ export function requireSesame(req: Request, res: Response, next: NextFunction) {
   }
   next();
 }
+
+/** À enchaîner après requireSesame — réserve l'accès aux comptes Sesame
+ * ayant le rôle CRM "admin" (gestion des utilisateurs CRM eux-mêmes). */
+export function requireCrmAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.admin) {
+    res.status(401).json({ error: "Authentification admin requise" });
+    return;
+  }
+  if (req.admin.crmRole !== "admin") {
+    res.status(403).json({ error: "Réservé aux administrateurs CRM" });
+    return;
+  }
+  next();
+}

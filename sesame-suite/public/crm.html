@@ -321,10 +321,13 @@ input[type=checkbox]{accent-color:var(--a);cursor:pointer;width:14px;height:14px
 .commercial-chip{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--tx);color:var(--card);font-size:8px;font-weight:600;flex-shrink:0}
 
 /* ── DEVIS (constructeur + aperçu impression) ── */
-.quote-lines{display:flex;flex-direction:column;gap:6px;margin:10px 0}
-.quote-line{display:grid;grid-template-columns:1fr 60px 90px 70px 28px;gap:6px;align-items:center}
+.quote-lines{display:flex;flex-direction:column;gap:10px;margin:10px 0}
+.quote-line{display:flex;flex-direction:column;gap:4px;padding-bottom:8px;border-bottom:0.5px solid var(--div)}
+.quote-line:last-child{border-bottom:none;padding-bottom:0}
+.quote-line-main{display:grid;grid-template-columns:1fr 60px 90px 70px 28px;gap:6px;align-items:center}
 .quote-line input[type=text]{font-family:inherit;font-size:12px;padding:0 8px;height:30px;border:0.5px solid var(--bdr2);border-radius:6px;background:var(--card);color:var(--tx)}
 .quote-line input[type=number]{font-family:inherit;font-size:12px;padding:0 6px;height:30px;border:0.5px solid var(--bdr2);border-radius:6px;background:var(--card);color:var(--tx)}
+.quote-line-desc{font-family:inherit;font-size:11px;font-style:italic;padding:0 8px;height:26px;border:0.5px solid var(--div);border-radius:6px;background:var(--bg);color:var(--mu);width:100%}
 .quote-line-head{display:grid;grid-template-columns:1fr 60px 90px 70px 28px;gap:6px;font-size:10px;color:var(--mu);text-transform:uppercase;letter-spacing:.03em}
 .quote-catalog-pick{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
 .quote-catalog-pick button{font-family:inherit;font-size:11px;padding:4px 10px;border-radius:20px;border:0.5px solid var(--bdr2);background:var(--card);color:var(--tx);cursor:pointer}
@@ -393,10 +396,12 @@ input[type=checkbox]{accent-color:var(--a);cursor:pointer;width:14px;height:14px
     <div class="nav-item" id="n-home" onclick="showHome()"><div class="nav-ico">⌂</div> Home</div>
     <div class="nav-item" id="n-list" onclick="showList()"><div class="nav-ico">≡</div> Vue liste</div>
     <div class="nav-item" id="n-affaires" onclick="showAffaires()"><div class="nav-ico">◆</div> Affaires</div>
+    <div class="nav-item" id="n-produits" onclick="showCrmProducts()"><div class="nav-ico">◫</div> Produits</div>
     <div class="nav-item" id="n-activite" onclick="showActivites()"><div class="nav-ico">◈</div> Activités</div>
     <div class="nav-item" id="n-contrats" onclick="showContrats()"><div class="nav-ico">◻</div> Contrats</div>
     <div class="nav-item" id="n-canaux" onclick="showCanauxPanel()"><div class="nav-ico">✉</div> Canaux</div>
     <div class="nav-item" id="n-auto" onclick="showAutomationPanel()"><div class="nav-ico">◈</div> Automatisations</div>
+    <div class="nav-item" id="n-crmusers" onclick="showCrmUsers()" style="display:none"><div class="nav-ico">◉</div> Utilisateurs CRM</div>
     <hr class="s-hr">
     <div class="nav-lbl">Filtres rapides</div>
     <div class="nav-item" onclick="qf('danger','Élevé !!')"><div class="nav-ico">!</div> Risque élevé <span class="nb nb-r" id="b-eleve">0</span></div>
@@ -426,6 +431,7 @@ input[type=checkbox]{accent-color:var(--a);cursor:pointer;width:14px;height:14px
 var API_BASE = '';
 var ADMIN_TOKEN = sessionStorage.getItem('SESAME_ADMIN_TOKEN') || null;
 var ADMIN_ROLE  = sessionStorage.getItem('SESAME_ADMIN_ROLE') || null;
+var ADMIN_CRM_ROLE = sessionStorage.getItem('SESAME_ADMIN_CRMROLE') || null;
 
 function apiFetch(url, opts){
   opts = opts || {};
@@ -506,9 +512,10 @@ async function crmLogin(){
     var data = await r.json();
     if(!r.ok){ errEl.textContent = data.error || 'Identifiants incorrects'; errEl.style.display='block'; return; }
     if(data.admin.role !== 'sesame'){ errEl.textContent = 'Ce module est réservé aux comptes Sesame Technology.'; errEl.style.display='block'; return; }
-    ADMIN_TOKEN = data.token; ADMIN_ROLE = data.admin.role;
+    ADMIN_TOKEN = data.token; ADMIN_ROLE = data.admin.role; ADMIN_CRM_ROLE = data.admin.crmRole || null;
     sessionStorage.setItem('SESAME_ADMIN_TOKEN', ADMIN_TOKEN);
     sessionStorage.setItem('SESAME_ADMIN_ROLE', ADMIN_ROLE);
+    sessionStorage.setItem('SESAME_ADMIN_CRMROLE', ADMIN_CRM_ROLE||'');
     enterApp();
   }catch(e){ errEl.textContent = 'Erreur de connexion au serveur'; errEl.style.display='block'; }
 }
@@ -517,6 +524,7 @@ function enterApp(){
   document.getElementById('loginGate').style.display='none';
   document.getElementById('topbar').style.display='flex';
   document.getElementById('layout').style.display='flex';
+  if(ADMIN_CRM_ROLE==='admin') document.getElementById('n-crmusers').style.display='';
   init();
 }
 
@@ -635,7 +643,7 @@ function ini(n){return(n||'?').split(' ').slice(0,2).map(w=>w[0]||'').join('').t
 function today(){const d=new Date();return d.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});}
 
 // ── NAV ──
-function setNav(id){['n-home','n-list','n-affaires','n-activite','n-contrats','n-canaux','n-auto'].forEach(n=>document.getElementById(n).classList.remove('active'));var el=document.getElementById(id);if(el)el.classList.add('active');}
+function setNav(id){['n-home','n-list','n-affaires','n-produits','n-activite','n-contrats','n-canaux','n-auto','n-crmusers'].forEach(n=>document.getElementById(n).classList.remove('active'));var el=document.getElementById(id);if(el)el.classList.add('active');}
 function setVMode(m){vmode=m;document.getElementById('vt-tbl').classList.toggle('active',m==='table');document.getElementById('vt-grd').classList.toggle('active',m==='grid');if(view==='list')renderList();}
 function bc(parts){document.getElementById('bc').innerHTML=parts.map((p,i)=>i<parts.length-1?`<span class="bc-link" onclick="${p.fn}">${p.label}</span><span class="bc-sep"> / </span>`:`<span class="bc-cur">${p.label}</span>`).join('');}
 function tba(html){document.getElementById('tb-actions').innerHTML=html;}
@@ -704,6 +712,11 @@ function inboundBadge(c){
 }
 function chk(v){return v?'<span class="tpill bg">oui</span>':'<span class="tpill" style="background:#f1efe8;color:#bbb">—</span>';}
 function esc(s){return String(s==null?'':s).replace(/"/g,'&quot;');}
+// Échappement pour une chaîne interpolée dans un argument JS entre quotes
+// simples au sein d'un attribut onclick="..." — distinct de esc() qui
+// n'échappe que pour l'HTML. Nécessaire dès qu'un libellé/nom contient une
+// apostrophe (très fréquent en français : "d'accès", "l'installation"...).
+function jsStr(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n');}
 
 // ════════════════════════════════════════
 // ICÔNES SECTEUR — pictogrammes simples assortis à chaque secteur d'activité
@@ -1578,7 +1591,10 @@ function renderDealModal(){
         ${(md.quotes||[]).length===0?'<div class="log-empty">Aucun devis pour cette affaire.</div>':md.quotes.map(q=>`
           <div class="log-item" style="cursor:pointer" onclick="openQuoteModal('${md.id}','${q.id}')">
             <div class="log-dot ld-b"></div>
-            <div class="log-body"><div class="log-text"><strong>${q.number}</strong> <span class="tpill ${q.status==='accepté'?'bg':q.status==='refusé'?'bd':q.status==='envoyé'?'bi':'bn'}" style="margin-left:6px">${q.status}</span></div></div>
+            <div class="log-body">
+              <div class="log-text"><strong>${q.number}</strong> <span class="tpill ${q.status==='accepté'?'bg':q.status==='refusé'?'bd':q.status==='envoyé'?'bi':'bn'}" style="margin-left:6px">${q.status}</span></div>
+              <div class="log-acts"><button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();duplicateQuote('${q.id}')">⧉ Dupliquer</button></div>
+            </div>
           </div>`).join('')}
       </div>
       <button class="btn btn-ghost btn-sm" onclick="openQuoteModal('${md.id}',null)">+ Nouveau devis</button>
@@ -1632,11 +1648,15 @@ async function deleteDeal(id){
 // ── Devis ──
 let QUOTE_CATALOG = null;
 let QUOTE_DRAFT = null;
+let QUOTE_TEMPLATES = null;
 
 async function openQuoteModal(dealId, quoteId){
   if(!QUOTE_CATALOG){
     try{ const r = await apiFetch('/wa/crmQuote/catalog'); QUOTE_CATALOG = r.ok ? await r.json() : {basePrice:0,modules:[]}; }
     catch(e){ QUOTE_CATALOG = {basePrice:0,modules:[]}; }
+  }
+  if(!crmProducts.length){
+    try{ const r = await apiFetch('/wa/crmProduct/list'); crmProducts = r.ok ? await r.json() : []; }catch(e){}
   }
   if(quoteId){
     try{
@@ -1661,51 +1681,124 @@ function quoteTotals(){
 function captureQuoteLines(){
   const lines = QUOTE_DRAFT.lines||[];
   lines.forEach((l,i)=>{
-    const gl=document.getElementById('ql-label-'+i), gq=document.getElementById('ql-qty-'+i), gp=document.getElementById('ql-price-'+i), gr=document.getElementById('ql-rec-'+i);
+    const gl=document.getElementById('ql-label-'+i), gd=document.getElementById('ql-desc-'+i), gq=document.getElementById('ql-qty-'+i), gp=document.getElementById('ql-price-'+i), gr=document.getElementById('ql-rec-'+i);
     if(gl) l.label = gl.value;
+    if(gd) l.description = gd.value;
     if(gq) l.qty = +gq.value || 0;
     if(gp) l.unitPrice = +gp.value || 0;
     if(gr) l.recurring = gr.checked;
   });
-  const gd=document.getElementById('q-discount'), gn=document.getElementById('q-notes'), gs=document.getElementById('q-status');
-  if(gd) QUOTE_DRAFT.discountPct = +gd.value || 0;
+  const gdisc=document.getElementById('q-discount'), gn=document.getElementById('q-notes'), gs=document.getElementById('q-status');
+  if(gdisc) QUOTE_DRAFT.discountPct = +gdisc.value || 0;
   if(gn) QUOTE_DRAFT.notes = gn.value;
   if(gs) QUOTE_DRAFT.status = gs.value;
 }
 
-function addQuoteLine(label, unitPrice, recurring){
+function addQuoteLine(label, unitPrice, recurring, description){
   captureQuoteLines();
   QUOTE_DRAFT.lines = QUOTE_DRAFT.lines || [];
-  QUOTE_DRAFT.lines.push({label: label||'', qty:1, unitPrice: unitPrice||0, recurring: recurring!==false});
+  QUOTE_DRAFT.lines.push({label: label||'', description: description||'', qty:1, unitPrice: unitPrice||0, recurring: recurring!==false});
   renderQuoteModal();
 }
 function removeQuoteLine(i){ captureQuoteLines(); QUOTE_DRAFT.lines.splice(i,1); renderQuoteModal(); }
 
+// ── Modèles de devis récurrents — pour gagner du temps sur des devis
+// verbeux et répétitifs : charger un modèle pré-remplit toutes les lignes
+// (libellés + descriptions + prix), il ne reste qu'à ajuster les quantités.
+async function loadQuoteTemplatesIfNeeded(){
+  if(QUOTE_TEMPLATES) return;
+  try{ const r = await apiFetch('/wa/crmQuoteTemplate/list'); QUOTE_TEMPLATES = r.ok ? await r.json() : []; }
+  catch(e){ QUOTE_TEMPLATES = []; }
+}
+async function applyQuoteTemplate(selectEl){
+  const id = selectEl.value;
+  selectEl.value = '';
+  if(!id) return;
+  const tpl = (QUOTE_TEMPLATES||[]).find(t=>t.id===id);
+  if(!tpl) return;
+  if((QUOTE_DRAFT.lines||[]).length && !confirm('Remplacer les lignes actuelles par celles du modèle "'+tpl.name+'" ?')) return;
+  QUOTE_DRAFT.lines = tpl.lines.map(l=>({...l}));
+  if(tpl.notes) QUOTE_DRAFT.notes = tpl.notes;
+  renderQuoteModal();
+}
+async function saveQuoteAsTemplate(){
+  captureQuoteLines();
+  if(!(QUOTE_DRAFT.lines||[]).length){ flash('Ajoutez au moins une ligne avant d\'enregistrer un modèle'); return; }
+  const name = prompt('Nom du modèle (ex : "Contrôle d\'accès standard hôtel")');
+  if(!name || !name.trim()) return;
+  try{
+    var r = await apiFetch('/wa/crmQuoteTemplate/create', {method:'POST', body:JSON.stringify({name:name.trim(), lines:QUOTE_DRAFT.lines, notes:QUOTE_DRAFT.notes})});
+    if(!r.ok) throw new Error('http '+r.status);
+    var saved = await r.json();
+  }catch(e){ flash('Erreur d\'enregistrement du modèle'); return; }
+  QUOTE_TEMPLATES = QUOTE_TEMPLATES || [];
+  QUOTE_TEMPLATES.push(saved);
+  flash('Modèle "'+saved.name+'" enregistré ✓');
+}
+
+async function duplicateQuote(id){
+  try{
+    var r = await apiFetch('/wa/crmQuote/duplicate', {method:'POST', body:JSON.stringify({id:id})});
+    if(!r.ok) throw new Error('http '+r.status);
+    var saved = await r.json();
+  }catch(e){ flash('Erreur de duplication'); return; }
+  const deal = deals.find(d=>d.id===saved.dealId);
+  if(deal){ deal.quotes = deal.quotes||[]; deal.quotes.push({id:saved.id, number:saved.number, status:saved.status}); }
+  flash('Devis dupliqué en '+saved.number);
+  openQuoteModal(saved.dealId, saved.id);
+}
+
+async function requestQuoteSignature(){
+  const q = QUOTE_DRAFT; if(!q || !q.id) return;
+  try{
+    var r = await apiFetch('/wa/crmQuote/requestSignature', {method:'POST', body:JSON.stringify({id:q.id})});
+    var data = await r.json();
+    if(!r.ok){ flash(data.error||'Erreur'); return; }
+  }catch(e){ flash('Erreur de connexion au serveur'); return; }
+  QUOTE_DRAFT = {...data, _new:false};
+  renderQuoteModal();
+}
+
 function renderQuoteModal(){
   const q = QUOTE_DRAFT;
   const totals = quoteTotals();
-  const catalogButtons = (QUOTE_CATALOG.modules||[]).map(m=>`<button type="button" onclick="addQuoteLine('${esc(m.label)}',${m.price},true)">+ ${esc(m.label)} (${fmtEUR(m.price)}/mois)</button>`).join('');
+  const catalogButtons = (QUOTE_CATALOG.modules||[]).map(m=>`<button type="button" onclick="addQuoteLine('${jsStr(m.label)}',${m.price},true)">+ ${esc(m.label)} (${fmtEUR(m.price)}/mois)</button>`).join('');
+  const productButtons = crmProducts.filter(p=>p.active).map(p=>`<button type="button" onclick="addQuoteLine('${jsStr(p.label)}',${p.unitPrice},${p.recurring},'${jsStr(p.description)}')">+ ${esc(p.label)} (${fmtEUR(p.unitPrice)}${p.recurring?'/mois':''})</button>`).join('');
+  const signUrl = q.signToken ? (location.origin+'/devis-signature.html?token='+q.signToken) : '';
   document.getElementById('modal-ct').innerHTML = `
   <div class="modal-bg" onclick="if(event.target===this)closeModal()">
     <div class="modal-box">
       <div class="modal-head">
         <div style="font-size:16px;font-weight:500">${q._new?'Nouveau devis':q.number}</div>
+        ${q.status?`<span class="tpill ${q.status==='accepté'?'bg':q.status==='refusé'?'bd':q.status==='envoyé'?'bi':'bn'}" style="margin-left:8px">${q.status}</span>`:''}
         <button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button>
       </div>
 
-      <div class="modal-section">Ajouter depuis le catalogue Sesame</div>
-      <div class="quote-catalog-pick">${catalogButtons}<button type="button" onclick="addQuoteLine('',0,false)">+ Ligne personnalisée</button></div>
+      ${q._new?`<div class="ff" style="max-width:280px;margin-bottom:6px"><label>Partir d'un modèle (optionnel)</label>
+        <select onchange="applyQuoteTemplate(this)" onfocus="loadQuoteTemplatesIfNeeded().then(()=>renderQuoteModal())">
+          <option value="">— Choisir un modèle —</option>
+          ${(QUOTE_TEMPLATES||[]).map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')}
+        </select></div>`:''}
+
+      <div class="modal-section">Ajouter depuis le catalogue de modules Sesame</div>
+      <div class="quote-catalog-pick">${catalogButtons||'<span class="log-empty">Aucun module disponible</span>'}</div>
+
+      <div class="modal-section">Ajouter depuis le catalogue produits</div>
+      <div class="quote-catalog-pick">${productButtons||'<span class="log-empty">Aucun produit au catalogue — <a href="#" onclick="closeModal();showCrmProducts();return false;">en créer un</a></span>'}<button type="button" onclick="addQuoteLine('',0,false)">+ Ligne personnalisée</button></div>
 
       <div class="modal-section">Lignes du devis</div>
       <div class="quote-line-head"><span>Libellé</span><span>Qté</span><span>Prix unit. €</span><span>Mensuel</span><span></span></div>
       <div class="quote-lines">
-        ${(q.lines||[]).length===0?'<div class="log-empty">Aucune ligne — ajoutez un module ou une ligne personnalisée.</div>':(q.lines||[]).map((l,i)=>`
+        ${(q.lines||[]).length===0?'<div class="log-empty">Aucune ligne — ajoutez un module, un produit ou une ligne personnalisée.</div>':(q.lines||[]).map((l,i)=>`
           <div class="quote-line">
-            <input type="text" id="ql-label-${i}" value="${esc(l.label)}" placeholder="Libellé">
-            <input type="number" id="ql-qty-${i}" value="${l.qty}" min="0" onchange="captureQuoteLines();renderQuoteModal()">
-            <input type="number" id="ql-price-${i}" value="${l.unitPrice}" min="0" step="0.01" onchange="captureQuoteLines();renderQuoteModal()">
-            <label style="display:flex;align-items:center;justify-content:center"><input type="checkbox" id="ql-rec-${i}" ${l.recurring?'checked':''} onchange="captureQuoteLines();renderQuoteModal()"></label>
-            <button class="btn btn-ghost btn-icon" style="width:28px;height:28px" onclick="removeQuoteLine(${i})">✕</button>
+            <div class="quote-line-main">
+              <input type="text" id="ql-label-${i}" value="${esc(l.label)}" placeholder="Libellé">
+              <input type="number" id="ql-qty-${i}" value="${l.qty}" min="0" onchange="captureQuoteLines();renderQuoteModal()">
+              <input type="number" id="ql-price-${i}" value="${l.unitPrice}" min="0" step="0.01" onchange="captureQuoteLines();renderQuoteModal()">
+              <label style="display:flex;align-items:center;justify-content:center"><input type="checkbox" id="ql-rec-${i}" ${l.recurring?'checked':''} onchange="captureQuoteLines();renderQuoteModal()"></label>
+              <button class="btn btn-ghost btn-icon" style="width:28px;height:28px" onclick="removeQuoteLine(${i})">✕</button>
+            </div>
+            <input type="text" class="quote-line-desc" id="ql-desc-${i}" value="${esc(l.description)}" placeholder="Description (sous-texte affiché sur le devis, optionnel)">
           </div>`).join('')}
       </div>
 
@@ -1720,9 +1813,19 @@ function renderQuoteModal(){
       <div class="quote-total-row"><span>Frais ponctuels</span><span>${fmtEUR(totals.oneoff)}${q.discountPct?' → '+fmtEUR(totals.oneoffNet)+' après remise':''}</span></div>
       <div class="quote-total-row grand"><span>Total 1ère facture</span><span>${fmtEUR(totals.mrrNet+totals.oneoffNet)}</span></div>
 
-      <div class="modal-footer">
+      ${!q._new && q.status!=='accepté' ? `
+      <div class="modal-section">Signature électronique</div>
+      <div style="font-size:11px;color:var(--mu);font-style:italic;margin-bottom:8px">⚠ Signature électronique simple (nom saisi + tracé + horodatage) — pas une signature qualifiée eIDAS certifiée par un tiers de confiance.</div>
+      ${signUrl?`<div class="ff"><label>Lien de signature à transmettre au client</label><div style="display:flex;gap:6px"><input type="text" readonly value="${esc(signUrl)}" style="flex:1;font-size:11px" onclick="this.select()"><button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText('${esc(signUrl)}');flash('Lien copié')">Copier</button></div></div>`
+        :`<button class="btn btn-ghost btn-sm" onclick="requestQuoteSignature()">✎ Générer le lien de signature</button>`}
+      `:''}
+      ${q.status==='accepté'?`<div class="tag t-green" style="margin-top:8px;display:inline-flex">✓ Devis signé électroniquement — l'affaire est passée automatiquement au statut "Gagné".</div>`:''}
+
+      <div class="modal-footer" style="flex-wrap:wrap">
         <button class="btn btn-primary" onclick="saveQuote()">Enregistrer</button>
         ${q._new?'':'<button class="btn btn-ghost" onclick="printQuote()">🖶 Aperçu / Imprimer</button>'}
+        ${q._new?'':'<button class="btn btn-ghost" onclick="duplicateQuote(\''+q.id+'\')">⧉ Dupliquer</button>'}
+        ${(q.lines||[]).length?'<button class="btn btn-ghost" onclick="saveQuoteAsTemplate()">💾 Enregistrer comme modèle</button>':''}
         ${q._new?'':'<button class="btn btn-ghost" style="color:#a32d2d" onclick="deleteQuote()">Supprimer</button>'}
         <button class="btn btn-ghost" onclick="closeModal()">Fermer</button>
       </div>
@@ -1735,7 +1838,7 @@ async function saveQuote(){
   const q = QUOTE_DRAFT;
   const body = {
     dealId: q.dealId,
-    lines: (q.lines||[]).map(l=>({label:l.label, qty:+l.qty||0, unitPrice:+l.unitPrice||0, recurring:!!l.recurring})),
+    lines: (q.lines||[]).map(l=>({label:l.label, description:l.description||'', qty:+l.qty||0, unitPrice:+l.unitPrice||0, recurring:!!l.recurring})),
     discountPct: +q.discountPct||0, notes: q.notes||'', status: q.status||'brouillon'
   };
   try{
@@ -1776,7 +1879,7 @@ function printQuote(){
   const totals = quoteTotals();
   const rowsHtml = (q.lines||[]).map(l=>`
     <tr>
-      <td>${esc(l.label)}${l.recurring?' <span style="color:#888;font-size:11px">(mensuel)</span>':' <span style="color:#888;font-size:11px">(ponctuel)</span>'}</td>
+      <td>${esc(l.label)}${l.recurring?' <span style="color:#888;font-size:11px">(mensuel)</span>':' <span style="color:#888;font-size:11px">(ponctuel)</span>'}${l.description?`<div style="color:#888;font-size:11px;font-style:italic;margin-top:2px">${esc(l.description)}</div>`:''}</td>
       <td style="text-align:center">${l.qty}</td>
       <td style="text-align:right">${fmtEUR(l.unitPrice)}</td>
       <td style="text-align:right">${fmtEUR((+l.qty||0)*(+l.unitPrice||0))}</td>
@@ -1816,6 +1919,194 @@ function printQuote(){
   w.document.close();
   w.focus();
   setTimeout(function(){ w.print(); }, 300);
+}
+
+// ════════════════════════════════════════
+// PRODUITS — catalogue interne Sesame (18/08/2026), stockable ou non, pour
+// pré-remplir les lignes de devis (cf. constructeur de devis, sections
+// AFFAIRES ci-dessus). stockable prépare une future gestion de stock, non
+// implémentée pour l'instant.
+// ════════════════════════════════════════
+let crmProducts = [];
+
+async function showCrmProducts(){
+  view='produits';setNav('n-produits');bc([{label:'Produits'}]);
+  tba('<button class="btn btn-primary btn-sm" onclick="openProductModal(null)">+ Nouveau produit</button>');
+  document.getElementById('main').innerHTML='<div class="card">Chargement…</div>';
+  try{
+    var r = await apiFetch('/wa/crmProduct/list');
+    crmProducts = r.ok ? await r.json() : [];
+  }catch(e){ crmProducts=[]; }
+  renderCrmProducts();
+}
+
+function renderCrmProducts(){
+  const rows = crmProducts.map(p=>`
+    <tr>
+      <td><div class="nom-cell">${esc(p.label)}</div>${p.description?`<div class="sub-cell">${esc(p.description)}</div>`:''}</td>
+      <td style="font-size:11px;color:#888">${esc(p.sku)||'—'}</td>
+      <td>${fmtEUR(p.unitPrice)}${p.recurring?'/mois':''}</td>
+      <td>${p.stockable?'<span class="tpill bi">Stockable</span>':'<span class="tpill bn">Non stockable</span>'}</td>
+      <td>${p.active?'<span class="tpill bg">Actif</span>':'<span class="tpill bn">Inactif</span>'}</td>
+      <td style="white-space:nowrap"><button class="ta-btn" onclick="openProductModal('${p.id}')" title="Modifier">✎</button><button class="ta-btn" style="margin-left:3px;color:#a32d2d" onclick="deleteProduct('${p.id}')" title="Supprimer">🗑</button></td>
+    </tr>`).join('');
+  document.getElementById('main').innerHTML = `<div class="tbl-wrap"><table>
+    <thead><tr><th>Produit</th><th style="width:90px">SKU</th><th style="width:110px">Prix</th><th style="width:130px">Stock</th><th style="width:90px">Statut</th><th style="width:70px">Actions</th></tr></thead>
+    <tbody>${rows.length?rows:'<tr><td colspan="6" class="log-empty">Aucun produit — créez-en un pour l\'utiliser dans vos devis.</td></tr>'}</tbody>
+  </table></div>`;
+}
+
+function openProductModal(id){
+  const p = id ? crmProducts.find(x=>x.id===id) : {id:null,sku:'',label:'',description:'',unitPrice:0,recurring:false,stockable:false,active:true};
+  if(!p) return;
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+    <div class="modal-box" style="max-width:520px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">${id?'Modifier le produit':'Nouveau produit'}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div class="form-grid">
+        <div class="ff"><label>Libellé</label><input id="p-label" value="${esc(p.label)}" placeholder="Ex : Contrôle d'accès Sesame Oneway"></div>
+        <div class="ff"><label>SKU (optionnel)</label><input id="p-sku" value="${esc(p.sku)}"></div>
+        <div class="ff"><label>Prix unitaire (€ HT)</label><input type="number" id="p-price" value="${p.unitPrice||0}" min="0" step="0.01"></div>
+        <div class="ff"><label>Facturation</label><select id="p-recurring"><option value="0" ${!p.recurring?'selected':''}>Ponctuel</option><option value="1" ${p.recurring?'selected':''}>Mensuel</option></select></div>
+      </div>
+      <div class="ff" style="margin-top:8px"><label>Description (sous-texte affiché sur le devis)</label><textarea id="p-desc">${esc(p.description)}</textarea></div>
+      <div class="feat-checks" style="margin-top:10px">
+        <label><input type="checkbox" id="p-stockable" ${p.stockable?'checked':''}> Stockable</label>
+        ${id?`<label><input type="checkbox" id="p-active" ${p.active?'checked':''}> Actif</label>`:''}
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="saveProduct(${id?`'${id}'`:'null'})">Enregistrer</button>
+        ${id?`<button class="btn btn-ghost" style="color:#a32d2d" onclick="deleteProduct('${id}')">Supprimer</button>`:''}
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function saveProduct(id){
+  const g=i=>(document.getElementById(i)||{value:''}).value;
+  const body = {
+    label: g('p-label').trim(), sku: g('p-sku').trim(), unitPrice: +g('p-price')||0,
+    recurring: g('p-recurring')==='1', description: g('p-desc'),
+    stockable: (document.getElementById('p-stockable')||{checked:false}).checked,
+  };
+  if(id){ const activeEl=document.getElementById('p-active'); if(activeEl) body.active = activeEl.checked; }
+  if(!body.label){ flash('Le libellé est obligatoire'); return; }
+  try{
+    var r = id
+      ? await apiFetch('/wa/crmProduct/update', {method:'POST', body:JSON.stringify({id:id, ...body})})
+      : await apiFetch('/wa/crmProduct/create', {method:'POST', body:JSON.stringify(body)});
+    if(!r.ok) throw new Error('http '+r.status);
+    var saved = await r.json();
+  }catch(e){ flash('Erreur d\'enregistrement'); return; }
+  if(id){ const ex=crmProducts.find(p=>p.id===id); if(ex) Object.assign(ex, saved); } else { crmProducts.push(saved); }
+  closeModal(); flash('Produit enregistré'); renderCrmProducts();
+}
+
+async function deleteProduct(id){
+  if(!confirm('Supprimer ce produit du catalogue ?'))return;
+  try{
+    var r = await apiFetch('/wa/crmProduct/delete', {method:'POST', body:JSON.stringify({id:id})});
+    if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash('Erreur de suppression'); return; }
+  crmProducts = crmProducts.filter(p=>p.id!==id);
+  closeModal(); flash('Produit supprimé'); renderCrmProducts();
+}
+
+// ════════════════════════════════════════
+// UTILISATEURS CRM — comptes de l'équipe Sesame + rôle fonctionnel
+// (admin/commercial, 18/08/2026). Nav masquée si crmRole!=="admin", mais
+// c'est le backend (requireCrmAdmin) qui fait autorité.
+// ════════════════════════════════════════
+let crmUsersList = [];
+const CRM_ROLE_LABEL = {admin:'Admin CRM', commercial:'Commercial'};
+
+async function showCrmUsers(){
+  view='crmusers';setNav('n-crmusers');bc([{label:'Utilisateurs CRM'}]);
+  tba('<button class="btn btn-primary btn-sm" onclick="openCrmUserModal(null)">+ Nouvel utilisateur</button>');
+  document.getElementById('main').innerHTML='<div class="card">Chargement…</div>';
+  try{
+    var r = await apiFetch('/wa/crmUser/list');
+    if(!r.ok){ document.getElementById('main').innerHTML = '<div class="card">Accès réservé aux administrateurs CRM.</div>'; return; }
+    crmUsersList = await r.json();
+  }catch(e){ crmUsersList=[]; }
+  renderCrmUsers();
+}
+
+function renderCrmUsers(){
+  const rows = crmUsersList.map(u=>`
+    <tr>
+      <td><div class="nom-cell">${esc(u.name||u.email)}</div><div class="sub-cell">${esc(u.email)}</div></td>
+      <td><span class="tpill ${u.crmRole==='admin'?'bi':'bn'}">${CRM_ROLE_LABEL[u.crmRole]||u.crmRole}</span></td>
+      <td>${u.active?'<span class="tpill bg">Actif</span>':'<span class="tpill bd">Désactivé</span>'}</td>
+      <td style="white-space:nowrap"><button class="ta-btn" onclick="openCrmUserModal('${u.id}')" title="Modifier">✎</button></td>
+    </tr>`).join('');
+  document.getElementById('main').innerHTML = `<div class="tbl-wrap"><table>
+    <thead><tr><th>Utilisateur</th><th style="width:130px">Rôle</th><th style="width:100px">Statut</th><th style="width:60px">Actions</th></tr></thead>
+    <tbody>${rows.length?rows:'<tr><td colspan="4" class="log-empty">Aucun utilisateur.</td></tr>'}</tbody>
+  </table></div>`;
+}
+
+function openCrmUserModal(id){
+  const u = id ? crmUsersList.find(x=>x.id===id) : {id:null,email:'',name:'',crmRole:'commercial',active:true};
+  if(!u) return;
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+    <div class="modal-box" style="max-width:480px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">${id?"Modifier l'utilisateur":'Nouvel utilisateur CRM'}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div class="form-grid">
+        <div class="ff"><label>Email</label><input type="email" id="u-email" value="${esc(u.email)}" ${id?'disabled':''} placeholder="prenom@sesame.technology"></div>
+        <div class="ff"><label>Nom</label><input id="u-name" value="${esc(u.name)}" placeholder="Prénom Nom"></div>
+        <div class="ff"><label>Rôle</label><select id="u-role"><option value="commercial" ${u.crmRole==='commercial'?'selected':''}>Commercial</option><option value="admin" ${u.crmRole==='admin'?'selected':''}>Admin CRM</option></select></div>
+        ${id?`<div class="ff"><label>Statut</label><select id="u-active"><option value="1" ${u.active?'selected':''}>Actif</option><option value="0" ${!u.active?'selected':''}>Désactivé</option></select></div>`:''}
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="saveCrmUser(${id?`'${id}'`:'null'})">Enregistrer</button>
+        ${id?`<button class="btn btn-ghost" onclick="resetCrmUserPassword('${id}')">Réinitialiser le mot de passe</button>`:''}
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+      <div id="u-pw-box" style="display:none;margin-top:10px;padding:10px;border-radius:8px;background:var(--hover);font-size:12px"></div>
+    </div>
+  </div>`;
+}
+
+async function saveCrmUser(id){
+  const g=i=>(document.getElementById(i)||{value:''}).value;
+  try{
+    var r, saved, data;
+    if(id){
+      const activeEl = document.getElementById('u-active');
+      const body = {id:id, name:g('u-name').trim(), crmRole:g('u-role')};
+      if(activeEl) body.active = activeEl.value==='1';
+      r = await apiFetch('/wa/crmUser/update', {method:'POST', body:JSON.stringify(body)});
+      if(!r.ok) throw new Error('http '+r.status);
+      saved = await r.json();
+      const ex=crmUsersList.find(u=>u.id===id); if(ex) Object.assign(ex, saved);
+      closeModal(); flash('Utilisateur mis à jour'); renderCrmUsers();
+    } else {
+      const email = g('u-email').trim();
+      if(!email){ flash('Email requis'); return; }
+      r = await apiFetch('/wa/crmUser/create', {method:'POST', body:JSON.stringify({email:email, name:g('u-name').trim(), crmRole:g('u-role')})});
+      data = await r.json();
+      if(!r.ok){ flash(data.error||'Erreur de création'); return; }
+      crmUsersList.push(data);
+      const box = document.getElementById('u-pw-box');
+      box.style.display='block';
+      box.innerHTML = 'Compte créé. Mot de passe temporaire (à communiquer, affiché une seule fois) :<br><strong style="font-size:14px;letter-spacing:.03em">'+esc(data.password)+'</strong>';
+    }
+  }catch(e){ flash('Erreur d\'enregistrement'); }
+}
+
+async function resetCrmUserPassword(id){
+  if(!confirm('Générer un nouveau mot de passe pour cet utilisateur ?'))return;
+  try{
+    var r = await apiFetch('/wa/crmUser/resetPassword', {method:'POST', body:JSON.stringify({id:id})});
+    var data = await r.json();
+    if(!r.ok){ flash(data.error||'Erreur'); return; }
+    const box = document.getElementById('u-pw-box');
+    box.style.display='block';
+    box.innerHTML = 'Nouveau mot de passe temporaire (affiché une seule fois) :<br><strong style="font-size:14px;letter-spacing:.03em">'+esc(data.password)+'</strong>';
+  }catch(e){ flash('Erreur de connexion au serveur'); }
 }
 
 // ════════════════════════════════════════

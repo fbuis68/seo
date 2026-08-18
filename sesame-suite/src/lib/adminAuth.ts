@@ -9,6 +9,7 @@ export interface AdminTokenPayload {
   adminId: string;
   email: string;
   role: AdminRole;
+  crmRole?: string; // "admin" | "commercial" — uniquement significatif pour role="sesame"
 }
 
 export function signAdminToken(payload: AdminTokenPayload): string {
