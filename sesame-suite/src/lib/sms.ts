@@ -68,8 +68,21 @@ async function sendViaTwilio(
   if (!res.ok) {
     let detail: string;
     try {
-      const j = (await res.json()) as { message?: string };
-      detail = j.message || JSON.stringify(j);
+      // Twilio renvoie systématiquement un code numérique ("code") en plus du
+      // message texte — jusqu'ici ignoré, alors qu'il identifie précisément la
+      // restriction en cause (cf. table des codes sur www.twilio.com/docs/errors/<code>).
+      // Nécessaire pour diagnostiquer sans deviner : un message Twilio du type
+      // "not available on a Trial account" peut recouvrir plusieurs causes
+      // distinctes (compte non vérifié, expéditeur non autorisé, sandbox WhatsApp
+      // non "join", etc.) que seul le code numérique désambiguïse.
+      const j = (await res.json()) as { message?: string; code?: number; more_info?: string };
+      if (j.message) {
+        detail = j.message;
+        if (j.code) detail += ` [code Twilio ${j.code}]`;
+        if (j.more_info) detail += ` — voir ${j.more_info}`;
+      } else {
+        detail = JSON.stringify(j);
+      }
     } catch {
       detail = await res.text();
     }
