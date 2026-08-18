@@ -133,7 +133,7 @@ function extractCookieHeader(res: Response): string | undefined {
  * (cf. extractCookieHeader), à renvoyer sur les appels suivants pour les
  * systèmes qui authentifient par session plutôt que par token.
  */
-async function performLogin(config: BookingSourceConfig): Promise<{ token: string; cookie?: string }> {
+async function performLogin(config: BookingSourceConfig): Promise<{ token: string; cookie?: string; resultFilterValue?: string }> {
   if (!config.baseUrl) throw new BookingSourceError("URL de base non configurée");
   if (!config.loginEmail || !config.loginPassword) throw new BookingSourceError("Email et mot de passe de connexion requis");
 
@@ -168,6 +168,7 @@ async function performLogin(config: BookingSourceConfig): Promise<{ token: strin
   const responseBody = await parseJsonResponse(res, "La réponse de connexion");
 
   let token: unknown;
+  let resultFilterValue: string | undefined;
   if (config.loginProfileListPath && config.loginProfileMatchField && config.loginProfileMatchValue) {
     // La réponse contient un tableau avec un profil par établissement (ex :
     // API Sesame Technology, un même compte a accès à plusieurs hôtels) —
@@ -192,6 +193,15 @@ async function performLogin(config: BookingSourceConfig): Promise<{ token: strin
       );
     }
     token = getPath(profile, config.loginTokenPath || "token");
+    // Capturé pour filtrer les résultats des appels suivants (cf.
+    // resultEntityField) — certaines API "login" à profils multiples (ex :
+    // Sesame Technology, un compte a accès à des dizaines d'établissements)
+    // n'appliquent PAS de cloisonnement strict par profil/token sur leurs
+    // autres endpoints : le token authentifie le COMPTE, pas un
+    // établissement précis, et /wa/booking/list a été observé renvoyer des
+    // réservations d'autres établissements que celui sélectionné ici.
+    const idRaw = getPath(profile, "entityId");
+    if (typeof idRaw === "string") resultFilterValue = idRaw;
   } else {
     token = config.loginTokenPath ? getPath(responseBody, config.loginTokenPath) : undefined;
   }
@@ -203,29 +213,32 @@ async function performLogin(config: BookingSourceConfig): Promise<{ token: strin
         : "Chemin du token de connexion non configuré"
     );
   }
-  return { token, cookie };
+  return { token, cookie, resultFilterValue };
 }
 
-async function buildAuthHeaders(config: BookingSourceConfig): Promise<Record<string, string>> {
+async function buildAuthHeaders(config: BookingSourceConfig): Promise<{ headers: Record<string, string>; resultFilterValue?: string }> {
   switch (config.authType) {
     case "apiKey":
-      if (!config.authApiKeyHeader || !config.authApiKeyValue) return {};
-      return { [config.authApiKeyHeader]: config.authApiKeyValue };
+      if (!config.authApiKeyHeader || !config.authApiKeyValue) return { headers: {} };
+      return { headers: { [config.authApiKeyHeader]: config.authApiKeyValue } };
     case "bearer":
-      return config.authBearerToken ? { Authorization: `Bearer ${config.authBearerToken}` } : {};
+      return { headers: config.authBearerToken ? { Authorization: `Bearer ${config.authBearerToken}` } : {} };
     case "basic":
-      if (!config.authBasicUser) return {};
-      return { Authorization: "Basic " + Buffer.from(`${config.authBasicUser}:${config.authBasicPassword || ""}`).toString("base64") };
+      if (!config.authBasicUser) return { headers: {} };
+      return { headers: { Authorization: "Basic " + Buffer.from(`${config.authBasicUser}:${config.authBasicPassword || ""}`).toString("base64") } };
     case "login": {
-      const { token, cookie } = await performLogin(config);
+      const { token, cookie, resultFilterValue } = await performLogin(config);
       const headerName = config.loginTokenHeaderName || "Authorization";
       return {
-        [headerName]: (config.loginTokenPrefix || "") + token,
-        ...(cookie ? { Cookie: cookie } : {}),
+        headers: {
+          [headerName]: (config.loginTokenPrefix || "") + token,
+          ...(cookie ? { Cookie: cookie } : {}),
+        },
+        resultFilterValue,
       };
     }
     default:
-      return {};
+      return { headers: {} };
   }
 }
 
@@ -250,7 +263,7 @@ async function fetchExternalList(
 ): Promise<unknown[]> {
   if (!config.baseUrl) throw new BookingSourceError("URL de base non configurée");
   const url = config.baseUrl.replace(/\/$/, "") + (endpointPath || "");
-  const authHeaders = await buildAuthHeaders(config);
+  const { headers: authHeaders, resultFilterValue } = await buildAuthHeaders(config);
   const isPost = (method || "GET").toUpperCase() === "POST";
   const params: Record<string, unknown> = bodyParams && typeof bodyParams === "object" ? (bodyParams as Record<string, unknown>) : {};
   let res: Response;
@@ -303,7 +316,21 @@ async function fetchExternalList(
         : `La réponse n'est pas un tableau — précisez le chemin vers la liste des ${what}`) + ` — réponse reçue : "${snippet}"`
     );
   }
-  return list;
+
+  // Filtre de sécurité — certaines API "login" à profils multiples (ex :
+  // Sesame Technology) n'appliquent pas de cloisonnement strict par profil
+  // sur tous leurs endpoints : le token authentifie le COMPTE (qui peut
+  // avoir accès à des dizaines d'établissements), pas nécessairement
+  // l'établissement sélectionné à la connexion — confirmé en pratique,
+  // /wa/booking/list a renvoyé des réservations d'un autre établissement
+  // que celui authentifié. Quand resultEntityField est configuré (avec le
+  // mode de connexion à profils), on ne garde que les éléments dont ce
+  // champ correspond à l'établissement réellement sélectionné.
+  const filtered =
+    config.resultEntityField && resultFilterValue
+      ? list.filter((item) => String(getPath(item, config.resultEntityField as string)) === resultFilterValue)
+      : list;
+  return filtered;
 }
 
 /** Appelle la source externe et renvoie le tableau brut de réservations (pas encore mappé). */

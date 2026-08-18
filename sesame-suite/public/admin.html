@@ -4566,6 +4566,9 @@ function bsRenderAuthFields(){
     h += '<div class="fi"><label class="lb">Champ à comparer</label><input type="text" id="bs-loginProfileMatchField" placeholder="entityCode"></div>';
     h += '</div>';
     h += '<div class="fi"><label class="lb">Valeur recherchée (identifiant de cet établissement)</label><input type="text" id="bs-loginProfileMatchValue" placeholder="Ex : CHURCHILL"></div>';
+    h += '<div class="alt alt-w" style="margin:12px 0"><i class="ti ti-alert-triangle"></i>'
+      +'<span>Recommandé avec un tableau de profils : certains systèmes (confirmé sur l\'API Sesame) authentifient le <b>compte</b> mais pas nécessairement l\'établissement précis sur tous leurs endpoints — un compte ayant accès à plusieurs hôtels peut alors recevoir des réservations d\'un autre établissement que celui sélectionné ci-dessus. Ce champ filtre les résultats reçus pour ne garder que ceux de l\'établissement choisi.</span></div>';
+    h += '<div class="fi"><label class="lb">Champ de vérification dans chaque réservation/chambre reçue</label><input type="text" id="bs-resultEntityField" placeholder="Ex : entityId (laisser vide pour ne pas filtrer)"></div>';
     h += '<div class="fi"><label class="lb">Chemin du token</label><input type="text" id="bs-loginTokenPath" placeholder="token si tableau de profils ci-dessus rempli — sinon data.token"></div>';
     h += '<div class="g2">';
     h += '<div class="fi"><label class="lb">Nom de l\'en-tête du token</label><input type="text" id="bs-loginTokenHeaderName" placeholder="Authorization"></div>';
@@ -4611,6 +4614,7 @@ function bsRenderAuthFields(){
     document.getElementById('bs-loginProfileListPath').value = BS_CONFIG.loginProfileListPath||'';
     document.getElementById('bs-loginProfileMatchField').value = BS_CONFIG.loginProfileMatchField||'';
     document.getElementById('bs-loginProfileMatchValue').value = BS_CONFIG.loginProfileMatchValue||'';
+    document.getElementById('bs-resultEntityField').value = BS_CONFIG.resultEntityField||'';
   }
 }
 
@@ -4664,7 +4668,7 @@ var PMS_PRESETS = {
   sesame: {
     label: 'Sesame Technology',
     noteType: 'b',
-    note: 'Vérifié en conditions réelles le 17/08/2026. Le compte utilisé doit avoir accès à l\'établissement voulu — il est retrouvé automatiquement par son code (entityCode) parmi les profils disponibles pour ce compte.',
+    note: 'Vérifié en conditions réelles le 17/08/2026. Le compte utilisé doit avoir accès à l\'établissement voulu — il est retrouvé automatiquement par son code (entityCode) parmi les profils disponibles pour ce compte. Le 18/08/2026, une fuite entre établissements a été constatée sur /wa/booking/list (réservations d\'un autre hôtel accessible par le même compte) — un filtre de sécurité (entityId) est appliqué automatiquement ci-dessous depuis ce modèle.',
     apply: function(){
       document.getElementById('bs-endpointPath').value = '/wa/booking/list';
       document.getElementById('bs-endpointMethod').value = 'POST';
@@ -4680,6 +4684,7 @@ var PMS_PRESETS = {
       document.getElementById('bs-loginTokenHeaderName').value = 'Authorization';
       document.getElementById('bs-loginProfileListPath').value = 'data.profiles';
       document.getElementById('bs-loginProfileMatchField').value = 'entityCode';
+      document.getElementById('bs-resultEntityField').value = 'entityId';
       document.getElementById('bs-responseListPath').value = 'root';
       bsRenderMappingFields({code:'code', personEmail:'personEmail', personFirstname:'personFirstname', personLastname:'personLastname', personPhone:'', startDate:'startDate', endDate:'endDate', facilityCode:'facilityCode', facilityName:'facilityName', status:'status'});
     },
@@ -4856,6 +4861,7 @@ function bsCollectFormValues(){
     loginProfileListPath: (document.getElementById('bs-loginProfileListPath')||{}).value||'',
     loginProfileMatchField: (document.getElementById('bs-loginProfileMatchField')||{}).value||'',
     loginProfileMatchValue: (document.getElementById('bs-loginProfileMatchValue')||{}).value||'',
+    resultEntityField: (document.getElementById('bs-resultEntityField')||{}).value||'',
     responseListPath: document.getElementById('bs-responseListPath').value.trim(),
     fieldMapping: bsCollectMapping(),
     facilityEndpointPath: document.getElementById('bs-facilityEndpointPath').value.trim(),

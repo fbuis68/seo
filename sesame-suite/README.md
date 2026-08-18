@@ -191,6 +191,19 @@ s'agisse ou non d'un client Sesame :
     sont renseignés, `loginTokenPath` s'applique au profil trouvé plutôt
     qu'à la réponse entière (ex : juste `token`). Erreur explicite listant
     les valeurs disponibles si aucun profil ne correspond.
+  - **Bug corrigé — fuite entre établissements** (`resultEntityField`,
+    18/08/2026) : sur l'API Sesame, le token authentifie le **compte**, pas
+    strictement l'établissement sélectionné ci-dessus — confirmé en
+    pratique, `/wa/booking/list` a renvoyé des réservations d'un autre
+    établissement accessible par le même compte (repérable via le
+    placeholder email Sesame `{...}@{NomEtablissement}.nomail`, qui trahit
+    l'établissement réel de la réservation). Quand `resultEntityField` est
+    renseigné (dot-path dans chaque élément reçu, ex : `entityId`), on ne
+    garde que les éléments dont ce champ correspond à l'`entityId` du
+    profil sélectionné à la connexion — appliqué automatiquement par le
+    modèle de connecteur Sesame (`PMS_PRESETS.sesame`, cf. plus bas).
+    Concerne à la fois les réservations et les chambres (même mécanisme de
+    connexion, même filtre appliqué aux deux endpoints).
 - **Méthode HTTP configurable** (`endpointMethod`/`facilityEndpointMethod`,
   GET par défaut) : la plupart des API répondent à un simple GET, mais
   l'API Sesame Technology (`POST /wa/booking/list`, confirmé le 17/08/2026)

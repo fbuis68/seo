@@ -46,6 +46,7 @@ function shapeConfig(c: {
   loginProfileListPath: string | null;
   loginProfileMatchField: string | null;
   loginProfileMatchValue: string | null;
+  resultEntityField: string | null;
   responseListPath: string | null;
   fieldMapping: unknown;
   facilityEndpointPath: string | null;
@@ -89,6 +90,7 @@ function shapeConfig(c: {
     loginProfileListPath: c.loginProfileListPath || "",
     loginProfileMatchField: c.loginProfileMatchField || "",
     loginProfileMatchValue: c.loginProfileMatchValue || "",
+    resultEntityField: c.resultEntityField || "",
     responseListPath: c.responseListPath || "",
     fieldMapping: c.fieldMapping || {},
     facilityEndpointPath: c.facilityEndpointPath || "",
@@ -149,6 +151,7 @@ interface ConfigBody {
   loginProfileListPath?: string;
   loginProfileMatchField?: string;
   loginProfileMatchValue?: string;
+  resultEntityField?: string;
   responseListPath?: string;
   fieldMapping?: FieldMapping;
   facilityEndpointPath?: string;
@@ -196,6 +199,7 @@ bookingSourceRouter.post(
       loginProfileListPath: b.loginProfileListPath,
       loginProfileMatchField: b.loginProfileMatchField,
       loginProfileMatchValue: b.loginProfileMatchValue,
+      resultEntityField: b.resultEntityField,
       responseListPath: b.responseListPath,
       fieldMapping: b.fieldMapping as never,
       facilityEndpointPath: b.facilityEndpointPath,
@@ -257,6 +261,7 @@ bookingSourceRouter.post(
       loginProfileListPath: b.loginProfileListPath ?? saved?.loginProfileListPath ?? null,
       loginProfileMatchField: b.loginProfileMatchField ?? saved?.loginProfileMatchField ?? null,
       loginProfileMatchValue: b.loginProfileMatchValue ?? saved?.loginProfileMatchValue ?? null,
+      resultEntityField: b.resultEntityField ?? saved?.resultEntityField ?? null,
       responseListPath: b.responseListPath ?? saved?.responseListPath ?? null,
       fieldMapping: (b.fieldMapping ?? saved?.fieldMapping ?? {}) as never,
       facilityEndpointPath: b.facilityEndpointPath ?? saved?.facilityEndpointPath ?? null,
@@ -348,6 +353,7 @@ bookingSourceRouter.post(
       loginProfileListPath: b.loginProfileListPath ?? saved?.loginProfileListPath ?? null,
       loginProfileMatchField: b.loginProfileMatchField ?? saved?.loginProfileMatchField ?? null,
       loginProfileMatchValue: b.loginProfileMatchValue ?? saved?.loginProfileMatchValue ?? null,
+      resultEntityField: b.resultEntityField ?? saved?.resultEntityField ?? null,
       responseListPath: saved?.responseListPath ?? null,
       fieldMapping: (saved?.fieldMapping ?? {}) as never,
       facilityEndpointPath: b.facilityEndpointPath ?? saved?.facilityEndpointPath ?? null,

@@ -287,6 +287,15 @@ model BookingSourceConfig {
   loginProfileListPath   String? // dot-path du tableau de profils (ex: "data.profiles")
   loginProfileMatchField String? // nom du champ à comparer dans chaque profil (ex: "entityCode")
   loginProfileMatchValue String? // valeur recherchée (ex: "CHURCHILL")
+  // Filtre de sécurité optionnel — certaines API "login" à profils multiples
+  // (ex : Sesame Technology) n'appliquent pas de cloisonnement strict par
+  // profil sur tous leurs endpoints : le token authentifie le COMPTE, pas
+  // nécessairement l'établissement sélectionné ci-dessus, et peut renvoyer
+  // des données d'autres établissements accessibles par ce même compte
+  // (confirmé en pratique sur /wa/booking/list). Quand renseigné, seuls les
+  // éléments dont ce champ (dot-path, ex: "entityId") correspond à
+  // l'"entityId" du profil sélectionné sont conservés.
+  resultEntityField String?
   // Champ optionnel supplémentaire envoyé dans le corps JSON de connexion, en
   // plus de l'email et du mot de passe — ex: certains systèmes multi-comptes
   // exigent un identifiant de client/groupe ("client": "monGroupe").
