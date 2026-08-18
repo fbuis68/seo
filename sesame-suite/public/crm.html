@@ -363,8 +363,8 @@ input[type=checkbox]{accent-color:var(--a);cursor:pointer;width:14px;height:14px
   <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
   <div class="sidebar" id="sidebar" onclick="if(event.target.closest('.nav-item,.vt'))closeSidebar()">
     <div class="nav-lbl">Navigation</div>
+    <div class="nav-item" id="n-home" onclick="showHome()"><div class="nav-ico">⌂</div> Home</div>
     <div class="nav-item" id="n-list" onclick="showList()"><div class="nav-ico">≡</div> Vue liste</div>
-    <div class="nav-item" id="n-fiche" onclick="goFiche()"><div class="nav-ico">◉</div> Fiche client</div>
     <div class="nav-item" id="n-activite" onclick="showActivites()"><div class="nav-ico">◈</div> Activités</div>
     <div class="nav-item" id="n-contrats" onclick="showContrats()"><div class="nav-ico">◻</div> Contrats</div>
     <div class="nav-item" id="n-canaux" onclick="showCanauxPanel()"><div class="nav-ico">✉</div> Canaux</div>
@@ -593,14 +593,23 @@ function ini(n){return(n||'?').split(' ').slice(0,2).map(w=>w[0]||'').join('').t
 function today(){const d=new Date();return d.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});}
 
 // ── NAV ──
-function setNav(id){['n-list','n-fiche','n-activite','n-contrats','n-canaux','n-auto'].forEach(n=>document.getElementById(n).classList.remove('active'));document.getElementById(id).classList.add('active');}
+function setNav(id){['n-home','n-list','n-activite','n-contrats','n-canaux','n-auto'].forEach(n=>document.getElementById(n).classList.remove('active'));document.getElementById(id).classList.add('active');}
 function setVMode(m){vmode=m;document.getElementById('vt-tbl').classList.toggle('active',m==='table');document.getElementById('vt-grd').classList.toggle('active',m==='grid');if(view==='list')renderList();}
-function goFiche(){if(curId)showFiche(curId);}
 function bc(parts){document.getElementById('bc').innerHTML=parts.map((p,i)=>i<parts.length-1?`<span class="bc-link" onclick="${p.fn}">${p.label}</span><span class="bc-sep"> / </span>`:`<span class="bc-cur">${p.label}</span>`).join('');}
 function tba(html){document.getElementById('tb-actions').innerHTML=html;}
 
 // ── QUICK FILTER ──
 function qf(f,v){srch='';fDanger='';fSecteur='';fContrat='';fType='';if(f==='danger')fDanger=v;else if(f==='contrat')fContrat=v;showList();}
+
+// ════════════════════════════════════════
+// HOME — vue d'ensemble (indicateurs seuls, sans la liste des fiches)
+// ════════════════════════════════════════
+function showHome(){
+  view='home';editingId=null;setNav('n-home');bc([{label:'Home'}]);tba('');
+  document.getElementById('main').innerHTML = clients.length
+    ? renderInsights()
+    : '<div style="padding:40px;text-align:center;color:#999;font-size:13px">Aucune fiche client pour le moment.</div>';
+}
 
 // ════════════════════════════════════════
 // LIST VIEW
@@ -767,14 +776,19 @@ function renderInsights(){
 
   // ── Parcours client activés — étapes d'onboarding et rubriques de l'espace
   // client, cf. matrice sectorielle (Hôtel/Sport/Stockage/Bureaux) appliquée
-  // par défaut à la création de la fiche puis éditable individuellement ──
+  // par défaut à la création de la fiche puis éditable individuellement.
+  // Corrigé le 18/08/2026 : calculé sur les fiches type==='Client'
+  // uniquement (comme le donut "Taux d'usage des accès" juste au-dessus),
+  // pas sur clients.length qui inclut aussi les Prospects — un "parcours
+  // client activé" n'a de sens que pour un client réel, le mélange avec les
+  // prospects gonflait/faussait artificiellement le taux affiché. ──
   const ONBOARDING_STEPS=[['onbChoixChambres','Choix chambre'],['onbOccupant','Occupant'],['onbIdentite','Identité'],['onbMenage','Ménage']];
   const ESPACE_SECTIONS=[['espBoutique','Boutique'],['espPoint','Points fidélité'],['livret','Livret digital'],['gestionDemande','Demande'],['espEvenement','Évènements']];
   function journeyRows(items){
     return items.map(([k,lbl])=>{
-      const n=clients.filter(c=>c[k]).length;
-      const pct=total?Math.round(n/total*100):0;
-      return '<div class="bar-row" title="'+lbl+' : '+n+'/'+total+'">'
+      const n=clientsOnly.filter(c=>c[k]).length;
+      const pct=nClients?Math.round(n/nClients*100):0;
+      return '<div class="bar-row" title="'+lbl+' : '+n+'/'+nClients+'">'
         +'<span class="bar-lbl-wide" style="width:110px">'+esc(lbl)+'</span>'
         +'<div class="bar-track"><div class="bar-fill" style="width:'+pct+'%;background:#8a5fd6"></div></div>'
         +'<span class="bar-pct">'+pct+'%</span>'
@@ -789,7 +803,7 @@ function renderInsights(){
   return '<div class="insight-grid">'
     + '<div class="card"><div class="card-head"><div class="ch-ico">◻</div><span class="ch-title">Répartition par secteur</span></div>'+secteurHtml+'</div>'
     + '<div class="card"><div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Usage des modules Sesame</span><span style="font-size:11px;color:#aaa;margin-left:8px">'+total+' fiches</span></div>'+moduleHtml+'</div>'
-    + '<div class="card"><div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Parcours client activés</span><span style="font-size:11px;color:#aaa;margin-left:8px">'+total+' fiches</span></div>'+journeyHtml+'</div>'
+    + '<div class="card"><div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Parcours client activés</span><span style="font-size:11px;color:#aaa;margin-left:8px">'+nClients+' clients</span></div>'+journeyHtml+'</div>'
     + '<div class="card"><div class="card-head"><div class="ch-ico">◉</div><span class="ch-title">Taux d\'usage des accès</span><span style="font-size:11px;color:#aaa;margin-left:8px">'+nClients+' clients</span></div>'+accessHtml
       +(nWithUsage?'':'<div style="font-size:12px;color:#bbb;padding:4px 0;font-style:italic">Aucune donnée d\'usage réelle sur les fiches Client</div>')+'</div>'
     + '</div>';
