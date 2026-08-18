@@ -22,7 +22,7 @@
  * que garder une palette de graphique stable indépendamment du thème.
  */
 :root, html[data-theme="signature"]{
-  --sb:#2B1420;--sbb:rgba(255,255,255,.08);
+  --sb:#6B2035;--sbb:rgba(255,255,255,.1);
   --bg:#F5F3F0;--card:#FFF;--bdr:#E3DED8;
   --tx:#14121E;--mu:#7A7870;--hi:#B0ADA4;
   --a:#8B1A2E;--al:#FDEDF0;--am:#8B1A2E;--primary:#8B1A2E;--pl:#FDEDF0;
@@ -33,7 +33,7 @@
   --r:10px;--rs:6px;
 }
 html[data-theme="emeraude"]{
-  --sb:#0E2A1F;--sbb:rgba(255,255,255,.08);
+  --sb:#185C3D;--sbb:rgba(255,255,255,.1);
   --bg:#F3F5F1;--card:#FFF;--bdr:#DCE3DC;
   --tx:#12201A;--mu:#6E7C71;--hi:#A8B5AA;
   --a:#1A6B47;--al:#E9F5EE;--am:#1A6B47;--primary:#1A6B47;--pl:#E9F5EE;
@@ -44,7 +44,7 @@ html[data-theme="emeraude"]{
   --r:10px;--rs:6px;
 }
 html[data-theme="ocean"]{
-  --sb:#0E2942;--sbb:rgba(255,255,255,.08);
+  --sb:#1B4E82;--sbb:rgba(255,255,255,.1);
   --bg:#F2F4F7;--card:#FFF;--bdr:#DDE3EA;
   --tx:#101C2B;--mu:#6B7A8C;--hi:#A9B7C6;
   --a:#1A4880;--al:#EBF2FA;--am:#1A4880;--primary:#1A4880;--pl:#EBF2FA;
@@ -55,7 +55,7 @@ html[data-theme="ocean"]{
   --r:10px;--rs:6px;
 }
 html[data-theme="ardoise"]{
-  --sb:#211C3D;--sbb:rgba(255,255,255,.08);
+  --sb:#423996;--sbb:rgba(255,255,255,.1);
   --bg:#F4F4F5;--card:#FFF;--bdr:#E2E3E6;
   --tx:#17181C;--mu:#74757D;--hi:#AEAFB6;
   --a:#4F46E5;--al:#EEEDFC;--am:#4F46E5;--primary:#4F46E5;--pl:#EEEDFC;
@@ -66,7 +66,7 @@ html[data-theme="ardoise"]{
   --r:10px;--rs:6px;
 }
 html[data-theme="nuit"]{
-  --sb:#1E1620;--sbb:rgba(255,255,255,.06);
+  --sb:#3A2333;--sbb:rgba(255,255,255,.08);
   --bg:#1B1C22;--card:#24262E;--bdr:#33353E;
   --tx:#EDEDEF;--mu:#9A9CA8;--hi:#6B6D78;
   --a:#E0536E;--al:rgba(224,83,110,.14);--am:#E0536E;--primary:#E0536E;--pl:rgba(224,83,110,.14);
@@ -347,7 +347,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   <div class="ni sesame-only" data-pan="groups" onclick="showPan('groups')" style="display:none"><i class="ti ti-hierarchy-3"></i>Groupes</div>
   <div class="ni sesame-only" data-pan="subscriptions" onclick="showPan('subscriptions')" style="display:none"><i class="ti ti-rocket"></i>Souscriptions</div>
   <div class="ns">Réservations</div>
-  <div class="ni" data-pan="reservations" onclick="showPan('reservations')"><i class="ti ti-calendar-check"></i>Arrivées du jour</div>
+  <div class="ni" data-pan="reservations" onclick="showPan('reservations')"><i class="ti ti-calendar-check"></i>Réservations</div>
   <div class="ns">Identité &amp; Charte</div>
   <div class="ni" data-pan="charte" onclick="showPan('charte')"><i class="ti ti-palette"></i>Logo &amp; Couleurs</div>
   <div class="ni" data-pan="typo" onclick="showPan('typo')"><i class="ti ti-typography"></i>Typographie &amp; Textes</div>
@@ -383,11 +383,11 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 <!-- ════════════════ RÉSERVATIONS ════════════════ -->
 <div id="pan-reservations" class="pan">
   <div class="ph">
-    <h2>Arrivées du jour</h2>
-    <p>Réservations dont l'arrivée est prévue aujourd'hui, avec les options retenues par le client au check-in éco (ménage, boutique, taxe de séjour…).</p>
+    <h2>Réservations</h2>
+    <p>Arrivées du jour par défaut, avec les options retenues par le client au check-in éco (ménage, boutique, taxe de séjour…) — cochez "Toutes les réservations" pour voir l'historique complet.</p>
   </div>
   <div class="ca">
-    <div class="ch"><i class="ti ti-calendar-check"></i>Arrivées — <span id="resa-count">0</span>
+    <div class="ch"><i class="ti ti-calendar-check"></i>Réservations — <span id="resa-count">0</span>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--mu);margin-left:14px;cursor:pointer;white-space:nowrap">
         <input type="checkbox" id="resa-showAll" onchange="renderReservations()"> Toutes les réservations (y compris expirées)
       </label>
@@ -9232,7 +9232,7 @@ var HELP_TEXT = {
   hotels: "Gérez tous les établissements Sesame depuis un seul endroit : création, configuration et supervision multi-hôtels.",
   groups: "Regroupez plusieurs établissements d'une même enseigne pour mutualiser la fidélité et les politiques communes.",
   subscriptions: "Suivez les demandes d'inscription, activez les essais et gérez les modules souscrits par chaque client.",
-  reservations: "Préparez la journée en un coup d'œil : qui arrive aujourd'hui et quelles options il a retenues au check-in (ménage, boutique, taxe de séjour), sans consulter chaque réservation une par une.",
+  reservations: "Préparez la journée en un coup d'œil : qui arrive aujourd'hui et quelles options il a retenues au check-in (ménage, boutique, taxe de séjour) — ou affichez tout l'historique et modifiez une réservation directement.",
   charte: "Personnalisez les couleurs et le logo pour que l'espace client reflète l'identité visuelle de votre établissement.",
   typo: "Adaptez les textes affichés aux clients sans toucher au code.",
   hotel: "Configurez les informations générales de l'hôtel et activez ou non chaque étape du parcours check-in.",
