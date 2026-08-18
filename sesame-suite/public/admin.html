@@ -113,7 +113,7 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;font-size:14px;color:var(
 .info-popover .ip-body{color:var(--mu)}
 /* MAIN */
 .mn{overflow-y:auto;background:var(--bg)}
-.ct{padding:24px 28px;max-width:1080px}
+.ct{padding:24px 28px;max-width:1400px}
 /* PAGE */
 .ph{margin-bottom:20px}
 .ph h2{font-family:'DM Serif Display',serif;font-weight:400;font-size:22px;margin-bottom:3px}
@@ -2929,8 +2929,16 @@ function toggleThemePicker(anchorEl){
 
 // ── Config — chargée/écrite via l'API (remplace loadCfg()/saveCfg() localStorage) ──
 async function loadCfg(){
-  var w = withEntityCode('/wa/entityModuleConfig/list');
-  var r = await fetch(API_BASE+w.url);
+  // GET /entityModuleConfig/list est volontairement public (le parcours
+  // client en a besoin sans JWT admin) — withEntityCode() n'ajoute
+  // entityCode que pour un compte "sesame" (bascule multi-établissements),
+  // donc un compte "hotel" partait sans aucun moyen d'identifier son
+  // établissement et le serveur retombait sur l'établissement par défaut
+  // (Churchill) pour TOUT compte hôtel. On force ici le code de
+  // l'établissement actif quel que soit le rôle.
+  var entityCode = ACTIVE_ENTITY_CODE || HOME_ENTITY_CODE;
+  var url = '/wa/entityModuleConfig/list' + (entityCode ? '?entityCode='+encodeURIComponent(entityCode) : '');
+  var r = await fetch(API_BASE+url);
   if(!r.ok) throw new Error('HTTP '+r.status);
   var data = await r.json();
   deepMerge(CFG, data);

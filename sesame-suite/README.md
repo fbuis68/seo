@@ -623,6 +623,23 @@ de 0 au lieu de la taille de son contenu ; il se faisait donc écraser par
     pour Émeraude, bleu pour Océan, indigo pour Ardoise, prune pour Nuit),
     en gardant une luminosité assez basse pour le contraste avec le texte
     blanc de la navigation.
+  - **Largeur du contenu** (`.ct{max-width}`) : passée de 1080px à 1400px —
+    sur un écran large, l'ancienne largeur laissait beaucoup d'espace vide à
+    droite, particulièrement visible sur Accueil (la grille "Indicateurs
+    réels" passe de 3-4 tuiles par ligne à 7 sur un écran 1920px).
+
+- **Bug corrigé — config d'un compte hôtel affichant celle d'un autre
+  établissement** (`loadCfg()`) : `GET /entityModuleConfig/list` est
+  volontairement public côté serveur (le parcours client en a besoin sans
+  JWT admin), donc `resolveEntity()` retombe sur l'établissement par défaut
+  quand ni JWT ni `entityCode` ne sont fournis. Côté front, `loadCfg()`
+  passait par `withEntityCode()`, qui n'ajoute `entityCode` que pour un
+  compte **sesame** (bascule multi-établissements) — un compte **hotel**
+  partait donc sans aucun moyen d'identifier son propre établissement, et
+  voyait systématiquement la configuration (nom, couleurs, tarifs, gains…)
+  de l'établissement par défaut au lieu de la sienne. Corrigé en forçant
+  l'`entityCode` de l'établissement actif dans cet appel, quel que soit le
+  rôle du compte.
 
 Également non couvert : l'app ménage (`sesame_menage.html`, application
 séparée pour les agents de ménage sur le terrain). La base de données est
