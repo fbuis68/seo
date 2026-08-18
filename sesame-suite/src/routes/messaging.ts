@@ -22,9 +22,17 @@ function isChannel(v: unknown): v is Channel {
   return v === "email" || v === "sms" || v === "whatsapp";
 }
 
-function shapeChannelConfig(c: { accountSid: string | null; authToken: string | null; fromNumber: string | null } | null) {
+function shapeChannelConfig(
+  c: { provider: string; accountSid: string | null; authToken: string | null; fromNumber: string | null; apiKey: string | null } | null
+) {
   if (!c) return null;
-  return { accountSid: c.accountSid || "", authToken: c.authToken || "", fromNumber: c.fromNumber || "" };
+  return {
+    provider: c.provider || "twilio",
+    accountSid: c.accountSid || "",
+    authToken: c.authToken || "",
+    fromNumber: c.fromNumber || "",
+    apiKey: c.apiKey || "",
+  };
 }
 
 messagingRouter.get(
@@ -40,9 +48,11 @@ messagingRouter.get(
 
 interface ChannelConfigBody {
   channel: string;
-  accountSid: string;
-  authToken: string;
-  fromNumber: string;
+  provider?: string;
+  accountSid?: string;
+  authToken?: string;
+  fromNumber?: string;
+  apiKey?: string;
 }
 
 messagingRouter.post(
@@ -52,10 +62,24 @@ messagingRouter.post(
     const entityId = await resolveScope(req);
     const b = req.body as ChannelConfigBody;
     if (!isSmsChannel(b.channel)) throw new HttpError(400, "channel doit être sms ou whatsapp");
+    // DocPartner/SMSPartner ne couvre que le SMS, pas le WhatsApp — un choix
+    // de provider "smspartner" sur le canal whatsapp retombe sur Twilio.
+    const provider = b.provider === "smspartner" && b.channel === "sms" ? "smspartner" : "twilio";
+    if (provider === "smspartner") {
+      if (!b.apiKey || !b.apiKey.trim()) throw new HttpError(400, "Clé API DocPartner requise");
+      const row = await upsertChannelConfig(entityId, b.channel, {
+        provider,
+        apiKey: b.apiKey.trim(),
+        fromNumber: (b.fromNumber || "").trim(),
+      });
+      res.json(shapeChannelConfig(row));
+      return;
+    }
     if (!b.accountSid || !b.accountSid.trim()) throw new HttpError(400, "Account SID requis");
     if (!b.authToken) throw new HttpError(400, "Auth Token requis");
     if (!b.fromNumber || !b.fromNumber.trim()) throw new HttpError(400, "Numéro expéditeur requis");
     const row = await upsertChannelConfig(entityId, b.channel, {
+      provider,
       accountSid: b.accountSid.trim(),
       authToken: b.authToken,
       fromNumber: b.fromNumber.trim(),

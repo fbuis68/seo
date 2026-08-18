@@ -485,10 +485,26 @@ de 0 au lieu de la taille de son contenu ; il se faisait donc écraser par
   sinon l'hôtel courant, comme partout ailleurs) :
   - **Email** : SMTP classique (`src/lib/email.ts`, endpoints
     `/wa/smtpConfig/*`).
-  - **SMS et WhatsApp** : un seul fournisseur, **Twilio**, dont l'API REST
-    couvre les deux canaux avec les mêmes identifiants de compte — c'est ce
-    qui permet la convergence (`src/lib/sms.ts`, endpoints
-    `/wa/channelConfig/*`, appel HTTP direct, sans SDK).
+  - **SMS et WhatsApp** : **Twilio** couvre les deux canaux avec les mêmes
+    identifiants de compte (`src/lib/sms.ts`, endpoints `/wa/channelConfig/*`,
+    appel HTTP direct, sans SDK). Depuis le 18/08/2026, le canal SMS peut
+    aussi être configuré sur **DocPartner (SMSPartner.fr)**, un second
+    provider choisi via un sélecteur "Fournisseur" dans la carte SMS de
+    l'onglet Canaux (CRM et back-office) — intégré à partir de la
+    documentation officielle fournie par l'utilisateur (`api.smspartner.fr/v1`,
+    endpoint `POST /send`). Ce partenaire ne couvre que le SMS (pas de
+    WhatsApp) et s'authentifie avec une **clé API unique** dans le corps JSON
+    plutôt qu'un couple Account SID/Auth Token + en-tête Basic comme Twilio —
+    d'où un champ `apiKey` dédié sur `ChannelConfig` et un client HTTP
+    (`sendViaSmsPartner()`) distinct de `sendViaTwilio()`, choisi par
+    `sendViaProvider()` selon `ChannelConfig.provider` (`twilio` par défaut,
+    `smspartner` uniquement valide sur le canal `sms`). Le "Numéro
+    expéditeur" devient un nom d'émetteur alphanumérique (3-11 caractères,
+    ex. `Churchill`) chez ce partenaire, la plateforme utilisant sinon un
+    shortcode opérateur par défaut. Changer de fournisseur réécrit
+    entièrement la ligne `ChannelConfig` (SID/Token remis à `null` en passant
+    à DocPartner, et vice-versa) pour éviter que des identifiants de l'ancien
+    provider ne traînent silencieusement en base.
   - **Modèles** : un seul modèle de gabarit `{{variable}}` par canal
     (`MessageTemplate`, endpoints `/wa/messageTemplate/*`) — objet+HTML pour
     l'email, texte brut pour SMS/WhatsApp.

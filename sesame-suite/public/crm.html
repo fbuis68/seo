@@ -1427,7 +1427,7 @@ async function loadCanauxPanelData(){
 
 function renderCanauxPanel(){
   const s = SMTP_CFG || {host:'',port:587,secure:false,username:'',password:'',fromName:'',fromEmail:''};
-  const sms = SMS_CFG || {accountSid:'',authToken:'',fromNumber:''};
+  const sms = SMS_CFG || {provider:'twilio',accountSid:'',authToken:'',fromNumber:'',apiKey:''};
   const wa = WA_CFG || {accountSid:'',authToken:'',fromNumber:''};
   const tpls = MSG_TEMPLATES.filter(t=>t.channel===tplChannelTab);
   document.getElementById('main').innerHTML = `
@@ -1450,10 +1450,19 @@ function renderCanauxPanel(){
   </div>
   <div class="two-col">
     <div class="card">
-      <div class="card-head"><div class="ch-ico">✆</div><span class="ch-title">SMS (Twilio)</span></div>
-      <div class="ff"><label>Account SID</label><input id="sms-sid" value="${esc(sms.accountSid)}" placeholder="ACxxxxxxxxxxxxxxxx"></div>
-      <div class="ff" style="margin-top:8px"><label>Auth Token</label><input type="password" id="sms-token" value="${esc(sms.authToken)}" placeholder="${sms.authToken?'':'••••••••'}"></div>
-      <div class="ff" style="margin-top:8px"><label>Numéro expéditeur</label><input id="sms-from" value="${esc(sms.fromNumber)}" placeholder="+33612345678"></div>
+      <div class="card-head"><div class="ch-ico">✆</div><span class="ch-title">SMS</span></div>
+      <div class="ff"><label>Fournisseur</label><select id="sms-provider" onchange="chanProviderChanged()">
+        <option value="twilio" ${sms.provider!=='smspartner'?'selected':''}>Twilio</option>
+        <option value="smspartner" ${sms.provider==='smspartner'?'selected':''}>DocPartner (SMSPartner.fr)</option>
+      </select></div>
+      <div id="sms-fields-twilio" style="${sms.provider==='smspartner'?'display:none':''}">
+        <div class="ff" style="margin-top:8px"><label>Account SID</label><input id="sms-sid" value="${esc(sms.accountSid)}" placeholder="ACxxxxxxxxxxxxxxxx"></div>
+        <div class="ff" style="margin-top:8px"><label>Auth Token</label><input type="password" id="sms-token" value="${esc(sms.authToken)}" placeholder="${sms.authToken?'':'••••••••'}"></div>
+      </div>
+      <div id="sms-fields-smspartner" style="${sms.provider==='smspartner'?'':'display:none'}">
+        <div class="ff" style="margin-top:8px"><label>Clé API</label><input type="password" id="sms-apikey" value="${esc(sms.apiKey)}" placeholder="${sms.apiKey?'':'••••••••'}"></div>
+      </div>
+      <div class="ff" style="margin-top:8px"><label id="sms-from-label">${sms.provider==='smspartner'?"Nom d'expéditeur (3-11 caractères)":'Numéro expéditeur'}</label><input id="sms-from" value="${esc(sms.fromNumber)}" placeholder="${sms.provider==='smspartner'?'MonHotel':'+33612345678'}"></div>
       <div class="modal-footer" style="border-top:none;padding-top:8px;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="saveChannelConfig('sms')">Enregistrer</button>
         <input id="sms-test-to" placeholder="+33612345678" class="test-inp">
@@ -1512,10 +1521,22 @@ async function testSmtpConfig(){
   }catch(e){ flash(e.message||'Échec de l\'envoi — vérifiez la configuration'); }
 }
 
+// DocPartner (SMSPartner.fr) — provider SMS alternatif à Twilio, sans
+// WhatsApp. La clé API remplace le couple SID/Token, et le "Numéro
+// expéditeur" devient un nom d'émetteur alphanumérique (3-11 caractères).
+function chanProviderChanged(){
+  const isSp = document.getElementById('sms-provider').value === 'smspartner';
+  document.getElementById('sms-fields-twilio').style.display = isSp ? 'none' : '';
+  document.getElementById('sms-fields-smspartner').style.display = isSp ? '' : 'none';
+  document.getElementById('sms-from-label').textContent = isSp ? "Nom d'expéditeur (3-11 caractères)" : 'Numéro expéditeur';
+  document.getElementById('sms-from').placeholder = isSp ? 'MonHotel' : '+33612345678';
+}
+
 async function saveChannelConfig(channel){
   const p = channel==='sms'?'sms':'wa';
   const g=i=>(document.getElementById(i)||{value:''}).value;
   const body={channel:channel, accountSid:g(p+'-sid').trim(), authToken:g(p+'-token'), fromNumber:g(p+'-from').trim(), scope:'crm'};
+  if(p==='sms'){ body.provider = g('sms-provider'); body.apiKey = g('sms-apikey').trim(); }
   try{
     var r = await apiFetch('/wa/channelConfig/update', {method:'POST', body:JSON.stringify(body)});
     var data = await r.json();

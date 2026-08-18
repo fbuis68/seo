@@ -749,10 +749,11 @@ model ChannelConfig {
   entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
   channel    String // sms | whatsapp
-  provider   String  @default("twilio")
+  provider   String  @default("twilio") // twilio | smspartner (SMS uniquement — pas de WhatsApp chez ce partenaire)
   accountSid String?
   authToken  String?
-  fromNumber String? // numéro Twilio (SMS) ou "whatsapp:+14155238886" (WhatsApp)
+  fromNumber String? // numéro Twilio (SMS/WhatsApp) ou nom d'émetteur DocPartner/SMSPartner (SMS, 3-11 car.)
+  apiKey     String? // clé API DocPartner/SMSPartner.fr — auth par clé unique (provider=smspartner)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

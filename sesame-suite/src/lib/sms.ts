@@ -11,6 +11,7 @@ import { HttpError } from "./asyncHandler";
  */
 
 const TWILIO_API_BASE = "https://api.twilio.com/2010-04-01";
+const SMSPARTNER_API_BASE = "https://api.smspartner.fr/v1";
 
 export type SmsChannel = "sms" | "whatsapp";
 
@@ -25,17 +26,28 @@ export async function getChannelConfig(entityId: string | null, channel: SmsChan
 export async function upsertChannelConfig(
   entityId: string | null,
   channel: SmsChannel,
-  data: { accountSid: string; authToken: string; fromNumber: string }
+  data: { provider?: string; accountSid?: string; authToken?: string; fromNumber?: string; apiKey?: string }
 ) {
+  // Le provider change la forme des identifiants stockés (SID+Token pour
+  // Twilio, une seule clé pour DocPartner/SMSPartner) : on réécrit toujours
+  // la ligne complète pour éviter qu'un changement de provider ne laisse des
+  // identifiants de l'ancien provider traîner dans la ligne.
+  const payload = {
+    provider: data.provider || "twilio",
+    accountSid: data.accountSid ?? null,
+    authToken: data.authToken ?? null,
+    fromNumber: data.fromNumber ?? null,
+    apiKey: data.apiKey ?? null,
+  };
   const existingRows = await prisma.channelConfig.findMany({ where: { entityId, channel }, orderBy: { updatedAt: "desc" } });
   if (existingRows.length > 0) {
     const [primary, ...duplicates] = existingRows;
     if (duplicates.length) {
       await prisma.channelConfig.deleteMany({ where: { id: { in: duplicates.map((d) => d.id) } } });
     }
-    return prisma.channelConfig.update({ where: { id: primary.id }, data });
+    return prisma.channelConfig.update({ where: { id: primary.id }, data: payload });
   }
-  return prisma.channelConfig.create({ data: { entityId, channel, provider: "twilio", ...data } });
+  return prisma.channelConfig.create({ data: { entityId, channel, ...payload } });
 }
 
 async function sendViaTwilio(
@@ -90,15 +102,79 @@ async function sendViaTwilio(
   }
 }
 
+/**
+ * DocPartner / SMSPartner.fr — partenaire SMS de Sesame Technology, intégré
+ * le 18/08/2026 à partir de la documentation officielle fournie par
+ * l'utilisateur (api.smspartner.fr/v1, endpoint /send). SMS uniquement, pas
+ * de canal WhatsApp chez ce partenaire. Authentification par une clé API
+ * unique passée dans le corps JSON — pas de couple SID/Token ni de header
+ * Authorization comme chez Twilio, d'où un client HTTP distinct.
+ */
+async function sendViaSmsPartner(cfg: { apiKey: string | null; fromNumber: string | null }, to: string, body: string) {
+  if (!cfg.apiKey) {
+    throw new HttpError(400, "Configuration SMS incomplète (clé API DocPartner manquante)");
+  }
+  const payload: Record<string, unknown> = { apiKey: cfg.apiKey, phoneNumbers: to, message: body };
+  if (cfg.fromNumber) payload.sender = cfg.fromNumber;
+
+  let res: Response;
+  try {
+    res = await fetch(`${SMSPARTNER_API_BASE}/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    throw new HttpError(502, "Échec de connexion à l'API DocPartner : " + String(err instanceof Error ? err.message : err));
+  }
+
+  // Lu en texte une seule fois puis parsé manuellement (plutôt que
+  // res.json() + catch → res.text() sur le corps déjà consommé, qui lève
+  // "body used already" si le JSON est invalide) : l'API renvoie du JSON
+  // structuré dans tous les cas documentés, mais on reste tolérant.
+  const text = await res.text();
+  let j: { success?: boolean; code?: number; message_id?: number; errors?: { elementId?: string; message?: string }[] } = {};
+  try {
+    j = JSON.parse(text);
+  } catch {
+    // corps non-JSON, géré ci-dessous via `text` brut
+  }
+
+  if (!res.ok || j.success === false) {
+    const detail = j.errors?.length
+      ? j.errors
+          .map((e) => e.message)
+          .filter(Boolean)
+          .join(" ; ")
+      : j.code !== undefined
+        ? `code DocPartner ${j.code}`
+        : text || `HTTP ${res.status}`;
+    throw new HttpError(502, `Échec de l'envoi DocPartner (HTTP ${res.status}) : ${detail}`);
+  }
+}
+
+async function sendViaProvider(
+  cfg: { provider: string; accountSid: string | null; authToken: string | null; fromNumber: string | null; apiKey: string | null },
+  to: string,
+  body: string,
+  channel: SmsChannel
+) {
+  if (channel === "sms" && cfg.provider === "smspartner") {
+    await sendViaSmsPartner(cfg, to, body);
+    return;
+  }
+  await sendViaTwilio(cfg, to, body, channel);
+}
+
 export async function sendTestMessage(entityId: string | null, channel: SmsChannel, to: string) {
   const cfg = await getChannelConfig(entityId, channel);
   if (!cfg) throw new HttpError(400, `Aucune configuration ${channel === "whatsapp" ? "WhatsApp" : "SMS"} pour cette portée`);
-  await sendViaTwilio(cfg, to, `Sesame Suite — test de configuration ${channel === "whatsapp" ? "WhatsApp" : "SMS"}.`, channel);
+  await sendViaProvider(cfg, to, `Sesame Suite — test de configuration ${channel === "whatsapp" ? "WhatsApp" : "SMS"}.`, channel);
 }
 
 /** Envoi brut, appelé par messaging.ts après rendu du modèle. */
 export async function sendChannelRaw(entityId: string | null, channel: SmsChannel, to: string, body: string) {
   const cfg = await getChannelConfig(entityId, channel);
   if (!cfg) throw new HttpError(400, `Aucune configuration ${channel === "whatsapp" ? "WhatsApp" : "SMS"} pour cette portée`);
-  await sendViaTwilio(cfg, to, body, channel);
+  await sendViaProvider(cfg, to, body, channel);
 }

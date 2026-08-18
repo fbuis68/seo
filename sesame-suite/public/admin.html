@@ -1569,10 +1569,21 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 
   <div class="g2">
     <div class="ca">
-      <div class="ch"><i class="ti ti-message"></i>SMS (Twilio)</div>
-      <div class="fi"><label class="lb">Account SID</label><input type="text" id="sms-sid" placeholder="ACxxxxxxxxxxxxxxxx" autocomplete="off"></div>
-      <div class="fi"><label class="lb">Auth Token</label><input type="password" id="sms-token" autocomplete="off"></div>
-      <div class="fi"><label class="lb">Numéro expéditeur</label><input type="text" id="sms-from" placeholder="+33612345678"></div>
+      <div class="ch"><i class="ti ti-message"></i>SMS</div>
+      <div class="fi"><label class="lb">Fournisseur</label>
+        <select id="sms-provider" onchange="chanProviderChanged()">
+          <option value="twilio">Twilio</option>
+          <option value="smspartner">DocPartner (SMSPartner.fr)</option>
+        </select>
+      </div>
+      <div id="sms-fields-twilio">
+        <div class="fi"><label class="lb">Account SID</label><input type="text" id="sms-sid" placeholder="ACxxxxxxxxxxxxxxxx" autocomplete="off"></div>
+        <div class="fi"><label class="lb">Auth Token</label><input type="password" id="sms-token" autocomplete="off"></div>
+      </div>
+      <div id="sms-fields-smspartner" style="display:none">
+        <div class="fi"><label class="lb">Clé API</label><input type="password" id="sms-apikey" autocomplete="off"></div>
+      </div>
+      <div class="fi"><label class="lb" id="sms-from-label">Numéro expéditeur</label><input type="text" id="sms-from" placeholder="+33612345678"></div>
       <div class="brow" style="align-items:center;flex-wrap:wrap">
         <button class="btn btn-p btn-s" onclick="chanSaveConfig('sms')"><i class="ti ti-device-floppy"></i> Enregistrer</button>
         <input type="text" id="sms-test-to" placeholder="+33612345678" style="max-width:150px">
@@ -4945,12 +4956,28 @@ async function emlInit(){
   await emlLoadTemplates();
 }
 
+// DocPartner (SMSPartner.fr) — provider SMS alternatif à Twilio, sans
+// WhatsApp. La clé API remplace le couple SID/Token, et le "Numéro
+// expéditeur" devient un nom d'émetteur alphanumérique (3-11 caractères).
+function chanProviderChanged(){
+  var isSp = document.getElementById('sms-provider').value === 'smspartner';
+  document.getElementById('sms-fields-twilio').style.display = isSp ? 'none' : '';
+  document.getElementById('sms-fields-smspartner').style.display = isSp ? '' : 'none';
+  document.getElementById('sms-from-label').textContent = isSp ? "Nom d'expéditeur (3-11 caractères)" : 'Numéro expéditeur';
+  document.getElementById('sms-from').placeholder = isSp ? 'MonHotel' : '+33612345678';
+}
+
 async function chanLoadConfig(channel){
   var p = channel==='sms' ? 'sms' : 'wa';
   try{
     var r = await adminFetch('/wa/channelConfig/get?channel='+channel);
     var cfg = r.ok ? await r.json() : null;
-    cfg = cfg || {accountSid:'',authToken:'',fromNumber:''};
+    cfg = cfg || {provider:'twilio',accountSid:'',authToken:'',fromNumber:'',apiKey:''};
+    if(p==='sms'){
+      document.getElementById('sms-provider').value = cfg.provider||'twilio';
+      document.getElementById('sms-apikey').value = cfg.apiKey||'';
+      chanProviderChanged();
+    }
     document.getElementById(p+'-sid').value = cfg.accountSid||'';
     document.getElementById(p+'-token').value = cfg.authToken||'';
     document.getElementById(p+'-from').value = cfg.fromNumber||'';
@@ -4965,6 +4992,10 @@ async function chanSaveConfig(channel){
     authToken: document.getElementById(p+'-token').value,
     fromNumber: document.getElementById(p+'-from').value.trim(),
   };
+  if(p==='sms'){
+    body.provider = document.getElementById('sms-provider').value;
+    body.apiKey = document.getElementById('sms-apikey').value.trim();
+  }
   try{
     var r = await adminFetch('/wa/channelConfig/update', {method:'POST', body:JSON.stringify(body)});
     var data = await r.json();
