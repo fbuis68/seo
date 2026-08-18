@@ -239,13 +239,24 @@ model BookingSourceConfig {
 
   enabled      Boolean @default(false)
   sourceName   String? // libellé libre (ex: "Mews", "Opera", "PMS interne")
+  // Modèle de connecteur appliqué côté interface (panneau "Intégration
+  // réservations") — purement informatif pour l'UI (savoir quelle section
+  // "identifiants" afficher et quels réglages techniques pré-remplir/masquer
+  // par défaut) : none | sesame | mews | opera | thais. Le reste des champs
+  // ci-dessous reste la seule source de vérité utilisée par le connecteur.
+  presetId     String? @default("none")
   baseUrl      String?
   endpointPath String? // ex: "/v1/bookings" — concaténé à baseUrl
   // La plupart des API répondent à un simple GET, mais certaines (ex : API
   // Sesame Technology, /wa/booking/list) exigent un POST avec un corps
   // application/x-www-form-urlencoded — souvent juste de la pagination
   // (start/limit). endpointBodyParams n'est envoyé que si endpointMethod="POST".
+  // endpointBodyFormat détermine l'encodage du corps POST : "form"
+  // (application/x-www-form-urlencoded, ex: Sesame) ou "json" (corps JSON —
+  // ex: API Mews, dont l'authentification par ClientToken/AccessToken se
+  // fait dans le corps de chaque appel plutôt qu'un en-tête ou un jeton).
   endpointMethod     String? @default("GET") // GET | POST
+  endpointBodyFormat String? @default("form") // form | json
   endpointBodyParams Json? // ex: {"start":"0","limit":"1000"}
 
   authType          String  @default("none") // none | apiKey | bearer | basic | login
@@ -296,6 +307,7 @@ model BookingSourceConfig {
   // "facilityCode" des réservations de retrouver la bonne chambre.
   facilityEndpointPath     String? // ex: "/ws/facility/list" — concaténé à baseUrl
   facilityEndpointMethod     String? @default("GET") // GET | POST — cf. endpointMethod
+  facilityEndpointBodyFormat String? @default("form") // form | json — cf. endpointBodyFormat
   facilityEndpointBodyParams Json?
   facilityResponseListPath String?
   // {code, name, floor, category, capacity, surface} -> chemin dot-path.

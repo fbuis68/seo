@@ -206,6 +206,37 @@ s'agisse ou non d'un client Sesame :
   et une chambre par réservation, seule la première valeur est conservée
   (email, prénom, nom, téléphone, code chambre) plutôt que d'importer une
   chaîne agrégée invalide.
+- **Modèle de connecteur** (`PMS_PRESETS` dans `admin.html`, champ
+  `presetId`) : un menu "Système source" (Sesame Technology / Mews / Opera
+  Cloud (OHIP) / Thaïs / Personnalisé) applique automatiquement les réglages
+  techniques fixes d'un système connu (chemins d'API, méthode, mapping des
+  champs) et replie tout le formulaire technique sous "Réglages techniques
+  avancés" — seuls les identifiants propres à ce client (compte, mot de
+  passe, code établissement...) restent visibles, dans une section
+  "Identifiants" compacte qui écrit directement dans les champs techniques
+  sous-jacents (aucun champ dupliqué côté serveur). "Personnalisé" laisse le
+  formulaire complet visible comme avant. Fiabilité inégale selon le
+  système, assumée explicitement dans l'encart affiché sous le menu :
+  - **Sesame Technology** : entièrement vérifié en conditions réelles le
+    17/08/2026 (voir plus haut).
+  - **Mews** : chemins et authentification (ClientToken/AccessToken/Client
+    dans le corps JSON, cf. `endpointBodyFormat="json"` ci-dessous)
+    conformes à la documentation Connector API publique, mais l'API ne
+    renvoie pas l'email/nom du client dans la liste des réservations (il
+    faudrait un appel supplémentaire vers `/customers/getAll`, non pris en
+    charge) — l'import échoue tant que ce champ obligatoire n'est pas
+    mappé. Encart orange dédié plutôt que de masquer cette limite.
+  - **Opera Cloud (OHIP)** et **Thaïs** : préparent uniquement les
+    identifiants (aucun chemin d'API deviné/inventé) — OHIP utilise un vrai
+    flux OAuth2 par formulaire (`grant_type=password` + en-têtes
+    `x-hotelid`/`x-app-key`) que ce connecteur ne sait pas encore réaliser ;
+    la documentation Thaïs fournie ne menait pas à une page consultable.
+    Encart orange explicite : connexion non fonctionnelle sans évolution du
+    connecteur ou confirmation du fournisseur.
+- **Corps JSON en POST** (`endpointBodyFormat`/`facilityEndpointBodyFormat`,
+  "form" par défaut) : à côté du formulaire URL-encodé existant (Sesame),
+  certaines API (Mews) exigent un corps JSON — mêmes `endpointBodyParams`,
+  sérialisés différemment selon ce réglage.
 - Mapping des champs par chemin JSON libre (ex : `guest.email`,
   `stay.check_in`) — aucune forme de réponse n'est supposée à l'avance,
   contrairement à l'ancien panneau qui ne comprenait que le format Sesame.

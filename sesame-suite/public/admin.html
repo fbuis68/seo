@@ -1378,8 +1378,32 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     <p>Récupérez automatiquement les réservations depuis n'importe quel système externe (PMS, moteur de réservation…) — client Sesame ou non. L'appel se fait depuis le serveur, pas depuis le navigateur : aucun problème de CORS ni de proxy à installer.</p>
   </div>
 
+  <!-- Modèle de connecteur — choisir un PMS préconfiguré n'affiche plus que
+       les identifiants propres à ce client (compte, mot de passe, code
+       établissement…) ; tous les réglages techniques fixes (URL d'API,
+       chemins, mapping des champs) sont appliqués automatiquement et
+       repliés sous "Réglages techniques avancés" ci-dessous. -->
+  <div class="ca">
+    <div class="ch"><i class="ti ti-plug-connected"></i>Modèle de connecteur</div>
+    <div class="fi">
+      <label class="lb">Système source</label>
+      <select id="bs-preset" onchange="bsApplyPreset(true)">
+        <option value="none">Personnalisé — tous les réglages visibles</option>
+        <option value="sesame">Sesame Technology</option>
+        <option value="mews">Mews</option>
+        <option value="opera">Opera Cloud (OHIP)</option>
+        <option value="thais">Thaïs</option>
+      </select>
+    </div>
+    <div id="bs-preset-note"></div>
+    <div id="bs-preset-vars"></div>
+  </div>
+
   <!-- Réglages de connexion -->
   <div class="ca" id="bs-status-banner" style="display:none;margin-bottom:16px"></div>
+
+  <details id="bs-advanced-tech" open>
+  <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">Réglages techniques avancés</summary>
 
   <div class="ca">
     <div class="ch"><i class="ti ti-plug"></i>Connexion</div>
@@ -1409,12 +1433,16 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     <div class="g2">
       <div class="fi">
         <label class="lb">Méthode HTTP de l'endpoint</label>
-        <select id="bs-endpointMethod"><option value="GET">GET</option><option value="POST">POST (formulaire)</option></select>
+        <select id="bs-endpointMethod"><option value="GET">GET</option><option value="POST">POST</option></select>
       </div>
       <div class="fi">
-        <label class="lb">Paramètres du corps si POST (un par ligne : clé=valeur)</label>
-        <textarea id="bs-endpointBodyParams" rows="2" placeholder="start=0&#10;limit=1000"></textarea>
+        <label class="lb">Format du corps si POST</label>
+        <select id="bs-endpointBodyFormat"><option value="form">Formulaire (application/x-www-form-urlencoded)</option><option value="json">JSON</option></select>
       </div>
+    </div>
+    <div class="fi">
+      <label class="lb">Paramètres du corps si POST (un par ligne : clé=valeur)</label>
+      <textarea id="bs-endpointBodyParams" rows="2" placeholder="start=0&#10;limit=1000"></textarea>
     </div>
     <div class="fi">
       <label class="lb">Type d'authentification</label>
@@ -1455,12 +1483,16 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     <div class="g2">
       <div class="fi">
         <label class="lb">Méthode HTTP de l'endpoint</label>
-        <select id="bs-facilityEndpointMethod"><option value="GET">GET</option><option value="POST">POST (formulaire)</option></select>
+        <select id="bs-facilityEndpointMethod"><option value="GET">GET</option><option value="POST">POST</option></select>
       </div>
       <div class="fi">
-        <label class="lb">Paramètres du corps si POST (un par ligne : clé=valeur)</label>
-        <textarea id="bs-facilityEndpointBodyParams" rows="2" placeholder="start=0&#10;limit=1000"></textarea>
+        <label class="lb">Format du corps si POST</label>
+        <select id="bs-facilityEndpointBodyFormat"><option value="form">Formulaire (application/x-www-form-urlencoded)</option><option value="json">JSON</option></select>
       </div>
+    </div>
+    <div class="fi">
+      <label class="lb">Paramètres du corps si POST (un par ligne : clé=valeur)</label>
+      <textarea id="bs-facilityEndpointBodyParams" rows="2" placeholder="start=0&#10;limit=1000"></textarea>
     </div>
     <div class="fi">
       <label class="lb">Chemin vers la liste des chambres dans la réponse</label>
@@ -1473,6 +1505,8 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       <button class="btn btn-p btn-s" onclick="bsImportFacilitiesNow()"><i class="ti ti-download"></i> Importer les chambres</button>
     </div>
   </div>
+
+  </details>
 
   <!-- Synchronisation -->
   <div class="ca">
@@ -4588,6 +4622,163 @@ function bsTextToParams(text){
   return obj;
 }
 
+/**
+ * Modèles de connecteur — "Modèle de connecteur" du panneau "Intégration
+ * réservations". Chaque preset sépare deux choses :
+ * - apply() : réglages TECHNIQUES fixes, identiques pour tous les clients
+ *   de ce système (chemins d'API, méthode, mapping des champs...) — appliqué
+ *   uniquement quand l'utilisateur choisit activement ce modèle (pas au
+ *   rechargement d'une config déjà enregistrée, pour ne jamais écraser des
+ *   valeurs personnalisées).
+ * - vars : les VARIABLES propres à ce client (identifiants, code
+ *   établissement...) — seuls champs affichés en dehors de "Réglages
+ *   techniques avancés". Chaque var pointe soit directement vers un champ
+ *   technique existant (target), soit vers une clé à fusionner dans le
+ *   corps de requête (bodyParamKey, ex : jetons Mews envoyés dans le JSON
+ *   de chaque appel plutôt qu'un en-tête).
+ *
+ * Sesame Technology : entièrement vérifié en conditions réelles le
+ * 17/08/2026 contre newtest.sesame.technology (voir README). Mews : base
+ * conforme à la documentation Connector API (ClientToken/AccessToken/Client
+ * dans le corps JSON de chaque appel), mais l'email/nom du client n'est pas
+ * inclus dans /reservations/getAll — nécessite une jointure vers
+ * /customers/getAll non prise en charge par ce connecteur pour l'instant,
+ * l'import échouera donc tant que ce champ n'est pas mappé. Opera Cloud et
+ * Thaïs : seuls les champs d'identifiants sont préparés — les chemins
+ * d'API exacts ne sont pas confirmés (OHIP utilise un flux OAuth2 par
+ * formulaire que ce connecteur ne sait pas encore réaliser ; la
+ * documentation Thaïs fournie n'était pas consultable) — la connexion
+ * réelle nécessite une évolution du connecteur ou confirmation du
+ * fournisseur avant de fonctionner.
+ */
+var PMS_PRESETS = {
+  sesame: {
+    label: 'Sesame Technology',
+    noteType: 'b',
+    note: 'Vérifié en conditions réelles le 17/08/2026. Le compte utilisé doit avoir accès à l\'établissement voulu — il est retrouvé automatiquement par son code (entityCode) parmi les profils disponibles pour ce compte.',
+    apply: function(){
+      document.getElementById('bs-endpointPath').value = '/wa/booking/list';
+      document.getElementById('bs-endpointMethod').value = 'POST';
+      document.getElementById('bs-endpointBodyFormat').value = 'form';
+      document.getElementById('bs-endpointBodyParams').value = 'start=0\nlimit=30';
+      document.getElementById('bs-authType').value = 'login';
+      bsRenderAuthFields();
+      document.getElementById('bs-loginPath').value = '/ws/login/login';
+      document.getElementById('bs-loginEmailField').value = 'login';
+      document.getElementById('bs-loginPasswordField').value = 'password';
+      document.getElementById('bs-loginEmailLocation').value = 'query';
+      document.getElementById('bs-loginTokenPath').value = 'token';
+      document.getElementById('bs-loginTokenHeaderName').value = 'Authorization';
+      document.getElementById('bs-loginProfileListPath').value = 'data.profiles';
+      document.getElementById('bs-loginProfileMatchField').value = 'entityCode';
+      document.getElementById('bs-responseListPath').value = 'root';
+      bsRenderMappingFields({code:'code', personEmail:'personEmail', personFirstname:'personFirstname', personLastname:'personLastname', personPhone:'', startDate:'startDate', endDate:'endDate', facilityCode:'facilityCode', status:'status'});
+    },
+    vars: [
+      {label:'URL du serveur Sesame', placeholder:'https://newtest.sesame.technology', target:'bs-baseUrl'},
+      {label:'Email de connexion', type:'email', target:'bs-loginEmail'},
+      {label:'Mot de passe', type:'password', target:'bs-loginPassword'},
+      {label:"Code de l'établissement (entityCode)", placeholder:'Ex : CHURCHILL', target:'bs-loginProfileMatchValue'},
+    ],
+  },
+  mews: {
+    label: 'Mews',
+    noteType: 'w',
+    note: 'L\'email et le nom du client ne sont pas inclus par l\'API Mews dans la liste des réservations (il faudrait un appel supplémentaire vers /customers/getAll, non pris en charge par ce connecteur pour l\'instant) — l\'import échouera tant que ce champ requis n\'est pas mappé. Contactez-nous si vous avez besoin de cette jointure.',
+    apply: function(){
+      document.getElementById('bs-endpointPath').value = '/api/connector/v1/reservations/getAll';
+      document.getElementById('bs-endpointMethod').value = 'POST';
+      document.getElementById('bs-endpointBodyFormat').value = 'json';
+      document.getElementById('bs-endpointBodyParams').value = 'ClientToken=\nAccessToken=\nClient=Sesame Suite 1.0';
+      document.getElementById('bs-authType').value = 'none';
+      bsRenderAuthFields();
+      document.getElementById('bs-responseListPath').value = 'Reservations';
+      bsRenderMappingFields({code:'Number', startDate:'StartUtc', endDate:'EndUtc', facilityCode:'AssignedSpaceId', status:'State'});
+    },
+    vars: [
+      {label:'URL de base', placeholder:'https://api.mews.com (prod) ou https://api.mews-demo.com (démo)', target:'bs-baseUrl'},
+      {label:'Client Token', type:'password', bodyParamKey:'ClientToken'},
+      {label:'Access Token', type:'password', bodyParamKey:'AccessToken'},
+    ],
+  },
+  opera: {
+    label: 'Opera Cloud (OHIP)',
+    noteType: 'w',
+    note: 'Ce connecteur ne sait pas encore réaliser le flux d\'authentification OAuth2 d\'OPERA Cloud (jeton obtenu par formulaire via grant_type=password, plus des en-têtes x-hotelid et x-app-key sur chaque appel) — la connexion réelle nécessite une évolution du connecteur, contactez-nous pour l\'activer. En plus des identifiants ci-dessous, munissez-vous aussi du Client ID, du Client Secret, de l\'identifiant d\'hôtel (Hotel ID) et de la clé d\'abonnement (x-app-key) fournis par Oracle : ce formulaire ne les collecte pas encore.',
+    vars: [
+      {label:"Nom d'utilisateur", target:'bs-loginEmail'},
+      {label:'Mot de passe', type:'password', target:'bs-loginPassword'},
+    ],
+  },
+  thais: {
+    label: 'Thaïs',
+    noteType: 'w',
+    note: 'Le lien de documentation fourni ne menait pas à une page consultable — les chemins d\'API Thaïs ne sont pas confirmés. Ces champs préparent vos identifiants (le champ "code groupe" est une hypothèse reprise d\'un réglage déjà présent dans ce projet, non revérifiée) ; à confirmer avec le support Thaïs avant de tester la connexion.',
+    apply: function(){
+      document.getElementById('bs-authType').value = 'login';
+      bsRenderAuthFields();
+      document.getElementById('bs-loginExtraField').value = 'client';
+    },
+    vars: [
+      {label:'URL de base', target:'bs-baseUrl'},
+      {label:'Chemin de connexion', placeholder:'à confirmer avec Thaïs', target:'bs-loginPath'},
+      {label:'Identifiant (login)', target:'bs-loginEmail'},
+      {label:'Mot de passe', type:'password', target:'bs-loginPassword'},
+      {label:'Code groupe / établissement', target:'bs-loginExtraValue'},
+    ],
+  },
+};
+
+var CURRENT_PRESET = null;
+
+function bsRenderPresetVars(preset){
+  var box = document.getElementById('bs-preset-vars');
+  if(!preset || !preset.vars){ box.innerHTML=''; return; }
+  box.innerHTML = '<div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin:14px 0 8px">Identifiants — '+preset.label+'</div>'
+    + preset.vars.map(function(v, i){
+      return '<div class="fi"><label class="lb">'+v.label+'</label><input type="'+(v.type||'text')+'" id="bs-pvar-'+i+'" placeholder="'+(v.placeholder||'')+'" onchange="bsPresetVarChanged('+i+')" autocomplete="off"></div>';
+    }).join('');
+  preset.vars.forEach(function(v, i){
+    var input = document.getElementById('bs-pvar-'+i);
+    if(v.bodyParamKey){
+      input.value = bsTextToParams(document.getElementById('bs-endpointBodyParams').value)[v.bodyParamKey] || '';
+    } else if(v.target && document.getElementById(v.target)){
+      input.value = document.getElementById(v.target).value || '';
+    }
+  });
+}
+
+function bsPresetVarChanged(i){
+  var v = CURRENT_PRESET.vars[i];
+  var val = document.getElementById('bs-pvar-'+i).value;
+  if(v.bodyParamKey){
+    var ta = document.getElementById('bs-endpointBodyParams');
+    var obj = bsTextToParams(ta.value);
+    obj[v.bodyParamKey] = val;
+    ta.value = bsParamsToText(obj);
+  } else if(v.target && document.getElementById(v.target)){
+    document.getElementById(v.target).value = val;
+  }
+}
+
+/** userTriggered=true : l'utilisateur vient de choisir ce modèle dans le menu
+ * → applique les réglages techniques par défaut. userTriggered=false : simple
+ * restauration à l'ouverture du panneau → ne touche pas aux valeurs déjà
+ * enregistrées, se contente d'afficher/peupler la bonne section. */
+function bsApplyPreset(userTriggered){
+  var id = document.getElementById('bs-preset').value;
+  var preset = PMS_PRESETS[id];
+  CURRENT_PRESET = (id!=='none' && preset) ? preset : null;
+  if(userTriggered && CURRENT_PRESET && CURRENT_PRESET.apply) CURRENT_PRESET.apply();
+  var noteEl = document.getElementById('bs-preset-note');
+  noteEl.innerHTML = CURRENT_PRESET
+    ? '<div class="alt alt-'+(CURRENT_PRESET.noteType||'b')+'" style="margin:10px 0"><i class="ti ti-info-circle"></i><span>'+CURRENT_PRESET.note+'</span></div>'
+    : '';
+  bsRenderPresetVars(CURRENT_PRESET);
+  var details = document.getElementById('bs-advanced-tech');
+  if(details) details.open = !CURRENT_PRESET;
+}
+
 function bsRenderMappingFields(mapping){
   mapping = mapping || {};
   document.getElementById('bs-mapping-fields').innerHTML = BS_MAPPING_FIELDS.map(function(f){
@@ -4630,9 +4821,11 @@ function bsCollectFormValues(){
   return {
     enabled: document.getElementById('bs-enabled').checked,
     sourceName: document.getElementById('bs-sourceName').value.trim(),
+    presetId: (document.getElementById('bs-preset')||{}).value||'none',
     baseUrl: document.getElementById('bs-baseUrl').value.trim(),
     endpointPath: document.getElementById('bs-endpointPath').value.trim(),
     endpointMethod: document.getElementById('bs-endpointMethod').value,
+    endpointBodyFormat: document.getElementById('bs-endpointBodyFormat').value,
     endpointBodyParams: bsTextToParams(document.getElementById('bs-endpointBodyParams').value),
     authType: document.getElementById('bs-authType').value,
     authApiKeyHeader: (document.getElementById('bs-authApiKeyHeader')||{}).value||'',
@@ -4658,6 +4851,7 @@ function bsCollectFormValues(){
     fieldMapping: bsCollectMapping(),
     facilityEndpointPath: document.getElementById('bs-facilityEndpointPath').value.trim(),
     facilityEndpointMethod: document.getElementById('bs-facilityEndpointMethod').value,
+    facilityEndpointBodyFormat: document.getElementById('bs-facilityEndpointBodyFormat').value,
     facilityEndpointBodyParams: bsTextToParams(document.getElementById('bs-facilityEndpointBodyParams').value),
     facilityResponseListPath: document.getElementById('bs-facilityResponseListPath').value.trim(),
     facilityFieldMapping: bsCollectFacilityMapping(),
@@ -4691,6 +4885,7 @@ async function bsInit(){
   document.getElementById('bs-baseUrl').value = BS_CONFIG.baseUrl||'';
   document.getElementById('bs-endpointPath').value = BS_CONFIG.endpointPath||'';
   document.getElementById('bs-endpointMethod').value = BS_CONFIG.endpointMethod||'GET';
+  document.getElementById('bs-endpointBodyFormat').value = BS_CONFIG.endpointBodyFormat||'form';
   document.getElementById('bs-endpointBodyParams').value = bsParamsToText(BS_CONFIG.endpointBodyParams);
   document.getElementById('bs-authType').value = BS_CONFIG.authType||'none';
   document.getElementById('bs-responseListPath').value = BS_CONFIG.responseListPath||'';
@@ -4699,11 +4894,14 @@ async function bsInit(){
   bsRenderMappingFields(BS_CONFIG.fieldMapping);
   document.getElementById('bs-facilityEndpointPath').value = BS_CONFIG.facilityEndpointPath||'';
   document.getElementById('bs-facilityEndpointMethod').value = BS_CONFIG.facilityEndpointMethod||'GET';
+  document.getElementById('bs-facilityEndpointBodyFormat').value = BS_CONFIG.facilityEndpointBodyFormat||'form';
   document.getElementById('bs-facilityEndpointBodyParams').value = bsParamsToText(BS_CONFIG.facilityEndpointBodyParams);
   document.getElementById('bs-facilityResponseListPath').value = BS_CONFIG.facilityResponseListPath||'';
   bsRenderFacilityMappingFields(BS_CONFIG.facilityFieldMapping);
   bsRenderStatusBanner();
   document.getElementById('bs-result-card').style.display='none';
+  document.getElementById('bs-preset').value = BS_CONFIG.presetId||'none';
+  bsApplyPreset(false);
 }
 
 async function bsSave(){

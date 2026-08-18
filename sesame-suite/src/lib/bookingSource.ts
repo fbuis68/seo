@@ -224,10 +224,13 @@ async function buildAuthHeaders(config: BookingSourceConfig): Promise<Record<str
 
 /**
  * Appelle un endpoint de la source externe et renvoie le tableau brut trouvé.
- * La plupart des API répondent à un simple GET, mais certaines (ex : API
- * Sesame Technology, /wa/booking/list) exigent un POST avec un corps
- * application/x-www-form-urlencoded — souvent juste de la pagination
- * (start/limit) — d'où le méthode/paramètres configurables.
+ * La plupart des API répondent à un simple GET, mais certaines exigent un
+ * POST avec un corps — soit application/x-www-form-urlencoded (ex : API
+ * Sesame Technology, /wa/booking/list, souvent juste de la pagination
+ * start/limit), soit un corps JSON (ex : API Mews, dont l'authentification
+ * par ClientToken/AccessToken se fait dans le corps de chaque appel plutôt
+ * que via un en-tête ou un jeton) — d'où méthode/format/paramètres
+ * configurables.
  */
 async function fetchExternalList(
   config: BookingSourceConfig,
@@ -235,19 +238,30 @@ async function fetchExternalList(
   responseListPath: string | null,
   what: string,
   method: string | null,
+  bodyFormat: string | null,
   bodyParams: unknown
 ): Promise<unknown[]> {
   if (!config.baseUrl) throw new BookingSourceError("URL de base non configurée");
   const url = config.baseUrl.replace(/\/$/, "") + (endpointPath || "");
   const authHeaders = await buildAuthHeaders(config);
   const isPost = (method || "GET").toUpperCase() === "POST";
+  const params: Record<string, unknown> = bodyParams && typeof bodyParams === "object" ? (bodyParams as Record<string, unknown>) : {};
   let res: Response;
   try {
-    if (isPost) {
+    if (isPost && (bodyFormat || "form") === "json") {
+      res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "User-Agent": "SesameSuite-BookingConnector/1.0",
+          ...authHeaders,
+        },
+        body: JSON.stringify(params),
+      });
+    } else if (isPost) {
       const form = new URLSearchParams();
-      if (bodyParams && typeof bodyParams === "object") {
-        for (const [k, v] of Object.entries(bodyParams as Record<string, unknown>)) form.set(k, String(v));
-      }
+      for (const [k, v] of Object.entries(params)) form.set(k, String(v));
       res = await fetch(url, {
         method: "POST",
         headers: {
@@ -287,7 +301,15 @@ async function fetchExternalList(
 
 /** Appelle la source externe et renvoie le tableau brut de réservations (pas encore mappé). */
 export async function fetchExternalBookings(config: BookingSourceConfig): Promise<unknown[]> {
-  return fetchExternalList(config, config.endpointPath, config.responseListPath, "réservations", config.endpointMethod, config.endpointBodyParams);
+  return fetchExternalList(
+    config,
+    config.endpointPath,
+    config.responseListPath,
+    "réservations",
+    config.endpointMethod,
+    config.endpointBodyFormat,
+    config.endpointBodyParams
+  );
 }
 
 /** Appelle la source externe et renvoie le tableau brut de chambres/facilities (pas encore mappé). */
@@ -298,6 +320,7 @@ export async function fetchExternalFacilities(config: BookingSourceConfig): Prom
     config.facilityResponseListPath,
     "chambres",
     config.facilityEndpointMethod,
+    config.facilityEndpointBodyFormat,
     config.facilityEndpointBodyParams
   );
 }

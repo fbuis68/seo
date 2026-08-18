@@ -20,9 +20,11 @@ export const bookingSourceRouter = Router();
 function shapeConfig(c: {
   enabled: boolean;
   sourceName: string | null;
+  presetId: string | null;
   baseUrl: string | null;
   endpointPath: string | null;
   endpointMethod: string | null;
+  endpointBodyFormat: string | null;
   endpointBodyParams: unknown;
   authType: string;
   authApiKeyHeader: string | null;
@@ -48,6 +50,7 @@ function shapeConfig(c: {
   fieldMapping: unknown;
   facilityEndpointPath: string | null;
   facilityEndpointMethod: string | null;
+  facilityEndpointBodyFormat: string | null;
   facilityEndpointBodyParams: unknown;
   facilityResponseListPath: string | null;
   facilityFieldMapping: unknown;
@@ -60,9 +63,11 @@ function shapeConfig(c: {
   return {
     enabled: c.enabled,
     sourceName: c.sourceName || "",
+    presetId: c.presetId || "none",
     baseUrl: c.baseUrl || "",
     endpointPath: c.endpointPath || "",
     endpointMethod: c.endpointMethod || "GET",
+    endpointBodyFormat: c.endpointBodyFormat || "form",
     endpointBodyParams: c.endpointBodyParams || {},
     authType: c.authType,
     authApiKeyHeader: c.authApiKeyHeader || "",
@@ -88,6 +93,7 @@ function shapeConfig(c: {
     fieldMapping: c.fieldMapping || {},
     facilityEndpointPath: c.facilityEndpointPath || "",
     facilityEndpointMethod: c.facilityEndpointMethod || "GET",
+    facilityEndpointBodyFormat: c.facilityEndpointBodyFormat || "form",
     facilityEndpointBodyParams: c.facilityEndpointBodyParams || {},
     facilityResponseListPath: c.facilityResponseListPath || "",
     facilityFieldMapping: c.facilityFieldMapping || {},
@@ -117,9 +123,11 @@ bookingSourceRouter.get(
 interface ConfigBody {
   enabled?: boolean;
   sourceName?: string;
+  presetId?: string;
   baseUrl?: string;
   endpointPath?: string;
   endpointMethod?: string;
+  endpointBodyFormat?: string;
   endpointBodyParams?: Record<string, string>;
   authType?: string;
   authApiKeyHeader?: string;
@@ -145,6 +153,7 @@ interface ConfigBody {
   fieldMapping?: FieldMapping;
   facilityEndpointPath?: string;
   facilityEndpointMethod?: string;
+  facilityEndpointBodyFormat?: string;
   facilityEndpointBodyParams?: Record<string, string>;
   facilityResponseListPath?: string;
   facilityFieldMapping?: FacilityMapping;
@@ -161,9 +170,11 @@ bookingSourceRouter.post(
     const data = {
       enabled: b.enabled,
       sourceName: b.sourceName,
+      presetId: b.presetId,
       baseUrl: b.baseUrl,
       endpointPath: b.endpointPath,
       endpointMethod: b.endpointMethod,
+      endpointBodyFormat: b.endpointBodyFormat,
       endpointBodyParams: b.endpointBodyParams as never,
       authType: b.authType,
       authApiKeyHeader: b.authApiKeyHeader,
@@ -189,6 +200,7 @@ bookingSourceRouter.post(
       fieldMapping: b.fieldMapping as never,
       facilityEndpointPath: b.facilityEndpointPath,
       facilityEndpointMethod: b.facilityEndpointMethod,
+      facilityEndpointBodyFormat: b.facilityEndpointBodyFormat,
       facilityEndpointBodyParams: b.facilityEndpointBodyParams as never,
       facilityResponseListPath: b.facilityResponseListPath,
       facilityFieldMapping: b.facilityFieldMapping as never,
@@ -223,6 +235,7 @@ bookingSourceRouter.post(
       baseUrl: b.baseUrl ?? saved?.baseUrl ?? null,
       endpointPath: b.endpointPath ?? saved?.endpointPath ?? null,
       endpointMethod: b.endpointMethod ?? saved?.endpointMethod ?? "GET",
+      endpointBodyFormat: b.endpointBodyFormat ?? saved?.endpointBodyFormat ?? "form",
       endpointBodyParams: (b.endpointBodyParams ?? saved?.endpointBodyParams ?? {}) as never,
       authType: b.authType ?? saved?.authType ?? "none",
       authApiKeyHeader: b.authApiKeyHeader ?? saved?.authApiKeyHeader ?? null,
@@ -248,6 +261,7 @@ bookingSourceRouter.post(
       fieldMapping: (b.fieldMapping ?? saved?.fieldMapping ?? {}) as never,
       facilityEndpointPath: b.facilityEndpointPath ?? saved?.facilityEndpointPath ?? null,
       facilityEndpointMethod: b.facilityEndpointMethod ?? saved?.facilityEndpointMethod ?? "GET",
+      facilityEndpointBodyFormat: b.facilityEndpointBodyFormat ?? saved?.facilityEndpointBodyFormat ?? "form",
       facilityEndpointBodyParams: (b.facilityEndpointBodyParams ?? saved?.facilityEndpointBodyParams ?? {}) as never,
       facilityResponseListPath: b.facilityResponseListPath ?? saved?.facilityResponseListPath ?? null,
       facilityFieldMapping: (b.facilityFieldMapping ?? saved?.facilityFieldMapping ?? {}) as never,
@@ -312,6 +326,7 @@ bookingSourceRouter.post(
       baseUrl: b.baseUrl ?? saved?.baseUrl ?? null,
       endpointPath: saved?.endpointPath ?? null,
       endpointMethod: saved?.endpointMethod ?? "GET",
+      endpointBodyFormat: saved?.endpointBodyFormat ?? "form",
       endpointBodyParams: (saved?.endpointBodyParams ?? {}) as never,
       authType: b.authType ?? saved?.authType ?? "none",
       authApiKeyHeader: b.authApiKeyHeader ?? saved?.authApiKeyHeader ?? null,
@@ -337,6 +352,7 @@ bookingSourceRouter.post(
       fieldMapping: (saved?.fieldMapping ?? {}) as never,
       facilityEndpointPath: b.facilityEndpointPath ?? saved?.facilityEndpointPath ?? null,
       facilityEndpointMethod: b.facilityEndpointMethod ?? saved?.facilityEndpointMethod ?? "GET",
+      facilityEndpointBodyFormat: b.facilityEndpointBodyFormat ?? saved?.facilityEndpointBodyFormat ?? "form",
       facilityEndpointBodyParams: (b.facilityEndpointBodyParams ?? saved?.facilityEndpointBodyParams ?? {}) as never,
       facilityResponseListPath: b.facilityResponseListPath ?? saved?.facilityResponseListPath ?? null,
       facilityFieldMapping: (b.facilityFieldMapping ?? saved?.facilityFieldMapping ?? {}) as never,
