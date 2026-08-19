@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "CrmProspect" ADD COLUMN     "mrr" DOUBLE PRECISION,
+ADD COLUMN     "previsionnel" DOUBLE PRECISION,
+ADD COLUMN     "signe" DOUBLE PRECISION;

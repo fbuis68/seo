@@ -70,6 +70,9 @@ function shapeProspect(p: {
   espEvenement: boolean;
   messagerie: string;
   note: string | null;
+  mrr: number | null;
+  signe: number | null;
+  previsionnel: number | null;
   inboundReplyCount: number;
   lastInboundReplyAt: Date | null;
   commercialId: string | null;
@@ -124,6 +127,9 @@ function shapeProspect(p: {
     espEvenement: p.espEvenement,
     messagerie: p.messagerie,
     note: p.note || "",
+    mrr: p.mrr,
+    signe: p.signe,
+    previsionnel: p.previsionnel,
     inboundReplyCount: p.inboundReplyCount,
     lastInboundReplyAt: p.lastInboundReplyAt,
     commercialId: p.commercialId,
@@ -191,6 +197,9 @@ interface ProspectBody {
   espEvenement?: boolean;
   messagerie?: string;
   note?: string;
+  mrr?: number | null;
+  signe?: number | null;
+  previsionnel?: number | null;
   commercialId?: string | null;
 }
 
@@ -245,6 +254,9 @@ crmProspectRouter.post(
         espEvenement: !!b.espEvenement,
         messagerie: b.messagerie || "Noreply",
         note: b.note,
+        mrr: b.mrr ?? null,
+        signe: b.signe ?? null,
+        previsionnel: b.previsionnel ?? null,
         commercialId: b.commercialId || null,
       },
       include: PROSPECT_INCLUDE,
@@ -316,6 +328,9 @@ crmProspectRouter.post(
         espEvenement: b.espEvenement,
         messagerie: b.messagerie,
         note: b.note,
+        mrr: b.mrr,
+        signe: b.signe,
+        previsionnel: b.previsionnel,
         commercialId: b.commercialId === undefined ? undefined : b.commercialId || null,
       },
       include: PROSPECT_INCLUDE,

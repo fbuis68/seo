@@ -1032,6 +1032,58 @@ La simulation KYC (OCR / selfie / correspondance biométrique) reste
 volontairement côté client uniquement, comme dans le prototype d'origine —
 aucun service de vérification d'identité réel n'a été demandé ni intégré.
 
+### MRR sur la fiche client + tableau "Portefeuille" (MRR / Signé / Prévisionnel)
+
+- **Schéma** : `CrmProspect` gagne 3 champs (`mrr`, `signe`, `previsionnel`,
+  tous `Float?`, `prisma/schema.prisma`). `mrr` est le seul alimenté par
+  import ; `signe`/`previsionnel` sont purement des saisies manuelles — il
+  n'existe pas de source fiable pour ces deux notions dans les fichiers
+  fournis (voir plus bas), donc aucune tentative de les déduire
+  automatiquement.
+- **Import MRR** : rapprochement par nom entre l'onglet "2026" (section
+  "Récurent", 36 clients avec un montant mensuel constant sur les colonnes
+  janv.-déc.) d'un fichier de trésorerie fourni et les 68 fiches
+  `CrmProspect`. Rapprochement flou (tokens normalisés, sigles/raisons
+  sociales différents entre les deux sources) puis vérifié à la main —
+  **12 correspondances** jugées fiables ont été retenues (ex. "SAS 15
+  ASTORG" → fiche "ASTORG", "HÔTEL L'AUBERG'INE" → fiche "AUBERG'INE") ; les
+  24 autres lignes du fichier ne correspondent à aucune fiche existante (pas
+  de faux rapprochement forcé — mieux vaut un MRR manquant qu'un MRR sur le
+  mauvais client). Champ affiché en lecture sur la fiche (juste après
+  "Modules") et éditable dans le modal de fiche (`#m-mrr`) comme dans le
+  nouveau tableau Portefeuille.
+- **Import Adresse** : même principe de rapprochement flou entre un export
+  d'entreprises (`pmexport.xls`, colonnes Nom/Adresse/CP/Ville) et les
+  fiches — **31 correspondances** retenues et appliquées uniquement aux
+  fiches dont l'adresse était encore vide (aucune adresse saisie à la main
+  n'a été écrasée). Un cas ("Maison Roquelongue") avait une adresse
+  imprononçable dans la source (placeholder `[ND] [ND] [ND]`) : seule la
+  ville a été reprise. Les rapprochements ambigus (plusieurs fiches
+  distinctes pointant vers la même ligne source, ex. les 3 "La Péniche…", ou
+  un score de correspondance trop faible/à égalité) ont été exclus plutôt
+  que devinés.
+- Les deux imports sont rejoués comme migration Prisma
+  (`prisma/migrations/20260819050000_crm_prospect_mrr_adresse_backfill`,
+  guardée par `IS NULL` — n'écrase jamais une valeur déjà présente) pour que
+  tout environnement provisionné à partir du même seed déterministe
+  (68 fiches) hérite des mêmes données sans reseed complet.
+- **Tableau "Portefeuille"** (nouvel item de nav `public/crm.html`,
+  `showPortefeuille()`/`renderPortefeuille()`) : liste tous les clients avec
+  3 colonnes éditables en ligne (MRR, Signé, Prévisionnel) + une colonne
+  "Total" calculée par ligne et une ligne de pied de tableau qui additionne
+  les 3 compteurs sur l'ensemble des clients affichés (recherche incluse).
+  Chaque cellule sauvegarde individuellement au blur (`pfSave()` →
+  `POST /crmProspect/update` avec un seul champ, pattern déjà utilisé
+  ailleurs dans le CRM pour les mises à jour partielles) ; les totaux se
+  recalculent en direct pendant la frappe (`pfLive()`, avant même la
+  sauvegarde) pour que l'addition soit immédiate.
+- À noter comme pour les précédents imports OpenData : le rapprochement par
+  nom est fait au meilleur effort sur des données d'origine hétérogène
+  (raisons sociales, sigles, orthographes différentes entre les fichiers et
+  le CRM) — les correspondances retenues ont été relues une à une, mais une
+  vérification humaine du résultat final reste recommandée avant de
+  considérer ces chiffres comme définitifs.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

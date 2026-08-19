@@ -691,6 +691,15 @@ model CrmProspect {
   messagerie     String  @default("Noreply") // Noreply | Client
   note           String?
 
+  // Portefeuille financier — MRR importé du fichier de trésorerie (montant
+  // mensuel récurrent, quand la fiche a pu être rapprochée par nom) ; signé
+  // et prévisionnel sont saisis à la main dans le tableau "Portefeuille"
+  // (public/crm.html) pour permettre au commercial d'additionner ses trois
+  // compteurs sans dépendre d'un import.
+  mrr          Float? // € / mois, récurrent
+  signe        Float? // € — montant signé (ponctuel ou engagé), saisie manuelle
+  previsionnel Float? // € — montant prévisionnel/pipeline, saisie manuelle
+
   // Signal d'engagement entrant — alimenté par POST /wa/crmProspect/inboundSignal
   // (flux Power Automate générique sur les boîtes partagées fbuis@/jtlod@
   // sesame-technology.com, cf. README) : incrémenté à chaque email reçu d'une
