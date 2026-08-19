@@ -862,6 +862,39 @@ de 0 au lieu de la taille de son contenu ; il se faisait donc écraser par
     inchangé), pour transmettre les identifiants sans les recopier à la main.
     Envoi manuel uniquement, à la demande : pas d'email automatique.
 
+- **Suite de corrections CRM** (18/08/2026) :
+  - **Sous-section "Paramètres" dans la nav CRM** (`public/crm.html`) :
+    Canaux, Automatisations et Produits, auparavant mélangés aux entrées de
+    navigation métier (Home/Vue liste/Affaires/Activités/Contrats), sont
+    désormais regroupés sous un label dédié "Paramètres" — Utilisateurs CRM
+    (visible seulement pour un rôle admin CRM) reste juste en-dessous.
+  - **Bug corrigé — les fenêtres modales (fiche client, modèles email…)
+    pouvaient se fermer seules en pleine saisie** : le correctif appliqué le
+    même jour au seul modal de modèle email (`emlOpenTemplateModal`/
+    `openTemplateModal`) a été généralisé à **tous** les modaux `.modal-bg`
+    de `crm.html` (9 occurrences — fiche client, envoi d'email, utilisateurs
+    CRM, devis, etc.) ainsi qu'aux 2 modaux restants de `admin.html`
+    (règle d'automatisation, module verrouillé) : même cause (un `mousedown`
+    dans le formulaire suivi d'un `mouseup` sur le fond fait remonter la
+    cible du `click` au fond), même correctif (fermeture conditionnée à un
+    `mousedown` **et** un `click` sur le fond).
+  - **Champ PMS transformé en liste déroulante** (fiche client,
+    `public/crm.html`) : les 13 valeurs réellement présentes dans le
+    portefeuille (`PMS_OPTIONS`, extraites de l'audit clients Sesame — Mews,
+    Medialog, Thais, MisterBooking, Easy Space, TeamR, etc.) plus "Autre…"
+    (révèle un champ texte libre, pour ne jamais bloquer la saisie d'un PMS
+    pas encore rencontré et pour préserver telles quelles les 2 fiches
+    historiques à la valeur libre "none"). Un champ libre laissait
+    coexister des variantes orthographiques du même PMS (ex. "Medialog" /
+    "Médialog", toutes deux conservées comme options distinctes — ce
+    correctif n'a pas réécrit les fiches existantes).
+  - **Graphique Home "Répartition par PMS"** (`renderInsights()`) : même
+    forme que "Répartition par secteur" (liste de barres, pas un camembert
+    — plus d'une dizaine de valeurs réelles rendraient un camembert
+    illisible), calculé en direct depuis les fiches réelles, "none"
+    regroupé avec les fiches sans PMS renseigné plutôt que traité comme un
+    nom de PMS à part entière.
+
 - **Bug corrigé — config d'un compte hôtel affichant celle d'un autre
   établissement** (`loadCfg()`) : `GET /entityModuleConfig/list` est
   volontairement public côté serveur (le parcours client en a besoin sans

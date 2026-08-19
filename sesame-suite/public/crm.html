@@ -396,11 +396,13 @@ input[type=checkbox]{accent-color:var(--a);cursor:pointer;width:14px;height:14px
     <div class="nav-item" id="n-home" onclick="showHome()"><div class="nav-ico">⌂</div> Home</div>
     <div class="nav-item" id="n-list" onclick="showList()"><div class="nav-ico">≡</div> Vue liste</div>
     <div class="nav-item" id="n-affaires" onclick="showAffaires()"><div class="nav-ico">◆</div> Affaires</div>
-    <div class="nav-item" id="n-produits" onclick="showCrmProducts()"><div class="nav-ico">◫</div> Produits</div>
     <div class="nav-item" id="n-activite" onclick="showActivites()"><div class="nav-ico">◈</div> Activités</div>
     <div class="nav-item" id="n-contrats" onclick="showContrats()"><div class="nav-ico">◻</div> Contrats</div>
+    <hr class="s-hr">
+    <div class="nav-lbl">Paramètres</div>
     <div class="nav-item" id="n-canaux" onclick="showCanauxPanel()"><div class="nav-ico">✉</div> Canaux</div>
     <div class="nav-item" id="n-auto" onclick="showAutomationPanel()"><div class="nav-ico">◈</div> Automatisations</div>
+    <div class="nav-item" id="n-produits" onclick="showCrmProducts()"><div class="nav-ico">◫</div> Produits</div>
     <div class="nav-item" id="n-crmusers" onclick="showCrmUsers()" style="display:none"><div class="nav-ico">◉</div> Utilisateurs CRM</div>
     <hr class="s-hr">
     <div class="nav-lbl">Filtres rapides</div>
@@ -592,6 +594,10 @@ document.addEventListener('DOMContentLoaded', function(){
 const DANGERS = ['Bon client','Modéré','Élevé !!'];
 const TYPES = ['Prospect','Client'];
 const SECTEURS = ['Hôtellerie','Location appartement','Appart Hotel','Location AirBnB','Bureaux','Sport','Garde meuble','Love hôtel','Location bureau','Agence gestion patrimoine'];
+// PMS effectivement rencontrés dans le portefeuille (audit clients Sesame) — la
+// fiche propose ces valeurs plus "Autre…" pour éviter les variantes orthographiques
+// libres (ex. "Medialog" / "Médialog" coexistaient avant ce champ en liste).
+const PMS_OPTIONS = ['Chloé','Easy Space','Escobe','Lodgify','Medialog','Médialog','Mews','Mews Intégration','MisterBooking','MyGuest Check','Reservit','TeamR','Thais'];
 const ACT_TYPES = ['Appel','Email','Visite','Proposition','Relance','Note interne','Autre'];
 const DOT_MAP = {Appel:'g',Email:'b',Visite:'g',Proposition:'b',Relance:'a','Note interne':'b',Autre:'b'};
 
@@ -817,6 +823,24 @@ function renderInsights(){
     +'</div>'
   ).join('');
 
+  // ── Répartition par PMS — même forme que la répartition par secteur
+  // (liste de catégories, jusqu'à plus d'une dizaine de valeurs réelles dans
+  // le portefeuille : un camembert serait illisible au-delà de 5-6 tranches).
+  // La valeur historique "none" (2 fiches, saisie libre avant que ce champ
+  // ne devienne une liste) est regroupée avec les fiches sans PMS renseigné
+  // plutôt que traitée comme un nom de PMS à part entière. ──
+  const byPms={};
+  clients.forEach(c=>{ const raw=(c.pms||'').trim(); const p=(raw && raw.toLowerCase()!=='none')?raw:'Non renseigné'; byPms[p]=(byPms[p]||0)+1; });
+  const pmsRows=Object.entries(byPms).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const maxPms=Math.max(...pmsRows.map(r=>r[1]),1);
+  const pmsHtml=pmsRows.map(([p,n])=>
+    '<div class="bar-row" title="'+esc(p)+' : '+n+'">'
+    +'<span class="bar-lbl-wide" style="width:130px"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(p)+'</span></span>'
+    +'<div class="bar-track"><div class="bar-fill" style="width:'+(n/maxPms*100)+'%;background:#0f8a7a"></div></div>'
+    +'<span class="bar-val">'+n+'</span>'
+    +'</div>'
+  ).join('');
+
   // ── Usage des modules Sesame — intégration technique uniquement ; Livret
   // digital et Gestion demande vivent désormais uniquement dans la carte
   // "Parcours client activés" (rubriques Espace client), pour ne pas doubler
@@ -865,6 +889,7 @@ function renderInsights(){
   // plus d'utilité.
   return '<div class="insight-grid">'
     + '<div class="card"><div class="card-head"><div class="ch-ico">◻</div><span class="ch-title">Répartition par secteur</span></div>'+secteurHtml+'</div>'
+    + '<div class="card"><div class="card-head"><div class="ch-ico">▤</div><span class="ch-title">Répartition par PMS</span></div>'+pmsHtml+'</div>'
     + '<div class="card"><div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Usage des modules Sesame</span><span style="font-size:11px;color:#aaa;margin-left:8px">'+total+' fiches</span></div>'+moduleHtml+'</div>'
     + '<div class="card"><div class="card-head"><div class="ch-ico">◉</div><span class="ch-title">Taux d\'usage des accès</span><span style="font-size:11px;color:#aaa;margin-left:8px">'+nClients+' clients</span></div>'+accessHtml
       +(nWithUsage?'':'<div style="font-size:12px;color:#bbb;padding:4px 0;font-style:italic">Aucune donnée d\'usage réelle sur les fiches Client</div>')+'</div>'
@@ -1345,7 +1370,7 @@ function closeModal(){document.getElementById('modal-ct').innerHTML='';}
 function renderModal(mc){
   const sectAll=[...new Set([...SECTEURS,...clients.map(c=>c.secteur)].filter(Boolean))].sort();
   document.getElementById('modal-ct').innerHTML=`
-  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box">
       <div class="modal-head">
         <div class="avatar" style="width:36px;height:36px;font-size:12px">${ini(mc.nom||'?')}</div>
@@ -1368,7 +1393,14 @@ function renderModal(mc){
 
       <div class="modal-section">Installation &amp; commercial</div>
       <div class="form-grid">
-        <div class="ff"><label>PMS</label><input id="m-pms" value="${esc(mc.pms)}" placeholder="Mews, Medialog…"></div>
+        <div class="ff"><label>PMS</label>
+          <select id="m-pms" onchange="document.getElementById('m-pms-other').style.display=this.value==='__other__'?'':'none'">
+            <option value="">—</option>
+            ${PMS_OPTIONS.map(p=>`<option value="${esc(p)}" ${mc.pms===p?'selected':''}>${esc(p)}</option>`).join('')}
+            <option value="__other__" ${mc.pms && !PMS_OPTIONS.includes(mc.pms)?'selected':''}>Autre…</option>
+          </select>
+          <input id="m-pms-other" value="${esc(mc.pms && !PMS_OPTIONS.includes(mc.pms)?mc.pms:'')}" placeholder="Nom du PMS" style="margin-top:6px;display:${mc.pms && !PMS_OPTIONS.includes(mc.pms)?'block':'none'}">
+        </div>
         <div class="ff"><label>Messagerie</label><select id="m-msg"><option value="Noreply" ${mc.messagerie!=='Client'?'selected':''}>Noreply</option><option value="Client" ${mc.messagerie==='Client'?'selected':''}>Client</option></select></div>
         <div class="ff"><label>Risque churn</label><select id="m-danger">${DANGERS.map(d=>`<option value="${d}" ${mc.danger===d?'selected':''}>${d}</option>`).join('')}</select></div>
         <div class="ff"><label>Potentiel</label><select id="m-pot"><option value="0">—</option><option value="1" ${mc.potentiel===1?'selected':''}>1</option><option value="2" ${mc.potentiel===2?'selected':''}>2</option><option value="3" ${mc.potentiel===3?'selected':''}>3</option></select></div>
@@ -1421,7 +1453,7 @@ async function saveModal(id,isNew){
     nom:g('m-nom').value.trim(),type:g('m-type').value,groupe:g('m-groupe').value,secteur:g('m-secteur').value,
     ville:g('m-ville').value,etoiles:g('m-etoiles').value,referent:g('m-referent').value,
     email:g('m-email').value,tel:g('m-tel').value,site:g('m-site').value,
-    pms:g('m-pms').value,messagerie:g('m-msg').value,danger:g('m-danger').value,commercialId:g('m-commercial').value||null,
+    pms:(g('m-pms').value==='__other__'?g('m-pms-other').value.trim():g('m-pms').value),messagerie:g('m-msg').value,danger:g('m-danger').value,commercialId:g('m-commercial').value||null,
     potentiel:+g('m-pot').value,modules:+g('m-mod').value,contrat:g('m-contrat').value,
     priorite:+g('m-prio').value,appel:g('m-appel').value,
     nfc:+g('m-nfc').value,qr:+g('m-qr').value,mobile:+g('m-mob').value,code:+g('m-code').value,
@@ -1533,7 +1565,7 @@ function renderDealModal(){
   const md = DEAL_DRAFT;
   const prospectOptions = clients.slice().sort((a,b)=>a.nom.localeCompare(b.nom));
   document.getElementById('modal-ct').innerHTML = `
-  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box">
       <div class="modal-head">
         <div style="font-size:16px;font-weight:500">${md._new?'Nouvelle affaire':esc(md.title)}</div>
@@ -1735,7 +1767,7 @@ function renderQuoteModal(){
   const productButtons = crmProducts.filter(p=>p.active).map(p=>`<button type="button" onclick="addQuoteLine('${jsStr(p.label)}',${p.unitPrice},${p.recurring},'${jsStr(p.description)}')">+ ${esc(p.label)} (${fmtEUR(p.unitPrice)}${p.recurring?'/mois':''})</button>`).join('');
   const signUrl = q.signToken ? (location.origin+'/devis-signature.html?token='+q.signToken) : '';
   document.getElementById('modal-ct').innerHTML = `
-  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box">
       <div class="modal-head">
         <div style="font-size:16px;font-weight:500">${q._new?'Nouveau devis':q.number}</div>
@@ -1929,7 +1961,7 @@ function openProductModal(id){
   const p = id ? crmProducts.find(x=>x.id===id) : {id:null,sku:'',label:'',description:'',unitPrice:0,recurring:false,stockable:false,active:true};
   if(!p) return;
   document.getElementById('modal-ct').innerHTML = `
-  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box" style="max-width:520px">
       <div class="modal-head"><div style="font-size:16px;font-weight:500">${id?'Modifier le produit':'Nouveau produit'}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
       <div class="form-grid">
@@ -2020,7 +2052,7 @@ function openCrmUserModal(id){
   const u = id ? crmUsersList.find(x=>x.id===id) : {id:null,email:'',name:'',crmRole:'commercial',active:true};
   if(!u) return;
   document.getElementById('modal-ct').innerHTML = `
-  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box" style="max-width:480px">
       <div class="modal-head"><div style="font-size:16px;font-weight:500">${id?"Modifier l'utilisateur":'Nouvel utilisateur CRM'}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
       <div class="form-grid">
@@ -2358,7 +2390,7 @@ async function openSendEmailModal(id){
   if(!available.length){flash('Aucun modèle disponible — créez-en un depuis "Canaux"');return;}
   const chan=available.includes('email')?'email':available[0];
   document.getElementById('modal-ct').innerHTML=`
-  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box" style="max-width:480px">
       <div class="modal-head"><div style="font-size:16px;font-weight:500">Envoyer un message à ${esc(c.nom)}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
       <div class="ff"><label>Canal</label><select id="send-channel" onchange="renderSendTplOptions('${id}')">${available.map(ch=>`<option value="${ch}" ${ch===chan?'selected':''}>${CHANNEL_LABEL[ch]}</option>`).join('')}</select></div>
@@ -2482,7 +2514,7 @@ function openRuleModal(id){
   const r = id ? AUTO_RULES.find(r=>r.id===id) : {id:null,name:'',trigger:TRIGGERS_CRM[0].key,enabled:true,timingMode:'immediate',offsetValue:1,offsetUnit:'days',recurrence:'monthly',atTime:'11:00',dayOfWeek:1,dayOfMonth:1,channel:'email',templateKey:'',recipientMode:'event',recipientOverride:'',senderName:'',audienceFilter:{type:'all',secteur:''}};
   if(!r)return;
   document.getElementById('modal-ct').innerHTML=`
-  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box">
       <div class="modal-head"><div style="font-size:16px;font-weight:500">${r.id?'Modifier la règle':'Nouvelle règle'}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
       <div class="ff"><label>Nom</label><input id="rule-name" value="${esc(r.name)}" placeholder="Ex. Newsletter mensuelle"></div>

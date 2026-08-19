@@ -5243,7 +5243,7 @@ function autoOpenRuleModal(id){
   if(!r) return;
   AUTO_RULE_EDITING = r;
   document.getElementById('auto-rule-modal').innerHTML =
-    '<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:28px 20px;overflow-y:auto" onclick="if(event.target===this)autoCloseRuleModal()">'
+    '<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:28px 20px;overflow-y:auto" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)autoCloseRuleModal()">'
     + '<div class="ca" style="width:100%;max-width:560px">'
     + '<div class="ch">'+(r.id?'Modifier la règle':'Nouvelle règle')+'<button class="btn btn-g" style="margin-left:auto" onclick="autoCloseRuleModal()"><i class="ti ti-x"></i></button></div>'
     + '<div class="fi"><label class="lb">Nom</label><input type="text" id="auto-name" value="'+esc(r.name)+'" placeholder="Ex. Rappel avant départ"></div>'
@@ -9626,7 +9626,7 @@ function showModuleLockedModal(panId){
   var benefit = HELP_TEXT[panId] || '';
   var isSesame = ADMIN_ROLE === 'sesame';
   document.getElementById('module-lock-modal').innerHTML =
-    '<div style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeModuleLockedModal()">'
+    '<div style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModuleLockedModal()">'
     + '<div class="ca" style="width:100%;max-width:420px;text-align:center">'
     + '<div style="width:52px;height:52px;border-radius:50%;background:var(--al);color:var(--a);display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 14px"><i class="ti ti-lock"></i></div>'
     + '<div style="font-size:16px;font-weight:700;margin-bottom:6px">'+esc(mod.label)+'</div>'
