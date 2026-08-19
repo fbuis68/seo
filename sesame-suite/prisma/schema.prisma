@@ -151,6 +151,13 @@ model EntityModuleConfig {
   progName   String? @default("Mon programme éco")
   lang       String  @default("fr")
   currency   String  @default("EUR")
+  // Fuseau horaire de l'établissement (identifiant IANA, ex. "Europe/Paris",
+  // "America/Guadeloupe") — sert de référence pour tout ce qui dépend du
+  // "jour" ou de "l'heure actuelle" à l'hôtel plutôt que sur le serveur ou
+  // le fuseau du navigateur : arrivées du jour, plages KPI, planning
+  // ménage, statut "en cours de séjour" côté client, et le moteur
+  // d'automatisation (délais avant/après séjour). Cf. src/lib/timezone.ts.
+  timezone   String  @default("Europe/Paris")
 
   tarifs    Json // number[5] — tarif taxe de séjour par catégorie d'étoiles
   exoEnf    Boolean @default(true)

@@ -1,6 +1,7 @@
 import { prisma } from "../db";
 import { sendMessage } from "./messaging";
 import { Channel } from "./messageTemplate";
+import { todayInTz } from "./timezone";
 
 /**
  * Catalogue fixe des déclencheurs métier — c'est la seule source de vérité
@@ -170,6 +171,17 @@ const LOOKBACK_MS = 7 * MS.days; // fenêtre de sécurité : on ne rebalaye jama
  * l'arithmétique calendaire (durée variable selon le mois), les autres
  * unités des millisecondes fixes.
  */
+/**
+ * Fuseau horaire de l'établissement pour une règle donnée — "Europe/Paris"
+ * par défaut si la règle est de portée CRM (entityId null) ou si la
+ * configuration est introuvable.
+ */
+async function entityTimezone(entityId: string | null): Promise<string> {
+  if (!entityId) return "Europe/Paris";
+  const cfg = await prisma.entityModuleConfig.findUnique({ where: { entityId }, select: { timezone: true } });
+  return cfg?.timezone || "Europe/Paris";
+}
+
 function applyOffset(date: Date, value: number, unit: string | null): Date {
   if (unit === "months") {
     const d = new Date(date);
@@ -211,7 +223,16 @@ async function sweepDateRule(rule: {
 }) {
   const trigger = getTrigger(rule.trigger);
   if (!trigger?.dateField) return;
-  const now = new Date();
+  // Pour un offset en jours/mois ("J-1 avant arrivée"…), on ancre le calcul
+  // sur le jour calendaire actuel à l'hôtel plutôt que sur l'heure serveur —
+  // sinon un serveur en UTC peut faire glisser la cible d'un jour selon le
+  // fuseau de l'établissement. Les offsets en heures/minutes restent
+  // calculés sur l'instant précis (une notion sans ambiguïté de fuseau).
+  const unit = rule.offsetUnit || "days";
+  const now =
+    unit === "days" || unit === "months"
+      ? new Date(`${todayInTz(await entityTimezone(rule.entityId))}T12:00:00Z`)
+      : new Date();
   // La règle se déclenche dès que la date pivot atteint "target" — cible
   // unique quel que soit le signe de l'offset (avant/après unifiés).
   const target = applyOffset(now, -signedOffset(rule), rule.offsetUnit);

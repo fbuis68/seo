@@ -1102,6 +1102,16 @@ async function loadCfg(){
     console.error('Impossible de charger la configuration depuis l\'API — valeurs par défaut utilisées.', e);
   }
 }
+// Fuseau horaire de l'hôtel (CFG.timezone) — "aujourd'hui" côté client doit
+// refléter le fuseau de l'établissement, pas celui de l'appareil du client
+// (mobile en itinérance, hôtel à la Réunion consulté depuis la métropole…).
+// Miroir de admin.html (hotelToday) et src/lib/timezone.ts (todayInTz).
+function hotelToday(){
+  try{
+    var fmt = new Intl.DateTimeFormat('en-CA', {timeZone: CFG.timezone||'Europe/Paris', year:'numeric', month:'2-digit', day:'2-digit'});
+    return fmt.format(new Date()); // en-CA => YYYY-MM-DD
+  }catch(e){ return new Date().toISOString().slice(0,10); }
+}
 
 // ═══════════════════ APPLY BRAND
 // ═══════════════════ TRANSLATIONS & CURRENCY
@@ -2183,7 +2193,7 @@ async function espRenderMenage(){
   if(!b){ statusEl.querySelector('span').textContent='Aucune réservation active.'; return; }
 
   // Déterminer si séjour en cours
-  var today = new Date().toISOString().slice(0,10);
+  var today = hotelToday();
   var inProgress = b.startDate <= today && b.endDate > today;
 
   if(!inProgress){
@@ -2250,7 +2260,7 @@ async function espRenderHisto(){
   // Trier par date décroissante
   mine = mine.slice().sort(function(a,c){return new Date(c.startDate)-new Date(a.startDate);});
 
-  var today = new Date().toISOString().slice(0,10);
+  var today = hotelToday();
 
   list.innerHTML = mine.map(function(r, idx){
     var inProgress = r.startDate <= today && r.endDate > today;

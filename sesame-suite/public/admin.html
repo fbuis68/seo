@@ -753,6 +753,29 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
           </select>
         </div>
       </div>
+      <div class="fi"><label class="lb">Fuseau horaire de l'hôtel</label>
+        <select id="h-timezone" onchange="liveSync()">
+          <option value="Europe/Paris">🇫🇷 Europe/Paris (métropole)</option>
+          <option value="America/Guadeloupe">🇬🇵 America/Guadeloupe</option>
+          <option value="America/Martinique">🇲🇶 America/Martinique</option>
+          <option value="America/Cayenne">🇬🇫 America/Cayenne (Guyane)</option>
+          <option value="Indian/Reunion">🇷🇪 Indian/Reunion</option>
+          <option value="Indian/Mayotte">🇾🇹 Indian/Mayotte</option>
+          <option value="Pacific/Noumea">🇳🇨 Pacific/Noumea</option>
+          <option value="Pacific/Tahiti">🇵🇫 Pacific/Tahiti</option>
+          <option value="Europe/London">🇬🇧 Europe/London</option>
+          <option value="Europe/Madrid">🇪🇸 Europe/Madrid</option>
+          <option value="Europe/Rome">🇮🇹 Europe/Rome</option>
+          <option value="Europe/Berlin">🇩🇪 Europe/Berlin</option>
+          <option value="Europe/Zurich">🇨🇭 Europe/Zurich</option>
+          <option value="Europe/Lisbon">🇵🇹 Europe/Lisbon</option>
+          <option value="Africa/Casablanca">🇲🇦 Africa/Casablanca</option>
+          <option value="Africa/Tunis">🇹🇳 Africa/Tunis</option>
+          <option value="America/New_York">🇺🇸 America/New_York</option>
+          <option value="America/Toronto">🇨🇦 America/Toronto</option>
+        </select>
+        <div style="font-size:11.5px;color:var(--mu);margin-top:4px">Détermine "aujourd'hui" pour les arrivées du jour, les KPI, le planning ménage et les automatisations avant/après séjour — indépendamment du fuseau du navigateur.</div>
+      </div>
     </div>
     <div class="ca">
       <div class="ch"><i class="ti ti-star"></i>Catégorie</div>
@@ -2676,7 +2699,7 @@ Accès au salon Premium</textarea>
 // ═══════════════════════════════════════════════ CONFIG ENGINE
 var DEFAULT = {
   hotelName:'Hôtel Les Jardins',hotelSlogan:'Séjour responsable & récompensé',entityId:'E00000001',
-  stars:3,hotelAddr:'',hotelEmail:'',
+  stars:3,hotelAddr:'',hotelEmail:'',timezone:'Europe/Paris',
   colors:{primary:'#8B1A2E',primaryLight:'#FDEDF0',accent:'#8B1A2E',headerBg:'#17121E',
     headerText:'#FFFFFF',bg:'#F5F3F0',cardBg:'#FFFFFF',border:'#E3DED8',text:'#14121E',btnNav:'#8B1A2E'},
   radius:14,radiusBtn:8,shadow:true,darkH:true,
@@ -2741,6 +2764,47 @@ var DEFAULT = {
   hotelPlan:null, rooms:[], roomServiceCatalog:[]
 };
 var CFG = JSON.parse(JSON.stringify(DEFAULT));
+
+// ── Fuseau horaire de l'hôtel (CFG.timezone) — "aujourd'hui" côté client
+// doit refléter le fuseau de l'établissement, pas celui du navigateur qui
+// consulte l'admin (ex. équipe Sesame à Paris qui gère un hôtel à la
+// Réunion). Utilisé par les arrivées du jour, les KPI et le planning
+// ménage. Miroir de src/lib/timezone.ts (todayInTz).
+// Même liste que le <select id="h-timezone"> du panneau Hôtel — réutilisée
+// par la modale "Hôtels [Multi]" (Sesame uniquement) pour rester cohérente.
+var HOTEL_TZ_OPTIONS = [
+  ['Europe/Paris','🇫🇷 Europe/Paris (métropole)'],
+  ['America/Guadeloupe','🇬🇵 America/Guadeloupe'],
+  ['America/Martinique','🇲🇶 America/Martinique'],
+  ['America/Cayenne','🇬🇫 America/Cayenne (Guyane)'],
+  ['Indian/Reunion','🇷🇪 Indian/Reunion'],
+  ['Indian/Mayotte','🇾🇹 Indian/Mayotte'],
+  ['Pacific/Noumea','🇳🇨 Pacific/Noumea'],
+  ['Pacific/Tahiti','🇵🇫 Pacific/Tahiti'],
+  ['Europe/London','🇬🇧 Europe/London'],
+  ['Europe/Madrid','🇪🇸 Europe/Madrid'],
+  ['Europe/Rome','🇮🇹 Europe/Rome'],
+  ['Europe/Berlin','🇩🇪 Europe/Berlin'],
+  ['Europe/Zurich','🇨🇭 Europe/Zurich'],
+  ['Europe/Lisbon','🇵🇹 Europe/Lisbon'],
+  ['Africa/Casablanca','🇲🇦 Africa/Casablanca'],
+  ['Africa/Tunis','🇹🇳 Africa/Tunis'],
+  ['America/New_York','🇺🇸 America/New_York'],
+  ['America/Toronto','🇨🇦 America/Toronto']
+];
+function hotelToday(){
+  try{
+    var fmt = new Intl.DateTimeFormat('en-CA', {timeZone: CFG.timezone||'Europe/Paris', year:'numeric', month:'2-digit', day:'2-digit'});
+    return fmt.format(new Date()); // en-CA => YYYY-MM-DD
+  }catch(e){ return new Date().toISOString().slice(0,10); }
+}
+function hotelNow(){
+  try{
+    var parts = new Intl.DateTimeFormat('en-CA', {timeZone: CFG.timezone||'Europe/Paris', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false}).formatToParts(new Date());
+    var o = {}; parts.forEach(function(p){ if(p.type!=='literal') o[p.type]=p.value; });
+    return new Date(o.year+'-'+o.month+'-'+o.day+'T'+o.hour+':'+o.minute+':'+o.second);
+  }catch(e){ return new Date(); }
+}
 
 // ═══════════════════════════════════════════════ AUTH (back-office)
 // Remplace la persistance localStorage('SESAME_CFG') par l'API TypeScript.
@@ -3044,6 +3108,7 @@ function populateAll(){
   setVal('h-stars',CFG.stars);
   setVal('h-currency',CFG.currency||'EUR');
   setVal('h-lang',CFG.lang||'fr');
+  setVal('h-timezone',CFG.timezone||'Europe/Paris');
   setChk('h-exoEnf',CFG.exoEnf);setChk('h-reducAdos',CFG.reducAdos);setChk('h-exoHand',CFG.exoHand);
   for(var i=1;i<=5;i++){setVal('tar-'+i,CFG.tarifs[i-1]);}
   setVal('e-eauM',CFG.eauMenage);document.getElementById('e-eauMV').textContent=CFG.eauMenage+' L';
@@ -3096,6 +3161,7 @@ function collectAll(){
   CFG.stars=parseInt(getVal('h-stars'))||3;
   CFG.currency=getVal('h-currency')||'EUR';
   CFG.lang=getVal('h-lang')||'fr';
+  CFG.timezone=getVal('h-timezone')||'Europe/Paris';
   CFG.exoEnf=getChk('h-exoEnf');CFG.reducAdos=getChk('h-reducAdos');CFG.exoHand=getChk('h-exoHand');
   for(var i=1;i<=5;i++){var v=parseFloat(getVal('tar-'+i));if(!isNaN(v))CFG.tarifs[i-1]=v;}
   var em=parseInt(getVal('e-eauM'));if(!isNaN(em))CFG.eauMenage=em;
@@ -5915,7 +5981,7 @@ function fmtShort(d){return d.toLocaleDateString('fr-FR',{weekday:'short',day:'n
 function fmtMonth(d){return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'});}
 function dateInRange(dt,start,end){return dt>=start&&dt<=end;}
 function getDays(){
-  var base=new Date();base.setDate(base.getDate()+PLAN.offset*(PLAN.view==='week'?7:1));
+  var base=new Date(hotelToday()+'T12:00:00');base.setDate(base.getDate()+PLAN.offset*(PLAN.view==='week'?7:1));
   if(PLAN.view==='week'){base.setDate(base.getDate()-base.getDay()+1);}
   var n=PLAN.view==='week'?7:1;
   var days=[];for(var i=0;i<n;i++)days.push(addDays(base,i));
@@ -5952,7 +6018,7 @@ function getPlanRooms(){
 function renderPlanGrid(){
   updateRangeLabel();
   var days=getDays();
-  var today=isoDate(new Date());
+  var today=hotelToday();
   var rooms=getPlanRooms();
   var flLbl=['RDC','1er','2ème','3ème','4ème'];
   var el=document.getElementById('planGrid');
@@ -6044,7 +6110,7 @@ var editingTaskId=null;
 function openNewTask(room,date){
   editingTaskId=null;
   document.getElementById('taskModalTitle').textContent='Nouvelle intervention';
-  renderTaskForm(room||'',date||isoDate(new Date()),null);
+  renderTaskForm(room||'',date||hotelToday(),null);
   document.getElementById('taskModal').style.display='flex';
 }
 function editTask(id){
@@ -6383,7 +6449,7 @@ renderPlanGrid = function(){
 function renderPlanGridByAgent(){
   updateRangeLabel();
   var days=getDays();
-  var today=isoDate(new Date());
+  var today=hotelToday();
   var el=document.getElementById('planGrid');if(!el)return;
   // Get agent list (staffList = cache global, déjà chargé)
   // Add agents from tasks
@@ -6427,7 +6493,7 @@ function renderPlanGridByAgent(){
 function renderPlanGridByStay(){
   updateRangeLabel();
   var days=getDays();
-  var today=isoDate(new Date());
+  var today=hotelToday();
   var el=document.getElementById('planGrid');if(!el)return;
   // Filter bookings that overlap with current period
   var dMin=isoDate(days[0]);var dMax=isoDate(days[days.length-1]);
@@ -6623,6 +6689,8 @@ async function hmOpenEdit(code){
   h += '</div><div class="g2">';
   h += hmFi('Devise', '<select id="hme-currency">'+[['EUR','€ Euro'],['USD','$ Dollar'],['GBP','£ Livre'],['CHF','CHF Suisse'],['MAD','MAD Dirham'],['JPY','¥ Yen']].map(function(c){return '<option value="'+c[0]+'"'+(cfg.currency===c[0]?' selected':'')+'>'+c[1]+'</option>';}).join('')+'</select>');
   h += hmFi('Langue', '<select id="hme-lang">'+[['fr','🇫🇷 Français'],['en','🇬🇧 English'],['de','🇩🇪 Deutsch'],['es','🇪🇸 Español'],['it','🇮🇹 Italiano'],['nl','🇳🇱 Nederlands'],['pt','🇵🇹 Português']].map(function(l){return '<option value="'+l[0]+'"'+(cfg.lang===l[0]?' selected':'')+'>'+l[1]+'</option>';}).join('')+'</select>');
+  h += '</div><div class="g2">';
+  h += hmFi('Fuseau horaire', '<select id="hme-timezone">'+HOTEL_TZ_OPTIONS.map(function(t){return '<option value="'+t[0]+'"'+((cfg.timezone||'Europe/Paris')===t[0]?' selected':'')+'>'+t[1]+'</option>';}).join('')+'</select>');
   h += '</div>';
 
   h += hmSection('ti-leaf','Modules Éco-Séjour actifs');
@@ -6688,6 +6756,7 @@ async function hmSaveEditAndApply(){
   var stars= parseInt(gv('hme-stars')); if(!isNaN(stars)) cfg.stars=stars;
   var cur  = gv('hme-currency'); if(cur!==null) cfg.currency=cur;
   var lang = gv('hme-lang');     if(lang!==null) cfg.lang=lang;
+  var tz   = gv('hme-timezone'); if(tz!==null) cfg.timezone=tz;
 
   if(!cfg.checkinModules) cfg.checkinModules={};
   ['taxe','room','kyc','eco','rewards','payment'].forEach(function(k){
@@ -7170,7 +7239,7 @@ function renderOrders(){
   var sym = getCurrSym();
 
   // Stats
-  var today = new Date().toISOString().slice(0,10);
+  var today = hotelToday();
   document.getElementById('ord-new').textContent   = orders.filter(function(o){return o.status==='new';}).length;
   document.getElementById('ord-prep').textContent  = orders.filter(function(o){return o.status==='preparing';}).length;
   document.getElementById('ord-deliv').textContent = orders.filter(function(o){return o.status==='delivering';}).length;
@@ -9138,14 +9207,18 @@ function kpiStartOfMonth(d){ return new Date(d.getFullYear(), d.getMonth(), 1); 
 function kpiEndOfMonth(d){ return new Date(d.getFullYear(), d.getMonth()+1, 0); }
 
 function kpiComputeRange(preset){
-  var now = new Date();
-  if(preset==='7d') return { from: kpiIso(kpiAddDays(now,-6)), to: kpiIso(now) };
-  if(preset==='month') return { from: kpiIso(kpiStartOfMonth(now)), to: kpiIso(now) };
+  var todayStr = hotelToday();
+  // Ancré à midi (plutôt que minuit) pour que les calculs de jours/mois ci-dessous
+  // ne changent jamais de date sous l'effet du DST du navigateur — seule la valeur
+  // du jour lui-même vient de hotelToday() (fuseau de l'hôtel).
+  var now = new Date(todayStr+'T12:00:00');
+  if(preset==='7d') return { from: kpiIso(kpiAddDays(now,-6)), to: todayStr };
+  if(preset==='month') return { from: kpiIso(kpiStartOfMonth(now)), to: todayStr };
   if(preset==='lastmonth'){
     var lm = new Date(now.getFullYear(), now.getMonth()-1, 1);
     return { from: kpiIso(kpiStartOfMonth(lm)), to: kpiIso(kpiEndOfMonth(lm)) };
   }
-  if(preset==='year') return { from: kpiIso(new Date(now.getFullYear(),0,1)), to: kpiIso(now) };
+  if(preset==='year') return { from: kpiIso(new Date(now.getFullYear(),0,1)), to: todayStr };
   return { from: KPI_STATE.from, to: KPI_STATE.to };
 }
 
@@ -9368,7 +9441,7 @@ function renderReservations(){
   var showAllEl = document.getElementById('resa-showAll');
   if(!listEl) return;
   var showAll = showAllEl && showAllEl.checked;
-  var todayStr = new Date().toISOString().slice(0,10);
+  var todayStr = hotelToday();
 
   var list = (showAll ? RESA_CACHE : RESA_CACHE.filter(function(r){ return (r.booking.startDate||'').slice(0,10) === todayStr; }))
     .slice()

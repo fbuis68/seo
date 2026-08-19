@@ -1188,6 +1188,59 @@ d'accès (portes/serrures) installés chez le client. Champ numérique ajouté
 juste après les cases "Type de module" (Sesame/Ttlock) dans le modal de
 fiche, et affiché sur la fiche à côté de "Modules".
 
+### Fuseau horaire de l'hôtel
+
+Nouveau champ `EntityModuleConfig.timezone` (String, défaut `Europe/Paris`,
+identifiant IANA) — configurable dans le panneau "Hôtel" (`public/admin.html`)
+via un sélecteur listant les fuseaux pertinents pour un établissement
+(métropole, DOM-TOM, pays limitrophes) et dans la modale rapide "Hôtels
+[Multi]" (Sesame uniquement, `hmOpenEdit()`), pour que "aujourd'hui" reflète
+le fuseau de l'établissement plutôt que celui du serveur (souvent UTC en
+production) ou du navigateur qui consulte l'admin (ex. équipe Sesame à Paris
+gérant un hôtel à la Réunion).
+
+Surfaces effectivement rendues tz-aware (calcul de "aujourd'hui" remplacé
+par un équivalent qui lit `CFG.timezone`) :
+- **Arrivées du jour** (`public/admin.html`, `renderReservations()`) —
+  liste et statut "Expirée" des réservations.
+- **KPI / tableau de bord** (`kpiComputeRange()`) — présets de période
+  (7 jours, mois en cours, mois dernier, année).
+- **Planning ménage** (`getDays()`, `renderPlanGrid()` et ses variantes
+  par agent/par séjour) — colonne "aujourd'hui" et date par défaut d'une
+  nouvelle intervention.
+- **Commandes boutique/room-service** (`renderOrders()`) — statistique
+  "livré aujourd'hui".
+- **Espace client** (`public/checkin.html`) — statut "séjour en cours" pour
+  l'édition des préférences ménage, et statut "En cours/À venir/Terminé"
+  de l'historique des séjours.
+- **Moteur d'automatisation** (`src/lib/automation.ts`, `sweepDateRule()`)
+  — pour les règles avant/après séjour avec un offset en jours ou en mois
+  (ex. "J-1 avant arrivée"), la date pivot est ancrée sur le jour calendaire
+  actuel à l'hôtel (fuseau de l'entité de la règle) plutôt que sur l'heure
+  serveur ; les offsets en heures/minutes restent calculés sur l'instant
+  précis (notion sans ambiguïté de fuseau).
+
+Nouvelle librairie partagée `src/lib/timezone.ts` (`todayInTz`, `hourInTz`,
+`weekdayInTz`, `dayOfMonthInTz`, via `Intl.DateTimeFormat` — aucune
+dépendance externe) côté backend, et `hotelToday()`/`hotelNow()` (même
+principe) dupliquées côté client dans `admin.html` et `checkin.html`.
+
+**Non couvert par ce passage** (mentionné pour transparence, pas un oubli) :
+quelques usages secondaires et cosmétiques de `new Date()` identifiés mais
+volontairement laissés tels quels — graphique de revenus CRM, compte à
+rebours d'essai d'abonnement (portée CRM, pas par hôtel), dates par défaut
+de documents/factures et export PDF, activités CRM. La date d'expiration
+d'un document KYC scanné par un client (`checkin.html`) reste elle aussi
+dans le fuseau du client, pas de l'hôtel — ça n'aurait pas de sens
+autrement. Le moteur de newsletters récurrentes (jour/heure programmés,
+`automation.ts`) reste à portée CRM (non rattaché à une entité hôtel) et
+n'a donc pas été rendu tz-aware dans ce passage. Par ailleurs, un défaut
+préexistant et distinct (round-trip `date.toISOString().slice(0,10)` sur
+des chaînes de date déjà "date-only" dans `housekeepingTask.ts` et
+`taxeSejourRecord.ts`) a été identifié mais n'a pas été retouché ici — il
+n'est fiable que par coïncidence quand les deux bouts sont ancrés en UTC,
+et mériterait un passage dédié.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT
