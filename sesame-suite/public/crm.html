@@ -1809,7 +1809,11 @@ function trMonthOpts(selected){
 }
 
 function renderTresorerie(){
-  const mrrClients = clients.filter(c=>c.mrr).slice().sort((a,b)=>(b.mrr||0)-(a.mrr||0));
+  // "Client" uniquement (jamais un prospect, qui n'a par définition pas de
+  // revenu récurrent) — tous les clients apparaissent, avec ou sans MRR
+  // déjà saisi, pour que le champ serve aussi bien à ajouter une nouvelle
+  // valeur qu'à corriger/effacer une valeur existante.
+  const mrrClients = clients.filter(c=>(c.type||'Client')==='Client').slice().sort((a,b)=>a.nom.localeCompare(b.nom,'fr'));
   const signeRows = trRows('signe');
   const pipelineRows = trRows('pipeline');
   const depenseRows = trRows('depense');
@@ -1823,7 +1827,7 @@ function renderTresorerie(){
 
   const dl = 'clientDatalist';
 
-  const mrrBody = mrrClients.length===0 ? '<div class="log-empty">Aucun client avec un MRR renseigné.</div>' : mrrClients.map(c=>`
+  const mrrBody = mrrClients.length===0 ? '<div class="log-empty">Aucun client dans le CRM.</div>' : mrrClients.map(c=>`
     <div class="tr-row">
       <div class="tr-row-top">
         <div class="tr-row-name" style="cursor:pointer" onclick="showFiche('${c.id}')">${esc(c.nom)}</div>
@@ -1900,7 +1904,7 @@ function renderTresorerie(){
     <div class="panels" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px">
       <div class="card" style="margin-bottom:0">
         <div class="card-head"><div class="ch-ico" style="background:var(--tr-mrr);border-color:var(--tr-mrr)"></div><span class="ch-title">MRR récurrent</span><span class="num" style="margin-left:auto;font-weight:600" id="tr-mrr-total">${fmtEUR(mrrTotal)}/mois</span></div>
-        <div class="tr-panel-body">${mrrBody}</div>
+        <div class="tr-panel-body" id="tr-mrr-body">${mrrBody}</div>
         <div class="tr-caveat">Édite le champ MRR de la fiche client (même valeur que la fiche et le tableau Portefeuille).</div>
       </div>
       <div class="card" style="margin-bottom:0">
