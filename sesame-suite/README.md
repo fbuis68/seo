@@ -895,6 +895,45 @@ de 0 au lieu de la taille de son contenu ; il se faisait donc écraser par
     regroupé avec les fiches sans PMS renseigné plutôt que traité comme un
     nom de PMS à part entière.
 
+- **Module Tickets (support)** (19/08/2026) — un contact hôtelier ouvre un
+  incident depuis un widget public, l'équipe Sesame le qualifie et y répond ;
+  jusqu'ici il n'existait aucune gestion de ticket réelle (seul un panneau
+  "CRM Sesame" orphelin dans `admin.html`, jamais relié à la navigation et
+  entièrement en `localStorage`, en avait l'apparence — cf. constat fait à
+  l'utilisateur avant ce chantier).
+  - **Schéma** : `CrmTicket` (rattaché à `CrmProspect`, statut/priorité/type,
+    agent assigné parmi les comptes Sesame, `publicToken` unique) +
+    `CrmTicketMessage` (authorType client/agent, kind reply/note, pièces
+    jointes en data URI — même convention que `Room.photos`). `SmtpConfig`
+    gagne `supportFromName`/`supportFromEmail`, une identité d'expédition
+    dédiée aux réponses de ticket (retombe sur l'adresse générale si vide).
+  - **Widget public** (`public/support.html`, sans authentification) : un
+    client ouvre un ticket (email retrouvé ou créé dans le CRM, comme le
+    formulaire de contact) et reçoit un lien permanent (`?token=…`, même
+    principe que `CrmQuote.signToken`) pour suivre son ticket et le
+    compléter ensuite d'une note et d'une photo — sans jamais voir les notes
+    internes de l'équipe support (filtrées côté serveur sur `GET
+    /wa/ticket/public`).
+  - **Côté CRM** (`public/crm.html`) : nouvel onglet "Support" (badge du
+    nombre de tickets ouverts dans la nav, comme "Sans contrat") — file
+    d'attente filtrable par statut, détail d'un ticket (qualification
+    statut/priorité/type/agent, fil de discussion, réponse ou note interne).
+    "Répondre" envoie un vrai email au contact (adresse support si
+    configurée) et bascule automatiquement le ticket en "Attente client" ;
+    "Note interne" n'est jamais envoyée. Un modèle de message existant peut
+    être inséré comme point de départ de la réponse (variables substituées,
+    éditable avant envoi) — répond au besoin de préparer des réponses types.
+    Badge "☎ N" sur chaque fiche client (liste, grille, fiche détaillée),
+    à la manière du badge d'engagement entrant (✉ N) déjà existant.
+  - **Automatisations** : deux nouveaux déclencheurs CRM,
+    `crm.ticket_created` et `crm.ticket_client_replied` (notification interne
+    de l'équipe support, via un destinataire personnalisé sur la règle —
+    aucun email n'est envoyé au client par ces déclencheurs, seulement par
+    "Répondre").
+  - Un client qui complète un ticket déjà fermé le rouvre automatiquement
+    (statut "En attente") — revenir sur un incident qu'on croyait résolu est
+    le signal même qu'il ne l'est pas.
+
 - **Bug corrigé — config d'un compte hôtel affichant celle d'un autre
   établissement** (`loadCfg()`) : `GET /entityModuleConfig/list` est
   volontairement public côté serveur (le parcours client en a besoin sans

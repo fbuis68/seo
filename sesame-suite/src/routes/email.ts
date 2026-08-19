@@ -14,7 +14,19 @@ import { getSmtpConfig, upsertSmtpConfig, sendTestEmail } from "../lib/email";
  */
 export const emailRouter = Router();
 
-function shapeSmtp(c: { host: string; port: number; secure: boolean; username: string; password: string; fromName: string | null; fromEmail: string } | null) {
+function shapeSmtp(
+  c: {
+    host: string;
+    port: number;
+    secure: boolean;
+    username: string;
+    password: string;
+    fromName: string | null;
+    fromEmail: string;
+    supportFromName: string | null;
+    supportFromEmail: string | null;
+  } | null
+) {
   if (!c) return null;
   return {
     host: c.host,
@@ -24,6 +36,8 @@ function shapeSmtp(c: { host: string; port: number; secure: boolean; username: s
     password: c.password,
     fromName: c.fromName || "",
     fromEmail: c.fromEmail,
+    supportFromName: c.supportFromName || "",
+    supportFromEmail: c.supportFromEmail || "",
   };
 }
 
@@ -44,6 +58,8 @@ interface SmtpBody {
   password: string;
   fromName?: string;
   fromEmail: string;
+  supportFromName?: string;
+  supportFromEmail?: string;
 }
 
 emailRouter.post(
@@ -57,6 +73,7 @@ emailRouter.post(
     if (!b.username || !b.username.trim()) throw new HttpError(400, "Identifiant requis");
     if (!b.password) throw new HttpError(400, "Mot de passe requis");
     if (!b.fromEmail || !b.fromEmail.includes("@")) throw new HttpError(400, "Adresse d'expédition valide requise");
+    if (b.supportFromEmail && !b.supportFromEmail.includes("@")) throw new HttpError(400, "Adresse support invalide");
     const row = await upsertSmtpConfig(entityId, {
       host: b.host.trim(),
       port: Number(b.port),
@@ -65,6 +82,8 @@ emailRouter.post(
       password: b.password,
       fromName: b.fromName,
       fromEmail: b.fromEmail.trim(),
+      supportFromName: b.supportFromName,
+      supportFromEmail: b.supportFromEmail,
     });
     res.json(shapeSmtp(row));
   })

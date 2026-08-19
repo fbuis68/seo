@@ -103,6 +103,7 @@ model AdminUser {
   // (l'équipe interne), cf. GET /wa/commercial/list.
   crmProspectsAsCommercial CrmProspect[] @relation("ProspectCommercial")
   crmDealsAsCommercial     CrmDeal[]     @relation("DealCommercial")
+  crmTicketsAsAgent        CrmTicket[]   @relation("TicketAgent")
 
   createdAt DateTime @default(now())
 }
@@ -698,6 +699,7 @@ model CrmProspect {
   updatedAt DateTime @updatedAt
 
   activities CrmActivity[]
+  tickets    CrmTicket[]
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -827,6 +829,54 @@ model CrmActivity {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Module Tickets (support) — 19/08/2026. Un client (contact hôtelier déjà
+// suivi au CRM, ou nouveau retrouvé/créé par email comme le formulaire de
+// contact) ouvre un incident depuis le widget public (public/support.html) ;
+// l'équipe Sesame le qualifie (statut/priorité/type/agent) et y répond
+// depuis la fiche — réponse envoyée par email réel au contact, note interne
+// jamais envoyée. `publicToken` donne au client un lien permanent vers SON
+// ticket pour le compléter (note + image) sans repasser par une nouvelle
+// ouverture, à la manière de CrmQuote.signToken pour la signature de devis.
+// ─────────────────────────────────────────────────────────────────────────
+model CrmTicket {
+  id         String      @id @default(cuid())
+  prospectId String
+  prospect   CrmProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  agentId String?
+  agent   AdminUser? @relation("TicketAgent", fields: [agentId], references: [id], onDelete: SetNull)
+
+  subject      String
+  status       String  @default("En attente") // En attente | En cours | Attente client | Résolu | Fermé
+  priority     String  @default("Normale") // Basse | Normale | Haute | Urgente
+  type         String? // Incident technique | Question | Demande | Facturation | Autre
+  tags         Json    @default("[]") // string[]
+  contactEmail String // qui a ouvert le ticket (peut différer du référent de la fiche)
+  contactName  String?
+  publicToken  String  @unique @default(cuid())
+
+  messages CrmTicketMessage[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  closedAt  DateTime?
+}
+
+model CrmTicketMessage {
+  id       String    @id @default(cuid())
+  ticketId String
+  ticket   CrmTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  authorType  String // client | agent
+  authorName  String?
+  kind        String // reply (envoyé par email au client si authorType=agent) | note (interne, jamais envoyée)
+  body        String @db.Text
+  attachments Json   @default("[]") // string[] data URI — même convention que Room.photos
+
+  createdAt DateTime @default(now())
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // Envoi d'email générique — un serveur SMTP sortant + des modèles, réutilisés
 // tels quels par le module CRM (entityId=null, portée Sesame) et par le
 // back-office de chaque hôtel (entityId=<hôtel>, ses propres modèles/envois).
@@ -847,6 +897,14 @@ model SmtpConfig {
   password String
   fromName  String?
   fromEmail String
+
+  // Adresse dédiée aux réponses de tickets support (module Tickets,
+  // 19/08/2026) — distincte de fromEmail/fromName pour que les échanges
+  // support ("L'équipe Support Sesame") ne partent pas sous l'identité
+  // générique utilisée pour les autres emails CRM. Retombe sur
+  // fromEmail/fromName si non renseignée (cf. ticketFromHeader()).
+  supportFromEmail String?
+  supportFromName  String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

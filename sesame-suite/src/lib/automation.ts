@@ -48,6 +48,8 @@ export const TRIGGERS: TriggerDef[] = [
     targetModel: "subscription",
   },
   { key: "crm.newsletter", label: "Newsletter récurrente", scope: "crm", timingModes: ["recurring"] },
+  { key: "crm.ticket_created", label: "Nouveau ticket support", scope: "crm", timingModes: ["immediate"] },
+  { key: "crm.ticket_client_replied", label: "Client a répondu à un ticket", scope: "crm", timingModes: ["immediate"] },
 ];
 
 export function getTrigger(key: string) {

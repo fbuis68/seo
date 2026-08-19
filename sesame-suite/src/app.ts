@@ -25,6 +25,7 @@ import { crmDealRouter } from "./routes/crmDeal";
 import { crmQuoteRouter } from "./routes/crmQuote";
 import { crmUserRouter } from "./routes/crmUser";
 import { crmProductRouter } from "./routes/crmProduct";
+import { crmTicketRouter } from "./routes/crmTicket";
 import { contactRouter } from "./routes/contact";
 import { emailRouter } from "./routes/email";
 import { messagingRouter } from "./routes/messaging";
@@ -68,6 +69,7 @@ export function createApp() {
   app.use("/wa", crmQuoteRouter);
   app.use("/wa", crmUserRouter);
   app.use("/wa", crmProductRouter);
+  app.use("/wa", crmTicketRouter);
   app.use("/wa", emailRouter);
   app.use("/wa", messagingRouter);
   app.use("/wa", automationRuleRouter);
@@ -98,6 +100,7 @@ export function createApp() {
   app.get("/admin", (_req, res) => res.sendFile(path.join(publicDir, "admin.html")));
   app.get("/onboarding", (_req, res) => res.sendFile(path.join(publicDir, "onboarding.html")));
   app.get("/crm", (_req, res) => res.sendFile(path.join(publicDir, "crm.html")));
+  app.get("/support", (_req, res) => res.sendFile(path.join(publicDir, "support.html")));
 
   app.use(errorHandler);
 

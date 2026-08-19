@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Support — Sesame Technology</title>
+<style>
+  :root{--bg:#f5f4f0;--card:#fff;--bdr:#e2dfd9;--tx:#1a1a1a;--mu:#888;--a:#8a2b2b}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--tx);font-size:14px}
+  .wrap{max-width:640px;margin:0 auto;padding:32px 20px 60px}
+  .logo{font-size:18px;font-weight:700;margin-bottom:4px}
+  .logo em{color:var(--a);font-style:normal}
+  .card{background:var(--card);border:0.5px solid var(--bdr);border-radius:12px;padding:22px;margin-top:18px}
+  h1{font-size:18px;margin:0 0 4px}
+  .sub{color:var(--mu);font-size:12px;margin-bottom:18px}
+  label{font-size:12px;color:var(--mu);display:block;margin-bottom:4px}
+  input[type=text],input[type=email],textarea{width:100%;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--bdr);border-radius:8px;margin-bottom:12px}
+  textarea{resize:vertical;min-height:100px}
+  input[type=file]{width:100%;margin-bottom:12px;font-size:12px}
+  .btn{font-family:inherit;font-size:13px;padding:10px 18px;border-radius:8px;border:none;background:var(--a);color:#fff;cursor:pointer;width:100%;font-weight:500}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn-ghost{background:transparent;color:var(--mu);border:1px solid var(--bdr);width:auto}
+  .err{color:#a32d2d;font-size:12px;margin-top:8px;display:none}
+  .ok-box{text-align:center;padding:30px 10px}
+  .ok-icon{font-size:36px;color:#1a6b47;margin-bottom:10px}
+  .link-box{background:var(--bg);border-radius:8px;padding:10px 12px;font-size:12px;word-break:break-all;margin-top:10px}
+  .status-pill{display:inline-flex;font-size:11px;padding:3px 10px;border-radius:20px;background:#e6f1fb;color:#0c447c;font-weight:600;margin-bottom:14px}
+  .msg{padding:12px 14px;margin-bottom:10px;border-radius:10px;background:#f7f6f2;border:1px solid var(--bdr)}
+  .msg.agent{background:#eef3fb}
+  .msg-head{display:flex;justify-content:space-between;font-size:11px;color:var(--mu);margin-bottom:6px}
+  .msg-body{font-size:13px;white-space:pre-wrap}
+  .msg-atts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .msg-atts img{width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--bdr)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">SESAME <em>TECHNOLOGY</em></div>
+  <div id="app"><div class="card">Chargement…</div></div>
+</div>
+
+<script>
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+const params = new URLSearchParams(location.search);
+const TOKEN = params.get('token') || '';
+let TICKET = null;
+
+async function init(){
+  if(TOKEN){ await loadTicket(); } else { renderCreateForm(); }
+}
+
+async function loadTicket(){
+  try{
+    const r = await fetch('/wa/ticket/public?token='+encodeURIComponent(TOKEN));
+    const data = await r.json();
+    if(!r.ok){ renderError(data.error || 'Lien invalide ou expiré.'); return; }
+    TICKET = data;
+    renderTicket();
+  }catch(e){ renderError('Erreur de connexion au serveur.'); }
+}
+
+function renderError(msg){
+  document.getElementById('app').innerHTML = '<div class="card"><h1>Support</h1><div class="sub">'+esc(msg)+'</div></div>';
+}
+
+function filesToDataUrls(fileList, cb){
+  const files = Array.from(fileList||[]);
+  if(!files.length){ cb([]); return; }
+  let done=0; const out=new Array(files.length);
+  files.forEach((f,i)=>{
+    const r = new FileReader();
+    r.onload = e=>{ out[i]=e.target.result; done++; if(done===files.length) cb(out); };
+    r.readAsDataURL(f);
+  });
+}
+
+function renderCreateForm(){
+  document.getElementById('app').innerHTML = `
+    <div class="card">
+      <h1>Ouvrir un ticket support</h1>
+      <div class="sub">Décrivez votre incident, nous vous répondrons par email dès que possible.</div>
+      <label>Votre email</label>
+      <input type="email" id="f-email" placeholder="vous@votrehotel.fr">
+      <label>Votre nom</label>
+      <input type="text" id="f-name" placeholder="Prénom Nom">
+      <label>Sujet</label>
+      <input type="text" id="f-subject" placeholder="Ex. Redémarrage platine incomplet">
+      <label>Description</label>
+      <textarea id="f-message" placeholder="Décrivez le problème rencontré…"></textarea>
+      <label>Pièce jointe (photo, optionnel)</label>
+      <input type="file" id="f-files" accept="image/*" multiple>
+      <button class="btn" id="f-submit" onclick="submitTicket()">Envoyer</button>
+      <div class="err" id="f-err"></div>
+    </div>`;
+}
+
+async function submitTicket(){
+  const errEl = document.getElementById('f-err');
+  errEl.style.display='none';
+  const email = document.getElementById('f-email').value.trim();
+  const name = document.getElementById('f-name').value.trim();
+  const subject = document.getElementById('f-subject').value.trim();
+  const message = document.getElementById('f-message').value.trim();
+  if(!email || !email.includes('@')){ errEl.textContent='Adresse email valide requise.'; errEl.style.display='block'; return; }
+  if(!subject){ errEl.textContent='Indiquez un sujet.'; errEl.style.display='block'; return; }
+  if(!message){ errEl.textContent='Décrivez votre incident.'; errEl.style.display='block'; return; }
+  const btn = document.getElementById('f-submit');
+  btn.disabled = true; btn.textContent = 'Envoi en cours…';
+  filesToDataUrls(document.getElementById('f-files').files, async (attachments)=>{
+    try{
+      const r = await fetch('/wa/ticket/create', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ email, name, subject, message, attachments })
+      });
+      const data = await r.json();
+      if(!r.ok){ errEl.textContent = data.error || "Erreur lors de l'ouverture du ticket."; errEl.style.display='block'; btn.disabled=false; btn.textContent='Envoyer'; return; }
+      const link = location.origin + '/support.html?token=' + data.publicToken;
+      document.getElementById('app').innerHTML = `
+        <div class="card">
+          <div class="ok-box">
+            <div class="ok-icon">✓</div>
+            <div><strong>Ticket ouvert avec succès</strong></div>
+            <div class="sub">Nous reviendrons vers vous par email dès que possible.</div>
+            <div class="sub" style="margin-top:10px">Conservez ce lien pour suivre ou compléter votre ticket :</div>
+            <div class="link-box"><a href="${esc(link)}">${esc(link)}</a></div>
+          </div>
+        </div>`;
+    }catch(e){ errEl.textContent = 'Erreur de connexion au serveur.'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Envoyer'; }
+  });
+}
+
+function msgHtml(m){
+  return `<div class="msg ${m.authorType==='agent'?'agent':''}">
+    <div class="msg-head"><strong>${esc(m.authorName||(m.authorType==='agent'?'Équipe support':'Vous'))}</strong><span>${new Date(m.createdAt).toLocaleString('fr-FR')}</span></div>
+    <div class="msg-body">${esc(m.body)}</div>
+    ${(m.attachments||[]).length?`<div class="msg-atts">${m.attachments.map(a=>`<a href="${a}" target="_blank"><img src="${a}"></a>`).join('')}</div>`:''}
+  </div>`;
+}
+
+function renderTicket(){
+  document.getElementById('app').innerHTML = `
+    <div class="card">
+      <span class="status-pill">${esc(TICKET.status)}</span>
+      <h1>${esc(TICKET.subject)}</h1>
+      <div class="sub">Ticket #${TICKET.id.slice(-6)}</div>
+      ${TICKET.messages.map(msgHtml).join('')}
+    </div>
+    <div class="card">
+      <h1 style="font-size:15px">Compléter mon ticket</h1>
+      <label>Message</label>
+      <textarea id="r-body" placeholder="Ajoutez une précision…"></textarea>
+      <label>Pièce jointe (photo, optionnel)</label>
+      <input type="file" id="r-files" accept="image/*" multiple>
+      <button class="btn" id="r-submit" onclick="submitFollowup()">Envoyer</button>
+      <div class="err" id="r-err"></div>
+    </div>`;
+}
+
+async function submitFollowup(){
+  const errEl = document.getElementById('r-err');
+  errEl.style.display='none';
+  const body = document.getElementById('r-body').value.trim();
+  if(!body){ errEl.textContent='Message requis.'; errEl.style.display='block'; return; }
+  const btn = document.getElementById('r-submit');
+  btn.disabled = true; btn.textContent = 'Envoi en cours…';
+  filesToDataUrls(document.getElementById('r-files').files, async (attachments)=>{
+    try{
+      const r = await fetch('/wa/ticket/publicReply', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ token: TOKEN, body, attachments })
+      });
+      const data = await r.json();
+      if(!r.ok){ errEl.textContent = data.error || "Erreur lors de l'envoi."; errEl.style.display='block'; btn.disabled=false; btn.textContent='Envoyer'; return; }
+    }catch(e){ errEl.textContent = 'Erreur de connexion au serveur.'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Envoyer'; return; }
+    await loadTicket();
+  });
+}
+
+init();
+</script>
+</body>
+</html>
