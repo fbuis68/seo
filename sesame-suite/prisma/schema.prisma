@@ -647,6 +647,14 @@ model CrmProspect {
   type           String  @default("Client") // Prospect | Client — auto "Prospect" pour les arrivées onboarding/formulaire de contact
   groupe         String?
   secteur        String?
+  // Identité légale — "nom" reste le nom d'usage/commercial affiché partout
+  // (listes, badges, graphiques) ; ces champs sont l'identité INSEE exacte,
+  // remplissables à la main ou via la recherche d'entreprises (API publique
+  // recherche-entreprises.api.gouv.fr, cf. crm.html) qui les renseigne tous
+  // en un clic à partir d'une raison sociale ou d'un SIRET/SIREN saisi.
+  denominationSociale String?
+  siret               String? // 14 chiffres (SIREN + NIC de l'établissement)
+  siren               String? // 9 chiffres — 9 premiers du SIRET, gardé distinct : retourné tel quel par l'API
   adresse        String? // adresse postale (numéro + voie) — ville reste un champ séparé
   ville          String?
   etoiles        String?

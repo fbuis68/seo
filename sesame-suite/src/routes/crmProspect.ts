@@ -34,6 +34,9 @@ function shapeProspect(p: {
   type: string;
   groupe: string | null;
   secteur: string | null;
+  denominationSociale: string | null;
+  siret: string | null;
+  siren: string | null;
   adresse: string | null;
   ville: string | null;
   etoiles: string | null;
@@ -85,6 +88,9 @@ function shapeProspect(p: {
     type: p.type,
     groupe: p.groupe || "",
     secteur: p.secteur || "",
+    denominationSociale: p.denominationSociale || "",
+    siret: p.siret || "",
+    siren: p.siren || "",
     adresse: p.adresse || "",
     ville: p.ville || "",
     etoiles: p.etoiles || "",
@@ -149,6 +155,9 @@ interface ProspectBody {
   type?: string;
   groupe?: string;
   secteur?: string;
+  denominationSociale?: string;
+  siret?: string;
+  siren?: string;
   adresse?: string;
   ville?: string;
   etoiles?: string;
@@ -200,6 +209,9 @@ crmProspectRouter.post(
         type: b.type || "Client",
         groupe: b.groupe,
         secteur: b.secteur,
+        denominationSociale: b.denominationSociale,
+        siret: b.siret,
+        siren: b.siren,
         adresse: b.adresse.trim(),
         ville: b.ville.trim(),
         etoiles: b.etoiles,
@@ -268,6 +280,9 @@ crmProspectRouter.post(
         type: b.type,
         groupe: b.groupe,
         secteur: b.secteur,
+        denominationSociale: b.denominationSociale,
+        siret: b.siret,
+        siren: b.siren,
         adresse: b.adresse?.trim(),
         ville: b.ville,
         etoiles: b.etoiles,

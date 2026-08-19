@@ -982,6 +982,34 @@ de 0 au lieu de la taille de son contenu ; il se faisait donc écraser par
     par texte libre, réponse GeoJSON avec `properties.name`/`.city`/
     `.label`) — à confirmer après déploiement.
 
+- **Identité légale (dénomination sociale, SIRET, SIREN) sur la fiche
+  client** (19/08/2026) — `nom` reste le nom d'usage affiché partout
+  (listes, badges, graphiques), mais ne permettait pas de retrouver ou
+  saisir la raison sociale exacte ni le SIRET d'un client. `CrmProspect`
+  gagne 3 champs libres (`denominationSociale`, `siret`, `siren`),
+  éditables directement dans la modale de la fiche ("Identité légale") :
+  - **Recherche d'entreprise** via l'API publique du même nom
+    (`recherche-entreprises.api.gouv.fr`, gratuite, sans clé, interroge le
+    répertoire SIRENE de l'INSEE) : taper une dénomination ou un SIRET dans
+    le champ de recherche affiche les correspondances, en sélectionner une
+    remplit dénomination + SIRET + SIREN d'un coup. Même repli non bloquant
+    que l'autocomplétion d'adresse en cas d'échec réseau. **Non plus
+    vérifiable en conditions réelles depuis ce sandbox** (même limitation
+    réseau que l'API Adresse) — à confirmer après déploiement.
+  - Saisir un SIRET à la main déduit automatiquement le SIREN (ses 9
+    premiers chiffres) sans avoir à le ressaisir.
+  - Aucun des 3 champs n'est obligatoire (contrairement à adresse/ville) :
+    l'information n'est pas toujours disponible ou pertinente selon le
+    client.
+
+- **Total du graphique "Usage des modules Sesame" corrigé** — additionnait
+  jusqu'ici les 13 "Options actives" (booléens), un chiffre qui n'a pas de
+  sens business réel puisque ces options ne couvrent pas tous les modules
+  Sesame effectivement installés. Il additionne maintenant le champ "Nb
+  modules" (`c.modules`, saisi depuis l'audit clients) de chaque fiche —
+  c'est ce champ, pas les 13 booléens, qui est la source officielle du
+  nombre de modules Sesame par client.
+
 - **Bug corrigé — config d'un compte hôtel affichant celle d'un autre
   établissement** (`loadCfg()`) : `GET /entityModuleConfig/list` est
   volontairement public côté serveur (le parcours client en a besoin sans

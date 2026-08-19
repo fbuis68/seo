@@ -852,13 +852,16 @@ function renderInsights(){
   // parcours onboarding/espace client : la carte "Parcours client activés"
   // qui les excluait autrefois de ce graphique a été supprimée le
   // 18/08/2026 (fusionnée dans "Options actives" sur la fiche), donc plus
-  // aucune raison de les exclure ici. Le nombre total ci-contre est la somme
-  // brute des modules actifs tous types confondus (une fiche avec 3 options
-  // actives compte pour 3), pas un nombre de fiches. ──
+  // aucune raison de les exclure ici. Le nombre total ci-contre additionne
+  // le champ "Nb modules" (c.modules) de chaque fiche — c'est ce champ,
+  // pas les booléens ci-dessous, qui est la source officielle du nombre de
+  // modules Sesame par client (saisi depuis l'audit) ; les 13 options ne
+  // couvrent que les modules connus individuellement et ne se totalisent
+  // pas forcément au même chiffre. ──
   const MODULE_FEATURES=[['webApp','WebApp'],['mobileV2','Mobile V2'],['offline','Offline'],['livret','Livret digital'],['checkin','Check-in mobile'],['gestionDemande','Gestion demande'],['onbChoixChambres','Choix chambre'],['onbOccupant','Occupant'],['onbIdentite','Identité'],['onbMenage','Ménage'],['espBoutique','Boutique'],['espPoint','Points fidélité'],['espEvenement','Évènements']];
   const total=clients.length;
   const moduleCounts=MODULE_FEATURES.map(([k,lbl])=>[k,lbl,clients.filter(c=>c[k]).length]);
-  const totalModulesActifs=moduleCounts.reduce((s,[,,n])=>s+n,0);
+  const totalModulesActifs=clients.reduce((s,c)=>s+(c.modules||0),0);
   const moduleHtml=moduleCounts.map(([k,lbl,n])=>{
     const pct=total?Math.round(n/total*100):0;
     return '<div class="bar-row" title="'+lbl+' : '+n+'/'+total+'">'
@@ -1084,6 +1087,8 @@ function renderFiche(c){
     </div>
     <hr class="divl">
     <div class="fgrid">
+      <div class="field"><div class="fl"><span class="fl-ico">D</span> Dénomination sociale</div><div class="fv">${c.denominationSociale?esc(c.denominationSociale):'—'}</div></div>
+      <div class="field"><div class="fl"><span class="fl-ico">S</span> SIRET</div><div class="fv">${c.siret?esc(c.siret)+(c.siren?' <span style="color:var(--mu,#888);font-size:11px">(SIREN '+esc(c.siren)+')</span>':''):'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">A</span> Adresse</div><div class="fv">${c.adresse?esc(c.adresse)+(c.ville?', '+esc(c.ville):''):'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">R</span> Référent</div><div class="fv">${c.referent||'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">◆</span> Commercial</div><div class="fv">${c.commercialName||'—'}</div></div>
@@ -1395,7 +1400,7 @@ function supportBadge(c){
 // MODAL EDIT CLIENT
 // ════════════════════════════════════════
 function openModal(id){const c=clients.find(c=>c.id===id);if(c)renderModal({...c});}
-function openNewModal(){renderModal({id:null,nom:'',type:'Client',groupe:'',secteur:'Hôtellerie',adresse:'',ville:'',etoiles:'',danger:'Modéré',potentiel:2,contrat:'non',modules:0,pms:'',priorite:1,appel:'',referent:'',email:'',tel:'',site:'',nfc:0,qr:0,mobile:0,webApp:false,mobileV2:false,checkin:false,livret:false,gestionDemande:false,offline:false,messagerie:'Noreply',note:'',commercialId:'',journal:[],_new:true});}
+function openNewModal(){renderModal({id:null,nom:'',type:'Client',groupe:'',secteur:'Hôtellerie',denominationSociale:'',siret:'',siren:'',adresse:'',ville:'',etoiles:'',danger:'Modéré',potentiel:2,contrat:'non',modules:0,pms:'',priorite:1,appel:'',referent:'',email:'',tel:'',site:'',nfc:0,qr:0,mobile:0,webApp:false,mobileV2:false,checkin:false,livret:false,gestionDemande:false,offline:false,messagerie:'Noreply',note:'',commercialId:'',journal:[],_new:true});}
 
 // Autocomplétion d'adresse via l'API Adresse (BAN — Base Adresse Nationale,
 // data.gouv.fr) : gratuite, sans clé, réponse CORS directement utilisable
@@ -1431,6 +1436,57 @@ function pickAdresse(street, city){
   if(v && city) v.value = city;
   if(box){ box.style.display='none'; box.innerHTML=''; }
 }
+// Recherche d'entreprises via l'API publique du même nom (data.gouv.fr,
+// recherche-entreprises.api.gouv.fr) : gratuite, sans clé, CORS activé,
+// interroge directement le répertoire SIRENE de l'INSEE par dénomination
+// ou SIRET/SIREN. Remplit dénomination sociale + SIRET + SIREN en un clic —
+// répond au besoin de retrouver ces informations sans ressaisie manuelle.
+// Même repli que l'autocomplétion d'adresse : API indisponible → liste
+// masquée, saisie manuelle toujours possible, jamais bloquant.
+let entrepriseDebounce=null;
+function entrepriseAutocomplete(){
+  clearTimeout(entrepriseDebounce);
+  const inp = document.getElementById('m-entreprise-search');
+  const box = document.getElementById('m-entreprise-suggestions');
+  if(!inp||!box) return;
+  const q = inp.value.trim();
+  if(q.length<3){ box.style.display='none'; box.innerHTML=''; return; }
+  entrepriseDebounce = setTimeout(async ()=>{
+    try{
+      const r = await fetch('https://recherche-entreprises.api.gouv.fr/search?q='+encodeURIComponent(q)+'&limit=5');
+      if(!r.ok){ box.style.display='none'; return; }
+      const data = await r.json();
+      const results = data.results||[];
+      if(!results.length){ box.style.display='none'; box.innerHTML=''; return; }
+      box.innerHTML = results.map(e=>{
+        const nom = e.nom_complet || e.nom_raison_sociale || '';
+        const siret = (e.siege&&e.siege.siret) || '';
+        const siren = e.siren || '';
+        const adresse = (e.siege&&e.siege.adresse) || '';
+        return '<div style="padding:7px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--bdr,#e2dfd9)" onmousedown="pickEntreprise(\''+jsStr(nom)+'\',\''+jsStr(siret)+'\',\''+jsStr(siren)+'\')">'
+          +'<div style="font-weight:600">'+esc(nom)+'</div>'
+          +'<div style="color:var(--mu,#888);font-size:11px">SIREN '+esc(siren)+(adresse?' · '+esc(adresse):'')+'</div>'
+          +'</div>';
+      }).join('');
+      box.style.display='block';
+    }catch(e){ box.style.display='none'; }
+  }, 300);
+}
+function pickEntreprise(nom, siret, siren){
+  const d=document.getElementById('m-denomination'), s=document.getElementById('m-siret'), n=document.getElementById('m-siren'), box=document.getElementById('m-entreprise-suggestions');
+  if(d) d.value = nom;
+  if(s) s.value = siret;
+  if(n) n.value = siren;
+  if(box){ box.style.display='none'; box.innerHTML=''; }
+}
+// SIRET = SIREN (9 chiffres) + NIC (5 chiffres) de l'établissement — un
+// SIRET saisi/collé à la main permet de déduire le SIREN sans le ressaisir.
+function siretToSiren(){
+  const s=document.getElementById('m-siret'), n=document.getElementById('m-siren');
+  if(!s||!n) return;
+  const digits = s.value.replace(/\s/g,'');
+  if(/^\d{14}$/.test(digits)) n.value = digits.slice(0,9);
+}
 function closeModal(){document.getElementById('modal-ct').innerHTML='';}
 
 function renderModal(mc){
@@ -1460,6 +1516,18 @@ function renderModal(mc){
         <div class="ff"><label>Email</label><input type="email" id="m-email" value="${esc(mc.email)}" placeholder="—"></div>
         <div class="ff"><label>Téléphone</label><input id="m-tel" value="${esc(mc.tel)}" placeholder="—"></div>
         <div class="ff"><label>Site web</label><input id="m-site" value="${esc(mc.site)}" placeholder="ex. hotel.fr"></div>
+      </div>
+
+      <div class="modal-section">Identité légale</div>
+      <div class="form-grid">
+        <div class="ff" style="grid-column:1/-1;position:relative">
+          <label>Rechercher une entreprise (dénomination ou SIRET)</label>
+          <input id="m-entreprise-search" placeholder="ex. Hôtel de la Gare Autun" autocomplete="off" oninput="entrepriseAutocomplete()">
+          <div id="m-entreprise-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:var(--card,#fff);border:1px solid var(--bdr,#e2dfd9);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.1);max-height:220px;overflow-y:auto"></div>
+        </div>
+        <div class="ff" style="grid-column:1/-1"><label>Dénomination sociale</label><input id="m-denomination" value="${esc(mc.denominationSociale)}" placeholder="Raison sociale exacte (INSEE)"></div>
+        <div class="ff"><label>SIRET</label><input id="m-siret" value="${esc(mc.siret)}" placeholder="14 chiffres" oninput="siretToSiren()"></div>
+        <div class="ff"><label>SIREN</label><input id="m-siren" value="${esc(mc.siren)}" placeholder="9 chiffres"></div>
       </div>
 
       <div class="modal-section">Installation &amp; commercial</div>
@@ -1524,6 +1592,7 @@ async function saveModal(id,isNew){
   if(!g('m-ville').value.trim()){ flash('Ville requise'); return; }
   const ch={
     nom:g('m-nom').value.trim(),type:g('m-type').value,groupe:g('m-groupe').value,secteur:g('m-secteur').value,
+    denominationSociale:g('m-denomination').value.trim(),siret:g('m-siret').value.trim(),siren:g('m-siren').value.trim(),
     adresse:g('m-adresse').value.trim(),ville:g('m-ville').value.trim(),etoiles:g('m-etoiles').value,referent:g('m-referent').value,
     email:g('m-email').value,tel:g('m-tel').value,site:g('m-site').value,
     pms:(g('m-pms').value==='__other__'?g('m-pms-other').value.trim():g('m-pms').value),messagerie:g('m-msg').value,danger:g('m-danger').value,commercialId:g('m-commercial').value||null,
@@ -2976,8 +3045,8 @@ async function testRule(id){
 // CSV EXPORT
 // ════════════════════════════════════════
 function exportCSV(){
-  const h=['ID','Type','Nom','Groupe','Secteur','Adresse','Ville','Étoiles','Risque','Potentiel','Contrat','Modules','PMS','Priorité','Appel','Référent','Email','Tél','Site','NFC%','Mobile%','Code%','QR%','WebApp','MobileV2','Offline','Check-in','Onb. Choix chambre','Onb. Occupant','Onb. Identité','Onb. Ménage','Esp. Boutique','Esp. Points','Esp. Livret','Esp. Demande','Esp. Évènements','Messagerie','Note','Nb activités'];
-  const rows=clients.map(c=>[c.id,c.type,c.nom,c.groupe,c.secteur,c.adresse,c.ville,c.etoiles,c.danger,c.potentiel,c.contrat,c.modules,c.pms,c.priorite,c.appel,c.referent,c.email,c.tel,c.site,c.nfc,c.mobile,c.code,c.qr,c.webApp?'oui':'non',c.mobileV2?'oui':'non',c.offline?'oui':'non',c.checkin?'oui':'non',c.onbChoixChambres?'oui':'non',c.onbOccupant?'oui':'non',c.onbIdentite?'oui':'non',c.onbMenage?'oui':'non',c.espBoutique?'oui':'non',c.espPoint?'oui':'non',c.livret?'oui':'non',c.gestionDemande?'oui':'non',c.espEvenement?'oui':'non',c.messagerie,c.note,(c.journal||[]).length].map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`));
+  const h=['ID','Type','Nom','Dénomination sociale','SIRET','SIREN','Groupe','Secteur','Adresse','Ville','Étoiles','Risque','Potentiel','Contrat','Modules','PMS','Priorité','Appel','Référent','Email','Tél','Site','NFC%','Mobile%','Code%','QR%','WebApp','MobileV2','Offline','Check-in','Onb. Choix chambre','Onb. Occupant','Onb. Identité','Onb. Ménage','Esp. Boutique','Esp. Points','Esp. Livret','Esp. Demande','Esp. Évènements','Messagerie','Note','Nb activités'];
+  const rows=clients.map(c=>[c.id,c.type,c.nom,c.denominationSociale,c.siret,c.siren,c.groupe,c.secteur,c.adresse,c.ville,c.etoiles,c.danger,c.potentiel,c.contrat,c.modules,c.pms,c.priorite,c.appel,c.referent,c.email,c.tel,c.site,c.nfc,c.mobile,c.code,c.qr,c.webApp?'oui':'non',c.mobileV2?'oui':'non',c.offline?'oui':'non',c.checkin?'oui':'non',c.onbChoixChambres?'oui':'non',c.onbOccupant?'oui':'non',c.onbIdentite?'oui':'non',c.onbMenage?'oui':'non',c.espBoutique?'oui':'non',c.espPoint?'oui':'non',c.livret?'oui':'non',c.gestionDemande?'oui':'non',c.espEvenement?'oui':'non',c.messagerie,c.note,(c.journal||[]).length].map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`));
   const csv='﻿'+[h,...rows].map(r=>r.join(';')).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='sesame_crm_export.csv';a.click();
 }
