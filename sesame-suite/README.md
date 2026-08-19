@@ -954,6 +954,34 @@ de 0 au lieu de la taille de son contenu ; il se faisait donc écraser par
   d'un ticket, pour que l'agent support voie d'un coup d'œil ce que le
   client a réellement activé sans changer d'onglet.
 
+- **Champ Adresse obligatoire + autocomplétion OpenData** (fiche client CRM,
+  `public/crm.html` + `src/routes/crmProspect.ts`) — le nom du client seul
+  ne suffisait pas à identifier une fiche de façon fiable ; `CrmProspect`
+  gagne un champ `adresse` (voie), désormais obligatoire avec `ville` (déjà
+  existant) à la création **et** à la modification complète d'une fiche
+  depuis la modale — validé côté serveur (mêmes routes que `nom`) donc pas
+  contournable en appelant l'API directement. Les mises à jour partielles
+  existantes (`setContrat()`, qualification de ticket, etc.) ne sont pas
+  affectées : la validation ne se déclenche que si `adresse`/`ville` sont
+  explicitement envoyés vides, jamais quand ils sont absents de la requête —
+  et les fiches déjà existantes sans adresse restent consultables, seule
+  leur **prochaine** modification via la modale l'exige.
+  - **Autocomplétion** via l'API Adresse (BAN — Base Adresse Nationale,
+    data.gouv.fr) : gratuite, sans clé, appelée directement depuis le
+    navigateur (CORS déjà activé côté data.gouv.fr, pas de proxy backend
+    nécessaire). Taper 3 caractères ou plus déclenche une recherche
+    debattue (300 ms) ; sélectionner une suggestion remplit adresse et
+    ville d'un coup. Si l'API est indisponible (réseau, quota, etc.), la
+    liste de suggestions se masque simplement — la saisie manuelle reste
+    toujours possible, ce n'est jamais bloquant. **Non vérifiable dans cet
+    environnement de développement** (pas d'accès sortant à
+    `api-adresse.data.gouv.fr` depuis ce sandbox) : le code est écrit et
+    testé pour le comportement de repli (échec réseau → champ manuel), mais
+    l'appel réel à l'API n'a pas pu être vérifié en conditions réelles ici,
+    seulement écrit d'après la documentation publique de l'API (recherche
+    par texte libre, réponse GeoJSON avec `properties.name`/`.city`/
+    `.label`) — à confirmer après déploiement.
+
 - **Bug corrigé — config d'un compte hôtel affichant celle d'un autre
   établissement** (`loadCfg()`) : `GET /entityModuleConfig/list` est
   volontairement public côté serveur (le parcours client en a besoin sans

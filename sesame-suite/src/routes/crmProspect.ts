@@ -34,6 +34,7 @@ function shapeProspect(p: {
   type: string;
   groupe: string | null;
   secteur: string | null;
+  adresse: string | null;
   ville: string | null;
   etoiles: string | null;
   danger: string;
@@ -84,6 +85,7 @@ function shapeProspect(p: {
     type: p.type,
     groupe: p.groupe || "",
     secteur: p.secteur || "",
+    adresse: p.adresse || "",
     ville: p.ville || "",
     etoiles: p.etoiles || "",
     danger: p.danger,
@@ -147,6 +149,7 @@ interface ProspectBody {
   type?: string;
   groupe?: string;
   secteur?: string;
+  adresse?: string;
   ville?: string;
   etoiles?: string;
   danger?: string;
@@ -189,13 +192,16 @@ crmProspectRouter.post(
   asyncHandler(async (req, res) => {
     const b = req.body as ProspectBody;
     if (!b.nom || !b.nom.trim()) throw new HttpError(400, "Nom requis");
+    if (!b.adresse || !b.adresse.trim()) throw new HttpError(400, "Adresse requise");
+    if (!b.ville || !b.ville.trim()) throw new HttpError(400, "Ville requise");
     const row = await prisma.crmProspect.create({
       data: {
         nom: b.nom.trim(),
         type: b.type || "Client",
         groupe: b.groupe,
         secteur: b.secteur,
-        ville: b.ville,
+        adresse: b.adresse.trim(),
+        ville: b.ville.trim(),
         etoiles: b.etoiles,
         danger: b.danger || "Modéré",
         potentiel: b.potentiel ?? 0,
@@ -251,6 +257,8 @@ crmProspectRouter.post(
     if (!id) throw new HttpError(400, "id requis");
     const b = rest;
     if (b.nom !== undefined && !b.nom.trim()) throw new HttpError(400, "Le nom ne peut pas être vide");
+    if (b.adresse !== undefined && !b.adresse.trim()) throw new HttpError(400, "L'adresse ne peut pas être vide");
+    if (b.ville !== undefined && !b.ville.trim()) throw new HttpError(400, "La ville ne peut pas être vide");
     const existing = await prisma.crmProspect.findUnique({ where: { id } });
     if (!existing) throw new HttpError(404, "Prospect introuvable");
     const row = await prisma.crmProspect.update({
@@ -260,6 +268,7 @@ crmProspectRouter.post(
         type: b.type,
         groupe: b.groupe,
         secteur: b.secteur,
+        adresse: b.adresse?.trim(),
         ville: b.ville,
         etoiles: b.etoiles,
         danger: b.danger,

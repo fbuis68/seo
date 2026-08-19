@@ -1084,6 +1084,7 @@ function renderFiche(c){
     </div>
     <hr class="divl">
     <div class="fgrid">
+      <div class="field"><div class="fl"><span class="fl-ico">A</span> Adresse</div><div class="fv">${c.adresse?esc(c.adresse)+(c.ville?', '+esc(c.ville):''):'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">R</span> Référent</div><div class="fv">${c.referent||'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">◆</span> Commercial</div><div class="fv">${c.commercialName||'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">@</span> Email</div><div class="fv">${c.email?`<a href="mailto:${c.email}">${c.email}</a>`:'—'}</div></div>
@@ -1394,7 +1395,42 @@ function supportBadge(c){
 // MODAL EDIT CLIENT
 // ════════════════════════════════════════
 function openModal(id){const c=clients.find(c=>c.id===id);if(c)renderModal({...c});}
-function openNewModal(){renderModal({id:null,nom:'',type:'Client',groupe:'',secteur:'Hôtellerie',ville:'',etoiles:'',danger:'Modéré',potentiel:2,contrat:'non',modules:0,pms:'',priorite:1,appel:'',referent:'',email:'',tel:'',site:'',nfc:0,qr:0,mobile:0,webApp:false,mobileV2:false,checkin:false,livret:false,gestionDemande:false,offline:false,messagerie:'Noreply',note:'',commercialId:'',journal:[],_new:true});}
+function openNewModal(){renderModal({id:null,nom:'',type:'Client',groupe:'',secteur:'Hôtellerie',adresse:'',ville:'',etoiles:'',danger:'Modéré',potentiel:2,contrat:'non',modules:0,pms:'',priorite:1,appel:'',referent:'',email:'',tel:'',site:'',nfc:0,qr:0,mobile:0,webApp:false,mobileV2:false,checkin:false,livret:false,gestionDemande:false,offline:false,messagerie:'Noreply',note:'',commercialId:'',journal:[],_new:true});}
+
+// Autocomplétion d'adresse via l'API Adresse (BAN — Base Adresse Nationale,
+// data.gouv.fr) : gratuite, sans clé, réponse CORS directement utilisable
+// depuis le navigateur. Sélectionner une suggestion remplit l'adresse ET la
+// ville d'un coup — la saisie manuelle reste possible si l'API est
+// indisponible ou si l'adresse recherchée n'y figure pas.
+let adresseDebounce=null;
+function adresseAutocomplete(){
+  clearTimeout(adresseDebounce);
+  const inp = document.getElementById('m-adresse');
+  const box = document.getElementById('m-adresse-suggestions');
+  if(!inp||!box) return;
+  const q = inp.value.trim();
+  if(q.length<3){ box.style.display='none'; box.innerHTML=''; return; }
+  adresseDebounce = setTimeout(async ()=>{
+    try{
+      const r = await fetch('https://api-adresse.data.gouv.fr/search/?q='+encodeURIComponent(q)+'&limit=5');
+      if(!r.ok){ box.style.display='none'; return; }
+      const data = await r.json();
+      const feats = data.features||[];
+      if(!feats.length){ box.style.display='none'; box.innerHTML=''; return; }
+      box.innerHTML = feats.map(f=>{
+        const p=f.properties||{};
+        return '<div style="padding:7px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--bdr,#e2dfd9)" onmousedown="pickAdresse(\''+jsStr(p.name||'')+'\',\''+jsStr(p.city||'')+'\')">'+esc(p.label||'')+'</div>';
+      }).join('');
+      box.style.display='block';
+    }catch(e){ box.style.display='none'; }
+  }, 300);
+}
+function pickAdresse(street, city){
+  const a=document.getElementById('m-adresse'), v=document.getElementById('m-ville'), box=document.getElementById('m-adresse-suggestions');
+  if(a) a.value = street;
+  if(v && city) v.value = city;
+  if(box){ box.style.display='none'; box.innerHTML=''; }
+}
 function closeModal(){document.getElementById('modal-ct').innerHTML='';}
 
 function renderModal(mc){
@@ -1413,7 +1449,12 @@ function renderModal(mc){
         <div class="ff"><label>Type</label><select id="m-type">${TYPES.map(t=>`<option value="${t}" ${mc.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
         <div class="ff"><label>Groupe</label><input id="m-groupe" value="${esc(mc.groupe)}" placeholder="—"></div>
         <div class="ff"><label>Secteur</label><select id="m-secteur">${sectAll.map(s=>`<option value="${s}" ${mc.secteur===s?'selected':''}>${s}</option>`).join('')}</select></div>
-        <div class="ff"><label>Ville</label><input id="m-ville" value="${esc(mc.ville)}" placeholder="—"></div>
+        <div class="ff" style="position:relative">
+          <label>Adresse *</label>
+          <input id="m-adresse" value="${esc(mc.adresse)}" placeholder="Numéro et voie" autocomplete="off" oninput="adresseAutocomplete()">
+          <div id="m-adresse-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:var(--card,#fff);border:1px solid var(--bdr,#e2dfd9);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.1);max-height:180px;overflow-y:auto"></div>
+        </div>
+        <div class="ff"><label>Ville *</label><input id="m-ville" value="${esc(mc.ville)}" placeholder="—"></div>
         <div class="ff"><label>Étoiles</label><input id="m-etoiles" value="${esc(mc.etoiles)}" placeholder="ex. ***"></div>
         <div class="ff"><label>Référent</label><input id="m-referent" value="${esc(mc.referent)}" placeholder="Nom, prénom"></div>
         <div class="ff"><label>Email</label><input type="email" id="m-email" value="${esc(mc.email)}" placeholder="—"></div>
@@ -1479,9 +1520,11 @@ function renderModal(mc){
 
 async function saveModal(id,isNew){
   const g=i=>(document.getElementById(i)||{value:''});
+  if(!g('m-adresse').value.trim()){ flash('Adresse requise'); return; }
+  if(!g('m-ville').value.trim()){ flash('Ville requise'); return; }
   const ch={
     nom:g('m-nom').value.trim(),type:g('m-type').value,groupe:g('m-groupe').value,secteur:g('m-secteur').value,
-    ville:g('m-ville').value,etoiles:g('m-etoiles').value,referent:g('m-referent').value,
+    adresse:g('m-adresse').value.trim(),ville:g('m-ville').value.trim(),etoiles:g('m-etoiles').value,referent:g('m-referent').value,
     email:g('m-email').value,tel:g('m-tel').value,site:g('m-site').value,
     pms:(g('m-pms').value==='__other__'?g('m-pms-other').value.trim():g('m-pms').value),messagerie:g('m-msg').value,danger:g('m-danger').value,commercialId:g('m-commercial').value||null,
     potentiel:+g('m-pot').value,modules:+g('m-mod').value,contrat:g('m-contrat').value,
@@ -2933,8 +2976,8 @@ async function testRule(id){
 // CSV EXPORT
 // ════════════════════════════════════════
 function exportCSV(){
-  const h=['ID','Type','Nom','Groupe','Secteur','Ville','Étoiles','Risque','Potentiel','Contrat','Modules','PMS','Priorité','Appel','Référent','Email','Tél','Site','NFC%','Mobile%','Code%','QR%','WebApp','MobileV2','Offline','Check-in','Onb. Choix chambre','Onb. Occupant','Onb. Identité','Onb. Ménage','Esp. Boutique','Esp. Points','Esp. Livret','Esp. Demande','Esp. Évènements','Messagerie','Note','Nb activités'];
-  const rows=clients.map(c=>[c.id,c.type,c.nom,c.groupe,c.secteur,c.ville,c.etoiles,c.danger,c.potentiel,c.contrat,c.modules,c.pms,c.priorite,c.appel,c.referent,c.email,c.tel,c.site,c.nfc,c.mobile,c.code,c.qr,c.webApp?'oui':'non',c.mobileV2?'oui':'non',c.offline?'oui':'non',c.checkin?'oui':'non',c.onbChoixChambres?'oui':'non',c.onbOccupant?'oui':'non',c.onbIdentite?'oui':'non',c.onbMenage?'oui':'non',c.espBoutique?'oui':'non',c.espPoint?'oui':'non',c.livret?'oui':'non',c.gestionDemande?'oui':'non',c.espEvenement?'oui':'non',c.messagerie,c.note,(c.journal||[]).length].map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`));
+  const h=['ID','Type','Nom','Groupe','Secteur','Adresse','Ville','Étoiles','Risque','Potentiel','Contrat','Modules','PMS','Priorité','Appel','Référent','Email','Tél','Site','NFC%','Mobile%','Code%','QR%','WebApp','MobileV2','Offline','Check-in','Onb. Choix chambre','Onb. Occupant','Onb. Identité','Onb. Ménage','Esp. Boutique','Esp. Points','Esp. Livret','Esp. Demande','Esp. Évènements','Messagerie','Note','Nb activités'];
+  const rows=clients.map(c=>[c.id,c.type,c.nom,c.groupe,c.secteur,c.adresse,c.ville,c.etoiles,c.danger,c.potentiel,c.contrat,c.modules,c.pms,c.priorite,c.appel,c.referent,c.email,c.tel,c.site,c.nfc,c.mobile,c.code,c.qr,c.webApp?'oui':'non',c.mobileV2?'oui':'non',c.offline?'oui':'non',c.checkin?'oui':'non',c.onbChoixChambres?'oui':'non',c.onbOccupant?'oui':'non',c.onbIdentite?'oui':'non',c.onbMenage?'oui':'non',c.espBoutique?'oui':'non',c.espPoint?'oui':'non',c.livret?'oui':'non',c.gestionDemande?'oui':'non',c.espEvenement?'oui':'non',c.messagerie,c.note,(c.journal||[]).length].map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`));
   const csv='﻿'+[h,...rows].map(r=>r.join(';')).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='sesame_crm_export.csv';a.click();
 }
