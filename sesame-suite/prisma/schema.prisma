@@ -718,6 +718,39 @@ model CrmProspect {
 
   activities CrmActivity[]
   tickets    CrmTicket[]
+  cashLines  CrmCashLine[]
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Trésorerie prévisionnelle — lignes datées qui alimentent la vue "Vision
+// annuelle" (mock-up validé le 19/08/2026, cf. README). Le MRR reste porté
+// par CrmProspect.mrr (récurrent, pas de date) ; ce modèle couvre les 3
+// autres catégories qui varient mois par mois :
+//   - "signe"       : un versement encaissé/attendu à une date précise
+//                      (plusieurs lignes possibles par client)
+//   - "pipeline"     : une affaire en cours, montant × probabilité, mois de
+//                      clôture prévu (nullable tant qu'il n'est pas choisi)
+//   - "depense"      : un poste de dépense récurrente ; mois=null = se répète
+//                      chaque mois (ex. assurance), mois défini = ne compte
+//                      que ce mois-là (postes qui varient réellement, ex. TVA)
+//   - "solde_depart" : une ligne unique par année portant le solde de
+//                      trésorerie au 1er janvier (mois toujours null)
+// Distinct des champs signe/previsionnel (un seul montant, sans date) déjà
+// utilisés par le tableau "Portefeuille" — ce dernier reste inchangé.
+model CrmCashLine {
+  id     String @id @default(cuid())
+  annee  Int    @default(2026)
+  kind   String // signe | pipeline | depense | solde_depart
+  label  String
+  montant Float
+  proba  Int? // 0-100, pipeline uniquement
+  mois   Int? // 0-11 ; sémantique dépend de kind (cf. ci-dessus)
+
+  prospectId String?
+  prospect   CrmProspect? @relation(fields: [prospectId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // ─────────────────────────────────────────────────────────────────────────

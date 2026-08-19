@@ -1084,6 +1084,56 @@ aucun service de vérification d'identité réel n'a été demandé ni intégré
   vérification humaine du résultat final reste recommandée avant de
   considérer ces chiffres comme définitifs.
 
+### Panneau "Trésorerie" — vision annuelle du prévisionnel de trésorerie
+
+Suite du point précédent : après une maquette HTML testée en aparté
+(validée par l'utilisateur), la fonctionnalité a été codée et déployée dans
+l'app (19/08/2026).
+
+- **Schéma** : nouveau modèle `CrmCashLine` (`prisma/schema.prisma`) —
+  lignes datées `kind` ∈ `signe | pipeline | depense | solde_depart`,
+  `annee`, `label`, `montant`, `proba` (pipeline uniquement),
+  `mois` (0-11 ; `null` = non placé pour signé/pipeline, ou récurrent
+  chaque mois pour une dépense), `prospectId` optionnel. Le MRR n'a **pas**
+  de ligne dédiée : il reste porté par `CrmProspect.mrr`, seule source de
+  vérité (fiche, tableau Portefeuille et panneau Trésorerie affichent tous
+  la même valeur, éditable depuis n'importe lequel des trois). Distinct des
+  champs `signe`/`previsionnel` du tableau "Portefeuille" (un seul montant
+  sans date, non touché par ce chantier) — les deux fonctionnalités
+  coexistent.
+- **Backend** : `src/routes/crmCashLine.ts` — CRUD standard
+  (`GET /crmCashLine/list?annee=`, `POST /create|update|delete`), réservé
+  aux comptes Sesame comme le reste du CRM interne.
+- **Import des données réelles** : rejoué comme migration
+  (`prisma/migrations/20260819083000_crm_cash_line_2026_import`, idempotente
+  via `NOT EXISTS`) — 65 lignes "signé" et 86 lignes "dépense" reprises
+  telles quelles du fichier de trésorerie fourni (mêmes totaux mensuels que
+  le fichier source, vérifiés poste par poste), 13 lignes "pipeline"
+  (montant + probabilité, mois de clôture laissé à `null` — n'existait pas
+  dans la source, à choisir dans l'app) et 1 ligne "solde de départ"
+  (30 000 €, repris de "Solde n-1").
+- **Frontend** (`public/crm.html`) : nouvel item de navigation
+  "Trésorerie" (`showTresorerie()`/`renderTresorerie()`) — 4 cartes de
+  saisie (MRR récurrent, Signé en cours, Pipeline pondéré, Dépenses
+  récurrentes ; chaque panneau défile en interne au-delà de 360px pour ne
+  pas allonger la page avec ~250 lignes de données réelles), une carte
+  "Vision annuelle" avec un graphique Recettes vs Dépenses par mois, un
+  graphique de trésorerie cumulée (aire verte/rouge selon le signe) et un
+  tableau mensuel compact — tout se recalcule en direct à la frappe
+  (`trRenderCharts()`) et se sauvegarde par cellule au blur/changement
+  (`trSave()`, `trMrrSave()`, `trStartBalanceSave()` → routes ci-dessus ou
+  `POST /crmProspect/update` pour le MRR). Couleurs de catégorie fixes
+  (`--tr-mrr/--tr-signe/--tr-pipeline/--tr-depense`) déclinées dans les 5
+  thèmes de l'app, sur le même principe que les couleurs déjà fixes du
+  donut NFC/Code/Mobile/QR (`--dch-*`).
+- **Écart à noter** : le panneau MRR de Trésorerie n'affiche que les 12
+  clients dont la fiche CRM porte un `mrr` (2 001 €/mois), alors que le
+  fichier source recense 36 comptes récurrents (9 178 €/mois) — les 24
+  autres n'ont pas de fiche CRM correspondante. Créer des fiches pour ces
+  24 comptes ferait remonter le panneau au chiffre complet, mais c'est un
+  choix de fond (ajouter des entrées au portefeuille CRM) qui n'a pas été
+  pris unilatéralement — à trancher avec l'utilisateur.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

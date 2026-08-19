@@ -20,6 +20,7 @@
   --a:#8a2b2b;--ah:#711f1f;--al:rgba(138,43,43,.08);
   --scb:#c7c4bd;--scbh:#a8a49c;
   --dch-nfc:#2a78d6;--dch-code:#eda100;--dch-mobile:#e87ba4;--dch-qr:#008300;
+  --tr-mrr:#12805a;--tr-signe:#2f5fbf;--tr-pipeline:#c1861d;--tr-depense:#b83f2c;
 }
 html[data-theme="emeraude"]{
   --bg:#f2f5f1;--card:#fff;--bdr:#dbe4dc;--bdr2:#c3d1c5;--div:#e8efe9;--hover:#eaf2ea;
@@ -27,6 +28,7 @@ html[data-theme="emeraude"]{
   --a:#1A6B47;--ah:#125236;--al:rgba(26,107,71,.08);
   --scb:#c0d0c2;--scbh:#9cb39f;
   --dch-nfc:#2a78d6;--dch-code:#eda100;--dch-mobile:#e87ba4;--dch-qr:#008300;
+  --tr-mrr:#12805a;--tr-signe:#2f5fbf;--tr-pipeline:#c1861d;--tr-depense:#b83f2c;
 }
 html[data-theme="ocean"]{
   --bg:#f1f4f7;--card:#fff;--bdr:#d9e1e9;--bdr2:#c0ccd8;--div:#e7edf2;--hover:#e9f0f6;
@@ -34,6 +36,7 @@ html[data-theme="ocean"]{
   --a:#1A4880;--ah:#123561;--al:rgba(26,72,128,.08);
   --scb:#bfd0dd;--scbh:#9cb4c6;
   --dch-nfc:#2a78d6;--dch-code:#eda100;--dch-mobile:#e87ba4;--dch-qr:#008300;
+  --tr-mrr:#12805a;--tr-signe:#2f5fbf;--tr-pipeline:#c1861d;--tr-depense:#b83f2c;
 }
 html[data-theme="ardoise"]{
   --bg:#f4f4f5;--card:#fff;--bdr:#e2e3e6;--bdr2:#cacbd0;--div:#ececee;--hover:#eeeef0;
@@ -41,6 +44,7 @@ html[data-theme="ardoise"]{
   --a:#4F46E5;--ah:#3c34b8;--al:rgba(79,70,229,.08);
   --scb:#cfd0d6;--scbh:#aeb0b8;
   --dch-nfc:#2a78d6;--dch-code:#eda100;--dch-mobile:#e87ba4;--dch-qr:#008300;
+  --tr-mrr:#12805a;--tr-signe:#2f5fbf;--tr-pipeline:#c1861d;--tr-depense:#b83f2c;
 }
 html[data-theme="nuit"]{
   --bg:#1B1C22;--card:#24262E;--bdr:#33353E;--bdr2:#3d3f4a;--div:#33353E;--hover:#2c2e37;
@@ -48,6 +52,7 @@ html[data-theme="nuit"]{
   --a:#E0536E;--ah:#c73f59;--al:rgba(224,83,110,.14);
   --scb:#41434d;--scbh:#54565f;
   --dch-nfc:#3987e5;--dch-code:#c98500;--dch-mobile:#d55181;--dch-qr:#008300;
+  --tr-mrr:#1f9e78;--tr-signe:#5f8ee0;--tr-pipeline:#b8791f;--tr-depense:#e8546f;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;color:var(--tx);background:var(--bg);display:flex;flex-direction:column;height:100vh;overflow:hidden}
@@ -369,7 +374,50 @@ input[type=checkbox]{accent-color:var(--a);cursor:pointer;width:14px;height:14px
   .tbl-wrap{overflow-x:auto}
   table{min-width:680px}
   .two-col,.three-col,.insight-grid{gap:8px}
+  .tr-hero{flex-wrap:wrap}
+  .tr-hero-figure{text-align:left!important}
+  .panels{grid-template-columns:1fr!important}
 }
+
+/* ── Trésorerie ── */
+.tr-hero{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;margin-bottom:16px}
+.tr-hero-eyebrow{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
+.tr-hero-sub{font-size:12px;color:var(--mu);max-width:52ch;margin-top:4px}
+.tr-hero-figure{text-align:right}
+.tr-hero-val{font-size:32px;font-weight:600;line-height:1.1}
+.tr-hero-val.neg{color:var(--bad,#b23b2c)}
+.tr-hero-note{font-size:11px;color:var(--mu);margin-top:2px}
+.tr-sub-lbl{font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.tr-panel-body{max-height:360px;overflow-y:auto;margin:0 -6px}
+.tr-row{padding:8px 6px;border-radius:8px}
+.tr-row:hover{background:var(--hover)}
+.tr-row-top{display:flex;align-items:center;gap:7px}
+.tr-row-name{flex:1;font-size:12.5px;color:var(--tx)}
+.tr-name{flex:1;min-width:0}
+.tr-amt{width:96px;text-align:right;flex:none}
+.tr-row-more{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:5px;padding-left:2px}
+.tr-row-more select{font-size:11px;border:0.5px solid var(--bdr2);border-radius:6px;background:var(--card);color:var(--tx);padding:3px 5px;outline:none}
+.tr-pct{width:52px;text-align:right;flex:none}
+.tr-weighted{font-size:11px;color:var(--mu)}
+.tr-weighted b{color:var(--tx)}
+.tr-caveat{margin-top:8px;padding:9px 10px;background:var(--hover);border-radius:8px;font-size:11px;color:var(--mu);line-height:1.5}
+.add-row{display:flex;align-items:center;gap:6px;width:100%;margin-top:6px;padding:8px 10px;border:1px dashed var(--bdr2);border-radius:8px;background:transparent;color:var(--mu);font-size:12px;cursor:pointer;font-family:inherit}
+.add-row:hover{border-color:var(--a);color:var(--a)}
+.tr-chart-title{font-size:12.5px;font-weight:600;color:var(--tx);margin-bottom:8px}
+.tr-legend{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px}
+.tr-legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--tx)}
+.tr-sw{width:10px;height:10px;border-radius:3px;flex:none;display:inline-block}
+.tr-sw.tr-line{width:14px;height:3px;border-radius:2px;background:linear-gradient(90deg,var(--good,#1a6b47),var(--bad,#b23b2c))}
+.tr-chart-wrap{position:relative}
+.tr-chart-scroll{overflow-x:auto}
+svg.tr-chart{display:block;width:100%;height:auto;min-width:640px}
+.tr-axis-lbl{font-size:9.5px;fill:var(--mu)}
+.tr-bar-lbl{font-size:9.5px;fill:var(--mu);text-anchor:middle}
+.tr-month-lbl{font-size:10.5px;fill:var(--mu);text-anchor:middle}
+.tr-zero-line{stroke:var(--bdr2);stroke-width:1;stroke-dasharray:3 3}
+.tr-grid-line{stroke:var(--bdr);stroke-width:1}
+.tr-tooltip{position:absolute;pointer-events:none;background:var(--tx);color:var(--card);font-size:11.5px;padding:8px 10px;border-radius:8px;box-shadow:0 8px 24px -8px rgba(0,0,0,.3);transform:translate(-50%,-100%);white-space:nowrap;opacity:0;transition:opacity .1s;z-index:5;line-height:1.5}
+.tr-tt-row{display:flex;justify-content:space-between;gap:14px}
 </style>
 </head>
 <body>
@@ -397,6 +445,7 @@ input[type=checkbox]{accent-color:var(--a);cursor:pointer;width:14px;height:14px
     <div class="nav-item" id="n-list" onclick="showList()"><div class="nav-ico">≡</div> Vue liste</div>
     <div class="nav-item" id="n-affaires" onclick="showAffaires()"><div class="nav-ico">◆</div> Affaires</div>
     <div class="nav-item" id="n-portefeuille" onclick="showPortefeuille()"><div class="nav-ico">€</div> Portefeuille</div>
+    <div class="nav-item" id="n-treso" onclick="showTresorerie()"><div class="nav-ico">Σ</div> Trésorerie</div>
     <div class="nav-item" id="n-tickets" onclick="showTickets()"><div class="nav-ico">☎</div> Support <span class="nb nb-r" id="b-tickets-open" style="display:none">0</span></div>
     <div class="nav-item" id="n-activite" onclick="showActivites()"><div class="nav-ico">◈</div> Activités</div>
     <div class="nav-item" id="n-contrats" onclick="showContrats()"><div class="nav-ico">◻</div> Contrats</div>
@@ -608,7 +657,8 @@ const DOT_MAP = {Appel:'g',Email:'b',Visite:'g',Proposition:'b',Relance:'a','Not
 // ════════════════════════════════════════
 let clients=[], view='list', vmode='table', curId=null, sortC='nom', sortD=1;
 let srch='', fDanger='', fSecteur='', fContrat='', fType='', editingId=null, toastT=null;
-let deals=[], COMMERCIALS=[], tickets=[];
+let deals=[], COMMERCIALS=[], tickets=[], cashLines=[];
+let cashYear = new Date().getFullYear();
 
 async function loadData(){
   var r = await apiFetch('/wa/crmProspect/list');
@@ -630,12 +680,17 @@ async function loadTickets(){
   if(!r.ok) throw new Error('http '+r.status);
   return await r.json();
 }
+async function loadCashLines(){
+  var r = await apiFetch('/wa/crmCashLine/list?annee='+cashYear);
+  if(!r.ok) throw new Error('http '+r.status);
+  return await r.json();
+}
 async function init(){
   try{
-    const [c, d, com, t] = await Promise.all([loadData(), loadDeals(), loadCommercials(), loadTickets()]);
-    clients = c; deals = d; COMMERCIALS = com; tickets = t;
+    const [c, d, com, t, cl] = await Promise.all([loadData(), loadDeals(), loadCommercials(), loadTickets(), loadCashLines()]);
+    clients = c; deals = d; COMMERCIALS = com; tickets = t; cashLines = cl;
   }
-  catch(e){ flash('Erreur de chargement — rechargez la page'); clients = []; deals = []; COMMERCIALS = []; tickets = []; }
+  catch(e){ flash('Erreur de chargement — rechargez la page'); clients = []; deals = []; COMMERCIALS = []; tickets = []; cashLines = []; }
   updateBadges();showList();
   loadVersionBadge();
 }
@@ -656,7 +711,7 @@ function ini(n){return(n||'?').split(' ').slice(0,2).map(w=>w[0]||'').join('').t
 function today(){const d=new Date();return d.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});}
 
 // ── NAV ──
-function setNav(id){['n-home','n-list','n-affaires','n-portefeuille','n-tickets','n-produits','n-activite','n-contrats','n-canaux','n-auto','n-crmusers'].forEach(n=>document.getElementById(n).classList.remove('active'));var el=document.getElementById(id);if(el)el.classList.add('active');}
+function setNav(id){['n-home','n-list','n-affaires','n-portefeuille','n-treso','n-tickets','n-produits','n-activite','n-contrats','n-canaux','n-auto','n-crmusers'].forEach(n=>document.getElementById(n).classList.remove('active'));var el=document.getElementById(id);if(el)el.classList.add('active');}
 function setVMode(m){vmode=m;document.getElementById('vt-tbl').classList.toggle('active',m==='table');document.getElementById('vt-grd').classList.toggle('active',m==='grid');if(view==='list')renderList();}
 function bc(parts){document.getElementById('bc').innerHTML=parts.map((p,i)=>i<parts.length-1?`<span class="bc-link" onclick="${p.fn}">${p.label}</span><span class="bc-sep"> / </span>`:`<span class="bc-cur">${p.label}</span>`).join('');}
 function tba(html){document.getElementById('tb-actions').innerHTML=html;}
@@ -1731,6 +1786,404 @@ async function pfSave(id, field, val){
   try{
     const r = await apiFetch('/wa/crmProspect/update', {method:'POST', body:JSON.stringify({id, [field]:v})});
     if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash('Erreur d\'enregistrement'); }
+}
+
+// ════════════════════════════════════════
+// TRÉSORERIE — MRR + Signé + Pipeline pondéré + Dépenses, vision annuelle
+// ════════════════════════════════════════
+const TR_MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+const TR_MONTHS_SHORT = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+
+function showTresorerie(){
+  view='treso';curId=null;setNav('n-treso');bc([{label:'Trésorerie '+cashYear}]);
+  tba('');
+  renderTresorerie();
+}
+
+function trRows(kind){ return cashLines.filter(l=>l.kind===kind).slice().sort((a,b)=>(a.mois??99)-(b.mois??99) || a.label.localeCompare(b.label,'fr')); }
+function trSolde(){ return cashLines.find(l=>l.kind==='solde_depart'); }
+function trWeighted(r){ return (+r.montant||0) * (+r.proba||0) / 100; }
+function trMonthOpts(selected){
+  return '<option value="">—</option>' + TR_MONTHS.map((m,i)=>`<option value="${i}" ${selected===i?'selected':''}>${m}</option>`).join('');
+}
+
+function renderTresorerie(){
+  const mrrClients = clients.filter(c=>c.mrr).slice().sort((a,b)=>(b.mrr||0)-(a.mrr||0));
+  const signeRows = trRows('signe');
+  const pipelineRows = trRows('pipeline');
+  const depenseRows = trRows('depense');
+  const solde = trSolde();
+  const startBalance = solde ? solde.montant : 0;
+
+  const mrrTotal = mrrClients.reduce((s,c)=>s+(+c.mrr||0),0);
+  const signeTotal = signeRows.reduce((s,r)=>s+(+r.montant||0),0);
+  const pipelineTotalW = pipelineRows.reduce((s,r)=>s+trWeighted(r),0);
+  const depenseAnnuel = depenseRows.reduce((s,r)=>s+(+r.montant||0)*(r.mois===null?12:1),0);
+
+  const dl = 'clientDatalist';
+
+  const mrrBody = mrrClients.length===0 ? '<div class="log-empty">Aucun client avec un MRR renseigné.</div>' : mrrClients.map(c=>`
+    <div class="tr-row">
+      <div class="tr-row-top">
+        <div class="tr-row-name" style="cursor:pointer" onclick="showFiche('${c.id}')">${esc(c.nom)}</div>
+        <input class="ei tr-amt num" type="number" step="0.01" value="${c.mrr||''}" placeholder="0"
+          oninput="trMrrLocal('${c.id}',this.value)" onchange="trMrrSave('${c.id}',this.value)">
+      </div>
+    </div>`).join('');
+
+  const signeBody = signeRows.length===0 ? '<div class="log-empty">Aucune ligne. Ajoutez un versement.</div>' : signeRows.map(r=>`
+    <div class="tr-row">
+      <div class="tr-row-top">
+        <input class="ei tr-name" list="${dl}" value="${esc(r.label)}" oninput="trEditLocal('${r.id}','label',this.value)" onchange="trSave('${r.id}','label',this.value)" placeholder="Client / projet">
+        <input class="ei tr-amt num" type="number" step="0.01" value="${r.montant}" oninput="trEditLocal('${r.id}','montant',+this.value)" onchange="trSave('${r.id}','montant',+this.value)">
+        <button class="ta-btn" title="Supprimer" onclick="trDelete('${r.id}')">✕</button>
+      </div>
+      <div class="tr-row-more">
+        <span class="tr-sub-lbl">Mois d'encaissement</span>
+        <select onchange="trEditLocal('${r.id}','mois',this.value===''?null:+this.value);trSave('${r.id}','mois',this.value===''?null:+this.value)">${trMonthOpts(r.mois)}</select>
+      </div>
+    </div>`).join('');
+
+  const pipelineBody = pipelineRows.length===0 ? '<div class="log-empty">Aucun prospect. Ajoutez une affaire.</div>' : pipelineRows.map(r=>`
+    <div class="tr-row">
+      <div class="tr-row-top">
+        <input class="ei tr-name" list="${dl}" value="${esc(r.label)}" oninput="trEditLocal('${r.id}','label',this.value)" onchange="trSave('${r.id}','label',this.value)" placeholder="Prospect ou client">
+        <input class="ei tr-amt num" type="number" step="100" value="${r.montant}" oninput="trEditLocal('${r.id}','montant',+this.value)" onchange="trSave('${r.id}','montant',+this.value)">
+        <button class="ta-btn" title="Supprimer" onclick="trDelete('${r.id}')">✕</button>
+      </div>
+      <div class="tr-row-more">
+        <input class="ei tr-pct num" type="number" min="0" max="100" value="${r.proba||0}" oninput="trEditLocal('${r.id}','proba',+this.value)" onchange="trSave('${r.id}','proba',+this.value)">
+        <span class="tr-sub-lbl">% ·</span>
+        <select onchange="trEditLocal('${r.id}','mois',this.value===''?null:+this.value);trSave('${r.id}','mois',this.value===''?null:+this.value)"><option value="" ${r.mois==null?'selected':''}>Mois de clôture —</option>${TR_MONTHS.map((m,i)=>`<option value="${i}" ${r.mois===i?'selected':''}>${m}</option>`).join('')}</select>
+        <span class="tr-weighted">pondéré <b class="num">${fmtEUR(trWeighted(r))}</b></span>
+      </div>
+    </div>`).join('');
+
+  const depenseBody = depenseRows.length===0 ? '<div class="log-empty">Aucun poste. Ajoutez une dépense.</div>' : depenseRows.map(r=>`
+    <div class="tr-row">
+      <div class="tr-row-top">
+        <input class="ei tr-name" value="${esc(r.label)}" oninput="trEditLocal('${r.id}','label',this.value)" onchange="trSave('${r.id}','label',this.value)" placeholder="Poste de dépense">
+        <input class="ei tr-amt num" type="number" step="10" value="${r.montant}" oninput="trEditLocal('${r.id}','montant',+this.value)" onchange="trSave('${r.id}','montant',+this.value)">
+        <button class="ta-btn" title="Supprimer" onclick="trDelete('${r.id}')">✕</button>
+      </div>
+      <div class="tr-row-more">
+        <select onchange="trEditLocal('${r.id}','mois',this.value===''?null:+this.value);trSave('${r.id}','mois',this.value===''?null:+this.value)">
+          <option value="" ${r.mois===null?'selected':''}>Tous les mois (récurrent)</option>
+          ${TR_MONTHS.map((m,i)=>`<option value="${i}" ${r.mois===i?'selected':''}>${m} seulement</option>`).join('')}
+        </select>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('main').innerHTML = `
+    <datalist id="${dl}">${clients.map(c=>`<option value="${esc(c.nom)}">`).join('')}</datalist>
+
+    <div class="tr-hero">
+      <div>
+        <div class="tr-hero-eyebrow">Prévisionnel ${cashYear}</div>
+        <div class="tr-hero-sub">MRR + Signé placé + Pipeline pondéré placé, moins les dépenses récurrentes — vision mensuelle sur l'année.</div>
+      </div>
+      <div class="tr-hero-figure">
+        <div class="tr-sub-lbl">Trésorerie fin d'année</div>
+        <div class="tr-hero-val num" id="tr-hero-balance">—</div>
+        <div class="tr-hero-note" id="tr-hero-sub-note">—</div>
+      </div>
+    </div>
+
+    <div class="stat-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:20px">
+      <div class="stat-card"><div class="stat-lbl">MRR actuel</div><div class="stat-val num" id="tr-chip-mrr">${fmtEUR(mrrTotal)}/mois</div></div>
+      <div class="stat-card"><div class="stat-lbl">Pipeline pondéré (affecté)</div><div class="stat-val num" id="tr-chip-pipeline">—</div></div>
+      <div class="stat-card"><div class="stat-lbl">Dépenses (année)</div><div class="stat-val num" id="tr-chip-depense">${fmtEUR(depenseAnnuel)}</div></div>
+      <div class="stat-card"><div class="stat-lbl">Solde de départ (1er janvier)</div><input class="ei num" id="tr-start-balance" type="number" step="100" value="${startBalance}" oninput="trStartBalanceLocal(this.value)" onchange="trStartBalanceSave(this.value)" style="font-size:16px;font-weight:600;border:none;padding:0;height:auto;background:transparent"></div>
+    </div>
+
+    <div class="panels" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px">
+      <div class="card" style="margin-bottom:0">
+        <div class="card-head"><div class="ch-ico" style="background:var(--tr-mrr);border-color:var(--tr-mrr)"></div><span class="ch-title">MRR récurrent</span><span class="num" style="margin-left:auto;font-weight:600" id="tr-mrr-total">${fmtEUR(mrrTotal)}/mois</span></div>
+        <div class="tr-panel-body">${mrrBody}</div>
+        <div class="tr-caveat">Édite le champ MRR de la fiche client (même valeur que la fiche et le tableau Portefeuille).</div>
+      </div>
+      <div class="card" style="margin-bottom:0">
+        <div class="card-head"><div class="ch-ico" style="background:var(--tr-signe);border-color:var(--tr-signe)"></div><span class="ch-title">Signé en cours</span><span class="num" style="margin-left:auto;font-weight:600" id="tr-signe-total">${fmtEUR(signeTotal)}</span></div>
+        <div class="tr-panel-body" id="tr-signe-body">${signeBody}</div>
+        <button class="add-row" onclick="trAdd('signe')">+ Ajouter une ligne</button>
+      </div>
+      <div class="card" style="margin-bottom:0">
+        <div class="card-head"><div class="ch-ico" style="background:var(--tr-pipeline);border-color:var(--tr-pipeline)"></div><span class="ch-title">Pipeline pondéré (Affaires)</span><span class="num" style="margin-left:auto;font-weight:600" id="tr-pipeline-total">${fmtEUR(pipelineTotalW)} pondéré</span></div>
+        <div class="tr-panel-body" id="tr-pipeline-body">${pipelineBody}</div>
+        <button class="add-row" onclick="trAdd('pipeline')">+ Ajouter une ligne</button>
+      </div>
+      <div class="card" style="margin-bottom:0">
+        <div class="card-head"><div class="ch-ico" style="background:var(--tr-depense);border-color:var(--tr-depense)"></div><span class="ch-title">Dépenses récurrentes</span><span class="num" style="margin-left:auto;font-weight:600" id="tr-depense-total">${fmtEUR(depenseAnnuel)}/an</span></div>
+        <div class="tr-panel-body" id="tr-depense-body">${depenseBody}</div>
+        <button class="add-row" onclick="trAdd('depense')">+ Ajouter une ligne</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Vision annuelle ${cashYear}</span></div>
+      <div class="tr-chart-title">Recettes vs dépenses, par mois</div>
+      <div class="tr-legend">
+        <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-mrr)"></span>MRR</span>
+        <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-signe)"></span>Signé</span>
+        <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-pipeline)"></span>Pipeline pondéré</span>
+        <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-depense)"></span>Dépenses</span>
+      </div>
+      <div class="tr-chart-wrap">
+        <div class="tr-chart-scroll"><svg class="tr-chart" id="tr-chart-bars" viewBox="0 0 940 260" preserveAspectRatio="xMinYMid meet"></svg></div>
+        <div class="tr-tooltip" id="tr-tt-bars"></div>
+      </div>
+
+      <div class="tr-chart-title" style="margin-top:26px">Trésorerie cumulée</div>
+      <div class="tr-legend">
+        <span class="tr-legend-item"><span class="tr-sw tr-line"></span>Positive/négative</span>
+      </div>
+      <div class="tr-chart-wrap">
+        <div class="tr-chart-scroll"><svg class="tr-chart" id="tr-chart-line" viewBox="0 0 940 200" preserveAspectRatio="xMinYMid meet"></svg></div>
+        <div class="tr-tooltip" id="tr-tt-line"></div>
+      </div>
+
+      <div class="tbl-wrap" style="margin-top:18px"><table>
+        <thead><tr><th>Mois</th><th style="text-align:right">MRR</th><th style="text-align:right">Signé</th><th style="text-align:right">Pipeline</th><th style="text-align:right">Recettes</th><th style="text-align:right">Dépenses</th><th style="text-align:right">Net</th><th style="text-align:right">Trésorerie</th></tr></thead>
+        <tbody id="tr-month-tbody"></tbody>
+      </table></div>
+    </div>`;
+
+  trRenderCharts();
+}
+
+function trComputeMonthly(){
+  const mrrTotal = clients.reduce((s,c)=>s+(+c.mrr||0),0);
+  const solde = trSolde();
+  let cum = solde ? (+solde.montant||0) : 0;
+  const months = [];
+  for(let m=0;m<12;m++){
+    const signeM = trRows('signe').filter(r=>r.mois===m).reduce((s,r)=>s+(+r.montant||0),0);
+    const pipeM = trRows('pipeline').filter(r=>r.mois===m).reduce((s,r)=>s+trWeighted(r),0);
+    const depensesM = trRows('depense').filter(r=>r.mois===null||r.mois===m).reduce((s,r)=>s+(+r.montant||0),0);
+    const recettes = mrrTotal + signeM + pipeM;
+    const net = recettes - depensesM;
+    cum += net;
+    months.push({ m, mrr:mrrTotal, signe:signeM, pipeline:pipeM, recettes, depenses:depensesM, net, cum });
+  }
+  return months;
+}
+
+function trRenderCharts(){
+  const months = trComputeMonthly();
+  trRenderBarChart(months);
+  trRenderLineChart(months);
+  trRenderMonthTable(months);
+
+  const last = months[months.length-1];
+  const heroEl = document.getElementById('tr-hero-balance');
+  if(!heroEl) return;
+  heroEl.textContent = fmtEUR(Math.abs(last.cum)) .replace(/^/, last.cum<0?'−':'');
+  heroEl.className = 'tr-hero-val num ' + (last.cum<0?'neg':'pos');
+  const solde = trSolde(); const startBalance = solde?solde.montant:0;
+  document.getElementById('tr-hero-sub-note').textContent = (last.cum>=startBalance?'↑ ':'↓ ') + 'depuis ' + fmtEUR(startBalance) + ' au 1er janvier';
+
+  const placedPipeline = months.reduce((s,mo)=>s+mo.pipeline,0);
+  const chipPipe = document.getElementById('tr-chip-pipeline'); if(chipPipe) chipPipe.textContent = fmtEUR(placedPipeline);
+}
+
+function trRenderBarChart(months){
+  const svg = document.getElementById('tr-chart-bars'); if(!svg) return;
+  const W = 940, H = 260, padL = 8, padR = 8, padT = 18, padB = 34;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const groupW = plotW / 12;
+  const barW = Math.min(30, groupW*0.30);
+  const gap = 6;
+  const maxVal = Math.max(1, ...months.map(mo=>Math.max(mo.recettes, mo.depenses)));
+  const scale = v => (v/maxVal) * plotH;
+
+  let s = '';
+  months.forEach((mo,i)=>{
+    const cx = padL + groupW*i + groupW/2;
+    const baseY = padT + plotH;
+    const xR = cx - gap/2 - barW;
+    let yTop = baseY;
+    const segs = [ [mo.mrr, 'var(--tr-mrr)'], [mo.signe, 'var(--tr-signe)'], [mo.pipeline, 'var(--tr-pipeline)'] ];
+    segs.forEach(([val,color])=>{
+      if(val<=0) return;
+      const h = scale(val);
+      yTop -= h;
+      s += `<rect x="${xR}" y="${yTop}" width="${barW}" height="${Math.max(h-1.5,0)}" rx="2.5" fill="${color}"></rect>`;
+    });
+    if(mo.recettes>0){ s += `<text class="tr-bar-lbl" x="${xR+barW/2}" y="${yTop-5}">${Math.round(mo.recettes/1000)}k</text>`; }
+    const xD = cx + gap/2;
+    const hD = scale(mo.depenses);
+    if(hD>0){ s += `<rect x="${xD}" y="${baseY-hD}" width="${barW}" height="${Math.max(hD-1.5,0)}" rx="2.5" fill="var(--tr-depense)"></rect>`; }
+    s += `<rect x="${cx-groupW/2}" y="${padT}" width="${groupW}" height="${plotH}" fill="transparent" class="tr-hitgroup" data-month="${i}"></rect>`;
+    s += `<text class="tr-month-lbl" x="${cx}" y="${H-10}">${TR_MONTHS_SHORT[i]}</text>`;
+  });
+  s += `<line class="tr-grid-line" x1="${padL}" y1="${padT+plotH}" x2="${W-padR}" y2="${padT+plotH}"></line>`;
+  svg.innerHTML = s;
+
+  const tt = document.getElementById('tr-tt-bars');
+  svg.querySelectorAll('.tr-hitgroup').forEach(el=>{
+    el.addEventListener('mousemove', (ev)=>{
+      const i = +el.dataset.month, mo = months[i];
+      tt.innerHTML = `<b>${TR_MONTHS[i]}</b>`+
+        `<div class="tr-tt-row"><span>MRR</span><span class="num">${fmtEUR(mo.mrr)}</span></div>`+
+        `<div class="tr-tt-row"><span>Signé</span><span class="num">${fmtEUR(mo.signe)}</span></div>`+
+        `<div class="tr-tt-row"><span>Pipeline</span><span class="num">${fmtEUR(mo.pipeline)}</span></div>`+
+        `<div class="tr-tt-row"><span>Dépenses</span><span class="num">−${fmtEUR(mo.depenses)}</span></div>`+
+        `<div class="tr-tt-row" style="border-top:1px solid rgba(255,255,255,.2);margin-top:3px;padding-top:3px"><span>Net</span><span class="num">${(mo.net>=0?'+':'−')+fmtEUR(Math.abs(mo.net))}</span></div>`;
+      trPositionTooltip(tt, ev, svg);
+      tt.style.opacity = 1;
+    });
+    el.addEventListener('mouseleave', ()=>{ tt.style.opacity = 0; });
+  });
+}
+
+function trRenderLineChart(months){
+  const svg = document.getElementById('tr-chart-line'); if(!svg) return;
+  const W = 940, H = 200, padL = 40, padR = 12, padT = 16, padB = 30;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const vals = months.map(mo=>mo.cum);
+  const minV = Math.min(0, ...vals), maxV = Math.max(0, ...vals);
+  const range = (maxV - minV) || 1;
+  const yFor = v => padT + plotH - ((v-minV)/range)*plotH;
+  const xFor = i => padL + (plotW/(months.length-1))*i;
+  const zeroY = yFor(0);
+  let pts = months.map((mo,i)=>[xFor(i), yFor(mo.cum)]);
+  let linePath = pts.map((p,i)=>(i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+
+  function areaPath(filterAbove){
+    let d = ''; let open=false;
+    for(let i=0;i<pts.length;i++){
+      const above = months[i].cum >= 0;
+      if(above===filterAbove){
+        if(!open){ d += `M ${pts[i][0].toFixed(1)},${zeroY.toFixed(1)} L ${pts[i][0].toFixed(1)},${pts[i][1].toFixed(1)} `; open=true; }
+        else d += `L ${pts[i][0].toFixed(1)},${pts[i][1].toFixed(1)} `;
+      } else if(open){ d += `L ${pts[i-1][0].toFixed(1)},${zeroY.toFixed(1)} Z `; open=false; }
+    }
+    if(open) d += `L ${pts[pts.length-1][0].toFixed(1)},${zeroY.toFixed(1)} Z `;
+    return d;
+  }
+
+  let s = '';
+  s += `<defs>
+    <linearGradient id="trGPos" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--good,#1a6b47)" stop-opacity="0.22"/><stop offset="100%" stop-color="var(--good,#1a6b47)" stop-opacity="0.02"/></linearGradient>
+    <linearGradient id="trGNeg" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="var(--bad,#b23b2c)" stop-opacity="0.22"/><stop offset="100%" stop-color="var(--bad,#b23b2c)" stop-opacity="0.02"/></linearGradient>
+  </defs>`;
+  s += `<line class="tr-zero-line" x1="${padL}" y1="${zeroY}" x2="${W-padR}" y2="${zeroY}"></line>`;
+  s += `<text class="tr-axis-lbl" x="${padL-6}" y="${zeroY+3}" text-anchor="end">0</text>`;
+  s += `<text class="tr-axis-lbl" x="${padL-6}" y="${padT+8}" text-anchor="end">${Math.round(maxV/1000)}k</text>`;
+  s += `<text class="tr-axis-lbl" x="${padL-6}" y="${padT+plotH}" text-anchor="end">${Math.round(minV/1000)}k</text>`;
+  s += `<path d="${areaPath(true)}" fill="url(#trGPos)"></path>`;
+  s += `<path d="${areaPath(false)}" fill="url(#trGNeg)"></path>`;
+  s += `<path d="${linePath}" fill="none" stroke="var(--tx)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></path>`;
+  pts.forEach((p,i)=>{
+    const color = months[i].cum>=0 ? 'var(--good,#1a6b47)' : 'var(--bad,#b23b2c)';
+    s += `<circle cx="${p[0]}" cy="${p[1]}" r="3.2" fill="${color}" stroke="var(--card)" stroke-width="1.4"></circle>`;
+    s += `<circle cx="${p[0]}" cy="${p[1]}" r="10" fill="transparent" class="tr-hitpt" data-month="${i}"></circle>`;
+    s += `<text class="tr-month-lbl" x="${p[0]}" y="${H-8}">${TR_MONTHS_SHORT[i]}</text>`;
+  });
+  const lastP = pts[pts.length-1], lastMo = months[months.length-1];
+  const lastLblY = Math.max(padT+10, Math.min(padT+plotH-4, lastP[1]-9));
+  s += `<text class="tr-bar-lbl" x="${Math.max(lastP[0]-2, padL+40)}" y="${lastLblY}" text-anchor="end" font-weight="600">${fmtEUR(lastMo.cum)}</text>`;
+  svg.innerHTML = s;
+
+  const tt = document.getElementById('tr-tt-line');
+  svg.querySelectorAll('.tr-hitpt').forEach(el=>{
+    el.addEventListener('mousemove', (ev)=>{
+      const i = +el.dataset.month, mo = months[i];
+      tt.innerHTML = `<b>${TR_MONTHS[i]}</b>`+
+        `<div class="tr-tt-row"><span>Net du mois</span><span class="num">${(mo.net>=0?'+':'−')+fmtEUR(Math.abs(mo.net))}</span></div>`+
+        `<div class="tr-tt-row"><span>Trésorerie cumulée</span><span class="num">${fmtEUR(mo.cum)}</span></div>`;
+      trPositionTooltip(tt, ev, svg);
+      tt.style.opacity = 1;
+    });
+    el.addEventListener('mouseleave', ()=>{ tt.style.opacity = 0; });
+  });
+}
+
+function trPositionTooltip(tt, ev, svg){
+  const wrapRect = svg.closest('.tr-chart-wrap').getBoundingClientRect();
+  tt.style.left = (ev.clientX - wrapRect.left) + 'px';
+  tt.style.top = (ev.clientY - wrapRect.top - 14) + 'px';
+}
+
+function trRenderMonthTable(months){
+  const body = document.getElementById('tr-month-tbody'); if(!body) return;
+  body.innerHTML = months.map(mo=>`
+    <tr>
+      <td>${TR_MONTHS[mo.m]}</td>
+      <td class="num" style="text-align:right">${fmtEUR(mo.mrr)}</td>
+      <td class="num" style="text-align:right">${mo.signe?fmtEUR(mo.signe):'—'}</td>
+      <td class="num" style="text-align:right">${mo.pipeline?fmtEUR(mo.pipeline):'—'}</td>
+      <td class="num" style="text-align:right">${fmtEUR(mo.recettes)}</td>
+      <td class="num" style="text-align:right">${fmtEUR(mo.depenses)}</td>
+      <td class="num" style="text-align:right;font-weight:500;color:${mo.net>=0?'var(--good,#1a6b47)':'var(--bad,#b23b2c)'}">${(mo.net>=0?'+':'−')+fmtEUR(Math.abs(mo.net))}</td>
+      <td class="num" style="text-align:right;font-weight:600;${mo.cum<0?'color:var(--bad,#b23b2c)':''}">${fmtEUR(mo.cum)}</td>
+    </tr>`).join('');
+}
+
+// ── MRR (édite directement CrmProspect.mrr) ──
+function trMrrLocal(clientId, val){
+  const c = clients.find(c=>c.id===clientId); if(c) c.mrr = val.trim()===''?null:+val;
+  trRenderCharts();
+}
+async function trMrrSave(clientId, val){
+  const v = val.trim()===''?null:+val;
+  try{
+    const r = await apiFetch('/wa/crmProspect/update', {method:'POST', body:JSON.stringify({id:clientId, mrr:v})});
+    if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash('Erreur d\'enregistrement'); }
+}
+
+// ── Signé / Pipeline / Dépenses (CrmCashLine) ──
+function trEditLocal(id, field, value){
+  const row = cashLines.find(r=>r.id===id); if(!row) return;
+  row[field] = value;
+  trRenderCharts();
+  if(field==='mois' || field==='proba') renderTresorerie();
+}
+async function trSave(id, field, value){
+  try{
+    const r = await apiFetch('/wa/crmCashLine/update', {method:'POST', body:JSON.stringify({id, [field]:value})});
+    if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash('Erreur d\'enregistrement'); }
+}
+async function trAdd(kind){
+  const defaults = { signe:{label:'',montant:0,mois:null}, pipeline:{label:'',montant:0,proba:50,mois:null}, depense:{label:'',montant:0,mois:null} }[kind];
+  try{
+    const r = await apiFetch('/wa/crmCashLine/create', {method:'POST', body:JSON.stringify({annee:cashYear, kind, ...defaults})});
+    if(!r.ok) throw new Error('http '+r.status);
+    const row = await r.json();
+    cashLines.push(row);
+  }catch(e){ flash('Erreur de création'); return; }
+  renderTresorerie();
+}
+async function trDelete(id){
+  cashLines = cashLines.filter(r=>r.id!==id);
+  renderTresorerie();
+  try{
+    const r = await apiFetch('/wa/crmCashLine/delete', {method:'POST', body:JSON.stringify({id})});
+    if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash('Erreur de suppression'); }
+}
+
+// ── Solde de départ (ligne unique kind=solde_depart) ──
+function trStartBalanceLocal(val){
+  const solde = trSolde();
+  if(solde) solde.montant = +val||0;
+  trRenderCharts();
+}
+async function trStartBalanceSave(val){
+  const v = +val||0;
+  const solde = trSolde();
+  try{
+    if(solde){
+      const r = await apiFetch('/wa/crmCashLine/update', {method:'POST', body:JSON.stringify({id:solde.id, montant:v})});
+      if(!r.ok) throw new Error('http '+r.status);
+    } else {
+      const r = await apiFetch('/wa/crmCashLine/create', {method:'POST', body:JSON.stringify({annee:cashYear, kind:'solde_depart', label:'Solde au 1er janvier', montant:v})});
+      if(!r.ok) throw new Error('http '+r.status);
+      cashLines.push(await r.json());
+    }
   }catch(e){ flash('Erreur d\'enregistrement'); }
 }
 
