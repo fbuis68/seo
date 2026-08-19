@@ -927,6 +927,19 @@ function renderInsights(){
       +'</div>';
   }).join('');
 
+  // ── Décompte par type de module installé (Sesame / Ttlock) — deux cases
+  // à cocher indépendantes sur la fiche, en face de "Nb modules". ──
+  const MODULE_TYPES=[['moduleSesame','Sesame','#1A6B47'],['moduleTtlock','Ttlock','#185fa5']];
+  const moduleTypeCounts=MODULE_TYPES.map(([k,lbl,color])=>[lbl,color,clients.filter(c=>c[k]).length]);
+  const moduleTypeHtml=moduleTypeCounts.map(([lbl,color,n])=>{
+    const pct=total?Math.round(n/total*100):0;
+    return '<div class="bar-row" title="'+lbl+' : '+n+'/'+total+'">'
+      +'<span class="bar-lbl-wide" style="width:130px">'+esc(lbl)+'</span>'
+      +'<div class="bar-track"><div class="bar-fill" style="width:'+pct+'%;background:'+color+'"></div></div>'
+      +'<span class="bar-pct" style="width:64px;white-space:nowrap">'+n+' ('+pct+'%)</span>'
+      +'</div>';
+  }).join('');
+
   // ── Répartition des accès par type (NFC / Mobile / Code / QR), en camembert
   // — les 4 se totalisent à 100% par fiche (ce sont les 4 façons dont un
   // client final s'identifie, pas 4 mesures indépendantes), donc calculés ici
@@ -961,6 +974,7 @@ function renderInsights(){
     + '<div class="card"><div class="card-head"><div class="ch-ico">◻</div><span class="ch-title">Répartition par secteur</span></div>'+secteurHtml+'</div>'
     + '<div class="card"><div class="card-head"><div class="ch-ico">▤</div><span class="ch-title">Répartition par PMS</span></div>'+pmsHtml+'</div>'
     + '<div class="card"><div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Usage des modules Sesame</span><span style="font-size:11px;color:#aaa;margin-left:8px;white-space:nowrap">'+totalModulesActifs+' au total</span></div>'+moduleHtml+'</div>'
+    + '<div class="card"><div class="card-head"><div class="ch-ico">◫</div><span class="ch-title">Type de module installé</span></div>'+moduleTypeHtml+'</div>'
     + '<div class="card"><div class="card-head"><div class="ch-ico">◉</div><span class="ch-title">Taux d\'usage des accès</span><span style="font-size:11px;color:#aaa;margin-left:8px">'+nClients+' clients</span></div>'+accessHtml
       +(nWithUsage?'':'<div style="font-size:12px;color:#bbb;padding:4px 0;font-style:italic">Aucune donnée d\'usage réelle sur les fiches Client</div>')+'</div>'
     + '</div>';
@@ -1152,7 +1166,7 @@ function renderFiche(c){
       <div class="field"><div class="fl"><span class="fl-ico">T</span> Téléphone</div><div class="fv">${c.tel||'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">W</span> Site web</div><div class="fv">${c.site?`<a href="https://${c.site}" target="_blank">${c.site}</a>`:'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">E</span> Établissement Sesame</div><div class="fv">${c.entityCode||'—'}</div></div>
-      <div class="field"><div class="fl"><span class="fl-ico">M</span> Modules</div><div class="fv">${c.modules?c.modules+' × Sesame':'—'}</div></div>
+      <div class="field"><div class="fl"><span class="fl-ico">M</span> Modules</div><div class="fv">${c.modules||'—'}${c.moduleSesame?' <span class="tag t-green" style="font-size:11px">Sesame</span>':''}${c.moduleTtlock?' <span class="tag t-blue" style="font-size:11px">Ttlock</span>':''}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">€</span> MRR</div><div class="fv">${c.mrr?fmtEUR(c.mrr)+'/mois':'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">P</span> PMS intégré</div><div class="fv">${c.pms?pmsBadge(c.pms):'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">✉</span> Messagerie</div><div class="fv">${c.messagerie==='Client'?'<span class="tag t-green" style="font-size:11px">Client</span>':'<span class="tag t-gray" style="font-size:11px">Noreply</span>'}</div></div>
@@ -1457,7 +1471,7 @@ function supportBadge(c){
 // MODAL EDIT CLIENT
 // ════════════════════════════════════════
 function openModal(id){const c=clients.find(c=>c.id===id);if(c)renderModal({...c});}
-function openNewModal(){renderModal({id:null,nom:'',type:'Client',groupe:'',secteur:'Hôtellerie',denominationSociale:'',siret:'',siren:'',adresse:'',ville:'',etoiles:'',danger:'Modéré',potentiel:2,contrat:'non',modules:0,mrr:null,pms:'',priorite:1,appel:'',referent:'',email:'',tel:'',site:'',nfc:0,qr:0,mobile:0,webApp:false,mobileV2:false,checkin:false,livret:false,gestionDemande:false,offline:false,messagerie:'Noreply',note:'',commercialId:'',journal:[],_new:true});}
+function openNewModal(){renderModal({id:null,nom:'',type:'Client',groupe:'',secteur:'Hôtellerie',denominationSociale:'',siret:'',siren:'',adresse:'',ville:'',etoiles:'',danger:'Modéré',potentiel:2,contrat:'non',modules:0,moduleSesame:false,moduleTtlock:false,mrr:null,pms:'',priorite:1,appel:'',referent:'',email:'',tel:'',site:'',nfc:0,qr:0,mobile:0,webApp:false,mobileV2:false,checkin:false,livret:false,gestionDemande:false,offline:false,messagerie:'Noreply',note:'',commercialId:'',journal:[],_new:true});}
 
 // Autocomplétion d'adresse via l'API Adresse (BAN — Base Adresse Nationale,
 // data.gouv.fr) : gratuite, sans clé, réponse CORS directement utilisable
@@ -1601,6 +1615,7 @@ function renderModal(mc){
         <div class="ff"><label>Risque churn</label><select id="m-danger">${DANGERS.map(d=>`<option value="${d}" ${mc.danger===d?'selected':''}>${d}</option>`).join('')}</select></div>
         <div class="ff"><label>Potentiel</label><select id="m-pot"><option value="0">—</option><option value="1" ${mc.potentiel===1?'selected':''}>1</option><option value="2" ${mc.potentiel===2?'selected':''}>2</option><option value="3" ${mc.potentiel===3?'selected':''}>3</option></select></div>
         <div class="ff"><label>Nb modules</label><input type="number" id="m-mod" value="${mc.modules||0}" min="0"></div>
+        <div class="ff"><label>Type de module</label><div style="display:flex;gap:14px;height:31px;align-items:center"><label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer"><input type="checkbox" id="m-mod-sesame" ${mc.moduleSesame?'checked':''}> Sesame</label><label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer"><input type="checkbox" id="m-mod-ttlock" ${mc.moduleTtlock?'checked':''}> Ttlock</label></div></div>
         <div class="ff"><label>MRR (€/mois)</label><input type="number" id="m-mrr" value="${mc.mrr||''}" min="0" step="0.01"></div>
         <div class="ff"><label>Contrat</label><select id="m-contrat"><option value="non" ${mc.contrat==='non'?'selected':''}>non</option><option value="oui" ${mc.contrat==='oui'?'selected':''}>oui</option><option value="en cours" ${mc.contrat==='en cours'?'selected':''}>en cours</option></select></div>
         <div class="ff"><label>Priorité appel</label><select id="m-prio"><option value="0">—</option><option value="1" ${mc.priorite===1?'selected':''}>1</option><option value="2" ${mc.priorite===2?'selected':''}>2</option><option value="3" ${mc.priorite===3?'selected':''}>3</option></select></div>
@@ -1654,7 +1669,7 @@ async function saveModal(id,isNew){
     adresse:g('m-adresse').value.trim(),ville:g('m-ville').value.trim(),etoiles:g('m-etoiles').value,referent:g('m-referent').value,
     email:g('m-email').value,tel:g('m-tel').value,site:g('m-site').value,
     pms:(g('m-pms').value==='__other__'?g('m-pms-other').value.trim():g('m-pms').value),messagerie:g('m-msg').value,danger:g('m-danger').value,commercialId:g('m-commercial').value||null,
-    potentiel:+g('m-pot').value,modules:+g('m-mod').value,mrr:g('m-mrr').value.trim()?+g('m-mrr').value:null,contrat:g('m-contrat').value,
+    potentiel:+g('m-pot').value,modules:+g('m-mod').value,moduleSesame:g('m-mod-sesame').checked,moduleTtlock:g('m-mod-ttlock').checked,mrr:g('m-mrr').value.trim()?+g('m-mrr').value:null,contrat:g('m-contrat').value,
     priorite:+g('m-prio').value,appel:g('m-appel').value,
     nfc:+g('m-nfc').value,qr:+g('m-qr').value,mobile:+g('m-mob').value,code:+g('m-code').value,
     webApp:g('m-webapp').checked,mobileV2:g('m-v2').checked,offline:g('m-offline').checked,

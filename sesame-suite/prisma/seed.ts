@@ -277,37 +277,20 @@ const AUDIT_CONTACT: Record<string, Partial<{ referent: string; tel: string; pms
 };
 
 /**
- * Parcours activés par défaut selon le secteur d'activité — cf. matrice
- * fournie (Hôtel/Sport/Stockage/Bureaux × étapes d'onboarding et rubriques
- * de l'espace client). Le choix des chambres, la déclaration d'occupants et
- * les préférences ménage ne concernent que l'hébergement ; l'identité et les
- * rubriques de l'espace client (boutique, points, évènements) sont
- * universelles. Sert de valeur initiale, éditable ensuite par fiche.
+ * Parcours activés par défaut sur une nouvelle fiche client — décochés par
+ * défaut (demande explicite de l'utilisateur, appliquée à plusieurs
+ * reprises en migration après reset de l'environnement : mieux vaut que le
+ * seed parte déjà décoché). Éditable ensuite par fiche.
  */
-type SectorGroup = "hotel" | "sport" | "stockage" | "work";
-function sectorGroupFor(secteur?: string): SectorGroup {
-  switch (secteur) {
-    case "Sport":
-      return "sport";
-    case "Garde meuble":
-      return "stockage";
-    case "Bureaux":
-    case "Agence gestion patrimoine":
-      return "work";
-    default:
-      return "hotel"; // Hôtellerie, Appart Hotel, Location appartement/AirBnB, Love hôtel, secteur non renseigné
-  }
-}
-function journeyFlagsFor(secteur?: string) {
-  const g = sectorGroupFor(secteur);
+function journeyFlagsFor() {
   return {
-    onbChoixChambres: g === "hotel",
-    onbOccupant: g === "hotel" || g === "sport",
-    onbIdentite: true,
-    onbMenage: g === "hotel",
-    espBoutique: true,
-    espPoint: true,
-    espEvenement: true,
+    onbChoixChambres: false,
+    onbOccupant: false,
+    onbIdentite: false,
+    onbMenage: false,
+    espBoutique: false,
+    espPoint: false,
+    espEvenement: false,
   };
 }
 

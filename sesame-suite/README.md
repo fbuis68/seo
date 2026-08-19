@@ -1134,6 +1134,42 @@ l'app (19/08/2026).
   choix de fond (ajouter des entrées au portefeuille CRM) qui n'a pas été
   pris unilatéralement — à trancher avec l'utilisateur.
 
+### Options actives décochées par défaut + type de module (Sesame/Ttlock) + décompte KPI
+
+- **Décochage des 7 options** ("Choix chambre", "Occupant", "Identité",
+  "Ménage", "Boutique", "Points fidélité", "Évènements") sur toutes les
+  fiches client, à la demande explicite de l'utilisateur — déjà fait une
+  fois plus tôt dans le projet, mais n'avait pas survécu à un reset de
+  l'environnement de dev (fait en direct sur la base, jamais rejoué en
+  migration). Cette fois : migration
+  (`prisma/migrations/20260820100000_crm_prospect_disable_7_options`) **et**
+  changement du défaut du seed (`prisma/seed.ts`,
+  `journeyFlagsFor()` retourne désormais `false` pour les 7 — l'ancienne
+  logique par secteur/"universel" est retirée) pour qu'un environnement
+  entièrement reseedé reparte déjà décoché, sans avoir à rejouer cette
+  correction une troisième fois.
+- **Type de module installé** : deux cases à cocher indépendantes
+  (`CrmProspect.moduleSesame`, `moduleTtlock`) ajoutées en face du champ
+  "Nb modules" dans le modal de fiche (`public/crm.html`) — un client peut
+  avoir les deux (transition de l'un vers l'autre). Affichées en pastilles
+  sur la fiche à côté du nombre de modules.
+- **Décompte par type au niveau du KPI** : nouvelle carte "Type de module
+  installé" dans le tableau de bord Home/Insights (`renderInsights()`),
+  même forme (barres + %) que les cartes voisines — nombre de clients
+  Sesame vs Ttlock sur l'ensemble du portefeuille.
+
+### Formulaire de contact du site web — vérifié à nouveau, backend OK
+
+Signalé comme "ne fonctionne plus". `POST /contact` (`src/routes/contact.ts`)
+re-testé en direct (`curl`) : crée bien un `CrmProspect` (type Prospect,
+trouvé/créé par email) et une activité "Relance" — réponse `201 {ok:true}`,
+aucune régression décelée côté backend, code inchangé depuis le 15/08. Le
+formulaire lui-même vit sur un site externe qui n'est pas dans ce dépôt,
+donc invisible d'ici — je ne peux pas voir ce que le navigateur envoie
+réellement. Pour aller plus loin il faut soit l'URL exacte appelée par le
+formulaire (peut-être qu'elle ne pointe plus vers ce déploiement), soit le
+message d'erreur/l'onglet Réseau du navigateur au moment de l'échec.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT
