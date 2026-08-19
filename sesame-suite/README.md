@@ -934,6 +934,26 @@ de 0 au lieu de la taille de son contenu ; il se faisait donc écraser par
     (statut "En attente") — revenir sur un incident qu'on croyait résolu est
     le signal même qu'il ne l'est pas.
 
+- **"Features actives" renommé en "Options actives"** (fiche client et
+  modal d'édition, `public/crm.html`) — pur changement de libellé affiché,
+  aucun changement de comportement.
+
+- **Décompte total des modules sur le graphique Home** (`renderInsights()`)
+  — le graphique "Usage des modules Sesame" se limitait jusqu'ici à 4 des 13
+  "Options actives" (WebApp/Mobile V2/Check-in/Offline), un reliquat de
+  l'époque où la carte "Parcours client activés" couvrait les 9 autres ;
+  cette carte ayant été supprimée le 18/08/2026 (fusionnée dans "Options
+  actives" sur la fiche), le graphique couvre maintenant les 13 options, en
+  affichant le nombre brut de fiches concernées à côté du pourcentage
+  ("54 (77%)" plutôt que "77%" seul), plus un total agrégé dans l'en-tête de
+  la carte (somme de toutes les options actives, tous types confondus).
+
+- **Options actives affichées sur un ticket** (`showTicketDetail()`) — la
+  liste des 13 options actives du client (même composant que sur la fiche,
+  factorisé dans `featDefFor()`) apparaît maintenant sur l'écran de détail
+  d'un ticket, pour que l'agent support voie d'un coup d'œil ce que le
+  client a réellement activé sans changer d'onglet.
+
 - **Bug corrigé — config d'un compte hôtel affichant celle d'un autre
   établissement** (`loadCfg()`) : `GET /entityModuleConfig/list` est
   volontairement public côté serveur (le parcours client en a besoin sans

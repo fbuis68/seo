@@ -847,19 +847,24 @@ function renderInsights(){
     +'</div>'
   ).join('');
 
-  // ── Usage des modules Sesame — intégration technique uniquement ; Livret
-  // digital et Gestion demande vivent désormais uniquement dans la carte
-  // "Parcours client activés" (rubriques Espace client), pour ne pas doubler
-  // le même indicateur dans deux graphiques différents ──
-  const MODULE_FEATURES=[['webApp','WebApp'],['mobileV2','Mobile V2'],['checkin','Check-in mobile'],['offline','Offline']];
+  // ── Usage des modules Sesame — les 13 "Options actives" de la fiche
+  // client (featDef), y compris Livret digital/Gestion demande et le
+  // parcours onboarding/espace client : la carte "Parcours client activés"
+  // qui les excluait autrefois de ce graphique a été supprimée le
+  // 18/08/2026 (fusionnée dans "Options actives" sur la fiche), donc plus
+  // aucune raison de les exclure ici. Le nombre total ci-contre est la somme
+  // brute des modules actifs tous types confondus (une fiche avec 3 options
+  // actives compte pour 3), pas un nombre de fiches. ──
+  const MODULE_FEATURES=[['webApp','WebApp'],['mobileV2','Mobile V2'],['offline','Offline'],['livret','Livret digital'],['checkin','Check-in mobile'],['gestionDemande','Gestion demande'],['onbChoixChambres','Choix chambre'],['onbOccupant','Occupant'],['onbIdentite','Identité'],['onbMenage','Ménage'],['espBoutique','Boutique'],['espPoint','Points fidélité'],['espEvenement','Évènements']];
   const total=clients.length;
-  const moduleHtml=MODULE_FEATURES.map(([k,lbl])=>{
-    const n=clients.filter(c=>c[k]).length;
+  const moduleCounts=MODULE_FEATURES.map(([k,lbl])=>[k,lbl,clients.filter(c=>c[k]).length]);
+  const totalModulesActifs=moduleCounts.reduce((s,[,,n])=>s+n,0);
+  const moduleHtml=moduleCounts.map(([k,lbl,n])=>{
     const pct=total?Math.round(n/total*100):0;
     return '<div class="bar-row" title="'+lbl+' : '+n+'/'+total+'">'
       +'<span class="bar-lbl-wide" style="width:130px">'+esc(lbl)+'</span>'
       +'<div class="bar-track"><div class="bar-fill" style="width:'+pct+'%;background:#eb6834"></div></div>'
-      +'<span class="bar-pct">'+pct+'%</span>'
+      +'<span class="bar-pct" style="width:64px;white-space:nowrap">'+n+' ('+pct+'%)</span>'
       +'</div>';
   }).join('');
 
@@ -890,13 +895,13 @@ function renderInsights(){
 
   // La carte "Parcours client activés" (étapes d'onboarding + rubriques de
   // l'espace client) a été retirée le 18/08/2026 : ce sont des modules
-  // Sesame comme les autres, désormais fusionnés dans "Features actives"
+  // Sesame comme les autres, désormais fusionnés dans "Options actives"
   // sur la fiche client — la doubler ici avec un graphique dédié n'avait
   // plus d'utilité.
   return '<div class="insight-grid">'
     + '<div class="card"><div class="card-head"><div class="ch-ico">◻</div><span class="ch-title">Répartition par secteur</span></div>'+secteurHtml+'</div>'
     + '<div class="card"><div class="card-head"><div class="ch-ico">▤</div><span class="ch-title">Répartition par PMS</span></div>'+pmsHtml+'</div>'
-    + '<div class="card"><div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Usage des modules Sesame</span><span style="font-size:11px;color:#aaa;margin-left:8px">'+total+' fiches</span></div>'+moduleHtml+'</div>'
+    + '<div class="card"><div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Usage des modules Sesame</span><span style="font-size:11px;color:#aaa;margin-left:8px;white-space:nowrap">'+totalModulesActifs+' au total</span></div>'+moduleHtml+'</div>'
     + '<div class="card"><div class="card-head"><div class="ch-ico">◉</div><span class="ch-title">Taux d\'usage des accès</span><span style="font-size:11px;color:#aaa;margin-left:8px">'+nClients+' clients</span></div>'+accessHtml
       +(nWithUsage?'':'<div style="font-size:12px;color:#bbb;padding:4px 0;font-style:italic">Aucune donnée d\'usage réelle sur les fiches Client</div>')+'</div>'
     + '</div>';
@@ -1018,13 +1023,18 @@ function riskScore(c){let s=0;if(c.danger==='Élevé !!')s+=5;else if(c.danger==
 function scoreColor(s){return s<=3?'#27500a':s<=6?'#854f0b':'#a32d2d';}
 function scoreLbl(s){return s<=3?'Faible':s<=6?'Modéré':'Élevé';}
 
+// Les "parcours" (onboarding + espace client) sont des modules Sesame au
+// même titre que WebApp/Check-in/etc. — fusionnés dans une seule liste
+// d'"Options actives" (18/08/2026), la distinction n'avait pas d'utilité.
+// Partagé par la fiche client et le détail d'un ticket (le support a besoin
+// de voir d'un coup d'œil ce que le client a réellement activé).
+function featDefFor(c){
+  return [['WebApp',c.webApp],['Mobile V2',c.mobileV2],['Offline',c.offline],['Livret digital',c.livret],['Check-in mobile',c.checkin],['Gestion demande',c.gestionDemande],['Choix chambre',c.onbChoixChambres],['Occupant',c.onbOccupant],['Identité',c.onbIdentite],['Ménage',c.onbMenage],['Boutique',c.espBoutique],['Points fidélité',c.espPoint],['Évènements',c.espEvenement]];
+}
+
 function renderFiche(c){
   const sc=riskScore(c);
-  // Les "parcours" (onboarding + espace client) sont des modules Sesame au
-  // même titre que WebApp/Check-in/etc. — fusionnés dans une seule liste de
-  // features actives (18/08/2026), la distinction n'avait pas d'utilité
-  // pour la fiche client.
-  const featDef=[['WebApp',c.webApp],['Mobile V2',c.mobileV2],['Offline',c.offline],['Livret digital',c.livret],['Check-in mobile',c.checkin],['Gestion demande',c.gestionDemande],['Choix chambre',c.onbChoixChambres],['Occupant',c.onbOccupant],['Identité',c.onbIdentite],['Ménage',c.onbMenage],['Boutique',c.espBoutique],['Points fidélité',c.espPoint],['Évènements',c.espEvenement]];
+  const featDef=featDefFor(c);
   const upsells=[
     {show:!c.checkin,ico:'◉',bg:'#eeedfe',name:'Check-in mobile',price:'+90€/mois',pcl:'t-purple'},
     {show:!c.gestionDemande,ico:'◈',bg:'#eaf3de',name:'Gestion demande',price:'',pcl:'t-green'},
@@ -1117,7 +1127,7 @@ function renderFiche(c){
            <div class="bar-row"><span class="bar-lbl">Code</span><div class="bar-track"><div class="bar-fill" style="width:${c.code}%;background:#ef9f27"></div></div><span class="bar-pct">${c.code}%</span></div>
            <div class="bar-row"><span class="bar-lbl">QR Code</span><div class="bar-track"><div class="bar-fill" style="width:${c.qr}%;background:#1d9e75"></div></div><span class="bar-pct">${c.qr}%</span></div>`
         :`<div style="font-size:12px;color:#bbb;padding:4px 0;font-style:italic">Données non renseignées</div>`}
-      <div class="feat-lbl">Features actives</div>
+      <div class="feat-lbl">Options actives</div>
       <div class="feat-pills">
         ${featDef.map(([n,v])=>`<span class="fp ${v?'fp-on':'fp-off'}"><span class="fp-ico">${v?'✓':'✕'}</span>${n}</span>`).join('')}
       </div>
@@ -1439,7 +1449,7 @@ function renderModal(mc){
         <div class="ff"><label>QR Code %</label><input type="number" id="m-qr" value="${mc.qr||0}" min="0" max="100"></div>
       </div>
 
-      <div class="modal-section">Features actives</div>
+      <div class="modal-section">Options actives</div>
       <div class="feat-checks">
         <label><input type="checkbox" id="m-webapp" ${mc.webApp?'checked':''}> WebApp</label>
         <label><input type="checkbox" id="m-v2" ${mc.mobileV2?'checked':''}> Mobile V2</label>
@@ -2267,6 +2277,7 @@ function renderTicketDetail(t){
         <div class="ff"><label>Agent</label><select id="tkt-agent" onchange="ticketQualify('${t.id}')"><option value="">Non assigné</option>${COMMERCIALS.map(c=>`<option value="${c.id}" ${t.agentId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
       </div>
     </div>
+    ${ticketOptionsActivesHtml(t.prospectId)}
     <div class="card">
       <div class="card-head"><div class="ch-ico">✉</div><span class="ch-title">Fil de discussion</span></div>
       <div id="tkt-thread">${t.messages.map(ticketMessageHtml).join('')}</div>
@@ -2282,6 +2293,19 @@ function renderTicketDetail(t){
         <button class="btn btn-ghost btn-sm" onclick="ticketSendReply('${t.id}','note')">Note interne</button>
       </div>
     </div>`;
+}
+
+// Options actives du client rattaché au ticket — utile à l'agent support
+// pour savoir tout de suite quels modules Sesame ce client a réellement
+// activés, sans devoir ouvrir sa fiche dans un autre onglet.
+function ticketOptionsActivesHtml(prospectId){
+  const c = clients.find(x=>x.id===prospectId);
+  if(!c) return '';
+  const featDef = featDefFor(c);
+  return `<div class="card">
+    <div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Options actives</span></div>
+    <div class="feat-pills">${featDef.map(([n,v])=>`<span class="fp ${v?'fp-on':'fp-off'}"><span class="fp-ico">${v?'✓':'✕'}</span>${n}</span>`).join('')}</div>
+  </div>`;
 }
 
 const TICKET_TYPES = ['Incident technique','Question','Demande','Facturation','Autre'];
