@@ -1170,6 +1170,24 @@ réellement. Pour aller plus loin il faut soit l'URL exacte appelée par le
 formulaire (peut-être qu'elle ne pointe plus vers ce déploiement), soit le
 message d'erreur/l'onglet Réseau du navigateur au moment de l'échec.
 
+**Suite de l'investigation (19/08/2026)** : l'onglet Réseau du navigateur,
+sur le site externe (chatgpt.site), montre que le formulaire poste vers
+`/contact` sur son **propre** domaine (pas vers ce backend), et reçoit
+`{"ok":true,"mode":"crm-only","provider":null,"crm":true,"confirmation":false}`
+— une forme de réponse qui n'est pas la nôtre (`/contact` de ce dépôt
+renvoie juste `{"ok":true}`). Ce n'est donc pas une régression du code :
+le formulaire n'a jamais été branché sur ce backend, il tape sur un
+endpoint simulé du site-builder qui l'a généré. Pas d'action possible côté
+code de ce dépôt tant que le formulaire externe n'est pas reconfiguré pour
+poster vers `<déploiement>/contact` avec `{nom, email, secteur?, message}`.
+
+### Nombre d'accès sur la fiche client
+
+Nouveau champ `CrmProspect.nbAcces` (Int, défaut 0) — nombre de points
+d'accès (portes/serrures) installés chez le client. Champ numérique ajouté
+juste après les cases "Type de module" (Sesame/Ttlock) dans le modal de
+fiche, et affiché sur la fiche à côté de "Modules".
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

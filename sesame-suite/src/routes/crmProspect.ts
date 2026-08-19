@@ -46,6 +46,7 @@ function shapeProspect(p: {
   modules: number;
   moduleSesame: boolean;
   moduleTtlock: boolean;
+  nbAcces: number;
   pms: string | null;
   priorite: number;
   appel: string | null;
@@ -105,6 +106,7 @@ function shapeProspect(p: {
     modules: p.modules,
     moduleSesame: p.moduleSesame,
     moduleTtlock: p.moduleTtlock,
+    nbAcces: p.nbAcces,
     pms: p.pms || "",
     priorite: p.priorite,
     appel: p.appel || "",
@@ -177,6 +179,7 @@ interface ProspectBody {
   modules?: number;
   moduleSesame?: boolean;
   moduleTtlock?: boolean;
+  nbAcces?: number;
   pms?: string;
   priorite?: number;
   appel?: string;
@@ -236,6 +239,7 @@ crmProspectRouter.post(
         modules: b.modules ?? 0,
         moduleSesame: !!b.moduleSesame,
         moduleTtlock: !!b.moduleTtlock,
+        nbAcces: b.nbAcces ?? 0,
         pms: b.pms,
         priorite: b.priorite ?? 0,
         appel: b.appel,
@@ -312,6 +316,7 @@ crmProspectRouter.post(
         modules: b.modules,
         moduleSesame: b.moduleSesame,
         moduleTtlock: b.moduleTtlock,
+        nbAcces: b.nbAcces,
         pms: b.pms,
         priorite: b.priorite,
         appel: b.appel,
