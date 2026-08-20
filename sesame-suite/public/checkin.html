@@ -86,6 +86,12 @@ input:focus,select:focus{border-color:var(--accent)}
   background:linear-gradient(to bottom,transparent,var(--bg) 40%);
 }
 
+/* ── LANGUAGE SWITCHER ── */
+.lang-switch{display:flex;gap:4px;margin-right:2px;flex-shrink:0}
+.lang-btn{font-size:11px;font-weight:700;padding:4px 8px;border-radius:20px;border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);cursor:pointer;transition:all .15s;line-height:1;font-family:inherit}
+.lang-btn.on{background:#fff;color:var(--primary);border-color:#fff}
+.lang-btn:active{transform:scale(.94)}
+
 /* ── BADGES ── */
 .bdg{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px}
 .bdg-g{background:var(--pl);color:var(--primary)}
@@ -263,6 +269,11 @@ input:focus,select:focus{border-color:var(--accent)}
 <div style="background:linear-gradient(110deg,#17121E 0%,#3D1018 50%,#8B1A2E 100%);flex-shrink:0;z-index:20">
 <header class="hdr" style="background:transparent">
   <div class="hdr-logo" id="hdrLogo"><span class="hdr-name" id="hdrName">Éco-Séjour</span></div>
+  <div class="lang-switch" id="langSwitch" role="group" aria-label="Français / English / Español">
+    <button type="button" class="lang-btn" data-lang="fr" onclick="setLang('fr')">FR</button>
+    <button type="button" class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+    <button type="button" class="lang-btn" data-lang="es" onclick="setLang('es')">ES</button>
+  </div>
   <span class="hdr-bdg"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#fff;margin-right:4px;animation:pulse 2s infinite"></span>Sesame</span>
 </header>
 </div>
@@ -275,103 +286,103 @@ input:focus,select:focus{border-color:var(--accent)}
     <div class="sd on" id="sd1">1</div><div class="sline" id="sl1"></div>
     <div class="sd" id="sd2">2</div><div class="sline" id="sl2"></div>
     <div class="sd" id="sd3">3</div><div class="sline" id="sl3"></div>
-    <div class="sd" id="sd4" title="Vérification identité">
+    <div class="sd" id="sd4" data-i18n-title="step_dot_kyc_title" title="Vérification identité">
       <i class="ti ti-shield-check" style="font-size:11px"></i>
     </div><div class="sline" id="sl4"></div>
     <div class="sd" id="sd5">5</div><div class="sline" id="sl5"></div>
-    <div class="sd" id="sd6" title="Boutique"><i class="ti ti-shopping-bag" style="font-size:11px"></i></div><div class="sline" id="sl6"></div>
+    <div class="sd" id="sd6" data-i18n-title="step_dot_boutique_title" title="Boutique"><i class="ti ti-shopping-bag" style="font-size:11px"></i></div><div class="sline" id="sl6"></div>
     <div class="sd" id="sd7">7</div>
   </div>
 
   <!-- ── STEP 1: BOOKING ── -->
   <div id="step1" class="step-panel on">
-    <div class="slbl">Votre réservation</div>
+    <div class="slbl" data-i18n="step1_title">Votre réservation</div>
     <div class="card">
-      <div class="ch"><i class="ti ti-cloud-download"></i>Récupérer depuis Sesame</div>
+      <div class="ch"><i class="ti ti-cloud-download"></i><span data-i18n="step1_fetch_hdr">Récupérer depuis Sesame</span></div>
       <div class="fi">
-        <label class="lb">Email ou code de réservation</label>
-        <input type="text" id="searchQ" placeholder="Email, code réservation ou nom…" value="">
+        <label class="lb" data-i18n="step1_search_label">Email ou code de réservation</label>
+        <input type="text" id="searchQ" data-i18n-placeholder="step1_search_placeholder" placeholder="Email, code réservation ou nom…" value="">
       </div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-p" onclick="fetchBookings()" style="flex:1"><i class="ti ti-search"></i> Rechercher</button>
+        <button class="btn btn-p" onclick="fetchBookings()" style="flex:1"><i class="ti ti-search"></i> <span data-i18n="btn_search">Rechercher</span></button>
         <button class="btn btn-sm" onclick="document.getElementById('searchQ').value='';fetchBookings();return false"
           style="width:auto;background:var(--bluel);color:var(--blue);border-color:var(--blue);font-weight:600">
-          <i class="ti ti-test-pipe"></i> Démo
+          <i class="ti ti-test-pipe"></i> <span data-i18n="btn_demo">Démo</span>
         </button>
       </div>
-      <div style="font-size:11px;color:var(--mu);margin-top:8px;text-align:center">
+      <div style="font-size:11px;color:var(--mu);margin-top:8px;text-align:center" data-i18n-html="step1_hint">
         Laissez vide et cliquez Rechercher · ou <strong>Démo</strong> pour les données de test
       </div>
     </div>
     <div id="bookingResults"></div>
     <div id="step1next" style="display:none">
-      <button class="btn btn-p" onclick="gotoStep(2)">Choisir ma chambre <i class="ti ti-arrow-right"></i></button>
+      <button class="btn btn-p" onclick="gotoStep(2)"><span data-i18n="step1_btn_next">Choisir ma chambre</span> <i class="ti ti-arrow-right"></i></button>
     </div>
   </div>
 
   <!-- ── STEP 2: ROOM CHOICE ── -->
   <div id="step2" class="step-panel">
-    <div class="slbl">Choisissez votre chambre</div>
+    <div class="slbl" data-i18n="step2_title">Choisissez votre chambre</div>
     <!-- Tag filters -->
     <div class="room-filters" id="roomFilters"></div>
     <!-- Map canvas -->
     <div class="room-map-wrap" id="roomMapWrap" style="display:none">
       <canvas id="roomCanvas" width="440" height="300"></canvas>
       <div style="font-size:11px;color:var(--mu);padding:8px 10px;display:flex;align-items:center;gap:5px;background:var(--card)">
-        <i class="ti ti-hand-click" style="font-size:13px"></i>Touchez une chambre sur le plan pour la sélectionner
+        <i class="ti ti-hand-click" style="font-size:13px"></i><span data-i18n="step2_map_hint">Touchez une chambre sur le plan pour la sélectionner</span>
       </div>
     </div>
     <!-- Room cards list -->
     <div id="roomList"></div>
     <div class="brow">
       <button class="btn btn-out" onclick="gotoStep(1)"><i class="ti ti-arrow-left"></i></button>
-      <button class="btn btn-p" id="btnStep2Next" onclick="gotoStep(3)">Continuer <i class="ti ti-arrow-right"></i></button>
+      <button class="btn btn-p" id="btnStep2Next" onclick="gotoStep(3)"><span data-i18n="btn_continue">Continuer</span> <i class="ti ti-arrow-right"></i></button>
     </div>
   </div>
 
   <!-- ── STEP 3: OCCUPANTS + TAXE ── -->
   <div id="step3" class="step-panel">
-    <div class="slbl">Occupants du séjour</div>
+    <div class="slbl" data-i18n="step3_title">Occupants du séjour</div>
     <div class="card">
-      <div class="ch"><i class="ti ti-users"></i>Déclarer les occupants</div>
+      <div class="ch"><i class="ti ti-users"></i><span data-i18n="step3_occ_hdr">Déclarer les occupants</span></div>
       <div id="occList"></div>
-      <button class="btn btn-sm btn-out" style="width:100%;margin-top:10px" onclick="addOcc()"><i class="ti ti-plus"></i> Ajouter un occupant</button>
+      <button class="btn btn-sm btn-out" style="width:100%;margin-top:10px" onclick="addOcc()"><i class="ti ti-plus"></i> <span data-i18n="step3_add_occ">Ajouter un occupant</span></button>
     </div>
     <!-- Taxe card -->
     <div id="taxeCard" style="display:none">
       <div class="card">
-        <div class="ch"><i class="ti ti-receipt"></i>Détail de la taxe de séjour</div>
+        <div class="ch"><i class="ti ti-receipt"></i><span data-i18n="step3_taxe_hdr">Détail de la taxe de séjour</span></div>
         <div id="taxeLines"></div>
       </div>
       <!-- Hero taxe display -->
       <div class="taxe-meter" id="taxeMeter">
-        <div class="taxe-meter-label">Taxe de séjour estimée</div>
+        <div class="taxe-meter-label" data-i18n="step3_taxe_hero_label">Taxe de séjour estimée</div>
         <div class="taxe-meter-amount" id="taxeMeterAmt">0,00 €</div>
-        <div class="taxe-meter-sub" id="taxeMeterSub">Sans engagement éco</div>
+        <div class="taxe-meter-sub" id="taxeMeterSub" data-i18n="step3_taxe_hero_sub_default">Sans engagement éco</div>
         <div style="margin-top:14px;font-size:12px;opacity:.7;display:flex;align-items:center;gap:5px">
           <i class="ti ti-leaf" style="font-size:14px"></i>
-          À l'étape suivante, découvrez comment réduire ce montant avec vos choix éco.
+          <span data-i18n="step3_taxe_hint">À l'étape suivante, découvrez comment réduire ce montant avec vos choix éco.</span>
         </div>
       </div>
     </div>
     <div class="brow">
       <button class="btn btn-out" onclick="gotoStep(2)"><i class="ti ti-arrow-left"></i></button>
-      <button class="btn btn-p" onclick="gotoStep(4)">Vérification identité <i class="ti ti-arrow-right"></i></button>
+      <button class="btn btn-p" onclick="gotoStep(4)"><span data-i18n="step3_btn_next">Vérification identité</span> <i class="ti ti-arrow-right"></i></button>
     </div>
     <div id="skipStep3" style="display:none;margin-top:8px">
-      <button class="btn btn-out" onclick="skipStep(3)" style="width:100%"><i class="ti ti-arrow-right"></i> Passer cette étape</button>
+      <button class="btn btn-out" onclick="skipStep(3)" style="width:100%"><i class="ti ti-arrow-right"></i> <span data-i18n="kyc_skip">Passer cette étape</span></button>
     </div>
   </div>
 
   <!-- ── STEP 4: KYC VÉRIFICATION IDENTITÉ ── -->
   <div id="step4" class="step-panel">
-    <div class="slbl">Vérification d'identité</div>
+    <div class="slbl" data-i18n="step4_title">Vérification d'identité</div>
 
     <!-- Hero optionnel -->
     <div class="kyc-hero">
       <div class="kyc-hero-icon"><i class="ti ti-shield-check"></i></div>
-      <div class="kyc-hero-title">Vérification optionnelle</div>
-      <div class="kyc-hero-sub">Cette étape est facultative. Elle accélère votre check-in et sécurise votre réservation.</div>
+      <div class="kyc-hero-title" data-i18n="kyc_hero_title">Vérification optionnelle</div>
+      <div class="kyc-hero-sub" data-i18n="kyc_hero_sub">Cette étape est facultative. Elle accélère votre check-in et sécurise votre réservation.</div>
     </div>
 
     <!-- Sous-étape 1 : Pièce d'identité -->
@@ -379,81 +390,81 @@ input:focus,select:focus{border-color:var(--accent)}
       <div class="kyc-step-head">
         <div class="kyc-step-num">1</div>
         <div>
-          <div class="kyc-step-title">Pièce d'identité</div>
-          <div class="kyc-step-sub">Passeport, CNI, permis de conduire</div>
+          <div class="kyc-step-title" data-i18n="kyc_id_title">Pièce d'identité</div>
+          <div class="kyc-step-sub" data-i18n="kyc_id_sub">Passeport, CNI, permis de conduire</div>
         </div>
-        <span class="kyc-status kyc-s-wait" id="kyc-id-status"><i class="ti ti-clock"></i> En attente</span>
+        <span class="kyc-status kyc-s-wait" id="kyc-id-status"><i class="ti ti-clock"></i> <span data-i18n="kyc_status_waiting">En attente</span></span>
       </div>
 
       <!-- Type de document -->
       <div class="fi">
-        <label class="lb">Type de document</label>
+        <label class="lb" data-i18n="kyc_doc_type_label">Type de document</label>
         <div style="display:flex;gap:8px;flex-wrap:wrap" id="kyc-doc-types">
-          <div class="pill on" onclick="selectDocType('passport')" id="dt-passport"><i class="ti ti-passport"></i> Passeport</div>
-          <div class="pill" onclick="selectDocType('id')" id="dt-id"><i class="ti ti-id-badge"></i> CNI</div>
-          <div class="pill" onclick="selectDocType('permit')" id="dt-permit"><i class="ti ti-car"></i> Permis</div>
+          <div class="pill on" onclick="selectDocType('passport')" id="dt-passport"><i class="ti ti-passport"></i> <span data-i18n="kyc_doc_passport">Passeport</span></div>
+          <div class="pill" onclick="selectDocType('id')" id="dt-id"><i class="ti ti-id-badge"></i> <span data-i18n="kyc_doc_id">CNI</span></div>
+          <div class="pill" onclick="selectDocType('permit')" id="dt-permit"><i class="ti ti-car"></i> <span data-i18n="kyc_doc_permit">Permis</span></div>
         </div>
       </div>
 
       <!-- Capture recto -->
       <div class="fi">
-        <label class="lb">Recto du document</label>
+        <label class="lb" data-i18n="kyc_front_label">Recto du document</label>
         <div class="id-drop" id="kyc-drop-front">
           <input type="file" accept="image/*" capture="environment" onchange="kycCaptureId(this,'front')">
           <i class="ti ti-scan" style="font-size:28px;color:var(--mu);display:block;margin-bottom:6px"></i>
-          <div style="font-size:13px;font-weight:500;color:var(--tx)">Scanner le recto</div>
-          <div style="font-size:11px;color:var(--mu);margin-top:3px">Appuyer pour prendre en photo</div>
+          <div style="font-size:13px;font-weight:500;color:var(--tx)" data-i18n="kyc_scan_front">Scanner le recto</div>
+          <div style="font-size:11px;color:var(--mu);margin-top:3px" data-i18n="kyc_tap_to_photo">Appuyer pour prendre en photo</div>
           <img id="kyc-prev-front" class="id-preview">
         </div>
       </div>
 
       <!-- Capture verso (CNI / permis) -->
       <div class="fi" id="kyc-verso-block" style="display:none">
-        <label class="lb">Verso du document</label>
+        <label class="lb" data-i18n="kyc_back_label">Verso du document</label>
         <div class="id-drop" id="kyc-drop-back">
           <input type="file" accept="image/*" capture="environment" onchange="kycCaptureId(this,'back')">
           <i class="ti ti-scan" style="font-size:28px;color:var(--mu);display:block;margin-bottom:6px"></i>
-          <div style="font-size:13px;font-weight:500;color:var(--tx)">Scanner le verso</div>
+          <div style="font-size:13px;font-weight:500;color:var(--tx)" data-i18n="kyc_scan_back">Scanner le verso</div>
           <img id="kyc-prev-back" class="id-preview">
         </div>
       </div>
 
       <!-- Champs extraits / saisis -->
       <div id="kyc-fields-block" style="display:none;margin-top:10px">
-        <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">
+        <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px" data-i18n="kyc_fields_hint">
           Informations extraites — vérifiez et corrigez si nécessaire
         </div>
         <div class="kyc-field-row">
-          <div class="fi"><label class="lb">Nom</label><input type="text" id="kyc-lastname" placeholder="DUPONT"></div>
-          <div class="fi"><label class="lb">Prénom</label><input type="text" id="kyc-firstname" placeholder="Martin"></div>
+          <div class="fi"><label class="lb" data-i18n="kyc_field_lastname">Nom</label><input type="text" id="kyc-lastname" placeholder="DUPONT"></div>
+          <div class="fi"><label class="lb" data-i18n="kyc_field_firstname">Prénom</label><input type="text" id="kyc-firstname" placeholder="Martin"></div>
         </div>
         <div class="kyc-field-row">
-          <div class="fi"><label class="lb">N° document</label><input type="text" id="kyc-docnum" placeholder="AB 123456"></div>
-          <div class="fi"><label class="lb">Genre</label>
-            <select id="kyc-genre"><option value="">—</option><option value="M">M — Masculin</option><option value="F">F — Féminin</option><option value="X">X — Non binaire</option></select>
+          <div class="fi"><label class="lb" data-i18n="kyc_field_docnum">N° document</label><input type="text" id="kyc-docnum" placeholder="AB 123456"></div>
+          <div class="fi"><label class="lb" data-i18n="kyc_field_genre">Genre</label>
+            <select id="kyc-genre"><option value="">—</option><option value="M" data-i18n="kyc_genre_m">M — Masculin</option><option value="F" data-i18n="kyc_genre_f">F — Féminin</option><option value="X" data-i18n="kyc_genre_x">X — Non binaire</option></select>
           </div>
         </div>
         <div class="kyc-field-row">
-          <div class="fi"><label class="lb">Date de naissance</label><input type="text" id="kyc-dob" placeholder="01/01/1985"></div>
-          <div class="fi"><label class="lb">Expiration</label><input type="text" id="kyc-expiry" placeholder="01/01/2030"></div>
+          <div class="fi"><label class="lb" data-i18n="kyc_field_dob">Date de naissance</label><input type="text" id="kyc-dob" placeholder="01/01/1985"></div>
+          <div class="fi"><label class="lb" data-i18n="kyc_field_expiry">Expiration</label><input type="text" id="kyc-expiry" placeholder="01/01/2030"></div>
         </div>
         <div class="kyc-field-row">
-          <div class="fi"><label class="lb">Nationalité</label><input type="text" id="kyc-nationality" placeholder="FRA"></div>
-          <div class="fi"><label class="lb">Pays</label><input type="text" id="kyc-pays" placeholder="France"></div>
+          <div class="fi"><label class="lb" data-i18n="kyc_field_nationality">Nationalité</label><input type="text" id="kyc-nationality" placeholder="FRA"></div>
+          <div class="fi"><label class="lb" data-i18n="kyc_field_country">Pays</label><input type="text" id="kyc-pays" placeholder="France"></div>
         </div>
         <!-- Adresse -->
-        <div class="fi"><label class="lb">Adresse</label><input type="text" id="kyc-adresse" placeholder="12 Rue de la Paix"></div>
+        <div class="fi"><label class="lb" data-i18n="kyc_field_address">Adresse</label><input type="text" id="kyc-adresse" placeholder="12 Rue de la Paix"></div>
         <div class="kyc-field-row">
-          <div class="fi"><label class="lb">Code postal</label><input type="text" id="kyc-cp" placeholder="75001"></div>
-          <div class="fi"><label class="lb">Ville</label><input type="text" id="kyc-ville" placeholder="Paris"></div>
+          <div class="fi"><label class="lb" data-i18n="kyc_field_zip">Code postal</label><input type="text" id="kyc-cp" placeholder="75001"></div>
+          <div class="fi"><label class="lb" data-i18n="kyc_field_city">Ville</label><input type="text" id="kyc-ville" placeholder="Paris"></div>
         </div>
         <!-- MRZ -->
         <div class="fi" style="margin-top:6px">
-          <label class="lb">Ligne MRZ 1 (optionnel)</label>
+          <label class="lb" data-i18n="kyc_field_mrz1">Ligne MRZ 1 (optionnel)</label>
           <input type="text" id="kyc-mrz1" placeholder="P<FRADUPONT<<MARTIN<<<" style="font-family:monospace;font-size:11px;letter-spacing:.05em">
         </div>
         <div class="fi">
-          <label class="lb">Ligne MRZ 2 (optionnel)</label>
+          <label class="lb" data-i18n="kyc_field_mrz2">Ligne MRZ 2 (optionnel)</label>
           <input type="text" id="kyc-mrz2" placeholder="AB1234563FRA8501016M3001010" style="font-family:monospace;font-size:11px;letter-spacing:.05em">
         </div>
       </div>
@@ -462,7 +473,7 @@ input:focus,select:focus{border-color:var(--accent)}
       <div id="kyc-id-result" style="display:none;margin-top:10px"></div>
 
       <button class="btn btn-p" id="kyc-verify-btn" onclick="kycVerifyDocument()" style="margin-top:12px;display:none">
-        <i class="ti ti-shield-search"></i> Vérifier dans la base de données
+        <i class="ti ti-shield-search"></i> <span data-i18n="kyc_verify_btn">Vérifier dans la base de données</span>
       </button>
     </div>
 
@@ -471,16 +482,16 @@ input:focus,select:focus{border-color:var(--accent)}
       <div class="kyc-step-head">
         <div class="kyc-step-num">2</div>
         <div>
-          <div class="kyc-step-title">Selfie biométrique</div>
-          <div class="kyc-step-sub">Comparaison avec la photo du document</div>
+          <div class="kyc-step-title" data-i18n="kyc_selfie_title">Selfie biométrique</div>
+          <div class="kyc-step-sub" data-i18n="kyc_selfie_sub">Comparaison avec la photo du document</div>
         </div>
-        <span class="kyc-status kyc-s-wait" id="kyc-selfie-status"><i class="ti ti-clock"></i> En attente</span>
+        <span class="kyc-status kyc-s-wait" id="kyc-selfie-status"><i class="ti ti-clock"></i> <span data-i18n="kyc_status_waiting">En attente</span></span>
       </div>
 
       <div id="kyc-selfie-content">
         <div class="alt alt-b" style="margin-bottom:10px">
           <i class="ti ti-info-circle"></i>
-          <span>Placez votre visage dans le cercle. La photo sera comparée à votre pièce d'identité.</span>
+          <span data-i18n="kyc_selfie_info">Placez votre visage dans le cercle. La photo sera comparée à votre pièce d'identité.</span>
         </div>
 
         <!-- Caméra selfie -->
@@ -493,10 +504,10 @@ input:focus,select:focus{border-color:var(--accent)}
 
           <div style="display:flex;gap:8px;justify-content:center;margin-top:10px">
             <button class="btn btn-sm" onclick="startKycCamera()" id="btnStartCam">
-              <i class="ti ti-camera"></i> Activer la caméra
+              <i class="ti ti-camera"></i> <span data-i18n="kyc_start_cam">Activer la caméra</span>
             </button>
             <button class="btn btn-sm btn-p" onclick="captureKycSelfie()" id="btnCapture" style="display:none">
-              <i class="ti ti-circle-dot"></i> Prendre le selfie
+              <i class="ti ti-circle-dot"></i> <span data-i18n="kyc_take_selfie">Prendre le selfie</span>
             </button>
           </div>
 
@@ -504,7 +515,7 @@ input:focus,select:focus{border-color:var(--accent)}
           <div style="margin-top:10px;position:relative">
             <label style="font-size:12px;color:var(--mu);cursor:pointer;display:inline-flex;align-items:center;gap:5px">
               <input type="file" accept="image/*" capture="user" onchange="kycUploadSelfie(this)" style="position:absolute;opacity:0;width:1px">
-              <i class="ti ti-upload" style="font-size:13px"></i> Ou importer une photo
+              <i class="ti ti-upload" style="font-size:13px"></i> <span data-i18n="kyc_upload_alt">Ou importer une photo</span>
             </label>
           </div>
         </div>
@@ -521,30 +532,30 @@ input:focus,select:focus{border-color:var(--accent)}
     <div class="brow">
       <button class="btn btn-out" onclick="gotoStep(3)"><i class="ti ti-arrow-left"></i></button>
       <button class="btn btn-p" onclick="gotoStep(5)">
-        Préférences éco <i class="ti ti-arrow-right"></i>
+        <span data-i18n="step4_btn_next">Préférences éco</span> <i class="ti ti-arrow-right"></i>
       </button>
     </div>
     <div id="skipStep4" style="margin-top:8px">
-      <button class="btn btn-out" onclick="skipKyc()" style="width:100%"><i class="ti ti-arrow-right"></i> Passer cette étape</button>
+      <button class="btn btn-out" onclick="skipKyc()" style="width:100%"><i class="ti ti-arrow-right"></i> <span data-i18n="kyc_skip">Passer cette étape</span></button>
     </div>
   </div>
   <div id="step5" class="step-panel">
-    <div class="slbl">Vos préférences éco</div>
+    <div class="slbl" data-i18n="step5_title">Vos préférences éco</div>
     <div class="alt alt-g" id="altEco"><i class="ti ti-leaf"></i><span></span></div>
 
     <!-- TAXE SAVING LIVE METER -->
     <div id="savingMeter" style="display:none">
       <div class="taxe-meter">
-        <div class="taxe-meter-label">Votre taxe de séjour</div>
+        <div class="taxe-meter-label" data-i18n="step5_saving_label">Votre taxe de séjour</div>
         <div class="taxe-saving-row">
           <div class="taxe-saving-from">
             <div class="taxe-saving-num" id="smFrom" style="opacity:.55;text-decoration:line-through rgba(255,255,255,.6)">—</div>
-            <div class="taxe-saving-lbl">Sans éco</div>
+            <div class="taxe-saving-lbl" data-i18n="step5_saving_without">Sans éco</div>
           </div>
           <div class="taxe-saving-arrow"><i class="ti ti-arrow-narrow-right"></i></div>
           <div class="taxe-saving-to">
             <div class="taxe-saving-num" id="smTo">—</div>
-            <div class="taxe-saving-lbl">Avec vos choix</div>
+            <div class="taxe-saving-lbl" data-i18n="step5_saving_with">Avec vos choix</div>
           </div>
         </div>
         <div style="text-align:center">
@@ -558,14 +569,14 @@ input:focus,select:focus{border-color:var(--accent)}
 
     <!-- MENAGE -->
     <div class="card">
-      <div class="ch"><i class="ti ti-vacuum-cleaner"></i>Ménage de la chambre</div>
+      <div class="ch"><i class="ti ti-vacuum-cleaner"></i><span data-i18n="step5_menage_hdr">Ménage de la chambre</span></div>
       <div class="pills" id="menagePills"></div>
       <div id="menageGainBanner" style="display:none"></div>
     </div>
 
     <!-- SERVIETTES -->
     <div class="card">
-      <div class="ch"><i class="ti ti-shirt"></i>Serviettes &amp; linge de bain</div>
+      <div class="ch"><i class="ti ti-shirt"></i><span data-i18n="step5_towels_hdr">Serviettes &amp; linge de bain</span></div>
       <div class="pills" id="servPills"></div>
       <div id="servGainBanner" style="display:none"></div>
     </div>
@@ -576,26 +587,26 @@ input:focus,select:focus{border-color:var(--accent)}
     <!-- DEDUCTION CHOICE (financial gain) -->
     <div id="deductBlock" style="display:none">
       <div class="deduct-banner">
-        <div class="deduct-banner-title"><i class="ti ti-coin" style="font-size:14px"></i>Économie sur la taxe — comment l'utiliser ?</div>
+        <div class="deduct-banner-title"><i class="ti ti-coin" style="font-size:14px"></i><span data-i18n="step5_deduct_title">Économie sur la taxe — comment l'utiliser ?</span></div>
         <div id="deductChoices"></div>
       </div>
     </div>
 
     <div class="brow">
       <button class="btn btn-out" onclick="gotoStep(prevActiveStep(5))"><i class="ti ti-arrow-left"></i></button>
-      <button class="btn btn-p" onclick="gotoStep(nextActiveStep(5))">La boutique <i class="ti ti-shopping-bag"></i></button>
+      <button class="btn btn-p" onclick="gotoStep(nextActiveStep(5))"><span data-i18n="step5_btn_next">La boutique</span> <i class="ti ti-shopping-bag"></i></button>
     </div>
     <div id="skipStep5" style="display:none;margin-top:8px">
-      <button class="btn btn-out" onclick="skipStep(5)" style="width:100%"><i class="ti ti-arrow-right"></i> Passer cette étape</button>
+      <button class="btn btn-out" onclick="skipStep(5)" style="width:100%"><i class="ti ti-arrow-right"></i> <span data-i18n="kyc_skip">Passer cette étape</span></button>
     </div>
   </div>
 
   <!-- ── STEP 6: BOUTIQUE ── -->
   <div id="step6" class="step-panel">
-    <div class="slbl"><i class="ti ti-shopping-bag" style="font-size:16px;vertical-align:-2px;margin-right:4px"></i>Boutique Churchill</div>
+    <div class="slbl"><i class="ti ti-shopping-bag" style="font-size:16px;vertical-align:-2px;margin-right:4px"></i><span data-i18n="step6_title">Boutique Churchill</span></div>
     <div class="alt alt-b" style="margin-bottom:12px">
       <i class="ti ti-info-circle"></i>
-      <div>Commandez maintenant et vos articles seront livrés en chambre avant votre arrivée — ou après votre check-in.<br>
+      <div data-i18n-html="step6_info">Commandez maintenant et vos articles seront livrés en chambre avant votre arrivée — ou après votre check-in.<br>
       <strong style="font-size:11px">Vous pouvez aussi commander plus tard depuis votre espace client.</strong></div>
     </div>
 
@@ -603,7 +614,7 @@ input:focus,select:focus{border-color:var(--accent)}
     <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
       <div style="flex:1;position:relative">
         <i class="ti ti-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--mu);font-size:13px"></i>
-        <input type="text" id="bqSearch" placeholder="Rechercher…" style="padding-left:32px;border-radius:20px" oninput="bqFilter()">
+        <input type="text" id="bqSearch" data-i18n-placeholder="btn_search_ellipsis" placeholder="Rechercher…" style="padding-left:32px;border-radius:20px" oninput="bqFilter()">
       </div>
     </div>
     <!-- Onglets catégories -->
@@ -613,23 +624,23 @@ input:focus,select:focus{border-color:var(--accent)}
     <div id="bqGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px"></div>
     <div id="bqEmpty" style="display:none;padding:32px;text-align:center;color:var(--mu)">
       <i class="ti ti-shopping-bag" style="font-size:36px;display:block;margin-bottom:8px;opacity:.3"></i>
-      Aucun produit disponible.
+      <span data-i18n="step6_no_products">Aucun produit disponible.</span>
     </div>
 
     <!-- Panier boutique -->
     <div id="bqCartBar" style="display:none">
       <div class="card" style="border-color:var(--primary);background:var(--pl)">
-        <div class="ch" style="border-color:rgba(139,26,46,.15)"><i class="ti ti-shopping-cart"></i>Mon panier</div>
+        <div class="ch" style="border-color:rgba(139,26,46,.15)"><i class="ti ti-shopping-cart"></i><span data-i18n="cart_my_cart">Mon panier</span></div>
         <div id="bqCartLines" style="margin-bottom:12px"></div>
         <div id="bqCartTotal" style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;padding-top:10px;border-top:1px solid rgba(139,26,46,.2)">
-          <span>Total</span><span style="color:var(--primary)" id="bqTotalVal">0.00 €</span>
+          <span data-i18n="cart_total">Total</span><span style="color:var(--primary)" id="bqTotalVal">0.00 €</span>
         </div>
         <div class="fi" style="margin-top:10px">
-          <label class="lb">Note / instructions</label>
-          <input type="text" id="bqNote" placeholder="Allergie, heure souhaitée…">
+          <label class="lb" data-i18n="step6_note_label">Note / instructions</label>
+          <input type="text" id="bqNote" data-i18n-placeholder="step6_note_placeholder" placeholder="Allergie, heure souhaitée…">
         </div>
         <button class="btn btn-p btn-w" style="margin-top:8px" onclick="bqPlaceOrder()">
-          <i class="ti ti-send"></i> Commander
+          <i class="ti ti-send"></i> <span data-i18n="btn_order">Commander</span>
         </button>
       </div>
     </div>
@@ -637,23 +648,23 @@ input:focus,select:focus{border-color:var(--accent)}
     <!-- Confirmation commande passée -->
     <div id="bqOrderConfirm" style="display:none" class="alt alt-g">
       <i class="ti ti-check-circle"></i>
-      <div id="bqOrderConfirmText">Commande envoyée ✓</div>
+      <div id="bqOrderConfirmText" data-i18n="step6_order_sent">Commande envoyée ✓</div>
     </div>
 
     <div class="brow">
       <button class="btn btn-out" onclick="gotoStep(prevActiveStep(6))" style="flex-shrink:0"><i class="ti ti-arrow-left"></i></button>
       <button class="btn btn-out" onclick="gotoStep(nextActiveStep(6))" style="flex:1;justify-content:center">
-        Passer <i class="ti ti-arrow-right"></i>
+        <span data-i18n="btn_pass">Passer</span> <i class="ti ti-arrow-right"></i>
       </button>
       <button class="btn btn-p" onclick="bqPlaceOrder();setTimeout(function(){gotoStep(nextActiveStep(6));},700)" style="flex:1;justify-content:center;display:none" id="bqContinueBtn">
-        <i class="ti ti-send"></i> Commander &amp; continuer
+        <i class="ti ti-send"></i> <span data-i18n="step6_order_continue">Commander &amp; continuer</span>
       </button>
     </div>
   </div>
 
   <!-- ── STEP 7: REWARDS ── -->
   <div id="step7" class="step-panel">
-    <div class="slbl">Vos récompenses</div>
+    <div class="slbl" data-i18n="step7_title">Vos récompenses</div>
 
     <!-- Points gagnés ce séjour -->
     <div id="rewardPointsHero" style="margin-bottom:12px"></div>
@@ -662,13 +673,13 @@ input:focus,select:focus{border-color:var(--accent)}
 
     <!-- Gains immédiats -->
     <div class="card" id="rewardDirectCard">
-      <div class="ch"><i class="ti ti-gift"></i>Gains immédiats ce séjour</div>
+      <div class="ch"><i class="ti ti-gift"></i><span data-i18n="step7_direct_hdr">Gains immédiats ce séjour</span></div>
       <div id="rewardTiles"></div>
     </div>
 
     <!-- Catalogue d'articles -->
     <div class="card" id="rewardCatalogCard" style="display:none">
-      <div class="ch"><i class="ti ti-shopping-bag"></i>Échanger vos points
+      <div class="ch"><i class="ti ti-shopping-bag"></i><span data-i18n="catalog_title">Échanger vos points</span>
         <span id="rewardPtsAvail" style="margin-left:auto;font-size:12px;font-weight:700;color:var(--primary)">0 pts</span>
       </div>
       <div id="rewardCatalog"></div>
@@ -676,17 +687,17 @@ input:focus,select:focus{border-color:var(--accent)}
 
     <!-- Récap sélections -->
     <div class="card" id="rewardSumCard" style="display:none">
-      <div class="ch"><i class="ti ti-sparkles"></i>Récapitulatif de vos gains</div>
+      <div class="ch"><i class="ti ti-sparkles"></i><span data-i18n="step7_sum_hdr">Récapitulatif de vos gains</span></div>
       <div id="rewardSumLines"></div>
     </div>
 
     <div id="skipStep7" style="display:none;margin-top:8px;margin-bottom:8px">
-      <button class="btn btn-out" onclick="skipStep(7)" style="width:100%"><i class="ti ti-arrow-right"></i> Passer cette étape</button>
+      <button class="btn btn-out" onclick="skipStep(7)" style="width:100%"><i class="ti ti-arrow-right"></i> <span data-i18n="kyc_skip">Passer cette étape</span></button>
     </div>
 
     <!-- ── Récapitulatif & Paiement (fusionné dans cette même étape) ── -->
     <div style="margin:20px 0 14px;padding-top:16px;border-top:2px solid var(--bdr)">
-      <div class="slbl" style="margin-top:0">Récapitulatif &amp; Paiement</div>
+      <div class="slbl" style="margin-top:0" data-i18n="step7_recap_title">Récapitulatif &amp; Paiement</div>
     </div>
 
     <!-- Chambre sélectionnée avec photos -->
@@ -699,7 +710,7 @@ input:focus,select:focus{border-color:var(--accent)}
               <div class="rc-code" id="recapRoomCode">—</div>
               <div class="rc-name" id="recapRoomName">—</div>
             </div>
-            <span class="bdg bdg-g"><i class="ti ti-check" style="font-size:11px"></i>Sélectionnée</span>
+            <span class="bdg bdg-g"><i class="ti ti-check" style="font-size:11px"></i><span data-i18n="badge_selected">Sélectionnée</span></span>
           </div>
         </div>
       </div>
@@ -707,7 +718,7 @@ input:focus,select:focus{border-color:var(--accent)}
 
     <!-- Séjour details -->
     <div class="card">
-      <div class="ch"><i class="ti ti-file-text"></i>Détail du séjour</div>
+      <div class="ch"><i class="ti ti-file-text"></i><span data-i18n="step7_stay_details_hdr">Détail du séjour</span></div>
       <div id="summaryLines"></div>
     </div>
 
@@ -716,57 +727,57 @@ input:focus,select:focus{border-color:var(--accent)}
 
     <!-- Choix du mode de paiement -->
     <div class="card">
-      <div class="ch"><i class="ti ti-wallet"></i>Mode de paiement</div>
+      <div class="ch"><i class="ti ti-wallet"></i><span data-i18n="step7_pay_mode_hdr">Mode de paiement</span></div>
       <div style="display:flex;gap:8px">
-        <div class="rf on" id="payModeCard" onclick="setPayMode('card')" style="flex:1;text-align:center;cursor:pointer"><i class="ti ti-credit-card"></i> Carte bancaire</div>
-        <div class="rf" id="payModeHotel" onclick="setPayMode('hotel')" style="flex:1;text-align:center;cursor:pointer"><i class="ti ti-building"></i> Payer à l'hôtel</div>
+        <div class="rf on" id="payModeCard" onclick="setPayMode('card')" style="flex:1;text-align:center;cursor:pointer"><i class="ti ti-credit-card"></i> <span data-i18n="step7_pay_card">Carte bancaire</span></div>
+        <div class="rf" id="payModeHotel" onclick="setPayMode('hotel')" style="flex:1;text-align:center;cursor:pointer"><i class="ti ti-building"></i> <span data-i18n="step7_pay_hotel">Payer à l'hôtel</span></div>
       </div>
     </div>
 
     <!-- Payment form (carte) -->
     <div class="card" id="payCardSection">
-      <div class="ch"><i class="ti ti-credit-card"></i>Paiement de la taxe de séjour</div>
+      <div class="ch"><i class="ti ti-credit-card"></i><span data-i18n="step7_pay_taxe_hdr">Paiement de la taxe de séjour</span></div>
       <div class="cviz">
         <div class="cv-chip"></div>
         <div class="cv-num" id="cvNum">•••• •••• •••• ••••</div>
         <div class="cv-holder" id="cvHolder">NOM PRÉNOM</div>
         <div class="cv-meta"><span>VALID <span id="cvExp">MM/AA</span></span><span>CVV <span id="cvCvv">•••</span></span></div>
       </div>
-      <div class="fi"><label class="lb">Numéro de carte</label>
+      <div class="fi"><label class="lb" data-i18n="step7_card_number">Numéro de carte</label>
         <input type="text" id="payNum" maxlength="19" placeholder="1234 5678 9012 3456" oninput="fmtCard(this)" inputmode="numeric">
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div class="fi"><label class="lb">Expiration</label><input type="text" id="payExp" maxlength="5" placeholder="MM/AA" oninput="fmtExp(this)" inputmode="numeric"></div>
-        <div class="fi"><label class="lb">CVV</label><input type="text" id="payCvv" maxlength="3" placeholder="123" inputmode="numeric" oninput="document.getElementById('cvCvv').textContent=this.value?'•'.repeat(this.value.length):'•••'"></div>
+        <div class="fi"><label class="lb" data-i18n="step7_card_expiry">Expiration</label><input type="text" id="payExp" maxlength="5" placeholder="MM/AA" oninput="fmtExp(this)" inputmode="numeric"></div>
+        <div class="fi"><label class="lb" data-i18n="step7_card_cvv">CVV</label><input type="text" id="payCvv" maxlength="3" placeholder="123" inputmode="numeric" oninput="document.getElementById('cvCvv').textContent=this.value?'•'.repeat(this.value.length):'•••'"></div>
       </div>
-      <div class="fi"><label class="lb">Nom sur la carte</label>
+      <div class="fi"><label class="lb" data-i18n="step7_card_holder">Nom sur la carte</label>
         <input type="text" id="payHolder" placeholder="MARTIN DUPONT" oninput="document.getElementById('cvHolder').textContent=this.value||'NOM PRÉNOM'">
       </div>
-      <div class="fi"><label class="lb">Fractionnement</label>
+      <div class="fi"><label class="lb" data-i18n="step7_card_split">Fractionnement</label>
         <select id="paySplit" onchange="updatePaySplit()">
-          <option value="1">Paiement en 1 fois</option>
-          <option value="2">En 2 fois sans frais</option>
-          <option value="3">En 3 fois sans frais</option>
+          <option value="1" data-i18n="step7_split_1">Paiement en 1 fois</option>
+          <option value="2" data-i18n="step7_split_2">En 2 fois sans frais</option>
+          <option value="3" data-i18n="step7_split_3">En 3 fois sans frais</option>
         </select>
       </div>
       <div class="alt alt-b" id="splitAlt" style="display:none"><i class="ti ti-info-circle"></i><span id="splitTxt"></span></div>
       <!-- Payment lines with saving highlighted -->
       <div id="payLines"></div>
       <div style="font-size:11px;color:var(--mu);display:flex;align-items:center;gap:5px;margin-top:10px">
-        <i class="ti ti-lock" style="font-size:13px"></i>Paiement sécurisé · SSL · PCI-DSS
+        <i class="ti ti-lock" style="font-size:13px"></i><span data-i18n="step7_secure_pay">Paiement sécurisé · SSL · PCI-DSS</span>
       </div>
     </div>
-    <button class="btn btn-p" id="payConfirmBtn" onclick="confirmPay()"><i class="ti ti-lock"></i> Confirmer &amp; envoyer à Sesame</button>
+    <button class="btn btn-p" id="payConfirmBtn" onclick="confirmPay()"><i class="ti ti-lock"></i> <span data-i18n="step7_confirm_pay">Confirmer &amp; envoyer à Sesame</span></button>
     <div id="payResult" style="margin-top:10px"></div>
 
     <!-- Bloc "Payer à l'hôtel" -->
     <div id="payHotelSection" class="card" style="display:none">
-      <div class="ch"><i class="ti ti-qrcode"></i>Paiement à l'hôtel</div>
+      <div class="ch"><i class="ti ti-qrcode"></i><span data-i18n="step7_pay_hotel_hdr">Paiement à l'hôtel</span></div>
       <div class="alt alt-b"><i class="ti ti-info-circle"></i>
-        <span>Votre réservation est confirmée. Présentez ce QR code à la réception pour finaliser votre check-in et régler la taxe de séjour sur place.</span>
+        <span data-i18n="step7_pay_hotel_info">Votre réservation est confirmée. Présentez ce QR code à la réception pour finaliser votre check-in et régler la taxe de séjour sur place.</span>
       </div>
       <div id="payHotelQr" style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:16px"></div>
-      <button class="btn btn-p" id="payHotelConfirmBtn" onclick="confirmPayAtHotel()"><i class="ti ti-check"></i> Continuer vers mon espace</button>
+      <button class="btn btn-p" id="payHotelConfirmBtn" onclick="confirmPayAtHotel()"><i class="ti ti-check"></i> <span data-i18n="step7_pay_hotel_continue">Continuer vers mon espace</span></button>
     </div>
 
     <div class="brow" style="margin-top:8px">
@@ -781,24 +792,24 @@ input:focus,select:focus{border-color:var(--accent)}
 
 <!-- ══ Connexion autonome espace client (accessible sans avoir refait le check-in) ══ -->
 <div id="espLocked">
-  <div class="slbl" style="padding-top:8px">Mon espace client</div>
+  <div class="slbl" style="padding-top:8px" data-i18n="esp_login_title">Mon espace client</div>
 
   <div class="alt alt-b" style="margin-bottom:14px">
     <i class="ti ti-info-circle"></i>
-    <div>Connectez-vous avec l'email et le code de réservation utilisés lors de votre check-in.</div>
+    <div data-i18n="esp_login_info">Connectez-vous avec l'email et le code de réservation utilisés lors de votre check-in.</div>
   </div>
 
   <div class="card">
-    <div class="ch"><i class="ti ti-login"></i>Identification</div>
-    <div class="fi"><label class="lb">Email</label>
-      <input type="email" id="espLoginEmail" placeholder="votre@email.com">
+    <div class="ch"><i class="ti ti-login"></i><span data-i18n="esp_login_hdr">Identification</span></div>
+    <div class="fi"><label class="lb" data-i18n="field_email">Email</label>
+      <input type="email" id="espLoginEmail" data-i18n-placeholder="esp_login_email_placeholder" placeholder="votre@email.com">
     </div>
-    <div class="fi"><label class="lb">Code de réservation</label>
+    <div class="fi"><label class="lb" data-i18n="esp_login_code_label">Code de réservation</label>
       <input type="text" id="espLoginCode" placeholder="HCH-2026-XXXX"
         style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
     </div>
     <button class="btn btn-p" style="width:100%;justify-content:center" onclick="espDoLogin()">
-      <i class="ti ti-login"></i> Accéder à mon espace
+      <i class="ti ti-login"></i> <span data-i18n="esp_login_btn">Accéder à mon espace</span>
     </button>
     <div id="espLoginErr" style="display:none;color:var(--primary);font-size:12px;margin-top:8px;text-align:center"></div>
   </div>
@@ -807,13 +818,13 @@ input:focus,select:focus{border-color:var(--accent)}
     <div class="alt alt-g" style="margin-bottom:8px">
       <i class="ti ti-star"></i>
       <div>
-        <strong>Accès démo rapide — séjour en cours :</strong><br>
+        <strong data-i18n="esp_demo_access">Accès démo rapide — séjour en cours :</strong><br>
         <span style="font-family:monospace;font-size:12px">demo@sesame.fr</span><br>
         <span style="font-family:monospace;font-size:12px">DEMO-2026-0001</span>
       </div>
     </div>
     <div style="font-size:11px;color:var(--mu);text-align:center">
-      Autres réservations disponibles :<br>
+      <span data-i18n="esp_other_bookings">Autres réservations disponibles :</span><br>
       <span style="font-family:monospace">camille.bernard@gmail.com · HCH-2026-1042</span><br>
       <span style="font-family:monospace">thomas.moreau@email.fr · HCH-2026-1078</span>
     </div>
@@ -823,40 +834,40 @@ input:focus,select:focus{border-color:var(--accent)}
   <!-- Contenu espace client -->
   <div id="espContent" style="display:none">
 
-    <div class="slbl">Mon espace</div>
+    <div class="slbl" data-i18n="esp_title">Mon espace</div>
 
     <!-- Tabs internes -->
     <div id="espTabs" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px;scrollbar-width:none">
-      <div class="pill on" data-tab="key"      onclick="espSetTab('key')"><i class="ti ti-key"></i> Clé digitale</div>
-      <div class="pill"    data-tab="loyalty"  onclick="espSetTab('loyalty')"><i class="ti ti-star"></i> Points</div>
-      <div class="pill"    data-tab="menage"   onclick="espSetTab('menage')"><i class="ti ti-vacuum-cleaner"></i> Ménage</div>
-      <div class="pill"    data-tab="histo"    onclick="espSetTab('histo')"><i class="ti ti-history"></i> Historique</div>
-      <div class="pill"    data-tab="livret"   onclick="espSetTab('livret')"><i class="ti ti-book"></i> Livret</div>
-      <div class="pill"    data-tab="boutique" onclick="espSetTab('boutique')"><i class="ti ti-shopping-bag"></i> Boutique</div>
-      <div class="pill"    data-tab="rs"       onclick="espSetTab('rs')"><i class="ti ti-bell"></i> Room Service</div>
+      <div class="pill on" data-tab="key"      onclick="espSetTab('key')"><i class="ti ti-key"></i> <span data-i18n="esp_tab_key">Clé digitale</span></div>
+      <div class="pill"    data-tab="loyalty"  onclick="espSetTab('loyalty')"><i class="ti ti-star"></i> <span data-i18n="esp_tab_loyalty">Points</span></div>
+      <div class="pill"    data-tab="menage"   onclick="espSetTab('menage')"><i class="ti ti-vacuum-cleaner"></i> <span data-i18n="esp_tab_menage">Ménage</span></div>
+      <div class="pill"    data-tab="histo"    onclick="espSetTab('histo')"><i class="ti ti-history"></i> <span data-i18n="esp_tab_histo">Historique</span></div>
+      <div class="pill"    data-tab="livret"   onclick="espSetTab('livret')"><i class="ti ti-book"></i> <span data-i18n="esp_tab_livret">Livret</span></div>
+      <div class="pill"    data-tab="boutique" onclick="espSetTab('boutique')"><i class="ti ti-shopping-bag"></i> <span data-i18n="esp_tab_boutique">Boutique</span></div>
+      <div class="pill"    data-tab="rs"       onclick="espSetTab('rs')"><i class="ti ti-bell"></i> <span data-i18n="esp_tab_rs">Room Service</span></div>
     </div>
 
     <!-- ═══ TAB: CLÉ DIGITALE ═══ -->
     <div id="espTabKey" class="esp-tab">
       <!-- QR Code simulé -->
       <div class="card" style="text-align:center;padding:24px 16px;margin-bottom:12px">
-        <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px">Votre clé digitale</div>
+        <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px" data-i18n="esp_key_title">Votre clé digitale</div>
         <div id="espQrWrap" style="display:inline-block;padding:14px;background:#fff;border-radius:12px;border:2px solid var(--bdr);margin-bottom:12px">
           <svg id="espQrSvg" width="160" height="160" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg"></svg>
         </div>
-        <div style="font-size:11px;color:var(--mu);margin-bottom:4px">Présentez ce code au lecteur Sesame</div>
+        <div style="font-size:11px;color:var(--mu);margin-bottom:4px" data-i18n="esp_key_present">Présentez ce code au lecteur Sesame</div>
         <div id="espQrCode" style="font-family:monospace;font-size:15px;font-weight:700;letter-spacing:3px;color:var(--primary)">—</div>
         <div id="espQrValidity" style="font-size:11px;color:var(--mu);margin-top:6px">—</div>
         <button class="btn btn-p" style="margin-top:14px;width:100%;justify-content:center" id="espQrOpenBtn" onclick="espSimulateOpen()">
-          <i class="ti ti-lock-open"></i> Simuler l'ouverture
+          <i class="ti ti-lock-open"></i> <span data-i18n="esp_key_simulate_open">Simuler l'ouverture</span>
         </button>
         <div id="espQrOpenResult" style="display:none;margin-top:10px" class="alt alt-g">
-          <i class="ti ti-check-circle"></i><span>Accès déverrouillé ✓</span>
+          <i class="ti ti-check-circle"></i><span data-i18n="esp_key_unlocked">Accès déverrouillé ✓</span>
         </div>
       </div>
 
       <div class="alt alt-g" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
-        <span>Approchez votre téléphone du lecteur ou présentez ce QR code pour chaque accès.</span>
+        <span data-i18n="esp_key_info">Approchez votre téléphone du lecteur ou présentez ce QR code pour chaque accès.</span>
       </div>
       <div id="espAccessList"></div>
     </div>
@@ -877,7 +888,7 @@ input:focus,select:focus{border-color:var(--accent)}
       <!-- Module désactivé par l'hôtel -->
       <div id="rsDisabled" style="display:none">
         <div class="alt alt-b"><i class="ti ti-info-circle"></i>
-          <span>Le room service n'est pas proposé par cet établissement.</span>
+          <span data-i18n="esp_rs_disabled">Le room service n'est pas proposé par cet établissement.</span>
         </div>
       </div>
 
@@ -887,7 +898,7 @@ input:focus,select:focus{border-color:var(--accent)}
         <!-- Vue catalogue -->
         <div id="rsCatalogView">
           <div class="alt alt-g" style="margin-bottom:12px"><i class="ti ti-bell"></i>
-            <span>Commandez depuis votre chambre <strong id="rsRoomLabel">—</strong>, livré directement chez vous.</span>
+            <span><span data-i18n="esp_rs_order_from">Commandez depuis votre chambre</span> <strong id="rsRoomLabel">—</strong>, <span data-i18n="esp_rs_delivered">livré directement chez vous.</span></span>
           </div>
 
           <!-- Tabs catégories -->
@@ -900,24 +911,24 @@ input:focus,select:focus{border-color:var(--accent)}
         <!-- Bouton panier flottant -->
         <div id="rsCartBar" style="display:none;position:sticky;bottom:8px;z-index:20;margin-top:14px">
           <button class="btn btn-p" onclick="rsOpenCart()" style="width:100%;display:flex;justify-content:space-between;align-items:center">
-            <span><i class="ti ti-shopping-cart"></i> Voir mon panier</span>
-            <span><span id="rsCartCount">0</span> article(s) · <span id="rsCartTotal">0.00</span></span>
+            <span><i class="ti ti-shopping-cart"></i> <span data-i18n="esp_rs_view_cart">Voir mon panier</span></span>
+            <span><span id="rsCartCount">0</span> <span data-i18n="esp_rs_articles">article(s)</span> · <span id="rsCartTotal">0.00</span></span>
           </button>
         </div>
 
         <!-- Vue panier -->
         <div id="rsCartView" style="display:none">
-          <div class="slbl">Mon panier</div>
+          <div class="slbl" data-i18n="cart_my_cart">Mon panier</div>
           <div id="rsCartLines" class="card"></div>
           <div class="card" id="rsCartSummary"></div>
 
-          <div class="fi"><label class="lb">Note pour le service (optionnel)</label>
-            <input type="text" id="rsOrderNote" placeholder="Ex : sans glaçons, allergie aux fruits à coque…">
+          <div class="fi"><label class="lb" data-i18n="esp_rs_note_label">Note pour le service (optionnel)</label>
+            <input type="text" id="rsOrderNote" data-i18n-placeholder="esp_rs_note_placeholder" placeholder="Ex : sans glaçons, allergie aux fruits à coque…">
           </div>
 
-          <button class="btn btn-p" onclick="rsPlaceOrder()"><i class="ti ti-send"></i> Passer la commande</button>
+          <button class="btn btn-p" onclick="rsPlaceOrder()"><i class="ti ti-send"></i> <span data-i18n="esp_rs_place_order">Passer la commande</span></button>
           <div class="brow" style="margin-top:8px">
-            <button class="btn btn-out" onclick="rsCloseCart()"><i class="ti ti-arrow-left"></i> Continuer mes achats</button>
+            <button class="btn btn-out" onclick="rsCloseCart()"><i class="ti ti-arrow-left"></i> <span data-i18n="esp_rs_continue_shopping">Continuer mes achats</span></button>
           </div>
         </div>
 
@@ -933,19 +944,19 @@ input:focus,select:focus{border-color:var(--accent)}
 
       <!-- Jauge progression -->
       <div class="card">
-        <div class="ch"><i class="ti ti-trending-up"></i>Progression</div>
+        <div class="ch"><i class="ti ti-trending-up"></i><span data-i18n="esp_loyalty_progress">Progression</span></div>
         <div id="espLoyaltyGauge"></div>
       </div>
 
       <!-- Avantages -->
       <div class="card">
-        <div class="ch"><i class="ti ti-gift"></i>Mes avantages</div>
+        <div class="ch"><i class="ti ti-gift"></i><span data-i18n="esp_loyalty_perks">Mes avantages</span></div>
         <div id="espLoyaltyPerks"></div>
       </div>
 
       <!-- Historique -->
       <div class="card">
-        <div class="ch"><i class="ti ti-history"></i>Historique des points</div>
+        <div class="ch"><i class="ti ti-history"></i><span data-i18n="esp_loyalty_history">Historique des points</span></div>
         <div id="espLoyaltyHistory"></div>
       </div>
     </div>
@@ -953,39 +964,39 @@ input:focus,select:focus{border-color:var(--accent)}
     <!-- ═══ TAB: MÉNAGE ═══ -->
     <div id="espTabMenage" class="esp-tab" style="display:none">
       <div class="card">
-        <div class="ch"><i class="ti ti-vacuum-cleaner"></i>Préférences de ménage</div>
+        <div class="ch"><i class="ti ti-vacuum-cleaner"></i><span data-i18n="esp_menage_hdr">Préférences de ménage</span></div>
         <div id="espMenageStatus" class="alt alt-b" style="margin-bottom:12px">
-          <i class="ti ti-info-circle"></i><span>Chargement…</span>
+          <i class="ti ti-info-circle"></i><span data-i18n="loading_ellipsis">Chargement…</span>
         </div>
         <div id="espMenageForm" style="display:none">
-          <div class="fi"><label class="lb">Fréquence de ménage souhaitée</label>
+          <div class="fi"><label class="lb" data-i18n="esp_menage_freq_label">Fréquence de ménage souhaitée</label>
             <select id="espMenageFreq" style="width:100%">
-              <option value="0">Pas de ménage pendant mon séjour</option>
-              <option value="1">Tous les jours</option>
-              <option value="2" selected>Tous les 2 jours</option>
-              <option value="3">Tous les 3 jours</option>
-              <option value="7">Une seule fois (fin de séjour)</option>
+              <option value="0" data-i18n="esp_menage_freq_0">Pas de ménage pendant mon séjour</option>
+              <option value="1" data-i18n="esp_menage_freq_1">Tous les jours</option>
+              <option value="2" selected data-i18n="esp_menage_freq_2">Tous les 2 jours</option>
+              <option value="3" data-i18n="esp_menage_freq_3">Tous les 3 jours</option>
+              <option value="7" data-i18n="esp_menage_freq_7">Une seule fois (fin de séjour)</option>
             </select>
           </div>
-          <div class="fi"><label class="lb">Serviettes</label>
+          <div class="fi"><label class="lb" data-i18n="esp_menage_towels_label">Serviettes</label>
             <select id="espMenageServ" style="width:100%">
-              <option value="0">Pas de remplacement</option>
-              <option value="1" selected>Remplacement si sol (signal habituel)</option>
-              <option value="2">Remplacement quotidien</option>
+              <option value="0" data-i18n="esp_menage_serv_0">Pas de remplacement</option>
+              <option value="1" selected data-i18n="esp_menage_serv_1">Remplacement si sol (signal habituel)</option>
+              <option value="2" data-i18n="esp_menage_serv_2">Remplacement quotidien</option>
             </select>
           </div>
-          <div class="fi"><label class="lb">Note pour l'équipe</label>
-            <input type="text" id="espMenageNote" placeholder="Ex: Ne pas déranger avant 10h">
+          <div class="fi"><label class="lb" data-i18n="esp_menage_note_label">Note pour l'équipe</label>
+            <input type="text" id="espMenageNote" data-i18n-placeholder="esp_menage_note_placeholder" placeholder="Ex: Ne pas déranger avant 10h">
           </div>
           <button class="btn btn-p" style="width:100%;justify-content:center" onclick="espSaveMenage()">
-            <i class="ti ti-check"></i> Enregistrer mes préférences
+            <i class="ti ti-check"></i> <span data-i18n="esp_menage_save">Enregistrer mes préférences</span>
           </button>
           <div id="espMenageResult" style="display:none;margin-top:8px"></div>
         </div>
       </div>
       <div class="alt alt-g" style="margin-top:0">
         <i class="ti ti-leaf"></i>
-        <div>Chaque ménage évité économise en moyenne <strong>15 L d'eau</strong> et génère des points fidélité.</div>
+        <div data-i18n-html="esp_menage_eco_note">Chaque ménage évité économise en moyenne <strong>15 L d'eau</strong> et génère des points fidélité.</div>
       </div>
     </div>
 
@@ -993,7 +1004,7 @@ input:focus,select:focus{border-color:var(--accent)}
     <div id="espTabHisto" class="esp-tab" style="display:none">
       <div class="card" style="margin-bottom:0;padding:0">
         <div class="ch" style="padding:14px 16px 10px;border-bottom:1px solid var(--bdr)">
-          <i class="ti ti-history"></i>Mes séjours
+          <i class="ti ti-history"></i><span data-i18n="esp_histo_hdr">Mes séjours</span>
         </div>
         <div id="espHistoList" style="padding:4px 0"></div>
       </div>
@@ -1003,7 +1014,7 @@ input:focus,select:focus{border-color:var(--accent)}
     <div id="espTabLivret" class="esp-tab" style="display:none">
       <div id="espLivretContent">
         <div class="alt alt-b"><i class="ti ti-book"></i>
-          <span>Le livret de l'hôtel sera disponible ici une fois publié par l'équipe.</span>
+          <span data-i18n="esp_livret_empty">Le livret de l'hôtel sera disponible ici une fois publié par l'équipe.</span>
         </div>
       </div>
     </div>
@@ -1014,19 +1025,19 @@ input:focus,select:focus{border-color:var(--accent)}
         <div style="width:60px;height:60px;border-radius:50%;background:var(--pl);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:26px;margin:0 auto 14px">
           <i class="ti ti-shopping-bag"></i>
         </div>
-        <div style="font-size:18px;font-weight:700;margin-bottom:6px">Boutique Churchill</div>
-        <div style="font-size:13px;color:var(--mu);margin-bottom:18px;line-height:1.6">
+        <div style="font-size:18px;font-weight:700;margin-bottom:6px" data-i18n="step6_title">Boutique Churchill</div>
+        <div style="font-size:13px;color:var(--mu);margin-bottom:18px;line-height:1.6" data-i18n-html="esp_boutique_desc">
           Commandez boissons, repas, bien-être et services directement en chambre.<br>
           Livraison incluse pendant votre séjour.
         </div>
         <button class="btn btn-p" style="width:100%;justify-content:center;padding:13px;font-size:15px" onclick="espOpenBoutique()">
-          <i class="ti ti-shopping-bag"></i> Accéder à la boutique
+          <i class="ti ti-shopping-bag"></i> <span data-i18n="esp_boutique_access">Accéder à la boutique</span>
         </button>
       </div>
 
       <!-- Commandes en cours -->
       <div style="margin-top:12px">
-        <div style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Mes commandes en cours</div>
+        <div style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px" data-i18n="esp_boutique_orders_hdr">Mes commandes en cours</div>
         <div id="espBoutiqueOrders"></div>
       </div>
     </div>
@@ -1044,8 +1055,8 @@ input:focus,select:focus{border-color:var(--accent)}
 </div><!-- /scroll -->
 
 <nav class="bnav">
-  <button class="bni on" id="bn-sejour" onclick="gotoScr('sejour')"><i class="ti ti-home"></i><span>Séjour</span></button>
-  <button class="bni" id="bn-infos" onclick="gotoScr('infos')"><i class="ti ti-user-circle"></i><span>Mon espace</span><span id="bnInfosBadge" style="display:none;position:absolute;top:4px;right:18%;width:8px;height:8px;border-radius:50%;background:var(--primary)"></span></button>
+  <button class="bni on" id="bn-sejour" onclick="gotoScr('sejour')"><i class="ti ti-home"></i><span data-i18n="nav_sejour">Séjour</span></button>
+  <button class="bni" id="bn-infos" onclick="gotoScr('infos')"><i class="ti ti-user-circle"></i><span data-i18n="nav_mon_espace">Mon espace</span><span id="bnInfosBadge" style="display:none;position:absolute;top:4px;right:18%;width:8px;height:8px;border-radius:50%;background:var(--primary)"></span></button>
 </nav>
 <div id="toast"></div>
 </div>
@@ -1115,12 +1126,723 @@ function hotelToday(){
 
 // ═══════════════════ APPLY BRAND
 // ═══════════════════ TRANSLATIONS & CURRENCY
+// Langue choisie par le CLIENT lui-même (indépendante de CFG.lang, la langue
+// par défaut configurée par l'hôtel). Persistée en sessionStorage pour tenir
+// sur toute la visite (navigation entre étapes, rechargement de page) sans
+// affecter la config hôtel partagée. Cette itération ne propose que fr/en/es
+// au client — les autres codes du dictionnaire restent en fallback fr.
+var GUEST_LANGS = ['fr','en','es'];
 function t(key){
-  var lang=CFG.lang||'fr';
-  var dict=getFallbackI18n(lang);
+  var lang = (S && S.lang) || CFG.lang || 'fr';
+  var dict = getFallbackI18n(lang);
   return (dict&&dict[key])||getFallbackI18n('fr')[key]||key;
 }
+// Petite aide pour les phrases avec valeurs dynamiques : tf('key',{a:1}) remplace
+// les "{a}" du texte traduit par les valeurs fournies, tout en gardant le calcul
+// et l'interpolation côté JS (cf. consignes i18n — on ne traduit que le texte fixe).
+function tf(key, vars){
+  var s = t(key);
+  vars = vars || {};
+  Object.keys(vars).forEach(function(k){ s = s.split('{'+k+'}').join(vars[k]); });
+  return s;
+}
+function initLang(){
+  var stored = null;
+  try{ stored = sessionStorage.getItem('SESAME_GUEST_LANG'); }catch(e){}
+  if(stored && GUEST_LANGS.indexOf(stored)!==-1) S.lang = stored;
+  else if(CFG.lang && GUEST_LANGS.indexOf(CFG.lang)!==-1) S.lang = CFG.lang;
+  else S.lang = 'fr';
+  updateLangSwitchUI();
+}
+function setLang(lang){
+  if(GUEST_LANGS.indexOf(lang)===-1) return;
+  S.lang = lang;
+  try{ sessionStorage.setItem('SESAME_GUEST_LANG', lang); }catch(e){}
+  updateLangSwitchUI();
+  applyStaticTranslations();
+  rerenderCurrentView();
+}
+function updateLangSwitchUI(){
+  document.querySelectorAll('#langSwitch .lang-btn').forEach(function(b){
+    b.classList.toggle('on', b.getAttribute('data-lang')===S.lang);
+  });
+}
+// Traduit toute la marge statique (hors render*() JS) marquée par data-i18n /
+// data-i18n-html / data-i18n-placeholder / data-i18n-title.
+function applyStaticTranslations(){
+  document.querySelectorAll('[data-i18n]').forEach(function(el){
+    el.textContent = t(el.getAttribute('data-i18n'));
+  });
+  document.querySelectorAll('[data-i18n-html]').forEach(function(el){
+    el.innerHTML = t(el.getAttribute('data-i18n-html'));
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el){
+    el.setAttribute('placeholder', t(el.getAttribute('data-i18n-placeholder')));
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach(function(el){
+    el.setAttribute('title', t(el.getAttribute('data-i18n-title')));
+  });
+}
+// Re-rendu de l'écran actuellement visible après un changement de langue —
+// chaque étape a sa propre fonction render*() ; on rappelle celle de l'étape
+// / de l'onglet "espace client" en cours pour rafraîchir le contenu généré en JS.
+function rerenderCurrentView(){
+  var infosScr = document.getElementById('scr-infos');
+  var infosOn = infosScr && infosScr.classList.contains('on');
+  if(infosOn){
+    renderEspace();
+  } else {
+    switch(S.step){
+      case 1: renderBookingResults((SESAME_CACHE&&SESAME_CACHE.bookings)||[]); break;
+      case 2: renderRoomStep(); break;
+      case 3: renderOcc(); break;
+      case 4: updateKycGlobal(); break;
+      case 5: renderEcoStep(); break;
+      case 6: if(typeof renderBoutiqueStep==='function') renderBoutiqueStep(); break;
+      case 7: renderRewardStep(); renderSummary(); break;
+    }
+    updateDots();
+  }
+}
 function currSym(){var map={EUR:'€',USD:'$',GBP:'£',CHF:'CHF',CAD:'CA$',JPY:'¥',MAD:'MAD',TND:'TND'};return map[CFG.currency||'EUR']||'€';}
+// Locale utilisée pour le formatage des dates/heures affichées au client —
+// suit la langue choisie par le client (S.lang), pas seulement CFG.lang.
+function localeForLang(){
+  var map={fr:'fr-FR',en:'en-GB',es:'es-ES'};
+  return map[(S&&S.lang)||'fr']||'fr-FR';
+}
+// ═══════════════════ TRADUCTIONS ÉTENDUES CLIENT (fr/en/es) ═══════════════════
+// Ajoutées autour du dictionnaire minimal existant (water_saved, co2_saved,
+// bottles_eq, pts_earned, catalog_title, redeem_btn, kyc_skip, night,
+// nights_pl, eco_msg — inchangés, cf. getFallbackI18n ci-dessous). Périmètre
+// de cette itération : fr/en/es uniquement (demande client explicite) — les
+// autres langues du dictionnaire (de/it/nl/pt/ar/zh/ja) restent en l'état et
+// retombent sur le français via le fallback de t().
+var I18N_FR = {
+  // Génériques
+  btn_continue:'Continuer',btn_search:'Rechercher',btn_search_ellipsis:'Rechercher…',
+  btn_demo:'Démo',btn_order:'Commander',btn_pass:'Passer',btn_cancel:'Annuler',
+  btn_add_to_cart:'Ajouter au panier',btn_modify:'Modifier',btn_added_to_cart:'Ajouté au panier',
+  badge_selected:'Sélectionnée',price_free:'Offert',
+  cart_my_cart:'Mon panier',cart_total:'Total',cart_empty:'Votre panier est vide.',
+  cart_per_unit:'/ unité',cart_added_to_room_bill:'Le montant sera ajouté à votre note de chambre.',
+  word_room:'Chambre',word_access:'Accès',loading_ellipsis:'Chargement…',processing_ellipsis:'Traitement…',
+  occupant_sg:'occupant',occupant_pl:'occupants',word_for:'Pour',discount_suffix:'de réduction',
+  rs_cat_other:'Autre',rs_watch_video:'Voir la vidéo',
+  rs_no_products_category:'Aucun produit dans cette catégorie.',rs_my_orders_hdr:'Mes commandes',
+  err_order_send:"Erreur lors de l'envoi de la commande",toast_order_sent_thanks:'Commande envoyée ✓ — merci !',
+  field_email:'Email',
+  // Points d'étape
+  step_dot_kyc_title:'Vérification identité',step_dot_boutique_title:'Boutique',
+  // Étape 1 — réservation
+  step1_title:'Votre réservation',step1_fetch_hdr:'Récupérer depuis Sesame',
+  step1_search_label:'Email ou code de réservation',
+  step1_search_placeholder:'Email, code réservation ou nom…',
+  step1_hint:"Laissez vide et cliquez Rechercher · ou <strong>Démo</strong> pour les données de test",
+  step1_btn_next:'Choisir ma chambre',booking_searching:'Recherche…',
+  booking_none_found:'Aucune réservation trouvée.',booking_count_found:'séjour(s) trouvé(s)',
+  err_server_connection:'Erreur de connexion au serveur : {msg}',
+  toast_booking_selected:'Réservation sélectionnée',
+  // Étape 2 — chambre
+  step2_title:'Choisissez votre chambre',
+  step2_map_hint:'Touchez une chambre sur le plan pour la sélectionner',
+  room_filter_all:'Toutes',room_floor_0:'RDC',room_floor_1:'1er étage',room_floor_2:'2ème étage',
+  room_floor_3:'3ème étage',room_floor_4:'4ème étage',room_no_photo:'Pas de photo disponible',
+  room_none_configured:'Aucune chambre configurée — votre chambre de réservation sera utilisée.',
+  room_none_match:'Aucune chambre ne correspond à ces critères.',
+  toast_room_selected_suffix:'sélectionnée ✓',
+  // Étape 3 — occupants & taxe
+  step3_title:'Occupants du séjour',step3_occ_hdr:'Déclarer les occupants',
+  step3_add_occ:'Ajouter un occupant',occ_none:'Aucun occupant.',occ_label_prefix:'Occ.',
+  occ_age_adulte:'Adulte (18+)',occ_age_ado:'Ado (13-17)',occ_age_enfant:'Enfant (<13)',
+  occ_age_bebe:'Bébé (<2)',taxe_label_adulte:'Adulte',taxe_label_ado:'Ado (13-17)',
+  taxe_label_enfant:'Enfant',taxe_label_bebe:'Bébé',taxe_exempt:'Exonéré',
+  step3_taxe_hdr:'Détail de la taxe de séjour',step3_taxe_hero_label:'Taxe de séjour estimée',
+  step3_taxe_hero_sub_default:'Sans engagement éco',
+  step3_taxe_hint:"À l'étape suivante, découvrez comment réduire ce montant avec vos choix éco.",
+  taxe_meter_sub_tpl:'Pour {n} {nights}, {occ} {guests}',step3_btn_next:'Vérification identité',
+  // Étape 4 — KYC
+  step4_title:"Vérification d'identité",kyc_hero_title:'Vérification optionnelle',
+  kyc_hero_sub:'Cette étape est facultative. Elle accélère votre check-in et sécurise votre réservation.',
+  kyc_id_title:"Pièce d'identité",kyc_id_sub:'Passeport, CNI, permis de conduire',
+  kyc_status_waiting:'En attente',kyc_doc_type_label:'Type de document',kyc_doc_passport:'Passeport',
+  kyc_doc_id:'CNI',kyc_doc_permit:'Permis',kyc_front_label:'Recto du document',
+  kyc_scan_front:'Scanner le recto',kyc_tap_to_photo:'Appuyer pour prendre en photo',
+  kyc_back_label:'Verso du document',kyc_scan_back:'Scanner le verso',
+  kyc_fields_hint:'Informations extraites — vérifiez et corrigez si nécessaire',
+  kyc_field_lastname:'Nom',kyc_field_firstname:'Prénom',kyc_field_docnum:'N° document',
+  kyc_field_genre:'Genre',kyc_genre_m:'M — Masculin',kyc_genre_f:'F — Féminin',
+  kyc_genre_x:'X — Non binaire',kyc_field_dob:'Date de naissance',kyc_field_expiry:'Expiration',
+  kyc_field_nationality:'Nationalité',kyc_field_country:'Pays',kyc_field_address:'Adresse',
+  kyc_field_zip:'Code postal',kyc_field_city:'Ville',kyc_field_mrz1:'Ligne MRZ 1 (optionnel)',
+  kyc_field_mrz2:'Ligne MRZ 2 (optionnel)',kyc_verify_btn:'Vérifier dans la base de données',
+  kyc_selfie_title:'Selfie biométrique',kyc_selfie_sub:'Comparaison avec la photo du document',
+  kyc_selfie_info:"Placez votre visage dans le cercle. La photo sera comparée à votre pièce d'identité.",
+  kyc_start_cam:'Activer la caméra',kyc_take_selfie:'Prendre le selfie',
+  kyc_upload_alt:'Ou importer une photo',step4_btn_next:'Préférences éco',
+  toast_client_recognized:'Client reconnu — informations pré-remplies depuis la base',
+  toast_doc_scanned:'Document scanné — vérifiez et complétez les informations',
+  verifying_ellipsis:'Vérification…',kyc_expired_title:'Document expiré',
+  kyc_expired_msg:'Votre pièce a expiré. Présentez un document valide à la réception.',
+  kyc_accepted_title:'Document accepté ✓',
+  kyc_client_recognized_db:'Client reconnu dans la base · Fiche mise à jour.',
+  kyc_client_new_db:'Nouveau client enregistré dans la base.',
+  kyc_status_verified:'✓ Vérifié',kyc_status_refused:'✗ Refusé',
+  toast_camera_active:'Caméra active — centrez votre visage',
+  toast_camera_unavailable:"Caméra inaccessible — utilisez l'import de photo",
+  kyc_retake:'Reprendre',kyc_analyzing:'Analyse…',
+  kyc_biometric_analysis_progress:'Analyse biométrique en cours…',
+  kyc_match_excellent:'Correspondance excellente',kyc_match_confirmed:'Correspondance confirmée',
+  kyc_match_insufficient:'Correspondance insuffisante',
+  kyc_match_ok_detail:"Le selfie correspond à la pièce d'identité avec un score de <strong>{score}%</strong>.",
+  kyc_match_fail_detail:'Le score de correspondance ({score}%) est insuffisant. Présentez-vous à la réception avec votre pièce.',
+  kyc_status_low_score:'Score faible',toast_identity_confirmed:'Identité confirmée ✓',
+  toast_low_score_manual_check:'Score faible — vérification manuelle recommandée',
+  kyc_global_complete:'Vérification KYC complète ✓',
+  kyc_global_complete_detail:"Pièce d'identité vérifiée · Selfie concordant ({score}%)",
+  kyc_badge_doc_verified:'Pièce vérifiée',kyc_selfie_pending:'Selfie en attente',
+  kyc_selfie_validated:'Selfie validé',kyc_doc_pending:'Pièce en attente',
+  kyc_badge_not_verified:'Non vérifiée',kyc_badge_verified_pct:'Vérifiée ({score}%)',
+  // Étape 5 — éco
+  step5_title:'Vos préférences éco',step5_saving_label:'Votre taxe de séjour',
+  step5_saving_without:'Sans éco',step5_saving_with:'Avec vos choix',
+  step5_menage_hdr:'Ménage de la chambre',step5_towels_hdr:'Serviettes & linge de bain',
+  step5_deduct_title:"Économie sur la taxe — comment l'utiliser ?",step5_btn_next:'La boutique',
+  eco_choose_freq:"Choisissez une fréquence éco pour voir l'impact de vos choix.",
+  eco_impact_title:'Votre impact positif ce séjour',eco_km_car:'km en voiture',
+  eco_less_than_1km:"moins d'1 km",pts_gained_suffix:'gagnés',you_save_prefix:'Vous économisez',
+  gain_services_saved:'service(s) économisé(s)',gain_on_taxe_suffix:'sur votre taxe',
+  deduct_option_deduct_title:'Déduire {amount} de ma taxe de séjour',
+  deduct_option_deduct_sub:'Le montant est directement déduit de votre note',
+  deduct_option_reward_title:'Convertir en récompense fidélité',
+  deduct_option_reward_sub:'Ajouté à votre programme points',
+  freq_never:'Jamais',freq_every2:'Tous les 2 j.',freq_every3:'Tous les 3 j.',
+  freq_weekly:'1×/sem.',freq_daily:'Quotidien',
+  // Étape 6 — boutique
+  step6_title:'Boutique Churchill',
+  step6_info:"Commandez maintenant et vos articles seront livrés en chambre avant votre arrivée — ou après votre check-in.<br><strong style=\"font-size:11px\">Vous pouvez aussi commander plus tard depuis votre espace client.</strong>",
+  step6_no_products:'Aucun produit disponible.',step6_note_label:'Note / instructions',
+  step6_note_placeholder:'Allergie, heure souhaitée…',step6_order_sent:'Commande envoyée ✓',
+  step6_order_continue:'Commander & continuer',step6_order_confirmed:'Commande confirmée ✓',
+  // Étape 7 — récompenses & paiement
+  step7_title:'Vos récompenses',step7_direct_hdr:'Gains immédiats ce séjour',
+  step7_sum_hdr:'Récapitulatif de vos gains',step7_recap_title:'Récapitulatif & Paiement',
+  step7_stay_details_hdr:'Détail du séjour',step7_pay_mode_hdr:'Mode de paiement',
+  step7_pay_card:'Carte bancaire',step7_pay_hotel:"Payer à l'hôtel",
+  step7_pay_taxe_hdr:'Paiement de la taxe de séjour',step7_card_number:'Numéro de carte',
+  step7_card_expiry:'Expiration',step7_card_cvv:'CVV',step7_card_holder:'Nom sur la carte',
+  step7_card_split:'Fractionnement',step7_split_1:'Paiement en 1 fois',
+  step7_split_2:'En 2 fois sans frais',step7_split_3:'En 3 fois sans frais',
+  step7_secure_pay:'Paiement sécurisé · SSL · PCI-DSS',
+  step7_confirm_pay:'Confirmer & envoyer à Sesame',step7_pay_hotel_hdr:"Paiement à l'hôtel",
+  step7_pay_hotel_info:'Votre réservation est confirmée. Présentez ce QR code à la réception pour finaliser votre check-in et régler la taxe de séjour sur place.',
+  step7_pay_hotel_continue:'Continuer vers mon espace',
+  pay_split_detail:'Paiement en {v} fois : {amount} × {v} versements',
+  err_card_number_incomplete:'Numéro incomplet',
+  err_card_expiry_invalid:"Date d'expiration invalide",err_card_cvv_invalid:'CVV invalide',
+  pay_accepted:'Paiement accepté · {txn}',
+  pay_points_credited:'{pts} points crédités sur votre compte fidélité',
+  toast_payment_confirmed:'Paiement confirmé ✓',err_generic:'Erreur : {msg}',
+  pay_hotel_booking_label:'Réservation {code}',
+  pay_hotel_present_code:"Présentez ce code à l'accueil (mode simulation)",
+  toast_checkin_confirmed_pay_hotel:"Check-in confirmé · Paiement à régler à l'accueil ✓",
+  err_sync_status:'Erreur de synchronisation ({status})',
+  err_sync_message:'Erreur de synchronisation : {msg}',
+  reward_balance_label:'Solde total disponible',
+  reward_balance_detail:'{existing} existants + {earned} gagnés ce séjour − {spent} dépensés',
+  reward_program_disabled:"Le programme de récompenses n'est pas activé pour ce séjour.",
+  reward_discount_sub:'Sur la note finale',reward_financier_sub:'Crédit prochaine réservation',
+  reward_financier_offered:'offerts',reward_product_sub:'Offert pour votre engagement',
+  reward_activate_eco:'Activez des préférences éco pour débloquer des gains.',
+  reward_no_immediate:'Pas de gain immédiat — utilisez vos points ci-dessous.',
+  reward_pts_available:'pts disponibles',reward_pts_missing:'pts manquants',
+  reward_credited_end_of_stay:'Crédités à la fin du séjour',
+  toast_item_added_rewards:'Article ajouté à vos gains ✓',
+  summary_freq_none:'Aucun',summary_freq_weekly_full:'1×/semaine',
+  summary_label_booking:'Réservation',summary_label_client:'Client',summary_label_duration:'Durée',
+  summary_label_identity:'Identité',summary_label_menage:'Ménage',summary_label_towels:'Serviettes',
+  summary_label_water:'Eau économisée',summary_label_co2:'CO₂ évité',summary_label_rewards:'Récompenses',
+  reward_count_suffix:'gain(s)',summary_taxe_recap_label:'Récapitulatif taxe de séjour',
+  summary_std_rate:'Tarif standard',summary_with_eco_discount:'Avec éco-réduction',
+  summary_you_save_eco:'Vous économisez {amount} grâce à vos choix éco',
+  summary_pay_line_taxe_std:'Taxe de séjour (tarif standard)',
+  summary_pay_line_eco_deduct:'Éco-déduction ménage',summary_pay_total:'Total à régler',
+  // Espace client
+  esp_login_title:'Mon espace client',
+  esp_login_info:"Connectez-vous avec l'email et le code de réservation utilisés lors de votre check-in.",
+  esp_login_hdr:'Identification',esp_login_code_label:'Code de réservation',
+  esp_login_btn:'Accéder à mon espace',esp_demo_access:'Accès démo rapide — séjour en cours :',
+  esp_other_bookings:'Autres réservations disponibles :',
+  esp_login_err_default:'Email ou code de réservation incorrect.',
+  err_server_connection_generic:'Erreur de connexion au serveur.',toast_welcome:'Bienvenue',
+  esp_title:'Mon espace',esp_title_with_name:'Mon espace · {name}',
+  esp_tab_key:'Clé digitale',esp_tab_loyalty:'Points',esp_tab_menage:'Ménage',
+  esp_tab_histo:'Historique',esp_tab_livret:'Livret',esp_tab_boutique:'Boutique',
+  esp_tab_rs:'Room Service',
+  esp_key_title:'Votre clé digitale',esp_key_present:'Présentez ce code au lecteur Sesame',
+  esp_key_simulate_open:"Simuler l'ouverture",esp_key_unlocked:'Accès déverrouillé ✓',
+  esp_key_info:'Approchez votre téléphone du lecteur ou présentez ce QR code pour chaque accès.',
+  esp_access_dedicated:'Accès dédié',esp_access_simulation:'Mode simulation',
+  esp_valid_until:"Valable jusqu'au {date} à 11h00",
+  esp_valid_whole_stay:'Valable pendant toute la durée de votre séjour',
+  esp_key_unlocked_sim:'{label} déverrouillé (mode simulation) ✓',esp_open_btn:'Ouvrir',
+  esp_backup_code_label:"Code d'accès secours (simulation)",
+  toast_access_unlocked_sim:'🔓 Accès déverrouillé (simulation)',
+  esp_no_active_booking:'Aucune réservation active.',
+  esp_menage_not_in_progress:'Les préférences de ménage ne peuvent être modifiées que pendant un séjour en cours (du {from} au {to}).',
+  esp_menage_in_progress:'Séjour en cours — Chambre <strong>{room}</strong>. Vous pouvez modifier vos préférences.',
+  esp_prefs_saved:'Préférences enregistrées ✓',
+  toast_menage_prefs_saved:'Préférences ménage enregistrées ✓',
+  esp_no_stays_found:'Aucun séjour trouvé.',esp_status_ongoing:'En cours',
+  esp_status_upcoming:'À venir',esp_status_finished:'Terminé',
+  esp_livret_subtitle:"Livret d'accueil digital",
+  esp_livret_no_sections:'Aucune rubrique publiée pour le moment.',
+  esp_no_orders:'Aucune commande pour ce séjour.',
+  order_status_received:'Reçue',order_status_preparing_short:'En prép.',
+  order_status_preparing_full:'En préparation',order_status_delivering_short:'En livraison',
+  order_status_delivering_full:'En cours de livraison',order_status_delivered_check:'Livrée ✓',
+  order_status_delivered:'Livrée',order_status_cancelled:'Annulée',
+  perk_std_1:'Accès au programme de fidélité',perk_std_2:'Offres anniversaire',
+  perk_gold_1:"Late check-out jusqu'à 14h",perk_gold_2:'Surclassement selon disponibilité',
+  perk_gold_3:'Boisson de bienvenue offerte',perk_prem_1:'Petit-déjeuner offert chaque matin',
+  perk_prem_2:'Surclassement prioritaire',perk_prem_3:"Check-out tardif jusqu'à 16h",
+  perk_prem_4:'Accès au salon Premium',esp_loyalty_status_label:'Statut',
+  esp_loyalty_top_tier:'Vous avez atteint notre statut le plus élevé. Merci pour votre fidélité !',
+  esp_loyalty_remaining_tpl:'{remaining} {ptsName} avant le statut {next}',
+  esp_loyalty_no_perks:'Aucun avantage configuré pour ce statut.',
+  esp_loyalty_no_history:'Aucun historique pour le moment.',
+  esp_rs_disabled:"Le room service n'est pas proposé par cet établissement.",
+  esp_rs_order_from:'Commandez depuis votre chambre',esp_rs_delivered:'livré directement chez vous.',
+  esp_rs_view_cart:'Voir mon panier',esp_rs_articles:'article(s)',
+  esp_rs_note_label:'Note pour le service (optionnel)',
+  esp_rs_note_placeholder:'Ex : sans glaçons, allergie aux fruits à coque…',
+  esp_rs_place_order:'Passer la commande',esp_rs_continue_shopping:'Continuer mes achats',
+  esp_loyalty_progress:'Progression',esp_loyalty_perks:'Mes avantages',
+  esp_loyalty_history:'Historique des points',esp_menage_hdr:'Préférences de ménage',
+  esp_menage_freq_label:'Fréquence de ménage souhaitée',
+  esp_menage_freq_0:'Pas de ménage pendant mon séjour',esp_menage_freq_1:'Tous les jours',
+  esp_menage_freq_2:'Tous les 2 jours',esp_menage_freq_3:'Tous les 3 jours',
+  esp_menage_freq_7:'Une seule fois (fin de séjour)',esp_menage_towels_label:'Serviettes',
+  esp_menage_serv_0:'Pas de remplacement',esp_menage_serv_1:'Remplacement si sol (signal habituel)',
+  esp_menage_serv_2:'Remplacement quotidien',esp_menage_note_label:"Note pour l'équipe",
+  esp_menage_note_placeholder:'Ex: Ne pas déranger avant 10h',esp_menage_save:'Enregistrer mes préférences',
+  esp_menage_eco_note:'Chaque ménage évité économise en moyenne <strong>15 L d\'eau</strong> et génère des points fidélité.',
+  esp_histo_hdr:'Mes séjours',esp_livret_empty:"Le livret de l'hôtel sera disponible ici une fois publié par l'équipe.",
+  esp_boutique_access:'Accéder à la boutique',
+  esp_boutique_desc:'Commandez boissons, repas, bien-être et services directement en chambre.<br>Livraison incluse pendant votre séjour.',
+  esp_boutique_orders_hdr:'Mes commandes en cours',
+  nav_sejour:'Séjour',nav_mon_espace:'Mon espace',
+  card_mmyy:'MM/AA',card_name_placeholder:'NOM PRÉNOM',esp_login_email_placeholder:'votre@email.com'
+};
+var I18N_EN = {
+  btn_continue:'Continue',btn_search:'Search',btn_search_ellipsis:'Search…',
+  btn_demo:'Demo',btn_order:'Order',btn_pass:'Skip',btn_cancel:'Cancel',
+  btn_add_to_cart:'Add to cart',btn_modify:'Edit',btn_added_to_cart:'Added to cart',
+  badge_selected:'Selected',price_free:'Free',
+  cart_my_cart:'My cart',cart_total:'Total',cart_empty:'Your cart is empty.',
+  cart_per_unit:'/ unit',cart_added_to_room_bill:'The amount will be added to your room bill.',
+  word_room:'Room',word_access:'Access',loading_ellipsis:'Loading…',processing_ellipsis:'Processing…',
+  occupant_sg:'guest',occupant_pl:'guests',word_for:'For',discount_suffix:'discount',
+  rs_cat_other:'Other',rs_watch_video:'Watch the video',
+  rs_no_products_category:'No products in this category.',rs_my_orders_hdr:'My orders',
+  err_order_send:'Error sending your order',toast_order_sent_thanks:'Order sent ✓ — thank you!',
+  field_email:'Email',
+  step_dot_kyc_title:'Identity verification',step_dot_boutique_title:'Shop',
+  step1_title:'Your booking',step1_fetch_hdr:'Retrieve from Sesame',
+  step1_search_label:'Email or booking code',
+  step1_search_placeholder:'Email, booking code or name…',
+  step1_hint:'Leave blank and click Search · or <strong>Demo</strong> for sample data',
+  step1_btn_next:'Choose my room',booking_searching:'Searching…',
+  booking_none_found:'No booking found.',booking_count_found:'stay(s) found',
+  err_server_connection:'Server connection error: {msg}',toast_booking_selected:'Booking selected',
+  step2_title:'Choose your room',step2_map_hint:'Tap a room on the map to select it',
+  room_filter_all:'All',room_floor_0:'Ground floor',room_floor_1:'1st floor',room_floor_2:'2nd floor',
+  room_floor_3:'3rd floor',room_floor_4:'4th floor',room_no_photo:'No photo available',
+  room_none_configured:'No rooms configured — your booked room will be used.',
+  room_none_match:'No room matches these criteria.',toast_room_selected_suffix:'selected ✓',
+  step3_title:'Guests staying',step3_occ_hdr:'Declare your guests',
+  step3_add_occ:'Add a guest',occ_none:'No guests.',occ_label_prefix:'Guest',
+  occ_age_adulte:'Adult (18+)',occ_age_ado:'Teen (13-17)',occ_age_enfant:'Child (<13)',
+  occ_age_bebe:'Baby (<2)',taxe_label_adulte:'Adult',taxe_label_ado:'Teen (13-17)',
+  taxe_label_enfant:'Child',taxe_label_bebe:'Baby',taxe_exempt:'Exempt',
+  step3_taxe_hdr:'Tourist tax breakdown',step3_taxe_hero_label:'Estimated tourist tax',
+  step3_taxe_hero_sub_default:'Without eco commitment',
+  step3_taxe_hint:'In the next step, discover how to reduce this amount with your eco choices.',
+  taxe_meter_sub_tpl:'For {n} {nights}, {occ} {guests}',step3_btn_next:'Identity verification',
+  step4_title:'Identity verification',kyc_hero_title:'Optional verification',
+  kyc_hero_sub:'This step is optional. It speeds up your check-in and secures your booking.',
+  kyc_id_title:'ID document',kyc_id_sub:'Passport, ID card, driving licence',
+  kyc_status_waiting:'Waiting',kyc_doc_type_label:'Document type',kyc_doc_passport:'Passport',
+  kyc_doc_id:'ID card',kyc_doc_permit:'Driving licence',kyc_front_label:'Front of document',
+  kyc_scan_front:'Scan the front',kyc_tap_to_photo:'Tap to take a photo',
+  kyc_back_label:'Back of document',kyc_scan_back:'Scan the back',
+  kyc_fields_hint:'Extracted information — please check and correct if needed',
+  kyc_field_lastname:'Last name',kyc_field_firstname:'First name',kyc_field_docnum:'Document number',
+  kyc_field_genre:'Gender',kyc_genre_m:'M — Male',kyc_genre_f:'F — Female',
+  kyc_genre_x:'X — Non-binary',kyc_field_dob:'Date of birth',kyc_field_expiry:'Expiry date',
+  kyc_field_nationality:'Nationality',kyc_field_country:'Country',kyc_field_address:'Address',
+  kyc_field_zip:'Postal code',kyc_field_city:'City',kyc_field_mrz1:'MRZ line 1 (optional)',
+  kyc_field_mrz2:'MRZ line 2 (optional)',kyc_verify_btn:'Verify in the database',
+  kyc_selfie_title:'Biometric selfie',kyc_selfie_sub:'Compared with the document photo',
+  kyc_selfie_info:'Position your face in the circle. The photo will be compared with your ID.',
+  kyc_start_cam:'Enable camera',kyc_take_selfie:'Take the selfie',
+  kyc_upload_alt:'Or upload a photo',step4_btn_next:'Eco preferences',
+  toast_client_recognized:'Guest recognized — information pre-filled from our records',
+  toast_doc_scanned:'Document scanned — please check and complete the information',
+  verifying_ellipsis:'Verifying…',kyc_expired_title:'Expired document',
+  kyc_expired_msg:'Your ID has expired. Please present a valid document at the front desk.',
+  kyc_accepted_title:'Document accepted ✓',
+  kyc_client_recognized_db:'Guest recognized in our records · Profile updated.',
+  kyc_client_new_db:'New guest saved to our records.',
+  kyc_status_verified:'✓ Verified',kyc_status_refused:'✗ Refused',
+  toast_camera_active:'Camera active — center your face',
+  toast_camera_unavailable:'Camera unavailable — please upload a photo instead',
+  kyc_retake:'Retake',kyc_analyzing:'Analyzing…',
+  kyc_biometric_analysis_progress:'Biometric analysis in progress…',
+  kyc_match_excellent:'Excellent match',kyc_match_confirmed:'Match confirmed',
+  kyc_match_insufficient:'Insufficient match',
+  kyc_match_ok_detail:'The selfie matches the ID document with a score of <strong>{score}%</strong>.',
+  kyc_match_fail_detail:'The match score ({score}%) is too low. Please visit the front desk with your ID.',
+  kyc_status_low_score:'Low score',toast_identity_confirmed:'Identity confirmed ✓',
+  toast_low_score_manual_check:'Low score — manual check recommended',
+  kyc_global_complete:'Identity verification complete ✓',
+  kyc_global_complete_detail:'ID document verified · Matching selfie ({score}%)',
+  kyc_badge_doc_verified:'ID verified',kyc_selfie_pending:'Selfie pending',
+  kyc_selfie_validated:'Selfie verified',kyc_doc_pending:'ID pending',
+  kyc_badge_not_verified:'Not verified',kyc_badge_verified_pct:'Verified ({score}%)',
+  step5_title:'Your eco preferences',step5_saving_label:'Your tourist tax',
+  step5_saving_without:'Without eco',step5_saving_with:'With your choices',
+  step5_menage_hdr:'Room housekeeping',step5_towels_hdr:'Towels & bath linen',
+  step5_deduct_title:'Savings on your tax — how would you like to use them?',step5_btn_next:'The shop',
+  eco_choose_freq:'Choose an eco frequency to see the impact of your choices.',
+  eco_impact_title:'Your positive impact this stay',eco_km_car:'km by car',
+  eco_less_than_1km:'less than 1 km',pts_gained_suffix:'earned',you_save_prefix:'You save',
+  gain_services_saved:'service(s) saved',gain_on_taxe_suffix:'off your tourist tax',
+  deduct_option_deduct_title:'Deduct {amount} from my tourist tax',
+  deduct_option_deduct_sub:'The amount is deducted directly from your bill',
+  deduct_option_reward_title:'Convert into a loyalty reward',
+  deduct_option_reward_sub:'Added to your points program',
+  freq_never:'Never',freq_every2:'Every 2 days',freq_every3:'Every 3 days',
+  freq_weekly:'1×/week',freq_daily:'Daily',
+  step6_title:'Churchill Shop',
+  step6_info:'Order now and your items will be delivered to your room before you arrive — or after check-in.<br><strong style="font-size:11px">You can also order later from your guest space.</strong>',
+  step6_no_products:'No products available.',step6_note_label:'Note / instructions',
+  step6_note_placeholder:'Allergies, preferred time…',step6_order_sent:'Order sent ✓',
+  step6_order_continue:'Order & continue',step6_order_confirmed:'Order confirmed ✓',
+  step7_title:'Your rewards',step7_direct_hdr:'Instant rewards this stay',
+  step7_sum_hdr:'Summary of your rewards',step7_recap_title:'Summary & Payment',
+  step7_stay_details_hdr:'Stay details',step7_pay_mode_hdr:'Payment method',
+  step7_pay_card:'Credit card',step7_pay_hotel:'Pay at the hotel',
+  step7_pay_taxe_hdr:'Tourist tax payment',step7_card_number:'Card number',
+  step7_card_expiry:'Expiry date',step7_card_cvv:'CVV',step7_card_holder:'Name on card',
+  step7_card_split:'Payment plan',step7_split_1:'Pay in full',
+  step7_split_2:'2 interest-free instalments',step7_split_3:'3 interest-free instalments',
+  step7_secure_pay:'Secure payment · SSL · PCI-DSS',
+  step7_confirm_pay:'Confirm & send to Sesame',step7_pay_hotel_hdr:'Payment at the hotel',
+  step7_pay_hotel_info:'Your booking is confirmed. Show this QR code at the front desk to finalize your check-in and pay the tourist tax on site.',
+  step7_pay_hotel_continue:'Continue to my space',
+  pay_split_detail:'Payment in {v} instalments: {amount} × {v} payments',
+  err_card_number_incomplete:'Incomplete card number',
+  err_card_expiry_invalid:'Invalid expiry date',err_card_cvv_invalid:'Invalid CVV',
+  pay_accepted:'Payment accepted · {txn}',
+  pay_points_credited:'{pts} points credited to your loyalty account',
+  toast_payment_confirmed:'Payment confirmed ✓',err_generic:'Error: {msg}',
+  pay_hotel_booking_label:'Booking {code}',
+  pay_hotel_present_code:'Show this code at the front desk (simulation mode)',
+  toast_checkin_confirmed_pay_hotel:'Check-in confirmed · Pay at the front desk ✓',
+  err_sync_status:'Synchronization error ({status})',
+  err_sync_message:'Synchronization error: {msg}',
+  reward_balance_label:'Total available balance',
+  reward_balance_detail:'{existing} existing + {earned} earned this stay − {spent} spent',
+  reward_program_disabled:'The rewards program is not enabled for this stay.',
+  reward_discount_sub:'On the final bill',reward_financier_sub:'Credit toward your next booking',
+  reward_financier_offered:'credited',reward_product_sub:'Complimentary for your commitment',
+  reward_activate_eco:'Turn on eco preferences to unlock rewards.',
+  reward_no_immediate:'No instant reward — use your points below.',
+  reward_pts_available:'pts available',reward_pts_missing:'pts missing',
+  reward_credited_end_of_stay:'Credited at the end of your stay',
+  toast_item_added_rewards:'Item added to your rewards ✓',
+  summary_freq_none:'None',summary_freq_weekly_full:'1×/week',
+  summary_label_booking:'Booking',summary_label_client:'Guest',summary_label_duration:'Duration',
+  summary_label_identity:'Identity',summary_label_menage:'Housekeeping',summary_label_towels:'Towels',
+  summary_label_water:'Water saved',summary_label_co2:'CO₂ avoided',summary_label_rewards:'Rewards',
+  reward_count_suffix:'reward(s)',summary_taxe_recap_label:'Tourist tax summary',
+  summary_std_rate:'Standard rate',summary_with_eco_discount:'With eco-discount',
+  summary_you_save_eco:'You save {amount} thanks to your eco choices',
+  summary_pay_line_taxe_std:'Tourist tax (standard rate)',
+  summary_pay_line_eco_deduct:'Housekeeping eco-deduction',summary_pay_total:'Total due',
+  esp_login_title:'My guest space',
+  esp_login_info:'Sign in with the email and booking code used during your check-in.',
+  esp_login_hdr:'Sign in',esp_login_code_label:'Booking code',
+  esp_login_btn:'Access my space',esp_demo_access:'Quick demo access — current stay:',
+  esp_other_bookings:'Other available bookings:',
+  esp_login_err_default:'Incorrect email or booking code.',
+  err_server_connection_generic:'Server connection error.',toast_welcome:'Welcome',
+  esp_title:'My space',esp_title_with_name:'My space · {name}',
+  esp_tab_key:'Digital key',esp_tab_loyalty:'Points',esp_tab_menage:'Housekeeping',
+  esp_tab_histo:'History',esp_tab_livret:'Guidebook',esp_tab_boutique:'Shop',
+  esp_tab_rs:'Room Service',
+  esp_key_title:'Your digital key',esp_key_present:'Present this code to the Sesame reader',
+  esp_key_simulate_open:'Simulate unlocking',esp_key_unlocked:'Access unlocked ✓',
+  esp_key_info:'Hold your phone near the reader or show this QR code for each access point.',
+  esp_access_dedicated:'Dedicated access',esp_access_simulation:'Simulation mode',
+  esp_valid_until:'Valid until {date} at 11:00 AM',
+  esp_valid_whole_stay:'Valid for the entire duration of your stay',
+  esp_key_unlocked_sim:'{label} unlocked (simulation mode) ✓',esp_open_btn:'Open',
+  esp_backup_code_label:'Backup access code (simulation)',
+  toast_access_unlocked_sim:'🔓 Access unlocked (simulation)',
+  esp_no_active_booking:'No active booking.',
+  esp_menage_not_in_progress:'Housekeeping preferences can only be changed during a current stay (from {from} to {to}).',
+  esp_menage_in_progress:'Stay in progress — Room <strong>{room}</strong>. You can update your preferences.',
+  esp_prefs_saved:'Preferences saved ✓',
+  toast_menage_prefs_saved:'Housekeeping preferences saved ✓',
+  esp_no_stays_found:'No stays found.',esp_status_ongoing:'Ongoing',
+  esp_status_upcoming:'Upcoming',esp_status_finished:'Completed',
+  esp_livret_subtitle:'Digital welcome guide',
+  esp_livret_no_sections:'No sections published yet.',
+  esp_no_orders:'No orders for this stay.',
+  order_status_received:'Received',order_status_preparing_short:'Preparing',
+  order_status_preparing_full:'Being prepared',order_status_delivering_short:'On the way',
+  order_status_delivering_full:'Out for delivery',order_status_delivered_check:'Delivered ✓',
+  order_status_delivered:'Delivered',order_status_cancelled:'Cancelled',
+  perk_std_1:'Access to the loyalty program',perk_std_2:'Birthday offers',
+  perk_gold_1:'Late check-out until 2:00 PM',perk_gold_2:'Upgrade subject to availability',
+  perk_gold_3:'Complimentary welcome drink',perk_prem_1:'Complimentary breakfast every morning',
+  perk_prem_2:'Priority upgrade',perk_prem_3:'Late check-out until 4:00 PM',
+  perk_prem_4:'Access to the Premium lounge',esp_loyalty_status_label:'Status',
+  esp_loyalty_top_tier:"You've reached our highest status. Thank you for your loyalty!",
+  esp_loyalty_remaining_tpl:'{remaining} {ptsName} until {next} status',
+  esp_loyalty_no_perks:'No perks configured for this status.',
+  esp_loyalty_no_history:'No history yet.',
+  esp_rs_disabled:'Room service is not offered by this establishment.',
+  esp_rs_order_from:'Order from your room',esp_rs_delivered:'delivered straight to your door.',
+  esp_rs_view_cart:'View my cart',esp_rs_articles:'item(s)',
+  esp_rs_note_label:'Note for the service (optional)',
+  esp_rs_note_placeholder:'E.g.: no ice, nut allergy…',
+  esp_rs_place_order:'Place order',esp_rs_continue_shopping:'Continue shopping',
+  esp_loyalty_progress:'Progress',esp_loyalty_perks:'My perks',
+  esp_loyalty_history:'Points history',esp_menage_hdr:'Housekeeping preferences',
+  esp_menage_freq_label:'Preferred housekeeping frequency',
+  esp_menage_freq_0:'No housekeeping during my stay',esp_menage_freq_1:'Every day',
+  esp_menage_freq_2:'Every 2 days',esp_menage_freq_3:'Every 3 days',
+  esp_menage_freq_7:'Once only (end of stay)',esp_menage_towels_label:'Towels',
+  esp_menage_serv_0:'No replacement',esp_menage_serv_1:'Replace if on the floor (usual signal)',
+  esp_menage_serv_2:'Daily replacement',esp_menage_note_label:'Note for the team',
+  esp_menage_note_placeholder:'E.g.: Do not disturb before 10am',esp_menage_save:'Save my preferences',
+  esp_menage_eco_note:'Every housekeeping visit skipped saves on average <strong>15 L of water</strong> and earns loyalty points.',
+  esp_histo_hdr:'My stays',esp_livret_empty:'The hotel guidebook will be available here once published by the team.',
+  esp_boutique_access:'Access the shop',
+  esp_boutique_desc:'Order drinks, meals, wellness and services directly to your room.<br>Delivery included during your stay.',
+  esp_boutique_orders_hdr:'My current orders',
+  nav_sejour:'Stay',nav_mon_espace:'My space',
+  card_mmyy:'MM/YY',card_name_placeholder:'CARDHOLDER NAME',esp_login_email_placeholder:'your@email.com'
+};
+var I18N_ES = {
+  btn_continue:'Continuar',btn_search:'Buscar',btn_search_ellipsis:'Buscar…',
+  btn_demo:'Demo',btn_order:'Pedir',btn_pass:'Omitir',btn_cancel:'Cancelar',
+  btn_add_to_cart:'Añadir al carrito',btn_modify:'Modificar',btn_added_to_cart:'Añadido al carrito',
+  badge_selected:'Seleccionada',price_free:'Gratis',
+  cart_my_cart:'Mi carrito',cart_total:'Total',cart_empty:'Su carrito está vacío.',
+  cart_per_unit:'/ unidad',cart_added_to_room_bill:'El importe se añadirá a la factura de su habitación.',
+  word_room:'Habitación',word_access:'Acceso',loading_ellipsis:'Cargando…',processing_ellipsis:'Procesando…',
+  occupant_sg:'huésped',occupant_pl:'huéspedes',word_for:'Para',discount_suffix:'de descuento',
+  rs_cat_other:'Otro',rs_watch_video:'Ver el vídeo',
+  rs_no_products_category:'No hay productos en esta categoría.',rs_my_orders_hdr:'Mis pedidos',
+  err_order_send:'Error al enviar el pedido',toast_order_sent_thanks:'Pedido enviado ✓ — ¡gracias!',
+  field_email:'Email',
+  step_dot_kyc_title:'Verificación de identidad',step_dot_boutique_title:'Tienda',
+  step1_title:'Su reserva',step1_fetch_hdr:'Recuperar desde Sesame',
+  step1_search_label:'Email o código de reserva',
+  step1_search_placeholder:'Email, código de reserva o nombre…',
+  step1_hint:'Déjelo en blanco y pulse Buscar · o <strong>Demo</strong> para datos de prueba',
+  step1_btn_next:'Elegir mi habitación',booking_searching:'Buscando…',
+  booking_none_found:'No se encontró ninguna reserva.',booking_count_found:'estancia(s) encontrada(s)',
+  err_server_connection:'Error de conexión con el servidor: {msg}',
+  toast_booking_selected:'Reserva seleccionada',
+  step2_title:'Elija su habitación',step2_map_hint:'Toque una habitación en el plano para seleccionarla',
+  room_filter_all:'Todas',room_floor_0:'Planta baja',room_floor_1:'1.ª planta',room_floor_2:'2.ª planta',
+  room_floor_3:'3.ª planta',room_floor_4:'4.ª planta',room_no_photo:'Sin foto disponible',
+  room_none_configured:'No hay habitaciones configuradas — se usará la habitación de su reserva.',
+  room_none_match:'Ninguna habitación coincide con estos criterios.',
+  toast_room_selected_suffix:'seleccionada ✓',
+  step3_title:'Ocupantes de la estancia',step3_occ_hdr:'Declarar los ocupantes',
+  step3_add_occ:'Añadir un ocupante',occ_none:'Sin ocupantes.',occ_label_prefix:'Ocup.',
+  occ_age_adulte:'Adulto (18+)',occ_age_ado:'Adolescente (13-17)',occ_age_enfant:'Niño (<13)',
+  occ_age_bebe:'Bebé (<2)',taxe_label_adulte:'Adulto',taxe_label_ado:'Adolescente (13-17)',
+  taxe_label_enfant:'Niño',taxe_label_bebe:'Bebé',taxe_exempt:'Exento',
+  step3_taxe_hdr:'Detalle de la tasa turística',step3_taxe_hero_label:'Tasa turística estimada',
+  step3_taxe_hero_sub_default:'Sin compromiso ecológico',
+  step3_taxe_hint:'En el siguiente paso, descubra cómo reducir este importe con sus elecciones ecológicas.',
+  taxe_meter_sub_tpl:'Para {n} {nights}, {occ} {guests}',step3_btn_next:'Verificación de identidad',
+  step4_title:'Verificación de identidad',kyc_hero_title:'Verificación opcional',
+  kyc_hero_sub:'Este paso es opcional. Agiliza su check-in y protege su reserva.',
+  kyc_id_title:'Documento de identidad',kyc_id_sub:'Pasaporte, DNI, carné de conducir',
+  kyc_status_waiting:'Pendiente',kyc_doc_type_label:'Tipo de documento',kyc_doc_passport:'Pasaporte',
+  kyc_doc_id:'DNI',kyc_doc_permit:'Carné de conducir',kyc_front_label:'Anverso del documento',
+  kyc_scan_front:'Escanear el anverso',kyc_tap_to_photo:'Toque para hacer una foto',
+  kyc_back_label:'Reverso del documento',kyc_scan_back:'Escanear el reverso',
+  kyc_fields_hint:'Información extraída — verifique y corrija si es necesario',
+  kyc_field_lastname:'Apellido',kyc_field_firstname:'Nombre',kyc_field_docnum:'N.º de documento',
+  kyc_field_genre:'Género',kyc_genre_m:'M — Masculino',kyc_genre_f:'F — Femenino',
+  kyc_genre_x:'X — No binario',kyc_field_dob:'Fecha de nacimiento',kyc_field_expiry:'Fecha de caducidad',
+  kyc_field_nationality:'Nacionalidad',kyc_field_country:'País',kyc_field_address:'Dirección',
+  kyc_field_zip:'Código postal',kyc_field_city:'Ciudad',kyc_field_mrz1:'Línea MRZ 1 (opcional)',
+  kyc_field_mrz2:'Línea MRZ 2 (opcional)',kyc_verify_btn:'Verificar en la base de datos',
+  kyc_selfie_title:'Selfie biométrico',kyc_selfie_sub:'Comparación con la foto del documento',
+  kyc_selfie_info:'Coloque su rostro dentro del círculo. La foto se comparará con su documento de identidad.',
+  kyc_start_cam:'Activar la cámara',kyc_take_selfie:'Tomar el selfie',
+  kyc_upload_alt:'O subir una foto',step4_btn_next:'Preferencias ecológicas',
+  toast_client_recognized:'Cliente reconocido — información precargada desde la base de datos',
+  toast_doc_scanned:'Documento escaneado — verifique y complete la información',
+  verifying_ellipsis:'Verificando…',kyc_expired_title:'Documento caducado',
+  kyc_expired_msg:'Su documento ha caducado. Presente un documento válido en la recepción.',
+  kyc_accepted_title:'Documento aceptado ✓',
+  kyc_client_recognized_db:'Cliente reconocido en la base de datos · Ficha actualizada.',
+  kyc_client_new_db:'Nuevo cliente registrado en la base de datos.',
+  kyc_status_verified:'✓ Verificado',kyc_status_refused:'✗ Rechazado',
+  toast_camera_active:'Cámara activa — centre su rostro',
+  toast_camera_unavailable:'Cámara no disponible — utilice la opción de subir una foto',
+  kyc_retake:'Repetir',kyc_analyzing:'Analizando…',
+  kyc_biometric_analysis_progress:'Análisis biométrico en curso…',
+  kyc_match_excellent:'Coincidencia excelente',kyc_match_confirmed:'Coincidencia confirmada',
+  kyc_match_insufficient:'Coincidencia insuficiente',
+  kyc_match_ok_detail:'El selfie coincide con el documento de identidad con una puntuación del <strong>{score}%</strong>.',
+  kyc_match_fail_detail:'La puntuación de coincidencia ({score}%) es insuficiente. Acuda a recepción con su documento.',
+  kyc_status_low_score:'Puntuación baja',toast_identity_confirmed:'Identidad confirmada ✓',
+  toast_low_score_manual_check:'Puntuación baja — se recomienda verificación manual',
+  kyc_global_complete:'Verificación de identidad completa ✓',
+  kyc_global_complete_detail:'Documento verificado · Selfie coincidente ({score}%)',
+  kyc_badge_doc_verified:'Documento verificado',kyc_selfie_pending:'Selfie pendiente',
+  kyc_selfie_validated:'Selfie verificado',kyc_doc_pending:'Documento pendiente',
+  kyc_badge_not_verified:'No verificada',kyc_badge_verified_pct:'Verificada ({score}%)',
+  step5_title:'Sus preferencias ecológicas',step5_saving_label:'Su tasa turística',
+  step5_saving_without:'Sin ecológico',step5_saving_with:'Con sus elecciones',
+  step5_menage_hdr:'Limpieza de la habitación',step5_towels_hdr:'Toallas y ropa de baño',
+  step5_deduct_title:'Ahorro en la tasa — ¿cómo desea utilizarlo?',step5_btn_next:'La tienda',
+  eco_choose_freq:'Elija una frecuencia ecológica para ver el impacto de sus elecciones.',
+  eco_impact_title:'Su impacto positivo en esta estancia',eco_km_car:'km en coche',
+  eco_less_than_1km:'menos de 1 km',pts_gained_suffix:'ganados',you_save_prefix:'Ahorra',
+  gain_services_saved:'servicio(s) ahorrado(s)',gain_on_taxe_suffix:'en su tasa turística',
+  deduct_option_deduct_title:'Deducir {amount} de mi tasa turística',
+  deduct_option_deduct_sub:'El importe se deduce directamente de su factura',
+  deduct_option_reward_title:'Convertir en recompensa de fidelidad',
+  deduct_option_reward_sub:'Añadido a su programa de puntos',
+  freq_never:'Nunca',freq_every2:'Cada 2 días',freq_every3:'Cada 3 días',
+  freq_weekly:'1×/semana',freq_daily:'Diario',
+  step6_title:'Tienda Churchill',
+  step6_info:'Pida ahora y sus artículos se entregarán en su habitación antes de su llegada — o después del check-in.<br><strong style="font-size:11px">También puede pedir más tarde desde su espacio de cliente.</strong>',
+  step6_no_products:'No hay productos disponibles.',step6_note_label:'Nota / instrucciones',
+  step6_note_placeholder:'Alergias, hora deseada…',step6_order_sent:'Pedido enviado ✓',
+  step6_order_continue:'Pedir y continuar',step6_order_confirmed:'Pedido confirmado ✓',
+  step7_title:'Sus recompensas',step7_direct_hdr:'Beneficios inmediatos en esta estancia',
+  step7_sum_hdr:'Resumen de sus beneficios',step7_recap_title:'Resumen y Pago',
+  step7_stay_details_hdr:'Detalle de la estancia',step7_pay_mode_hdr:'Método de pago',
+  step7_pay_card:'Tarjeta bancaria',step7_pay_hotel:'Pagar en el hotel',
+  step7_pay_taxe_hdr:'Pago de la tasa turística',step7_card_number:'Número de tarjeta',
+  step7_card_expiry:'Caducidad',step7_card_cvv:'CVV',step7_card_holder:'Nombre en la tarjeta',
+  step7_card_split:'Fraccionamiento',step7_split_1:'Pago único',
+  step7_split_2:'En 2 plazos sin intereses',step7_split_3:'En 3 plazos sin intereses',
+  step7_secure_pay:'Pago seguro · SSL · PCI-DSS',
+  step7_confirm_pay:'Confirmar y enviar a Sesame',step7_pay_hotel_hdr:'Pago en el hotel',
+  step7_pay_hotel_info:'Su reserva está confirmada. Muestre este código QR en recepción para finalizar su check-in y pagar la tasa turística in situ.',
+  step7_pay_hotel_continue:'Continuar a mi espacio',
+  pay_split_detail:'Pago en {v} plazos: {amount} × {v} cuotas',
+  err_card_number_incomplete:'Número incompleto',
+  err_card_expiry_invalid:'Fecha de caducidad no válida',err_card_cvv_invalid:'CVV no válido',
+  pay_accepted:'Pago aceptado · {txn}',
+  pay_points_credited:'{pts} puntos acreditados en su cuenta de fidelidad',
+  toast_payment_confirmed:'Pago confirmado ✓',err_generic:'Error: {msg}',
+  pay_hotel_booking_label:'Reserva {code}',
+  pay_hotel_present_code:'Presente este código en recepción (modo simulación)',
+  toast_checkin_confirmed_pay_hotel:'Check-in confirmado · Pago pendiente en recepción ✓',
+  err_sync_status:'Error de sincronización ({status})',
+  err_sync_message:'Error de sincronización: {msg}',
+  reward_balance_label:'Saldo total disponible',
+  reward_balance_detail:'{existing} existentes + {earned} ganados esta estancia − {spent} gastados',
+  reward_program_disabled:'El programa de recompensas no está activado para esta estancia.',
+  reward_discount_sub:'En la factura final',reward_financier_sub:'Crédito para su próxima reserva',
+  reward_financier_offered:'de crédito',reward_product_sub:'Cortesía por su compromiso',
+  reward_activate_eco:'Active preferencias ecológicas para desbloquear beneficios.',
+  reward_no_immediate:'Sin beneficio inmediato — utilice sus puntos a continuación.',
+  reward_pts_available:'pts disponibles',reward_pts_missing:'pts faltan',
+  reward_credited_end_of_stay:'Acreditados al final de la estancia',
+  toast_item_added_rewards:'Artículo añadido a sus beneficios ✓',
+  summary_freq_none:'Ninguna',summary_freq_weekly_full:'1×/semana',
+  summary_label_booking:'Reserva',summary_label_client:'Cliente',summary_label_duration:'Duración',
+  summary_label_identity:'Identidad',summary_label_menage:'Limpieza',summary_label_towels:'Toallas',
+  summary_label_water:'Agua ahorrada',summary_label_co2:'CO₂ evitado',summary_label_rewards:'Recompensas',
+  reward_count_suffix:'recompensa(s)',summary_taxe_recap_label:'Resumen de la tasa turística',
+  summary_std_rate:'Tarifa estándar',summary_with_eco_discount:'Con descuento ecológico',
+  summary_you_save_eco:'Ahorra {amount} gracias a sus elecciones ecológicas',
+  summary_pay_line_taxe_std:'Tasa turística (tarifa estándar)',
+  summary_pay_line_eco_deduct:'Ecodeducción por limpieza',summary_pay_total:'Total a pagar',
+  esp_login_title:'Mi espacio de cliente',
+  esp_login_info:'Inicie sesión con el email y el código de reserva utilizados durante su check-in.',
+  esp_login_hdr:'Identificación',esp_login_code_label:'Código de reserva',
+  esp_login_btn:'Acceder a mi espacio',esp_demo_access:'Acceso rápido de demostración — estancia en curso:',
+  esp_other_bookings:'Otras reservas disponibles:',
+  esp_login_err_default:'Email o código de reserva incorrecto.',
+  err_server_connection_generic:'Error de conexión con el servidor.',toast_welcome:'Bienvenido/a',
+  esp_title:'Mi espacio',esp_title_with_name:'Mi espacio · {name}',
+  esp_tab_key:'Llave digital',esp_tab_loyalty:'Puntos',esp_tab_menage:'Limpieza',
+  esp_tab_histo:'Historial',esp_tab_livret:'Guía',esp_tab_boutique:'Tienda',
+  esp_tab_rs:'Servicio de habitaciones',
+  esp_key_title:'Su llave digital',esp_key_present:'Presente este código en el lector Sesame',
+  esp_key_simulate_open:'Simular apertura',esp_key_unlocked:'Acceso desbloqueado ✓',
+  esp_key_info:'Acerque su teléfono al lector o muestre este código QR en cada acceso.',
+  esp_access_dedicated:'Acceso dedicado',esp_access_simulation:'Modo simulación',
+  esp_valid_until:'Válido hasta el {date} a las 11:00',
+  esp_valid_whole_stay:'Válido durante toda su estancia',
+  esp_key_unlocked_sim:'{label} desbloqueado (modo simulación) ✓',esp_open_btn:'Abrir',
+  esp_backup_code_label:'Código de acceso de respaldo (simulación)',
+  toast_access_unlocked_sim:'🔓 Acceso desbloqueado (simulación)',
+  esp_no_active_booking:'Ninguna reserva activa.',
+  esp_menage_not_in_progress:'Las preferencias de limpieza solo pueden modificarse durante una estancia en curso (del {from} al {to}).',
+  esp_menage_in_progress:'Estancia en curso — Habitación <strong>{room}</strong>. Puede modificar sus preferencias.',
+  esp_prefs_saved:'Preferencias guardadas ✓',
+  toast_menage_prefs_saved:'Preferencias de limpieza guardadas ✓',
+  esp_no_stays_found:'No se encontraron estancias.',esp_status_ongoing:'En curso',
+  esp_status_upcoming:'Próxima',esp_status_finished:'Finalizada',
+  esp_livret_subtitle:'Guía de bienvenida digital',
+  esp_livret_no_sections:'Todavía no se ha publicado ninguna sección.',
+  esp_no_orders:'No hay pedidos para esta estancia.',
+  order_status_received:'Recibido',order_status_preparing_short:'En preparación',
+  order_status_preparing_full:'En preparación',order_status_delivering_short:'En reparto',
+  order_status_delivering_full:'En camino',order_status_delivered_check:'Entregado ✓',
+  order_status_delivered:'Entregado',order_status_cancelled:'Cancelado',
+  perk_std_1:'Acceso al programa de fidelidad',perk_std_2:'Ofertas de cumpleaños',
+  perk_gold_1:'Late check-out hasta las 14:00',perk_gold_2:'Upgrade según disponibilidad',
+  perk_gold_3:'Bebida de bienvenida de cortesía',perk_prem_1:'Desayuno de cortesía cada mañana',
+  perk_prem_2:'Upgrade prioritario',perk_prem_3:'Late check-out hasta las 16:00',
+  perk_prem_4:'Acceso al salón Premium',esp_loyalty_status_label:'Estatus',
+  esp_loyalty_top_tier:'Ha alcanzado nuestro estatus más alto. ¡Gracias por su fidelidad!',
+  esp_loyalty_remaining_tpl:'{remaining} {ptsName} antes del estatus {next}',
+  esp_loyalty_no_perks:'No hay ventajas configuradas para este estatus.',
+  esp_loyalty_no_history:'Todavía no hay historial.',
+  esp_rs_disabled:'El servicio de habitaciones no está disponible en este establecimiento.',
+  esp_rs_order_from:'Pida desde su habitación',esp_rs_delivered:'se lo entregamos directamente en su puerta.',
+  esp_rs_view_cart:'Ver mi carrito',esp_rs_articles:'artículo(s)',
+  esp_rs_note_label:'Nota para el servicio (opcional)',
+  esp_rs_note_placeholder:'Ej.: sin hielo, alergia a los frutos secos…',
+  esp_rs_place_order:'Realizar el pedido',esp_rs_continue_shopping:'Seguir comprando',
+  esp_loyalty_progress:'Progreso',esp_loyalty_perks:'Mis ventajas',
+  esp_loyalty_history:'Historial de puntos',esp_menage_hdr:'Preferencias de limpieza',
+  esp_menage_freq_label:'Frecuencia de limpieza deseada',
+  esp_menage_freq_0:'Sin limpieza durante mi estancia',esp_menage_freq_1:'Todos los días',
+  esp_menage_freq_2:'Cada 2 días',esp_menage_freq_3:'Cada 3 días',
+  esp_menage_freq_7:'Una sola vez (fin de estancia)',esp_menage_towels_label:'Toallas',
+  esp_menage_serv_0:'Sin reposición',esp_menage_serv_1:'Reposición si están en el suelo (señal habitual)',
+  esp_menage_serv_2:'Reposición diaria',esp_menage_note_label:'Nota para el equipo',
+  esp_menage_note_placeholder:'Ej.: No molestar antes de las 10h',esp_menage_save:'Guardar mis preferencias',
+  esp_menage_eco_note:'Cada limpieza omitida ahorra de media <strong>15 L de agua</strong> y genera puntos de fidelidad.',
+  esp_histo_hdr:'Mis estancias',esp_livret_empty:'La guía del hotel estará disponible aquí en cuanto el equipo la publique.',
+  esp_boutique_access:'Acceder a la tienda',
+  esp_boutique_desc:'Pida bebidas, comidas, bienestar y servicios directamente en su habitación.<br>Entrega incluida durante su estancia.',
+  esp_boutique_orders_hdr:'Mis pedidos en curso',
+  nav_sejour:'Estancia',nav_mon_espace:'Mi espacio',
+  card_mmyy:'MM/AA',card_name_placeholder:'NOMBRE DEL TITULAR',esp_login_email_placeholder:'tu@email.com'
+};
+
 function getFallbackI18n(lang){
   var d={
     fr:{water_saved:'eau économisée',co2_saved:'CO₂ évité',bottles_eq:'bouteilles de 1,5 L',
@@ -1154,6 +1876,9 @@ function getFallbackI18n(lang){
     ja:{water_saved:'節水',co2_saved:'CO₂削減',redeem_btn:'交換',
       kyc_skip:'スキップ',night:'泊',nights_pl:'泊',eco_msg:'一つ一つの行動が大切です！'}
   };
+  Object.assign(d.fr, I18N_FR);
+  Object.assign(d.en, I18N_EN);
+  Object.assign(d.es, I18N_ES);
   return d[lang]||d.fr;
 }
 
@@ -1177,7 +1902,8 @@ var S={
   eau:0, co2:0, taxeTotal:0, deductChoice:'note',
   activeRewards:[], activeRoomTags:[],
   redeemedItems:[],
-  checkinDone:false, rsCart:{}
+  checkinDone:false, rsCart:{},
+  lang:'fr' // langue choisie par le client — voir initLang()/setLang()
 };
 
 // ═══════════════════ SCREEN / STEP NAV
@@ -1286,7 +2012,7 @@ var SESAME_CACHE = { bookings: [] };
 async function fetchBookings() {
   var q = (document.getElementById('searchQ').value || '').trim();
   var res = document.getElementById('bookingResults');
-  res.innerHTML = '<div class="loading"><div class="spin"></div>Recherche…</div>';
+  res.innerHTML = '<div class="loading"><div class="spin"></div>'+t('booking_searching')+'</div>';
   document.getElementById('step1next').style.display = 'none';
   try {
     var r = await apiFetch(API_BASE+'/wa/booking/list'+(q?('?q='+encodeURIComponent(q)):''));
@@ -1295,17 +2021,17 @@ async function fetchBookings() {
     SESAME_CACHE.bookings = list;
     renderBookingResults(list);
   } catch(e) {
-    res.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-circle"></i><span>Erreur de connexion au serveur : '+esc(e.message)+'</span></div>';
+    res.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-circle"></i><span>'+tf('err_server_connection',{msg:esc(e.message)})+'</span></div>';
   }
 }
 
 function renderBookingResults(list) {
   var res = document.getElementById('bookingResults');
   if (!list.length) {
-    res.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-circle"></i><span>Aucune réservation trouvée.</span></div>';
+    res.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-circle"></i><span>'+t('booking_none_found')+'</span></div>';
     return;
   }
-  var h = '<div style="font-size:12px;color:var(--mu);margin-bottom:8px">'+list.length+' séjour(s) trouvé(s)</div>';
+  var h = '<div style="font-size:12px;color:var(--mu);margin-bottom:8px">'+list.length+' '+t('booking_count_found')+'</div>';
   list.forEach(function(b) {
     var isSel = S.booking && S.booking.id === b.id;
     var name = [b.personFirstname, b.personLastname].filter(Boolean).join(' ') || b.personEmail || b.code;
@@ -1331,7 +2057,7 @@ function selectBooking(id) {
     el.classList.toggle('on', el.querySelector('.bi-code')?.textContent === S.booking.code);
   });
   document.getElementById('step1next').style.display = 'block';
-  toast('Réservation sélectionnée · '+S.booking.personFirstname+' '+S.booking.personLastname);
+  toast(t('toast_booking_selected')+' · '+S.booking.personFirstname+' '+S.booking.personLastname);
   fetchLoyalty(S.booking.personEmail); // préchargement en tâche de fond pour l'étape 7
   fetchOrders(S.booking.code);
 }
@@ -1347,7 +2073,7 @@ function renderRoomStep(){
   var rooms=CFG.rooms.filter(function(r){return r.available!==false;});
   // Build tag filters
   var allTags=[];rooms.forEach(function(r){(r.tags||[]).forEach(function(t){if(!allTags.includes(t))allTags.push(t);});});
-  var fh='<div class="rf'+(S.activeRoomTags.length===0?' on':'')+'" onclick="setRoomTag(null)">Toutes</div>';
+  var fh='<div class="rf'+(S.activeRoomTags.length===0?' on':'')+'" onclick="setRoomTag(null)">'+t('room_filter_all')+'</div>';
   allTags.forEach(function(t){fh+='<div class="rf'+(S.activeRoomTags.includes(t)?' on':'')+'" onclick="setRoomTag(\''+t+'\')">'+(t.length<15?t:t.slice(0,13)+'…')+'</div>';});
   document.getElementById('roomFilters').innerHTML=fh;
   renderFilteredRooms();
@@ -1364,12 +2090,12 @@ function renderFilteredRooms(){
     if(!S.activeRoomTags.length)return true;
     return S.activeRoomTags.every(function(t){return (r.tags||[]).includes(t);});
   });
-  var flLbls=['RDC','1er','2ème','3ème','4ème'];
+  var flLbls=[t('room_floor_0'),t('room_floor_1'),t('room_floor_2'),t('room_floor_3'),t('room_floor_4')];
   var h='';
   if(!CFG.rooms.length){
-    h='<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Aucune chambre configurée — votre chambre de réservation sera utilisée.</span></div>';
+    h='<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>'+t('room_none_configured')+'</span></div>';
   } else if(!rooms.length){
-    h='<div class="alt alt-w"><i class="ti ti-alert-circle"></i><span>Aucune chambre ne correspond à ces critères.</span></div>';
+    h='<div class="alt alt-w"><i class="ti ti-alert-circle"></i><span>'+t('room_none_match')+'</span></div>';
   } else {
     rooms.forEach(function(r){
       var isSel=S.selectedRoom&&S.selectedRoom.code===r.code;
@@ -1379,7 +2105,7 @@ function renderFilteredRooms(){
       h+='<div class="rc-gallery'+(photos.length===0?' no-photo':'')+'" id="rcg_'+r.code+'">';
       if(photos.length===0){
         h+='<i class="ti ti-bed" style="font-size:32px;color:var(--mu);opacity:.4"></i>';
-        h+='<div style="font-size:12px;color:var(--mu);opacity:.6">Pas de photo disponible</div>';
+        h+='<div style="font-size:12px;color:var(--mu);opacity:.6">'+t('room_no_photo')+'</div>';
       } else {
         h+='<div class="rc-gallery-imgs" id="rcgi_'+r.code+'" style="transform:translateX(0)">';
         photos.forEach(function(p){h+='<img class="rc-gallery-img" src="'+p+'" loading="lazy">';});
@@ -1392,7 +2118,7 @@ function renderFilteredRooms(){
           h+='</div>';
         }
       }
-      h+='<div class="rc-selected-badge"><i class="ti ti-check" style="font-size:11px"></i> Sélectionnée</div>';
+      h+='<div class="rc-selected-badge"><i class="ti ti-check" style="font-size:11px"></i> '+t('badge_selected')+'</div>';
       h+='</div>';
       // BODY
       h+='<div class="rc-body">';
@@ -1438,12 +2164,12 @@ function selectRoom(code){
   var btn = document.getElementById('btnStep2Next');
   if(btn){
     btn.disabled = false;
-    btn.innerHTML = 'Continuer <i class="ti ti-arrow-right"></i>';
+    btn.innerHTML = t('btn_continue')+' <i class="ti ti-arrow-right"></i>';
     btn.style.boxShadow = '0 0 0 4px rgba(26,107,71,.25)';
     setTimeout(function(){ if(btn) btn.style.boxShadow=''; }, 800);
     setTimeout(function(){ if(btn) btn.scrollIntoView({behavior:'smooth', block:'nearest'}); }, 100);
   }
-  toast('Chambre '+code+' sélectionnée ✓');
+  toast(t('word_room')+' '+code+' '+t('toast_room_selected_suffix'));
 }
 function renderRoomMap(){
   var canvas=document.getElementById('roomCanvas');if(!canvas||!CFG.hotelPlan)return;
@@ -1477,11 +2203,11 @@ function addOcc(){S.occupants.push({age:'adulte'});renderOcc();}
 function removeOcc(i){S.occupants.splice(i,1);renderOcc();}
 function renderOcc(){
   var c=document.getElementById('occList');if(!c)return;
-  if(!S.occupants.length){c.innerHTML='<p style="font-size:13px;color:var(--mu)">Aucun occupant.</p>';document.getElementById('taxeCard').style.display='none';return;}
+  if(!S.occupants.length){c.innerHTML='<p style="font-size:13px;color:var(--mu)">'+t('occ_none')+'</p>';document.getElementById('taxeCard').style.display='none';return;}
   c.innerHTML=S.occupants.map(function(o,i){
-    return '<div class="occ-row"><span style="font-size:13px;font-weight:500">Occ.'+(i+1)+'</span>'
+    return '<div class="occ-row"><span style="font-size:13px;font-weight:500">'+t('occ_label_prefix')+(i+1)+'</span>'
       +'<select onchange="S.occupants['+i+'].age=this.value;renderOcc()" style="font-size:13px">'
-      +[{v:'adulte',l:'Adulte (18+)'},{v:'ado',l:'Ado (13-17)'},{v:'enfant',l:'Enfant (<13)'},{v:'bebe',l:'Bébé (<2)'}].map(function(x){return '<option value="'+x.v+'"'+(o.age===x.v?' selected':'')+'>'+x.l+'</option>';}).join('')
+      +[{v:'adulte',l:t('occ_age_adulte')},{v:'ado',l:t('occ_age_ado')},{v:'enfant',l:t('occ_age_enfant')},{v:'bebe',l:t('occ_age_bebe')}].map(function(x){return '<option value="'+x.v+'"'+(o.age===x.v?' selected':'')+'>'+x.l+'</option>';}).join('')
       +'</select><button class="btn btn-sm" onclick="removeOcc('+i+')" style="width:36px;height:36px;padding:0;justify-content:center;color:var(--mu)"><i class="ti ti-x"></i></button></div>';
   }).join('');
   calcTaxe();
@@ -1490,26 +2216,29 @@ function calcTaxe(){
   if(!S.occupants.length){document.getElementById('taxeCard').style.display='none';return;}
   var tarif=CFG.tarifs[CFG.stars-1]||1.65,n=S.nuits,total=0,h='';
   var groups={};S.occupants.forEach(function(o){groups[o.age]=(groups[o.age]||0)+1;});
-  var labels={adulte:'Adulte',ado:'Ado (13-17)',enfant:'Enfant',bebe:'Bébé'};
+  var labels={adulte:t('taxe_label_adulte'),ado:t('taxe_label_ado'),enfant:t('taxe_label_enfant'),bebe:t('taxe_label_bebe')};
   Object.keys(groups).forEach(function(k){
     var cnt=groups[k],isExo=CFG.exoEnf&&(k==='enfant'||k==='bebe'),isHalf=CFG.reducAdos&&k==='ado';
-    var t=isExo?0:tarif*(isHalf?0.5:1),m=t*n*cnt;total+=m;
+    var rate=isExo?0:tarif*(isHalf?0.5:1),m=rate*n*cnt;total+=m;
     h+='<div class="pay-line"><span style="color:var(--mu)">'+labels[k]+' × '+cnt+' × '+n+'n'+(isHalf?' (50%)':'')+'</span>';
-    h+=isExo?'<span class="bdg bdg-g">Exonéré</span>':'<span>'+m.toFixed(2)+' €</span>';
+    h+=isExo?'<span class="bdg bdg-g">'+t('taxe_exempt')+'</span>':'<span>'+m.toFixed(2)+' €</span>';
     h+='</div>';
   });
   document.getElementById('taxeLines').innerHTML=h;
   document.getElementById('taxeCard').style.display='block';
   // Hero meter
   document.getElementById('taxeMeterAmt').textContent=total.toFixed(2)+' €';
-  document.getElementById('taxeMeterSub').textContent='Pour '+n+' nuit'+(n>1?'s':'')+', '+S.occupants.length+' occupant'+(S.occupants.length>1?'s':'');
+  document.getElementById('taxeMeterSub').textContent=tf('taxe_meter_sub_tpl',{
+    n:n, nights:(n>1?t('nights_pl'):t('night')),
+    occ:S.occupants.length, guests:(S.occupants.length>1?t('occupant_pl'):t('occupant_sg'))
+  });
   S.taxeTotal=total;
   updateSavingMeter();
 }
 
 // ═══════════════════ ECO STEP
 function getFreqs(){
-  var map=[{v:0,l:'Jamais'},{v:2,l:'Tous les 2 j.'},{v:3,l:'Tous les 3 j.'},{v:7,l:'1×/sem.'},{v:1,l:'Quotidien'}];
+  var map=[{v:0,l:t('freq_never')},{v:2,l:t('freq_every2')},{v:3,l:t('freq_every3')},{v:7,l:t('freq_weekly')},{v:1,l:t('freq_daily')}];
   return map.filter(function(f){return CFG.freqOpts.includes(f.v);});
 }
 function renderEcoStep(){
@@ -1529,7 +2258,7 @@ function setEcoOption(type, v){
   renderEcoStep();
 }
 function renderPills(id, current, type){
-  var freqs=getFreqs();if(!freqs.length)freqs=[{v:1,l:'Quotidien'}];
+  var freqs=getFreqs();if(!freqs.length)freqs=[{v:1,l:t('freq_daily')}];
   document.getElementById(id).innerHTML=freqs.map(function(f){
     var eco=f.v!==1;
     return '<div class="pill'+(current===f.v?' on':'')+'" onclick="setEcoOption(\''+type+'\','+f.v+')">'
@@ -1635,7 +2364,7 @@ function updateEco(){
   var hero=document.getElementById('ecoImpactHero');
   if(!hero) return;
   if(S.eau<=0){
-    hero.innerHTML='<div class="alt alt-b"><i class="ti ti-leaf"></i><span>Choisissez une fréquence éco pour voir l\'impact de vos choix.</span></div>';
+    hero.innerHTML='<div class="alt alt-b"><i class="ti ti-leaf"></i><span>'+t('eco_choose_freq')+'</span></div>';
     return;
   }
   // Equivalent en bouteilles (1.5L) et km voiture
@@ -1645,7 +2374,7 @@ function updateEco(){
 
   hero.innerHTML='<div style="background:linear-gradient(135deg,#0D3320,#1A5C36);border-radius:var(--r);padding:20px;color:#fff;position:relative;overflow:hidden">'
     +'<div style="position:absolute;right:-20px;top:-20px;width:110px;height:110px;border-radius:50%;background:rgba(255,255,255,.04)"></div>'
-    +'<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.09em;opacity:.65;margin-bottom:14px">Votre impact positif ce séjour</div>'
+    +'<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.09em;opacity:.65;margin-bottom:14px">'+t('eco_impact_title')+'</div>'
     // Water row
     +'<div style="display:flex;align-items:center;gap:14px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,.12);flex-wrap:wrap">'
     +'<div style="width:48px;height:48px;border-radius:12px;background:rgba(58,155,213,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0">'
@@ -1662,11 +2391,11 @@ function updateEco(){
     +'<i class="ti ti-cloud" style="font-size:24px;color:#6EE7B7"></i></div>'
     +'<div style="flex:1;min-width:120px">'
     +'<div style="font-family:var(--font-title,\'Fraunces\',serif);font-size:38px;font-weight:300;line-height:1;color:#6EE7B7">'+S.co2.toFixed(2)+'<span style="font-size:18px;opacity:.8"> kg</span></div>'
-    +'<div style="font-size:12px;opacity:.7;margin-top:2px">'+t('co2_saved')+' · = '+(kmVoiture>0?kmVoiture+' km en voiture':'moins d\'1 km')+'</div>'
+    +'<div style="font-size:12px;opacity:.7;margin-top:2px">'+t('co2_saved')+' · = '+(kmVoiture>0?kmVoiture+' '+t('eco_km_car'):t('eco_less_than_1km'))+'</div>'
     +'</div>'
     +'<div style="flex-shrink:0;display:flex;align-items:center;min-height:42px">'+multiUnitFigureSvg(S.co2, 1, '#6EE7B7', 'co2Cloud')+'</div>'
     +'</div>'
-    +(ptsGained>0?'<div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.12);display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#FFD700"><i class="ti ti-star-filled" style="font-size:16px"></i>+'+ptsGained+' '+(CFG.gains&&CFG.gains.points&&CFG.gains.points.name||'Green Points')+' gagnés</div>':'')
+    +(ptsGained>0?'<div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.12);display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#FFD700"><i class="ti ti-star-filled" style="font-size:16px"></i>+'+ptsGained+' '+(CFG.gains&&CFG.gains.points&&CFG.gains.points.name||'Green Points')+' '+t('pts_gained_suffix')+'</div>':'')
     +'</div>';
 }
 function calcDeduction(){
@@ -1684,7 +2413,7 @@ function updateSavingMeter(){
   document.getElementById('smFrom').textContent=S.taxeTotal.toFixed(2)+' €';
   document.getElementById('smTo').textContent=taxeNet.toFixed(2)+' €';
   var chip=document.getElementById('smChip');
-  if(fd>0){chip.style.display='inline-flex';document.getElementById('smSaving').textContent='Vous économisez '+fd.toFixed(2)+' €';}
+  if(fd>0){chip.style.display='inline-flex';document.getElementById('smSaving').textContent=t('you_save_prefix')+' '+fd.toFixed(2)+' €';}
   else chip.style.display='none';
 }
 function renderGainBanner(type){
@@ -1704,13 +2433,13 @@ function renderGainBanner(type){
   // Financial (menage only)
   if(type==='menage'&&g.financier.active){
     var eur=(saved*g.financier.euroPerMenage).toFixed(2);
-    parts.push({ico:'ti-coin',col:'#1A4880',bg:'#EBF2FA',txt:eur+' € sur votre taxe'});
+    parts.push({ico:'ti-coin',col:'#1A4880',bg:'#EBF2FA',txt:eur+' € '+t('gain_on_taxe_suffix')});
   }
   // Reduction
-  if(g.reduction.active)parts.push({ico:'ti-discount',col:'var(--primary)',bg:'var(--pl)',txt:g.reduction.pct+'% de réduction'});
+  if(g.reduction.active)parts.push({ico:'ti-discount',col:'var(--primary)',bg:'var(--pl)',txt:g.reduction.pct+'% '+t('discount_suffix')});
   if(!parts.length){el.style.display='none';return;}
   el.innerHTML='<div class="gain-banner"><div class="gain-banner-icon"><i class="ti ti-gift"></i></div>'
-    +'<div class="gain-banner-text"><div class="gain-banner-title">'+saved+' service'+(saved>1?'s':'')+' économisé'+(saved>1?'s':'')+'</div>'
+    +'<div class="gain-banner-text"><div class="gain-banner-title">'+saved+' '+t('gain_services_saved')+'</div>'
     +'<div class="gain-banner-sub" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px">'
     +parts.map(function(p){return '<span style="display:inline-flex;align-items:center;gap:3px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:12px;background:'+p.bg+';color:'+p.col+'"><i class="ti '+p.ico+'" style="font-size:11px"></i>'+p.txt+'</span>';}).join('')
     +'</div></div></div>';
@@ -1725,12 +2454,12 @@ function renderDeductBlock(){
   var euro=(saved*g.financier.euroPerMenage).toFixed(2);
   bl.querySelector('#deductChoices').innerHTML=
     '<div class="dc'+(S.deductChoice==='note'?' on':'')+'" onclick="S.deductChoice=\'note\';renderDeductBlock();updateSavingMeter()">'
-    +'<div class="dc-rd"></div><div><div class="dc-title">Déduire '+euro+' € de ma taxe de séjour</div>'
-    +'<div class="dc-sub">Le montant est directement déduit de votre note</div>'
+    +'<div class="dc-rd"></div><div><div class="dc-title">'+tf('deduct_option_deduct_title',{amount:euro+' €'})+'</div>'
+    +'<div class="dc-sub">'+t('deduct_option_deduct_sub')+'</div>'
     +'<div class="dc-amount">−'+euro+' €</div></div></div>'
     +'<div class="dc'+(S.deductChoice==='reward'?' on':'')+'" onclick="S.deductChoice=\'reward\';renderDeductBlock();updateSavingMeter()">'
-    +'<div class="dc-rd"></div><div><div class="dc-title">Convertir en récompense fidélité</div>'
-    +'<div class="dc-sub">Ajouté à votre programme points</div></div></div>';
+    +'<div class="dc-rd"></div><div><div class="dc-title">'+t('deduct_option_reward_title')+'</div>'
+    +'<div class="dc-sub">'+t('deduct_option_reward_sub')+'</div></div></div>';
 }
 
 // ═══════════════════ REWARD STEP — Points + Catalogue
@@ -1807,7 +2536,7 @@ function renderRewardStep(){
   var hero=document.getElementById('rewardPointsHero');
   if(ptsEarned>0){
     hero.innerHTML='<div class="taxe-meter" style="text-align:center;padding:16px 20px">'
-      +'<div class="taxe-meter-label">Points gagnés ce séjour</div>'
+      +'<div class="taxe-meter-label">'+t('pts_earned')+'</div>'
       +'<div style="font-family:var(--font-title,\'Fraunces\',serif);font-size:48px;font-weight:300;line-height:1">'+ptsEarned+'</div>'
       +'<div style="font-size:12px;opacity:.75;margin-top:4px">'+CFG.gains.points.name+'</div>'
       +'</div>';
@@ -1817,9 +2546,9 @@ function renderRewardStep(){
   var balCard=document.getElementById('rewardBalanceCard');
   balCard.innerHTML='<div style="background:var(--card);border:1px solid var(--bdr);border-radius:var(--r);padding:12px 16px;display:flex;align-items:center;gap:14px">'
     +'<div style="flex:1">'
-    +'<div style="font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;font-weight:600">Solde total disponible</div>'
+    +'<div style="font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;font-weight:600">'+t('reward_balance_label')+'</div>'
     +'<div style="font-family:var(--font-title,\'Fraunces\',serif);font-size:26px;font-weight:300;color:var(--primary)">'+ptsLeft+' <span style="font-size:14px">pts</span></div>'
-    +'<div style="font-size:11px;color:var(--mu)">'+balance.total+' existants + '+ptsEarned+' gagnés ce séjour − '+ptsSpent+' dépensés</div>'
+    +'<div style="font-size:11px;color:var(--mu)">'+tf('reward_balance_detail',{existing:balance.total,earned:ptsEarned,spent:ptsSpent})+'</div>'
     +'</div>'
     +'<i class="ti ti-star-filled" style="font-size:32px;color:var(--primary);opacity:.3"></i>'
     +'</div>';
@@ -1827,15 +2556,15 @@ function renderRewardStep(){
   // ── Gains immédiats (non-points) ──
   var rewards=[];
   if(g.reduction.active&&(menS>0||srvS>0))
-    rewards.push({key:'reduction',ico:'ti-discount',bg:'#FDEDF0',tc:'#8B1A2E',nm:g.reduction.pct+'% de réduction',sb:'Sur la note finale'});
+    rewards.push({key:'reduction',ico:'ti-discount',bg:'#FDEDF0',tc:'#8B1A2E',nm:g.reduction.pct+'% '+t('discount_suffix'),sb:t('reward_discount_sub')});
   if(g.financier.active&&menS>0&&S.deductChoice==='reward')
-    rewards.push({key:'financier',ico:'ti-coin',bg:'#EBF2FA',tc:'#1A4880',nm:(menS*g.financier.euroPerMenage).toFixed(2)+' € offerts',sb:'Crédit prochaine réservation'});
+    rewards.push({key:'financier',ico:'ti-coin',bg:'#EBF2FA',tc:'#1A4880',nm:(menS*g.financier.euroPerMenage).toFixed(2)+' € '+t('reward_financier_offered'),sb:t('reward_financier_sub')});
   if(g.produit.active&&(menS>0||srvS>0))
-    g.produit.list.forEach(function(p,i){rewards.push({key:'prod'+i,ico:'ti-gift',bg:'#FEF0DC',tc:'#A85A0A',nm:p,sb:'Offert pour votre engagement'});});
+    g.produit.list.forEach(function(p,i){rewards.push({key:'prod'+i,ico:'ti-gift',bg:'#FEF0DC',tc:'#A85A0A',nm:p,sb:t('reward_product_sub')});});
 
   if(!rewardsEnabled){
-    document.getElementById('rewardDirectCard').innerHTML='<div class="ch"><i class="ti ti-gift"></i>Gains immédiats ce séjour</div>'
-      +'<div class="alt alt-w"><i class="ti ti-lock"></i><span>Le programme de récompenses n\'est pas activé pour ce séjour.</span></div>';
+    document.getElementById('rewardDirectCard').innerHTML='<div class="ch"><i class="ti ti-gift"></i>'+t('step7_direct_hdr')+'</div>'
+      +'<div class="alt alt-w"><i class="ti ti-lock"></i><span>'+t('reward_program_disabled')+'</span></div>';
     document.getElementById('rewardCatalogCard').style.display='none';
     document.getElementById('rewardSumCard').style.display='none';
     document.getElementById('rewardPointsHero').innerHTML='';
@@ -1843,7 +2572,7 @@ function renderRewardStep(){
     return;
   }
   if(!ecoEnabled || (menS===0&&srvS===0)){
-    document.getElementById('rewardTiles').innerHTML='<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Activez des préférences éco pour débloquer des gains.</span></div>';
+    document.getElementById('rewardTiles').innerHTML='<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>'+t('reward_activate_eco')+'</span></div>';
     document.getElementById('rewardCatalogCard').style.display= ptsLeft>0 ? 'block' : 'none';
   } else {
     document.getElementById('rewardTiles').innerHTML = rewards.length
@@ -1851,11 +2580,11 @@ function renderRewardStep(){
           var on=S.activeRewards.includes(r.key);
           return '<div class="rt'+(on?' on':'')+'" onclick="toggleReward(\''+r.key+'\')"><div class="rt-ck"><i class="ti ti-check"></i></div><div class="rt-ico" style="background:'+r.bg+';color:'+r.tc+'"><i class="ti '+r.ico+'"></i></div><div class="rt-nm">'+r.nm+'</div><div class="rt-sb">'+r.sb+'</div></div>';
         }).join('')+'</div>'
-      : '<div style="font-size:13px;color:var(--mu)">Pas de gain immédiat — utilisez vos points ci-dessous.</div>';
+      : '<div style="font-size:13px;color:var(--mu)">'+t('reward_no_immediate')+'</div>';
 
     // ── Catalogue ──
     document.getElementById('rewardCatalogCard').style.display='block';
-    document.getElementById('rewardPtsAvail').textContent=ptsLeft+' pts disponibles';
+    document.getElementById('rewardPtsAvail').textContent=ptsLeft+' '+t('reward_pts_available');
     document.getElementById('rewardCatalog').innerHTML=getRewardCatalog().map(function(item){
       var bg=hexBgClient(item.color);
       var canAfford=ptsLeft>=item.pts;
@@ -1869,10 +2598,10 @@ function renderRewardStep(){
         +'<div style="text-align:right;flex-shrink:0">'
         +'<div style="font-size:13px;font-weight:700;color:'+item.color+'">'+item.pts+' pts</div>'
         +(isRedeemed
-          ?'<button class="btn btn-sm" onclick="unredeemItem(\''+item.id+'\')" style="background:#FDEAEA;color:#B83030;border-color:#B83030;margin-top:4px;padding:4px 10px;font-size:11px"><i class="ti ti-x"></i> Annuler</button>'
+          ?'<button class="btn btn-sm" onclick="unredeemItem(\''+item.id+'\')" style="background:#FDEAEA;color:#B83030;border-color:#B83030;margin-top:4px;padding:4px 10px;font-size:11px"><i class="ti ti-x"></i> '+t('btn_cancel')+'</button>'
           :canAfford
-            ?'<button class="btn btn-sm btn-p" onclick="redeemItem(\''+item.id+'\')" style="margin-top:4px;padding:4px 10px;font-size:11px"><i class="ti ti-shopping-bag"></i> Échanger</button>'
-            :'<div style="font-size:11px;color:var(--mu);margin-top:4px">'+Math.max(0,item.pts-ptsLeft)+' pts manquants</div>'
+            ?'<button class="btn btn-sm btn-p" onclick="redeemItem(\''+item.id+'\')" style="margin-top:4px;padding:4px 10px;font-size:11px"><i class="ti ti-shopping-bag"></i> '+t('redeem_btn')+'</button>'
+            :'<div style="font-size:11px;color:var(--mu);margin-top:4px">'+Math.max(0,item.pts-ptsLeft)+' '+t('reward_pts_missing')+'</div>'
         )
         +'</div></div>';
     }).join('');
@@ -1882,7 +2611,7 @@ function renderRewardStep(){
   var allSel=[];
   S.activeRewards.forEach(function(k){var r=rewards.find(function(x){return x.key===k;});if(r)allSel.push({label:r.nm,sub:r.sb,color:r.tc,bg:r.bg});});
   S.redeemedItems.forEach(function(id){var it=getRewardCatalog().find(function(c){return c.id===id;});if(it){var bg=hexBgClient(it.color);allSel.push({label:it.label,sub:it.pts+' pts',color:it.color,bg:bg});}});
-  if(ptsEarned>0) allSel.push({label:ptsEarned+' '+g.points.name,sub:'Crédités à la fin du séjour',color:'var(--primary)',bg:'var(--pl)'});
+  if(ptsEarned>0) allSel.push({label:ptsEarned+' '+g.points.name,sub:t('reward_credited_end_of_stay'),color:'var(--primary)',bg:'var(--pl)'});
   var sc=document.getElementById('rewardSumCard');
   sc.style.display=allSel.length?'block':'none';
   document.getElementById('rewardSumLines').innerHTML=allSel.map(function(r){
@@ -1897,7 +2626,7 @@ function toggleReward(k){
 }
 function redeemItem(id){
   if(!S.redeemedItems.includes(id))S.redeemedItems.push(id);
-  toast('Article ajouté à vos gains ✓');
+  toast(t('toast_item_added_rewards'));
   renderRewardStep();
 }
 function unredeemItem(id){
@@ -1990,7 +2719,7 @@ async function espDoLogin(){
     });
     if(!r.ok){
       var err = await r.json().catch(function(){return {};});
-      errEl.textContent = err.error || 'Email ou code de réservation incorrect.';
+      errEl.textContent = err.error || t('esp_login_err_default');
       errEl.style.display = 'block';
       return;
     }
@@ -2004,9 +2733,9 @@ async function espDoLogin(){
 
     await Promise.all([fetchLoyalty(data.booking.personEmail), fetchOrders(data.booking.code)]);
     renderEspace();
-    toast('Bienvenue ' + data.booking.personFirstname + ' !');
+    toast(t('toast_welcome') + ' ' + data.booking.personFirstname + ' !');
   }catch(e){
-    errEl.textContent = 'Erreur de connexion au serveur.';
+    errEl.textContent = t('err_server_connection_generic');
     errEl.style.display = 'block';
   }
 }
@@ -2031,7 +2760,7 @@ function renderEspace(){
   // Nom du client dans le header
   if(S.booking){
     document.querySelector('#espContent .slbl') && (document.querySelector('#espContent .slbl').textContent =
-      'Mon espace · ' + (S.booking.personFirstname||'Client'));
+      tf('esp_title_with_name',{name:S.booking.personFirstname||'Client'}));
   }
 
   espSetTab(ESP_ACTIVE_TAB);
@@ -2060,7 +2789,7 @@ function espSetTab(tab){
 // ── CLÉ DIGITALE / ACCÈS NUMÉRIQUES ──
 function espGetAccessPoints(){
   var pts = (CFG.accessPoints && CFG.accessPoints.length) ? CFG.accessPoints : [
-    {id:'room', label:'Chambre', ico:'ti-door', facilityCode:'', auto:true}
+    {id:'room', label:t('word_room'), ico:'ti-door', facilityCode:'', auto:true}
   ];
   return pts;
 }
@@ -2073,8 +2802,8 @@ function espRenderKey(){
 
   list.innerHTML = pts.map(function(ap, idx){
     var sub = ap.auto
-      ? 'Chambre '+roomLabel
-      : (ap.facilityCode ? 'Accès dédié' : 'Mode simulation');
+      ? t('word_room')+' '+roomLabel
+      : (ap.facilityCode ? t('esp_access_dedicated') : t('esp_access_simulation'));
     return '<div class="card" style="display:flex;align-items:center;gap:14px;padding:14px;cursor:pointer" onclick="espOpenAccess('+idx+')">'
       +'<div style="width:46px;height:46px;border-radius:12px;background:var(--pl);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0"><i class="ti '+(ap.ico||'ti-key')+'"></i></div>'
       +'<div style="flex:1;min-width:0">'
@@ -2098,8 +2827,8 @@ async function espOpenAccess(idx){
 
   var checkOut = S.booking && S.booking.endDate ? new Date(S.booking.endDate) : null;
   document.getElementById('espAccessModalValidity').textContent = checkOut
-    ? 'Valable jusqu\'au '+checkOut.toLocaleDateString('fr-FR')+' à 11h00'
-    : 'Valable pendant toute la durée de votre séjour';
+    ? tf('esp_valid_until',{date:checkOut.toLocaleDateString(localeForLang())})
+    : t('esp_valid_whole_stay');
 
   var actionEl = document.getElementById('espAccessModalAction');
   actionEl.innerHTML = '<div class="spin" style="margin:0 auto"></div>';
@@ -2112,8 +2841,8 @@ async function espOpenAccess(idx){
   actionEl.innerHTML = espKeySimulated(ap);
 }
 function espKeySimulated(ap){
-  return '<button class="btn btn-p" style="display:flex;justify-content:center;margin-bottom:10px" onclick="toast(\''+esc(ap?ap.label:'Accès')+' déverrouillé (mode simulation) ✓\')"><i class="ti ti-lock-open"></i> Ouvrir</button>'
-    + '<div style="font-size:11px;color:var(--mu);margin-bottom:4px">Code d\'accès secours (simulation)</div>'
+  return '<button class="btn btn-p" style="display:flex;justify-content:center;margin-bottom:10px" onclick="toast(\''+esc(tf('esp_key_unlocked_sim',{label:ap?ap.label:t('word_access')}))+'\')"><i class="ti ti-lock-open"></i> '+t('esp_open_btn')+'</button>'
+    + '<div style="font-size:11px;color:var(--mu);margin-bottom:4px">'+t('esp_backup_code_label')+'</div>'
     + '<div style="font-size:28px;font-weight:700;letter-spacing:4px;font-family:monospace">'+espSimPasscode(ap)+'</div>';
 }
 function espSimPasscode(ap){
@@ -2138,8 +2867,8 @@ function espRenderQr(){
   var validEl= document.getElementById('espQrValidity');
   if(codeEl) codeEl.textContent = code;
   if(validEl){
-    var endDate = b.endDate ? new Date(b.endDate).toLocaleDateString('fr-FR') : null;
-    validEl.textContent = endDate ? 'Valable jusqu\'au ' + endDate + ' à 11h00' : 'Valable pendant votre séjour';
+    var endDate = b.endDate ? new Date(b.endDate).toLocaleDateString(localeForLang()) : null;
+    validEl.textContent = endDate ? tf('esp_valid_until',{date:endDate}) : t('esp_valid_whole_stay');
   }
 
   // Générer un QR code SVG minimaliste (pattern pseudo-aléatoire déterministe basé sur le code)
@@ -2181,7 +2910,7 @@ function espSimulateOpen(){
   var res = document.getElementById('espQrOpenResult');
   res.style.display = 'flex';
   setTimeout(function(){ if(res) res.style.display = 'none'; }, 3000);
-  toast('🔓 Accès déverrouillé (simulation)');
+  toast(t('toast_access_unlocked_sim'));
 }
 
 // ── PRÉFÉRENCES MÉNAGE POST CHECK-IN ──
@@ -2190,7 +2919,7 @@ async function espRenderMenage(){
   var statusEl = document.getElementById('espMenageStatus');
   var formEl   = document.getElementById('espMenageForm');
 
-  if(!b){ statusEl.querySelector('span').textContent='Aucune réservation active.'; return; }
+  if(!b){ statusEl.querySelector('span').textContent=t('esp_no_active_booking'); return; }
 
   // Déterminer si séjour en cours
   var today = hotelToday();
@@ -2198,14 +2927,16 @@ async function espRenderMenage(){
 
   if(!inProgress){
     statusEl.className='alt alt-w';
-    statusEl.innerHTML='<i class="ti ti-calendar-off"></i><span>Les préférences de ménage ne peuvent être modifiées que pendant un séjour en cours (du '
-      +new Date(b.startDate).toLocaleDateString('fr-FR')+' au '+new Date(b.endDate).toLocaleDateString('fr-FR')+').</span>';
+    statusEl.innerHTML='<i class="ti ti-calendar-off"></i><span>'+tf('esp_menage_not_in_progress',{
+      from:new Date(b.startDate).toLocaleDateString(localeForLang()),
+      to:new Date(b.endDate).toLocaleDateString(localeForLang())
+    })+'</span>';
     formEl.style.display='none';
     return;
   }
 
   statusEl.className='alt alt-g';
-  statusEl.innerHTML='<i class="ti ti-check-circle"></i><span>Séjour en cours — Chambre <strong>'+(b.facilityName||b.facilityCode)+'</strong>. Vous pouvez modifier vos préférences.</span>';
+  statusEl.innerHTML='<i class="ti ti-check-circle"></i><span>'+tf('esp_menage_in_progress',{room:b.facilityName||b.facilityCode})+'</span>';
   formEl.style.display='block';
 
   // Charger les préférences sauvegardées depuis l'API
@@ -2232,9 +2963,9 @@ function espSaveMenage(){
 
   var resEl = document.getElementById('espMenageResult');
   resEl.className='alt alt-g'; resEl.style.display='flex';
-  resEl.innerHTML='<i class="ti ti-check"></i><span>Préférences enregistrées ✓</span>';
+  resEl.innerHTML='<i class="ti ti-check"></i><span>'+t('esp_prefs_saved')+'</span>';
   setTimeout(function(){ resEl.style.display='none'; }, 3000);
-  toast('Préférences ménage enregistrées ✓');
+  toast(t('toast_menage_prefs_saved'));
 }
 
 // ── HISTORIQUE RÉSERVATIONS — GET /wa/booking/list?email= ──
@@ -2253,7 +2984,7 @@ async function espRenderHisto(){
   }
 
   if(!mine.length){
-    list.innerHTML='<div style="padding:20px;text-align:center;color:var(--mu);font-size:13px">Aucun séjour trouvé.</div>';
+    list.innerHTML='<div style="padding:20px;text-align:center;color:var(--mu);font-size:13px">'+t('esp_no_stays_found')+'</div>';
     return;
   }
 
@@ -2265,9 +2996,9 @@ async function espRenderHisto(){
   list.innerHTML = mine.map(function(r, idx){
     var inProgress = r.startDate <= today && r.endDate > today;
     var isFuture   = r.startDate > today;
-    var st = inProgress ? {label:'En cours',color:'var(--go)',bg:'rgba(26,107,71,.1)',ico:'ti-home'}
-           : isFuture   ? {label:'À venir', color:'var(--bu)',bg:'rgba(58,155,213,.1)',ico:'ti-calendar'}
-           :               {label:'Terminé', color:'var(--mu)',bg:'rgba(0,0,0,.05)',   ico:'ti-check'};
+    var st = inProgress ? {label:t('esp_status_ongoing'),color:'var(--go)',bg:'rgba(26,107,71,.1)',ico:'ti-home'}
+           : isFuture   ? {label:t('esp_status_upcoming'), color:'var(--bu)',bg:'rgba(58,155,213,.1)',ico:'ti-calendar'}
+           :               {label:t('esp_status_finished'), color:'var(--mu)',bg:'rgba(0,0,0,.05)',   ico:'ti-check'};
     var nights = r.nights || Math.round((new Date(r.endDate)-new Date(r.startDate))/86400000);
     return '<div style="display:flex;align-items:flex-start;gap:12px;padding:14px 16px;'+(idx>0?'border-top:1px solid var(--bdr)':'')+'">'
       +'<div style="width:40px;height:40px;border-radius:10px;background:'+st.bg+';color:'+st.color+';display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">'
@@ -2275,8 +3006,8 @@ async function espRenderHisto(){
       +'<div style="flex:1;min-width:0">'
       +'<div style="font-size:13px;font-weight:700;margin-bottom:2px">'+esc(r.facilityName||r.facilityCode)+'</div>'
       +'<div style="font-size:12px;color:var(--mu)">'
-      +new Date(r.startDate).toLocaleDateString('fr-FR')+' → '+new Date(r.endDate).toLocaleDateString('fr-FR')
-      +' · '+nights+' nuit'+(nights>1?'s':'')+'</div>'
+      +new Date(r.startDate).toLocaleDateString(localeForLang())+' → '+new Date(r.endDate).toLocaleDateString(localeForLang())
+      +' · '+nights+' '+(nights>1?t('nights_pl'):t('night'))+'</div>'
       +'<div style="font-size:11px;margin-top:4px;font-family:monospace;color:var(--primary)">'+esc(r.code)+'</div>'
       +'</div>'
       +'<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;background:'+st.bg+';color:'+st.color+';white-space:nowrap">'+st.label+'</span>'
@@ -2298,7 +3029,7 @@ async function espRenderLivret(){
 
   if(!livret.length){
     wrap.innerHTML='<div class="alt alt-b"><i class="ti ti-book"></i>'
-      +'<span>Le livret de l\'hôtel sera disponible ici une fois publié par l\'équipe.</span></div>';
+      +'<span>'+t('esp_livret_empty')+'</span></div>';
     return;
   }
 
@@ -2306,7 +3037,7 @@ async function espRenderLivret(){
   var html='<div class="card" style="text-align:center;padding:20px;background:linear-gradient(135deg,var(--pl),var(--cardBg));margin-bottom:12px">'
     +'<div style="font-size:22px;font-weight:700;font-family:var(--fontTitle);color:var(--primary);margin-bottom:4px">'
     +(CFG.hotelName||'Hôtel Churchill')+'</div>'
-    +'<div style="font-size:12px;color:var(--mu)">Livret d\'accueil digital</div>'
+    +'<div style="font-size:12px;color:var(--mu)">'+t('esp_livret_subtitle')+'</div>'
     +'</div>';
 
   livret.forEach(function(section){
@@ -2318,7 +3049,7 @@ async function espRenderLivret(){
   });
 
   if(!html.match(/livret-content/)){
-    html='<div class="alt alt-b"><i class="ti ti-book"></i><span>Aucune rubrique publiée pour le moment.</span></div>';
+    html='<div class="alt alt-b"><i class="ti ti-book"></i><span>'+t('esp_livret_no_sections')+'</span></div>';
   }
   wrap.innerHTML=html;
 }
@@ -2337,17 +3068,17 @@ async function espRenderBoutiqueTab(){
     .sort(function(a,c){return new Date(c.createdAt)-new Date(a.createdAt);})
     .slice(0,5);
 
-  if(!mine.length){ el.innerHTML='<div style="font-size:12px;color:var(--mu);text-align:center;padding:8px">Aucune commande pour ce séjour.</div>'; return; }
+  if(!mine.length){ el.innerHTML='<div style="font-size:12px;color:var(--mu);text-align:center;padding:8px">'+t('esp_no_orders')+'</div>'; return; }
 
-  var ST={new:{l:'Reçue',c:'var(--bu)'},preparing:{l:'En prép.',c:'var(--am)'},
-    delivering:{l:'En livraison',c:'#9B59B6'},delivered:{l:'Livrée ✓',c:'var(--go)'},cancelled:{l:'Annulée',c:'var(--re)'}};
+  var ST={new:{l:t('order_status_received'),c:'var(--bu)'},preparing:{l:t('order_status_preparing_short'),c:'var(--am)'},
+    delivering:{l:t('order_status_delivering_short'),c:'#9B59B6'},delivered:{l:t('order_status_delivered_check'),c:'var(--go)'},cancelled:{l:t('order_status_cancelled'),c:'var(--re)'}};
 
   el.innerHTML=mine.map(function(o){
     var st=ST[o.status]||ST.new;
     return '<div style="border:1px solid var(--bdr);border-radius:var(--rs);padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px">'
       +'<div style="flex:1">'
       +'<div style="font-size:12px;font-weight:700">'+(o.items||[]).map(function(it){return it.qty+'× '+it.label;}).join(', ')+'</div>'
-      +'<div style="font-size:11px;color:var(--mu)">'+(o.total||0).toFixed(2)+' € · '+new Date(o.createdAt).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})+'</div>'
+      +'<div style="font-size:11px;color:var(--mu)">'+(o.total||0).toFixed(2)+' € · '+new Date(o.createdAt).toLocaleTimeString(localeForLang(),{hour:'2-digit',minute:'2-digit'})+'</div>'
       +'</div>'
       +'<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;background:'+st.c+'22;color:'+st.c+'">'+st.l+'</span>'
       +'</div>';
@@ -2364,9 +3095,9 @@ function espOpenBoutique(){
 function espCrmLoadTiers(){
   if(CFG.loyaltyTiers) return Object.assign({gold:500,premium:1500,perks:{}},CFG.loyaltyTiers);
   return {gold:500, premium:1500, perks:{
-    Standard:['Accès au programme de fidélité','Offres anniversaire'],
-    Gold:['Late check-out jusqu\'à 14h','Surclassement selon disponibilité','Boisson de bienvenue offerte'],
-    Premium:['Petit-déjeuner offert chaque matin','Surclassement prioritaire','Check-out tardif jusqu\'à 16h','Accès au salon Premium']
+    Standard:[t('perk_std_1'),t('perk_std_2')],
+    Gold:[t('perk_gold_1'),t('perk_gold_2'),t('perk_gold_3')],
+    Premium:[t('perk_prem_1'),t('perk_prem_2'),t('perk_prem_3'),t('perk_prem_4')]
   }};
 }
 function espComputeTier(points){
@@ -2390,7 +3121,7 @@ function espRenderLoyalty(){
   // ── Carte statut ──
   var card = document.getElementById('espLoyaltyCard');
   card.innerHTML = '<div style="width:56px;height:56px;border-radius:50%;background:'+color+'22;color:'+color+';display:flex;align-items:center;justify-content:center;font-size:26px;margin:0 auto 10px"><i class="ti '+ESP_TIER_ICONS[tier]+'"></i></div>'
-    + '<div style="font-size:12px;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;font-weight:600">Statut</div>'
+    + '<div style="font-size:12px;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;font-weight:600">'+t('esp_loyalty_status_label')+'</div>'
     + '<div style="font-size:22px;font-weight:700;color:'+color+';margin-bottom:8px">'+tier+'</div>'
     + '<div style="font-size:32px;font-weight:700;font-family:var(--fontTitle)">'+points+'</div>'
     + '<div style="font-size:12px;color:var(--mu)">'+esc(ptsName)+'</div>';
@@ -2398,7 +3129,7 @@ function espRenderLoyalty(){
   // ── Jauge progression ──
   var gauge = document.getElementById('espLoyaltyGauge');
   if(tier==='Premium'){
-    gauge.innerHTML = '<div class="alt alt-g"><i class="ti ti-trophy"></i><span>Vous avez atteint notre statut le plus élevé. Merci pour votre fidélité !</span></div>';
+    gauge.innerHTML = '<div class="alt alt-g"><i class="ti ti-trophy"></i><span>'+t('esp_loyalty_top_tier')+'</span></div>';
   } else {
     var next     = tier==='Standard' ? 'Gold' : 'Premium';
     var nextMin  = tier==='Standard' ? tiers.gold : tiers.premium;
@@ -2410,7 +3141,11 @@ function espRenderLoyalty(){
       + '<div style="height:10px;background:var(--bg);border-radius:5px;overflow:hidden">'
       + '<div style="height:100%;width:'+pct.toFixed(0)+'%;background:'+ESP_TIER_COLORS[next]+';border-radius:5px;transition:width 1s ease"></div></div>'
       + '<div style="font-size:13px;text-align:center;margin-top:10px">'
-      + '<strong style="color:'+ESP_TIER_COLORS[next]+'">'+remaining+'</strong> '+esc(ptsName)+' avant le statut <strong style="color:'+ESP_TIER_COLORS[next]+'">'+next+'</strong></div>';
+      + tf('esp_loyalty_remaining_tpl',{
+          remaining:'<strong style="color:'+ESP_TIER_COLORS[next]+'">'+remaining+'</strong>',
+          ptsName:esc(ptsName),
+          next:'<strong style="color:'+ESP_TIER_COLORS[next]+'">'+next+'</strong>'
+        }) + '</div>';
   }
 
   // ── Avantages ──
@@ -2418,20 +3153,20 @@ function espRenderLoyalty(){
   var perksEl = document.getElementById('espLoyaltyPerks');
   perksEl.innerHTML = perks.length
     ? perks.map(function(p){return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0"><i class="ti ti-check" style="color:'+color+'"></i><span style="font-size:13px">'+esc(p)+'</span></div>';}).join('')
-    : '<div style="font-size:13px;color:var(--mu)">Aucun avantage configuré pour ce statut.</div>';
+    : '<div style="font-size:13px;color:var(--mu)">'+t('esp_loyalty_no_perks')+'</div>';
 
   // ── Historique ──
   var histEl = document.getElementById('espLoyaltyHistory');
   var hist = (balance.history||[]).slice().reverse().slice(0,10);
   histEl.innerHTML = hist.length
     ? hist.map(function(h){
-        var d = h.date ? new Date(h.date).toLocaleDateString('fr-FR') : '—';
+        var d = h.date ? new Date(h.date).toLocaleDateString(localeForLang()) : '—';
         return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px solid var(--border)">'
           + '<span style="color:var(--mu)">'+d+'</span>'
           + '<span>'+(h.earned?'<span style="color:var(--primary);font-weight:600">+'+h.earned+'</span>':'')
           + (h.spent?' <span style="color:var(--re)">−'+h.spent+'</span>':'')+'</span></div>';
       }).join('')
-    : '<div style="font-size:13px;color:var(--mu)">Aucun historique pour le moment.</div>';
+    : '<div style="font-size:13px;color:var(--mu)">'+t('esp_loyalty_no_history')+'</div>';
 }
 
 // ── PROFIL / PRÉFÉRENCES — cache local + GET/POST /wa/clientPrefs/* ──
@@ -2547,7 +3282,7 @@ async function renderRoomService(){
 
 function rsRenderCatTabs(){
   var products = rsGetCatalog();
-  var cats = Array.from(new Set(products.map(function(p){return p.cat||'Autre';})));
+  var cats = Array.from(new Set(products.map(function(p){return p.cat||t('rs_cat_other');})));
   if(RS_ACTIVE_CAT===null) RS_ACTIVE_CAT = cats[0]||null;
   var tabs = document.getElementById('rsCatTabs');
   tabs.innerHTML = cats.map(function(c){
@@ -2568,7 +3303,7 @@ function rsVideoEmbed(url){
   if(vm) return '<iframe src="https://player.vimeo.com/video/'+vm[1]+'" style="width:100%;aspect-ratio:16/9;border:none;border-radius:10px" allowfullscreen></iframe>';
   if(/\.(mp4|webm|ogg)(\?.*)?$/i.test(url)) return '<video src="'+esc(url)+'" controls style="width:100%;border-radius:10px"></video>';
   // Fallback: lien externe
-  return '<a href="'+esc(url)+'" target="_blank" class="btn btn-out" style="display:flex;justify-content:center;width:100%"><i class="ti ti-external-link"></i> Voir la vidéo</a>';
+  return '<a href="'+esc(url)+'" target="_blank" class="btn btn-out" style="display:flex;justify-content:center;width:100%"><i class="ti ti-external-link"></i> '+t('rs_watch_video')+'</a>';
 }
 
 function rsOpenProduct(productId){
@@ -2602,7 +3337,7 @@ function rsOpenProduct(productId){
   h += '<div style="padding:16px">';
   h += '<div style="font-size:17px;font-weight:700">'+esc(p.label)+'</div>';
   if(p.desc) h += '<div style="font-size:13px;color:var(--mu);margin-top:4px">'+esc(p.desc)+'</div>';
-  h += '<div style="font-size:18px;font-weight:700;color:var(--primary);margin-top:8px">'+(p.price>0?p.price.toFixed(2)+' '+sym:'Offert')+'</div>';
+  h += '<div style="font-size:18px;font-weight:700;color:var(--primary);margin-top:8px">'+(p.price>0?p.price.toFixed(2)+' '+sym:t('price_free'))+'</div>';
 
   if(p.videoUrl){
     h += '<div style="margin-top:14px">'+rsVideoEmbed(p.videoUrl)+'</div>';
@@ -2613,9 +3348,9 @@ function rsOpenProduct(productId){
     h += '<button class="qbtn" onclick="rsChangeQty(\''+p.id+'\',-1);rsOpenProduct(\''+p.id+'\')"><i class="ti ti-minus"></i></button>'
       + '<span style="min-width:24px;text-align:center;font-weight:700;font-size:15px">'+qty+'</span>'
       + '<button class="qbtn" onclick="rsChangeQty(\''+p.id+'\',1);rsOpenProduct(\''+p.id+'\')"><i class="ti ti-plus"></i></button>'
-      + '<button class="btn btn-p" style="flex:1" onclick="rsCloseProduct()"><i class="ti ti-check"></i> Ajouté au panier</button>';
+      + '<button class="btn btn-p" style="flex:1" onclick="rsCloseProduct()"><i class="ti ti-check"></i> '+t('btn_added_to_cart')+'</button>';
   } else {
-    h += '<button class="btn btn-p" style="flex:1" onclick="rsChangeQty(\''+p.id+'\',1);rsOpenProduct(\''+p.id+'\')"><i class="ti ti-plus"></i> Ajouter au panier</button>';
+    h += '<button class="btn btn-p" style="flex:1" onclick="rsChangeQty(\''+p.id+'\',1);rsOpenProduct(\''+p.id+'\')"><i class="ti ti-plus"></i> '+t('btn_add_to_cart')+'</button>';
   }
   h += '</div></div>';
 
@@ -2644,11 +3379,11 @@ function rsCloseProduct(){
 
 function rsRenderProducts(){
   var sym = currSym();
-  var products = rsGetCatalog().filter(function(p){ return (p.cat||'Autre')===RS_ACTIVE_CAT; });
+  var products = rsGetCatalog().filter(function(p){ return (p.cat||t('rs_cat_other'))===RS_ACTIVE_CAT; });
   var list = document.getElementById('rsProductList');
 
   if(!products.length){
-    list.innerHTML = '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Aucun produit dans cette catégorie.</span></div>';
+    list.innerHTML = '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>'+t('rs_no_products_category')+'</span></div>';
     return;
   }
 
@@ -2665,7 +3400,7 @@ function rsRenderProducts(){
       +(p.videoUrl?' <i class="ti ti-video" style="font-size:12px;color:var(--mu)"></i>':'')
       +'</div>'
       +(p.desc?'<div style="font-size:12px;color:var(--mu)">'+esc(p.desc)+'</div>':'')
-      +'<div style="font-size:13px;font-weight:700;color:var(--primary);margin-top:2px">'+(p.price>0?p.price.toFixed(2)+' '+sym:'Offert')+'</div>'
+      +'<div style="font-size:13px;font-weight:700;color:var(--primary);margin-top:2px">'+(p.price>0?p.price.toFixed(2)+' '+sym:t('price_free'))+'</div>'
       +'</div>'
       +'<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">'
       +(qty>0
@@ -2744,7 +3479,7 @@ function rsRenderCartView(){
   }).filter(Boolean);
 
   if(!entries.length){
-    lines.innerHTML = '<div class="alt alt-b"><i class="ti ti-shopping-cart"></i><span>Votre panier est vide.</span></div>';
+    lines.innerHTML = '<div class="alt alt-b"><i class="ti ti-shopping-cart"></i><span>'+t('cart_empty')+'</span></div>';
     summary.style.display='none';
     return;
   }
@@ -2755,25 +3490,25 @@ function rsRenderCartView(){
     return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">'
       +'<div style="width:32px;height:32px;border-radius:8px;background:var(--pl);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0"><i class="ti '+e.p.ico+'"></i></div>'
       +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+esc(e.p.label)+'</div>'
-      +'<div style="font-size:11px;color:var(--mu)">'+(e.p.price>0?e.p.price.toFixed(2)+' '+sym+' / unité':'Offert')+'</div></div>'
+      +'<div style="font-size:11px;color:var(--mu)">'+(e.p.price>0?e.p.price.toFixed(2)+' '+sym+' '+t('cart_per_unit'):t('price_free'))+'</div></div>'
       +'<button class="qbtn" onclick="rsChangeQty(\''+e.p.id+'\',-1)"><i class="ti ti-minus"></i></button>'
       +'<span style="min-width:18px;text-align:center;font-weight:700">'+e.qty+'</span>'
       +'<button class="qbtn" onclick="rsChangeQty(\''+e.p.id+'\',1)"><i class="ti ti-plus"></i></button>'
-      +'<span style="min-width:60px;text-align:right;font-weight:700;font-size:13px">'+(lineTotal>0?lineTotal.toFixed(2)+' '+sym:'Offert')+'</span>'
+      +'<span style="min-width:60px;text-align:right;font-weight:700;font-size:13px">'+(lineTotal>0?lineTotal.toFixed(2)+' '+sym:t('price_free'))+'</span>'
       +'</div>';
   }).join('');
 
   var total = rsCartTotal();
   summary.innerHTML = '<div style="display:flex;justify-content:space-between;font-size:16px;font-weight:700">'
-    +'<span>Total</span><span style="color:var(--primary)">'+total.toFixed(2)+' '+sym+'</span></div>'
-    +'<div style="font-size:11px;color:var(--mu);margin-top:4px">Le montant sera ajouté à votre note de chambre.</div>';
+    +'<span>'+t('cart_total')+'</span><span style="color:var(--primary)">'+total.toFixed(2)+' '+sym+'</span></div>'
+    +'<div style="font-size:11px;color:var(--mu);margin-top:4px">'+t('cart_added_to_room_bill')+'</div>';
 }
 
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 async function rsPlaceOrder(){
   var entries = Object.keys(S.rsCart);
-  if(!entries.length){ toast('Votre panier est vide'); return; }
+  if(!entries.length){ toast(t('cart_empty')); return; }
 
   var products = rsGetCatalog();
   var items = entries.map(function(id){
@@ -2800,7 +3535,7 @@ async function rsPlaceOrder(){
     var order = await r.json();
     ORDERS_CACHE.unshift(order);
   }catch(e){
-    toast('Erreur lors de l\'envoi de la commande');
+    toast(t('err_order_send'));
     console.error('rsPlaceOrder error', e);
     return;
   }
@@ -2814,14 +3549,19 @@ async function rsPlaceOrder(){
   rsUpdateCartBar();
   rsRenderTracking();
 
-  toast('Commande envoyée ✓ — merci !');
+  toast(t('toast_order_sent_thanks'));
 }
 
 // ── Suivi des commandes du client (par bookingCode) ──
-var RS_STATUS_LABELS = {
-  new:'Reçue', preparing:'En préparation', delivering:'En cours de livraison',
-  delivered:'Livrée', cancelled:'Annulée'
-};
+// Fonction (et non objet figé) car les libellés dépendent de la langue
+// choisie par le client — recalculés à chaque appel de rsRenderTracking().
+function rsStatusLabels(){
+  return {
+    new:t('order_status_received'), preparing:t('order_status_preparing_full'),
+    delivering:t('order_status_delivering_full'), delivered:t('order_status_delivered'),
+    cancelled:t('order_status_cancelled')
+  };
+}
 var RS_STATUS_COLORS = {
   new:'#3A9BD5', preparing:'#E67E22', delivering:'#9B59B6', delivered:'#1A6B47', cancelled:'#E74C3C'
 };
@@ -2840,12 +3580,13 @@ function rsRenderTracking(){
   if(!orders.length){ el.innerHTML=''; return; }
 
   var sym = currSym();
-  el.innerHTML = '<div class="ch" style="margin-bottom:8px"><i class="ti ti-clipboard-list"></i>Mes commandes</div>'
+  var statusLabels = rsStatusLabels();
+  el.innerHTML = '<div class="ch" style="margin-bottom:8px"><i class="ti ti-clipboard-list"></i>'+t('rs_my_orders_hdr')+'</div>'
     + orders.map(function(o){
       var color = RS_STATUS_COLORS[o.status]||'#999';
       var icon  = RS_STATUS_ICONS[o.status]||'ti-clock';
-      var label = RS_STATUS_LABELS[o.status]||o.status;
-      var time  = new Date(o.createdAt).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+      var label = statusLabels[o.status]||o.status;
+      var time  = new Date(o.createdAt).toLocaleTimeString(localeForLang(),{hour:'2-digit',minute:'2-digit'});
       var itemsTxt = o.items.map(function(it){return it.qty+'× '+it.label;}).join(', ');
       return '<div class="card" style="padding:10px 12px;margin-bottom:8px">'
         +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'
@@ -2865,7 +3606,7 @@ function renderSummary(){
   updateEco();
   setPayMode('card');
   var b=S.booking||{},n=S.nuits,fd=calcDeduction(),taxeNet=Math.max(0,S.taxeTotal-fd);
-  var menLbls={0:'Aucun',1:'Quotidien',2:'Tous les 2 j.',3:'Tous les 3 j.',7:'1×/semaine'};
+  var menLbls={0:t('summary_freq_none'),1:t('freq_daily'),2:t('freq_every2'),3:t('freq_every3'),7:t('summary_freq_weekly_full')};
   // Room recap card with photos
   var rcCard=document.getElementById('recapRoomCard');
   var r=S.selectedRoom;
@@ -2888,46 +3629,49 @@ function renderSummary(){
       gal.innerHTML=h;
     } else {
       gal.className='rc-gallery no-photo';
-      gal.innerHTML='<i class="ti ti-bed" style="font-size:32px;color:var(--mu);opacity:.4"></i><div style="font-size:12px;color:var(--mu);opacity:.6">Pas de photo</div>';
+      gal.innerHTML='<i class="ti ti-bed" style="font-size:32px;color:var(--mu);opacity:.4"></i><div style="font-size:12px;color:var(--mu);opacity:.6">'+t('room_no_photo')+'</div>';
     }
   } else rcCard.style.display='none';
   // Summary lines
   document.getElementById('summaryLines').innerHTML=[
-    srow('Réservation',b.code||'—'),
-    srow('Client',(b.personFirstname||'')+' '+(b.personLastname||'')),
-    srow('Durée',n+' nuit'+(n>1?'s':'')),
-    srow('Identité', KYC.skipped ? '<span class="bdg bdg-w">Non vérifiée</span>'
-      : KYC.idVerified && KYC.selfieVerified ? '<span class="bdg bdg-g"><i class="ti ti-shield-check" style="font-size:10px"></i> Vérifiée ('+KYC.matchScore+'%)</span>'
-      : KYC.idVerified ? '<span class="bdg bdg-b">Pièce vérifiée</span>'
-      : '<span class="bdg bdg-w">Non vérifiée</span>'),
-    srow('Ménage','<span class="bdg bdg-g">'+(menLbls[S.menage]||'—')+'</span>'),
-    srow('Serviettes','<span class="bdg bdg-g">'+(menLbls[S.serviette]||'—')+'</span>'),
-    srow('Eau économisée','<span style="color:var(--blue)">'+S.eau+' L</span>'),
-    srow('CO₂ évité','<span style="color:var(--primary)">'+S.co2.toFixed(2)+' kg</span>'),
-    S.activeRewards.length?srow('Récompenses','<span class="bdg bdg-g">'+S.activeRewards.length+' gain(s)</span>'):'',
+    srow(t('summary_label_booking'),b.code||'—'),
+    srow(t('summary_label_client'),(b.personFirstname||'')+' '+(b.personLastname||'')),
+    srow(t('summary_label_duration'),n+' '+(n>1?t('nights_pl'):t('night'))),
+    srow(t('summary_label_identity'), KYC.skipped ? '<span class="bdg bdg-w">'+t('kyc_badge_not_verified')+'</span>'
+      : KYC.idVerified && KYC.selfieVerified ? '<span class="bdg bdg-g"><i class="ti ti-shield-check" style="font-size:10px"></i> '+tf('kyc_badge_verified_pct',{score:KYC.matchScore})+'</span>'
+      : KYC.idVerified ? '<span class="bdg bdg-b">'+t('kyc_badge_doc_verified')+'</span>'
+      : '<span class="bdg bdg-w">'+t('kyc_badge_not_verified')+'</span>'),
+    srow(t('summary_label_menage'),'<span class="bdg bdg-g">'+(menLbls[S.menage]||'—')+'</span>'),
+    srow(t('summary_label_towels'),'<span class="bdg bdg-g">'+(menLbls[S.serviette]||'—')+'</span>'),
+    srow(t('summary_label_water'),'<span style="color:var(--blue)">'+S.eau+' L</span>'),
+    srow(t('summary_label_co2'),'<span style="color:var(--primary)">'+S.co2.toFixed(2)+' kg</span>'),
+    S.activeRewards.length?srow(t('summary_label_rewards'),'<span class="bdg bdg-g">'+S.activeRewards.length+' '+t('reward_count_suffix')+'</span>'):'',
   ].join('');
   // ── TAXE SAVINGS BLOCK — PROMINENT ──
   var taxeBlock=document.getElementById('summaryTaxeBlock');
   var h='<div class="taxe-meter" style="margin-bottom:12px">';
-  h+='<div class="taxe-meter-label">Récapitulatif taxe de séjour</div>';
+  h+='<div class="taxe-meter-label">'+t('summary_taxe_recap_label')+'</div>';
   if(fd>0){
     h+='<div class="taxe-saving-row">';
-    h+='<div class="taxe-saving-from"><div class="taxe-saving-num" style="opacity:.55;text-decoration:line-through rgba(255,255,255,.55)">'+S.taxeTotal.toFixed(2)+' €</div><div class="taxe-saving-lbl">Tarif standard</div></div>';
+    h+='<div class="taxe-saving-from"><div class="taxe-saving-num" style="opacity:.55;text-decoration:line-through rgba(255,255,255,.55)">'+S.taxeTotal.toFixed(2)+' €</div><div class="taxe-saving-lbl">'+t('summary_std_rate')+'</div></div>';
     h+='<div class="taxe-saving-arrow"><i class="ti ti-arrow-narrow-right"></i></div>';
-    h+='<div class="taxe-saving-to"><div class="taxe-saving-num">'+taxeNet.toFixed(2)+' €</div><div class="taxe-saving-lbl">Avec éco-réduction</div></div>';
+    h+='<div class="taxe-saving-to"><div class="taxe-saving-num">'+taxeNet.toFixed(2)+' €</div><div class="taxe-saving-lbl">'+t('summary_with_eco_discount')+'</div></div>';
     h+='</div>';
-    h+='<div style="text-align:center"><div class="taxe-saving-chip"><i class="ti ti-leaf" style="font-size:12px"></i>Vous économisez '+fd.toFixed(2)+' € grâce à vos choix éco</div></div>';
+    h+='<div style="text-align:center"><div class="taxe-saving-chip"><i class="ti ti-leaf" style="font-size:12px"></i>'+tf('summary_you_save_eco',{amount:fd.toFixed(2)+' €'})+'</div></div>';
   } else {
     h+='<div class="taxe-meter-amount">'+S.taxeTotal.toFixed(2)+' €</div>';
-    h+='<div class="taxe-meter-sub">'+n+' nuit'+(n>1?'s:':'')+', '+S.occupants.length+' occupant'+(S.occupants.length>1?'s':'')+'</div>';
+    h+='<div class="taxe-meter-sub">'+tf('taxe_meter_sub_tpl',{
+      n:n, nights:(n>1?t('nights_pl'):t('night')),
+      occ:S.occupants.length, guests:(S.occupants.length>1?t('occupant_pl'):t('occupant_sg'))
+    })+'</div>';
   }
   h+='</div>';
   taxeBlock.innerHTML=h;
   // Payment lines
   var payH='';
-  payH+='<div class="pay-line"><span style="color:var(--mu)">Taxe de séjour (tarif standard)</span><span>'+S.taxeTotal.toFixed(2)+' €</span></div>';
-  if(fd>0)payH+='<div class="pay-saving-line"><i class="ti ti-leaf" style="font-size:13px"></i><span>Éco-déduction ménage</span><span>−'+fd.toFixed(2)+' €</span></div>';
-  payH+='<div class="pay-total"><span>Total à régler</span><span style="color:var(--blue)">'+taxeNet.toFixed(2)+' €</span></div>';
+  payH+='<div class="pay-line"><span style="color:var(--mu)">'+t('summary_pay_line_taxe_std')+'</span><span>'+S.taxeTotal.toFixed(2)+' €</span></div>';
+  if(fd>0)payH+='<div class="pay-saving-line"><i class="ti ti-leaf" style="font-size:13px"></i><span>'+t('summary_pay_line_eco_deduct')+'</span><span>−'+fd.toFixed(2)+' €</span></div>';
+  payH+='<div class="pay-total"><span>'+t('summary_pay_total')+'</span><span style="color:var(--blue)">'+taxeNet.toFixed(2)+' €</span></div>';
   document.getElementById('payLines').innerHTML=payH;
   S._taxeNet=taxeNet;updatePaySplit();
 }
@@ -2952,7 +3696,7 @@ function fmtExp(inp){
 function updatePaySplit(){
   var v=parseInt(document.getElementById('paySplit')?.value)||1,tot=S._taxeNet||S.taxeTotal;
   var sa=document.getElementById('splitAlt');
-  if(v>1&&sa){sa.style.display='flex';document.getElementById('splitTxt').textContent='Paiement en '+v+' fois : '+(tot/v).toFixed(2)+' € × '+v+' versements';}
+  if(v>1&&sa){sa.style.display='flex';document.getElementById('splitTxt').textContent=tf('pay_split_detail',{v:v, amount:(tot/v).toFixed(2)+' €'});}
   else if(sa)sa.style.display='none';
 }
 // ── Choix du mode de paiement ──
@@ -2980,8 +3724,8 @@ async function finalizeCheckin(syncStatus){
           selectedRoomCode: (S.selectedRoom && S.selectedRoom.code) || S.booking.facilityCode
         })
       });
-      result = r2.ok ? '' : ' · Erreur de synchronisation ('+r2.status+')';
-    } catch(se) { result = ' · Erreur de synchronisation : '+se.message; }
+      result = r2.ok ? '' : ' · '+tf('err_sync_status',{status:r2.status});
+    } catch(se) { result = ' · '+tf('err_sync_message',{msg:se.message}); }
   }
   if(S.booking && S.booking.facilityCode){
     await pushEcoToPlanning((S.selectedRoom&&S.selectedRoom.code)||S.booking.facilityCode, S.booking);
@@ -3033,24 +3777,24 @@ async function pushTaxeRecord(){
 
 async function confirmPay(){
   var n=document.getElementById('payNum').value,e=document.getElementById('payExp').value,c=document.getElementById('payCvv').value;
-  if(!n||n.replace(/\s/g,'').length<16){toast('Numéro incomplet');return;}
-  if(!e||e.length<5){toast('Date d\'expiration invalide');return;}
-  if(!c||c.length<3){toast('CVV invalide');return;}
-  var btn=event.target;btn.disabled=true;btn.innerHTML='<div class="spin"></div> Traitement…';
+  if(!n||n.replace(/\s/g,'').length<16){toast(t('err_card_number_incomplete'));return;}
+  if(!e||e.length<5){toast(t('err_card_expiry_invalid'));return;}
+  if(!c||c.length<3){toast(t('err_card_cvv_invalid'));return;}
+  var btn=event.target;btn.disabled=true;btn.innerHTML='<div class="spin"></div> '+t('processing_ellipsis');
   try {
     // Paiement simulé (intégration PSP à brancher ici)
     await new Promise(function(r){setTimeout(r,1200);});
     var sesameResult = await finalizeCheckin('checkedin');
     var txn='TXN-'+Math.floor(Math.random()*9000000+1000000);
-    document.getElementById('payResult').innerHTML='<div class="alt alt-g"><i class="ti ti-check-circle"></i><div><strong>Paiement accepté · '+txn+'</strong><br><span style="font-size:12px">'+sesameResult+'</span>'
-      +(calcPointsEarned()>0?'<br><span style="font-size:12px;color:var(--primary)"><i class="ti ti-star"></i> '+calcPointsEarned()+' points crédités sur votre compte fidélité</span>':'')
+    document.getElementById('payResult').innerHTML='<div class="alt alt-g"><i class="ti ti-check-circle"></i><div><strong>'+tf('pay_accepted',{txn:txn})+'</strong><br><span style="font-size:12px">'+sesameResult+'</span>'
+      +(calcPointsEarned()>0?'<br><span style="font-size:12px;color:var(--primary)"><i class="ti ti-star"></i> '+tf('pay_points_credited',{pts:calcPointsEarned()})+'</span>':'')
       +'</div></div>';
-    toast('Paiement confirmé ✓');
+    toast(t('toast_payment_confirmed'));
     ESP_ACTIVE_TAB='key'; setTimeout(function(){ gotoScr('sejour'); }, 900);
   } catch(err) {
-    document.getElementById('payResult').innerHTML='<div class="alt alt-w"><i class="ti ti-alert-circle"></i><span>Erreur : '+err.message+'</span></div>';
+    document.getElementById('payResult').innerHTML='<div class="alt alt-w"><i class="ti ti-alert-circle"></i><span>'+tf('err_generic',{msg:err.message})+'</span></div>';
   }
-  btn.disabled=false;btn.innerHTML='<i class="ti ti-lock"></i> Confirmer &amp; envoyer à Sesame';
+  btn.disabled=false;btn.innerHTML='<i class="ti ti-lock"></i> '+t('step7_confirm_pay');
 }
 
 // ── Paiement à l'hôtel : QR de la réservation ──
@@ -3063,8 +3807,8 @@ async function rsRenderHotelQr(){
   var code = S.booking ? S.booking.code : null;
   await new Promise(function(r){ setTimeout(r, 250); });
   wrap.innerHTML = rsSimulatedQr(code||'RESERVATION')
-    + '<div style="font-size:13px;font-weight:700">Réservation '+esc(code||'—')+'</div>'
-    + '<div style="font-size:11px;color:var(--mu)">Présentez ce code à l\'accueil (mode simulation)</div>';
+    + '<div style="font-size:13px;font-weight:700">'+tf('pay_hotel_booking_label',{code:esc(code||'—')})+'</div>'
+    + '<div style="font-size:11px;color:var(--mu)">'+t('pay_hotel_present_code')+'</div>';
 }
 
 // QR code simulé (pattern SVG déterministe basé sur le texte) — utilisé hors connexion Sesame
@@ -3088,15 +3832,15 @@ function rsSimulatedQr(text){
 // ── Confirmation "Payer à l'hôtel" ──
 async function confirmPayAtHotel(){
   var btn=document.getElementById('payHotelConfirmBtn');
-  btn.disabled=true;btn.innerHTML='<div class="spin"></div> Traitement…';
+  btn.disabled=true;btn.innerHTML='<div class="spin"></div> '+t('processing_ellipsis');
   try {
     var sesameResult = await finalizeCheckin('confirmed'); // statut "confirmed" : check-in fait, paiement en attente sur place
-    toast('Check-in confirmé · Paiement à régler à l\'accueil ✓');
+    toast(t('toast_checkin_confirmed_pay_hotel'));
     ESP_ACTIVE_TAB='key'; setTimeout(function(){ gotoScr('sejour'); }, 600);
   } catch(err){
-    toast('Erreur : '+err.message);
+    toast(tf('err_generic',{msg:err.message}));
   }
-  btn.disabled=false;btn.innerHTML='<i class="ti ti-check"></i> Continuer vers mon espace';
+  btn.disabled=false;btn.innerHTML='<i class="ti ti-check"></i> '+t('step7_pay_hotel_continue');
 }
 
 
@@ -3221,7 +3965,7 @@ function kycExtractOCR() {
     setKycField('kyc-pays',      existing.pays||'France');
     setKycField('kyc-mrz1',      existing.mrz1||'');
     setKycField('kyc-mrz2',      existing.mrz2||'');
-    toast('Client reconnu — informations pré-remplies depuis la base');
+    toast(t('toast_client_recognized'));
   } else {
     // Simulation OCR : générer des données réalistes
     var letters='ABCDEFGH';
@@ -3237,7 +3981,7 @@ function kycExtractOCR() {
     var prnMrz=((fn&&fn.value)||'MARTIN').toUpperCase().replace(/[^A-Z]/g,'<');
     setKycField('kyc-mrz1','P<FRA'+nomMrz+'<<'+prnMrz+'<<<<<<<<<<<<<<<<');
     setKycField('kyc-mrz2',docnum+'3FRA'+'8501016'+'M'+'3001010'+'<<<<<<06');
-    toast('Document scanné — vérifiez et complétez les informations');
+    toast(t('toast_doc_scanned'));
   }
 
   var btn=document.getElementById('kyc-verify-btn');
@@ -3264,11 +4008,11 @@ function kycVerifyDocument() {
   var res=document.getElementById('kyc-id-result');
   var stat=document.getElementById('kyc-id-status');
 
-  btn.innerHTML='<div class="spin" style="width:14px;height:14px;border-width:2px"></div> Vérification…';
+  btn.innerHTML='<div class="spin" style="width:14px;height:14px;border-width:2px"></div> '+t('verifying_ellipsis');
   btn.disabled=true;
 
   setTimeout(function(){
-    btn.innerHTML='<i class="ti ti-shield-search"></i> Vérifier dans la base de données';
+    btn.innerHTML='<i class="ti ti-shield-search"></i> '+t('kyc_verify_btn');
     btn.disabled=false;
 
     // Vérification expiration
@@ -3281,7 +4025,7 @@ function kycVerifyDocument() {
         if(!isNaN(expDate)&&expDate<new Date()) expired=true;
       }
     }
-    if(expired){kycIdResult(false,'Document expiré','Votre pièce a expiré. Présentez un document valide à la réception.',res,stat);return;}
+    if(expired){kycIdResult(false,t('kyc_expired_title'),t('kyc_expired_msg'),res,stat);return;}
 
     // Recherche dans la base
     var match=findClientInDB(num,nom,prn);
@@ -3307,9 +4051,9 @@ function kycVerifyDocument() {
 
     KYC.idVerified=true;
     var dbMsg=match
-      ?'Client reconnu dans la base · Fiche mise à jour.'
-      :'Nouveau client enregistré dans la base.';
-    kycIdResult(true,'Document accepté ✓',
+      ?t('kyc_client_recognized_db')
+      :t('kyc_client_new_db');
+    kycIdResult(true,t('kyc_accepted_title'),
       'N° <strong>'+num+'</strong> · '+nom+' '+prn
       +(adr?' · '+adr+', '+cp+' '+ville:'')+' · '+dbMsg,
       res,stat);
@@ -3321,7 +4065,7 @@ function kycIdResult(ok, title, msg, res, stat) {
   var bg    = ok ? 'var(--pl)' : '#FDEAEA';
   var icon  = ok ? 'ti-shield-check' : 'ti-shield-x';
   var statCls = ok ? 'kyc-s-ok' : 'kyc-s-err';
-  var statTxt = ok ? '✓ Vérifié' : '✗ Refusé';
+  var statTxt = ok ? t('kyc_status_verified') : t('kyc_status_refused');
   if(res) res.innerHTML='<div class="alt" style="background:'+bg+';color:'+color+';border-left:3px solid '+color+';display:block"><strong><i class="ti '+icon+'"></i> '+title+'</strong><br><span style="font-size:12px;opacity:.85">'+msg+'</span></div>';
   if(res) res.style.display='block';
   if(stat) stat.className='kyc-status '+(ok?'kyc-s-ok':'kyc-s-err');
@@ -3341,9 +4085,9 @@ async function startKycCamera() {
     video.play();
     btnStart.style.display = 'none';
     btnCap.style.display   = 'inline-flex';
-    toast('Caméra active — centrez votre visage');
+    toast(t('toast_camera_active'));
   } catch(e) {
-    toast('Caméra inaccessible — utilisez l\'import de photo');
+    toast(t('toast_camera_unavailable'));
     console.log('camera error:', e.message);
   }
 }
@@ -3368,7 +4112,7 @@ function captureKycSelfie() {
     video.style.display = 'none';
     stopKycCamera();
     document.getElementById('btnCapture').style.display='none';
-    document.getElementById('btnStartCam').innerHTML='<i class="ti ti-refresh"></i> Reprendre';
+    document.getElementById('btnStartCam').innerHTML='<i class="ti ti-refresh"></i> '+t('kyc_retake');
     document.getElementById('btnStartCam').style.display='inline-flex';
     analyzeSelfie();
   }, 1000);
@@ -3403,8 +4147,8 @@ function analyzeSelfie() {
   var res  = document.getElementById('kyc-match-result');
   var stat = document.getElementById('kyc-selfie-status');
   stat.className='kyc-status kyc-s-proc';
-  stat.innerHTML='<i class="ti ti-loader-2" style="animation:spin .8s linear infinite"></i> Analyse…';
-  if(res){res.style.display='block';res.innerHTML='<div class="alt alt-b"><i class="ti ti-brain"></i><span>Analyse biométrique en cours…</span></div>';}
+  stat.innerHTML='<i class="ti ti-loader-2" style="animation:spin .8s linear infinite"></i> '+t('kyc_analyzing');
+  if(res){res.style.display='block';res.innerHTML='<div class="alt alt-b"><i class="ti ti-brain"></i><span>'+t('kyc_biometric_analysis_progress')+'</span></div>';}
 
   // Simulation analyse biométrique (en production → API face recognition)
   setTimeout(function(){
@@ -3417,10 +4161,10 @@ function analyzeSelfie() {
 
     var color     = score>=85?'var(--primary)':score>=70?'#1A4880':'#B83030';
     var fillColor = score>=85?'#2ECC71':score>=70?'#3A9BD5':'#E74C3C';
-    var label     = score>=85?'Correspondance excellente':score>=70?'Correspondance confirmée':'Correspondance insuffisante';
+    var label     = score>=85?t('kyc_match_excellent'):score>=70?t('kyc_match_confirmed'):t('kyc_match_insufficient');
     var detail    = ok
-      ? 'Le selfie correspond à la pièce d\'identité avec un score de <strong>'+score+'%</strong>.'
-      : 'Le score de correspondance ('+score+'%) est insuffisant. Présentez-vous à la réception avec votre pièce.';
+      ? tf('kyc_match_ok_detail',{score:score})
+      : tf('kyc_match_fail_detail',{score:score});
 
     if(res) res.innerHTML='<div>'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'
@@ -3430,9 +4174,9 @@ function analyzeSelfie() {
       +'<div style="font-size:12px;color:var(--mu);margin-top:8px">'+detail+'</div></div>';
 
     stat.className='kyc-status '+(ok?'kyc-s-ok':'kyc-s-err');
-    stat.innerHTML='<i class="ti '+(ok?'ti-check':'ti-x')+'"></i> '+(ok?score+'% ✓':'Score faible');
+    stat.innerHTML='<i class="ti '+(ok?'ti-check':'ti-x')+'"></i> '+(ok?score+'% ✓':t('kyc_status_low_score'));
     updateKycGlobal();
-    toast(ok?'Identité confirmée ✓':'Score faible — vérification manuelle recommandée');
+    toast(ok?t('toast_identity_confirmed'):t('toast_low_score_manual_check'));
   }, 2200);
 }
 
@@ -3444,14 +4188,14 @@ function updateKycGlobal() {
   if(!idOk&&!selOk){res.style.display='none';return;}
   res.style.display='block';
   if(idOk&&selOk) {
-    res.innerHTML='<div class="alt alt-g" style="font-size:13px"><i class="ti ti-shield-check-filled"></i><div><strong>Vérification KYC complète ✓</strong><br>Pièce d\'identité vérifiée · Selfie concordant ('+KYC.matchScore+'%)</div></div>';
+    res.innerHTML='<div class="alt alt-g" style="font-size:13px"><i class="ti ti-shield-check-filled"></i><div><strong>'+t('kyc_global_complete')+'</strong><br>'+tf('kyc_global_complete_detail',{score:KYC.matchScore})+'</div></div>';
     // Marquer le dot KYC comme validé
     var sd4=document.getElementById('sd4');
     if(sd4){sd4.style.background='var(--primary)';sd4.style.borderColor='var(--primary)';sd4.style.color='#fff';}
   } else if(idOk) {
-    res.innerHTML='<div class="alt alt-g" style="font-size:13px"><i class="ti ti-id-badge"></i><div><strong>Pièce vérifiée</strong> · Selfie en attente</div></div>';
+    res.innerHTML='<div class="alt alt-g" style="font-size:13px"><i class="ti ti-id-badge"></i><div><strong>'+t('kyc_badge_doc_verified')+'</strong> · '+t('kyc_selfie_pending')+'</div></div>';
   } else if(selOk) {
-    res.innerHTML='<div class="alt alt-b" style="font-size:13px"><i class="ti ti-camera-selfie"></i><div><strong>Selfie validé</strong> · Pièce en attente</div></div>';
+    res.innerHTML='<div class="alt alt-b" style="font-size:13px"><i class="ti ti-camera-selfie"></i><div><strong>'+t('kyc_selfie_validated')+'</strong> · '+t('kyc_doc_pending')+'</div></div>';
   }
 }
 
@@ -3581,7 +4325,7 @@ function bqFilter(){
 
     var priceEl = document.createElement('div');
     priceEl.style.cssText = 'font-size:14px;font-weight:700;color:' + (p.price === 0 ? 'var(--go)' : 'var(--primary)');
-    priceEl.textContent = p.price > 0 ? p.price.toFixed(2) + ' €' : 'Gratuit';
+    priceEl.textContent = p.price > 0 ? p.price.toFixed(2) + ' €' : t('price_free');
     footer.appendChild(priceEl);
 
     // Qty controls
@@ -3657,7 +4401,7 @@ function bqOpenProduct(id){
   titleEl.textContent = p.label;
   var priceEl = document.createElement('div');
   priceEl.style.cssText = 'font-size:18px;font-weight:700;color:var(--primary);white-space:nowrap;margin-left:12px';
-  priceEl.textContent = p.price > 0 ? p.price.toFixed(2) + ' €' : 'Gratuit';
+  priceEl.textContent = p.price > 0 ? p.price.toFixed(2) + ' €' : t('price_free');
   header.appendChild(titleEl); header.appendChild(priceEl);
   body.appendChild(header);
 
@@ -3676,7 +4420,7 @@ function bqOpenProduct(id){
   var addBtn = document.createElement('button');
   addBtn.className = 'btn btn-p';
   addBtn.style.cssText = 'width:100%;justify-content:center;padding:13px;font-size:15px';
-  addBtn.innerHTML = '<i class="ti ti-shopping-cart"></i> ' + (qty > 0 ? 'Modifier' : 'Ajouter au panier');
+  addBtn.innerHTML = '<i class="ti ti-shopping-cart"></i> ' + (qty > 0 ? t('btn_modify') : t('btn_add_to_cart'));
   addBtn.onclick = function(){ bqChangeQty(p.id, 1); overlay.remove(); bqFilter(); bqUpdateCart(); };
   body.appendChild(addBtn);
 
@@ -3758,7 +4502,7 @@ function bqUpdateCart(){
 }
 
 async function bqPlaceOrder(){
-  if (!bqCartCount()){ toast('Votre panier est vide'); return; }
+  if (!bqCartCount()){ toast(t('cart_empty')); return; }
   var cat = bqGetCatalog();
   var items = Object.keys(BQ.cart).map(function(id){
     var p = cat.find(function(x){ return x.id === id; });
@@ -3785,7 +4529,7 @@ async function bqPlaceOrder(){
     order = await r.json();
     ORDERS_CACHE.unshift(order);
   }catch(e){
-    toast('Erreur lors de l\'envoi de la commande');
+    toast(t('err_order_send'));
     console.error('bqPlaceOrder error', e);
     return;
   }
@@ -3798,7 +4542,7 @@ async function bqPlaceOrder(){
   var textEl    = document.getElementById('bqOrderConfirmText');
   textEl.innerHTML = '';
   var strong = document.createElement('strong');
-  strong.textContent = 'Commande confirmée ✓';
+  strong.textContent = t('step6_order_confirmed');
   textEl.appendChild(strong);
   textEl.appendChild(document.createElement('br'));
   textEl.appendChild(document.createTextNode(items.map(function(it){ return it.qty + '× ' + it.label; }).join(', ')));
@@ -3809,7 +4553,7 @@ async function bqPlaceOrder(){
     textEl.appendChild(tot);
   }
   confirmEl.style.display = 'flex';
-  toast('Commande envoyée ✓');
+  toast(t('step6_order_sent'));
 }
 
 // Hook gotoStep — initialise la boutique à l'étape 6
@@ -3828,7 +4572,9 @@ gotoStep = function(n){
 // ═══════════════════ INIT
 window.addEventListener('DOMContentLoaded',async function(){
   await loadCfg(); // GET /wa/entityModuleConfig/list — remplace SESAME_CFG
+  initLang(); // langue du client — sessionStorage > CFG.lang (si fr/en/es) > fr
   applyBrand();
+  applyStaticTranslations();
   // Charger les réservations dès l'ouverture
   fetchBookings();
 });

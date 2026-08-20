@@ -1241,6 +1241,33 @@ des chaînes de date déjà "date-only" dans `housekeepingTask.ts` et
 n'est fiable que par coïncidence quand les deux bouts sont ancrés en UTC,
 et mériterait un passage dédié.
 
+### Parcours client (checkin.html) traduit en FR/EN/ES, sélecteur de langue
+
+Le parcours client (recherche de réservation, choix de chambre, occupants,
+taxe de séjour, KYC, préférences éco, boutique/room-service, récompenses
+& paiement, espace client post check-in) fonctionne désormais en français,
+anglais et espagnol, avec un sélecteur `FR`/`EN`/`ES` dans l'en-tête —
+le choix appartient au CLIENT (pas au fuseau/langue du navigateur ni à la
+langue par défaut de l'hôtel `CFG.lang`, qui ne sert que de valeur de
+départ) : persisté en `sessionStorage` pour la durée de la visite, et
+n'écrase jamais `CFG.lang` côté hôtel. Changer de langue re-rend
+immédiatement l'écran affiché, sans rechargement de page.
+
+Infrastructure : ~360 clés `I18N_FR`/`I18N_EN`/`I18N_ES`, fonctions
+`t(key)`/`tf(key, vars)` (interpolation), `data-i18n`/`data-i18n-html`/
+`data-i18n-placeholder`/`data-i18n-title` sur le markup statique,
+`applyStaticTranslations()` + `rerenderCurrentView()` appelés à chaque
+changement de langue. Le back-office admin (`admin.html`, réservé au
+personnel) reste en français pour l'instant — même squelette i18n
+disponible si un passage similaire est demandé plus tard.
+
+**Non traduit, volontairement** : le contenu saisi par l'hôtel lui-même
+(catalogue boutique/room-service, message éco personnalisé, paliers de
+fidélité, libellés des points d'accès, rubriques du livret digital, noms
+de chambres/clients) — ce sont des données métier par établissement, pas
+de l'habillage de l'app ; les traduire impliquerait des champs
+multilingues côté admin, hors périmètre de ce passage.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT
