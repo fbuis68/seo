@@ -21,10 +21,14 @@ Chaque module ci-dessous a son propre `NOTES.md` dans `modules/` avec le détail
 - `widget-conversationnel.html` (module IA Conversationnelle, v1 à base
   de règles sur des questions connues, mêmes données réelles que
   `widget-ia.html`)
-- `widget-qualiopi.html` (module Assistant Qualiopi, v1 "découverte" —
-  teste en direct les entités `sessionQualiopi`/`conventionExportQualiopi`/
-  `fullConventionQualiopi` et affiche les champs réels trouvés, pas
-  encore d'indicateurs habillés tant que les champs ne sont pas confirmés)
+- `widget-qualiopi.html` (module Assistant Qualiopi — 3 onglets :
+  « Indicateurs » calculés en direct sur les champs confirmés de
+  `sessionQualiopi`/`fullConventionQualiopi` (documents envoyés/signés,
+  attestations, heures vendues/réalisées/facturées, crédit OPCA,
+  enquêtes) ; « Détection API » pour explorer d'autres champs ; « Saisie
+  manuelle » pour les indicateurs qualité classiques — satisfaction,
+  réclamations, actions correctives — qui n'ont toujours aucune source
+  MCDF connue)
 - `launcher-embed.js` (bouton flottant + panneau donnant accès aux 4
   modules, une seule ligne à intégrer) + `INSTALL-LAUNCHER.md`
 - `mock_server.py` / `mock_server.js` — validation locale sans accès à
@@ -40,7 +44,7 @@ confirmer les noms d'entité et les champs réels du module Qualiopi.
 | # | Module | État | Ce qui manque |
 |---|--------|------|-------------------------------|
 | 1 | IA Conversationnelle | 🟢 v1 livrée | `production/widget-conversationnel.html` — répond à un jeu de questions connu sur les données réelles ; pas encore un vrai LLM (pas de endpoint d'écriture confirmé non plus) |
-| 2 | Assistant Qualiopi | 🟢 v1 "découverte" livrée | `production/widget-qualiopi.html` — teste les entités en direct ; reste à lancer `browser/live-qualiopi-check.js` sur un vrai compte pour confirmer les champs et construire les vrais indicateurs |
+| 2 | Assistant Qualiopi | 🟢 livrable | `production/widget-qualiopi.html` — `sessionQualiopi`/`fullConventionQualiopi` confirmées en direct (5544/3769 lignes réelles) ; indicateurs de suivi horaire/documentaire/OPCO calculés en direct ; les indicateurs qualité classiques (satisfaction, réclamations) restent en saisie manuelle, aucune source MCDF trouvée pour ceux-là |
 | 3a | Génération de rapports | 🟢 livrable | `production/widget-ia.html` — widget réel, données en direct, prêt à intégrer (voir `production/INTEGRATION.md`) |
 | 3b | Génération de documents | 🔴 à démarrer | trouver l'endpoint qui déclenche le pipeline XDocReport existant |
 | 4 | Recherche intelligente | 🟡 piste confirmée | trouver le paramètre HTTP qui active la recherche libre (`freeField`) déjà présente côté serveur |

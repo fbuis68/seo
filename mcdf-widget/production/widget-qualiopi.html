@@ -69,6 +69,7 @@
   .eyebrow { text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px; font-weight: 600; color: var(--accent); margin: 0 0 10px; }
   h1 { font-family: var(--font-display); font-size: clamp(22px, 3vw, 30px); font-weight: 500; margin: 0 0 8px; }
   .lede { max-width: 68ch; color: var(--ink-2); font-size: 14px; line-height: 1.6; margin: 0; }
+  .lede code { background: var(--surface-2); border-radius: 4px; padding: 1px 5px; font-size: 12.5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   header.top { padding-bottom: 22px; margin-bottom: 24px; border-bottom: 1px solid var(--border); }
 
   #banner { padding: 12px 16px; border-radius: 8px; font-size: 13.5px; margin-bottom: 24px; background: var(--surface-2); color: var(--ink-2); }
@@ -131,21 +132,36 @@
   .save-status { font-size: 12px; color: var(--ink-muted); }
   .json-box { width: 100%; min-height: 120px; margin-top: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; background: var(--surface); border: 1px solid var(--border-2); border-radius: 8px; padding: 10px; color: var(--ink); display: none; }
   .json-box.open { display: block; }
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-bottom: 30px; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+  .kpi-label { font-size: 12px; color: var(--ink-muted); margin: 0 0 10px; line-height: 1.4; }
+  .kpi-value { font-family: var(--font-display); font-size: 26px; font-weight: 500; line-height: 1; margin: 0 0 8px; font-variant-numeric: tabular-nums; }
+  .kpi-sub { font-size: 12px; color: var(--ink-2); }
+  .kpi-source { font-size: 10.5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink-muted); margin-top: 8px; display: block; }
+
+  .indic-section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-muted); font-weight: 600; margin: 0 0 12px; }
 </style>
 
 <div class="wrap">
   <header class="top">
     <p class="eyebrow">Widget IA - MCDF</p>
-    <h1>Assistant Qualiopi -- v1 decouverte</h1>
-    <p class="lede">Ce module n'affiche pas encore d'indicateurs Qualiopi habilles : il teste en direct les entites repérées dans le code source et montre ce qu'elles renvoient réellement, pour construire le vrai tableau de bord sur des champs confirmés, pas supposés.</p>
+    <h1>Assistant Qualiopi</h1>
+    <p class="lede">Indicateurs calculés en direct à partir des entités confirmées (<code>sessionQualiopi</code>, <code>fullConventionQualiopi</code>) -- suivi horaire, documentaire et enquêtes pour les conventions/OPCO, pas les indicateurs qualité classiques (satisfaction, réclamations) qui restent en saisie manuelle faute de source MCDF connue.</p>
   </header>
 
   <div class="tabs">
-    <button class="tab-btn active" type="button" data-tab="api">Détection API</button>
+    <button class="tab-btn active" type="button" data-tab="indicateurs">Indicateurs</button>
+    <button class="tab-btn" type="button" data-tab="api">Détection API</button>
     <button class="tab-btn" type="button" data-tab="manual">Saisie manuelle</button>
   </div>
 
-  <div class="tab-panel active" id="tab-api">
+  <div class="tab-panel active" id="tab-indicateurs">
+    <div id="indic-banner" class="manual-note">Chargement des indicateurs en direct...</div>
+    <div id="indic-kpis" class="kpis" style="display:none"></div>
+  </div>
+
+  <div class="tab-panel" id="tab-api">
     <div id="banner">Interrogation des entités candidates...</div>
     <div id="results"></div>
   </div>
@@ -164,7 +180,7 @@
   </div>
 
   <footer>
-    Lecture seule -- mêmes règles que <code>widget-ia.html</code> (cookie de session déjà actif, aucun appel d'écriture). Une fois les bons champs confirmés ici, l'onglet « Détection API » sera remplacé par de vrais indicateurs Qualiopi calculés en direct ; l'onglet « Saisie manuelle » restera pour ceux qui n'ont pas de source dans MCDF.
+    Lecture seule -- mêmes règles que <code>widget-ia.html</code> (cookie de session déjà actif, aucun appel d'écriture). L'onglet « Détection API » reste disponible pour explorer d'autres champs de ces entités ; l'onglet « Saisie manuelle » couvre ce qui n'a aucune source connue dans MCDF (satisfaction, réclamations, actions correctives...).
   </footer>
 </div>
 
@@ -257,6 +273,146 @@ function renderResult(r) {
   const wrap = document.getElementById('results');
   results.forEach((r) => wrap.appendChild(renderResult(r)));
 })();
+
+// ------------------------------------------------------------------
+// Indicateurs en direct -- champs confirmes via l'onglet Detection API
+// (sessionQualiopi, fullConventionQualiopi). Suivi horaire/documentaire
+// des conventions vis-a-vis des financeurs, pas le referentiel qualite
+// 7 criteres (satisfaction, reclamations -- toujours sans source
+// connue, voir l'onglet Saisie manuelle).
+// ------------------------------------------------------------------
+function fmtPct(n) { return `${(n * 100).toFixed(0)}%`; }
+
+async function fetchQualiopiEntity(entity, entityId) {
+  const res = await fetch(`/wa/${entity}/list?nopaging=1&_dc=${Date.now()}`, { credentials: 'same-origin' });
+  if (res.status === 401 || res.status === 403) throw new Error('AUTH');
+  let data;
+  try { data = await res.json(); } catch (e) { throw new Error('AUTH'); }
+  if (!data.success) throw new Error(`Appel /wa/${entity}/list refusé.`);
+  return entityId ? data.root.filter((r) => r.entityId === entityId) : data.root;
+}
+
+function parseRatio(str) {
+  if (typeof str !== 'string' || str.indexOf('/') === -1) return null;
+  const [num, den] = str.split('/').map((s) => parseFloat(s.trim()));
+  if (!isFinite(num) || !isFinite(den) || den === 0) return null;
+  return { num, den };
+}
+
+function kpiCard({ label, value, sub, source }) {
+  const card = el('div', 'kpi');
+  card.appendChild(el('p', 'kpi-label', label));
+  card.appendChild(el('p', 'kpi-value', value));
+  if (sub) card.appendChild(el('p', 'kpi-sub', sub));
+  if (source) card.appendChild(el('span', 'kpi-source', source));
+  return card;
+}
+
+async function loadIndicateurs() {
+  const banner = document.getElementById('indic-banner');
+  const kpisWrap = document.getElementById('indic-kpis');
+  const entityId = new URLSearchParams(location.search).get('entityId');
+
+  try {
+    const [sessions, conventions] = await Promise.all([
+      fetchQualiopiEntity('sessionQualiopi', entityId),
+      fetchQualiopiEntity('fullConventionQualiopi', entityId),
+    ]);
+    const convs = conventions.filter((c) => c.isConvention);
+
+    // Documents obligatoires envoyes (format "N / total")
+    const ratios = convs.map((c) => parseRatio(c.documentSent)).filter(Boolean);
+    const docSentAvg = ratios.length
+      ? ratios.reduce((s, r) => s + r.num / r.den, 0) / ratios.length
+      : null;
+    const docComplete = ratios.filter((r) => r.num >= r.den).length;
+
+    // Documents signes
+    const withSigned = convs.filter((c) => typeof c.signedDocument === 'number');
+    const signedTotal = withSigned.reduce((s, c) => s + c.signedDocument, 0);
+    const signedConvs = withSigned.filter((c) => c.signedDocument > 0).length;
+
+    // Attestations sur conventions terminees
+    const now = new Date();
+    const ended = convs.filter((c) => c.endDate && new Date(c.endDate) < now);
+    const withAttestation = ended.filter((c) => c.attestationDate);
+
+    // Heures vendues vs realisees vs facturees
+    const sumField = (arr, f) => arr.reduce((s, c) => s + (typeof c[f] === 'number' ? c[f] : 0), 0);
+    const soldH = sumField(convs, 'soldHours');
+    const fulfilledH = sumField(convs, 'fulfilledHours');
+    const invoicedH = sumField(convs, 'invoicedHours');
+    const creditLeft = sumField(convs, 'creditLeftHours');
+
+    // Enquetes (sessionQualiopi)
+    const withSurvey = sessions.filter((s) => (s.survey || 0) > 0).length;
+    const surveyTotal = sumField(sessions, 'survey');
+    const comebackTotal = sumField(sessions, 'comeback');
+
+    const kpis = [
+      {
+        label: 'Documents obligatoires envoyés',
+        value: docSentAvg !== null ? fmtPct(docSentAvg) : '—',
+        sub: ratios.length ? `${docComplete}/${ratios.length} conventions au complet` : 'aucune donnée exploitable',
+        source: 'fullConventionQualiopi.documentSent',
+      },
+      {
+        label: 'Conventions avec document signé',
+        value: withSigned.length ? fmtPct(signedConvs / withSigned.length) : '—',
+        sub: `${signedTotal} document(s) signé(s) au total`,
+        source: 'fullConventionQualiopi.signedDocument',
+      },
+      {
+        label: 'Attestations délivrées (conventions terminées)',
+        value: ended.length ? fmtPct(withAttestation.length / ended.length) : '—',
+        sub: `${withAttestation.length}/${ended.length} conventions terminées`,
+        source: 'fullConventionQualiopi.attestationDate',
+      },
+      {
+        label: 'Heures réalisées vs vendues',
+        value: soldH ? fmtPct(fulfilledH / soldH) : '—',
+        sub: `${Math.round(fulfilledH)} h réalisées / ${Math.round(soldH)} h vendues`,
+        source: 'fullConventionQualiopi.fulfilledHours / soldHours',
+      },
+      {
+        label: 'Heures facturées vs réalisées',
+        value: fulfilledH ? fmtPct(invoicedH / fulfilledH) : '—',
+        sub: `${Math.round(invoicedH)} h facturées / ${Math.round(fulfilledH)} h réalisées`,
+        source: 'fullConventionQualiopi.invoicedHours / fulfilledHours',
+      },
+      {
+        label: 'Crédit d’heures restant (OPCA)',
+        value: `${Math.round(creditLeft)} h`,
+        sub: `sur ${convs.length} convention(s)`,
+        source: 'fullConventionQualiopi.creditLeftHours',
+      },
+      {
+        label: 'Sessions avec retour d’enquête',
+        value: sessions.length ? fmtPct(withSurvey / sessions.length) : '—',
+        sub: `${surveyTotal} réponse(s) collectée(s) au total`,
+        source: 'sessionQualiopi.survey',
+      },
+      {
+        label: 'Relances / retours signalés',
+        value: String(comebackTotal),
+        sub: `sur ${sessions.length} session(s)`,
+        source: 'sessionQualiopi.comeback',
+      },
+    ];
+
+    banner.style.display = 'none';
+    kpisWrap.style.display = 'grid';
+    kpis.forEach((k) => kpisWrap.appendChild(kpiCard(k)));
+  } catch (err) {
+    if (err && err.message === 'AUTH') {
+      banner.innerHTML = 'Session MCDF non détectée. Ouvrez cette page depuis un onglet déjà connecté à MCDF.';
+    } else {
+      banner.textContent = `Erreur de chargement : ${(err && err.message) || err}`;
+      console.error(err);
+    }
+  }
+}
+loadIndicateurs();
 
 // ------------------------------------------------------------------
 // Onglets
