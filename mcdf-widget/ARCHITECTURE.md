@@ -16,8 +16,14 @@ Chaque module ci-dessous a son propre `NOTES.md` dans `modules/` avec le détail
 
 **`production/`** contient les livrables réels :
 - `widget-ia.html` (module rapports, page autonome, données MCDF en
-  direct, lecture seule, avec sélecteur de période pour la comparaison
-  N vs N-1) + `INTEGRATION.md` / `INSTALL-SERVEUR-TEST.md`
+  direct, lecture seule, structuré en 4 sous-rubriques — Commercial
+  (CA, top conseillers/clients, comparaison N vs N-1 avec sélecteur de
+  période), Planning (sessions à venir, volume d'heures), Formateurs
+  (top formateurs, heures prévues/réalisées/planifiées), Listing
+  (stagiaires, crédit d'heures restant, sessions, montant vendu/facturé)
+  — reconstruit à partir des rapports Power BI existants (Suivi
+  Commercial, Suivi Formateurs, Rapports Listings)) + `INTEGRATION.md` /
+  `INSTALL-SERVEUR-TEST.md`
 - `widget-conversationnel.html` (module IA Conversationnelle, v1 à base
   de règles sur des questions connues, mêmes données réelles que
   `widget-ia.html`)
