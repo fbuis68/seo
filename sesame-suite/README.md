@@ -1268,6 +1268,34 @@ de chambres/clients) — ce sont des données métier par établissement, pas
 de l'habillage de l'app ; les traduire impliquerait des champs
 multilingues côté admin, hors périmètre de ce passage.
 
+### Module Trésorerie simplifié (20/08/2026)
+
+Retour à un modèle plus simple, sur demande explicite : suppression du
+détail par client ("Signé en cours") et par prospect ("Pipeline pondéré"),
+remplacés par deux catégories génériques récurrentes —
+`CrmCashLine.kind` = `revenu` (fréquence mensuelle, trimestrielle ou
+annuelle) ou `depense` (fréquence mensuelle ou annuelle uniquement,
+pas de trimestriel). Le solde de départ (`solde_depart`) est inchangé.
+
+Chaque catégorie bascule indépendamment entre **saisie globale** (un seul
+montant + une fréquence, ex. "8 000 €/mois") et **saisie détaillée**
+(plusieurs lignes, chacune avec son propre montant/fréquence) via
+`CrmCashSettings` (une ligne par année). En mode global, les éventuelles
+lignes détaillées existantes restent visibles en lecture seule avec leur
+somme annualisée et l'écart par rapport au montant global saisi — sert à
+vérifier que le détail reste cohérent avec le chiffre global sans avoir à
+choisir entre les deux façons de saisir.
+
+Le MRR (`CrmProspect.mrr`) et le tableau "Portefeuille" sont inchangés —
+seul le panneau Trésorerie ne les affiche plus.
+
+**Données supprimées** (migration
+`20260820140000_crm_cash_line_simplify`, sur confirmation explicite) :
+toutes les lignes "Dépenses" existantes (86), "Signé en cours" (65) et
+"Pipeline pondéré" (13) — aucune ne correspond au nouveau modèle
+(fréquence au lieu d'un mois ponctuel, pas de lien client/fournisseur).
+Le solde de départ (1 ligne) est conservé.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

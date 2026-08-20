@@ -730,36 +730,56 @@ model CrmProspect {
 
   activities CrmActivity[]
   tickets    CrmTicket[]
-  cashLines  CrmCashLine[]
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Trésorerie prévisionnelle — lignes datées qui alimentent la vue "Vision
-// annuelle" (mock-up validé le 19/08/2026, cf. README). Le MRR reste porté
-// par CrmProspect.mrr (récurrent, pas de date) ; ce modèle couvre les 3
-// autres catégories qui varient mois par mois :
-//   - "signe"       : un versement encaissé/attendu à une date précise
-//                      (plusieurs lignes possibles par client)
-//   - "pipeline"     : une affaire en cours, montant × probabilité, mois de
-//                      clôture prévu (nullable tant qu'il n'est pas choisi)
-//   - "depense"      : un poste de dépense récurrente ; mois=null = se répète
-//                      chaque mois (ex. assurance), mois défini = ne compte
-//                      que ce mois-là (postes qui varient réellement, ex. TVA)
+// Trésorerie prévisionnelle — modèle simplifié (20/08/2026, remplace le
+// détail par client/prospect du mock-up du 19/08/2026 : plus de "Signé"
+// (par client) ni de "Pipeline pondéré" (par prospect), juste des lignes
+// récurrentes génériques. Le MRR reste porté par CrmProspect.mrr côté
+// fiche/Portefeuille (inchangé) mais n'alimente plus ce panneau.
+//   - "revenu"       : ligne d'encaissement récurrent — fréquence mensuelle,
+//                      trimestrielle ou annuelle (cf. `frequence`)
+//   - "depense"      : ligne de dépense récurrente — fréquence mensuelle ou
+//                      annuelle uniquement (pas de trimestriel)
 //   - "solde_depart" : une ligne unique par année portant le solde de
-//                      trésorerie au 1er janvier (mois toujours null)
-// Distinct des champs signe/previsionnel (un seul montant, sans date) déjà
-// utilisés par le tableau "Portefeuille" — ce dernier reste inchangé.
+//                      trésorerie au 1er janvier (frequence/mois toujours null)
+// `mois` (0-11) donne, selon `frequence` : le mois unique où la ligne tombe
+// (annuel), le mois de départ du cycle trimestriel (trimestriel — répétée
+// tous les 3 mois à partir de là), ou est ignoré (mensuel : tous les mois).
 model CrmCashLine {
-  id     String @id @default(cuid())
-  annee  Int    @default(2026)
-  kind   String // signe | pipeline | depense | solde_depart
-  label  String
-  montant Float
-  proba  Int? // 0-100, pipeline uniquement
-  mois   Int? // 0-11 ; sémantique dépend de kind (cf. ci-dessus)
+  id        String  @id @default(cuid())
+  annee     Int     @default(2026)
+  kind      String // revenu | depense | solde_depart
+  label     String
+  montant   Float
+  frequence String? // mensuel | trimestriel | annuel — revenu/depense uniquement
+  mois      Int? // 0-11 ; sémantique dépend de frequence (cf. ci-dessus)
 
-  prospectId String?
-  prospect   CrmProspect? @relation(fields: [prospectId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Bascule "saisie globale / détaillée" par catégorie (revenu, dépense) et
+// par année — une ligne unique par année. En mode "detail", le total de la
+// catégorie est calculé automatiquement à partir des CrmCashLine
+// correspondantes ; en mode "global", un seul montant/fréquence saisis ici
+// font foi pour la projection, et les lignes détaillées (s'il y en a)
+// restent visibles en lecture seule pour vérifier que leur somme est
+// cohérente avec le chiffre global.
+model CrmCashSettings {
+  id    String @id @default(cuid())
+  annee Int    @unique
+
+  revenuMode      String  @default("detail") // global | detail
+  revenuMontant   Float   @default(0)
+  revenuFrequence String  @default("mensuel") // mensuel | trimestriel | annuel
+  revenuMois      Int?
+
+  depenseMode      String  @default("detail")
+  depenseMontant   Float   @default(0)
+  depenseFrequence String  @default("mensuel") // mensuel | annuel
+  depenseMois      Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

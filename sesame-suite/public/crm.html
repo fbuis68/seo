@@ -658,6 +658,7 @@ const DOT_MAP = {Appel:'g',Email:'b',Visite:'g',Proposition:'b',Relance:'a','Not
 let clients=[], view='list', vmode='table', curId=null, sortC='nom', sortD=1;
 let srch='', fDanger='', fSecteur='', fContrat='', fType='', editingId=null, toastT=null;
 let deals=[], COMMERCIALS=[], tickets=[], cashLines=[];
+let cashSettings = {revenuMode:'detail',revenuMontant:0,revenuFrequence:'mensuel',revenuMois:null,depenseMode:'detail',depenseMontant:0,depenseFrequence:'mensuel',depenseMois:null};
 let cashYear = new Date().getFullYear();
 
 async function loadData(){
@@ -685,10 +686,15 @@ async function loadCashLines(){
   if(!r.ok) throw new Error('http '+r.status);
   return await r.json();
 }
+async function loadCashSettings(){
+  var r = await apiFetch('/wa/crmCashSettings/get?annee='+cashYear);
+  if(!r.ok) throw new Error('http '+r.status);
+  return await r.json();
+}
 async function init(){
   try{
-    const [c, d, com, t, cl] = await Promise.all([loadData(), loadDeals(), loadCommercials(), loadTickets(), loadCashLines()]);
-    clients = c; deals = d; COMMERCIALS = com; tickets = t; cashLines = cl;
+    const [c, d, com, t, cl, cs] = await Promise.all([loadData(), loadDeals(), loadCommercials(), loadTickets(), loadCashLines(), loadCashSettings()]);
+    clients = c; deals = d; COMMERCIALS = com; tickets = t; cashLines = cl; cashSettings = cs;
   }
   catch(e){ flash('Erreur de chargement — rechargez la page'); clients = []; deals = []; COMMERCIALS = []; tickets = []; cashLines = []; }
   updateBadges();showList();
@@ -1823,89 +1829,133 @@ function showTresorerie(){
 
 function trRows(kind){ return cashLines.filter(l=>l.kind===kind).slice().sort((a,b)=>(a.mois??99)-(b.mois??99) || a.label.localeCompare(b.label,'fr')); }
 function trSolde(){ return cashLines.find(l=>l.kind==='solde_depart'); }
-function trWeighted(r){ return (+r.montant||0) * (+r.proba||0) / 100; }
-function trMonthOpts(selected){
-  return '<option value="">—</option>' + TR_MONTHS.map((m,i)=>`<option value="${i}" ${selected===i?'selected':''}>${m}</option>`).join('');
+
+// ── Fréquence : mensuel (tous les mois) / trimestriel (tous les 3 mois à
+// partir d'un mois de départ) / annuel (un seul mois par an) ──
+function trFreqLabel(f){ return {mensuel:'Mensuel', trimestriel:'Trimestriel', annuel:'Annuel'}[f] || f || '—'; }
+function trFreqsFor(kind){ return kind==='depense' ? ['mensuel','annuel'] : ['mensuel','trimestriel','annuel']; }
+function trFreqOpts(kind, selected){
+  return trFreqsFor(kind).map(f=>`<option value="${f}" ${selected===f?'selected':''}>${trFreqLabel(f)}</option>`).join('');
+}
+function trMonthOptsSingle(selected){
+  return TR_MONTHS.map((m,i)=>`<option value="${i}" ${(+selected)===i?'selected':''}>${m}</option>`).join('');
+}
+/** Montant apporté par une ligne (ou la saisie globale) pour le mois `m` (0-11). */
+function trMonthlyFromSpec(spec, m){
+  const val = +spec.montant || 0;
+  if(spec.frequence==='mensuel') return val;
+  if(spec.frequence==='trimestriel'){ const start = spec.mois ?? 0; return ((m-start+12)%3===0) ? val : 0; }
+  if(spec.frequence==='annuel') return (spec.mois ?? 0)===m ? val : 0;
+  return 0;
+}
+/** Montant annualisé d'une ligne (ou la saisie globale), pour les totaux affichés. */
+function trAnnualFromSpec(spec){
+  const val = +spec.montant || 0;
+  if(spec.frequence==='mensuel') return val*12;
+  if(spec.frequence==='trimestriel') return val*4;
+  if(spec.frequence==='annuel') return val;
+  return 0;
+}
+/** Total annuel de la catégorie, selon le mode actif (global ou somme des lignes détaillées). */
+function trCategoryAnnual(kind){
+  if(cashSettings[kind+'Mode']==='global'){
+    return trAnnualFromSpec({montant:cashSettings[kind+'Montant'], frequence:cashSettings[kind+'Frequence']});
+  }
+  return trRows(kind).reduce((s,r)=>s+trAnnualFromSpec(r),0);
+}
+/** Montant de la catégorie pour le mois `m`, selon le mode actif. */
+function trCategoryMonthly(kind, m){
+  if(cashSettings[kind+'Mode']==='global'){
+    return trMonthlyFromSpec({montant:cashSettings[kind+'Montant'], frequence:cashSettings[kind+'Frequence'], mois:cashSettings[kind+'Mois']}, m);
+  }
+  return trRows(kind).reduce((s,r)=>s+trMonthlyFromSpec(r,m),0);
 }
 
-function renderTresorerie(){
-  // "Client" uniquement (jamais un prospect, qui n'a par définition pas de
-  // revenu récurrent) — tous les clients apparaissent, avec ou sans MRR
-  // déjà saisi, pour que le champ serve aussi bien à ajouter une nouvelle
-  // valeur qu'à corriger/effacer une valeur existante.
-  const mrrClients = clients.filter(c=>(c.type||'Client')==='Client').slice().sort((a,b)=>a.nom.localeCompare(b.nom,'fr'));
-  const signeRows = trRows('signe');
-  const pipelineRows = trRows('pipeline');
-  const depenseRows = trRows('depense');
-  const solde = trSolde();
-  const startBalance = solde ? solde.montant : 0;
+function trModeToggle(kind){
+  const mode = cashSettings[kind+'Mode'];
+  const btn = (v,lbl) => `<button type="button" onclick="trSetMode('${kind}','${v}')" style="padding:4px 10px;font-size:11px;font-weight:600;border:none;cursor:pointer;background:${mode===v?'var(--a)':'transparent'};color:${mode===v?'#fff':'var(--mu)'}">${lbl}</button>`;
+  return `<div style="display:inline-flex;border:1px solid var(--bdr);border-radius:8px;overflow:hidden;margin-left:12px">${btn('global','Global')}${btn('detail','Détaillé')}</div>`;
+}
 
-  const mrrTotal = mrrClients.reduce((s,c)=>s+(+c.mrr||0),0);
-  const signeTotal = signeRows.reduce((s,r)=>s+(+r.montant||0),0);
-  const pipelineTotalW = pipelineRows.reduce((s,r)=>s+trWeighted(r),0);
-  const depenseAnnuel = depenseRows.reduce((s,r)=>s+(+r.montant||0)*(r.mois===null?12:1),0);
-
-  const dl = 'clientDatalist';
-
-  const mrrBody = mrrClients.length===0 ? '<div class="log-empty">Aucun client dans le CRM.</div>' : mrrClients.map(c=>`
+function trLineRow(r, kind){
+  const showMois = r.frequence !== 'mensuel';
+  const moisLbl = r.frequence==='trimestriel' ? 'Départ (tous les 3 mois)' : 'Mois';
+  return `
     <div class="tr-row">
       <div class="tr-row-top">
-        <div class="tr-row-name" style="cursor:pointer" onclick="showFiche('${c.id}')">${esc(c.nom)}</div>
-        <input class="ei tr-amt num" type="number" step="0.01" value="${c.mrr||''}" placeholder="0"
-          oninput="trMrrLocal('${c.id}',this.value)" onchange="trMrrSave('${c.id}',this.value)">
-      </div>
-    </div>`).join('');
-
-  const signeBody = signeRows.length===0 ? '<div class="log-empty">Aucune ligne. Ajoutez un versement.</div>' : signeRows.map(r=>`
-    <div class="tr-row">
-      <div class="tr-row-top">
-        <input class="ei tr-name" list="${dl}" value="${esc(r.label)}" oninput="trEditLocal('${r.id}','label',this.value)" onchange="trSave('${r.id}','label',this.value)" placeholder="Client / projet">
-        <input class="ei tr-amt num" type="number" step="0.01" value="${r.montant}" oninput="trEditLocal('${r.id}','montant',+this.value)" onchange="trSave('${r.id}','montant',+this.value)">
-        <button class="ta-btn" title="Supprimer" onclick="trDelete('${r.id}')">✕</button>
-      </div>
-      <div class="tr-row-more">
-        <span class="tr-sub-lbl">Mois d'encaissement</span>
-        <select onchange="trEditLocal('${r.id}','mois',this.value===''?null:+this.value);trSave('${r.id}','mois',this.value===''?null:+this.value)">${trMonthOpts(r.mois)}</select>
-      </div>
-    </div>`).join('');
-
-  const pipelineBody = pipelineRows.length===0 ? '<div class="log-empty">Aucun prospect. Ajoutez une affaire.</div>' : pipelineRows.map(r=>`
-    <div class="tr-row">
-      <div class="tr-row-top">
-        <input class="ei tr-name" list="${dl}" value="${esc(r.label)}" oninput="trEditLocal('${r.id}','label',this.value)" onchange="trSave('${r.id}','label',this.value)" placeholder="Prospect ou client">
-        <input class="ei tr-amt num" type="number" step="100" value="${r.montant}" oninput="trEditLocal('${r.id}','montant',+this.value)" onchange="trSave('${r.id}','montant',+this.value)">
-        <button class="ta-btn" title="Supprimer" onclick="trDelete('${r.id}')">✕</button>
-      </div>
-      <div class="tr-row-more">
-        <input class="ei tr-pct num" type="number" min="0" max="100" value="${r.proba||0}" oninput="trEditLocal('${r.id}','proba',+this.value)" onchange="trSave('${r.id}','proba',+this.value)">
-        <span class="tr-sub-lbl">% ·</span>
-        <select onchange="trEditLocal('${r.id}','mois',this.value===''?null:+this.value);trSave('${r.id}','mois',this.value===''?null:+this.value)"><option value="" ${r.mois==null?'selected':''}>Mois de clôture —</option>${TR_MONTHS.map((m,i)=>`<option value="${i}" ${r.mois===i?'selected':''}>${m}</option>`).join('')}</select>
-        <span class="tr-weighted">pondéré <b class="num">${fmtEUR(trWeighted(r))}</b></span>
-      </div>
-    </div>`).join('');
-
-  const depenseBody = depenseRows.length===0 ? '<div class="log-empty">Aucun poste. Ajoutez une dépense.</div>' : depenseRows.map(r=>`
-    <div class="tr-row">
-      <div class="tr-row-top">
-        <input class="ei tr-name" value="${esc(r.label)}" oninput="trEditLocal('${r.id}','label',this.value)" onchange="trSave('${r.id}','label',this.value)" placeholder="Poste de dépense">
+        <input class="ei tr-name" value="${esc(r.label)}" oninput="trEditLocal('${r.id}','label',this.value)" onchange="trSave('${r.id}','label',this.value)" placeholder="${kind==='revenu'?'Libellé (ex. Abonnements clients)':'Libellé (ex. Salaires)'}">
         <input class="ei tr-amt num" type="number" step="10" value="${r.montant}" oninput="trEditLocal('${r.id}','montant',+this.value)" onchange="trSave('${r.id}','montant',+this.value)">
         <button class="ta-btn" title="Supprimer" onclick="trDelete('${r.id}')">✕</button>
       </div>
       <div class="tr-row-more">
-        <select onchange="trEditLocal('${r.id}','mois',this.value===''?null:+this.value);trSave('${r.id}','mois',this.value===''?null:+this.value)">
-          <option value="" ${r.mois===null?'selected':''}>Tous les mois (récurrent)</option>
-          ${TR_MONTHS.map((m,i)=>`<option value="${i}" ${r.mois===i?'selected':''}>${m} seulement</option>`).join('')}
-        </select>
+        <select onchange="trFreqChange('${r.id}','${kind}',this.value)">${trFreqOpts(kind, r.frequence)}</select>
+        ${showMois?`<span class="tr-sub-lbl">${moisLbl}</span><select onchange="trEditLocal('${r.id}','mois',+this.value);trSave('${r.id}','mois',+this.value)">${trMonthOptsSingle(r.mois)}</select>`:''}
       </div>
-    </div>`).join('');
+    </div>`;
+}
+function trLineRowReadonly(r){
+  return `
+    <div class="tr-row">
+      <div class="tr-row-top">
+        <div class="tr-row-name">${esc(r.label)||'—'}</div>
+        <div class="num">${fmtEUR(r.montant)}</div>
+      </div>
+      <div class="tr-row-more"><span class="tr-sub-lbl">${trFreqLabel(r.frequence)}${r.mois!=null?' · '+TR_MONTHS[r.mois]:''}</span></div>
+    </div>`;
+}
+
+function trGlobalBlock(kind){
+  const montant = cashSettings[kind+'Montant'], freq = cashSettings[kind+'Frequence'], mois = cashSettings[kind+'Mois'];
+  const showMois = freq !== 'mensuel';
+  const rows = trRows(kind);
+  const linesSum = rows.reduce((s,r)=>s+trAnnualFromSpec(r),0);
+  const globalAnnual = trAnnualFromSpec({montant, frequence:freq});
+  const delta = linesSum - globalAnnual;
+  return `
+    <div class="tr-row">
+      <div class="tr-row-top">
+        <input class="ei tr-amt num" type="number" step="10" value="${montant}" oninput="trGlobalLocal('${kind}','Montant',+this.value)" onchange="trGlobalSave('${kind}','Montant',+this.value)" placeholder="Montant">
+        <select onchange="trGlobalFreqChange('${kind}',this.value)">${trFreqOpts(kind, freq)}</select>
+      </div>
+      ${showMois?`<div class="tr-row-more"><span class="tr-sub-lbl">${freq==='trimestriel'?'Départ (tous les 3 mois)':'Mois'}</span><select onchange="trGlobalLocal('${kind}','Mois',+this.value);trGlobalSave('${kind}','Mois',+this.value)">${trMonthOptsSingle(mois)}</select></div>`:''}
+    </div>
+    ${rows.length ? `
+      <div class="tr-caveat" style="margin-top:10px">Lignes détaillées existantes (lecture seule, pour vérifier la cohérence) — somme annualisée <b class="num">${fmtEUR(linesSum)}</b>, écart avec la saisie globale : <b class="num" style="color:${Math.abs(delta)<1?'var(--good,#1a6b47)':'var(--bad,#b23b2c)'}">${delta>=0?'+':''}${fmtEUR(delta)}</b></div>
+      <div class="tr-panel-body" style="opacity:.6">${rows.map(trLineRowReadonly).join('')}</div>
+    ` : ''}`;
+}
+
+function trCategoryCard(kind, title, colorVar){
+  const mode = cashSettings[kind+'Mode'];
+  const rows = trRows(kind);
+  const total = trCategoryAnnual(kind);
+  const body = mode==='global'
+    ? trGlobalBlock(kind)
+    : (rows.length===0 ? `<div class="log-empty">Aucune ligne. Ajoutez ${kind==='revenu'?'un encaissement':'une dépense'}.</div>` : rows.map(r=>trLineRow(r,kind)).join(''));
+  return `
+    <div class="card" style="margin-bottom:0">
+      <div class="card-head">
+        <div class="ch-ico" style="background:${colorVar};border-color:${colorVar}"></div>
+        <span class="ch-title">${title}</span>
+        <span class="num" style="margin-left:10px;font-weight:600">${fmtEUR(total)}/an</span>
+        ${trModeToggle(kind)}
+      </div>
+      <div class="tr-panel-body">${body}</div>
+      ${mode==='detail'?`<button class="add-row" onclick="trAdd('${kind}')">+ Ajouter une ligne</button>`:''}
+    </div>`;
+}
+
+function renderTresorerie(){
+  const solde = trSolde();
+  const startBalance = solde ? solde.montant : 0;
+  const revenuAnnuel = trCategoryAnnual('revenu');
+  const depenseAnnuel = trCategoryAnnual('depense');
 
   document.getElementById('main').innerHTML = `
-    <datalist id="${dl}">${clients.map(c=>`<option value="${esc(c.nom)}">`).join('')}</datalist>
-
     <div class="tr-hero">
       <div>
         <div class="tr-hero-eyebrow">Prévisionnel ${cashYear}</div>
-        <div class="tr-hero-sub">MRR + Signé placé + Pipeline pondéré placé, moins les dépenses récurrentes — vision mensuelle sur l'année.</div>
+        <div class="tr-hero-sub">Encaissement récurrent moins dépenses récurrentes — vision mensuelle sur l'année.</div>
       </div>
       <div class="tr-hero-figure">
         <div class="tr-sub-lbl">Trésorerie fin d'année</div>
@@ -1915,42 +1965,21 @@ function renderTresorerie(){
     </div>
 
     <div class="stat-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:20px">
-      <div class="stat-card"><div class="stat-lbl">MRR actuel</div><div class="stat-val num" id="tr-chip-mrr">${fmtEUR(mrrTotal)}/mois</div></div>
-      <div class="stat-card"><div class="stat-lbl">Pipeline pondéré (affecté)</div><div class="stat-val num" id="tr-chip-pipeline">—</div></div>
+      <div class="stat-card"><div class="stat-lbl">Encaissement (année)</div><div class="stat-val num" id="tr-chip-revenu">${fmtEUR(revenuAnnuel)}</div></div>
       <div class="stat-card"><div class="stat-lbl">Dépenses (année)</div><div class="stat-val num" id="tr-chip-depense">${fmtEUR(depenseAnnuel)}</div></div>
       <div class="stat-card"><div class="stat-lbl">Solde de départ (1er janvier)</div><input class="ei num" id="tr-start-balance" type="number" step="100" value="${startBalance}" oninput="trStartBalanceLocal(this.value)" onchange="trStartBalanceSave(this.value)" style="font-size:16px;font-weight:600;border:none;padding:0;height:auto;background:transparent"></div>
     </div>
 
     <div class="panels" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px">
-      <div class="card" style="margin-bottom:0">
-        <div class="card-head"><div class="ch-ico" style="background:var(--tr-mrr);border-color:var(--tr-mrr)"></div><span class="ch-title">MRR récurrent</span><span class="num" style="margin-left:auto;font-weight:600" id="tr-mrr-total">${fmtEUR(mrrTotal)}/mois</span></div>
-        <div class="tr-panel-body" id="tr-mrr-body">${mrrBody}</div>
-        <div class="tr-caveat">Édite le champ MRR de la fiche client (même valeur que la fiche et le tableau Portefeuille).</div>
-      </div>
-      <div class="card" style="margin-bottom:0">
-        <div class="card-head"><div class="ch-ico" style="background:var(--tr-signe);border-color:var(--tr-signe)"></div><span class="ch-title">Signé en cours</span><span class="num" style="margin-left:auto;font-weight:600" id="tr-signe-total">${fmtEUR(signeTotal)}</span></div>
-        <div class="tr-panel-body" id="tr-signe-body">${signeBody}</div>
-        <button class="add-row" onclick="trAdd('signe')">+ Ajouter une ligne</button>
-      </div>
-      <div class="card" style="margin-bottom:0">
-        <div class="card-head"><div class="ch-ico" style="background:var(--tr-pipeline);border-color:var(--tr-pipeline)"></div><span class="ch-title">Pipeline pondéré (Affaires)</span><span class="num" style="margin-left:auto;font-weight:600" id="tr-pipeline-total">${fmtEUR(pipelineTotalW)} pondéré</span></div>
-        <div class="tr-panel-body" id="tr-pipeline-body">${pipelineBody}</div>
-        <button class="add-row" onclick="trAdd('pipeline')">+ Ajouter une ligne</button>
-      </div>
-      <div class="card" style="margin-bottom:0">
-        <div class="card-head"><div class="ch-ico" style="background:var(--tr-depense);border-color:var(--tr-depense)"></div><span class="ch-title">Dépenses récurrentes</span><span class="num" style="margin-left:auto;font-weight:600" id="tr-depense-total">${fmtEUR(depenseAnnuel)}/an</span></div>
-        <div class="tr-panel-body" id="tr-depense-body">${depenseBody}</div>
-        <button class="add-row" onclick="trAdd('depense')">+ Ajouter une ligne</button>
-      </div>
+      ${trCategoryCard('revenu', 'Encaissement récurrent', 'var(--tr-signe)')}
+      ${trCategoryCard('depense', 'Dépenses récurrentes', 'var(--tr-depense)')}
     </div>
 
     <div class="card">
       <div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Vision annuelle ${cashYear}</span></div>
-      <div class="tr-chart-title">Recettes vs dépenses, par mois</div>
+      <div class="tr-chart-title">Encaissement vs dépenses, par mois</div>
       <div class="tr-legend">
-        <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-mrr)"></span>MRR</span>
-        <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-signe)"></span>Signé</span>
-        <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-pipeline)"></span>Pipeline pondéré</span>
+        <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-signe)"></span>Encaissement</span>
         <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-depense)"></span>Dépenses</span>
       </div>
       <div class="tr-chart-wrap">
@@ -1968,7 +1997,7 @@ function renderTresorerie(){
       </div>
 
       <div class="tbl-wrap" style="margin-top:18px"><table>
-        <thead><tr><th>Mois</th><th style="text-align:right">MRR</th><th style="text-align:right">Signé</th><th style="text-align:right">Pipeline</th><th style="text-align:right">Recettes</th><th style="text-align:right">Dépenses</th><th style="text-align:right">Net</th><th style="text-align:right">Trésorerie</th></tr></thead>
+        <thead><tr><th>Mois</th><th style="text-align:right">Encaissement</th><th style="text-align:right">Dépenses</th><th style="text-align:right">Net</th><th style="text-align:right">Trésorerie</th></tr></thead>
         <tbody id="tr-month-tbody"></tbody>
       </table></div>
     </div>`;
@@ -1977,18 +2006,15 @@ function renderTresorerie(){
 }
 
 function trComputeMonthly(){
-  const mrrTotal = clients.reduce((s,c)=>s+(+c.mrr||0),0);
   const solde = trSolde();
   let cum = solde ? (+solde.montant||0) : 0;
   const months = [];
   for(let m=0;m<12;m++){
-    const signeM = trRows('signe').filter(r=>r.mois===m).reduce((s,r)=>s+(+r.montant||0),0);
-    const pipeM = trRows('pipeline').filter(r=>r.mois===m).reduce((s,r)=>s+trWeighted(r),0);
-    const depensesM = trRows('depense').filter(r=>r.mois===null||r.mois===m).reduce((s,r)=>s+(+r.montant||0),0);
-    const recettes = mrrTotal + signeM + pipeM;
-    const net = recettes - depensesM;
+    const revenu = trCategoryMonthly('revenu', m);
+    const depenses = trCategoryMonthly('depense', m);
+    const net = revenu - depenses;
     cum += net;
-    months.push({ m, mrr:mrrTotal, signe:signeM, pipeline:pipeM, recettes, depenses:depensesM, net, cum });
+    months.push({ m, revenu, depenses, net, cum });
   }
   return months;
 }
@@ -2006,9 +2032,6 @@ function trRenderCharts(){
   heroEl.className = 'tr-hero-val num ' + (last.cum<0?'neg':'pos');
   const solde = trSolde(); const startBalance = solde?solde.montant:0;
   document.getElementById('tr-hero-sub-note').textContent = (last.cum>=startBalance?'↑ ':'↓ ') + 'depuis ' + fmtEUR(startBalance) + ' au 1er janvier';
-
-  const placedPipeline = months.reduce((s,mo)=>s+mo.pipeline,0);
-  const chipPipe = document.getElementById('tr-chip-pipeline'); if(chipPipe) chipPipe.textContent = fmtEUR(placedPipeline);
 }
 
 function trRenderBarChart(months){
@@ -2018,7 +2041,7 @@ function trRenderBarChart(months){
   const groupW = plotW / 12;
   const barW = Math.min(30, groupW*0.30);
   const gap = 6;
-  const maxVal = Math.max(1, ...months.map(mo=>Math.max(mo.recettes, mo.depenses)));
+  const maxVal = Math.max(1, ...months.map(mo=>Math.max(mo.revenu, mo.depenses)));
   const scale = v => (v/maxVal) * plotH;
 
   let s = '';
@@ -2026,15 +2049,11 @@ function trRenderBarChart(months){
     const cx = padL + groupW*i + groupW/2;
     const baseY = padT + plotH;
     const xR = cx - gap/2 - barW;
-    let yTop = baseY;
-    const segs = [ [mo.mrr, 'var(--tr-mrr)'], [mo.signe, 'var(--tr-signe)'], [mo.pipeline, 'var(--tr-pipeline)'] ];
-    segs.forEach(([val,color])=>{
-      if(val<=0) return;
-      const h = scale(val);
-      yTop -= h;
-      s += `<rect x="${xR}" y="${yTop}" width="${barW}" height="${Math.max(h-1.5,0)}" rx="2.5" fill="${color}"></rect>`;
-    });
-    if(mo.recettes>0){ s += `<text class="tr-bar-lbl" x="${xR+barW/2}" y="${yTop-5}">${Math.round(mo.recettes/1000)}k</text>`; }
+    const hR = scale(mo.revenu);
+    if(hR>0){
+      s += `<rect x="${xR}" y="${baseY-hR}" width="${barW}" height="${Math.max(hR-1.5,0)}" rx="2.5" fill="var(--tr-signe)"></rect>`;
+      s += `<text class="tr-bar-lbl" x="${xR+barW/2}" y="${baseY-hR-5}">${Math.round(mo.revenu/1000)}k</text>`;
+    }
     const xD = cx + gap/2;
     const hD = scale(mo.depenses);
     if(hD>0){ s += `<rect x="${xD}" y="${baseY-hD}" width="${barW}" height="${Math.max(hD-1.5,0)}" rx="2.5" fill="var(--tr-depense)"></rect>`; }
@@ -2049,9 +2068,7 @@ function trRenderBarChart(months){
     el.addEventListener('mousemove', (ev)=>{
       const i = +el.dataset.month, mo = months[i];
       tt.innerHTML = `<b>${TR_MONTHS[i]}</b>`+
-        `<div class="tr-tt-row"><span>MRR</span><span class="num">${fmtEUR(mo.mrr)}</span></div>`+
-        `<div class="tr-tt-row"><span>Signé</span><span class="num">${fmtEUR(mo.signe)}</span></div>`+
-        `<div class="tr-tt-row"><span>Pipeline</span><span class="num">${fmtEUR(mo.pipeline)}</span></div>`+
+        `<div class="tr-tt-row"><span>Encaissement</span><span class="num">${fmtEUR(mo.revenu)}</span></div>`+
         `<div class="tr-tt-row"><span>Dépenses</span><span class="num">−${fmtEUR(mo.depenses)}</span></div>`+
         `<div class="tr-tt-row" style="border-top:1px solid rgba(255,255,255,.2);margin-top:3px;padding-top:3px"><span>Net</span><span class="num">${(mo.net>=0?'+':'−')+fmtEUR(Math.abs(mo.net))}</span></div>`;
       trPositionTooltip(tt, ev, svg);
@@ -2135,35 +2152,19 @@ function trRenderMonthTable(months){
   body.innerHTML = months.map(mo=>`
     <tr>
       <td>${TR_MONTHS[mo.m]}</td>
-      <td class="num" style="text-align:right">${fmtEUR(mo.mrr)}</td>
-      <td class="num" style="text-align:right">${mo.signe?fmtEUR(mo.signe):'—'}</td>
-      <td class="num" style="text-align:right">${mo.pipeline?fmtEUR(mo.pipeline):'—'}</td>
-      <td class="num" style="text-align:right">${fmtEUR(mo.recettes)}</td>
+      <td class="num" style="text-align:right">${fmtEUR(mo.revenu)}</td>
       <td class="num" style="text-align:right">${fmtEUR(mo.depenses)}</td>
       <td class="num" style="text-align:right;font-weight:500;color:${mo.net>=0?'var(--good,#1a6b47)':'var(--bad,#b23b2c)'}">${(mo.net>=0?'+':'−')+fmtEUR(Math.abs(mo.net))}</td>
       <td class="num" style="text-align:right;font-weight:600;${mo.cum<0?'color:var(--bad,#b23b2c)':''}">${fmtEUR(mo.cum)}</td>
     </tr>`).join('');
 }
 
-// ── MRR (édite directement CrmProspect.mrr) ──
-function trMrrLocal(clientId, val){
-  const c = clients.find(c=>c.id===clientId); if(c) c.mrr = val.trim()===''?null:+val;
-  trRenderCharts();
-}
-async function trMrrSave(clientId, val){
-  const v = val.trim()===''?null:+val;
-  try{
-    const r = await apiFetch('/wa/crmProspect/update', {method:'POST', body:JSON.stringify({id:clientId, mrr:v})});
-    if(!r.ok) throw new Error('http '+r.status);
-  }catch(e){ flash('Erreur d\'enregistrement'); }
-}
-
-// ── Signé / Pipeline / Dépenses (CrmCashLine) ──
+// ── Lignes détaillées Encaissement/Dépense (CrmCashLine) ──
 function trEditLocal(id, field, value){
   const row = cashLines.find(r=>r.id===id); if(!row) return;
   row[field] = value;
   trRenderCharts();
-  if(field==='mois' || field==='proba') renderTresorerie();
+  if(field==='mois') renderTresorerie();
 }
 async function trSave(id, field, value){
   try{
@@ -2171,10 +2172,22 @@ async function trSave(id, field, value){
     if(!r.ok) throw new Error('http '+r.status);
   }catch(e){ flash('Erreur d\'enregistrement'); }
 }
-async function trAdd(kind){
-  const defaults = { signe:{label:'',montant:0,mois:null}, pipeline:{label:'',montant:0,proba:50,mois:null}, depense:{label:'',montant:0,mois:null} }[kind];
+async function trFreqChange(id, kind, freq){
+  const row = cashLines.find(r=>r.id===id); if(!row) return;
+  row.frequence = freq;
+  if(freq==='mensuel') row.mois = null;
+  else if(row.mois==null) row.mois = 0;
+  renderTresorerie();
   try{
-    const r = await apiFetch('/wa/crmCashLine/create', {method:'POST', body:JSON.stringify({annee:cashYear, kind, ...defaults})});
+    const r = await apiFetch('/wa/crmCashLine/update', {method:'POST', body:JSON.stringify({id, frequence:freq, mois:row.mois})});
+    if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash('Erreur d\'enregistrement'); }
+}
+async function trAdd(kind){
+  const defaults = { montant:0, frequence:'mensuel', mois:null };
+  const label = kind==='revenu' ? 'Nouvel encaissement' : 'Nouvelle dépense';
+  try{
+    const r = await apiFetch('/wa/crmCashLine/create', {method:'POST', body:JSON.stringify({annee:cashYear, kind, label, ...defaults})});
     if(!r.ok) throw new Error('http '+r.status);
     const row = await r.json();
     cashLines.push(row);
@@ -2188,6 +2201,39 @@ async function trDelete(id){
     const r = await apiFetch('/wa/crmCashLine/delete', {method:'POST', body:JSON.stringify({id})});
     if(!r.ok) throw new Error('http '+r.status);
   }catch(e){ flash('Erreur de suppression'); }
+}
+
+// ── Saisie globale (CrmCashSettings, par catégorie) ──
+function trGlobalLocal(kind, field, value){
+  cashSettings[kind+field] = value;
+  trRenderCharts();
+}
+async function trGlobalSave(kind, field, value){
+  try{
+    const body = {annee:cashYear}; body[kind+field] = value;
+    const r = await apiFetch('/wa/crmCashSettings/update', {method:'POST', body:JSON.stringify(body)});
+    if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash('Erreur d\'enregistrement'); }
+}
+async function trGlobalFreqChange(kind, freq){
+  cashSettings[kind+'Frequence'] = freq;
+  if(freq==='mensuel') cashSettings[kind+'Mois'] = null;
+  else if(cashSettings[kind+'Mois']==null) cashSettings[kind+'Mois'] = 0;
+  renderTresorerie();
+  try{
+    const body = {annee:cashYear}; body[kind+'Frequence']=freq; body[kind+'Mois']=cashSettings[kind+'Mois'];
+    const r = await apiFetch('/wa/crmCashSettings/update', {method:'POST', body:JSON.stringify(body)});
+    if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash('Erreur d\'enregistrement'); }
+}
+async function trSetMode(kind, mode){
+  cashSettings[kind+'Mode'] = mode;
+  renderTresorerie();
+  try{
+    const body = {annee:cashYear}; body[kind+'Mode'] = mode;
+    const r = await apiFetch('/wa/crmCashSettings/update', {method:'POST', body:JSON.stringify(body)});
+    if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash('Erreur d\'enregistrement'); }
 }
 
 // ── Solde de départ (ligne unique kind=solde_depart) ──
