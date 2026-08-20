@@ -1351,6 +1351,39 @@ pondéré s'affiche désormais dans une **couleur distincte** (doré,
 (lignes/saisie globale, bleu) — légende et infobulle mises à jour en
 conséquence.
 
+### Onboarding : étape "Modèle tarifaire" — v1 du "forfait zéro" (20/08/2026)
+
+Suite à la validation du concept (maquette autonome), le parcours
+d'inscription en ligne (`public/onboarding.html`) intègre désormais une
+nouvelle étape **"Tarif"** (4ᵉ sur 6, entre "Options" et "Récap") où le
+prospect choisit entre deux modèles :
+
+- **Abonnement classique** (comportement historique, sélectionné par
+  défaut) : le total mensuel calculé à partir de la grille + options
+  cochées, facturé comme avant.
+- **Forfait zéro** : aucun abonnement fixe — Sesame prélève 10 % des
+  économies de ménage (temps de ménage évité × taux horaire) et 10 % du
+  chiffre d'affaires room service généré via la plateforme. Le récap
+  affiche l'équivalent classique à titre de comparaison mais aucun
+  montant fixe n'est facturé.
+
+Le choix est envoyé au serveur (`POST /onboarding/register`) et persisté
+sur la fiche `Subscription` via deux nouveaux champs : `pricingModel`
+(`flat` par défaut | `roi_share`) et `roiSharePct` (10 par défaut). Pour
+`roi_share`, `basePrice`/`modulePrices`/`monthlyTotal` sont mis à `0` en
+base — afin de ne pas fausser les agrégats MRR existants (panneau
+"Souscriptions", "Comptes clients") avec un forfait fantôme. La note
+CRM automatique créée à l'inscription (`crmActivity`) mentionne le
+modèle choisi.
+
+**Important — périmètre v1** : cette étape capture uniquement le choix
+fait à l'inscription. Le moteur de calcul mensuel réel du "forfait
+zéro" (agrégation des ménages évités et des commandes room service par
+établissement, facturation effective des 10 %) **n'est pas encore
+implémenté** — à construire dans une itération ultérieure. Le panneau
+"Souscriptions" du back-office n'affiche pas non plus (encore) de badge
+distinguant les abonnements `roi_share` des abonnements classiques.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

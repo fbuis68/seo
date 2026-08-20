@@ -72,6 +72,7 @@ interface RegisterBody {
   existingEntityCode?: string;
   users?: string;
   modules?: string[];
+  pricingModel?: string;
   skipPayment?: boolean;
   ibanHolder?: string;
   iban?: string;
@@ -124,6 +125,18 @@ onboardingRouter.post(
       if (!def.required) monthlyTotal += price;
     });
 
+    // Modèle "forfait zéro" (piste validée le 20/08/2026, cf. README) : pas
+    // d'abonnement fixe, Sesame prélève un pourcentage des économies de
+    // ménage et du CA room service générés — basePrice/modulePrices/
+    // monthlyTotal ci-dessus restent calculés (référence "équivalent
+    // classique" affichée au récapitulatif) mais ne sont pas ce qui est
+    // effectivement facturé pour ce modèle, donc mis à 0 en base. Le moteur
+    // de calcul mensuel réel (agrégation des ménages évités et des
+    // commandes room service par entité) n'est pas encore construit — v1
+    // capture uniquement le choix fait à l'inscription.
+    const pricingModel = b.pricingModel === "roi_share" ? "roi_share" : "flat";
+    const roiSharePct = 10;
+
     let pmsLabel = b.pms;
     if (b.pms === "other" && b.pmsOther) pmsLabel = b.pmsOther.trim();
     if (b.existingEntityCode && b.existingEntityCode.trim()) {
@@ -168,9 +181,11 @@ onboardingRouter.post(
         contactPhone: b.phone,
         pmsLabel,
         modules: selectedKeys,
-        basePrice: cfg.basePrice,
-        modulePrices,
-        monthlyTotal,
+        basePrice: pricingModel === "roi_share" ? 0 : cfg.basePrice,
+        modulePrices: pricingModel === "roi_share" ? {} : modulePrices,
+        monthlyTotal: pricingModel === "roi_share" ? 0 : monthlyTotal,
+        pricingModel,
+        roiSharePct: pricingModel === "roi_share" ? roiSharePct : 0,
         paymentIbanHolder: !b.skipPayment ? b.ibanHolder : undefined,
         paymentIbanLast4: ibanLast4 || undefined,
         status: "trial",
@@ -216,7 +231,7 @@ onboardingRouter.post(
       data: {
         prospectId: prospect.id,
         type: "Note interne",
-        text: `Inscription en ligne complétée — essai démarré (${trialDays} jours). Modules souscrits : ${selectedKeys.join(", ")}.`,
+        text: `Inscription en ligne complétée — essai démarré (${trialDays} jours). Modules souscrits : ${selectedKeys.join(", ")}. Modèle tarifaire : ${pricingModel === "roi_share" ? `forfait zéro (${roiSharePct}% des économies)` : "abonnement classique"}.`,
         authorName: "Automatique",
       },
     });
@@ -232,6 +247,8 @@ onboardingRouter.post(
         trialEnd: trialEnd.toISOString(),
         trialDays,
         monthlyTotal,
+        pricingModel,
+        roiSharePct,
       },
     });
   })

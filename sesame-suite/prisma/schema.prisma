@@ -613,6 +613,19 @@ model Subscription {
   modulePrices Json  @default("{}") // {moduleKey: prix} — snapshot à la souscription
   monthlyTotal Float
 
+  // Modèle tarifaire choisi à l'inscription ("forfait zéro", 20/08/2026 — cf.
+  // README) : "flat" = abonnement classique (basePrice/modulePrices/
+  // monthlyTotal ci-dessus font foi, comportement historique inchangé).
+  // "roi_share" = pas de forfait mensuel fixe — Sesame prélève roiSharePct%
+  // des économies de ménage (heures évitées × taux horaire) et du chiffre
+  // d'affaires room service généré via la plateforme ; basePrice/
+  // modulePrices/monthlyTotal valent alors 0 (rien n'est facturé a priori).
+  // v1 : capture uniquement le choix fait à l'inscription — le moteur de
+  // calcul mensuel réel (agrégation des ménages évités/commandes par
+  // entité, facturation) n'est pas encore implémenté.
+  pricingModel String @default("flat") // flat | roi_share
+  roiSharePct  Int    @default(10) // % pris par Sesame si pricingModel="roi_share"
+
   paymentIbanHolder String?
   paymentIbanLast4  String?
 

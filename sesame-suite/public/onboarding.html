@@ -329,8 +329,49 @@ textarea{resize:vertical;min-height:70px}
         </div>
       </div>
 
-      <!-- ═══ STEP 4 : RÉCAPITULATIF & TARIFICATION ═══ -->
+      <!-- ═══ STEP 4 : MODÈLE TARIFAIRE ═══ -->
       <div class="wiz-section" id="wstep-4">
+        <div class="wiz-h">Comment souhaitez-vous payer ?</div>
+        <div class="wiz-sub">Deux façons de financer vos options — choisissez celle qui vous convient, vous pourrez en changer plus tard.</div>
+
+        <div class="opt on" id="pm-flat" onclick="obSetPricingModel('flat')">
+          <div class="opt-ico"><i class="ti ti-calendar-repeat"></i></div>
+          <div class="opt-body">
+            <div class="opt-title">Abonnement classique</div>
+            <div class="opt-desc">Facturation mensuelle fixe pour les options choisies, dès la fin de la période d'essai.</div>
+            <div style="margin-top:8px;font-size:12px;color:var(--mu)" id="pm-flat-estimate"></div>
+          </div>
+          <div class="opt-check"><i class="ti ti-check"></i></div>
+        </div>
+
+        <div class="opt" id="pm-roi" onclick="obSetPricingModel('roi_share')">
+          <div class="opt-ico"><i class="ti ti-leaf"></i></div>
+          <div class="opt-body">
+            <div class="opt-title">Forfait zéro <span class="opt-badge" style="background:rgba(184,134,43,.14);color:#9C6E1F">Nouveau</span></div>
+            <div class="opt-desc">Pas d'abonnement fixe — Sesame prélève 10&nbsp;% de vos économies de ménage et de votre chiffre d'affaires room service généré via la plateforme.</div>
+          </div>
+          <div class="opt-check"><i class="ti ti-check"></i></div>
+        </div>
+
+        <div id="pm-roi-detail" style="display:none">
+          <div class="recap-card" style="margin-top:4px">
+            <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">Comment c'est calculé</div>
+            <div class="recap-row"><span>Ménage évité</span><strong>heures gagnées × taux horaire × 10&nbsp;%</strong></div>
+            <div class="recap-row"><span>Commande room service</span><strong>montant de la commande × 10&nbsp;%</strong></div>
+          </div>
+          <div class="alt alt-g"><i class="ti ti-shield-check"></i>
+            <span>Mois sans économie ni commande&nbsp;? Aucune facture. Vous ne payez jamais plus que ce que Sesame vous a fait gagner.</span>
+          </div>
+        </div>
+
+        <div class="brow">
+          <button class="btn btn-out" onclick="wizPrev()"><i class="ti ti-arrow-left"></i> Retour</button>
+          <button class="btn btn-p" onclick="wizNext()">Continuer <i class="ti ti-arrow-right"></i></button>
+        </div>
+      </div>
+
+      <!-- ═══ STEP 5 : RÉCAPITULATIF & TARIFICATION ═══ -->
+      <div class="wiz-section" id="wstep-5">
         <div class="wiz-h">Récapitulatif</div>
         <div class="wiz-sub">Voici votre configuration et l'estimation tarifaire associée.</div>
 
@@ -360,8 +401,8 @@ textarea{resize:vertical;min-height:70px}
         </div>
       </div>
 
-      <!-- ═══ STEP 5 : PAIEMENT / GOCARDLESS ═══ -->
-      <div class="wiz-section" id="wstep-5">
+      <!-- ═══ STEP 6 : PAIEMENT / GOCARDLESS ═══ -->
+      <div class="wiz-section" id="wstep-6">
 
         <!-- ── Formulaire de paiement ── -->
         <div id="wstep5-form">
@@ -416,6 +457,11 @@ textarea{resize:vertical;min-height:70px}
             <div class="trial-chip"><i class="ti ti-calendar-event"></i> <span id="conf-trial-dates">—</span></div>
           </div>
 
+          <div class="recap-card" id="conf-pricing-card" style="text-align:center;display:none">
+            <div style="font-size:12px;color:var(--mu);margin-bottom:6px">Modèle tarifaire</div>
+            <div class="trial-chip" id="conf-pricing-chip"><i class="ti ti-leaf"></i> Forfait zéro — 10% des économies</div>
+          </div>
+
           <div class="alt alt-g"><i class="ti ti-mail"></i>
             <span>Un récapitulatif a été envoyé à <strong id="conf-email">—</strong> avec vos accès au back-office et les prochaines étapes.</span>
           </div>
@@ -456,6 +502,7 @@ var WIZ_STEPS = [
   {k:'hotel',   label:'Hôtel'},
   {k:'pms',     label:'PMS'},
   {k:'modules', label:'Options'},
+  {k:'pricing', label:'Tarif'},
   {k:'recap',   label:'Récap'},
   {k:'payment', label:'Paiement'}
 ];
@@ -470,6 +517,10 @@ var OB_TRIAL_DAYS = 30;
 var OB_SELECTED_MODULES = {};
 var OB_STARS = 3;
 var CURRENT_STEP = 1;
+// "flat" = abonnement classique (comportement historique) ; "roi_share" =
+// forfait zéro, 10% des économies de ménage + CA room service (piste
+// validée le 20/08/2026, cf. README) — v1 capture le choix uniquement.
+var OB_PRICING_MODEL = 'flat';
 
 function obModulePrice(k){
   var def = OB_MODULES.find(function(m){return m.k===k;});
@@ -554,7 +605,8 @@ function wizGoto(n){
   window.scrollTo({top:0, behavior:'smooth'});
 
   if(n===3) renderModulesList();
-  if(n===4) renderRecap();
+  if(n===4) renderPricingStep();
+  if(n===5) renderRecap();
 }
 
 function wizNext(){
@@ -628,6 +680,24 @@ function obToggleModule(k, required){
   if(required) return; // module obligatoire, non désélectionnable
   OB_SELECTED_MODULES[k] = !OB_SELECTED_MODULES[k];
   renderModulesList();
+}
+
+// ═══════════════════════════════════════════════ STEP 4 : MODÈLE TARIFAIRE
+function obSetPricingModel(v){
+  OB_PRICING_MODEL = v;
+  document.getElementById('pm-flat').classList.toggle('on', v==='flat');
+  document.getElementById('pm-roi').classList.toggle('on', v==='roi_share');
+  document.getElementById('pm-roi-detail').style.display = v==='roi_share' ? 'block' : 'none';
+}
+function obClassicTotal(){
+  var total = OB_BASE_PRICE;
+  OB_MODULES.forEach(function(m){
+    if(OB_SELECTED_MODULES[m.k] && !m.required) total += obModulePrice(m.k);
+  });
+  return total;
+}
+function renderPricingStep(){
+  document.getElementById('pm-flat-estimate').textContent = '≈ ' + obClassicTotal() + ' €/mois avec vos options actuelles';
 }
 
 // ═══════════════════════════════════════════════ PROJECTION IMPACT ÉCO
@@ -951,16 +1021,22 @@ function renderRecap(){
   }).join('');
 
   // Tarification
-  var total = OB_BASE_PRICE;
-  var lines = '<div class="recap-row"><span>Abonnement de base</span><strong>'+OB_BASE_PRICE+' € / mois</strong></div>';
-  selected.forEach(function(m){
-    if(m.required) return;
-    var p = obModulePrice(m.k);
-    total += p;
-    lines += '<div class="recap-row"><span>Option — '+m.label+'</span><strong>+'+p+' € / mois</strong></div>';
-  });
-  lines += '<div class="recap-total"><span>Total mensuel estimé</span><span>'+total+' € HT</span></div>';
-  document.getElementById('rc-pricing').innerHTML = lines;
+  var total = obClassicTotal();
+  if(OB_PRICING_MODEL === 'roi_share'){
+    var roiLines = '<div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Modèle tarifaire</div>'
+      + '<div class="recap-row"><span>Forfait zéro</span><strong>10&nbsp;% des économies</strong></div>'
+      + '<div style="font-size:12px;color:var(--mu);margin-top:8px">Aucun abonnement fixe — équivalent abonnement classique pour comparaison : '+total+' €/mois (non facturé).</div>';
+    document.getElementById('rc-pricing').innerHTML = roiLines;
+  } else {
+    var lines = '<div class="recap-row"><span>Abonnement de base</span><strong>'+OB_BASE_PRICE+' € / mois</strong></div>';
+    selected.forEach(function(m){
+      if(m.required) return;
+      var p = obModulePrice(m.k);
+      lines += '<div class="recap-row"><span>Option — '+m.label+'</span><strong>+'+p+' € / mois</strong></div>';
+    });
+    lines += '<div class="recap-total"><span>Total mensuel estimé</span><span>'+total+' € HT</span></div>';
+    document.getElementById('rc-pricing').innerHTML = lines;
+  }
 
   document.getElementById('rc-trial-days').textContent = OB_TRIAL_DAYS;
 }
@@ -1005,6 +1081,7 @@ async function wizSubmit(skipPayment){
     existingEntityCode: document.getElementById('ob-entityid').value.trim(),
     users: document.getElementById('ob-users').value,
     modules: Object.keys(OB_SELECTED_MODULES).filter(function(k){return OB_SELECTED_MODULES[k];}),
+    pricingModel: OB_PRICING_MODEL,
     skipPayment: !!skipPayment,
     ibanHolder: document.getElementById('ob-iban-holder').value.trim(),
     iban: iban,
@@ -1044,6 +1121,12 @@ async function wizSubmit(skipPayment){
   document.getElementById('conf-trial-dates').textContent =
     start.toLocaleDateString('fr-FR') + ' → ' + end.toLocaleDateString('fr-FR')
     + ' (' + record.subscription.trialDays + ' jours)';
+
+  if(record.subscription.pricingModel === 'roi_share'){
+    document.getElementById('conf-pricing-card').style.display = 'block';
+    document.getElementById('conf-pricing-chip').innerHTML =
+      '<i class="ti ti-leaf"></i> Forfait zéro — '+record.subscription.roiSharePct+'% des économies';
+  }
 
   document.getElementById('wstep5-form').style.display = 'none';
   document.getElementById('wstep5-success').style.display = 'block';
