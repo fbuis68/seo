@@ -26,7 +26,7 @@
 
   const CSS = `
     #ia-launcher-btn {
-      position: fixed; right: 22px; bottom: 22px; z-index: 2147483000;
+      position: fixed; left: 22px; bottom: 22px; z-index: 2147483000;
       display: inline-flex; align-items: center; gap: 8px;
       background: #256abf; color: #ffffff;
       border: none; border-radius: 100px; padding: 13px 20px 13px 16px;
@@ -39,7 +39,7 @@
     #ia-launcher-btn svg { width: 20px; height: 20px; flex: none; }
     #ia-launcher-modal {
       position: fixed; inset: 0; z-index: 2147483001;
-      display: none; align-items: flex-end; justify-content: flex-end;
+      display: none; align-items: flex-end; justify-content: flex-start;
       padding: 22px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
