@@ -1870,6 +1870,12 @@ function trDealsPipelineAnnual(){
   let s=0; for(let m=0;m<12;m++) s+=trDealsPipelineFor(m); return s;
 }
 
+/** Montant de la catégorie hors pipeline des affaires — lignes CrmCashLine ou saisie globale uniquement. */
+function trCategoryMonthlyBase(kind, m){
+  return cashSettings[kind+'Mode']==='global'
+    ? trMonthlyFromSpec({montant:cashSettings[kind+'Montant'], frequence:cashSettings[kind+'Frequence'], mois:cashSettings[kind+'Mois']}, m)
+    : trRows(kind).reduce((s,r)=>s+trMonthlyFromSpec(r,m),0);
+}
 /** Total annuel de la catégorie, selon le mode actif (global ou somme des lignes détaillées). */
 function trCategoryAnnual(kind){
   const base = cashSettings[kind+'Mode']==='global'
@@ -1877,11 +1883,9 @@ function trCategoryAnnual(kind){
     : trRows(kind).reduce((s,r)=>s+trAnnualFromSpec(r),0);
   return kind==='revenu' ? base + trDealsPipelineAnnual() : base;
 }
-/** Montant de la catégorie pour le mois `m`, selon le mode actif. */
+/** Montant de la catégorie pour le mois `m`, selon le mode actif (inclut le pipeline des affaires pour "revenu"). */
 function trCategoryMonthly(kind, m){
-  const base = cashSettings[kind+'Mode']==='global'
-    ? trMonthlyFromSpec({montant:cashSettings[kind+'Montant'], frequence:cashSettings[kind+'Frequence'], mois:cashSettings[kind+'Mois']}, m)
-    : trRows(kind).reduce((s,r)=>s+trMonthlyFromSpec(r,m),0);
+  const base = trCategoryMonthlyBase(kind, m);
   return kind==='revenu' ? base + trDealsPipelineFor(m) : base;
 }
 
@@ -2003,6 +2007,7 @@ function renderTresorerie(){
       <div class="tr-chart-title">Encaissement vs dépenses, par mois</div>
       <div class="tr-legend">
         <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-signe)"></span>Encaissement</span>
+        <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-pipeline)"></span>Pipeline pondéré (Affaires)</span>
         <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-depense)"></span>Dépenses</span>
       </div>
       <div class="tr-chart-wrap">
@@ -2044,14 +2049,16 @@ function trComputeMonthly(){
     // montrer fausserait le graphique "Encaissement vs dépenses" en
     // affichant des mois qui ne font pas partie de la période suivie.
     const beforeSolde = m < soldeMois;
-    const revenu = beforeSolde ? 0 : trCategoryMonthly('revenu', m);
+    const revenuBase = beforeSolde ? 0 : trCategoryMonthlyBase('revenu', m);
+    const pipeline = beforeSolde ? 0 : trDealsPipelineFor(m);
+    const revenu = revenuBase + pipeline;
     const depenses = beforeSolde ? 0 : trCategoryMonthly('depense', m);
     const net = revenu - depenses;
     let curCum;
     if(beforeSolde) curCum = null;
     else if(m === soldeMois){ cum = soldeMontant + net; curCum = cum; }
     else { cum += net; curCum = cum; }
-    months.push({ m, revenu, depenses, net, cum: curCum });
+    months.push({ m, revenu, revenuBase, pipeline, depenses, net, cum: curCum });
   }
   return months;
 }
@@ -2086,10 +2093,16 @@ function trRenderBarChart(months){
     const cx = padL + groupW*i + groupW/2;
     const baseY = padT + plotH;
     const xR = cx - gap/2 - barW;
-    const hR = scale(mo.revenu);
-    if(hR>0){
-      s += `<rect x="${xR}" y="${baseY-hR}" width="${barW}" height="${Math.max(hR-1.5,0)}" rx="2.5" fill="var(--tr-signe)"></rect>`;
-      s += `<text class="tr-bar-lbl" x="${xR+barW/2}" y="${baseY-hR-5}">${Math.round(mo.revenu/1000)}k</text>`;
+    // Encaissement empilé : lignes/saisie globale (bleu) en bas, pipeline
+    // pondéré des affaires (doré) au-dessus — pour distinguer visuellement
+    // ce qui est du prévisionnel ferme de ce qui dépend encore d'une
+    // probabilité de closing.
+    const hBase = scale(mo.revenuBase);
+    const hPipe = scale(mo.pipeline);
+    if(hBase>0) s += `<rect x="${xR}" y="${baseY-hBase}" width="${barW}" height="${Math.max(hBase-1.5,0)}" rx="2.5" fill="var(--tr-signe)"></rect>`;
+    if(hPipe>0) s += `<rect x="${xR}" y="${baseY-hBase-hPipe}" width="${barW}" height="${Math.max(hPipe-1.5,0)}" rx="2.5" fill="var(--tr-pipeline)"></rect>`;
+    if(hBase+hPipe>0){
+      s += `<text class="tr-bar-lbl" x="${xR+barW/2}" y="${baseY-hBase-hPipe-5}">${Math.round(mo.revenu/1000)}k</text>`;
     }
     const xD = cx + gap/2;
     const hD = scale(mo.depenses);
@@ -2105,7 +2118,8 @@ function trRenderBarChart(months){
     el.addEventListener('mousemove', (ev)=>{
       const i = +el.dataset.month, mo = months[i];
       tt.innerHTML = `<b>${TR_MONTHS[i]}</b>`+
-        `<div class="tr-tt-row"><span>Encaissement</span><span class="num">${fmtEUR(mo.revenu)}</span></div>`+
+        `<div class="tr-tt-row"><span>Encaissement</span><span class="num">${fmtEUR(mo.revenuBase)}</span></div>`+
+        (mo.pipeline>0?`<div class="tr-tt-row"><span>Pipeline (Affaires)</span><span class="num">${fmtEUR(mo.pipeline)}</span></div>`:'')+
         `<div class="tr-tt-row"><span>Dépenses</span><span class="num">−${fmtEUR(mo.depenses)}</span></div>`+
         `<div class="tr-tt-row" style="border-top:1px solid rgba(255,255,255,.2);margin-top:3px;padding-top:3px"><span>Net</span><span class="num">${(mo.net>=0?'+':'−')+fmtEUR(Math.abs(mo.net))}</span></div>`;
       trPositionTooltip(tt, ev, svg);

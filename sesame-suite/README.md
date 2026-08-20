@@ -1345,6 +1345,12 @@ pondéré depuis les affaires en cours" sur la carte pour rester traçable ;
 suit la même règle que le reste de la Trésorerie pour les mois avant le
 solde d'ouverture (ignoré, cf. ci-dessus).
 
+Sur le graphique "Encaissement vs dépenses par mois", ce pipeline
+pondéré s'affiche désormais dans une **couleur distincte** (doré,
+`var(--tr-pipeline)`), empilée au-dessus de l'encaissement "ferme"
+(lignes/saisie globale, bleu) — légende et infobulle mises à jour en
+conséquence.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT
