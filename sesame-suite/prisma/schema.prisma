@@ -739,13 +739,14 @@ model CrmProspect {
 // récurrentes génériques. Le MRR reste porté par CrmProspect.mrr côté
 // fiche/Portefeuille (inchangé) mais n'alimente plus ce panneau.
 //   - "revenu"       : ligne d'encaissement récurrent — fréquence mensuelle,
-//                      trimestrielle ou annuelle (cf. `frequence`)
+//                      trimestrielle ou ponctuelle (cf. `frequence`)
 //   - "depense"      : ligne de dépense récurrente — fréquence mensuelle ou
-//                      annuelle uniquement (pas de trimestriel)
+//                      ponctuelle uniquement (pas de trimestriel)
 //   - "solde_depart" : une ligne unique par année portant le solde de
-//                      trésorerie au 1er janvier (frequence/mois toujours null)
+//                      trésorerie (frequence toujours null, `mois` donne le
+//                      mois auquel ce solde est constaté — défaut janvier)
 // `mois` (0-11) donne, selon `frequence` : le mois unique où la ligne tombe
-// (annuel), le mois de départ du cycle trimestriel (trimestriel — répétée
+// (ponctuel), le mois de départ du cycle trimestriel (trimestriel — répétée
 // tous les 3 mois à partir de là), ou est ignoré (mensuel : tous les mois).
 model CrmCashLine {
   id        String  @id @default(cuid())
@@ -753,8 +754,8 @@ model CrmCashLine {
   kind      String // revenu | depense | solde_depart
   label     String
   montant   Float
-  frequence String? // mensuel | trimestriel | annuel — revenu/depense uniquement
-  mois      Int? // 0-11 ; sémantique dépend de frequence (cf. ci-dessus)
+  frequence String? // mensuel | trimestriel | ponctuel — revenu/depense uniquement
+  mois      Int? // 0-11 ; sémantique dépend de frequence (cf. ci-dessus) ; pour solde_depart, mois du solde constaté
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -773,12 +774,12 @@ model CrmCashSettings {
 
   revenuMode      String  @default("detail") // global | detail
   revenuMontant   Float   @default(0)
-  revenuFrequence String  @default("mensuel") // mensuel | trimestriel | annuel
+  revenuFrequence String  @default("mensuel") // mensuel | trimestriel | ponctuel
   revenuMois      Int?
 
   depenseMode      String  @default("detail")
   depenseMontant   Float   @default(0)
-  depenseFrequence String  @default("mensuel") // mensuel | annuel
+  depenseFrequence String  @default("mensuel") // mensuel | ponctuel
   depenseMois      Int?
 
   createdAt DateTime @default(now())

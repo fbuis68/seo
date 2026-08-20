@@ -1816,7 +1816,7 @@ async function pfSave(id, field, val){
 }
 
 // ════════════════════════════════════════
-// TRÉSORERIE — MRR + Signé + Pipeline pondéré + Dépenses, vision annuelle
+// TRÉSORERIE — Encaissement récurrent + Dépenses récurrentes, vision annuelle
 // ════════════════════════════════════════
 const TR_MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 const TR_MONTHS_SHORT = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
@@ -1829,11 +1829,14 @@ function showTresorerie(){
 
 function trRows(kind){ return cashLines.filter(l=>l.kind===kind).slice().sort((a,b)=>(a.mois??99)-(b.mois??99) || a.label.localeCompare(b.label,'fr')); }
 function trSolde(){ return cashLines.find(l=>l.kind==='solde_depart'); }
+/** Mois (0-11) auquel le solde d'ouverture est constaté — janvier par défaut si non saisi. */
+function trSoldeMois(){ const s = trSolde(); return s && s.mois!=null ? s.mois : 0; }
 
 // ── Fréquence : mensuel (tous les mois) / trimestriel (tous les 3 mois à
-// partir d'un mois de départ) / annuel (un seul mois par an) ──
-function trFreqLabel(f){ return {mensuel:'Mensuel', trimestriel:'Trimestriel', annuel:'Annuel'}[f] || f || '—'; }
-function trFreqsFor(kind){ return kind==='depense' ? ['mensuel','annuel'] : ['mensuel','trimestriel','annuel']; }
+// partir d'un mois de départ) / ponctuel (un seul mois, pour un encaissement
+// ou une dépense qui tombe une fois dans l'année plutôt que de se répéter) ──
+function trFreqLabel(f){ return {mensuel:'Mensuel', trimestriel:'Trimestriel', ponctuel:'Ponctuel'}[f] || f || '—'; }
+function trFreqsFor(kind){ return kind==='depense' ? ['mensuel','ponctuel'] : ['mensuel','trimestriel','ponctuel']; }
 function trFreqOpts(kind, selected){
   return trFreqsFor(kind).map(f=>`<option value="${f}" ${selected===f?'selected':''}>${trFreqLabel(f)}</option>`).join('');
 }
@@ -1845,7 +1848,7 @@ function trMonthlyFromSpec(spec, m){
   const val = +spec.montant || 0;
   if(spec.frequence==='mensuel') return val;
   if(spec.frequence==='trimestriel'){ const start = spec.mois ?? 0; return ((m-start+12)%3===0) ? val : 0; }
-  if(spec.frequence==='annuel') return (spec.mois ?? 0)===m ? val : 0;
+  if(spec.frequence==='ponctuel') return (spec.mois ?? 0)===m ? val : 0;
   return 0;
 }
 /** Montant annualisé d'une ligne (ou la saisie globale), pour les totaux affichés. */
@@ -1853,7 +1856,7 @@ function trAnnualFromSpec(spec){
   const val = +spec.montant || 0;
   if(spec.frequence==='mensuel') return val*12;
   if(spec.frequence==='trimestriel') return val*4;
-  if(spec.frequence==='annuel') return val;
+  if(spec.frequence==='ponctuel') return val;
   return 0;
 }
 /** Total annuel de la catégorie, selon le mode actif (global ou somme des lignes détaillées). */
@@ -1948,6 +1951,7 @@ function trCategoryCard(kind, title, colorVar){
 function renderTresorerie(){
   const solde = trSolde();
   const startBalance = solde ? solde.montant : 0;
+  const startMois = trSoldeMois();
   const revenuAnnuel = trCategoryAnnual('revenu');
   const depenseAnnuel = trCategoryAnnual('depense');
 
@@ -1967,7 +1971,13 @@ function renderTresorerie(){
     <div class="stat-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:20px">
       <div class="stat-card"><div class="stat-lbl">Encaissement (année)</div><div class="stat-val num" id="tr-chip-revenu">${fmtEUR(revenuAnnuel)}</div></div>
       <div class="stat-card"><div class="stat-lbl">Dépenses (année)</div><div class="stat-val num" id="tr-chip-depense">${fmtEUR(depenseAnnuel)}</div></div>
-      <div class="stat-card"><div class="stat-lbl">Solde de départ (1er janvier)</div><input class="ei num" id="tr-start-balance" type="number" step="100" value="${startBalance}" oninput="trStartBalanceLocal(this.value)" onchange="trStartBalanceSave(this.value)" style="font-size:16px;font-weight:600;border:none;padding:0;height:auto;background:transparent"></div>
+      <div class="stat-card">
+        <div class="stat-lbl">Solde d'ouverture</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input class="ei num" id="tr-start-balance" type="number" step="100" value="${startBalance}" oninput="trStartBalanceLocal(this.value)" onchange="trStartBalanceSave(this.value)" style="font-size:16px;font-weight:600;border:none;padding:0;height:auto;background:transparent;flex:1;min-width:0">
+          <select id="tr-start-mois" onchange="trStartBalanceMoisLocal(this.value);trStartBalanceMoisSave(this.value)" style="font-size:11px;padding:3px 5px;border:1px solid var(--bdr);border-radius:6px;background:var(--card);color:var(--tx)">${trMonthOptsSingle(startMois)}</select>
+        </div>
+      </div>
     </div>
 
     <div class="panels" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px">
@@ -2005,16 +2015,25 @@ function renderTresorerie(){
   trRenderCharts();
 }
 
+// Le solde d'ouverture est désormais constaté à un mois choisi (pas
+// forcément janvier) — la trésorerie cumulée n'a pas de sens avant ce
+// mois-là (cum=null, affiché "—"/absent des graphes), et démarre au solde
+// saisi + le net du mois de constatation lui-même.
 function trComputeMonthly(){
   const solde = trSolde();
-  let cum = solde ? (+solde.montant||0) : 0;
+  const soldeMois = trSoldeMois();
+  const soldeMontant = solde ? (+solde.montant||0) : 0;
+  let cum = 0;
   const months = [];
   for(let m=0;m<12;m++){
     const revenu = trCategoryMonthly('revenu', m);
     const depenses = trCategoryMonthly('depense', m);
     const net = revenu - depenses;
-    cum += net;
-    months.push({ m, revenu, depenses, net, cum });
+    let curCum;
+    if(m < soldeMois) curCum = null;
+    else if(m === soldeMois){ cum = soldeMontant + net; curCum = cum; }
+    else { cum += net; curCum = cum; }
+    months.push({ m, revenu, depenses, net, cum: curCum });
   }
   return months;
 }
@@ -2031,7 +2050,7 @@ function trRenderCharts(){
   heroEl.textContent = fmtEUR(Math.abs(last.cum)) .replace(/^/, last.cum<0?'−':'');
   heroEl.className = 'tr-hero-val num ' + (last.cum<0?'neg':'pos');
   const solde = trSolde(); const startBalance = solde?solde.montant:0;
-  document.getElementById('tr-hero-sub-note').textContent = (last.cum>=startBalance?'↑ ':'↓ ') + 'depuis ' + fmtEUR(startBalance) + ' au 1er janvier';
+  document.getElementById('tr-hero-sub-note').textContent = (last.cum>=startBalance?'↑ ':'↓ ') + 'depuis ' + fmtEUR(startBalance) + ' au 1er '+TR_MONTHS[trSoldeMois()];
 }
 
 function trRenderBarChart(months){
@@ -2078,23 +2097,27 @@ function trRenderBarChart(months){
   });
 }
 
+// Les mois avant le mois du solde d'ouverture n'ont pas de trésorerie
+// cumulée connue (mo.cum===null) — la courbe ne démarre qu'à partir de là,
+// mais les 12 mois restent affichés en abscisse pour le repère visuel.
 function trRenderLineChart(months){
   const svg = document.getElementById('tr-chart-line'); if(!svg) return;
   const W = 940, H = 200, padL = 40, padR = 12, padT = 16, padB = 30;
   const plotW = W - padL - padR, plotH = H - padT - padB;
-  const vals = months.map(mo=>mo.cum);
-  const minV = Math.min(0, ...vals), maxV = Math.max(0, ...vals);
+  const defined = months.filter(mo=>mo.cum!=null);
+  const vals = defined.map(mo=>mo.cum);
+  const minV = Math.min(0, ...(vals.length?vals:[0])), maxV = Math.max(0, ...(vals.length?vals:[0]));
   const range = (maxV - minV) || 1;
   const yFor = v => padT + plotH - ((v-minV)/range)*plotH;
   const xFor = i => padL + (plotW/(months.length-1))*i;
   const zeroY = yFor(0);
-  let pts = months.map((mo,i)=>[xFor(i), yFor(mo.cum)]);
+  let pts = defined.map(mo=>[xFor(mo.m), yFor(mo.cum)]);
   let linePath = pts.map((p,i)=>(i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
 
   function areaPath(filterAbove){
     let d = ''; let open=false;
     for(let i=0;i<pts.length;i++){
-      const above = months[i].cum >= 0;
+      const above = defined[i].cum >= 0;
       if(above===filterAbove){
         if(!open){ d += `M ${pts[i][0].toFixed(1)},${zeroY.toFixed(1)} L ${pts[i][0].toFixed(1)},${pts[i][1].toFixed(1)} `; open=true; }
         else d += `L ${pts[i][0].toFixed(1)},${pts[i][1].toFixed(1)} `;
@@ -2116,15 +2139,20 @@ function trRenderLineChart(months){
   s += `<path d="${areaPath(true)}" fill="url(#trGPos)"></path>`;
   s += `<path d="${areaPath(false)}" fill="url(#trGNeg)"></path>`;
   s += `<path d="${linePath}" fill="none" stroke="var(--tx)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></path>`;
-  pts.forEach((p,i)=>{
-    const color = months[i].cum>=0 ? 'var(--good,#1a6b47)' : 'var(--bad,#b23b2c)';
+  pts.forEach((p,idx)=>{
+    const mo = defined[idx];
+    const color = mo.cum>=0 ? 'var(--good,#1a6b47)' : 'var(--bad,#b23b2c)';
     s += `<circle cx="${p[0]}" cy="${p[1]}" r="3.2" fill="${color}" stroke="var(--card)" stroke-width="1.4"></circle>`;
-    s += `<circle cx="${p[0]}" cy="${p[1]}" r="10" fill="transparent" class="tr-hitpt" data-month="${i}"></circle>`;
-    s += `<text class="tr-month-lbl" x="${p[0]}" y="${H-8}">${TR_MONTHS_SHORT[i]}</text>`;
+    s += `<circle cx="${p[0]}" cy="${p[1]}" r="10" fill="transparent" class="tr-hitpt" data-month="${mo.m}"></circle>`;
   });
-  const lastP = pts[pts.length-1], lastMo = months[months.length-1];
-  const lastLblY = Math.max(padT+10, Math.min(padT+plotH-4, lastP[1]-9));
-  s += `<text class="tr-bar-lbl" x="${Math.max(lastP[0]-2, padL+40)}" y="${lastLblY}" text-anchor="end" font-weight="600">${fmtEUR(lastMo.cum)}</text>`;
+  months.forEach((mo,i)=>{
+    s += `<text class="tr-month-lbl" x="${xFor(i)}" y="${H-8}">${TR_MONTHS_SHORT[i]}</text>`;
+  });
+  if(pts.length){
+    const lastP = pts[pts.length-1], lastMo = defined[defined.length-1];
+    const lastLblY = Math.max(padT+10, Math.min(padT+plotH-4, lastP[1]-9));
+    s += `<text class="tr-bar-lbl" x="${Math.max(lastP[0]-2, padL+40)}" y="${lastLblY}" text-anchor="end" font-weight="600">${fmtEUR(lastMo.cum)}</text>`;
+  }
   svg.innerHTML = s;
 
   const tt = document.getElementById('tr-tt-line');
@@ -2155,7 +2183,7 @@ function trRenderMonthTable(months){
       <td class="num" style="text-align:right">${fmtEUR(mo.revenu)}</td>
       <td class="num" style="text-align:right">${fmtEUR(mo.depenses)}</td>
       <td class="num" style="text-align:right;font-weight:500;color:${mo.net>=0?'var(--good,#1a6b47)':'var(--bad,#b23b2c)'}">${(mo.net>=0?'+':'−')+fmtEUR(Math.abs(mo.net))}</td>
-      <td class="num" style="text-align:right;font-weight:600;${mo.cum<0?'color:var(--bad,#b23b2c)':''}">${fmtEUR(mo.cum)}</td>
+      <td class="num" style="text-align:right;font-weight:600;${mo.cum!=null&&mo.cum<0?'color:var(--bad,#b23b2c)':''}">${mo.cum==null?'—':fmtEUR(mo.cum)}</td>
     </tr>`).join('');
 }
 
@@ -2236,7 +2264,7 @@ async function trSetMode(kind, mode){
   }catch(e){ flash('Erreur d\'enregistrement'); }
 }
 
-// ── Solde de départ (ligne unique kind=solde_depart) ──
+// ── Solde d'ouverture (ligne unique kind=solde_depart, mois choisi) ──
 function trStartBalanceLocal(val){
   const solde = trSolde();
   if(solde) solde.montant = +val||0;
@@ -2250,11 +2278,31 @@ async function trStartBalanceSave(val){
       const r = await apiFetch('/wa/crmCashLine/update', {method:'POST', body:JSON.stringify({id:solde.id, montant:v})});
       if(!r.ok) throw new Error('http '+r.status);
     } else {
-      const r = await apiFetch('/wa/crmCashLine/create', {method:'POST', body:JSON.stringify({annee:cashYear, kind:'solde_depart', label:'Solde au 1er janvier', montant:v})});
+      const moisSel = document.getElementById('tr-start-mois');
+      const mois = moisSel ? +moisSel.value : 0;
+      const r = await apiFetch('/wa/crmCashLine/create', {method:'POST', body:JSON.stringify({annee:cashYear, kind:'solde_depart', label:'Solde d\'ouverture', montant:v, mois})});
       if(!r.ok) throw new Error('http '+r.status);
       cashLines.push(await r.json());
     }
   }catch(e){ flash('Erreur d\'enregistrement'); }
+  trRenderCharts();
+}
+function trStartBalanceMoisLocal(val){
+  const solde = trSolde();
+  if(solde){ solde.mois = +val; trRenderCharts(); }
+}
+async function trStartBalanceMoisSave(val){
+  const v = +val;
+  const solde = trSolde();
+  // Sans montant déjà saisi, il n'y a pas encore de ligne à mettre à jour —
+  // le mois choisi ici sera repris au prochain enregistrement du montant
+  // (cf. trStartBalanceSave, qui relit le select #tr-start-mois).
+  if(!solde) return;
+  try{
+    const r = await apiFetch('/wa/crmCashLine/update', {method:'POST', body:JSON.stringify({id:solde.id, mois:v})});
+    if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash('Erreur d\'enregistrement'); }
+  trRenderCharts();
 }
 
 function showAffaires(){

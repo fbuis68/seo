@@ -1296,6 +1296,25 @@ toutes les lignes "Dépenses" existantes (86), "Signé en cours" (65) et
 (fréquence au lieu d'un mois ponctuel, pas de lien client/fournisseur).
 Le solde de départ (1 ligne) est conservé.
 
+### Trésorerie : mois pour les entrées ponctuelles + mois du solde d'ouverture
+
+Deux ajustements sur le module simplifié le 20/08/2026 :
+
+- La fréquence "Annuel" est renommée **"Ponctuel"** (encaissement comme
+  dépense) — c'est le même mécanisme (un montant qui ne tombe qu'un seul
+  mois dans l'année plutôt que tous les mois ou tous les 3 mois), mais le
+  mot "Annuel" prêtait à confusion en laissant penser à une récurrence
+  automatique d'une année sur l'autre, alors que chaque année se saisit
+  indépendamment (`CrmCashLine.annee`). Le sélecteur "Mois" apparaît dès
+  que la fréquence n'est pas "Mensuel", pour les deux catégories.
+- Le **solde d'ouverture** (`CrmCashLine.kind="solde_depart"`) porte
+  désormais un mois (`mois`, 0-11, janvier par défaut) au lieu d'être
+  toujours implicitement "au 1er janvier" — utile pour un établissement
+  qui démarre le suivi de trésorerie en cours d'année. La trésorerie
+  cumulée (graphique et tableau mensuel) n'affiche rien (`—`) pour les
+  mois précédant le mois du solde — elle n'a pas de sens tant que le
+  point de départ n'est pas encore atteint.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

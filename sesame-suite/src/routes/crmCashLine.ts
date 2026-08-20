@@ -13,8 +13,8 @@ import { requireAdmin, requireSesame } from "../middleware/requireAdmin";
 export const crmCashLineRouter = Router();
 
 const KINDS = ["revenu", "depense", "solde_depart"] as const;
-const REVENU_FREQS = ["mensuel", "trimestriel", "annuel"] as const;
-const DEPENSE_FREQS = ["mensuel", "annuel"] as const;
+const REVENU_FREQS = ["mensuel", "trimestriel", "ponctuel"] as const;
+const DEPENSE_FREQS = ["mensuel", "ponctuel"] as const;
 const MODES = ["global", "detail"] as const;
 
 function freqsFor(kind: string): readonly string[] {
