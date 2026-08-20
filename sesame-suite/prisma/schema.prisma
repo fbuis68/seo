@@ -805,9 +805,17 @@ model CrmDeal {
   title       String
   stage       String    @default("Nouveau") // Nouveau | Qualification | Devis envoyé | Négociation | Gagné | Perdu
   amount      Float     @default(0) // valeur mensuelle estimée (MRR) de l'affaire
-  probability Int       @default(20) // 0-100 — pondère "amount" pour la valeur pondérée du pipeline
+  probability Int       @default(20) // 0-100 — pondère amount ET montantPonctuel
   closeDate   DateTime? // date de clôture prévue/réelle selon l'étape
   lostReason  String?
+
+  // Montant ponctuel (one-shot, distinct du MRR "amount" ci-dessus — ex.
+  // frais de mise en service, vente d'équipement) et mois où il doit être
+  // encaissé (0-11). Pondéré par `probability` et reporté automatiquement
+  // sur le panneau Trésorerie (catégorie Encaissement, cf. crm.html
+  // trDealsPipelineFor()) — ignoré si l'affaire est au stade "Perdu".
+  montantPonctuel  Float?
+  moisEncaissement Int?
 
   quotes CrmQuote[]
 

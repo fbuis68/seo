@@ -1329,6 +1329,22 @@ Les catégories "Encaissement récurrent" et "Dépenses récurrentes" sont
 renommées **"Encaissement"** et **"Dépenses"** — le mot "récurrent(es)"
 n'était plus exact depuis l'ajout de la fréquence "Ponctuel".
 
+### Affaires : montant ponctuel + mois d'encaissement, reporté sur la Trésorerie
+
+Une affaire (`CrmDeal`, module "Gestion des affaires") porte désormais
+deux champs supplémentaires, distincts du MRR estimé ("Valeur mensuelle")
+déjà existant : **Montant ponctuel** (€, ex. frais de mise en service,
+vente ponctuelle) et **Mois d'encaissement** (0-11). Pondéré par la
+probabilité de l'affaire déjà saisie, ce montant est reporté
+automatiquement sur le panneau Trésorerie — catégorie "Encaissement",
+mois choisi — sans ressaisie manuelle d'une ligne `CrmCashLine`.
+
+Comportement : ignoré si l'affaire est au stade "Perdu" ; s'additionne au
+total déjà affiché (mode global ou détaillé), avec une mention "dont X €
+pondéré depuis les affaires en cours" sur la carte pour rester traçable ;
+suit la même règle que le reste de la Trésorerie pour les mois avant le
+solde d'ouverture (ignoré, cf. ci-dessus).
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

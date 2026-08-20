@@ -24,6 +24,8 @@ function shapeDeal(d: {
   probability: number;
   closeDate: Date | null;
   lostReason: string | null;
+  montantPonctuel: number | null;
+  moisEncaissement: number | null;
   createdAt: Date;
   updatedAt: Date;
   prospect?: { nom: string } | null;
@@ -42,6 +44,8 @@ function shapeDeal(d: {
     probability: d.probability,
     closeDate: d.closeDate,
     lostReason: d.lostReason || "",
+    montantPonctuel: d.montantPonctuel,
+    moisEncaissement: d.moisEncaissement,
     createdAt: d.createdAt,
     updatedAt: d.updatedAt,
     quotes: (d.quotes || []).map((q) => ({ id: q.id, number: q.number, status: q.status })),
@@ -78,6 +82,14 @@ interface DealBody {
   probability?: number;
   closeDate?: string | null;
   lostReason?: string;
+  montantPonctuel?: number | null;
+  moisEncaissement?: number | null;
+}
+
+function validateMoisEncaissement(mois: number | null | undefined) {
+  if (mois !== undefined && mois !== null && (mois < 0 || mois > 11)) {
+    throw new HttpError(400, "Mois d'encaissement invalide (0-11)");
+  }
 }
 
 crmDealRouter.post(
@@ -88,6 +100,7 @@ crmDealRouter.post(
     const b = req.body as DealBody;
     if (!b.prospectId) throw new HttpError(400, "prospectId requis");
     if (!b.title || !b.title.trim()) throw new HttpError(400, "Titre de l'affaire requis");
+    validateMoisEncaissement(b.moisEncaissement);
     const prospect = await prisma.crmProspect.findUnique({ where: { id: b.prospectId } });
     if (!prospect) throw new HttpError(404, "Fiche CRM introuvable");
     const row = await prisma.crmDeal.create({
@@ -99,6 +112,8 @@ crmDealRouter.post(
         amount: b.amount ?? 0,
         probability: b.probability ?? 20,
         closeDate: b.closeDate ? new Date(b.closeDate) : null,
+        montantPonctuel: b.montantPonctuel ?? null,
+        moisEncaissement: b.moisEncaissement ?? null,
       },
       include: DEAL_INCLUDE,
     });
@@ -117,6 +132,7 @@ crmDealRouter.post(
     if (b.stage !== undefined && !DEAL_STAGES.includes(b.stage as (typeof DEAL_STAGES)[number])) {
       throw new HttpError(400, "Étape invalide");
     }
+    validateMoisEncaissement(b.moisEncaissement);
     const existing = await prisma.crmDeal.findUnique({ where: { id } });
     if (!existing) throw new HttpError(404, "Affaire introuvable");
     const row = await prisma.crmDeal.update({
@@ -129,6 +145,8 @@ crmDealRouter.post(
         probability: b.probability,
         closeDate: b.closeDate === undefined ? undefined : b.closeDate ? new Date(b.closeDate) : null,
         lostReason: b.lostReason,
+        montantPonctuel: b.montantPonctuel === undefined ? undefined : b.montantPonctuel,
+        moisEncaissement: b.moisEncaissement === undefined ? undefined : b.moisEncaissement,
       },
       include: DEAL_INCLUDE,
     });

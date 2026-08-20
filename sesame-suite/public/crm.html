@@ -1859,19 +1859,30 @@ function trAnnualFromSpec(spec){
   if(spec.frequence==='ponctuel') return val;
   return 0;
 }
+// ── Pipeline des affaires (CrmDeal) — reporté automatiquement sur
+// l'Encaissement, pondéré par la probabilité de l'affaire. Une affaire
+// "Perdue" ou sans mois d'encaissement/montant ponctuel saisi ne compte pas. ──
+function trDealsPipelineFor(m){
+  return deals.filter(d=>d.stage!=='Perdu' && d.moisEncaissement===m && d.montantPonctuel)
+    .reduce((s,d)=>s+(+d.montantPonctuel||0)*(+d.probability||0)/100, 0);
+}
+function trDealsPipelineAnnual(){
+  let s=0; for(let m=0;m<12;m++) s+=trDealsPipelineFor(m); return s;
+}
+
 /** Total annuel de la catégorie, selon le mode actif (global ou somme des lignes détaillées). */
 function trCategoryAnnual(kind){
-  if(cashSettings[kind+'Mode']==='global'){
-    return trAnnualFromSpec({montant:cashSettings[kind+'Montant'], frequence:cashSettings[kind+'Frequence']});
-  }
-  return trRows(kind).reduce((s,r)=>s+trAnnualFromSpec(r),0);
+  const base = cashSettings[kind+'Mode']==='global'
+    ? trAnnualFromSpec({montant:cashSettings[kind+'Montant'], frequence:cashSettings[kind+'Frequence']})
+    : trRows(kind).reduce((s,r)=>s+trAnnualFromSpec(r),0);
+  return kind==='revenu' ? base + trDealsPipelineAnnual() : base;
 }
 /** Montant de la catégorie pour le mois `m`, selon le mode actif. */
 function trCategoryMonthly(kind, m){
-  if(cashSettings[kind+'Mode']==='global'){
-    return trMonthlyFromSpec({montant:cashSettings[kind+'Montant'], frequence:cashSettings[kind+'Frequence'], mois:cashSettings[kind+'Mois']}, m);
-  }
-  return trRows(kind).reduce((s,r)=>s+trMonthlyFromSpec(r,m),0);
+  const base = cashSettings[kind+'Mode']==='global'
+    ? trMonthlyFromSpec({montant:cashSettings[kind+'Montant'], frequence:cashSettings[kind+'Frequence'], mois:cashSettings[kind+'Mois']}, m)
+    : trRows(kind).reduce((s,r)=>s+trMonthlyFromSpec(r,m),0);
+  return kind==='revenu' ? base + trDealsPipelineFor(m) : base;
 }
 
 function trModeToggle(kind){
@@ -1935,6 +1946,7 @@ function trCategoryCard(kind, title, colorVar){
   const body = mode==='global'
     ? trGlobalBlock(kind)
     : (rows.length===0 ? `<div class="log-empty">Aucune ligne. Ajoutez ${kind==='revenu'?'un encaissement':'une dépense'}.</div>` : rows.map(r=>trLineRow(r,kind)).join(''));
+  const pipeline = kind==='revenu' ? trDealsPipelineAnnual() : 0;
   return `
     <div class="card" style="margin-bottom:0">
       <div class="card-head">
@@ -1945,6 +1957,7 @@ function trCategoryCard(kind, title, colorVar){
       </div>
       <div class="tr-panel-body">${body}</div>
       ${mode==='detail'?`<button class="add-row" onclick="trAdd('${kind}')">+ Ajouter une ligne</button>`:''}
+      ${pipeline>0?`<div class="tr-caveat">dont <b class="num">${fmtEUR(pipeline)}</b> pondéré depuis les affaires en cours (montant ponctuel × probabilité, module Affaires) — reporté automatiquement, non éditable ici.</div>`:''}
     </div>`;
 }
 
@@ -2350,7 +2363,7 @@ function renderAffaires(){
 }
 
 function openNewDealModal(prospectId){
-  DEAL_DRAFT = {id:null, prospectId: prospectId||(clients[0]?clients[0].id:''), commercialId:'', title:'', stage:'Nouveau', amount:0, probability:20, closeDate:'', lostReason:'', quotes:[], _new:true};
+  DEAL_DRAFT = {id:null, prospectId: prospectId||(clients[0]?clients[0].id:''), commercialId:'', title:'', stage:'Nouveau', amount:0, probability:20, closeDate:'', lostReason:'', montantPonctuel:null, moisEncaissement:null, quotes:[], _new:true};
   renderDealModal();
 }
 function openDealModal(id){
@@ -2363,6 +2376,8 @@ function captureDealDraft(){
   Object.assign(DEAL_DRAFT, {
     title:g('d-title'), commercialId:g('d-commercial'), amount:+g('d-amount')||0,
     probability:+g('d-proba')||0, closeDate:g('d-close'),
+    montantPonctuel: g('d-montant-ponctuel').trim()===''?null:+g('d-montant-ponctuel'),
+    moisEncaissement: g('d-mois-encaissement')===''?null:+g('d-mois-encaissement'),
     lostReason: document.getElementById('d-lost') ? g('d-lost') : DEAL_DRAFT.lostReason
   });
 }
@@ -2390,6 +2405,8 @@ function renderDealModal(){
         <div class="ff"><label>Valeur mensuelle (€)</label><input type="number" id="d-amount" value="${md.amount||0}" min="0"></div>
         <div class="ff"><label>Probabilité (%)</label><input type="number" id="d-proba" value="${md.probability||0}" min="0" max="100"></div>
         <div class="ff"><label>Date de clôture prévue</label><input type="date" id="d-close" value="${md.closeDate?String(md.closeDate).slice(0,10):''}"></div>
+        <div class="ff"><label>Montant ponctuel (€)</label><input type="number" id="d-montant-ponctuel" value="${md.montantPonctuel??''}" min="0" placeholder="Ex : frais de mise en service"></div>
+        <div class="ff"><label>Mois d'encaissement</label><select id="d-mois-encaissement"><option value="">—</option>${TR_MONTHS.map((m,i)=>`<option value="${i}" ${md.moisEncaissement===i?'selected':''}>${m}</option>`).join('')}</select></div>
         ${md.stage==='Perdu'?`<div class="ff"><label>Raison de la perte</label><input id="d-lost" value="${esc(md.lostReason)}"></div>`:''}
       </div>
 
@@ -2425,7 +2442,8 @@ async function saveDeal(id,isNew){
   if(isNew && !prospectId){ flash('Sélectionnez un client'); return; }
   const body = {
     prospectId, commercialId: md.commercialId||null, title: md.title.trim(), stage: md.stage,
-    amount: +md.amount||0, probability: +md.probability||0, closeDate: md.closeDate||null, lostReason: md.lostReason||''
+    amount: +md.amount||0, probability: +md.probability||0, closeDate: md.closeDate||null, lostReason: md.lostReason||'',
+    montantPonctuel: md.montantPonctuel==null?null:+md.montantPonctuel, moisEncaissement: md.moisEncaissement==null?null:+md.moisEncaissement
   };
   try{
     var r = isNew
