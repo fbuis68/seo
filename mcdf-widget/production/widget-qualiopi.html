@@ -351,48 +351,56 @@ async function loadIndicateurs() {
 
     const kpis = [
       {
+        critere: 3, critereLabel: 'Adaptation aux publics bénéficiaires',
         label: 'Documents obligatoires envoyés',
         value: docSentAvg !== null ? fmtPct(docSentAvg) : '—',
         sub: ratios.length ? `${docComplete}/${ratios.length} conventions au complet` : 'aucune donnée exploitable',
         source: 'fullConventionQualiopi.documentSent',
       },
       {
+        critere: 3, critereLabel: 'Adaptation aux publics bénéficiaires',
         label: 'Conventions avec document signé',
         value: withSigned.length ? fmtPct(signedConvs / withSigned.length) : '—',
         sub: `${signedTotal} document(s) signé(s) au total`,
         source: 'fullConventionQualiopi.signedDocument',
       },
       {
+        critere: 3, critereLabel: 'Adaptation aux publics bénéficiaires',
         label: 'Attestations délivrées (conventions terminées)',
         value: ended.length ? fmtPct(withAttestation.length / ended.length) : '—',
         sub: `${withAttestation.length}/${ended.length} conventions terminées`,
         source: 'fullConventionQualiopi.attestationDate',
       },
       {
+        critere: 4, critereLabel: 'Moyens pédagogiques, techniques et encadrement',
         label: 'Heures réalisées vs vendues',
         value: soldH ? fmtPct(fulfilledH / soldH) : '—',
         sub: `${Math.round(fulfilledH)} h réalisées / ${Math.round(soldH)} h vendues`,
         source: 'fullConventionQualiopi.fulfilledHours / soldHours',
       },
       {
+        critere: 4, critereLabel: 'Moyens pédagogiques, techniques et encadrement',
         label: 'Heures facturées vs réalisées',
         value: fulfilledH ? fmtPct(invoicedH / fulfilledH) : '—',
         sub: `${Math.round(invoicedH)} h facturées / ${Math.round(fulfilledH)} h réalisées`,
         source: 'fullConventionQualiopi.invoicedHours / fulfilledHours',
       },
       {
+        critere: 6, critereLabel: 'Inscription dans l’environnement professionnel',
         label: 'Crédit d’heures restant (OPCA)',
         value: `${Math.round(creditLeft)} h`,
         sub: `sur ${convs.length} convention(s)`,
         source: 'fullConventionQualiopi.creditLeftHours',
       },
       {
+        critere: 7, critereLabel: 'Appréciations et réclamations',
         label: 'Sessions avec retour d’enquête',
         value: sessions.length ? fmtPct(withSurvey / sessions.length) : '—',
         sub: `${surveyTotal} réponse(s) collectée(s) au total`,
         source: 'sessionQualiopi.survey',
       },
       {
+        critere: 7, critereLabel: 'Appréciations et réclamations',
         label: 'Relances / retours signalés',
         value: String(comebackTotal),
         sub: `sur ${sessions.length} session(s)`,
@@ -401,8 +409,23 @@ async function loadIndicateurs() {
     ];
 
     banner.style.display = 'none';
-    kpisWrap.style.display = 'grid';
-    kpis.forEach((k) => kpisWrap.appendChild(kpiCard(k)));
+    kpisWrap.style.display = 'block';
+    const byCritere = new Map();
+    kpis.forEach((k) => {
+      if (!byCritere.has(k.critere)) byCritere.set(k.critere, { label: k.critereLabel, items: [] });
+      byCritere.get(k.critere).items.push(k);
+    });
+    [...byCritere.entries()].sort((a, b) => a[0] - b[0]).forEach(([num, group]) => {
+      const block = el('div', 'critere-block');
+      const head = el('div', 'critere-head');
+      head.appendChild(el('span', 'critere-num', `Critère ${num}`));
+      head.appendChild(el('h2', '', group.label));
+      block.appendChild(head);
+      const grid = el('div', 'kpis');
+      group.items.forEach((k) => grid.appendChild(kpiCard(k)));
+      block.appendChild(grid);
+      kpisWrap.appendChild(block);
+    });
   } catch (err) {
     if (err && err.message === 'AUTH') {
       banner.innerHTML = 'Session MCDF non détectée. Ouvrez cette page depuis un onglet déjà connecté à MCDF.';
