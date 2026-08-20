@@ -27,14 +27,14 @@ Chaque module ci-dessous a son propre `NOTES.md` dans `modules/` avec le détail
 - `widget-conversationnel.html` (module IA Conversationnelle, v1 à base
   de règles sur des questions connues, mêmes données réelles que
   `widget-ia.html`)
-- `widget-qualiopi.html` (module Assistant Qualiopi — 3 onglets :
+- `widget-qualiopi.html` (module Assistant Qualiopi — 4 onglets :
   « Indicateurs » calculés en direct sur les champs confirmés de
-  `sessionQualiopi`/`fullConventionQualiopi` (documents envoyés/signés,
-  attestations, heures vendues/réalisées/facturées, crédit OPCA,
-  enquêtes) ; « Détection API » pour explorer d'autres champs ; « Saisie
-  manuelle » pour les indicateurs qualité classiques — satisfaction,
-  réclamations, actions correctives — qui n'ont toujours aucune source
-  MCDF connue)
+  `sessionQualiopi`/`fullConventionQualiopi`, groupés par critère ;
+  « Référentiel (32 indicateurs) » liste les 32 indicateurs officiels
+  du référentiel national qualité par critère, avec pour chacun un
+  badge « preuve auto / saisie manuelle / aucune preuve » ; « Détection
+  API » pour explorer d'autres champs ; « Saisie manuelle » pour les
+  indicateurs sans source MCDF connue)
 - `launcher-embed.js` (bouton flottant + panneau donnant accès aux 4
   modules, une seule ligne à intégrer) + `INSTALL-LAUNCHER.md`
 - `mock_server.py` / `mock_server.js` — validation locale sans accès à
