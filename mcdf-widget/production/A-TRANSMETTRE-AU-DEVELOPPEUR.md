@@ -1,9 +1,32 @@
 # Widget IA MCDF — à installer sur test.moncentredeformation.fr
 
-## Fichier à déployer
-`widget-ia.html` (joint à ce message) → copier dans `WebContent/` de
-l'application déployée sur `test.moncentredeformation.fr`, **en
-remplaçant toute version précédemment déposée**.
+## Emplacement confirmé sur le serveur
+`/var/lib/tomcat/webapps/ROOT/` — c'est là que vont tous les fichiers
+listés ci-dessous, à la racine (même niveau que `ext-all-debug.js`
+dans son sous-dossier `scripts/premium/ext/`).
+
+## Fichiers à déployer
+- `widget-ia.html` — module Génération de rapports
+- `widget-conversationnel.html` — module IA Conversationnelle (v1)
+- `widget-qualiopi.html` — module Assistant Qualiopi (v1 découverte)
+- `launcher-embed.js` — bouton flottant, une seule ligne à intégrer
+  (voir `INSTALL-LAUNCHER.md`)
+
+Tous à copier dans `/var/lib/tomcat/webapps/ROOT/`, **en remplaçant
+toute version précédemment déposée**.
+
+## Commande de mise à jour (à chaque nouvelle version)
+Depuis une session PuTTY connectée au serveur (`su -` puis mot de passe
+root si besoin) :
+```bash
+cd /var/lib/tomcat/webapps/ROOT && curl -o widget-ia.html https://raw.githubusercontent.com/fbuis68/seo/claude/mcdf-ai-widget-xxnxub/mcdf-widget/production/widget-ia.html && head -1 widget-ia.html
+```
+Remplacer `widget-ia.html` par le nom du fichier à mettre à jour (même
+commande, juste changer le nom aux 3 endroits). Le `head -1` doit
+afficher `<meta charset="utf-8">` pour les fichiers `.html`, ou le
+début du commentaire `/**` pour `launcher-embed.js`.
+Aucun redémarrage nécessaire (fichiers statiques) — juste `Ctrl+Maj+R`
+côté navigateur pour vider le cache avant de tester.
 
 ## ⚠️ 3 points de vigilance (déjà rencontrés lors des premiers tests)
 
@@ -44,18 +67,23 @@ Pour trouver un identifiant d'entité valide **sur ce serveur de test** :
 4. Une liste s'affiche avec des `id` du type `E00000xxx` — en choisir un
    (idéalement celui utilisé habituellement pour les tests)
 
-## URL finale à utiliser
+## URLs finales à utiliser
 ```
 https://test.moncentredeformation.fr/widget-ia.html?entityId=E00000xxx
+https://test.moncentredeformation.fr/widget-conversationnel.html?entityId=E00000xxx
+https://test.moncentredeformation.fr/widget-qualiopi.html?entityId=E00000xxx
 ```
 Remplacer `E00000xxx` par l'id trouvé à l'étape précédente — **sans
-chevrons, sans crochets, sans espace autour**.
+chevrons, sans crochets, sans espace autour**. Le lanceur flottant
+(`launcher-embed.js`, déjà installé) pointe automatiquement vers les
+3 premiers modules une fois `window.MCDF_CURRENT_ENTITY_ID` renseigné.
 
 ## Checklist de validation
 
-- [ ] La page s'affiche avec des accents corrects ("Données", "écriture" — pas "DonnÃ©es", "Ã©criture")
-- [ ] Le bandeau en haut à droite affiche **"Entité E00000xxx · lecture seule"**
-- [ ] Les 4 cases en haut (Nouveaux clients, CA facturé, Sessions programmées, Devis à relancer) affichent des chiffres — pas uniquement des 0
+- [ ] `widget-ia.html` : accents corrects, bandeau **"Entité E00000xxx · lecture seule"**, les 4 cases en haut affichent des chiffres non nuls
+- [ ] `widget-ia.html` : le sélecteur "Jusqu'à" au-dessus du tableau de comparaison change bien les chiffres quand on choisit un autre mois
+- [ ] `widget-conversationnel.html` : cliquer une suggestion (ex. "Quels devis relancer ?") affiche une vraie réponse chiffrée, pas le message "je ne sais pas encore répondre"
+- [ ] `widget-qualiopi.html` : au moins une des 3 entités testées passe au badge "OK" (sinon, c'est normal pour l'instant — coller le résultat de `browser/live-qualiopi-check.js` dans la conversation pour qu'on ajuste)
 - [ ] Si tout reste à 0 : essayer une autre entité de la liste obtenue à l'étape 3 (certaines entités de test peuvent être vides)
 - [ ] Aucun bandeau rouge d'erreur en haut de page
 - [ ] Aucune erreur dans la console (F12 → Console)

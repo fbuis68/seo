@@ -1,0 +1,206 @@
+<meta charset="utf-8">
+<title>Assistant Qualiopi - MCDF (v1 decouverte)</title>
+<!--
+  Assistant Qualiopi MCDF -- v1 "decouverte" (lecture seule).
+
+  Contrairement a widget-ia.html, ce module n'a JAMAIS ete confirme
+  contre l'API reelle : on sait seulement, par lecture du code source
+  cote serveur, que des DAO dedies Qualiopi existent probablement sous
+  les noms sessionQualiopi / conventionExportQualiopi /
+  fullConventionQualiopi (voir ARCHITECTURE.md). On ignore encore :
+    - si ces noms sont exacts
+    - quels champs ils renvoient reellement
+
+  Cette page teste donc les 3 noms en direct (meme pattern que
+  widget-ia.html : GET /wa/{entite}/list?nopaging=1, cookie de session
+  deja actif, aucune ecriture) et affiche ce qu'elle trouve tel quel --
+  pas d'indicateurs Qualiopi "habilles" (taux de satisfaction, actions
+  correctives...) tant que les vrais champs n'ont pas ete vus, pour ne
+  pas afficher de faux chiffres.
+
+  Une fois les champs confirmes ici, cette page sera remplacee par un
+  vrai tableau de bord d'indicateurs Qualiopi.
+-->
+<style>
+  :root {
+    color-scheme: light;
+    --page:        #f9f9f7;
+    --surface:     #fcfcfb;
+    --surface-2:   #f2f1ec;
+    --ink:         #0b0b0b;
+    --ink-2:       #52514e;
+    --ink-muted:   #898781;
+    --grid:        #e1e0d9;
+    --border:      rgba(11,11,11,0.10);
+    --border-2:    rgba(11,11,11,0.16);
+    --accent:      #256abf;
+    --accent-tint: #dbe8f8;
+    --good:        #0ca30c;
+    --good-text:   #006300;
+    --warning:     #b8860b;
+    --critical:    #b23327;
+    --critical-tint: #f6e2df;
+    --font-display: Charter, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322;
+      --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #8f8d86;
+      --grid: #2c2c2a; --border: rgba(255,255,255,0.10); --border-2: rgba(255,255,255,0.18);
+      --accent: #5b9bea; --accent-tint: #1c2e44;
+      --good: #3fc23f; --good-text: #4fd44f; --warning: #e0b03a;
+      --critical: #e2685c; --critical-tint: #3a201d;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322;
+    --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #8f8d86;
+    --grid: #2c2c2a; --border: rgba(255,255,255,0.10); --border-2: rgba(255,255,255,0.18);
+    --accent: #5b9bea; --accent-tint: #1c2e44;
+    --good: #3fc23f; --good-text: #4fd44f; --warning: #e0b03a;
+    --critical: #e2685c; --critical-tint: #3a201d;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink); font-family: var(--font-body); -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 28px 80px; }
+  .eyebrow { text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px; font-weight: 600; color: var(--accent); margin: 0 0 10px; }
+  h1 { font-family: var(--font-display); font-size: clamp(22px, 3vw, 30px); font-weight: 500; margin: 0 0 8px; }
+  .lede { max-width: 68ch; color: var(--ink-2); font-size: 14px; line-height: 1.6; margin: 0; }
+  header.top { padding-bottom: 22px; margin-bottom: 24px; border-bottom: 1px solid var(--border); }
+
+  #banner { padding: 12px 16px; border-radius: 8px; font-size: 13.5px; margin-bottom: 24px; background: var(--surface-2); color: var(--ink-2); }
+
+  .entity-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 20px; overflow: hidden; }
+  .entity-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+  .entity-head h2 { font-family: var(--font-display); font-size: 16px; font-weight: 500; margin: 0; }
+  .entity-body { padding: 14px 18px; font-size: 13px; color: var(--ink-2); }
+  .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 100px; white-space: nowrap; }
+  .badge .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .badge.ok { background: var(--accent-tint); color: var(--accent); }
+  .badge.ok .dot { background: var(--accent); }
+  .badge.empty { background: var(--surface-2); color: var(--ink-muted); }
+  .badge.empty .dot { background: var(--ink-muted); }
+  .badge.missing { background: var(--critical-tint); color: var(--critical); }
+  .badge.missing .dot { background: var(--critical); }
+
+  .field-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; }
+  .field-chip { font-size: 11.5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--surface-2); border-radius: 5px; padding: 3px 8px; color: var(--ink); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 12px; }
+  thead th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-muted); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--border); background: var(--surface-2); white-space: nowrap; }
+  tbody td { padding: 7px 10px; border-bottom: 1px solid var(--border); color: var(--ink-2); white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+  .table-scroll { overflow-x: auto; }
+
+  footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 12px; color: var(--ink-muted); line-height: 1.7; max-width: 74ch; }
+  footer code { background: var(--surface-2); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <p class="eyebrow">Widget IA - MCDF</p>
+    <h1>Assistant Qualiopi -- v1 decouverte</h1>
+    <p class="lede">Ce module n'affiche pas encore d'indicateurs Qualiopi habilles : il teste en direct les entites repérées dans le code source et montre ce qu'elles renvoient réellement, pour construire le vrai tableau de bord sur des champs confirmés, pas supposés.</p>
+  </header>
+
+  <div id="banner">Interrogation des entités candidates...</div>
+
+  <div id="results"></div>
+
+  <footer>
+    Lecture seule -- mêmes règles que <code>widget-ia.html</code> (cookie de session déjà actif, aucun appel d'écriture). Une fois les bons champs confirmés ici, cette page sera remplacée par de vrais indicateurs Qualiopi (par ex. taux de satisfaction stagiaires, réclamations, actions correctives, preuves manquantes par critère).
+  </footer>
+</div>
+
+<script>
+const CANDIDATES = ['sessionQualiopi', 'conventionExportQualiopi', 'fullConventionQualiopi'];
+
+function el(tag, cls, html) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html !== undefined) e.innerHTML = html;
+  return e;
+}
+
+async function probe(entity) {
+  try {
+    const res = await fetch(`/wa/${entity}/list?nopaging=1&limit=8&_dc=${Date.now()}`, { credentials: 'same-origin' });
+    if (res.status === 401 || res.status === 403) return { entity, state: 'auth' };
+    let data;
+    try { data = await res.json(); } catch (e) { return { entity, state: 'missing' }; }
+    if (!data.success) return { entity, state: 'missing', detail: JSON.stringify(data).slice(0, 200) };
+    if (!data.root || data.root.length === 0) return { entity, state: 'empty' };
+    return { entity, state: 'ok', rows: data.root };
+  } catch (e) {
+    return { entity, state: 'error', detail: e.message };
+  }
+}
+
+function renderResult(r) {
+  const card = el('div', 'entity-card');
+  const head = el('div', 'entity-head');
+  head.appendChild(el('h2', '', `<code>/wa/${r.entity}/list</code>`));
+
+  const body = el('div', 'entity-body');
+
+  if (r.state === 'auth') {
+    head.appendChild(el('span', 'badge missing', '<span class="dot"></span> Non authentifié'));
+    body.textContent = 'Session MCDF non détectée. Ouvrez cette page depuis un onglet déjà connecté à MCDF.';
+  } else if (r.state === 'missing') {
+    head.appendChild(el('span', 'badge missing', '<span class="dot"></span> Entité introuvable'));
+    body.textContent = `Ce nom d'entité ne répond pas (404 ou réponse non exploitable)${r.detail ? ' -- ' + r.detail : ''}. Ce n'est probablement pas le bon nom, à corriger dans data-beans.xml côté serveur ou à chercher côté source.`;
+  } else if (r.state === 'error') {
+    head.appendChild(el('span', 'badge missing', '<span class="dot"></span> Erreur réseau'));
+    body.textContent = r.detail;
+  } else if (r.state === 'empty') {
+    head.appendChild(el('span', 'badge empty', '<span class="dot"></span> Entité valide, 0 résultat'));
+    body.textContent = 'Le nom est probablement correct mais aucune donnée sur ce compte/cette entité pour le moment.';
+  } else {
+    head.appendChild(el('span', 'badge ok', `<span class="dot"></span> OK -- ${r.rows.length} ligne(s)`));
+    const fields = Object.keys(r.rows[0]);
+    const fieldsWrap = el('div', 'field-list');
+    fields.forEach((f) => fieldsWrap.appendChild(el('span', 'field-chip', f)));
+    body.appendChild(el('p', '', 'Champs disponibles :'));
+    body.appendChild(fieldsWrap);
+
+    const scroll = el('div', 'table-scroll');
+    const table = el('table');
+    const thead = el('thead');
+    const trh = el('tr');
+    fields.slice(0, 10).forEach((f) => trh.appendChild(el('th', '', f)));
+    thead.appendChild(trh);
+    table.appendChild(thead);
+    const tbody = el('tbody');
+    r.rows.slice(0, 8).forEach((row) => {
+      const tr = el('tr');
+      fields.slice(0, 10).forEach((f) => {
+        const v = row[f];
+        tr.appendChild(el('td', '', v === null || v === undefined ? '—' : String(v)));
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    scroll.appendChild(table);
+    body.appendChild(scroll);
+  }
+
+  card.appendChild(head);
+  card.appendChild(body);
+  return card;
+}
+
+(async () => {
+  const results = await Promise.all(CANDIDATES.map(probe));
+  const banner = document.getElementById('banner');
+  const okCount = results.filter((r) => r.state === 'ok').length;
+  if (okCount === 0) {
+    banner.textContent = 'Aucune des entités candidates ne renvoie de données exploitables pour le moment -- voir le détail de chacune ci-dessous.';
+  } else {
+    banner.textContent = `${okCount} entité(s) sur ${results.length} répondent avec des données -- copiez les champs listés ci-dessous pour construire le vrai tableau de bord Qualiopi.`;
+  }
+  const wrap = document.getElementById('results');
+  results.forEach((r) => wrap.appendChild(renderResult(r)));
+})();
+</script>

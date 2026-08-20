@@ -1,28 +1,28 @@
 /**
- * Lanceur flottant du Copilote IA MCDF — version "une seule ligne à ajouter".
+ * Lanceur flottant du Copilote IA MCDF - version "une seule ligne a ajouter".
  *
- * Contrairement à launcher.html (qui demande de copier 3 blocs à des
- * endroits différents), ce fichier fait tout lui-même : il injecte son
+ * Contrairement a launcher.html (qui demande de copier 3 blocs a des
+ * endroits differents), ce fichier fait tout lui-meme : il injecte son
  * propre CSS et construit le bouton + le panneau au chargement de la
- * page. L'intégration se résume à UNE seule ligne, à ajouter une seule
+ * page. L'integration se resume a UNE seule ligne, a ajouter une seule
  * fois dans le gabarit commun de l'appli (juste avant </body>) :
  *
  *   <script src="/launcher-embed.js"></script>
  *
- * (Adapter le chemin "/launcher-embed.js" à l'endroit où ce fichier est
- * réellement déposé dans WebContent/.)
+ * (Adapter le chemin "/launcher-embed.js" a l'endroit ou ce fichier est
+ * reellement depose dans WebContent/.)
  *
- * Optionnel : définir window.MCDF_CURRENT_ENTITY_ID avant cette balise
- * <script> pour que le lien vers "Génération de rapports" s'ouvre sur la
- * bonne entité. Sans ça, le widget s'ouvre quand même (juste sans filtre
- * d'entité).
+ * Optionnel : definir window.MCDF_CURRENT_ENTITY_ID avant cette balise
+ * <script> pour que le lien vers "Generation de rapports" s'ouvre sur la
+ * bonne entite. Sans ca, le widget s'ouvre quand meme (juste sans filtre
+ * d'entite).
  *
- * Vérification que ce script s'est bien exécuté : dans la console du
+ * Verification que ce script s'est bien execute : dans la console du
  * navigateur, `document.getElementById('ia-launcher-btn')` doit renvoyer
- * l'élément (pas null).
+ * l'element (pas null).
  */
 (function () {
-  if (document.getElementById('ia-launcher-btn')) return; // déjà injecté, ne pas dupliquer
+  if (document.getElementById('ia-launcher-btn')) return; // deja injecte, ne pas dupliquer
 
   const CSS = `
     #ia-launcher-btn {
@@ -130,13 +130,13 @@
       <div id="ia-launcher-backdrop"></div>
       <div id="ia-launcher-panel">
         <div class="ia-l-header">
-          <button class="ia-l-close" type="button" aria-label="Fermer">✕</button>
+          <button class="ia-l-close" type="button" aria-label="Fermer">\u2715</button>
           <h2>Copilote IA MCDF</h2>
           <p>Posez une question ou choisissez un module ci-dessous.</p>
         </div>
         <div class="ia-l-body">
           <div class="ia-l-ask">
-            <input type="text" placeholder="Ex. « quels devis relancer cette semaine ? »" id="ia-l-ask-input">
+            <input type="text" placeholder="Ex. \u00AB quels devis relancer cette semaine ? \u00BB" id="ia-l-ask-input">
             <button type="button" id="ia-l-ask-btn" aria-label="Envoyer">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
             </button>
@@ -144,7 +144,7 @@
           <p class="ia-l-section-label">Modules</p>
           <div class="ia-l-cards" id="ia-l-cards"></div>
         </div>
-        <div class="ia-l-footer"><span class="dot"></span> Lecture seule — vos données restent dans MCDF</div>
+        <div class="ia-l-footer"><span class="dot"></span> Lecture seule \u2014 vos donn\u00E9es restent dans MCDF</div>
       </div>
     </div>
   `;
@@ -156,10 +156,10 @@
   const ENTITY_ID = window.MCDF_CURRENT_ENTITY_ID || '';
   const qs = ENTITY_ID ? `?entityId=${encodeURIComponent(ENTITY_ID)}` : '';
   const MODULES = [
-    { icon: '💬', title: 'IA Conversationnelle', desc: 'Dialoguer en langage naturel pour interroger MCDF.', ready: false, href: null },
-    { icon: '✅', title: 'Assistant Qualiopi', desc: 'Vérifier les indicateurs et les preuves manquantes.', ready: false, href: null },
-    { icon: '📊', title: 'Génération de rapports', desc: "Restitutions et KPI en direct (nouveaux clients, CA, devis...).", ready: true, href: `widget-ia.html${qs}` },
-    { icon: '🔍', title: 'Recherche intelligente', desc: "Chercher en langage naturel plutôt qu'avec des filtres.", ready: false, href: null },
+    { icon: '\u{1F4AC}', title: 'IA Conversationnelle', desc: 'Dialoguer en langage naturel pour interroger MCDF (v1, questions connues).', ready: true, href: `widget-conversationnel.html${qs}` },
+    { icon: '\u2705', title: 'Assistant Qualiopi', desc: 'V\u00E9rifier les indicateurs et les preuves manquantes (v1, mode d\u00E9couverte).', ready: true, href: `widget-qualiopi.html${qs}` },
+    { icon: '\u{1F4CA}', title: 'G\u00E9n\u00E9ration de rapports', desc: "Restitutions et KPI en direct (nouveaux clients, CA, devis...).", ready: true, href: `widget-ia.html${qs}` },
+    { icon: '\u{1F50D}', title: 'Recherche intelligente', desc: "Chercher en langage naturel plut\u00F4t qu'avec des filtres.", ready: false, href: null },
   ];
   const cardsWrap = document.getElementById('ia-l-cards');
   MODULES.forEach((m) => {
@@ -174,7 +174,7 @@
         <p class="ia-l-card-title">${m.title}</p>
         <p class="ia-l-card-desc">${m.desc}</p>
       </div>
-      <span class="ia-l-badge ${m.ready ? 'ready' : 'soon'}">${m.ready ? 'Disponible' : 'Bientôt'}</span>
+      <span class="ia-l-badge ${m.ready ? 'ready' : 'soon'}">${m.ready ? 'Disponible' : 'Bient\u00F4t'}</span>
     `;
     cardsWrap.appendChild(card);
   });
@@ -195,7 +195,7 @@
 
   function handleAsk() {
     if (!askInput.value.trim()) return;
-    askInput.placeholder = 'Bientôt disponible — essayez un module ci-dessous en attendant';
+    askInput.placeholder = 'Bient\u00F4t disponible \u2014 essayez un module ci-dessous en attendant';
     askInput.value = '';
   }
   askBtn.addEventListener('click', handleAsk);
