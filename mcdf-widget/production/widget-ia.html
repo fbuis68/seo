@@ -14,6 +14,11 @@
   DEPUIS L'APPLICATION MCDF (même origine) — voir INTEGRATION.md dans ce
   même dossier pour les instructions d'intégration côté développeur.
 
+  Structure en 4 sous-rubriques (repris des rapports Power BI existants —
+  Suivi Commercial, Suivi Formateurs, Rapports Listings — reconstruits ici
+  avec les données MCDF en direct) : Commercial, Planning, Formateurs,
+  Listing.
+
   Fonctionnement :
   - Aucune dépendance externe, aucun build. Un seul fichier HTML/CSS/JS.
   - S'appuie sur le cookie de session déjà actif dans l'onglet MCDF (même
@@ -22,9 +27,10 @@
     ?entityId=E00000361 (à passer par l'appli hôte, cf. INTEGRATION.md).
     Sans ce paramètre, affiche toutes les entités accessibles au compte
     connecté (utile pour tester, à éviter en production).
-  - Lecture seule : aucun appel d'écriture (create/update) — cf.
-    modules/01-conversationnel/NOTES.md pour ce qui manque avant de coder
-    des actions.
+  - Lecture seule : aucun appel d'écriture (create/update).
+  - Utilise fullConventionQualiopi (superset confirmé de convention, avec
+    accountManagerName/customerName déjà résolus) plutôt que convention
+    seul, pour éviter des jointures supplémentaires.
 -->
 <style>
   :root {
@@ -48,6 +54,7 @@
     --critical-tint: #f6e2df;
     --font-display: Charter, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
     --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -95,6 +102,16 @@
   .kpi-sub { font-size: 12.5px; color: var(--ink-2); display: flex; align-items: center; gap: 6px; }
   .kpi-sub.up { color: var(--good-text); }
   .kpi-sub.down { color: var(--critical); }
+
+  .tabs { display: flex; gap: 6px; margin-bottom: 26px; border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    font: inherit; font-size: 13.5px; font-weight: 600; color: var(--ink-muted);
+    background: none; border: none; border-bottom: 2px solid transparent;
+    padding: 10px 6px; margin-bottom: -1px; cursor: pointer;
+  }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
 
   section { margin-bottom: 34px; }
   .section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 14px; }
@@ -162,6 +179,8 @@
   .rank-bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
   .rank-value { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; font-size: 13px; }
 
+  .note { padding: 12px 16px; border-radius: 8px; font-size: 12.5px; margin-bottom: 16px; background: var(--surface-2); color: var(--ink-2); line-height: 1.55; }
+
   footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 12px; color: var(--ink-muted); line-height: 1.7; max-width: 74ch; }
   footer code { background: var(--surface-2); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
 
@@ -176,7 +195,7 @@
   <header class="top">
     <div>
       <p class="eyebrow">Widget IA · MCDF</p>
-      <h1>Restitutions Direction</h1>
+      <h1>Génération de rapports</h1>
       <p class="lede">Données en direct, lecture seule — aucune action d'écriture n'est effectuée par ce widget.</p>
     </div>
     <span class="status-tag" id="status-tag"><span class="dot"></span> Connexion…</span>
@@ -188,93 +207,225 @@
 
     <div class="kpis" id="kpis"></div>
 
-    <section>
-      <div class="section-head">
-        <h2 id="compare-title">Comparaison annuelle</h2>
-        <label class="hint" style="display:flex; align-items:center; gap:6px;">
-          Jusqu'à
-          <select id="compare-cutoff" style="font:inherit; font-size:12px; color:var(--ink); background:var(--surface); border:1px solid var(--border-2); border-radius:6px; padding:3px 6px;"></select>
-        </label>
-      </div>
-      <div class="panel">
-        <div class="table-scroll" style="max-height:260px">
-          <table class="tight-table">
-            <colgroup><col style="width:32%"><col style="width:34%"><col style="width:18%"><col style="width:16%"></colgroup>
-            <thead><tr><th>Indicateur</th><th>Comparaison</th><th class="num">Écart</th><th class="num">vs N-1</th></tr></thead>
-            <tbody id="tbl-comparaison"></tbody>
-          </table>
-        </div>
-      </div>
-    </section>
+    <div class="tabs">
+      <button class="tab-btn active" type="button" data-tab="commercial">Commercial</button>
+      <button class="tab-btn" type="button" data-tab="planning">Planning</button>
+      <button class="tab-btn" type="button" data-tab="formateurs">Formateurs</button>
+      <button class="tab-btn" type="button" data-tab="listing">Listing</button>
+    </div>
 
-    <section>
-      <div class="two-col">
-        <div>
-          <div class="section-head"><h2>Nouveaux clients par mois</h2><span class="hint">clients créés dans le mois</span></div>
-          <div class="panel">
-            <div class="table-scroll">
-              <table class="tight-table">
-                <colgroup><col style="width:30%"><col style="width:70%"></colgroup>
-                <thead><tr><th>Mois</th><th>Nouveaux clients</th></tr></thead>
-                <tbody id="tbl-nouveaux"></tbody>
-              </table>
+    <!-- ============================= COMMERCIAL ============================= -->
+    <div class="tab-panel active" id="tab-commercial">
+
+      <section>
+        <div class="section-head">
+          <h2 id="compare-title">Comparaison annuelle</h2>
+          <label class="hint" style="display:flex; align-items:center; gap:6px;">
+            Jusqu'à
+            <select id="compare-cutoff" style="font:inherit; font-size:12px; color:var(--ink); background:var(--surface); border:1px solid var(--border-2); border-radius:6px; padding:3px 6px;"></select>
+          </label>
+        </div>
+        <div class="panel">
+          <div class="table-scroll" style="max-height:260px">
+            <table class="tight-table">
+              <colgroup><col style="width:32%"><col style="width:34%"><col style="width:18%"><col style="width:16%"></colgroup>
+              <thead><tr><th>Indicateur</th><th>Comparaison</th><th class="num">Écart</th><th class="num">vs N-1</th></tr></thead>
+              <tbody id="tbl-comparaison"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="two-col">
+          <div>
+            <div class="section-head"><h2>Nouveaux clients par mois</h2><span class="hint">clients créés dans le mois</span></div>
+            <div class="panel">
+              <div class="table-scroll">
+                <table class="tight-table">
+                  <colgroup><col style="width:30%"><col style="width:70%"></colgroup>
+                  <thead><tr><th>Mois</th><th>Nouveaux clients</th></tr></thead>
+                  <tbody id="tbl-nouveaux"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="section-head"><h2>CA facturé</h2><span class="hint">12 mois</span></div>
+            <div class="panel chart-pad">
+              <div class="mini-chart" id="chart-ca"></div>
+              <div class="mini-labels" id="labels-ca"></div>
             </div>
           </div>
         </div>
-        <div>
-          <div class="section-head"><h2>30 derniers stagiaires inscrits</h2><span class="hint" id="stagiaires-count"></span></div>
-          <div class="panel">
-            <div class="table-scroll">
-              <table class="tight-table">
-                <colgroup><col style="width:28%"><col style="width:50%"><col style="width:22%"></colgroup>
-                <thead><tr><th>Stagiaire</th><th>Convention</th><th>Inscrit le</th></tr></thead>
-                <tbody id="tbl-stagiaires"></tbody>
-              </table>
+      </section>
+
+      <section>
+        <div class="two-col">
+          <div>
+            <div class="section-head"><h2>Top 5 conseillers</h2><span class="hint">par CA facturé</span></div>
+            <div class="panel"><div class="rank-list" id="rank-conseillers"></div></div>
+          </div>
+          <div>
+            <div class="section-head"><h2>Top 5 clients</h2><span class="hint">par CA facturé</span></div>
+            <div class="panel"><div class="rank-list" id="rank-clients"></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-head"><h2>CA par client</h2><span class="hint" id="ca-client-hint"></span></div>
+        <div class="panel">
+          <div class="table-scroll">
+            <table class="tight-table">
+              <colgroup><col style="width:34%"><col style="width:22%"><col style="width:22%"><col style="width:22%"></colgroup>
+              <thead><tr><th>Client</th><th class="num">Année préc.</th><th class="num">Année en cours</th><th class="num">Écart</th></tr></thead>
+              <tbody id="tbl-ca-client"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-head"><h2>Devis à relancer</h2><span class="hint">&gt; 10 jours sans réponse</span></div>
+        <div class="panel">
+          <div class="table-scroll" style="max-height:220px"><table><tbody id="tbl-devis"></tbody></table></div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- ============================== PLANNING =============================== -->
+    <div class="tab-panel" id="tab-planning">
+
+      <section>
+        <div class="two-col">
+          <div>
+            <div class="section-head"><h2>Sessions programmées</h2><span class="hint">avec capacité déclarée, 6 mois</span></div>
+            <div class="panel chart-pad">
+              <div class="mini-chart" id="chart-sessions"></div>
+              <div class="mini-labels" id="labels-sessions"></div>
+            </div>
+          </div>
+          <div>
+            <div class="section-head"><h2>Volume d'heures programmées</h2><span class="hint">12 mois, toutes sessions</span></div>
+            <div class="panel chart-pad">
+              <div class="mini-chart" id="chart-heures"></div>
+              <div class="mini-labels" id="labels-heures"></div>
             </div>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <section>
-      <div class="three-col">
-        <div>
-          <div class="section-head"><h2>CA facturé</h2><span class="hint">12 mois</span></div>
-          <div class="panel chart-pad">
-            <div class="mini-chart" id="chart-ca"></div>
-            <div class="mini-labels" id="labels-ca"></div>
+      <section>
+        <div class="section-head"><h2>Sessions à venir</h2><span class="hint" id="sessions-list-hint"></span></div>
+        <div class="panel">
+          <div class="table-scroll">
+            <table class="tight-table">
+              <colgroup><col style="width:26%"><col style="width:20%"><col style="width:14%"><col style="width:14%"><col style="width:16%"><col style="width:10%"></colgroup>
+              <thead><tr><th>Session</th><th>Formation</th><th>Début</th><th>Fin</th><th>Formateur</th><th class="num">Places</th></tr></thead>
+              <tbody id="tbl-sessions-planning"></tbody>
+            </table>
           </div>
         </div>
-        <div>
-          <div class="section-head"><h2>Sessions programmées</h2><span class="hint">avec capacité déclarée, 6 mois</span></div>
-          <div class="panel chart-pad">
-            <div class="mini-chart" id="chart-sessions"></div>
-            <div class="mini-labels" id="labels-sessions"></div>
-          </div>
-        </div>
-        <div>
-          <div class="section-head"><h2>Devis à relancer</h2><span class="hint">&gt; 10 jours sans réponse</span></div>
-          <div class="panel">
-            <div class="table-scroll" style="max-height:180px"><table><tbody id="tbl-devis"></tbody></table></div>
-          </div>
-        </div>
-      </div>
-    </section>
+      </section>
 
-    <section>
-      <div class="section-head"><h2>Top formateurs</h2><span class="hint">par CA estimé (tarif jour × durée des sessions)</span></div>
-      <div class="panel"><div class="rank-list" id="rank-formateurs"></div></div>
-    </section>
+    </div>
+
+    <!-- ============================= FORMATEURS ============================== -->
+    <div class="tab-panel" id="tab-formateurs">
+
+      <section>
+        <div class="section-head"><h2>Top formateurs</h2><span class="hint">par CA estimé (tarif jour × durée des sessions)</span></div>
+        <div class="panel"><div class="rank-list" id="rank-formateurs"></div></div>
+      </section>
+
+      <section>
+        <div class="section-head"><h2>Heures par formateur</h2><span class="hint">12 mois</span></div>
+        <div id="formateurs-heures-note"></div>
+        <div class="panel" id="formateurs-heures-panel" style="display:none">
+          <div class="table-scroll">
+            <table class="tight-table">
+              <colgroup><col style="width:30%"><col style="width:17.5%"><col style="width:17.5%"><col style="width:17.5%"><col style="width:17.5%"></colgroup>
+              <thead><tr><th>Formateur</th><th class="num">Prévues</th><th class="num">Réalisées</th><th class="num">Planifiées</th><th class="num">Sessions</th></tr></thead>
+              <tbody id="tbl-heures-formateur"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- =============================== LISTING ================================ -->
+    <div class="tab-panel" id="tab-listing">
+
+      <section>
+        <div class="section-head"><h2>30 derniers stagiaires inscrits</h2><span class="hint" id="stagiaires-count"></span></div>
+        <div class="panel">
+          <div class="table-scroll">
+            <table class="tight-table">
+              <colgroup><col style="width:28%"><col style="width:50%"><col style="width:22%"></colgroup>
+              <thead><tr><th>Stagiaire</th><th>Convention</th><th>Inscrit le</th></tr></thead>
+              <tbody id="tbl-stagiaires"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-head"><h2>Crédit d'heures restant</h2><span class="hint">par convention, avec participants</span></div>
+        <div class="panel">
+          <div class="table-scroll">
+            <table class="tight-table">
+              <colgroup><col style="width:32%"><col style="width:44%"><col style="width:24%"></colgroup>
+              <thead><tr><th>Convention</th><th>Participants</th><th class="num">Crédit restant</th></tr></thead>
+              <tbody id="tbl-credit"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-head"><h2>Sessions</h2><span class="hint">formation, session, durée</span></div>
+        <div class="panel">
+          <div class="table-scroll">
+            <table class="tight-table">
+              <colgroup><col style="width:36%"><col style="width:36%"><col style="width:14%"><col style="width:14%"></colgroup>
+              <thead><tr><th>Formation</th><th>Session</th><th class="num">Heures</th><th>Début</th></tr></thead>
+              <tbody id="tbl-sessions-listing"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-head"><h2>Montant vendu / facturé</h2><span class="hint">par dossier</span></div>
+        <div class="panel">
+          <div class="table-scroll">
+            <table class="tight-table">
+              <colgroup><col style="width:12%"><col style="width:14%"><col style="width:22%"><col style="width:20%"><col style="width:16%"><col style="width:16%"></colgroup>
+              <thead><tr><th>Dossier</th><th>Statut</th><th>Client</th><th>Conseiller</th><th class="num">Vendu</th><th class="num">Facturé</th></tr></thead>
+              <tbody id="tbl-montant"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </div>
 
     <footer>
-      Widget IA MCDF — module « génération de rapports » (lecture seule).
-      Les données viennent de l'API MCDF en direct (<code>/wa/{entité}/list</code>),
-      pas d'un jeu de démonstration. Le remplissage réel par session n'est
-      pas encore calculable (le lien session↔inscrits n'a pas encore été
-      confirmé côté API — voir <code>modules/03-documents/NOTES.md</code> et
-      <code>ARCHITECTURE.md</code>) : le panneau « Sessions programmées »
-      montre un volume, pas un taux de remplissage réel. Le CA par
-      formateur est estimé (tarif jour × durée), pas facturé réellement.
+      Widget IA MCDF — module « génération de rapports » (lecture seule),
+      structuré à partir des rapports Power BI existants (Suivi Commercial,
+      Suivi Formateurs, Rapports Listings). Les données viennent de l'API
+      MCDF en direct (<code>/wa/{entité}/list</code>), pas d'un jeu de
+      démonstration. Le CA par formateur est estimé (tarif jour × durée),
+      pas facturé réellement. Le détail « Prévues/Planifiées » par
+      formateur dépend d'une jointure entre <code>sessionQualiopi</code>
+      et <code>session</code> qui n'est fiable que si les deux entités
+      partagent le même identifiant — un bandeau l'indique si ce n'est
+      pas le cas sur ce compte. La répartition Training/Coaching (page
+      d'accueil Power BI d'origine) n'a pas de champ MCDF confirmé, elle
+      n'a donc pas été reconstruite ici.
     </footer>
 
   </div>
@@ -293,6 +444,7 @@ function fmtMonth(ym) {
 function fmtEUR(n) {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
 }
+function fmtH(n) { return Number.isFinite(n) ? `${Math.round(n).toLocaleString('fr-FR')} h` : '—'; }
 function el(tag, cls, html) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -322,6 +474,18 @@ function setStatus(kind, html) {
 }
 
 // ------------------------------------------------------------------
+// Onglets
+// ------------------------------------------------------------------
+document.querySelectorAll('.tab-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+  });
+});
+
+// ------------------------------------------------------------------
 // Récupération des données en direct (même pattern que browser/live-reports.js)
 // ------------------------------------------------------------------
 async function fetchAll(entity, entityId) {
@@ -338,12 +502,13 @@ async function fetchAll(entity, entityId) {
 }
 
 async function buildData(entityId) {
-  const [customers, conventions, invoices, attendees, sessions] = await Promise.all([
+  const [customers, conventions, invoices, attendees, sessions, sessionQualiopi] = await Promise.all([
     fetchAll('customer', entityId),
-    fetchAll('convention', entityId),
+    fetchAll('fullConventionQualiopi', entityId),
     fetchAll('invoice', entityId),
     fetchAll('conventionAttendee', entityId),
     fetchAll('session', entityId),
+    fetchAll('sessionQualiopi', entityId).catch(() => []),
   ]);
 
   const convById = new Map(conventions.map((c) => [c.id, c]));
@@ -393,6 +558,14 @@ async function buildData(entityId) {
     capacite_totale: (sesMap[m] || {}).capacite_totale || 0,
   }));
 
+  const heuresMap = {};
+  sessions.forEach((s) => {
+    const m = monthKey(s.startDate);
+    if (!m || !s.hours) return;
+    heuresMap[m] = (heuresMap[m] || 0) + s.hours;
+  });
+  const heures_par_mois = months12.map((m) => ({ mois: m, heures: heuresMap[m] || 0 }));
+
   const parFormateur = {};
   sessions.filter((s) => s.trainerId).forEach((s) => {
     const key = s.trainerId;
@@ -401,6 +574,119 @@ async function buildData(entityId) {
     parFormateur[key].ca_estime += (s.dailyRate || 0) * (s.days || 0);
   });
   const top_formateurs = Object.values(parFormateur).sort((a, b) => b.ca_estime - a.ca_estime).slice(0, 5);
+
+  // Top conseillers / clients (par CA facturé, via convention.accountManagerName /
+  // customerName déjà résolus sur fullConventionQualiopi)
+  const caByField = (field) => {
+    const map = {};
+    invoices.forEach((i) => {
+      const conv = convById.get(i.conventionId);
+      const key = conv ? conv[field] : null;
+      if (!key) return;
+      map[key] = (map[key] || 0) + (i.amount || 0);
+    });
+    return Object.entries(map)
+      .map(([nom, ca]) => ({ nom, ca }))
+      .sort((a, b) => b.ca - a.ca)
+      .slice(0, 5);
+  };
+  const top_conseillers = caByField('accountManagerName');
+  const top_clients = caByField('customerName');
+
+  // CA par client, année en cours vs année précédente (comme la page
+  // "Suivi Commercial" du classeur Power BI d'origine)
+  const yearNow = new Date().getFullYear();
+  const caParClientMap = {};
+  invoices.forEach((i) => {
+    if (!i.billingDate) return;
+    const y = new Date(i.billingDate).getFullYear();
+    if (y !== yearNow && y !== yearNow - 1) return;
+    const conv = convById.get(i.conventionId);
+    const client = conv ? conv.customerName : null;
+    if (!client) return;
+    if (!caParClientMap[client]) caParClientMap[client] = { client, cur: 0, prev: 0 };
+    caParClientMap[client][y === yearNow ? 'cur' : 'prev'] += (i.amount || 0);
+  });
+  const ca_par_client = Object.values(caParClientMap)
+    .filter((r) => r.cur || r.prev)
+    .sort((a, b) => b.cur - a.cur)
+    .slice(0, 25);
+
+  // Sessions à venir (Planning)
+  const today = new Date().toISOString().slice(0, 10);
+  const sessions_a_venir = sessions
+    .filter((s) => s.startDate && s.startDate >= today)
+    .sort((a, b) => a.startDate.localeCompare(b.startDate))
+    .slice(0, 30);
+  const sessions_recentes_fallback = sessions_a_venir.length
+    ? sessions_a_venir
+    : sessions.filter((s) => s.startDate).sort((a, b) => b.startDate.localeCompare(a.startDate)).slice(0, 30);
+
+  // Toutes les sessions (Listing)
+  const sessions_listing = [...sessions]
+    .filter((s) => s.startDate)
+    .sort((a, b) => b.startDate.localeCompare(a.startDate))
+    .slice(0, 50);
+
+  // Crédit d'heures restant par convention, avec participants (Listing)
+  const attendeesByConv = new Map();
+  attendees.filter((a) => a.attendee).forEach((a) => {
+    if (!attendeesByConv.has(a.conventionId)) attendeesByConv.set(a.conventionId, []);
+    attendeesByConv.get(a.conventionId).push(a.fullname);
+  });
+  const credit_restant = conventions
+    .filter((c) => c.isConvention && c.creditLeftHours > 0)
+    .map((c) => ({
+      nom: c.name || c.code || c.id,
+      participants: (attendeesByConv.get(c.id) || []).join(', ') || '—',
+      credit: c.creditLeftHours,
+    }))
+    .sort((a, b) => b.credit - a.credit)
+    .slice(0, 30);
+
+  // Montant vendu / facturé par dossier (Listing)
+  const invoicedByConv = new Map();
+  invoices.forEach((i) => {
+    if (!i.conventionId) return;
+    invoicedByConv.set(i.conventionId, (invoicedByConv.get(i.conventionId) || 0) + (i.amount || 0));
+  });
+  const montant_vendu_facture = conventions
+    .filter((c) => c.isConvention)
+    .map((c) => ({
+      code: c.code || c.conventionCode || c.id,
+      statut: c.conventionStatus || '—',
+      client: c.customerName || '—',
+      conseiller: c.accountManagerName || '—',
+      vendu: c.turnover || 0,
+      facture: invoicedByConv.get(c.id) || 0,
+    }))
+    .filter((r) => r.vendu || r.facture)
+    .sort((a, b) => b.facture - a.facture)
+    .slice(0, 30);
+
+  // Heures par formateur (Formateurs) -- tentative de jointure
+  // sessionQualiopi.id -> session.id pour récupérer trainerId, qui
+  // n'existe pas directement sur sessionQualiopi. Dégradation propre si
+  // la jointure ne matche pas assez de lignes.
+  const sessionIds = new Set(sessions.map((s) => String(s.id)));
+  const matched = sessionQualiopi.filter((sq) => sessionIds.has(String(sq.id)));
+  const joinRatio = sessionQualiopi.length ? matched.length / sessionQualiopi.length : 0;
+  const sessionById = new Map(sessions.map((s) => [String(s.id), s]));
+  let heures_formateur = null;
+  if (joinRatio > 0.3) {
+    const byTrainer = {};
+    matched.forEach((sq) => {
+      const s = sessionById.get(String(sq.id));
+      if (!s || !s.trainerId) return;
+      const key = s.trainerId;
+      if (!byTrainer[key]) byTrainer[key] = { nom: s.trainerName || key, prevues: 0, realisees: 0, planifiees: 0, sessions: 0 };
+      byTrainer[key].prevues += sq.assigningHours || 0;
+      byTrainer[key].realisees += sq.fulfilledHours || 0;
+      byTrainer[key].planifiees += sq.schedulingHours || 0;
+      byTrainer[key].sessions += 1;
+    });
+    heures_formateur = Object.values(byTrainer).sort((a, b) => b.realisees - a.realisees);
+  }
 
   const now = new Date();
   const comparaison_annuelle = computeComparaison(
@@ -411,7 +697,11 @@ async function buildData(entityId) {
   return {
     generated_at: new Date().toISOString().slice(0, 10),
     counts: { customers: customers.length, conventions: conventions.length, invoices: invoices.length, attendees: attendees.length, sessions: sessions.length },
-    nouveaux_clients_par_mois, derniers_stagiaires, ca_mensuel, devis_a_relancer, sessions_programmees, top_formateurs, comparaison_annuelle,
+    nouveaux_clients_par_mois, derniers_stagiaires, ca_mensuel, devis_a_relancer, sessions_programmees,
+    heures_par_mois, top_formateurs, top_conseillers, top_clients, ca_par_client,
+    sessions_a_venir: sessions_recentes_fallback, sessions_a_venir_is_future: sessions_a_venir.length > 0,
+    sessions_listing, credit_restant, montant_vendu_facture, heures_formateur, join_ratio: joinRatio,
+    comparaison_annuelle,
     raw: { customers, conventions, invoices, attendees },
   };
 }
@@ -453,8 +743,7 @@ function computeComparaison(raw, cutoffMonth, cutoffDay) {
 }
 
 // ------------------------------------------------------------------
-// Rendu (identique dans l'esprit au prototype dashboard.html, adapté
-// aux champs réellement disponibles en direct)
+// Rendu
 // ------------------------------------------------------------------
 function renderKpis(DATA) {
   const nc = DATA.nouveaux_clients_par_mois;
@@ -563,22 +852,102 @@ function renderDevis(DATA) {
   });
 }
 
-function renderFormateurs(DATA) {
-  const wrap = document.getElementById('rank-formateurs');
-  const rows = DATA.top_formateurs;
-  const max = Math.max(...rows.map((r) => r.ca_estime), 1);
+function renderRankList(wrapId, rows, nameKey, valueKey, metaFn, fmt) {
+  const wrap = document.getElementById(wrapId);
+  const max = Math.max(...rows.map((r) => r[valueKey]), 1);
   rows.forEach((r, i) => {
     const row = el('div', 'rank-row');
     row.appendChild(el('div', 'rank-num', String(i + 1).padStart(2, '0')));
-    row.appendChild(el('div', 'rank-name', r.nom));
-    row.appendChild(el('div', 'rank-meta', `${r.nb_sessions} sessions`));
+    row.appendChild(el('div', 'rank-name', r[nameKey]));
+    row.appendChild(el('div', 'rank-meta', metaFn ? metaFn(r) : ''));
     const track = el('div', 'rank-bar-track');
     const fill = el('div', 'rank-bar-fill');
-    fill.style.width = `${(r.ca_estime / max * 100).toFixed(1)}%`;
+    fill.style.width = `${(r[valueKey] / max * 100).toFixed(1)}%`;
     track.appendChild(fill);
     row.appendChild(track);
-    row.appendChild(el('div', 'rank-value', fmtEUR(r.ca_estime)));
+    row.appendChild(el('div', 'rank-value', fmt(r[valueKey])));
     wrap.appendChild(row);
+  });
+}
+
+function renderCAParClient(DATA) {
+  const tbody = document.getElementById('tbl-ca-client');
+  const now = new Date();
+  document.getElementById('ca-client-hint').textContent = `${now.getFullYear() - 1} vs ${now.getFullYear()}`;
+  DATA.ca_par_client.forEach((r) => {
+    const tr = el('tr');
+    const nameTd = el('td', 'strong', r.client); nameTd.title = r.client;
+    tr.appendChild(nameTd);
+    tr.appendChild(el('td', 'num', fmtEUR(r.prev)));
+    tr.appendChild(el('td', 'num', fmtEUR(r.cur)));
+    const ecart = r.cur - r.prev;
+    const ecartTd = el('td', 'num');
+    ecartTd.innerHTML = `<span class="compare-delta ${ecart >= 0 ? 'up' : 'down'}">${ecart >= 0 ? '▲' : '▼'} ${fmtEUR(Math.abs(ecart))}</span>`;
+    tr.appendChild(ecartTd);
+    tbody.appendChild(tr);
+  });
+}
+
+function renderSessionsTable(tbodyId, rows, cols) {
+  const tbody = document.getElementById(tbodyId);
+  rows.forEach((r) => {
+    const tr = el('tr');
+    cols.forEach(([key, cls, fmt]) => {
+      const v = fmt ? fmt(r[key]) : (r[key] ?? '—');
+      const td = el('td', cls || '', String(v));
+      if (typeof v === 'string') td.title = v;
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+function renderCredit(DATA) {
+  const tbody = document.getElementById('tbl-credit');
+  DATA.credit_restant.forEach((r) => {
+    const tr = el('tr');
+    const nameTd = el('td', 'strong', r.nom); nameTd.title = r.nom;
+    tr.appendChild(nameTd);
+    const partTd = el('td', '', r.participants); partTd.title = r.participants;
+    tr.appendChild(partTd);
+    tr.appendChild(el('td', 'num', fmtH(r.credit)));
+    tbody.appendChild(tr);
+  });
+}
+
+function renderMontant(DATA) {
+  const tbody = document.getElementById('tbl-montant');
+  DATA.montant_vendu_facture.forEach((r) => {
+    const tr = el('tr');
+    tr.appendChild(el('td', 'strong', String(r.code)));
+    tr.appendChild(el('td', '', r.statut));
+    const clientTd = el('td', '', r.client); clientTd.title = r.client;
+    tr.appendChild(clientTd);
+    const conseillerTd = el('td', '', r.conseiller); conseillerTd.title = r.conseiller;
+    tr.appendChild(conseillerTd);
+    tr.appendChild(el('td', 'num', fmtEUR(r.vendu)));
+    tr.appendChild(el('td', 'num', fmtEUR(r.facture)));
+    tbody.appendChild(tr);
+  });
+}
+
+function renderHeuresFormateur(DATA) {
+  const note = document.getElementById('formateurs-heures-note');
+  const panel = document.getElementById('formateurs-heures-panel');
+  if (!DATA.heures_formateur) {
+    note.innerHTML = `<div class="note">Détail Prévues/Réalisées/Planifiées non disponible pour ce compte : les identifiants de <code>sessionQualiopi</code> ne correspondent pas (ou trop peu) à ceux de <code>session</code> (${Math.round(DATA.join_ratio * 100)}% de correspondance). Le classement « Top formateurs » ci-dessus reste basé sur <code>session</code> directement.</div>`;
+    return;
+  }
+  panel.style.display = 'block';
+  const tbody = document.getElementById('tbl-heures-formateur');
+  DATA.heures_formateur.forEach((r) => {
+    const tr = el('tr');
+    tr.appendChild(el('td', 'strong', r.nom));
+    tr.appendChild(el('td', 'num', fmtH(r.prevues)));
+    tr.appendChild(el('td', 'num', fmtH(r.realisees)));
+    tr.appendChild(el('td', 'num', fmtH(r.planifiees)));
+    tr.appendChild(el('td', 'num', String(r.sessions)));
+    tbody.appendChild(tr);
   });
 }
 
@@ -597,7 +966,7 @@ function renderComparaison(rows) {
     const max = Math.max(r.annee_courante, r.annee_precedente, 1);
     const fmt = (v) => (isEUR(r.indicateur) ? fmtEUR(v) : String(v));
     const compareTd = el('td');
-    const rows = el('div', 'compare-rows');
+    const rowsWrap = el('div', 'compare-rows');
     [[yearN, r.annee_courante, ''], [yearN1, r.annee_precedente, 'prev']].forEach(([year, val, mod]) => {
       const row = el('div', 'compare-row');
       row.appendChild(el('span', 'compare-year', String(year)));
@@ -607,9 +976,9 @@ function renderComparaison(rows) {
       track.appendChild(fill);
       row.appendChild(track);
       row.appendChild(el('span', 'compare-val', fmt(val)));
-      rows.appendChild(row);
+      rowsWrap.appendChild(row);
     });
-    compareTd.appendChild(rows);
+    compareTd.appendChild(rowsWrap);
     tr.appendChild(compareTd);
 
     const ecart = r.annee_courante - r.annee_precedente;
@@ -647,14 +1016,38 @@ function populateCutoffSelect(DATA) {
 
 function renderAll(DATA) {
   renderKpis(DATA);
+
+  // Commercial
   populateCutoffSelect(DATA);
   renderComparaison(DATA.comparaison_annuelle);
   renderNouveaux(DATA);
-  renderStagiaires(DATA);
   renderMiniChart('chart-ca', 'labels-ca', DATA.ca_mensuel, 'ca', 'mois', (v) => fmtEUR(v));
-  renderMiniChart('chart-sessions', 'labels-sessions', DATA.sessions_programmees, 'nb_sessions', 'mois', (v) => `${v} session(s)`);
+  renderRankList('rank-conseillers', DATA.top_conseillers, 'nom', 'ca', () => '', fmtEUR);
+  renderRankList('rank-clients', DATA.top_clients, 'nom', 'ca', () => '', fmtEUR);
+  renderCAParClient(DATA);
   renderDevis(DATA);
-  renderFormateurs(DATA);
+
+  // Planning
+  renderMiniChart('chart-sessions', 'labels-sessions', DATA.sessions_programmees, 'nb_sessions', 'mois', (v) => `${v} session(s)`);
+  renderMiniChart('chart-heures', 'labels-heures', DATA.heures_par_mois, 'heures', 'mois', (v) => fmtH(v));
+  document.getElementById('sessions-list-hint').textContent = DATA.sessions_a_venir_is_future
+    ? `${DATA.sessions_a_venir.length} session(s) à venir`
+    : `${DATA.sessions_a_venir.length} session(s) les plus récentes (aucune à venir)`;
+  renderSessionsTable('tbl-sessions-planning', DATA.sessions_a_venir, [
+    ['name', 'strong'], ['trainingName'], ['startDate', '', fmtDate], ['endDate', '', fmtDate], ['trainerName'], ['numberMaxi', 'num'],
+  ]);
+
+  // Formateurs
+  renderRankList('rank-formateurs', DATA.top_formateurs, 'nom', 'ca_estime', (r) => `${r.nb_sessions} sessions`, fmtEUR);
+  renderHeuresFormateur(DATA);
+
+  // Listing
+  renderStagiaires(DATA);
+  renderCredit(DATA);
+  renderSessionsTable('tbl-sessions-listing', DATA.sessions_listing, [
+    ['trainingName', 'strong'], ['name'], ['hours', 'num', fmtH], ['startDate', '', fmtDate],
+  ]);
+  renderMontant(DATA);
 }
 
 // ------------------------------------------------------------------
