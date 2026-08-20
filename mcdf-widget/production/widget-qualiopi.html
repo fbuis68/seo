@@ -141,6 +141,14 @@
   .kpi-source { font-size: 10.5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink-muted); margin-top: 8px; display: block; }
 
   .indic-section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-muted); font-weight: 600; margin: 0 0 12px; }
+
+  .ref-list { padding: 4px 18px 14px; }
+  .ref-row { display: flex; align-items: flex-start; gap: 14px; padding: 11px 0; border-top: 1px solid var(--border); }
+  .ref-row:first-child { border-top: none; }
+  .ref-num { flex: none; width: 24px; font-family: var(--font-display); color: var(--ink-muted); font-size: 13px; padding-top: 1px; }
+  .ref-text { flex: 1; font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+  .ref-source { font-size: 11.5px; color: var(--ink-muted); margin-top: 4px; font-family: var(--font-mono); }
+  .ref-badge { flex: none; }
 </style>
 
 <div class="wrap">
@@ -152,6 +160,7 @@
 
   <div class="tabs">
     <button class="tab-btn active" type="button" data-tab="indicateurs">Indicateurs</button>
+    <button class="tab-btn" type="button" data-tab="referentiel">Référentiel (32 indicateurs)</button>
     <button class="tab-btn" type="button" data-tab="api">Détection API</button>
     <button class="tab-btn" type="button" data-tab="manual">Saisie manuelle</button>
   </div>
@@ -159,6 +168,11 @@
   <div class="tab-panel active" id="tab-indicateurs">
     <div id="indic-banner" class="manual-note">Chargement des indicateurs en direct...</div>
     <div id="indic-kpis" class="kpis" style="display:none"></div>
+  </div>
+
+  <div class="tab-panel" id="tab-referentiel">
+    <div class="manual-note" id="ref-summary">Chargement...</div>
+    <div id="ref-list"></div>
   </div>
 
   <div class="tab-panel" id="tab-api">
@@ -180,7 +194,7 @@
   </div>
 
   <footer>
-    Lecture seule -- mêmes règles que <code>widget-ia.html</code> (cookie de session déjà actif, aucun appel d'écriture). L'onglet « Détection API » reste disponible pour explorer d'autres champs de ces entités ; l'onglet « Saisie manuelle » couvre ce qui n'a aucune source connue dans MCDF (satisfaction, réclamations, actions correctives...).
+    Lecture seule -- mêmes règles que <code>widget-ia.html</code> (cookie de session déjà actif, aucun appel d'écriture). L'onglet « Référentiel » liste les 32 indicateurs officiels (catégorie « actions de formation ») et indique, pour chacun, s'il est déjà couvert par une preuve calculée en direct, par une saisie manuelle, ou par aucune preuve numérique pour le moment. L'onglet « Détection API » reste disponible pour explorer d'autres champs ; l'onglet « Saisie manuelle » couvre ce qui n'a aucune source connue dans MCDF.
   </footer>
 </div>
 
@@ -436,6 +450,101 @@ async function loadIndicateurs() {
   }
 }
 loadIndicateurs();
+
+// ------------------------------------------------------------------
+// Referentiel national qualite (Qualiopi) -- 7 criteres, 32 indicateurs
+// (categorie "actions de formation"). Formulations reprises du
+// referentiel usuel -- a recouper avec la version exacte detenue par
+// le certificateur en cas de doute sur le libelle precis d'un
+// indicateur. Chaque ligne est reliee, quand c'est le cas, a une
+// preuve deja disponible dans ce widget : "auto" = calcule en direct
+// (onglet Indicateurs), "manuel" = champ de l'onglet Saisie manuelle,
+// "aucune" = aucune preuve numerique disponible pour le moment.
+// ------------------------------------------------------------------
+const REFERENTIEL_32 = [
+  { num: 1, critere: 1, text: "Le prestataire diffuse une information accessible au public, detaillee et verifiable sur les prestations proposees (prerequis, objectifs, duree, modalites et delais d'acces, tarifs, contacts, methodes mobilisees, modalites d'evaluation, accessibilite handicap).", status: 'aucune' },
+  { num: 2, critere: 1, text: "Le prestataire diffuse des indicateurs de resultats adaptes a la nature des prestations et des publics accueillis.", status: 'aucune' },
+  { num: 3, critere: 1, text: "Le prestataire informe le public des resultats obtenus (taux d'obtention des certifications, taux d'interruption, taux de retour a l'emploi, appreciations...).", status: 'manuel', source: 'resultats_publies' },
+  { num: 4, critere: 2, text: "Le prestataire analyse le besoin du beneficiaire en lien avec l'entreprise et/ou le financeur.", status: 'aucune' },
+  { num: 5, critere: 2, text: "Le prestataire definit les objectifs operationnels et evaluables de la prestation.", status: 'aucune' },
+  { num: 6, critere: 2, text: "Le prestataire etablit les contenus et modalites de mise en oeuvre (pedagogiques, techniques, encadrement) adaptes aux objectifs et publics.", status: 'aucune' },
+  { num: 7, critere: 3, text: "Le prestataire met en oeuvre et adapte la prestation, l'accompagnement et le suivi aux beneficiaires tout au long de la prestation.", status: 'auto', source: 'Documents obligatoires envoyes / Conventions avec document signe' },
+  { num: 8, critere: 3, text: "Le prestataire evalue l'atteinte par le beneficiaire des objectifs de la prestation.", status: 'auto', source: 'Attestations delivrees (conventions terminees)' },
+  { num: 9, critere: 3, text: "Le prestataire decrit et met en oeuvre les mesures pour favoriser l'engagement des beneficiaires et prevenir les ruptures de parcours.", status: 'aucune' },
+  { num: 10, critere: 3, text: "Le prestataire met en oeuvre des dispositifs facilitant l'accueil, l'accompagnement, le suivi des beneficiaires en situation de handicap.", status: 'manuel', source: 'handicap_accompagne' },
+  { num: 11, critere: 4, text: "Le prestataire mobilise et coordonne les differents intervenants internes et/ou externes (pedagogiques, administratifs, logistiques).", status: 'aucune' },
+  { num: 12, critere: 4, text: "Le prestataire met a disposition les moyens humains et techniques adaptes et un environnement approprie (locaux, equipements, plateau technique...).", status: 'auto', source: 'Heures realisees vs vendues' },
+  { num: 13, critere: 4, text: "Le prestataire met a disposition des ressources pedagogiques et permet leur appropriation par les beneficiaires.", status: 'aucune' },
+  { num: 14, critere: 4, text: "En cas de prestation a distance, le prestataire met en oeuvre des moyens et un dispositif permettant l'atteinte des objectifs.", status: 'aucune' },
+  { num: 15, critere: 4, text: "En cas d'apprentissage, le prestataire designe un maitre d'apprentissage et s'assure de sa mobilisation et de sa montee en competences.", status: 'aucune' },
+  { num: 16, critere: 4, text: "Le prestataire s'assure de l'adequation et de la mise en oeuvre des modalites d'evaluation aux objectifs de la prestation.", status: 'auto', source: 'Heures facturees vs realisees' },
+  { num: 17, critere: 5, text: "Le prestataire determine, mobilise et evalue les competences des personnels charges de la mise en oeuvre, adaptees aux prestations proposees.", status: 'manuel', source: 'heures_formation_formateur' },
+  { num: 18, critere: 5, text: "Le prestataire entretient et developpe les competences de ses salaries, adaptees aux prestations qu'il propose.", status: 'manuel', source: 'heures_formation_formateur' },
+  { num: 19, critere: 5, text: "Le prestataire mobilise les competences necessaires a la conception, a l'execution et a l'evaluation de la prestation.", status: 'aucune' },
+  { num: 20, critere: 5, text: "En cas de certification professionnelle, le prestataire s'assure de la conformite aux exigences prevues par le certificateur.", status: 'aucune' },
+  { num: 21, critere: 5, text: "En cas d'apprentissage, le prestataire s'assure des competences pedagogiques de ses formateurs d'apprentis.", status: 'aucune' },
+  { num: 22, critere: 6, text: "Le prestataire realise une veille legale et reglementaire sur le champ de la formation professionnelle et en accompagne la mise en oeuvre.", status: 'manuel', source: 'veille_reglementaire' },
+  { num: 23, critere: 6, text: "Le prestataire realise une veille sur les evolutions des competences, des metiers et des emplois dans son/ses secteur(s) d'intervention.", status: 'aucune' },
+  { num: 24, critere: 6, text: "Le prestataire realise une veille sur les innovations pedagogiques et technologiques permettant une evolution de ses prestations.", status: 'aucune' },
+  { num: 25, critere: 6, text: "En cas de sous-traitance ou de portage salarial, le prestataire s'assure du respect de la conformite au referentiel.", status: 'aucune' },
+  { num: 26, critere: 6, text: "Le prestataire mobilise les expertises, ressources et reseaux necessaires a la mise en oeuvre des prestations et/ou en lien avec son secteur d'activite.", status: 'aucune' },
+  { num: 27, critere: 7, text: "Le prestataire recueille les appreciations des parties prenantes (beneficiaires, financeurs, equipes pedagogiques, entreprises...).", status: 'auto', source: 'Sessions avec retour d’enquete' },
+  { num: 28, critere: 7, text: "Le prestataire met en oeuvre des modalites de traitement des difficultes rencontrees par les parties prenantes (reclamations, dysfonctionnements, abandons, litiges...).", status: 'manuel', source: 'reclamations_recues / reclamations_traitees / delai_traitement' },
+  { num: 29, critere: 7, text: "Le prestataire met en oeuvre des modalites de prise en compte des dysfonctionnements et des mesures d'amelioration ou correctives.", status: 'manuel', source: 'actions_correctives_cloturees / actions_correctives_ouvertes' },
+  { num: 30, critere: 7, text: "Le prestataire est en mesure d'assurer la tracabilite et la mise a jour des differentes actions et met a disposition les preuves necessaires.", status: 'aucune' },
+  { num: 31, critere: 7, text: "Les enquetes de satisfaction, les appreciations et les indicateurs de resultats sont mis a la disposition des parties prenantes.", status: 'aucune' },
+  { num: 32, critere: 7, text: "Le prestataire met en oeuvre au moins un moyen d'amelioration continue (codeveloppement entre pairs, travaux d'organismes professionnels de branche, recherche, colloques...).", status: 'aucune' },
+];
+const CRITERE_LABELS = {
+  1: "Conditions d'information du public",
+  2: 'Objectifs des prestations et adaptation au public (conception)',
+  3: 'Adaptation aux publics beneficiaires (mise en oeuvre)',
+  4: 'Moyens pedagogiques, techniques et encadrement',
+  5: 'Qualification et competences des personnels',
+  6: "Inscription dans l'environnement professionnel",
+  7: 'Appreciations et reclamations',
+};
+
+function renderReferentiel32() {
+  const summary = document.getElementById('ref-summary');
+  const wrap = document.getElementById('ref-list');
+  const counts = { auto: 0, manuel: 0, aucune: 0 };
+  REFERENTIEL_32.forEach((r) => counts[r.status]++);
+  summary.innerHTML = `<strong>${counts.auto}</strong>/32 avec preuve calculee en direct · <strong>${counts.manuel}</strong>/32 en saisie manuelle · <strong>${counts.aucune}</strong>/32 sans preuve numerique pour le moment. Formulation des indicateurs a recouper avec la version exacte de votre certificateur.`;
+
+  const byCritere = new Map();
+  REFERENTIEL_32.forEach((r) => {
+    if (!byCritere.has(r.critere)) byCritere.set(r.critere, []);
+    byCritere.get(r.critere).push(r);
+  });
+
+  [...byCritere.entries()].sort((a, b) => a[0] - b[0]).forEach(([num, rows]) => {
+    const block = el('div', 'critere-block');
+    const head = el('div', 'critere-head');
+    head.appendChild(el('span', 'critere-num', `Critère ${num}`));
+    head.appendChild(el('h2', '', CRITERE_LABELS[num]));
+    block.appendChild(head);
+
+    const panel = el('div', 'panel');
+    const list = el('div', 'ref-list');
+    rows.forEach((r) => {
+      const row = el('div', 'ref-row');
+      row.appendChild(el('div', 'ref-num', String(r.num).padStart(2, '0')));
+      const textWrap = el('div', 'ref-text');
+      textWrap.appendChild(document.createTextNode(r.text));
+      if (r.source) textWrap.appendChild(el('div', 'ref-source', r.source));
+      row.appendChild(textWrap);
+      const badgeCls = r.status === 'auto' ? 'ok' : r.status === 'manuel' ? 'empty' : 'missing';
+      const badgeLabel = r.status === 'auto' ? 'Preuve auto' : r.status === 'manuel' ? 'Saisie manuelle' : 'Aucune preuve';
+      row.appendChild(el('span', `badge ${badgeCls} ref-badge`, `<span class="dot"></span>${badgeLabel}`));
+      list.appendChild(row);
+    });
+    panel.appendChild(list);
+    block.appendChild(panel);
+    wrap.appendChild(block);
+  });
+}
+renderReferentiel32();
 
 // ------------------------------------------------------------------
 // Onglets
