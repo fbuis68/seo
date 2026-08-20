@@ -16,20 +16,31 @@ Chaque module ci-dessous a son propre `NOTES.md` dans `modules/` avec le détail
 
 **`production/`** contient les livrables réels :
 - `widget-ia.html` (module rapports, page autonome, données MCDF en
-  direct, lecture seule) + `INTEGRATION.md` / `INSTALL-SERVEUR-TEST.md`
-- `launcher.html` (bouton flottant + panneau donnant accès aux 4
-  modules) + `INSTALL-LAUNCHER.md` — point d'entrée unique une fois les
-  autres modules prêts, cf. capture d'écran du widget d'aide MCDF qui a
-  inspiré ce pattern.
+  direct, lecture seule, avec sélecteur de période pour la comparaison
+  N vs N-1) + `INTEGRATION.md` / `INSTALL-SERVEUR-TEST.md`
+- `widget-conversationnel.html` (module IA Conversationnelle, v1 à base
+  de règles sur des questions connues, mêmes données réelles que
+  `widget-ia.html`)
+- `widget-qualiopi.html` (module Assistant Qualiopi, v1 "découverte" —
+  teste en direct les entités `sessionQualiopi`/`conventionExportQualiopi`/
+  `fullConventionQualiopi` et affiche les champs réels trouvés, pas
+  encore d'indicateurs habillés tant que les champs ne sont pas confirmés)
+- `launcher-embed.js` (bouton flottant + panneau donnant accès aux 4
+  modules, une seule ligne à intégrer) + `INSTALL-LAUNCHER.md`
 - `mock_server.py` / `mock_server.js` — validation locale sans accès à
   MCDF, données fictives dans le même format que l'API réelle.
+- `A-TRANSMETTRE-AU-DEVELOPPEUR.md` — fiche de déploiement/mise à jour
+  côté serveur (commandes `curl` + points de vigilance).
+
+Côté découverte : `browser/live-qualiopi-check.js` — script console pour
+confirmer les noms d'entité et les champs réels du module Qualiopi.
 
 ## Vue d'ensemble
 
-| # | Module | État | Ce qui manque avant de coder |
+| # | Module | État | Ce qui manque |
 |---|--------|------|-------------------------------|
-| 1 | IA Conversationnelle | 🔴 à démarrer | les endpoints d'écriture (create/edit) — on n'a capturé que des lectures |
-| 2 | Assistant Qualiopi | 🟡 piste confirmée | tester les entités `sessionQualiopi`/`conventionExportQualiopi` déjà repérées dans le code source |
+| 1 | IA Conversationnelle | 🟢 v1 livrée | `production/widget-conversationnel.html` — répond à un jeu de questions connu sur les données réelles ; pas encore un vrai LLM (pas de endpoint d'écriture confirmé non plus) |
+| 2 | Assistant Qualiopi | 🟢 v1 "découverte" livrée | `production/widget-qualiopi.html` — teste les entités en direct ; reste à lancer `browser/live-qualiopi-check.js` sur un vrai compte pour confirmer les champs et construire les vrais indicateurs |
 | 3a | Génération de rapports | 🟢 livrable | `production/widget-ia.html` — widget réel, données en direct, prêt à intégrer (voir `production/INTEGRATION.md`) |
 | 3b | Génération de documents | 🔴 à démarrer | trouver l'endpoint qui déclenche le pipeline XDocReport existant |
 | 4 | Recherche intelligente | 🟡 piste confirmée | trouver le paramètre HTTP qui active la recherche libre (`freeField`) déjà présente côté serveur |

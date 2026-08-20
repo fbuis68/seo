@@ -191,7 +191,10 @@
     <section>
       <div class="section-head">
         <h2 id="compare-title">Comparaison annuelle</h2>
-        <span class="hint">année en cours vs année précédente, à date égale (YTD)</span>
+        <label class="hint" style="display:flex; align-items:center; gap:6px;">
+          Jusqu'à
+          <select id="compare-cutoff" style="font:inherit; font-size:12px; color:var(--ink); background:var(--surface); border:1px solid var(--border-2); border-radius:6px; padding:3px 6px;"></select>
+        </label>
       </div>
       <div class="panel">
         <div class="table-scroll" style="max-height:260px">
@@ -400,8 +403,30 @@ async function buildData(entityId) {
   const top_formateurs = Object.values(parFormateur).sort((a, b) => b.ca_estime - a.ca_estime).slice(0, 5);
 
   const now = new Date();
-  const yearN = now.getFullYear(), yearN1 = yearN - 1;
-  const cutoffMonth = now.getMonth(), cutoffDay = now.getDate();
+  const comparaison_annuelle = computeComparaison(
+    { customers, conventions, invoices, attendees },
+    now.getMonth(), now.getDate(),
+  );
+
+  return {
+    generated_at: new Date().toISOString().slice(0, 10),
+    counts: { customers: customers.length, conventions: conventions.length, invoices: invoices.length, attendees: attendees.length, sessions: sessions.length },
+    nouveaux_clients_par_mois, derniers_stagiaires, ca_mensuel, devis_a_relancer, sessions_programmees, top_formateurs, comparaison_annuelle,
+    raw: { customers, conventions, invoices, attendees },
+  };
+}
+
+// ------------------------------------------------------------------
+// Comparaison annuelle N vs N-1, jusqu'à un mois choisi (par défaut :
+// aujourd'hui). cutoffMonth est un index 0-11, cutoffDay le jour du
+// mois — pour un mois déjà terminé on passe son dernier jour, ce qui
+// donne une comparaison "mois plein" plutôt qu'un YTD partiel.
+// ------------------------------------------------------------------
+function daysInMonth(year, monthIdx) { return new Date(year, monthIdx + 1, 0).getDate(); }
+
+function computeComparaison(raw, cutoffMonth, cutoffDay) {
+  const { customers, conventions, invoices, attendees } = raw;
+  const yearN = new Date().getFullYear(), yearN1 = yearN - 1;
   const inYtd = (dateStr, year) => {
     if (!dateStr) return false;
     const d = new Date(dateStr);
@@ -419,18 +444,12 @@ async function buildData(entityId) {
   const devisN = conventions.filter((c) => c.isProposal && inYtd(c.signingDate, yearN)).length;
   const devisN1 = conventions.filter((c) => c.isProposal && inYtd(c.signingDate, yearN1)).length;
 
-  const comparaison_annuelle = [
+  return [
     { indicateur: 'CA facturé (HT)', annee_courante: Math.round(caN * 100) / 100, annee_precedente: Math.round(caN1 * 100) / 100, delta_pct: pctDelta(caN, caN1) },
     { indicateur: 'Nouveaux clients', annee_courante: clientsN, annee_precedente: clientsN1, delta_pct: pctDelta(clientsN, clientsN1) },
     { indicateur: 'Stagiaires inscrits', annee_courante: stagN, annee_precedente: stagN1, delta_pct: pctDelta(stagN, stagN1) },
     { indicateur: 'Devis signés', annee_courante: devisN, annee_precedente: devisN1, delta_pct: pctDelta(devisN, devisN1) },
   ];
-
-  return {
-    generated_at: new Date().toISOString().slice(0, 10),
-    counts: { customers: customers.length, conventions: conventions.length, invoices: invoices.length, attendees: attendees.length, sessions: sessions.length },
-    nouveaux_clients_par_mois, derniers_stagiaires, ca_mensuel, devis_a_relancer, sessions_programmees, top_formateurs, comparaison_annuelle,
-  };
 }
 
 // ------------------------------------------------------------------
@@ -563,15 +582,15 @@ function renderFormateurs(DATA) {
   });
 }
 
-function renderComparaison(DATA) {
+function renderComparaison(rows) {
   const tbody = document.getElementById('tbl-comparaison');
-  const [gy, gm, gd] = DATA.generated_at.split('-').map(Number);
-  const yearN = gy, yearN1 = gy - 1;
-  const cutoff = `${String(gd).padStart(2, '0')}/${String(gm).padStart(2, '0')}`;
-  document.getElementById('compare-title').textContent = `Comparaison ${yearN} vs ${yearN1} (jusqu'au ${cutoff})`;
+  tbody.innerHTML = '';
+  const now = new Date();
+  const yearN = now.getFullYear(), yearN1 = yearN - 1;
+  document.getElementById('compare-title').textContent = `Comparaison ${yearN} vs ${yearN1}`;
   const isEUR = (nom) => /CA facturé/i.test(nom);
 
-  DATA.comparaison_annuelle.forEach((r) => {
+  rows.forEach((r) => {
     const tr = el('tr');
     tr.appendChild(el('td', 'strong', r.indicateur));
 
@@ -608,9 +627,28 @@ function renderComparaison(DATA) {
   });
 }
 
+function populateCutoffSelect(DATA) {
+  const sel = document.getElementById('compare-cutoff');
+  const now = new Date();
+  const noms = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+  for (let m = 0; m <= now.getMonth(); m++) {
+    const opt = document.createElement('option');
+    opt.value = String(m);
+    opt.textContent = m === now.getMonth() ? "aujourd'hui" : `fin ${noms[m]}`;
+    sel.appendChild(opt);
+  }
+  sel.value = String(now.getMonth());
+  sel.addEventListener('change', () => {
+    const m = parseInt(sel.value, 10);
+    const day = m === now.getMonth() ? now.getDate() : daysInMonth(now.getFullYear(), m);
+    renderComparaison(computeComparaison(DATA.raw, m, day));
+  });
+}
+
 function renderAll(DATA) {
   renderKpis(DATA);
-  renderComparaison(DATA);
+  populateCutoffSelect(DATA);
+  renderComparaison(DATA.comparaison_annuelle);
   renderNouveaux(DATA);
   renderStagiaires(DATA);
   renderMiniChart('chart-ca', 'labels-ca', DATA.ca_mensuel, 'ca', 'mois', (v) => fmtEUR(v));
