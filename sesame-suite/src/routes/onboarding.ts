@@ -31,6 +31,24 @@ export const ONBOARDING_MODULES = [
 
 const MODULE_KEYS = new Set(ONBOARDING_MODULES.map((m) => m.k));
 
+// Barème indicatif du taux horaire chargé d'une femme/valet de chambre par
+// pays, en devise locale — sert de valeur de départ à
+// entityModuleConfig.kpi.hourlyRate (utilisée pour chiffrer les économies de
+// ménage, forfait zéro comme dashboard KPI classique), ajustable ensuite par
+// l'hôtel dans Admin → Paramètres éco. Doit rester synchronisée avec
+// OB_COUNTRY_DEFAULTS dans public/onboarding.html (affichage côté client
+// uniquement — c'est cette table serveur qui fait foi).
+const HOUSEKEEPING_HOURLY_RATE_BY_COUNTRY: Record<string, number> = {
+  FR: 22,
+  BE: 24,
+  CH: 32,
+  LU: 25,
+  MA: 25,
+  ES: 14,
+  IT: 16,
+};
+const DEFAULT_HOUSEKEEPING_HOURLY_RATE = 20; // pays "Autre" / non couvert par le barème
+
 /** GET /onboarding/pricing — grille tarifaire publique consommée par le wizard. */
 onboardingRouter.get(
   "/onboarding/pricing",
@@ -151,6 +169,7 @@ onboardingRouter.post(
 
     // Complète les informations de contact/adresse au-delà du socle par défaut de provisionEntity().
     const fullAddr = [b.addr, [b.zipcode, b.city].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+    const hourlyRate = (b.country && HOUSEKEEPING_HOURLY_RATE_BY_COUNTRY[b.country]) || DEFAULT_HOUSEKEEPING_HOURLY_RATE;
     await prisma.entityModuleConfig.update({
       where: { entityId: entity.id },
       data: {
@@ -159,6 +178,7 @@ onboardingRouter.post(
         currency: b.currency || undefined,
         lang: b.lang || undefined,
         timezone: b.timezone || undefined,
+        kpi: { minPerClean: 45, minPerTowel: 10, hourlyRate, annualStays: 500, checkinMin: 8, checkinAdoption: 70 },
       },
     });
 

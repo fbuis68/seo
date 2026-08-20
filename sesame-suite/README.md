@@ -1384,6 +1384,36 @@ implémenté** — à construire dans une itération ultérieure. Le panneau
 "Souscriptions" du back-office n'affiche pas non plus (encore) de badge
 distinguant les abonnements `roi_share` des abonnements classiques.
 
+### Forfait zéro : clarification "0 € d'abonnement", barème horaire par pays, CGV
+
+Trois ajustements sur l'étape "Modèle tarifaire" ci-dessus, suite aux
+retours après validation :
+
+- **0 € clarifié.** Le libellé et le détail de la carte "Forfait zéro"
+  insistent désormais explicitement sur l'absence de tout forfait fixe
+  ("0 € d'abonnement, aujourd'hui comme demain") et sur le livrable
+  concret côté Sesame : un **récapitulatif mensuel des journées de
+  ménage économisées**, transmis à l'hôtel — la commission de 10 % ne
+  s'applique qu'aux économies constatées dans ce récapitulatif.
+- **Barème horaire ménage par pays.** Le taux horaire utilisé pour
+  chiffrer les économies de ménage (`entityModuleConfig.kpi.hourlyRate`)
+  est désormais pré-rempli à l'inscription selon le pays de
+  l'établissement (barème indicatif : France 22, Belgique 24, Suisse
+  32, Luxembourg 25, Maroc 25, Espagne 14, Italie 16, autre 20 — en
+  devise locale), au lieu d'une valeur unique fixe (22 €/h). Table
+  côté serveur dans `src/routes/onboarding.ts`
+  (`HOUSEKEEPING_HOURLY_RATE_BY_COUNTRY`, seule source qui fait foi),
+  mirroir côté client dans `OB_COUNTRY_DEFAULTS`
+  (`public/onboarding.html`) pour l'affichage indicatif à l'étape
+  Tarif. Toujours ajustable ensuite par l'hôtel dans Admin →
+  Paramètres éco.
+- **Lien vers les conditions générales.** La carte "Forfait zéro"
+  pointe vers une nouvelle page `public/cgv-forfait-zero.html`
+  détaillant le principe, le mode de calcul et le fonctionnement du
+  récapitulatif mensuel — explicitement marquée comme document de
+  travail non contractuel, en attente de validation juridique avant
+  toute signature.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

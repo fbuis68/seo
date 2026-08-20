@@ -348,19 +348,24 @@ textarea{resize:vertical;min-height:70px}
           <div class="opt-ico"><i class="ti ti-leaf"></i></div>
           <div class="opt-body">
             <div class="opt-title">Forfait zéro <span class="opt-badge" style="background:rgba(184,134,43,.14);color:#9C6E1F">Nouveau</span></div>
-            <div class="opt-desc">Pas d'abonnement fixe — Sesame prélève 10&nbsp;% de vos économies de ménage et de votre chiffre d'affaires room service généré via la plateforme.</div>
+            <div class="opt-desc"><strong>0&nbsp;€ d'abonnement</strong>, aujourd'hui comme demain. Chaque mois, Sesame vous envoie un récapitulatif de vos journées de ménage économisées ; une commission de 10&nbsp;% ne s'applique que sur les économies constatées et les commandes room service.</div>
           </div>
           <div class="opt-check"><i class="ti ti-check"></i></div>
         </div>
 
         <div id="pm-roi-detail" style="display:none">
           <div class="recap-card" style="margin-top:4px">
-            <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">Comment c'est calculé</div>
+            <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">Comment ça marche</div>
+            <div class="recap-row"><span>Chaque mois</span><strong>récapitulatif des journées de ménage économisées</strong></div>
             <div class="recap-row"><span>Ménage évité</span><strong>heures gagnées × taux horaire × 10&nbsp;%</strong></div>
             <div class="recap-row"><span>Commande room service</span><strong>montant de la commande × 10&nbsp;%</strong></div>
+            <div id="pm-roi-rate" style="font-size:11.5px;color:var(--mu);margin-top:8px;padding-top:8px;border-top:1px dashed var(--bdr)"></div>
           </div>
           <div class="alt alt-g"><i class="ti ti-shield-check"></i>
-            <span>Mois sans économie ni commande&nbsp;? Aucune facture. Vous ne payez jamais plus que ce que Sesame vous a fait gagner.</span>
+            <span>Aucun forfait fixe. Mois sans économie ni commande&nbsp;? Aucune facture. Vous ne payez jamais plus que ce que Sesame vous a fait gagner.</span>
+          </div>
+          <div style="text-align:center;margin-top:2px">
+            <a href="/cgv-forfait-zero.html" target="_blank" rel="noopener" style="font-size:12px;color:var(--mu);text-decoration:underline">Voir les conditions générales du forfait zéro</a>
           </div>
         </div>
 
@@ -532,15 +537,22 @@ function obModulePrice(k){
 // hôtel à la Réunion ou en Guadeloupe reste en France mais change de
 // fuseau ; un établissement marocain francophone peut préférer garder
 // "fr" plutôt que la langue déduite de la devise locale).
+// hourlyRate : barème indicatif du taux horaire chargé d'une femme/valet de
+// chambre dans le pays, en devise locale — sert uniquement d'estimation
+// affichée à l'étape "Modèle tarifaire" (forfait zéro) ; la valeur qui fait
+// foi et qui est réellement enregistrée (entityModuleConfig.kpi.hourlyRate)
+// est calculée côté serveur par la même table (cf. HOURLY_RATE_BY_COUNTRY
+// dans src/routes/onboarding.ts — à garder synchronisée). Ajustable ensuite
+// par l'hôtel dans Admin → Gains/Paramètres éco.
 var OB_COUNTRY_DEFAULTS = {
-  FR: { lang: 'fr', currency: 'EUR', timezone: 'Europe/Paris' },
-  BE: { lang: 'fr', currency: 'EUR', timezone: 'Europe/Brussels' },
-  CH: { lang: 'fr', currency: 'CHF', timezone: 'Europe/Zurich' },
-  LU: { lang: 'fr', currency: 'EUR', timezone: 'Europe/Luxembourg' },
-  MA: { lang: 'fr', currency: 'MAD', timezone: 'Africa/Casablanca' },
-  ES: { lang: 'es', currency: 'EUR', timezone: 'Europe/Madrid' },
-  IT: { lang: 'fr', currency: 'EUR', timezone: 'Europe/Rome' },
-  OTHER: { lang: 'en', currency: 'EUR', timezone: 'Europe/Paris' }
+  FR: { lang: 'fr', currency: 'EUR', timezone: 'Europe/Paris', hourlyRate: 22 },
+  BE: { lang: 'fr', currency: 'EUR', timezone: 'Europe/Brussels', hourlyRate: 24 },
+  CH: { lang: 'fr', currency: 'CHF', timezone: 'Europe/Zurich', hourlyRate: 32 },
+  LU: { lang: 'fr', currency: 'EUR', timezone: 'Europe/Luxembourg', hourlyRate: 25 },
+  MA: { lang: 'fr', currency: 'MAD', timezone: 'Africa/Casablanca', hourlyRate: 25 },
+  ES: { lang: 'es', currency: 'EUR', timezone: 'Europe/Madrid', hourlyRate: 14 },
+  IT: { lang: 'fr', currency: 'EUR', timezone: 'Europe/Rome', hourlyRate: 16 },
+  OTHER: { lang: 'en', currency: 'EUR', timezone: 'Europe/Paris', hourlyRate: 20 }
 };
 function obApplyCountryDefaults(){
   var country = document.getElementById('ob-country').value;
@@ -698,6 +710,9 @@ function obClassicTotal(){
 }
 function renderPricingStep(){
   document.getElementById('pm-flat-estimate').textContent = '≈ ' + obClassicTotal() + ' €/mois avec vos options actuelles';
+  var country = document.getElementById('ob-country').value;
+  var d = OB_COUNTRY_DEFAULTS[country] || OB_COUNTRY_DEFAULTS.FR;
+  document.getElementById('pm-roi-rate').textContent = 'Calculé sur la base d\'un taux horaire ménage moyen de ' + d.hourlyRate + ' ' + d.currency + '/h pour votre pays — ajustable ensuite dans Admin → Paramètres éco.';
 }
 
 // ═══════════════════════════════════════════════ PROJECTION IMPACT ÉCO
