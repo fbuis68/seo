@@ -1413,6 +1413,15 @@ retours après validation :
   récapitulatif mensuel — explicitement marquée comme document de
   travail non contractuel, en attente de validation juridique avant
   toute signature.
+- **Récapitulatif : plus de faux prix d'option, exemple chiffré ajouté.**
+  La carte "Options sélectionnées" du récapitulatif affichait "+12 €/mois"
+  pour une option même en forfait zéro, alors qu'aucune option n'y est
+  facturée séparément — corrigé (affiche "Inclus" pour toutes les
+  options quand `pricingModel === 'roi_share'`). La carte "Modèle
+  tarifaire" ajoute un exemple concret chiffré (ex. 10 h de ménage
+  économisées × taux horaire du pays + 300 € de commandes room service
+  → total facturé ce mois-là à 10 %), pour rendre le calcul tangible
+  avant de choisir.
 
 ## Stack
 

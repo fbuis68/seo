@@ -1025,22 +1025,40 @@ function renderRecap(){
   }
   document.getElementById('rc-pms').textContent = pmsLabel;
 
-  // Modules sélectionnés
+  // Modules sélectionnés — sous forfait zéro, aucune option n'est facturée
+  // séparément (pas d'abonnement du tout) : on l'affiche clairement plutôt
+  // que de laisser un prix mensuel qui ne sera jamais prélevé.
   var selected = OB_MODULES.filter(function(m){return OB_SELECTED_MODULES[m.k];});
+  var isRoi = OB_PRICING_MODEL === 'roi_share';
   document.getElementById('rc-modules').innerHTML = selected.map(function(m){
+    var priceTag;
+    if(m.required || isRoi) priceTag = '<span style="font-size:11px;color:var(--mu)">Inclus</span>';
+    else priceTag = '<span style="font-size:12px;font-weight:700;color:var(--a)">+'+obModulePrice(m.k)+' €/mois</span>';
     return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px">'
       + '<i class="ti ti-check" style="color:var(--a)"></i>'
       + '<span style="flex:1">'+m.label+'</span>'
-      + (m.required?'<span style="font-size:11px;color:var(--mu)">Inclus</span>':'<span style="font-size:12px;font-weight:700;color:var(--a)">+'+obModulePrice(m.k)+' €/mois</span>')
+      + priceTag
       + '</div>';
   }).join('');
 
   // Tarification
   var total = obClassicTotal();
   if(OB_PRICING_MODEL === 'roi_share'){
+    var country = document.getElementById('ob-country').value;
+    var d = OB_COUNTRY_DEFAULTS[country] || OB_COUNTRY_DEFAULTS.FR;
+    var exHours = 10, exRoomService = 300;
+    var exMenage = Math.round(exHours * d.hourlyRate * 0.10);
+    var exRS = Math.round(exRoomService * 0.10);
+    var exTotal = exMenage + exRS;
     var roiLines = '<div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Modèle tarifaire</div>'
       + '<div class="recap-row"><span>Forfait zéro</span><strong>10&nbsp;% des économies</strong></div>'
-      + '<div style="font-size:12px;color:var(--mu);margin-top:8px">Aucun abonnement fixe — équivalent abonnement classique pour comparaison : '+total+' €/mois (non facturé).</div>';
+      + '<div style="font-size:12px;color:var(--mu);margin-top:8px">Aucun abonnement fixe, aucune option facturée séparément — même avec les options ci-dessus. Équivalent abonnement classique pour comparaison : '+total+' €/mois (non facturé).</div>'
+      + '<div style="border:1.5px dashed var(--bdr);border-radius:var(--rs);padding:12px 14px;margin-top:12px">'
+      + '<div style="font-size:11px;font-weight:600;color:var(--a);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Exemple concret, pour un mois donné</div>'
+      + '<div class="recap-row"><span>'+exHours+'&nbsp;h de ménage économisées × '+d.hourlyRate+'&nbsp;'+d.currency+'/h</span><strong>'+exMenage+'&nbsp;'+d.currency+'</strong></div>'
+      + '<div class="recap-row"><span>'+exRoomService+'&nbsp;'+d.currency+' de commandes room service</span><strong>'+exRS+'&nbsp;'+d.currency+'</strong></div>'
+      + '<div class="recap-total" style="font-size:14px;padding-top:8px;margin-top:4px"><span>Facturé ce mois-là (10&nbsp;%)</span><span>'+exTotal+'&nbsp;'+d.currency+'</span></div>'
+      + '</div>';
     document.getElementById('rc-pricing').innerHTML = roiLines;
   } else {
     var lines = '<div class="recap-row"><span>Abonnement de base</span><strong>'+OB_BASE_PRICE+' € / mois</strong></div>';
