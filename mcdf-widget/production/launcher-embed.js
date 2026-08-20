@@ -51,13 +51,28 @@
       background: #fcfcfb; border-radius: 16px; overflow: hidden;
       box-shadow: 0 12px 32px rgba(11,11,11,0.18), 0 2px 8px rgba(11,11,11,0.10);
       display: flex; flex-direction: column; color: #0b0b0b;
+      transition: width 0.15s ease, max-height 0.15s ease;
     }
-    .ia-l-header { background: #256abf; color: #ffffff; padding: 22px 22px 20px; }
+    #ia-launcher-panel.detail {
+      width: min(1120px, calc(100vw - 44px));
+      height: calc(100vh - 44px);
+      max-height: calc(100vh - 44px);
+    }
+    .ia-l-header { background: #256abf; color: #ffffff; padding: 22px 22px 20px; flex: none; }
     .ia-l-header h2 {
       font-family: Charter, "Iowan Old Style", Georgia, serif; font-weight: 500;
       font-size: 20px; margin: 0 0 4px;
     }
     .ia-l-header p { margin: 0; font-size: 12.5px; opacity: 0.88; }
+    .ia-l-back {
+      display: none; position: absolute; top: 16px; left: 16px; width: 28px; height: 28px;
+      border-radius: 50%; border: none; background: rgba(255,255,255,0.18);
+      color: #ffffff; font-size: 17px; cursor: pointer; line-height: 1;
+      align-items: center; justify-content: center;
+    }
+    .ia-l-back:hover { background: rgba(255,255,255,0.28); }
+    #ia-launcher-panel.detail .ia-l-back { display: flex; }
+    #ia-launcher-panel.detail .ia-l-header { padding-left: 54px; }
     .ia-l-close {
       position: absolute; top: 16px; right: 16px; width: 28px; height: 28px;
       border-radius: 50%; border: none; background: rgba(255,255,255,0.18);
@@ -65,6 +80,10 @@
     }
     .ia-l-close:hover { background: rgba(255,255,255,0.28); }
     .ia-l-body { padding: 16px 18px 6px; overflow-y: auto; flex: 1; }
+    #ia-launcher-panel.detail .ia-l-body { display: none; }
+    .ia-l-detail { display: none; flex: 1; min-height: 0; }
+    #ia-launcher-panel.detail .ia-l-detail { display: flex; }
+    .ia-l-detail iframe { flex: 1; width: 100%; border: none; display: block; }
     .ia-l-ask {
       display: flex; align-items: center; gap: 8px; background: #f2f1ec;
       border: 1px solid rgba(11,11,11,0.10); border-radius: 10px;
@@ -130,9 +149,10 @@
       <div id="ia-launcher-backdrop"></div>
       <div id="ia-launcher-panel">
         <div class="ia-l-header">
+          <button class="ia-l-back" type="button" aria-label="Retour aux modules">\u2039</button>
           <button class="ia-l-close" type="button" aria-label="Fermer">\u2715</button>
-          <h2>Copilote IA MCDF</h2>
-          <p>Posez une question ou choisissez un module ci-dessous.</p>
+          <h2 id="ia-l-title">Copilote IA MCDF</h2>
+          <p id="ia-l-subtitle">Posez une question ou choisissez un module ci-dessous.</p>
         </div>
         <div class="ia-l-body">
           <div class="ia-l-ask">
@@ -143,6 +163,9 @@
           </div>
           <p class="ia-l-section-label">Modules</p>
           <div class="ia-l-cards" id="ia-l-cards"></div>
+        </div>
+        <div class="ia-l-detail" id="ia-l-detail">
+          <iframe id="ia-l-iframe" title="Module Copilote IA"></iframe>
         </div>
         <div class="ia-l-footer"><span class="dot"></span> Lecture seule \u2014 vos donn\u00E9es restent dans MCDF</div>
       </div>
@@ -161,13 +184,35 @@
     { icon: '\u{1F4CA}', title: 'G\u00E9n\u00E9ration de rapports', desc: "Restitutions et KPI en direct (nouveaux clients, CA, devis...).", ready: true, href: `widget-ia.html${qs}` },
     { icon: '\u{1F50D}', title: 'Recherche intelligente', desc: "Chercher en langage naturel plut\u00F4t qu'avec des filtres.", ready: false, href: null },
   ];
+  const panel = document.getElementById('ia-launcher-panel');
+  const titleEl = document.getElementById('ia-l-title');
+  const subtitleEl = document.getElementById('ia-l-subtitle');
+  const iframe = document.getElementById('ia-l-iframe');
+  const DEFAULT_TITLE = titleEl.textContent;
+  const DEFAULT_SUBTITLE = subtitleEl.textContent;
+
+  function openDetail(m) {
+    iframe.src = m.href;
+    titleEl.textContent = m.title;
+    subtitleEl.textContent = m.desc;
+    panel.classList.add('detail');
+  }
+  function closeDetail() {
+    panel.classList.remove('detail');
+    iframe.src = 'about:blank';
+    titleEl.textContent = DEFAULT_TITLE;
+    subtitleEl.textContent = DEFAULT_SUBTITLE;
+  }
+
   const cardsWrap = document.getElementById('ia-l-cards');
   MODULES.forEach((m) => {
-    const isLink = m.ready && m.href;
-    const card = document.createElement(isLink ? 'a' : 'div');
+    const card = document.createElement('div');
     card.className = 'ia-l-card';
-    if (isLink) { card.href = m.href; card.target = '_blank'; card.rel = 'noopener'; }
-    else { card.setAttribute('aria-disabled', 'true'); }
+    if (m.ready && m.href) {
+      card.addEventListener('click', () => openDetail(m));
+    } else {
+      card.setAttribute('aria-disabled', 'true');
+    }
     card.innerHTML = `
       <div class="ia-l-icon">${m.icon}</div>
       <div class="ia-l-card-body">
@@ -183,13 +228,15 @@
   const modal = document.getElementById('ia-launcher-modal');
   const backdrop = document.getElementById('ia-launcher-backdrop');
   const closeBtn = document.querySelector('.ia-l-close');
+  const backBtn = document.querySelector('.ia-l-back');
   const askInput = document.getElementById('ia-l-ask-input');
   const askBtn = document.getElementById('ia-l-ask-btn');
 
   function openModal() { modal.classList.add('open'); askInput.focus(); }
-  function closeModal() { modal.classList.remove('open'); }
+  function closeModal() { modal.classList.remove('open'); closeDetail(); }
   btn.addEventListener('click', openModal);
   closeBtn.addEventListener('click', closeModal);
+  backBtn.addEventListener('click', closeDetail);
   backdrop.addEventListener('click', closeModal);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
