@@ -96,6 +96,41 @@
 
   footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 12px; color: var(--ink-muted); line-height: 1.7; max-width: 74ch; }
   footer code { background: var(--surface-2); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+
+  .tabs { display: flex; gap: 6px; margin-bottom: 22px; border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    font: inherit; font-size: 13px; font-weight: 600; color: var(--ink-muted);
+    background: none; border: none; border-bottom: 2px solid transparent;
+    padding: 10px 4px; margin-bottom: -1px; cursor: pointer;
+  }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .manual-note { padding: 12px 16px; border-radius: 8px; font-size: 13px; margin-bottom: 22px; background: var(--surface-2); color: var(--ink-2); }
+
+  .critere-block { margin-bottom: 26px; }
+  .critere-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .critere-num { font-family: var(--font-display); font-size: 13px; font-weight: 500; color: var(--accent); background: var(--accent-tint); border-radius: 100px; padding: 2px 11px; flex: none; }
+  .critere-head h2 { font-family: var(--font-display); font-size: 16px; font-weight: 500; margin: 0; }
+
+  .field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  .field-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .field-card label { display: block; font-size: 12.5px; color: var(--ink-2); margin-bottom: 8px; line-height: 1.4; }
+  .field-card input {
+    width: 100%; font: inherit; font-size: 14px; font-variant-numeric: tabular-nums;
+    color: var(--ink); background: var(--page); border: 1px solid var(--border-2);
+    border-radius: 7px; padding: 7px 10px;
+  }
+  .field-card input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .field-unit { font-size: 11px; color: var(--ink-muted); margin-left: 4px; }
+
+  .manual-actions { display: flex; align-items: center; gap: 12px; margin: 24px 0 8px; flex-wrap: wrap; }
+  .btn { font: inherit; font-size: 13px; font-weight: 600; border-radius: 8px; padding: 9px 16px; cursor: pointer; border: 1px solid var(--border-2); background: var(--surface); color: var(--ink); }
+  .btn.primary { background: var(--accent); color: #ffffff; border-color: var(--accent); }
+  .save-status { font-size: 12px; color: var(--ink-muted); }
+  .json-box { width: 100%; min-height: 120px; margin-top: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; background: var(--surface); border: 1px solid var(--border-2); border-radius: 8px; padding: 10px; color: var(--ink); display: none; }
+  .json-box.open { display: block; }
 </style>
 
 <div class="wrap">
@@ -105,12 +140,31 @@
     <p class="lede">Ce module n'affiche pas encore d'indicateurs Qualiopi habilles : il teste en direct les entites repérées dans le code source et montre ce qu'elles renvoient réellement, pour construire le vrai tableau de bord sur des champs confirmés, pas supposés.</p>
   </header>
 
-  <div id="banner">Interrogation des entités candidates...</div>
+  <div class="tabs">
+    <button class="tab-btn active" type="button" data-tab="api">Détection API</button>
+    <button class="tab-btn" type="button" data-tab="manual">Saisie manuelle</button>
+  </div>
 
-  <div id="results"></div>
+  <div class="tab-panel active" id="tab-api">
+    <div id="banner">Interrogation des entités candidates...</div>
+    <div id="results"></div>
+  </div>
+
+  <div class="tab-panel" id="tab-manual">
+    <div class="manual-note">
+      Ces indicateurs n'ont aucune source connue dans l'API MCDF (probablement saisis ailleurs -- écran de paramétrage, tableur externe -- comme les pages web du client). En attendant de trouver où les lire automatiquement, saisissez-les ici : <strong>enregistré uniquement dans ce navigateur</strong> (pas de base de données côté serveur pour ce widget), utilisez « Copier en JSON » pour transférer les valeurs vers un autre poste si besoin.
+    </div>
+    <div id="manual-form"></div>
+    <div class="manual-actions">
+      <button class="btn primary" type="button" id="manual-save">Enregistrer</button>
+      <button class="btn" type="button" id="manual-json-toggle">Copier / importer en JSON</button>
+      <span class="save-status" id="manual-status"></span>
+    </div>
+    <textarea class="json-box" id="manual-json" spellcheck="false"></textarea>
+  </div>
 
   <footer>
-    Lecture seule -- mêmes règles que <code>widget-ia.html</code> (cookie de session déjà actif, aucun appel d'écriture). Une fois les bons champs confirmés ici, cette page sera remplacée par de vrais indicateurs Qualiopi (par ex. taux de satisfaction stagiaires, réclamations, actions correctives, preuves manquantes par critère).
+    Lecture seule -- mêmes règles que <code>widget-ia.html</code> (cookie de session déjà actif, aucun appel d'écriture). Une fois les bons champs confirmés ici, l'onglet « Détection API » sera remplacé par de vrais indicateurs Qualiopi calculés en direct ; l'onglet « Saisie manuelle » restera pour ceux qui n'ont pas de source dans MCDF.
   </footer>
 </div>
 
@@ -203,4 +257,132 @@ function renderResult(r) {
   const wrap = document.getElementById('results');
   results.forEach((r) => wrap.appendChild(renderResult(r)));
 })();
+
+// ------------------------------------------------------------------
+// Onglets
+// ------------------------------------------------------------------
+document.querySelectorAll('.tab-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+  });
+});
+
+// ------------------------------------------------------------------
+// Saisie manuelle -- indicateurs sans source MCDF connue (voir
+// referentiel-qualiopi-kpi.html, badges "aucune source"). Stocke en
+// localStorage : pas de backend pour ce widget, donc pas de partage
+// automatique entre postes -- d'ou le bouton copier/importer en JSON.
+// ------------------------------------------------------------------
+const STORAGE_KEY = 'mcdf-qualiopi-manual-v1';
+
+const MANUAL_FIELDS = [
+  { critere: 1, label: 'Conditions d’information du public', fields: [
+    { id: 'resultats_publies', label: 'Résultats publiés (réussite, satisfaction)', unit: '%' },
+  ]},
+  { critere: 3, label: 'Adaptation aux publics bénéficiaires', fields: [
+    { id: 'handicap_accompagne', label: 'Situations de handicap accompagnées', unit: '%' },
+  ]},
+  { critere: 5, label: 'Qualification des personnels', fields: [
+    { id: 'heures_formation_formateur', label: 'Heures de formation continue / formateur / an', unit: 'h' },
+  ]},
+  { critere: 6, label: 'Environnement professionnel', fields: [
+    { id: 'insertion_pro', label: 'Taux d’insertion professionnelle à 6 mois', unit: '%' },
+    { id: 'veille_reglementaire', label: 'Mises à jour de veille réglementaire (trimestre)', unit: 'nb' },
+  ]},
+  { critere: 7, label: 'Appréciations et réclamations', fields: [
+    { id: 'satisfaction_stagiaires', label: 'Taux de satisfaction stagiaires', unit: '/5' },
+    { id: 'taux_reponse_enquetes', label: 'Taux de réponse aux enquêtes', unit: '%' },
+    { id: 'reclamations_recues', label: 'Réclamations reçues (période)', unit: 'nb' },
+    { id: 'reclamations_traitees', label: 'Réclamations traitées (période)', unit: 'nb' },
+    { id: 'delai_traitement', label: 'Délai moyen de traitement', unit: 'j' },
+    { id: 'actions_correctives_cloturees', label: 'Actions correctives clôturées', unit: 'nb' },
+    { id: 'actions_correctives_ouvertes', label: 'Actions correctives ouvertes', unit: 'nb' },
+  ]},
+];
+
+function loadManualValues() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : { values: {}, updatedAt: null };
+  } catch (e) {
+    return { values: {}, updatedAt: null };
+  }
+}
+
+function renderManualForm() {
+  const stored = loadManualValues();
+  const formWrap = document.getElementById('manual-form');
+  MANUAL_FIELDS.forEach((group) => {
+    const block = el('div', 'critere-block');
+    const head = el('div', 'critere-head');
+    head.appendChild(el('span', 'critere-num', `Critère ${group.critere}`));
+    head.appendChild(el('h2', '', group.label));
+    block.appendChild(head);
+
+    const grid = el('div', 'field-grid');
+    group.fields.forEach((f) => {
+      const card = el('div', 'field-card');
+      const label = el('label', '', `${f.label}<span class="field-unit">${f.unit}</span>`);
+      label.htmlFor = `manual-${f.id}`;
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.step = 'any';
+      input.id = `manual-${f.id}`;
+      input.dataset.fieldId = f.id;
+      const v = stored.values[f.id];
+      if (v !== undefined && v !== null) input.value = v;
+      card.appendChild(label);
+      card.appendChild(input);
+      grid.appendChild(card);
+    });
+    block.appendChild(grid);
+    formWrap.appendChild(block);
+  });
+
+  updateStatus(stored.updatedAt);
+}
+
+function updateStatus(updatedAt) {
+  const status = document.getElementById('manual-status');
+  status.textContent = updatedAt
+    ? `Dernière mise à jour (ce navigateur) : ${new Date(updatedAt).toLocaleString('fr-FR')}`
+    : 'Aucune valeur enregistrée pour le moment.';
+}
+
+function collectManualValues() {
+  const values = {};
+  document.querySelectorAll('#manual-form input').forEach((input) => {
+    if (input.value !== '') values[input.dataset.fieldId] = parseFloat(input.value);
+  });
+  return values;
+}
+
+function saveManualValues() {
+  const payload = { values: collectManualValues(), updatedAt: new Date().toISOString() };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  updateStatus(payload.updatedAt);
+}
+
+renderManualForm();
+document.getElementById('manual-save').addEventListener('click', saveManualValues);
+
+const jsonBox = document.getElementById('manual-json');
+document.getElementById('manual-json-toggle').addEventListener('click', () => {
+  const open = jsonBox.classList.toggle('open');
+  if (open) jsonBox.value = JSON.stringify(loadManualValues(), null, 2);
+});
+jsonBox.addEventListener('change', () => {
+  try {
+    const parsed = JSON.parse(jsonBox.value);
+    if (!parsed.values) throw new Error('format inattendu');
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+    document.getElementById('manual-form').innerHTML = '';
+    renderManualForm();
+  } catch (e) {
+    alert('JSON invalide, valeurs non importées.');
+  }
+});
 </script>
