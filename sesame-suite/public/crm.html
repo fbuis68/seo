@@ -1166,6 +1166,7 @@ function renderFiche(c){
       <div class="field"><div class="fl"><span class="fl-ico">T</span> Téléphone</div><div class="fv">${c.tel||'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">W</span> Site web</div><div class="fv">${c.site?`<a href="https://${c.site}" target="_blank">${c.site}</a>`:'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">E</span> Établissement Sesame</div><div class="fv">${c.entityCode||'—'}</div></div>
+      <div class="field"><div class="fl"><span class="fl-ico">◔</span> Langue / Devise / Fuseau</div><div class="fv">${c.entityCode?(langLabel(c.lang)+' · '+(c.currency||'—')+' · '+(c.timezone||'—')):'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">M</span> Modules</div><div class="fv">${c.modules||'—'}${c.moduleSesame?' <span class="tag t-green" style="font-size:11px">Sesame</span>':''}${c.moduleTtlock?' <span class="tag t-blue" style="font-size:11px">Ttlock</span>':''}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">A</span> Nombre d'accès</div><div class="fv">${c.nbAcces||'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">€</span> MRR</div><div class="fv">${c.mrr?fmtEUR(c.mrr)+'/mois':'—'}</div></div>
@@ -1722,6 +1723,8 @@ let dealFilterCommercial = '';
 let DEAL_DRAFT = null;
 
 function fmtEUR(n){ return (n||0).toLocaleString('fr-FR',{maximumFractionDigits:0})+' €'; }
+var LANG_LABELS = {fr:'🇫🇷 Français',en:'🇬🇧 English',es:'🇪🇸 Español',de:'🇩🇪 Deutsch',it:'🇮🇹 Italiano',nl:'🇳🇱 Nederlands',pt:'🇵🇹 Português',ar:'🇲🇦 العربية',zh:'🇨🇳 中文',ja:'🇯🇵 日本語'};
+function langLabel(l){ return l ? (LANG_LABELS[l]||l) : '—'; }
 
 // ════════════════════════════════════════
 // PORTEFEUILLE — tableau modifiable MRR / Signé / Prévisionnel

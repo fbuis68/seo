@@ -3,6 +3,7 @@ import { prisma } from "../db";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin, requireSesame } from "../middleware/requireAdmin";
 import { provisionEntity } from "../lib/provisionEntity";
+import { fireTrigger } from "../lib/automation";
 
 export const entityRouter = Router();
 
@@ -62,6 +63,46 @@ entityRouter.post(
         adminEmail: b.adminEmail,
         adminPassword: b.adminPassword,
       });
+
+      // Relie systématiquement une fiche CRM à l'établissement dès sa
+      // création manuelle — jusqu'ici seule l'inscription en ligne
+      // (onboarding.ts) créait ce lien, laissant les établissements
+      // provisionnés à la main par Sesame invisibles du CRM (pas de langue/
+      // devise/fuseau consultables sur la fiche). "Client" plutôt que
+      // "Prospect" : une création manuelle par l'équipe Sesame correspond à
+      // un établissement déjà engagé, pas à un essai en self-service.
+      const prospect = await prisma.crmProspect.create({
+        data: {
+          entityId: entity.id,
+          nom: b.name,
+          type: "Client",
+          secteur: "Hôtellerie",
+          etoiles: b.stars ? "★".repeat(Math.min(b.stars, 5)) : undefined,
+          danger: "Modéré",
+          contrat: "en cours",
+          modules: 0,
+          email: adminEmail,
+          webApp: true,
+          checkin: true,
+          messagerie: "Noreply",
+        },
+      });
+      fireTrigger("crm.prospect_created", {
+        entityId: null,
+        targetType: "crmProspect",
+        targetId: prospect.id,
+        recipient: { email: prospect.email, phone: prospect.tel },
+        variables: { nom: prospect.nom, secteur: prospect.secteur || "" },
+      }).catch((e) => console.error("[automation] crm.prospect_created:", e));
+      await prisma.crmActivity.create({
+        data: {
+          prospectId: prospect.id,
+          type: "Note interne",
+          text: "Établissement provisionné manuellement depuis le panneau Hôtels [Multi].",
+          authorName: "Automatique",
+        },
+      });
+
       res.status(201).json({ entity: { id: entity.id, code: entity.code, name: entity.name }, admin: { email: adminEmail, password: adminPassword } });
     } catch (e) {
       throw new HttpError(409, e instanceof Error ? e.message : "Création impossible");

@@ -61,6 +61,8 @@ interface RegisterBody {
   city?: string;
   country?: string;
   currency?: string;
+  lang?: string;
+  timezone?: string;
   stars?: number;
   rooms?: number;
   avgStay?: number;
@@ -142,6 +144,8 @@ onboardingRouter.post(
         hotelAddr: fullAddr || undefined,
         hotelEmail: email,
         currency: b.currency || undefined,
+        lang: b.lang || undefined,
+        timezone: b.timezone || undefined,
       },
     });
 

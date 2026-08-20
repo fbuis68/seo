@@ -81,7 +81,7 @@ function shapeProspect(p: {
   commercialId: string | null;
   createdAt: Date;
   updatedAt: Date;
-  entity?: { code: string } | null;
+  entity?: { code: string; config: { lang: string; currency: string; timezone: string } | null } | null;
   commercial?: { id: string; name: string | null; email: string } | null;
   activities?: Parameters<typeof shapeActivity>[0][];
 }) {
@@ -89,6 +89,14 @@ function shapeProspect(p: {
     id: p.id,
     entityId: p.entityId,
     entityCode: p.entity ? p.entity.code : null,
+    // Langue/devise/fuseau proviennent en direct de EntityModuleConfig (via
+    // l'entité liée) plutôt que d'une copie sur la fiche — pas de risque de
+    // désynchronisation si l'hôtel change ces paramètres depuis son propre
+    // panneau. null pour les fiches sans entité liée (contact/ticket/saisie
+    // manuelle) : rien à retrouver tant qu'aucun compte n'existe derrière.
+    lang: p.entity?.config?.lang ?? null,
+    currency: p.entity?.config?.currency ?? null,
+    timezone: p.entity?.config?.timezone ?? null,
     subscriptionId: p.subscriptionId,
     nom: p.nom,
     type: p.type,
@@ -147,7 +155,7 @@ function shapeProspect(p: {
 }
 
 const PROSPECT_INCLUDE = {
-  entity: { select: { code: true } },
+  entity: { select: { code: true, config: { select: { lang: true, currency: true, timezone: true } } } },
   activities: { orderBy: { createdAt: "asc" as const } },
   commercial: { select: { id: true, name: true, email: true } },
 };

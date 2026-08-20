@@ -191,7 +191,7 @@ textarea{resize:vertical;min-height:70px}
           <div class="fi"><label class="lb">Ville</label>
             <input type="text" id="ob-city" placeholder="Paris"></div>
           <div class="fi"><label class="lb">Pays</label>
-            <select id="ob-country">
+            <select id="ob-country" onchange="obApplyCountryDefaults()">
               <option value="FR">France</option>
               <option value="BE">Belgique</option>
               <option value="CH">Suisse</option>
@@ -203,7 +203,7 @@ textarea{resize:vertical;min-height:70px}
             </select></div>
         </div>
 
-        <div class="g2">
+        <div class="g3">
           <div class="fi"><label class="lb">Devise</label>
             <select id="ob-currency">
               <option value="EUR">€ Euro</option>
@@ -212,8 +212,30 @@ textarea{resize:vertical;min-height:70px}
               <option value="GBP">£ Livre sterling</option>
               <option value="MAD">MAD Dirham</option>
             </select></div>
-          <div class="fi"></div>
+          <div class="fi"><label class="lb">Langue</label>
+            <select id="ob-lang">
+              <option value="fr">🇫🇷 Français</option>
+              <option value="en">🇬🇧 English</option>
+              <option value="es">🇪🇸 Español</option>
+            </select></div>
+          <div class="fi"><label class="lb">Fuseau horaire</label>
+            <select id="ob-timezone">
+              <option value="Europe/Paris">🇫🇷 Europe/Paris</option>
+              <option value="Europe/Brussels">🇧🇪 Europe/Brussels</option>
+              <option value="Europe/Zurich">🇨🇭 Europe/Zurich</option>
+              <option value="Europe/Luxembourg">🇱🇺 Europe/Luxembourg</option>
+              <option value="Africa/Casablanca">🇲🇦 Africa/Casablanca</option>
+              <option value="Europe/Madrid">🇪🇸 Europe/Madrid</option>
+              <option value="Europe/Rome">🇮🇹 Europe/Rome</option>
+              <option value="America/Guadeloupe">🇬🇵 America/Guadeloupe</option>
+              <option value="America/Martinique">🇲🇶 America/Martinique</option>
+              <option value="Indian/Reunion">🇷🇪 Indian/Reunion</option>
+              <option value="America/New_York">🇺🇸 America/New_York</option>
+              <option value="Europe/London">🇬🇧 Europe/London</option>
+            </select></div>
         </div>
+
+        <div style="font-size:11.5px;color:var(--mu);margin-top:-10px;margin-bottom:14px">Pré-remplis depuis le pays choisi — ajustez si besoin (ex. établissement à la Réunion ou aux Antilles).</div>
 
         <div class="fi"><label class="lb">Catégorie</label>
           <div class="pills" id="ob-stars">
@@ -454,6 +476,29 @@ function obModulePrice(k){
   return def ? def.price : 0;
 }
 
+// Langue/devise/fuseau par défaut selon le pays choisi — pré-remplissage
+// uniquement, l'établissement reste libre de les ajuster ensuite (ex. un
+// hôtel à la Réunion ou en Guadeloupe reste en France mais change de
+// fuseau ; un établissement marocain francophone peut préférer garder
+// "fr" plutôt que la langue déduite de la devise locale).
+var OB_COUNTRY_DEFAULTS = {
+  FR: { lang: 'fr', currency: 'EUR', timezone: 'Europe/Paris' },
+  BE: { lang: 'fr', currency: 'EUR', timezone: 'Europe/Brussels' },
+  CH: { lang: 'fr', currency: 'CHF', timezone: 'Europe/Zurich' },
+  LU: { lang: 'fr', currency: 'EUR', timezone: 'Europe/Luxembourg' },
+  MA: { lang: 'fr', currency: 'MAD', timezone: 'Africa/Casablanca' },
+  ES: { lang: 'es', currency: 'EUR', timezone: 'Europe/Madrid' },
+  IT: { lang: 'fr', currency: 'EUR', timezone: 'Europe/Rome' },
+  OTHER: { lang: 'en', currency: 'EUR', timezone: 'Europe/Paris' }
+};
+function obApplyCountryDefaults(){
+  var country = document.getElementById('ob-country').value;
+  var d = OB_COUNTRY_DEFAULTS[country] || OB_COUNTRY_DEFAULTS.FR;
+  document.getElementById('ob-currency').value = d.currency;
+  document.getElementById('ob-lang').value = d.lang;
+  document.getElementById('ob-timezone').value = d.timezone;
+}
+
 // ═══════════════════════════════════════════════ CHARGEMENT INITIAL (tarifs)
 async function obInit(){
   try{
@@ -473,6 +518,7 @@ async function obInit(){
   }
   document.getElementById('wizLoading').style.display = 'none';
   document.getElementById('wizWrap').style.display = 'block';
+  obApplyCountryDefaults();
   renderProgress();
 }
 
@@ -948,6 +994,8 @@ async function wizSubmit(skipPayment){
     city: document.getElementById('ob-city').value.trim(),
     country: document.getElementById('ob-country').value,
     currency: document.getElementById('ob-currency').value,
+    lang: document.getElementById('ob-lang').value,
+    timezone: document.getElementById('ob-timezone').value,
     stars: OB_STARS,
     rooms: parseInt(document.getElementById('ob-rooms').value)||0,
     avgStay: parseFloat(document.getElementById('ob-avgstay').value)||0,
