@@ -1315,6 +1315,20 @@ Deux ajustements sur le module simplifié le 20/08/2026 :
   mois précédant le mois du solde — elle n'a pas de sens tant que le
   point de départ n'est pas encore atteint.
 
+### Trésorerie : les mois avant le solde d'ouverture ignorent aussi encaissement/dépenses, catégories renommées
+
+Suite au retour du 20/08/2026 : afficher les encaissements/dépenses des
+mois précédant le solde d'ouverture faussait le graphique "Encaissement
+vs dépenses" (des lignes récurrentes mensuelles apparaissaient sur des
+mois hors période suivie). `trComputeMonthly()` met désormais aussi à
+zéro `revenu`/`depenses` pour ces mois (pas seulement la trésorerie
+cumulée) — le graphique et le tableau mensuel n'affichent donc plus rien
+avant le mois du solde.
+
+Les catégories "Encaissement récurrent" et "Dépenses récurrentes" sont
+renommées **"Encaissement"** et **"Dépenses"** — le mot "récurrent(es)"
+n'était plus exact depuis l'ajout de la fréquence "Ponctuel".
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

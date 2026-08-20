@@ -1816,7 +1816,7 @@ async function pfSave(id, field, val){
 }
 
 // ════════════════════════════════════════
-// TRÉSORERIE — Encaissement récurrent + Dépenses récurrentes, vision annuelle
+// TRÉSORERIE — Encaissement + Dépenses, vision annuelle
 // ════════════════════════════════════════
 const TR_MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 const TR_MONTHS_SHORT = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
@@ -1959,7 +1959,7 @@ function renderTresorerie(){
     <div class="tr-hero">
       <div>
         <div class="tr-hero-eyebrow">Prévisionnel ${cashYear}</div>
-        <div class="tr-hero-sub">Encaissement récurrent moins dépenses récurrentes — vision mensuelle sur l'année.</div>
+        <div class="tr-hero-sub">Encaissement moins dépenses — vision mensuelle sur l'année.</div>
       </div>
       <div class="tr-hero-figure">
         <div class="tr-sub-lbl">Trésorerie fin d'année</div>
@@ -1981,8 +1981,8 @@ function renderTresorerie(){
     </div>
 
     <div class="panels" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px">
-      ${trCategoryCard('revenu', 'Encaissement récurrent', 'var(--tr-signe)')}
-      ${trCategoryCard('depense', 'Dépenses récurrentes', 'var(--tr-depense)')}
+      ${trCategoryCard('revenu', 'Encaissement', 'var(--tr-signe)')}
+      ${trCategoryCard('depense', 'Dépenses', 'var(--tr-depense)')}
     </div>
 
     <div class="card">
@@ -2026,11 +2026,16 @@ function trComputeMonthly(){
   let cum = 0;
   const months = [];
   for(let m=0;m<12;m++){
-    const revenu = trCategoryMonthly('revenu', m);
-    const depenses = trCategoryMonthly('depense', m);
+    // Avant le mois du solde d'ouverture, on ignore aussi les encaissements
+    // et dépenses eux-mêmes (pas seulement la trésorerie cumulée) — les
+    // montrer fausserait le graphique "Encaissement vs dépenses" en
+    // affichant des mois qui ne font pas partie de la période suivie.
+    const beforeSolde = m < soldeMois;
+    const revenu = beforeSolde ? 0 : trCategoryMonthly('revenu', m);
+    const depenses = beforeSolde ? 0 : trCategoryMonthly('depense', m);
     const net = revenu - depenses;
     let curCum;
-    if(m < soldeMois) curCum = null;
+    if(beforeSolde) curCum = null;
     else if(m === soldeMois){ cum = soldeMontant + net; curCum = cum; }
     else { cum += net; curCum = cum; }
     months.push({ m, revenu, depenses, net, cum: curCum });
@@ -2177,14 +2182,17 @@ function trPositionTooltip(tt, ev, svg){
 
 function trRenderMonthTable(months){
   const body = document.getElementById('tr-month-tbody'); if(!body) return;
-  body.innerHTML = months.map(mo=>`
-    <tr>
+  body.innerHTML = months.map(mo=>{
+    const before = mo.cum==null; // avant le mois du solde d'ouverture — période non suivie
+    return `
+    <tr${before?' style="opacity:.45"':''}>
       <td>${TR_MONTHS[mo.m]}</td>
-      <td class="num" style="text-align:right">${fmtEUR(mo.revenu)}</td>
-      <td class="num" style="text-align:right">${fmtEUR(mo.depenses)}</td>
-      <td class="num" style="text-align:right;font-weight:500;color:${mo.net>=0?'var(--good,#1a6b47)':'var(--bad,#b23b2c)'}">${(mo.net>=0?'+':'−')+fmtEUR(Math.abs(mo.net))}</td>
-      <td class="num" style="text-align:right;font-weight:600;${mo.cum!=null&&mo.cum<0?'color:var(--bad,#b23b2c)':''}">${mo.cum==null?'—':fmtEUR(mo.cum)}</td>
-    </tr>`).join('');
+      <td class="num" style="text-align:right">${before?'—':fmtEUR(mo.revenu)}</td>
+      <td class="num" style="text-align:right">${before?'—':fmtEUR(mo.depenses)}</td>
+      <td class="num" style="text-align:right;font-weight:500;color:${before?'inherit':(mo.net>=0?'var(--good,#1a6b47)':'var(--bad,#b23b2c)')}">${before?'—':(mo.net>=0?'+':'−')+fmtEUR(Math.abs(mo.net))}</td>
+      <td class="num" style="text-align:right;font-weight:600;${!before&&mo.cum<0?'color:var(--bad,#b23b2c)':''}">${before?'—':fmtEUR(mo.cum)}</td>
+    </tr>`;
+  }).join('');
 }
 
 // ── Lignes détaillées Encaissement/Dépense (CrmCashLine) ──
