@@ -149,6 +149,24 @@
   .ref-text { flex: 1; font-size: 13px; color: var(--ink-2); line-height: 1.5; }
   .ref-source { font-size: 11.5px; color: var(--ink-muted); margin-top: 4px; font-family: var(--font-mono); }
   .ref-badge { flex: none; }
+
+  .quality-block { margin-top: 14px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+  .quality-title { font-size: 12px; color: var(--ink-muted); margin: 0 0 12px; }
+  .quality-rows { display: flex; flex-direction: column; gap: 10px; }
+  .quality-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+  .quality-label { font-size: 13px; color: var(--ink-2); line-height: 1.4; }
+  .quality-btns { display: flex; gap: 6px; flex: none; }
+  .quality-dot {
+    width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border-2);
+    background: var(--dot-color); opacity: 0.35; cursor: pointer; padding: 0;
+    transition: opacity 0.12s ease, transform 0.12s ease;
+  }
+  .quality-dot:hover { opacity: 0.7; transform: scale(1.08); }
+  .quality-dot.active { opacity: 1; border-color: var(--ink); }
+  .ref-quality { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 100px; white-space: nowrap; }
+  .ref-quality .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--q-color); }
+  .ref-site-link { font-size: 11.5px; color: var(--accent); text-decoration: none; margin-left: 10px; }
+  .ref-site-link:hover { text-decoration: underline; }
 </style>
 
 <div class="wrap">
@@ -505,12 +523,20 @@ const CRITERE_LABELS = {
   7: 'Appreciations et reclamations',
 };
 
+const QUALITY_BY_INDICATEUR = { 1: 'q_ind1', 2: 'q_ind2', 3: 'q_ind3' };
+
 function renderReferentiel32() {
   const summary = document.getElementById('ref-summary');
   const wrap = document.getElementById('ref-list');
+  wrap.innerHTML = '';
+  const stored = loadManualValues();
+  const quality = stored.quality || {};
+  const siteWeb = stored.values ? stored.values.site_web : null;
+
   const counts = { auto: 0, manuel: 0, aucune: 0 };
   REFERENTIEL_32.forEach((r) => counts[r.status]++);
-  summary.innerHTML = `<strong>${counts.auto}</strong>/32 avec preuve calculee en direct · <strong>${counts.manuel}</strong>/32 en saisie manuelle · <strong>${counts.aucune}</strong>/32 sans preuve numerique pour le moment. Formulation des indicateurs a recouper avec la version exacte de votre certificateur.`;
+  const evaluated = Object.values(quality).filter(Boolean).length;
+  summary.innerHTML = `<strong>${counts.auto}</strong>/32 avec preuve calculee en direct · <strong>${counts.manuel}</strong>/32 en saisie manuelle · <strong>${counts.aucune}</strong>/32 sans preuve numerique pour le moment${evaluated ? ` · <strong>${evaluated}</strong>/3 indicateurs du critere 1 evalues manuellement` : ''}. Formulation des indicateurs a recouper avec la version exacte de votre certificateur.`;
 
   const byCritere = new Map();
   REFERENTIEL_32.forEach((r) => {
@@ -523,6 +549,15 @@ function renderReferentiel32() {
     const head = el('div', 'critere-head');
     head.appendChild(el('span', 'critere-num', `Critère ${num}`));
     head.appendChild(el('h2', '', CRITERE_LABELS[num]));
+    if (num === 1 && siteWeb) {
+      const link = document.createElement('a');
+      link.className = 'ref-site-link';
+      link.href = siteWeb;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.textContent = '↗ Voir le site du client';
+      head.appendChild(link);
+    }
     block.appendChild(head);
 
     const panel = el('div', 'panel');
@@ -534,9 +569,21 @@ function renderReferentiel32() {
       textWrap.appendChild(document.createTextNode(r.text));
       if (r.source) textWrap.appendChild(el('div', 'ref-source', r.source));
       row.appendChild(textWrap);
-      const badgeCls = r.status === 'auto' ? 'ok' : r.status === 'manuel' ? 'empty' : 'missing';
-      const badgeLabel = r.status === 'auto' ? 'Preuve auto' : r.status === 'manuel' ? 'Saisie manuelle' : 'Aucune preuve';
-      row.appendChild(el('span', `badge ${badgeCls} ref-badge`, `<span class="dot"></span>${badgeLabel}`));
+
+      const checkId = QUALITY_BY_INDICATEUR[r.num];
+      const level = checkId ? quality[checkId] : null;
+      if (level) {
+        const lvl = QUALITY_LEVELS.find((l) => l.key === level);
+        const badge = el('span', 'ref-quality', `<span class="dot"></span>${lvl.label}`);
+        badge.style.setProperty('--q-color', lvl.dot);
+        badge.style.background = `${lvl.dot}22`;
+        badge.style.color = lvl.dot;
+        row.appendChild(badge);
+      } else {
+        const badgeCls = r.status === 'auto' ? 'ok' : r.status === 'manuel' ? 'empty' : 'missing';
+        const badgeLabel = r.status === 'auto' ? 'Preuve auto' : r.status === 'manuel' ? 'Saisie manuelle' : 'Aucune preuve';
+        row.appendChild(el('span', `badge ${badgeCls} ref-badge`, `<span class="dot"></span>${badgeLabel}`));
+      }
       list.appendChild(row);
     });
     panel.appendChild(list);
@@ -544,7 +591,8 @@ function renderReferentiel32() {
     wrap.appendChild(block);
   });
 }
-renderReferentiel32();
+// Appelée plus bas, une fois MANUAL_FIELDS/QUALITY_LEVELS déclarés
+// (renderReferentiel32 lit loadManualValues() et QUALITY_LEVELS).
 
 // ------------------------------------------------------------------
 // Onglets
@@ -568,6 +616,7 @@ const STORAGE_KEY = 'mcdf-qualiopi-manual-v1';
 
 const MANUAL_FIELDS = [
   { critere: 1, label: 'Conditions d’information du public', fields: [
+    { id: 'site_web', label: 'Site web du client', unit: '', type: 'url' },
     { id: 'resultats_publies', label: 'Résultats publiés (réussite, satisfaction)', unit: '%' },
   ]},
   { critere: 3, label: 'Adaptation aux publics bénéficiaires', fields: [
@@ -600,6 +649,64 @@ function loadManualValues() {
   }
 }
 
+// ------------------------------------------------------------------
+// Evaluation qualite manuelle (icones de couleur) -- pour l'instant
+// limitee au critere 1, dont les 3 indicateurs sont verifiables en
+// ouvrant le site web du client (champ site_web ci-dessus). Vert /
+// orange / rouge, stocke dans le meme payload localStorage que les
+// valeurs numeriques (cle "quality").
+// ------------------------------------------------------------------
+const QUALITY_CHECKS = [
+  { id: 'q_ind1', indicateur: 1, label: 'Infos publiques complètes (prérequis, objectifs, durée, tarifs, contacts, modalités, accessibilité handicap)' },
+  { id: 'q_ind2', indicateur: 2, label: 'Indicateurs de résultats diffusés (taux de réussite, satisfaction...)' },
+  { id: 'q_ind3', indicateur: 3, label: 'Résultats obtenus communiqués au public' },
+];
+const QUALITY_LEVELS = [
+  { key: 'green', label: 'Conforme', dot: '#0ca30c' },
+  { key: 'orange', label: 'Partiel', dot: '#b8860b' },
+  { key: 'red', label: 'Insuffisant', dot: '#b23327' },
+];
+
+function renderQualityBlock(stored) {
+  const wrap = el('div', 'quality-block');
+  wrap.appendChild(el('p', 'quality-title', 'Évaluation de la qualité (ouvrir le site web ci-dessus pour vérifier)'));
+  const rows = el('div', 'quality-rows');
+  QUALITY_CHECKS.forEach((c) => {
+    const row = el('div', 'quality-row');
+    row.appendChild(el('span', 'quality-label', `${c.indicateur}. ${c.label}`));
+    const btns = el('div', 'quality-btns');
+    const current = (stored.quality || {})[c.id];
+    QUALITY_LEVELS.forEach((lvl) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `quality-dot${current === lvl.key ? ' active' : ''}`;
+      btn.style.setProperty('--dot-color', lvl.dot);
+      btn.title = lvl.label;
+      btn.dataset.checkId = c.id;
+      btn.dataset.level = lvl.key;
+      btn.addEventListener('click', () => setQuality(c.id, lvl.key));
+      btns.appendChild(btn);
+    });
+    row.appendChild(btns);
+    rows.appendChild(row);
+  });
+  wrap.appendChild(rows);
+  return wrap;
+}
+
+function setQuality(checkId, level) {
+  const stored = loadManualValues();
+  if (!stored.quality) stored.quality = {};
+  stored.quality[checkId] = stored.quality[checkId] === level ? undefined : level; // re-cliquer desactive
+  stored.values = { ...stored.values, ...collectManualValues() }; // ne pas perdre une saisie en cours
+  stored.updatedAt = new Date().toISOString();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+  document.getElementById('manual-form').innerHTML = '';
+  renderManualForm();
+  document.getElementById('ref-list').innerHTML = '';
+  renderReferentiel32();
+}
+
 function renderManualForm() {
   const stored = loadManualValues();
   const formWrap = document.getElementById('manual-form');
@@ -616,10 +723,12 @@ function renderManualForm() {
       const label = el('label', '', `${f.label}<span class="field-unit">${f.unit}</span>`);
       label.htmlFor = `manual-${f.id}`;
       const input = document.createElement('input');
-      input.type = 'number';
-      input.step = 'any';
+      input.type = f.type === 'url' ? 'url' : 'number';
+      if (f.type !== 'url') input.step = 'any';
+      else input.placeholder = 'https://...';
       input.id = `manual-${f.id}`;
       input.dataset.fieldId = f.id;
+      input.dataset.fieldType = f.type || 'number';
       const v = stored.values[f.id];
       if (v !== undefined && v !== null) input.value = v;
       card.appendChild(label);
@@ -627,6 +736,9 @@ function renderManualForm() {
       grid.appendChild(card);
     });
     block.appendChild(grid);
+
+    if (group.critere === 1) block.appendChild(renderQualityBlock(stored));
+
     formWrap.appendChild(block);
   });
 
@@ -643,18 +755,23 @@ function updateStatus(updatedAt) {
 function collectManualValues() {
   const values = {};
   document.querySelectorAll('#manual-form input').forEach((input) => {
-    if (input.value !== '') values[input.dataset.fieldId] = parseFloat(input.value);
+    if (input.value === '') return;
+    values[input.dataset.fieldId] = input.dataset.fieldType === 'url' ? input.value : parseFloat(input.value);
   });
   return values;
 }
 
 function saveManualValues() {
-  const payload = { values: collectManualValues(), updatedAt: new Date().toISOString() };
+  const prev = loadManualValues();
+  const payload = { values: collectManualValues(), quality: prev.quality || {}, updatedAt: new Date().toISOString() };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   updateStatus(payload.updatedAt);
+  document.getElementById('ref-list').innerHTML = '';
+  renderReferentiel32();
 }
 
 renderManualForm();
+renderReferentiel32();
 document.getElementById('manual-save').addEventListener('click', saveManualValues);
 
 const jsonBox = document.getElementById('manual-json');
