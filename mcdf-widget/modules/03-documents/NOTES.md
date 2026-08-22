@@ -42,6 +42,14 @@ Aucune requête de génération de document n'a encore été capturée. Il faut 
    l'id de l'enregistrement cible) et la réponse (fichier binaire ? lien de
    téléchargement ? id de document créé dans `conventionDocumentDao` ?)
 
+**Envoi / signature électronique** (demandé le 22/08/2026) : même situation,
+aucun endpoint capturé. Procédure de capture détaillée dans
+`CAPTURE-ENVOI-SIGNATURE.md` — à faire sur un dossier de test, pas un vrai
+client, car c'est une action à effet réel (contrairement à tout le reste du
+widget qui est en lecture seule). Une fois la requête capturée, le widget
+pourra proposer un déclenchement réel, avec confirmation explicite avant
+toute écriture.
+
 ## Architecture proposée
 1. Le copilote identifie l'intention ("prépare la convention pour la
    session X") et résout l'entité cible (`convention.id`).
