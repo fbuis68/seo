@@ -167,6 +167,16 @@
   .ref-quality .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--q-color); }
   .ref-site-link { font-size: 11.5px; color: var(--accent); text-decoration: none; margin-left: 10px; }
   .ref-site-link:hover { text-decoration: underline; }
+
+  .quality-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .quality-title-row .quality-title { margin: 0; }
+  .note { padding: 10px 14px; border-radius: 8px; font-size: 12.5px; margin: 10px 0; background: var(--surface-2); color: var(--ink-2); line-height: 1.55; }
+  .check-block { margin-top: 10px; padding: 12px 14px; background: var(--surface-2); border-radius: 8px; }
+  .check-block-title { font-size: 12px; font-weight: 600; color: var(--ink); margin: 0 0 6px; }
+  .check-ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+  .check-ul li { font-size: 12px; color: var(--ink-muted); }
+  .check-ul li.hit { color: var(--good-text); }
+  .check-ul li.miss { color: var(--critical); }
 </style>
 
 <div class="wrap">
@@ -667,9 +677,106 @@ const QUALITY_LEVELS = [
   { key: 'red', label: 'Insuffisant', dot: '#b23327' },
 ];
 
+// Regroupements de mots-clés par indicateur, pour l'analyse automatique
+// best-effort du site web (voir checkWebsite ci-dessous). Purement
+// indicatif -- une detection par mot-cle ne remplace pas une lecture
+// humaine, mais donne un premier reperage rapide quand le site est
+// lisible (CORS autorise).
+const CHECK_KEYWORDS = {
+  q_ind1: [
+    { label: 'Prérequis', words: ['prérequis', 'pré-requis', 'pre-requis'] },
+    { label: 'Objectifs', words: ['objectif'] },
+    { label: 'Durée', words: ['durée', 'heures', 'jours'] },
+    { label: 'Délais d’accès', words: ['délai'] },
+    { label: 'Tarifs', words: ['tarif', 'prix', '€', 'coût', 'cout'] },
+    { label: 'Contact', words: ['contact', 'téléphone', 'telephone', '@'] },
+    { label: 'Méthodes mobilisées', words: ['méthode', 'methode', 'pédagog', 'pedagog'] },
+    { label: 'Modalités d’évaluation', words: ['évaluation', 'evaluation', 'examen', 'certificat'] },
+    { label: 'Accessibilité handicap', words: ['handicap', 'accessib', 'pmr'] },
+  ],
+  q_ind2: [
+    { label: 'Taux de réussite', words: ['taux de réussite', 'taux de reussite'] },
+    { label: 'Taux de satisfaction', words: ['satisfaction'] },
+    { label: 'Indicateurs de résultats', words: ['indicateur', 'résultat', 'resultat'] },
+  ],
+  q_ind3: [
+    { label: 'Taux d’obtention / certification', words: ['obtention', 'certifi'] },
+    { label: 'Taux de retour à l’emploi', words: ['emploi', 'insertion'] },
+    { label: 'Avis / témoignages', words: ['avis', 'témoignage', 'temoignage'] },
+  ],
+};
+
+async function checkWebsite() {
+  const url = (document.getElementById('manual-site_web') || {}).value;
+  const resultEl = document.getElementById('site-check-result');
+  if (!url || !url.trim()) {
+    resultEl.innerHTML = '<div class="note">Renseignez d’abord l’URL du site avant de lancer la vérification.</div>';
+    return;
+  }
+  resultEl.innerHTML = '<div class="note">Lecture du site en cours…</div>';
+  let text;
+  try {
+    const res = await fetch(url, { mode: 'cors' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const html = await res.text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    text = (doc.body ? doc.body.innerText || doc.body.textContent : '').toLowerCase();
+  } catch (e) {
+    renderCheckFallback(resultEl, url);
+    return;
+  }
+  renderCheckResults(resultEl, text);
+}
+
+function renderCheckFallback(resultEl, url) {
+  resultEl.innerHTML = '';
+  resultEl.appendChild(el('div', 'note',
+    `Lecture automatique impossible depuis le navigateur : ce site ne renvoie pas d’autorisation CORS pour être lu par un autre site (restriction de sécurité standard des navigateurs, pas une erreur de ce widget). ` +
+    `Ouvrez <a href="${url}" target="_blank" rel="noopener" style="color:var(--accent)">${url}</a> et vérifiez vous-même les points ci-dessous, puis notez avec les pastilles au-dessus.`));
+  Object.entries(CHECK_KEYWORDS).forEach(([checkId, groups]) => {
+    const check = QUALITY_CHECKS.find((c) => c.id === checkId);
+    const block = el('div', 'check-block');
+    block.appendChild(el('p', 'check-block-title', `Indicateur ${check.indicateur} — à vérifier manuellement :`));
+    const ul = el('ul', 'check-ul');
+    groups.forEach((g) => ul.appendChild(el('li', '', g.label)));
+    block.appendChild(ul);
+    resultEl.appendChild(block);
+  });
+}
+
+function renderCheckResults(resultEl, text) {
+  resultEl.innerHTML = '';
+  resultEl.appendChild(el('div', 'note',
+    'Analyse automatique par mots-clés dans le contenu de la page — indicative seulement (ne remplace pas une lecture humaine, et ne vérifie qu’une seule page, pas tout le site).'));
+  Object.entries(CHECK_KEYWORDS).forEach(([checkId, groups]) => {
+    const check = QUALITY_CHECKS.find((c) => c.id === checkId);
+    const found = groups.filter((g) => g.words.some((w) => text.includes(w)));
+    const pct = Math.round((found.length / groups.length) * 100);
+    const block = el('div', 'check-block');
+    block.appendChild(el('p', 'check-block-title', `Indicateur ${check.indicateur} — ${found.length}/${groups.length} éléments détectés (${pct}%)`));
+    const ul = el('ul', 'check-ul');
+    groups.forEach((g) => {
+      const hit = g.words.some((w) => text.includes(w));
+      ul.appendChild(el('li', hit ? 'hit' : 'miss', `${hit ? '✓' : '✕'} ${g.label}`));
+    });
+    block.appendChild(ul);
+    resultEl.appendChild(block);
+  });
+}
+
 function renderQualityBlock(stored) {
   const wrap = el('div', 'quality-block');
-  wrap.appendChild(el('p', 'quality-title', 'Évaluation de la qualité (ouvrir le site web ci-dessus pour vérifier)'));
+  const titleRow = el('div', 'quality-title-row');
+  titleRow.appendChild(el('p', 'quality-title', 'Évaluation de la qualité (ouvrir le site web ci-dessus pour vérifier)'));
+  const checkBtn = document.createElement('button');
+  checkBtn.type = 'button';
+  checkBtn.className = 'btn';
+  checkBtn.textContent = 'Vérifier automatiquement';
+  checkBtn.addEventListener('click', checkWebsite);
+  titleRow.appendChild(checkBtn);
+  wrap.appendChild(titleRow);
+  const resultEl = document.createElement('div');
+  resultEl.id = 'site-check-result';
   const rows = el('div', 'quality-rows');
   QUALITY_CHECKS.forEach((c) => {
     const row = el('div', 'quality-row');
@@ -691,6 +798,7 @@ function renderQualityBlock(stored) {
     rows.appendChild(row);
   });
   wrap.appendChild(rows);
+  wrap.appendChild(resultEl);
   return wrap;
 }
 
