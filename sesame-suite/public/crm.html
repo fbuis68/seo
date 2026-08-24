@@ -2347,8 +2347,10 @@ function showAffaires(){
 }
 
 var dealViewMode = 'kanban'; // kanban | monthly
+var dealMonthlyLayout = 'list'; // list | kanban — sous-bascule de la vue "monthly"
 
 function dealSetViewMode(v){ dealViewMode = v; renderAffaires(); }
+function dealSetMonthlyLayout(v){ dealMonthlyLayout = v; renderAffaires(); }
 
 function renderAffaires(){
   const filtered = dealFilterCommercial ? deals.filter(d=>d.commercialId===dealFilterCommercial) : deals;
@@ -2358,14 +2360,19 @@ function renderAffaires(){
       ${COMMERCIALS.map(c=>`<option value="${c.id}" ${dealFilterCommercial===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}
     </select>
     <div style="display:flex;border:1px solid var(--bdr);border-radius:8px;overflow:hidden">
-      <button onclick="dealSetViewMode('kanban')" style="border:none;cursor:pointer;padding:6px 12px;font-size:12px;font-weight:500;background:${dealViewMode==='kanban'?'var(--a)':'var(--card)'};color:${dealViewMode==='kanban'?'#fff':'var(--tx)'}">Kanban</button>
+      <button onclick="dealSetViewMode('kanban')" style="border:none;cursor:pointer;padding:6px 12px;font-size:12px;font-weight:500;background:${dealViewMode==='kanban'?'var(--a)':'var(--card)'};color:${dealViewMode==='kanban'?'#fff':'var(--tx)'}">Kanban (étapes)</button>
       <button onclick="dealSetViewMode('monthly')" style="border:none;cursor:pointer;padding:6px 12px;font-size:12px;font-weight:500;background:${dealViewMode==='monthly'?'var(--a)':'var(--card)'};color:${dealViewMode==='monthly'?'#fff':'var(--tx)'}">Mois par mois</button>
     </div>
+    ${dealViewMode==='monthly'?`<div style="display:flex;border:1px solid var(--bdr);border-radius:8px;overflow:hidden">
+      <button onclick="dealSetMonthlyLayout('list')" style="border:none;cursor:pointer;padding:6px 12px;font-size:12px;font-weight:500;background:${dealMonthlyLayout==='list'?'var(--tx)':'var(--card)'};color:${dealMonthlyLayout==='list'?'var(--card)':'var(--tx)'}">Liste</button>
+      <button onclick="dealSetMonthlyLayout('kanban')" style="border:none;cursor:pointer;padding:6px 12px;font-size:12px;font-weight:500;background:${dealMonthlyLayout==='kanban'?'var(--tx)':'var(--card)'};color:${dealMonthlyLayout==='kanban'?'var(--card)':'var(--tx)'}">Kanban</button>
+    </div>`:''}
     <span class="count-lbl">${filtered.length} affaire${filtered.length>1?'s':''}</span>
   </div>`;
 
   if(dealViewMode==='monthly'){
-    document.getElementById('main').innerHTML = filterBar + renderAffairesMonthly(filtered);
+    const body = dealMonthlyLayout==='kanban' ? renderAffairesMonthlyKanban(filtered) : renderAffairesMonthly(filtered);
+    document.getElementById('main').innerHTML = filterBar + body;
     return;
   }
 
@@ -2387,7 +2394,7 @@ function renderAffaires(){
       </div>
     </div>`;
   }).join('');
-  document.getElementById('main').innerHTML = filterBar + `<div class="kanban-wrap">${cols}</div>`;
+  document.getElementById('main').innerHTML = filterBar + renderDealFunnel(filtered) + `<div class="kanban-wrap">${cols}</div>`;
 }
 
 // ── Vue "Mois par mois" — regroupe les affaires par mois de leur date de
@@ -2449,6 +2456,80 @@ function renderAffairesMonthly(filtered){
   </div>` : '';
 
   return monthBlocks + noDateBlock;
+}
+
+// ── Même regroupement que renderAffairesMonthly, mais en colonnes (une par
+// mois) plutôt qu'en blocs empilés — pour glisser d'un coup d'œil d'un mois
+// à l'autre comme sur le Kanban par étape.
+function renderAffairesMonthlyKanban(filtered){
+  const withDate = filtered.filter(d=>dealMonthKey(d));
+  const noDate = filtered.filter(d=>!dealMonthKey(d));
+  if(!withDate.length && !noDate.length){
+    return '<div style="padding:30px;text-align:center;color:var(--mu);font-size:13px">Aucune affaire.</div>';
+  }
+
+  const groups = {};
+  withDate.forEach(d=>{ const k=dealMonthKey(d); (groups[k]=groups[k]||[]).push(d); });
+  const keys = Object.keys(groups).sort();
+
+  const monthCol = (label, items) => {
+    const live = items.filter(d=>d.stage!=='Perdu');
+    const totalPondere = live.reduce((s,d)=>s+(d.amount||0)*(d.probability||0)/100,0);
+    return `<div class="kanban-col">
+      <div class="kanban-col-head"><span>${label}</span><span class="kanban-col-total">${items.length} · ${fmtEUR(totalPondere)} pond.</span></div>
+      <div class="kanban-cards">
+        ${items.length===0?'<div class="kanban-empty">—</div>':items.slice().sort((a,b)=>(b.amount||0)-(a.amount||0)).map(d=>`
+          <div class="kanban-card" onclick="openDealModal('${d.id}')">
+            <div style="margin-bottom:4px"><span class="tag ${STAGE_TAG[d.stage]}" style="font-size:9px">${d.stage}</span></div>
+            <div class="kanban-card-title">${esc(d.title)}</div>
+            <div class="kanban-card-client">${esc(d.prospectNom)}</div>
+            <div class="kanban-card-foot">
+              <span class="kanban-card-amount">${d.amount?fmtEUR(d.amount)+'/mois':(d.montantPonctuel?fmtEUR(d.montantPonctuel)+' ponctuel':'—')}</span>
+              ${d.commercialName?`<span class="commercial-chip" title="${esc(d.commercialName)}">${ini(d.commercialName)}</span>`:''}
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  };
+
+  const cols = keys.map(k=>{
+    const [y,m] = k.split('-');
+    return monthCol(TR_MONTHS_SHORT[+m-1]+' '+y, groups[k]);
+  }).join('') + (noDate.length ? monthCol('Sans date', noDate) : '');
+
+  return `<div class="kanban-wrap">${cols}</div>`;
+}
+
+// ── Funnel des affaires en cours, par étape (hors "Perdu", qui est une
+// sortie du pipeline plutôt qu'une étape de progression) — respecte le
+// filtre commercial actif de la vue. Largeur de barre proportionnelle au
+// nombre d'affaires de l'étape la plus remplie ; taux de conversion affiché
+// entre deux étapes consécutives (photo instantanée de la répartition
+// actuelle, pas un suivi de cohorte dans le temps — on n'historise pas les
+// transitions d'étape).
+function renderDealFunnel(filtered){
+  const stages = DEAL_STAGES.filter(s=>s!=='Perdu');
+  const counts = stages.map(s=>filtered.filter(d=>d.stage===s).length);
+  const max = Math.max(1, ...counts);
+  const rows = stages.map((s,i)=>{
+    const n = counts[i];
+    const pct = Math.round(n/max*100);
+    const conv = i>0 && counts[i-1]>0 ? Math.round(n/counts[i-1]*100) : null;
+    const tint = 100 - i*16; // dégradé du même accent — le plus dense en tête de funnel, le plus clair en fin
+    return `<div style="display:flex;align-items:center;gap:10px;padding:5px 0">
+      <div style="width:112px;font-size:12px;color:var(--mu);text-align:right;flex-shrink:0">${s}</div>
+      <div style="flex:1;background:var(--div);border-radius:6px;overflow:hidden;height:22px">
+        <div style="width:${Math.max(pct,4)}%;height:100%;background:color-mix(in srgb, var(--a) ${tint}%, var(--card));border-radius:6px"></div>
+      </div>
+      <div style="width:120px;font-size:12px;flex-shrink:0">
+        <b>${n}</b> affaire${n>1?'s':''}${conv!=null?` <span style="color:var(--mu)">· ${conv}%</span>`:''}
+      </div>
+    </div>`;
+  }).join('');
+  return `<div style="border:1px solid var(--bdr);border-radius:10px;padding:14px 16px;margin-bottom:16px">
+    <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">Funnel des affaires en cours</div>
+    ${rows}
+  </div>`;
 }
 
 function openNewDealModal(prospectId){

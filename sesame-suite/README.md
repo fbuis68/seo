@@ -1513,6 +1513,26 @@ se base sur `montantPonctuel`/`moisEncaissement` plutôt que sur
 ("quand ce CA récurrent doit-il se signer ?" vs "quel encaissement
 ponctuel atterrit dans quel mois ?").
 
+### Affaires : vue Kanban pour "Mois par mois" + funnel sur la vue par étape
+
+Deux compléments à la vue Affaires :
+
+- **Kanban "Mois par mois".** Sous-bascule Liste/Kanban quand la vue
+  mensuelle est active (`dealSetMonthlyLayout`) — mêmes groupes que la
+  vue liste (un mois = une colonne, "Sans date" en dernière colonne),
+  mais présentés en colonnes façon Kanban (`renderAffairesMonthlyKanban`),
+  cartes identiques au Kanban par étape avec la pastille d'étape en plus
+  pour ne pas perdre cette information en changeant d'axe.
+- **Funnel sur le Kanban par étape.** Au-dessus des colonnes, un funnel
+  (`renderDealFunnel`) affiche le nombre d'affaires par étape (hors
+  "Perdu", qui est une sortie du pipeline, pas une étape de progression)
+  avec un taux de conversion entre étapes consécutives — barres en
+  dégradé d'une seule teinte (couleur d'accent du thème actif, via
+  `color-mix`), respecte le filtre commercial actif. C'est une photo
+  instantanée de la répartition actuelle par étape, pas un suivi de
+  cohorte dans le temps (aucun historique des transitions d'étape n'est
+  conservé).
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT
