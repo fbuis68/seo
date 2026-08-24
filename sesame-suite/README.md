@@ -1721,6 +1721,21 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   affaires de test aux montants mensuel/ponctuel volontairement divergents
   pour confirmer que les 3 vues affichent bien la même valeur pondérée.
 
+### CRM Home : "Type de module installé" compte les modules, pas les clients
+
+- Ce KPI comptait le nombre de fiches ayant chaque type (`moduleSesame` /
+  `moduleTtlock` / `moduleOneway`), pas la quantité réelle de modules
+  installés. Chaque compteur est désormais la SOMME du champ "Nb modules"
+  (`c.modules`, saisi depuis l'audit) des fiches ayant ce type, cohérent
+  avec la demande explicite ("le KPI type de module installé renvoie un
+  nombre de client plutôt que la somme des valeurs se trouvant dans la
+  fiche client Nb de modules"). Le pourcentage affiché par barre reflète
+  désormais la part de ce type dans le total des modules (et non plus la
+  part des clients). Le clic sur une barre (cf. `kpiByFlag`) ouvre
+  toujours la liste des fiches ayant ce type — inchangé, puisqu'on ne peut
+  pas "cliquer" une quantité. Vérifié : Sesame 902 modules / 47 fiches,
+  Ttlock 128 / 6, Oneway 153 / 10, total 1183.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

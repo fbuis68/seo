@@ -991,17 +991,22 @@ function renderInsights(){
 
   // ── Décompte par type de module installé (Sesame / Ttlock / Oneway) —
   // liste déroulante "Type de module" sur la fiche (un seul type, ou "Mix"
-  // Sesame+Ttlock, cf. saveModal). Total ci-contre = somme des 3 compteurs,
-  // pas le nombre de clients (un client "Mix" compte pour 2 : Sesame ET
-  // Ttlock) — absent jusqu'ici, ajouté le 24/08/2026 pour rester cohérent
-  // avec la carte "Usage des modules Sesame" juste au-dessus. ──
+  // Sesame+Ttlock, cf. saveModal). Chaque compteur est la SOMME du champ
+  // "Nb modules" (c.modules, saisi à la main depuis l'audit) des fiches
+  // ayant ce type — pas le nombre de fiches (un client avec 51 modules
+  // Sesame doit peser 51, pas 1) : la version précédente comptait les
+  // clients (`.filter(c=>c[k]).length`), corrigé le 24/08/2026 à la
+  // demande explicite. Total ci-contre = somme des 3 compteurs (un client
+  // "Mix" compte dans Sesame ET Ttlock). Pourcentage affiché = part de ce
+  // type dans le total des modules (et non plus part des clients, qui
+  // n'aurait plus de sens face à une somme de quantités). ──
   const MODULE_TYPES=[['moduleSesame','Sesame','#1A6B47'],['moduleTtlock','Ttlock','#185fa5'],['moduleOneway','Oneway','#c1861d']];
-  const moduleTypeCounts=MODULE_TYPES.map(([k,lbl,color])=>[lbl,color,clientsOnly.filter(c=>c[k]).length]);
+  const moduleTypeCounts=MODULE_TYPES.map(([k,lbl,color])=>[lbl,color,clientsOnly.filter(c=>c[k]).reduce((s,c)=>s+(c.modules||0),0)]);
   const totalModuleTypes=moduleTypeCounts.reduce((s,[,,n])=>s+n,0);
   const moduleTypeHtml=moduleTypeCounts.map(([lbl,color,n],idx)=>{
-    const pct=total?Math.round(n/total*100):0;
+    const pct=totalModuleTypes?Math.round(n/totalModuleTypes*100):0;
     const k=MODULE_TYPES[idx][0];
-    return '<button type="button" class="bar-row" title="'+lbl+' : '+n+'/'+total+'" onclick="kpiByFlag(\''+jsStr(k)+'\',\''+jsStr(lbl)+'\')">'
+    return '<button type="button" class="bar-row" title="'+lbl+' : '+n+' module(s)" onclick="kpiByFlag(\''+jsStr(k)+'\',\''+jsStr(lbl)+'\')">'
       +'<span class="bar-lbl-wide" style="width:130px">'+esc(lbl)+'</span>'
       +'<div class="bar-track"><div class="bar-fill" style="width:'+pct+'%;background:'+color+'"></div></div>'
       +'<span class="bar-pct" style="width:64px;white-space:nowrap">'+n+' ('+pct+'%)</span>'
