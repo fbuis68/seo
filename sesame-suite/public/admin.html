@@ -384,7 +384,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 <div id="pan-reservations" class="pan">
   <div class="ph">
     <h2>Réservations</h2>
-    <p>Arrivées du jour par défaut, avec les options retenues par le client au check-in éco (ménage, boutique, taxe de séjour…) — cochez "Toutes les réservations" pour voir l'historique complet.</p>
+    <p>Réservations en cours et à venir par défaut, avec les options retenues par le client au check-in éco (ménage, boutique, taxe de séjour…) — cochez "Toutes les réservations" pour voir aussi l'historique (réservations expirées).</p>
   </div>
   <div class="ca">
     <div class="ch"><i class="ti ti-calendar-check"></i>Réservations — <span id="resa-count">0</span>
@@ -9652,14 +9652,18 @@ function renderReservations(){
   var showAll = showAllEl && showAllEl.checked;
   var todayStr = hotelToday();
 
-  var list = (showAll ? RESA_CACHE : RESA_CACHE.filter(function(r){ return (r.booking.startDate||'').slice(0,10) === todayStr; }))
+  // Par défaut : réservations non expirées (en cours ou à venir, quelle que
+  // soit leur date d'arrivée) — pas seulement celles arrivant aujourd'hui,
+  // pour rester cohérent avec le libellé de la case à cocher qui ne promet
+  // d'ajouter que les réservations expirées.
+  var list = (showAll ? RESA_CACHE : RESA_CACHE.filter(function(r){ return (r.booking.endDate||'').slice(0,10) >= todayStr; }))
     .slice()
     .sort(function(a,b){ return (b.booking.startDate||'').localeCompare(a.booking.startDate||''); });
 
   if(countEl) countEl.textContent = list.length;
 
   if(!list.length){
-    listEl.innerHTML = '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>'+(showAll?'Aucune réservation.':'Aucune arrivée prévue aujourd\'hui.')+'</span></div>';
+    listEl.innerHTML = '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>'+(showAll?'Aucune réservation.':'Aucune réservation en cours ou à venir.')+'</span></div>';
     return;
   }
 

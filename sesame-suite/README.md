@@ -1652,6 +1652,30 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   Piste v2 explicite si besoin : un instantané quotidien (cron) pour
   reconstituer un vrai historique, comme dans la maquette.
 
+### Réservations : la vue par défaut n'excluait pas que les expirées + jeu de données de démo Churchill
+
+- Panneau admin "Réservations" : la case "Toutes les réservations (y
+  compris expirées)" décochée ne montrait que les arrivées du jour exact
+  (`startDate === aujourd'hui`), masquant à tort les réservations futures
+  non expirées (ex. un séjour arrivant dans 2 jours). Le libellé de la case
+  ne promet pourtant d'ajouter que les réservations *expirées* — la vue par
+  défaut affiche donc désormais toutes les réservations non expirées (en
+  cours ou à venir, quelle que soit leur date d'arrivée), et la case à
+  cocher n'ajoute plus que l'historique expiré, conformément à son
+  libellé.
+- Base de démo Hôtel Churchill : ajout d'un script ponctuel
+  `scripts/backfill-churchill-kpi-demo.ts` qui crée 27 réservations
+  supplémentaires réparties sur les 12 derniers mois (+ quelques arrivées à
+  venir), avec commandes boutique, taxe de séjour et tâches de ménage éco
+  associées, pour que les "Indicateurs réels" du Dashboard (séjours, CA,
+  taxe collectée, ménages évités, eau économisée, CO₂ évité, temps gagné)
+  affichent des valeurs réelles sur les 4 préréglages de période (7 jours /
+  mois en cours / mois dernier / année) au lieu de zéros. Supprime aussi
+  deux chambres de test (`TESTX01`/`TESTX02`) laissées par erreur dans les
+  données Churchill lors de tests précédents. Les photos de chambres
+  existaient déjà (migration `20260818180000_churchill_room_media_backfill`)
+  et n'ont pas eu besoin d'être régénérées.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT
