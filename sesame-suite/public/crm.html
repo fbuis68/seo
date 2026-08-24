@@ -914,17 +914,23 @@ function openKpiDetail(title, list){
     +'<div style="max-height:60vh;overflow-y:auto">'+body+'</div>'
     +'</div></div>';
 }
-function kpiBySecteur(s){ openKpiDetail('Secteur : '+s, clients.filter(c=>(c.secteur||'Non renseigné')===s)); }
-function kpiByPms(p){ openKpiDetail('PMS : '+p, clients.filter(c=>{ const raw=(c.pms||'').trim(); return (raw && raw.toLowerCase()!=='none'?raw:'Non renseigné')===p; })); }
-function kpiByFlag(k,lbl){ openKpiDetail(lbl, clients.filter(c=>c[k])); }
+function kpiBySecteur(s){ openKpiDetail('Secteur : '+s, clients.filter(c=>c.type==='Client' && (c.secteur||'Non renseigné')===s)); }
+function kpiByPms(p){ openKpiDetail('PMS : '+p, clients.filter(c=>{ if(c.type!=='Client') return false; const raw=(c.pms||'').trim(); return (raw && raw.toLowerCase()!=='none'?raw:'Non renseigné')===p; })); }
+function kpiByFlag(k,lbl){ openKpiDetail(lbl, clients.filter(c=>c.type==='Client' && c[k])); }
 function kpiByAccess(k,lbl){ openKpiDetail(lbl+' — usage réel', clients.filter(c=>c.type==='Client' && (c.nfc||0)+(c.mobile||0)+(c.code||0)+(c.qr||0)>0 && (c[k]||0)>0)); }
 
 function renderInsights(){
   if(!clients.length) return '';
+  // Les KPI de cette vue ne portent que sur les fiches Client — les
+  // Prospects (pas encore clients, cf. TYPES) fausseraient des indicateurs
+  // comme "Répartition par PMS" ou "Usage des modules Sesame" qui décrivent
+  // le parc installé, pas le pipe commercial (déjà couvert par
+  // renderPipelineKpis()).
+  const clientsOnly=clients.filter(c=>c.type==='Client');
 
   // ── Répartition par secteur ──
   const bySecteur={};
-  clients.forEach(c=>{ const s=c.secteur||'Non renseigné'; bySecteur[s]=(bySecteur[s]||0)+1; });
+  clientsOnly.forEach(c=>{ const s=c.secteur||'Non renseigné'; bySecteur[s]=(bySecteur[s]||0)+1; });
   const secteurRows=Object.entries(bySecteur).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const maxSecteur=Math.max(...secteurRows.map(r=>r[1]),1);
   const secteurHtml=secteurRows.map(([s,n])=>
@@ -942,7 +948,7 @@ function renderInsights(){
   // ne devienne une liste) est regroupée avec les fiches sans PMS renseigné
   // plutôt que traitée comme un nom de PMS à part entière. ──
   const byPms={};
-  clients.forEach(c=>{ const raw=(c.pms||'').trim(); const p=(raw && raw.toLowerCase()!=='none')?raw:'Non renseigné'; byPms[p]=(byPms[p]||0)+1; });
+  clientsOnly.forEach(c=>{ const raw=(c.pms||'').trim(); const p=(raw && raw.toLowerCase()!=='none')?raw:'Non renseigné'; byPms[p]=(byPms[p]||0)+1; });
   const pmsRows=Object.entries(byPms).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const maxPms=Math.max(...pmsRows.map(r=>r[1]),1);
   const pmsHtml=pmsRows.map(([p,n])=>
@@ -966,8 +972,8 @@ function renderInsights(){
   // depuis l'audit) — décorrélé des 13 booléens ci-dessous et pas fiable
   // comme décompte réel de modules, corrigé le 24/08/2026. ──
   const MODULE_FEATURES=[['webApp','WebApp'],['mobileV2','Mobile V2'],['offline','Offline'],['livret','Livret digital'],['checkin','Check-in mobile'],['gestionDemande','Gestion demande'],['onbChoixChambres','Choix chambre'],['onbOccupant','Occupant'],['onbIdentite','Identité'],['onbMenage','Ménage'],['espBoutique','Boutique'],['espPoint','Points fidélité'],['espEvenement','Évènements']];
-  const total=clients.length;
-  const moduleCounts=MODULE_FEATURES.map(([k,lbl])=>[k,lbl,clients.filter(c=>c[k]).length]);
+  const total=clientsOnly.length;
+  const moduleCounts=MODULE_FEATURES.map(([k,lbl])=>[k,lbl,clientsOnly.filter(c=>c[k]).length]);
   const totalModulesActifs=moduleCounts.reduce((s,[,,n])=>s+n,0);
   const moduleHtml=moduleCounts.map(([k,lbl,n])=>{
     const pct=total?Math.round(n/total*100):0;
@@ -985,7 +991,7 @@ function renderInsights(){
   // Ttlock) — absent jusqu'ici, ajouté le 24/08/2026 pour rester cohérent
   // avec la carte "Usage des modules Sesame" juste au-dessus. ──
   const MODULE_TYPES=[['moduleSesame','Sesame','#1A6B47'],['moduleTtlock','Ttlock','#185fa5'],['moduleOneway','Oneway','#c1861d']];
-  const moduleTypeCounts=MODULE_TYPES.map(([k,lbl,color])=>[lbl,color,clients.filter(c=>c[k]).length]);
+  const moduleTypeCounts=MODULE_TYPES.map(([k,lbl,color])=>[lbl,color,clientsOnly.filter(c=>c[k]).length]);
   const totalModuleTypes=moduleTypeCounts.reduce((s,[,,n])=>s+n,0);
   const moduleTypeHtml=moduleTypeCounts.map(([lbl,color,n],idx)=>{
     const pct=total?Math.round(n/total*100):0;
@@ -1008,7 +1014,6 @@ function renderInsights(){
   // palette catégorielle validée dataviz (4 teintes qui passent le contrôle
   // all-pairs CVD/normal-vision en clair ET sombre, cf. --dch-* par thème). ──
   const ACCESS_TYPES=[['nfc','NFC','--dch-nfc'],['mobile','Mobile','--dch-mobile'],['code','Code','--dch-code'],['qr','QR Code','--dch-qr']];
-  const clientsOnly=clients.filter(c=>c.type==='Client');
   const nClients=clientsOnly.length;
   const clientsWithUsage=clientsOnly.filter(c=>(c.nfc||0)+(c.mobile||0)+(c.code||0)+(c.qr||0)>0);
   const nWithUsage=clientsWithUsage.length;

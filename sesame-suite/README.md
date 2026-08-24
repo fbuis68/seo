@@ -1694,6 +1694,19 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   commercial (Affaires ouvertes/Valeur du pipe/…) n'ont pas été touchés,
   n'étant pas dans la demande.
 
+### CRM Home : les 5 KPI ne comptent plus que les fiches Client (hors Prospect)
+
+- Les cartes "Répartition par secteur", "Répartition par PMS", "Usage des
+  modules Sesame", "Type de module installé" et "Taux d'usage des accès"
+  agrégeaient jusqu'ici toutes les fiches (`clients`, qui contient en
+  réalité Client ET Prospect, cf. `TYPES`) — un Prospect sans PMS/secteur
+  renseigné gonflait par exemple "Non renseigné". Ces 5 cartes ne portent
+  désormais que sur les fiches de type Client (le pipe commercial, avec ses
+  Prospects, reste couvert séparément par `renderPipelineKpis()`) ; la
+  modale de détail ouverte au clic (cf. ci-dessus) applique le même filtre,
+  donc le total affiché et la liste qui s'ouvre restent toujours
+  cohérents.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT
