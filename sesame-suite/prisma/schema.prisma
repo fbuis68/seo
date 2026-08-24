@@ -736,9 +736,15 @@ model CrmProspect {
   contrat        String  @default("non") // non | oui | en cours
   modules        Int     @default(0)
   // Type de module d'accès installé — indépendants l'un de l'autre (un
-  // client peut avoir les deux en transition de l'un vers l'autre).
+  // client peut avoir plusieurs cases cochées, ex : en transition de l'un
+  // vers l'autre). Backfillés le 24/08/2026 depuis la colonne "Type Module"
+  // de l'audit (AUDIT_CLIENTS_SESAME_2025.xlsx) — jusque-là ces champs
+  // n'avaient jamais été renseignés pour la quasi-totalité des fiches
+  // importées (ajoutés après l'import initial, sans backfill), d'où un
+  // décompte "Type de module installé" très en dessous de la réalité.
   moduleSesame Boolean @default(false)
   moduleTtlock Boolean @default(false)
+  moduleOneway Boolean @default(false) // 3e type d'accès trouvé dans l'audit, absent du modèle jusqu'ici
   nbAcces        Int     @default(0) // nombre de points d'accès (portes/serrures) installés chez le client
   pms            String?
   priorite       Int     @default(0) // 0-3

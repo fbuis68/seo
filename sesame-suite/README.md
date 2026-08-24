@@ -1565,6 +1565,34 @@ modules cochés compte pour 3) — c'est désormais un vrai décompte de
 module**. Le champ `c.modules` reste inchangé ailleurs (fiche client,
 export CSV) : seul ce total agrégé change de source.
 
+### CRM Home : "Type de module installé" — backfill depuis l'audit + 3e type "Oneway"
+
+La carte "Type de module installé" (Sesame / Ttlock) affichait des
+comptes quasi nuls (5 et 1 sur 72 clients) car `moduleSesame`/
+`moduleTtlock` n'avaient jamais été renseignés pour la quasi-totalité
+des fiches importées — ajoutés après l'import initial (migration
+`20260819092719`), sans backfill. Retrouvé et exploité la colonne
+"Type Module" de l'audit source (`AUDIT_CLIENTS_SESAME_2025.xlsx`,
+ligne 26, une colonne par client) :
+
+- **Nouveau champ `moduleOneway`** — l'audit révèle un 3e type de
+  verrouillage ("Oneway") absent du modèle jusqu'ici, présent chez ~14 %
+  des clients ; ajouté au schéma (`CrmProspect.moduleOneway`), à la
+  route (`src/routes/crmProspect.ts`) et à l'UI (case à cocher sur la
+  fiche, tag sur le détail, barre sur la carte "Type de module
+  installé").
+- **Backfill par nom de client** — migration
+  `20260824140000_crm_prospect_module_oneway_backfill` : 63 des 67
+  clients importés depuis l'audit correspondent nommément à une entrée
+  de la colonne "Type Module" (appariement direct + 5 correspondances
+  manuelles pour des variantes d'intitulé — ex. "COPWELL – Fédé.
+  Natation" vs "COPWELL\nFédé. Fr. Natation" dans le fichier source) ;
+  "Mix" dans l'audit devient `moduleSesame` ET `moduleTtlock` tous deux
+  vrais. Résultat : Sesame 47, Ttlock 6, Oneway 10 (au lieu de 5/1/—).
+  4 fiches ont un "Type Module" vide dans l'audit et restent à false/
+  false/false ; les 9 fiches restantes (sur 72) n'existaient pas dans
+  cet audit (ajoutées manuellement depuis).
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT
