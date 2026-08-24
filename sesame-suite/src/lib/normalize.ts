@@ -22,6 +22,11 @@ export function normaliseBooking(b: Booking) {
     otaId: b.otaId || "",
     checkinDone: b.checkinDone,
     selectedRoomCode: b.selectedRoomCode || null,
+    importedFrom: b.importedFrom || "",
+    nfcCount: b.nfcCount,
+    nfcEncodedAt: b.nfcEncodedAt ? iso(b.nfcEncodedAt) : null,
+    createdAt: iso(b.createdAt),
+    updatedAt: iso(b.updatedAt),
   };
 }
 

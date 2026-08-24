@@ -428,6 +428,17 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   </div>
 </div>
 
+<!-- ════════════════ DÉTAIL RÉSERVATION ════════════════ -->
+<div id="resaDetailModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:540px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.3)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--bdr)">
+      <h2 style="font-size:17px">Détail de la réservation</h2>
+      <button onclick="resaCloseDetail()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
+    </div>
+    <div style="padding:18px 20px" id="resa-detail-body"></div>
+  </div>
+</div>
+
 <!-- ════════════════ DASHBOARD ════════════════ -->
 <div id="pan-dash" class="pan on">
   <div class="ph"><h2>Accueil</h2><p>Vue d'ensemble : configuration active, gains pour l'hôtelier et impact pour le client</p></div>
@@ -1526,6 +1537,42 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
       <button class="btn btn-s" onclick="bsTestFacilities()"><i class="ti ti-flask"></i> Tester les chambres</button>
       <button class="btn btn-p btn-s" onclick="bsImportFacilitiesNow()"><i class="ti ti-download"></i> Importer les chambres</button>
+    </div>
+  </div>
+
+  <!-- Encodage NFC -->
+  <div class="ca">
+    <div class="ch"><i class="ti ti-nfc"></i>Encodage NFC</div>
+    <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
+      <span>Optionnel — bouton "Encoder NFC" sur l'écran de détail d'une réservation (panneau Réservations). Même connexion/auth que ci-dessus, sur un endpoint séparé qui prend UNE réservation en paramètre. Laissez le chemin vide tant que vous n'avez pas confirmé que la source externe expose bien un tel endpoint (ex: capture réseau — F12 → onglet Réseau — sur le produit réel pendant un encodage) : le bouton échoue alors avec un message explicite plutôt que d'appeler une URL non configurée.</span>
+    </div>
+    <div class="fi">
+      <label class="lb">Chemin de l'endpoint d'encodage NFC</label>
+      <input type="text" id="bs-nfcEndpointPath" placeholder="Ex : /ws/nfc/encode — laisser vide pour désactiver" autocomplete="off">
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Méthode HTTP</label>
+        <select id="bs-nfcEndpointMethod"><option value="POST">POST</option><option value="GET">GET</option></select>
+      </div>
+      <div class="fi">
+        <label class="lb">Format du corps si POST</label>
+        <select id="bs-nfcEndpointBodyFormat"><option value="json">JSON</option><option value="form">Formulaire (application/x-www-form-urlencoded)</option></select>
+      </div>
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Nom du paramètre portant le code de réservation</label>
+        <input type="text" id="bs-nfcCodeParam" placeholder="code">
+      </div>
+      <div class="fi">
+        <label class="lb">Chemin du décompte de cartes dans la réponse (optionnel)</label>
+        <input type="text" id="bs-nfcResponseCountPath" placeholder="Ex : cardsEncoded — vide = 1 par appel réussi">
+      </div>
+    </div>
+    <div class="fi">
+      <label class="lb">Paramètres additionnels du corps (un par ligne : clé=valeur)</label>
+      <textarea id="bs-nfcEndpointBodyParams" rows="2" placeholder="cardType=guest"></textarea>
     </div>
   </div>
 
@@ -4961,6 +5008,12 @@ function bsCollectFormValues(){
     facilityEndpointBodyParams: bsTextToParams(document.getElementById('bs-facilityEndpointBodyParams').value),
     facilityResponseListPath: document.getElementById('bs-facilityResponseListPath').value.trim(),
     facilityFieldMapping: bsCollectFacilityMapping(),
+    nfcEndpointPath: document.getElementById('bs-nfcEndpointPath').value.trim(),
+    nfcEndpointMethod: document.getElementById('bs-nfcEndpointMethod').value,
+    nfcEndpointBodyFormat: document.getElementById('bs-nfcEndpointBodyFormat').value,
+    nfcCodeParam: document.getElementById('bs-nfcCodeParam').value.trim(),
+    nfcResponseCountPath: document.getElementById('bs-nfcResponseCountPath').value.trim(),
+    nfcEndpointBodyParams: bsTextToParams(document.getElementById('bs-nfcEndpointBodyParams').value),
     syncIntervalMinutes: document.getElementById('bs-syncInterval').value ? parseInt(document.getElementById('bs-syncInterval').value) : null,
   };
 }
@@ -5004,6 +5057,12 @@ async function bsInit(){
   document.getElementById('bs-facilityEndpointBodyParams').value = bsParamsToText(BS_CONFIG.facilityEndpointBodyParams);
   document.getElementById('bs-facilityResponseListPath').value = BS_CONFIG.facilityResponseListPath||'';
   bsRenderFacilityMappingFields(BS_CONFIG.facilityFieldMapping);
+  document.getElementById('bs-nfcEndpointPath').value = BS_CONFIG.nfcEndpointPath||'';
+  document.getElementById('bs-nfcEndpointMethod').value = BS_CONFIG.nfcEndpointMethod||'POST';
+  document.getElementById('bs-nfcEndpointBodyFormat').value = BS_CONFIG.nfcEndpointBodyFormat||'json';
+  document.getElementById('bs-nfcCodeParam').value = BS_CONFIG.nfcCodeParam||'';
+  document.getElementById('bs-nfcResponseCountPath').value = BS_CONFIG.nfcResponseCountPath||'';
+  document.getElementById('bs-nfcEndpointBodyParams').value = bsParamsToText(BS_CONFIG.nfcEndpointBodyParams);
   bsRenderStatusBanner();
   document.getElementById('bs-result-card').style.display='none';
   document.getElementById('bs-preset').value = BS_CONFIG.presetId||'none';
@@ -9485,16 +9544,19 @@ function renderReservations(){
     var boutiqueVal = r.orders.length ? r.orders.length+' commande(s) — '+ordersTotal.toFixed(2)+' '+sym : 'Aucune';
     var taxeVal = r.taxe ? r.taxe.montantNet.toFixed(2)+' '+(r.taxe.devise||'EUR')+' ('+r.taxe.occupantsTotal+' pers.)' : 'Non calculée';
 
-    return '<div class="resa-card">'
+    var nfcBadge = '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:'+(b.nfcCount>0?'rgba(26,107,71,.1);color:#1A6B47':'var(--bdr);color:var(--mu)')+'"><i class="ti ti-nfc" style="font-size:11px"></i> NFC ('+(b.nfcCount||0)+')</span>';
+
+    return '<div class="resa-card" style="cursor:pointer" onclick="resaOpenDetail(\''+esc(b.code)+'\')">'
       + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">'
       + '<div>'
       + '<div style="font-size:15px;font-weight:700">'+esc(b.personFirstname)+' '+esc(b.personLastname)+' <span style="font-weight:400;color:var(--mu);font-size:12px">— Chambre '+esc(room)+'</span></div>'
       + '<div style="font-size:12px;color:var(--mu);margin-top:2px"><i class="ti ti-ticket" style="font-size:11px"></i> '+esc(b.code)+' &nbsp;·&nbsp; <i class="ti ti-mail" style="font-size:11px"></i> '+esc(b.personEmail)+(b.personPhone?' &nbsp;·&nbsp; <i class="ti ti-phone" style="font-size:11px"></i> '+esc(b.personPhone):'')+'</div>'
       + '<div style="font-size:12px;color:var(--mu);margin-top:2px"><i class="ti ti-calendar" style="font-size:11px"></i> '+esc(dates)+'</div>'
       + '</div>'
-      + '<div style="display:flex;align-items:center;gap:8px">'
+      + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">'
       + checkinBadge
-      + '<button class="btn btn-s" style="padding:4px 10px;font-size:12px" onclick="resaOpenEdit(\''+esc(b.code)+'\')"><i class="ti ti-edit"></i> Modifier</button>'
+      + nfcBadge
+      + '<button class="btn btn-s" style="padding:4px 10px;font-size:12px" onclick="event.stopPropagation();resaOpenEdit(\''+esc(b.code)+'\')"><i class="ti ti-edit"></i> Modifier</button>'
       + '</div>'
       + '</div>'
       + '<div class="resa-opts">'
@@ -9504,6 +9566,86 @@ function renderReservations(){
       + '</div>'
       + '</div>';
   }).join('');
+}
+
+// ═══════════════════════════════════════════════ RÉSERVATIONS — DÉTAIL + ENCODAGE NFC
+
+function resaStatusLabel(b){
+  if(b.checkinDone) return 'Check-in fait';
+  if(b.status==='cancelled') return 'Annulée';
+  if(b.status==='completed') return 'Terminée';
+  return 'Réservé';
+}
+
+function resaOpenDetail(code){
+  var r = RESA_CACHE.find(function(x){ return x.booking.code === code; });
+  if(!r) return;
+  var b = r.booking;
+  var room = b.facilityName || b.selectedRoomCode || b.facilityCode || '—';
+  var updated = b.updatedAt ? new Date(b.updatedAt).toLocaleString('fr-FR') : '—';
+  var nfcColor = b.nfcCount>0 ? '#1A6B47' : 'var(--mu)';
+  var nfcBg = b.nfcCount>0 ? 'rgba(26,107,71,.1)' : 'var(--bdr)';
+
+  var rows = [
+    ['Code de réservation', esc(b.code)],
+    ['Statut', esc(resaStatusLabel(b))+' <span style="color:var(--mu);font-weight:400">('+esc(b.status)+')</span>'],
+    ['Au nom de', esc(b.personFirstname)+' '+esc(b.personLastname)],
+    ['Email', esc(b.personEmail)],
+    ['Téléphone', b.personPhone ? esc(b.personPhone) : '—'],
+    ['Accès (chambre)', esc(room)],
+    ['Source', b.importedFrom ? esc(b.importedFrom) : 'Saisie manuelle / check-in éco'],
+    ['Date de début', esc(fmtDMY(b.startDate))],
+    ['Date de fin', esc(fmtDMY(b.endDate))],
+    ['Mise à jour', esc(updated)],
+  ];
+
+  var html = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">'
+    + '<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:rgba(139,26,46,.08);color:var(--a)">'+esc(resaStatusLabel(b))+'</span>'
+    + '<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:'+nfcBg+';color:'+nfcColor+'"><i class="ti ti-nfc"></i> NFC ('+(b.nfcCount||0)+')</span>'
+    + '</div>';
+  html += '<div style="border:1px solid var(--bdr);border-radius:var(--rs);overflow:hidden">'
+    + rows.map(function(row, i){
+        return '<div style="display:flex;justify-content:space-between;gap:12px;padding:9px 12px;font-size:13px'+(i<rows.length-1?';border-bottom:1px solid var(--bdr)':'')+'">'
+          + '<span style="color:var(--mu)">'+row[0]+'</span><span style="font-weight:600;text-align:right">'+row[1]+'</span></div>';
+      }).join('')
+    + '</div>';
+  html += '<div id="resa-detail-nfc-error" class="alt alt-w" style="display:none;margin-top:12px"><i class="ti ti-alert-triangle"></i><span id="resa-detail-nfc-error-msg"></span></div>';
+  html += '<div style="display:flex;gap:8px;margin-top:16px">'
+    + '<button class="btn btn-p" style="flex:1" onclick="resaEncodeNfc(\''+esc(b.code)+'\')" id="resa-detail-nfc-btn"><i class="ti ti-nfc"></i> Encoder NFC</button>'
+    + '<button class="btn btn-s" onclick="event.stopPropagation();resaCloseDetail();resaOpenEdit(\''+esc(b.code)+'\')"><i class="ti ti-edit"></i> Modifier</button>'
+    + '</div>';
+
+  document.getElementById('resa-detail-body').innerHTML = html;
+  document.getElementById('resaDetailModal').style.display = 'flex';
+}
+
+function resaCloseDetail(){
+  document.getElementById('resaDetailModal').style.display = 'none';
+}
+
+async function resaEncodeNfc(code){
+  var btn = document.getElementById('resa-detail-nfc-btn');
+  var errEl = document.getElementById('resa-detail-nfc-error');
+  var errMsg = document.getElementById('resa-detail-nfc-error-msg');
+  errEl.style.display = 'none';
+  var orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spin"></div> Encodage…';
+  try{
+    var r = await adminFetch('/wa/booking/encodeNfc', {method:'POST', body: JSON.stringify({code:code})});
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error || 'Échec de l\'encodage NFC');
+    var idx = RESA_CACHE.findIndex(function(x){ return x.booking.code === code; });
+    if(idx>-1) RESA_CACHE[idx].booking = data;
+    toast('Encodage NFC réussi');
+    resaOpenDetail(code);
+    renderReservations();
+  }catch(e){
+    errMsg.textContent = e.message;
+    errEl.style.display = 'flex';
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
 }
 
 function fmtDMY(iso){

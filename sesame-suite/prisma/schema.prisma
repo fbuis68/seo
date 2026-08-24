@@ -236,7 +236,16 @@ model Booking {
   selectedRoomCode String? // chambre choisie à l'étape 2 (peut différer de facilityCode)
   importedFrom     String? // nom de la source si créée par le connecteur externe (cf. BookingSourceConfig), sinon null
 
-  createdAt DateTime @default(now())
+  // Encodage de cartes/badges NFC pour cette réservation (panneau
+  // "Réservations", écran de détail — cf. BookingSourceConfig.nfcEndpointPath).
+  // Nombre cumulé de cartes encodées avec succès pour cette réservation ;
+  // 0 tant qu'aucun encodage n'a été fait ou que le connecteur ne renvoie pas
+  // de décompte exploitable.
+  nfcCount     Int       @default(0)
+  nfcEncodedAt DateTime? // dernier encodage réussi
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   occupants   Occupant[]
   taxeRecords TaxeSejourRecord[]
@@ -362,6 +371,28 @@ model BookingSourceConfig {
   facilityResponseListPath String?
   // {code, name, floor, category, capacity, surface} -> chemin dot-path.
   facilityFieldMapping     Json?
+
+  // Encodage NFC (panneau "Réservations" → détail d'une réservation, bouton
+  // "Encoder NFC") — même connexion/auth que ci-dessus, sur un endpoint
+  // séparé qui prend UNE réservation en paramètre (pas une liste) et
+  // déclenche l'encodage d'une carte/badge côté source externe (ex : API
+  // Sesame Technology, si elle expose bien un tel endpoint — à confirmer/
+  // capturer depuis le produit réel avant de configurer ces champs). Inerte
+  // tant que nfcEndpointPath est vide : le bouton "Encoder NFC" échoue alors
+  // avec un message explicite plutôt que d'appeler une URL non configurée.
+  nfcEndpointPath       String? // ex: "/ws/nfc/encode" — concaténé à baseUrl
+  nfcEndpointMethod     String? @default("POST") // GET | POST
+  nfcEndpointBodyFormat String? @default("json") // form | json
+  // Paramètres statiques envoyés à chaque appel, en plus du code de
+  // réservation (cf. nfcCodeParam) — ex: {"cardType":"guest"}.
+  nfcEndpointBodyParams Json?
+  // Nom du paramètre (query si GET, corps si POST) qui porte le code de la
+  // réservation à encoder.
+  nfcCodeParam String? @default("code")
+  // Dot-path optionnel dans la réponse pour lire le nombre de cartes
+  // encodées (ex: "cardsEncoded") — si vide, un appel réussi (2xx) compte
+  // simplement pour 1.
+  nfcResponseCountPath String?
 
   // null = synchronisation manuelle uniquement ("Importer maintenant").
   syncIntervalMinutes Int?

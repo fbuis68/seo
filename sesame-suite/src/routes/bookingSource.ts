@@ -57,6 +57,12 @@ function shapeConfig(c: {
   facilityEndpointBodyParams: unknown;
   facilityResponseListPath: string | null;
   facilityFieldMapping: unknown;
+  nfcEndpointPath: string | null;
+  nfcEndpointMethod: string | null;
+  nfcEndpointBodyFormat: string | null;
+  nfcEndpointBodyParams: unknown;
+  nfcCodeParam: string | null;
+  nfcResponseCountPath: string | null;
   syncIntervalMinutes: number | null;
   lastSyncAt: Date | null;
   lastSyncStatus: string | null;
@@ -103,6 +109,12 @@ function shapeConfig(c: {
     facilityEndpointBodyParams: c.facilityEndpointBodyParams || {},
     facilityResponseListPath: c.facilityResponseListPath || "",
     facilityFieldMapping: c.facilityFieldMapping || {},
+    nfcEndpointPath: c.nfcEndpointPath || "",
+    nfcEndpointMethod: c.nfcEndpointMethod || "POST",
+    nfcEndpointBodyFormat: c.nfcEndpointBodyFormat || "json",
+    nfcEndpointBodyParams: c.nfcEndpointBodyParams || {},
+    nfcCodeParam: c.nfcCodeParam || "code",
+    nfcResponseCountPath: c.nfcResponseCountPath || "",
     syncIntervalMinutes: c.syncIntervalMinutes,
     lastSyncAt: c.lastSyncAt,
     lastSyncStatus: c.lastSyncStatus,
@@ -166,6 +178,12 @@ interface ConfigBody {
   facilityEndpointBodyParams?: Record<string, string>;
   facilityResponseListPath?: string;
   facilityFieldMapping?: FacilityMapping;
+  nfcEndpointPath?: string;
+  nfcEndpointMethod?: string;
+  nfcEndpointBodyFormat?: string;
+  nfcEndpointBodyParams?: Record<string, string>;
+  nfcCodeParam?: string;
+  nfcResponseCountPath?: string;
   syncIntervalMinutes?: number | null;
 }
 
@@ -216,6 +234,12 @@ bookingSourceRouter.post(
       facilityEndpointBodyParams: b.facilityEndpointBodyParams as never,
       facilityResponseListPath: b.facilityResponseListPath,
       facilityFieldMapping: b.facilityFieldMapping as never,
+      nfcEndpointPath: b.nfcEndpointPath,
+      nfcEndpointMethod: b.nfcEndpointMethod,
+      nfcEndpointBodyFormat: b.nfcEndpointBodyFormat,
+      nfcEndpointBodyParams: b.nfcEndpointBodyParams as never,
+      nfcCodeParam: b.nfcCodeParam,
+      nfcResponseCountPath: b.nfcResponseCountPath,
       syncIntervalMinutes: b.syncIntervalMinutes ?? null,
     };
     const config = await prisma.bookingSourceConfig.upsert({

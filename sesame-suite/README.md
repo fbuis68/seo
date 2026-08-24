@@ -1468,6 +1468,36 @@ pour ne pas toucher la configuration réelle d'Hôtel Churchill) : les
 nouveaux champs s'affichent, s'enregistrent et persistent après
 rechargement.
 
+### Réservations : écran de détail + encodage NFC (connecteur générique, inerte tant que non configuré)
+
+Sur le panneau "Réservations", cliquer sur une réservation ouvre désormais
+un écran de détail (code, statut, client, "Accès" = chambre assignée,
+source, dates, dernière mise à jour, badge NFC) avec un bouton "Encoder
+NFC". Comme demandé, la fonction d'encodage passe par une API côté
+serveur — mais sur le MÊME principe de connecteur générique déjà utilisé
+pour les réservations/chambres (`BookingSourceConfig`), pas une intégration
+figée sur un prestataire précis : personne, y compris nous, n'a pu
+confirmer l'existence ni la forme exacte d'un endpoint d'encodage NFC sur
+l'API "Sesame Technology" déjà branchée pour les réservations — ça reste à
+vérifier (capture réseau F12 sur le produit réel pendant un encodage).
+
+- Nouveaux champs `BookingSourceConfig.nfcEndpointPath/Method/BodyFormat/
+  BodyParams/CodeParam/ResponseCountPath` (section "Encodage NFC", même
+  connexion/auth que le reste du connecteur — cf. `src/lib/bookingSource.ts`,
+  `encodeNfc()`). Tant que `nfcEndpointPath` est vide, le bouton "Encoder
+  NFC" échoue avec un message explicite plutôt que d'appeler une URL non
+  configurée — une fois l'endpoint réel identifié, il suffit de le
+  renseigner dans l'admin, sans nouveau déploiement.
+- Nouveaux champs `Booking.nfcCount`/`nfcEncodedAt`/`updatedAt` (badge
+  "NFC (n)" sur la liste et le détail). `POST /wa/booking/encodeNfc`
+  (`src/routes/booking.ts`) déclenche l'appel et incrémente le compteur.
+  Migration `20260824130000_booking_nfc_and_source_nfc_endpoint`.
+- Testé (Playwright) : ouverture du détail depuis un clic sur la carte,
+  affichage correct de tous les champs, clic sur "Encoder NFC" avec
+  connecteur non configuré → message d'erreur clair affiché dans l'écran
+  (pas d'appel réseau vers une URL vide), sans toucher au connecteur réel
+  d'Hôtel Churchill.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

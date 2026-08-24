@@ -553,3 +553,74 @@ export async function runImport(entity: Entity, config: BookingSourceConfig) {
     return { ok: false as const, message };
   }
 }
+
+/**
+ * Déclenche l'encodage d'une carte/badge NFC pour UNE réservation auprès de
+ * la source externe (même connexion/auth que la synchronisation des
+ * réservations, cf. buildAuthHeaders), via l'endpoint dédié
+ * config.nfcEndpointPath. Inerte tant que ce champ n'est pas configuré —
+ * échoue explicitement plutôt que de tenter un appel sur une URL vide.
+ */
+export async function encodeNfc(config: BookingSourceConfig, bookingCode: string): Promise<{ count: number }> {
+  if (!config.nfcEndpointPath) {
+    throw new BookingSourceError(
+      'Encodage NFC non configuré pour cet établissement — renseignez "Encodage NFC" dans les réglages techniques avancés de l\'Intégration réservations (chemin d\'endpoint côté source externe).'
+    );
+  }
+  if (!config.baseUrl) throw new BookingSourceError("URL de base non configurée");
+  const url = config.baseUrl.replace(/\/$/, "") + config.nfcEndpointPath;
+  const { headers: authHeaders } = await buildAuthHeaders(config);
+  const codeParam = config.nfcCodeParam || "code";
+  const method = (config.nfcEndpointMethod || "POST").toUpperCase();
+  const staticParams: Record<string, unknown> =
+    config.nfcEndpointBodyParams && typeof config.nfcEndpointBodyParams === "object" ? (config.nfcEndpointBodyParams as Record<string, unknown>) : {};
+
+  let res: Response;
+  try {
+    if (method === "GET") {
+      const qs = new URLSearchParams();
+      Object.entries(staticParams).forEach(([k, v]) => qs.set(k, String(v)));
+      qs.set(codeParam, bookingCode);
+      res = await fetch(`${url}${url.includes("?") ? "&" : "?"}${qs.toString()}`, {
+        headers: { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...authHeaders },
+      });
+    } else if ((config.nfcEndpointBodyFormat || "json") === "json") {
+      res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "User-Agent": "SesameSuite-BookingConnector/1.0",
+          ...authHeaders,
+        },
+        body: JSON.stringify({ ...staticParams, [codeParam]: bookingCode }),
+      });
+    } else {
+      const form = new URLSearchParams();
+      Object.entries(staticParams).forEach(([k, v]) => form.set(k, String(v)));
+      form.set(codeParam, bookingCode);
+      res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/x-www-form-urlencoded",
+          "User-Agent": "SesameSuite-BookingConnector/1.0",
+          ...authHeaders,
+        },
+        body: form.toString(),
+      });
+    }
+  } catch (e) {
+    throw new BookingSourceError(`Connexion à l'encodeur NFC impossible : ${describeFetchError(e)}`);
+  }
+  if (!res.ok) throw new BookingSourceError(`L'encodeur NFC a répondu ${res.status} ${res.statusText}`);
+
+  let count = 1;
+  if (config.nfcResponseCountPath) {
+    const body = await parseJsonResponse(res, "La réponse de l'encodeur NFC");
+    const raw = getPath(body, config.nfcResponseCountPath);
+    const n = Number(raw);
+    if (!isNaN(n)) count = n;
+  }
+  return { count };
+}
