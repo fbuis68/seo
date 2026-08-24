@@ -584,6 +584,14 @@ model RoomHousekeepingStatus {
   bookingCode  String?
   ecoPrefs     Json?
 
+  // Statut de propreté détaillé (panneau "Ménage", vue "Statuts chambres",
+  // 20260824) — distinct de `status` ci-dessus (occupation), sur le même
+  // modèle qu'un connecteur PMS de référence (Thaïs) : une chambre a
+  // toujours EXACTEMENT un de ces 8 statuts, mis à jour manuellement par le
+  // personnel de ménage. "sale" par défaut (une chambre nouvellement créée
+  // est considérée à nettoyer avant sa première occupation).
+  cleanStatus String @default("sale") // propre | recouche_lit | recouche_blanc | sale | en_verif | taie_oreiller | serviette | drap
+
   updatedAt DateTime @updatedAt
 }
 

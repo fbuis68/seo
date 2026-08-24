@@ -1737,8 +1737,13 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       <div class="ptab on" id="pv-week" onclick="setPlanView('week')">Semaine</div>
       <div class="ptab" id="pv-day" onclick="setPlanView('day')">Jour</div>
     </div>
-    <!-- Vue par : chambre / agent / séjour -->
+    <!-- Grille d'interventions / statuts chambres -->
     <div style="display:flex;gap:3px;background:var(--bdr);border-radius:var(--rs);padding:3px">
+      <div class="ptab on" id="pm-grid" onclick="setPlanMode('grid')">Grille</div>
+      <div class="ptab" id="pm-status" onclick="setPlanMode('status')"><i class="ti ti-spray" style="font-size:13px"></i> Statuts chambres</div>
+    </div>
+    <!-- Vue par : chambre / agent / séjour -->
+    <div style="display:flex;gap:3px;background:var(--bdr);border-radius:var(--rs);padding:3px" id="planGroupByTabs">
       <div class="ptab on" id="pgv-room"  onclick="setPlanGroupBy('room')" title="Par chambre"><i class="ti ti-door" style="font-size:13px"></i> Chambre</div>
       <div class="ptab" id="pgv-agent" onclick="setPlanGroupBy('agent')" title="Par agent"><i class="ti ti-user" style="font-size:13px"></i> Agent</div>
       <div class="ptab" id="pgv-stay"  onclick="setPlanGroupBy('stay')"  title="Par séjour"><i class="ti ti-calendar" style="font-size:13px"></i> Séjour</div>
@@ -5965,6 +5970,7 @@ window.addEventListener('DOMContentLoaded',function(){
 // ── State ──
 var PLAN = {
   view: 'week',       // 'week' | 'day'
+  mode: 'grid',        // 'grid' (interventions) | 'status' (statuts chambres)
   offset: 0,          // week or day offset from today
   filter: 'all',
   tasks: [],          // persisted
@@ -6035,6 +6041,135 @@ function setPlanView(v){
   document.getElementById('pv-day').classList.toggle('on',v==='day');
   renderPlanGrid();
 }
+function setPlanMode(m){
+  PLAN.mode=m;
+  if(m==='status') PLAN.view='week'; // la vue statuts raisonne toujours en semaines de 7 jours
+  document.getElementById('pm-grid').classList.toggle('on',m==='grid');
+  document.getElementById('pm-status').classList.toggle('on',m==='status');
+  document.getElementById('planGroupByTabs').style.display=m==='status'?'none':'';
+  document.getElementById('planFilters').style.display=m==='status'?'none':'';
+  renderPlanGrid();
+}
+
+// ═══════════════════════════════════════════════ MÉNAGE — STATUTS CHAMBRES
+// Vue "philosophie Thaïs" (PMS de référence) : chaque chambre a exactement
+// un statut de propreté (8 valeurs, cf. CLEAN_STATUSES côté serveur) et un
+// tableau hebdomadaire affiche, par jour, le nombre de départs (gris) et
+// d'arrivées (vert) — dérivés des réservations réelles. Contrairement à la
+// maquette de référence, qui affiche aussi un historique quotidien des
+// statuts, cette vue ne fabrique pas ces chiffres pour le passé/futur :
+// aucun instantané n'est conservé jour par jour (cleanStatus est un état
+// courant, pas un historique) — la répartition des statuts n'est donc
+// affichée que sur la colonne "aujourd'hui".
+var HK_STATUS_DEFS = [
+  {k:'propre',label:'Propre',color:'#2ECC71'},
+  {k:'recouche_lit',label:'Recouche lit à faire',color:'#E67E22'},
+  {k:'recouche_blanc',label:'Recouche à blanc',color:'#F1C40F'},
+  {k:'sale',label:'Sale',color:'#E74C3C'},
+  {k:'en_verif',label:'En vérif',color:'#3498DB'},
+  {k:'taie_oreiller',label:"Taie d'oreiller",color:'#9B59B6'},
+  {k:'serviette',label:'Serviette',color:'#1ABC9C'},
+  {k:'drap',label:'Drap',color:'#95A5A6'}
+];
+var HK_STATUS_BY_KEY = {}; HK_STATUS_DEFS.forEach(function(s){HK_STATUS_BY_KEY[s.k]=s;});
+var HK_ROOMS_CACHE = [];
+var HK_WEEK_CACHE = null;
+
+async function renderHousekeepingStatusView(){
+  updateRangeLabel();
+  var el = document.getElementById('planGrid');
+  if(!el) return;
+  el.innerHTML = '<div style="padding:30px;text-align:center;color:var(--mu)"><div class="spin" style="margin:0 auto 10px"></div>Chargement…</div>';
+
+  var base=new Date(hotelToday()+'T12:00:00'); base.setDate(base.getDate()+PLAN.offset*7); base.setDate(base.getDate()-base.getDay()+1);
+  var fromIso = isoDate(base);
+
+  try{
+    var results = await Promise.all([
+      adminFetch('/wa/housekeepingStatus/list'),
+      adminFetch('/wa/housekeepingStatus/week?from='+fromIso)
+    ]);
+    HK_ROOMS_CACHE = results[0].ok ? await results[0].json() : [];
+    HK_WEEK_CACHE = results[1].ok ? await results[1].json() : null;
+  }catch(e){
+    el.innerHTML = '<div class="alt alt-w" style="margin:16px"><i class="ti ti-alert-triangle"></i><span>Erreur de chargement des statuts.</span></div>';
+    return;
+  }
+
+  var counts = {}; HK_STATUS_DEFS.forEach(function(s){counts[s.k]=0;});
+  HK_ROOMS_CACHE.forEach(function(r){ if(r.cleanStatus in counts) counts[r.cleanStatus]++; });
+
+  var chips = HK_STATUS_DEFS.map(function(s){
+    return '<div style="background:'+s.color+'18;border:1px solid '+s.color+'55;border-radius:12px;padding:10px 14px;min-width:90px;text-align:center">'
+      + '<div style="font-size:11px;font-weight:600;color:'+s.color+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+s.label+'</div>'
+      + '<div style="font-size:20px;font-weight:700;color:'+s.color+'">'+counts[s.k]+'</div>'
+      + '</div>';
+  }).join('');
+
+  var roomRows = HK_ROOMS_CACHE.map(function(r){
+    var s = HK_STATUS_BY_KEY[r.cleanStatus] || HK_STATUS_BY_KEY.sale;
+    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--div)">'
+      + '<div style="width:70px;font-weight:600;font-size:13px">'+esc(r.roomCode)+'</div>'
+      + '<div style="flex:1;font-size:12px;color:var(--mu);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.roomName||'')+'</div>'
+      + '<select onchange="hkSetCleanStatus(\''+esc(r.roomCode)+'\',this.value)" style="border:1px solid '+s.color+';color:'+s.color+';font-weight:600;font-size:12px;padding:4px 8px;border-radius:20px;background:'+s.color+'12">'
+      + HK_STATUS_DEFS.map(function(o){return '<option value="'+o.k+'" '+(o.k===r.cleanStatus?'selected':'')+'>'+o.label+'</option>';}).join('')
+      + '</select>'
+      + '</div>';
+  }).join('') || '<div style="padding:20px;text-align:center;color:var(--mu)">Aucune chambre.</div>';
+
+  var todayIso = hotelToday();
+  var weekHtml = '';
+  if(HK_WEEK_CACHE){
+    weekHtml = '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:'+(160+HK_WEEK_CACHE.days.length*140)+'px">';
+    weekHtml += '<thead><tr>';
+    weekHtml += '<th style="text-align:left;padding:8px 12px;font-size:11px;color:var(--mu);text-transform:uppercase;border-bottom:2px solid var(--bdr)">Statut</th>';
+    HK_WEEK_CACHE.days.forEach(function(d){
+      var isToday = d.date===todayIso;
+      var dd = new Date(d.date+'T12:00:00');
+      weekHtml += '<th style="padding:8px 10px;border-bottom:2px solid var(--bdr);'+(isToday?'background:var(--al)':'')+'">'
+        + '<div style="font-size:11px;font-weight:600;text-align:center;margin-bottom:4px">'+dd.toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'})+'</div>'
+        + '<div style="display:flex;justify-content:center;gap:8px;font-size:11px">'
+        + '<span style="color:#7f8c8d" title="Départs (check-out)"><i class="ti ti-arrow-right"></i> '+d.checkouts+'</span>'
+        + '<span style="color:#2ECC71;font-weight:600" title="Arrivées (check-in)"><i class="ti ti-arrow-right-bar"></i> '+d.checkins+'</span>'
+        + '</div></th>';
+    });
+    weekHtml += '</tr></thead><tbody>';
+    HK_STATUS_DEFS.forEach(function(s){
+      weekHtml += '<tr><td style="padding:7px 12px;font-size:12px;font-weight:500;border-bottom:1px solid var(--div)">'+s.label+'</td>';
+      HK_WEEK_CACHE.days.forEach(function(d){
+        var isToday = d.date===todayIso;
+        var val = isToday ? HK_WEEK_CACHE.todayCounts[s.k] : null;
+        weekHtml += '<td style="padding:7px 10px;text-align:center;font-size:12px;border-bottom:1px solid var(--div);'+(isToday?'background:var(--al)':'')+'">'
+          + (val==null ? '<span style="color:var(--hi)">—</span>' : (val>0?'<b>'+val+'</b>':'<span style="color:var(--hi)">0</span>'))
+          + '</td>';
+      });
+      weekHtml += '</tr>';
+    });
+    weekHtml += '</tbody></table></div>';
+  }
+
+  el.innerHTML = '<div style="padding:16px">'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">'+chips+'</div>'
+    + '<div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;margin-bottom:8px">Vue hebdomadaire — départs (gris) / arrivées (vert)</div>'
+    + weekHtml
+    + '<div class="alt alt-b" style="margin:10px 0 20px"><i class="ti ti-info-circle"></i><span>Les statuts de propreté ne sont affichés que pour aujourd\'hui : aucun historique quotidien n\'est conservé pour l\'instant (v1). Les départs/arrivées, eux, sont réels sur toute la semaine.</span></div>'
+    + '<div style="border:1px solid var(--bdr);border-radius:var(--rs);overflow:hidden;max-width:600px">'
+    + '<div style="padding:10px 12px;background:var(--bg);font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;border-bottom:1px solid var(--bdr)">Chambres ('+HK_ROOMS_CACHE.length+')</div>'
+    + '<div style="max-height:520px;overflow-y:auto">'+roomRows+'</div>'
+    + '</div>'
+    + '</div>';
+}
+
+async function hkSetCleanStatus(roomCode, cleanStatus){
+  try{
+    var r = await adminFetch('/wa/housekeepingStatus/update', {method:'POST', body:JSON.stringify({roomCode:roomCode, cleanStatus:cleanStatus})});
+    if(!r.ok) throw new Error('http '+r.status);
+    toast('Statut mis à jour');
+    renderHousekeepingStatusView();
+  }catch(e){
+    toast('Erreur de mise à jour du statut');
+  }
+}
 function planNav(d){
   if(d===0)PLAN.offset=0; else PLAN.offset+=d;
   renderPlanGrid();
@@ -6089,6 +6224,7 @@ function getPlanRooms(){
 
 // ── Main grid renderer ── (PLAN.tasks/PLAN.bookings déjà chargés à l'ouverture du panneau)
 function renderPlanGrid(){
+  if(PLAN.mode==='status'){ renderHousekeepingStatusView(); return; }
   updateRangeLabel();
   var days=getDays();
   var today=hotelToday();

@@ -1624,6 +1624,34 @@ l'absence du même récapitulatif "X au total" que sur la carte
 au-dessus. Ajouté pour cohérence : somme des 3 compteurs (Sesame +
 Ttlock + Oneway), un client "Mix" comptant pour 2.
 
+### Planning ménage : vue "Statuts chambres" (statuts de propreté + départs/arrivées)
+
+Nouvelle sous-vue du panneau "Planning d'interventions" (bascule
+"Grille"/"Statuts chambres" à côté de Semaine/Jour), sur le modèle d'un
+connecteur PMS de référence (Thaïs) fourni en exemple :
+
+- **8 statuts de propreté**, un par chambre à la fois — Propre, Recouche
+  lit à faire, Recouche à blanc, Sale, En vérif, Taie d'oreiller,
+  Serviette, Drap — distincts du statut d'occupation existant
+  (`RoomHousekeepingStatus.status` : libre/occupée/...), sur un nouveau
+  champ `cleanStatus` (migration
+  `20260824150000_room_housekeeping_clean_status`, défaut "sale").
+  Chaque chambre affiche une pastille cliquable (liste déroulante) pour
+  changer son statut ; les compteurs en tête de vue se mettent à jour en
+  direct. `GET/POST /wa/housekeepingStatus/*`
+  (`src/routes/housekeepingStatus.ts`).
+- **Vue hebdomadaire** : pour chaque jour de la semaine, le nombre de
+  départs (icône grise) et d'arrivées (icône verte) — dérivés des vraies
+  réservations (`Booking.startDate`/`endDate`), comme demandé
+  ("gris = check-out, vert = check-in"). Contrairement à la maquette de
+  référence, qui affiche aussi un historique quotidien des statuts de
+  propreté, cette v1 ne fabrique pas ces chiffres pour le passé/futur —
+  `cleanStatus` est un état courant, pas un historique conservé jour par
+  jour — donc seule la colonne "aujourd'hui" affiche la répartition
+  réelle des statuts ; un bandeau d'info l'explique dans l'interface.
+  Piste v2 explicite si besoin : un instantané quotidien (cron) pour
+  reconstituer un vrai historique, comme dans la maquette.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

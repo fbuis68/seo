@@ -11,6 +11,7 @@ import { loyaltyRouter } from "./routes/loyalty";
 import { livretRouter } from "./routes/livret";
 import { housekeepingTaskRouter } from "./routes/housekeepingTask";
 import { housekeepingStaffRouter } from "./routes/housekeepingStaff";
+import { housekeepingStatusRouter } from "./routes/housekeepingStatus";
 import { crmRouter } from "./routes/crm";
 import { campaignRouter } from "./routes/campaign";
 import { authRouter } from "./routes/auth";
@@ -58,6 +59,7 @@ export function createApp() {
   app.use("/wa", livretRouter);
   app.use("/wa", housekeepingTaskRouter);
   app.use("/wa", housekeepingStaffRouter);
+  app.use("/wa", housekeepingStatusRouter);
   app.use("/wa", crmRouter);
   app.use("/wa", campaignRouter);
   app.use("/wa", loginRouter);
