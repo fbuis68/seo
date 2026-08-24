@@ -19,7 +19,7 @@
   --tx:#1a1a1a;--mu:#999;--hi:#bbb;
   --a:#8a2b2b;--ah:#711f1f;--al:rgba(138,43,43,.08);
   --scb:#c7c4bd;--scbh:#a8a49c;
-  --dch-nfc:#2a78d6;--dch-code:#eda100;--dch-mobile:#e87ba4;--dch-qr:#008300;
+  --dch-nfc:#2a78d6;--dch-code:#eda100;--dch-mobile:#e87ba4;--dch-qr:#008300;--dch-violet:#4a3aa7;
   --tr-mrr:#12805a;--tr-signe:#2f5fbf;--tr-pipeline:#c1861d;--tr-depense:#b83f2c;
 }
 html[data-theme="emeraude"]{
@@ -27,7 +27,7 @@ html[data-theme="emeraude"]{
   --tx:#12201a;--mu:#7c8a7e;--hi:#a9b6ab;
   --a:#1A6B47;--ah:#125236;--al:rgba(26,107,71,.08);
   --scb:#c0d0c2;--scbh:#9cb39f;
-  --dch-nfc:#2a78d6;--dch-code:#eda100;--dch-mobile:#e87ba4;--dch-qr:#008300;
+  --dch-nfc:#2a78d6;--dch-code:#eda100;--dch-mobile:#e87ba4;--dch-qr:#008300;--dch-violet:#4a3aa7;
   --tr-mrr:#12805a;--tr-signe:#2f5fbf;--tr-pipeline:#c1861d;--tr-depense:#b83f2c;
 }
 html[data-theme="ocean"]{
@@ -35,7 +35,7 @@ html[data-theme="ocean"]{
   --tx:#101c2b;--mu:#7688a0;--hi:#a9b8c8;
   --a:#1A4880;--ah:#123561;--al:rgba(26,72,128,.08);
   --scb:#bfd0dd;--scbh:#9cb4c6;
-  --dch-nfc:#2a78d6;--dch-code:#eda100;--dch-mobile:#e87ba4;--dch-qr:#008300;
+  --dch-nfc:#2a78d6;--dch-code:#eda100;--dch-mobile:#e87ba4;--dch-qr:#008300;--dch-violet:#4a3aa7;
   --tr-mrr:#12805a;--tr-signe:#2f5fbf;--tr-pipeline:#c1861d;--tr-depense:#b83f2c;
 }
 html[data-theme="ardoise"]{
@@ -43,7 +43,7 @@ html[data-theme="ardoise"]{
   --tx:#17181c;--mu:#83848c;--hi:#b3b4bb;
   --a:#4F46E5;--ah:#3c34b8;--al:rgba(79,70,229,.08);
   --scb:#cfd0d6;--scbh:#aeb0b8;
-  --dch-nfc:#2a78d6;--dch-code:#eda100;--dch-mobile:#e87ba4;--dch-qr:#008300;
+  --dch-nfc:#2a78d6;--dch-code:#eda100;--dch-mobile:#e87ba4;--dch-qr:#008300;--dch-violet:#4a3aa7;
   --tr-mrr:#12805a;--tr-signe:#2f5fbf;--tr-pipeline:#c1861d;--tr-depense:#b83f2c;
 }
 html[data-theme="nuit"]{
@@ -51,7 +51,7 @@ html[data-theme="nuit"]{
   --tx:#EDEDEF;--mu:#9A9CA8;--hi:#6B6D78;
   --a:#E0536E;--ah:#c73f59;--al:rgba(224,83,110,.14);
   --scb:#41434d;--scbh:#54565f;
-  --dch-nfc:#3987e5;--dch-code:#c98500;--dch-mobile:#d55181;--dch-qr:#008300;
+  --dch-nfc:#3987e5;--dch-code:#c98500;--dch-mobile:#d55181;--dch-qr:#008300;--dch-violet:#9085e9;
   --tr-mrr:#1f9e78;--tr-signe:#5f8ee0;--tr-pipeline:#b8791f;--tr-depense:#e8546f;
 }
 *{box-sizing:border-box;margin:0;padding:0}
@@ -2502,35 +2502,57 @@ function renderAffairesMonthlyKanban(filtered){
 
 // ── Funnel des affaires en cours, par étape (hors "Perdu", qui est une
 // sortie du pipeline plutôt qu'une étape de progression) — respecte le
-// filtre commercial actif de la vue. Largeur de barre proportionnelle au
-// nombre d'affaires de l'étape la plus remplie ; taux de conversion affiché
-// entre deux étapes consécutives (photo instantanée de la répartition
-// actuelle, pas un suivi de cohorte dans le temps — on n'historise pas les
-// transitions d'étape).
+// filtre commercial actif de la vue. Bandes en dégradé de couleurs
+// catégorielles distinctes (une par étape, mêmes teintes que les vars
+// --dch-* déjà utilisées ailleurs pour les points d'accès — validées
+// anti-daltonisme via le script dataviz/validate_palette.js), largeur
+// décroissante par construction (un funnel ne s'élargit jamais) même si les
+// effectifs réels ne le sont pas strictement. Taux de conversion affiché
+// entre deux étapes consécutives — photo instantanée de la répartition
+// actuelle, pas un suivi de cohorte dans le temps (aucun historique des
+// transitions d'étape n'est conservé).
+const DEAL_FUNNEL_COLORS = ['var(--dch-nfc)','var(--dch-code)','var(--dch-violet)','var(--dch-mobile)','var(--dch-qr)'];
+
 function renderDealFunnel(filtered){
   const stages = DEAL_STAGES.filter(s=>s!=='Perdu');
   const counts = stages.map(s=>filtered.filter(d=>d.stage===s).length);
   const max = Math.max(1, ...counts);
+
+  const widths = counts.map(n=>Math.max(22, Math.round(n/max*100)));
+  for(let i=1;i<widths.length;i++) widths[i] = Math.min(widths[i], widths[i-1]);
+
+  const bandH = 50, gap = 3, halfMax = 168, cx = 190;
+  const svgH = widths.length*bandH + (widths.length-1)*gap;
+  const bands = widths.map((w,i)=>{
+    const topW = i===0 ? 2*halfMax : (widths[i-1]/100*2*halfMax);
+    const botW = w/100*2*halfMax;
+    const y0 = i*(bandH+gap), y1 = y0+bandH;
+    const tl = cx-topW/2, tr = cx+topW/2, bl = cx-botW/2, br = cx+botW/2;
+    return `<polygon points="${tl},${y0} ${tr},${y0} ${br},${y1} ${bl},${y1}" fill="${DEAL_FUNNEL_COLORS[i]}"/>`
+      + `<text x="${cx}" y="${(y0+y1)/2+5}" text-anchor="middle" font-size="15" font-weight="700" fill="#fff">${i+1}</text>`;
+  }).join('');
+
   const rows = stages.map((s,i)=>{
     const n = counts[i];
-    const pct = Math.round(n/max*100);
     const conv = i>0 && counts[i-1]>0 ? Math.round(n/counts[i-1]*100) : null;
-    const tint = 100 - i*16; // dégradé du même accent — le plus dense en tête de funnel, le plus clair en fin
-    return `<div style="display:flex;align-items:center;gap:10px;padding:5px 0">
-      <div style="width:112px;font-size:12px;color:var(--mu);text-align:right;flex-shrink:0">${s}</div>
-      <div style="flex:1;background:var(--div);border-radius:6px;overflow:hidden;height:22px">
-        <div style="width:${Math.max(pct,4)}%;height:100%;background:color-mix(in srgb, var(--a) ${tint}%, var(--card));border-radius:6px"></div>
-      </div>
-      <div style="width:120px;font-size:12px;flex-shrink:0">
-        <b>${n}</b> affaire${n>1?'s':''}${conv!=null?` <span style="color:var(--mu)">· ${conv}%</span>`:''}
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;${i<stages.length-1?'border-bottom:1px solid var(--div)':''}">
+      <span style="width:22px;height:22px;border-radius:50%;background:${DEAL_FUNNEL_COLORS[i]};color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${i+1}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600">${s}</div>
+        <div style="font-size:11px;color:var(--mu)">${n} affaire${n>1?'s':''}${conv!=null?` · ${conv}% depuis l'étape précédente`:''}</div>
       </div>
     </div>`;
   }).join('');
-  return `<div style="border:1px solid var(--bdr);border-radius:10px;padding:14px 16px;margin-bottom:16px">
-    <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">Funnel des affaires en cours</div>
-    ${rows}
+
+  return `<div style="border:1px solid var(--bdr);border-radius:10px;padding:16px;margin-bottom:16px;display:flex;gap:24px;flex-wrap:wrap;align-items:center">
+    <div style="flex:1;min-width:220px">
+      <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Funnel des affaires en cours</div>
+      ${rows}
+    </div>
+    <svg width="380" height="${svgH}" viewBox="0 0 380 ${svgH}" style="flex-shrink:0">${bands}</svg>
   </div>`;
 }
+
 
 function openNewDealModal(prospectId){
   DEAL_DRAFT = {id:null, prospectId: prospectId||(clients[0]?clients[0].id:''), commercialId:'', title:'', stage:'Nouveau', amount:0, probability:20, closeDate:'', lostReason:'', montantPonctuel:null, moisEncaissement:null, quotes:[], _new:true};

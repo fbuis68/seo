@@ -1526,12 +1526,31 @@ Deux compléments à la vue Affaires :
 - **Funnel sur le Kanban par étape.** Au-dessus des colonnes, un funnel
   (`renderDealFunnel`) affiche le nombre d'affaires par étape (hors
   "Perdu", qui est une sortie du pipeline, pas une étape de progression)
-  avec un taux de conversion entre étapes consécutives — barres en
-  dégradé d'une seule teinte (couleur d'accent du thème actif, via
-  `color-mix`), respecte le filtre commercial actif. C'est une photo
-  instantanée de la répartition actuelle par étape, pas un suivi de
-  cohorte dans le temps (aucun historique des transitions d'étape n'est
-  conservé).
+  avec un taux de conversion entre étapes consécutives, respecte le
+  filtre commercial actif. C'est une photo instantanée de la répartition
+  actuelle par étape, pas un suivi de cohorte dans le temps (aucun
+  historique des transitions d'étape n'est conservé).
+
+### Funnel des affaires — bandes en trapèze façon maquette (20/08/2026)
+
+Remplace le funnel en simples barres horizontales ci-dessus par des
+bandes en trapèze empilées (SVG), sur le modèle d'une maquette fournie
+(funnel numéroté, une couleur par étape). Détails :
+
+- 5 couleurs catégorielles fixes, une par étape (Nouveau → Qualification
+  → Devis envoyé → Négociation → Gagné), réutilisant/complétant les
+  variables `--dch-*` déjà présentes par thème (`--dch-nfc`, `--dch-code`,
+  `--dch-mobile`, `--dch-qr` + nouvelle `--dch-violet` ajoutée aux 5
+  thèmes). Palette validée anti-daltonisme via le script du skill
+  `dataviz` (`validate_palette.js`, tous les contrôles passent en clair
+  et en sombre).
+- Largeur de bande décroissante par construction (plancher à 22 % pour
+  rester lisible, jamais plus large que la bande précédente) — un
+  funnel ne s'élargit jamais, même si les effectifs réels ne décroissent
+  pas strictement d'une étape à l'autre.
+- Étiquettes (nom d'étape, effectif, taux de conversion) toujours en
+  texte à côté du funnel, jamais uniquement encodées par la couleur —
+  chaque bande ne porte qu'un numéro, pas de texte sur fond coloré.
 
 ## Stack
 
