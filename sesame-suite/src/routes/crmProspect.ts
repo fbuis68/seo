@@ -305,8 +305,13 @@ crmProspectRouter.post(
     if (!id) throw new HttpError(400, "id requis");
     const b = rest;
     if (b.nom !== undefined && !b.nom.trim()) throw new HttpError(400, "Le nom ne peut pas être vide");
-    if (b.adresse !== undefined && !b.adresse.trim()) throw new HttpError(400, "L'adresse ne peut pas être vide");
-    if (b.ville !== undefined && !b.ville.trim()) throw new HttpError(400, "La ville ne peut pas être vide");
+    // Adresse/ville sont requises à la création (cf. /crmProspect/create) mais
+    // pas ici : le formulaire d'édition envoie toujours ces deux champs,
+    // même quand l'utilisateur modifie un tout autre champ (ex : type de
+    // module) — les bloquer aurait empêché toute modification des 42/72
+    // fiches importées depuis l'audit sans adresse complète (confirmé le
+    // 24/08/2026 : c'était la cause d'un blocage silencieux "le calcul ne se
+    // fait pas" en pratique).
     const existing = await prisma.crmProspect.findUnique({ where: { id } });
     if (!existing) throw new HttpError(404, "Prospect introuvable");
     const row = await prisma.crmProspect.update({

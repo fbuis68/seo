@@ -1593,6 +1593,28 @@ ligne 26, une colonne par client) :
   false/false ; les 9 fiches restantes (sur 72) n'existaient pas dans
   cet audit (ajoutées manuellement depuis).
 
+### Fiche client : liste déroulante pour "Type de module" + correction d'un blocage silencieux à l'édition
+
+Deux changements sur la fiche client (`public/crm.html`) :
+
+- **Liste déroulante au lieu de 3 cases à cocher.** "Type de module"
+  passe de 3 checkboxes indépendantes à un `<select>` (—, Sesame, Ttlock,
+  Oneway, Mix) — plus lisible pour un champ presque toujours exclusif
+  (2 cas "Mix" sur ~97 clients audités), tout en gardant la possibilité
+  de représenter les deux à la fois.
+- **Bug trouvé en testant le changement ci-dessus : "Enregistrer" ne
+  faisait rien sur la plupart des fiches.** Le formulaire d'édition
+  exige "Adresse" et "Ville" (côté client ET serveur), mais les envoie
+  systématiquement même quand on modifie un champ sans rapport — sur les
+  42/72 fiches sans adresse et 25/72 sans ville (jamais renseignées à
+  l'import de l'audit), toute modification échouait silencieusement
+  (`flash` générique "Erreur d'enregistrement", sans dire pourquoi).
+  Adresse/ville restent obligatoires à la **création** d'une fiche
+  (`/wa/crmProspect/create`) mais plus à l'**édition** d'une fiche
+  existante (`/wa/crmProspect/update` et `saveModal` côté client) —
+  testé en conditions réelles sur la fiche "1K" (sans adresse), qui ne
+  pouvait auparavant recevoir aucune modification.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

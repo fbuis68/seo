@@ -1624,7 +1624,15 @@ function renderModal(mc){
         <div class="ff"><label>Risque churn</label><select id="m-danger">${DANGERS.map(d=>`<option value="${d}" ${mc.danger===d?'selected':''}>${d}</option>`).join('')}</select></div>
         <div class="ff"><label>Potentiel</label><select id="m-pot"><option value="0">—</option><option value="1" ${mc.potentiel===1?'selected':''}>1</option><option value="2" ${mc.potentiel===2?'selected':''}>2</option><option value="3" ${mc.potentiel===3?'selected':''}>3</option></select></div>
         <div class="ff"><label>Nb modules</label><input type="number" id="m-mod" value="${mc.modules||0}" min="0"></div>
-        <div class="ff"><label>Type de module</label><div style="display:flex;gap:14px;height:31px;align-items:center"><label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer"><input type="checkbox" id="m-mod-sesame" ${mc.moduleSesame?'checked':''}> Sesame</label><label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer"><input type="checkbox" id="m-mod-ttlock" ${mc.moduleTtlock?'checked':''}> Ttlock</label><label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer"><input type="checkbox" id="m-mod-oneway" ${mc.moduleOneway?'checked':''}> Oneway</label></div></div>
+        <div class="ff"><label>Type de module</label>
+          <select id="m-mod-type">
+            <option value="" ${!mc.moduleSesame&&!mc.moduleTtlock&&!mc.moduleOneway?'selected':''}>—</option>
+            <option value="sesame" ${mc.moduleSesame&&!mc.moduleTtlock?'selected':''}>Sesame</option>
+            <option value="ttlock" ${mc.moduleTtlock&&!mc.moduleSesame?'selected':''}>Ttlock</option>
+            <option value="oneway" ${mc.moduleOneway?'selected':''}>Oneway</option>
+            <option value="mix" ${mc.moduleSesame&&mc.moduleTtlock?'selected':''}>Mix (Sesame + Ttlock)</option>
+          </select>
+        </div>
         <div class="ff"><label>Nombre d'accès</label><input type="number" id="m-nbacces" value="${mc.nbAcces||0}" min="0"></div>
         <div class="ff"><label>MRR (€/mois)</label><input type="number" id="m-mrr" value="${mc.mrr||''}" min="0" step="0.01"></div>
         <div class="ff"><label>Contrat</label><select id="m-contrat"><option value="non" ${mc.contrat==='non'?'selected':''}>non</option><option value="oui" ${mc.contrat==='oui'?'selected':''}>oui</option><option value="en cours" ${mc.contrat==='en cours'?'selected':''}>en cours</option></select></div>
@@ -1671,15 +1679,21 @@ function renderModal(mc){
 
 async function saveModal(id,isNew){
   const g=i=>(document.getElementById(i)||{value:''});
-  if(!g('m-adresse').value.trim()){ flash('Adresse requise'); return; }
-  if(!g('m-ville').value.trim()){ flash('Ville requise'); return; }
+  // Adresse/ville requises seulement à la création — sur une fiche déjà
+  // existante, les bloquer empêcherait de modifier un tout autre champ (ex :
+  // type de module) tant qu'une adresse absente depuis l'import n'est pas
+  // renseignée, un blocage silencieux repéré le 24/08/2026.
+  if(isNew){
+    if(!g('m-adresse').value.trim()){ flash('Adresse requise'); return; }
+    if(!g('m-ville').value.trim()){ flash('Ville requise'); return; }
+  }
   const ch={
     nom:g('m-nom').value.trim(),type:g('m-type').value,groupe:g('m-groupe').value,secteur:g('m-secteur').value,
     denominationSociale:g('m-denomination').value.trim(),siret:g('m-siret').value.trim(),siren:g('m-siren').value.trim(),
     adresse:g('m-adresse').value.trim(),ville:g('m-ville').value.trim(),etoiles:g('m-etoiles').value,referent:g('m-referent').value,
     email:g('m-email').value,tel:g('m-tel').value,site:g('m-site').value,
     pms:(g('m-pms').value==='__other__'?g('m-pms-other').value.trim():g('m-pms').value),messagerie:g('m-msg').value,danger:g('m-danger').value,commercialId:g('m-commercial').value||null,
-    potentiel:+g('m-pot').value,modules:+g('m-mod').value,moduleSesame:g('m-mod-sesame').checked,moduleTtlock:g('m-mod-ttlock').checked,moduleOneway:g('m-mod-oneway').checked,nbAcces:+g('m-nbacces').value,mrr:g('m-mrr').value.trim()?+g('m-mrr').value:null,contrat:g('m-contrat').value,
+    potentiel:+g('m-pot').value,modules:+g('m-mod').value,moduleSesame:['sesame','mix'].includes(g('m-mod-type').value),moduleTtlock:['ttlock','mix'].includes(g('m-mod-type').value),moduleOneway:g('m-mod-type').value==='oneway',nbAcces:+g('m-nbacces').value,mrr:g('m-mrr').value.trim()?+g('m-mrr').value:null,contrat:g('m-contrat').value,
     priorite:+g('m-prio').value,appel:g('m-appel').value,
     nfc:+g('m-nfc').value,qr:+g('m-qr').value,mobile:+g('m-mob').value,code:+g('m-code').value,
     webApp:g('m-webapp').checked,mobileV2:g('m-v2').checked,offline:g('m-offline').checked,
