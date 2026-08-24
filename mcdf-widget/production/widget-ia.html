@@ -245,7 +245,7 @@
       <section>
         <div class="two-col">
           <div>
-            <div class="section-head"><h2>Nouveaux clients par mois</h2><span class="hint">clients créés dans le mois</span></div>
+            <div class="section-head"><h2>Nouveaux clients par mois</h2><span class="hint" id="nouveaux-hint">clients créés dans le mois</span></div>
             <div class="panel">
               <div class="table-scroll">
                 <table class="tight-table">
@@ -257,7 +257,7 @@
             </div>
           </div>
           <div>
-            <div class="section-head"><h2>CA facturé</h2><span class="hint">12 mois</span></div>
+            <div class="section-head"><h2>CA facturé</h2><span class="hint" id="ca-mensuel-hint">12 mois</span></div>
             <div class="panel chart-pad">
               <div class="mini-chart" id="chart-ca"></div>
               <div class="mini-labels" id="labels-ca"></div>
@@ -269,11 +269,11 @@
       <section>
         <div class="two-col">
           <div>
-            <div class="section-head"><h2>Top 5 conseillers</h2><span class="hint">par CA facturé</span></div>
+            <div class="section-head"><h2>Top 5 conseillers</h2><span class="hint" id="top-conseillers-hint">par CA facturé</span></div>
             <div class="panel"><div class="rank-list" id="rank-conseillers"></div></div>
           </div>
           <div>
-            <div class="section-head"><h2>Top 5 clients</h2><span class="hint">par CA facturé</span></div>
+            <div class="section-head"><h2>Top 5 clients</h2><span class="hint" id="top-clients-hint">par CA facturé</span></div>
             <div class="panel"><div class="rank-list" id="rank-clients"></div></div>
           </div>
         </div>
@@ -284,8 +284,8 @@
         <div class="panel">
           <div class="table-scroll">
             <table class="tight-table">
-              <colgroup><col style="width:34%"><col style="width:22%"><col style="width:22%"><col style="width:22%"></colgroup>
-              <thead><tr><th>Client</th><th class="num">Année préc.</th><th class="num">Année en cours</th><th class="num">Écart</th></tr></thead>
+              <colgroup><col style="width:30%"><col style="width:70%"></colgroup>
+              <thead><tr><th>Client</th><th>CA facturé</th></tr></thead>
               <tbody id="tbl-ca-client"></tbody>
             </table>
           </div>
@@ -519,11 +519,6 @@ async function buildData(entityId) {
 
   const convById = new Map(conventions.map((c) => [c.id, c]));
 
-  const months12 = lastNMonths(12);
-  const ncMap = {};
-  customers.forEach((c) => { const m = monthKey(c.created); if (m) ncMap[m] = (ncMap[m] || 0) + 1; });
-  const nouveaux_clients_par_mois = months12.map((m) => ({ mois: m, nouveaux_clients: ncMap[m] || 0 }));
-
   const latestByAttendee = new Map();
   attendees.filter((a) => a.attendee).forEach((a) => {
     const prev = latestByAttendee.get(a.attendeeId);
@@ -538,10 +533,6 @@ async function buildData(entityId) {
       inscrit_le: a.created,
     }));
 
-  const caMap = {};
-  invoices.forEach((i) => { const m = monthKey(i.billingDate); if (m) caMap[m] = (caMap[m] || 0) + (i.amount || 0); });
-  const ca_mensuel = months12.map((m) => ({ mois: m, ca: Math.round((caMap[m] || 0) * 100) / 100 }));
-
   const devis_a_relancer = conventions
     .filter((c) => c.isProposal && !c.signingDate)
     .map((c) => ({ ...c, age: daysAgo(c.provisionalDate || c.created) }))
@@ -549,6 +540,7 @@ async function buildData(entityId) {
     .sort((a, b) => b.age - a.age)
     .map((c) => ({ id: c.id, name: c.name, proposal_code: c.proposalCode, proposal_status: c.proposalStatus, age_jours: c.age }));
 
+  const months12 = lastNMonths(12);
   const months6 = lastNMonths(6);
   const sesMap = {};
   sessions.filter((s) => s.numberMaxi).forEach((s) => {
@@ -580,43 +572,6 @@ async function buildData(entityId) {
     parFormateur[key].ca_estime += (s.dailyRate || 0) * (s.days || 0);
   });
   const top_formateurs = Object.values(parFormateur).sort((a, b) => b.ca_estime - a.ca_estime).slice(0, 5);
-
-  // Top conseillers / clients (par CA facturé, via convention.accountManagerName /
-  // customerName déjà résolus sur fullConventionQualiopi)
-  const caByField = (field) => {
-    const map = {};
-    invoices.forEach((i) => {
-      const conv = convById.get(i.conventionId);
-      const key = conv ? conv[field] : null;
-      if (!key) return;
-      map[key] = (map[key] || 0) + (i.amount || 0);
-    });
-    return Object.entries(map)
-      .map(([nom, ca]) => ({ nom, ca }))
-      .sort((a, b) => b.ca - a.ca)
-      .slice(0, 5);
-  };
-  const top_conseillers = caByField('accountManagerName');
-  const top_clients = caByField('customerName');
-
-  // CA par client, année en cours vs année précédente (comme la page
-  // "Suivi Commercial" du classeur Power BI d'origine)
-  const yearNow = new Date().getFullYear();
-  const caParClientMap = {};
-  invoices.forEach((i) => {
-    if (!i.billingDate) return;
-    const y = new Date(i.billingDate).getFullYear();
-    if (y !== yearNow && y !== yearNow - 1) return;
-    const conv = convById.get(i.conventionId);
-    const client = conv ? conv.customerName : null;
-    if (!client) return;
-    if (!caParClientMap[client]) caParClientMap[client] = { client, cur: 0, prev: 0 };
-    caParClientMap[client][y === yearNow ? 'cur' : 'prev'] += (i.amount || 0);
-  });
-  const ca_par_client = Object.values(caParClientMap)
-    .filter((r) => r.cur || r.prev)
-    .sort((a, b) => b.cur - a.cur)
-    .slice(0, 25);
 
   // Sessions à venir (Planning)
   const today = new Date().toISOString().slice(0, 10);
@@ -695,20 +650,20 @@ async function buildData(entityId) {
   }
 
   const now = new Date();
-  const comparaison_annuelle = computeComparaison(
-    { customers, conventions, invoices, attendees },
-    [now.getFullYear() - 1, now.getFullYear()], now.getMonth(), now.getDate(),
-  );
+  const defaultYears = [now.getFullYear() - 1, now.getFullYear()];
+  const defaultCutoffMonth = now.getMonth(), defaultCutoffDay = now.getDate();
+  const raw = { customers, conventions, invoices, attendees };
+  const commercial = computeCommercialFiltered(raw, convById, defaultYears, defaultCutoffMonth, defaultCutoffDay);
 
   return {
     generated_at: new Date().toISOString().slice(0, 10),
     counts: { customers: customers.length, conventions: conventions.length, invoices: invoices.length, attendees: attendees.length, sessions: sessions.length },
-    nouveaux_clients_par_mois, derniers_stagiaires, ca_mensuel, devis_a_relancer, sessions_programmees,
-    heures_par_mois, top_formateurs, top_conseillers, top_clients, ca_par_client,
+    derniers_stagiaires, devis_a_relancer, sessions_programmees,
+    heures_par_mois, top_formateurs,
     sessions_a_venir: sessions_recentes_fallback, sessions_a_venir_is_future: sessions_a_venir.length > 0,
     sessions_listing, credit_restant, montant_vendu_facture, heures_formateur, join_ratio: joinRatio,
-    comparaison_annuelle,
-    raw: { customers, conventions, invoices, attendees },
+    ...commercial,
+    raw,
   };
 }
 
@@ -752,6 +707,81 @@ function computeComparaison(raw, years, cutoffMonth, cutoffDay) {
     withDelta('Stagiaires inscrits', stagPerYear),
     withDelta('Devis signés', devisPerYear),
   ];
+}
+
+// ------------------------------------------------------------------
+// Filtre global du sous-onglet Commercial -- les annees cochees et le
+// mois de coupure (compare-years / compare-cutoff) s'appliquent a tout
+// : comparaison annuelle, top conseillers/clients, CA par client, et
+// les 2 series mensuelles (nouveaux clients, CA facture). Une meme
+// fonction inSelectedPeriod() sert de base a tout ce filtrage.
+// ------------------------------------------------------------------
+function inSelectedPeriod(dateStr, years, cutoffMonth, cutoffDay) {
+  if (!dateStr) return false;
+  const d = new Date(dateStr);
+  if (!years.includes(d.getFullYear())) return false;
+  return d.getMonth() < cutoffMonth || (d.getMonth() === cutoffMonth && d.getDate() <= cutoffDay);
+}
+
+function monthsForYears(years, cutoffMonth) {
+  const out = [];
+  [...years].sort((a, b) => a - b).forEach((year) => {
+    for (let m = 0; m <= cutoffMonth; m++) out.push(`${year}-${String(m + 1).padStart(2, '0')}`);
+  });
+  return out;
+}
+
+function computeTopBy(invoices, convById, field, years, cutoffMonth, cutoffDay) {
+  const map = {};
+  invoices.forEach((i) => {
+    if (!inSelectedPeriod(i.billingDate, years, cutoffMonth, cutoffDay)) return;
+    const conv = convById.get(i.conventionId);
+    const key = conv ? conv[field] : null;
+    if (!key) return;
+    map[key] = (map[key] || 0) + (i.amount || 0);
+  });
+  return Object.entries(map).map(([nom, ca]) => ({ nom, ca })).sort((a, b) => b.ca - a.ca).slice(0, 5);
+}
+
+function computeCAParClient(invoices, convById, years, cutoffMonth, cutoffDay) {
+  const map = {};
+  invoices.forEach((i) => {
+    if (!inSelectedPeriod(i.billingDate, years, cutoffMonth, cutoffDay)) return;
+    const conv = convById.get(i.conventionId);
+    const client = conv ? conv.customerName : null;
+    if (!client) return;
+    map[client] = (map[client] || 0) + (i.amount || 0);
+  });
+  return Object.entries(map).map(([client, ca]) => ({ client, ca })).sort((a, b) => b.ca - a.ca).slice(0, 25);
+}
+
+function computeCommercialFiltered(raw, convById, years, cutoffMonth, cutoffDay) {
+  const { customers, invoices } = raw;
+  const months = monthsForYears(years, cutoffMonth);
+
+  const ncMap = {};
+  customers.forEach((c) => {
+    if (!inSelectedPeriod(c.created, years, cutoffMonth, cutoffDay)) return;
+    const m = monthKey(c.created);
+    ncMap[m] = (ncMap[m] || 0) + 1;
+  });
+  const nouveaux_clients_par_mois = months.map((m) => ({ mois: m, nouveaux_clients: ncMap[m] || 0 }));
+
+  const caMap = {};
+  invoices.forEach((i) => {
+    if (!inSelectedPeriod(i.billingDate, years, cutoffMonth, cutoffDay)) return;
+    const m = monthKey(i.billingDate);
+    caMap[m] = (caMap[m] || 0) + (i.amount || 0);
+  });
+  const ca_mensuel = months.map((m) => ({ mois: m, ca: Math.round((caMap[m] || 0) * 100) / 100 }));
+
+  return {
+    comparaison_annuelle: computeComparaison(raw, years, cutoffMonth, cutoffDay),
+    top_conseillers: computeTopBy(invoices, convById, 'accountManagerName', years, cutoffMonth, cutoffDay),
+    top_clients: computeTopBy(invoices, convById, 'customerName', years, cutoffMonth, cutoffDay),
+    ca_par_client: computeCAParClient(invoices, convById, years, cutoffMonth, cutoffDay),
+    nouveaux_clients_par_mois, ca_mensuel,
+  };
 }
 
 // ------------------------------------------------------------------
@@ -884,18 +914,23 @@ function renderRankList(wrapId, rows, nameKey, valueKey, metaFn, fmt) {
 
 function renderCAParClient(DATA) {
   const tbody = document.getElementById('tbl-ca-client');
-  const now = new Date();
-  document.getElementById('ca-client-hint').textContent = `${now.getFullYear() - 1} vs ${now.getFullYear()}`;
-  DATA.ca_par_client.forEach((r) => {
+  tbody.innerHTML = '';
+  const rows = DATA.ca_par_client;
+  const max = Math.max(...rows.map((r) => r.ca), 1);
+  rows.forEach((r) => {
     const tr = el('tr');
     const nameTd = el('td', 'strong', r.client); nameTd.title = r.client;
     tr.appendChild(nameTd);
-    tr.appendChild(el('td', 'num', fmtEUR(r.prev)));
-    tr.appendChild(el('td', 'num', fmtEUR(r.cur)));
-    const ecart = r.cur - r.prev;
-    const ecartTd = el('td', 'num');
-    ecartTd.innerHTML = `<span class="compare-delta ${ecart >= 0 ? 'up' : 'down'}">${ecart >= 0 ? '▲' : '▼'} ${fmtEUR(Math.abs(ecart))}</span>`;
-    tr.appendChild(ecartTd);
+    const barTd = el('td', 'bar-td');
+    const cell = el('div', 'bar-cell');
+    const track = el('div', 'bar-track');
+    const fill = el('div', 'bar-fill');
+    fill.style.width = `${(r.ca / max * 100).toFixed(1)}%`;
+    track.appendChild(fill);
+    cell.appendChild(track);
+    cell.appendChild(el('span', 'bar-pct', fmtEUR(r.ca)));
+    barTd.appendChild(cell);
+    tr.appendChild(barTd);
     tbody.appendChild(tr);
   });
 }
@@ -1016,7 +1051,7 @@ function getSelectedYears() {
   return [...document.querySelectorAll('#compare-years input:checked')].map((cb) => parseInt(cb.value, 10));
 }
 
-function refreshComparaison(DATA) {
+function refreshCommercial(DATA) {
   const sel = document.getElementById('compare-cutoff');
   const now = new Date();
   const m = parseInt(sel.value, 10);
@@ -1026,7 +1061,35 @@ function refreshComparaison(DATA) {
     // au moins une annee doit rester selectionnee -- on force celle qu'on vient de decocher
     years = [now.getFullYear()];
   }
-  renderComparaison(computeComparaison(DATA.raw, years, m, day), years);
+  const convById = new Map(DATA.raw.conventions.map((c) => [c.id, c]));
+  const commercial = computeCommercialFiltered(DATA.raw, convById, years, m, day);
+  Object.assign(DATA, commercial);
+
+  renderComparaison(commercial.comparaison_annuelle, years);
+
+  document.getElementById('rank-conseillers').innerHTML = '';
+  document.getElementById('rank-clients').innerHTML = '';
+  renderRankList('rank-conseillers', commercial.top_conseillers, 'nom', 'ca', () => '', fmtEUR);
+  renderRankList('rank-clients', commercial.top_clients, 'nom', 'ca', () => '', fmtEUR);
+
+  renderCAParClient(DATA);
+
+  document.getElementById('tbl-nouveaux').innerHTML = '';
+  renderNouveaux(DATA);
+
+  document.getElementById('chart-ca').innerHTML = '';
+  document.getElementById('labels-ca').innerHTML = '';
+  renderMiniChart('chart-ca', 'labels-ca', commercial.ca_mensuel, 'ca', 'mois', (v) => fmtEUR(v));
+
+  const periodLabel = years.length > 1
+    ? [...years].sort((a, b) => a - b).join(' + ')
+    : String(years[0]);
+  ['ca-client-hint', 'top-conseillers-hint', 'top-clients-hint', 'nouveaux-hint', 'ca-mensuel-hint'].forEach((id) => {
+    const hint = document.getElementById(id);
+    if (hint) hint.textContent = `par CA facturé · ${periodLabel}`;
+  });
+  document.getElementById('nouveaux-hint').textContent = `clients créés · ${periodLabel}`;
+  document.getElementById('ca-mensuel-hint').textContent = periodLabel;
 }
 
 function populateYearPicker(DATA) {
@@ -1053,7 +1116,7 @@ function populateYearPicker(DATA) {
     if (cb.checked) chip.classList.add('checked');
     cb.addEventListener('change', () => {
       chip.classList.toggle('checked', cb.checked);
-      refreshComparaison(DATA);
+      refreshCommercial(DATA);
     });
     chip.appendChild(cb);
     chip.appendChild(document.createTextNode(String(y)));
@@ -1072,7 +1135,7 @@ function populateCutoffSelect(DATA) {
     sel.appendChild(opt);
   }
   sel.value = String(now.getMonth());
-  sel.addEventListener('change', () => refreshComparaison(DATA));
+  sel.addEventListener('change', () => refreshCommercial(DATA));
 }
 
 function renderAll(DATA) {
@@ -1081,12 +1144,7 @@ function renderAll(DATA) {
   // Commercial
   populateYearPicker(DATA);
   populateCutoffSelect(DATA);
-  renderComparaison(DATA.comparaison_annuelle, [new Date().getFullYear() - 1, new Date().getFullYear()]);
-  renderNouveaux(DATA);
-  renderMiniChart('chart-ca', 'labels-ca', DATA.ca_mensuel, 'ca', 'mois', (v) => fmtEUR(v));
-  renderRankList('rank-conseillers', DATA.top_conseillers, 'nom', 'ca', () => '', fmtEUR);
-  renderRankList('rank-clients', DATA.top_clients, 'nom', 'ca', () => '', fmtEUR);
-  renderCAParClient(DATA);
+  refreshCommercial(DATA);
   renderDevis(DATA);
 
   // Planning
