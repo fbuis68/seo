@@ -934,10 +934,15 @@ function renderInsights(){
       +'</div>';
   }).join('');
 
-  // ── Décompte par type de module installé (Sesame / Ttlock) — deux cases
-  // à cocher indépendantes sur la fiche, en face de "Nb modules". ──
+  // ── Décompte par type de module installé (Sesame / Ttlock / Oneway) —
+  // liste déroulante "Type de module" sur la fiche (un seul type, ou "Mix"
+  // Sesame+Ttlock, cf. saveModal). Total ci-contre = somme des 3 compteurs,
+  // pas le nombre de clients (un client "Mix" compte pour 2 : Sesame ET
+  // Ttlock) — absent jusqu'ici, ajouté le 24/08/2026 pour rester cohérent
+  // avec la carte "Usage des modules Sesame" juste au-dessus. ──
   const MODULE_TYPES=[['moduleSesame','Sesame','#1A6B47'],['moduleTtlock','Ttlock','#185fa5'],['moduleOneway','Oneway','#c1861d']];
   const moduleTypeCounts=MODULE_TYPES.map(([k,lbl,color])=>[lbl,color,clients.filter(c=>c[k]).length]);
+  const totalModuleTypes=moduleTypeCounts.reduce((s,[,,n])=>s+n,0);
   const moduleTypeHtml=moduleTypeCounts.map(([lbl,color,n])=>{
     const pct=total?Math.round(n/total*100):0;
     return '<div class="bar-row" title="'+lbl+' : '+n+'/'+total+'">'
@@ -981,7 +986,7 @@ function renderInsights(){
     + '<div class="card"><div class="card-head"><div class="ch-ico">◻</div><span class="ch-title">Répartition par secteur</span></div>'+secteurHtml+'</div>'
     + '<div class="card"><div class="card-head"><div class="ch-ico">▤</div><span class="ch-title">Répartition par PMS</span></div>'+pmsHtml+'</div>'
     + '<div class="card"><div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Usage des modules Sesame</span><span style="font-size:11px;color:#aaa;margin-left:8px;white-space:nowrap">'+totalModulesActifs+' au total</span></div>'+moduleHtml+'</div>'
-    + '<div class="card"><div class="card-head"><div class="ch-ico">◫</div><span class="ch-title">Type de module installé</span></div>'+moduleTypeHtml+'</div>'
+    + '<div class="card"><div class="card-head"><div class="ch-ico">◫</div><span class="ch-title">Type de module installé</span><span style="font-size:11px;color:#aaa;margin-left:8px;white-space:nowrap">'+totalModuleTypes+' au total</span></div>'+moduleTypeHtml+'</div>'
     + '<div class="card"><div class="card-head"><div class="ch-ico">◉</div><span class="ch-title">Taux d\'usage des accès</span><span style="font-size:11px;color:#aaa;margin-left:8px">'+nClients+' clients</span></div>'+accessHtml
       +(nWithUsage?'':'<div style="font-size:12px;color:#bbb;padding:4px 0;font-style:italic">Aucune donnée d\'usage réelle sur les fiches Client</div>')+'</div>'
     + '</div>';

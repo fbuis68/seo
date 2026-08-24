@@ -1615,6 +1615,15 @@ Deux changements sur la fiche client (`public/crm.html`) :
   testé en conditions réelles sur la fiche "1K" (sans adresse), qui ne
   pouvait auparavant recevoir aucune modification.
 
+### CRM Home : total manquant sur "Type de module installé"
+
+Suite au correctif du total sur "Usage des modules Sesame" (24/08/2026),
+la carte voisine "Type de module installé" n'affichait, elle, aucun
+total du tout — pas de bug de calcul à proprement parler, juste
+l'absence du même récapitulatif "X au total" que sur la carte
+au-dessus. Ajouté pour cohérence : somme des 3 compteurs (Sesame +
+Ttlock + Oneway), un client "Mix" comptant pour 2.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT
