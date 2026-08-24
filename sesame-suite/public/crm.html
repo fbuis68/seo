@@ -158,14 +158,25 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,san
 .donut-svg{flex-shrink:0}
 .donut-legend{flex:1;min-width:120px;display:flex;flex-direction:column;gap:7px}
 .donut-legend-row{display:flex;align-items:center;gap:7px;font-size:12px}
+.donut-legend-row[onclick]{cursor:pointer;border-radius:6px;margin:0 -4px;padding:2px 4px}
+.donut-legend-row[onclick]:hover{background:var(--al)}
 .donut-swatch{width:10px;height:10px;border-radius:2px;flex-shrink:0}
 .donut-legend-lbl{flex:1;color:var(--mu)}
 .donut-legend-val{font-weight:500;color:var(--tx)}
 .donut-cov{font-size:11px;color:var(--mu);margin-top:8px;padding-top:8px;border-top:0.5px solid var(--div)}
 
-/* BARS */
-.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+/* BARS — cliquables : chaque ligne ouvre le détail des fiches qui la composent
+   (cf. openKpiDetail) — bouton natif plutôt que div pour l'accessibilité clavier. */
+.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:7px;width:100%;background:none;border:0;padding:0;font:inherit;text-align:left;cursor:pointer;border-radius:6px}
+.bar-row:hover{background:var(--al)}
 .bar-row:hover .bar-fill{filter:brightness(0.9)}
+/* KPI DETAIL MODAL — liste des fiches derrière une ligne/segment cliqué */
+.kpi-detail-row{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:0.5px solid var(--div);cursor:pointer}
+.kpi-detail-row:last-child{border-bottom:0}
+.kpi-detail-row:hover{background:var(--al)}
+.kpi-detail-main{flex:1;min-width:0}
+.kpi-detail-nom{font-size:13px;font-weight:500;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi-detail-meta{font-size:11px;color:var(--mu);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bar-lbl{font-size:12px;color:var(--mu);width:68px;flex-shrink:0}
 .bar-lbl-wide{font-size:12px;color:var(--tx);width:150px;flex-shrink:0;display:flex;align-items:center;gap:6px}
 .bar-track{flex:1;height:8px;background:var(--div);border-radius:4px;overflow:hidden}
@@ -862,6 +873,7 @@ function buildDonut(segments){
     const offset=-cum;
     cum+=arcLen;
     return '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="var('+s.cv+')" stroke-width="'+sw+'" '
+      +(s.onclick?'style="cursor:pointer" onclick="'+s.onclick+'" ':'')
       +'stroke-dasharray="'+visible+' '+(circ-visible)+'" stroke-dashoffset="'+offset+'" transform="rotate(-90 '+cx+' '+cy+')">'
       +'<title>'+esc(s.lbl)+' : '+s.pct+'%</title></circle>';
   }).join('');
@@ -869,11 +881,43 @@ function buildDonut(segments){
     +'<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="var(--div)" stroke-width="'+sw+'"></circle>'
     +arcs+'</svg>';
   const legend='<div class="donut-legend">'+segments.map(s=>
-    '<div class="donut-legend-row"><span class="donut-swatch" style="background:var('+s.cv+')"></span>'
+    '<div class="donut-legend-row"'+(s.onclick?' onclick="'+s.onclick+'"':'')+'><span class="donut-swatch" style="background:var('+s.cv+')"></span>'
     +'<span class="donut-legend-lbl">'+esc(s.lbl)+'</span><span class="donut-legend-val">'+s.pct+'%</span></div>'
   ).join('')+'</div>';
   return '<div class="donut-wrap">'+svg+legend+'</div>';
 }
+
+// ── Détail cliquable des KPI (Home) ──────────────────────────────────────
+// Chaque ligne/segment des cartes "Répartition…" et "Usage…" ci-dessous ouvre
+// la liste des fiches qui composent ce chiffre (ex. "Non renseigné" sur la
+// répartition par PMS → les fiches sans PMS saisi), dans une modale légère
+// réutilisant #modal-ct — cliquer une fiche dans la liste y navigue direct.
+function jsStr(s){ return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+function openKpiDetail(title, list){
+  const rows=list.slice().sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
+  const body=rows.length
+    ? rows.map(c=>{
+        const dc=c.danger==='Élevé !!'?'bd':c.danger==='Bon client'?'bg':'bw';
+        const meta=[c.ville,c.secteur].filter(Boolean).join(' · ')||'—';
+        return '<div class="kpi-detail-row" onclick="closeModal();showFiche(\''+c.id+'\')">'
+          +'<div class="kpi-detail-main"><div class="kpi-detail-nom">'+esc(c.nom)+'</div><div class="kpi-detail-meta">'+esc(meta)+'</div></div>'
+          +'<span class="badge '+dc+'" style="font-size:10px">'+esc(c.danger||'—')+'</span>'
+          +'</div>';
+      }).join('')
+    : '<div style="padding:16px 4px;color:var(--mu);font-size:13px">Aucune fiche.</div>';
+  document.getElementById('modal-ct').innerHTML =
+    '<div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">'
+    +'<div class="modal-box" style="max-width:480px">'
+    +'<div class="modal-head"><div style="font-size:16px;font-weight:500">'+esc(title)+'</div>'
+    +'<span style="font-size:12px;color:var(--mu);margin-left:8px;white-space:nowrap">'+rows.length+' fiche'+(rows.length>1?'s':'')+'</span>'
+    +'<button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>'
+    +'<div style="max-height:60vh;overflow-y:auto">'+body+'</div>'
+    +'</div></div>';
+}
+function kpiBySecteur(s){ openKpiDetail('Secteur : '+s, clients.filter(c=>(c.secteur||'Non renseigné')===s)); }
+function kpiByPms(p){ openKpiDetail('PMS : '+p, clients.filter(c=>{ const raw=(c.pms||'').trim(); return (raw && raw.toLowerCase()!=='none'?raw:'Non renseigné')===p; })); }
+function kpiByFlag(k,lbl){ openKpiDetail(lbl, clients.filter(c=>c[k])); }
+function kpiByAccess(k,lbl){ openKpiDetail(lbl+' — usage réel', clients.filter(c=>c.type==='Client' && (c.nfc||0)+(c.mobile||0)+(c.code||0)+(c.qr||0)>0 && (c[k]||0)>0)); }
 
 function renderInsights(){
   if(!clients.length) return '';
@@ -884,11 +928,11 @@ function renderInsights(){
   const secteurRows=Object.entries(bySecteur).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const maxSecteur=Math.max(...secteurRows.map(r=>r[1]),1);
   const secteurHtml=secteurRows.map(([s,n])=>
-    '<div class="bar-row" title="'+esc(s)+' : '+n+'">'
+    '<button type="button" class="bar-row" title="'+esc(s)+' : '+n+'" onclick="kpiBySecteur(\''+jsStr(s)+'\')">'
     +'<span class="bar-lbl-wide">'+sectorIcon(s)+'<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(s)+'</span></span>'
     +'<div class="bar-track"><div class="bar-fill" style="width:'+(n/maxSecteur*100)+'%;background:#2a78d6"></div></div>'
     +'<span class="bar-val">'+n+'</span>'
-    +'</div>'
+    +'</button>'
   ).join('');
 
   // ── Répartition par PMS — même forme que la répartition par secteur
@@ -902,11 +946,11 @@ function renderInsights(){
   const pmsRows=Object.entries(byPms).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const maxPms=Math.max(...pmsRows.map(r=>r[1]),1);
   const pmsHtml=pmsRows.map(([p,n])=>
-    '<div class="bar-row" title="'+esc(p)+' : '+n+'">'
+    '<button type="button" class="bar-row" title="'+esc(p)+' : '+n+'" onclick="kpiByPms(\''+jsStr(p)+'\')">'
     +'<span class="bar-lbl-wide" style="width:130px"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(p)+'</span></span>'
     +'<div class="bar-track"><div class="bar-fill" style="width:'+(n/maxPms*100)+'%;background:#0f8a7a"></div></div>'
     +'<span class="bar-val">'+n+'</span>'
-    +'</div>'
+    +'</button>'
   ).join('');
 
   // ── Usage des modules Sesame — les 13 "Options actives" de la fiche
@@ -927,11 +971,11 @@ function renderInsights(){
   const totalModulesActifs=moduleCounts.reduce((s,[,,n])=>s+n,0);
   const moduleHtml=moduleCounts.map(([k,lbl,n])=>{
     const pct=total?Math.round(n/total*100):0;
-    return '<div class="bar-row" title="'+lbl+' : '+n+'/'+total+'">'
+    return '<button type="button" class="bar-row" title="'+lbl+' : '+n+'/'+total+'" onclick="kpiByFlag(\''+jsStr(k)+'\',\''+jsStr(lbl)+'\')">'
       +'<span class="bar-lbl-wide" style="width:130px">'+esc(lbl)+'</span>'
       +'<div class="bar-track"><div class="bar-fill" style="width:'+pct+'%;background:#eb6834"></div></div>'
       +'<span class="bar-pct" style="width:64px;white-space:nowrap">'+n+' ('+pct+'%)</span>'
-      +'</div>';
+      +'</button>';
   }).join('');
 
   // ── Décompte par type de module installé (Sesame / Ttlock / Oneway) —
@@ -943,13 +987,14 @@ function renderInsights(){
   const MODULE_TYPES=[['moduleSesame','Sesame','#1A6B47'],['moduleTtlock','Ttlock','#185fa5'],['moduleOneway','Oneway','#c1861d']];
   const moduleTypeCounts=MODULE_TYPES.map(([k,lbl,color])=>[lbl,color,clients.filter(c=>c[k]).length]);
   const totalModuleTypes=moduleTypeCounts.reduce((s,[,,n])=>s+n,0);
-  const moduleTypeHtml=moduleTypeCounts.map(([lbl,color,n])=>{
+  const moduleTypeHtml=moduleTypeCounts.map(([lbl,color,n],idx)=>{
     const pct=total?Math.round(n/total*100):0;
-    return '<div class="bar-row" title="'+lbl+' : '+n+'/'+total+'">'
+    const k=MODULE_TYPES[idx][0];
+    return '<button type="button" class="bar-row" title="'+lbl+' : '+n+'/'+total+'" onclick="kpiByFlag(\''+jsStr(k)+'\',\''+jsStr(lbl)+'\')">'
       +'<span class="bar-lbl-wide" style="width:130px">'+esc(lbl)+'</span>'
       +'<div class="bar-track"><div class="bar-fill" style="width:'+pct+'%;background:'+color+'"></div></div>'
       +'<span class="bar-pct" style="width:64px;white-space:nowrap">'+n+' ('+pct+'%)</span>'
-      +'</div>';
+      +'</button>';
   }).join('');
 
   // ── Répartition des accès par type (NFC / Mobile / Code / QR), en camembert
@@ -970,7 +1015,7 @@ function renderInsights(){
   const accessShares=ACCESS_TYPES.map(([k,lbl,cv])=>{
     const sum=clientsWithUsage.reduce((s,c)=>s+(c[k]||0),0);
     const pct=nWithUsage?Math.round(sum/nWithUsage):0;
-    return {k,lbl,cv,pct};
+    return {k,lbl,cv,pct,onclick:"kpiByAccess('"+jsStr(k)+"','"+jsStr(lbl)+"')"};
   });
   const accessHtml=nWithUsage
     ? buildDonut(accessShares)

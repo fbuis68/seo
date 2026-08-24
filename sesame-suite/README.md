@@ -1676,6 +1676,24 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   existaient déjà (migration `20260818180000_churchill_room_media_backfill`)
   et n'ont pas eu besoin d'être régénérées.
 
+### CRM Home : indicateurs cliquables (détail des fiches derrière chaque KPI)
+
+- Les 5 cartes de `renderInsights()` (Répartition par secteur, Répartition
+  par PMS, Usage des modules Sesame, Type de module installé, Taux d'usage
+  des accès) sont désormais cliquables ligne par ligne (ou segment par
+  segment pour le camembert) : cliquer ouvre une modale listant les fiches
+  qui composent ce chiffre, avec clic direct vers la fiche client. Exemple
+  demandé : cliquer "Non renseigné" sur la répartition par PMS montre la
+  liste des clients sans PMS saisi. Nouvelle fonction générique
+  `openKpiDetail(title, list)` + 4 raccourcis (`kpiBySecteur`, `kpiByPms`,
+  `kpiByFlag`, `kpiByAccess`) qui appliquent le même critère que celui déjà
+  utilisé pour agréger le chiffre affiché (ex. normalisation PMS
+  vide/"none" → "Non renseigné", identique à celle du graphique).
+  Volontairement limité à ces 5 cartes de la vue Home — les indicateurs de
+  la vue Liste (Clients/Risque élevé/Sans contrat/Activités) et du pipe
+  commercial (Affaires ouvertes/Valeur du pipe/…) n'ont pas été touchés,
+  n'étant pas dans la demande.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT
