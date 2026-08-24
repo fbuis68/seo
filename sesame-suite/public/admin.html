@@ -4643,9 +4643,17 @@ function bsRenderAuthFields(){
     h += '<div class="fi"><label class="lb">Champ à comparer</label><input type="text" id="bs-loginProfileMatchField" placeholder="entityCode"></div>';
     h += '</div>';
     h += '<div class="fi"><label class="lb">Valeur recherchée (identifiant de cet établissement)</label><input type="text" id="bs-loginProfileMatchValue" placeholder="Ex : CHURCHILL"></div>';
+    h += '<div class="alt alt-g" style="margin:12px 0"><i class="ti ti-shield-check"></i>'
+      +'<span><b>Filtrage anti-fuite ACTIF PAR DÉFAUT</b> dès qu\'un tableau de profils est renseigné ci-dessus : certains systèmes (confirmé sur l\'API Sesame — un établissement a déjà reçu les réservations d\'un autre par ce biais) authentifient le <b>compte</b> mais pas nécessairement l\'établissement précis sur tous leurs endpoints. Les 2 champs ci-dessous valent "entityId" si laissés vides — inutile d\'y toucher sauf si l\'API utilisée nomme différemment cet identifiant.</span></div>';
+    h += '<div class="g2">';
+    h += '<div class="fi"><label class="lb">Champ de vérification dans chaque réservation/chambre reçue</label><input type="text" id="bs-resultEntityField" placeholder="entityId par défaut si vide"></div>';
+    h += '<div class="fi"><label class="lb">Champ correspondant DANS LE PROFIL ci-dessus</label><input type="text" id="bs-resultEntityProfileField" placeholder="entityId par défaut si vide"></div>';
+    h += '</div>';
     h += '<div class="alt alt-w" style="margin:12px 0"><i class="ti ti-alert-triangle"></i>'
-      +'<span>Recommandé avec un tableau de profils : certains systèmes (confirmé sur l\'API Sesame) authentifient le <b>compte</b> mais pas nécessairement l\'établissement précis sur tous leurs endpoints — un compte ayant accès à plusieurs hôtels peut alors recevoir des réservations d\'un autre établissement que celui sélectionné ci-dessus. Ce champ filtre les résultats reçus pour ne garder que ceux de l\'établissement choisi.</span></div>';
-    h += '<div class="fi"><label class="lb">Champ de vérification dans chaque réservation/chambre reçue</label><input type="text" id="bs-resultEntityField" placeholder="Ex : entityId (laisser vide pour ne pas filtrer)"></div>';
+      +'<span>Ces deux champs doivent désigner la <b>même information</b> (l\'identifiant de l\'établissement), mais dans deux objets différents : le premier dans chaque réservation/chambre reçue, le second dans le profil sélectionné plus haut. S\'ils ne correspondent pas au nom réel utilisé par l\'API, le filtrage échoue — la synchronisation sera bloquée avec une erreur explicite plutôt que d\'importer sans filtrer.</span></div>';
+    h += '<label class="fi" style="display:flex;align-items:center;gap:8px;flex-direction:row;cursor:pointer">'
+      +'<input type="checkbox" id="bs-skipEntityFilter" style="width:auto"> '
+      +'<span class="lb" style="margin:0">Désactiver ce filtre (déconseillé — uniquement si cette source est déjà correctement cloisonnée par établissement)</span></label>';
     h += '<div class="fi"><label class="lb">Chemin du token</label><input type="text" id="bs-loginTokenPath" placeholder="token si tableau de profils ci-dessus rempli — sinon data.token"></div>';
     h += '<div class="g2">';
     h += '<div class="fi"><label class="lb">Nom de l\'en-tête du token</label><input type="text" id="bs-loginTokenHeaderName" placeholder="Authorization"></div>';
@@ -4692,6 +4700,8 @@ function bsRenderAuthFields(){
     document.getElementById('bs-loginProfileMatchField').value = BS_CONFIG.loginProfileMatchField||'';
     document.getElementById('bs-loginProfileMatchValue').value = BS_CONFIG.loginProfileMatchValue||'';
     document.getElementById('bs-resultEntityField').value = BS_CONFIG.resultEntityField||'';
+    document.getElementById('bs-resultEntityProfileField').value = BS_CONFIG.resultEntityProfileField||'';
+    document.getElementById('bs-skipEntityFilter').checked = !!BS_CONFIG.skipEntityFilter;
   }
 }
 
@@ -4762,6 +4772,8 @@ var PMS_PRESETS = {
       document.getElementById('bs-loginProfileListPath').value = 'data.profiles';
       document.getElementById('bs-loginProfileMatchField').value = 'entityCode';
       document.getElementById('bs-resultEntityField').value = 'entityId';
+      document.getElementById('bs-resultEntityProfileField').value = 'entityId';
+      document.getElementById('bs-skipEntityFilter').checked = false;
       document.getElementById('bs-responseListPath').value = 'root';
       bsRenderMappingFields({code:'code', personEmail:'personEmail', personFirstname:'personFirstname', personLastname:'personLastname', personPhone:'', startDate:'startDate', endDate:'endDate', facilityCode:'facilityCode', facilityName:'facilityName', status:'status'});
     },
@@ -4939,6 +4951,8 @@ function bsCollectFormValues(){
     loginProfileMatchField: (document.getElementById('bs-loginProfileMatchField')||{}).value||'',
     loginProfileMatchValue: (document.getElementById('bs-loginProfileMatchValue')||{}).value||'',
     resultEntityField: (document.getElementById('bs-resultEntityField')||{}).value||'',
+    resultEntityProfileField: (document.getElementById('bs-resultEntityProfileField')||{}).value||'',
+    skipEntityFilter: !!(document.getElementById('bs-skipEntityFilter')||{}).checked,
     responseListPath: document.getElementById('bs-responseListPath').value.trim(),
     fieldMapping: bsCollectMapping(),
     facilityEndpointPath: document.getElementById('bs-facilityEndpointPath').value.trim(),

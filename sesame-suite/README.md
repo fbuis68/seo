@@ -1423,6 +1423,51 @@ retours après validation :
   → total facturé ce mois-là à 10 %), pour rendre le calcul tangible
   avant de choisir.
 
+### Intégration réservations : fuite inter-établissements — filtre anti-fuite actif par défaut
+
+Un établissement ("Deer Forest") a reçu des réservations d'un autre
+établissement ("Le Victor") via le connecteur "Intégration réservations"
+(source "Sesame Technology", authentification à profils multiples — un
+même compte externe a accès à plusieurs hôtels). Un premier filtre
+(`resultEntityField`) avait déjà été ajouté le 18/08/2026 suite à une
+fuite similaire, mais restait **optionnel**, dans la section repliable
+"Réglages techniques avancés" — repliée automatiquement dès qu'un
+connecteur préréglé est appliqué (`bsRenderPresetVars`), donc facile à
+ne jamais ouvrir en configurant un nouvel établissement. Deux bugs
+corrigés dans `src/lib/bookingSource.ts` :
+
+- **Extraction codée en dur.** Le champ utilisé pour lire l'identifiant
+  d'établissement DANS LE PROFIL de connexion était figé sur le nom
+  littéral `"entityId"`, alors que le champ de filtrage côté
+  réservations/chambres (`resultEntityField`) était configurable — si
+  l'API externe nomme ce champ différemment dans son profil, l'extraction
+  échouait silencieusement et le filtre ne s'appliquait jamais, sans
+  erreur visible. Nouveau champ `resultEntityProfileField` (dot-path
+  dans le profil, défaut `"entityId"` si vide) pour découpler les deux.
+- **Filtrage passé d'opt-in à activé par défaut.** Dès qu'un tableau de
+  profils est configuré (`loginProfileListPath`/`MatchField`/`MatchValue`),
+  le filtre s'applique désormais automatiquement (`resultEntityField`/
+  `resultEntityProfileField` valent `"entityId"` si laissés vides) —
+  au lieu de rester inactif tant que personne n'a rempli ces champs à la
+  main. Si la valeur ne peut pas être extraite du profil, la
+  synchronisation échoue explicitement (message dans "Dernière synchro")
+  plutôt que d'importer sans filtrer. Nouveau champ `skipEntityFilter`
+  (case à cocher, décochée par défaut) pour les rares sources déjà
+  cloisonnées côté API, qui n'ont pas besoin de ce filtre.
+
+Migrations `20260824120000_booking_source_result_entity_profile_field`
+et `20260824121500_booking_source_skip_entity_filter`. Testé (script
+autonome simulant une API à profils multiples nommant l'identifiant
+`hotelId` plutôt que `entityId`) : sans configuration explicite, la
+synchronisation échoue désormais avec un message clair au lieu de fuiter
+des données ; avec `resultEntityProfileField` renseigné, seules les
+réservations du bon établissement sont importées ; avec
+`skipEntityFilter` activé, le filtre est bien contourné comme demandé.
+Testé aussi côté panneau Admin (Playwright, sur un établissement de test
+pour ne pas toucher la configuration réelle d'Hôtel Churchill) : les
+nouveaux champs s'affichent, s'enregistrent et persistent après
+rechargement.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

@@ -306,15 +306,37 @@ model BookingSourceConfig {
   loginProfileListPath   String? // dot-path du tableau de profils (ex: "data.profiles")
   loginProfileMatchField String? // nom du champ à comparer dans chaque profil (ex: "entityCode")
   loginProfileMatchValue String? // valeur recherchée (ex: "CHURCHILL")
-  // Filtre de sécurité optionnel — certaines API "login" à profils multiples
-  // (ex : Sesame Technology) n'appliquent pas de cloisonnement strict par
-  // profil sur tous leurs endpoints : le token authentifie le COMPTE, pas
-  // nécessairement l'établissement sélectionné ci-dessus, et peut renvoyer
-  // des données d'autres établissements accessibles par ce même compte
-  // (confirmé en pratique sur /wa/booking/list). Quand renseigné, seuls les
-  // éléments dont ce champ (dot-path, ex: "entityId") correspond à
-  // l'"entityId" du profil sélectionné sont conservés.
+  // Filtre de sécurité inter-établissements — certaines API "login" à
+  // profils multiples (ex : Sesame Technology) n'appliquent pas de
+  // cloisonnement strict par profil sur tous leurs endpoints : le token
+  // authentifie le COMPTE, pas nécessairement l'établissement sélectionné
+  // ci-dessus, et peut renvoyer des données d'autres établissements
+  // accessibles par ce même compte (confirmé en pratique sur
+  // /wa/booking/list, ex : établissement "Deer Forest" ayant reçu des
+  // réservations de "Le Victor" — l'admin n'avait jamais ouvert la section
+  // "réglages techniques avancés" où vivait ce filtre quand il était
+  // optionnel, d'où la fuite passée inaperçue). ACTIVÉ PAR DÉFAUT dès qu'un
+  // tableau de profils est configuré (loginProfileListPath/MatchField/
+  // MatchValue) — resultEntityField/resultEntityProfileField valent alors
+  // "entityId" si laissés vides, plutôt que de désactiver silencieusement le
+  // filtrage. Seuls les éléments dont resultEntityField (dot-path dans
+  // chaque réservation/chambre reçue) correspondent à la valeur trouvée au
+  // chemin resultEntityProfileField dans le profil sélectionné sont
+  // conservés. Si la valeur ne peut pas être extraite du profil, la
+  // synchronisation échoue explicitement plutôt que d'importer sans filtrer
+  // (cf. bookingSource.ts, performLogin) — sauf si skipEntityFilter est activé.
   resultEntityField String?
+  // Dot-path DANS LE PROFIL sélectionné pointant vers la valeur à comparer à
+  // resultEntityField. Peut différer selon l'API (ex: "id", "hotelId",
+  // "propertyId" au lieu de "entityId").
+  resultEntityProfileField String?
+  // Échappatoire explicite pour les rares sources "login" à profils
+  // multiples déjà correctement cloisonnées par l'API elle-même, où ce
+  // filtre ne ferait que bloquer inutilement la synchronisation. Laisser à
+  // false dans tous les autres cas — le risque d'une fuite de données
+  // clients entre établissements est plus grave qu'une synchronisation
+  // bloquée par erreur (visible et corrigeable immédiatement).
+  skipEntityFilter Boolean @default(false)
   // Champ optionnel supplémentaire envoyé dans le corps JSON de connexion, en
   // plus de l'email et du mot de passe — ex: certains systèmes multi-comptes
   // exigent un identifiant de client/groupe ("client": "monGroupe").
