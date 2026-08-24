@@ -42,13 +42,40 @@ Aucune requête de génération de document n'a encore été capturée. Il faut 
    l'id de l'enregistrement cible) et la réponse (fichier binaire ? lien de
    téléchargement ? id de document créé dans `conventionDocumentDao` ?)
 
-**Envoi / signature électronique** (demandé le 22/08/2026) : même situation,
-aucun endpoint capturé. Procédure de capture détaillée dans
-`CAPTURE-ENVOI-SIGNATURE.md` — à faire sur un dossier de test, pas un vrai
-client, car c'est une action à effet réel (contrairement à tout le reste du
-widget qui est en lecture seule). Une fois la requête capturée, le widget
-pourra proposer un déclenchement réel, avec confirmation explicite avant
-toute écriture.
+**Envoi simple : CONFIRMÉ le 24/08/2026** (capture réseau réelle, testée
+avec succès — email reçu). Voir `CAPTURE-ENVOI-SIGNATURE.md` pour le détail
+complet (endpoint, payload, réponse). Résumé :
+
+```
+POST /wa/conventionExport/sendMessage
+Content-Type: multipart/form-data
+```
+Champs (Form Data) :
+| Champ | Exemple | Rôle |
+|---|---|---|
+| `targets` | `[{"name":"M. BUIS Frédéric","email":"fbuis@alphacent.com","id":"A00046252","civility":"M.","lastname":"BUIS","firstname":"Frédéric"}]` | destinataires (JSON stringifié) |
+| `conventionId` | `C00020404` | dossier concerné |
+| `senderId` | `entity` | expéditeur (id ou `entity` = adresse par défaut de l'entité) |
+| `cc` / `bcc` | — | copie / copie cachée |
+| `documentId` | `Calling` | document à joindre (liste "Documents:") — signification exacte à confirmer |
+| `messageTemplateId` | `MT00001128` | modèle de message (voir `/wa/messageTemplate/list`) |
+| `title` | `Bienvenu chez Sherwood` | objet, pré-rempli par le modèle |
+| `conventionDocumentId` | — | document attaché généré (liste "Document attaché:") |
+| `content` | `<p>Cher @actor.civility@ @actor.firstname@</p>...` | corps HTML, variables de fusion `@actor.xxx@` |
+| `attachedFile(One/Two)` | binaire | pièces jointes libres (3 max) |
+
+Réponse (200 OK, `text/html` mais corps JSON) : `{"success":true}`
+
+**Non résolu** : le sens exact de `documentId` vs `conventionDocumentId`
+vs `templateIds` (ce dernier vide dans la capture) — à clarifier en testant
+avec différentes combinaisons si le widget doit un jour proposer un choix
+de document/pièce-jointe, pas juste un message texte.
+
+**Signature électronique : toujours à capturer.** Une icône `bouton-a-signer.jpg`
+a été repérée dans les ressources chargées par MCDF, confirmant l'existence
+d'un bouton "Signer" séparé de l'envoi simple — probablement un flux
+différent (peut-être vers un prestataire externe). Procédure de capture
+dans `CAPTURE-ENVOI-SIGNATURE.md`, toujours à faire.
 
 ## Architecture proposée
 1. Le copilote identifie l'intention ("prépare la convention pour la
