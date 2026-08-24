@@ -1707,6 +1707,20 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   donc le total affiché et la liste qui s'ouvre restent toujours
   cohérents.
 
+### Affaires : la valeur pondérée du pipe utilise le montant ponctuel, pas le montant mensuel
+
+- "Valeur pondérée" sur Home (`renderPipelineKpis`) et "pondéré" sur les vues
+  "Mois par mois" (liste et Kanban) des Affaires multipliaient le montant
+  mensuel récurrent (`amount`) par la probabilité — un calcul incohérent
+  avec le "Pipeline pondéré (Affaires)" de la Trésorerie, qui lui a
+  toujours utilisé `montantPonctuel × probabilité` (cf. `trDealsPipelineFor`).
+  Les 3 endroits utilisent désormais tous la même formule
+  (`montantPonctuel × probabilité`) ; "Valeur du pipe (mensuel)" sur Home
+  reste, elle, le total non pondéré du montant mensuel récurrent — une
+  mesure distincte, pas concernée par ce changement. Vérifié avec deux
+  affaires de test aux montants mensuel/ponctuel volontairement divergents
+  pour confirmer que les 3 vues affichent bien la même valeur pondérée.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

@@ -755,13 +755,18 @@ function renderPipelineKpis(){
   const won = deals.filter(d=>d.stage==='Gagné');
   const lost = deals.filter(d=>d.stage==='Perdu');
   const pipelineValue = open.reduce((s,d)=>s+(d.amount||0),0);
-  const weightedValue = open.reduce((s,d)=>s+(d.amount||0)*(d.probability||0)/100,0);
+  // Valeur pondérée du pipe = montant ponctuel × probabilité (même
+  // convention que le "Pipeline pondéré (Affaires)" de la Trésorerie,
+  // cf. trDealsPipelineFor) — pas le montant mensuel récurrent (amount),
+  // qui est déjà affiché séparément ci-dessus, non pondéré, dans "Valeur
+  // du pipe (mensuel)".
+  const weightedValue = open.reduce((s,d)=>s+(d.montantPonctuel||0)*(d.probability||0)/100,0);
   const closedCount = won.length+lost.length;
   const conversionRate = closedCount ? Math.round(won.length/closedCount*100) : 0;
   return `<div class="stats-row" style="margin-bottom:12px">
     <div class="stat-card"><div class="stat-lbl">Affaires ouvertes</div><div class="stat-val">${open.length}</div></div>
     <div class="stat-card"><div class="stat-lbl">Valeur du pipe (mensuel)</div><div class="stat-val" style="color:#185fa5">${fmtEUR(pipelineValue)}</div></div>
-    <div class="stat-card"><div class="stat-lbl">Valeur pondérée</div><div class="stat-val" style="color:#3c3489">${fmtEUR(weightedValue)}</div></div>
+    <div class="stat-card"><div class="stat-lbl">Valeur pondérée (ponctuel)</div><div class="stat-val" style="color:#3c3489">${fmtEUR(weightedValue)}</div></div>
     <div class="stat-card"><div class="stat-lbl">Taux de conversion</div><div class="stat-val" style="color:${conversionRate>=50?'#1A6B47':'#854f0b'}">${conversionRate}%</div></div>
   </div>`;
 }
@@ -2469,11 +2474,12 @@ function renderAffaires(){
 
 // ── Vue "Mois par mois" — regroupe les affaires par mois de leur date de
 // clôture prévue (closeDate), pour visualiser le pipeline commercial dans
-// le temps plutôt que par étape. Distinct du "Pipeline pondéré (Affaires)"
-// de la Trésorerie (qui lui se base sur montantPonctuel/moisEncaissement) :
-// ici c'est la valeur mensuelle récurrente (amount) pondérée par la
-// probabilité qui sert de référence, mois par mois, sur toute la durée où
-// des affaires ont une date de clôture renseignée.
+// le temps plutôt que par étape. "Pondéré" = montant ponctuel × probabilité,
+// même convention que le "Pipeline pondéré (Affaires)" de la Trésorerie
+// (cf. trDealsPipelineFor) — seul le regroupement diffère : ici par mois de
+// clôture prévue (closeDate), là-bas par mois d'encaissement
+// (moisEncaissement). Le montant mensuel récurrent (amount) reste affiché
+// par affaire, mais n'entre plus dans ce total pondéré.
 function dealMonthKey(d){
   if(!d.closeDate) return null;
   const dt = new Date(d.closeDate);
@@ -2496,12 +2502,11 @@ function renderAffairesMonthly(filtered){
     const [y,m] = k.split('-');
     const items = groups[k].slice().sort((a,b)=>(b.amount||0)-(a.amount||0));
     const live = items.filter(d=>d.stage!=='Perdu');
-    const totalPondere = live.reduce((s,d)=>s+(d.amount||0)*(d.probability||0)/100,0);
-    const totalPonctuel = live.reduce((s,d)=>s+(d.montantPonctuel?d.montantPonctuel*(d.probability||0)/100:0),0);
+    const totalPondere = live.reduce((s,d)=>s+(d.montantPonctuel||0)*(d.probability||0)/100,0);
     return `<div style="border:1px solid var(--bdr);border-radius:10px;margin-bottom:14px;overflow:hidden">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--al);border-bottom:1px solid var(--bdr);flex-wrap:wrap;gap:6px">
         <div style="font-weight:600">${TR_MONTHS[+m-1]} ${y}</div>
-        <div style="font-size:12px;color:var(--mu)">${items.length} affaire${items.length>1?'s':''} · pondéré ${fmtEUR(totalPondere)}${totalPonctuel?' + '+fmtEUR(totalPonctuel)+' ponctuel':''}</div>
+        <div style="font-size:12px;color:var(--mu)">${items.length} affaire${items.length>1?'s':''} · pondéré ${fmtEUR(totalPondere)}</div>
       </div>
       <div>
         ${items.map(d=>`
@@ -2544,7 +2549,9 @@ function renderAffairesMonthlyKanban(filtered){
 
   const monthCol = (label, items) => {
     const live = items.filter(d=>d.stage!=='Perdu');
-    const totalPondere = live.reduce((s,d)=>s+(d.amount||0)*(d.probability||0)/100,0);
+    // Pondéré = montant ponctuel × probabilité (cf. commentaire au-dessus
+    // de renderAffairesMonthly — même convention partout dans ce module).
+    const totalPondere = live.reduce((s,d)=>s+(d.montantPonctuel||0)*(d.probability||0)/100,0);
     return `<div class="kanban-col">
       <div class="kanban-col-head"><span>${label}</span><span class="kanban-col-total">${items.length} · ${fmtEUR(totalPondere)} pond.</span></div>
       <div class="kanban-cards">
