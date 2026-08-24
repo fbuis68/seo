@@ -2346,6 +2346,10 @@ function showAffaires(){
   renderAffaires();
 }
 
+var dealViewMode = 'kanban'; // kanban | monthly
+
+function dealSetViewMode(v){ dealViewMode = v; renderAffaires(); }
+
 function renderAffaires(){
   const filtered = dealFilterCommercial ? deals.filter(d=>d.commercialId===dealFilterCommercial) : deals;
   const filterBar = `<div class="list-toolbar" style="margin-bottom:14px">
@@ -2353,8 +2357,18 @@ function renderAffaires(){
       <option value="">Tous commerciaux</option>
       ${COMMERCIALS.map(c=>`<option value="${c.id}" ${dealFilterCommercial===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}
     </select>
+    <div style="display:flex;border:1px solid var(--bdr);border-radius:8px;overflow:hidden">
+      <button onclick="dealSetViewMode('kanban')" style="border:none;cursor:pointer;padding:6px 12px;font-size:12px;font-weight:500;background:${dealViewMode==='kanban'?'var(--a)':'var(--card)'};color:${dealViewMode==='kanban'?'#fff':'var(--tx)'}">Kanban</button>
+      <button onclick="dealSetViewMode('monthly')" style="border:none;cursor:pointer;padding:6px 12px;font-size:12px;font-weight:500;background:${dealViewMode==='monthly'?'var(--a)':'var(--card)'};color:${dealViewMode==='monthly'?'#fff':'var(--tx)'}">Mois par mois</button>
+    </div>
     <span class="count-lbl">${filtered.length} affaire${filtered.length>1?'s':''}</span>
   </div>`;
+
+  if(dealViewMode==='monthly'){
+    document.getElementById('main').innerHTML = filterBar + renderAffairesMonthly(filtered);
+    return;
+  }
+
   const cols = DEAL_STAGES.map(stage=>{
     const items = filtered.filter(d=>d.stage===stage);
     const total = items.reduce((s,d)=>s+(d.amount||0),0);
@@ -2374,6 +2388,67 @@ function renderAffaires(){
     </div>`;
   }).join('');
   document.getElementById('main').innerHTML = filterBar + `<div class="kanban-wrap">${cols}</div>`;
+}
+
+// ── Vue "Mois par mois" — regroupe les affaires par mois de leur date de
+// clôture prévue (closeDate), pour visualiser le pipeline commercial dans
+// le temps plutôt que par étape. Distinct du "Pipeline pondéré (Affaires)"
+// de la Trésorerie (qui lui se base sur montantPonctuel/moisEncaissement) :
+// ici c'est la valeur mensuelle récurrente (amount) pondérée par la
+// probabilité qui sert de référence, mois par mois, sur toute la durée où
+// des affaires ont une date de clôture renseignée.
+function dealMonthKey(d){
+  if(!d.closeDate) return null;
+  const dt = new Date(d.closeDate);
+  if(isNaN(dt.getTime())) return null;
+  return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0');
+}
+
+function renderAffairesMonthly(filtered){
+  const withDate = filtered.filter(d=>dealMonthKey(d));
+  const noDate = filtered.filter(d=>!dealMonthKey(d));
+  if(!withDate.length && !noDate.length){
+    return '<div style="padding:30px;text-align:center;color:var(--mu);font-size:13px">Aucune affaire.</div>';
+  }
+
+  const groups = {};
+  withDate.forEach(d=>{ const k=dealMonthKey(d); (groups[k]=groups[k]||[]).push(d); });
+  const keys = Object.keys(groups).sort();
+
+  const monthBlocks = keys.map(k=>{
+    const [y,m] = k.split('-');
+    const items = groups[k].slice().sort((a,b)=>(b.amount||0)-(a.amount||0));
+    const live = items.filter(d=>d.stage!=='Perdu');
+    const totalPondere = live.reduce((s,d)=>s+(d.amount||0)*(d.probability||0)/100,0);
+    const totalPonctuel = live.reduce((s,d)=>s+(d.montantPonctuel?d.montantPonctuel*(d.probability||0)/100:0),0);
+    return `<div style="border:1px solid var(--bdr);border-radius:10px;margin-bottom:14px;overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--al);border-bottom:1px solid var(--bdr);flex-wrap:wrap;gap:6px">
+        <div style="font-weight:600">${TR_MONTHS[+m-1]} ${y}</div>
+        <div style="font-size:12px;color:var(--mu)">${items.length} affaire${items.length>1?'s':''} · pondéré ${fmtEUR(totalPondere)}${totalPonctuel?' + '+fmtEUR(totalPonctuel)+' ponctuel':''}</div>
+      </div>
+      <div>
+        ${items.map(d=>`
+          <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--div);cursor:pointer" onclick="openDealModal('${d.id}')">
+            <span class="tag ${STAGE_TAG[d.stage]}" style="font-size:10px;flex:0 0 auto">${d.stage}</span>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.title)}</div>
+              <div style="font-size:11px;color:var(--mu)">${esc(d.prospectNom)}${d.commercialName?' · '+esc(d.commercialName):''}</div>
+            </div>
+            <div style="text-align:right;font-size:12px;flex:0 0 auto">
+              ${d.amount?`<div>${fmtEUR(d.amount)}/mois</div>`:''}
+              ${d.montantPonctuel?`<div style="color:var(--mu)">+${fmtEUR(d.montantPonctuel)} ponctuel</div>`:''}
+              <div style="color:var(--mu)">${d.probability||0}%</div>
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+
+  const noDateBlock = noDate.length ? `<div style="border:1px dashed var(--bdr);border-radius:10px;padding:10px 14px;color:var(--mu);font-size:12px">
+    <b>${noDate.length} affaire${noDate.length>1?'s':''} sans date de clôture prévue</b> — ${noDate.map(d=>esc(d.title)).join(', ')}
+  </div>` : '';
+
+  return monthBlocks + noDateBlock;
 }
 
 function openNewDealModal(prospectId){

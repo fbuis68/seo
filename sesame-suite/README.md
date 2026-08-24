@@ -1498,6 +1498,21 @@ vérifier (capture réseau F12 sur le produit réel pendant un encodage).
   (pas d'appel réseau vers une URL vide), sans toucher au connecteur réel
   d'Hôtel Churchill.
 
+### Affaires : vue "Mois par mois"
+
+Bascule Kanban / "Mois par mois" en haut du panneau Affaires
+(`public/crm.html`, `dealSetViewMode`). La vue mensuelle regroupe les
+affaires par mois de leur **date de clôture prévue** (`closeDate`), en
+ordre chronologique — chaque mois affiche le nombre d'affaires, le
+pipeline pondéré (valeur mensuelle × probabilité, hors affaires "Perdu")
+et, si renseigné, le montant ponctuel pondéré. Les affaires sans date de
+clôture sont listées à part plutôt qu'exclues silencieusement. Distinct
+du "Pipeline pondéré (Affaires)" déjà affiché sur la Trésorerie, qui lui
+se base sur `montantPonctuel`/`moisEncaissement` plutôt que sur
+`closeDate` — les deux vues répondent à des questions différentes
+("quand ce CA récurrent doit-il se signer ?" vs "quel encaissement
+ponctuel atterrit dans quel mois ?").
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT
