@@ -1,0 +1,419 @@
+<meta charset="utf-8">
+<title>Envoi de documents MCDF</title>
+<!--
+  Envoi de documents / messages -- MCDF (v1).
+
+  CONTRAIREMENT A TOUS LES AUTRES WIDGETS DE CE PROJET, celui-ci ECRIT :
+  il declenche un vrai envoi d'email via l'endpoint confirme
+  POST /wa/conventionExport/sendMessage (capture reseau reelle, testee
+  avec succes le 24/08/2026 -- voir modules/03-documents/NOTES.md pour
+  le detail complet du payload).
+
+  Champs envoyes, tous confirmes par la capture :
+    targets (JSON stringifie), conventionId, senderId, cc, bcc,
+    messageTemplateId, title, content, attachedFile.
+  Champs vus dans la capture mais volontairement OMIS ici car leur role
+  exact n'est pas confirme (documentId, conventionDocumentId,
+  templateIds) -- la capture a reussi avec conventionDocumentId et
+  templateIds vides, donc probablement optionnels ; documentId avait une
+  valeur ("Calling") dont on ignore si elle est requise. Si l'envoi
+  echoue depuis ce widget alors qu'il marche depuis MCDF, c'est le
+  premier point a verifier.
+
+  Securite : aucun envoi sans un ecran de confirmation explicite listant
+  destinataires + objet + apercu du contenu. Pas d'envoi automatique,
+  pas de bouton "un clic".
+-->
+<style>
+  :root {
+    color-scheme: light;
+    --page:        #f9f9f7;
+    --surface:     #fcfcfb;
+    --surface-2:   #f2f1ec;
+    --ink:         #0b0b0b;
+    --ink-2:       #52514e;
+    --ink-muted:   #898781;
+    --border:      rgba(11,11,11,0.10);
+    --border-2:    rgba(11,11,11,0.16);
+    --accent:      #256abf;
+    --accent-tint: #dbe8f8;
+    --good:        #0ca30c;
+    --good-tint:   #e3f3e3;
+    --good-text:   #006300;
+    --warning:     #b8860b;
+    --warning-tint:#f5ecd6;
+    --critical:    #b23327;
+    --critical-tint: #f6e2df;
+    --font-display: Charter, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322;
+      --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #8f8d86;
+      --border: rgba(255,255,255,0.10); --border-2: rgba(255,255,255,0.18);
+      --accent: #5b9bea; --accent-tint: #1c2e44;
+      --good: #3fc23f; --good-tint: #16301a; --good-text: #4fd44f;
+      --warning: #e0b03a; --warning-tint: #3a3018;
+      --critical: #e2685c; --critical-tint: #3a201d;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322;
+    --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #8f8d86;
+    --border: rgba(255,255,255,0.10); --border-2: rgba(255,255,255,0.18);
+    --accent: #5b9bea; --accent-tint: #1c2e44;
+    --good: #3fc23f; --good-tint: #16301a; --good-text: #4fd44f;
+    --warning: #e0b03a; --warning-tint: #3a3018;
+    --critical: #e2685c; --critical-tint: #3a201d;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink); font-family: var(--font-body); -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 32px 28px 70px; }
+  .eyebrow { text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px; font-weight: 600; color: var(--accent); margin: 0 0 10px; }
+  h1 { font-family: var(--font-display); font-size: clamp(22px, 3vw, 30px); font-weight: 500; margin: 0 0 8px; }
+  .lede { color: var(--ink-2); font-size: 13.5px; line-height: 1.6; margin: 0 0 8px; }
+  header.top { padding-bottom: 22px; margin-bottom: 24px; border-bottom: 1px solid var(--border); }
+
+  .write-warning { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--warning); background: var(--warning-tint); border-radius: 8px; padding: 8px 12px; margin-top: 12px; }
+  .write-warning .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--warning); flex: none; }
+
+  #banner { padding: 12px 16px; border-radius: 8px; font-size: 13.5px; margin-bottom: 20px; background: var(--surface-2); color: var(--ink-2); }
+  #banner.error { background: var(--critical-tint); color: var(--critical); }
+
+  .field-block { margin-bottom: 20px; }
+  .field-label { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink); margin-bottom: 6px; }
+  .field-hint { font-size: 11.5px; color: var(--ink-muted); margin: 4px 0 0; }
+  input[type="text"], input[type="search"], select, textarea {
+    width: 100%; font: inherit; font-size: 13.5px; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--border-2); border-radius: 8px;
+    padding: 9px 12px;
+  }
+  textarea { min-height: 140px; resize: vertical; font-family: var(--font-mono); font-size: 12.5px; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .search-row { display: flex; gap: 8px; }
+  .search-row input { flex: 1; }
+  .btn { font: inherit; font-size: 13px; font-weight: 600; border-radius: 8px; padding: 9px 16px; cursor: pointer; border: 1px solid var(--border-2); background: var(--surface); color: var(--ink); white-space: nowrap; }
+  .btn.primary { background: var(--accent); color: #ffffff; border-color: var(--accent); }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+
+  .conv-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; margin-top: 8px; }
+  .conv-item { padding: 9px 12px; font-size: 12.5px; cursor: pointer; border-bottom: 1px solid var(--border); }
+  .conv-item:last-child { border-bottom: none; }
+  .conv-item:hover { background: var(--surface-2); }
+  .conv-item .name { color: var(--ink); font-weight: 500; }
+  .conv-item .meta { color: var(--ink-muted); font-size: 11.5px; }
+
+  .selected-conv { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; background: var(--accent-tint); border-radius: 8px; font-size: 13px; color: var(--accent); margin-top: 8px; }
+  .selected-conv button { border: none; background: none; color: inherit; cursor: pointer; font-size: 12px; text-decoration: underline; }
+
+  .attendee-list { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+  .attendee-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .attendee-row label { flex: 1; }
+  .attendee-email { color: var(--ink-muted); font-size: 11.5px; }
+
+  .preview-panel { background: var(--surface); border: 1px solid var(--border-2); border-radius: 10px; padding: 16px 18px; margin-top: 16px; }
+  .preview-panel h3 { font-family: var(--font-display); font-size: 15px; font-weight: 500; margin: 0 0 12px; }
+  .preview-row { display: flex; gap: 10px; font-size: 12.5px; padding: 6px 0; border-top: 1px solid var(--border); }
+  .preview-row:first-child { border-top: none; }
+  .preview-row .k { flex: none; width: 90px; color: var(--ink-muted); }
+  .preview-row .v { flex: 1; color: var(--ink-2); }
+  .preview-content { margin-top: 10px; padding: 10px 12px; background: var(--surface-2); border-radius: 8px; font-size: 12px; font-family: var(--font-mono); white-space: pre-wrap; max-height: 140px; overflow-y: auto; }
+
+  .result-banner { padding: 12px 16px; border-radius: 8px; font-size: 13.5px; margin-top: 16px; }
+  .result-banner.ok { background: var(--good-tint); color: var(--good-text); }
+  .result-banner.ko { background: var(--critical-tint); color: var(--critical); }
+
+  footer { margin-top: 36px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 11.5px; color: var(--ink-muted); line-height: 1.7; }
+  footer code { background: var(--surface-2); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <p class="eyebrow">Widget IA · MCDF</p>
+    <h1>Envoi de documents</h1>
+    <p class="lede">Envoyer un email (avec pièce jointe éventuelle) à un ou plusieurs participants d'un dossier, via l'endpoint MCDF confirmé.</p>
+    <div class="write-warning"><span class="dot"></span> Ce widget écrit — chaque envoi déclenche un vrai email. Rien ne part sans confirmation explicite ci-dessous.</div>
+  </header>
+
+  <div id="banner">Chargement…</div>
+
+  <div id="app" style="display:none">
+
+    <div class="field-block">
+      <label class="field-label" for="conv-search">1. Dossier (convention)</label>
+      <div class="search-row">
+        <input type="search" id="conv-search" placeholder="Rechercher par nom ou code de dossier…">
+      </div>
+      <div class="conv-list" id="conv-list" style="display:none"></div>
+      <div id="conv-selected"></div>
+    </div>
+
+    <div class="field-block" id="attendees-block" style="display:none">
+      <label class="field-label">2. Destinataires</label>
+      <div class="attendee-list" id="attendee-list"></div>
+      <p class="field-hint" id="attendees-hint"></p>
+    </div>
+
+    <div class="field-block">
+      <label class="field-label" for="tpl-select">3. Modèle de message (optionnel)</label>
+      <select id="tpl-select"><option value="">— aucun —</option></select>
+      <p class="field-hint">Optionnel — sélectionner un modèle ne remplit pas automatiquement l'objet/contenu dans cette v1, à écrire manuellement ci-dessous.</p>
+    </div>
+
+    <div class="field-block">
+      <label class="field-label" for="title-input">4. Objet</label>
+      <input type="text" id="title-input" placeholder="Objet de l'email">
+    </div>
+
+    <div class="field-block">
+      <label class="field-label" for="content-input">5. Contenu</label>
+      <textarea id="content-input" placeholder="Corps du message (HTML accepté). Variables de fusion disponibles : @actor.civility@ @actor.firstname@ @actor.lastname@"></textarea>
+    </div>
+
+    <div class="field-block">
+      <label class="field-label" for="attach-input">6. Pièce jointe (optionnel)</label>
+      <input type="file" id="attach-input">
+    </div>
+
+    <div class="field-block">
+      <button type="button" class="btn primary" id="preview-btn">Aperçu avant envoi</button>
+    </div>
+
+    <div id="preview-wrap"></div>
+    <div id="result-wrap"></div>
+
+  </div>
+
+  <footer>
+    Endpoint : <code>POST /wa/conventionExport/sendMessage</code> (multipart/form-data) — capturé et confirmé le 24/08/2026, voir <code>modules/03-documents/NOTES.md</code>. Expéditeur fixé à <code>entity</code> (adresse par défaut de l'entité), comme dans la capture d'origine. Les champs <code>documentId</code>/<code>conventionDocumentId</code>/<code>templateIds</code> vus dans la capture ne sont pas envoyés ici (rôle non confirmé) — si un envoi échoue de façon inattendue, c'est le premier point à vérifier.
+  </footer>
+</div>
+
+<script>
+function el(tag, cls, html) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html !== undefined) e.innerHTML = html;
+  return e;
+}
+function setBanner(kind, html) {
+  const b = document.getElementById('banner');
+  b.className = kind || '';
+  b.innerHTML = html;
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+async function fetchAll(entity, entityId) {
+  const res = await fetch(`/wa/${entity}/list?nopaging=1&_dc=${Date.now()}`, { credentials: 'same-origin' });
+  if (res.status === 401 || res.status === 403) throw new Error('AUTH');
+  let data;
+  try { data = await res.json(); } catch (e) { throw new Error('AUTH'); }
+  if (!data.success) throw new Error(`Appel /wa/${entity}/list refusé.`);
+  return entityId ? data.root.filter((r) => r.entityId === entityId) : data.root;
+}
+
+// Devine le meilleur champ "libellé" d'un objet dont la forme exacte
+// n'est pas confirmée (messageTemplate) -- plutôt que de supposer un nom
+// de champ au hasard.
+function guessLabelField(obj) {
+  const candidates = ['name', 'title', 'label', 'code'];
+  for (const c of candidates) if (typeof obj[c] === 'string' && obj[c]) return c;
+  const firstString = Object.keys(obj).find((k) => typeof obj[k] === 'string' && k !== 'id');
+  return firstString || 'id';
+}
+
+let STATE = { entityId: null, conventions: [], attendees: [], selectedConv: null, selectedAttendees: new Set() };
+
+(async () => {
+  STATE.entityId = new URLSearchParams(location.search).get('entityId');
+  setBanner('', 'Chargement des dossiers et modèles de message…');
+  try {
+    const [conventions, templates] = await Promise.all([
+      fetchAll('fullConventionQualiopi', STATE.entityId),
+      fetchAll('messageTemplate', STATE.entityId).catch(() => []),
+    ]);
+    STATE.conventions = conventions.filter((c) => c.isConvention);
+
+    const tplSelect = document.getElementById('tpl-select');
+    if (templates.length) {
+      const labelField = guessLabelField(templates[0]);
+      templates.forEach((t) => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = t[labelField] || t.id;
+        tplSelect.appendChild(opt);
+      });
+    }
+
+    document.getElementById('banner').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    wireUp();
+  } catch (err) {
+    if (err && err.message === 'AUTH') {
+      setBanner('error', 'Session MCDF non détectée. Ouvrez cette page depuis un onglet déjà connecté à MCDF.');
+    } else {
+      setBanner('error', `Erreur de chargement : ${(err && err.message) || err}`);
+      console.error(err);
+    }
+  }
+})();
+
+function wireUp() {
+  const searchInput = document.getElementById('conv-search');
+  const listWrap = document.getElementById('conv-list');
+
+  searchInput.addEventListener('input', () => {
+    const q = searchInput.value.trim().toLowerCase();
+    if (!q) { listWrap.style.display = 'none'; listWrap.innerHTML = ''; return; }
+    const matches = STATE.conventions.filter((c) =>
+      (c.name || '').toLowerCase().includes(q) || (c.code || '').toLowerCase().includes(q)
+    ).slice(0, 20);
+    listWrap.innerHTML = '';
+    if (!matches.length) {
+      listWrap.appendChild(el('div', 'conv-item', 'Aucun résultat.'));
+    } else {
+      matches.forEach((c) => {
+        const item = el('div', 'conv-item', `<div class="name">${escapeHtml(c.name || c.code || c.id)}</div><div class="meta">${escapeHtml(c.customerName || '')} · ${escapeHtml(c.code || c.id)}</div>`);
+        item.addEventListener('click', () => selectConvention(c));
+        listWrap.appendChild(item);
+      });
+    }
+    listWrap.style.display = 'block';
+  });
+
+  document.getElementById('preview-btn').addEventListener('click', showPreview);
+}
+
+async function selectConvention(conv) {
+  STATE.selectedConv = conv;
+  document.getElementById('conv-search').value = '';
+  document.getElementById('conv-list').style.display = 'none';
+  const selWrap = document.getElementById('conv-selected');
+  selWrap.innerHTML = '';
+  const chip = el('div', 'selected-conv', `<span>${escapeHtml(conv.name || conv.code || conv.id)}</span>`);
+  const clearBtn = document.createElement('button');
+  clearBtn.type = 'button';
+  clearBtn.textContent = 'Changer';
+  clearBtn.addEventListener('click', () => {
+    STATE.selectedConv = null;
+    STATE.selectedAttendees = new Set();
+    selWrap.innerHTML = '';
+    document.getElementById('attendees-block').style.display = 'none';
+  });
+  chip.appendChild(clearBtn);
+  selWrap.appendChild(chip);
+
+  const attBlock = document.getElementById('attendees-block');
+  const attList = document.getElementById('attendee-list');
+  const hint = document.getElementById('attendees-hint');
+  attList.innerHTML = '<div class="attendee-row">Chargement des participants…</div>';
+  attBlock.style.display = 'block';
+
+  const allAttendees = await fetchAll('conventionAttendee', STATE.entityId);
+  const forConv = allAttendees.filter((a) => a.conventionId === conv.id && a.attendee && a.email);
+  STATE.attendees = forConv;
+  STATE.selectedAttendees = new Set();
+
+  attList.innerHTML = '';
+  if (!forConv.length) {
+    attList.appendChild(el('div', 'attendee-row', 'Aucun participant avec email trouvé pour ce dossier.'));
+    hint.textContent = '';
+  } else {
+    forConv.forEach((a) => {
+      const row = el('div', 'attendee-row');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.id = `att-${a.attendeeId}`;
+      cb.addEventListener('change', () => {
+        if (cb.checked) STATE.selectedAttendees.add(a.attendeeId);
+        else STATE.selectedAttendees.delete(a.attendeeId);
+      });
+      row.appendChild(cb);
+      const label = document.createElement('label');
+      label.htmlFor = cb.id;
+      label.innerHTML = `${escapeHtml(a.fullname)} <span class="attendee-email">${escapeHtml(a.email)}</span>`;
+      row.appendChild(label);
+      attList.appendChild(row);
+    });
+    hint.textContent = `${forConv.length} participant(s) avec email.`;
+  }
+}
+
+function showPreview() {
+  const resultWrap = document.getElementById('result-wrap');
+  resultWrap.innerHTML = '';
+  const previewWrap = document.getElementById('preview-wrap');
+  previewWrap.innerHTML = '';
+
+  if (!STATE.selectedConv) { alert('Sélectionnez un dossier.'); return; }
+  const targets = STATE.attendees.filter((a) => STATE.selectedAttendees.has(a.attendeeId));
+  if (!targets.length) { alert('Sélectionnez au moins un destinataire.'); return; }
+  const title = document.getElementById('title-input').value.trim();
+  if (!title) { alert('Renseignez un objet.'); return; }
+  const content = document.getElementById('content-input').value;
+
+  const panel = el('div', 'preview-panel');
+  panel.appendChild(el('h3', '', 'Vérifier avant envoi'));
+  panel.appendChild(el('div', 'preview-row', `<span class="k">Dossier</span><span class="v">${escapeHtml(STATE.selectedConv.name || STATE.selectedConv.id)}</span>`));
+  panel.appendChild(el('div', 'preview-row', `<span class="k">Destinataires</span><span class="v">${targets.map((t) => escapeHtml(`${t.fullname} <${t.email}>`)).join(', ')}</span>`));
+  panel.appendChild(el('div', 'preview-row', `<span class="k">Objet</span><span class="v">${escapeHtml(title)}</span>`));
+  const file = document.getElementById('attach-input').files[0];
+  if (file) panel.appendChild(el('div', 'preview-row', `<span class="k">Pièce jointe</span><span class="v">${escapeHtml(file.name)}</span>`));
+  panel.appendChild(el('div', 'preview-content', escapeHtml(content || '(vide)')));
+
+  const confirmBtn = document.createElement('button');
+  confirmBtn.type = 'button';
+  confirmBtn.className = 'btn primary';
+  confirmBtn.style.marginTop = '14px';
+  confirmBtn.textContent = `Confirmer et envoyer à ${targets.length} destinataire(s)`;
+  confirmBtn.addEventListener('click', () => sendMessage(targets, title, content, confirmBtn));
+  panel.appendChild(confirmBtn);
+
+  previewWrap.appendChild(panel);
+}
+
+async function sendMessage(targets, title, content, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Envoi en cours…';
+  const resultWrap = document.getElementById('result-wrap');
+  resultWrap.innerHTML = '';
+
+  const form = new FormData();
+  form.append('targets', JSON.stringify(targets.map((t) => ({
+    name: t.fullname, email: t.email, id: t.attendeeId,
+    civility: t.civility || '', lastname: t.lastname || '', firstname: t.firstname || '',
+  }))));
+  form.append('conventionId', STATE.selectedConv.id);
+  form.append('senderId', 'entity');
+  form.append('cc', '');
+  form.append('bcc', '');
+  const tplId = document.getElementById('tpl-select').value;
+  form.append('messageTemplateId', tplId || '');
+  form.append('title', title);
+  form.append('content', content);
+  const file = document.getElementById('attach-input').files[0];
+  if (file) form.append('attachedFile', file);
+
+  try {
+    const res = await fetch('/wa/conventionExport/sendMessage', { method: 'POST', body: form, credentials: 'same-origin' });
+    let data;
+    try { data = await res.json(); } catch (e) { data = null; }
+    if (res.ok && data && data.success) {
+      resultWrap.appendChild(el('div', 'result-banner ok', `✓ Envoyé à ${targets.length} destinataire(s).`));
+    } else {
+      resultWrap.appendChild(el('div', 'result-banner ko', `Échec de l'envoi (HTTP ${res.status}). Réponse : ${escapeHtml(JSON.stringify(data))}`));
+    }
+  } catch (err) {
+    resultWrap.appendChild(el('div', 'result-banner ko', `Erreur réseau : ${escapeHtml(err.message)}`));
+  }
+  btn.disabled = false;
+  btn.textContent = 'Confirmer et envoyer';
+}
+</script>
