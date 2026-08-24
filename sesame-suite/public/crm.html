@@ -914,16 +914,17 @@ function renderInsights(){
   // parcours onboarding/espace client : la carte "Parcours client activés"
   // qui les excluait autrefois de ce graphique a été supprimée le
   // 18/08/2026 (fusionnée dans "Options actives" sur la fiche), donc plus
-  // aucune raison de les exclure ici. Le nombre total ci-contre additionne
-  // le champ "Nb modules" (c.modules) de chaque fiche — c'est ce champ,
-  // pas les booléens ci-dessous, qui est la source officielle du nombre de
-  // modules Sesame par client (saisi depuis l'audit) ; les 13 options ne
-  // couvrent que les modules connus individuellement et ne se totalisent
-  // pas forcément au même chiffre. ──
+  // aucune raison de les exclure ici. Le nombre total ci-contre est la
+  // somme des 13 compteurs ci-dessous — le nombre de MODULES actifs sur
+  // tout le portefeuille (un client avec 3 options cochées compte pour 3),
+  // pas le nombre de clients ayant au moins un module. Il additionnait
+  // auparavant le champ libre "Nb modules" (c.modules, saisi à la main
+  // depuis l'audit) — décorrélé des 13 booléens ci-dessous et pas fiable
+  // comme décompte réel de modules, corrigé le 24/08/2026. ──
   const MODULE_FEATURES=[['webApp','WebApp'],['mobileV2','Mobile V2'],['offline','Offline'],['livret','Livret digital'],['checkin','Check-in mobile'],['gestionDemande','Gestion demande'],['onbChoixChambres','Choix chambre'],['onbOccupant','Occupant'],['onbIdentite','Identité'],['onbMenage','Ménage'],['espBoutique','Boutique'],['espPoint','Points fidélité'],['espEvenement','Évènements']];
   const total=clients.length;
   const moduleCounts=MODULE_FEATURES.map(([k,lbl])=>[k,lbl,clients.filter(c=>c[k]).length]);
-  const totalModulesActifs=clients.reduce((s,c)=>s+(c.modules||0),0);
+  const totalModulesActifs=moduleCounts.reduce((s,[,,n])=>s+n,0);
   const moduleHtml=moduleCounts.map(([k,lbl,n])=>{
     const pct=total?Math.round(n/total*100):0;
     return '<div class="bar-row" title="'+lbl+' : '+n+'/'+total+'">'

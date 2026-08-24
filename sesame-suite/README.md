@@ -1552,6 +1552,19 @@ bandes en trapèze empilées (SVG), sur le modèle d'une maquette fournie
   texte à côté du funnel, jamais uniquement encodées par la couleur —
   chaque bande ne porte qu'un numéro, pas de texte sur fond coloré.
 
+### CRM Home : "Usage des modules Sesame" — corrige le total affiché
+
+Le total "X au total" de la carte "Usage des modules Sesame" (`public/crm.html`,
+`totalModulesActifs`) additionnait le champ libre "Nb modules" (`c.modules`,
+saisi à la main sur la fiche client depuis l'audit) — un chiffre décorrélé
+des 13 barres affichées juste en dessous, et qui ne représentait pas
+fidèlement le nombre de modules réellement actifs sur le portefeuille.
+Corrigé pour additionner les 13 compteurs eux-mêmes (un client avec 3
+modules cochés compte pour 3) — c'est désormais un vrai décompte de
+**modules actifs**, pas un décompte de **clients ayant au moins un
+module**. Le champ `c.modules` reste inchangé ailleurs (fiche client,
+export CSV) : seul ce total agrégé change de source.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT
