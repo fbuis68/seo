@@ -150,6 +150,11 @@
   .compare-delta.up { color: var(--good-text); }
   .compare-delta.down { color: var(--critical); }
 
+  .year-picker { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .year-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--ink-2); background: var(--surface); border: 1px solid var(--border-2); border-radius: 100px; padding: 5px 12px 5px 10px; cursor: pointer; user-select: none; }
+  .year-chip input { margin: 0; accent-color: var(--accent); }
+  .year-chip.checked { background: var(--accent-tint); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
   .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 100px; white-space: nowrap; }
   .badge .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
   .badge.age-ok { background: var(--surface-2); color: var(--ink-2); }
@@ -218,18 +223,19 @@
     <div class="tab-panel active" id="tab-commercial">
 
       <section>
-        <div class="section-head">
+        <div class="section-head" style="flex-wrap:wrap; row-gap:10px;">
           <h2 id="compare-title">Comparaison annuelle</h2>
           <label class="hint" style="display:flex; align-items:center; gap:6px;">
             Jusqu'à
             <select id="compare-cutoff" style="font:inherit; font-size:12px; color:var(--ink); background:var(--surface); border:1px solid var(--border-2); border-radius:6px; padding:3px 6px;"></select>
           </label>
         </div>
+        <div id="compare-years" class="year-picker"></div>
         <div class="panel">
           <div class="table-scroll" style="max-height:260px">
             <table class="tight-table">
-              <colgroup><col style="width:32%"><col style="width:34%"><col style="width:18%"><col style="width:16%"></colgroup>
-              <thead><tr><th>Indicateur</th><th>Comparaison</th><th class="num">Écart</th><th class="num">vs N-1</th></tr></thead>
+              <colgroup><col style="width:26%"><col style="width:40%"><col style="width:17%"><col style="width:17%"></colgroup>
+              <thead><tr><th>Indicateur</th><th>Comparaison</th><th class="num">Écart</th><th class="num">Variation</th></tr></thead>
               <tbody id="tbl-comparaison"></tbody>
             </table>
           </div>
@@ -691,7 +697,7 @@ async function buildData(entityId) {
   const now = new Date();
   const comparaison_annuelle = computeComparaison(
     { customers, conventions, invoices, attendees },
-    now.getMonth(), now.getDate(),
+    [now.getFullYear() - 1, now.getFullYear()], now.getMonth(), now.getDate(),
   );
 
   return {
@@ -707,16 +713,19 @@ async function buildData(entityId) {
 }
 
 // ------------------------------------------------------------------
-// Comparaison annuelle N vs N-1, jusqu'à un mois choisi (par défaut :
-// aujourd'hui). cutoffMonth est un index 0-11, cutoffDay le jour du
-// mois — pour un mois déjà terminé on passe son dernier jour, ce qui
-// donne une comparaison "mois plein" plutôt qu'un YTD partiel.
+// Comparaison entre les annees choisies (pas forcement consecutives,
+// ex. 2026 vs 2023), jusqu'a un mois donne (par defaut : aujourd'hui
+// pour l'annee en cours). cutoffMonth est un index 0-11, cutoffDay le
+// jour du mois -- pour un mois deja termine on passe son dernier jour,
+// ce qui donne une comparaison "mois plein" plutot qu'un YTD partiel.
+// `years` : tableau d'annees (nombres), au moins 1, ordre quelconque en
+// entree -- trie ici par ordre croissant pour un rendu stable.
 // ------------------------------------------------------------------
 function daysInMonth(year, monthIdx) { return new Date(year, monthIdx + 1, 0).getDate(); }
 
-function computeComparaison(raw, cutoffMonth, cutoffDay) {
+function computeComparaison(raw, years, cutoffMonth, cutoffDay) {
   const { customers, conventions, invoices, attendees } = raw;
-  const yearN = new Date().getFullYear(), yearN1 = yearN - 1;
+  const sortedYears = [...years].sort((a, b) => a - b);
   const inYtd = (dateStr, year) => {
     if (!dateStr) return false;
     const d = new Date(dateStr);
@@ -725,20 +734,23 @@ function computeComparaison(raw, cutoffMonth, cutoffDay) {
   };
   const pctDelta = (cur, prev) => (prev ? Math.round(((cur - prev) / prev) * 1000) / 10 : null);
 
-  const caN = invoices.filter((i) => inYtd(i.billingDate, yearN)).reduce((s, i) => s + (i.amount || 0), 0);
-  const caN1 = invoices.filter((i) => inYtd(i.billingDate, yearN1)).reduce((s, i) => s + (i.amount || 0), 0);
-  const clientsN = customers.filter((c) => inYtd(c.created, yearN)).length;
-  const clientsN1 = customers.filter((c) => inYtd(c.created, yearN1)).length;
-  const stagN = new Set(attendees.filter((a) => a.attendee && inYtd(a.created, yearN)).map((a) => a.attendeeId)).size;
-  const stagN1 = new Set(attendees.filter((a) => a.attendee && inYtd(a.created, yearN1)).map((a) => a.attendeeId)).size;
-  const devisN = conventions.filter((c) => c.isProposal && inYtd(c.signingDate, yearN)).length;
-  const devisN1 = conventions.filter((c) => c.isProposal && inYtd(c.signingDate, yearN1)).length;
+  const perYear = (calc) => sortedYears.map((year) => ({ year, val: calc(year) }));
+
+  const caPerYear = perYear((year) => Math.round(invoices.filter((i) => inYtd(i.billingDate, year)).reduce((s, i) => s + (i.amount || 0), 0) * 100) / 100);
+  const clientsPerYear = perYear((year) => customers.filter((c) => inYtd(c.created, year)).length);
+  const stagPerYear = perYear((year) => new Set(attendees.filter((a) => a.attendee && inYtd(a.created, year)).map((a) => a.attendeeId)).size);
+  const devisPerYear = perYear((year) => conventions.filter((c) => c.isProposal && inYtd(c.signingDate, year)).length);
+
+  const withDelta = (indicateur, values) => {
+    const first = values[0].val, last = values[values.length - 1].val;
+    return { indicateur, values, delta: last - first, delta_pct: pctDelta(last, first) };
+  };
 
   return [
-    { indicateur: 'CA facturé (HT)', annee_courante: Math.round(caN * 100) / 100, annee_precedente: Math.round(caN1 * 100) / 100, delta_pct: pctDelta(caN, caN1) },
-    { indicateur: 'Nouveaux clients', annee_courante: clientsN, annee_precedente: clientsN1, delta_pct: pctDelta(clientsN, clientsN1) },
-    { indicateur: 'Stagiaires inscrits', annee_courante: stagN, annee_precedente: stagN1, delta_pct: pctDelta(stagN, stagN1) },
-    { indicateur: 'Devis signés', annee_courante: devisN, annee_precedente: devisN1, delta_pct: pctDelta(devisN, devisN1) },
+    withDelta('CA facturé (HT)', caPerYear),
+    withDelta('Nouveaux clients', clientsPerYear),
+    withDelta('Stagiaires inscrits', stagPerYear),
+    withDelta('Devis signés', devisPerYear),
   ];
 }
 
@@ -951,41 +963,41 @@ function renderHeuresFormateur(DATA) {
   });
 }
 
-function renderComparaison(rows) {
+function renderComparaison(rows, years) {
   const tbody = document.getElementById('tbl-comparaison');
   tbody.innerHTML = '';
-  const now = new Date();
-  const yearN = now.getFullYear(), yearN1 = yearN - 1;
-  document.getElementById('compare-title').textContent = `Comparaison ${yearN} vs ${yearN1}`;
+  const sortedYears = [...years].sort((a, b) => a - b);
+  document.getElementById('compare-title').textContent = sortedYears.length > 1
+    ? `Comparaison ${sortedYears.join(' vs ')}`
+    : `Année ${sortedYears[0] || ''}`;
   const isEUR = (nom) => /CA facturé/i.test(nom);
 
   rows.forEach((r) => {
     const tr = el('tr');
     tr.appendChild(el('td', 'strong', r.indicateur));
 
-    const max = Math.max(r.annee_courante, r.annee_precedente, 1);
+    const max = Math.max(...r.values.map((v) => v.val), 1);
     const fmt = (v) => (isEUR(r.indicateur) ? fmtEUR(v) : String(v));
     const compareTd = el('td');
     const rowsWrap = el('div', 'compare-rows');
-    [[yearN, r.annee_courante, ''], [yearN1, r.annee_precedente, 'prev']].forEach(([year, val, mod]) => {
+    r.values.forEach((v, i) => {
       const row = el('div', 'compare-row');
-      row.appendChild(el('span', 'compare-year', String(year)));
+      row.appendChild(el('span', 'compare-year', String(v.year)));
       const track = el('div', 'compare-track');
-      const fill = el('div', `compare-fill ${mod}`.trim());
-      fill.style.width = `${Math.max((val / max * 100), 2).toFixed(1)}%`;
+      const fill = el('div', `compare-fill ${i < r.values.length - 1 ? 'prev' : ''}`.trim());
+      fill.style.width = `${Math.max((v.val / max * 100), 2).toFixed(1)}%`;
       track.appendChild(fill);
       row.appendChild(track);
-      row.appendChild(el('span', 'compare-val', fmt(val)));
+      row.appendChild(el('span', 'compare-val', fmt(v.val)));
       rowsWrap.appendChild(row);
     });
     compareTd.appendChild(rowsWrap);
     tr.appendChild(compareTd);
 
-    const ecart = r.annee_courante - r.annee_precedente;
-    tr.appendChild(el('td', 'num', isEUR(r.indicateur) ? fmtEUR(ecart) : String(ecart)));
+    tr.appendChild(el('td', 'num', isEUR(r.indicateur) ? fmtEUR(r.delta) : String(r.delta)));
 
     const deltaTd = el('td', 'num');
-    if (r.delta_pct === null || r.delta_pct === undefined) {
+    if (r.delta_pct === null || r.delta_pct === undefined || r.values.length < 2) {
       deltaTd.innerHTML = '<span class="compare-delta">—</span>';
     } else {
       const up = r.delta_pct >= 0;
@@ -996,10 +1008,63 @@ function renderComparaison(rows) {
   });
 }
 
+// ------------------------------------------------------------------
+// Selecteur "annees a comparer" (cases a cocher, pas forcement
+// consecutives -- ex. 2026 + 2023) + selecteur de mois de coupure.
+// ------------------------------------------------------------------
+function getSelectedYears() {
+  return [...document.querySelectorAll('#compare-years input:checked')].map((cb) => parseInt(cb.value, 10));
+}
+
+function refreshComparaison(DATA) {
+  const sel = document.getElementById('compare-cutoff');
+  const now = new Date();
+  const m = parseInt(sel.value, 10);
+  const day = m === now.getMonth() ? now.getDate() : daysInMonth(now.getFullYear(), m);
+  let years = getSelectedYears();
+  if (years.length === 0) {
+    // au moins une annee doit rester selectionnee -- on force celle qu'on vient de decocher
+    years = [now.getFullYear()];
+  }
+  renderComparaison(computeComparaison(DATA.raw, years, m, day), years);
+}
+
+function populateYearPicker(DATA) {
+  const wrap = document.getElementById('compare-years');
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  const yearsInData = new Set();
+  [...DATA.raw.invoices.map((i) => i.billingDate), ...DATA.raw.customers.map((c) => c.created), ...DATA.raw.conventions.map((c) => c.signingDate)]
+    .filter(Boolean)
+    .forEach((d) => yearsInData.add(new Date(d).getFullYear()));
+  yearsInData.add(currentYear);
+  const minYear = Math.min(...yearsInData, currentYear - 5);
+
+  const years = [];
+  for (let y = currentYear; y >= minYear; y--) years.push(y);
+
+  years.forEach((y) => {
+    const chip = el('label', 'year-chip');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = String(y);
+    cb.checked = y === currentYear || y === currentYear - 1;
+    if (cb.checked) chip.classList.add('checked');
+    cb.addEventListener('change', () => {
+      chip.classList.toggle('checked', cb.checked);
+      refreshComparaison(DATA);
+    });
+    chip.appendChild(cb);
+    chip.appendChild(document.createTextNode(String(y)));
+    wrap.appendChild(chip);
+  });
+}
+
 function populateCutoffSelect(DATA) {
   const sel = document.getElementById('compare-cutoff');
   const now = new Date();
-  const noms = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+  const noms = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','déc.'];
   for (let m = 0; m <= now.getMonth(); m++) {
     const opt = document.createElement('option');
     opt.value = String(m);
@@ -1007,19 +1072,16 @@ function populateCutoffSelect(DATA) {
     sel.appendChild(opt);
   }
   sel.value = String(now.getMonth());
-  sel.addEventListener('change', () => {
-    const m = parseInt(sel.value, 10);
-    const day = m === now.getMonth() ? now.getDate() : daysInMonth(now.getFullYear(), m);
-    renderComparaison(computeComparaison(DATA.raw, m, day));
-  });
+  sel.addEventListener('change', () => refreshComparaison(DATA));
 }
 
 function renderAll(DATA) {
   renderKpis(DATA);
 
   // Commercial
+  populateYearPicker(DATA);
   populateCutoffSelect(DATA);
-  renderComparaison(DATA.comparaison_annuelle);
+  renderComparaison(DATA.comparaison_annuelle, [new Date().getFullYear() - 1, new Date().getFullYear()]);
   renderNouveaux(DATA);
   renderMiniChart('chart-ca', 'labels-ca', DATA.ca_mensuel, 'ca', 'mois', (v) => fmtEUR(v));
   renderRankList('rank-conseillers', DATA.top_conseillers, 'nom', 'ca', () => '', fmtEUR);
