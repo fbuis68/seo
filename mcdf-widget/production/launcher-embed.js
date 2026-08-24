@@ -182,6 +182,7 @@
     { icon: '\u{1F4AC}', title: 'IA Conversationnelle', desc: 'Dialoguer en langage naturel pour interroger MCDF (v1, questions connues).', ready: true, href: `widget-conversationnel.html${qs}` },
     { icon: '\u2705', title: 'Assistant Qualiopi', desc: 'V\u00E9rifier les indicateurs et les preuves manquantes (v1, mode d\u00E9couverte).', ready: true, href: `widget-qualiopi.html${qs}` },
     { icon: '\u{1F4CA}', title: 'G\u00E9n\u00E9ration de rapports', desc: "Restitutions et KPI en direct (nouveaux clients, CA, devis...).", ready: true, href: `widget-ia.html${qs}` },
+    { icon: '\u{1F4E4}', title: 'Envoi de documents', desc: "Envoyer un email \u00E0 des participants d'un dossier \u2014 d\u00E9clenche un vrai envoi.", ready: true, href: `widget-envoi.html${qs}` },
     { icon: '\u{1F50D}', title: 'Recherche intelligente', desc: "Chercher en langage naturel plut\u00F4t qu'avec des filtres.", ready: false, href: null },
   ];
   const panel = document.getElementById('ia-launcher-panel');

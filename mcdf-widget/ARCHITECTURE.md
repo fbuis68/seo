@@ -52,7 +52,7 @@ confirmer les noms d'entité et les champs réels du module Qualiopi.
 | 1 | IA Conversationnelle | 🟢 v1 livrée | `production/widget-conversationnel.html` — répond à un jeu de questions connu sur les données réelles ; pas encore un vrai LLM (pas de endpoint d'écriture confirmé non plus) |
 | 2 | Assistant Qualiopi | 🟢 livrable | `production/widget-qualiopi.html` — `sessionQualiopi`/`fullConventionQualiopi` confirmées en direct (5544/3769 lignes réelles) ; indicateurs de suivi horaire/documentaire/OPCO calculés en direct ; les indicateurs qualité classiques (satisfaction, réclamations) restent en saisie manuelle, aucune source MCDF trouvée pour ceux-là |
 | 3a | Génération de rapports | 🟢 livrable | `production/widget-ia.html` — widget réel, données en direct, prêt à intégrer (voir `production/INTEGRATION.md`) |
-| 3b | Génération de documents | 🟡 envoi confirmé | `POST /wa/conventionExport/sendMessage` capturé et testé avec succès (destinataires, modèle de message, pièces jointes) — voir `modules/03-documents/NOTES.md`. Reste : signature électronique (bouton repéré, pas encore capturé) et la génération de document elle-même (bouton "Générer"/"Imprimer") |
+| 3b | Génération de documents | 🟢 envoi livré | `production/widget-envoi.html` — envoi réel d'email à des participants d'un dossier via `POST /wa/conventionExport/sendMessage` (confirmé et testé), avec écran de confirmation obligatoire avant tout envoi. Reste : signature électronique (bouton repéré, pas encore capturé) et la génération de document elle-même (bouton "Générer"/"Imprimer") |
 | 4 | Recherche intelligente | 🟡 piste confirmée | trouver le paramètre HTTP qui active la recherche libre (`freeField`) déjà présente côté serveur |
 
 ## Pourquoi cet ordre de priorité
