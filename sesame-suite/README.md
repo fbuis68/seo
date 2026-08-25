@@ -1842,6 +1842,34 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   16 200€ de pipeline tant que la seconde n'est pas corrigée — la
   modale de détail identifie sans ambiguïté laquelle des deux corriger.
 
+### Docker : scripts/ absent de l'image (backfills en prod cassés)
+
+- `docker exec ... npx tsx scripts/backfill-room-media.ts` échouait en
+  production avec `ERR_MODULE_NOT_FOUND` — le Dockerfile copiait
+  `prisma`/`src`/`public` mais jamais `scripts/`, absent de l'image
+  buildée malgré sa présence dans le dépôt. `COPY scripts ./scripts`
+  ajouté, même endroit que les autres `COPY`.
+
+### Intégration réservations : réglages techniques verrouillés par défaut par modèle de PMS
+
+- Les préréglages PMS (Sesame Technology, Mews, Opera Cloud, Thaïs)
+  appliquaient déjà des valeurs techniques par défaut (endpoint, mapping,
+  authentification…) au choix dans la liste déroulante, mais rien
+  n'empêchait de les modifier par mégarde ensuite. Les champs sous
+  "Réglages techniques avancés" démarrent désormais verrouillés
+  (`disabled`) sur les valeurs par défaut du modèle choisi — à chaque
+  sélection d'un modèle ET à chaque rechargement du panneau — avec un
+  bandeau "Réglages techniques par défaut du modèle X — verrouillés" et un
+  bouton "Modifier" pour les déverrouiller à la demande (et "Personnalisé"
+  déverrouillé, cf. bsSetLocked/bsToggleLock). Les identifiants simplifiés
+  propres à l'établissement (URL, identifiants de connexion, code
+  établissement — section "Identifiants" au-dessus) restent toujours
+  éditables, verrou ou non : ce ne sont pas des valeurs par défaut du
+  modèle. Cliquer "Modifier" déplie aussi la section si elle était
+  repliée. Revenir sur le même modèle réapplique et reverrouille ses
+  valeurs par défaut (vérifié : une valeur modifiée à la main après
+  déverrouillage est bien écrasée en resélectionnant le même modèle).
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

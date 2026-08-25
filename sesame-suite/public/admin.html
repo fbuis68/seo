@@ -1436,6 +1436,17 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   <!-- Réglages de connexion -->
   <div class="ca" id="bs-status-banner" style="display:none;margin-bottom:16px"></div>
 
+  <!-- Verrou des réglages techniques d'un modèle de connecteur — visible
+       uniquement quand un préréglage (autre que "Personnalisé") est actif ;
+       les champs sous "Réglages techniques avancés" démarrent verrouillés
+       sur les valeurs par défaut du modèle à chaque sélection/rechargement,
+       "Modifier" les déverrouille à la demande pour un ajustement ponctuel. -->
+  <div class="ca" id="bs-lock-banner" style="display:none;align-items:center;gap:10px;margin-bottom:16px">
+    <i class="ti ti-lock" id="bs-lock-icon" style="color:var(--mu);font-size:16px"></i>
+    <span style="color:var(--mu);font-size:12px;flex:1">Réglages techniques par défaut du modèle <b id="bs-lock-preset-label"></b> — verrouillés pour éviter une modification accidentelle.</span>
+    <button class="chact" onclick="bsToggleLock()" id="bs-lock-btn"><i class="ti ti-pencil" style="font-size:12px"></i> Modifier</button>
+  </div>
+
   <details id="bs-advanced-tech" open>
   <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">Réglages techniques avancés</summary>
 
@@ -4932,6 +4943,46 @@ function bsApplyPreset(userTriggered){
   bsRenderPresetVars(CURRENT_PRESET);
   var details = document.getElementById('bs-advanced-tech');
   if(details) details.open = !CURRENT_PRESET;
+
+  // Verrou des réglages techniques — un modèle choisi (re)verrouille
+  // toujours ses champs sur les valeurs par défaut (à chaque sélection ET
+  // à chaque rechargement du panneau, cf. bsInit) ; "Personnalisé" n'a pas
+  // de valeurs par défaut à protéger, donc pas de verrou.
+  var lockBanner = document.getElementById('bs-lock-banner');
+  if(CURRENT_PRESET){
+    document.getElementById('bs-lock-preset-label').textContent = CURRENT_PRESET.label;
+    lockBanner.style.display = 'flex';
+    bsSetLocked(true);
+  } else {
+    lockBanner.style.display = 'none';
+    bsSetLocked(false);
+  }
+}
+
+var BS_LOCKED = false;
+/** Verrouille/déverrouille les champs des "Réglages techniques avancés"
+ * (endpoint, mapping, auth…) — pas les identifiants simplifiés du modèle
+ * (#bs-preset-vars, propres à chaque établissement, toujours éditables).
+ * `disabled` n'empêche pas les écritures programmatiques (bsPresetVarChanged
+ * continue de fonctionner sur un champ verrouillé) — seule la saisie
+ * manuelle directe est bloquée. */
+function bsSetLocked(locked){
+  BS_LOCKED = locked;
+  document.querySelectorAll('#bs-advanced-tech input, #bs-advanced-tech select, #bs-advanced-tech textarea').forEach(function(el){ el.disabled = locked; });
+  var icon = document.getElementById('bs-lock-icon');
+  if(icon) icon.className = 'ti '+(locked?'ti-lock':'ti-lock-open');
+  var btn = document.getElementById('bs-lock-btn');
+  if(btn) btn.innerHTML = locked ? '<i class="ti ti-pencil" style="font-size:12px"></i> Modifier' : '<i class="ti ti-lock" style="font-size:12px"></i> Reverrouiller';
+}
+function bsToggleLock(){
+  bsSetLocked(!BS_LOCKED);
+  // Cliquer "Modifier" pour déverrouiller n'a d'intérêt que si la section
+  // est visible pour éditer dans la foulée — elle est repliée par défaut
+  // quand un modèle est actif (cf. bsApplyPreset).
+  if(!BS_LOCKED){
+    var details = document.getElementById('bs-advanced-tech');
+    if(details) details.open = true;
+  }
 }
 
 function bsRenderMappingFields(mapping){
