@@ -1961,11 +1961,23 @@ function trAnnualFromSpec(spec){
   if(spec.frequence==='ponctuel') return val;
   return 0;
 }
+// moisEncaissement (0-11) seul ne distingue pas deux affaires attendues le
+// même mois d'années différentes (Octobre 2026 vs Octobre 2027) — une
+// affaire créée avant l'ajout d'anneeEncaissement (25/08/2026) n'a pas
+// cette valeur : on la traite comme l'année civile en cours au moment du
+// calcul plutôt que de l'exclure, pour ne pas faire disparaître les
+// affaires déjà saisies.
+function dealEncaissementYear(d){
+  return d.anneeEncaissement!=null ? d.anneeEncaissement : new Date().getFullYear();
+}
 // ── Pipeline des affaires (CrmDeal) — reporté automatiquement sur
 // l'Encaissement, pondéré par la probabilité de l'affaire. Une affaire
-// "Perdue" ou sans mois d'encaissement/montant ponctuel saisi ne compte pas. ──
+// "Perdue" ou sans mois d'encaissement/montant ponctuel saisi ne compte
+// pas. Filtré sur cashYear (année Trésorerie affichée) en plus du mois —
+// sans ça, une affaire encaissée en Octobre d'une AUTRE année se retrouvait
+// additionnée dans l'Octobre de l'année actuellement consultée. ──
 function trDealsPipelineFor(m){
-  return deals.filter(d=>d.stage!=='Perdu' && d.moisEncaissement===m && d.montantPonctuel)
+  return deals.filter(d=>d.stage!=='Perdu' && d.moisEncaissement===m && d.montantPonctuel && dealEncaissementYear(d)===cashYear)
     .reduce((s,d)=>s+(+d.montantPonctuel||0)*(+d.probability||0)/100, 0);
 }
 function trDealsPipelineAnnual(){
@@ -2659,7 +2671,7 @@ function renderDealFunnel(filtered){
 
 
 function openNewDealModal(prospectId){
-  DEAL_DRAFT = {id:null, prospectId: prospectId||(clients[0]?clients[0].id:''), commercialId:'', title:'', stage:'Nouveau', amount:0, probability:20, closeDate:'', lostReason:'', montantPonctuel:null, moisEncaissement:null, quotes:[], _new:true};
+  DEAL_DRAFT = {id:null, prospectId: prospectId||(clients[0]?clients[0].id:''), commercialId:'', title:'', stage:'Nouveau', amount:0, probability:20, closeDate:'', lostReason:'', montantPonctuel:null, moisEncaissement:null, anneeEncaissement:new Date().getFullYear(), quotes:[], _new:true};
   renderDealModal();
 }
 function openDealModal(id){
@@ -2674,6 +2686,7 @@ function captureDealDraft(){
     probability:+g('d-proba')||0, closeDate:g('d-close'),
     montantPonctuel: g('d-montant-ponctuel').trim()===''?null:+g('d-montant-ponctuel'),
     moisEncaissement: g('d-mois-encaissement')===''?null:+g('d-mois-encaissement'),
+    anneeEncaissement: g('d-annee-encaissement').trim()===''?null:+g('d-annee-encaissement'),
     lostReason: document.getElementById('d-lost') ? g('d-lost') : DEAL_DRAFT.lostReason
   });
 }
@@ -2702,7 +2715,12 @@ function renderDealModal(){
         <div class="ff"><label>Probabilité (%)</label><input type="number" id="d-proba" value="${md.probability||0}" min="0" max="100"></div>
         <div class="ff"><label>Date de clôture prévue</label><input type="date" id="d-close" value="${md.closeDate?String(md.closeDate).slice(0,10):''}"></div>
         <div class="ff"><label>Montant ponctuel (€)</label><input type="number" id="d-montant-ponctuel" value="${md.montantPonctuel??''}" min="0" placeholder="Ex : frais de mise en service"></div>
-        <div class="ff"><label>Mois d'encaissement</label><select id="d-mois-encaissement"><option value="">—</option>${TR_MONTHS.map((m,i)=>`<option value="${i}" ${md.moisEncaissement===i?'selected':''}>${m}</option>`).join('')}</select></div>
+        <div class="ff"><label>Mois d'encaissement</label>
+          <div style="display:flex;gap:6px">
+            <select id="d-mois-encaissement" style="flex:1"><option value="" ${md.moisEncaissement==null?'selected':''}>—</option>${TR_MONTHS.map((m,i)=>`<option value="${i}" ${md.moisEncaissement===i?'selected':''}>${m}</option>`).join('')}</select>
+            <input type="number" id="d-annee-encaissement" value="${md.anneeEncaissement??''}" placeholder="Année" style="width:90px" min="2000" max="2100">
+          </div>
+        </div>
         ${md.stage==='Perdu'?`<div class="ff"><label>Raison de la perte</label><input id="d-lost" value="${esc(md.lostReason)}"></div>`:''}
       </div>
 
@@ -2739,7 +2757,8 @@ async function saveDeal(id,isNew){
   const body = {
     prospectId, commercialId: md.commercialId||null, title: md.title.trim(), stage: md.stage,
     amount: +md.amount||0, probability: +md.probability||0, closeDate: md.closeDate||null, lostReason: md.lostReason||'',
-    montantPonctuel: md.montantPonctuel==null?null:+md.montantPonctuel, moisEncaissement: md.moisEncaissement==null?null:+md.moisEncaissement
+    montantPonctuel: md.montantPonctuel==null?null:+md.montantPonctuel, moisEncaissement: md.moisEncaissement==null?null:+md.moisEncaissement,
+    anneeEncaissement: md.anneeEncaissement==null?null:+md.anneeEncaissement
   };
   try{
     var r = isNew

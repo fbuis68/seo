@@ -56,32 +56,165 @@ export function hotelPlanSvg(): string {
   </svg>`;
 }
 
-const ROOM_PHOTO_THEME: Record<string, { wall: string; accent: string; wood: string }> = {
-  "A — Supérieure": { wall: "#F4ECD8", accent: "#9B6E0A", wood: "#B98A3E" },
-  "B — Standard": { wall: "#E9EFF6", accent: "#1A4880", wood: "#8A9BB0" },
-  "C — Compacte": { wall: "#E9F3ED", accent: "#2D9B6A", wood: "#7CAE95" },
+// Palette par catégorie — reprise du thème existant (A=doré/bois,
+// B=bleu, C=vert), enrichie de teintes de mur/ciel/linge pour les
+// illustrations façon "scène" ci-dessous (25/08/2026 : les photos étaient
+// de simples aplats rectangulaires, remplacées par une scène avec
+// dégradés/ombres pour un rendu nettement plus soigné — toujours généré en
+// interne, faute d'accès réseau à un vrai shooting photo dans cet
+// environnement).
+const ROOM_PHOTO_THEME: Record<string, { wallTop: string; wallBot: string; accent: string; accentDark: string; wood: string; woodDark: string; linen: string; sky1: string; sky2: string }> = {
+  "A — Supérieure": { wallTop: "#F7EFDD", wallBot: "#EDE0C4", accent: "#B9862F", accentDark: "#8A5F16", wood: "#C79A55", woodDark: "#A67B3B", linen: "#FBF6EC", sky1: "#FDECC8", sky2: "#F7C873" },
+  "B — Standard": { wallTop: "#EDF2F9", wallBot: "#DCE6F2", accent: "#3A6FB0", accentDark: "#1A4880", wood: "#9FB3C8", woodDark: "#7B93AC", linen: "#F7FAFD", sky1: "#DCEBFB", sky2: "#8FC1EF" },
+  "C — Compacte": { wallTop: "#EDF6F0", wallBot: "#DCEEE2", accent: "#2F9A6B", accentDark: "#1E7350", wood: "#9BC3AC", woodDark: "#78A98D", linen: "#F6FBF8", sky1: "#DFF3E6", sky2: "#8FD3AC" },
 };
+
+/** Chambre illustrée (dégradés + ombres douces) : fenêtre/ciel, lit avec
+ * couette + oreillers, table de chevet + lampe, cadre mural, tapis. */
+function chambreSvg(t: (typeof ROOM_PHOTO_THEME)[string], label: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200" viewBox="0 0 320 200">
+    <defs>
+      <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="${t.wallTop}"/><stop offset="1" stop-color="${t.wallBot}"/>
+      </linearGradient>
+      <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="${t.wood}"/><stop offset="1" stop-color="${t.woodDark}"/>
+      </linearGradient>
+      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="${t.sky1}"/><stop offset="1" stop-color="${t.sky2}"/>
+      </linearGradient>
+      <linearGradient id="duvet" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="${t.linen}"/>
+      </linearGradient>
+      <radialGradient id="lampGlow" cx="0.5" cy="0.35" r="0.65">
+        <stop offset="0" stop-color="#FFE9A8" stop-opacity=".9"/><stop offset="1" stop-color="#FFE9A8" stop-opacity="0"/>
+      </radialGradient>
+      <radialGradient id="vignette" cx="0.5" cy="0.42" r="0.75">
+        <stop offset="0.6" stop-color="#000000" stop-opacity="0"/><stop offset="1" stop-color="#000000" stop-opacity=".1"/>
+      </radialGradient>
+      <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+        <feGaussianBlur stdDeviation="4"/>
+      </filter>
+    </defs>
+
+    <rect width="320" height="200" fill="url(#wall)"/>
+    <rect x="0" y="140" width="320" height="60" fill="url(#floor)"/>
+    <g stroke="${t.woodDark}" stroke-width="1" opacity=".25">
+      ${[0, 40, 80, 120, 160, 200, 240, 280].map((x) => `<line x1="${x}" y1="140" x2="${x - 14}" y2="200"/>`).join("")}
+    </g>
+
+    <!-- fenêtre + ciel -->
+    <rect x="214" y="16" width="92" height="80" rx="3" fill="url(#sky)"/>
+    <circle cx="270" cy="38" r="10" fill="#FFF6DD" opacity=".85"/>
+    <rect x="214" y="80" width="92" height="16" fill="${t.accentDark}" opacity=".18"/>
+    <rect x="214" y="16" width="92" height="80" rx="3" fill="none" stroke="${t.accentDark}" stroke-width="3"/>
+    <line x1="260" y1="16" x2="260" y2="96" stroke="${t.accentDark}" stroke-width="2"/>
+    <line x1="214" y1="56" x2="306" y2="56" stroke="${t.accentDark}" stroke-width="2"/>
+
+    <!-- rideaux -->
+    <line x1="196" y1="10" x2="320" y2="10" stroke="${t.accentDark}" stroke-width="3"/>
+    <rect x="200" y="9" width="18" height="132" fill="${t.accent}" opacity=".38"/>
+    <rect x="303" y="9" width="17" height="132" fill="${t.accent}" opacity=".38"/>
+    <g stroke="${t.accentDark}" stroke-width="1" opacity=".2">
+      <line x1="206" y1="9" x2="206" y2="141"/><line x1="212" y1="9" x2="212" y2="141"/>
+      <line x1="309" y1="9" x2="309" y2="141"/><line x1="315" y1="9" x2="315" y2="141"/>
+    </g>
+
+    <!-- tapis -->
+    <ellipse cx="95" cy="176" rx="88" ry="16" fill="${t.accent}" opacity=".22"/>
+
+    <!-- ombre du lit -->
+    <ellipse cx="92" cy="172" rx="82" ry="10" fill="#000000" opacity=".12" filter="url(#soft)"/>
+
+    <!-- tête de lit -->
+    <rect x="18" y="66" width="150" height="46" rx="10" fill="${t.accent}"/>
+    <rect x="18" y="66" width="150" height="46" rx="10" fill="none" stroke="${t.accentDark}" stroke-width="1" opacity=".4"/>
+
+    <!-- sommier + couette -->
+    <rect x="14" y="100" width="158" height="58" rx="8" fill="url(#duvet)" stroke="#E7E0D2" stroke-width="1"/>
+    <rect x="14" y="100" width="158" height="14" rx="7" fill="${t.accent}" opacity=".9"/>
+    <!-- oreillers -->
+    <rect x="24" y="88" width="52" height="30" rx="10" fill="#FFFFFF" stroke="#E7E0D2" stroke-width="1"/>
+    <rect x="82" y="88" width="52" height="30" rx="10" fill="#FFFFFF" stroke="#E7E0D2" stroke-width="1"/>
+
+    <!-- chevet + lampe (base → pied fin → abat-jour, le pied disparaît
+         sous l'abat-jour plutôt que de dépasser dessus) -->
+    <rect x="182" y="118" width="30" height="40" rx="4" fill="${t.woodDark}"/>
+    <circle cx="197" cy="76" r="22" fill="url(#lampGlow)"/>
+    <rect x="190" y="109" width="14" height="9" rx="2" fill="${t.accentDark}"/>
+    <line x1="197" y1="109" x2="197" y2="82" stroke="${t.woodDark}" stroke-width="2"/>
+    <path d="M186,86 L208,86 L201,64 L193,64 Z" fill="${t.accent}"/>
+    <path d="M186,86 L208,86 L201,64 L193,64 Z" fill="none" stroke="${t.accentDark}" stroke-width="1" opacity=".35"/>
+
+    <!-- cadre mural -->
+    <rect x="234" y="118" width="52" height="34" rx="2" fill="#FFFFFF" stroke="${t.accentDark}" stroke-width="2"/>
+    <rect x="240" y="124" width="18" height="22" fill="${t.accent}" opacity=".6"/>
+    <rect x="262" y="124" width="18" height="22" fill="${t.woodDark}" opacity=".5"/>
+
+    <rect width="320" height="200" fill="url(#vignette)"/>
+    <rect x="0" y="176" width="320" height="24" fill="rgba(20,19,13,.5)"/>
+    <text x="10" y="192" font-family="DM Sans,Arial,sans-serif" font-size="11" fill="#fff">${label} — Chambre</text>
+  </svg>`;
+}
+
+/** Salle de bain illustrée : vasque + miroir lumineux, douche vitrée,
+ * carrelage au sol, touche végétale. */
+function sdbSvg(t: (typeof ROOM_PHOTO_THEME)[string], label: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200" viewBox="0 0 320 200">
+    <defs>
+      <linearGradient id="wall2" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="${t.wallBot}"/>
+      </linearGradient>
+      <linearGradient id="counter" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="${t.linen}"/>
+      </linearGradient>
+      <radialGradient id="mirrorGlow" cx="0.5" cy="0.4" r="0.7">
+        <stop offset="0" stop-color="#FFFFFF" stop-opacity=".95"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+      </radialGradient>
+      <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="${t.accent}" stop-opacity=".16"/><stop offset="1" stop-color="${t.accent}" stop-opacity=".05"/>
+      </linearGradient>
+      <pattern id="tiles" width="20" height="20" patternUnits="userSpaceOnUse">
+        <rect width="20" height="20" fill="${t.linen}"/>
+        <rect width="19" height="19" fill="none" stroke="${t.wallBot}" stroke-width="1"/>
+      </pattern>
+    </defs>
+
+    <rect width="320" height="200" fill="url(#wall2)"/>
+    <rect x="0" y="150" width="320" height="50" fill="url(#tiles)"/>
+    <rect x="0" y="150" width="320" height="3" fill="${t.accentDark}" opacity=".25"/>
+
+    <!-- douche vitrée -->
+    <rect x="216" y="20" width="92" height="150" rx="4" fill="url(#glass)" stroke="${t.accentDark}" stroke-width="2.5"/>
+    <line x1="262" y1="24" x2="262" y2="166" stroke="${t.accentDark}" stroke-width="1.5" opacity=".5"/>
+    <circle cx="248" cy="34" r="7" fill="${t.accentDark}" opacity=".7"/>
+    <line x1="248" y1="41" x2="248" y2="58" stroke="${t.accentDark}" stroke-width="2" opacity=".7"/>
+    <g stroke="${t.accent}" stroke-width="1.5" opacity=".35">
+      <line x1="240" y1="64" x2="236" y2="80"/><line x1="248" y1="64" x2="245" y2="82"/><line x1="256" y1="64" x2="254" y2="80"/>
+    </g>
+
+    <!-- vasque -->
+    <rect x="24" y="96" width="150" height="18" rx="6" fill="url(#counter)" stroke="#E7E0D2" stroke-width="1"/>
+    <rect x="24" y="112" width="150" height="42" fill="${t.woodDark}" opacity=".9"/>
+    <ellipse cx="65" cy="104" rx="26" ry="9" fill="#FFFFFF" stroke="${t.accentDark}" stroke-width="1.5"/>
+    <rect x="60" y="82" width="4" height="16" fill="${t.accentDark}"/>
+    <rect x="52" y="80" width="20" height="5" rx="2" fill="${t.accentDark}"/>
+
+    <!-- miroir -->
+    <circle cx="65" cy="58" r="32" fill="url(#mirrorGlow)" stroke="${t.accentDark}" stroke-width="2.5"/>
+
+    <!-- plante (3 feuilles depuis un pot, plutôt qu'une masse unique) -->
+    <rect x="189" y="146" width="16" height="14" rx="2" fill="${t.woodDark}"/>
+    <path d="M197,146 C197,128 188,116 182,108 C186,124 190,138 197,146 Z" fill="${t.accent}" opacity=".85"/>
+    <path d="M197,146 C197,124 200,110 197,98 C193,112 195,132 197,146 Z" fill="${t.accent}"/>
+    <path d="M197,146 C197,128 206,116 212,108 C208,124 204,138 197,146 Z" fill="${t.accent}" opacity=".7"/>
+
+    <rect x="0" y="176" width="320" height="24" fill="rgba(20,19,13,.5)"/>
+    <text x="10" y="192" font-family="DM Sans,Arial,sans-serif" font-size="11" fill="#fff">${label} — Salle de bain</text>
+  </svg>`;
+}
 
 export function roomPhotoSvg(label: string, category: string, kind: "chambre" | "sdb"): string {
   const t = ROOM_PHOTO_THEME[category] || ROOM_PHOTO_THEME["B — Standard"];
-  const body =
-    kind === "chambre"
-      ? `<rect width="320" height="200" fill="${t.wall}"/>
-         <rect x="0" y="150" width="320" height="50" fill="${t.wood}" opacity=".35"/>
-         <rect x="200" y="20" width="90" height="70" rx="3" fill="#FFFFFF" opacity=".55" stroke="${t.accent}" stroke-width="2"/>
-         <rect x="20" y="90" width="150" height="80" rx="6" fill="#FFFFFF" stroke="${t.accent}" stroke-width="2"/>
-         <rect x="20" y="90" width="150" height="22" rx="6" fill="${t.accent}" opacity=".85"/>
-         <circle cx="45" cy="101" r="9" fill="#FFFFFF" opacity=".9"/>
-         <circle cx="70" cy="101" r="9" fill="#FFFFFF" opacity=".9"/>
-         <rect x="190" y="120" width="34" height="50" rx="4" fill="${t.accent}" opacity=".5"/>`
-      : `<rect width="320" height="200" fill="#F5F5F2"/>
-         <rect x="0" y="150" width="320" height="50" fill="${t.accent}" opacity=".18"/>
-         <rect x="30" y="40" width="80" height="90" rx="4" fill="#FFFFFF" stroke="${t.accent}" stroke-width="2"/>
-         <circle cx="70" cy="60" r="12" fill="${t.accent}" opacity=".3"/>
-         <rect x="150" y="90" width="140" height="55" rx="27" fill="#FFFFFF" stroke="${t.accent}" stroke-width="2"/>`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200" viewBox="0 0 320 200">
-    ${body}
-    <rect x="0" y="176" width="320" height="24" fill="rgba(20,19,13,.55)"/>
-    <text x="10" y="192" font-family="DM Sans,Arial,sans-serif" font-size="11" fill="#fff">${label} — ${kind === "chambre" ? "Chambre" : "Salle de bain"}</text>
-  </svg>`;
+  return kind === "chambre" ? chambreSvg(t, label) : sdbSvg(t, label);
 }

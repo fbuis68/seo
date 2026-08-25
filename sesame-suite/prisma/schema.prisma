@@ -890,12 +890,19 @@ model CrmDeal {
   lostReason  String?
 
   // Montant ponctuel (one-shot, distinct du MRR "amount" ci-dessus — ex.
-  // frais de mise en service, vente d'équipement) et mois où il doit être
-  // encaissé (0-11). Pondéré par `probability` et reporté automatiquement
-  // sur le panneau Trésorerie (catégorie Encaissement, cf. crm.html
-  // trDealsPipelineFor()) — ignoré si l'affaire est au stade "Perdu".
+  // frais de mise en service, vente d'équipement), mois (0-11) ET année où
+  // il doit être encaissé. Pondéré par `probability` et reporté
+  // automatiquement sur le panneau Trésorerie (catégorie Encaissement, cf.
+  // crm.html trDealsPipelineFor()) — ignoré si l'affaire est au stade
+  // "Perdu". `anneeEncaissement` ajouté le 25/08/2026 : sans elle,
+  // `moisEncaissement` seul (ex. "Octobre") ne distingue pas Octobre 2026
+  // d'Octobre 2027, et deux affaires de deux années différentes se
+  // retrouvaient additionnées dans le même mois de la Trésorerie affichée —
+  // fiches déjà en base avant cet ajout traitées comme année civile en
+  // cours au moment du calcul (cf. dealEncaissementYear()).
   montantPonctuel  Float?
   moisEncaissement Int?
+  anneeEncaissement Int?
 
   quotes CrmQuote[]
 

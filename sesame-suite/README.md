@@ -1751,6 +1751,51 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   caractère par caractère avec Playwright : focus conservé, filtrage
   toujours correct.
 
+### Pipe pondéré de la Trésorerie : deux affaires du même mois d'années différentes s'additionnaient
+
+- Signalé : sur Octobre, la Trésorerie affichait un pipeline pondéré de
+  16 200 € alors qu'une seule affaire visible (montant ponctuel 30 000 €,
+  probabilité 10 %) donnait 3 000 €. Cause : `CrmDeal.moisEncaissement`
+  n'est qu'un index de mois (0-11), sans année — `trDealsPipelineFor(m)`
+  ne filtrait donc que par mois, additionnant dans l'Octobre de l'année
+  Trésorerie actuellement affichée TOUTE affaire "Octobre" quelle que soit
+  son année réelle (Octobre 2026 ET Octobre 2027 finissaient dans le même
+  panier). Ajout du champ `CrmDeal.anneeEncaissement` (migration
+  `20260825090000_crm_deal_annee_encaissement`), select année à côté du
+  mois dans la fiche affaire, et filtre `trDealsPipelineFor()` sur
+  `moisEncaissement ET anneeEncaissement===cashYear`. Les affaires déjà en
+  base sans cette valeur (toutes, avant ce correctif) sont traitées comme
+  l'année civile en cours au moment du calcul (`dealEncaissementYear()`),
+  pour ne pas les faire disparaître du pipe tant qu'elles ne sont pas
+  rééditées. Reproduit et vérifié avec deux affaires 30 000 €/10 % et
+  26 400 €/50 %, l'une en Octobre 2026 et l'autre en Octobre 2027 : avant
+  le correctif, les deux vues (2026 et 2027) auraient montré 16 200 € ; le
+  correctif rend bien 3 000 € pour 2026 et 13 200 € pour 2027.
+
+### Hôtel Churchill : photos de chambres retravaillées
+
+- Les photos de chambres générées (SVG, faute d'accès réseau à un vrai
+  shooting photo ou à une banque d'images libres depuis cet
+  environnement — la sortie HTTPS est limitée à une liste blanche
+  d'infrastructure de développement, pas au web ouvert) étaient de simples
+  aplats rectangulaires (lit/fenêtre/chevet en blocs plats sans profondeur).
+  `prisma/roomMedia.ts` génère désormais une scène avec dégradés (mur,
+  ciel, parquet, couette), ombres douces, rideaux encadrant la fenêtre, une
+  vraie silhouette de lampe de chevet (pied fin caché sous l'abat-jour
+  plutôt que dépassant dessus) et un cadre mural, déclinée dans les 3
+  palettes de catégorie existantes (Supérieure/doré, Standard/bleu,
+  Compacte/vert) ; la salle de bain gagne un miroir lumineux rapproché de
+  la vasque, une douche vitrée avec pommeau et gouttes, un sol carrelé et
+  une plante à 3 feuilles. Nouveau script `scripts/backfill-room-media.ts`
+  (comblant une promesse du commentaire d'en-tête du fichier depuis la
+  migration du 18/08 — jamais tenue jusqu'ici) : régénère les photos des
+  chambres déjà en base à partir du générateur courant, à relancer chaque
+  fois que celui-ci est retouché visuellement pour propager la mise à jour
+  aux bases déjà provisionnées (seed.ts ne pose des photos qu'à la
+  création d'une chambre, jamais sur une ligne existante). **Ces photos
+  restent des illustrations générées, pas de vraies photographies** —
+  cet environnement n'a pas d'accès Internet général pour en récupérer.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT
