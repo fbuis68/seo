@@ -9,6 +9,17 @@ function normalizeBaseUrl(baseUrl: string): string {
   return /^https?:\/\//i.test(baseUrl) ? baseUrl : `https://${baseUrl}`;
 }
 
+const CONNECTOR_TIMEOUT_MS = 15000;
+
+/** Tous les appels sortants vers une source externe passent par ici plutôt
+ * que par `fetch()` nu — sans limite de temps, une source lente ou qui ne
+ * répond jamais laisse la requête bloquée indéfiniment, et avec elle le
+ * bouton côté client qui l'a déclenchée (constaté en pratique : "Ouvrir la
+ * porte" resté grisé sans aucun message, 25/08/2026). */
+function fetchWithTimeout(url: string, opts: RequestInit = {}): Promise<Response> {
+  return fetch(url, { ...opts, signal: AbortSignal.timeout(CONNECTOR_TIMEOUT_MS) });
+}
+
 /** Champs Booking que le mapping peut renseigner — valeur = dot-path dans
  * chaque élément du tableau JSON retourné par la source externe. */
 export interface FieldMapping {
@@ -86,6 +97,7 @@ export class BookingSourceError extends Error {}
  */
 function describeFetchError(e: unknown): string {
   if (!(e instanceof Error)) return "erreur réseau";
+  if (e.name === "TimeoutError") return `délai de ${CONNECTOR_TIMEOUT_MS / 1000}s dépassé sans réponse du serveur distant`;
   const cause = (e as { cause?: unknown }).cause;
   const causeCode = cause && typeof cause === "object" && "code" in cause ? String((cause as { code: unknown }).code) : null;
   const causeMessage = cause instanceof Error ? cause.message : null;
@@ -158,7 +170,7 @@ async function performLogin(
 
   let res: Response;
   try {
-    res = await fetch(url, {
+    res = await fetchWithTimeout(url, {
       method: "POST",
       // Node/undici n'envoie aucun User-Agent par défaut (contrairement aux
       // navigateurs et à curl) — certains WAF/pare-feux applicatifs
@@ -302,7 +314,7 @@ async function fetchExternalList(
   let res: Response;
   try {
     if (isPost && (bodyFormat || "form") === "json") {
-      res = await fetch(url, {
+      res = await fetchWithTimeout(url, {
         method: "POST",
         headers: {
           Accept: "application/json",
@@ -315,7 +327,7 @@ async function fetchExternalList(
     } else if (isPost) {
       const form = new URLSearchParams();
       for (const [k, v] of Object.entries(params)) form.set(k, String(v));
-      res = await fetch(url, {
+      res = await fetchWithTimeout(url, {
         method: "POST",
         headers: {
           Accept: "application/json",
@@ -326,7 +338,7 @@ async function fetchExternalList(
         body: form.toString(),
       });
     } else {
-      res = await fetch(url, { headers: { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...authHeaders } });
+      res = await fetchWithTimeout(url, { headers: { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...authHeaders } });
     }
   } catch (e) {
     throw new BookingSourceError(`Connexion impossible : ${describeFetchError(e)}`);
@@ -588,11 +600,11 @@ export async function encodeNfc(config: BookingSourceConfig, bookingCode: string
       const qs = new URLSearchParams();
       Object.entries(staticParams).forEach(([k, v]) => qs.set(k, String(v)));
       qs.set(codeParam, bookingCode);
-      res = await fetch(`${url}${url.includes("?") ? "&" : "?"}${qs.toString()}`, {
+      res = await fetchWithTimeout(`${url}${url.includes("?") ? "&" : "?"}${qs.toString()}`, {
         headers: { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...authHeaders },
       });
     } else if ((config.nfcEndpointBodyFormat || "json") === "json") {
-      res = await fetch(url, {
+      res = await fetchWithTimeout(url, {
         method: "POST",
         headers: {
           Accept: "application/json",
@@ -606,7 +618,7 @@ export async function encodeNfc(config: BookingSourceConfig, bookingCode: string
       const form = new URLSearchParams();
       Object.entries(staticParams).forEach(([k, v]) => form.set(k, String(v)));
       form.set(codeParam, bookingCode);
-      res = await fetch(url, {
+      res = await fetchWithTimeout(url, {
         method: "POST",
         headers: {
           Accept: "application/json",
@@ -667,11 +679,11 @@ export async function fetchAccessQr(
     if (method === "GET") {
       const qs = new URLSearchParams();
       Object.entries(dynamicParams).forEach(([k, v]) => qs.set(k, String(v)));
-      res = await fetch(`${url}${url.includes("?") ? "&" : "?"}${qs.toString()}`, {
+      res = await fetchWithTimeout(`${url}${url.includes("?") ? "&" : "?"}${qs.toString()}`, {
         headers: { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...authHeaders },
       });
     } else if ((config.qrEndpointBodyFormat || "json") === "json") {
-      res = await fetch(url, {
+      res = await fetchWithTimeout(url, {
         method: "POST",
         headers: {
           Accept: "application/json",
@@ -684,7 +696,7 @@ export async function fetchAccessQr(
     } else {
       const form = new URLSearchParams();
       Object.entries(dynamicParams).forEach(([k, v]) => form.set(k, String(v)));
-      res = await fetch(url, {
+      res = await fetchWithTimeout(url, {
         method: "POST",
         headers: {
           Accept: "application/json",
@@ -720,11 +732,11 @@ export async function fetchAccessQr(
       if (method === "GET") {
         const qs = new URLSearchParams();
         Object.entries(dynamicParams).forEach(([k, v]) => qs.set(k, String(v)));
-        pcRes = await fetch(`${pcUrl}${pcUrl.includes("?") ? "&" : "?"}${qs.toString()}`, {
+        pcRes = await fetchWithTimeout(`${pcUrl}${pcUrl.includes("?") ? "&" : "?"}${qs.toString()}`, {
           headers: { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...authHeaders },
         });
       } else if ((config.qrEndpointBodyFormat || "json") === "json") {
-        pcRes = await fetch(pcUrl, {
+        pcRes = await fetchWithTimeout(pcUrl, {
           method: "POST",
           headers: {
             Accept: "application/json",
@@ -737,7 +749,7 @@ export async function fetchAccessQr(
       } else {
         const form = new URLSearchParams();
         Object.entries(dynamicParams).forEach(([k, v]) => form.set(k, String(v)));
-        pcRes = await fetch(pcUrl, {
+        pcRes = await fetchWithTimeout(pcUrl, {
           method: "POST",
           headers: {
             Accept: "application/json",
@@ -800,11 +812,11 @@ export async function openDoor(
     if (method === "GET") {
       const qs = new URLSearchParams();
       Object.entries(params).forEach(([k, v]) => qs.set(k, String(v)));
-      res = await fetch(`${url}${url.includes("?") ? "&" : "?"}${qs.toString()}`, {
+      res = await fetchWithTimeout(`${url}${url.includes("?") ? "&" : "?"}${qs.toString()}`, {
         headers: { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...authHeaders },
       });
     } else if ((config.doorEndpointBodyFormat || "json") === "json") {
-      res = await fetch(url, {
+      res = await fetchWithTimeout(url, {
         method: "POST",
         headers: {
           Accept: "application/json",
@@ -817,7 +829,7 @@ export async function openDoor(
     } else {
       const form = new URLSearchParams();
       Object.entries(params).forEach(([k, v]) => form.set(k, String(v)));
-      res = await fetch(url, {
+      res = await fetchWithTimeout(url, {
         method: "POST",
         headers: {
           Accept: "application/json",

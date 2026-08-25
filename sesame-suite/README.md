@@ -2084,6 +2084,23 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   toast de succès réel — et non-régression confirmée sur un établissement
   sans connecteur configuré (comportement simulé inchangé).
 
+### Intégration réservations : bouton "Ouvrir la porte" bloqué sans message
+
+- Signalé sur E00000007 après confirmation que le mode réel fonctionnait :
+  le bouton d'ouverture reste grisé indéfiniment, sans erreur ni succès.
+  Cause trouvée à l'inspection : aucun appel `fetch()` de ce connecteur
+  (login, réservations, chambres, NFC, QR, ouverture de porte) n'avait de
+  limite de temps — une source externe lente ou qui ne répond jamais
+  laisse la requête, et avec elle le bouton qui l'a déclenchée côté
+  client, bloqués sans aucun retour visible.
+- Toutes les requêtes sortantes du connecteur passent désormais par
+  `fetchWithTimeout()` (`src/lib/bookingSource.ts`), qui applique une
+  limite de 15s (`AbortSignal.timeout`) — au-delà, une erreur explicite
+  est levée ("délai de 15s dépassé sans réponse du serveur distant") au
+  lieu d'un blocage silencieux. Vérifié : un serveur qui accepte la
+  connexion mais ne répond jamais (`black hole` local) produit bien cette
+  erreur après exactement 15s, plutôt qu'un blocage indéfini.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT
