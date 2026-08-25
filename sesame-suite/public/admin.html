@@ -1421,13 +1421,18 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     <div class="ch"><i class="ti ti-plug-connected"></i>Modèle de connecteur</div>
     <div class="fi">
       <label class="lb">Système source</label>
-      <select id="bs-preset" onchange="bsApplyPreset(true)">
-        <option value="none">Personnalisé — tous les réglages visibles</option>
-        <option value="sesame">Sesame Technology</option>
-        <option value="mews">Mews</option>
-        <option value="opera">Opera Cloud (OHIP)</option>
-        <option value="thais">Thaïs</option>
-      </select>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="bs-preset" onchange="bsApplyPreset(true)" style="flex:1;min-width:180px">
+          <option value="none">Personnalisé — tous les réglages visibles</option>
+          <option value="sesame">Sesame Technology</option>
+          <option value="mews">Mews</option>
+          <option value="opera">Opera Cloud (OHIP)</option>
+          <option value="thais">Thaïs</option>
+        </select>
+        <button type="button" class="btn btn-s" id="bs-reapply-btn" style="display:none;white-space:nowrap;width:auto" onclick="bsReapplyPreset()" title="Recharge les valeurs par défaut techniques du modèle sélectionné — utile après une mise à jour du connecteur qui ajoute de nouveaux réglages (le modèle déjà sélectionné ne se réapplique pas tout seul en rouvrant ce panneau)">
+          <i class="ti ti-refresh" style="font-size:12px"></i> Réappliquer les valeurs par défaut
+        </button>
+      </div>
     </div>
     <div id="bs-preset-note"></div>
     <div id="bs-preset-vars"></div>
@@ -5082,6 +5087,8 @@ function bsApplyPreset(userTriggered){
   bsRenderPresetVars(CURRENT_PRESET);
   var details = document.getElementById('bs-advanced-tech');
   if(details) details.open = !CURRENT_PRESET;
+  var reapplyBtn = document.getElementById('bs-reapply-btn');
+  if(reapplyBtn) reapplyBtn.style.display = (CURRENT_PRESET && CURRENT_PRESET.apply) ? 'inline-flex' : 'none';
 
   // Verrou des réglages techniques — un modèle choisi (re)verrouille
   // toujours ses champs sur les valeurs par défaut (à chaque sélection ET
@@ -5096,6 +5103,21 @@ function bsApplyPreset(userTriggered){
     lockBanner.style.display = 'none';
     bsSetLocked(false);
   }
+}
+
+/** Recharge de force les valeurs par défaut techniques du modèle déjà
+ * sélectionné — nécessaire car <select onchange> ne se déclenche pas en
+ * resélectionnant la même valeur : un établissement déjà configuré sur ce
+ * modèle AVANT l'ajout d'un nouveau réglage (ex: QR/porte, 25/08/2026) ne le
+ * récupère jamais tout seul en rouvrant ce panneau. bsApplyPreset(false) au
+ * chargement ne suffit pas non plus, par design (il ne doit pas écraser des
+ * valeurs déjà enregistrées) — ce bouton appelle directement .apply(). */
+function bsReapplyPreset(){
+  if(!CURRENT_PRESET || !CURRENT_PRESET.apply) return;
+  CURRENT_PRESET.apply();
+  bsRenderPresetVars(CURRENT_PRESET);
+  bsSetLocked(true);
+  toast('Valeurs par défaut de « '+CURRENT_PRESET.label+' » réappliquées — pensez à Enregistrer.');
 }
 
 var BS_LOCKED = false;

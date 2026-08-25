@@ -1975,6 +1975,25 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   appels QR+passcode et l'appel d'ouverture envoient exactement les
   paramètres attendus.
 
+### Intégration réservations : le modèle déjà sélectionné ne récupérait jamais les nouveaux réglages
+
+- Signalé en pratique sur Hôtel Churchill : les champs QR/porte du modèle
+  "Sesame Technology" restaient vides même le connecteur déjà configuré
+  sur ce modèle avant leur ajout. Cause : `<select onchange="...">` ne se
+  déclenche pas en resélectionnant la même valeur — un modèle déjà actif
+  ne réapplique donc jamais ses valeurs par défaut en rouvrant le panneau
+  (`bsApplyPreset(false)` au chargement ne le fait pas non plus, par
+  design, pour ne jamais écraser des valeurs déjà enregistrées). Tout
+  nouveau réglage ajouté à un préréglage existant restait donc invisible
+  pour les connecteurs déjà configurés sur ce modèle.
+- Ajouté un bouton "↻ Réappliquer les valeurs par défaut" à côté du menu
+  de modèle, visible dès qu'un modèle (autre que "Personnalisé") est
+  sélectionné — appelle directement `.apply()` du modèle, sans dépendre
+  d'un changement de sélection. Vérifié : un connecteur avec `presetId:
+  "sesame"` mais des champs QR/porte vides les récupère bien après un
+  clic, sans toucher aux identifiants propres à l'établissement (URL,
+  login, mot de passe, entityCode).
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT
