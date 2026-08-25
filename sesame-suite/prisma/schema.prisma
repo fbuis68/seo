@@ -417,17 +417,34 @@ model BookingSourceConfig {
   qrEndpointBodyFormat String? @default("json") // form | json
   qrEndpointBodyParams Json?
   qrCodeParam          String? @default("code") // nom du paramètre code réservation
+  // Nom du paramètre optionnel portant l'email du client — certaines
+  // sources (ex : API Sesame Technology, /ws/pass/findMimeSecret) exigent
+  // un second identifiant en plus du code de réservation pour retrouver le
+  // bon pass. Laisser vide si la source n'en a pas besoin.
+  qrEmailParam String?
   // Dot-path vers une image déjà prête dans la réponse (base64/data URI/URL)
   // — prioritaire sur qrValuePath si les deux sont renseignés.
   qrImagePath String?
   // Dot-path vers une valeur brute (texte/URL) à encoder nous-même en QR
   // (bibliothèque "qrcode") si la source ne renvoie pas d'image toute faite.
   qrValuePath String?
-  // Dot-path vers un code d'accès texte/numérique distinct du QR (ex: code
-  // à composer sur un digicode en secours).
+  // Dot-path vers un code d'accès texte/numérique distinct du QR, s'il est
+  // présent dans LA MÊME réponse que qrEndpointPath (ex: code à composer
+  // sur un digicode en secours). Si vide et que qrPasscodeEndpointPath est
+  // renseigné, ce second endpoint est appelé à la place (ex : API Sesame
+  // Technology, dont le passcode est un appel séparé du QR).
   qrAccessCodePath String?
   // Dot-path optionnel vers la date/heure d'expiration du QR ou du code.
   qrValidUntilPath String?
+  // Endpoint optionnel pour récupérer le code d'accès SÉPARÉMENT du QR (ex
+  // : API Sesame Technology, /ws/pass/findPasscode — un appel distinct de
+  // celui du QR). Mêmes connexion/méthode/format/paramètres que
+  // qrEndpointPath ci-dessus (code réservation + email). Ignoré si
+  // qrAccessCodePath a déjà trouvé un code dans la réponse de qrEndpointPath.
+  qrPasscodeEndpointPath String?
+  // Dot-path du code dans la réponse de qrPasscodeEndpointPath — vide =
+  // "passcode" par défaut.
+  qrPasscodeValuePath String?
 
   // Ouverture de porte à distance (bouton "Ouvrir la porte" du même onglet
   // "Clé digitale") — même principe : endpoint séparé prenant UNE
@@ -441,6 +458,9 @@ model BookingSourceConfig {
   doorEndpointBodyFormat String? @default("json") // form | json
   doorEndpointBodyParams Json?
   doorCodeParam          String? @default("code") // nom du paramètre code réservation
+  // Nom du paramètre optionnel portant l'email du client — même principe
+  // que qrEmailParam (ex : API Sesame Technology, /ws/booking/openAs).
+  doorEmailParam String?
   // Nom du paramètre optionnel portant le code de la chambre sélectionnée
   // (facilityCode/selectedRoomCode) — laisser vide si la source n'a besoin
   // que du code réservation pour savoir quelle porte ouvrir.

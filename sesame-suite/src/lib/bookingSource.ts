@@ -641,7 +641,8 @@ export async function encodeNfc(config: BookingSourceConfig, bookingCode: string
  */
 export async function fetchAccessQr(
   config: BookingSourceConfig,
-  bookingCode: string
+  bookingCode: string,
+  personEmail?: string | null
 ): Promise<{ qrImage?: string; qrValue?: string; accessCode?: string; validUntil?: string }> {
   if (!config.qrEndpointPath) {
     throw new BookingSourceError(
@@ -655,13 +656,17 @@ export async function fetchAccessQr(
   const method = (config.qrEndpointMethod || "GET").toUpperCase();
   const staticParams: Record<string, unknown> =
     config.qrEndpointBodyParams && typeof config.qrEndpointBodyParams === "object" ? (config.qrEndpointBodyParams as Record<string, unknown>) : {};
+  // Certaines sources (ex : API Sesame Technology, /ws/pass/findMimeSecret)
+  // exigent un second identifiant en plus du code de réservation — cf.
+  // schema.prisma, qrEmailParam.
+  const dynamicParams: Record<string, unknown> = { ...staticParams, [codeParam]: bookingCode };
+  if (config.qrEmailParam && personEmail) dynamicParams[config.qrEmailParam] = personEmail;
 
   let res: Response;
   try {
     if (method === "GET") {
       const qs = new URLSearchParams();
-      Object.entries(staticParams).forEach(([k, v]) => qs.set(k, String(v)));
-      qs.set(codeParam, bookingCode);
+      Object.entries(dynamicParams).forEach(([k, v]) => qs.set(k, String(v)));
       res = await fetch(`${url}${url.includes("?") ? "&" : "?"}${qs.toString()}`, {
         headers: { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...authHeaders },
       });
@@ -674,12 +679,11 @@ export async function fetchAccessQr(
           "User-Agent": "SesameSuite-BookingConnector/1.0",
           ...authHeaders,
         },
-        body: JSON.stringify({ ...staticParams, [codeParam]: bookingCode }),
+        body: JSON.stringify(dynamicParams),
       });
     } else {
       const form = new URLSearchParams();
-      Object.entries(staticParams).forEach(([k, v]) => form.set(k, String(v)));
-      form.set(codeParam, bookingCode);
+      Object.entries(dynamicParams).forEach(([k, v]) => form.set(k, String(v)));
       res = await fetch(url, {
         method: "POST",
         headers: {
@@ -702,10 +706,62 @@ export async function fetchAccessQr(
   const accessCodeRaw = config.qrAccessCodePath ? getPath(body, config.qrAccessCodePath) : undefined;
   const validUntilRaw = config.qrValidUntilPath ? getPath(body, config.qrValidUntilPath) : undefined;
 
+  let accessCode = accessCodeRaw !== undefined && accessCodeRaw !== null && accessCodeRaw !== "" ? String(accessCodeRaw) : undefined;
+
+  // Code d'accès sur un endpoint séparé (ex : API Sesame Technology,
+  // /ws/pass/findPasscode) — appelé uniquement si la réponse principale
+  // n'en contenait pas déjà. Un échec ici dégrade juste l'affichage du code
+  // (le QR, déjà obtenu, reste fonctionnel) : on le journalise sans faire
+  // échouer tout l'appel pour autant.
+  if (!accessCode && config.qrPasscodeEndpointPath) {
+    try {
+      const pcUrl = normalizeBaseUrl(config.baseUrl).replace(/\/$/, "") + config.qrPasscodeEndpointPath;
+      let pcRes: Response;
+      if (method === "GET") {
+        const qs = new URLSearchParams();
+        Object.entries(dynamicParams).forEach(([k, v]) => qs.set(k, String(v)));
+        pcRes = await fetch(`${pcUrl}${pcUrl.includes("?") ? "&" : "?"}${qs.toString()}`, {
+          headers: { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...authHeaders },
+        });
+      } else if ((config.qrEndpointBodyFormat || "json") === "json") {
+        pcRes = await fetch(pcUrl, {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "SesameSuite-BookingConnector/1.0",
+            ...authHeaders,
+          },
+          body: JSON.stringify(dynamicParams),
+        });
+      } else {
+        const form = new URLSearchParams();
+        Object.entries(dynamicParams).forEach(([k, v]) => form.set(k, String(v)));
+        pcRes = await fetch(pcUrl, {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "SesameSuite-BookingConnector/1.0",
+            ...authHeaders,
+          },
+          body: form.toString(),
+        });
+      }
+      if (pcRes.ok) {
+        const pcBody = await parseJsonResponse(pcRes, "La réponse du code d'accès");
+        const pcRaw = getPath(pcBody, config.qrPasscodeValuePath || "passcode");
+        if (pcRaw !== undefined && pcRaw !== null && pcRaw !== "") accessCode = String(pcRaw);
+      }
+    } catch (e) {
+      console.error("[bookingSource] Échec de récupération du code d'accès (qrPasscodeEndpointPath) :", e);
+    }
+  }
+
   return {
     qrImage: typeof qrImageRaw === "string" && qrImageRaw ? qrImageRaw : undefined,
     qrValue: typeof qrValueRaw === "string" && qrValueRaw ? qrValueRaw : undefined,
-    accessCode: accessCodeRaw !== undefined && accessCodeRaw !== null && accessCodeRaw !== "" ? String(accessCodeRaw) : undefined,
+    accessCode,
     validUntil: typeof validUntilRaw === "string" && validUntilRaw ? validUntilRaw : undefined,
   };
 }
@@ -719,7 +775,8 @@ export async function fetchAccessQr(
 export async function openDoor(
   config: BookingSourceConfig,
   bookingCode: string,
-  roomCode?: string | null
+  roomCode?: string | null,
+  personEmail?: string | null
 ): Promise<{ opened: boolean }> {
   if (!config.doorEndpointPath) {
     throw new BookingSourceError(
@@ -736,6 +793,7 @@ export async function openDoor(
     config.doorEndpointBodyParams && typeof config.doorEndpointBodyParams === "object" ? (config.doorEndpointBodyParams as Record<string, unknown>) : {};
   const params: Record<string, unknown> = { ...staticParams, [codeParam]: bookingCode };
   if (roomParam && roomCode) params[roomParam] = roomCode;
+  if (config.doorEmailParam && personEmail) params[config.doorEmailParam] = personEmail;
 
   let res: Response;
   try {

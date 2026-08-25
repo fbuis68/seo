@@ -209,7 +209,7 @@ bookingRouter.get(
     }
 
     try {
-      const { qrImage, qrValue, accessCode, validUntil } = await fetchAccessQr(config, booking.code);
+      const { qrImage, qrValue, accessCode, validUntil } = await fetchAccessQr(config, booking.code, booking.personEmail);
       const finalImage = qrImage || (qrValue ? await QRCode.toDataURL(qrValue, { margin: 1, width: 320 }) : undefined);
       if (!finalImage && !accessCode) {
         throw new HttpError(
@@ -250,7 +250,7 @@ bookingRouter.post(
     }
 
     try {
-      await openDoor(config, booking.code, booking.selectedRoomCode || booking.facilityCode || null);
+      await openDoor(config, booking.code, booking.selectedRoomCode || booking.facilityCode || null, booking.personEmail);
       const updated = await prisma.booking.update({
         where: { id: booking.id },
         data: { doorOpenCount: { increment: 1 }, doorLastOpenedAt: new Date() },

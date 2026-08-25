@@ -1607,9 +1607,15 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         <select id="bs-qrEndpointBodyFormat"><option value="json">JSON</option><option value="form">Formulaire (application/x-www-form-urlencoded)</option></select>
       </div>
     </div>
-    <div class="fi">
-      <label class="lb">Nom du paramètre portant le code de réservation</label>
-      <input type="text" id="bs-qrCodeParam" placeholder="code">
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Nom du paramètre portant le code de réservation</label>
+        <input type="text" id="bs-qrCodeParam" placeholder="code">
+      </div>
+      <div class="fi">
+        <label class="lb">Nom du paramètre portant l'email du client (optionnel)</label>
+        <input type="text" id="bs-qrEmailParam" placeholder="Ex : personEmail — vide si non nécessaire">
+      </div>
     </div>
     <div class="g2">
       <div class="fi">
@@ -1623,7 +1629,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     </div>
     <div class="g2">
       <div class="fi">
-        <label class="lb">Chemin d'un code d'accès texte (optionnel)</label>
+        <label class="lb">Chemin d'un code d'accès texte, si présent dans la même réponse</label>
         <input type="text" id="bs-qrAccessCodePath" placeholder="Ex : data.pinCode">
       </div>
       <div class="fi">
@@ -1634,6 +1640,19 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     <div class="fi">
       <label class="lb">Paramètres additionnels du corps (un par ligne : clé=valeur)</label>
       <textarea id="bs-qrEndpointBodyParams" rows="2" placeholder=""></textarea>
+    </div>
+    <div class="alt alt-b" style="margin:12px 0 8px"><i class="ti ti-info-circle"></i>
+      <span>Optionnel — si le code d'accès est renvoyé par un <b>second</b> appel distinct du QR (ex : API Sesame Technology, dont le passcode n'est pas dans la même réponse que le QR) : même connexion/méthode/format/paramètres que ci-dessus, sur un chemin différent. Ignoré si un code a déjà été trouvé ci-dessus.</span>
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Chemin de l'endpoint du code d'accès (optionnel)</label>
+        <input type="text" id="bs-qrPasscodeEndpointPath" placeholder="Ex : /ws/pass/findPasscode">
+      </div>
+      <div class="fi">
+        <label class="lb">Chemin du code dans sa réponse</label>
+        <input type="text" id="bs-qrPasscodeValuePath" placeholder="passcode par défaut">
+      </div>
     </div>
   </div>
 
@@ -1667,9 +1686,15 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         <input type="text" id="bs-doorRoomParam" placeholder="Ex : roomCode — vide si non nécessaire">
       </div>
     </div>
-    <div class="fi">
-      <label class="lb">Chemin d'un statut de succès dans la réponse (optionnel)</label>
-      <input type="text" id="bs-doorResponseSuccessPath" placeholder="Ex : success — vide = un appel réussi (2xx) suffit">
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Nom du paramètre portant l'email du client (optionnel)</label>
+        <input type="text" id="bs-doorEmailParam" placeholder="Ex : personEmail — vide si non nécessaire">
+      </div>
+      <div class="fi">
+        <label class="lb">Chemin d'un statut de succès dans la réponse (optionnel)</label>
+        <input type="text" id="bs-doorResponseSuccessPath" placeholder="Ex : success — vide = un appel réussi (2xx) suffit">
+      </div>
     </div>
     <div class="fi">
       <label class="lb">Paramètres additionnels du corps (un par ligne : clé=valeur)</label>
@@ -4908,7 +4933,7 @@ var PMS_PRESETS = {
   sesame: {
     label: 'Sesame Technology',
     noteType: 'b',
-    note: 'Vérifié en conditions réelles le 17/08/2026. Le compte utilisé doit avoir accès à l\'établissement voulu — il est retrouvé automatiquement par son code (entityCode) parmi les profils disponibles pour ce compte. Le 18/08/2026, une fuite entre établissements a été constatée sur /wa/booking/list (réservations d\'un autre hôtel accessible par le même compte) — un filtre de sécurité (entityId) est appliqué automatiquement ci-dessous depuis ce modèle.',
+    note: 'Connexion et liste des réservations vérifiées en conditions réelles le 17/08/2026. Le compte utilisé doit avoir accès à l\'établissement voulu — il est retrouvé automatiquement par son code (entityCode) parmi les profils disponibles pour ce compte. Le 18/08/2026, une fuite entre établissements a été constatée sur /wa/booking/list (réservations d\'un autre hôtel accessible par le même compte) — un filtre de sécurité (entityId) est appliqué automatiquement ci-dessous depuis ce modèle. QR code / code d\'accès / ouverture de porte : chemins repris de la documentation officielle Sesame API (version 2023-11-23) fournie le 25/08/2026 — pas encore vérifiés en conditions réelles comme le reste ci-dessus, à tester avant mise en production.',
     apply: function(){
       document.getElementById('bs-endpointPath').value = '/wa/booking/list';
       document.getElementById('bs-endpointMethod').value = 'POST';
@@ -4929,6 +4954,30 @@ var PMS_PRESETS = {
       document.getElementById('bs-skipEntityFilter').checked = false;
       document.getElementById('bs-responseListPath').value = 'root';
       bsRenderMappingFields({code:'code', personEmail:'personEmail', personFirstname:'personFirstname', personLastname:'personLastname', personPhone:'', startDate:'startDate', endDate:'endDate', facilityCode:'facilityCode', facilityName:'facilityName', status:'status'});
+      // QR / code d'accès / ouverture de porte — d'après la documentation
+      // officielle Sesame API (version 2023-11-23) : POST /ws/pass/findMimeSecret
+      // (QR image prête, {"secret":"data:image/jpeg;base64,..."}) et
+      // POST /ws/pass/findPasscode ({"success":true,"passcode":"123456"}),
+      // tous deux avec bookingCode + personEmail ; POST /ws/booking/openAs
+      // avec bookingCode + personEmail + facilityCode.
+      document.getElementById('bs-qrEndpointPath').value = '/ws/pass/findMimeSecret';
+      document.getElementById('bs-qrEndpointMethod').value = 'POST';
+      document.getElementById('bs-qrEndpointBodyFormat').value = 'json';
+      document.getElementById('bs-qrCodeParam').value = 'bookingCode';
+      document.getElementById('bs-qrEmailParam').value = 'personEmail';
+      document.getElementById('bs-qrImagePath').value = 'secret';
+      document.getElementById('bs-qrValuePath').value = '';
+      document.getElementById('bs-qrAccessCodePath').value = '';
+      document.getElementById('bs-qrValidUntilPath').value = '';
+      document.getElementById('bs-qrPasscodeEndpointPath').value = '/ws/pass/findPasscode';
+      document.getElementById('bs-qrPasscodeValuePath').value = 'passcode';
+      document.getElementById('bs-doorEndpointPath').value = '/ws/booking/openAs';
+      document.getElementById('bs-doorEndpointMethod').value = 'POST';
+      document.getElementById('bs-doorEndpointBodyFormat').value = 'json';
+      document.getElementById('bs-doorCodeParam').value = 'bookingCode';
+      document.getElementById('bs-doorEmailParam').value = 'personEmail';
+      document.getElementById('bs-doorRoomParam').value = 'facilityCode';
+      document.getElementById('bs-doorResponseSuccessPath').value = '';
     },
     vars: [
       {label:'URL du serveur Sesame', placeholder:'https://newtest.sesame.technology', target:'bs-baseUrl'},
@@ -5164,15 +5213,19 @@ function bsCollectFormValues(){
     qrEndpointMethod: document.getElementById('bs-qrEndpointMethod').value,
     qrEndpointBodyFormat: document.getElementById('bs-qrEndpointBodyFormat').value,
     qrCodeParam: document.getElementById('bs-qrCodeParam').value.trim(),
+    qrEmailParam: document.getElementById('bs-qrEmailParam').value.trim(),
     qrImagePath: document.getElementById('bs-qrImagePath').value.trim(),
     qrValuePath: document.getElementById('bs-qrValuePath').value.trim(),
     qrAccessCodePath: document.getElementById('bs-qrAccessCodePath').value.trim(),
     qrValidUntilPath: document.getElementById('bs-qrValidUntilPath').value.trim(),
+    qrPasscodeEndpointPath: document.getElementById('bs-qrPasscodeEndpointPath').value.trim(),
+    qrPasscodeValuePath: document.getElementById('bs-qrPasscodeValuePath').value.trim(),
     qrEndpointBodyParams: bsTextToParams(document.getElementById('bs-qrEndpointBodyParams').value),
     doorEndpointPath: document.getElementById('bs-doorEndpointPath').value.trim(),
     doorEndpointMethod: document.getElementById('bs-doorEndpointMethod').value,
     doorEndpointBodyFormat: document.getElementById('bs-doorEndpointBodyFormat').value,
     doorCodeParam: document.getElementById('bs-doorCodeParam').value.trim(),
+    doorEmailParam: document.getElementById('bs-doorEmailParam').value.trim(),
     doorRoomParam: document.getElementById('bs-doorRoomParam').value.trim(),
     doorResponseSuccessPath: document.getElementById('bs-doorResponseSuccessPath').value.trim(),
     doorEndpointBodyParams: bsTextToParams(document.getElementById('bs-doorEndpointBodyParams').value),
@@ -5229,15 +5282,19 @@ async function bsInit(){
   document.getElementById('bs-qrEndpointMethod').value = BS_CONFIG.qrEndpointMethod||'GET';
   document.getElementById('bs-qrEndpointBodyFormat').value = BS_CONFIG.qrEndpointBodyFormat||'json';
   document.getElementById('bs-qrCodeParam').value = BS_CONFIG.qrCodeParam||'';
+  document.getElementById('bs-qrEmailParam').value = BS_CONFIG.qrEmailParam||'';
   document.getElementById('bs-qrImagePath').value = BS_CONFIG.qrImagePath||'';
   document.getElementById('bs-qrValuePath').value = BS_CONFIG.qrValuePath||'';
   document.getElementById('bs-qrAccessCodePath').value = BS_CONFIG.qrAccessCodePath||'';
   document.getElementById('bs-qrValidUntilPath').value = BS_CONFIG.qrValidUntilPath||'';
+  document.getElementById('bs-qrPasscodeEndpointPath').value = BS_CONFIG.qrPasscodeEndpointPath||'';
+  document.getElementById('bs-qrPasscodeValuePath').value = BS_CONFIG.qrPasscodeValuePath||'';
   document.getElementById('bs-qrEndpointBodyParams').value = bsParamsToText(BS_CONFIG.qrEndpointBodyParams);
   document.getElementById('bs-doorEndpointPath').value = BS_CONFIG.doorEndpointPath||'';
   document.getElementById('bs-doorEndpointMethod').value = BS_CONFIG.doorEndpointMethod||'POST';
   document.getElementById('bs-doorEndpointBodyFormat').value = BS_CONFIG.doorEndpointBodyFormat||'json';
   document.getElementById('bs-doorCodeParam').value = BS_CONFIG.doorCodeParam||'';
+  document.getElementById('bs-doorEmailParam').value = BS_CONFIG.doorEmailParam||'';
   document.getElementById('bs-doorRoomParam').value = BS_CONFIG.doorRoomParam||'';
   document.getElementById('bs-doorResponseSuccessPath').value = BS_CONFIG.doorResponseSuccessPath||'';
   document.getElementById('bs-doorEndpointBodyParams').value = bsParamsToText(BS_CONFIG.doorEndpointBodyParams);

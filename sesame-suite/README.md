@@ -1945,6 +1945,36 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   code, vraie ouverture), cas configuré en échec (erreur explicite, bouton
   d'ouverture masqué).
 
+### Clé digitale : préréglage Sesame câblé sur la documentation officielle
+
+- La documentation officielle Sesame API (version 2023-11-23, fournie le
+  25/08/2026) confirme les endpoints réels : `POST /ws/pass/findMimeSecret`
+  (QR déjà encodé en image, `{"secret":"data:image/jpeg;base64,..."}`),
+  `POST /ws/pass/findPasscode` (code texte, **appel séparé** du QR,
+  `{"success":true,"passcode":"123456"}`) et `POST /ws/booking/openAs`
+  (ouverture de porte). Les trois exigent `bookingCode` **et** `personEmail`
+  (Sesame authentifie le compte, pas la réservation seule) ; `openAs` exige
+  en plus `facilityCode`.
+- Le système générique (`qrEndpointPath`/`doorEndpointPath`…) ne portait
+  jusqu'ici qu'UN SEUL identifiant dynamique (le code réservation) et
+  supposait une seule réponse pour QR + code — insuffisant pour Sesame en
+  pratique. Ajouté : `qrEmailParam`/`doorEmailParam` (envoient
+  `booking.personEmail` sous le nom de paramètre configuré) et
+  `qrPasscodeEndpointPath`/`qrPasscodeValuePath` (second appel optionnel
+  pour le code, utilisé seulement si `qrAccessCodePath` n'a rien trouvé
+  dans la réponse du QR) — `fetchAccessQr()`/`openDoor()`
+  (`src/lib/bookingSource.ts`) et leurs champs admin mis à jour en
+  conséquence.
+- Le préréglage "Sesame Technology" (déjà vérifié en conditions réelles
+  pour la connexion et la liste des réservations) pré-remplit désormais
+  aussi ces 3 fonctions avec les valeurs exactes de la documentation —
+  reste à vérifier en conditions réelles comme le reste du préréglage
+  avant mise en production. Vérifié bout en bout avec un serveur mock
+  reproduisant strictement ce contrat (rejette les appels sans
+  `bookingCode`+`personEmail`, `openAs` sans `facilityCode`) : les deux
+  appels QR+passcode et l'appel d'ouverture envoient exactement les
+  paramètres attendus.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT
