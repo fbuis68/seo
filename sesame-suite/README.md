@@ -1994,6 +1994,32 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   clic, sans toucher aux identifiants propres à l'établissement (URL,
   login, mot de passe, entityCode).
 
+### Intégration réservations : "Enregistrer" perdait silencieusement les réglages QR/porte
+
+- Bug plus grave que le précédent, trouvé en creusant le même symptôme
+  ("champs remplis, Enregistrer cliqué, toujours en mode démo") : la route
+  `POST /wa/bookingSource/config/update` (`src/routes/bookingSource.ts`)
+  construit son payload Prisma depuis une interface `ConfigBody` et un
+  objet `data` qui listent explicitement chaque champ accepté — ajouter
+  les champs QR/porte au schéma et au formulaire admin (25/08/2026) sans
+  toucher CETTE route (oubliée) faisait que le formulaire les envoyait
+  bien, l'appel réseau réussissait (200), mais Express les ignorait
+  silencieusement : rien n'était jamais écrit en base. Le
+  bouton "Réappliquer les valeurs par défaut" ci-dessus semblait donc ne
+  servir à rien, alors qu'il fonctionnait très bien — c'est
+  l'enregistrement juste après qui ne prenait pas.
+- Les tests de bout en bout menés lors de l'ajout de la fonctionnalité
+  n'avaient PAS détecté ce bug : ils écrivaient la config de test
+  directement en base via Prisma (raccourci pratique pour isoler le test
+  du reste du formulaire), en contournant justement la route cassée —
+  d'où sa découverte tardive, seulement en suivant le vrai parcours
+  utilisateur (remplir le formulaire → cliquer Enregistrer) signalé par
+  le client. Corrigé : les ~20 champs QR/porte ajoutés à `ConfigBody`, à
+  `shapeConfig()` (réponse du GET) et à l'objet `data` de la route POST.
+  Revérifié cette fois via le vrai bouton "Enregistrer" du panneau
+  (`bsSave()`), pas un raccourci base de données : la configuration
+  persiste bien après un rechargement de page.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

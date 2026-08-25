@@ -63,6 +63,26 @@ function shapeConfig(c: {
   nfcEndpointBodyParams: unknown;
   nfcCodeParam: string | null;
   nfcResponseCountPath: string | null;
+  qrEndpointPath: string | null;
+  qrEndpointMethod: string | null;
+  qrEndpointBodyFormat: string | null;
+  qrEndpointBodyParams: unknown;
+  qrCodeParam: string | null;
+  qrEmailParam: string | null;
+  qrImagePath: string | null;
+  qrValuePath: string | null;
+  qrAccessCodePath: string | null;
+  qrValidUntilPath: string | null;
+  qrPasscodeEndpointPath: string | null;
+  qrPasscodeValuePath: string | null;
+  doorEndpointPath: string | null;
+  doorEndpointMethod: string | null;
+  doorEndpointBodyFormat: string | null;
+  doorEndpointBodyParams: unknown;
+  doorCodeParam: string | null;
+  doorEmailParam: string | null;
+  doorRoomParam: string | null;
+  doorResponseSuccessPath: string | null;
   syncIntervalMinutes: number | null;
   lastSyncAt: Date | null;
   lastSyncStatus: string | null;
@@ -115,6 +135,26 @@ function shapeConfig(c: {
     nfcEndpointBodyParams: c.nfcEndpointBodyParams || {},
     nfcCodeParam: c.nfcCodeParam || "code",
     nfcResponseCountPath: c.nfcResponseCountPath || "",
+    qrEndpointPath: c.qrEndpointPath || "",
+    qrEndpointMethod: c.qrEndpointMethod || "GET",
+    qrEndpointBodyFormat: c.qrEndpointBodyFormat || "json",
+    qrEndpointBodyParams: c.qrEndpointBodyParams || {},
+    qrCodeParam: c.qrCodeParam || "code",
+    qrEmailParam: c.qrEmailParam || "",
+    qrImagePath: c.qrImagePath || "",
+    qrValuePath: c.qrValuePath || "",
+    qrAccessCodePath: c.qrAccessCodePath || "",
+    qrValidUntilPath: c.qrValidUntilPath || "",
+    qrPasscodeEndpointPath: c.qrPasscodeEndpointPath || "",
+    qrPasscodeValuePath: c.qrPasscodeValuePath || "",
+    doorEndpointPath: c.doorEndpointPath || "",
+    doorEndpointMethod: c.doorEndpointMethod || "POST",
+    doorEndpointBodyFormat: c.doorEndpointBodyFormat || "json",
+    doorEndpointBodyParams: c.doorEndpointBodyParams || {},
+    doorCodeParam: c.doorCodeParam || "code",
+    doorEmailParam: c.doorEmailParam || "",
+    doorRoomParam: c.doorRoomParam || "",
+    doorResponseSuccessPath: c.doorResponseSuccessPath || "",
     syncIntervalMinutes: c.syncIntervalMinutes,
     lastSyncAt: c.lastSyncAt,
     lastSyncStatus: c.lastSyncStatus,
@@ -184,6 +224,26 @@ interface ConfigBody {
   nfcEndpointBodyParams?: Record<string, string>;
   nfcCodeParam?: string;
   nfcResponseCountPath?: string;
+  qrEndpointPath?: string;
+  qrEndpointMethod?: string;
+  qrEndpointBodyFormat?: string;
+  qrEndpointBodyParams?: Record<string, string>;
+  qrCodeParam?: string;
+  qrEmailParam?: string;
+  qrImagePath?: string;
+  qrValuePath?: string;
+  qrAccessCodePath?: string;
+  qrValidUntilPath?: string;
+  qrPasscodeEndpointPath?: string;
+  qrPasscodeValuePath?: string;
+  doorEndpointPath?: string;
+  doorEndpointMethod?: string;
+  doorEndpointBodyFormat?: string;
+  doorEndpointBodyParams?: Record<string, string>;
+  doorCodeParam?: string;
+  doorEmailParam?: string;
+  doorRoomParam?: string;
+  doorResponseSuccessPath?: string;
   syncIntervalMinutes?: number | null;
 }
 
@@ -240,6 +300,26 @@ bookingSourceRouter.post(
       nfcEndpointBodyParams: b.nfcEndpointBodyParams as never,
       nfcCodeParam: b.nfcCodeParam,
       nfcResponseCountPath: b.nfcResponseCountPath,
+      qrEndpointPath: b.qrEndpointPath,
+      qrEndpointMethod: b.qrEndpointMethod,
+      qrEndpointBodyFormat: b.qrEndpointBodyFormat,
+      qrEndpointBodyParams: b.qrEndpointBodyParams as never,
+      qrCodeParam: b.qrCodeParam,
+      qrEmailParam: b.qrEmailParam,
+      qrImagePath: b.qrImagePath,
+      qrValuePath: b.qrValuePath,
+      qrAccessCodePath: b.qrAccessCodePath,
+      qrValidUntilPath: b.qrValidUntilPath,
+      qrPasscodeEndpointPath: b.qrPasscodeEndpointPath,
+      qrPasscodeValuePath: b.qrPasscodeValuePath,
+      doorEndpointPath: b.doorEndpointPath,
+      doorEndpointMethod: b.doorEndpointMethod,
+      doorEndpointBodyFormat: b.doorEndpointBodyFormat,
+      doorEndpointBodyParams: b.doorEndpointBodyParams as never,
+      doorCodeParam: b.doorCodeParam,
+      doorEmailParam: b.doorEmailParam,
+      doorRoomParam: b.doorRoomParam,
+      doorResponseSuccessPath: b.doorResponseSuccessPath,
       syncIntervalMinutes: b.syncIntervalMinutes ?? null,
     };
     const config = await prisma.bookingSourceConfig.upsert({
