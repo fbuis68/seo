@@ -1914,6 +1914,37 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   déjà enregistrées sans schéma, sans qu'il soit nécessaire de resaisir
   l'URL dans l'admin.
 
+### Clé digitale : vrai QR code / code d'accès + ouverture de porte réelle
+
+- L'onglet "Clé digitale" de l'espace client (`checkin.html`) était
+  entièrement simulé : QR pseudo-aléatoire généré localement (pas un vrai
+  QR encodable), code d'accès dérivé d'un hash du code réservation, bouton
+  "Simuler l'ouverture" qui n'appelait jamais rien — documenté comme tel
+  dans le code depuis l'origine ("hors périmètre de cette itération —
+  mode simulation ... reste à brancher sur l'API Sesame réelle").
+- Même principe que l'encodage NFC déjà en place : deux nouveaux endpoints
+  configurables par établissement dans "Intégration réservations" →
+  réglages techniques avancés ("Récupération QR / code d'accès" et
+  "Ouverture de porte à distance"), inertes tant qu'ils ne sont pas
+  renseignés — le client garde alors exactement l'écran de démonstration
+  d'avant. Une fois configurés (`BookingSourceConfig.qrEndpointPath` /
+  `doorEndpointPath`, `prisma/schema.prisma`), `fetchAccessQr()` /
+  `openDoor()` (`src/lib/bookingSource.ts`) appellent la source externe et
+  `GET /wa/booking/accessQr` / `POST /wa/booking/openDoor`
+  (`src/routes/booking.ts`, accessibles sans auth staff comme
+  `/booking/checkin`) renvoient un vrai QR (image déjà prête, ou valeur
+  brute encodée côté serveur avec la lib `qrcode`) et un vrai code d'accès,
+  ou déclenchent une vraie ouverture de porte.
+- Une fois un connecteur configuré, un échec de CET appel précis affiche
+  une erreur explicite au client ("Clé indisponible — présentez-vous à la
+  réception" / "Ouverture impossible — présentez-vous à la réception")
+  plutôt que de se rabattre silencieusement sur la démo : un faux QR qui a
+  l'air valide ou un faux succès d'ouverture serait pire qu'une erreur
+  visible. Vérifié bout en bout (mock serveur local) : cas non configuré
+  (démo inchangée), cas configuré fonctionnel (vrai QR scannable, vrai
+  code, vraie ouverture), cas configuré en échec (erreur explicite, bouton
+  d'ouverture masqué).
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

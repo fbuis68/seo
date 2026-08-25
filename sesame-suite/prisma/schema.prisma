@@ -244,6 +244,13 @@ model Booking {
   nfcCount     Int       @default(0)
   nfcEncodedAt DateTime? // dernier encodage réussi
 
+  // Nombre cumulé d'ouvertures de porte à distance réussies pour cette
+  // réservation (cf. lib/bookingSource.ts openDoor) — 0 tant qu'aucune
+  // ouverture réelle n'a été faite (les ouvertures en mode simulation, sans
+  // connecteur configuré, ne sont pas comptées ici).
+  doorOpenCount    Int       @default(0)
+  doorLastOpenedAt DateTime? // dernière ouverture réelle réussie
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
@@ -393,6 +400,55 @@ model BookingSourceConfig {
   // encodées (ex: "cardsEncoded") — si vide, un appel réussi (2xx) compte
   // simplement pour 1.
   nfcResponseCountPath String?
+
+  // Récupération du QR code / code d'accès (onglet "Clé digitale" de
+  // l'espace client, cf. checkin.html espRenderQr) — même principe que
+  // l'encodage NFC ci-dessus : endpoint séparé prenant UNE réservation en
+  // paramètre. Inerte tant que qrEndpointPath est vide : le client affiche
+  // alors un QR de démonstration (pattern local, non fonctionnel sur un
+  // vrai lecteur) plutôt qu'une erreur — utile en confère/démo avant que le
+  // connecteur réel soit configuré. Une fois configuré, une erreur de ce
+  // endpoint est en revanche remontée explicitement au client plutôt que de
+  // se rabattre silencieusement sur la démo (un faux QR qui a l'air valide
+  // mais ne fonctionnerait pas sur un vrai lecteur serait pire qu'une
+  // erreur visible).
+  qrEndpointPath       String? // ex: "/ws/access/qrcode" — concaténé à baseUrl
+  qrEndpointMethod     String? @default("GET") // GET | POST
+  qrEndpointBodyFormat String? @default("json") // form | json
+  qrEndpointBodyParams Json?
+  qrCodeParam          String? @default("code") // nom du paramètre code réservation
+  // Dot-path vers une image déjà prête dans la réponse (base64/data URI/URL)
+  // — prioritaire sur qrValuePath si les deux sont renseignés.
+  qrImagePath String?
+  // Dot-path vers une valeur brute (texte/URL) à encoder nous-même en QR
+  // (bibliothèque "qrcode") si la source ne renvoie pas d'image toute faite.
+  qrValuePath String?
+  // Dot-path vers un code d'accès texte/numérique distinct du QR (ex: code
+  // à composer sur un digicode en secours).
+  qrAccessCodePath String?
+  // Dot-path optionnel vers la date/heure d'expiration du QR ou du code.
+  qrValidUntilPath String?
+
+  // Ouverture de porte à distance (bouton "Ouvrir la porte" du même onglet
+  // "Clé digitale") — même principe : endpoint séparé prenant UNE
+  // réservation (et, si doorRoomParam est renseigné, sa chambre
+  // sélectionnée) en paramètre. Inerte tant que doorEndpointPath est vide :
+  // le client garde alors le bouton "Simuler l'ouverture" existant. Une
+  // fois configuré, un échec est remonté explicitement — jamais un faux
+  // succès, une porte non ouverte doit rester visiblement non ouverte.
+  doorEndpointPath       String? // ex: "/ws/lock/open" — concaténé à baseUrl
+  doorEndpointMethod     String? @default("POST") // GET | POST
+  doorEndpointBodyFormat String? @default("json") // form | json
+  doorEndpointBodyParams Json?
+  doorCodeParam          String? @default("code") // nom du paramètre code réservation
+  // Nom du paramètre optionnel portant le code de la chambre sélectionnée
+  // (facilityCode/selectedRoomCode) — laisser vide si la source n'a besoin
+  // que du code réservation pour savoir quelle porte ouvrir.
+  doorRoomParam String?
+  // Dot-path optionnel dans la réponse pour vérifier un statut explicite
+  // (ex: "success") — si vide, un appel réussi (2xx) suffit à considérer la
+  // porte ouverte.
+  doorResponseSuccessPath String?
 
   // null = synchronisation manuelle uniquement ("Importer maintenant").
   syncIntervalMinutes Int?

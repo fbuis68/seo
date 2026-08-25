@@ -1,11 +1,12 @@
 import { Router } from "express";
+import QRCode from "qrcode";
 import { prisma } from "../db";
 import { resolveEntity } from "../lib/entity";
 import { normaliseBooking } from "../lib/normalize";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { fireTrigger } from "../lib/automation";
 import { requireAdmin } from "../middleware/requireAdmin";
-import { encodeNfc, BookingSourceError } from "../lib/bookingSource";
+import { encodeNfc, fetchAccessQr, openDoor, BookingSourceError } from "../lib/bookingSource";
 
 export const bookingRouter = Router();
 
@@ -172,6 +173,91 @@ bookingRouter.post(
       res.json(normaliseBooking(updated));
     } catch (e) {
       if (e instanceof BookingSourceError) throw new HttpError(400, e.message);
+      throw e;
+    }
+  })
+);
+
+/**
+ * GET /wa/booking/accessQr?code=... — récupère le QR code / code d'accès
+ * généré par la source externe (ex : Sesame) pour une réservation. Comme
+ * /booking/list et /booking/checkin, accessible sans authentification staff
+ * : appelé directement par le client depuis son "Espace client" (onglet
+ * "Clé digitale"), le code réservation faisant office de jeton.
+ *
+ * Si aucun endpoint QR n'est configuré pour cet établissement, renvoie
+ * simulated:true plutôt qu'une erreur — le client affiche alors son pattern
+ * de démonstration existant (cf. checkin.html, espRenderQr), utile en
+ * démo/vente avant que le connecteur réel soit branché. Une fois configuré,
+ * un échec de CET endpoint est en revanche une vraie erreur 502 : jamais de
+ * repli silencieux sur la démo une fois qu'un vrai connecteur est attendu.
+ */
+bookingRouter.get(
+  "/booking/accessQr",
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const code = ((req.query.code as string) || "").trim();
+    if (!code) throw new HttpError(400, "code requis");
+
+    const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code } } });
+    if (!booking) throw new HttpError(404, "Réservation introuvable");
+
+    const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
+    if (!config || !config.qrEndpointPath) {
+      res.json({ simulated: true });
+      return;
+    }
+
+    try {
+      const { qrImage, qrValue, accessCode, validUntil } = await fetchAccessQr(config, booking.code);
+      const finalImage = qrImage || (qrValue ? await QRCode.toDataURL(qrValue, { margin: 1, width: 320 }) : undefined);
+      if (!finalImage && !accessCode) {
+        throw new HttpError(
+          502,
+          "La source externe n'a renvoyé ni QR code ni code d'accès — vérifiez le mapping (qrImagePath / qrValuePath / qrAccessCodePath) dans les réglages techniques avancés."
+        );
+      }
+      res.json({ simulated: false, qrImage: finalImage, accessCode, validUntil });
+    } catch (e) {
+      if (e instanceof HttpError) throw e;
+      if (e instanceof BookingSourceError) throw new HttpError(502, e.message);
+      throw e;
+    }
+  })
+);
+
+/**
+ * POST /wa/booking/openDoor — body: { code } — déclenche l'ouverture à
+ * distance de la porte pour cette réservation (source externe, même
+ * connexion que la synchronisation). Même logique simulated:true que
+ * /booking/accessQr si aucun endpoint n'est configuré — le client garde
+ * alors son bouton "Simuler l'ouverture" existant.
+ */
+bookingRouter.post(
+  "/booking/openDoor",
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const code = (req.body.code as string) || "";
+    if (!code) throw new HttpError(400, "code requis");
+
+    const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code } } });
+    if (!booking) throw new HttpError(404, "Réservation introuvable");
+
+    const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
+    if (!config || !config.doorEndpointPath) {
+      res.json({ simulated: true });
+      return;
+    }
+
+    try {
+      await openDoor(config, booking.code, booking.selectedRoomCode || booking.facilityCode || null);
+      const updated = await prisma.booking.update({
+        where: { id: booking.id },
+        data: { doorOpenCount: { increment: 1 }, doorLastOpenedAt: new Date() },
+      });
+      res.json({ simulated: false, opened: true, doorOpenCount: updated.doorOpenCount });
+    } catch (e) {
+      if (e instanceof BookingSourceError) throw new HttpError(502, e.message);
       throw e;
     }
   })

@@ -1587,6 +1587,96 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     </div>
   </div>
 
+  <!-- QR code / code d'accès -->
+  <div class="ca">
+    <div class="ch"><i class="ti ti-qrcode"></i>Récupération QR / code d'accès</div>
+    <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
+      <span>Optionnel — alimente l'onglet "Clé digitale" de l'espace client (QR code + code d'accès affichés au client). Même connexion/auth que ci-dessus, sur un endpoint séparé qui prend UNE réservation en paramètre. Laissez le chemin vide tant que vous n'avez pas confirmé cet endpoint côté source réelle : le client voit alors un QR de démonstration (non fonctionnel sur un vrai lecteur) plutôt qu'une erreur — pratique en démo/vente. Une fois le chemin renseigné, un échec de CET appel est en revanche affiché explicitement au client, jamais remplacé silencieusement par la démo.</span>
+    </div>
+    <div class="fi">
+      <label class="lb">Chemin de l'endpoint QR / code d'accès</label>
+      <input type="text" id="bs-qrEndpointPath" placeholder="Ex : /ws/access/qrcode — laisser vide pour garder la démo" autocomplete="off">
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Méthode HTTP</label>
+        <select id="bs-qrEndpointMethod"><option value="GET">GET</option><option value="POST">POST</option></select>
+      </div>
+      <div class="fi">
+        <label class="lb">Format du corps si POST</label>
+        <select id="bs-qrEndpointBodyFormat"><option value="json">JSON</option><option value="form">Formulaire (application/x-www-form-urlencoded)</option></select>
+      </div>
+    </div>
+    <div class="fi">
+      <label class="lb">Nom du paramètre portant le code de réservation</label>
+      <input type="text" id="bs-qrCodeParam" placeholder="code">
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Chemin d'une image déjà prête (base64/data URI/URL)</label>
+        <input type="text" id="bs-qrImagePath" placeholder="Ex : data.qrImage — prioritaire si renseigné">
+      </div>
+      <div class="fi">
+        <label class="lb">Chemin d'une valeur brute à encoder en QR (texte/URL)</label>
+        <input type="text" id="bs-qrValuePath" placeholder="Ex : data.passUrl — si pas d'image toute faite">
+      </div>
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Chemin d'un code d'accès texte (optionnel)</label>
+        <input type="text" id="bs-qrAccessCodePath" placeholder="Ex : data.pinCode">
+      </div>
+      <div class="fi">
+        <label class="lb">Chemin de la date d'expiration (optionnel)</label>
+        <input type="text" id="bs-qrValidUntilPath" placeholder="Ex : data.validUntil">
+      </div>
+    </div>
+    <div class="fi">
+      <label class="lb">Paramètres additionnels du corps (un par ligne : clé=valeur)</label>
+      <textarea id="bs-qrEndpointBodyParams" rows="2" placeholder=""></textarea>
+    </div>
+  </div>
+
+  <!-- Ouverture de porte à distance -->
+  <div class="ca">
+    <div class="ch"><i class="ti ti-lock-open"></i>Ouverture de porte à distance</div>
+    <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
+      <span>Optionnel — bouton "Ouvrir la porte" du même onglet "Clé digitale". Laissez le chemin vide tant que vous n'avez pas confirmé cet endpoint côté source réelle : le client garde alors le bouton "Simuler l'ouverture" existant. Une fois configuré, un échec réel n'est jamais remplacé par un faux succès — une porte non ouverte doit rester visiblement non ouverte.</span>
+    </div>
+    <div class="fi">
+      <label class="lb">Chemin de l'endpoint d'ouverture</label>
+      <input type="text" id="bs-doorEndpointPath" placeholder="Ex : /ws/lock/open — laisser vide pour garder la simulation" autocomplete="off">
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Méthode HTTP</label>
+        <select id="bs-doorEndpointMethod"><option value="POST">POST</option><option value="GET">GET</option></select>
+      </div>
+      <div class="fi">
+        <label class="lb">Format du corps si POST</label>
+        <select id="bs-doorEndpointBodyFormat"><option value="json">JSON</option><option value="form">Formulaire (application/x-www-form-urlencoded)</option></select>
+      </div>
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Nom du paramètre portant le code de réservation</label>
+        <input type="text" id="bs-doorCodeParam" placeholder="code">
+      </div>
+      <div class="fi">
+        <label class="lb">Nom du paramètre portant le code chambre (optionnel)</label>
+        <input type="text" id="bs-doorRoomParam" placeholder="Ex : roomCode — vide si non nécessaire">
+      </div>
+    </div>
+    <div class="fi">
+      <label class="lb">Chemin d'un statut de succès dans la réponse (optionnel)</label>
+      <input type="text" id="bs-doorResponseSuccessPath" placeholder="Ex : success — vide = un appel réussi (2xx) suffit">
+    </div>
+    <div class="fi">
+      <label class="lb">Paramètres additionnels du corps (un par ligne : clé=valeur)</label>
+      <textarea id="bs-doorEndpointBodyParams" rows="2" placeholder=""></textarea>
+    </div>
+  </div>
+
   </details>
 
   <!-- Synchronisation -->
@@ -5070,6 +5160,22 @@ function bsCollectFormValues(){
     nfcCodeParam: document.getElementById('bs-nfcCodeParam').value.trim(),
     nfcResponseCountPath: document.getElementById('bs-nfcResponseCountPath').value.trim(),
     nfcEndpointBodyParams: bsTextToParams(document.getElementById('bs-nfcEndpointBodyParams').value),
+    qrEndpointPath: document.getElementById('bs-qrEndpointPath').value.trim(),
+    qrEndpointMethod: document.getElementById('bs-qrEndpointMethod').value,
+    qrEndpointBodyFormat: document.getElementById('bs-qrEndpointBodyFormat').value,
+    qrCodeParam: document.getElementById('bs-qrCodeParam').value.trim(),
+    qrImagePath: document.getElementById('bs-qrImagePath').value.trim(),
+    qrValuePath: document.getElementById('bs-qrValuePath').value.trim(),
+    qrAccessCodePath: document.getElementById('bs-qrAccessCodePath').value.trim(),
+    qrValidUntilPath: document.getElementById('bs-qrValidUntilPath').value.trim(),
+    qrEndpointBodyParams: bsTextToParams(document.getElementById('bs-qrEndpointBodyParams').value),
+    doorEndpointPath: document.getElementById('bs-doorEndpointPath').value.trim(),
+    doorEndpointMethod: document.getElementById('bs-doorEndpointMethod').value,
+    doorEndpointBodyFormat: document.getElementById('bs-doorEndpointBodyFormat').value,
+    doorCodeParam: document.getElementById('bs-doorCodeParam').value.trim(),
+    doorRoomParam: document.getElementById('bs-doorRoomParam').value.trim(),
+    doorResponseSuccessPath: document.getElementById('bs-doorResponseSuccessPath').value.trim(),
+    doorEndpointBodyParams: bsTextToParams(document.getElementById('bs-doorEndpointBodyParams').value),
     syncIntervalMinutes: document.getElementById('bs-syncInterval').value ? parseInt(document.getElementById('bs-syncInterval').value) : null,
   };
 }
@@ -5119,6 +5225,22 @@ async function bsInit(){
   document.getElementById('bs-nfcCodeParam').value = BS_CONFIG.nfcCodeParam||'';
   document.getElementById('bs-nfcResponseCountPath').value = BS_CONFIG.nfcResponseCountPath||'';
   document.getElementById('bs-nfcEndpointBodyParams').value = bsParamsToText(BS_CONFIG.nfcEndpointBodyParams);
+  document.getElementById('bs-qrEndpointPath').value = BS_CONFIG.qrEndpointPath||'';
+  document.getElementById('bs-qrEndpointMethod').value = BS_CONFIG.qrEndpointMethod||'GET';
+  document.getElementById('bs-qrEndpointBodyFormat').value = BS_CONFIG.qrEndpointBodyFormat||'json';
+  document.getElementById('bs-qrCodeParam').value = BS_CONFIG.qrCodeParam||'';
+  document.getElementById('bs-qrImagePath').value = BS_CONFIG.qrImagePath||'';
+  document.getElementById('bs-qrValuePath').value = BS_CONFIG.qrValuePath||'';
+  document.getElementById('bs-qrAccessCodePath').value = BS_CONFIG.qrAccessCodePath||'';
+  document.getElementById('bs-qrValidUntilPath').value = BS_CONFIG.qrValidUntilPath||'';
+  document.getElementById('bs-qrEndpointBodyParams').value = bsParamsToText(BS_CONFIG.qrEndpointBodyParams);
+  document.getElementById('bs-doorEndpointPath').value = BS_CONFIG.doorEndpointPath||'';
+  document.getElementById('bs-doorEndpointMethod').value = BS_CONFIG.doorEndpointMethod||'POST';
+  document.getElementById('bs-doorEndpointBodyFormat').value = BS_CONFIG.doorEndpointBodyFormat||'json';
+  document.getElementById('bs-doorCodeParam').value = BS_CONFIG.doorCodeParam||'';
+  document.getElementById('bs-doorRoomParam').value = BS_CONFIG.doorRoomParam||'';
+  document.getElementById('bs-doorResponseSuccessPath').value = BS_CONFIG.doorResponseSuccessPath||'';
+  document.getElementById('bs-doorEndpointBodyParams').value = bsParamsToText(BS_CONFIG.doorEndpointBodyParams);
   bsRenderStatusBanner();
   document.getElementById('bs-result-card').style.display='none';
   document.getElementById('bs-preset').value = BS_CONFIG.presetId||'none';

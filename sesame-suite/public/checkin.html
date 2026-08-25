@@ -849,20 +849,25 @@ input:focus,select:focus{border-color:var(--accent)}
 
     <!-- ═══ TAB: CLÉ DIGITALE ═══ -->
     <div id="espTabKey" class="esp-tab">
-      <!-- QR Code simulé -->
+      <!-- QR Code — récupéré de la source PMS réelle si configurée (cf.
+           espRenderQr), sinon pattern de démonstration local -->
       <div class="card" style="text-align:center;padding:24px 16px;margin-bottom:12px">
         <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px" data-i18n="esp_key_title">Votre clé digitale</div>
         <div id="espQrWrap" style="display:inline-block;padding:14px;background:#fff;border-radius:12px;border:2px solid var(--bdr);margin-bottom:12px">
           <svg id="espQrSvg" width="160" height="160" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg"></svg>
+          <img id="espQrImg" width="160" height="160" style="display:none;border-radius:4px;object-fit:contain" alt="QR code d'accès">
         </div>
-        <div style="font-size:11px;color:var(--mu);margin-bottom:4px" data-i18n="esp_key_present">Présentez ce code au lecteur Sesame</div>
-        <div id="espQrCode" style="font-family:monospace;font-size:15px;font-weight:700;letter-spacing:3px;color:var(--primary)">—</div>
-        <div id="espQrValidity" style="font-size:11px;color:var(--mu);margin-top:6px">—</div>
-        <button class="btn btn-p" style="margin-top:14px;width:100%;justify-content:center" id="espQrOpenBtn" onclick="espSimulateOpen()">
-          <i class="ti ti-lock-open"></i> <span data-i18n="esp_key_simulate_open">Simuler l'ouverture</span>
-        </button>
-        <div id="espQrOpenResult" style="display:none;margin-top:10px" class="alt alt-g">
-          <i class="ti ti-check-circle"></i><span data-i18n="esp_key_unlocked">Accès déverrouillé ✓</span>
+        <div id="espQrErrorBox" style="display:none;margin-bottom:10px" class="alt alt-w"><i class="ti ti-alert-triangle"></i><span id="espQrErrorText"></span></div>
+        <div id="espQrOkBlock">
+          <div style="font-size:11px;color:var(--mu);margin-bottom:4px" data-i18n="esp_key_present">Présentez ce code au lecteur Sesame</div>
+          <div id="espQrCode" style="font-family:monospace;font-size:15px;font-weight:700;letter-spacing:3px;color:var(--primary)">—</div>
+          <div id="espQrValidity" style="font-size:11px;color:var(--mu);margin-top:6px">—</div>
+          <button class="btn btn-p" style="margin-top:14px;width:100%;justify-content:center" id="espQrOpenBtn" onclick="espOpenDoor()">
+            <i class="ti ti-lock-open"></i> <span id="espQrOpenBtnLabel" data-i18n="esp_key_simulate_open">Simuler l'ouverture</span>
+          </button>
+          <div id="espQrOpenResult" style="display:none;margin-top:10px" class="alt alt-g">
+            <i class="ti ti-check-circle"></i><span id="espQrOpenResultLabel" data-i18n="esp_key_unlocked">Accès déverrouillé ✓</span>
+          </div>
         </div>
       </div>
 
@@ -1388,6 +1393,10 @@ var I18N_FR = {
   esp_key_unlocked_sim:'{label} déverrouillé (mode simulation) ✓',esp_open_btn:'Ouvrir',
   esp_backup_code_label:"Code d'accès secours (simulation)",
   toast_access_unlocked_sim:'🔓 Accès déverrouillé (simulation)',
+  esp_key_open_real:'Ouvrir la porte',esp_key_unlocked_real:'Porte déverrouillée ✓',
+  toast_access_unlocked_real:'🔓 Porte déverrouillée',
+  esp_qr_fetch_error:'Clé indisponible pour le moment — présentez-vous à la réception.',
+  esp_door_open_error:'Ouverture impossible — présentez-vous à la réception.',
   esp_no_active_booking:'Aucune réservation active.',
   esp_menage_not_in_progress:'Les préférences de ménage ne peuvent être modifiées que pendant un séjour en cours (du {from} au {to}).',
   esp_menage_in_progress:'Séjour en cours — Chambre <strong>{room}</strong>. Vous pouvez modifier vos préférences.',
@@ -1591,6 +1600,10 @@ var I18N_EN = {
   esp_key_unlocked_sim:'{label} unlocked (simulation mode) ✓',esp_open_btn:'Open',
   esp_backup_code_label:'Backup access code (simulation)',
   toast_access_unlocked_sim:'🔓 Access unlocked (simulation)',
+  esp_key_open_real:'Open the door',esp_key_unlocked_real:'Door unlocked ✓',
+  toast_access_unlocked_real:'🔓 Door unlocked',
+  esp_qr_fetch_error:'Key unavailable right now — please check in at the front desk.',
+  esp_door_open_error:'Unable to unlock — please check in at the front desk.',
   esp_no_active_booking:'No active booking.',
   esp_menage_not_in_progress:'Housekeeping preferences can only be changed during a current stay (from {from} to {to}).',
   esp_menage_in_progress:'Stay in progress — Room <strong>{room}</strong>. You can update your preferences.',
@@ -1796,6 +1809,10 @@ var I18N_ES = {
   esp_key_unlocked_sim:'{label} desbloqueado (modo simulación) ✓',esp_open_btn:'Abrir',
   esp_backup_code_label:'Código de acceso de respaldo (simulación)',
   toast_access_unlocked_sim:'🔓 Acceso desbloqueado (simulación)',
+  esp_key_open_real:'Abrir la puerta',esp_key_unlocked_real:'Puerta desbloqueada ✓',
+  toast_access_unlocked_real:'🔓 Puerta desbloqueada',
+  esp_qr_fetch_error:'Llave no disponible en este momento — preséntese en recepción.',
+  esp_door_open_error:'No se pudo abrir — preséntese en recepción.',
   esp_no_active_booking:'Ninguna reserva activa.',
   esp_menage_not_in_progress:'Las preferencias de limpieza solo pueden modificarse durante una estancia en curso (del {from} al {to}).',
   esp_menage_in_progress:'Estancia en curso — Habitación <strong>{room}</strong>. Puede modificar sus preferencias.',
@@ -2870,23 +2887,22 @@ function espSimPasscode(ap){
   return String(Math.abs(hash)%10000).padStart(4,'0');
 }
 
-// ── QR CODE SIMULÉ ──
-function espRenderQr(){
-  var b = S.booking; if(!b) return;
-  var code = b.code || 'DEMO';
+// ── QR CODE / CLÉ D'ACCÈS ── récupéré de la source PMS réelle si le
+// connecteur expose "Récupération QR / code d'accès" (admin.html, panneau
+// Intégration réservations → réglages techniques avancés) ; sinon pattern
+// de démonstration local (non fonctionnel sur un vrai lecteur, mais permet
+// de présenter l'écran avant que le connecteur réel soit branché). Une
+// fois le connecteur configuré, un échec de CET appel affiche une erreur
+// explicite plutôt que de se rabattre silencieusement sur la démo — cf.
+// routes/booking.ts, GET /wa/booking/accessQr.
+var ESP_QR_STATE = { simulated: true };
 
-  // Afficher le code texte et la validité
-  var codeEl = document.getElementById('espQrCode');
-  var validEl= document.getElementById('espQrValidity');
-  if(codeEl) codeEl.textContent = code;
-  if(validEl){
-    var endDate = b.endDate ? new Date(b.endDate).toLocaleDateString(localeForLang()) : null;
-    validEl.textContent = endDate ? tf('esp_valid_until',{date:endDate}) : t('esp_valid_whole_stay');
-  }
-
-  // Générer un QR code SVG minimaliste (pattern pseudo-aléatoire déterministe basé sur le code)
+function espRenderQrSimulatedPattern(code){
   var svg = document.getElementById('espQrSvg');
+  var img = document.getElementById('espQrImg');
+  if(img) img.style.display = 'none';
   if(!svg) return;
+  svg.style.display = 'block';
   var size = 160, mod = 21, cell = Math.floor(size/mod);
 
   // Hash déterministe pour générer un pattern cohérent
@@ -2919,11 +2935,91 @@ function espRenderQr(){
   svg.innerHTML = svgContent;
 }
 
-function espSimulateOpen(){
+function espShowQrError(msg){
+  var errBox = document.getElementById('espQrErrorBox');
+  var errText = document.getElementById('espQrErrorText');
+  var okBlock = document.getElementById('espQrOkBlock');
+  if(errText) errText.textContent = msg;
+  if(errBox) errBox.style.display = 'flex';
+  if(okBlock) okBlock.style.display = 'none';
+}
+function espHideQrError(){
+  var errBox = document.getElementById('espQrErrorBox');
+  var okBlock = document.getElementById('espQrOkBlock');
+  if(errBox) errBox.style.display = 'none';
+  if(okBlock) okBlock.style.display = 'block';
+}
+
+async function espRenderQr(){
+  var b = S.booking; if(!b) return;
+  var code = b.code || 'DEMO';
+
+  var codeEl = document.getElementById('espQrCode');
+  var validEl = document.getElementById('espQrValidity');
+  var btnLabel = document.getElementById('espQrOpenBtnLabel');
+
+  // Affichage immédiat de la démo pendant l'appel réseau, pour ne pas
+  // laisser un cadre vide le temps de la réponse.
+  ESP_QR_STATE = { simulated: true };
+  espHideQrError();
+  espRenderQrSimulatedPattern(code);
+  if(codeEl) codeEl.textContent = code;
+  if(validEl){
+    var endDate = b.endDate ? new Date(b.endDate).toLocaleDateString(localeForLang()) : null;
+    validEl.textContent = endDate ? tf('esp_valid_until',{date:endDate}) : t('esp_valid_whole_stay');
+  }
+  if(btnLabel) btnLabel.textContent = t('esp_key_simulate_open');
+
+  try {
+    var r = await apiFetch(API_BASE+'/wa/booking/accessQr?code='+encodeURIComponent(code));
+    var data = await r.json().catch(function(){ return {}; });
+    if(!r.ok) throw new Error(data.error || ('HTTP '+r.status));
+    if(data.simulated) return; // pas de connecteur configuré — la démo déjà affichée reste valable
+
+    ESP_QR_STATE = { simulated: false };
+    var img = document.getElementById('espQrImg');
+    var svg = document.getElementById('espQrSvg');
+    if(data.qrImage && img && svg){
+      img.src = data.qrImage;
+      img.style.display = 'block';
+      svg.style.display = 'none';
+    }
+    if(data.accessCode && codeEl) codeEl.textContent = data.accessCode;
+    if(data.validUntil && validEl){
+      var vDate = new Date(data.validUntil);
+      validEl.textContent = isNaN(vDate.getTime()) ? data.validUntil : tf('esp_valid_until',{date:vDate.toLocaleDateString(localeForLang())});
+    }
+    if(btnLabel) btnLabel.textContent = t('esp_key_open_real');
+  } catch(e) {
+    ESP_QR_STATE = { simulated: true };
+    espShowQrError(t('esp_qr_fetch_error'));
+  }
+}
+
+async function espOpenDoor(){
+  var b = S.booking; if(!b) return;
+  var btn = document.getElementById('espQrOpenBtn');
   var res = document.getElementById('espQrOpenResult');
-  res.style.display = 'flex';
-  setTimeout(function(){ if(res) res.style.display = 'none'; }, 3000);
-  toast(t('toast_access_unlocked_sim'));
+  var resLabel = document.getElementById('espQrOpenResultLabel');
+  if(btn) btn.disabled = true;
+  try {
+    var r = await apiFetch(API_BASE+'/wa/booking/openDoor', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({code:b.code})
+    });
+    var data = await r.json().catch(function(){ return {}; });
+    if(!r.ok) throw new Error(data.error || ('HTTP '+r.status));
+
+    if(resLabel) resLabel.textContent = t(data.simulated ? 'esp_key_unlocked' : 'esp_key_unlocked_real');
+    if(res){
+      res.style.display = 'flex';
+      setTimeout(function(){ res.style.display = 'none'; }, 3000);
+    }
+    toast(t(data.simulated ? 'toast_access_unlocked_sim' : 'toast_access_unlocked_real'));
+  } catch(e) {
+    toast(t('esp_door_open_error'));
+  } finally {
+    if(btn) btn.disabled = false;
+  }
 }
 
 // ── PRÉFÉRENCES MÉNAGE POST CHECK-IN ──

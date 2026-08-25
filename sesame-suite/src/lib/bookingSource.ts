@@ -631,3 +631,156 @@ export async function encodeNfc(config: BookingSourceConfig, bookingCode: string
   }
   return { count };
 }
+
+/**
+ * Récupère le QR code / code d'accès généré par la source externe pour UNE
+ * réservation, via l'endpoint dédié config.qrEndpointPath. Inerte tant que
+ * ce champ n'est pas configuré (l'appelant décide alors du repli — cf.
+ * routes/booking.ts, qui bascule sur le mode simulation côté client plutôt
+ * que d'appeler cette fonction).
+ */
+export async function fetchAccessQr(
+  config: BookingSourceConfig,
+  bookingCode: string
+): Promise<{ qrImage?: string; qrValue?: string; accessCode?: string; validUntil?: string }> {
+  if (!config.qrEndpointPath) {
+    throw new BookingSourceError(
+      'Récupération du QR code non configurée pour cet établissement — renseignez "Récupération QR / code d\'accès" dans les réglages techniques avancés de l\'Intégration réservations.'
+    );
+  }
+  if (!config.baseUrl) throw new BookingSourceError("URL de base non configurée");
+  const url = normalizeBaseUrl(config.baseUrl).replace(/\/$/, "") + config.qrEndpointPath;
+  const { headers: authHeaders } = await buildAuthHeaders(config);
+  const codeParam = config.qrCodeParam || "code";
+  const method = (config.qrEndpointMethod || "GET").toUpperCase();
+  const staticParams: Record<string, unknown> =
+    config.qrEndpointBodyParams && typeof config.qrEndpointBodyParams === "object" ? (config.qrEndpointBodyParams as Record<string, unknown>) : {};
+
+  let res: Response;
+  try {
+    if (method === "GET") {
+      const qs = new URLSearchParams();
+      Object.entries(staticParams).forEach(([k, v]) => qs.set(k, String(v)));
+      qs.set(codeParam, bookingCode);
+      res = await fetch(`${url}${url.includes("?") ? "&" : "?"}${qs.toString()}`, {
+        headers: { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...authHeaders },
+      });
+    } else if ((config.qrEndpointBodyFormat || "json") === "json") {
+      res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "User-Agent": "SesameSuite-BookingConnector/1.0",
+          ...authHeaders,
+        },
+        body: JSON.stringify({ ...staticParams, [codeParam]: bookingCode }),
+      });
+    } else {
+      const form = new URLSearchParams();
+      Object.entries(staticParams).forEach(([k, v]) => form.set(k, String(v)));
+      form.set(codeParam, bookingCode);
+      res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/x-www-form-urlencoded",
+          "User-Agent": "SesameSuite-BookingConnector/1.0",
+          ...authHeaders,
+        },
+        body: form.toString(),
+      });
+    }
+  } catch (e) {
+    throw new BookingSourceError(`Connexion à la source de QR code impossible : ${describeFetchError(e)}`);
+  }
+  if (!res.ok) throw new BookingSourceError(`La source de QR code a répondu ${res.status} ${res.statusText}`);
+
+  const body = await parseJsonResponse(res, "La réponse de la source de QR code");
+  const qrImageRaw = config.qrImagePath ? getPath(body, config.qrImagePath) : undefined;
+  const qrValueRaw = config.qrValuePath ? getPath(body, config.qrValuePath) : undefined;
+  const accessCodeRaw = config.qrAccessCodePath ? getPath(body, config.qrAccessCodePath) : undefined;
+  const validUntilRaw = config.qrValidUntilPath ? getPath(body, config.qrValidUntilPath) : undefined;
+
+  return {
+    qrImage: typeof qrImageRaw === "string" && qrImageRaw ? qrImageRaw : undefined,
+    qrValue: typeof qrValueRaw === "string" && qrValueRaw ? qrValueRaw : undefined,
+    accessCode: accessCodeRaw !== undefined && accessCodeRaw !== null && accessCodeRaw !== "" ? String(accessCodeRaw) : undefined,
+    validUntil: typeof validUntilRaw === "string" && validUntilRaw ? validUntilRaw : undefined,
+  };
+}
+
+/**
+ * Déclenche l'ouverture à distance d'une serrure pour UNE réservation (et,
+ * si config.doorRoomParam est renseigné, sa chambre) auprès de la source
+ * externe, via l'endpoint dédié config.doorEndpointPath. Inerte tant que ce
+ * champ n'est pas configuré (même logique de repli que fetchAccessQr).
+ */
+export async function openDoor(
+  config: BookingSourceConfig,
+  bookingCode: string,
+  roomCode?: string | null
+): Promise<{ opened: boolean }> {
+  if (!config.doorEndpointPath) {
+    throw new BookingSourceError(
+      'Ouverture de porte à distance non configurée pour cet établissement — renseignez "Ouverture de porte à distance" dans les réglages techniques avancés de l\'Intégration réservations.'
+    );
+  }
+  if (!config.baseUrl) throw new BookingSourceError("URL de base non configurée");
+  const url = normalizeBaseUrl(config.baseUrl).replace(/\/$/, "") + config.doorEndpointPath;
+  const { headers: authHeaders } = await buildAuthHeaders(config);
+  const codeParam = config.doorCodeParam || "code";
+  const roomParam = config.doorRoomParam || "";
+  const method = (config.doorEndpointMethod || "POST").toUpperCase();
+  const staticParams: Record<string, unknown> =
+    config.doorEndpointBodyParams && typeof config.doorEndpointBodyParams === "object" ? (config.doorEndpointBodyParams as Record<string, unknown>) : {};
+  const params: Record<string, unknown> = { ...staticParams, [codeParam]: bookingCode };
+  if (roomParam && roomCode) params[roomParam] = roomCode;
+
+  let res: Response;
+  try {
+    if (method === "GET") {
+      const qs = new URLSearchParams();
+      Object.entries(params).forEach(([k, v]) => qs.set(k, String(v)));
+      res = await fetch(`${url}${url.includes("?") ? "&" : "?"}${qs.toString()}`, {
+        headers: { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...authHeaders },
+      });
+    } else if ((config.doorEndpointBodyFormat || "json") === "json") {
+      res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "User-Agent": "SesameSuite-BookingConnector/1.0",
+          ...authHeaders,
+        },
+        body: JSON.stringify(params),
+      });
+    } else {
+      const form = new URLSearchParams();
+      Object.entries(params).forEach(([k, v]) => form.set(k, String(v)));
+      res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/x-www-form-urlencoded",
+          "User-Agent": "SesameSuite-BookingConnector/1.0",
+          ...authHeaders,
+        },
+        body: form.toString(),
+      });
+    }
+  } catch (e) {
+    throw new BookingSourceError(`Connexion à la serrure impossible : ${describeFetchError(e)}`);
+  }
+  if (!res.ok) throw new BookingSourceError(`La serrure a répondu ${res.status} ${res.statusText}`);
+
+  if (config.doorResponseSuccessPath) {
+    const body = await parseJsonResponse(res, "La réponse d'ouverture de porte");
+    const raw = getPath(body, config.doorResponseSuccessPath);
+    if (raw === false || raw === "false" || raw === 0) {
+      throw new BookingSourceError("La serrure a refusé l'ouverture de la porte (réponse négative)");
+    }
+  }
+  return { opened: true };
+}
