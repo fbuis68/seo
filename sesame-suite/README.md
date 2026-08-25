@@ -1796,6 +1796,27 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   restent des illustrations générées, pas de vraies photographies** —
   cet environnement n'a pas d'accès Internet général pour en récupérer.
 
+### Trésorerie : nouveau tableau mensuel MRR / Signé / Pipeline / Recettes
+
+- Le tableau "Vision annuelle" ne montrait qu'Encaissement/Dépenses/Net/
+  Trésorerie, où "Encaissement" ne comptait que les lignes CrmCashLine
+  saisies à la main + le pipeline pondéré des affaires — **le MRR du
+  portefeuille (panneau Portefeuille, champ `mrr` par fiche client)
+  n'entrait jamais dans le calcul**, malgré une variable CSS `--tr-mrr`
+  déjà prévue dans les 5 thèmes mais jamais utilisée. Remplacé par le
+  tableau demandé : Mois / MRR / Signé / Pipeline / Recettes / Dépenses /
+  Net / Trésorerie, avec `Recettes = MRR + Signé + Pipeline`. Nouvelle
+  fonction `trPortfolioMrrMonthly()` (somme de `CrmProspect.mrr`, reportée
+  identiquement chaque mois — flux récurrent, contrairement à Signé/
+  Pipeline qui varient mois par mois). Le graphique en barres empilées
+  gagne un 3ᵉ segment (vert, MRR, sous Signé/Pipeline), la légende et
+  l'infobulle sont mises à jour en conséquence, et la carte "Recettes"
+  (ex-"Encaissement") affiche désormais un encart "dont X € de MRR
+  portefeuille — non éditable ici" à côté de celui déjà existant pour le
+  pipeline. Vérifié avec un cas combinant les 3 sources sur un même mois
+  (MRR 2 001 € + Signé 5 000 € + Pipeline 2 000 €) : Recettes affiche bien
+  9 001 €, cohérent entre tableau, infobulle et graphique.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

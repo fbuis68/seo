@@ -2003,6 +2003,16 @@ function trCategoryMonthly(kind, m){
   return kind==='revenu' ? base + trDealsPipelineFor(m) : base;
 }
 
+// MRR du portefeuille (somme de CrmProspect.mrr, tous types confondus —
+// même somme que le pied de tableau Portefeuille) : un flux récurrent
+// mensuel, indépendant des lignes CrmCashLine ("Signé" ci-dessous, saisies
+// manuellement) et du pipeline pondéré des affaires — reporté
+// automatiquement sur la Trésorerie (25/08/2026) plutôt que de rester
+// cantonné au seul panneau Portefeuille comme jusqu'ici.
+function trPortfolioMrrMonthly(){
+  return clients.reduce((s,c)=>s+(+c.mrr||0), 0);
+}
+
 function trModeToggle(kind){
   const mode = cashSettings[kind+'Mode'];
   const btn = (v,lbl) => `<button type="button" onclick="trSetMode('${kind}','${v}')" style="padding:4px 10px;font-size:11px;font-weight:600;border:none;cursor:pointer;background:${mode===v?'var(--a)':'transparent'};color:${mode===v?'#fff':'var(--mu)'}">${lbl}</button>`;
@@ -2060,7 +2070,8 @@ function trGlobalBlock(kind){
 function trCategoryCard(kind, title, colorVar){
   const mode = cashSettings[kind+'Mode'];
   const rows = trRows(kind);
-  const total = trCategoryAnnual(kind);
+  const mrr = kind==='revenu' ? trPortfolioMrrMonthly()*12 : 0;
+  const total = trCategoryAnnual(kind) + mrr;
   const body = mode==='global'
     ? trGlobalBlock(kind)
     : (rows.length===0 ? `<div class="log-empty">Aucune ligne. Ajoutez ${kind==='revenu'?'un encaissement':'une dépense'}.</div>` : rows.map(r=>trLineRow(r,kind)).join(''));
@@ -2075,6 +2086,7 @@ function trCategoryCard(kind, title, colorVar){
       </div>
       <div class="tr-panel-body">${body}</div>
       ${mode==='detail'?`<button class="add-row" onclick="trAdd('${kind}')">+ Ajouter une ligne</button>`:''}
+      ${mrr>0?`<div class="tr-caveat">dont <b class="num">${fmtEUR(mrr)}</b> de MRR portefeuille (somme des fiches clients, panneau Portefeuille) — reporté automatiquement, non éditable ici.</div>`:''}
       ${pipeline>0?`<div class="tr-caveat">dont <b class="num">${fmtEUR(pipeline)}</b> pondéré depuis les affaires en cours (montant ponctuel × probabilité, module Affaires) — reporté automatiquement, non éditable ici.</div>`:''}
     </div>`;
 }
@@ -2083,14 +2095,14 @@ function renderTresorerie(){
   const solde = trSolde();
   const startBalance = solde ? solde.montant : 0;
   const startMois = trSoldeMois();
-  const revenuAnnuel = trCategoryAnnual('revenu');
+  const revenuAnnuel = trCategoryAnnual('revenu') + trPortfolioMrrMonthly()*12;
   const depenseAnnuel = trCategoryAnnual('depense');
 
   document.getElementById('main').innerHTML = `
     <div class="tr-hero">
       <div>
         <div class="tr-hero-eyebrow">Prévisionnel ${cashYear}</div>
-        <div class="tr-hero-sub">Encaissement moins dépenses — vision mensuelle sur l'année.</div>
+        <div class="tr-hero-sub">Recettes moins dépenses — vision mensuelle sur l'année.</div>
       </div>
       <div class="tr-hero-figure">
         <div class="tr-sub-lbl">Trésorerie fin d'année</div>
@@ -2100,7 +2112,7 @@ function renderTresorerie(){
     </div>
 
     <div class="stat-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:20px">
-      <div class="stat-card"><div class="stat-lbl">Encaissement (année)</div><div class="stat-val num" id="tr-chip-revenu">${fmtEUR(revenuAnnuel)}</div></div>
+      <div class="stat-card"><div class="stat-lbl">Recettes (année)</div><div class="stat-val num" id="tr-chip-revenu">${fmtEUR(revenuAnnuel)}</div></div>
       <div class="stat-card"><div class="stat-lbl">Dépenses (année)</div><div class="stat-val num" id="tr-chip-depense">${fmtEUR(depenseAnnuel)}</div></div>
       <div class="stat-card">
         <div class="stat-lbl">Solde d'ouverture</div>
@@ -2112,15 +2124,16 @@ function renderTresorerie(){
     </div>
 
     <div class="panels" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px">
-      ${trCategoryCard('revenu', 'Encaissement', 'var(--tr-signe)')}
+      ${trCategoryCard('revenu', 'Recettes', 'var(--tr-signe)')}
       ${trCategoryCard('depense', 'Dépenses', 'var(--tr-depense)')}
     </div>
 
     <div class="card">
       <div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Vision annuelle ${cashYear}</span></div>
-      <div class="tr-chart-title">Encaissement vs dépenses, par mois</div>
+      <div class="tr-chart-title">Recettes vs dépenses, par mois</div>
       <div class="tr-legend">
-        <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-signe)"></span>Encaissement</span>
+        <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-mrr)"></span>MRR</span>
+        <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-signe)"></span>Signé</span>
         <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-pipeline)"></span>Pipeline pondéré (Affaires)</span>
         <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-depense)"></span>Dépenses</span>
       </div>
@@ -2139,7 +2152,7 @@ function renderTresorerie(){
       </div>
 
       <div class="tbl-wrap" style="margin-top:18px"><table>
-        <thead><tr><th>Mois</th><th style="text-align:right">Encaissement</th><th style="text-align:right">Dépenses</th><th style="text-align:right">Net</th><th style="text-align:right">Trésorerie</th></tr></thead>
+        <thead><tr><th>Mois</th><th style="text-align:right">MRR</th><th style="text-align:right">Signé</th><th style="text-align:right">Pipeline</th><th style="text-align:right">Recettes</th><th style="text-align:right">Dépenses</th><th style="text-align:right">Net</th><th style="text-align:right">Trésorerie</th></tr></thead>
         <tbody id="tr-month-tbody"></tbody>
       </table></div>
     </div>`;
@@ -2163,16 +2176,17 @@ function trComputeMonthly(){
     // montrer fausserait le graphique "Encaissement vs dépenses" en
     // affichant des mois qui ne font pas partie de la période suivie.
     const beforeSolde = m < soldeMois;
+    const mrr = beforeSolde ? 0 : trPortfolioMrrMonthly();
     const revenuBase = beforeSolde ? 0 : trCategoryMonthlyBase('revenu', m);
     const pipeline = beforeSolde ? 0 : trDealsPipelineFor(m);
-    const revenu = revenuBase + pipeline;
+    const revenu = mrr + revenuBase + pipeline;
     const depenses = beforeSolde ? 0 : trCategoryMonthly('depense', m);
     const net = revenu - depenses;
     let curCum;
     if(beforeSolde) curCum = null;
     else if(m === soldeMois){ cum = soldeMontant + net; curCum = cum; }
     else { cum += net; curCum = cum; }
-    months.push({ m, revenu, revenuBase, pipeline, depenses, net, cum: curCum });
+    months.push({ m, revenu, mrr, revenuBase, pipeline, depenses, net, cum: curCum });
   }
   return months;
 }
@@ -2207,16 +2221,19 @@ function trRenderBarChart(months){
     const cx = padL + groupW*i + groupW/2;
     const baseY = padT + plotH;
     const xR = cx - gap/2 - barW;
-    // Encaissement empilé : lignes/saisie globale (bleu) en bas, pipeline
-    // pondéré des affaires (doré) au-dessus — pour distinguer visuellement
-    // ce qui est du prévisionnel ferme de ce qui dépend encore d'une
-    // probabilité de closing.
+    // Recettes empilées : MRR portefeuille (vert, le socle récurrent) en
+    // bas, lignes/saisie globale "Signé" (bleu) au milieu, pipeline pondéré
+    // des affaires (doré) au sommet — pour distinguer visuellement le
+    // récurrent acquis, le ponctuel déjà signé, et ce qui dépend encore
+    // d'une probabilité de closing.
+    const hMrr = scale(mo.mrr);
     const hBase = scale(mo.revenuBase);
     const hPipe = scale(mo.pipeline);
-    if(hBase>0) s += `<rect x="${xR}" y="${baseY-hBase}" width="${barW}" height="${Math.max(hBase-1.5,0)}" rx="2.5" fill="var(--tr-signe)"></rect>`;
-    if(hPipe>0) s += `<rect x="${xR}" y="${baseY-hBase-hPipe}" width="${barW}" height="${Math.max(hPipe-1.5,0)}" rx="2.5" fill="var(--tr-pipeline)"></rect>`;
-    if(hBase+hPipe>0){
-      s += `<text class="tr-bar-lbl" x="${xR+barW/2}" y="${baseY-hBase-hPipe-5}">${Math.round(mo.revenu/1000)}k</text>`;
+    if(hMrr>0) s += `<rect x="${xR}" y="${baseY-hMrr}" width="${barW}" height="${Math.max(hMrr-1.5,0)}" rx="2.5" fill="var(--tr-mrr)"></rect>`;
+    if(hBase>0) s += `<rect x="${xR}" y="${baseY-hMrr-hBase}" width="${barW}" height="${Math.max(hBase-1.5,0)}" rx="2.5" fill="var(--tr-signe)"></rect>`;
+    if(hPipe>0) s += `<rect x="${xR}" y="${baseY-hMrr-hBase-hPipe}" width="${barW}" height="${Math.max(hPipe-1.5,0)}" rx="2.5" fill="var(--tr-pipeline)"></rect>`;
+    if(hMrr+hBase+hPipe>0){
+      s += `<text class="tr-bar-lbl" x="${xR+barW/2}" y="${baseY-hMrr-hBase-hPipe-5}">${Math.round(mo.revenu/1000)}k</text>`;
     }
     const xD = cx + gap/2;
     const hD = scale(mo.depenses);
@@ -2232,7 +2249,8 @@ function trRenderBarChart(months){
     el.addEventListener('mousemove', (ev)=>{
       const i = +el.dataset.month, mo = months[i];
       tt.innerHTML = `<b>${TR_MONTHS[i]}</b>`+
-        `<div class="tr-tt-row"><span>Encaissement</span><span class="num">${fmtEUR(mo.revenuBase)}</span></div>`+
+        (mo.mrr>0?`<div class="tr-tt-row"><span>MRR</span><span class="num">${fmtEUR(mo.mrr)}</span></div>`:'')+
+        `<div class="tr-tt-row"><span>Signé</span><span class="num">${fmtEUR(mo.revenuBase)}</span></div>`+
         (mo.pipeline>0?`<div class="tr-tt-row"><span>Pipeline (Affaires)</span><span class="num">${fmtEUR(mo.pipeline)}</span></div>`:'')+
         `<div class="tr-tt-row"><span>Dépenses</span><span class="num">−${fmtEUR(mo.depenses)}</span></div>`+
         `<div class="tr-tt-row" style="border-top:1px solid rgba(255,255,255,.2);margin-top:3px;padding-top:3px"><span>Net</span><span class="num">${(mo.net>=0?'+':'−')+fmtEUR(Math.abs(mo.net))}</span></div>`;
@@ -2321,6 +2339,13 @@ function trPositionTooltip(tt, ev, svg){
   tt.style.top = (ev.clientY - wrapRect.top - 14) + 'px';
 }
 
+// Cellule "—" (période non suivie) ou "–" (valeur nulle, ex. pas de
+// pipeline ce mois-là) plutôt qu'un 0,00 € qui alourdirait la lecture du
+// tableau — même convention que la maquette de référence.
+function trCell(v, before){
+  if(before) return '—';
+  return v ? fmtEUR(v) : '–';
+}
 function trRenderMonthTable(months){
   const body = document.getElementById('tr-month-tbody'); if(!body) return;
   body.innerHTML = months.map(mo=>{
@@ -2328,8 +2353,11 @@ function trRenderMonthTable(months){
     return `
     <tr${before?' style="opacity:.45"':''}>
       <td>${TR_MONTHS[mo.m]}</td>
-      <td class="num" style="text-align:right">${before?'—':fmtEUR(mo.revenu)}</td>
-      <td class="num" style="text-align:right">${before?'—':fmtEUR(mo.depenses)}</td>
+      <td class="num" style="text-align:right">${trCell(mo.mrr, before)}</td>
+      <td class="num" style="text-align:right">${trCell(mo.revenuBase, before)}</td>
+      <td class="num" style="text-align:right">${trCell(mo.pipeline, before)}</td>
+      <td class="num" style="text-align:right;font-weight:500">${trCell(mo.revenu, before)}</td>
+      <td class="num" style="text-align:right">${trCell(mo.depenses, before)}</td>
       <td class="num" style="text-align:right;font-weight:500;color:${before?'inherit':(mo.net>=0?'var(--good,#1a6b47)':'var(--bad,#b23b2c)')}">${before?'—':(mo.net>=0?'+':'−')+fmtEUR(Math.abs(mo.net))}</td>
       <td class="num" style="text-align:right;font-weight:600;${!before&&mo.cum<0?'color:var(--bad,#b23b2c)':''}">${before?'—':fmtEUR(mo.cum)}</td>
     </tr>`;
