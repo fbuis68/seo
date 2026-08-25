@@ -26,6 +26,12 @@ COPY tsconfig.json ./
 COPY prisma ./prisma
 COPY src ./src
 COPY public ./public
+# Scripts ponctuels (ex. scripts/backfill-room-media.ts) — exécutés à la
+# main via `docker exec` après déploiement, pas au démarrage, mais doivent
+# être présents dans l'image pour ça (oublié initialement : le premier
+# `docker exec ... npx tsx scripts/backfill-room-media.ts` en production a
+# échoué avec ERR_MODULE_NOT_FOUND faute de ce COPY).
+COPY scripts ./scripts
 
 # Génère le client Prisma pour la plateforme de l'image (linux-musl)
 RUN npx prisma generate
