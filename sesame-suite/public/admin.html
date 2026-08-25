@@ -4985,6 +4985,12 @@ var PMS_PRESETS = {
       document.getElementById('bs-qrValuePath').value = '';
       document.getElementById('bs-qrAccessCodePath').value = '';
       document.getElementById('bs-qrValidUntilPath').value = '';
+      // Sans row/size, findMimeSecret peut renvoyer une planche de plusieurs
+      // petits QR côte à côte (pensée pour l'impression de badges) plutôt
+      // qu'un seul grand code — constaté en pratique le 25/08/2026 (lecteur
+      // physique refusant le QR affiché à l'écran d'un téléphone). row=1
+      // force un seul code par ligne, size agrandit le rendu pour un écran.
+      document.getElementById('bs-qrEndpointBodyParams').value = 'row=1\nsize=400';
       document.getElementById('bs-qrPasscodeEndpointPath').value = '/ws/pass/findPasscode';
       document.getElementById('bs-qrPasscodeValuePath').value = 'passcode';
       document.getElementById('bs-doorEndpointPath').value = '/ws/booking/openAs';

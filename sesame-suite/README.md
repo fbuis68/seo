@@ -2039,6 +2039,27 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   vrai parcours client. Vérifié via Playwright : ouvre effectivement
   `checkin.html` avec le bon `entityCode`, pas une 404.
 
+### Clé digitale : premier test en conditions réelles (E00000007)
+
+- QR et ouverture de porte confirmés fonctionnels en mode réel sur un
+  établissement autre que Hôtel Churchill (E00000007), en suivant le
+  vrai parcours utilisateur (admin : sélection du modèle, "Réappliquer
+  les valeurs par défaut", Enregistrer ; client : QR réel affiché, porte
+  déverrouillée). Un log de diagnostic temporaire posé sur `POST
+  /booking/openDoor` (retiré une fois la confirmation obtenue) a
+  définitivement écarté l'hypothèse d'un écart de résolution
+  d'établissement entre `accessQr` et `openDoor` — les deux routes
+  utilisent le même code, aucun bug trouvé à cet endroit.
+- En parallèle, un lecteur physique a d'abord rejeté le QR affiché à
+  l'écran d'un téléphone ("QR code non valide"). Cause probable
+  identifiée dans la doc officielle : sans les paramètres optionnels
+  `row`/`size`, `findMimeSecret` peut renvoyer une planche de plusieurs
+  petits QR côte à côte (pensée pour l'impression de badges) plutôt qu'un
+  seul grand code scannable à l'écran. Le préréglage "Sesame Technology"
+  renseigne désormais par défaut `row=1` / `size=400` dans les
+  "Paramètres additionnels du corps" de la section QR — à confirmer sur
+  un vrai lecteur, pas encore vérifié en conditions réelles.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

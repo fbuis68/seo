@@ -244,26 +244,6 @@ bookingRouter.post(
     if (!booking) throw new HttpError(404, "Réservation introuvable");
 
     const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
-    // Log de diagnostic temporaire — le client (E00000007) voit "mode
-    // simulation" au clic malgré une config enregistrée et confirmée après
-    // rechargement du panneau admin ; on n'a pas trouvé d'écart de code
-    // entre cette route et /booking/accessQr (identique et fonctionnelle) —
-    // ce log doit confirmer si le serveur résout bien le même établissement/
-    // la même config au moment précis de ce clic. À retirer une fois la
-    // cause identifiée.
-    console.log(
-      "[diag openDoor]",
-      JSON.stringify({
-        requestedEntityCode: (req.query.entityCode as string) || req.body?.entityCode || null,
-        resolvedEntityId: entity.id,
-        resolvedEntityCode: entity.code,
-        bookingCode: code,
-        configFound: !!config,
-        configId: config?.id || null,
-        doorEndpointPath: config?.doorEndpointPath ?? null,
-        qrEndpointPath: config?.qrEndpointPath ?? null,
-      })
-    );
     if (!config || !config.doorEndpointPath) {
       res.json({ simulated: true });
       return;
