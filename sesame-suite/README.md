@@ -1817,6 +1817,31 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   (MRR 2 001 € + Signé 5 000 € + Pipeline 2 000 €) : Recettes affiche bien
   9 001 €, cohérent entre tableau, infobulle et graphique.
 
+### Trésorerie : détail cliquable sur le Pipeline (retrouver l'affaire sans année renseignée)
+
+- Rapporté après le correctif `anneeEncaissement` : le pipeline pondéré
+  d'un mois restait incorrect (le même écart chiffré qu'avant le
+  correctif). Cause confirmée en reproduisant le cas : les affaires déjà
+  en base au moment du correctif n'ont pas d'année renseignée, donc
+  `dealEncaissementYear()` les traite comme l'année civile en cours — si
+  deux affaires "Octobre" distinctes (l'une avec une année explicitement
+  posée, l'autre encore sans) tombent toutes les deux sur l'année en
+  cours par ce mécanisme de repli, elles se remélangent exactement comme
+  avant le correctif. Ce n'est pas un bug de calcul, mais une donnée à
+  finir de renseigner affaire par affaire — sans façon de voir QUELLES
+  affaires composent un montant de pipeline, impossible à repérer
+  soi-même. La cellule "Pipeline" du tableau mensuel est désormais
+  cliquable (dès qu'elle est non nulle) : ouvre le détail des affaires
+  qui la composent, avec le montant pondéré de chacune et — si l'année
+  n'a jamais été renseignée — un avertissement explicite ("année non
+  renseignée, traitée comme 2026"). Cliquer une affaire dans ce détail
+  ouvre directement sa fiche pour corriger l'année. Nouvelle fonction
+  `trDealsFor(m)` (factorisée avec `trDealsPipelineFor`) +
+  `openPipelineDetail(m)`. Reproduit et vérifié : deux affaires Octobre
+  (30 000€×10% avec année posée, 26 400€×50% sans année) redonnent bien
+  16 200€ de pipeline tant que la seconde n'est pas corrigée — la
+  modale de détail identifie sans ambiguïté laquelle des deux corriger.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

@@ -1976,12 +1976,42 @@ function dealEncaissementYear(d){
 // pas. Filtré sur cashYear (année Trésorerie affichée) en plus du mois —
 // sans ça, une affaire encaissée en Octobre d'une AUTRE année se retrouvait
 // additionnée dans l'Octobre de l'année actuellement consultée. ──
+function trDealsFor(m){
+  return deals.filter(d=>d.stage!=='Perdu' && d.moisEncaissement===m && d.montantPonctuel && dealEncaissementYear(d)===cashYear);
+}
 function trDealsPipelineFor(m){
-  return deals.filter(d=>d.stage!=='Perdu' && d.moisEncaissement===m && d.montantPonctuel && dealEncaissementYear(d)===cashYear)
-    .reduce((s,d)=>s+(+d.montantPonctuel||0)*(+d.probability||0)/100, 0);
+  return trDealsFor(m).reduce((s,d)=>s+(+d.montantPonctuel||0)*(+d.probability||0)/100, 0);
 }
 function trDealsPipelineAnnual(){
   let s=0; for(let m=0;m<12;m++) s+=trDealsPipelineFor(m); return s;
+}
+// Détail des affaires qui composent le Pipeline d'un mois — pour repérer
+// d'un coup d'œil une affaire dont l'année n'a jamais été renseignée
+// explicitement (traitée par défaut comme l'année civile en cours, cf.
+// dealEncaissementYear) et qui se retrouve donc peut-être comptée dans le
+// mauvais mois/la mauvaise année sans que ce soit visible autrement.
+function openPipelineDetail(m){
+  const rows = trDealsFor(m);
+  const body = rows.length
+    ? rows.map(d=>{
+        const pondere = (+d.montantPonctuel||0)*(+d.probability||0)/100;
+        const yearNote = d.anneeEncaissement!=null
+          ? ''
+          : ' <span style="color:var(--bad,#b23b2c)">— année non renseignée, traitée comme '+cashYear+'</span>';
+        return '<div class="kpi-detail-row" onclick="closeModal();openDealModal(\''+d.id+'\')">'
+          +'<div class="kpi-detail-main"><div class="kpi-detail-nom">'+esc(d.title)+'</div>'
+          +'<div class="kpi-detail-meta" style="white-space:normal;overflow:visible;text-overflow:clip">'+esc(d.prospectNom||'')+' · '+fmtEUR(d.montantPonctuel)+' × '+(d.probability||0)+'%'+yearNote+'</div></div>'
+          +'<span class="num" style="font-weight:600">'+fmtEUR(pondere)+'</span>'
+          +'</div>';
+      }).join('')
+    : '<div style="padding:16px 4px;color:var(--mu);font-size:13px">Aucune affaire.</div>';
+  document.getElementById('modal-ct').innerHTML =
+    '<div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">'
+    +'<div class="modal-box" style="max-width:480px">'
+    +'<div class="modal-head"><div style="font-size:16px;font-weight:500">Pipeline — '+TR_MONTHS[m]+' '+cashYear+'</div>'
+    +'<button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>'
+    +'<div style="max-height:60vh;overflow-y:auto">'+body+'</div>'
+    +'</div></div>';
 }
 
 /** Montant de la catégorie hors pipeline des affaires — lignes CrmCashLine ou saisie globale uniquement. */
@@ -2355,7 +2385,7 @@ function trRenderMonthTable(months){
       <td>${TR_MONTHS[mo.m]}</td>
       <td class="num" style="text-align:right">${trCell(mo.mrr, before)}</td>
       <td class="num" style="text-align:right">${trCell(mo.revenuBase, before)}</td>
-      <td class="num" style="text-align:right">${trCell(mo.pipeline, before)}</td>
+      <td class="num" style="text-align:right${!before&&mo.pipeline?';cursor:pointer;text-decoration:underline;text-decoration-style:dotted' : ''}" ${!before&&mo.pipeline?'onclick="openPipelineDetail('+mo.m+')" title="Voir les affaires qui composent ce pipeline"':''}>${trCell(mo.pipeline, before)}</td>
       <td class="num" style="text-align:right;font-weight:500">${trCell(mo.revenu, before)}</td>
       <td class="num" style="text-align:right">${trCell(mo.depenses, before)}</td>
       <td class="num" style="text-align:right;font-weight:500;color:${before?'inherit':(mo.net>=0?'var(--good,#1a6b47)':'var(--bad,#b23b2c)')}">${before?'—':(mo.net>=0?'+':'−')+fmtEUR(Math.abs(mo.net))}</td>
