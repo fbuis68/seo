@@ -1900,6 +1900,20 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   scripts/backfill-room-media.ts` (le seed ne régénère ces champs qu'à la
   création d'une chambre/config, jamais sur des lignes existantes).
 
+### Intégration réservations : URL de base sans schéma → "Invalid URL"
+
+- Une "URL du serveur Sesame" saisie sans `https://` (ex :
+  `sesame.technology` au lieu de `https://sesame.technology`) faisait
+  échouer toute connexion (login) avec `Failed to parse URL from
+  sesame.technology/ws/login/login?… — Invalid URL` — `fetch()` ne
+  complète pas de schéma manquant, et le message ne pointe pas vers la
+  vraie cause. `normalizeBaseUrl()` (`src/lib/bookingSource.ts`) préfixe
+  désormais `https://` par défaut si l'URL enregistrée n'en a pas, aux 3
+  endroits où `baseUrl` sert à construire une requête (connexion,
+  réservations/chambres, encodage NFC) — corrige aussi les configurations
+  déjà enregistrées sans schéma, sans qu'il soit nécessaire de resaisir
+  l'URL dans l'admin.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

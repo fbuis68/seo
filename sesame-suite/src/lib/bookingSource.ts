@@ -2,6 +2,13 @@ import { prisma } from "../db";
 import type { BookingSourceConfig, Entity } from "@prisma/client";
 import { fireTrigger } from "./automation";
 
+/** L'admin accepte de saisir "sesame.technology" sans schéma — `fetch()`
+ * échoue alors avec "Failed to parse URL … Invalid URL", un message qui ne
+ * pointe pas vers la vraie cause. On complète par https:// par défaut. */
+function normalizeBaseUrl(baseUrl: string): string {
+  return /^https?:\/\//i.test(baseUrl) ? baseUrl : `https://${baseUrl}`;
+}
+
 /** Champs Booking que le mapping peut renseigner — valeur = dot-path dans
  * chaque élément du tableau JSON retourné par la source externe. */
 export interface FieldMapping {
@@ -143,7 +150,7 @@ async function performLogin(
   const passwordField = config.loginPasswordField || "password";
   const inQuery = (config.loginEmailLocation || "body") === "query";
 
-  let url = config.baseUrl.replace(/\/$/, "") + (config.loginPath || "");
+  let url = normalizeBaseUrl(config.baseUrl).replace(/\/$/, "") + (config.loginPath || "");
   if (inQuery) url += (url.includes("?") ? "&" : "?") + `${encodeURIComponent(emailField)}=${encodeURIComponent(config.loginEmail)}`;
   const body: Record<string, string> = { [passwordField]: config.loginPassword };
   if (!inQuery) body[emailField] = config.loginEmail;
@@ -288,7 +295,7 @@ async function fetchExternalList(
   bodyParams: unknown
 ): Promise<unknown[]> {
   if (!config.baseUrl) throw new BookingSourceError("URL de base non configurée");
-  const url = config.baseUrl.replace(/\/$/, "") + (endpointPath || "");
+  const url = normalizeBaseUrl(config.baseUrl).replace(/\/$/, "") + (endpointPath || "");
   const { headers: authHeaders, resultFilterValue, resultEntityField } = await buildAuthHeaders(config);
   const isPost = (method || "GET").toUpperCase() === "POST";
   const params: Record<string, unknown> = bodyParams && typeof bodyParams === "object" ? (bodyParams as Record<string, unknown>) : {};
@@ -568,7 +575,7 @@ export async function encodeNfc(config: BookingSourceConfig, bookingCode: string
     );
   }
   if (!config.baseUrl) throw new BookingSourceError("URL de base non configurée");
-  const url = config.baseUrl.replace(/\/$/, "") + config.nfcEndpointPath;
+  const url = normalizeBaseUrl(config.baseUrl).replace(/\/$/, "") + config.nfcEndpointPath;
   const { headers: authHeaders } = await buildAuthHeaders(config);
   const codeParam = config.nfcCodeParam || "code";
   const method = (config.nfcEndpointMethod || "POST").toUpperCase();
