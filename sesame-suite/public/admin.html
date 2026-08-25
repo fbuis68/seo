@@ -1843,11 +1843,11 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       <div class="ca">
         <div class="ch"><i class="ti ti-link"></i>Lien d'accès client</div>
         <div style="background:var(--bg);border-radius:var(--rs);padding:9px 12px;font-family:monospace;font-size:12px;display:flex;align-items:center;justify-content:space-between;border:1px solid var(--bdr)">
-          <span id="clientUrl">sesame_eco_module.html</span>
+          <span id="clientUrl" style="overflow-x:auto;white-space:nowrap">—</span>
           <button class="btn btn-s btn-g" onclick="navigator.clipboard&&navigator.clipboard.writeText(document.getElementById('clientUrl').textContent);toast('Lien copié ✓')"><i class="ti ti-copy"></i></button>
         </div>
         <div style="display:flex;gap:8px;margin-top:10px">
-          <button class="btn btn-p btn-s" onclick="window.open('sesame_eco_module.html')"><i class="ti ti-external-link"></i> Ouvrir l'app client</button>
+          <button class="btn btn-p btn-s" onclick="window.open(document.getElementById('clientUrl').textContent)"><i class="ti ti-external-link"></i> Ouvrir l'app client</button>
           <button class="btn btn-s" onclick="publish()"><i class="ti ti-cloud-upload"></i> Publier</button>
         </div>
       </div>
@@ -4530,6 +4530,17 @@ function renderFullPreview(){
   if(pp)pp.innerHTML=buildPhoneHTML();
 }
 function renderPrevSummary(){
+  // Lien d'accès client — même construction que h-checkinUrl (panneau
+  // "Hôtel") : racine du site + ?entityCode= l'établissement actif (ou
+  // celui de l'admin mono-hôtel). Remplaçait auparavant un nom de fichier
+  // figé et périmé (sesame_eco_module.html, jamais mis à jour depuis le
+  // renommage du prototype en checkin.html) — lien mort et jamais
+  // spécifique au bon établissement.
+  var clientUrlEl = document.getElementById('clientUrl');
+  if(clientUrlEl){
+    var checkinCode = (ADMIN_ROLE==='sesame' && ACTIVE_ENTITY_CODE) ? ACTIVE_ENTITY_CODE : HOME_ENTITY_CODE;
+    clientUrlEl.textContent = checkinCode ? (window.location.origin+'/?entityCode='+checkinCode) : window.location.origin+'/';
+  }
   var el=document.getElementById('prevCfgSummary');if(!el)return;
   var gains=Object.keys(CFG.gains).filter(function(k){return CFG.gains[k].active;}).join(', ');
   el.innerHTML='<div style="display:flex;flex-direction:column;gap:5px">'

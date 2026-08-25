@@ -2020,6 +2020,25 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   (`bsSave()`), pas un raccourci base de données : la configuration
   persiste bien après un rechargement de page.
 
+### Aperçu client : lien d'accès mort (nom de fichier périmé)
+
+- Signalé : "le lien d'accès client spécifique ne fonctionne pas et le
+  bouton ouvrir l'app client". Panneau "Aperçu client" (admin.html) :
+  le lien affiché et le bouton "Ouvrir l'app client" pointaient tous deux
+  vers `sesame_eco_module.html` en dur — un nom de fichier du prototype
+  d'origine, jamais mis à jour depuis son renommage en `checkin.html`, et
+  qui n'a jamais existé dans ce dépôt (`public/checkin.html` uniquement).
+  Le panneau "Hôtel" avait déjà la bonne construction de lien
+  (`h-checkinUrl` : racine du site + `?entityCode=`) — jamais reprise ici.
+- Corrigé en reprenant exactement cette construction (même variable
+  `checkinCode`, même formule) dans `renderPrevSummary()`, appelée à
+  chaque ouverture du panneau : le lien est maintenant généré
+  dynamiquement, pointe vers la racine du site avec l'`entityCode` de
+  l'établissement actif (celui affiché pour un admin mono-hôtel, celui
+  sélectionné pour un compte Sesame multi-hôtels), et s'ouvre bien sur le
+  vrai parcours client. Vérifié via Playwright : ouvre effectivement
+  `checkin.html` avec le bon `entityCode`, pas une 404.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT
