@@ -227,17 +227,22 @@ bookingRouter.get(
 );
 
 /**
- * POST /wa/booking/openDoor — body: { code } — déclenche l'ouverture à
- * distance de la porte pour cette réservation (source externe, même
- * connexion que la synchronisation). Même logique simulated:true que
- * /booking/accessQr si aucun endpoint n'est configuré — le client garde
- * alors son bouton "Simuler l'ouverture" existant.
+ * POST /wa/booking/openDoor — body: { code, facilityCode? } — déclenche
+ * l'ouverture à distance de la porte pour cette réservation (source
+ * externe, même connexion que la synchronisation). `facilityCode` est
+ * optionnel : quand fourni (ex : un point d'accès distinct de la chambre —
+ * parking, salle de sport… cf. checkin.html espOpenAccess), il remplace la
+ * chambre de la réservation comme cible de l'ouverture ; sinon la chambre
+ * de la réservation est utilisée par défaut. Même logique simulated:true
+ * que /booking/accessQr si aucun endpoint n'est configuré — le client
+ * garde alors son bouton "Simuler l'ouverture" existant.
  */
 bookingRouter.post(
   "/booking/openDoor",
   asyncHandler(async (req, res) => {
     const entity = await resolveEntity(req);
     const code = (req.body.code as string) || "";
+    const facilityCodeOverride = (req.body.facilityCode as string) || "";
     if (!code) throw new HttpError(400, "code requis");
 
     const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code } } });
@@ -250,7 +255,7 @@ bookingRouter.post(
     }
 
     try {
-      await openDoor(config, booking.code, booking.selectedRoomCode || booking.facilityCode || null, booking.personEmail);
+      await openDoor(config, booking.code, facilityCodeOverride || booking.selectedRoomCode || booking.facilityCode || null, booking.personEmail);
       const updated = await prisma.booking.update({
         where: { id: booking.id },
         data: { doorOpenCount: { increment: 1 }, doorLastOpenedAt: new Date() },

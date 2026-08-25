@@ -1391,6 +1391,7 @@ var I18N_FR = {
   esp_valid_until:"Valable jusqu'au {date} à 11h00",
   esp_valid_whole_stay:'Valable pendant toute la durée de votre séjour',
   esp_key_unlocked_sim:'{label} déverrouillé (mode simulation) ✓',esp_open_btn:'Ouvrir',
+  esp_key_unlocked_real_label:'{label} déverrouillé ✓',
   esp_backup_code_label:"Code d'accès secours (simulation)",
   toast_access_unlocked_sim:'🔓 Accès déverrouillé (simulation)',
   esp_key_open_real:'Ouvrir la porte',esp_key_unlocked_real:'Porte déverrouillée ✓',
@@ -1598,6 +1599,7 @@ var I18N_EN = {
   esp_valid_until:'Valid until {date} at 11:00 AM',
   esp_valid_whole_stay:'Valid for the entire duration of your stay',
   esp_key_unlocked_sim:'{label} unlocked (simulation mode) ✓',esp_open_btn:'Open',
+  esp_key_unlocked_real_label:'{label} unlocked ✓',
   esp_backup_code_label:'Backup access code (simulation)',
   toast_access_unlocked_sim:'🔓 Access unlocked (simulation)',
   esp_key_open_real:'Open the door',esp_key_unlocked_real:'Door unlocked ✓',
@@ -1807,6 +1809,7 @@ var I18N_ES = {
   esp_valid_until:'Válido hasta el {date} a las 11:00',
   esp_valid_whole_stay:'Válido durante toda su estancia',
   esp_key_unlocked_sim:'{label} desbloqueado (modo simulación) ✓',esp_open_btn:'Abrir',
+  esp_key_unlocked_real_label:'{label} desbloqueado ✓',
   esp_backup_code_label:'Código de acceso de respaldo (simulación)',
   toast_access_unlocked_sim:'🔓 Acceso desbloqueado (simulación)',
   esp_key_open_real:'Abrir la puerta',esp_key_unlocked_real:'Puerta desbloqueada ✓',
@@ -2845,17 +2848,24 @@ function espRenderKey(){
   }).join('');
 }
 
+// Point d'accès actuellement affiché dans la modale — utilisé par
+// espOpenAccessConfirm() au clic sur le bouton d'ouverture, sans le
+// re-transmettre via l'attribut onclick (échappement plus simple).
+var ESP_ACCESS_CURRENT = null;
+
 async function espOpenAccess(idx){
   var pts = espGetAccessPoints();
   var ap  = pts[idx]; if(!ap) return;
+  var b = S.booking;
+  ESP_ACCESS_CURRENT = ap;
 
   var roomLabel = (S.selectedRoom && (S.selectedRoom.name||S.selectedRoom.code))
-    || (S.booking && S.booking.facilityCode) || '—';
+    || (b && b.facilityCode) || '—';
 
   document.getElementById('espAccessModalIcon').innerHTML = '<i class="ti '+(ap.ico||'ti-key')+'"></i>';
   document.getElementById('espAccessModalTitle').textContent = ap.auto ? (ap.label+' '+roomLabel) : ap.label;
 
-  var checkOut = S.booking && S.booking.endDate ? new Date(S.booking.endDate) : null;
+  var checkOut = b && b.endDate ? new Date(b.endDate) : null;
   document.getElementById('espAccessModalValidity').textContent = checkOut
     ? tf('esp_valid_until',{date:checkOut.toLocaleDateString(localeForLang())})
     : t('esp_valid_whole_stay');
@@ -2864,23 +2874,44 @@ async function espOpenAccess(idx){
   actionEl.innerHTML = '<div class="spin" style="margin:0 auto"></div>';
   document.getElementById('espAccessModal').style.display = 'flex';
 
-  // Génération de la clé (Sesame /ws/pass/*) hors périmètre de cette
-  // itération — mode simulation, comme documenté (dossier §10.4 "Vraie
-  // génération QR code" reste à brancher sur l'API Sesame réelle).
-  await new Promise(function(r){ setTimeout(r, 300); });
-  actionEl.innerHTML = espKeySimulated(ap);
+  // Code de secours affiché : Sesame n'a qu'un seul QR/code par réservation
+  // (pas un par point d'accès, cf. doc API — findMimeSecret/findPasscode ne
+  // prennent que bookingCode+personEmail), donc même appel que l'onglet
+  // "Clé digitale" principal. Reste simulé si aucun connecteur réel n'est
+  // configuré, ou si cet appel échoue.
+  var passcode = espSimPasscode(ap);
+  var simulated = true;
+  if(b){
+    try{
+      var r = await apiFetch(API_BASE+'/wa/booking/accessQr?code='+encodeURIComponent(b.code));
+      var data = await r.json().catch(function(){ return {}; });
+      if(r.ok && !data.simulated && data.accessCode){ passcode = data.accessCode; simulated = false; }
+    }catch(e){}
+  }
+  if(ESP_ACCESS_CURRENT === ap) actionEl.innerHTML = espKeyActionHtml(ap, passcode, simulated);
 }
-function espKeySimulated(ap){
-  return '<button class="btn btn-p" style="display:flex;justify-content:center;margin-bottom:10px" onclick="toast(\''+esc(tf('esp_key_unlocked_sim',{label:ap?ap.label:t('word_access')}))+'\')"><i class="ti ti-lock-open"></i> '+t('esp_open_btn')+'</button>'
-    + '<div style="font-size:11px;color:var(--mu);margin-bottom:4px">'+t('esp_backup_code_label')+'</div>'
-    + '<div style="font-size:28px;font-weight:700;letter-spacing:4px;font-family:monospace">'+espSimPasscode(ap)+'</div>';
+function espKeyActionHtml(ap, passcode, simulated){
+  return '<button class="btn btn-p" style="display:flex;justify-content:center;margin-bottom:10px" onclick="espOpenAccessConfirm(this)"><i class="ti ti-lock-open"></i> '+t(simulated?'esp_open_btn':'esp_key_open_real')+'</button>'
+    + '<div style="font-size:11px;color:var(--mu);margin-bottom:4px">'+t(simulated?'esp_backup_code_label':'esp_key_present')+'</div>'
+    + '<div style="font-size:28px;font-weight:700;letter-spacing:4px;font-family:monospace">'+esc(passcode)+'</div>';
 }
-function espSimPasscode(ap){
-  var code = ((S.booking&&S.booking.code)||'0000') + (ap?ap.id:'');
-  var hash=0; for(var i=0;i<code.length;i++){hash=((hash<<5)-hash+code.charCodeAt(i))|0;}
-  return String(Math.abs(hash)%10000).padStart(4,'0');
+async function espOpenAccessConfirm(btn){
+  var ap = ESP_ACCESS_CURRENT, b = S.booking; if(!b) return;
+  btn.disabled = true;
+  try{
+    var r = await apiFetch(API_BASE+'/wa/booking/openDoor', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({code:b.code, facilityCode:(ap&&ap.facilityCode)||undefined})
+    });
+    var data = await r.json().catch(function(){ return {}; });
+    if(!r.ok) throw new Error(data.error || ('HTTP '+r.status));
+    toast(tf(data.simulated ? 'esp_key_unlocked_sim' : 'esp_key_unlocked_real_label', {label: ap?ap.label:t('word_access')}));
+  }catch(e){
+    toast(t('esp_door_open_error'));
+  }finally{
+    btn.disabled = false;
+  }
 }
-
 function espSimPasscode(ap){
   var code = ((S.booking&&S.booking.code)||'0000') + (ap?ap.id:'');
   var hash=0; for(var i=0;i<code.length;i++){hash=((hash<<5)-hash+code.charCodeAt(i))|0;}

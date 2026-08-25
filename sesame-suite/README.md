@@ -2060,6 +2060,30 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   "Paramètres additionnels du corps" de la section QR — à confirmer sur
   un vrai lecteur, pas encore vérifié en conditions réelles.
 
+### Clé digitale : la liste "Accès" (points d'accès multiples) restait simulée
+
+- Le QR/l'ouverture réelle n'avaient été branchés que sur le bouton
+  principal de l'onglet "Clé digitale" — la liste "Accès" en dessous
+  (plusieurs points d'accès par établissement : chambre, parking, salle de
+  sport… `CFG.accessPoints`, `checkin.html` `espOpenAccess()`) restait
+  intégralement simulée (code factice haché, bouton toujours "mode
+  simulation" quel que soit le connecteur). Repéré en pratique : le client
+  clique sur un point d'accès de cette liste plutôt que sur le bouton du
+  haut, et retombe donc systématiquement en simulation.
+- `espOpenAccess()` récupère désormais le vrai code d'accès (même appel
+  que le bouton principal — Sesame n'a qu'un seul QR/code par réservation,
+  pas un par point d'accès) et le bouton "Ouvrir" de la modale appelle
+  `POST /wa/booking/openDoor` avec, en plus du code réservation, le
+  `facilityCode` propre à CE point d'accès quand il en a un (nouveau
+  paramètre optionnel de la route, prioritaire sur la chambre de la
+  réservation) — pour que "Salle de sport" ouvre bien la salle de sport et
+  pas la chambre. Reste simulé si aucun connecteur n'est configuré, ou si
+  ce point d'accès n'a pas de `facilityCode` dédié (comportement
+  identique à avant dans ce cas). Vérifié bout en bout (mock serveur
+  local) : vrai code affiché, appel `openAs` avec le bon `facilityCode`,
+  toast de succès réel — et non-régression confirmée sur un établissement
+  sans connecteur configuré (comportement simulé inchangé).
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT
