@@ -1736,6 +1736,21 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   pas "cliquer" une quantité. Vérifié : Sesame 902 modules / 47 fiches,
   Ttlock 128 / 6, Oneway 153 / 10, total 1183.
 
+### CRM : les champs de recherche client perdaient le focus à chaque frappe
+
+- La recherche "Client, ville, groupe…" (Vue liste) et "Rechercher un
+  client…" (Portefeuille) redéclenchaient un re-render complet de `#main`
+  (`innerHTML=...`) à chaque caractère tapé (`oninput`) — le champ étant
+  recréé de zéro à chaque frappe, il perdait le focus, obligeant à
+  recliquer dedans après chaque lettre. Nouvelle fonction utilitaire
+  `withFocusKept(selector, renderFn)` : capture le focus + la position du
+  curseur du champ avant le re-render, les restaure juste après. Appliquée
+  aux deux champs concernés (`.srch-wrap input` en Vue liste,
+  `#pf-search-input` en Portefeuille — nouvel id ajouté pour le cibler,
+  la classe `.lsel` étant partagée par d'autres champs). Vérifié en tapant
+  caractère par caractère avec Playwright : focus conservé, filtrage
+  toujours correct.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT
