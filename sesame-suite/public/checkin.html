@@ -2181,11 +2181,24 @@ function renderRoomMap(){
     CFG.rooms.filter(function(r){return r.available!==false;}).forEach(function(r){
       var isSel=S.selectedRoom&&S.selectedRoom.code===r.code;
       var hasPh=r.photos&&r.photos.length>0;
-      ctx.beginPath();ctx.arc(r.x*scx,r.y*scy,isSel?13:10,0,Math.PI*2);
+      var cx=r.x*scx,cy=r.y*scy;
+      // Halo doux autour de la chambre sélectionnée + ombre portée sur
+      // toutes les pastilles — même esprit de finition que les photos de
+      // chambre (25/08/2026), sans changer le code couleur fonctionnel
+      // (sélectionnée / avec photo / sans photo).
+      if(isSel){
+        ctx.beginPath();ctx.arc(cx,cy,19,0,Math.PI*2);
+        ctx.fillStyle='rgba(26,107,71,.18)';ctx.fill();
+      }
+      ctx.save();
+      ctx.shadowColor='rgba(20,19,13,.35)';ctx.shadowBlur=5;ctx.shadowOffsetY=1.5;
+      ctx.beginPath();ctx.arc(cx,cy,isSel?13:10,0,Math.PI*2);
       ctx.fillStyle=isSel?'rgba(26,107,71,.95)':hasPh?'rgba(26,72,128,.8)':'rgba(45,155,106,.8)';
-      ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
+      ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(cx,cy,isSel?13:10,0,Math.PI*2);ctx.stroke();
       ctx.fillStyle='#fff';ctx.font='bold '+(isSel?10:8)+'px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
-      ctx.fillText(r.code.replace(/\D/g,'').slice(-3)||r.code.slice(-2),r.x*scx,r.y*scy);
+      ctx.fillText(r.code.replace(/\D/g,'').slice(-3)||r.code.slice(-2),cx,cy);
     });
   };img.src=CFG.hotelPlan;
   canvas.onclick=function(e){

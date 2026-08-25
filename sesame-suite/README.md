@@ -1870,6 +1870,36 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   valeurs par défaut (vérifié : une valeur modifiée à la main après
   déverrouillage est bien écrasée en resélectionnant le même modèle).
 
+### Chambres et plan d'étage Hôtel Churchill : finition visuelle
+
+- Le plan d'étage (`hotelPlanSvg()` dans `prisma/roomMedia.ts`, servi comme
+  fond du plan cliquable côté client dans `checkin.html` et de l'éditeur
+  côté `admin.html`) était un simple schéma plat. Repris avec un fond en
+  dégradé, une ombre douce sur le contour du bâtiment, des amorces de porte
+  à chaque cellule le long du couloir, et une boussole détaillée — même
+  esprit que les photos de chambre illustrées ajoutées précédemment. La
+  grille de coordonnées (9 colonnes, pas de 62.5px à partir de x=20) est
+  restée strictement inchangée : les pastilles de chambre (`ROOMS[].x`/`y`,
+  positionnées dynamiquement par-dessus le fond) y sont calibrées, un
+  décalage aurait cassé leur alignement.
+- Les pastilles elles-mêmes (dessinées côté client par `renderRoomMap()`
+  dans `checkin.html`) ont gagné une ombre portée douce et un halo
+  translucide autour de la chambre sélectionnée, sans toucher au code
+  couleur fonctionnel existant (verte = sélectionnée, bleue = avec photo,
+  verte = sans photo) ni à la logique de détection de clic. L'éditeur admin
+  (`drawRooms()` dans `admin.html`) n'a volontairement pas été modifié :
+  c'est un outil de configuration fonctionnel, pas un affichage à
+  enjoliver — il hérite quand même du nouveau fond de plan, partagé.
+- Vérifié via Playwright (bureau et mobile) : fond, ombres, amorces de
+  porte et boussole s'affichent correctement ; un clic sur une pastille du
+  plan sélectionne toujours la bonne chambre (halo + carte "Sélectionnée"
+  en dessous).
+- Comme pour les photos de chambre, ceci ne prend effet sur les bases déjà
+  provisionnées (dont la démo Churchill en production) qu'après avoir
+  relancé `docker exec -it sesame-suite-app-1 npx tsx
+  scripts/backfill-room-media.ts` (le seed ne régénère ces champs qu'à la
+  création d'une chambre/config, jamais sur des lignes existantes).
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

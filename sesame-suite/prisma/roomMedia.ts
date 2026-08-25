@@ -34,24 +34,60 @@ export const ROOMS: Array<{
 
 export function hotelPlanSvg(): string {
   // Fond schématique uniquement : les pastilles de chambres sont dessinées
-  // par-dessus dynamiquement (drawRooms() dans admin.html), filtrées par
-  // étage sélectionné — les baker dans l'image mélangerait tous les étages.
+  // par-dessus dynamiquement (drawRooms() dans admin.html, renderRoomMap()
+  // dans checkin.html), filtrées par étage sélectionné — les baker dans
+  // l'image mélangerait tous les étages. Coordonnées de la grille (9
+  // colonnes tous les 62.5px à partir de x=20) INCHANGÉES par rapport à la
+  // version précédente : ROOMS[].x/y (prisma/roomMedia.ts) sont calibrées
+  // dessus, un décalage romprait l'alignement des pastilles cliquables.
+  // Amélioration purement visuelle (25/08/2026) : dégradés, ombre douce,
+  // amorces de porte à chaque cellule le long du couloir, boussole
+  // détaillée — même esprit que le lifting des photos de chambres.
   return `<svg xmlns="http://www.w3.org/2000/svg" width="540" height="380" viewBox="0 0 540 380">
-    <rect width="540" height="380" fill="#FAF9F5"/>
-    <rect x="20" y="20" width="500" height="340" fill="#FFFFFF" stroke="#C9C4B6" stroke-width="2"/>
-    <rect x="20" y="175" width="500" height="30" fill="#F1EEE4"/>
-    <text x="270" y="195" font-family="DM Sans,Arial,sans-serif" font-size="11" fill="#B0ADA4" text-anchor="middle" letter-spacing="2">COULOIR</text>
-    ${Array.from({ length: 9 })
-      .map((_, i) => `<line x1="${20 + i * 62.5}" y1="20" x2="${20 + i * 62.5}" y2="175" stroke="#EDEAE0" stroke-width="1"/><line x1="${20 + i * 62.5}" y1="205" x2="${20 + i * 62.5}" y2="360" stroke="#EDEAE0" stroke-width="1"/>`)
-      .join("")}
+    <defs>
+      <linearGradient id="planBg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#FBF8F2"/><stop offset="1" stop-color="#F1EADC"/>
+      </linearGradient>
+      <linearGradient id="planCorridor" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#EFE9DC"/><stop offset="1" stop-color="#E6DDC9"/>
+      </linearGradient>
+      <filter id="planShadow" x="-10%" y="-15%" width="120%" height="140%">
+        <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="#14130D" flood-opacity=".1"/>
+      </filter>
+    </defs>
+
+    <rect width="540" height="380" fill="url(#planBg)"/>
+    <rect x="20" y="20" width="500" height="340" rx="6" fill="#FFFFFF" stroke="#D9D2C0" stroke-width="1.5" filter="url(#planShadow)"/>
+
+    <g stroke="#EEE8DA" stroke-width="1">
+      ${Array.from({ length: 9 })
+        .map((_, i) => `<line x1="${20 + i * 62.5}" y1="20" x2="${20 + i * 62.5}" y2="175"/><line x1="${20 + i * 62.5}" y1="205" x2="${20 + i * 62.5}" y2="360"/>`)
+        .join("")}
+    </g>
+    <!-- amorces de porte : un repère par cellule, de chaque côté du couloir -->
+    <g fill="#C9BFA0">
+      ${Array.from({ length: 9 })
+        .map((_, i) => {
+          const cx = 20 + i * 62.5 + 31.25;
+          return `<rect x="${cx - 7}" y="171" width="14" height="4" rx="2"/><rect x="${cx - 7}" y="205" width="14" height="4" rx="2"/>`;
+        })
+        .join("")}
+    </g>
+
+    <rect x="20" y="175" width="500" height="30" fill="url(#planCorridor)"/>
+    <text x="270" y="195" font-family="DM Sans,Arial,sans-serif" font-size="11" font-weight="600" fill="#A69A78" text-anchor="middle" letter-spacing="3">COULOIR</text>
+
     <g font-family="DM Sans,Arial,sans-serif">
-      <text x="30" y="42" font-size="14" font-weight="700" fill="#8B1A2E">Hôtel Churchill</text>
+      <text x="30" y="42" font-size="15" font-weight="700" fill="#8B1A2E">Hôtel Churchill</text>
       <text x="30" y="58" font-size="9" fill="#B0ADA4">Plan schématique — étage sélectionné en haut du panneau</text>
     </g>
     <g transform="translate(492,42)">
-      <circle r="14" fill="#FFFFFF" stroke="#C9C4B6"/>
+      <circle r="15" fill="#FFFFFF" stroke="#D9D2C0" stroke-width="1.5"/>
+      <g stroke="#D9D2C0" stroke-width="1">
+        <line x1="-15" y1="0" x2="-19" y2="0"/><line x1="15" y1="0" x2="19" y2="0"/><line x1="0" y1="15" x2="0" y2="19"/>
+      </g>
+      <path d="M0,-10 L3.5,-1 L0,-4 L-3.5,-1 Z" fill="#8B1A2E"/>
       <text y="4" font-size="11" font-weight="700" fill="#8B1A2E" text-anchor="middle">N</text>
-      <path d="M0,-9 L3,0 L0,-3 L-3,0 Z" fill="#8B1A2E"/>
     </g>
   </svg>`;
 }
