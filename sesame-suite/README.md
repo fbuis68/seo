@@ -2256,6 +2256,23 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   (ouvrir chacune depuis la vue "Affaires" et choisir le bon client dans
   le menu "Client", désormais modifiable).
 
+### CRM Trésorerie : les dépenses (et recettes) détaillées devenaient impossibles à modifier en mode "Global"
+
+- Signalé : impossible de modifier une dépense saisie, mensuelle ou
+  ponctuelle par mois. Cause : le panneau Trésorerie (revenu/dépense)
+  bascule entre saisie "Global" (un seul montant agrégé) et "Détaillé"
+  (des lignes par poste) — en mode "Global", les lignes détaillées déjà
+  existantes n'étaient affichées qu'en lecture seule ("pour vérifier la
+  cohérence"), sans aucun champ éditable ni bouton de suppression.
+- Ces lignes détaillées ne comptent de toute façon dans aucun calcul tant
+  que le mode reste sur "Global" (seul le montant agrégé compte,
+  `trCategoryAnnual`/`trCategoryMonthlyBase`) : les rendre modifiables ne
+  change donc rien aux totaux, juste à la possibilité de les tenir à jour.
+  Elles utilisent désormais le même rendu éditable qu'en mode "Détaillé"
+  (libellé, montant, fréquence mensuel/ponctuel, mois, suppression).
+  Vérifié bout en bout : une ligne éditée en mode "Global" se sauvegarde
+  et persiste bien en base.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

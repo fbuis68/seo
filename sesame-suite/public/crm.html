@@ -2065,16 +2065,6 @@ function trLineRow(r, kind){
       </div>
     </div>`;
 }
-function trLineRowReadonly(r){
-  return `
-    <div class="tr-row">
-      <div class="tr-row-top">
-        <div class="tr-row-name">${esc(r.label)||'—'}</div>
-        <div class="num">${fmtEUR(r.montant)}</div>
-      </div>
-      <div class="tr-row-more"><span class="tr-sub-lbl">${trFreqLabel(r.frequence)}${r.mois!=null?' · '+TR_MONTHS[r.mois]:''}</span></div>
-    </div>`;
-}
 
 function trGlobalBlock(kind){
   const montant = cashSettings[kind+'Montant'], freq = cashSettings[kind+'Frequence'], mois = cashSettings[kind+'Mois'];
@@ -2092,8 +2082,8 @@ function trGlobalBlock(kind){
       ${showMois?`<div class="tr-row-more"><span class="tr-sub-lbl">${freq==='trimestriel'?'Départ (tous les 3 mois)':'Mois'}</span><select onchange="trGlobalLocal('${kind}','Mois',+this.value);trGlobalSave('${kind}','Mois',+this.value)">${trMonthOptsSingle(mois)}</select></div>`:''}
     </div>
     ${rows.length ? `
-      <div class="tr-caveat" style="margin-top:10px">Lignes détaillées existantes (lecture seule, pour vérifier la cohérence) — somme annualisée <b class="num">${fmtEUR(linesSum)}</b>, écart avec la saisie globale : <b class="num" style="color:${Math.abs(delta)<1?'var(--good,#1a6b47)':'var(--bad,#b23b2c)'}">${delta>=0?'+':''}${fmtEUR(delta)}</b></div>
-      <div class="tr-panel-body" style="opacity:.6">${rows.map(trLineRowReadonly).join('')}</div>
+      <div class="tr-caveat" style="margin-top:10px">Lignes détaillées existantes — modifiables ci-dessous (mensuel ou ponctuel par mois), sans compter dans le total "Global" ci-dessus tant que ce mode reste actif — somme annualisée <b class="num">${fmtEUR(linesSum)}</b>, écart avec la saisie globale : <b class="num" style="color:${Math.abs(delta)<1?'var(--good,#1a6b47)':'var(--bad,#b23b2c)'}">${delta>=0?'+':''}${fmtEUR(delta)}</b></div>
+      <div class="tr-panel-body">${rows.map(r=>trLineRow(r, kind)).join('')}</div>
     ` : ''}`;
 }
 
