@@ -2228,6 +2228,34 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   jusqu'au" déjà passé en démo. Repoussé à 2032 (`seed.ts` + migration
   `pin_churchill_demo_booking_dates` pour les installations déjà seedées).
 
+### CRM : des affaires créées depuis la vue "Affaires" s'attachaient au mauvais client
+
+- Signalé : la fiche d'un client ("1K") affichait des affaires manifestement
+  d'autres sociétés (CAPINATURE, Cabelia Lodge, DUNOYER PHASE, TALGO).
+- Cause : le bouton "+ Nouvelle affaire" du pipeline général (vue "Affaires",
+  hors contexte d'une fiche précise) ouvrait la modale via
+  `openNewDealModal(null)`, qui repliait silencieusement sur
+  `clients[0].id` — le premier client de la liste — comme client
+  pré-sélectionné du menu déroulant "Client". Si le commercial ne
+  remarquait pas/ne changeait pas cette présélection avant d'enregistrer,
+  l'affaire était attachée au mauvais client sans aucun avertissement.
+- Le menu déroulant "Client" démarre désormais vide ("— Sélectionner un
+  client —") quand la modale n'est pas ouverte depuis une fiche précise,
+  et l'enregistrement est bloqué tant qu'aucun choix explicite n'est fait
+  (validation déjà présente, mais rendue inopérante par le repli
+  silencieux). Autre lacune corrigée au passage : le client d'une affaire
+  déjà créée ne pouvait pas être corrigé (champ désactivé en modification,
+  et `POST /wa/crmDeal/update` ignorait `prospectId` même envoyé) — les 4
+  affaires mal attribuées ne pouvaient donc pas être réparées depuis
+  l'interface. Le champ est maintenant modifiable aussi en édition, avec
+  validation côté serveur que le client cible existe. Vérifié bout en
+  bout : nouvelle affaire sans client sélectionné → bloquée ; affaire
+  existante réattribuée à un autre client → persistée en base et disparaît
+  de la fiche d'origine.
+- Les 4 affaires déjà mal attribuées restent à corriger manuellement
+  (ouvrir chacune depuis la vue "Affaires" et choisir le bon client dans
+  le menu "Client", désormais modifiable).
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

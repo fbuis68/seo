@@ -147,9 +147,14 @@ crmDealRouter.post(
     validateAnneeEncaissement(b.anneeEncaissement);
     const existing = await prisma.crmDeal.findUnique({ where: { id } });
     if (!existing) throw new HttpError(404, "Affaire introuvable");
+    if (b.prospectId !== undefined && b.prospectId !== existing.prospectId) {
+      const prospect = await prisma.crmProspect.findUnique({ where: { id: b.prospectId } });
+      if (!prospect) throw new HttpError(404, "Fiche CRM introuvable");
+    }
     const row = await prisma.crmDeal.update({
       where: { id },
       data: {
+        prospectId: b.prospectId === undefined ? undefined : b.prospectId,
         commercialId: b.commercialId === undefined ? undefined : b.commercialId || null,
         title: b.title?.trim(),
         stage: b.stage,

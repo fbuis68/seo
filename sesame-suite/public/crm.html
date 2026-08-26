@@ -2729,7 +2729,7 @@ function renderDealFunnel(filtered){
 
 
 function openNewDealModal(prospectId){
-  DEAL_DRAFT = {id:null, prospectId: prospectId||(clients[0]?clients[0].id:''), commercialId:'', title:'', stage:'Nouveau', amount:0, probability:20, closeDate:'', lostReason:'', montantPonctuel:null, moisEncaissement:null, anneeEncaissement:new Date().getFullYear(), quotes:[], _new:true};
+  DEAL_DRAFT = {id:null, prospectId: prospectId||'', commercialId:'', title:'', stage:'Nouveau', amount:0, probability:20, closeDate:'', lostReason:'', montantPonctuel:null, moisEncaissement:null, anneeEncaissement:new Date().getFullYear(), quotes:[], _new:true};
   renderDealModal();
 }
 function openDealModal(id){
@@ -2763,7 +2763,7 @@ function renderDealModal(){
       <div class="form-grid">
         <div class="ff"><label>Titre</label><input id="d-title" value="${esc(md.title)}" placeholder="Ex : Upsell module CRM"></div>
         <div class="ff"><label>Client</label>
-          <select id="d-prospect" ${md._new?'':'disabled'}>${prospectOptions.map(c=>`<option value="${c.id}" ${md.prospectId===c.id?'selected':''}>${esc(c.nom)}</option>`).join('')}</select>
+          <select id="d-prospect">${md._new?`<option value="" ${md.prospectId?'':'selected'}>— Sélectionner un client —</option>`:''}${prospectOptions.map(c=>`<option value="${c.id}" ${md.prospectId===c.id?'selected':''}>${esc(c.nom)}</option>`).join('')}</select>
         </div>
         <div class="ff"><label>Commercial</label>
           <select id="d-commercial"><option value="">—</option>${COMMERCIALS.map(c=>`<option value="${c.id}" ${md.commercialId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select>
@@ -2809,9 +2809,9 @@ function renderDealModal(){
 async function saveDeal(id,isNew){
   captureDealDraft();
   const md = DEAL_DRAFT;
-  const prospectId = isNew ? (document.getElementById('d-prospect')||{value:''}).value : md.prospectId;
+  const prospectId = (document.getElementById('d-prospect')||{value:md.prospectId}).value;
   if(!md.title || !md.title.trim()){ flash('Le titre est obligatoire'); return; }
-  if(isNew && !prospectId){ flash('Sélectionnez un client'); return; }
+  if(!prospectId){ flash('Sélectionnez un client'); return; }
   const body = {
     prospectId, commercialId: md.commercialId||null, title: md.title.trim(), stage: md.stage,
     amount: +md.amount||0, probability: +md.probability||0, closeDate: md.closeDate||null, lostReason: md.lostReason||'',
@@ -2828,7 +2828,10 @@ async function saveDeal(id,isNew){
   if(isNew){ deals.push(saved); } else { const ex=deals.find(d=>d.id===id); if(ex) Object.assign(ex, saved); }
   closeModal(); flash('Affaire enregistrée');
   if(view==='affaires') renderAffaires();
-  if(view==='fiche'&&curId===saved.prospectId) showFiche(curId);
+  // Toujours réafficher la fiche courante (pas seulement si elle correspond
+  // au client de l'affaire) : une réattribution à un autre client doit aussi
+  // faire disparaître l'affaire de la fiche qu'on est en train de regarder.
+  if(view==='fiche') showFiche(curId);
 }
 
 async function deleteDeal(id){
