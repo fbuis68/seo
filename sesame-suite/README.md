@@ -2169,6 +2169,17 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   champs) pour bénéficier du fix — un préréglage déjà appliqué ne se
   met pas à jour tout seul.
 
+### Bouton "Ouvrir la porte" masqué quand la réservation a plusieurs serrures
+
+- Signalé : avec plusieurs accès associés à la réservation, cliquer sur le
+  bouton principal ouvre tout d'un coup (`booking.facilityCode` en entier)
+  sans que le client sache lequel il vient réellement d'ouvrir.
+- Le bouton principal (`espQrOpenBtn`) est désormais masqué dès que
+  `espGetAccessPoints()` renvoie plus d'un point d'accès, remplacé par un
+  texte invitant à choisir dans la liste "Accès" ci-dessous (chaque entrée y
+  cible un seul `facilityCode`). Comportement inchangé pour une réservation
+  à un seul accès. Vérifié bout en bout (mock local) sur les deux cas.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

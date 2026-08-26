@@ -865,6 +865,7 @@ input:focus,select:focus{border-color:var(--accent)}
           <button class="btn btn-p" style="margin-top:14px;width:100%;justify-content:center" id="espQrOpenBtn" onclick="espOpenDoor()">
             <i class="ti ti-lock-open"></i> <span id="espQrOpenBtnLabel" data-i18n="esp_key_simulate_open">Simuler l'ouverture</span>
           </button>
+          <div id="espQrOpenBtnMulti" style="display:none;margin-top:14px;font-size:12px;color:var(--mu)" data-i18n="esp_key_pick_access">Choisissez un accès précis ci-dessous.</div>
           <div id="espQrOpenResult" style="display:none;margin-top:10px" class="alt alt-g">
             <i class="ti ti-check-circle"></i><span id="espQrOpenResultLabel" data-i18n="esp_key_unlocked">Accès déverrouillé ✓</span>
           </div>
@@ -1385,7 +1386,7 @@ var I18N_FR = {
   esp_tab_histo:'Historique',esp_tab_livret:'Livret',esp_tab_boutique:'Boutique',
   esp_tab_rs:'Room Service',
   esp_key_title:'Votre clé digitale',esp_key_present:'Présentez ce code au lecteur Sesame',
-  esp_key_simulate_open:"Simuler l'ouverture",esp_key_unlocked:'Accès déverrouillé ✓',
+  esp_key_simulate_open:"Simuler l'ouverture",esp_key_unlocked:'Accès déverrouillé ✓',esp_key_pick_access:'Choisissez un accès précis ci-dessous.',
   esp_key_info:'Approchez votre téléphone du lecteur ou présentez ce QR code pour chaque accès.',
   esp_access_dedicated:'Accès dédié',esp_access_simulation:'Mode simulation',
   esp_valid_until:"Valable jusqu'au {date} à 11h00",
@@ -1593,7 +1594,7 @@ var I18N_EN = {
   esp_tab_histo:'History',esp_tab_livret:'Guidebook',esp_tab_boutique:'Shop',
   esp_tab_rs:'Room Service',
   esp_key_title:'Your digital key',esp_key_present:'Present this code to the Sesame reader',
-  esp_key_simulate_open:'Simulate unlocking',esp_key_unlocked:'Access unlocked ✓',
+  esp_key_simulate_open:'Simulate unlocking',esp_key_unlocked:'Access unlocked ✓',esp_key_pick_access:'Pick a specific access point below.',
   esp_key_info:'Hold your phone near the reader or show this QR code for each access point.',
   esp_access_dedicated:'Dedicated access',esp_access_simulation:'Simulation mode',
   esp_valid_until:'Valid until {date} at 11:00 AM',
@@ -1803,7 +1804,7 @@ var I18N_ES = {
   esp_tab_histo:'Historial',esp_tab_livret:'Guía',esp_tab_boutique:'Tienda',
   esp_tab_rs:'Servicio de habitaciones',
   esp_key_title:'Su llave digital',esp_key_present:'Presente este código en el lector Sesame',
-  esp_key_simulate_open:'Simular apertura',esp_key_unlocked:'Acceso desbloqueado ✓',
+  esp_key_simulate_open:'Simular apertura',esp_key_unlocked:'Acceso desbloqueado ✓',esp_key_pick_access:'Elige un acceso concreto abajo.',
   esp_key_info:'Acerque su teléfono al lector o muestre este código QR en cada acceso.',
   esp_access_dedicated:'Acceso dedicado',esp_access_simulation:'Modo simulación',
   esp_valid_until:'Válido hasta el {date} a las 11:00',
@@ -3008,6 +3009,16 @@ async function espRenderQr(){
   var codeEl = document.getElementById('espQrCode');
   var validEl = document.getElementById('espQrValidity');
   var btnLabel = document.getElementById('espQrOpenBtnLabel');
+
+  // Avec plusieurs serrures associées à la réservation, le bouton principal
+  // ouvrirait tout d'un coup (booking.facilityCode en entier) sans que le
+  // client sache ce qu'il vient d'ouvrir — masqué au profit de la liste
+  // "Accès" ci-dessous, où chaque entrée cible une seule serrure identifiée.
+  var openBtn = document.getElementById('espQrOpenBtn');
+  var openBtnMulti = document.getElementById('espQrOpenBtnMulti');
+  var isMulti = espGetAccessPoints().length > 1;
+  if(openBtn) openBtn.style.display = isMulti ? 'none' : 'inline-flex';
+  if(openBtnMulti) openBtnMulti.style.display = isMulti ? 'block' : 'none';
 
   // Affichage immédiat de la démo pendant l'appel réseau, pour ne pas
   // laisser un cadre vide le temps de la réponse.
