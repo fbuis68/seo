@@ -811,7 +811,9 @@ export async function openDoor(
   config: BookingSourceConfig,
   bookingCode: string,
   roomCode?: string | null,
-  personEmail?: string | null
+  personEmail?: string | null,
+  personLastname?: string | null,
+  personFirstname?: string | null
 ): Promise<{ opened: boolean }> {
   if (!config.doorEndpointPath) {
     throw new BookingSourceError(
@@ -829,6 +831,8 @@ export async function openDoor(
   const params: Record<string, unknown> = { ...staticParams, [codeParam]: bookingCode };
   if (roomParam && roomCode) params[roomParam] = roomCode;
   if (config.doorEmailParam && personEmail) params[config.doorEmailParam] = personEmail;
+  if (config.doorLastnameParam && personLastname) params[config.doorLastnameParam] = personLastname;
+  if (config.doorFirstnameParam && personFirstname) params[config.doorFirstnameParam] = personFirstname;
 
   let res: Response;
   try {

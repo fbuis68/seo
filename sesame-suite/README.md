@@ -2138,6 +2138,37 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   principal envoie la liste complète `"A11,GYM01,201"` en un seul appel
   `openAs`. Reste à confirmer par le client sur du matériel réel.
 
+### Ouverture réelle Sesame : la porte ne s'ouvrait jamais malgré un succès affiché
+
+- Signalé après le fix multi-serrures : le bouton "Ouvrir la porte" continuait
+  d'afficher un succès (`doorOpenCount` incrémenté) sans que la serrure
+  physique ne réagisse. Diagnostiqué en ajoutant temporairement un log de la
+  réponse brute de Sesame (retiré ensuite) : `openDoor()` ne lisait le corps
+  de la réponse — et donc ne pouvait détecter un refus logique — que si
+  `doorResponseSuccessPath` était configuré ; le préréglage Sesame le
+  laissait vide par défaut. Or Sesame répond bien **200 OK** même en cas de
+  refus, avec `{"success":false,"message":"..."}` — traité jusque-là comme
+  un succès.
+- Le message d'erreur obtenu en conditions réelles était explicite :
+  `"personLastname,bookingCode,facilityCode are mandatory"` — alors que
+  l'appel envoyait déjà `bookingCode`, `facilityCode` et `personEmail`.
+  Contrairement à ce que suggère la variante "bookingCode+personEmail+
+  facilityCode" de la doc `/ws/booking/openAs`, le serveur Sesame exige en
+  pratique `personLastname` (variante "bookingCode+personLastname+
+  personFirstname+facilityCode" de la même doc).
+- Ajout de deux nouveaux champs `doorLastnameParam`/`doorFirstnameParam`
+  (schema, lib, route de sauvegarde, panneau admin — même mécanique que
+  `doorEmailParam`), câblés dans le préréglage Sesame avec `personLastname`/
+  `personFirstname`, en plus de l'email déjà envoyé (ne gêne pas). Et
+  `doorResponseSuccessPath` du préréglage Sesame passe de vide à `success` —
+  un refus logique de Sesame devient enfin une vraie erreur 502 côté client
+  au lieu d'un faux succès silencieux.
+- **Les établissements Sesame déjà configurés avant ce correctif** doivent
+  rouvrir leur panneau "Intégration réservations" et cliquer sur "↻
+  Réappliquer les valeurs par défaut" (ou reconfigurer manuellement ces 3
+  champs) pour bénéficier du fix — un préréglage déjà appliqué ne se
+  met pas à jour tout seul.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT

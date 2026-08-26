@@ -461,6 +461,15 @@ model BookingSourceConfig {
   // Nom du paramètre optionnel portant l'email du client — même principe
   // que qrEmailParam (ex : API Sesame Technology, /ws/booking/openAs).
   doorEmailParam String?
+  // Noms des paramètres optionnels portant nom/prénom du client — certaines
+  // sources exigent ces champs plutôt que (ou en plus de) l'email malgré ce
+  // que suggère leur documentation : constaté en pratique sur l'API Sesame
+  // Technology, /ws/booking/openAs rejette un appel bookingCode+email+
+  // facilityCode ("personLastname,bookingCode,facilityCode are mandatory")
+  // et exige en réalité personLastname (variante bookingCode+personLastname
+  // +personFirstname+facilityCode de la doc officielle).
+  doorLastnameParam  String?
+  doorFirstnameParam String?
   // Nom du paramètre optionnel portant le code de la chambre sélectionnée
   // (facilityCode/selectedRoomCode) — laisser vide si la source n'a besoin
   // que du code réservation pour savoir quelle porte ouvrir.

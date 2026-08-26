@@ -81,6 +81,8 @@ function shapeConfig(c: {
   doorEndpointBodyParams: unknown;
   doorCodeParam: string | null;
   doorEmailParam: string | null;
+  doorLastnameParam: string | null;
+  doorFirstnameParam: string | null;
   doorRoomParam: string | null;
   doorResponseSuccessPath: string | null;
   syncIntervalMinutes: number | null;
@@ -153,6 +155,8 @@ function shapeConfig(c: {
     doorEndpointBodyParams: c.doorEndpointBodyParams || {},
     doorCodeParam: c.doorCodeParam || "code",
     doorEmailParam: c.doorEmailParam || "",
+    doorLastnameParam: c.doorLastnameParam || "",
+    doorFirstnameParam: c.doorFirstnameParam || "",
     doorRoomParam: c.doorRoomParam || "",
     doorResponseSuccessPath: c.doorResponseSuccessPath || "",
     syncIntervalMinutes: c.syncIntervalMinutes,
@@ -242,6 +246,8 @@ interface ConfigBody {
   doorEndpointBodyParams?: Record<string, string>;
   doorCodeParam?: string;
   doorEmailParam?: string;
+  doorLastnameParam?: string;
+  doorFirstnameParam?: string;
   doorRoomParam?: string;
   doorResponseSuccessPath?: string;
   syncIntervalMinutes?: number | null;
@@ -318,6 +324,8 @@ bookingSourceRouter.post(
       doorEndpointBodyParams: b.doorEndpointBodyParams as never,
       doorCodeParam: b.doorCodeParam,
       doorEmailParam: b.doorEmailParam,
+      doorLastnameParam: b.doorLastnameParam,
+      doorFirstnameParam: b.doorFirstnameParam,
       doorRoomParam: b.doorRoomParam,
       doorResponseSuccessPath: b.doorResponseSuccessPath,
       syncIntervalMinutes: b.syncIntervalMinutes ?? null,

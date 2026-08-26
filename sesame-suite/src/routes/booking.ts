@@ -263,7 +263,14 @@ bookingRouter.post(
     }
 
     try {
-      await openDoor(config, booking.code, facilityCodeOverride || booking.facilityCode || booking.selectedRoomCode || null, booking.personEmail);
+      await openDoor(
+        config,
+        booking.code,
+        facilityCodeOverride || booking.facilityCode || booking.selectedRoomCode || null,
+        booking.personEmail,
+        booking.personLastname,
+        booking.personFirstname
+      );
       const updated = await prisma.booking.update({
         where: { id: booking.id },
         data: { doorOpenCount: { increment: 1 }, doorLastOpenedAt: new Date() },
