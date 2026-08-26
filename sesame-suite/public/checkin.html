@@ -2821,6 +2821,28 @@ function espSetTab(tab){
 
 // ── CLÉ DIGITALE / ACCÈS NUMÉRIQUES ──
 function espGetAccessPoints(){
+  // Une réservation peut être associée à PLUSIEURS serrures côté Sesame —
+  // booking.facilityCode peut déjà être une liste séparée par des virgules
+  // (ex: "201,203", cf. doc officielle "Booking Creation") : constaté en
+  // pratique (25/08/2026), une réservation avec plusieurs serrures
+  // associées n'en affichait qu'une seule ici, faute de les distinguer.
+  var b = S.booking;
+  var codes = (b && b.facilityCode) ? b.facilityCode.split(',').map(function(s){ return s.trim(); }).filter(Boolean) : [];
+  if(codes.length){
+    return codes.map(function(code){
+      var room = (CFG.rooms||[]).find(function(r){ return r.code===code; });
+      var isSelected = code === ((b&&b.selectedRoomCode)||'');
+      return {
+        id: code,
+        label: (room && (room.name||room.code)) || code,
+        ico: 'ti-door',
+        facilityCode: code,
+        auto: isSelected || codes.length===1,
+      };
+    });
+  }
+  // Repli si la réservation n'a aucun facilityCode connu (import manuel,
+  // ou source externe ne le renseignant pas) — comportement historique.
   var pts = (CFG.accessPoints && CFG.accessPoints.length) ? CFG.accessPoints : [
     {id:'room', label:t('word_room'), ico:'ti-door', facilityCode:'', auto:true}
   ];
@@ -2830,13 +2852,14 @@ function espGetAccessPoints(){
 function espRenderKey(){
   var list = document.getElementById('espAccessList');
   var pts = espGetAccessPoints();
-  var roomLabel = (S.selectedRoom && (S.selectedRoom.name||S.selectedRoom.code))
-    || (S.booking && S.booking.facilityCode) || '—';
 
+  // ap.label est déjà le nom résolu de CE point précis (nom de la chambre
+  // trouvée dans CFG.rooms, ou le code Sesame brut si aucune correspondance)
+  // — pas besoin d'y accoler un "nom de chambre" générique séparé, qui
+  // affichait par erreur la liste brute complète des codes de la réservation
+  // (booking.facilityCode) quand plusieurs serrures y sont associées.
   list.innerHTML = pts.map(function(ap, idx){
-    var sub = ap.auto
-      ? t('word_room')+' '+roomLabel
-      : (ap.facilityCode ? t('esp_access_dedicated') : t('esp_access_simulation'));
+    var sub = ap.facilityCode ? t('esp_access_dedicated') : t('esp_access_simulation');
     return '<div class="card" style="display:flex;align-items:center;gap:14px;padding:14px;cursor:pointer" onclick="espOpenAccess('+idx+')">'
       +'<div style="width:46px;height:46px;border-radius:12px;background:var(--pl);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0"><i class="ti '+(ap.ico||'ti-key')+'"></i></div>'
       +'<div style="flex:1;min-width:0">'
@@ -2859,11 +2882,8 @@ async function espOpenAccess(idx){
   var b = S.booking;
   ESP_ACCESS_CURRENT = ap;
 
-  var roomLabel = (S.selectedRoom && (S.selectedRoom.name||S.selectedRoom.code))
-    || (b && b.facilityCode) || '—';
-
   document.getElementById('espAccessModalIcon').innerHTML = '<i class="ti '+(ap.ico||'ti-key')+'"></i>';
-  document.getElementById('espAccessModalTitle').textContent = ap.auto ? (ap.label+' '+roomLabel) : ap.label;
+  document.getElementById('espAccessModalTitle').textContent = ap.label;
 
   var checkOut = b && b.endDate ? new Date(b.endDate) : null;
   document.getElementById('espAccessModalValidity').textContent = checkOut

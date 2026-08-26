@@ -230,12 +230,20 @@ bookingRouter.get(
  * POST /wa/booking/openDoor — body: { code, facilityCode? } — déclenche
  * l'ouverture à distance de la porte pour cette réservation (source
  * externe, même connexion que la synchronisation). `facilityCode` est
- * optionnel : quand fourni (ex : un point d'accès distinct de la chambre —
- * parking, salle de sport… cf. checkin.html espOpenAccess), il remplace la
- * chambre de la réservation comme cible de l'ouverture ; sinon la chambre
- * de la réservation est utilisée par défaut. Même logique simulated:true
- * que /booking/accessQr si aucun endpoint n'est configuré — le client
- * garde alors son bouton "Simuler l'ouverture" existant.
+ * optionnel : quand fourni (ex : un point d'accès distinct cliqué dans la
+ * liste "Accès" — cf. checkin.html espOpenAccess), il cible précisément CE
+ * point d'accès. Sinon, `booking.facilityCode` est utilisé tel quel : côté
+ * Sesame, ce champ peut déjà être une LISTE de codes séparés par des
+ * virgules pour une même réservation associée à plusieurs serrures (ex :
+ * "201,203" dans la doc officielle "Booking Creation") — openAs accepte
+ * cette même liste et ouvre tout d'un coup. `selectedRoomCode` (la chambre
+ * choisie par le client à l'étape 2 du parcours, pour l'affichage) n'a
+ * PAS vocation à restreindre les accès Sesame de la réservation — l'utiliser
+ * ici écraserait par erreur les autres serrures associées par Sesame (ex :
+ * accès communs) par la seule chambre sélectionnée, d'où son retrait comme
+ * valeur par défaut. Même logique simulated:true que /booking/accessQr si
+ * aucun endpoint n'est configuré — le client garde alors son bouton
+ * "Simuler l'ouverture" existant.
  */
 bookingRouter.post(
   "/booking/openDoor",
@@ -255,7 +263,7 @@ bookingRouter.post(
     }
 
     try {
-      await openDoor(config, booking.code, facilityCodeOverride || booking.selectedRoomCode || booking.facilityCode || null, booking.personEmail);
+      await openDoor(config, booking.code, facilityCodeOverride || booking.facilityCode || booking.selectedRoomCode || null, booking.personEmail);
       const updated = await prisma.booking.update({
         where: { id: booking.id },
         data: { doorOpenCount: { increment: 1 }, doorLastOpenedAt: new Date() },

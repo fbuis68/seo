@@ -2101,6 +2101,43 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   connexion mais ne répond jamais (`black hole` local) produit bien cette
   erreur après exactement 15s, plutôt qu'un blocage indéfini.
 
+### Réservation avec plusieurs serrures : une seule ouvrait, une seule apparaissait dans "Accès"
+
+- Signalé : "dans la réservation j'ai plusieurs serrures associées et dans
+  l'app éco je n'en vois qu'une". Cause : côté Sesame, `Booking.facilityCode`
+  peut déjà être une LISTE de codes séparés par des virgules pour une même
+  réservation (ex. `"201,203"`, documenté sur "Booking Creation" et repris
+  tel quel par `openAs`) — mais notre route `POST /wa/booking/openDoor`
+  ciblait par défaut `booking.selectedRoomCode` (la chambre choisie par le
+  client à l'étape 2 du parcours, pour l'affichage — un concept propre à
+  notre UI, sans rapport avec les accès Sesame), qui n'est jamais qu'UN
+  seul code. Le bouton principal "Ouvrir la porte" n'ouvrait donc que la
+  chambre sélectionnée, jamais les autres serrures associées par Sesame
+  (accès communs, parking…). Et `espGetAccessPoints()` (`checkin.html`)
+  affichait toujours la liste statique `CFG.accessPoints` configurée en
+  admin, sans jamais regarder les vrais codes de LA réservation.
+- Le bouton principal utilise désormais `booking.facilityCode` en
+  priorité (liste complète telle que renvoyée par Sesame),
+  `selectedRoomCode` ne servant plus que de repli si `facilityCode` est
+  vide. La liste "Accès" de la Clé digitale dérive maintenant dynamiquement
+  un point d'accès par code de `booking.facilityCode` (nom résolu via
+  `CFG.rooms` si une chambre correspond, sinon le code brut affiché tel
+  quel), chacun ouvrant individuellement avec son propre `facilityCode` —
+  et ne retombe sur l'ancienne liste statique `CFG.accessPoints` que si la
+  réservation n'a aucun `facilityCode` connu (import manuel, source externe
+  qui ne le renseigne pas).
+- Corrigé au passage : les cartes de la liste "Accès" et le titre de la
+  modale affichaient par erreur la chaîne brute complète de
+  `booking.facilityCode` ("Chambre A11,GYM01,201") au lieu du nom déjà
+  résolu de CE point précis — un reliquat d'un ancien libellé générique
+  concaténé au nom de la chambre, retiré.
+- Vérifié bout en bout (mock serveur local, réservation à 3 serrures
+  `"A11,GYM01,201"`) : la liste "Accès" affiche bien 3 entrées avec des
+  libellés propres (nom de chambre résolu, ou code brut en repli), chaque
+  entrée envoie son propre `facilityCode` à l'ouverture, et le bouton
+  principal envoie la liste complète `"A11,GYM01,201"` en un seul appel
+  `openAs`. Reste à confirmer par le client sur du matériel réel.
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT
