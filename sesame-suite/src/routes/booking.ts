@@ -191,6 +191,16 @@ bookingRouter.post(
  * démo/vente avant que le connecteur réel soit branché. Une fois configuré,
  * un échec de CET endpoint est en revanche une vraie erreur 502 : jamais de
  * repli silencieux sur la démo une fois qu'un vrai connecteur est attendu.
+ *
+ * Idem si CETTE réservation précise n'a pas été importée par le connecteur
+ * actuellement configuré (`booking.importedFrom` vide ou différent de
+ * `config.sourceName`) : c'est le cas des réservations de démo saisies à la
+ * main (ex : jeu de données Hôtel Churchill, utilisé en vente alors que son
+ * connecteur Sesame réel est branché en parallèle pour la synchro des
+ * vraies réservations) — leur code/facilityCode n'a aucune existence côté
+ * Sesame, un appel réel échouerait donc systématiquement (constaté :
+ * "réservation introuvable" côté Sesame). Reste simulé pour elles quel que
+ * soit l'état du connecteur, plutôt que de casser la démo.
  */
 bookingRouter.get(
   "/booking/accessQr",
@@ -203,7 +213,7 @@ bookingRouter.get(
     if (!booking) throw new HttpError(404, "Réservation introuvable");
 
     const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
-    if (!config || !config.qrEndpointPath) {
+    if (!config || !config.qrEndpointPath || booking.importedFrom !== (config.sourceName || "Connecteur externe")) {
       res.json({ simulated: true });
       return;
     }
@@ -243,7 +253,10 @@ bookingRouter.get(
  * accès communs) par la seule chambre sélectionnée, d'où son retrait comme
  * valeur par défaut. Même logique simulated:true que /booking/accessQr si
  * aucun endpoint n'est configuré — le client garde alors son bouton
- * "Simuler l'ouverture" existant.
+ * "Simuler l'ouverture" existant. Même repli sur simulated:true, quel que
+ * soit l'état du connecteur, quand la réservation elle-même n'a pas été
+ * importée par CE connecteur (cf. commentaire équivalent sur
+ * /booking/accessQr — jeu de données de démo Hôtel Churchill notamment).
  */
 bookingRouter.post(
   "/booking/openDoor",
@@ -257,7 +270,7 @@ bookingRouter.post(
     if (!booking) throw new HttpError(404, "Réservation introuvable");
 
     const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
-    if (!config || !config.doorEndpointPath) {
+    if (!config || !config.doorEndpointPath || booking.importedFrom !== (config.sourceName || "Connecteur externe")) {
       res.json({ simulated: true });
       return;
     }

@@ -425,7 +425,13 @@ async function main() {
   const BOOKINGS: Array<{
     code: string; email: string; first: string; last: string; room: string; start: string; end: string; status: string;
   }> = [
-    { code: "DEMO-2026-0001", email: "demo@sesame.fr", first: "Alexis", last: "DEMO", room: "A43", start: "2026-08-10", end: "2026-08-15", status: "checkin_done" },
+    // Réservation "vitrine" — identifiants pré-établis documentés dans le
+    // README pour les démos commerciales ("Comptes de démonstration").
+    // Fenêtre lointaine plutôt que proche : contrairement aux autres lignes
+    // de démo, celle-ci doit rester fiable des années sans retouche (cf.
+    // migration pin_churchill_demo_booking_dates pour les installations déjà
+    // seedées avant l'ajout de cette remarque).
+    { code: "DEMO-2026-0001", email: "demo@sesame.fr", first: "Alexis", last: "DEMO", room: "A43", start: "2032-06-10", end: "2032-06-15", status: "checkin_done" },
     { code: "HCH-2026-1042", email: "camille.bernard@gmail.com", first: "Camille", last: "BERNARD", room: "A12", start: "2026-06-10", end: "2026-06-13", status: "confirmed" },
     { code: "HCH-2026-0881", email: "camille.bernard@gmail.com", first: "Camille", last: "BERNARD", room: "B11", start: "2025-12-27", end: "2025-12-30", status: "completed" },
     { code: "HCH-2026-1078", email: "thomas.moreau@email.fr", first: "Thomas", last: "MOREAU", room: "B13", start: "2026-06-15", end: "2026-06-19", status: "confirmed" },

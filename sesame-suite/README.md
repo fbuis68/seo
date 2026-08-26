@@ -2201,6 +2201,33 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   dans le lien. Vérifié bout en bout : connexion par nom seul, sans paramètre
   d'URL, aboutit au bon établissement (thème, chambres, réservation).
 
+### Distinction démo (Churchill) / production : le connecteur réel ne doit jamais casser une démo
+
+- Hôtel Churchill (E00000001) sert de vitrine commerciale mais dispose d'un
+  vrai connecteur Sesame branché en parallèle (synchronisation des vraies
+  réservations, cf. panneau "Intégration réservations"). Avec l'ouverture de
+  porte et le QR désormais réels (cf. plus haut), configurer ce connecteur
+  pour le QR/la porte aurait fait tenter un appel Sesame réel pour N'IMPORTE
+  QUELLE réservation de Churchill — y compris les réservations de démo
+  saisies à la main (`DEMO-2026-0001` et les autres comptes ci-dessous),
+  dont le code/facilityCode n'existe pas côté Sesame : l'appel aurait
+  échoué en pleine démo commerciale au lieu d'afficher le pattern simulé.
+- `GET /booking/accessQr` et `POST /booking/openDoor` (`src/routes/booking.ts`)
+  ne tentent désormais un appel réel QUE si `booking.importedFrom` correspond
+  au `sourceName` du connecteur actuellement configuré — signe que CETTE
+  réservation précise a bien été importée par ce connecteur, donc que son
+  code/facilityCode a une réalité côté Sesame. Une réservation saisie à la
+  main (`importedFrom` vide, cas de tout le jeu de données de démo Churchill)
+  reste simulée quel que soit l'état du connecteur. Vérifié bout en bout sur
+  l'établissement de test (E00000003) : réservation sans `importedFrom` →
+  toujours simulée ; réservation avec `importedFrom` correspondant → tente
+  bien l'appel réel (erreur de connexion attendue sur un endpoint de test).
+- `DEMO-2026-0001` (compte "vitrine" documenté ci-dessous) avait par ailleurs
+  des dates de séjour figées en 2026 déjà expirées au 26/08/2026 — n'empêche
+  pas la connexion (non vérifiée sur les dates) mais affichait un "Valable
+  jusqu'au" déjà passé en démo. Repoussé à 2032 (`seed.ts` + migration
+  `pin_churchill_demo_booking_dates` pour les installations déjà seedées).
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT
