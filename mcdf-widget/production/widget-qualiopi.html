@@ -177,6 +177,8 @@
   .check-ul li { font-size: 12px; color: var(--ink-muted); }
   .check-ul li.hit { color: var(--good-text); }
   .check-ul li.miss { color: var(--critical); }
+  .extract-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; font-size: 12.5px; color: var(--ink); }
+  .extract-row .btn { padding: 5px 11px; font-size: 11.5px; }
 </style>
 
 <div class="wrap">
@@ -222,7 +224,7 @@
   </div>
 
   <footer>
-    Lecture seule -- mêmes règles que <code>widget-ia.html</code> (cookie de session déjà actif, aucun appel d'écriture). L'onglet « Référentiel » liste les 32 indicateurs officiels (catégorie « actions de formation ») et indique, pour chacun, s'il est déjà couvert par une preuve calculée en direct, par une saisie manuelle, ou par aucune preuve numérique pour le moment. L'onglet « Détection API » reste disponible pour explorer d'autres champs ; l'onglet « Saisie manuelle » couvre ce qui n'a aucune source connue dans MCDF.
+    Lecture seule -- mêmes règles que <code>widget-ia.html</code> (cookie de session déjà actif, aucun appel d'écriture). L'onglet « Référentiel » liste les 32 indicateurs officiels (catégorie « actions de formation ») et indique, pour chacun, s'il est déjà couvert par une preuve calculée en direct, par une saisie manuelle, ou par aucune preuve numérique pour le moment. L'onglet « Détection API » reste disponible pour explorer d'autres champs ; l'onglet « Saisie manuelle » couvre ce qui n'a aucune source connue dans MCDF -- dont l'analyse automatique du site web (résultats, satisfaction), déclenchée dès que l'URL est renseignée, avec extraction des valeurs chiffrées à confirmer avant utilisation.
   </footer>
 </div>
 
@@ -706,6 +708,46 @@ const CHECK_KEYWORDS = {
   ],
 };
 
+// Extraction best-effort de valeurs chiffrees pres d'un mot-cle, pour
+// pre-remplir un champ de Saisie manuelle -- seulement les indicateurs
+// qui sont normalement publies publiquement sur un site vitrine
+// (resultats, satisfaction). Le reste (reclamations, actions
+// correctives, veille...) n'a pas vocation a etre publie, donc pas de
+// tentative d'extraction pour ces champs-la.
+const VALUE_EXTRACTORS = [
+  { fieldId: 'resultats_publies', keywordRe: /taux de r[ée]ussite|r[ée]sultats?/i, valueRe: /(\d{1,3}(?:[.,]\d+)?)\s*%/, unit: '%' },
+  { fieldId: 'satisfaction_stagiaires', keywordRe: /satisfaction/i, valueRe: /(\d{1,2}(?:[.,]\d+)?)\s*\/\s*5/, unit: '/5' },
+];
+
+function findManualFieldLabel(fieldId) {
+  for (const group of MANUAL_FIELDS) {
+    const f = group.fields.find((x) => x.id === fieldId);
+    if (f) return f.label;
+  }
+  return fieldId;
+}
+
+function extractValues(text) {
+  const results = [];
+  VALUE_EXTRACTORS.forEach((ex) => {
+    const idx = text.search(ex.keywordRe);
+    if (idx === -1) return;
+    const windowText = text.slice(Math.max(0, idx - 40), idx + 80);
+    const m = windowText.match(ex.valueRe);
+    if (m) results.push({ fieldId: ex.fieldId, value: m[1].replace(',', '.'), unit: ex.unit });
+  });
+  return results;
+}
+
+function applyExtractedValue(fieldId, value, btn) {
+  const input = document.getElementById(`manual-${fieldId}`);
+  if (!input) return;
+  input.value = value;
+  saveManualValues();
+  btn.textContent = 'Valeur appliquée ✓';
+  btn.disabled = true;
+}
+
 async function checkWebsite() {
   const url = (document.getElementById('manual-site_web') || {}).value;
   const resultEl = document.getElementById('site-check-result');
@@ -748,6 +790,25 @@ function renderCheckResults(resultEl, text) {
   resultEl.innerHTML = '';
   resultEl.appendChild(el('div', 'note',
     'Analyse automatique par mots-clés dans le contenu de la page — indicative seulement (ne remplace pas une lecture humaine, et ne vérifie qu’une seule page, pas tout le site).'));
+
+  const extracted = extractValues(text);
+  if (extracted.length) {
+    const block = el('div', 'check-block');
+    block.appendChild(el('p', 'check-block-title', 'Valeurs détectées automatiquement — à confirmer :'));
+    extracted.forEach((r) => {
+      const row = el('div', 'extract-row');
+      row.appendChild(el('span', '', `${findManualFieldLabel(r.fieldId)} : ${r.value}${r.unit}`));
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn';
+      btn.textContent = 'Utiliser cette valeur';
+      btn.addEventListener('click', () => applyExtractedValue(r.fieldId, r.value, btn));
+      row.appendChild(btn);
+      block.appendChild(row);
+    });
+    resultEl.appendChild(block);
+  }
+
   Object.entries(CHECK_KEYWORDS).forEach(([checkId, groups]) => {
     const check = QUALITY_CHECKS.find((c) => c.id === checkId);
     const found = groups.filter((g) => g.words.some((w) => text.includes(w)));
@@ -839,6 +900,9 @@ function renderManualForm() {
       input.dataset.fieldType = f.type || 'number';
       const v = stored.values[f.id];
       if (v !== undefined && v !== null) input.value = v;
+      if (f.type === 'url') {
+        input.addEventListener('blur', () => { if (input.value.trim()) checkWebsite(); });
+      }
       card.appendChild(label);
       card.appendChild(input);
       grid.appendChild(card);
