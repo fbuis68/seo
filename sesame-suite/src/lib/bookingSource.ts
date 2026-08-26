@@ -735,6 +735,7 @@ export async function fetchAccessQr(
   if (!res.ok) throw new BookingSourceError(`La source de QR code a répondu ${res.status} ${res.statusText}`);
 
   const body = await parseJsonResponse(res, "La réponse de la source de QR code");
+  console.log("[diag accessQr] status=%d body=%s", res.status, JSON.stringify(body).slice(0, 800));
   const qrImageRaw = config.qrImagePath ? getPath(body, config.qrImagePath) : undefined;
   const qrValueRaw = config.qrValuePath ? getPath(body, config.qrValuePath) : undefined;
   const accessCodeRaw = config.qrAccessCodePath ? getPath(body, config.qrAccessCodePath) : undefined;
@@ -867,8 +868,16 @@ export async function openDoor(
   }
   if (!res.ok) throw new BookingSourceError(`La serrure a répondu ${res.status} ${res.statusText}`);
 
+  const rawText = await res.text();
+  console.log("[diag openDoor] status=%d params=%s body=%s", res.status, JSON.stringify(params), rawText.slice(0, 800));
+
   if (config.doorResponseSuccessPath) {
-    const body = await parseJsonResponse(res, "La réponse d'ouverture de porte");
+    let body: unknown;
+    try {
+      body = JSON.parse(rawText);
+    } catch {
+      throw new BookingSourceError(`La réponse d'ouverture de porte n'est pas un JSON valide — début : "${rawText.trim().slice(0, 200)}"`);
+    }
     const raw = getPath(body, config.doorResponseSuccessPath);
     if (raw === false || raw === "false" || raw === 0) {
       throw new BookingSourceError("La serrure a refusé l'ouverture de la porte (réponse négative)");
