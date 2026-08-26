@@ -418,6 +418,24 @@ function firstOf(value: string): string {
   return value.split(",")[0].trim();
 }
 
+/**
+ * Cas différent de firstOf() : pour facilityCode spécifiquement, une valeur
+ * séparée par des virgules peut légitimement désigner PLUSIEURS accès
+ * distincts pour UNE seule réservation (ex : "201,203" — porte de chambre +
+ * accès commun, cf. doc officielle Sesame "Booking Creation", reprise telle
+ * quelle par openAs) — la tronquer à la première valeur comme pour les
+ * champs "personne" (cf. firstOf) supprimerait silencieusement les autres
+ * serrures associées par la source. On ne dédoublonne que les valeurs
+ * strictement identiques (le cas visé par le commentaire de firstOf : une
+ * réservation de groupe où plusieurs personnes partagent la même chambre,
+ * ex : "CH1,CH1").
+ */
+function dedupeFacilityCodes(value: string): string {
+  const codes = value.split(",").map((s) => s.trim()).filter(Boolean);
+  const seen = new Set<string>();
+  return codes.filter((c) => (seen.has(c) ? false : (seen.add(c), true))).join(",");
+}
+
 /** Applique le mapping de champs à la liste brute — sépare éléments valides et en erreur. */
 export function mapBookings(items: unknown[], mapping: FieldMapping): { mapped: MappedBooking[]; errors: MapError[] } {
   const mapped: MappedBooking[] = [];
@@ -444,7 +462,7 @@ export function mapBookings(items: unknown[], mapping: FieldMapping): { mapped: 
       personPhone: mapping.personPhone ? firstOf(String(getPath(item, mapping.personPhone) ?? "")) : "",
       startDate,
       endDate,
-      facilityCode: mapping.facilityCode ? firstOf(String(getPath(item, mapping.facilityCode) ?? "")) : "",
+      facilityCode: mapping.facilityCode ? dedupeFacilityCodes(String(getPath(item, mapping.facilityCode) ?? "")) : "",
       facilityName: mapping.facilityName ? firstOf(String(getPath(item, mapping.facilityName) ?? "")) : "",
       status: (mapping.status ? String(getPath(item, mapping.status) ?? "").trim() : "") || "confirmed",
     });
@@ -510,8 +528,12 @@ export async function upsertMappedBookings(entity: Entity, mapped: MappedBooking
   let created = 0;
   let updated = 0;
   for (const b of mapped) {
-    const room = b.facilityCode
-      ? await prisma.room.findUnique({ where: { entityId_code: { entityId: entity.id, code: b.facilityCode } } })
+    // b.facilityCode peut désormais lister plusieurs accès ("201,203") — Room
+    // reste à une seule chambre, donc on ne cherche que sur le premier code
+    // (celui affiché comme chambre principale de la réservation).
+    const primaryFacilityCode = b.facilityCode ? firstOf(b.facilityCode) : "";
+    const room = primaryFacilityCode
+      ? await prisma.room.findUnique({ where: { entityId_code: { entityId: entity.id, code: primaryFacilityCode } } })
       : null;
     const existing = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code: b.code } } });
     const data = {
