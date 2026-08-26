@@ -796,13 +796,13 @@ input:focus,select:focus{border-color:var(--accent)}
 
   <div class="alt alt-b" style="margin-bottom:14px">
     <i class="ti ti-info-circle"></i>
-    <div data-i18n="esp_login_info">Connectez-vous avec l'email et le code de réservation utilisés lors de votre check-in.</div>
+    <div data-i18n="esp_login_info">Connectez-vous avec votre email (ou votre nom) et le code de réservation utilisés lors de votre check-in.</div>
   </div>
 
   <div class="card">
     <div class="ch"><i class="ti ti-login"></i><span data-i18n="esp_login_hdr">Identification</span></div>
-    <div class="fi"><label class="lb" data-i18n="field_email">Email</label>
-      <input type="email" id="espLoginEmail" data-i18n-placeholder="esp_login_email_placeholder" placeholder="votre@email.com">
+    <div class="fi"><label class="lb" data-i18n="esp_login_identifier_label">Email ou nom de famille</label>
+      <input type="text" id="espLoginEmail" data-i18n-placeholder="esp_login_email_placeholder" placeholder="votre@email.com ou votre nom">
     </div>
     <div class="fi"><label class="lb" data-i18n="esp_login_code_label">Code de réservation</label>
       <input type="text" id="espLoginCode" placeholder="HCH-2026-XXXX"
@@ -1375,7 +1375,8 @@ var I18N_FR = {
   summary_pay_line_eco_deduct:'Éco-déduction ménage',summary_pay_total:'Total à régler',
   // Espace client
   esp_login_title:'Mon espace client',
-  esp_login_info:"Connectez-vous avec l'email et le code de réservation utilisés lors de votre check-in.",
+  esp_login_info:"Connectez-vous avec votre email (ou votre nom) et le code de réservation utilisés lors de votre check-in.",
+  esp_login_identifier_label:'Email ou nom de famille',
   esp_login_hdr:'Identification',esp_login_code_label:'Code de réservation',
   esp_login_btn:'Accéder à mon espace',esp_demo_access:'Accès démo rapide — séjour en cours :',
   esp_other_bookings:'Autres réservations disponibles :',
@@ -1443,7 +1444,7 @@ var I18N_FR = {
   esp_boutique_desc:'Commandez boissons, repas, bien-être et services directement en chambre.<br>Livraison incluse pendant votre séjour.',
   esp_boutique_orders_hdr:'Mes commandes en cours',
   nav_sejour:'Séjour',nav_mon_espace:'Mon espace',
-  card_mmyy:'MM/AA',card_name_placeholder:'NOM PRÉNOM',esp_login_email_placeholder:'votre@email.com'
+  card_mmyy:'MM/AA',card_name_placeholder:'NOM PRÉNOM',esp_login_email_placeholder:'votre@email.com ou votre nom'
 };
 var I18N_EN = {
   btn_continue:'Continue',btn_search:'Search',btn_search_ellipsis:'Search…',
@@ -1583,7 +1584,8 @@ var I18N_EN = {
   summary_pay_line_taxe_std:'Tourist tax (standard rate)',
   summary_pay_line_eco_deduct:'Housekeeping eco-deduction',summary_pay_total:'Total due',
   esp_login_title:'My guest space',
-  esp_login_info:'Sign in with the email and booking code used during your check-in.',
+  esp_login_info:'Sign in with your email (or your last name) and the booking code used during your check-in.',
+  esp_login_identifier_label:'Email or last name',
   esp_login_hdr:'Sign in',esp_login_code_label:'Booking code',
   esp_login_btn:'Access my space',esp_demo_access:'Quick demo access — current stay:',
   esp_other_bookings:'Other available bookings:',
@@ -1651,7 +1653,7 @@ var I18N_EN = {
   esp_boutique_desc:'Order drinks, meals, wellness and services directly to your room.<br>Delivery included during your stay.',
   esp_boutique_orders_hdr:'My current orders',
   nav_sejour:'Stay',nav_mon_espace:'My space',
-  card_mmyy:'MM/YY',card_name_placeholder:'CARDHOLDER NAME',esp_login_email_placeholder:'your@email.com'
+  card_mmyy:'MM/YY',card_name_placeholder:'CARDHOLDER NAME',esp_login_email_placeholder:'your@email.com or your last name'
 };
 var I18N_ES = {
   btn_continue:'Continuar',btn_search:'Buscar',btn_search_ellipsis:'Buscar…',
@@ -1793,7 +1795,8 @@ var I18N_ES = {
   summary_pay_line_taxe_std:'Tasa turística (tarifa estándar)',
   summary_pay_line_eco_deduct:'Ecodeducción por limpieza',summary_pay_total:'Total a pagar',
   esp_login_title:'Mi espacio de cliente',
-  esp_login_info:'Inicie sesión con el email y el código de reserva utilizados durante su check-in.',
+  esp_login_info:'Inicie sesión con su email (o su apellido) y el código de reserva utilizados durante su check-in.',
+  esp_login_identifier_label:'Email o apellido',
   esp_login_hdr:'Identificación',esp_login_code_label:'Código de reserva',
   esp_login_btn:'Acceder a mi espacio',esp_demo_access:'Acceso rápido de demostración — estancia en curso:',
   esp_other_bookings:'Otras reservas disponibles:',
@@ -1861,7 +1864,7 @@ var I18N_ES = {
   esp_boutique_desc:'Pida bebidas, comidas, bienestar y servicios directamente en su habitación.<br>Entrega incluida durante su estancia.',
   esp_boutique_orders_hdr:'Mis pedidos en curso',
   nav_sejour:'Estancia',nav_mon_espace:'Mi espacio',
-  card_mmyy:'MM/AA',card_name_placeholder:'NOMBRE DEL TITULAR',esp_login_email_placeholder:'tu@email.com'
+  card_mmyy:'MM/AA',card_name_placeholder:'NOMBRE DEL TITULAR',esp_login_email_placeholder:'tu@email.com o tu apellido'
 };
 
 function getFallbackI18n(lang){
@@ -2740,16 +2743,23 @@ function rsLoadOrders(){
 // ═══════════════════ ESPACE CLIENT
 
 // ══ Login autonome espace client — POST /api/auth/guest-login ══
+// Le premier champ accepte un email OU un nom de famille (détecté par la
+// présence d'un "@") — pour une appli en production servant tous les
+// établissements depuis une même URL, cette combinaison doit à elle seule
+// permettre de s'authentifier ET de déterminer l'établissement (recherche
+// globale côté serveur), sans dépendre d'un ?entityCode= dans le lien.
 async function espDoLogin(){
-  var email = (document.getElementById('espLoginEmail').value||'').trim().toLowerCase();
+  var identifier = (document.getElementById('espLoginEmail').value||'').trim();
   var code  = (document.getElementById('espLoginCode').value||'').trim().toUpperCase();
   var errEl = document.getElementById('espLoginErr');
   errEl.style.display = 'none';
+  var isEmail = identifier.indexOf('@') !== -1;
+  var payload = isEmail ? {email: identifier.toLowerCase(), code: code} : {lastname: identifier, code: code};
 
   try{
     var r = await apiFetch(API_BASE+'/api/auth/guest-login', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({email:email, code:code})
+      body: JSON.stringify(payload)
     });
     if(!r.ok){
       var err = await r.json().catch(function(){return {};});
@@ -2759,6 +2769,17 @@ async function espDoLogin(){
     }
     var data = await r.json();
     ESP_TOKEN = data.token; // en mémoire uniquement — perdu au rechargement, comme S.checkinDone à l'origine
+
+    // Établissement déterminé par le login lui-même (pas par l'URL) — s'il
+    // diffère de ce qui était déjà chargé (ou si rien n'était chargé, cas
+    // sans ?entityCode=), on recharge la config/le thème de CE hôtel avant
+    // d'afficher l'espace, pour que couleurs/logo et CFG.rooms (résolution
+    // des noms de chambre) correspondent au bon établissement.
+    if(data.entityCode && data.entityCode !== ENTITY_CODE){
+      ENTITY_CODE = data.entityCode;
+      await loadCfg();
+      applyBrand();
+    }
 
     // Injecter dans l'état S comme si le check-in était fait
     S.booking      = data.booking;

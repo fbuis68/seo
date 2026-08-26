@@ -2180,6 +2180,27 @@ connecteur PMS de référence (Thaïs) fourni en exemple :
   cible un seul `facilityCode`). Comportement inchangé pour une réservation
   à un seul accès. Vérifié bout en bout (mock local) sur les deux cas.
 
+### Connexion "Mon espace" en production : détermine l'établissement sans ?entityCode=
+
+- Jusqu'ici `POST /api/auth/guest-login` (email+code) exigeait un établissement
+  déjà résolu via `?entityCode=...` dans le lien fourni au client (`resolveEntity`,
+  repli sur le tenant par défaut sinon) — adapté à un lien dédié par hôtel, mais
+  pas à une appli unique servant tous les établissements Sesame depuis une même URL.
+- Le login accepte désormais email+code **ou** nom de famille+code (un seul champ
+  "Email ou nom de famille" côté client, détection par la présence d'un "@"), et
+  recherche la correspondance sur TOUTES les réservations de TOUS les
+  établissements plutôt que sur un entityId déjà connu — l'établissement est
+  déterminé par la réservation trouvée, pas par l'URL. Une correspondance nom+code
+  ambiguë entre plusieurs établissements (nom courant) est refusée explicitement
+  (409, invite à utiliser l'email) plutôt que de deviner et risquer d'exposer la
+  réservation d'un autre client — l'email reste nettement plus discriminant.
+- Le client (`checkin.html`) adopte l'`entityCode` renvoyé par le login, recharge
+  la config/le thème de cet établissement (couleurs, logo, `CFG.rooms` pour la
+  résolution des noms de chambre dans la liste "Accès") si différent de celui déjà
+  chargé, puis affiche l'espace — sans jamais avoir eu besoin d'un `?entityCode=`
+  dans le lien. Vérifié bout en bout : connexion par nom seul, sans paramètre
+  d'URL, aboutit au bon établissement (thème, chambres, réservation).
+
 ## Stack
 
 - **Backend** : Node.js 22, TypeScript, Express, Prisma, PostgreSQL, JWT
