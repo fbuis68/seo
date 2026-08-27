@@ -23,6 +23,14 @@
   Securite : aucun envoi sans un ecran de confirmation explicite listant
   destinataires + objet + apercu du contenu. Pas d'envoi automatique,
   pas de bouton "un clic".
+
+  Envoi groupe (onglet "Envoi groupe") : meme endpoint, appele une fois
+  par dossier selectionne (l'API ne prend qu'un conventionId par appel,
+  pas une liste), envoye sequentiellement avec un resultat affiche
+  dossier par dossier. Premier critere de selection disponible :
+  "dossiers avec planning cette semaine" (chevauchement
+  convention.startDate/endDate avec la semaine en cours) -- prevu pour
+  accueillir d'autres criteres plus tard.
 -->
 <style>
   :root {
@@ -130,6 +138,26 @@
 
   footer { margin-top: 36px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 11.5px; color: var(--ink-muted); line-height: 1.7; }
   footer code { background: var(--surface-2); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+
+  .tabs { display: flex; gap: 6px; margin-bottom: 22px; border-bottom: 1px solid var(--border); }
+  .tab-btn { font: inherit; font-size: 13.5px; font-weight: 600; color: var(--ink-muted); background: none; border: none; border-bottom: 2px solid transparent; padding: 10px 6px; margin-bottom: -1px; cursor: pointer; }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .group-list { border: 1px solid var(--border); border-radius: 8px; max-height: 320px; overflow-y: auto; }
+  .group-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; font-size: 12.5px; border-bottom: 1px solid var(--border); }
+  .group-row:last-child { border-bottom: none; }
+  .group-row .name { flex: 1; color: var(--ink); font-weight: 500; }
+  .group-row .meta { color: var(--ink-muted); font-size: 11.5px; }
+  .group-toolbar { display: flex; align-items: center; gap: 12px; margin: 8px 0 6px; font-size: 12px; }
+  .group-toolbar a { color: var(--accent); cursor: pointer; text-decoration: underline; }
+  .group-breakdown { list-style: none; margin: 8px 0 0; padding: 0; font-size: 12px; color: var(--ink-2); }
+  .group-breakdown li { padding: 3px 0; }
+  .group-progress { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+  .group-progress-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+  .group-progress-row .ok { color: var(--good-text); }
+  .group-progress-row .ko { color: var(--critical); }
 </style>
 
 <div class="wrap">
@@ -143,6 +171,13 @@
   <div id="banner">Chargement…</div>
 
   <div id="app" style="display:none">
+
+    <div class="tabs">
+      <button class="tab-btn active" type="button" data-tab="individuel">Envoi individuel</button>
+      <button class="tab-btn" type="button" data-tab="groupe">Envoi groupé</button>
+    </div>
+
+    <div class="tab-panel active" id="tab-individuel">
 
     <div class="field-block">
       <label class="field-label" for="conv-search">1. Dossier (convention)</label>
@@ -187,6 +222,57 @@
     <div id="preview-wrap"></div>
     <div id="result-wrap"></div>
 
+    </div>
+
+    <div class="tab-panel" id="tab-groupe">
+
+      <div class="field-block">
+        <label class="field-label" for="group-criteria">1. Critère de sélection</label>
+        <select id="group-criteria">
+          <option value="week">Dossiers avec planning cette semaine</option>
+        </select>
+        <p class="field-hint" id="group-period-hint"></p>
+      </div>
+
+      <div class="field-block">
+        <label class="field-label">2. Dossiers</label>
+        <div class="group-toolbar">
+          <a id="group-select-all">Tout cocher</a>
+          <a id="group-select-none">Tout décocher</a>
+        </div>
+        <div class="group-list" id="group-list"></div>
+        <p class="field-hint" id="group-hint"></p>
+      </div>
+
+      <div class="field-block">
+        <label class="field-label" for="tpl-select-g">3. Modèle de message (optionnel)</label>
+        <select id="tpl-select-g"><option value="">— aucun —</option></select>
+      </div>
+
+      <div class="field-block">
+        <label class="field-label" for="title-input-g">4. Objet</label>
+        <input type="text" id="title-input-g" placeholder="Objet de l'email (le même pour tous les dossiers sélectionnés)">
+      </div>
+
+      <div class="field-block">
+        <label class="field-label" for="content-input-g">5. Contenu</label>
+        <textarea id="content-input-g" placeholder="Corps du message (HTML accepté). Variables de fusion disponibles : @actor.civility@ @actor.firstname@ @actor.lastname@"></textarea>
+      </div>
+
+      <div class="field-block">
+        <label class="field-label" for="attach-input-g">6. Pièce jointe (optionnel, la même pour tous)</label>
+        <input type="file" id="attach-input-g">
+      </div>
+
+      <div class="field-block">
+        <button type="button" class="btn primary" id="preview-btn-g">Aperçu avant envoi groupé</button>
+      </div>
+
+      <div id="preview-wrap-g"></div>
+      <div id="result-wrap-g"></div>
+
+    </div>
+
   </div>
 
   <footer>
@@ -229,20 +315,22 @@ function guessLabelField(obj) {
   return firstString || 'id';
 }
 
-let STATE = { entityId: null, conventions: [], attendees: [], selectedConv: null, selectedAttendees: new Set() };
+let STATE = { entityId: null, conventions: [], allAttendees: [], attendees: [], selectedConv: null, selectedAttendees: new Set(), groupSelected: new Set() };
 
 (async () => {
   STATE.entityId = new URLSearchParams(location.search).get('entityId');
   setBanner('', 'Chargement des dossiers et modèles de message…');
   try {
-    const [conventions, templates] = await Promise.all([
+    const [conventions, templates, allAttendees] = await Promise.all([
       fetchAll('fullConventionQualiopi', STATE.entityId),
       fetchAll('messageTemplate', STATE.entityId).catch(() => []),
+      fetchAll('conventionAttendee', STATE.entityId),
     ]);
     STATE.conventions = conventions.filter((c) => c.isConvention);
+    STATE.allAttendees = allAttendees.filter((a) => a.attendee && a.email);
 
-    const tplSelect = document.getElementById('tpl-select');
-    if (templates.length) {
+    [document.getElementById('tpl-select'), document.getElementById('tpl-select-g')].forEach((tplSelect) => {
+      if (!templates.length) return;
       const labelField = guessLabelField(templates[0]);
       templates.forEach((t) => {
         const opt = document.createElement('option');
@@ -250,11 +338,12 @@ let STATE = { entityId: null, conventions: [], attendees: [], selectedConv: null
         opt.textContent = t[labelField] || t.id;
         tplSelect.appendChild(opt);
       });
-    }
+    });
 
     document.getElementById('banner').style.display = 'none';
     document.getElementById('app').style.display = 'block';
     wireUp();
+    wireGroup();
   } catch (err) {
     if (err && err.message === 'AUTH') {
       setBanner('error', 'Session MCDF non détectée. Ouvrez cette page depuis un onglet déjà connecté à MCDF.');
@@ -264,6 +353,15 @@ let STATE = { entityId: null, conventions: [], attendees: [], selectedConv: null
     }
   }
 })();
+
+document.querySelectorAll('.tab-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+  });
+});
 
 function wireUp() {
   const searchInput = document.getElementById('conv-search');
@@ -313,11 +411,9 @@ async function selectConvention(conv) {
   const attBlock = document.getElementById('attendees-block');
   const attList = document.getElementById('attendee-list');
   const hint = document.getElementById('attendees-hint');
-  attList.innerHTML = '<div class="attendee-row">Chargement des participants…</div>';
   attBlock.style.display = 'block';
 
-  const allAttendees = await fetchAll('conventionAttendee', STATE.entityId);
-  const forConv = allAttendees.filter((a) => a.conventionId === conv.id && a.attendee && a.email);
+  const forConv = STATE.allAttendees.filter((a) => a.conventionId === conv.id);
   STATE.attendees = forConv;
   STATE.selectedAttendees = new Set();
 
@@ -379,40 +475,213 @@ function showPreview() {
   previewWrap.appendChild(panel);
 }
 
-async function sendMessage(targets, title, content, btn) {
-  btn.disabled = true;
-  btn.textContent = 'Envoi en cours…';
-  const resultWrap = document.getElementById('result-wrap');
-  resultWrap.innerHTML = '';
-
+async function postSendMessage(conventionId, targets, title, content, tplId, file) {
   const form = new FormData();
   form.append('targets', JSON.stringify(targets.map((t) => ({
     name: t.fullname, email: t.email, id: t.attendeeId,
     civility: t.civility || '', lastname: t.lastname || '', firstname: t.firstname || '',
   }))));
-  form.append('conventionId', STATE.selectedConv.id);
+  form.append('conventionId', conventionId);
   form.append('senderId', 'entity');
   form.append('cc', '');
   form.append('bcc', '');
-  const tplId = document.getElementById('tpl-select').value;
   form.append('messageTemplateId', tplId || '');
   form.append('title', title);
   form.append('content', content);
-  const file = document.getElementById('attach-input').files[0];
   if (file) form.append('attachedFile', file);
 
   try {
     const res = await fetch('/wa/conventionExport/sendMessage', { method: 'POST', body: form, credentials: 'same-origin' });
     let data;
     try { data = await res.json(); } catch (e) { data = null; }
-    if (res.ok && data && data.success) {
-      resultWrap.appendChild(el('div', 'result-banner ok', `✓ Envoyé à ${targets.length} destinataire(s).`));
-    } else {
-      resultWrap.appendChild(el('div', 'result-banner ko', `Échec de l'envoi (HTTP ${res.status}). Réponse : ${escapeHtml(JSON.stringify(data))}`));
-    }
+    return { ok: res.ok && !!(data && data.success), status: res.status, data };
   } catch (err) {
-    resultWrap.appendChild(el('div', 'result-banner ko', `Erreur réseau : ${escapeHtml(err.message)}`));
+    return { ok: false, status: null, error: err.message };
   }
+}
+
+async function sendMessage(targets, title, content, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Envoi en cours…';
+  const resultWrap = document.getElementById('result-wrap');
+  resultWrap.innerHTML = '';
+
+  const tplId = document.getElementById('tpl-select').value;
+  const file = document.getElementById('attach-input').files[0];
+  const result = await postSendMessage(STATE.selectedConv.id, targets, title, content, tplId, file);
+
+  if (result.ok) {
+    resultWrap.appendChild(el('div', 'result-banner ok', `✓ Envoyé à ${targets.length} destinataire(s).`));
+  } else if (result.error) {
+    resultWrap.appendChild(el('div', 'result-banner ko', `Erreur réseau : ${escapeHtml(result.error)}`));
+  } else {
+    resultWrap.appendChild(el('div', 'result-banner ko', `Échec de l'envoi (HTTP ${result.status}). Réponse : ${escapeHtml(JSON.stringify(result.data))}`));
+  }
+  btn.disabled = false;
+  btn.textContent = 'Confirmer et envoyer';
+}
+
+// ------------------------------------------------------------------
+// Envoi groupe -- selectionner plusieurs dossiers via une coche, meme
+// message envoye a tous, une requete sendMessage par dossier (l'API ne
+// prend qu'un seul conventionId a la fois).
+// ------------------------------------------------------------------
+function computeWeekRange(d) {
+  const date = new Date(d);
+  const day = (date.getDay() + 6) % 7; // 0 = lundi
+  const monday = new Date(date); monday.setDate(date.getDate() - day); monday.setHours(0, 0, 0, 0);
+  const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6); sunday.setHours(23, 59, 59, 999);
+  return { start: monday, end: sunday };
+}
+function fmtDateFr(d) { return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
+function overlaps(convStart, convEnd, rangeStart, rangeEnd) {
+  if (!convStart || !convEnd) return false;
+  const cs = new Date(convStart.slice(0, 10)), ce = new Date(convEnd.slice(0, 10));
+  return cs <= rangeEnd && ce >= rangeStart;
+}
+
+function attendeesFor(convId) {
+  return STATE.allAttendees.filter((a) => a.conventionId === convId);
+}
+
+function getGroupCandidates() {
+  const criteria = document.getElementById('group-criteria').value;
+  if (criteria === 'week') {
+    const { start, end } = computeWeekRange(new Date());
+    document.getElementById('group-period-hint').textContent = `Semaine du ${fmtDateFr(start)} au ${fmtDateFr(end)}`;
+    return STATE.conventions.filter((c) => overlaps(c.startDate, c.endDate, start, end));
+  }
+  return [];
+}
+
+function renderGroupList() {
+  const candidates = getGroupCandidates();
+  STATE.groupSelected = new Set(candidates.map((c) => c.id)); // tout coche par defaut
+  const listWrap = document.getElementById('group-list');
+  listWrap.innerHTML = '';
+  if (!candidates.length) {
+    listWrap.appendChild(el('div', 'group-row', '<span class="meta">Aucun dossier ne correspond à ce critère.</span>'));
+  } else {
+    candidates.forEach((c) => {
+      const row = el('div', 'group-row');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = true;
+      cb.addEventListener('change', () => {
+        if (cb.checked) STATE.groupSelected.add(c.id);
+        else STATE.groupSelected.delete(c.id);
+        updateGroupHint();
+      });
+      row.appendChild(cb);
+      const nb = attendeesFor(c.id).length;
+      row.appendChild(el('span', 'name', escapeHtml(c.name || c.code || c.id)));
+      row.appendChild(el('span', 'meta', `${escapeHtml(c.customerName || '')} · ${c.startDate ? c.startDate.slice(0, 10) : '?'} → ${c.endDate ? c.endDate.slice(0, 10) : '?'} · ${nb} destinataire(s)`));
+      listWrap.appendChild(row);
+    });
+  }
+  updateGroupHint();
+}
+
+function updateGroupHint() {
+  const selected = STATE.conventions.filter((c) => STATE.groupSelected.has(c.id));
+  const totalAttendees = selected.reduce((s, c) => s + attendeesFor(c.id).length, 0);
+  document.getElementById('group-hint').textContent = `${selected.length} dossier(s) sélectionné(s) · ${totalAttendees} destinataire(s) au total`;
+}
+
+function wireGroup() {
+  document.getElementById('group-criteria').addEventListener('change', renderGroupList);
+  document.getElementById('group-select-all').addEventListener('click', () => {
+    STATE.groupSelected = new Set(getGroupCandidates().map((c) => c.id));
+    document.querySelectorAll('#group-list input[type="checkbox"]').forEach((cb) => { cb.checked = true; });
+    updateGroupHint();
+  });
+  document.getElementById('group-select-none').addEventListener('click', () => {
+    STATE.groupSelected = new Set();
+    document.querySelectorAll('#group-list input[type="checkbox"]').forEach((cb) => { cb.checked = false; });
+    updateGroupHint();
+  });
+  document.getElementById('preview-btn-g').addEventListener('click', showGroupPreview);
+  renderGroupList();
+}
+
+function showGroupPreview() {
+  const resultWrap = document.getElementById('result-wrap-g');
+  resultWrap.innerHTML = '';
+  const previewWrap = document.getElementById('preview-wrap-g');
+  previewWrap.innerHTML = '';
+
+  const selected = STATE.conventions.filter((c) => STATE.groupSelected.has(c.id));
+  if (!selected.length) { alert('Sélectionnez au moins un dossier.'); return; }
+  const title = document.getElementById('title-input-g').value.trim();
+  if (!title) { alert('Renseignez un objet.'); return; }
+  const content = document.getElementById('content-input-g').value;
+
+  const withAttendees = selected.map((c) => ({ conv: c, targets: attendeesFor(c.id) }));
+  const noAttendees = withAttendees.filter((x) => x.targets.length === 0);
+  const sendable = withAttendees.filter((x) => x.targets.length > 0);
+  const totalTargets = sendable.reduce((s, x) => s + x.targets.length, 0);
+
+  const panel = el('div', 'preview-panel');
+  panel.appendChild(el('h3', '', 'Vérifier avant envoi groupé'));
+  panel.appendChild(el('div', 'preview-row', `<span class="k">Dossiers</span><span class="v">${sendable.length} dossier(s) avec destinataires (sur ${selected.length} sélectionné(s))</span>`));
+  panel.appendChild(el('div', 'preview-row', `<span class="k">Destinataires</span><span class="v">${totalTargets} au total — tous les participants avec email de chaque dossier reçoivent ce message</span>`));
+  panel.appendChild(el('div', 'preview-row', `<span class="k">Objet</span><span class="v">${escapeHtml(title)}</span>`));
+  const file = document.getElementById('attach-input-g').files[0];
+  if (file) panel.appendChild(el('div', 'preview-row', `<span class="k">Pièce jointe</span><span class="v">${escapeHtml(file.name)}</span>`));
+  panel.appendChild(el('div', 'preview-content', escapeHtml(content || '(vide)')));
+
+  const breakdown = el('ul', 'group-breakdown');
+  sendable.forEach((x) => breakdown.appendChild(el('li', '', `${escapeHtml(x.conv.name || x.conv.id)} — ${x.targets.length} destinataire(s)`)));
+  if (noAttendees.length) {
+    noAttendees.forEach((x) => breakdown.appendChild(el('li', '', `${escapeHtml(x.conv.name || x.conv.id)} — aucun destinataire avec email, ignoré`)));
+  }
+  panel.appendChild(breakdown);
+
+  if (!sendable.length) {
+    panel.appendChild(el('div', 'result-banner ko', 'Aucun des dossiers sélectionnés n’a de destinataire avec email.'));
+    previewWrap.appendChild(panel);
+    return;
+  }
+
+  const confirmBtn = document.createElement('button');
+  confirmBtn.type = 'button';
+  confirmBtn.className = 'btn primary';
+  confirmBtn.style.marginTop = '14px';
+  confirmBtn.textContent = `Confirmer et envoyer à ${sendable.length} dossier(s) (${totalTargets} destinataire(s))`;
+  confirmBtn.addEventListener('click', () => sendGroupMessages(sendable, title, content, confirmBtn));
+  panel.appendChild(confirmBtn);
+
+  previewWrap.appendChild(panel);
+}
+
+async function sendGroupMessages(sendable, title, content, btn) {
+  btn.disabled = true;
+  const resultWrap = document.getElementById('result-wrap-g');
+  resultWrap.innerHTML = '';
+  const progress = el('div', 'group-progress');
+  resultWrap.appendChild(progress);
+
+  const tplId = document.getElementById('tpl-select-g').value;
+  const file = document.getElementById('attach-input-g').files[0];
+
+  let okCount = 0, koCount = 0;
+  for (const x of sendable) {
+    btn.textContent = `Envoi en cours… (${okCount + koCount + 1}/${sendable.length})`;
+    const row = el('div', 'group-progress-row', `${escapeHtml(x.conv.name || x.conv.id)} — …`);
+    progress.appendChild(row);
+    const result = await postSendMessage(x.conv.id, x.targets, title, content, tplId, file);
+    if (result.ok) {
+      okCount++;
+      row.innerHTML = `<span class="ok">✓</span> ${escapeHtml(x.conv.name || x.conv.id)} — envoyé à ${x.targets.length} destinataire(s)`;
+    } else {
+      koCount++;
+      const reason = result.error || `HTTP ${result.status}`;
+      row.innerHTML = `<span class="ko">✕</span> ${escapeHtml(x.conv.name || x.conv.id)} — échec (${escapeHtml(String(reason))})`;
+    }
+  }
+
+  const summary = el('div', `result-banner ${koCount ? 'ko' : 'ok'}`, `${okCount} dossier(s) envoyé(s) avec succès${koCount ? `, ${koCount} échec(s)` : ''}.`);
+  resultWrap.appendChild(summary);
   btn.disabled = false;
   btn.textContent = 'Confirmer et envoyer';
 }
