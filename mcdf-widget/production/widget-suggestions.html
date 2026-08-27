@@ -317,6 +317,29 @@ function buildMailto(req, adminEmail) {
   return `mailto:${encodeURIComponent(adminEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
+// Pre-remplissage depuis un lien "Suggerer..." envoye par un autre widget
+// (widget-ia.html, widget-qualiopi.html, etc.) : ?module=...&titre=...&desc=...
+// -- permet a ces widgets de generer un prompt deja documente (module, fichier,
+// entites API utilisees) sans dupliquer ce formulaire ailleurs.
+function applyPrefillFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const qModule = params.get('module');
+  const qTitre = params.get('titre');
+  const qDesc = params.get('desc');
+  if (qModule) {
+    const sel = document.getElementById('req-module');
+    if ([...sel.options].some((o) => o.value === qModule)) sel.value = qModule;
+  }
+  if (qTitre) document.getElementById('req-title').value = qTitre;
+  if (qDesc) document.getElementById('req-desc').value = qDesc;
+  if (qTitre || qDesc) {
+    const titleInput = document.getElementById('req-title');
+    titleInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    titleInput.focus();
+    titleInput.setSelectionRange(titleInput.value.length, titleInput.value.length);
+  }
+}
+
 function init() {
   const adminEmail = localStorage.getItem(ADMIN_EMAIL_KEY) || '';
   document.getElementById('admin-email').value = adminEmail;
@@ -392,6 +415,7 @@ function init() {
   });
 
   renderList();
+  applyPrefillFromUrl();
 }
 init();
 </script>

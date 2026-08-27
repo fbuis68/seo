@@ -65,7 +65,10 @@
   .eyebrow { text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px; font-weight: 600; color: var(--accent); margin: 0 0 10px; }
   h1 { font-family: var(--font-display); font-size: clamp(22px, 3vw, 30px); font-weight: 500; margin: 0 0 8px; }
   .lede { color: var(--ink-2); font-size: 13.5px; line-height: 1.6; margin: 0 0 8px; }
-  .version-tag { font-size: 11px; color: var(--ink-muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0 0 24px; }
+  .version-tag { font-size: 11px; color: var(--ink-muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0 0 10px; }
+  .suggest-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 24px; }
+  .suggest-btn { font: inherit; font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-tint); border: none; border-radius: 100px; padding: 6px 13px; cursor: pointer; }
+  .suggest-btn:hover { filter: brightness(0.96); }
 
   #banner { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 8px; font-size: 13.5px; margin-bottom: 20px; background: var(--surface-2); color: var(--ink-2); }
   #banner.error { background: var(--critical-tint); color: var(--critical); }
@@ -98,6 +101,10 @@
   <h1>IA Conversationnelle -- v1</h1>
   <p class="lede">Posez une question sur vos donnees MCDF (nouveaux clients, CA, devis a relancer, stagiaires, formateurs, comparaison N vs N-1). V1 a base de regles sur des questions connues -- pas encore un vrai LLM, voir la note en bas de page.</p>
   <p class="version-tag">Version du fichier : 2026-08-27</p>
+  <div class="suggest-row">
+    <button type="button" class="suggest-btn" id="suggest-report-btn">💡 Suggérer un nouveau rapport</button>
+    <button type="button" class="suggest-btn" id="suggest-filter-btn">🔎 Suggérer un nouveau filtre</button>
+  </div>
 
   <div id="banner"><span class="spinner"></span><span>Chargement des données MCDF en direct...</span></div>
 
@@ -280,4 +287,45 @@ function addMsg(role, html) {
     }
   }
 })();
+
+// ------------------------------------------------------------------
+// Boutons "Suggerer..." -- ouvrent widget-suggestions.html avec un
+// prompt deja documente (module, fichier, entites API confirmees ici)
+// pour que la demande d'evolution soit exploitable sans aller-retour.
+// ------------------------------------------------------------------
+const SUGGEST_MODULE = 'IA Conversationnelle';
+function buildSuggestContext() {
+  return [
+    'Contexte technique (pré-rempli automatiquement) :',
+    '- Widget : IA Conversationnelle (widget-conversationnel.html)',
+    '- Entités API MCDF déjà utilisées ici : customer, convention, invoice, conventionAttendee (via /wa/{entity}/list?nopaging=1)',
+    '- Fonctionnement : réponses par détection de motif (regex) sur la question posée, pas un vrai LLM -- voir les intentions déjà couvertes (devis à relancer, nouveaux clients, CA, stagiaires, comparaison N vs N-1)',
+    '',
+  ].join('\n');
+}
+function openSuggest(kind) {
+  const context = buildSuggestContext();
+  let titre, desc;
+  if (kind === 'report') {
+    titre = 'Nouveau rapport : ';
+    desc = context + [
+      'Décrivez la nouvelle question/réponse souhaitée :',
+      '- Question type que l\'utilisateur poserait : ',
+      '- Donnée/champ nécessaire pour y répondre (si connu) : ',
+      '- Exemple concret de réponse attendue : ',
+    ].join('\n');
+  } else {
+    titre = 'Nouveau filtre : ';
+    desc = context + [
+      'Décrivez le nouveau filtre souhaité :',
+      '- Sur quelle réponse/intention doit-il s\'appliquer : ',
+      '- Valeurs ou critère du filtre : ',
+      '- Doit-il se cumuler avec les filtres existants ou les remplacer : ',
+    ].join('\n');
+  }
+  const url = `widget-suggestions.html?module=${encodeURIComponent(SUGGEST_MODULE)}&titre=${encodeURIComponent(titre)}&desc=${encodeURIComponent(desc)}`;
+  window.open(url, '_blank');
+}
+document.getElementById('suggest-report-btn').addEventListener('click', () => openSuggest('report'));
+document.getElementById('suggest-filter-btn').addEventListener('click', () => openSuggest('filter'));
 </script>

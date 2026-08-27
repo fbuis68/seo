@@ -24,6 +24,15 @@
   destinataires + objet + apercu du contenu. Pas d'envoi automatique,
   pas de bouton "un clic".
 
+  Envoi individuel (onglet "Envoi individuel") : possibilite d'ajouter
+  plusieurs dossiers les uns apres les autres (recherche -> coche des
+  destinataires -> "Ajouter ce dossier a l'envoi" -> la recherche se
+  reinitialise pour le dossier suivant). Le meme objet/contenu/piece
+  jointe est ensuite envoye a chaque dossier du panier, une requete
+  sendMessage par dossier, sequentiellement (voir "Envoi groupe"
+  ci-dessous pour le meme principe applique a une selection par critere
+  plutot qu'ajoutee dossier par dossier).
+
   Envoi groupe (onglet "Envoi groupe") : meme endpoint, appele une fois
   par dossier selectionne (l'API ne prend qu'un conventionId par appel,
   pas une liste), envoye sequentiellement avec un resultat affiche
@@ -142,6 +151,9 @@
   footer { margin-top: 36px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 11.5px; color: var(--ink-muted); line-height: 1.7; }
   footer code { background: var(--surface-2); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
   .version-tag { font-size: 11px; color: var(--ink-muted); font-family: var(--font-mono); margin: 10px 0 0; }
+  .suggest-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .suggest-btn { font: inherit; font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-tint); border: none; border-radius: 100px; padding: 6px 13px; cursor: pointer; }
+  .suggest-btn:hover { filter: brightness(0.96); }
 
   .tabs { display: flex; gap: 6px; margin-bottom: 22px; border-bottom: 1px solid var(--border); }
   .tab-btn { font: inherit; font-size: 13.5px; font-weight: 600; color: var(--ink-muted); background: none; border: none; border-bottom: 2px solid transparent; padding: 10px 6px; margin-bottom: -1px; cursor: pointer; }
@@ -168,9 +180,13 @@
   <header class="top">
     <p class="eyebrow">Widget IA · MCDF</p>
     <h1>Envoi de documents</h1>
-    <p class="lede">Envoyer un email (avec pièce jointe éventuelle) à un ou plusieurs participants d'un dossier, via l'endpoint MCDF confirmé.</p>
+    <p class="lede">Envoyer un email (avec pièce jointe éventuelle) à un ou plusieurs participants d'un ou plusieurs dossiers — ajoutés un par un ou sélectionnés par critère — via l'endpoint MCDF confirmé.</p>
     <div class="write-warning"><span class="dot"></span> Ce widget écrit — chaque envoi déclenche un vrai email. Rien ne part sans confirmation explicite ci-dessous.</div>
     <p class="version-tag">Version du fichier : 2026-08-27 — si vous voyez une date antérieure ici, videz le cache (Ctrl+Maj+R) ou redéployez.</p>
+    <div class="suggest-row">
+      <button type="button" class="suggest-btn" id="suggest-report-btn">💡 Suggérer une évolution</button>
+      <button type="button" class="suggest-btn" id="suggest-filter-btn">🔎 Suggérer un nouveau filtre/critère</button>
+    </div>
   </header>
 
   <div id="banner"><span class="spinner"></span><span>Chargement…</span></div>
@@ -185,7 +201,7 @@
     <div class="tab-panel active" id="tab-individuel">
 
     <div class="field-block">
-      <label class="field-label" for="conv-search">1. Dossier (convention)</label>
+      <label class="field-label" for="conv-search">1. Dossier — ajoutez-en un ou plusieurs, un par un</label>
       <div class="search-row">
         <input type="search" id="conv-search" placeholder="Rechercher par nom ou code de dossier…">
       </div>
@@ -194,29 +210,40 @@
     </div>
 
     <div class="field-block" id="attendees-block" style="display:none">
-      <label class="field-label">2. Destinataires</label>
+      <label class="field-label">2. Destinataires pour ce dossier</label>
       <div class="attendee-list" id="attendee-list"></div>
       <p class="field-hint" id="attendees-hint"></p>
     </div>
 
+    <div class="field-block" id="add-to-cart-wrap" style="display:none">
+      <button type="button" class="btn" id="add-to-cart-btn">+ Ajouter ce dossier à l'envoi</button>
+      <p class="field-hint">Ajoute ce dossier à la liste ci-dessous puis réinitialise la recherche pour en sélectionner un autre.</p>
+    </div>
+
+    <div class="field-block" id="cart-block" style="display:none">
+      <label class="field-label">3. Dossiers ajoutés à l'envoi</label>
+      <div class="group-list" id="cart-list"></div>
+      <p class="field-hint" id="cart-hint"></p>
+    </div>
+
     <div class="field-block">
-      <label class="field-label" for="tpl-select">3. Modèle de message (optionnel)</label>
+      <label class="field-label" for="tpl-select">4. Modèle de message (optionnel)</label>
       <select id="tpl-select"><option value="">— aucun —</option></select>
       <p class="field-hint">Optionnel — sélectionner un modèle ne remplit pas automatiquement l'objet/contenu dans cette v1, à écrire manuellement ci-dessous.</p>
     </div>
 
     <div class="field-block">
-      <label class="field-label" for="title-input">4. Objet</label>
+      <label class="field-label" for="title-input">5. Objet</label>
       <input type="text" id="title-input" placeholder="Objet de l'email">
     </div>
 
     <div class="field-block">
-      <label class="field-label" for="content-input">5. Contenu</label>
+      <label class="field-label" for="content-input">6. Contenu</label>
       <textarea id="content-input" placeholder="Corps du message (HTML accepté). Variables de fusion disponibles : @actor.civility@ @actor.firstname@ @actor.lastname@"></textarea>
     </div>
 
     <div class="field-block">
-      <label class="field-label" for="attach-input">6. Pièce jointe (optionnel)</label>
+      <label class="field-label" for="attach-input">7. Pièce jointe (optionnel)</label>
       <input type="file" id="attach-input">
     </div>
 
@@ -320,7 +347,7 @@ function guessLabelField(obj) {
   return firstString || 'id';
 }
 
-let STATE = { entityId: null, conventions: [], allAttendees: [], attendees: [], selectedConv: null, selectedAttendees: new Set(), groupSelected: new Set() };
+let STATE = { entityId: null, conventions: [], allAttendees: [], attendees: [], selectedConv: null, selectedAttendees: new Set(), groupSelected: new Set(), individualCart: [] };
 
 (async () => {
   STATE.entityId = new URLSearchParams(location.search).get('entityId');
@@ -392,6 +419,7 @@ function wireUp() {
   });
 
   document.getElementById('preview-btn').addEventListener('click', showPreview);
+  document.getElementById('add-to-cart-btn').addEventListener('click', addToCart);
 }
 
 async function selectConvention(conv) {
@@ -409,6 +437,7 @@ async function selectConvention(conv) {
     STATE.selectedAttendees = new Set();
     selWrap.innerHTML = '';
     document.getElementById('attendees-block').style.display = 'none';
+    document.getElementById('add-to-cart-wrap').style.display = 'none';
   });
   chip.appendChild(clearBtn);
   selWrap.appendChild(chip);
@@ -417,6 +446,7 @@ async function selectConvention(conv) {
   const attList = document.getElementById('attendee-list');
   const hint = document.getElementById('attendees-hint');
   attBlock.style.display = 'block';
+  document.getElementById('add-to-cart-wrap').style.display = 'block';
 
   const forConv = STATE.allAttendees.filter((a) => a.conventionId === conv.id);
   STATE.attendees = forConv;
@@ -447,34 +477,88 @@ async function selectConvention(conv) {
   }
 }
 
+// Ajoute le dossier + destinataires actuellement selectionnes a la liste
+// d'envoi (le "panier"), puis reinitialise la recherche pour permettre
+// d'ajouter un dossier suivant sans perdre les precedents.
+function addToCart() {
+  if (!STATE.selectedConv) { alert('Sélectionnez un dossier.'); return; }
+  const targets = STATE.attendees.filter((a) => STATE.selectedAttendees.has(a.attendeeId));
+  if (!targets.length) { alert('Sélectionnez au moins un destinataire pour ce dossier.'); return; }
+  if (STATE.individualCart.some((x) => x.conv.id === STATE.selectedConv.id)) {
+    alert('Ce dossier est déjà dans la liste d’envoi.');
+    return;
+  }
+  STATE.individualCart.push({ conv: STATE.selectedConv, targets });
+  renderCart();
+
+  STATE.selectedConv = null;
+  STATE.selectedAttendees = new Set();
+  document.getElementById('conv-selected').innerHTML = '';
+  document.getElementById('attendees-block').style.display = 'none';
+  document.getElementById('add-to-cart-wrap').style.display = 'none';
+  const searchInput = document.getElementById('conv-search');
+  searchInput.value = '';
+  searchInput.focus();
+}
+
+function renderCart() {
+  const block = document.getElementById('cart-block');
+  const listWrap = document.getElementById('cart-list');
+  listWrap.innerHTML = '';
+  if (!STATE.individualCart.length) {
+    block.style.display = 'none';
+    return;
+  }
+  block.style.display = 'block';
+  STATE.individualCart.forEach((x, idx) => {
+    const row = el('div', 'group-row');
+    row.appendChild(el('span', 'name', escapeHtml(x.conv.name || x.conv.code || x.conv.id)));
+    row.appendChild(el('span', 'meta', `${x.targets.length} destinataire(s)`));
+    const removeLink = document.createElement('a');
+    removeLink.textContent = 'Retirer';
+    removeLink.style.cssText = 'cursor:pointer;color:var(--critical);font-size:11.5px;text-decoration:underline;';
+    removeLink.addEventListener('click', () => {
+      STATE.individualCart.splice(idx, 1);
+      renderCart();
+    });
+    row.appendChild(removeLink);
+    listWrap.appendChild(row);
+  });
+  const total = STATE.individualCart.reduce((s, x) => s + x.targets.length, 0);
+  document.getElementById('cart-hint').textContent = `${STATE.individualCart.length} dossier(s) ajouté(s) · ${total} destinataire(s) au total`;
+}
+
 function showPreview() {
   const resultWrap = document.getElementById('result-wrap');
   resultWrap.innerHTML = '';
   const previewWrap = document.getElementById('preview-wrap');
   previewWrap.innerHTML = '';
 
-  if (!STATE.selectedConv) { alert('Sélectionnez un dossier.'); return; }
-  const targets = STATE.attendees.filter((a) => STATE.selectedAttendees.has(a.attendeeId));
-  if (!targets.length) { alert('Sélectionnez au moins un destinataire.'); return; }
+  if (!STATE.individualCart.length) { alert('Ajoutez au moins un dossier à l’envoi (bouton "Ajouter ce dossier à l’envoi" après avoir choisi ses destinataires).'); return; }
   const title = document.getElementById('title-input').value.trim();
   if (!title) { alert('Renseignez un objet.'); return; }
   const content = document.getElementById('content-input').value;
+  const totalTargets = STATE.individualCart.reduce((s, x) => s + x.targets.length, 0);
 
   const panel = el('div', 'preview-panel');
   panel.appendChild(el('h3', '', 'Vérifier avant envoi'));
-  panel.appendChild(el('div', 'preview-row', `<span class="k">Dossier</span><span class="v">${escapeHtml(STATE.selectedConv.name || STATE.selectedConv.id)}</span>`));
-  panel.appendChild(el('div', 'preview-row', `<span class="k">Destinataires</span><span class="v">${targets.map((t) => escapeHtml(`${t.fullname} <${t.email}>`)).join(', ')}</span>`));
+  panel.appendChild(el('div', 'preview-row', `<span class="k">Dossiers</span><span class="v">${STATE.individualCart.length} dossier(s)</span>`));
+  panel.appendChild(el('div', 'preview-row', `<span class="k">Destinataires</span><span class="v">${totalTargets} au total</span>`));
   panel.appendChild(el('div', 'preview-row', `<span class="k">Objet</span><span class="v">${escapeHtml(title)}</span>`));
   const file = document.getElementById('attach-input').files[0];
   if (file) panel.appendChild(el('div', 'preview-row', `<span class="k">Pièce jointe</span><span class="v">${escapeHtml(file.name)}</span>`));
   panel.appendChild(el('div', 'preview-content', escapeHtml(content || '(vide)')));
 
+  const breakdown = el('ul', 'group-breakdown');
+  STATE.individualCart.forEach((x) => breakdown.appendChild(el('li', '', `${escapeHtml(x.conv.name || x.conv.id)} — ${x.targets.map((t) => escapeHtml(`${t.fullname} <${t.email}>`)).join(', ')}`)));
+  panel.appendChild(breakdown);
+
   const confirmBtn = document.createElement('button');
   confirmBtn.type = 'button';
   confirmBtn.className = 'btn primary';
   confirmBtn.style.marginTop = '14px';
-  confirmBtn.textContent = `Confirmer et envoyer à ${targets.length} destinataire(s)`;
-  confirmBtn.addEventListener('click', () => sendMessage(targets, title, content, confirmBtn));
+  confirmBtn.textContent = `Confirmer et envoyer à ${STATE.individualCart.length} dossier(s) (${totalTargets} destinataire(s))`;
+  confirmBtn.addEventListener('click', () => sendCartMessages(title, content, confirmBtn));
   panel.appendChild(confirmBtn);
 
   previewWrap.appendChild(panel);
@@ -505,22 +589,38 @@ async function postSendMessage(conventionId, targets, title, content, tplId, fil
   }
 }
 
-async function sendMessage(targets, title, content, btn) {
+async function sendCartMessages(title, content, btn) {
   btn.disabled = true;
-  btn.textContent = 'Envoi en cours…';
   const resultWrap = document.getElementById('result-wrap');
   resultWrap.innerHTML = '';
+  const progress = el('div', 'group-progress');
+  resultWrap.appendChild(progress);
 
   const tplId = document.getElementById('tpl-select').value;
   const file = document.getElementById('attach-input').files[0];
-  const result = await postSendMessage(STATE.selectedConv.id, targets, title, content, tplId, file);
+  const cart = STATE.individualCart;
 
-  if (result.ok) {
-    resultWrap.appendChild(el('div', 'result-banner ok', `✓ Envoyé à ${targets.length} destinataire(s).`));
-  } else if (result.error) {
-    resultWrap.appendChild(el('div', 'result-banner ko', `Erreur réseau : ${escapeHtml(result.error)}`));
-  } else {
-    resultWrap.appendChild(el('div', 'result-banner ko', `Échec de l'envoi (HTTP ${result.status}). Réponse : ${escapeHtml(JSON.stringify(result.data))}`));
+  let okCount = 0, koCount = 0;
+  for (const x of cart) {
+    btn.textContent = `Envoi en cours… (${okCount + koCount + 1}/${cart.length})`;
+    const row = el('div', 'group-progress-row', `${escapeHtml(x.conv.name || x.conv.id)} — …`);
+    progress.appendChild(row);
+    const result = await postSendMessage(x.conv.id, x.targets, title, content, tplId, file);
+    if (result.ok) {
+      okCount++;
+      row.innerHTML = `<span class="ok">✓</span> ${escapeHtml(x.conv.name || x.conv.id)} — envoyé à ${x.targets.length} destinataire(s)`;
+    } else {
+      koCount++;
+      const reason = result.error || `HTTP ${result.status}`;
+      row.innerHTML = `<span class="ko">✕</span> ${escapeHtml(x.conv.name || x.conv.id)} — échec (${escapeHtml(String(reason))})`;
+    }
+  }
+
+  const summary = el('div', `result-banner ${koCount ? 'ko' : 'ok'}`, `${okCount} dossier(s) envoyé(s) avec succès${koCount ? `, ${koCount} échec(s)` : ''}.`);
+  resultWrap.appendChild(summary);
+  if (!koCount) {
+    STATE.individualCart = [];
+    renderCart();
   }
   btn.disabled = false;
   btn.textContent = 'Confirmer et envoyer';
@@ -690,4 +790,46 @@ async function sendGroupMessages(sendable, title, content, btn) {
   btn.disabled = false;
   btn.textContent = 'Confirmer et envoyer';
 }
+
+// ------------------------------------------------------------------
+// Boutons "Suggerer..." -- ouvrent widget-suggestions.html avec un
+// prompt deja documente (module, fichier, entites API confirmees ici)
+// pour que la demande d'evolution soit exploitable sans aller-retour.
+// ------------------------------------------------------------------
+const SUGGEST_MODULE = 'Envoi de documents';
+function buildSuggestContext() {
+  return [
+    'Contexte technique (pré-rempli automatiquement) :',
+    '- Widget : Envoi de documents (widget-envoi.html)',
+    '- Entités API MCDF déjà utilisées ici : fullConventionQualiopi, conventionAttendee, messageTemplate (via /wa/{entity}/list?nopaging=1)',
+    '- Endpoint d\'envoi confirmé : POST /wa/conventionExport/sendMessage (multipart/form-data)',
+    '- Onglets existants : Envoi individuel (panier de dossiers ajoutés un par un), Envoi groupé (sélection par critère, ex. "dossiers avec planning cette semaine")',
+    '',
+  ].join('\n');
+}
+function openSuggest(kind) {
+  const context = buildSuggestContext();
+  let titre, desc;
+  if (kind === 'report') {
+    titre = 'Évolution souhaitée : ';
+    desc = context + [
+      'Décrivez l\'évolution souhaitée (nouveau type d\'envoi, nouveau document, etc.) :',
+      '- Objectif : ',
+      '- Donnée/champ nécessaire (si connu) : ',
+      '- Exemple concret attendu : ',
+    ].join('\n');
+  } else {
+    titre = 'Nouveau filtre/critère : ';
+    desc = context + [
+      'Décrivez le nouveau critère de sélection ou filtre souhaité :',
+      '- S\'applique à l\'envoi individuel, à l\'envoi groupé, ou aux deux : ',
+      '- Valeurs ou critère du filtre : ',
+      '- Doit-il se cumuler avec les critères existants ou les remplacer : ',
+    ].join('\n');
+  }
+  const url = `widget-suggestions.html?module=${encodeURIComponent(SUGGEST_MODULE)}&titre=${encodeURIComponent(titre)}&desc=${encodeURIComponent(desc)}`;
+  window.open(url, '_blank');
+}
+document.getElementById('suggest-report-btn').addEventListener('click', () => openSuggest('report'));
+document.getElementById('suggest-filter-btn').addEventListener('click', () => openSuggest('filter'));
 </script>
