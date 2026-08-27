@@ -490,6 +490,46 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     <div id="kpi-real-grid" class="kpi-real-grid"><div class="alt alt-b"><i class="ti ti-loader"></i><span>Chargement…</span></div></div>
   </div>
 
+  <!-- ══════════ SIMULATEUR — curseurs pour visualiser les gains en rendez-vous ══════════ -->
+  <div class="ca" style="margin-bottom:20px">
+    <div class="ch"><i class="ti ti-adjustments"></i>Paramètres de simulation
+      <button class="chact" onclick="resetDashKpiSim()"><i class="ti ti-refresh" style="font-size:12px"></i> Réinitialiser</button>
+    </div>
+    <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
+      <span>Ajustez ces curseurs pour visualiser l'impact en direct, par exemple en rendez-vous commercial — rien n'est enregistré ici, les vrais réglages restent dans <a href="#" onclick="showPan('gains');return false" style="color:var(--a);font-weight:600">Gains</a>.</span>
+    </div>
+    <div class="g4">
+      <div class="fi">
+        <label class="lb">Taux d'occupation</label>
+        <div class="slrow">
+          <input type="range" id="dashSimOcc" min="0" max="100" step="1" oninput="renderDashKpiSim()">
+          <span class="slv" id="dashSimOccV">—%</span>
+        </div>
+      </div>
+      <div class="fi">
+        <label class="lb">Temps ménage gagné</label>
+        <div class="slrow">
+          <input type="range" id="dashSimMenage" min="15" max="120" step="5" oninput="renderDashKpiSim()">
+          <span class="slv" id="dashSimMenageV">— min</span>
+        </div>
+      </div>
+      <div class="fi">
+        <label class="lb">Temps check-in gagné</label>
+        <div class="slrow">
+          <input type="range" id="dashSimCheckin" min="0" max="60" step="1" oninput="renderDashKpiSim()">
+          <span class="slv" id="dashSimCheckinV">— min</span>
+        </div>
+      </div>
+      <div class="fi">
+        <label class="lb">Veilleur de nuit</label>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <label class="tg"><input type="checkbox" id="dashSimNightWatch" checked onchange="renderDashKpiSim()"><span class="tgl"></span></label>
+          <span id="dashSimNightWatchLbl" style="font-size:13px;font-weight:600">Présent</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ══════════ KPI HÔTELIER ══════════ -->
   <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;display:flex;align-items:center;gap:6px">
     <i class="ti ti-building-store"></i>KPI hôtelier — gains opérationnels (estimation)
@@ -3322,22 +3362,26 @@ function populateAll(){
   setVal('e-eauS',CFG.eauServ);document.getElementById('e-eauSV').textContent=CFG.eauServ+' L';
   setVal('e-co2',CFG.co2Factor);document.getElementById('e-co2V').textContent=CFG.co2Factor.toFixed(4);
   [0,2,3,7,1].forEach(function(v){setChk('e-f'+v,CFG.freqOpts.includes(v));});
-  // KPI fields
-  if(CFG.kpi){
-    setVal('kpi-minPerClean',CFG.kpi.minPerClean||45);
-    setVal('kpi-minPerTowel',CFG.kpi.minPerTowel||10);
-    setVal('kpi-hourlyRate',CFG.kpi.hourlyRate||22);
-    setVal('kpi-annualStays',CFG.kpi.annualStays||500);
-    setVal('kpi-checkinMin',CFG.kpi.checkinMin!=null?CFG.kpi.checkinMin:8);
-    setVal('kpi-checkinAdoption',CFG.kpi.checkinAdoption!=null?CFG.kpi.checkinAdoption:70);
-    document.getElementById('kpi-minPerCleanV').textContent=(CFG.kpi.minPerClean||45)+' min';
-    document.getElementById('kpi-minPerTowelV').textContent=(CFG.kpi.minPerTowel||10)+' min';
-    document.getElementById('kpi-hourlyRateV').textContent=(CFG.kpi.hourlyRate||22)+' €/h';
-    document.getElementById('kpi-annualStaysV').textContent=(CFG.kpi.annualStays||500);
-    document.getElementById('kpi-checkinMinV').textContent=(CFG.kpi.checkinMin!=null?CFG.kpi.checkinMin:8)+' min';
-    document.getElementById('kpi-checkinAdoptionV').textContent=(CFG.kpi.checkinAdoption!=null?CFG.kpi.checkinAdoption:70)+'%';
+  // KPI fields — pas de garde sur CFG.kpi : tant qu'aucun réglage n'a été
+  // enregistré (kpi=null), ces curseurs restaient sinon au point milieu de
+  // leur range HTML (ex: 2550 séjours/an) au lieu des mêmes valeurs par
+  // défaut sensées que le reste de l'app (cf. renderKpiPreview()).
+  (function(){
+    var k=CFG.kpi||{};
+    setVal('kpi-minPerClean',k.minPerClean||45);
+    setVal('kpi-minPerTowel',k.minPerTowel||10);
+    setVal('kpi-hourlyRate',k.hourlyRate||22);
+    setVal('kpi-annualStays',k.annualStays||500);
+    setVal('kpi-checkinMin',k.checkinMin!=null?k.checkinMin:8);
+    setVal('kpi-checkinAdoption',k.checkinAdoption!=null?k.checkinAdoption:70);
+    document.getElementById('kpi-minPerCleanV').textContent=(k.minPerClean||45)+' min';
+    document.getElementById('kpi-minPerTowelV').textContent=(k.minPerTowel||10)+' min';
+    document.getElementById('kpi-hourlyRateV').textContent=(k.hourlyRate||22)+' €/h';
+    document.getElementById('kpi-annualStaysV').textContent=(k.annualStays||500);
+    document.getElementById('kpi-checkinMinV').textContent=(k.checkinMin!=null?k.checkinMin:8)+' min';
+    document.getElementById('kpi-checkinAdoptionV').textContent=(k.checkinAdoption!=null?k.checkinAdoption:70)+'%';
     syncKpiPreview();
-  }
+  })();
   // logo previews
   if(CFG.logoMain)setLogoPrev('main',CFG.logoMain);
   if(CFG.hotelPlan)setPlanPrev(CFG.hotelPlan);
@@ -4670,7 +4714,58 @@ function kpiTile(val,lbl,color){
 }
 function renderKpiDash(){
   // Les KPIs sont désormais affichés dans les blocs hero de l'Accueil
-  renderKpiPreview();
+  resetDashKpiSim();
+}
+
+// ── Simulateur Accueil : curseurs occupation / ménage / check-in / veilleur
+// de nuit, en plus des vrais KPI hôtelier — ne touchent jamais CFG.kpi
+// (contrairement aux curseurs du panneau Gains, qui persistent) : c'est un
+// outil de démo commerciale ("avec vos chiffres, voici ce que ça change"),
+// pas un réglage. Initialisé depuis les vraies valeurs (CFG.kpi, nombre de
+// chambres réel) à chaque chargement du dashboard. ──
+function resetDashKpiSim(){
+  var occEl=document.getElementById('dashSimOcc'), menEl=document.getElementById('dashSimMenage'),
+      ciEl=document.getElementById('dashSimCheckin'), nwEl=document.getElementById('dashSimNightWatch');
+  if(!occEl||!menEl||!ciEl||!nwEl){ renderKpiPreview(); return; }
+  var kpi=CFG.kpi||{minPerClean:45,minPerTowel:10,hourlyRate:22,annualStays:500,checkinMin:8,checkinAdoption:70};
+  var rooms=(CFG.rooms&&CFG.rooms.length)||1;
+  var occ=Math.max(0,Math.min(100,Math.round((kpi.annualStays*3)/(rooms*365)*100)));
+  occEl.value=occ;
+  menEl.value=kpi.minPerClean;
+  ciEl.value=kpi.checkinMin;
+  nwEl.checked=true;
+  renderDashKpiSim();
+}
+
+function renderDashKpiSim(){
+  var occEl=document.getElementById('dashSimOcc'), menEl=document.getElementById('dashSimMenage'),
+      ciEl=document.getElementById('dashSimCheckin'), nwEl=document.getElementById('dashSimNightWatch');
+  if(!occEl||!menEl||!ciEl||!nwEl){ renderKpiPreview(); return; }
+  var kpi=CFG.kpi||{minPerClean:45,minPerTowel:10,hourlyRate:22,annualStays:500,checkinMin:8,checkinAdoption:70};
+  var rooms=(CFG.rooms&&CFG.rooms.length)||1;
+
+  var occ=parseInt(occEl.value)||0;
+  var menage=parseInt(menEl.value)||kpi.minPerClean;
+  var checkin=parseInt(ciEl.value); if(isNaN(checkin)) checkin=kpi.checkinMin;
+  var nightWatch=nwEl.checked;
+
+  document.getElementById('dashSimOccV').textContent=occ+'%';
+  document.getElementById('dashSimMenageV').textContent=menage+' min';
+  document.getElementById('dashSimCheckinV').textContent=checkin+' min';
+  document.getElementById('dashSimNightWatchLbl').textContent=nightWatch?'Présent':'Absent';
+
+  var annualStays=Math.round(rooms*365*(occ/100)/3); // séjour type 3 nuits, même convention que le reste de l'app
+  var adoptionBonus=nightWatch?0:15; // sans veilleur de nuit, le check-in en ligne devient la seule option à l'arrivée tardive
+  var checkinAdoption=Math.min(100,(kpi.checkinAdoption!=null?kpi.checkinAdoption:70)+adoptionBonus);
+
+  renderKpiPreview({
+    minPerClean: menage,
+    minPerTowel: kpi.minPerTowel!=null?kpi.minPerTowel:10,
+    hourlyRate: kpi.hourlyRate!=null?kpi.hourlyRate:22,
+    annualStays: annualStays,
+    checkinMin: checkin,
+    checkinAdoption: checkinAdoption
+  });
 }
 
 // ═══════════════════════════════════════════════ TRANSLATIONS
@@ -6870,8 +6965,11 @@ function gaugeSvg(pct, color, width){
     + '</svg>';
 }
 
-function renderKpiPreview(){
-  var kpi=CFG.kpi||{minPerClean:45,minPerTowel:10,hourlyRate:22,annualStays:500,checkinMin:8,checkinAdoption:70};
+function renderKpiPreview(overrideKpi){
+  // overrideKpi : passé par le simulateur du dashboard (curseurs occupation/
+  // ménage/check-in/veilleur de nuit) pour prévisualiser en direct sans
+  // toucher à CFG.kpi — les vrais réglages restent ceux du panneau Gains.
+  var kpi=overrideKpi||CFG.kpi||{minPerClean:45,minPerTowel:10,hourlyRate:22,annualStays:500,checkinMin:8,checkinAdoption:70};
   var sym=currencySymbol(CFG.currency||'EUR');
   var n=3,mf=3,sf=3;
   var menS=n-Math.ceil(n/mf), srvS=n-Math.ceil(n/sf);
