@@ -2042,6 +2042,11 @@ async function fetchBookings() {
     var r = await apiFetch(API_BASE+'/wa/booking/list'+(q?('?q='+encodeURIComponent(q)):''));
     if (!r.ok) throw new Error('HTTP '+r.status);
     var list = await r.json();
+    // Recherche vide (bouton Démo) : ne pas exposer tout l'historique de
+    // réservations de l'hôtel (des dizaines une fois les données réelles
+    // alimentées) — un échantillon restreint suffit à faire la démo sans
+    // induire le visiteur en erreur sur le nombre de séjours réels.
+    if (!q) list = list.slice(0, 5);
     SESAME_CACHE.bookings = list;
     renderBookingResults(list);
   } catch(e) {
