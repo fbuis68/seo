@@ -289,6 +289,20 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 .kreal-tile .kt-delta.down{color:var(--re)}
 .kreal-tile .kt-delta.flat{color:var(--mu)}
 .kreal-tile .kt-caption{font-size:10px;color:var(--hi);margin-top:6px;line-height:1.3}
+/* KPI réels — mise en scène "fleuve" : les 7 cartes reliées par un tracé, du
+   séjour vécu (voie accent) vers l'impact généré (voie or), pour donner un
+   sens de lecture au lieu d'une grille de chiffres isolés. */
+.kpi-river-wrap{overflow-x:auto}
+.kpi-river-svg{display:block;width:100%;height:auto;min-width:900px;overflow:visible}
+.kpi-river-line{fill:none;stroke-width:3;stroke-linecap:round}
+.kpi-medallion{filter:drop-shadow(0 2px 5px rgba(0,0,0,.15))}
+.kpi-lane-caption{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase}
+.kpi-stops{display:grid;grid-template-columns:repeat(7,minmax(140px,1fr));gap:10px;margin-top:-8px;min-width:900px}
+.kreal-tile .kpi-substat{display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--bdr)}
+.kreal-tile .kpi-substat-ico{flex:none;display:block}
+.kreal-tile .kpi-substat-text{display:flex;flex-direction:column;gap:1px;line-height:1.25}
+.kreal-tile .kpi-substat-text strong{font-size:12px;font-variant-numeric:tabular-nums}
+.kreal-tile .kpi-substat-text span{font-size:10px;color:var(--hi)}
 /* Réservations */
 .resa-card{border:1px solid var(--bdr);border-left:4px solid var(--a);border-radius:var(--r);background:var(--card);padding:14px 16px;margin-bottom:10px}
 .resa-opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--bdr)}
@@ -9864,25 +9878,103 @@ function renderRealKpis(){
   }
 
   var sym = getCurrSym();
+
+  // ── Sous-indicateurs "temps homme gagné" (taxe/ménage) et pictos eau/CO₂ —
+  // dérivés des mêmes barèmes déjà réels ailleurs sur cette page (minutes de
+  // check-in par module, minutes/ménage du bloc "KPI hôtelier" juste
+  // en-dessous) : ce panneau reste 100% données réelles, jamais de valeur
+  // simulée ou inventée pour l'habillage visuel. ──
+  var taxeMod = CFG.checkinModules && CFG.checkinModules.taxe;
+  var taxeActive = !taxeMod || taxeMod.active !== false;
+  var taxeMinPerCheckin = (taxeMod && taxeMod.staffMinutesSaved != null) ? taxeMod.staffMinutesSaved : STAFF_TIME_DEFAULTS.taxe;
+  var taxeHeures = taxeActive ? (curr.checkinsDone * taxeMinPerCheckin) / 60 : 0;
+  var checkinAdoptionPct = curr.stays > 0 ? Math.min(100, (curr.checkinsDone / curr.stays) * 100) : 0;
+
+  var minPerClean = (CFG.kpi && CFG.kpi.minPerClean != null) ? CFG.kpi.minPerClean : 45;
+  var menageHeures = (curr.skippedCleanings * minPerClean) / 60;
+  var ecoAdoptionPct = curr.stays > 0 ? Math.min(100, (curr.trackedStays / curr.stays) * 100) : 0;
+
+  var bonbonnes = curr.eauEconomisee / 1000;
+
   var tiles = [
-    { ico:'ti-calendar-check', lbl:'Séjours', val:curr.stays, prevVal: prev?prev.stays:null, fmt:function(v){return v;} },
-    { ico:'ti-cash', lbl:'Chiffre d\'affaires généré', val:curr.revenue, prevVal: prev?prev.revenue:null, fmt:function(v){return v.toFixed(2)+' '+sym;}, caption:'Room service &amp; boutique — hors hébergement (non suivi dans l\'app)' },
-    { ico:'ti-receipt', lbl:'Taxe de séjour collectée', val:curr.taxeCollected, prevVal: prev?prev.taxeCollected:null, fmt:function(v){return v.toFixed(2)+' '+sym;} },
-    { ico:'ti-spray', lbl:'Ménages évités', val:curr.skippedCleanings, prevVal: prev?prev.skippedCleanings:null, fmt:function(v){return v;}, caption: curr.trackedStays ? (curr.trackedStays+' séjour(s) via check-in éco') : 'Aucun séjour avec check-in éco sur la période' },
-    { ico:'ti-droplet', lbl:'Eau économisée', val:curr.eauEconomisee, prevVal: prev?prev.eauEconomisee:null, fmt:function(v){return Math.round(v)+' L';} },
-    { ico:'ti-leaf', lbl:'CO₂ évité', val:curr.co2Evite, prevVal: prev?prev.co2Evite:null, fmt:function(v){return v.toFixed(2)+' kg';} },
-    { ico:'ti-clock', lbl:'Temps homme check-in gagné', val:curr.heuresGagnees, prevVal: prev?prev.heuresGagnees:null, fmt:function(v){return v.toFixed(1)+' h';}, caption:curr.checkinsDone+' check-in(s) effectué(s)' },
+    { ico:'ti-calendar-check', lane:'stay', lbl:'Séjours', val:curr.stays, prevVal: prev?prev.stays:null, fmt:function(v){return v;} },
+    { ico:'ti-cash', lane:'stay', lbl:'Chiffre d\'affaires généré', val:curr.revenue, prevVal: prev?prev.revenue:null, fmt:function(v){return v.toFixed(2)+' '+sym;}, caption:'Room service &amp; boutique — hors hébergement (non suivi dans l\'app)' },
+    { ico:'ti-receipt', lane:'stay', lbl:'Taxe de séjour collectée', val:curr.taxeCollected, prevVal: prev?prev.taxeCollected:null, fmt:function(v){return v.toFixed(2)+' '+sym;},
+      badge: taxeActive && curr.checkinsDone>0 ? { kind:'gauge', pct:checkinAdoptionPct, val:taxeHeures.toFixed(1)+' h', lbl:'Temps homme gagné · '+taxeMinPerCheckin+'min/check-in' } : null },
+    { ico:'ti-spray', lane:'impact', lbl:'Ménages évités', val:curr.skippedCleanings, prevVal: prev?prev.skippedCleanings:null, fmt:function(v){return v;}, caption: curr.trackedStays ? (curr.trackedStays+' séjour(s) via check-in éco') : 'Aucun séjour avec check-in éco sur la période',
+      badge: curr.skippedCleanings>0 ? { kind:'gauge', pct:ecoAdoptionPct, val:menageHeures.toFixed(0)+' h', lbl:'Temps homme gagné' } : null },
+    { ico:'ti-droplet', lane:'impact', lbl:'Eau économisée', val:curr.eauEconomisee, prevVal: prev?prev.eauEconomisee:null, fmt:function(v){return Math.round(v)+' L';},
+      badge: curr.eauEconomisee>0 ? { kind:'icon', shape:'waterJug', val:'≈ '+(bonbonnes<1?bonbonnes.toFixed(1):Math.round(bonbonnes)), lbl:'bonbonnes de 1000 L' } : null },
+    { ico:'ti-leaf', lane:'impact', lbl:'CO₂ évité', val:curr.co2Evite, prevVal: prev?prev.co2Evite:null, fmt:function(v){return v.toFixed(2)+' kg';},
+      badge: curr.co2Evite>0 ? { kind:'icon', shape:'co2Cloud', val:curr.co2Evite.toFixed(2)+' kg', lbl:'non rejetés dans l’atmosphère' } : null },
+    { ico:'ti-clock', lane:'impact', lbl:'Temps homme check-in gagné', val:curr.heuresGagnees, prevVal: prev?prev.heuresGagnees:null, fmt:function(v){return v.toFixed(1)+' h';}, caption:curr.checkinsDone+' check-in(s) effectué(s)' },
   ];
 
-  grid.innerHTML = tiles.map(function(t){
+  // ── Fleuve : tracé SVG reliant les 7 médaillons, du séjour vécu (voie
+  // accent du thème) vers l'impact généré (voie or) — donne un sens de
+  // lecture explicite à la grille au lieu de 7 chiffres isolés. Couleurs
+  // résolues depuis les tokens du thème actif (pas de couleur en dur, pour
+  // rester correct sur les 5 thèmes admin). ──
+  var rootStyle = getComputedStyle(document.documentElement);
+  var colStay = (rootStyle.getPropertyValue('--a')||'#8B1A2E').trim();
+  var colImpact = (rootStyle.getPropertyValue('--go')||'#9B6E0A').trim();
+  var colCard = (rootStyle.getPropertyValue('--card')||'#FFF').trim();
+  var colBorder = (rootStyle.getPropertyValue('--bdr')||'#E3DED8').trim();
+  var laneColor = { stay: colStay, impact: colImpact };
+
+  var W = 1200, H = 170, N = tiles.length, marginX = 60, midY = 95, amp = 46;
+  var pts = [];
+  for(var i=0;i<N;i++){
+    var x = marginX + ((W - marginX*2) * i) / (N - 1);
+    var phase = i % 2 === 0 ? -1 : 1;
+    var y = midY + phase * amp * (i === N-1 ? 0.5 : 1);
+    pts.push({ x:x, y:y });
+  }
+  function kpiCatmull(points){
+    var d = 'M '+points[0].x+' '+points[0].y;
+    for(var j=0;j<points.length-1;j++){
+      var p0 = points[j-1] || points[j], p1 = points[j], p2 = points[j+1], p3 = points[j+2] || p2;
+      var c1x = p1.x + (p2.x-p0.x)/6, c1y = p1.y + (p2.y-p0.y)/6;
+      var c2x = p2.x - (p3.x-p1.x)/6, c2y = p2.y - (p3.y-p1.y)/6;
+      d += ' C '+c1x+' '+c1y+', '+c2x+' '+c2y+', '+p2.x+' '+p2.y;
+    }
+    return d;
+  }
+  var pathD = kpiCatmull(pts);
+  var medallions = tiles.map(function(t,idx){
+    var p = pts[idx];
+    return '<circle cx="'+p.x+'" cy="'+p.y+'" r="15" fill="'+colCard+'"></circle>'
+      + '<circle cx="'+p.x+'" cy="'+p.y+'" r="12" fill="'+laneColor[t.lane]+'" class="kpi-medallion"></circle>'
+      + '<text x="'+p.x+'" y="'+(p.y+4)+'" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">'+(idx+1)+'</text>';
+  }).join('');
+  var riverSvg = '<div class="kpi-river-wrap"><svg class="kpi-river-svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">'
+    + '<text x="'+marginX+'" y="18" class="kpi-lane-caption" fill="'+colStay+'">Le séjour</text>'
+    + '<text x="'+(W-marginX)+'" y="18" text-anchor="end" class="kpi-lane-caption" fill="'+colImpact+'">L’impact généré</text>'
+    + '<path class="kpi-river-line" d="'+pathD+'" stroke="'+colBorder+'"></path>'
+    + medallions
+    + '</svg></div>';
+
+  var stopsHtml = tiles.map(function(t){
+    var badgeHtml = '';
+    if(t.badge){
+      var idSuffix = 'kreal'+Math.random().toString(36).slice(2);
+      var pctForIcon = t.badge.kind === 'gauge' ? t.badge.pct : 100;
+      var shapeForIcon = t.badge.kind === 'gauge' ? 'person' : t.badge.shape;
+      badgeHtml = '<div class="kpi-substat"><div class="kpi-substat-ico">'
+        + singleUnitFigureSvg(pctForIcon, laneColor[t.lane], shapeForIcon, idSuffix)
+        + '</div><div class="kpi-substat-text"><strong>'+t.badge.val+'</strong><span>'+t.badge.lbl+'</span></div></div>';
+    }
     return '<div class="kreal-tile">'
       + '<div class="kt-ico"><i class="ti '+t.ico+'"></i></div>'
       + '<div class="kt-lbl">'+t.lbl+'</div>'
       + '<div class="kt-val">'+t.fmt(t.val)+'</div>'
       + (compare ? kpiDeltaHtml(t.val, t.prevVal) : '')
       + (t.caption ? '<div class="kt-caption">'+t.caption+'</div>' : '')
+      + badgeHtml
       + '</div>';
   }).join('');
+
+  grid.innerHTML = '<div class="kpi-river-block">' + riverSvg + '<div class="kpi-stops">' + stopsHtml + '</div></div>';
 }
 
 // ═══════════════════════════════════════════════ RÉSERVATIONS — ARRIVÉES DU JOUR
