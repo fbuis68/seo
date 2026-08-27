@@ -89,10 +89,13 @@
   .status-tag.warn .dot { background: var(--warning); }
   .status-tag.warn { color: var(--warning); border-color: var(--warning); }
 
-  #banner { display: none; padding: 12px 16px; border-radius: 8px; font-size: 13.5px; margin-bottom: 24px; }
-  #banner.loading { display: block; background: var(--surface-2); color: var(--ink-2); }
-  #banner.error { display: block; background: var(--critical-tint); color: var(--critical); }
-  #banner.warn { display: block; background: var(--surface-2); color: var(--warning); border: 1px solid var(--warning); }
+  #banner { display: none; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 8px; font-size: 13.5px; margin-bottom: 24px; }
+  #banner.loading { display: flex; background: var(--surface-2); color: var(--ink-2); }
+  #banner.error { display: flex; background: var(--critical-tint); color: var(--critical); }
+  #banner.warn { display: flex; background: var(--surface-2); color: var(--warning); border: 1px solid var(--warning); }
+  .spinner { flex: none; width: 15px; height: 15px; border: 2px solid var(--border-2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.2s; } }
   #app { display: none; }
 
   .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 36px; }
@@ -473,7 +476,7 @@ function lastNMonths(n) {
 function setBanner(kind, html) {
   const b = document.getElementById('banner');
   b.className = kind;
-  b.innerHTML = html;
+  b.innerHTML = kind === 'loading' ? `<span class="spinner"></span><span>${html}</span>` : html;
 }
 function setStatus(kind, html) {
   const s = document.getElementById('status-tag');
