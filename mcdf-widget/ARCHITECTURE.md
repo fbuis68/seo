@@ -41,6 +41,13 @@ Chaque module ci-dessous a son propre `NOTES.md` dans `modules/` avec le détail
   MCDF, données fictives dans le même format que l'API réelle.
 - `A-TRANSMETTRE-AU-DEVELOPPEUR.md` — fiche de déploiement/mise à jour
   côté serveur (commandes `curl` + points de vigilance).
+- `widget-suggestions.html` — module "Suggestions d'évolution" : ne
+  parle pas à l'API MCDF, sert à remonter des demandes d'évolution du
+  widget lui-même. Aucun backend partagé : enregistrement local
+  (`localStorage`) + envoi réel par `mailto:` vers une adresse de
+  super-administrateur configurable, export/import JSON pour centraliser
+  plusieurs postes, et un « mode super-administrateur » qui n'est qu'un
+  affichage différent (pas une authentification).
 
 Côté découverte : `browser/live-qualiopi-check.js` — script console pour
 confirmer les noms d'entité et les champs réels du module Qualiopi.

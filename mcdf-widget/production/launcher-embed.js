@@ -184,6 +184,7 @@
     { icon: '\u{1F4CA}', title: 'G\u00E9n\u00E9ration de rapports', desc: "Restitutions et KPI en direct (nouveaux clients, CA, devis...).", ready: true, href: `widget-ia.html${qs}` },
     { icon: '\u{1F4E4}', title: 'Envoi de documents', desc: "Envoyer un email \u00E0 des participants d'un dossier \u2014 d\u00E9clenche un vrai envoi.", ready: true, href: `widget-envoi.html${qs}` },
     { icon: '\u{1F50D}', title: 'Recherche intelligente', desc: "Chercher en langage naturel plut\u00F4t qu'avec des filtres.", ready: false, href: null },
+    { icon: '\u{1F4A1}', title: "Suggestions d'\u00E9volution", desc: "Proposer une \u00E9volution du widget, \u00E0 valider par un super administrateur.", ready: true, href: `widget-suggestions.html${qs}` },
   ];
   const panel = document.getElementById('ia-launcher-panel');
   const titleEl = document.getElementById('ia-l-title');
