@@ -167,7 +167,7 @@
         <div class="ia-l-detail" id="ia-l-detail">
           <iframe id="ia-l-iframe" title="Module Copilote IA"></iframe>
         </div>
-        <div class="ia-l-footer"><span class="dot"></span> Lecture seule \u2014 vos donn\u00E9es restent dans MCDF</div>
+        <div class="ia-l-footer"><span class="dot"></span> Lecture seule \u2014 vos donn\u00E9es restent dans MCDF \u00B7 v2026-08-27</div>
       </div>
     </div>
   `;
