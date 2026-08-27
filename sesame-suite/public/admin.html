@@ -475,7 +475,11 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     <div class="stat"><div class="sv" style="color:var(--a)" id="db-hotel">—</div><div class="sl">Établissement</div></div>
     <div class="stat"><div class="sv" style="color:var(--bu)" id="db-stars">—</div><div class="sl">Catégorie</div></div>
     <div class="stat"><div class="sv" style="color:var(--go)" id="db-gains">—</div><div class="sl">Gains actifs</div></div>
-    <div class="stat"><div class="sv" style="color:var(--am)" id="db-rooms">—</div><div class="sl">Chambres configurées</div></div>
+    <div class="stat">
+      <input type="number" id="db-rooms" min="1" max="999" oninput="onDashRoomsChange()"
+        style="font-family:'DM Serif Display',serif;font-size:26px;color:var(--am);background:none;border:none;padding:0;width:100%;outline:none">
+      <div class="sl">Chambres <span title="Modifiable pour la simulation — n'affecte pas les chambres réellement configurées" style="text-decoration:underline dotted;cursor:help">(éditable)</span></div>
+    </div>
   </div>
 
   <!-- ══════════ SIMULATEUR — curseurs pour visualiser les gains en rendez-vous ══════════ -->
@@ -4657,7 +4661,7 @@ function renderDash(){
   var ss=document.getElementById('db-stars');if(ss)ss.textContent=CFG.stars+'★';
   var sg=document.getElementById('db-gains');
   if(sg)sg.textContent=Object.keys(CFG.gains).filter(function(k){return CFG.gains[k].active;}).length;
-  var sr=document.getElementById('db-rooms');if(sr)sr.textContent=CFG.rooms.length;
+  var sr=document.getElementById('db-rooms');if(sr)sr.value=CFG.rooms.length;
   var sum=document.getElementById('db-summary');
   var sym=currencySymbol(CFG.currency||'EUR');
   if(sum){
@@ -4749,12 +4753,27 @@ function renderKpiDash(){
 // outil de démo commerciale ("avec vos chiffres, voici ce que ça change"),
 // pas un réglage. Initialisé depuis les vraies valeurs (CFG.kpi, nombre de
 // chambres réel) à chaque chargement du dashboard. ──
+// Nombre de chambres utilisé par la simulation : lu depuis le champ éditable
+// de l'en-tête (#db-rooms) plutôt que CFG.rooms.length directement, pour
+// pouvoir simuler avec un nombre de chambres différent de la config réelle
+// (ex: prospect avec un parc différent) sans toucher aux vraies chambres.
+function dashSimRoomsCount(){
+  var el=document.getElementById('db-rooms');
+  var v=el?parseInt(el.value):NaN;
+  return (!isNaN(v)&&v>0) ? v : ((CFG.rooms&&CFG.rooms.length)||1);
+}
+function onDashRoomsChange(){
+  renderDashKpiSim();
+}
+
 function resetDashKpiSim(){
   var occEl=document.getElementById('dashSimOcc'), menEl=document.getElementById('dashSimMenage'),
       ciEl=document.getElementById('dashSimCheckin'), nwEl=document.getElementById('dashSimNightWatch');
   if(!occEl||!menEl||!ciEl||!nwEl){ renderKpiPreview(); return; }
   var kpi=CFG.kpi||{minPerClean:45,minPerTowel:10,hourlyRate:22,annualStays:500,checkinMin:8,checkinAdoption:70};
-  var rooms=(CFG.rooms&&CFG.rooms.length)||1;
+  var roomsEl=document.getElementById('db-rooms');
+  if(roomsEl) roomsEl.value=(CFG.rooms&&CFG.rooms.length)||1;
+  var rooms=dashSimRoomsCount();
   var occ=Math.max(0,Math.min(100,Math.round((kpi.annualStays*3)/(rooms*365)*100)));
   occEl.value=occ;
   menEl.value=kpi.minPerClean;
@@ -4795,7 +4814,7 @@ function renderDashKpiSim(){
       ciEl=document.getElementById('dashSimCheckin'), nwEl=document.getElementById('dashSimNightWatch');
   if(!occEl||!menEl||!ciEl||!nwEl){ renderKpiPreview(); return; }
   var kpi=CFG.kpi||{minPerClean:45,minPerTowel:10,hourlyRate:22,annualStays:500,checkinMin:8,checkinAdoption:70};
-  var rooms=(CFG.rooms&&CFG.rooms.length)||1;
+  var rooms=dashSimRoomsCount();
 
   var occ=parseInt(occEl.value)||0;
   var menage=parseInt(menEl.value)||kpi.minPerClean;
@@ -10045,27 +10064,43 @@ function renderRealKpis(){
   var taxeHeures = taxeActive ? (curr.checkinsDone * taxeMinPerCheckin) / 60 : 0;
   var checkinAdoptionPct = curr.stays > 0 ? Math.min(100, (curr.checkinsDone / curr.stays) * 100) : 0;
 
-  var minPerClean = (CFG.kpi && CFG.kpi.minPerClean != null) ? CFG.kpi.minPerClean : 45;
-  var menageHeures = (curr.skippedCleanings * minPerClean) / 60;
-  var ecoAdoptionPct = curr.stays > 0 ? Math.min(100, (curr.trackedStays / curr.stays) * 100) : 0;
-
-  var bonbonnes = curr.eauEconomisee / 1000;
+  // ── Ménages / Eau / CO₂ simulés : contrairement à Séjours/CA/Taxe/Temps
+  // check-in (données réelles de la période), ces 3 KPI suivent directement
+  // le simulateur ci-dessus (occupation, chambres, module Ménage éco) — même
+  // barème que le bloc "KPI hôtelier" (séjour type 3 nuits, ménage tous les
+  // 3 jours) et les mêmes CFG.eauMenage/eauServ/co2Factor réels, mis à
+  // l'échelle sur la période affichée plutôt qu'à l'année. ──
+  var simOccEl = document.getElementById('dashSimOcc');
+  var simOcc = simOccEl ? (parseInt(simOccEl.value) || 0) : 0;
+  var simMenageEl = document.getElementById('dashSimMenage');
+  var simMenageMin = (CFG.kpi && CFG.kpi.minPerClean != null) ? CFG.kpi.minPerClean : 45;
+  if(simMenageEl) simMenageMin = parseInt(simMenageEl.value) || simMenageMin;
+  var simRooms = dashSimRoomsCount();
+  var periodDays = Math.max(1, Math.round((new Date(range.to) - new Date(range.from)) / 86400000) + 1);
+  var menageOn = dashSimModuleOn('menage');
+  var simMenS = 2, simSrvS = 2; // séjour type 3 nuits, ménage/serviettes tous les 3 jours — même hypothèse que renderKpiPreview()
+  var simStays = simRooms * periodDays * (simOcc / 100) / 3;
+  var simSkipped = menageOn ? Math.round(simStays * simMenS) : 0;
+  var simEau = menageOn ? simStays * (simMenS * (CFG.eauMenage || 15) + simSrvS * (CFG.eauServ || 40)) : 0;
+  var simCo2 = simEau * (CFG.co2Factor || 0.0003);
+  var simBonbonnes = simEau / 1000;
+  var menageHeures = (simSkipped * simMenageMin) / 60;
 
   // ── Modules utilisés (pastilles du simulateur juste au-dessus) : un module
   // désactivé grise son étape du fleuve au lieu de la faire disparaître — on
   // voit ce qu'on perd à ne pas l'activer, pas seulement ce qu'on gagne à
-  // l'activer. Les chiffres restent réels, seule l'opacité change. ──
+  // l'activer. ──
   var tiles = [
     { ico:'ti-calendar-check', lane:'stay', lbl:'Séjours', val:curr.stays, prevVal: prev?prev.stays:null, fmt:function(v){return v;}, active:true },
     { ico:'ti-cash', lane:'stay', lbl:'Chiffre d\'affaires généré', val:curr.revenue, prevVal: prev?prev.revenue:null, fmt:function(v){return v.toFixed(2)+' '+sym;}, caption:'Room service &amp; boutique — hors hébergement (non suivi dans l\'app)', active: dashSimModuleOn('boutique') },
     { ico:'ti-receipt', lane:'stay', lbl:'Taxe de séjour collectée', val:curr.taxeCollected, prevVal: prev?prev.taxeCollected:null, fmt:function(v){return v.toFixed(2)+' '+sym;}, active: dashSimModuleOn('taxe'),
       badge: taxeActive && curr.checkinsDone>0 ? { kind:'gauge', pct:checkinAdoptionPct, val:taxeHeures.toFixed(1)+' h', lbl:'Temps homme gagné · '+taxeMinPerCheckin+'min/check-in' } : null },
-    { ico:'ti-spray', lane:'impact', lbl:'Ménages évités', val:curr.skippedCleanings, prevVal: prev?prev.skippedCleanings:null, fmt:function(v){return v;}, caption: curr.trackedStays ? (curr.trackedStays+' séjour(s) via check-in éco') : 'Aucun séjour avec check-in éco sur la période', active: dashSimModuleOn('menage'),
-      badge: curr.skippedCleanings>0 ? { kind:'gauge', pct:ecoAdoptionPct, val:menageHeures.toFixed(0)+' h', lbl:'Temps homme gagné' } : null },
-    { ico:'ti-droplet', lane:'impact', lbl:'Eau économisée', val:curr.eauEconomisee, prevVal: prev?prev.eauEconomisee:null, fmt:function(v){return Math.round(v)+' L';}, active: dashSimModuleOn('menage'),
-      badge: curr.eauEconomisee>0 ? { kind:'icon', shape:'waterJug', val:'≈ '+(bonbonnes<1?bonbonnes.toFixed(1):Math.round(bonbonnes)), lbl:'bonbonnes de 1000 L' } : null },
-    { ico:'ti-leaf', lane:'impact', lbl:'CO₂ évité', val:curr.co2Evite, prevVal: prev?prev.co2Evite:null, fmt:function(v){return v.toFixed(2)+' kg';}, active: dashSimModuleOn('menage'),
-      badge: curr.co2Evite>0 ? { kind:'icon', shape:'co2Cloud', val:curr.co2Evite.toFixed(2)+' kg', lbl:'non rejetés dans l’atmosphère' } : null },
+    { ico:'ti-spray', lane:'impact', lbl:'Ménages évités', val:simSkipped, prevVal: null, fmt:function(v){return v;}, caption: 'Estimation simulée · '+Math.round(simStays)+' séjour(s) projeté(s) sur la période', active: menageOn,
+      badge: simSkipped>0 ? { kind:'gauge', pct:simOcc, val:menageHeures.toFixed(0)+' h', lbl:'Temps homme gagné' } : null },
+    { ico:'ti-droplet', lane:'impact', lbl:'Eau économisée', val:simEau, prevVal: null, fmt:function(v){return Math.round(v)+' L';}, caption: 'Estimation simulée · '+(CFG.eauMenage||15)+'L/ménage + '+(CFG.eauServ||40)+'L/serviettes', active: menageOn,
+      badge: simEau>0 ? { kind:'icon', shape:'waterJug', val:'≈ '+(simBonbonnes<1?simBonbonnes.toFixed(1):Math.round(simBonbonnes)), lbl:'bonbonnes de 1000 L' } : null },
+    { ico:'ti-leaf', lane:'impact', lbl:'CO₂ évité', val:simCo2, prevVal: null, fmt:function(v){return v.toFixed(2)+' kg';}, caption: 'Estimation simulée · facteur '+(CFG.co2Factor||0.0003)+' kg/L', active: menageOn,
+      badge: simCo2>0 ? { kind:'icon', shape:'co2Cloud', val:simCo2.toFixed(2)+' kg', lbl:'non rejetés dans l’atmosphère' } : null },
     { ico:'ti-clock', lane:'impact', lbl:'Temps homme check-in gagné', val:curr.heuresGagnees, prevVal: prev?prev.heuresGagnees:null, fmt:function(v){return v.toFixed(1)+' h';}, caption:curr.checkinsDone+' check-in(s) effectué(s)', active: dashSimModuleOn('checkin') },
   ];
 
