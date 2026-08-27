@@ -296,13 +296,27 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 .kpi-river-svg{display:block;width:100%;height:auto;min-width:900px;overflow:visible}
 .kpi-river-line{fill:none;stroke-width:3;stroke-linecap:round}
 .kpi-medallion{filter:drop-shadow(0 2px 5px rgba(0,0,0,.15))}
+.kpi-medallion-wrap{transition:opacity .2s ease}
+.kpi-medallion-wrap.inactive{opacity:.35}
 .kpi-lane-caption{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase}
 .kpi-stops{display:grid;grid-template-columns:repeat(7,minmax(140px,1fr));gap:10px;margin-top:-8px;min-width:900px}
+.kreal-tile{transition:opacity .2s ease}
+.kreal-tile.inactive{opacity:.4}
 .kreal-tile .kpi-substat{display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--bdr)}
 .kreal-tile .kpi-substat-ico{flex:none;display:block}
 .kreal-tile .kpi-substat-text{display:flex;flex-direction:column;gap:1px;line-height:1.25}
 .kreal-tile .kpi-substat-text strong{font-size:12px;font-variant-numeric:tabular-nums}
 .kreal-tile .kpi-substat-text span{font-size:10px;color:var(--hi)}
+/* Curseurs du simulateur Accueil : valeur centrée sous la barre plutôt qu'à
+   côté, pour rester lisible quand le curseur est proche d'une extrémité. */
+.slcol{display:flex;flex-direction:column;gap:6px}
+.slcol input[type="range"]{width:100%}
+.slcol .slv{text-align:center;min-width:0}
+/* Pastilles "modules utilisés" du simulateur */
+.module-pill{appearance:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;padding:6px 12px;border-radius:999px;border:1px solid var(--bdr);background:var(--bg);color:var(--mu)}
+.module-pill.on{background:var(--gol);border-color:var(--go);color:var(--tx)}
+.module-pill.on::before{content:'● ';color:var(--go)}
+.module-pill:not(.on)::before{content:'○ ';color:var(--mu)}
 /* Réservations */
 .resa-card{border:1px solid var(--bdr);border-left:4px solid var(--a);border-radius:var(--r);background:var(--card);padding:14px 16px;margin-bottom:10px}
 .resa-opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--bdr)}
@@ -464,6 +478,58 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     <div class="stat"><div class="sv" style="color:var(--am)" id="db-rooms">—</div><div class="sl">Chambres configurées</div></div>
   </div>
 
+  <!-- ══════════ SIMULATEUR — curseurs pour visualiser les gains en rendez-vous ══════════ -->
+  <div class="ca" style="margin-bottom:20px">
+    <div class="ch"><i class="ti ti-adjustments"></i>Paramètres de simulation
+      <button class="chact" onclick="resetDashKpiSim()"><i class="ti ti-refresh" style="font-size:12px"></i> Réinitialiser</button>
+      <button class="chact" id="dashSimToggleBtn" onclick="toggleDashSimVisibility()" style="margin-left:14px"><i class="ti ti-eye-off" id="dashSimToggleIco" style="font-size:12px"></i> <span id="dashSimToggleLbl">Masquer</span></button>
+    </div>
+    <div id="dashSimBody">
+      <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
+        <span>Ajustez ces curseurs pour visualiser l'impact en direct, par exemple en rendez-vous commercial — rien n'est enregistré ici, les vrais réglages restent dans <a href="#" onclick="showPan('gains');return false" style="color:var(--a);font-weight:600">Gains</a>.</span>
+      </div>
+      <div class="g4">
+        <div class="fi">
+          <label class="lb">Taux d'occupation</label>
+          <div class="slcol">
+            <input type="range" id="dashSimOcc" min="0" max="100" step="1" oninput="renderDashKpiSim()">
+            <span class="slv" id="dashSimOccV">—%</span>
+          </div>
+        </div>
+        <div class="fi">
+          <label class="lb">Temps ménage gagné</label>
+          <div class="slcol">
+            <input type="range" id="dashSimMenage" min="15" max="120" step="5" oninput="renderDashKpiSim()">
+            <span class="slv" id="dashSimMenageV">— min</span>
+          </div>
+        </div>
+        <div class="fi">
+          <label class="lb">Temps check-in gagné</label>
+          <div class="slcol">
+            <input type="range" id="dashSimCheckin" min="0" max="60" step="1" oninput="renderDashKpiSim()">
+            <span class="slv" id="dashSimCheckinV">— min</span>
+          </div>
+        </div>
+        <div class="fi">
+          <label class="lb">Veilleur de nuit</label>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+            <label class="tg"><input type="checkbox" id="dashSimNightWatch" checked onchange="renderDashKpiSim()"><span class="tgl"></span></label>
+            <span id="dashSimNightWatchLbl" style="font-size:13px;font-weight:600">Présent</span>
+          </div>
+        </div>
+      </div>
+      <div class="fi" style="margin-top:14px;margin-bottom:0">
+        <label class="lb">Modules utilisés</label>
+        <div id="dashSimModules" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">
+          <button type="button" class="module-pill on" data-mod="checkin" onclick="toggleDashSimModule(this)">Check-in digital</button>
+          <button type="button" class="module-pill on" data-mod="menage" onclick="toggleDashSimModule(this)">Ménage éco</button>
+          <button type="button" class="module-pill on" data-mod="taxe" onclick="toggleDashSimModule(this)">Taxe de séjour</button>
+          <button type="button" class="module-pill on" data-mod="boutique" onclick="toggleDashSimModule(this)">Boutique &amp; room-service</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ══════════ KPI RÉELS — période sélectionnable ══════════ -->
   <div class="ca" style="margin-bottom:20px">
     <div class="ch"><i class="ti ti-chart-bar"></i>Indicateurs réels
@@ -488,46 +554,6 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     </div>
     <div id="kpi-period-label" style="font-size:12px;color:var(--mu);margin-bottom:12px"></div>
     <div id="kpi-real-grid" class="kpi-real-grid"><div class="alt alt-b"><i class="ti ti-loader"></i><span>Chargement…</span></div></div>
-  </div>
-
-  <!-- ══════════ SIMULATEUR — curseurs pour visualiser les gains en rendez-vous ══════════ -->
-  <div class="ca" style="margin-bottom:20px">
-    <div class="ch"><i class="ti ti-adjustments"></i>Paramètres de simulation
-      <button class="chact" onclick="resetDashKpiSim()"><i class="ti ti-refresh" style="font-size:12px"></i> Réinitialiser</button>
-    </div>
-    <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
-      <span>Ajustez ces curseurs pour visualiser l'impact en direct, par exemple en rendez-vous commercial — rien n'est enregistré ici, les vrais réglages restent dans <a href="#" onclick="showPan('gains');return false" style="color:var(--a);font-weight:600">Gains</a>.</span>
-    </div>
-    <div class="g4">
-      <div class="fi">
-        <label class="lb">Taux d'occupation</label>
-        <div class="slrow">
-          <input type="range" id="dashSimOcc" min="0" max="100" step="1" oninput="renderDashKpiSim()">
-          <span class="slv" id="dashSimOccV">—%</span>
-        </div>
-      </div>
-      <div class="fi">
-        <label class="lb">Temps ménage gagné</label>
-        <div class="slrow">
-          <input type="range" id="dashSimMenage" min="15" max="120" step="5" oninput="renderDashKpiSim()">
-          <span class="slv" id="dashSimMenageV">— min</span>
-        </div>
-      </div>
-      <div class="fi">
-        <label class="lb">Temps check-in gagné</label>
-        <div class="slrow">
-          <input type="range" id="dashSimCheckin" min="0" max="60" step="1" oninput="renderDashKpiSim()">
-          <span class="slv" id="dashSimCheckinV">— min</span>
-        </div>
-      </div>
-      <div class="fi">
-        <label class="lb">Veilleur de nuit</label>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-          <label class="tg"><input type="checkbox" id="dashSimNightWatch" checked onchange="renderDashKpiSim()"><span class="tgl"></span></label>
-          <span id="dashSimNightWatchLbl" style="font-size:13px;font-weight:600">Présent</span>
-        </div>
-      </div>
-    </div>
   </div>
 
   <!-- ══════════ KPI HÔTELIER ══════════ -->
@@ -4734,7 +4760,34 @@ function resetDashKpiSim(){
   menEl.value=kpi.minPerClean;
   ciEl.value=kpi.checkinMin;
   nwEl.checked=true;
+  document.querySelectorAll('#dashSimModules .module-pill').forEach(function(b){ b.classList.add('on'); });
   renderDashKpiSim();
+}
+
+// Modules utilisés : pastilles on/off (Check-in digital / Ménage éco / Taxe
+// de séjour / Boutique & room-service). Lues directement depuis le DOM
+// (pas de state JS dupliqué) par renderDashKpiSim() ET renderRealKpis(), qui
+// grise l'étape correspondante du fleuve "Indicateurs réels" — on voit alors
+// ce qu'on perd à désactiver un module, pas seulement ce qu'on gagne à
+// l'activer (même logique que la maquette d'origine).
+function dashSimModuleOn(key){
+  var el=document.querySelector('#dashSimModules .module-pill[data-mod="'+key+'"]');
+  return el ? el.classList.contains('on') : true;
+}
+function toggleDashSimModule(btn){
+  btn.classList.toggle('on');
+  renderDashKpiSim();
+}
+
+function toggleDashSimVisibility(){
+  var body=document.getElementById('dashSimBody');
+  var ico=document.getElementById('dashSimToggleIco');
+  var lbl=document.getElementById('dashSimToggleLbl');
+  if(!body) return;
+  var willHide = body.style.display!=='none';
+  body.style.display = willHide ? 'none' : '';
+  if(ico) ico.className = 'ti '+(willHide?'ti-eye':'ti-eye-off');
+  if(lbl) lbl.textContent = willHide ? 'Afficher' : 'Masquer';
 }
 
 function renderDashKpiSim(){
@@ -4748,6 +4801,7 @@ function renderDashKpiSim(){
   var menage=parseInt(menEl.value)||kpi.minPerClean;
   var checkin=parseInt(ciEl.value); if(isNaN(checkin)) checkin=kpi.checkinMin;
   var nightWatch=nwEl.checked;
+  var menageOn=dashSimModuleOn('menage'), checkinOn=dashSimModuleOn('checkin');
 
   document.getElementById('dashSimOccV').textContent=occ+'%';
   document.getElementById('dashSimMenageV').textContent=menage+' min';
@@ -4759,13 +4813,16 @@ function renderDashKpiSim(){
   var checkinAdoption=Math.min(100,(kpi.checkinAdoption!=null?kpi.checkinAdoption:70)+adoptionBonus);
 
   renderKpiPreview({
-    minPerClean: menage,
-    minPerTowel: kpi.minPerTowel!=null?kpi.minPerTowel:10,
+    minPerClean: menageOn ? menage : 0,
+    minPerTowel: menageOn ? (kpi.minPerTowel!=null?kpi.minPerTowel:10) : 0,
     hourlyRate: kpi.hourlyRate!=null?kpi.hourlyRate:22,
     annualStays: annualStays,
-    checkinMin: checkin,
+    checkinMin: checkinOn ? checkin : 0,
     checkinAdoption: checkinAdoption
   });
+
+  // Le fleuve "Indicateurs réels" grise ses étapes selon ces mêmes modules.
+  if(typeof renderRealKpis==='function') renderRealKpis();
 }
 
 // ═══════════════════════════════════════════════ TRANSLATIONS
@@ -9994,18 +10051,22 @@ function renderRealKpis(){
 
   var bonbonnes = curr.eauEconomisee / 1000;
 
+  // ── Modules utilisés (pastilles du simulateur juste au-dessus) : un module
+  // désactivé grise son étape du fleuve au lieu de la faire disparaître — on
+  // voit ce qu'on perd à ne pas l'activer, pas seulement ce qu'on gagne à
+  // l'activer. Les chiffres restent réels, seule l'opacité change. ──
   var tiles = [
-    { ico:'ti-calendar-check', lane:'stay', lbl:'Séjours', val:curr.stays, prevVal: prev?prev.stays:null, fmt:function(v){return v;} },
-    { ico:'ti-cash', lane:'stay', lbl:'Chiffre d\'affaires généré', val:curr.revenue, prevVal: prev?prev.revenue:null, fmt:function(v){return v.toFixed(2)+' '+sym;}, caption:'Room service &amp; boutique — hors hébergement (non suivi dans l\'app)' },
-    { ico:'ti-receipt', lane:'stay', lbl:'Taxe de séjour collectée', val:curr.taxeCollected, prevVal: prev?prev.taxeCollected:null, fmt:function(v){return v.toFixed(2)+' '+sym;},
+    { ico:'ti-calendar-check', lane:'stay', lbl:'Séjours', val:curr.stays, prevVal: prev?prev.stays:null, fmt:function(v){return v;}, active:true },
+    { ico:'ti-cash', lane:'stay', lbl:'Chiffre d\'affaires généré', val:curr.revenue, prevVal: prev?prev.revenue:null, fmt:function(v){return v.toFixed(2)+' '+sym;}, caption:'Room service &amp; boutique — hors hébergement (non suivi dans l\'app)', active: dashSimModuleOn('boutique') },
+    { ico:'ti-receipt', lane:'stay', lbl:'Taxe de séjour collectée', val:curr.taxeCollected, prevVal: prev?prev.taxeCollected:null, fmt:function(v){return v.toFixed(2)+' '+sym;}, active: dashSimModuleOn('taxe'),
       badge: taxeActive && curr.checkinsDone>0 ? { kind:'gauge', pct:checkinAdoptionPct, val:taxeHeures.toFixed(1)+' h', lbl:'Temps homme gagné · '+taxeMinPerCheckin+'min/check-in' } : null },
-    { ico:'ti-spray', lane:'impact', lbl:'Ménages évités', val:curr.skippedCleanings, prevVal: prev?prev.skippedCleanings:null, fmt:function(v){return v;}, caption: curr.trackedStays ? (curr.trackedStays+' séjour(s) via check-in éco') : 'Aucun séjour avec check-in éco sur la période',
+    { ico:'ti-spray', lane:'impact', lbl:'Ménages évités', val:curr.skippedCleanings, prevVal: prev?prev.skippedCleanings:null, fmt:function(v){return v;}, caption: curr.trackedStays ? (curr.trackedStays+' séjour(s) via check-in éco') : 'Aucun séjour avec check-in éco sur la période', active: dashSimModuleOn('menage'),
       badge: curr.skippedCleanings>0 ? { kind:'gauge', pct:ecoAdoptionPct, val:menageHeures.toFixed(0)+' h', lbl:'Temps homme gagné' } : null },
-    { ico:'ti-droplet', lane:'impact', lbl:'Eau économisée', val:curr.eauEconomisee, prevVal: prev?prev.eauEconomisee:null, fmt:function(v){return Math.round(v)+' L';},
+    { ico:'ti-droplet', lane:'impact', lbl:'Eau économisée', val:curr.eauEconomisee, prevVal: prev?prev.eauEconomisee:null, fmt:function(v){return Math.round(v)+' L';}, active: dashSimModuleOn('menage'),
       badge: curr.eauEconomisee>0 ? { kind:'icon', shape:'waterJug', val:'≈ '+(bonbonnes<1?bonbonnes.toFixed(1):Math.round(bonbonnes)), lbl:'bonbonnes de 1000 L' } : null },
-    { ico:'ti-leaf', lane:'impact', lbl:'CO₂ évité', val:curr.co2Evite, prevVal: prev?prev.co2Evite:null, fmt:function(v){return v.toFixed(2)+' kg';},
+    { ico:'ti-leaf', lane:'impact', lbl:'CO₂ évité', val:curr.co2Evite, prevVal: prev?prev.co2Evite:null, fmt:function(v){return v.toFixed(2)+' kg';}, active: dashSimModuleOn('menage'),
       badge: curr.co2Evite>0 ? { kind:'icon', shape:'co2Cloud', val:curr.co2Evite.toFixed(2)+' kg', lbl:'non rejetés dans l’atmosphère' } : null },
-    { ico:'ti-clock', lane:'impact', lbl:'Temps homme check-in gagné', val:curr.heuresGagnees, prevVal: prev?prev.heuresGagnees:null, fmt:function(v){return v.toFixed(1)+' h';}, caption:curr.checkinsDone+' check-in(s) effectué(s)' },
+    { ico:'ti-clock', lane:'impact', lbl:'Temps homme check-in gagné', val:curr.heuresGagnees, prevVal: prev?prev.heuresGagnees:null, fmt:function(v){return v.toFixed(1)+' h';}, caption:curr.checkinsDone+' check-in(s) effectué(s)', active: dashSimModuleOn('checkin') },
   ];
 
   // ── Fleuve : tracé SVG reliant les 7 médaillons, du séjour vécu (voie
@@ -10041,9 +10102,11 @@ function renderRealKpis(){
   var pathD = kpiCatmull(pts);
   var medallions = tiles.map(function(t,idx){
     var p = pts[idx];
-    return '<circle cx="'+p.x+'" cy="'+p.y+'" r="15" fill="'+colCard+'"></circle>'
+    return '<g class="kpi-medallion-wrap'+(t.active?'':' inactive')+'">'
+      + '<circle cx="'+p.x+'" cy="'+p.y+'" r="15" fill="'+colCard+'"></circle>'
       + '<circle cx="'+p.x+'" cy="'+p.y+'" r="12" fill="'+laneColor[t.lane]+'" class="kpi-medallion"></circle>'
-      + '<text x="'+p.x+'" y="'+(p.y+4)+'" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">'+(idx+1)+'</text>';
+      + '<text x="'+p.x+'" y="'+(p.y+4)+'" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">'+(idx+1)+'</text>'
+      + '</g>';
   }).join('');
   var riverSvg = '<div class="kpi-river-wrap"><svg class="kpi-river-svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">'
     + '<text x="'+marginX+'" y="18" class="kpi-lane-caption" fill="'+colStay+'">Le séjour</text>'
@@ -10062,7 +10125,7 @@ function renderRealKpis(){
         + singleUnitFigureSvg(pctForIcon, laneColor[t.lane], shapeForIcon, idSuffix)
         + '</div><div class="kpi-substat-text"><strong>'+t.badge.val+'</strong><span>'+t.badge.lbl+'</span></div></div>';
     }
-    return '<div class="kreal-tile">'
+    return '<div class="kreal-tile'+(t.active?'':' inactive')+'">'
       + '<div class="kt-ico"><i class="ti '+t.ico+'"></i></div>'
       + '<div class="kt-lbl">'+t.lbl+'</div>'
       + '<div class="kt-val">'+t.fmt(t.val)+'</div>'
