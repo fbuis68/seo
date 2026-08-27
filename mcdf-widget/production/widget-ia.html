@@ -192,6 +192,9 @@
   footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 12px; color: var(--ink-muted); line-height: 1.7; max-width: 74ch; }
   footer code { background: var(--surface-2); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
   .version-tag { font-size: 11px; color: var(--ink-muted); font-family: var(--font-mono); margin: 6px 0 0; }
+  .suggest-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .suggest-btn { font: inherit; font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-tint); border: none; border-radius: 100px; padding: 6px 13px; cursor: pointer; }
+  .suggest-btn:hover { filter: brightness(0.96); }
 
   @media (max-width: 880px) {
     .kpis { grid-template-columns: repeat(2, 1fr); }
@@ -207,6 +210,10 @@
       <h1>Génération de rapports</h1>
       <p class="lede">Données en direct, lecture seule — aucune action d'écriture n'est effectuée par ce widget.</p>
       <p class="version-tag">Version du fichier : 2026-08-27</p>
+      <div class="suggest-row">
+        <button type="button" class="suggest-btn" id="suggest-report-btn">💡 Suggérer un nouveau rapport</button>
+        <button type="button" class="suggest-btn" id="suggest-filter-btn">🔎 Suggérer un nouveau filtre</button>
+      </div>
     </div>
     <span class="status-tag" id="status-tag"><span class="dot"></span> Connexion…</span>
   </header>
@@ -1209,4 +1216,46 @@ function renderAll(DATA) {
     }
   }
 })();
+
+// ------------------------------------------------------------------
+// Boutons "Suggerer..." -- ouvrent widget-suggestions.html avec un
+// prompt deja documente (module, fichier, entites API confirmees ici)
+// pour que la demande d'evolution soit exploitable sans aller-retour.
+// ------------------------------------------------------------------
+const SUGGEST_MODULE = 'Génération de rapports';
+function buildSuggestContext() {
+  return [
+    'Contexte technique (pré-rempli automatiquement) :',
+    '- Widget : Génération de rapports (widget-ia.html)',
+    '- Entités API MCDF déjà utilisées ici : customer, fullConventionQualiopi, invoice, conventionAttendee, session, sessionQualiopi (via /wa/{entity}/list?nopaging=1)',
+    '- Onglets existants : Commercial, Planning, Formateurs, Listing',
+    '',
+  ].join('\n');
+}
+function openSuggest(kind) {
+  const context = buildSuggestContext();
+  let titre, desc;
+  if (kind === 'report') {
+    titre = 'Nouveau rapport : ';
+    desc = context + [
+      'Décrivez le nouveau rapport ou indicateur souhaité :',
+      '- Objectif du rapport : ',
+      '- Données/champs nécessaires (si connus) : ',
+      '- Filtre ou période à appliquer : ',
+      '- Exemple concret attendu : ',
+    ].join('\n');
+  } else {
+    titre = 'Nouveau filtre : ';
+    desc = context + [
+      'Décrivez le nouveau filtre souhaité :',
+      '- Sur quel tableau/section doit-il s\'appliquer : ',
+      '- Valeurs ou critère du filtre : ',
+      '- Doit-il se cumuler avec les filtres existants ou les remplacer : ',
+    ].join('\n');
+  }
+  const url = `widget-suggestions.html?module=${encodeURIComponent(SUGGEST_MODULE)}&titre=${encodeURIComponent(titre)}&desc=${encodeURIComponent(desc)}`;
+  window.open(url, '_blank');
+}
+document.getElementById('suggest-report-btn').addEventListener('click', () => openSuggest('report'));
+document.getElementById('suggest-filter-btn').addEventListener('click', () => openSuggest('filter'));
 </script>

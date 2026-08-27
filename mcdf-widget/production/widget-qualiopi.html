@@ -102,6 +102,9 @@
   footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 12px; color: var(--ink-muted); line-height: 1.7; max-width: 74ch; }
   footer code { background: var(--surface-2); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
   .version-tag { font-size: 11px; color: var(--ink-muted); font-family: var(--font-mono); margin: 6px 0 0; }
+  .suggest-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .suggest-btn { font: inherit; font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-tint); border: none; border-radius: 100px; padding: 6px 13px; cursor: pointer; }
+  .suggest-btn:hover { filter: brightness(0.96); }
 
   .tabs { display: flex; gap: 6px; margin-bottom: 22px; border-bottom: 1px solid var(--border); }
   .tab-btn {
@@ -192,6 +195,10 @@
     <h1>Assistant Qualiopi</h1>
     <p class="lede">Indicateurs calculés en direct à partir des entités confirmées (<code>sessionQualiopi</code>, <code>fullConventionQualiopi</code>) -- suivi horaire, documentaire et enquêtes pour les conventions/OPCO, pas les indicateurs qualité classiques (satisfaction, réclamations) qui restent en saisie manuelle faute de source MCDF connue.</p>
     <p class="version-tag">Version du fichier : 2026-08-27</p>
+    <div class="suggest-row">
+      <button type="button" class="suggest-btn" id="suggest-report-btn">💡 Suggérer un nouvel indicateur</button>
+      <button type="button" class="suggest-btn" id="suggest-filter-btn">🔎 Suggérer un nouveau filtre</button>
+    </div>
   </header>
 
   <div class="tabs">
@@ -968,4 +975,46 @@ jsonBox.addEventListener('change', () => {
     alert('JSON invalide, valeurs non importées.');
   }
 });
+
+// ------------------------------------------------------------------
+// Boutons "Suggerer..." -- ouvrent widget-suggestions.html avec un
+// prompt deja documente (module, fichier, entites API confirmees ici)
+// pour que la demande d'evolution soit exploitable sans aller-retour.
+// ------------------------------------------------------------------
+const SUGGEST_MODULE = 'Assistant Qualiopi';
+function buildSuggestContext() {
+  return [
+    'Contexte technique (pré-rempli automatiquement) :',
+    '- Widget : Assistant Qualiopi (widget-qualiopi.html)',
+    '- Entités API MCDF déjà utilisées ici : sessionQualiopi, fullConventionQualiopi (via /wa/{entity}/list?nopaging=1)',
+    '- Onglets existants : Indicateurs, Référentiel (32 indicateurs), Détection API, Saisie manuelle',
+    '',
+  ].join('\n');
+}
+function openSuggest(kind) {
+  const context = buildSuggestContext();
+  let titre, desc;
+  if (kind === 'report') {
+    titre = 'Nouvel indicateur : ';
+    desc = context + [
+      'Décrivez le nouvel indicateur Qualiopi souhaité :',
+      '- Numéro/critère Qualiopi concerné (si connu) : ',
+      '- Donnée nécessaire pour le calculer : ',
+      '- Source envisagée (API MCDF, saisie manuelle, site web du client) : ',
+      '- Exemple concret attendu : ',
+    ].join('\n');
+  } else {
+    titre = 'Nouveau filtre : ';
+    desc = context + [
+      'Décrivez le nouveau filtre souhaité :',
+      '- Sur quel onglet/section doit-il s\'appliquer : ',
+      '- Valeurs ou critère du filtre : ',
+      '- Doit-il se cumuler avec les filtres existants ou les remplacer : ',
+    ].join('\n');
+  }
+  const url = `widget-suggestions.html?module=${encodeURIComponent(SUGGEST_MODULE)}&titre=${encodeURIComponent(titre)}&desc=${encodeURIComponent(desc)}`;
+  window.open(url, '_blank');
+}
+document.getElementById('suggest-report-btn').addEventListener('click', () => openSuggest('report'));
+document.getElementById('suggest-filter-btn').addEventListener('click', () => openSuggest('filter'));
 </script>
