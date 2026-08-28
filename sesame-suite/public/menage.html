@@ -7,6 +7,212 @@
 <link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap">
 <style>
+/* ════════════════ SPLASH SCREEN (écran de démarrage) ════════════════
+   Même mécanique que le splash de admin.html (marque Sesame, halo,
+   animation "journey" en 4 étapes, loader) — graphisme adapté au sujet
+   Ménage & Maintenance : accent doré (var --menage déjà utilisée dans
+   l'app pour les badges de ménage) au lieu du rose admin/client, et
+   parcours reprenant le flux réel de l'appli (Planning → Chambres →
+   Intervention → Contrôle) plutôt que le parcours client (réservation,
+   check-in…). */
+:root{
+  --sesame-burgundy: #8B1A2E;
+  --sesame-wine: #6B1423;
+  --sesame-black: #2B0E14;
+  --sesame-rose: #D9A93A;
+  --sesame-white: #FFFBF3;
+}
+
+.sesame-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: var(--sesame-white);
+  background:
+    radial-gradient(circle at 18% 18%, rgba(184, 134, 10, .4), transparent 38%),
+    linear-gradient(118deg, var(--sesame-burgundy) 0%, var(--sesame-wine) 38%, var(--sesame-black) 88%);
+  transition: opacity .55s ease, visibility .55s ease;
+}
+
+.sesame-splash::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 25%, rgba(255,255,255,.045) 48%, transparent 68%);
+  transform: translateX(-100%);
+  animation: sheen 6.5s ease-in-out infinite;
+}
+
+.sesame-splash__halo {
+  position: absolute;
+  width: min(760px, 80vw);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: rgba(139, 26, 46, .22);
+  filter: blur(90px);
+}
+
+.sesame-splash__content {
+  position: relative;
+  z-index: 1;
+  width: min(1120px, calc(100vw - 48px));
+  text-align: center;
+}
+
+.sesame-splash__logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: clamp(245px, 32vw, 470px);
+  height: auto;
+  margin: 0 auto clamp(54px, 8vh, 90px);
+  filter: drop-shadow(0 12px 28px rgba(0,0,0,.28));
+  animation: logo-in 1.4s cubic-bezier(.2,.75,.25,1) both;
+}
+
+.splash-mark { color: var(--sesame-white); }
+.splash-mark svg { width: 82px; height: 82px; }
+.splash-word__sesame { font-family:'DM Serif Display',serif; font-size: clamp(28px,4vw,40px); letter-spacing: .06em; line-height: 1; color: var(--sesame-white); }
+.splash-word__tech { font-family:'DM Sans',Arial,sans-serif; font-size: clamp(12px,1.3vw,15px); font-weight: 600; letter-spacing: .38em; color: var(--sesame-rose); margin-top: 6px; }
+.splash-word__tag { font-family:'DM Sans',Arial,sans-serif; font-style: italic; font-size: 13px; font-weight: 300; letter-spacing: .02em; color: rgba(255,255,255,.62); margin-top: 10px; }
+
+.journey {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: clamp(22px, 6vw, 88px);
+  margin-bottom: clamp(48px, 7vh, 74px);
+}
+
+.journey__line {
+  position: absolute;
+  top: 39px;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  overflow: hidden;
+  background: rgba(255,255,255,.14);
+}
+
+.journey__line span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, var(--sesame-white) 15%, var(--sesame-rose) 85%, transparent);
+  transform-origin: left;
+  animation: draw-line 3.6s .2s ease both;
+}
+
+.journey__step {
+  position: relative;
+  opacity: 0;
+  transform: translateY(10px);
+  animation: step-in .85s var(--delay) ease forwards;
+}
+
+.journey__step::after {
+  content: "";
+  position: absolute;
+  top: 35px;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sesame-white);
+  box-shadow: 0 0 18px 4px rgba(217, 169, 58, .5);
+  transform: translate(-50%, -50%);
+}
+
+.journey__icon {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 15px;
+  color: #f6e3c3;
+  background: rgba(42, 14, 4, .28);
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 22px;
+  backdrop-filter: blur(8px);
+}
+
+.journey__icon svg {
+  width: 46px;
+  height: 46px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.journey__step > span {
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: .08em;
+  color: rgba(255,255,255,.72);
+}
+
+.loader {
+  width: min(360px, 62vw);
+  height: 2px;
+  margin: 0 auto 18px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: rgba(255,255,255,.17);
+}
+
+.loader span {
+  display: block;
+  width: 55%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--sesame-rose), white);
+  box-shadow: 0 0 12px rgba(255,255,255,.7);
+  animation: loading 2.6s ease-in-out infinite;
+}
+
+.sesame-splash__status {
+  margin: 0;
+  font-size: clamp(14px, 1.35vw, 18px);
+  font-weight: 300;
+  letter-spacing: .025em;
+  color: rgba(255,255,255,.84);
+}
+
+.sesame-splash.is-leaving { opacity: 0; visibility: hidden; }
+
+@keyframes logo-in {
+  from { opacity: 0; transform: translateY(-12px) scale(.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes step-in { to { opacity: 1; transform: none; } }
+@keyframes draw-line { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes sheen { 0%, 45% { transform: translateX(-100%); } 75%, 100% { transform: translateX(100%); } }
+@keyframes loading { 0% { transform: translateX(-110%); } 50%, 100% { transform: translateX(185%); } }
+
+@media (max-width: 680px) {
+  .sesame-splash__content { width: min(92vw, 430px); }
+  .sesame-splash__logo { margin-bottom: 44px; }
+  .journey { gap: 8px; margin-bottom: 52px; }
+  .journey__line { top: 31px; }
+  .journey__icon { width: 58px; height: 58px; border-radius: 18px; }
+  .journey__icon svg { width: 36px; height: 36px; }
+  .journey__step::after { top: 31px; width: 6px; height: 6px; }
+  .journey__step > span { font-size: 10px; letter-spacing: .02em; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sesame-splash *, .sesame-splash *::before, .sesame-splash *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+}
+
 :root{
   --wine:#8B1A2E; --wine-d:#6B1423; --wine-l:#FDEDF0;
   --menage:#B8860A; --menage-l:#FBF2DC;
@@ -128,6 +334,48 @@ main{flex:1;padding:10px 18px 110px}
 </style>
 </head>
 <body>
+
+<!-- ════════════════ SPLASH SCREEN ════════════════ -->
+<div class="sesame-splash" id="sesameSplash" role="status" aria-live="polite" aria-label="Chargement de l'espace Ménage &amp; Maintenance">
+  <div class="sesame-splash__halo" aria-hidden="true"></div>
+  <div class="sesame-splash__content">
+    <div class="sesame-splash__logo">
+      <div class="splash-mark" aria-hidden="true">
+        <svg viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-dasharray="72 40" transform="rotate(-18 50 50)"/>
+          <circle cx="50" cy="50" r="27" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-dasharray="48 32" transform="rotate(40 50 50)"/>
+          <circle cx="50" cy="50" r="14" fill="none" stroke="var(--sesame-rose)" stroke-width="6" stroke-linecap="round" stroke-dasharray="28 20" transform="rotate(-65 50 50)"/>
+        </svg>
+      </div>
+      <div>
+        <div class="splash-word__sesame">SESAME</div>
+        <div class="splash-word__tech">TECHNOLOGY</div>
+        <div class="splash-word__tag">Ménage &amp; Maintenance</div>
+      </div>
+    </div>
+    <div class="journey" aria-label="Planning, chambres, intervention et contrôle qualité">
+      <div class="journey__line" aria-hidden="true"><span></span></div>
+      <div class="journey__step" style="--delay:.25s">
+        <div class="journey__icon"><svg viewBox="0 0 64 64" aria-hidden="true"><rect x="10" y="15" width="44" height="39" rx="6"/><path d="M10 25h44M21 10v10M43 10v10"/><path d="m24 40 6 6 12-14"/></svg></div>
+        <span>Planning</span>
+      </div>
+      <div class="journey__step" style="--delay:1.05s">
+        <div class="journey__icon"><svg viewBox="0 0 64 64" aria-hidden="true"><rect x="18" y="8" width="28" height="48" rx="5"/><circle cx="38" cy="32" r="2.5"/><path d="M18 56h28"/></svg></div>
+        <span>Chambres</span>
+      </div>
+      <div class="journey__step" style="--delay:1.85s">
+        <div class="journey__icon"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M26 20v-6a4 4 0 0 1 4-4h0a4 4 0 0 1 4 4v6"/><rect x="21" y="20" width="22" height="34" rx="6"/><path d="M43 17h6M46 14v6M50 10l4 4M50 18l4-2"/></svg></div>
+        <span>Intervention</span>
+      </div>
+      <div class="journey__step" style="--delay:2.65s">
+        <div class="journey__icon"><svg viewBox="0 0 64 64" aria-hidden="true"><rect x="24" y="7" width="16" height="9" rx="3"/><rect x="14" y="11" width="36" height="46" rx="6"/><path d="m22 33 7 7 15-16"/></svg></div>
+        <span>Contrôle</span>
+      </div>
+    </div>
+    <div class="loader" aria-hidden="true"><span></span></div>
+    <p class="sesame-splash__status">Préparation de votre planning…</p>
+  </div>
+</div>
 
 <div id="loginGate">
   <div class="login-box">
@@ -285,9 +533,25 @@ function mgApiFetch(path, opts){
 }
 
 // ═══════════════════════════════════════════════ BOOT
+window.closeSesameSplash = function () {
+  var splash = document.getElementById('sesameSplash');
+  if (!splash) return;
+  splash.classList.add('is-leaving');
+  window.setTimeout(function () { splash.remove(); }, 650);
+};
+
 window.addEventListener('DOMContentLoaded', function(){
+  // Durée minimale d'affichage pour laisser jouer l'animation du parcours
+  // (4 étapes, la dernière finit vers 2.65s + .85s) — combinée à la vraie
+  // disponibilité de l'écran suivant (login, ou fin de mgBoot() si déjà
+  // authentifié) : jamais fermé avant l'un ou l'autre, jamais bloqué même
+  // en cas d'échec de chargement (cf. même mécanique que admin.html).
+  var splashMinDelay = new Promise(function(resolve){ setTimeout(resolve, 3900); });
   var t = mgSavedToken(), e = mgSavedEntity();
-  if(t && e){ mgBoot(t, e, null); }
+  var appReady = (t && e) ? mgBoot(t, e, null) : Promise.resolve();
+  Promise.all([splashMinDelay, appReady]).catch(function(){}).then(function(){
+    window.closeSesameSplash();
+  });
 });
 
 async function mgBoot(token, entityCode, hotelName){
