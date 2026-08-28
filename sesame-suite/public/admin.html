@@ -2066,6 +2066,46 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     </div>
   </div>
 
+  <!-- Mise à jour d'une réservation -->
+  <div class="ca">
+    <div class="ch"><i class="ti ti-refresh-dot"></i>Mise à jour d'une réservation</div>
+    <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
+      <span>Optionnel — répercute vers la source externe les changements de chambre et les annulations/réactivations faits depuis le panneau "Réservations". La réservation est toujours mise à jour ici quel que soit l'état de ce réglage ; laissez le chemin vide tant que vous n'avez pas confirmé qu'un tel endpoint existe côté source réelle.</span>
+    </div>
+    <div class="fi">
+      <label class="lb">Chemin de l'endpoint de mise à jour</label>
+      <input type="text" id="bs-updateEndpointPath" placeholder="Ex : /ws/booking/update — laisser vide pour désactiver" autocomplete="off">
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Méthode HTTP</label>
+        <select id="bs-updateEndpointMethod"><option value="POST">POST</option><option value="GET">GET</option></select>
+      </div>
+      <div class="fi">
+        <label class="lb">Format du corps si POST</label>
+        <select id="bs-updateEndpointBodyFormat"><option value="json">JSON</option><option value="form">Formulaire (application/x-www-form-urlencoded)</option></select>
+      </div>
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Nom du paramètre portant le code de réservation</label>
+        <input type="text" id="bs-updateCodeParam" placeholder="code">
+      </div>
+      <div class="fi">
+        <label class="lb">Nom du paramètre portant le nouveau code chambre (optionnel)</label>
+        <input type="text" id="bs-updateRoomParam" placeholder="Ex : facilityCode — vide si non notifié">
+      </div>
+    </div>
+    <div class="fi">
+      <label class="lb">Nom du paramètre portant le nouveau statut (optionnel)</label>
+      <input type="text" id="bs-updateStatusParam" placeholder="Ex : status — vide si non notifié">
+    </div>
+    <div class="fi">
+      <label class="lb">Paramètres additionnels du corps (un par ligne : clé=valeur)</label>
+      <textarea id="bs-updateEndpointBodyParams" rows="2" placeholder=""></textarea>
+    </div>
+  </div>
+
   </details>
 
   <!-- Synchronisation -->
@@ -5852,6 +5892,13 @@ function bsCollectFormValues(){
     doorRoomParam: document.getElementById('bs-doorRoomParam').value.trim(),
     doorResponseSuccessPath: document.getElementById('bs-doorResponseSuccessPath').value.trim(),
     doorEndpointBodyParams: bsTextToParams(document.getElementById('bs-doorEndpointBodyParams').value),
+    updateEndpointPath: document.getElementById('bs-updateEndpointPath').value.trim(),
+    updateEndpointMethod: document.getElementById('bs-updateEndpointMethod').value,
+    updateEndpointBodyFormat: document.getElementById('bs-updateEndpointBodyFormat').value,
+    updateCodeParam: document.getElementById('bs-updateCodeParam').value.trim(),
+    updateRoomParam: document.getElementById('bs-updateRoomParam').value.trim(),
+    updateStatusParam: document.getElementById('bs-updateStatusParam').value.trim(),
+    updateEndpointBodyParams: bsTextToParams(document.getElementById('bs-updateEndpointBodyParams').value),
     syncIntervalMinutes: document.getElementById('bs-syncInterval').value ? parseInt(document.getElementById('bs-syncInterval').value) : null,
   };
 }
@@ -5923,6 +5970,13 @@ async function bsInit(){
   document.getElementById('bs-doorRoomParam').value = BS_CONFIG.doorRoomParam||'';
   document.getElementById('bs-doorResponseSuccessPath').value = BS_CONFIG.doorResponseSuccessPath||'';
   document.getElementById('bs-doorEndpointBodyParams').value = bsParamsToText(BS_CONFIG.doorEndpointBodyParams);
+  document.getElementById('bs-updateEndpointPath').value = BS_CONFIG.updateEndpointPath||'';
+  document.getElementById('bs-updateEndpointMethod').value = BS_CONFIG.updateEndpointMethod||'POST';
+  document.getElementById('bs-updateEndpointBodyFormat').value = BS_CONFIG.updateEndpointBodyFormat||'json';
+  document.getElementById('bs-updateCodeParam').value = BS_CONFIG.updateCodeParam||'';
+  document.getElementById('bs-updateRoomParam').value = BS_CONFIG.updateRoomParam||'';
+  document.getElementById('bs-updateStatusParam').value = BS_CONFIG.updateStatusParam||'';
+  document.getElementById('bs-updateEndpointBodyParams').value = bsParamsToText(BS_CONFIG.updateEndpointBodyParams);
   bsRenderStatusBanner();
   document.getElementById('bs-result-card').style.display='none';
   document.getElementById('bs-preset').value = BS_CONFIG.presetId||'none';
@@ -10456,55 +10510,88 @@ function renderRealKpis(){
 
   var sym = getCurrSym();
 
-  // ── Sous-indicateurs "temps homme gagné" (taxe/ménage) et pictos eau/CO₂ —
-  // dérivés des mêmes barèmes déjà réels ailleurs sur cette page (minutes de
-  // check-in par module, minutes/ménage du bloc "KPI hôtelier" juste
-  // en-dessous) : ce panneau reste 100% données réelles, jamais de valeur
-  // simulée ou inventée pour l'habillage visuel. ──
+  // ── Sous-indicateurs "temps homme gagné" (taxe/ménage) — barèmes réels
+  // (minutes de check-in par module) appliqués soit au décompte réel de
+  // check-in de la période, soit au décompte simulé ci-dessous. ──
   var taxeMod = CFG.checkinModules && CFG.checkinModules.taxe;
   var taxeActive = !taxeMod || taxeMod.active !== false;
   var taxeMinPerCheckin = (taxeMod && taxeMod.staffMinutesSaved != null) ? taxeMod.staffMinutesSaved : STAFF_TIME_DEFAULTS.taxe;
   var taxeHeures = taxeActive ? (curr.checkinsDone * taxeMinPerCheckin) / 60 : 0;
   var checkinAdoptionPct = curr.stays > 0 ? Math.min(100, (curr.checkinsDone / curr.stays) * 100) : 0;
 
-  // ── Ménages / Eau / CO₂ simulés : contrairement à Séjours/CA/Taxe/Temps
-  // check-in (données réelles de la période), ces 3 KPI suivent directement
-  // le simulateur ci-dessus (occupation, chambres, module Ménage éco) — même
-  // barème que le bloc "KPI hôtelier" (séjour type 3 nuits, ménage tous les
-  // 3 jours) et les mêmes CFG.eauMenage/eauServ/co2Factor réels, mis à
-  // l'échelle sur la période affichée plutôt qu'à l'année. ──
+  // ── Simulation en cascade : quand le simulateur (bloc "Paramètres de
+  // simulation" ci-dessus) est affiché, Séjours/Taxe de séjour/Ménages/Eau/
+  // CO₂/Temps homme gagné suivent TOUS le même nombre de séjours simulé
+  // (occupation × chambres × séjour moyen, période affichée) au lieu des
+  // données réelles — Chiffre d'affaires reste toujours réel (aucun tarif
+  // room-service/boutique n'est simulé). Masquer le simulateur revient
+  // immédiatement aux données réelles pour ces 6 tuiles (cf.
+  // toggleDashSimVisibility, qui rappelle cette fonction). ──
+  var simBodyEl = document.getElementById('dashSimBody');
+  var simActive = !!(simBodyEl && simBodyEl.style.display !== 'none');
   var simOccEl = document.getElementById('dashSimOcc');
   var simOcc = simOccEl ? (parseInt(simOccEl.value) || 0) : 0;
+  var simAvgStayEl = document.getElementById('dashSimAvgStay');
+  var simAvgStay = simAvgStayEl ? (parseInt(simAvgStayEl.value) || 3) : 3;
   var simMenageEl = document.getElementById('dashSimMenage');
   var simMenageMin = (CFG.kpi && CFG.kpi.minPerClean != null) ? CFG.kpi.minPerClean : 45;
   if(simMenageEl) simMenageMin = parseInt(simMenageEl.value) || simMenageMin;
+  var simCheckinEl = document.getElementById('dashSimCheckin');
+  var simCheckinMin = (CFG.kpi && CFG.kpi.checkinMin != null) ? CFG.kpi.checkinMin : 8;
+  if(simCheckinEl) simCheckinMin = parseInt(simCheckinEl.value); if(isNaN(simCheckinMin)) simCheckinMin = 0;
+  var simNightWatchEl = document.getElementById('dashSimNightWatch');
+  var simNightWatch = simNightWatchEl ? simNightWatchEl.checked : true;
   var simRooms = dashSimRoomsCount();
   var periodDays = Math.max(1, Math.round((new Date(range.to) - new Date(range.from)) / 86400000) + 1);
   var menageOn = dashSimModuleOn('menage');
-  var simMenS = 2, simSrvS = 2; // séjour type 3 nuits, ménage/serviettes tous les 3 jours — même hypothèse que renderKpiPreview()
-  var simStays = simRooms * periodDays * (simOcc / 100) / 3;
-  var simSkipped = menageOn ? Math.round(simStays * simMenS) : 0;
-  var simEau = menageOn ? simStays * (simMenS * (CFG.eauMenage || 15) + simSrvS * (CFG.eauServ || 40)) : 0;
+  var checkinOn = dashSimModuleOn('checkin');
+  var taxeOn = dashSimModuleOn('taxe');
+  var simMenS = simAvgStay - Math.ceil(simAvgStay/3), simSrvS = simMenS; // même hypothèse que renderKpiPreview() (ménage/serviettes tous les 3 jours)
+  var simStays = simRooms * periodDays * (simOcc / 100) / simAvgStay;
+  // Ménages/Eau/CO2 n'ont pas d'équivalent "réel" tracké par l'app (toujours
+  // dérivés du simulateur) — masquer le simulateur doit donc les ramener à
+  // zéro (tuiles grisées), pas les laisser figées sur le dernier scénario.
+  var simSkipped = (menageOn && simActive) ? Math.round(simStays * simMenS) : 0;
+  var simEau = (menageOn && simActive) ? simStays * (simMenS * (CFG.eauMenage || 15) + simSrvS * (CFG.eauServ || 40)) : 0;
   var simCo2 = simEau * (CFG.co2Factor || 0.0003);
   var simBonbonnes = simEau / 1000;
   var menageHeures = (simSkipped * simMenageMin) / 60;
+
+  var simAdoptionBonus = simNightWatch ? 0 : 15; // sans veilleur de nuit, le check-in en ligne devient la seule option à l'arrivée tardive
+  var simCheckinAdoption = Math.min(100, ((CFG.kpi&&CFG.kpi.checkinAdoption!=null)?CFG.kpi.checkinAdoption:70) + simAdoptionBonus);
+  var simCheckinsDone = checkinOn ? Math.round(simStays * (simCheckinAdoption/100)) : 0;
+  var simHeuresCheckin = checkinOn ? (simCheckinsDone * simCheckinMin) / 60 : 0;
+  var simTaxeHeures = taxeActive ? (simCheckinsDone * taxeMinPerCheckin) / 60 : 0;
+  // Taxe simulée : taxe moyenne réelle par séjour sur la période (si des
+  // données existent), mise à l'échelle du nombre de séjours simulé — sinon
+  // repli sur le tarif légal de la catégorie de l'hôtel × durée simulée.
+  var avgTaxePerStay = curr.stays > 0 ? (curr.taxeCollected / curr.stays) : ((CFG.tarifs && CFG.tarifs[CFG.stars-1]) || 0) * simAvgStay;
+  var simTaxe = taxeOn ? simStays * avgTaxePerStay : 0;
+
+  var displayStays = simActive ? Math.round(simStays) : curr.stays;
+  var displayTaxe = simActive ? simTaxe : curr.taxeCollected;
+  var displayTaxeHeures = simActive ? simTaxeHeures : taxeHeures;
+  var displayCheckinAdoptionPct = simActive ? simCheckinAdoption : checkinAdoptionPct;
+  var displayCheckinsDone = simActive ? simCheckinsDone : curr.checkinsDone;
+  var displayHeuresGagnees = simActive ? simHeuresCheckin : curr.heuresGagnees;
+  var simCaption = 'Estimation simulée · '+Math.round(simStays)+' séjour(s) projeté(s) sur la période';
 
   // ── Modules utilisés (pastilles du simulateur juste au-dessus) : un module
   // désactivé grise son étape du fleuve au lieu de la faire disparaître — on
   // voit ce qu'on perd à ne pas l'activer, pas seulement ce qu'on gagne à
   // l'activer. ──
   var tiles = [
-    { ico:'ti-calendar-check', lane:'stay', lbl:'Séjours', val:curr.stays, prevVal: prev?prev.stays:null, fmt:function(v){return v;}, active:true },
+    { ico:'ti-calendar-check', lane:'stay', lbl:'Séjours', val:displayStays, prevVal: simActive?null:(prev?prev.stays:null), fmt:function(v){return v;}, caption: simActive?simCaption:null, active:true },
     { ico:'ti-cash', lane:'stay', lbl:'Chiffre d\'affaires généré', val:curr.revenue, prevVal: prev?prev.revenue:null, fmt:function(v){return v.toFixed(2)+' '+sym;}, caption:'Room service &amp; boutique — hors hébergement (non suivi dans l\'app)', active: dashSimModuleOn('boutique') },
-    { ico:'ti-receipt', lane:'stay', lbl:'Taxe de séjour collectée', val:curr.taxeCollected, prevVal: prev?prev.taxeCollected:null, fmt:function(v){return v.toFixed(2)+' '+sym;}, active: dashSimModuleOn('taxe'),
-      badge: taxeActive && curr.checkinsDone>0 ? { kind:'gauge', pct:checkinAdoptionPct, val:taxeHeures.toFixed(1)+' h', lbl:'Temps homme gagné · '+taxeMinPerCheckin+'min/check-in' } : null },
-    { ico:'ti-spray', lane:'impact', lbl:'Ménages évités', val:simSkipped, prevVal: null, fmt:function(v){return v;}, caption: 'Estimation simulée · '+Math.round(simStays)+' séjour(s) projeté(s) sur la période', active: menageOn,
+    { ico:'ti-receipt', lane:'stay', lbl:'Taxe de séjour collectée', val:displayTaxe, prevVal: simActive?null:(prev?prev.taxeCollected:null), fmt:function(v){return v.toFixed(2)+' '+sym;}, caption: simActive?simCaption:null, active: taxeOn,
+      badge: taxeActive && displayCheckinsDone>0 ? { kind:'gauge', pct:displayCheckinAdoptionPct, val:displayTaxeHeures.toFixed(1)+' h', lbl:'Temps homme gagné · '+taxeMinPerCheckin+'min/check-in' } : null },
+    { ico:'ti-spray', lane:'impact', lbl:'Ménages évités', val:simSkipped, prevVal: null, fmt:function(v){return v;}, caption: simCaption, active: menageOn && simActive,
       badge: simSkipped>0 ? { kind:'gauge', pct:simOcc, val:menageHeures.toFixed(0)+' h', lbl:'Temps homme gagné' } : null },
-    { ico:'ti-droplet', lane:'impact', lbl:'Eau économisée', val:simEau, prevVal: null, fmt:function(v){return Math.round(v)+' L';}, caption: 'Estimation simulée · '+(CFG.eauMenage||15)+'L/ménage + '+(CFG.eauServ||40)+'L/serviettes', active: menageOn,
+    { ico:'ti-droplet', lane:'impact', lbl:'Eau économisée', val:simEau, prevVal: null, fmt:function(v){return Math.round(v)+' L';}, caption: 'Estimation simulée · '+(CFG.eauMenage||15)+'L/ménage + '+(CFG.eauServ||40)+'L/serviettes', active: menageOn && simActive,
       badge: simEau>0 ? { kind:'icon', shape:'waterJug', val:'≈ '+(simBonbonnes<1?simBonbonnes.toFixed(1):Math.round(simBonbonnes)), lbl:'bonbonnes de 1000 L' } : null },
-    { ico:'ti-leaf', lane:'impact', lbl:'CO₂ évité', val:simCo2, prevVal: null, fmt:function(v){return v.toFixed(2)+' kg';}, caption: 'Estimation simulée · facteur '+(CFG.co2Factor||0.0003)+' kg/L', active: menageOn,
+    { ico:'ti-leaf', lane:'impact', lbl:'CO₂ évité', val:simCo2, prevVal: null, fmt:function(v){return v.toFixed(2)+' kg';}, caption: 'Estimation simulée · facteur '+(CFG.co2Factor||0.0003)+' kg/L', active: menageOn && simActive,
       badge: simCo2>0 ? { kind:'icon', shape:'co2Cloud', val:simCo2.toFixed(2)+' kg', lbl:'non rejetés dans l’atmosphère' } : null },
-    { ico:'ti-clock', lane:'impact', lbl:'Temps homme check-in gagné', val:curr.heuresGagnees, prevVal: prev?prev.heuresGagnees:null, fmt:function(v){return v.toFixed(1)+' h';}, caption:curr.checkinsDone+' check-in(s) effectué(s)', active: dashSimModuleOn('checkin') },
+    { ico:'ti-clock', lane:'impact', lbl:'Temps homme check-in gagné', val:displayHeuresGagnees, prevVal: simActive?null:(prev?prev.heuresGagnees:null), fmt:function(v){return v.toFixed(1)+' h';}, caption: simActive?simCaption:(curr.checkinsDone+' check-in(s) effectué(s)'), active: checkinOn },
   ];
 
   // ── Fleuve : tracé SVG reliant les 7 médaillons, du séjour vécu (voie

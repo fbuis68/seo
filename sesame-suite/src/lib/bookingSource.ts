@@ -667,6 +667,88 @@ export async function encodeNfc(config: BookingSourceConfig, bookingCode: string
 }
 
 /**
+ * Répercute un changement de chambre et/ou de statut (annulation/
+ * réactivation) sur la source externe, via l'endpoint dédié
+ * config.updateEndpointPath — panneau "Réservations" (bouton "Modifier",
+ * changement de chambre ; bouton "Désactiver"/"Réactiver").
+ *
+ * Contrairement à encodeNfc/fetchAccessQr/openDoor (des actions explicites
+ * déclenchées par un clic, où "non configuré" est une vraie erreur à
+ * remonter), une mise à jour de réservation reste une opération LOCALE
+ * valide même sans connecteur — ne lève donc jamais : silencieuse tant que
+ * updateEndpointPath n'est pas configuré (retourne skipped:true), et
+ * retourne ok:false + un message explicite en cas d'échec de l'appel
+ * plutôt que de faire échouer toute la requête /booking/update. La
+ * réservation locale (source de vérité de l'app) est toujours mise à jour
+ * par l'appelant, que cet appel réussisse, échoue, ou soit sauté.
+ */
+export async function pushBookingUpdate(
+  config: BookingSourceConfig,
+  bookingCode: string,
+  changes: { roomCode?: string | null; status?: string }
+): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
+  if (!config.updateEndpointPath) return { ok: true, skipped: true };
+  if (!config.baseUrl) return { ok: false, error: "URL de base non configurée" };
+
+  const params: Record<string, unknown> = {};
+  if (changes.roomCode !== undefined && config.updateRoomParam) params[config.updateRoomParam] = changes.roomCode ?? "";
+  if (changes.status !== undefined && config.updateStatusParam) params[config.updateStatusParam] = changes.status;
+  if (!Object.keys(params).length) return { ok: true, skipped: true };
+
+  const url = normalizeBaseUrl(config.baseUrl).replace(/\/$/, "") + config.updateEndpointPath;
+  const { headers: authHeaders } = await buildAuthHeaders(config);
+  const codeParam = config.updateCodeParam || "code";
+  const method = (config.updateEndpointMethod || "POST").toUpperCase();
+  const staticParams: Record<string, unknown> =
+    config.updateEndpointBodyParams && typeof config.updateEndpointBodyParams === "object"
+      ? (config.updateEndpointBodyParams as Record<string, unknown>)
+      : {};
+
+  let res: Response;
+  try {
+    if (method === "GET") {
+      const qs = new URLSearchParams();
+      Object.entries(staticParams).forEach(([k, v]) => qs.set(k, String(v)));
+      Object.entries(params).forEach(([k, v]) => qs.set(k, String(v)));
+      qs.set(codeParam, bookingCode);
+      res = await fetchWithTimeout(`${url}${url.includes("?") ? "&" : "?"}${qs.toString()}`, {
+        headers: { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...authHeaders },
+      });
+    } else if ((config.updateEndpointBodyFormat || "json") === "json") {
+      res = await fetchWithTimeout(url, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "User-Agent": "SesameSuite-BookingConnector/1.0",
+          ...authHeaders,
+        },
+        body: JSON.stringify({ ...staticParams, ...params, [codeParam]: bookingCode }),
+      });
+    } else {
+      const form = new URLSearchParams();
+      Object.entries(staticParams).forEach(([k, v]) => form.set(k, String(v)));
+      Object.entries(params).forEach(([k, v]) => form.set(k, String(v)));
+      form.set(codeParam, bookingCode);
+      res = await fetchWithTimeout(url, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/x-www-form-urlencoded",
+          "User-Agent": "SesameSuite-BookingConnector/1.0",
+          ...authHeaders,
+        },
+        body: form.toString(),
+      });
+    }
+  } catch (e) {
+    return { ok: false, error: `Connexion à la source externe impossible : ${describeFetchError(e)}` };
+  }
+  if (!res.ok) return { ok: false, error: `La source externe a répondu ${res.status} ${res.statusText}` };
+  return { ok: true };
+}
+
+/**
  * Récupère le QR code / code d'accès généré par la source externe pour UNE
  * réservation, via l'endpoint dédié config.qrEndpointPath. Inerte tant que
  * ce champ n'est pas configuré (l'appelant décide alors du repli — cf.

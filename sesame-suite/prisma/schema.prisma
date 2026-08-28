@@ -479,6 +479,28 @@ model BookingSourceConfig {
   // porte ouverte.
   doorResponseSuccessPath String?
 
+  // Mise à jour d'une réservation (panneau "Réservations" — changement de
+  // chambre ou annulation/réactivation) — même principe que les endpoints
+  // ci-dessus : endpoint séparé prenant UNE réservation en paramètre. La
+  // réservation est TOUJOURS mise à jour localement même si cet appel
+  // échoue ou n'est pas configuré (source de vérité de l'app) — l'appel à
+  // la source externe est une répercussion best-effort, jamais bloquante :
+  // un avertissement (pas une erreur) est renvoyé au panneau si l'appel
+  // échoue une fois configuré. Inerte tant que updateEndpointPath est vide.
+  updateEndpointPath       String? // ex: "/ws/booking/update" — concaténé à baseUrl
+  updateEndpointMethod     String? @default("POST") // GET | POST
+  updateEndpointBodyFormat String? @default("json") // form | json
+  updateEndpointBodyParams Json?
+  updateCodeParam          String? @default("code") // nom du paramètre code réservation
+  // Nom du paramètre optionnel portant le nouveau code de chambre — laisser
+  // vide si la source externe ne doit pas être notifiée des changements de
+  // chambre.
+  updateRoomParam String?
+  // Nom du paramètre optionnel portant le nouveau statut ("cancelled" ou
+  // "confirmed") — laisser vide si la source externe ne doit pas être
+  // notifiée des annulations/réactivations.
+  updateStatusParam String?
+
   // null = synchronisation manuelle uniquement ("Importer maintenant").
   syncIntervalMinutes Int?
 

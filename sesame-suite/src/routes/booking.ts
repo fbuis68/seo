@@ -6,7 +6,7 @@ import { normaliseBooking } from "../lib/normalize";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { fireTrigger } from "../lib/automation";
 import { requireAdmin } from "../middleware/requireAdmin";
-import { encodeNfc, fetchAccessQr, openDoor, BookingSourceError } from "../lib/bookingSource";
+import { encodeNfc, fetchAccessQr, openDoor, pushBookingUpdate, BookingSourceError } from "../lib/bookingSource";
 import { sendEmailRaw } from "../lib/email";
 
 export const bookingRouter = Router();
@@ -111,6 +111,7 @@ bookingRouter.post(
       personLastname?: string;
       personEmail?: string;
       personPhone?: string;
+      status?: string;
     };
     if (!b.code) throw new HttpError(400, "code requis");
 
@@ -131,6 +132,7 @@ bookingRouter.post(
       data.personEmail = b.personEmail.trim();
     }
     if (b.personPhone !== undefined) data.personPhone = b.personPhone.trim() || null;
+    let roomCodeChanged: string | null | undefined;
     if (b.facilityCode !== undefined) {
       const code = b.facilityCode.trim();
       const room = code ? await prisma.room.findUnique({ where: { entityId_code: { entityId: entity.id, code } } }) : null;
@@ -138,10 +140,31 @@ bookingRouter.post(
       data.facilityName = room?.name || null;
       data.selectedRoomCode = code || null;
       data.roomId = room?.id || null;
+      roomCodeChanged = code || null;
+    }
+    if (b.status !== undefined) {
+      if (!["confirmed", "checkin_done", "completed", "cancelled"].includes(b.status)) {
+        throw new HttpError(400, "Statut invalide");
+      }
+      data.status = b.status;
     }
 
     const updated = await prisma.booking.update({ where: { id: booking.id }, data });
-    res.json(normaliseBooking(updated));
+
+    // Répercussion best-effort vers la source externe (chambre et/ou
+    // statut) — jamais bloquante, cf. lib/bookingSource.ts pushBookingUpdate.
+    let pushWarning: string | undefined;
+    if (roomCodeChanged !== undefined || b.status !== undefined) {
+      const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
+      if (config) {
+        const result = await pushBookingUpdate(config, updated.code, { roomCode: roomCodeChanged, status: b.status }).catch(
+          (e) => ({ ok: false, error: String(e) })
+        );
+        if (!result.ok) pushWarning = result.error;
+      }
+    }
+
+    res.json({ ...normaliseBooking(updated), sourcePushWarning: pushWarning || null });
   })
 );
 
