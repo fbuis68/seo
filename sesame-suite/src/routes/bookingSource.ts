@@ -85,6 +85,15 @@ function shapeConfig(c: {
   doorFirstnameParam: string | null;
   doorRoomParam: string | null;
   doorResponseSuccessPath: string | null;
+  updateEndpointPath: string | null;
+  updateEndpointMethod: string | null;
+  updateEndpointBodyFormat: string | null;
+  updateEndpointBodyParams: unknown;
+  updateCodeParam: string | null;
+  updateRoomParam: string | null;
+  updateStatusParam: string | null;
+  updateStatusValueMap: unknown;
+  updateBookingTypeParam: string | null;
   syncIntervalMinutes: number | null;
   lastSyncAt: Date | null;
   lastSyncStatus: string | null;
@@ -159,6 +168,15 @@ function shapeConfig(c: {
     doorFirstnameParam: c.doorFirstnameParam || "",
     doorRoomParam: c.doorRoomParam || "",
     doorResponseSuccessPath: c.doorResponseSuccessPath || "",
+    updateEndpointPath: c.updateEndpointPath || "",
+    updateEndpointMethod: c.updateEndpointMethod || "POST",
+    updateEndpointBodyFormat: c.updateEndpointBodyFormat || "json",
+    updateEndpointBodyParams: c.updateEndpointBodyParams || {},
+    updateCodeParam: c.updateCodeParam || "code",
+    updateRoomParam: c.updateRoomParam || "",
+    updateStatusParam: c.updateStatusParam || "",
+    updateStatusValueMap: c.updateStatusValueMap || {},
+    updateBookingTypeParam: c.updateBookingTypeParam || "",
     syncIntervalMinutes: c.syncIntervalMinutes,
     lastSyncAt: c.lastSyncAt,
     lastSyncStatus: c.lastSyncStatus,
@@ -250,6 +268,15 @@ interface ConfigBody {
   doorFirstnameParam?: string;
   doorRoomParam?: string;
   doorResponseSuccessPath?: string;
+  updateEndpointPath?: string;
+  updateEndpointMethod?: string;
+  updateEndpointBodyFormat?: string;
+  updateEndpointBodyParams?: Record<string, string>;
+  updateCodeParam?: string;
+  updateRoomParam?: string;
+  updateStatusParam?: string;
+  updateStatusValueMap?: Record<string, string>;
+  updateBookingTypeParam?: string;
   syncIntervalMinutes?: number | null;
 }
 
@@ -328,6 +355,15 @@ bookingSourceRouter.post(
       doorFirstnameParam: b.doorFirstnameParam,
       doorRoomParam: b.doorRoomParam,
       doorResponseSuccessPath: b.doorResponseSuccessPath,
+      updateEndpointPath: b.updateEndpointPath,
+      updateEndpointMethod: b.updateEndpointMethod,
+      updateEndpointBodyFormat: b.updateEndpointBodyFormat,
+      updateEndpointBodyParams: b.updateEndpointBodyParams as never,
+      updateCodeParam: b.updateCodeParam,
+      updateRoomParam: b.updateRoomParam,
+      updateStatusParam: b.updateStatusParam,
+      updateStatusValueMap: b.updateStatusValueMap as never,
+      updateBookingTypeParam: b.updateBookingTypeParam,
       syncIntervalMinutes: b.syncIntervalMinutes ?? null,
     };
     const config = await prisma.bookingSourceConfig.upsert({
