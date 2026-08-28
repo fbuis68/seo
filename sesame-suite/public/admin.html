@@ -10610,13 +10610,69 @@ function resaOpenDetail(code){
       }).join('')
     + '</div>';
   html += '<div id="resa-detail-nfc-error" class="alt alt-w" style="display:none;margin-top:12px"><i class="ti ti-alert-triangle"></i><span id="resa-detail-nfc-error-msg"></span></div>';
-  html += '<div style="display:flex;gap:8px;margin-top:16px">'
+  html += '<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">'
     + '<button class="btn btn-p" style="flex:1" onclick="resaEncodeNfc(\''+esc(b.code)+'\')" id="resa-detail-nfc-btn"><i class="ti ti-nfc"></i> Encoder NFC</button>'
+    + '<button class="btn btn-s" onclick="resaToggleEmailCompose(\''+esc(b.code)+'\')" id="resa-detail-email-btn"'+(b.personEmail?'':' disabled title="Aucune adresse email sur cette réservation"')+'><i class="ti ti-mail"></i> Envoyer un email</button>'
     + '<button class="btn btn-s" onclick="event.stopPropagation();resaCloseDetail();resaOpenEdit(\''+esc(b.code)+'\')"><i class="ti ti-edit"></i> Modifier</button>'
+    + '</div>';
+  html += '<div id="resa-detail-email-compose" style="display:none;margin-top:12px;border:1px solid var(--bdr);border-radius:var(--rs);padding:14px;background:var(--bg)">'
+    + '<div class="fi"><label class="lb">Destinataire</label><input type="text" value="'+esc(b.personEmail||'')+'" disabled></div>'
+    + '<div class="fi"><label class="lb">Objet</label><input type="text" id="resa-email-subject" placeholder="Objet de l\'email"></div>'
+    + '<div class="fi"><label class="lb">Message</label><textarea id="resa-email-message" rows="5" placeholder="Votre message…"></textarea></div>'
+    + '<div id="resa-email-error" class="alt alt-w" style="display:none;margin-bottom:10px"><i class="ti ti-alert-triangle"></i><span id="resa-email-error-msg"></span></div>'
+    + '<div style="display:flex;gap:8px"><button class="btn btn-p" onclick="resaSendEmail(\''+esc(b.code)+'\')" id="resa-email-send-btn"><i class="ti ti-send"></i> Envoyer</button>'
+    + '<button class="btn btn-s" onclick="resaToggleEmailCompose(\''+esc(b.code)+'\')">Annuler</button></div>'
     + '</div>';
 
   document.getElementById('resa-detail-body').innerHTML = html;
   document.getElementById('resaDetailModal').style.display = 'flex';
+}
+
+function resaToggleEmailCompose(code){
+  var box = document.getElementById('resa-detail-email-compose');
+  if(!box) return;
+  var showing = box.style.display !== 'none';
+  box.style.display = showing ? 'none' : 'block';
+  if(!showing){
+    document.getElementById('resa-email-error').style.display = 'none';
+    setTimeout(function(){ var s=document.getElementById('resa-email-subject'); if(s) s.focus(); }, 50);
+  }
+}
+
+async function resaSendEmail(code){
+  var subject = document.getElementById('resa-email-subject').value.trim();
+  var message = document.getElementById('resa-email-message').value.trim();
+  var errEl = document.getElementById('resa-email-error');
+  var errMsg = document.getElementById('resa-email-error-msg');
+  errEl.style.display = 'none';
+  if(!subject || !message){
+    errMsg.textContent = 'Objet et message sont requis.';
+    errEl.style.display = 'flex';
+    return;
+  }
+  var btn = document.getElementById('resa-email-send-btn');
+  var orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spin"></div> Envoi…';
+  try{
+    var r = await adminFetch('/wa/booking/sendEmail', {method:'POST', body:JSON.stringify({code:code, subject:subject, message:message})});
+    var data = await r.json();
+    if(!r.ok){
+      errMsg.textContent = data.error || 'Erreur lors de l\'envoi.';
+      errEl.style.display = 'flex';
+      return;
+    }
+    toast('Email envoyé ✓');
+    resaToggleEmailCompose(code);
+    document.getElementById('resa-email-subject').value = '';
+    document.getElementById('resa-email-message').value = '';
+  }catch(e){
+    errMsg.textContent = 'Erreur de connexion au serveur.';
+    errEl.style.display = 'flex';
+  }finally{
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
 }
 
 function resaCloseDetail(){

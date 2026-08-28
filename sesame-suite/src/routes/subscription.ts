@@ -62,12 +62,25 @@ function shapeSub(s: any) {
   };
 }
 
+/**
+ * GET /subscription/list?entityCode= — sans entityCode, portefeuille complet
+ * (vue Sesame HQ). Avec entityCode (envoyé automatiquement par adminFetch
+ * dès qu'un hôtel est "actif" côté admin, cf. ACTIVE_ENTITY_CODE dans
+ * admin.html), scope à ce seul établissement — le paramètre était jusqu'ici
+ * ignoré, donc le panneau Souscriptions montrait tous les hôtels même en
+ * contexte "hôtel actif".
+ */
 subscriptionRouter.get(
   "/subscription/list",
   requireAdmin,
   requireSesame,
-  asyncHandler(async (_req, res) => {
-    const subs = await prisma.subscription.findMany({ include: { entity: true }, orderBy: { createdAt: "desc" } });
+  asyncHandler(async (req, res) => {
+    const entityCode = req.query.entityCode as string | undefined;
+    const subs = await prisma.subscription.findMany({
+      where: entityCode ? { entity: { code: entityCode } } : undefined,
+      include: { entity: true },
+      orderBy: { createdAt: "desc" },
+    });
     res.json(subs.map(shapeSub));
   })
 );

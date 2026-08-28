@@ -7,6 +7,7 @@ import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { fireTrigger } from "../lib/automation";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { encodeNfc, fetchAccessQr, openDoor, BookingSourceError } from "../lib/bookingSource";
+import { sendEmailRaw } from "../lib/email";
 
 export const bookingRouter = Router();
 
@@ -175,6 +176,40 @@ bookingRouter.post(
       if (e instanceof BookingSourceError) throw new HttpError(400, e.message);
       throw e;
     }
+  })
+);
+
+/**
+ * POST /wa/booking/sendEmail — body: { code, subject, message } — envoie un
+ * email libre au client d'une réservation (bouton "Envoyer un email" du
+ * détail de réservation, panneau Réservations). Réutilise la config SMTP de
+ * l'établissement (cf. lib/email.ts, déjà utilisée par les modèles/règles
+ * d'automatisation) — même erreur 400 explicite si aucun SMTP n'est
+ * configuré, plutôt qu'un échec silencieux.
+ */
+bookingRouter.post(
+  "/booking/sendEmail",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const code = (req.body.code as string) || "";
+    const subject = ((req.body.subject as string) || "").trim();
+    const message = ((req.body.message as string) || "").trim();
+    if (!code) throw new HttpError(400, "code requis");
+    if (!subject) throw new HttpError(400, "Objet requis");
+    if (!message) throw new HttpError(400, "Message requis");
+
+    const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code } } });
+    if (!booking) throw new HttpError(404, "Réservation introuvable");
+    if (!booking.personEmail) throw new HttpError(400, "Cette réservation n'a pas d'adresse email");
+
+    const escaped = message
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\n/g, "<br>");
+    await sendEmailRaw(entity.id, booking.personEmail, subject, `<p>${escaped}</p>`);
+    res.json({ ok: true });
   })
 );
 
