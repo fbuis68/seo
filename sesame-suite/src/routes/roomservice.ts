@@ -194,6 +194,20 @@ roomserviceRouter.post(
               lockerSourceOrderId: result.mcfOrderId || null,
             },
           });
+          // Rattache le(s) casier(s) obtenu(s) à la réservation en cours,
+          // en plus de la commande — la réservation devient la référence
+          // pour tout accès casier accordé pendant le séjour (cf.
+          // Booking.lockerAccess), pas seulement l'historique des
+          // commandes. Retiré si cette commande est ensuite annulée
+          // (cf. /roomservice/update).
+          if (booking && result.lockerNumbers?.length) {
+            const existingAccess = (booking.lockerAccess as { numberOnModule: number; pickupCode: string; orderId: string }[]) || [];
+            const newAccess = result.lockerNumbers.map((numberOnModule) => ({ numberOnModule, pickupCode, orderId: order.id }));
+            await prisma.booking.update({
+              where: { id: booking.id },
+              data: { lockerAccess: [...existingAccess, ...newAccess] },
+            });
+          }
         } else {
           warning = result.error;
         }
@@ -259,6 +273,17 @@ roomserviceRouter.post(
         );
         if (!result.ok) {
           finalUpdated = await prisma.order.update({ where: { id }, data: { lockerSourceWarning: result.error } });
+        } else if (updated.bookingId) {
+          // Retire de la réservation le(s) casier(s) que cette commande y
+          // avait ajoutés (cf. /roomservice/create) — l'accès n'est plus
+          // valide une fois la réservation de casier annulée côté source.
+          const booking = await prisma.booking.findUnique({ where: { id: updated.bookingId } });
+          if (booking) {
+            const remaining = ((booking.lockerAccess as { numberOnModule: number; pickupCode: string; orderId: string }[]) || []).filter(
+              (l) => l.orderId !== order.id
+            );
+            await prisma.booking.update({ where: { id: booking.id }, data: { lockerAccess: remaining } });
+          }
         }
       }
     }

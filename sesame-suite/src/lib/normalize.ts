@@ -26,6 +26,10 @@ export function normaliseBooking(b: Booking) {
     importedFrom: b.importedFrom || "",
     nfcCount: b.nfcCount,
     nfcEncodedAt: b.nfcEncodedAt ? iso(b.nfcEncodedAt) : null,
+    // Casiers Mon Casier Frais associés à cette réservation, accumulés au
+    // fil des commandes contenant un article "casier" — cf.
+    // roomservice.ts /roomservice/create et /roomservice/update.
+    lockerAccess: (b.lockerAccess as { numberOnModule: number; pickupCode: string; orderId: string }[]) || [],
     createdAt: iso(b.createdAt),
     updatedAt: iso(b.updatedAt),
   };
