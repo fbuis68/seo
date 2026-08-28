@@ -388,3 +388,65 @@ export async function cancelLockerReservation(
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
+
+interface McfLockerRow {
+  id: string;
+  lockerBlocId?: string;
+  number?: number;
+  numberOnModule: number;
+  state?: number;
+  moduleId?: string;
+}
+
+/** GET /v1/lockers filtré sur le module configuré — liste BRUTE de tous les
+ * casiers physiques de l'installation (contrairement à
+ * reserveLockersForOrder ci-dessus, qui ne récupère que les casiers
+ * correspondant à une commande précise). Sert à importer les casiers comme
+ * "accès" — cf. runLockerRoomImport. */
+export async function fetchLockersForModule(config: LockerSourceConfig): Promise<McfLockerRow[]> {
+  if (!config.moduleId) throw new LockerSourceError("Module Mon Casier Frais non configuré");
+  const q = encodeURIComponent(JSON.stringify({ moduleId: config.moduleId }));
+  const json = await mcfGet(config, `/lockers?q=${q}`);
+  return extractRows(json, "lockers");
+}
+
+/**
+ * Importe les casiers du module configuré comme "accès" (table Room, type
+ * "casier") — panneau "Gestion des Accès". Contrairement au catalogue
+ * boutique (runCatalogImport), c'est une action MANUELLE/PONCTUELLE,
+ * jamais planifiée : les casiers physiques d'une installation changent
+ * rarement, inutile de resynchroniser en tâche de fond (pas d'entrée dans
+ * lockerSourceScheduler.ts pour ce flux). Idempotent par code
+ * ("CASIER-{numberOnModule}") — un import répété ne crée jamais de
+ * doublon ; un accès déjà présent n'est PAS retouché (l'admin a pu le
+ * renommer, changer son étage/sa photo depuis), seuls les nouveaux casiers
+ * détectés sont créés.
+ */
+export async function runLockerRoomImport(entity: Entity, config: LockerSourceConfig) {
+  const lockers = await fetchLockersForModule(config);
+  let created = 0;
+  let skipped = 0;
+  for (const l of lockers) {
+    if (typeof l.numberOnModule !== "number") continue;
+    const code = `CASIER-${l.numberOnModule}`;
+    const existing = await prisma.room.findUnique({ where: { entityId_code: { entityId: entity.id, code } } });
+    if (existing) {
+      skipped++;
+      continue;
+    }
+    await prisma.room.create({
+      data: {
+        entityId: entity.id,
+        code,
+        name: `Casier n°${l.numberOnModule}`,
+        floor: 0,
+        type: "casier",
+        available: true,
+        tags: [],
+        photos: [],
+      },
+    });
+    created++;
+  }
+  return { ok: true as const, created, skipped, total: lockers.length };
+}

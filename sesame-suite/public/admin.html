@@ -639,7 +639,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   <div class="ni" data-pan="planning" onclick="showPan('planning')"><i class="ti ti-calendar-event"></i>Planning</div>
   <div class="ns">Plan &amp; Chambres</div>
   <div class="ni" data-pan="plan" onclick="showPan('plan')"><i class="ti ti-map"></i>Plan de l'hôtel</div>
-  <div class="ni" data-pan="rooms" onclick="showPan('rooms')"><i class="ti ti-door"></i>Gestion des chambres</div>
+  <div class="ni" data-pan="rooms" onclick="showPan('rooms')"><i class="ti ti-door"></i>Gestion des Accès</div>
   <div class="ns">Intégration</div>
   <div class="ni" data-pan="api" onclick="showPan('api')"><i class="ti ti-api"></i>Intégration réservations</div>
   <div class="ni" data-pan="email" onclick="showPan('email')"><i class="ti ti-mail"></i>Canaux</div>
@@ -1554,19 +1554,20 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 
 <!-- ════════════════ ROOMS ════════════════ -->
 <div id="pan-rooms" class="pan">
-  <div class="ph"><h2>Gestion des chambres</h2>
-    <p>Créez et configurez les chambres manuellement ou importez-les depuis Sesame. Chaque chambre peut être éditée, photographiée et assignée à un agent.</p>
+  <div class="ph"><h2>Gestion des Accès</h2>
+    <p>Créez et configurez les accès (chambres, casiers…) manuellement ou importez-les depuis Sesame ou Mon Casier Frais. Chaque accès peut être édité, photographié et assigné à un agent.</p>
   </div>
 
   <!-- Barre d'actions -->
   <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
-    <button class="btn btn-p" onclick="rmOpenCreate()"><i class="ti ti-plus"></i> Nouvelle chambre</button>
+    <button class="btn btn-p" onclick="rmOpenCreate()"><i class="ti ti-plus"></i> Nouvel accès</button>
     <button class="btn btn-s" onclick="rmOpenBulk()"><i class="ti ti-table-import"></i> Import en masse</button>
+    <button class="btn btn-s" onclick="rmImportLockers()"><i class="ti ti-building-warehouse"></i> Importer les casiers</button>
     <button class="btn btn-s" onclick="showPan('plan')"><i class="ti ti-map"></i> Vue plan</button>
     <button class="btn btn-s" onclick="window.open('sesame_menage.html')"><i class="ti ti-device-mobile"></i> App ménage</button>
     <div style="flex:1"></div>
     <!-- Filtre / recherche -->
-    <input type="text" id="rmSearch" placeholder="Rechercher une chambre…"
+    <input type="text" id="rmSearch" placeholder="Rechercher un accès…"
       oninput="renderRoomGrid()" style="max-width:200px">
     <select id="rmFilterFloor" onchange="renderRoomGrid()" style="max-width:120px">
       <option value="">Tous étages</option>
@@ -1574,21 +1575,21 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       <option value="2">2ème</option><option value="3">3ème</option><option value="4">4ème</option>
     </select>
     <div style="font-size:12px;color:var(--mu);font-weight:600">
-      <span id="rmCount">0</span> chambre(s)
+      <span id="rmCount">0</span> accès
     </div>
   </div>
 
-  <!-- Grille des chambres -->
+  <!-- Grille des accès -->
   <div id="rmGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-bottom:16px"></div>
 
-  <!-- Aucune chambre -->
+  <!-- Aucun accès -->
   <div id="rmEmpty" style="display:none">
     <div class="alt alt-b" style="text-align:center;padding:24px">
       <i class="ti ti-door-off" style="font-size:32px;display:block;margin-bottom:10px;opacity:.4"></i>
-      <div style="font-size:15px;font-weight:600;margin-bottom:6px">Aucune chambre configurée</div>
-      <div style="font-size:13px;color:var(--mu);margin-bottom:14px">Créez vos chambres manuellement.</div>
+      <div style="font-size:15px;font-weight:600;margin-bottom:6px">Aucun accès configuré</div>
+      <div style="font-size:13px;color:var(--mu);margin-bottom:14px">Créez vos accès manuellement.</div>
       <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
-        <button class="btn btn-p btn-s" onclick="rmOpenCreate()"><i class="ti ti-plus"></i> Créer une chambre</button>
+        <button class="btn btn-p btn-s" onclick="rmOpenCreate()"><i class="ti ti-plus"></i> Créer un accès</button>
         <button class="btn btn-s" onclick="rmQuickGenerate()"><i class="ti ti-wand"></i> Générer des chambres</button>
       </div>
     </div>
@@ -1616,7 +1617,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   <div id="rmModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center;padding:16px">
     <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:560px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.3)">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--bdr)">
-        <h2 style="font-size:17px" id="rmModalTitle">Nouvelle chambre</h2>
+        <h2 style="font-size:17px" id="rmModalTitle">Nouvel accès</h2>
         <button onclick="rmCloseModal()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
       </div>
       <div style="padding:18px 20px">
@@ -1625,7 +1626,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">Informations</div>
         <div class="g2">
           <div class="fi">
-            <label class="lb">Code chambre <span style="color:var(--re)">*</span></label>
+            <label class="lb">Code d'accès <span style="color:var(--re)">*</span></label>
             <input type="text" id="rm-code" placeholder="101" autocomplete="off">
             <div style="font-size:11px;color:var(--mu);margin-top:3px">Identifiant unique (ex : 101, Suite_A, CH-214)</div>
           </div>
@@ -1646,7 +1647,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         </div>
         <div class="g2">
           <div class="fi">
-            <label class="lb">Type de chambre</label>
+            <label class="lb">Type d'accès</label>
             <select id="rm-type">
               <option value="">Non spécifié</option>
               <option value="single">Single</option>
@@ -1657,6 +1658,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
               <option value="family">Familiale</option>
               <option value="junior_suite">Junior Suite</option>
               <option value="penthouse">Penthouse</option>
+              <option value="casier">Casier</option>
             </select>
           </div>
           <div class="fi">
@@ -4620,7 +4622,8 @@ var RM_TAGS    = [];     // tags de la chambre en cours
 
 var ROOM_TYPES = {
   '':'—', single:'Single', double:'Double', twin:'Twin', triple:'Triple',
-  suite:'Suite', family:'Familiale', junior_suite:'Junior Suite', penthouse:'Penthouse'
+  suite:'Suite', family:'Familiale', junior_suite:'Junior Suite', penthouse:'Penthouse',
+  casier:'Casier'
 };
 var FLOOR_LABELS = ['RDC','1er','2ème','3ème','4ème'];
 
@@ -4654,7 +4657,7 @@ function renderRoomGrid(){
       +'onclick="rmOpenEdit(\''+r.code+'\')" onmouseover="this.style.boxShadow=\'0 4px 16px rgba(0,0,0,.1)\'" onmouseout="this.style.boxShadow=\'\'">'
       // Photo or placeholder
       +'<div style="height:100px;background:'+(photo?'url(\''+photo+'\') center/cover':'var(--bg)')+';position:relative">'
-      +(photo?'':' <i class="ti ti-door" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:28px;color:var(--bdr)"></i>')
+      +(photo?'':' <i class="ti '+(r.type==='casier'?'ti-building-warehouse':'ti-door')+'" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:28px;color:var(--bdr)"></i>')
       +'<div style="position:absolute;top:6px;right:6px;display:flex;gap:4px">'
       +(r.available===false?'<span style="font-size:10px;padding:2px 7px;border-radius:8px;background:rgba(231,76,60,.9);color:#fff;font-weight:600">Masquée</span>':'')
       +(r.pmr?'<span style="font-size:10px;padding:2px 7px;border-radius:8px;background:rgba(58,155,213,.9);color:#fff;font-weight:600">PMR</span>':'')
@@ -4739,7 +4742,7 @@ function rmOpenEdit(code){
   RM_EDITING = code;
   RM_PHOTOS  = r.photos ? JSON.parse(JSON.stringify(r.photos)) : [];
   RM_TAGS    = r.tags   ? JSON.parse(JSON.stringify(r.tags))   : [];
-  document.getElementById('rmModalTitle').textContent = 'Chambre '+code;
+  document.getElementById('rmModalTitle').textContent = (r.type==='casier'?'Casier ':'Accès ')+code;
   document.getElementById('rm-code').value    = r.code;
   document.getElementById('rm-floor').value   = r.floor||0;
   document.getElementById('rm-name').value    = r.name||'';
@@ -4771,6 +4774,22 @@ async function refreshRooms(){
     var r = await adminFetch('/wa/facility/list');
     if(r.ok) CFG.rooms = await r.json();
   }catch(e){ console.error('refreshRooms error', e); }
+}
+
+// Import ponctuel des casiers Mon Casier Frais comme accès (type "casier")
+// — POST /wa/lockerSource/importRooms. Connecteur configuré depuis le
+// panneau "Catalogue produits" (jeton API + module) ; action manuelle, pas
+// de synchronisation automatique pour ce flux (contrairement au catalogue
+// boutique, qui lui peut se resynchroniser périodiquement).
+async function rmImportLockers(){
+  try{
+    var r = await adminFetch('/wa/lockerSource/importRooms', {method:'POST'});
+    var data = await r.json();
+    if(!r.ok){ toast('⚠ '+(data.error||'Échec de l\'import des casiers')); return; }
+    toast(data.created+' casier(s) importé(s)'+(data.skipped?', '+data.skipped+' déjà présent(s)':'')+' ✓');
+    await refreshRooms();
+    renderRoomGrid();
+  }catch(e){ toast('⚠ Erreur de connexion au serveur'); }
 }
 
 // ── Sauvegarder une chambre — POST /wa/facility/create|update ──

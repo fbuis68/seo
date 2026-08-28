@@ -3,7 +3,7 @@ import { prisma } from "../db";
 import { resolveEntity } from "../lib/entity";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
-import { fetchModules, runCatalogImport, LockerSourceError } from "../lib/lockerSource";
+import { fetchModules, runCatalogImport, runLockerRoomImport, LockerSourceError } from "../lib/lockerSource";
 
 export const lockerSourceRouter = Router();
 
@@ -139,5 +139,31 @@ lockerSourceRouter.post(
     const result = await runCatalogImport(entity, config);
     if (!result.ok) throw new HttpError(400, result.message);
     res.json(result);
+  })
+);
+
+/**
+ * POST /wa/lockerSource/importRooms — importe les casiers du module
+ * configuré comme "accès" (panneau "Gestion des Accès", table Room, type
+ * "casier"). Action MANUELLE/PONCTUELLE, déclenchée à la demande depuis ce
+ * panneau — contrairement au catalogue boutique, pas de synchronisation
+ * périodique pour ce flux (cf. lib/lockerSource.ts runLockerRoomImport).
+ */
+lockerSourceRouter.post(
+  "/lockerSource/importRooms",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const config = await prisma.lockerSourceConfig.findUnique({ where: { entityId: entity.id } });
+    if (!config || !config.apiToken || !config.moduleId) {
+      throw new HttpError(400, "Connecteur non configuré — renseignez le jeton API et le module dans le Catalogue produits, puis enregistrez");
+    }
+    try {
+      const result = await runLockerRoomImport(entity, config);
+      res.json(result);
+    } catch (e) {
+      if (e instanceof LockerSourceError) throw new HttpError(400, e.message);
+      throw e;
+    }
   })
 );
