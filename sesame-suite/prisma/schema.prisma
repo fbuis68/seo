@@ -206,6 +206,12 @@ model Room {
   available   Boolean @default(true)
   x           Float? // position sur le plan (coordonnées 540x380)
   y           Float?
+  // Exclut cet accès du parcours ménage (planning d'interventions, statut
+  // de propreté, appli tablette du personnel) — utile pour les accès qui
+  // n'en ont pas besoin (ex : casiers Mon Casier Frais, cf. type="casier").
+  // N'affecte pas la disponibilité générale de l'accès (réservations,
+  // panneau "Gestion des Accès").
+  housekeepingExempt Boolean @default(false)
 
   createdAt DateTime @default(now())
 

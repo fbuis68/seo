@@ -1,0 +1,1 @@
+ALTER TABLE "Room" ADD COLUMN "housekeepingExempt" BOOLEAN NOT NULL DEFAULT false;

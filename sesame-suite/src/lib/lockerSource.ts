@@ -457,6 +457,10 @@ export async function runLockerRoomImport(entity: Entity, config: LockerSourceCo
         available: true,
         tags: [],
         photos: [],
+        // Un casier n'a pas de statut de propreté à suivre — exempté du
+        // parcours ménage par défaut (modifiable ensuite depuis la fiche
+        // accès si besoin).
+        housekeepingExempt: true,
       },
     });
     created++;

@@ -28,7 +28,9 @@ export const housekeepingStatusRouter = Router();
 /**
  * GET /wa/housekeepingStatus/list — statut de propreté de chaque chambre de
  * l'hôtel (créé à "sale" par défaut au premier accès si absent, plutôt que
- * de planter sur les chambres créées avant ce champ).
+ * de planter sur les chambres créées avant ce champ). Exclut les accès
+ * marqués "non soumis au ménage" (cf. Room.housekeepingExempt) — un casier
+ * par exemple n'a pas de statut de propreté à suivre.
  */
 housekeepingStatusRouter.get(
   "/housekeepingStatus/list",
@@ -36,7 +38,7 @@ housekeepingStatusRouter.get(
   asyncHandler(async (req, res) => {
     const entity = await resolveEntity(req);
     const rooms = await prisma.room.findMany({
-      where: { entityId: entity.id },
+      where: { entityId: entity.id, housekeepingExempt: false },
       orderBy: { code: "asc" },
       include: { housekeepingStatus: true },
     });
@@ -127,7 +129,10 @@ housekeepingStatusRouter.get(
       if (coDay) coDay.checkouts++;
     }
 
-    const rooms = await prisma.room.findMany({ where: { entityId: entity.id }, include: { housekeepingStatus: true } });
+    const rooms = await prisma.room.findMany({
+      where: { entityId: entity.id, housekeepingExempt: false },
+      include: { housekeepingStatus: true },
+    });
     const todayCounts: Record<string, number> = {};
     CLEAN_STATUSES.forEach((s) => (todayCounts[s.k] = 0));
     rooms.forEach((r) => {

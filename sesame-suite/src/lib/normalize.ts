@@ -50,5 +50,6 @@ export function normaliseRoom(r: Room) {
     available: r.available,
     x: r.x,
     y: r.y,
+    housekeepingExempt: r.housekeepingExempt,
   };
 }

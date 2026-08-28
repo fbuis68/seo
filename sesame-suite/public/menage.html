@@ -565,8 +565,15 @@ async function mgBoot(token, entityCode, hotelName){
     if(r.status===401 || r.status===403){ mgLogout(); return; }
     var cfg = await r.json();
     document.getElementById('hn').textContent = cfg.hotelName || 'Sesame';
-    MG_ROOMS = cfg.rooms || [];
   }catch(e){}
+
+  // Chambres proposées pour une intervention — exclut les accès marqués
+  // "non soumis au ménage" (ex : casiers Mon Casier Frais), cf.
+  // Room.housekeepingExempt / GET /wa/facility/list?housekeeping=true.
+  try{
+    var rr = await mgApiFetch('/wa/facility/list?housekeeping=true');
+    MG_ROOMS = rr.ok ? await rr.json() : [];
+  }catch(e){ MG_ROOMS = []; }
 
   try{
     var r2 = await mgApiFetch('/wa/housekeepingStaff/list');

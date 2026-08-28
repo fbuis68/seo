@@ -1725,6 +1725,10 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
             <input type="checkbox" id="rm-connected" style="accent-color:var(--am)">
             <span style="font-size:13px">Chambre communicante disponible</span>
           </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+            <input type="checkbox" id="rm-housekeepingExempt" style="accent-color:var(--am)">
+            <span style="font-size:13px">Non soumis au ménage (absent du planning et de l'appli du personnel)</span>
+          </label>
         </div>
 
         <!-- Actions du modal -->
@@ -4746,6 +4750,7 @@ function rmOpenCreate(){
   document.getElementById('rm-pmr').checked   = false;
   document.getElementById('rm-nosmoking').checked = true;
   document.getElementById('rm-connected').checked= false;
+  document.getElementById('rm-housekeepingExempt').checked = false;
   document.getElementById('rmDeleteBtn').style.display='none';
   document.getElementById('rm-currency-sym').textContent = getCurrSym();
   rmRenderTags();
@@ -4775,6 +4780,7 @@ function rmOpenEdit(code){
   document.getElementById('rm-pmr').checked   = !!r.pmr;
   document.getElementById('rm-nosmoking').checked = r.nosmoking!==false;
   document.getElementById('rm-connected').checked = !!r.connected;
+  document.getElementById('rm-housekeepingExempt').checked = !!r.housekeepingExempt;
   document.getElementById('rmDeleteBtn').style.display='';
   document.getElementById('rm-currency-sym').textContent = getCurrSym();
   rmRenderTags();
@@ -4834,6 +4840,7 @@ async function rmSaveRoom(){
     pmr:         document.getElementById('rm-pmr').checked,
     nosmoking:   document.getElementById('rm-nosmoking').checked,
     connected:   document.getElementById('rm-connected').checked,
+    housekeepingExempt: document.getElementById('rm-housekeepingExempt').checked,
   };
   try{
     if(RM_EDITING){

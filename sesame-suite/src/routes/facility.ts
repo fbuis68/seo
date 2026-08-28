@@ -7,14 +7,26 @@ import { requireAdmin } from "../middleware/requireAdmin";
 
 export const facilityRouter = Router();
 
-/** GET /wa/facility/list?entityCode=&available=true — chambres de l'hôtel. */
+/**
+ * GET /wa/facility/list?entityCode=&available=true&housekeeping=true —
+ * chambres de l'hôtel. housekeeping=true exclut les accès marqués "non
+ * soumis au ménage" (cf. Room.housekeepingExempt) — utilisé par l'appli
+ * tablette du personnel (menage.html) pour son sélecteur de chambre à la
+ * création d'une intervention, sans filtrer la liste générale (Gestion
+ * des Accès, réservations…) consommée ailleurs.
+ */
 facilityRouter.get(
   "/facility/list",
   asyncHandler(async (req, res) => {
     const entity = await resolveEntity(req);
     const onlyAvailable = req.query.available === "true";
+    const onlyHousekeeping = req.query.housekeeping === "true";
     const rooms = await prisma.room.findMany({
-      where: { entityId: entity.id, ...(onlyAvailable ? { available: true } : {}) },
+      where: {
+        entityId: entity.id,
+        ...(onlyAvailable ? { available: true } : {}),
+        ...(onlyHousekeeping ? { housekeepingExempt: false } : {}),
+      },
       orderBy: { code: "asc" },
     });
     res.json(rooms.map(normaliseRoom));
@@ -39,6 +51,7 @@ interface RoomBody {
   available?: boolean;
   x?: number;
   y?: number;
+  housekeepingExempt?: boolean;
 }
 
 /** POST /wa/facility/create — CRUD chambres (back-office, panneau "Gestion des chambres"). */
@@ -73,6 +86,7 @@ facilityRouter.post(
         available: b.available !== false,
         x: b.x,
         y: b.y,
+        housekeepingExempt: b.housekeepingExempt || false,
       },
     });
     await prisma.roomHousekeepingStatus.create({ data: { roomId: room.id, status: "libre" } });
@@ -112,6 +126,7 @@ facilityRouter.post(
         available: b.available,
         x: b.x,
         y: b.y,
+        housekeepingExempt: b.housekeepingExempt,
       },
     });
     res.json(normaliseRoom(updated));
