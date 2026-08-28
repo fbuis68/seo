@@ -656,14 +656,27 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 <div id="pan-reservations" class="pan">
   <div class="ph">
     <h2>Réservations</h2>
-    <p>Réservations en cours et à venir par défaut, avec les options retenues par le client au check-in éco (ménage, boutique, taxe de séjour…) — cochez "Toutes les réservations" pour voir aussi l'historique (réservations expirées).</p>
+    <p>"En arrivées" regroupe tous les séjours pas encore terminés (avant ou après check-in) ; "En cours" n'affiche que les clients déjà arrivés ; "Check-out" les séjours terminés.</p>
   </div>
   <div class="ca">
     <div class="ch"><i class="ti ti-calendar-check"></i>Réservations — <span id="resa-count">0</span>
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--mu);margin-left:14px;cursor:pointer;white-space:nowrap">
-        <input type="checkbox" id="resa-showAll" onchange="renderReservations()"> Toutes les réservations (y compris expirées)
-      </label>
       <button class="chact" onclick="loadReservations()"><i class="ti ti-refresh" style="font-size:12px"></i> Actualiser</button>
+    </div>
+    <div id="resa-tabs" style="display:flex;gap:3px;background:var(--bdr);border-radius:var(--rs);padding:3px;width:fit-content;margin-bottom:10px">
+      <div class="ptab on" data-filter="all" onclick="resaSetTab('all')">Toutes</div>
+      <div class="ptab" data-filter="arriving" onclick="resaSetTab('arriving')">En arrivées</div>
+      <div class="ptab" data-filter="inhouse" onclick="resaSetTab('inhouse')">En cours</div>
+      <div class="ptab" data-filter="checkedout" onclick="resaSetTab('checkedout')">Check-out</div>
+    </div>
+    <div id="resa-subfilters" style="display:none;gap:8px;flex-wrap:wrap;margin-bottom:12px;padding:10px;background:var(--bg);border-radius:var(--rs)">
+      <select id="resa-f-room" onchange="renderReservations()" style="max-width:180px"><option value="">Toutes les chambres</option></select>
+      <select id="resa-f-roomtype" onchange="renderReservations()" style="max-width:180px"><option value="">Tous types de chambre</option></select>
+      <input type="text" id="resa-f-lastname" placeholder="Nom de famille…" oninput="renderReservations()" style="max-width:180px">
+      <select id="resa-f-checkin" onchange="renderReservations()" style="max-width:180px">
+        <option value="">Check-in : tous</option>
+        <option value="no">Pas encore check-in</option>
+        <option value="yes">Check-in fait</option>
+      </select>
     </div>
     <div id="resa-list"></div>
   </div>
@@ -690,11 +703,17 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         <div class="fi"><label class="lb">Date d'arrivée</label><input type="date" id="resa-e-start"></div>
         <div class="fi"><label class="lb">Date de départ</label><input type="date" id="resa-e-end"></div>
       </div>
-      <div class="fi"><label class="lb">Chambre (code)</label><input type="text" id="resa-e-room" placeholder="Ex : A11"></div>
+      <div class="g2">
+        <div class="fi"><label class="lb">Type de chambre</label><select id="resa-e-roomtype" onchange="resaFilterRoomOptions()"><option value="">Tous types</option></select></div>
+        <div class="fi"><label class="lb">Chambre</label><select id="resa-e-room"><option value="">— Aucune —</option></select></div>
+      </div>
       <div id="resa-e-error" class="alt alt-w" style="display:none;margin-top:4px"><i class="ti ti-alert-triangle"></i><span id="resa-e-error-msg"></span></div>
       <div style="display:flex;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--bdr)">
         <button class="btn btn-p" onclick="resaSaveEdit()" style="flex:1"><i class="ti ti-check"></i> Enregistrer</button>
         <button class="btn btn-s" onclick="resaCloseEdit()"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bdr)">
+        <button class="btn btn-s btn-d" id="resa-e-cancel-btn" onclick="resaToggleCancel()" style="width:100%"><i class="ti ti-ban"></i> <span id="resa-e-cancel-lbl">Désactiver la réservation</span></button>
       </div>
     </div>
   </div>
@@ -10690,7 +10709,10 @@ async function loadReservations(){
     var orders = results[1].ok ? await results[1].json() : [];
     var taxeRecords = results[2].ok ? await results[2].json() : [];
 
-    var active = bookings.filter(function(b){ return b.status !== 'cancelled'; });
+    // Contrairement à avant, les réservations annulées ne sont plus exclues
+    // ici : le panneau doit pouvoir les afficher (onglet "Toutes") pour
+    // permettre leur réactivation depuis le détail.
+    var active = bookings;
 
     var emails = Array.from(new Set(active.map(function(b){ return (b.personEmail||'').trim().toLowerCase(); }).filter(Boolean)));
     var prefsByEmail = {};
@@ -10710,32 +10732,85 @@ async function loadReservations(){
       };
     });
 
+    resaPopulateFilters();
     renderReservations();
   }catch(e){
     listEl.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Erreur de chargement des arrivées.</span></div>';
   }
 }
 
+var RESA_TAB = 'all';
+
+function resaSetTab(tab){
+  RESA_TAB = tab;
+  document.querySelectorAll('#resa-tabs .ptab').forEach(function(el){ el.classList.toggle('on', el.getAttribute('data-filter')===tab); });
+  var sub = document.getElementById('resa-subfilters');
+  if(sub) sub.style.display = (tab==='arriving') ? 'flex' : 'none';
+  renderReservations();
+}
+
+// Chambre/type de chambre proposés au filtre "En arrivées" — dérivés de
+// CFG.rooms (déjà chargé pour le panneau Chambres), pas d'un appel dédié.
+function resaPopulateFilters(){
+  var roomSel = document.getElementById('resa-f-room');
+  var typeSel = document.getElementById('resa-f-roomtype');
+  if(!roomSel || !typeSel) return;
+  var rooms = (CFG.rooms||[]).slice().sort(function(a,b){ return (a.code||'').localeCompare(b.code||''); });
+  roomSel.innerHTML = '<option value="">Toutes les chambres</option>'
+    + rooms.map(function(r){ return '<option value="'+esc(r.code)+'">'+esc(r.code)+' — '+esc(r.name||'')+'</option>'; }).join('');
+  var types = Array.from(new Set(rooms.map(function(r){ return r.category||''; }).filter(Boolean)));
+  typeSel.innerHTML = '<option value="">Tous types de chambre</option>'
+    + types.map(function(t){ return '<option value="'+esc(t)+'">'+esc(t)+'</option>'; }).join('');
+}
+
 function renderReservations(){
   var listEl = document.getElementById('resa-list');
   var countEl = document.getElementById('resa-count');
-  var showAllEl = document.getElementById('resa-showAll');
   if(!listEl) return;
-  var showAll = showAllEl && showAllEl.checked;
   var todayStr = hotelToday();
 
-  // Par défaut : réservations non expirées (en cours ou à venir, quelle que
-  // soit leur date d'arrivée) — pas seulement celles arrivant aujourd'hui,
-  // pour rester cohérent avec le libellé de la case à cocher qui ne promet
-  // d'ajouter que les réservations expirées.
-  var list = (showAll ? RESA_CACHE : RESA_CACHE.filter(function(r){ return (r.booking.endDate||'').slice(0,10) >= todayStr; }))
-    .slice()
-    .sort(function(a,b){ return (b.booking.startDate||'').localeCompare(a.booking.startDate||''); });
+  // "En arrivées" : tout séjour pas encore terminé (avant ou après check-in
+  // — filtrable ensuite par le statut check-in via le sous-filtre dédié).
+  // "En cours" : sous-ensemble déjà arrivé (checkinDone). "Check-out" :
+  // séjour terminé (date de départ passée, ou statut "completed"). Les
+  // réservations annulées ne sortent que dans "Toutes".
+  function matchesTab(b){
+    if(b.status === 'cancelled') return RESA_TAB === 'all';
+    var ended = (b.endDate||'').slice(0,10) < todayStr || b.status === 'completed';
+    if(RESA_TAB === 'all') return true;
+    if(RESA_TAB === 'checkedout') return ended;
+    if(ended) return false;
+    if(RESA_TAB === 'inhouse') return !!b.checkinDone;
+    return true; // 'arriving'
+  }
+
+  var applySubfilters = RESA_TAB === 'arriving';
+  var roomF = applySubfilters ? ((document.getElementById('resa-f-room')||{}).value || '') : '';
+  var typeF = applySubfilters ? ((document.getElementById('resa-f-roomtype')||{}).value || '') : '';
+  var lastF = applySubfilters ? ((document.getElementById('resa-f-lastname')||{}).value || '').trim().toLowerCase() : '';
+  var checkinF = applySubfilters ? ((document.getElementById('resa-f-checkin')||{}).value || '') : '';
+
+  var list = RESA_CACHE.filter(function(r){
+    var b = r.booking;
+    if(!matchesTab(b)) return false;
+    if(applySubfilters){
+      var roomCode = b.selectedRoomCode || b.facilityCode || '';
+      if(roomF && roomCode !== roomF) return false;
+      if(typeF){
+        var room = (CFG.rooms||[]).find(function(x){ return x.code === roomCode; });
+        if(!room || room.category !== typeF) return false;
+      }
+      if(lastF && (b.personLastname||'').toLowerCase().indexOf(lastF) === -1) return false;
+      if(checkinF === 'yes' && !b.checkinDone) return false;
+      if(checkinF === 'no' && b.checkinDone) return false;
+    }
+    return true;
+  }).slice().sort(function(a,b){ return (b.booking.startDate||'').localeCompare(a.booking.startDate||''); });
 
   if(countEl) countEl.textContent = list.length;
 
   if(!list.length){
-    listEl.innerHTML = '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>'+(showAll?'Aucune réservation.':'Aucune réservation en cours ou à venir.')+'</span></div>';
+    listEl.innerHTML = '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Aucune réservation pour ce filtre.</span></div>';
     return;
   }
 
@@ -10744,7 +10819,9 @@ function renderReservations(){
     var b = r.booking;
     var room = b.facilityName || b.selectedRoomCode || b.facilityCode || '—';
     var expired = (b.endDate||'').slice(0,10) < todayStr;
-    var checkinBadge = b.checkinDone
+    var checkinBadge = b.status === 'cancelled'
+      ? '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:rgba(184,48,48,.1);color:#B83030"><i class="ti ti-ban" style="font-size:11px"></i> Annulée</span>'
+      : b.checkinDone
       ? '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:rgba(26,107,71,.1);color:#1A6B47"><i class="ti ti-check" style="font-size:11px"></i> Check-in fait</span>'
       : (expired
         ? '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:var(--bdr);color:var(--mu)"><i class="ti ti-history" style="font-size:11px"></i> Expirée</span>'
@@ -10922,6 +10999,23 @@ function fmtDMY(iso){
   return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('fr-FR');
 }
 
+// Renseigne le type de chambre + limite la liste déroulante "Chambre" aux
+// chambres de ce type (ou toutes si aucun type choisi). preselectCode :
+// code à resélectionner après reconstruction de la liste (édition d'une
+// réservation existante).
+function resaFilterRoomOptions(preselectCode){
+  var typeSel = document.getElementById('resa-e-roomtype');
+  var roomSel = document.getElementById('resa-e-room');
+  if(!typeSel || !roomSel) return;
+  var typeF = typeSel.value;
+  var rooms = (CFG.rooms||[]).filter(function(r){ return !typeF || r.category === typeF; })
+    .slice().sort(function(a,b){ return (a.code||'').localeCompare(b.code||''); });
+  var current = preselectCode !== undefined ? preselectCode : roomSel.value;
+  roomSel.innerHTML = '<option value="">— Aucune —</option>'
+    + rooms.map(function(r){ return '<option value="'+esc(r.code)+'">'+esc(r.code)+' — '+esc(r.name||'')+'</option>'; }).join('');
+  if(current && rooms.some(function(r){ return r.code === current; })) roomSel.value = current;
+}
+
 function resaOpenEdit(code){
   var r = RESA_CACHE.find(function(x){ return x.booking.code === code; });
   if(!r) return;
@@ -10933,13 +11027,48 @@ function resaOpenEdit(code){
   document.getElementById('resa-e-phone').value = b.personPhone||'';
   document.getElementById('resa-e-start').value = (b.startDate||'').slice(0,10);
   document.getElementById('resa-e-end').value = (b.endDate||'').slice(0,10);
-  document.getElementById('resa-e-room').value = b.selectedRoomCode || b.facilityCode || '';
+
+  var currentRoomCode = b.selectedRoomCode || b.facilityCode || '';
+  var currentRoom = (CFG.rooms||[]).find(function(x){ return x.code === currentRoomCode; });
+  var types = Array.from(new Set((CFG.rooms||[]).map(function(x){ return x.category||''; }).filter(Boolean)));
+  var typeSel = document.getElementById('resa-e-roomtype');
+  typeSel.innerHTML = '<option value="">Tous types</option>' + types.map(function(t){ return '<option value="'+esc(t)+'">'+esc(t)+'</option>'; }).join('');
+  typeSel.value = currentRoom ? (currentRoom.category||'') : '';
+  resaFilterRoomOptions(currentRoomCode);
+
+  document.getElementById('resa-e-cancel-lbl').textContent = (b.status === 'cancelled') ? 'Réactiver la réservation' : 'Désactiver la réservation';
+  document.getElementById('resa-e-cancel-btn').className = 'btn btn-s ' + (b.status === 'cancelled' ? '' : 'btn-d');
+  document.getElementById('resa-e-cancel-btn').style.width = '100%';
+
   document.getElementById('resa-e-error').style.display = 'none';
   document.getElementById('resaEditModal').style.display = 'flex';
 }
 
 function resaCloseEdit(){
   document.getElementById('resaEditModal').style.display = 'none';
+}
+
+async function resaToggleCancel(){
+  var code = document.getElementById('resa-e-code').value;
+  var r = RESA_CACHE.find(function(x){ return x.booking.code === code; });
+  if(!r) return;
+  var willCancel = r.booking.status !== 'cancelled';
+  if(willCancel && !confirm('Désactiver cette réservation ? Elle n\'apparaîtra plus que dans l\'onglet "Toutes".')) return;
+  var errEl = document.getElementById('resa-e-error');
+  var errMsg = document.getElementById('resa-e-error-msg');
+  errEl.style.display = 'none';
+  try{
+    var res = await adminFetch('/wa/booking/update', {method:'POST', body: JSON.stringify({code: code, status: willCancel ? 'cancelled' : 'confirmed'})});
+    var data = await res.json();
+    if(!res.ok){ errMsg.textContent = data.error||'Échec de la mise à jour'; errEl.style.display='block'; return; }
+    resaCloseEdit();
+    toast(willCancel ? 'Réservation désactivée ✓' : 'Réservation réactivée ✓');
+    if(data.sourcePushWarning) toast('⚠ Non répercuté vers la source externe : '+data.sourcePushWarning);
+    loadReservations();
+  }catch(e){
+    errMsg.textContent = 'Erreur de connexion au serveur';
+    errEl.style.display='block';
+  }
 }
 
 async function resaSaveEdit(){
@@ -10962,6 +11091,7 @@ async function resaSaveEdit(){
     if(!r.ok){ errMsg.textContent = data.error||'Échec de la mise à jour'; errEl.style.display='block'; return; }
     resaCloseEdit();
     toast('Réservation mise à jour ✓');
+    if(data.sourcePushWarning) toast('⚠ Non répercuté vers la source externe : '+data.sourcePushWarning);
     loadReservations();
   }catch(e){
     errMsg.textContent = 'Erreur de connexion au serveur';
