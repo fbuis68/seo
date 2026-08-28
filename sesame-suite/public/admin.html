@@ -372,7 +372,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   inset: 0;
   background: linear-gradient(100deg, transparent 25%, rgba(255,255,255,.045) 48%, transparent 68%);
   transform: translateX(-100%);
-  animation: sheen 4.5s ease-in-out infinite;
+  animation: sheen 6.5s ease-in-out infinite;
 }
 
 .sesame-splash__halo {
@@ -400,7 +400,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   height: auto;
   margin: 0 auto clamp(54px, 8vh, 90px);
   filter: drop-shadow(0 12px 28px rgba(0,0,0,.28));
-  animation: logo-in .9s cubic-bezier(.2,.75,.25,1) both;
+  animation: logo-in 1.4s cubic-bezier(.2,.75,.25,1) both;
 }
 
 .splash-mark { color: var(--sesame-white); }
@@ -433,14 +433,14 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   height: 100%;
   background: linear-gradient(90deg, transparent, var(--sesame-white) 15%, var(--sesame-rose) 85%, transparent);
   transform-origin: left;
-  animation: draw-line 2.25s .15s ease both;
+  animation: draw-line 3.6s .2s ease both;
 }
 
 .journey__step {
   position: relative;
   opacity: 0;
   transform: translateY(10px);
-  animation: step-in .55s var(--delay) ease forwards;
+  animation: step-in .85s var(--delay) ease forwards;
 }
 
 .journey__step::after {
@@ -504,7 +504,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   border-radius: inherit;
   background: linear-gradient(90deg, var(--sesame-rose), white);
   box-shadow: 0 0 12px rgba(255,255,255,.7);
-  animation: loading 1.7s ease-in-out infinite;
+  animation: loading 2.6s ease-in-out infinite;
 }
 
 .sesame-splash__status {
@@ -568,19 +568,19 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     </div>
     <div class="journey" aria-label="Réservation, check-in, accès digital et séjour">
       <div class="journey__line" aria-hidden="true"><span></span></div>
-      <div class="journey__step" style="--delay:.15s">
+      <div class="journey__step" style="--delay:.25s">
         <div class="journey__icon"><svg viewBox="0 0 64 64" aria-hidden="true"><rect x="10" y="15" width="44" height="39" rx="6"/><path d="M10 25h44M21 10v10M43 10v10"/><path d="m24 40 6 6 12-14"/></svg></div>
         <span>Réservation</span>
       </div>
-      <div class="journey__step" style="--delay:.65s">
+      <div class="journey__step" style="--delay:1.05s">
         <div class="journey__icon"><svg viewBox="0 0 64 64" aria-hidden="true"><rect x="18" y="7" width="28" height="50" rx="6"/><circle cx="32" cy="27" r="7"/><path d="M23 44c2-6 6-9 9-9s7 3 9 9M29 12h6M29 52h6"/></svg></div>
         <span>Check-in</span>
       </div>
-      <div class="journey__step" style="--delay:1.15s">
+      <div class="journey__step" style="--delay:1.85s">
         <div class="journey__icon"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M12 55V12l31-5v48M12 55h40"/><circle cx="37" cy="32" r="2"/><circle cx="48" cy="27" r="8"/><path d="M42 33 31 44h-7v-7l11-11"/></svg></div>
         <span>Accès digital</span>
       </div>
-      <div class="journey__step" style="--delay:1.65s">
+      <div class="journey__step" style="--delay:2.65s">
         <div class="journey__icon"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M8 48V32h48v16M13 32v-8a6 6 0 0 1 6-6h26a6 6 0 0 1 6 6v8M8 48v7M56 48v7M13 42h38"/><path d="m49 9 2 4 4 2-4 2-2 4-2-4-4-2 4-2z"/></svg></div>
         <span>Séjour</span>
       </div>
@@ -746,16 +746,24 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       </div>
       <div class="g4">
         <div class="fi">
+          <label class="lb">Séjour moyen (jours)</label>
+          <select id="dashSimAvgStay" onchange="renderDashKpiSim()">
+            <option value="1">1 jour</option>
+            <option value="2">2 jours</option>
+            <option value="3">3 jours</option>
+            <option value="4">4 jours</option>
+            <option value="5">5 jours</option>
+            <option value="6">6 jours</option>
+            <option value="7">7 jours</option>
+          </select>
+          <div style="font-size:11px;color:var(--mu);margin-top:4px">Nb séjours/an = 365 ÷ séjour moyen × chambres × occupation</div>
+        </div>
+        <div class="fi">
           <label class="lb">Taux d'occupation</label>
           <div class="slcol">
             <input type="range" id="dashSimOcc" min="0" max="100" step="1" oninput="renderDashKpiSim()">
             <span class="slv" id="dashSimOccV">—%</span>
           </div>
-        </div>
-        <div class="fi">
-          <label class="lb">Séjour moyen (jours)</label>
-          <input type="number" id="dashSimAvgStay" min="1" max="30" step="1" oninput="renderDashKpiSim()">
-          <div style="font-size:11px;color:var(--mu);margin-top:4px">Nb séjours/an = 365 ÷ séjour moyen × chambres × occupation</div>
         </div>
         <div class="fi">
           <label class="lb">Temps ménage gagné</label>
@@ -6818,7 +6826,7 @@ window.addEventListener('DOMContentLoaded',function(){
   // immédiatement, ou bootAdminApp() si déjà authentifié) : le splash ne
   // se ferme ni avant l'un ni avant l'autre, et jamais bloqué même en cas
   // d'échec du chargement.
-  var splashMinDelay = new Promise(function(resolve){ setTimeout(resolve, 2400); });
+  var splashMinDelay = new Promise(function(resolve){ setTimeout(resolve, 3900); });
   var appReady;
 
   if(ADMIN_TOKEN){
