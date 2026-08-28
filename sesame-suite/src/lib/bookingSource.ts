@@ -38,6 +38,11 @@ export interface FieldMapping {
   // sur le nom de la chambre importée correspondant à facilityCode.
   facilityName?: string;
   status?: string;
+  // Champ à part entière côté source (ex : "typeCode"/"typeId"/"type" de
+  // l'API Sesame Technology) — distinct du type/catégorie de la chambre
+  // occupée (Room.category), qui a son propre mapping (facilityCode ->
+  // chambre importée).
+  bookingType?: string;
 }
 
 export interface MappedBooking {
@@ -51,6 +56,7 @@ export interface MappedBooking {
   facilityCode: string;
   facilityName: string;
   status: string;
+  bookingType: string;
 }
 
 export interface MapError {
@@ -465,6 +471,7 @@ export function mapBookings(items: unknown[], mapping: FieldMapping): { mapped: 
       facilityCode: mapping.facilityCode ? dedupeFacilityCodes(String(getPath(item, mapping.facilityCode) ?? "")) : "",
       facilityName: mapping.facilityName ? firstOf(String(getPath(item, mapping.facilityName) ?? "")) : "",
       status: (mapping.status ? String(getPath(item, mapping.status) ?? "").trim() : "") || "confirmed",
+      bookingType: mapping.bookingType ? String(getPath(item, mapping.bookingType) ?? "").trim() : "",
     });
   });
 
@@ -550,6 +557,7 @@ export async function upsertMappedBookings(entity: Entity, mapped: MappedBooking
       facilityName: b.facilityName || room?.name || undefined,
       roomId: room?.id,
       status: b.status,
+      bookingType: b.bookingType || existing?.bookingType || undefined,
       importedFrom: sourceName,
     };
     if (existing) {
@@ -685,14 +693,26 @@ export async function encodeNfc(config: BookingSourceConfig, bookingCode: string
 export async function pushBookingUpdate(
   config: BookingSourceConfig,
   bookingCode: string,
-  changes: { roomCode?: string | null; status?: string }
+  changes: { roomCode?: string | null; status?: string; bookingType?: string | null }
 ): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
   if (!config.updateEndpointPath) return { ok: true, skipped: true };
   if (!config.baseUrl) return { ok: false, error: "URL de base non configurée" };
 
   const params: Record<string, unknown> = {};
   if (changes.roomCode !== undefined && config.updateRoomParam) params[config.updateRoomParam] = changes.roomCode ?? "";
-  if (changes.status !== undefined && config.updateStatusParam) params[config.updateStatusParam] = changes.status;
+  if (changes.bookingType !== undefined && config.updateBookingTypeParam) params[config.updateBookingTypeParam] = changes.bookingType ?? "";
+  if (changes.status !== undefined && config.updateStatusParam) {
+    // Le vocabulaire de statut local (confirmed/checkin_done/completed/
+    // cancelled) ne correspond pas forcément à celui de la source — ex :
+    // l'API Sesame Technology attend "confirmed"/"checkedin"/"checkedout"/
+    // "cancel". Traduit via updateStatusValueMap si une entrée existe,
+    // sinon envoie la valeur locale telle quelle.
+    const statusMap =
+      config.updateStatusValueMap && typeof config.updateStatusValueMap === "object"
+        ? (config.updateStatusValueMap as Record<string, string>)
+        : {};
+    params[config.updateStatusParam] = statusMap[changes.status] ?? changes.status;
+  }
   if (!Object.keys(params).length) return { ok: true, skipped: true };
 
   const url = normalizeBaseUrl(config.baseUrl).replace(/\/$/, "") + config.updateEndpointPath;

@@ -707,6 +707,11 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         <div class="fi"><label class="lb">Type de chambre</label><select id="resa-e-roomtype" onchange="resaFilterRoomOptions()"><option value="">Tous types</option></select></div>
         <div class="fi"><label class="lb">Chambre</label><select id="resa-e-room"><option value="">— Aucune —</option></select></div>
       </div>
+      <div class="fi">
+        <label class="lb">Type de réservation</label>
+        <input type="text" id="resa-e-bookingtype" list="resa-bookingtype-options" placeholder="Ex : Standard, Groupe, Corporate…" autocomplete="off">
+        <datalist id="resa-bookingtype-options"></datalist>
+      </div>
       <div id="resa-e-error" class="alt alt-w" style="display:none;margin-top:4px"><i class="ti ti-alert-triangle"></i><span id="resa-e-error-msg"></span></div>
       <div style="display:flex;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--bdr)">
         <button class="btn btn-p" onclick="resaSaveEdit()" style="flex:1"><i class="ti ti-check"></i> Enregistrer</button>
@@ -2115,9 +2120,19 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         <input type="text" id="bs-updateRoomParam" placeholder="Ex : facilityCode — vide si non notifié">
       </div>
     </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Nom du paramètre portant le nouveau statut (optionnel)</label>
+        <input type="text" id="bs-updateStatusParam" placeholder="Ex : status — vide si non notifié">
+      </div>
+      <div class="fi">
+        <label class="lb">Nom du paramètre portant le type de réservation (optionnel)</label>
+        <input type="text" id="bs-updateBookingTypeParam" placeholder="Ex : type — vide si non notifié">
+      </div>
+    </div>
     <div class="fi">
-      <label class="lb">Nom du paramètre portant le nouveau statut (optionnel)</label>
-      <input type="text" id="bs-updateStatusParam" placeholder="Ex : status — vide si non notifié">
+      <label class="lb">Correspondance des statuts (un par ligne : statut local=valeur source externe)</label>
+      <textarea id="bs-updateStatusValueMap" rows="4" placeholder="confirmed=confirmed&#10;checkin_done=checkedin&#10;completed=checkedout&#10;cancelled=cancel"></textarea>
     </div>
     <div class="fi">
       <label class="lb">Paramètres additionnels du corps (un par ligne : clé=valeur)</label>
@@ -5416,6 +5431,7 @@ var BS_MAPPING_FIELDS = [
   {k:'facilityCode', label:'Code chambre', required:false},
   {k:'facilityName', label:'Nom de la chambre', required:false},
   {k:'status', label:'Statut', required:false},
+  {k:'bookingType', label:'Type de réservation', required:false},
 ];
 
 var BS_FACILITY_MAPPING_FIELDS = [
@@ -5599,7 +5615,7 @@ var PMS_PRESETS = {
       document.getElementById('bs-resultEntityProfileField').value = 'entityId';
       document.getElementById('bs-skipEntityFilter').checked = false;
       document.getElementById('bs-responseListPath').value = 'root';
-      bsRenderMappingFields({code:'code', personEmail:'personEmail', personFirstname:'personFirstname', personLastname:'personLastname', personPhone:'', startDate:'startDate', endDate:'endDate', facilityCode:'facilityCode', facilityName:'facilityName', status:'status'});
+      bsRenderMappingFields({code:'code', personEmail:'personEmail', personFirstname:'personFirstname', personLastname:'personLastname', personPhone:'', startDate:'startDate', endDate:'endDate', facilityCode:'facilityCode', facilityName:'facilityName', status:'status', bookingType:'typeCode'});
       // QR / code d'accès / ouverture de porte — d'après la documentation
       // officielle Sesame API (version 2023-11-23) : POST /ws/pass/findMimeSecret
       // (QR image prête, {"secret":"data:image/jpeg;base64,..."}) et
@@ -5641,6 +5657,20 @@ var PMS_PRESETS = {
       // logique, avec {"success":false,"message":"..."} — sans ce mapping,
       // un tel refus était silencieusement traité comme une porte ouverte.
       document.getElementById('bs-doorResponseSuccessPath').value = 'success';
+      // Mise à jour d'une réservation — POST /ws/booking/update, d'après la
+      // doc officielle (chambre via facilityCode, type via typeCode/typeId/
+      // type, statut via status parmi booked/confirmed/cancel/checkedin/
+      // checkedout). La réponse est juste {"success":true}, sans miroir du
+      // statut appliqué — rien à mapper côté "réponse".
+      document.getElementById('bs-updateEndpointPath').value = '/ws/booking/update';
+      document.getElementById('bs-updateEndpointMethod').value = 'POST';
+      document.getElementById('bs-updateEndpointBodyFormat').value = 'json';
+      document.getElementById('bs-updateCodeParam').value = 'code';
+      document.getElementById('bs-updateRoomParam').value = 'facilityCode';
+      document.getElementById('bs-updateStatusParam').value = 'status';
+      document.getElementById('bs-updateBookingTypeParam').value = 'typeCode';
+      // Vocabulaire de statut Sesame ≠ vocabulaire local : traduction requise.
+      document.getElementById('bs-updateStatusValueMap').value = 'confirmed=confirmed\ncheckin_done=checkedin\ncompleted=checkedout\ncancelled=cancel';
     },
     vars: [
       {label:'URL du serveur Sesame', placeholder:'https://newtest.sesame.technology', target:'bs-baseUrl'},
@@ -5917,6 +5947,8 @@ function bsCollectFormValues(){
     updateCodeParam: document.getElementById('bs-updateCodeParam').value.trim(),
     updateRoomParam: document.getElementById('bs-updateRoomParam').value.trim(),
     updateStatusParam: document.getElementById('bs-updateStatusParam').value.trim(),
+    updateBookingTypeParam: document.getElementById('bs-updateBookingTypeParam').value.trim(),
+    updateStatusValueMap: bsTextToParams(document.getElementById('bs-updateStatusValueMap').value),
     updateEndpointBodyParams: bsTextToParams(document.getElementById('bs-updateEndpointBodyParams').value),
     syncIntervalMinutes: document.getElementById('bs-syncInterval').value ? parseInt(document.getElementById('bs-syncInterval').value) : null,
   };
@@ -5995,6 +6027,8 @@ async function bsInit(){
   document.getElementById('bs-updateCodeParam').value = BS_CONFIG.updateCodeParam||'';
   document.getElementById('bs-updateRoomParam').value = BS_CONFIG.updateRoomParam||'';
   document.getElementById('bs-updateStatusParam').value = BS_CONFIG.updateStatusParam||'';
+  document.getElementById('bs-updateBookingTypeParam').value = BS_CONFIG.updateBookingTypeParam||'';
+  document.getElementById('bs-updateStatusValueMap').value = bsParamsToText(BS_CONFIG.updateStatusValueMap);
   document.getElementById('bs-updateEndpointBodyParams').value = bsParamsToText(BS_CONFIG.updateEndpointBodyParams);
   bsRenderStatusBanner();
   document.getElementById('bs-result-card').style.display='none';
@@ -10882,11 +10916,14 @@ function resaOpenDetail(code){
     ['Email', esc(b.personEmail)],
     ['Téléphone', b.personPhone ? esc(b.personPhone) : '—'],
     ['Accès (chambre)', esc(room)],
+  ];
+  if(b.bookingType) rows.push(['Type de réservation', esc(b.bookingType)]);
+  rows = rows.concat([
     ['Source', b.importedFrom ? esc(b.importedFrom) : 'Saisie manuelle / check-in éco'],
     ['Date de début', esc(fmtDMY(b.startDate))],
     ['Date de fin', esc(fmtDMY(b.endDate))],
     ['Mise à jour', esc(updated)],
-  ];
+  ]);
 
   var html = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">'
     + '<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:rgba(139,26,46,.08);color:var(--a)">'+esc(resaStatusLabel(b))+'</span>'
@@ -11036,6 +11073,10 @@ function resaOpenEdit(code){
   typeSel.value = currentRoom ? (currentRoom.category||'') : '';
   resaFilterRoomOptions(currentRoomCode);
 
+  document.getElementById('resa-e-bookingtype').value = b.bookingType||'';
+  var knownTypes = Array.from(new Set(RESA_CACHE.map(function(x){ return x.booking.bookingType||''; }).filter(Boolean)));
+  document.getElementById('resa-bookingtype-options').innerHTML = knownTypes.map(function(t){ return '<option value="'+esc(t)+'">'; }).join('');
+
   document.getElementById('resa-e-cancel-lbl').textContent = (b.status === 'cancelled') ? 'Réactiver la réservation' : 'Désactiver la réservation';
   document.getElementById('resa-e-cancel-btn').className = 'btn btn-s ' + (b.status === 'cancelled' ? '' : 'btn-d');
   document.getElementById('resa-e-cancel-btn').style.width = '100%';
@@ -11084,6 +11125,7 @@ async function resaSaveEdit(){
     startDate: document.getElementById('resa-e-start').value,
     endDate: document.getElementById('resa-e-end').value,
     facilityCode: document.getElementById('resa-e-room').value.trim(),
+    bookingType: document.getElementById('resa-e-bookingtype').value.trim(),
   };
   try{
     var r = await adminFetch('/wa/booking/update', {method:'POST', body: JSON.stringify(body)});

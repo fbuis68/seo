@@ -231,6 +231,13 @@ model Booking {
   facilityCode     String? // dénormalisé — code chambre au moment de la réservation
   facilityName     String?
   status           String   @default("confirmed") // confirmed | checkin_done | completed | cancelled
+  // Champ à part entière issu de la source externe (ex : "typeCode/typeId/
+  // type" de l'API Sesame Technology) — n'est PAS dérivé de Room.category :
+  // Sesame distingue le type de réservation du type de chambre occupée.
+  // Importé via fieldMapping.bookingType, modifiable depuis le panneau
+  // Réservations, répercuté à la source externe via
+  // BookingSourceConfig.updateBookingTypeParam (cf. pushBookingUpdate).
+  bookingType      String?
   otaId            String?
   checkinDone      Boolean  @default(false)
   selectedRoomCode String? // chambre choisie à l'étape 2 (peut différer de facilityCode)
@@ -496,10 +503,24 @@ model BookingSourceConfig {
   // vide si la source externe ne doit pas être notifiée des changements de
   // chambre.
   updateRoomParam String?
-  // Nom du paramètre optionnel portant le nouveau statut ("cancelled" ou
-  // "confirmed") — laisser vide si la source externe ne doit pas être
-  // notifiée des annulations/réactivations.
+  // Nom du paramètre optionnel portant le nouveau statut local (confirmed |
+  // checkin_done | completed | cancelled) — laisser vide si la source
+  // externe ne doit pas être notifiée des annulations/réactivations. La
+  // VALEUR envoyée est traduite via updateStatusValueMap avant l'appel (le
+  // vocabulaire de statut local ne correspond pas forcément à celui de la
+  // source — ex : l'API Sesame Technology attend "cancel"/"checkedin"/
+  // "checkedout"/"confirmed", pas les valeurs locales telles quelles).
   updateStatusParam String?
+  // {"confirmed":"...", "checkin_done":"...", "completed":"...",
+  // "cancelled":"..."} — statut local -> valeur externe. Statut envoyé tel
+  // quel si la map ou l'entrée correspondante est absente.
+  updateStatusValueMap Json?
+  // Nom du paramètre optionnel portant le type de réservation
+  // (Booking.bookingType, ex: "typeCode"/"typeId"/"type" côté API Sesame
+  // Technology — code/id/nom du type selon ce que la source attend) —
+  // laisser vide si la source externe ne doit pas être notifiée de ce
+  // changement.
+  updateBookingTypeParam String?
 
   // null = synchronisation manuelle uniquement ("Importer maintenant").
   syncIntervalMinutes Int?

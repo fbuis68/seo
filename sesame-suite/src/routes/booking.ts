@@ -112,6 +112,7 @@ bookingRouter.post(
       personEmail?: string;
       personPhone?: string;
       status?: string;
+      bookingType?: string;
     };
     if (!b.code) throw new HttpError(400, "code requis");
 
@@ -148,18 +149,27 @@ bookingRouter.post(
       }
       data.status = b.status;
     }
+    let bookingTypeChanged: string | null | undefined;
+    if (b.bookingType !== undefined) {
+      const bt = b.bookingType.trim();
+      data.bookingType = bt || null;
+      bookingTypeChanged = bt || null;
+    }
 
     const updated = await prisma.booking.update({ where: { id: booking.id }, data });
 
-    // Répercussion best-effort vers la source externe (chambre et/ou
-    // statut) — jamais bloquante, cf. lib/bookingSource.ts pushBookingUpdate.
+    // Répercussion best-effort vers la source externe (chambre, statut et/ou
+    // type de réservation) — jamais bloquante, cf. lib/bookingSource.ts
+    // pushBookingUpdate.
     let pushWarning: string | undefined;
-    if (roomCodeChanged !== undefined || b.status !== undefined) {
+    if (roomCodeChanged !== undefined || b.status !== undefined || bookingTypeChanged !== undefined) {
       const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
       if (config) {
-        const result = await pushBookingUpdate(config, updated.code, { roomCode: roomCodeChanged, status: b.status }).catch(
-          (e) => ({ ok: false, error: String(e) })
-        );
+        const result = await pushBookingUpdate(config, updated.code, {
+          roomCode: roomCodeChanged,
+          status: b.status,
+          bookingType: bookingTypeChanged,
+        }).catch((e) => ({ ok: false, error: String(e) }));
         if (!result.ok) pushWarning = result.error;
       }
     }
