@@ -569,6 +569,17 @@ model LockerSourceConfig {
   // défaut — enrichi via GET /v1/products + /v1/product-types quand
   // possible, ce champ sert de repli).
   defaultCategory String? @default("Mon Casier Frais")
+  // Mode démo — affiche et rend commandables côté boutique client les
+  // produits importés même quand leur stock réel (stockQty) est à 0.
+  // Utile quand le compte Mon Casier Frais connecté est un environnement
+  // de développement/sandbox sans casiers physiquement garnis : permet de
+  // montrer le catalogue sans attendre un vrai réapprovisionnement.
+  // N'affecte QUE l'affichage — la réservation de casier à la commande
+  // revérifie toujours le stock réel en direct (cf. reserveLockersForOrder)
+  // et échoue proprement (avertissement non bloquant) si le stock est
+  // toujours à 0 au moment de la commande, ce mode ne fabrique jamais une
+  // fausse réservation.
+  showOutOfStock Boolean @default(false)
 
   // null = synchronisation manuelle uniquement ("Importer maintenant").
   syncIntervalMinutes Int?

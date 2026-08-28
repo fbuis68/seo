@@ -289,6 +289,15 @@ roomserviceRouter.get(
   "/roomservice/product/public",
   asyncHandler(async (req, res) => {
     const entity = await resolveEntity(req);
+    // Mode démo (LockerSourceConfig.showOutOfStock) — affiche et rend
+    // commandables côté client les produits importés même en rupture,
+    // utile quand le compte Mon Casier Frais connecté est un environnement
+    // de développement sans casiers physiquement garnis. N'affecte QUE
+    // l'affichage : la réservation à la commande revérifie toujours le
+    // stock réel en direct (cf. reserveLockersForOrder) et échoue
+    // proprement si rien n'est réellement disponible.
+    const lockerConfig = await prisma.lockerSourceConfig.findUnique({ where: { entityId: entity.id } });
+    const showOutOfStock = lockerConfig?.showOutOfStock ?? false;
     const products = await prisma.product.findMany({
       where: {
         entityId: entity.id,
@@ -296,11 +305,20 @@ roomserviceRouter.get(
         // Masque les produits importés (Mon Casier Frais) en rupture —
         // stockQty=0 au dernier sync. Les produits boutique classiques
         // (stockQty=null, pas de suivi de stock) restent toujours affichés.
-        NOT: { importedFrom: { not: null }, stockQty: 0 },
+        ...(showOutOfStock ? {} : { NOT: { importedFrom: { not: null }, stockQty: 0 } }),
       },
       orderBy: { sortOrder: "asc" },
     });
-    res.json(products.map(shapeProduct));
+    const shaped = products.map(shapeProduct);
+    if (showOutOfStock) {
+      // Masque aussi le compteur de stock côté client (sinon la limite de
+      // quantité au panier resterait bloquée à 0) — l'admin garde le vrai
+      // stock dans /product/list.
+      shaped.forEach((p) => {
+        if (p.source === "moncasierfrais") p.stock = null;
+      });
+    }
+    res.json(shaped);
   })
 );
 

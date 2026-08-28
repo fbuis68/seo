@@ -14,6 +14,7 @@ function shapeConfig(c: {
   sellerGroupId: string | null;
   moduleId: string | null;
   defaultCategory: string | null;
+  showOutOfStock: boolean;
   syncIntervalMinutes: number | null;
   lastSyncAt: Date | null;
   lastSyncStatus: string | null;
@@ -27,6 +28,7 @@ function shapeConfig(c: {
     sellerGroupId: c.sellerGroupId || "",
     moduleId: c.moduleId || "",
     defaultCategory: c.defaultCategory || "Mon Casier Frais",
+    showOutOfStock: c.showOutOfStock,
     syncIntervalMinutes: c.syncIntervalMinutes,
     lastSyncAt: c.lastSyncAt,
     lastSyncStatus: c.lastSyncStatus,
@@ -57,6 +59,7 @@ interface ConfigBody {
   sellerGroupId?: string;
   moduleId?: string;
   defaultCategory?: string;
+  showOutOfStock?: boolean;
   syncIntervalMinutes?: number | null;
 }
 
@@ -74,6 +77,7 @@ lockerSourceRouter.post(
       sellerGroupId: b.sellerGroupId,
       moduleId: b.moduleId,
       defaultCategory: b.defaultCategory,
+      showOutOfStock: b.showOutOfStock,
       syncIntervalMinutes: b.syncIntervalMinutes ?? null,
     };
     const config = await prisma.lockerSourceConfig.upsert({

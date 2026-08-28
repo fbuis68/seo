@@ -3107,6 +3107,13 @@ Accès au salon Premium</textarea>
         <div class="fi"><label class="lb">Catégorie boutique par défaut</label>
           <input type="text" id="ls-defaultCategory" placeholder="Mon Casier Frais"></div>
       </div>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px">
+        <input type="checkbox" id="ls-showOutOfStock" style="accent-color:var(--am)">
+        <span style="font-size:13px">Mode démo — afficher et rendre commandables les produits importés même en rupture</span>
+      </label>
+      <div class="alt alt-w" style="margin-bottom:12px"><i class="ti ti-alert-triangle"></i>
+        <span>Utile si le compte Mon Casier Frais connecté est un environnement de développement sans casiers physiquement garnis. N'affecte que l'affichage — la réservation à la commande revérifie toujours le stock réel : sans casier réellement disponible, la commande sera créée mais avec un message "réservation en cours" plutôt qu'un vrai numéro de casier.</span>
+      </div>
       <div class="fi"><label class="lb">Synchronisation automatique</label>
         <select id="ls-syncInterval">
           <option value="">Manuelle uniquement</option>
@@ -8344,6 +8351,7 @@ async function lsInit(){
     document.getElementById('ls-apiToken').value = LS_CONFIG.apiToken || '';
     document.getElementById('ls-sellerGroupId').value = LS_CONFIG.sellerGroupId || '';
     document.getElementById('ls-defaultCategory').value = LS_CONFIG.defaultCategory || '';
+    document.getElementById('ls-showOutOfStock').checked = !!LS_CONFIG.showOutOfStock;
     document.getElementById('ls-syncInterval').value = LS_CONFIG.syncIntervalMinutes || '';
     var modSel = document.getElementById('ls-moduleId');
     if(LS_CONFIG.moduleId && !Array.from(modSel.options).some(function(o){return o.value===LS_CONFIG.moduleId;})){
@@ -8381,6 +8389,7 @@ async function lsSaveConfig(){
     sellerGroupId: document.getElementById('ls-sellerGroupId').value.trim(),
     moduleId: document.getElementById('ls-moduleId').value,
     defaultCategory: document.getElementById('ls-defaultCategory').value.trim(),
+    showOutOfStock: document.getElementById('ls-showOutOfStock').checked,
     syncIntervalMinutes: document.getElementById('ls-syncInterval').value ? parseInt(document.getElementById('ls-syncInterval').value) : null,
   };
   try{
