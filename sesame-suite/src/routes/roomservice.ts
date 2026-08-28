@@ -200,6 +200,24 @@ roomserviceRouter.get(
   })
 );
 
+/**
+ * GET /wa/roomservice/product/public — sans authentification, uniquement les
+ * produits actifs. Alimente la boutique du check-in (public/checkin.html) et
+ * l'espace client : ces pages n'ont pas de JWT admin et ne pouvaient jusqu'ici
+ * jamais lire le vrai catalogue, d'où des prix figés au fallback local.
+ */
+roomserviceRouter.get(
+  "/roomservice/product/public",
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const products = await prisma.product.findMany({
+      where: { entityId: entity.id, active: true },
+      orderBy: { sortOrder: "asc" },
+    });
+    res.json(products.map(shapeProduct));
+  })
+);
+
 interface ProductBody {
   category: string;
   label: string;

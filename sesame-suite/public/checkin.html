@@ -77,13 +77,24 @@ input:focus,select:focus{border-color:var(--accent)}
 .brow .btn:first-child:not(:last-child){flex:0 0 auto;width:auto;padding:13px 13px}
 /* Boutons de navigation d'étape — toujours visibles au-dessus de la nav */
 .step-panel .brow{
+  /* Centrage par margin-left négatif (moitié de max-width), pas par
+     transform:translateX(-50%) : .step-panel.on>*{animation:fadeUp…} plus
+     bas anime aussi transform sur ce même élément (direct enfant d'un step
+     actif) et écraserait un transform statique une fois l'animation finie —
+     .bnav n'a pas ce problème car il n'est pas un enfant direct d'un step. */
   position:fixed;
   bottom:var(--nav);
-  left:0;
-  right:0;
+  left:50%;
+  margin-left:-240px;
+  width:100%;
+  max-width:480px;
+  box-sizing:border-box;
   z-index:20;
   padding:10px 16px;
   background:linear-gradient(to bottom,transparent,var(--bg) 40%);
+}
+@media (max-width:480px){
+  .step-panel .brow{ left:0; margin-left:0; }
 }
 
 /* ── LANGUAGE SWITCHER ── */
@@ -1117,6 +1128,16 @@ async function loadCfg(){
     CFG = Object.assign({}, DEFAULT_CFG, data);
   }catch(e){
     console.error('Impossible de charger la configuration depuis l\'API — valeurs par défaut utilisées.', e);
+  }
+  // Le catalogue boutique vit désormais dans la table Product (édité depuis
+  // le panneau admin "Catalogue produits"), plus dans le blob CFG — sans cet
+  // appel, roomServiceCatalog restait vide et bqGetCatalog() retombait
+  // systématiquement sur BQ_CATALOG (prix figés, jamais mis à jour par l'admin).
+  try{
+    var rp = await apiFetch(API_BASE+'/wa/roomservice/product/public');
+    if(rp.ok) CFG.roomServiceCatalog = await rp.json();
+  }catch(e){
+    console.error('Impossible de charger le catalogue produits — repli sur le catalogue par défaut.', e);
   }
 }
 // Fuseau horaire de l'hôtel (CFG.timezone) — "aujourd'hui" côté client doit
