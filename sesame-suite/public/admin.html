@@ -3087,6 +3087,10 @@ Accès au salon Premium</textarea>
         <input type="checkbox" id="ls-enabled" style="accent-color:var(--am)">
         <span style="font-size:13px">Connecteur actif</span>
       </label>
+      <div class="fi"><label class="lb">URL du serveur</label>
+        <input type="text" id="ls-baseUrl" placeholder="https://api.moncasierfrais.fr/v1">
+        <div style="font-size:11px;color:var(--mu);margin-top:3px">Laisser vide = API de production. Un accès "plateforme de développement" (jeton de démo/sandbox) utilise une URL différente — à demander à Mon Casier Frais si besoin.</div>
+      </div>
       <div class="fi"><label class="lb">Jeton API (Bearer, créé depuis le portail Mon Casier Frais)</label>
         <input type="password" id="ls-apiToken" placeholder="MCF-…" autocomplete="off"></div>
       <div class="g2">
@@ -8336,6 +8340,7 @@ async function lsInit(){
     if(!r.ok) return;
     LS_CONFIG = await r.json();
     document.getElementById('ls-enabled').checked = !!LS_CONFIG.enabled;
+    document.getElementById('ls-baseUrl').value = LS_CONFIG.baseUrl || '';
     document.getElementById('ls-apiToken').value = LS_CONFIG.apiToken || '';
     document.getElementById('ls-sellerGroupId').value = LS_CONFIG.sellerGroupId || '';
     document.getElementById('ls-defaultCategory').value = LS_CONFIG.defaultCategory || '';
@@ -8371,6 +8376,7 @@ function lsRenderStatus(){
 async function lsSaveConfig(){
   var body = {
     enabled: document.getElementById('ls-enabled').checked,
+    baseUrl: document.getElementById('ls-baseUrl').value.trim(),
     apiToken: document.getElementById('ls-apiToken').value.trim(),
     sellerGroupId: document.getElementById('ls-sellerGroupId').value.trim(),
     moduleId: document.getElementById('ls-moduleId').value,
@@ -8388,6 +8394,7 @@ async function lsSaveConfig(){
 }
 async function lsLoadModules(){
   var body = {
+    baseUrl: document.getElementById('ls-baseUrl').value.trim(),
     apiToken: document.getElementById('ls-apiToken').value.trim(),
     sellerGroupId: document.getElementById('ls-sellerGroupId').value.trim(),
   };
