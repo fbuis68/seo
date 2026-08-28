@@ -726,6 +726,14 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     </div>
   </div>
 
+  <!-- ══════════ ARRIVÉES DE LA SEMAINE ══════════ -->
+  <div class="ca" style="margin-bottom:20px">
+    <div class="ch"><i class="ti ti-calendar-stats"></i>Arrivées de la semaine
+      <button class="chact" onclick="renderWeeklyArrivals()"><i class="ti ti-refresh" style="font-size:12px"></i> Actualiser</button>
+    </div>
+    <div id="weeklyArrivalsChart"><div class="alt alt-b"><i class="ti ti-loader"></i><span>Chargement…</span></div></div>
+  </div>
+
   <!-- ══════════ SIMULATEUR — curseurs pour visualiser les gains en rendez-vous ══════════ -->
   <div class="ca" style="margin-bottom:20px">
     <div class="ch"><i class="ti ti-adjustments"></i>Paramètres de simulation
@@ -4930,6 +4938,91 @@ function renderDash(){
   // KPI dashboard
   renderKpiDash();
   loadRealKpis();
+  renderWeeklyArrivals();
+}
+
+// ── ARRIVÉES DE LA SEMAINE — nombre d'arrivées par jour (lun.→dim. de la
+// semaine courante), et deux sous-compteurs : enregistrements en ligne
+// (checkinDone) et arrivées déjà traitées à la réception (statut
+// checkin_done/completed) — même sémantique que les badges du panneau
+// Réservations (cf. resaStatusLabel/checkinBadge). ──
+var WEEKLY_ARRIVALS_COLORS = { total:'#4C6FE7', online:'#C68E1A', arrived:'#1A6B47' };
+async function renderWeeklyArrivals(){
+  var box = document.getElementById('weeklyArrivalsChart');
+  if(!box) return;
+  var bookings = [];
+  try{
+    var r = await adminFetch('/wa/booking/list');
+    if(r.ok) bookings = await r.json();
+  }catch(e){}
+
+  // Semaine lundi→dimanche contenant "aujourd'hui" (fuseau de l'hôtel)
+  var today = new Date(hotelToday()+'T00:00:00');
+  var dow = today.getDay(); // 0=dim..6=sam
+  var mondayOffset = dow===0 ? -6 : 1-dow;
+  var monday = new Date(today); monday.setDate(monday.getDate()+mondayOffset);
+
+  var DAY_LBL = ['dim.','lun.','mar.','mer.','jeu.','ven.','sam.'];
+  var days = [];
+  for(var i=0;i<7;i++){
+    var d = new Date(monday); d.setDate(d.getDate()+i);
+    var iso = d.toISOString().slice(0,10);
+    var dayBookings = bookings.filter(function(b){ return (b.startDate||'').slice(0,10) === iso; });
+    days.push({
+      iso: iso,
+      label: DAY_LBL[d.getDay()]+' '+d.getDate()+' '+d.toLocaleDateString('fr-FR',{month:'short'}),
+      total: dayBookings.length,
+      online: dayBookings.filter(function(b){ return b.checkinDone; }).length,
+      arrived: dayBookings.filter(function(b){ return b.status==='checkin_done'||b.status==='completed'; }).length
+    });
+  }
+
+  var maxVal = Math.max.apply(null, days.map(function(d){return Math.max(d.total,d.online,d.arrived);}).concat([1]));
+  // Échelle à paliers entiers "ronds" (données de comptage, jamais
+  // fractionnaires) — évite les imprécisions flottantes d'un calcul en
+  // puissances de 10 (ex: 0.1*5 !== 0.5 en JS), qui produisaient des
+  // graduations du type "0.000000002" au lieu de "2".
+  var NICE_STEPS = [1,2,5,10,20,25,50,100,200,250,500,1000,2000,5000,10000];
+  var niceStep = NICE_STEPS[NICE_STEPS.length-1];
+  for(var ns=0; ns<NICE_STEPS.length; ns++){
+    if(NICE_STEPS[ns]*4 >= maxVal){ niceStep = NICE_STEPS[ns]; break; }
+  }
+  var axisMax = niceStep*4;
+  while(axisMax < maxVal){ axisMax += niceStep; }
+
+  var ticks=[]; for(var t=axisMax;t>=0;t-=niceStep) ticks.push(t);
+
+  var barsHtml = days.map(function(d){
+    function bar(val,color){
+      var h = axisMax>0 ? (val/axisMax*100) : 0;
+      return '<div title="'+val+'" style="width:9px;border-radius:3px 3px 0 0;background:'+color+';height:'+h+'%;min-height:'+(val>0?'2px':'0')+'"></div>';
+    }
+    return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0">'
+      + '<div style="flex:1;display:flex;align-items:flex-end;gap:3px;width:100%;justify-content:center">'
+      + bar(d.total,WEEKLY_ARRIVALS_COLORS.total) + bar(d.online,WEEKLY_ARRIVALS_COLORS.online) + bar(d.arrived,WEEKLY_ARRIVALS_COLORS.arrived)
+      + '</div>'
+      + '<div style="font-size:10px;color:var(--mu);white-space:nowrap;text-align:center">'+esc(d.label)+'</div>'
+      + '</div>';
+  }).join('');
+
+  var axisHtml = ticks.map(function(t){
+    return '<div style="flex:1;display:flex;align-items:flex-end;justify-content:flex-end;padding-right:6px;font-size:10px;color:var(--mu)">'+t+'</div>';
+  }).join('');
+
+  box.innerHTML =
+    '<div style="display:flex;gap:0;height:170px;border-bottom:1px solid var(--bdr)">'
+    + '<div style="display:flex;flex-direction:column;width:32px;flex-shrink:0">'+axisHtml+'</div>'
+    + '<div style="flex:1;display:flex;gap:2px;position:relative">'
+    +   ticks.slice(1).map(function(t,i){ return '<div style="position:absolute;left:0;right:0;bottom:'+((t/axisMax)*100)+'%;border-top:1px dashed var(--bdr)"></div>'; }).join('')
+    +   barsHtml
+    + '</div>'
+    + '</div>'
+    + '<div style="display:flex;gap:16px;margin-top:12px;flex-wrap:wrap">'
+    + ['total:Arrivées','online:Enregistrements en ligne','arrived:Déjà arrivées'].map(function(s){
+        var parts=s.split(':');
+        return '<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu)"><span style="width:9px;height:9px;border-radius:2px;background:'+WEEKLY_ARRIVALS_COLORS[parts[0]]+';display:inline-block"></span>'+parts[1]+'</div>';
+      }).join('')
+    + '</div>';
 }
 
 // ── KPI helpers ──
@@ -7216,21 +7309,21 @@ var UNIT_SHAPES = {
     viewBox:'0 0 80 110', w:36, h:50,
     path:'M40,28 C50,28 58,34 58,44 L58,60 C58,64 55,66 52,66 L52,92 C52,97 47,100 43,100 L41,100 C39,100 38,98 38,96 L38,70 L34,70 L34,96 C34,98 33,100 31,100 L29,100 C25,100 22,97 22,92 L22,66 C19,66 16,64 16,60 L16,44 C16,34 24,28 34,28 Z',
     extra:'<circle cx="40" cy="14" r="13" fill="{color}"/>',
-    extraGhost:'<circle cx="40" cy="14" r="13" fill="rgba(255,255,255,.22)"/>'
+    extraGhost:'<circle cx="40" cy="14" r="13" fill="rgba(255,255,255,.4)"/>'
   },
   waterJug: {
     // Bidon d'eau stylisé : bouchon, col, corps arrondi, anse
     viewBox:'0 0 80 110', w:34, h:46,
     path:'M30,8 L42,8 L42,18 L46,18 C52,18 56,23 56,30 L56,92 C56,98 51,103 45,103 L27,103 C21,103 16,98 16,92 L16,30 C16,23 20,18 26,18 L30,18 Z',
     extra:'<path d="M16,46 L10,46 C8,46 7,47 7,49 L7,68 C7,70 8,71 10,71 L16,71 Z" fill="{color}" opacity="0.85"/>',
-    extraGhost:'<path d="M16,46 L10,46 C8,46 7,47 7,49 L7,68 C7,70 8,71 10,71 L16,71 Z" fill="rgba(255,255,255,.22)"/>'
+    extraGhost:'<path d="M16,46 L10,46 C8,46 7,47 7,49 L7,68 C7,70 8,71 10,71 L16,71 Z" fill="rgba(255,255,255,.4)"/>'
   },
   co2Cloud: {
     // Nuage CO2 stylisé avec flèche descendante (évacuation/réduction)
     viewBox:'0 0 100 100', w:42, h:42,
     path:'M30,55 C20,55 13,48 13,39 C13,31 19,25 26,24 C27,13 36,5 47,5 C57,5 65,12 67,22 C76,22 84,29 84,39 C84,48 76,55 67,55 Z',
     extra:'<path d="M44,62 L56,62 L56,76 L64,76 L50,92 L36,76 L44,76 Z" fill="{color}"/>',
-    extraGhost:'<path d="M44,62 L56,62 L56,76 L64,76 L50,92 L36,76 L44,76 Z" fill="rgba(255,255,255,.22)"/>'
+    extraGhost:'<path d="M44,62 L56,62 L56,76 L64,76 L50,92 L36,76 L44,76 Z" fill="rgba(255,255,255,.4)"/>'
   }
 };
 
@@ -7288,9 +7381,11 @@ function singleUnitFigureSvg(pct, color, shapeKey, idSuffix){
 
   return '<svg viewBox="'+shape.viewBox+'" style="width:'+shape.w+'px;height:'+shape.h+'px;min-width:'+shape.w+'px;min-height:'+shape.h+'px;flex-shrink:0;display:block" xmlns="http://www.w3.org/2000/svg">'
     + '<defs><clipPath id="'+clipId+'"><rect x="0" y="'+fillY+'" width="'+vb[2]+'" height="'+((p/100)*vbH)+'"/></clipPath></defs>'
-    // état "vide" en gris clair
+    // état "vide" — contour net + remplissage clair pour rester lisible
+    // même à 0% (silhouette peu visible signalée quand hAnTotal/annualStays
+    // est petit face au dénominateur fixe de normalisation)
     + ghostExtra
-    + '<path d="'+shape.path+'" fill="rgba(255,255,255,.22)"/>'
+    + '<path d="'+shape.path+'" fill="rgba(255,255,255,.4)" stroke="rgba(255,255,255,.75)" stroke-width="1.5"/>'
     // état rempli, rogné par le clip selon le %
     + '<g clip-path="url(#'+clipId+')">'
     + colorExtra
