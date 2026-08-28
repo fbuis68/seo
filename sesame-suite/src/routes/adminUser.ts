@@ -75,7 +75,7 @@ adminUserRouter.post(
     const email = (b.email || "").trim().toLowerCase();
     if (!b.entityId) throw new HttpError(400, "Aucun établissement rattaché à ce contact");
     if (!email) throw new HttpError(400, "Ce contact n'a pas d'adresse email");
-    const role = b.role === "sesame" ? "sesame" : "hotel";
+    const role = b.role === "sesame" ? "sesame" : b.role === "housekeeping" ? "housekeeping" : "hotel";
 
     const entity = await prisma.entity.findUnique({ where: { id: b.entityId } });
     if (!entity) throw new HttpError(404, "Établissement introuvable");

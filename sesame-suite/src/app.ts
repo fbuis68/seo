@@ -33,6 +33,7 @@ import { emailRouter } from "./routes/email";
 import { messagingRouter } from "./routes/messaging";
 import { automationRuleRouter } from "./routes/automationRule";
 import { adminUserRouter } from "./routes/adminUser";
+import { housekeepingScope } from "./middleware/housekeepingScope";
 import { errorHandler } from "./middleware/errorHandler";
 import { VERSION } from "./lib/version";
 import { CHANGELOG } from "./lib/changelog";
@@ -49,6 +50,12 @@ export function createApp() {
   // fidèle à la convention chiefOrchester décrite dans la documentation
   // technique (§6.6), afin de faciliter un futur remplacement par le vrai
   // backend Java com.alphacent.fmk sans changer le contrat front-end.
+  // Cantonne les comptes role="housekeeping" (app tablette menage.html) à un
+  // allow-list de routes — cf. middleware/housekeepingScope.ts. Monté avant
+  // tous les routeurs /wa pour rester la seule frontière de sécurité à
+  // tenir à jour, plutôt qu'une garde par route sensible.
+  app.use("/wa", housekeepingScope);
+
   app.use("/wa", configRouter);
   app.use("/wa", facilityRouter);
   app.use("/wa", bookingRouter);
@@ -105,6 +112,7 @@ export function createApp() {
   app.get("/onboarding", (_req, res) => res.sendFile(path.join(publicDir, "onboarding.html")));
   app.get("/crm", (_req, res) => res.sendFile(path.join(publicDir, "crm.html")));
   app.get("/support", (_req, res) => res.sendFile(path.join(publicDir, "support.html")));
+  app.get("/menage", (_req, res) => res.sendFile(path.join(publicDir, "menage.html")));
 
   app.use(errorHandler);
 

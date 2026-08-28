@@ -101,7 +101,7 @@ loginRouter.post(
         const rawToken = await createResetToken(admin.id);
         const proto = req.get("x-forwarded-proto") || req.protocol;
         const host = req.get("host");
-        const page = admin.role === "sesame" ? "crm.html" : "admin.html";
+        const page = admin.role === "sesame" ? "crm.html" : admin.role === "housekeeping" ? "menage.html" : "admin.html";
         const resetUrl = `${proto}://${host}/${page}?resetToken=${rawToken}`;
         await sendResetEmail(admin, resetUrl);
       } catch (err) {

@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Ménage &amp; Maintenance — Sesame</title>
+<link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap">
+<style>
+:root{
+  --wine:#8B1A2E; --wine-d:#6B1423; --wine-l:#FDEDF0;
+  --menage:#B8860A; --menage-l:#FBF2DC;
+  --maint:#1A6FA8; --maint-l:#E9F2FA;
+  --done:#1A8A4E; --done-l:#E7F7EE;
+  --urgent:#C23B2E; --urgent-l:#FBEAE8;
+  --bg:#F4F2EF; --card:#FFFFFF; --ink:#22181C; --mu:#7E7570; --bdr:#E6E0DA;
+  --r:16px; --rs:12px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--ink);font-family:'DM Sans',Arial,sans-serif;font-size:17px;-webkit-tap-highlight-color:transparent}
+button{font-family:inherit}
+h1,h2,h3{font-family:'DM Serif Display',Georgia,serif;font-weight:400;margin:0}
+::-webkit-scrollbar{width:0;height:0}
+
+/* ── Login ── */
+#loginGate{position:fixed;inset:0;background:linear-gradient(150deg,var(--wine) 0%,var(--wine-d) 60%,#2B0E14 100%);display:flex;align-items:center;justify-content:center;padding:24px;z-index:500}
+.login-box{width:100%;max-width:380px;background:#fff;border-radius:var(--r);padding:34px 30px;box-shadow:0 24px 60px rgba(0,0,0,.35)}
+.login-mark{width:52px;height:52px;border-radius:14px;background:var(--wine);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'DM Serif Display',serif;font-size:26px;margin-bottom:14px}
+.login-box h1{font-size:22px;margin-bottom:2px}
+.login-sub{font-size:14px;color:var(--mu);margin-bottom:24px}
+.lf{margin-bottom:16px}
+.lf label{display:block;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--mu);margin-bottom:6px}
+.lf input{width:100%;font-size:18px;padding:14px 16px;border:1.5px solid var(--bdr);border-radius:var(--rs);background:var(--bg)}
+.lf input:focus{outline:none;border-color:var(--wine)}
+.login-btn{width:100%;padding:16px;border:none;border-radius:var(--rs);background:var(--wine);color:#fff;font-size:17px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:4px}
+.login-btn:active{background:var(--wine-d)}
+.login-err{margin-top:14px;color:var(--urgent);font-size:14px;text-align:center;display:none}
+
+/* ── App shell ── */
+#app{display:none;min-height:100%;flex-direction:column}
+header.top{position:sticky;top:0;z-index:40;background:var(--wine);color:#fff;padding:14px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;box-shadow:0 2px 10px rgba(0,0,0,.15)}
+header.top .hn{font-family:'DM Serif Display',serif;font-size:20px;line-height:1.1}
+header.top .hs{font-size:12px;opacity:.75}
+.datectl{display:flex;align-items:center;gap:6px;margin-left:auto;flex-shrink:0}
+.datectl button:not(.todaybtn){width:38px;height:38px;flex-shrink:0;border-radius:10px;border:none;background:rgba(255,255,255,.16);color:#fff;font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.datectl button:active{background:rgba(255,255,255,.3)}
+.datelbl{font-size:14px;font-weight:600;min-width:118px;text-align:center;flex-shrink:0}
+.todaybtn{padding:0 12px;height:38px;flex-shrink:0;white-space:nowrap;border-radius:10px;border:none;background:rgba(255,255,255,.16);color:#fff;font-size:13px;font-weight:600;cursor:pointer}
+.logoutbtn{width:38px;height:38px;flex-shrink:0;border-radius:10px;border:none;background:rgba(255,255,255,.12);color:#fff;font-size:17px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+
+.viewtabs{display:flex;gap:3px;background:var(--bdr);border-radius:12px;padding:3px;margin:14px 18px 0;width:fit-content}
+.vtab{padding:9px 18px;border-radius:9px;font-size:14px;font-weight:600;color:var(--mu);cursor:pointer;display:flex;align-items:center;gap:6px}
+.vtab.on{background:#fff;color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.1)}
+.roomgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.rcard{background:var(--card);border:1px solid var(--bdr);border-radius:var(--rs);padding:14px;cursor:pointer;text-align:left}
+.rcard:active{background:var(--bg)}
+.rcard .rname{font-family:'DM Serif Display',serif;font-size:17px;margin-bottom:8px}
+.rstatus{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:5px 10px;border-radius:999px}
+.rstatus .dot{width:8px;height:8px;border-radius:50%;background:currentColor}
+.statuspick{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
+.spick{padding:14px 10px;border-radius:var(--rs);border:2px solid var(--bdr);background:#fff;font-size:14px;font-weight:600;text-align:center;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+.spick .dot{width:10px;height:10px;border-radius:50%;flex:none}
+.spick.cur{border-color:var(--ink);background:var(--bg)}
+.filters{display:flex;gap:8px;padding:14px 18px 4px;flex-wrap:wrap;align-items:center}
+.chip{padding:9px 16px;border-radius:999px;border:1.5px solid var(--bdr);background:#fff;color:var(--mu);font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.chip.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.chip.on.f-menage{background:var(--menage);border-color:var(--menage)}
+.chip.on.f-maintenance{background:var(--maint);border-color:var(--maint)}
+.spacer{flex:1}
+.togglehide{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mu);cursor:pointer;user-select:none}
+.togglehide input{width:20px;height:20px}
+
+main{flex:1;padding:10px 18px 110px}
+.daysum{font-size:13px;color:var(--mu);padding:6px 2px 12px}
+
+.tcard{background:var(--card);border:1px solid var(--bdr);border-radius:var(--r);padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:opacity .15s ease}
+.tcard:active{background:var(--bg)}
+.tcard.done{opacity:.55}
+.tcard .ticon{flex:none;width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;color:#fff}
+.tcard .ticon.menage{background:var(--menage)}
+.tcard .ticon.maintenance{background:var(--maint)}
+.tcard .ticon.autre,.tcard .ticon.linge,.tcard .ticon.entretien,.tcard .ticon.controle{background:#8A7F99}
+.tcard .tbody{flex:1;min-width:0}
+.tcard .troom{font-family:'DM Serif Display',serif;font-size:19px;line-height:1.15}
+.tcard .ttype{font-size:14px;color:var(--mu);margin-top:2px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.badge-urgent{background:var(--urgent-l);color:var(--urgent);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:2px 8px;border-radius:999px}
+.badge-staff{background:var(--bg);color:var(--mu);font-size:12px;padding:2px 8px;border-radius:999px}
+.tcard .tstatus{flex:none;width:52px;height:52px;border-radius:14px;border:2px solid var(--bdr);display:flex;align-items:center;justify-content:center;font-size:24px;color:transparent;background:#fff}
+.tcard.done .tstatus{background:var(--done);border-color:var(--done);color:#fff}
+
+.empty{text-align:center;padding:60px 20px;color:var(--mu)}
+.empty i{font-size:40px;opacity:.4;display:block;margin-bottom:10px}
+.loading{text-align:center;padding:60px 20px;color:var(--mu)}
+
+.fab{position:fixed;right:22px;bottom:26px;width:64px;height:64px;border-radius:50%;background:var(--wine);color:#fff;border:none;font-size:28px;box-shadow:0 10px 26px rgba(139,26,46,.4);display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:50}
+.fab:active{background:var(--wine-d)}
+
+/* ── Bottom sheet ── */
+.sheet-bg{position:fixed;inset:0;background:rgba(20,10,12,.4);z-index:200;display:none;align-items:flex-end;justify-content:center}
+.sheet-bg.show{display:flex}
+.sheet{width:100%;max-width:560px;background:#fff;border-radius:22px 22px 0 0;max-height:88vh;overflow-y:auto;padding:22px 22px calc(22px + env(safe-area-inset-bottom))}
+.sheet-handle{width:40px;height:4px;background:var(--bdr);border-radius:2px;margin:0 auto 16px}
+.sheet h2{font-size:21px;margin-bottom:2px}
+.sheet .shsub{font-size:13px;color:var(--mu);margin-bottom:18px}
+.sf{margin-bottom:16px}
+.sf label{display:block;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--mu);margin-bottom:7px}
+.sf select,.sf textarea,.sf input{width:100%;font-size:16px;padding:12px 14px;border:1.5px solid var(--bdr);border-radius:var(--rs);background:var(--bg);font-family:inherit}
+.sf textarea{min-height:78px;resize:vertical}
+.segrow{display:flex;gap:8px}
+.seg{flex:1;padding:12px;border-radius:var(--rs);border:1.5px solid var(--bdr);background:var(--bg);text-align:center;font-size:14px;font-weight:600;color:var(--mu);cursor:pointer}
+.seg.on{border-color:var(--ink);background:var(--ink);color:#fff}
+.seg.on.seg-menage{background:var(--menage);border-color:var(--menage)}
+.seg.on.seg-maintenance{background:var(--maint);border-color:var(--maint)}
+.seg.on.seg-urgent{background:var(--urgent);border-color:var(--urgent)}
+.sheet-acts{display:flex;gap:10px;margin-top:22px}
+.btn{flex:1;padding:15px;border-radius:var(--rs);border:none;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px}
+.btn-primary{background:var(--wine);color:#fff}
+.btn-primary:active{background:var(--wine-d)}
+.btn-done{background:var(--done);color:#fff}
+.btn-ghost{background:var(--bg);color:var(--ink)}
+.btn-danger{background:var(--urgent-l);color:var(--urgent)}
+
+@media (min-width:820px){
+  main{padding-left:32px;padding-right:32px}
+  .tcard{max-width:760px}
+}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+</style>
+</head>
+<body>
+
+<div id="loginGate">
+  <div class="login-box">
+    <div class="login-mark">S</div>
+    <h1>Ménage &amp; Maintenance</h1>
+    <div class="login-sub">Espace tablette du personnel — Sesame</div>
+    <div class="lf"><label for="mg-email">Email</label><input type="email" id="mg-email" autocomplete="username" placeholder="gouvernante@hotel.fr"></div>
+    <div class="lf"><label for="mg-password">Mot de passe</label><input type="password" id="mg-password" autocomplete="current-password" placeholder="••••••••"></div>
+    <button class="login-btn" onclick="mgLogin()"><i class="ti ti-login"></i> Se connecter</button>
+    <div class="login-err" id="mg-login-err"></div>
+  </div>
+</div>
+
+<div id="app">
+  <header class="top">
+    <div>
+      <div class="hn" id="hn">Sesame</div>
+      <div class="hs" id="hs">Ménage &amp; Maintenance</div>
+    </div>
+    <div class="datectl">
+      <button onclick="mgNavDay(-1)" aria-label="Jour précédent"><i class="ti ti-chevron-left"></i></button>
+      <span class="datelbl" id="datelbl">—</span>
+      <button onclick="mgNavDay(1)" aria-label="Jour suivant"><i class="ti ti-chevron-right"></i></button>
+      <button class="todaybtn" onclick="mgNavToday()">Aujourd'hui</button>
+    </div>
+    <button class="logoutbtn" onclick="mgLogout()" aria-label="Déconnexion"><i class="ti ti-logout"></i></button>
+  </header>
+
+  <div class="viewtabs" id="viewtabs">
+    <div class="vtab on" data-v="tasks" onclick="mgSetView('tasks')"><i class="ti ti-list-check"></i> Tâches</div>
+    <div class="vtab" data-v="rooms" onclick="mgSetView('rooms')"><i class="ti ti-door"></i> Chambres</div>
+  </div>
+
+  <div id="viewTasks">
+    <div class="filters" id="filters">
+      <div class="chip on" data-f="all" onclick="mgSetFilter('all')">Tout</div>
+      <div class="chip f-menage" data-f="menage" onclick="mgSetFilter('menage')"><i class="ti ti-spray"></i> Ménage</div>
+      <div class="chip f-maintenance" data-f="maintenance" onclick="mgSetFilter('maintenance')"><i class="ti ti-tool"></i> Maintenance</div>
+      <div class="spacer"></div>
+      <label class="togglehide"><input type="checkbox" id="hideDone" onchange="mgRender()"> Masquer terminées</label>
+    </div>
+
+    <main>
+      <div class="daysum" id="daysum"></div>
+      <div id="taskList"><div class="loading"><i class="ti ti-loader"></i> Chargement…</div></div>
+    </main>
+  </div>
+
+  <div id="viewRooms" style="display:none">
+    <main>
+      <div class="daysum">État de propreté de chaque chambre — appuyez pour mettre à jour.</div>
+      <div class="roomgrid" id="roomGrid"><div class="loading"><i class="ti ti-loader"></i> Chargement…</div></div>
+    </main>
+  </div>
+
+  <button class="fab" id="fabNew" onclick="mgOpenNew()" aria-label="Signaler une intervention"><i class="ti ti-plus"></i></button>
+</div>
+
+<div class="sheet-bg" id="sheetBg" onclick="if(event.target===this)mgCloseSheet()">
+  <div class="sheet" id="sheet"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════ ÉTAT
+var API_BASE = '';
+var MG_TOKEN = null, MG_ENTITY = null;
+var MG_ROOMS = [];         // [{code,name,floor}]
+var MG_STAFF = [];         // [{id,name,color}]
+var MG_TASKS = [];         // tâches du jour affiché
+var MG_DATE = mgToday();
+var MG_FILTER = 'all';
+var MG_EDIT_ID = null;     // tâche en cours d'édition dans la sheet (null = création)
+var MG_POLL = null;
+var MG_VIEW = 'tasks';     // tasks | rooms
+var MG_ROOM_STATUS = [];   // [{roomCode,roomName,floor,cleanStatus,occupancyStatus}]
+var MG_ROOM_EDIT = null;   // roomCode en cours d'édition dans la sheet "Chambres"
+
+var TYPE_META = {
+  menage:      { label:'Ménage',      icon:'ti-spray' },
+  maintenance: { label:'Maintenance', icon:'ti-tool' },
+  linge:       { label:'Linge',       icon:'ti-wash' },
+  entretien:   { label:'Entretien',   icon:'ti-broom' },
+  controle:    { label:'Contrôle',    icon:'ti-clipboard-check' },
+  autre:       { label:'Autre',       icon:'ti-dots' }
+};
+
+// Statuts de propreté — même liste que CLEAN_STATUSES côté API
+// (src/routes/housekeepingStatus.ts), dupliquée ici pour rester un simple
+// front statique sans build step.
+var CLEAN_STATUSES = [
+  { k:'propre',          label:'Propre',               color:'#1A8A4E' },
+  { k:'sale',             label:'Sale',                 color:'#C23B2E' },
+  { k:'recouche_lit',     label:'Recouche lit à faire',  color:'#B8720A' },
+  { k:'recouche_blanc',   label:'Recouche à blanc',      color:'#B8A20A' },
+  { k:'en_verif',         label:'En vérification',       color:'#1A6FA8' },
+  { k:'taie_oreiller',    label:'Taie d\'oreiller',       color:'#7D3C98' },
+  { k:'serviette',        label:'Serviette',             color:'#0F9E88' },
+  { k:'drap',             label:'Drap',                  color:'#7E7570' }
+];
+function mgStatusMeta(k){
+  for(var i=0;i<CLEAN_STATUSES.length;i++) if(CLEAN_STATUSES[i].k===k) return CLEAN_STATUSES[i];
+  return CLEAN_STATUSES[1];
+}
+
+function mgToday(){ var d=new Date(); d.setHours(0,0,0,0); return d; }
+function mgFmtISO(d){ return d.toISOString().slice(0,10); }
+function mgFmtLabel(d){
+  var t=mgToday();
+  if(d.getTime()===t.getTime()) return "Aujourd'hui";
+  var tmr=new Date(t); tmr.setDate(tmr.getDate()+1);
+  if(d.getTime()===tmr.getTime()) return "Demain";
+  var y=new Date(t); y.setDate(y.getDate()-1);
+  if(d.getTime()===y.getTime()) return "Hier";
+  return d.toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'});
+}
+
+// ═══════════════════════════════════════════════ AUTH
+function mgSavedToken(){
+  return sessionStorage.getItem('SESAME_MENAGE_TOKEN') || sessionStorage.getItem('SESAME_ADMIN_TOKEN');
+}
+function mgSavedEntity(){
+  return sessionStorage.getItem('SESAME_MENAGE_ENTITY') || sessionStorage.getItem('SESAME_ADMIN_ROLE_ENTITY') || sessionStorage.getItem('SESAME_HOME_ENTITY');
+}
+
+async function mgLogin(){
+  var email=(document.getElementById('mg-email').value||'').trim();
+  var password=document.getElementById('mg-password').value||'';
+  var errEl=document.getElementById('mg-login-err');
+  errEl.style.display='none';
+  if(!email||!password){ errEl.textContent='Email et mot de passe requis'; errEl.style.display='block'; return; }
+  try{
+    var r=await fetch(API_BASE+'/wa/login/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email,password:password})});
+    var data=await r.json();
+    if(!r.ok){ errEl.textContent=data.error||'Identifiants incorrects'; errEl.style.display='block'; return; }
+    sessionStorage.setItem('SESAME_MENAGE_TOKEN', data.token);
+    sessionStorage.setItem('SESAME_MENAGE_ENTITY', data.admin.entityCode);
+    mgBoot(data.token, data.admin.entityCode, data.admin.hotelName);
+  }catch(e){
+    errEl.textContent='Erreur de connexion au serveur'; errEl.style.display='block';
+  }
+}
+function mgLogout(){
+  sessionStorage.removeItem('SESAME_MENAGE_TOKEN');
+  sessionStorage.removeItem('SESAME_MENAGE_ENTITY');
+  sessionStorage.removeItem('SESAME_ADMIN_TOKEN');
+  sessionStorage.removeItem('SESAME_ADMIN_ROLE');
+  location.reload();
+}
+
+function mgApiFetch(path, opts){
+  opts = opts || {};
+  opts.headers = Object.assign({'Content-Type':'application/json','Authorization':'Bearer '+MG_TOKEN}, opts.headers||{});
+  var sep = path.indexOf('?')>=0 ? '&' : '?';
+  return fetch(API_BASE+path+sep+'entityCode='+encodeURIComponent(MG_ENTITY), opts);
+}
+
+// ═══════════════════════════════════════════════ BOOT
+window.addEventListener('DOMContentLoaded', function(){
+  var t = mgSavedToken(), e = mgSavedEntity();
+  if(t && e){ mgBoot(t, e, null); }
+});
+
+async function mgBoot(token, entityCode, hotelName){
+  MG_TOKEN = token; MG_ENTITY = entityCode;
+  document.getElementById('loginGate').style.display='none';
+  document.getElementById('app').style.display='flex';
+  if(hotelName) document.getElementById('hn').textContent = hotelName;
+
+  try{
+    var r = await mgApiFetch('/wa/entityModuleConfig/list');
+    if(r.status===401 || r.status===403){ mgLogout(); return; }
+    var cfg = await r.json();
+    document.getElementById('hn').textContent = cfg.hotelName || 'Sesame';
+    MG_ROOMS = cfg.rooms || [];
+  }catch(e){}
+
+  try{
+    var r2 = await mgApiFetch('/wa/housekeepingStaff/list');
+    if(r2.ok) MG_STAFF = await r2.json();
+  }catch(e){}
+
+  mgRenderDateLabel();
+  await mgLoadTasks();
+
+  if(MG_POLL) clearInterval(MG_POLL);
+  MG_POLL = setInterval(function(){
+    if(!document.getElementById('sheetBg').classList.contains('show')) mgLoadTasks();
+  }, 30000);
+}
+
+// ═══════════════════════════════════════════════ DONNÉES
+function mgRoomInfo(code){
+  for(var i=0;i<MG_ROOMS.length;i++) if(MG_ROOMS[i].code===code) return MG_ROOMS[i];
+  return null;
+}
+function mgStaffName(id){
+  for(var i=0;i<MG_STAFF.length;i++) if(MG_STAFF[i].id===id) return MG_STAFF[i].name;
+  return '';
+}
+
+async function mgLoadTasks(){
+  var iso = mgFmtISO(MG_DATE);
+  try{
+    var r = await mgApiFetch('/wa/housekeepingTask/list?from='+iso+'&to='+iso);
+    if(r.status===401 || r.status===403){ mgLogout(); return; }
+    MG_TASKS = r.ok ? await r.json() : [];
+  }catch(e){
+    MG_TASKS = [];
+  }
+  MG_TASKS = MG_TASKS.filter(function(t){ return t.status!=='cancelled'; });
+  mgRender();
+}
+
+function mgNavDay(delta){
+  MG_DATE = new Date(MG_DATE); MG_DATE.setDate(MG_DATE.getDate()+delta);
+  mgRenderDateLabel();
+  mgLoadTasks();
+}
+function mgNavToday(){ MG_DATE = mgToday(); mgRenderDateLabel(); mgLoadTasks(); }
+function mgRenderDateLabel(){
+  document.getElementById('datelbl').textContent = mgFmtLabel(MG_DATE);
+  document.querySelector('.todaybtn').style.display = (mgFmtISO(MG_DATE)===mgFmtISO(mgToday())) ? 'none' : '';
+}
+
+function mgSetFilter(f){
+  MG_FILTER = f;
+  document.querySelectorAll('#filters .chip').forEach(function(c){ c.classList.toggle('on', c.getAttribute('data-f')===f); });
+  mgRender();
+}
+
+// ═══════════════════════════════════════════════ VUE "CHAMBRES" (statut de propreté)
+function mgSetView(v){
+  MG_VIEW = v;
+  document.querySelectorAll('#viewtabs .vtab').forEach(function(c){ c.classList.toggle('on', c.getAttribute('data-v')===v); });
+  document.getElementById('viewTasks').style.display = v==='tasks' ? '' : 'none';
+  document.getElementById('viewRooms').style.display = v==='rooms' ? '' : 'none';
+  document.getElementById('fabNew').style.display = v==='tasks' ? '' : 'none';
+  if(v==='rooms') mgLoadRoomStatus();
+}
+
+async function mgLoadRoomStatus(){
+  try{
+    var r = await mgApiFetch('/wa/housekeepingStatus/list');
+    if(r.status===401 || r.status===403){ mgLogout(); return; }
+    MG_ROOM_STATUS = r.ok ? await r.json() : [];
+  }catch(e){ MG_ROOM_STATUS = []; }
+  mgRenderRooms();
+}
+
+function mgRenderRooms(){
+  var el = document.getElementById('roomGrid');
+  if(!MG_ROOM_STATUS.length){ el.innerHTML = '<div class="empty"><i class="ti ti-door"></i>Aucune chambre configurée.</div>'; return; }
+  var sorted = MG_ROOM_STATUS.slice().sort(function(a,b){ return a.roomCode.localeCompare(b.roomCode, undefined, {numeric:true}); });
+  el.innerHTML = sorted.map(function(r){
+    var meta = mgStatusMeta(r.cleanStatus);
+    return '<button class="rcard" onclick="mgOpenRoomStatus(\''+r.roomCode+'\')">'
+      + '<div class="rname">'+esc(r.roomName||r.roomCode)+'</div>'
+      + '<div class="rstatus" style="background:'+meta.color+'22;color:'+meta.color+'"><span class="dot"></span>'+esc(meta.label)+'</div>'
+      + '</button>';
+  }).join('');
+}
+
+function mgOpenRoomStatus(roomCode){
+  var r = MG_ROOM_STATUS.find(function(x){ return x.roomCode===roomCode; });
+  if(!r) return;
+  MG_ROOM_EDIT = roomCode;
+  var html = '<div class="sheet-handle"></div>'
+    + '<h2>'+esc(r.roomName||roomCode)+'</h2>'
+    + '<div class="shsub">Choisissez le nouveau statut de propreté</div>'
+    + '<div class="statuspick">'
+    + CLEAN_STATUSES.map(function(s){
+        return '<div class="spick'+(s.k===r.cleanStatus?' cur':'')+'" style="color:'+s.color+'" onclick="mgPickStatus(\''+s.k+'\')"><span class="dot" style="background:'+s.color+'"></span>'+esc(s.label)+'</div>';
+      }).join('')
+    + '</div>';
+  document.getElementById('sheet').innerHTML = html;
+  document.getElementById('sheetBg').classList.add('show');
+}
+
+async function mgPickStatus(k){
+  if(!MG_ROOM_EDIT) return;
+  try{
+    await mgApiFetch('/wa/housekeepingStatus/update', { method:'POST', body: JSON.stringify({ roomCode: MG_ROOM_EDIT, cleanStatus: k }) });
+  }catch(e){}
+  mgCloseSheet();
+  mgLoadRoomStatus();
+}
+
+// ═══════════════════════════════════════════════ RENDU LISTE
+function mgRender(){
+  var hideDone = document.getElementById('hideDone').checked;
+  var list = MG_TASKS.filter(function(t){
+    if(MG_FILTER!=='all' && t.type!==MG_FILTER) return false;
+    if(hideDone && t.status==='done') return false;
+    return true;
+  });
+  list.sort(function(a,b){
+    if((a.status==='done') !== (b.status==='done')) return a.status==='done' ? 1 : -1;
+    if((a.priority==='urgent') !== (b.priority==='urgent')) return a.priority==='urgent' ? -1 : 1;
+    return a.roomCode.localeCompare(b.roomCode, undefined, {numeric:true});
+  });
+
+  var doneCount = MG_TASKS.filter(function(t){return t.status==='done';}).length;
+  document.getElementById('daysum').textContent = MG_TASKS.length
+    ? doneCount+' / '+MG_TASKS.length+' tâche(s) terminée(s)'
+    : '';
+
+  var el = document.getElementById('taskList');
+  if(!list.length){
+    el.innerHTML = '<div class="empty"><i class="ti ti-checkbox"></i>'+(MG_TASKS.length?'Aucune tâche pour ce filtre.':'Aucune intervention prévue ce jour-là.')+'</div>';
+    return;
+  }
+  el.innerHTML = list.map(mgTaskCardHtml).join('');
+}
+
+function mgTaskCardHtml(t){
+  var meta = TYPE_META[t.type] || TYPE_META.autre;
+  var room = mgRoomInfo(t.roomCode);
+  var roomLabel = room ? (room.name || t.roomCode) : t.roomCode;
+  var staffName = t.assignedStaffId ? mgStaffName(t.assignedStaffId) : '';
+  var done = t.status==='done';
+  return '<div class="tcard'+(done?' done':'')+'" onclick="mgOpenTask(\''+t.id+'\')">'
+    + '<div class="ticon '+t.type+'"><i class="ti '+meta.icon+'"></i></div>'
+    + '<div class="tbody">'
+    +   '<div class="troom">'+esc(roomLabel)+'</div>'
+    +   '<div class="ttype">'+esc(meta.label)+(t.subtype?' · '+esc(t.subtype):'')
+    +     (t.priority==='urgent'?'<span class="badge-urgent">Urgent</span>':'')
+    +     (staffName?'<span class="badge-staff">'+esc(staffName)+'</span>':'')
+    +   '</div>'
+    + '</div>'
+    + '<div class="tstatus"><i class="ti ti-check"></i></div>'
+    + '</div>';
+}
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+// ═══════════════════════════════════════════════ QUICK TOGGLE (depuis la carte — tap direct sur le rond ✓ passerait par mgOpenTask, on garde un seul geste = ouvrir la fiche pour rester simple et éviter les faux clics)
+function mgOpenTask(id){
+  var t = MG_TASKS.find(function(x){ return x.id===id; });
+  if(!t) return;
+  MG_EDIT_ID = id;
+  mgOpenSheet(t);
+}
+
+function mgOpenNew(){
+  MG_EDIT_ID = null;
+  mgOpenSheet(null);
+}
+
+// ═══════════════════════════════════════════════ SHEET (détail / création)
+function mgOpenSheet(t){
+  var isNew = !t;
+  var type = t ? t.type : 'menage';
+  var priority = t ? t.priority : 'normal';
+  var roomOptions = MG_ROOMS.map(function(r){
+    var sel = t && t.roomCode===r.code ? ' selected' : '';
+    return '<option value="'+esc(r.code)+'"'+sel+'>'+esc(r.name||r.code)+'</option>';
+  }).join('');
+
+  var html = '<div class="sheet-handle"></div>'
+    + '<h2>'+(isNew?'Signaler une intervention':'Détail de la tâche')+'</h2>'
+    + '<div class="shsub">'+(isNew?mgFmtLabel(MG_DATE):esc((mgRoomInfo(t.roomCode)||{}).name||t.roomCode))+'</div>'
+    + '<div class="sf"><label>Chambre</label><select id="sf-room" '+(isNew?'':'disabled')+'>'+roomOptions+'</select></div>'
+    + '<div class="sf"><label>Type</label><div class="segrow" id="sf-type">'
+    +   '<div class="seg seg-menage'+(type==='menage'?' on':'')+'" data-v="menage" onclick="mgSegPick(this)">🧹 Ménage</div>'
+    +   '<div class="seg seg-maintenance'+(type==='maintenance'?' on':'')+'" data-v="maintenance" onclick="mgSegPick(this)">🔧 Maintenance</div>'
+    + '</div></div>'
+    + '<div class="sf"><label>Priorité</label><div class="segrow" id="sf-priority">'
+    +   '<div class="seg'+(priority!=='urgent'?' on':'')+'" data-v="normal" onclick="mgSegPick(this)">Normale</div>'
+    +   '<div class="seg seg-urgent'+(priority==='urgent'?' on':'')+'" data-v="urgent" onclick="mgSegPick(this)">Urgente</div>'
+    + '</div></div>'
+    + '<div class="sf"><label>Note</label><textarea id="sf-notes" placeholder="Ex : robinet qui fuit, minibar vide…">'+(t?esc(t.notes):'')+'</textarea></div>'
+    + '<div class="sheet-acts">'
+    + (isNew
+        ? '<button class="btn btn-ghost" onclick="mgCloseSheet()">Annuler</button><button class="btn btn-primary" onclick="mgSubmitNew()"><i class="ti ti-plus"></i> Créer</button>'
+        : ((t.status==='done')
+            ? '<button class="btn btn-ghost" onclick="mgToggleDone()"><i class="ti ti-rotate"></i> Remettre à faire</button><button class="btn btn-primary" onclick="mgSaveEdit()">Enregistrer</button>'
+            : '<button class="btn btn-primary" onclick="mgSaveEdit()">Enregistrer</button><button class="btn btn-done" onclick="mgToggleDone()"><i class="ti ti-check"></i> Terminé</button>'
+          )
+      )
+    + '</div>';
+
+  document.getElementById('sheet').innerHTML = html;
+  document.getElementById('sheetBg').classList.add('show');
+}
+function mgCloseSheet(){ document.getElementById('sheetBg').classList.remove('show'); }
+function mgSegPick(el){
+  var group = el.parentElement;
+  [].forEach.call(group.children, function(c){ c.classList.remove('on'); });
+  el.classList.add('on');
+}
+function mgSegVal(groupId){
+  var on = document.querySelector('#'+groupId+' .seg.on');
+  return on ? on.getAttribute('data-v') : null;
+}
+
+async function mgSubmitNew(){
+  var roomCode = document.getElementById('sf-room').value;
+  var type = mgSegVal('sf-type') || 'menage';
+  var priority = mgSegVal('sf-priority') || 'normal';
+  var notes = document.getElementById('sf-notes').value;
+  if(!roomCode) return;
+  try{
+    await mgApiFetch('/wa/housekeepingTask/create', { method:'POST', body: JSON.stringify({
+      roomCode: roomCode, date: mgFmtISO(MG_DATE), type: type, priority: priority, notes: notes, status:'planned'
+    })});
+  }catch(e){}
+  mgCloseSheet();
+  mgLoadTasks();
+}
+
+async function mgSaveEdit(){
+  if(!MG_EDIT_ID) return;
+  var type = mgSegVal('sf-type');
+  var priority = mgSegVal('sf-priority');
+  var notes = document.getElementById('sf-notes').value;
+  try{
+    await mgApiFetch('/wa/housekeepingTask/update', { method:'POST', body: JSON.stringify({
+      id: MG_EDIT_ID, type: type, priority: priority, notes: notes
+    })});
+  }catch(e){}
+  mgCloseSheet();
+  mgLoadTasks();
+}
+
+async function mgToggleDone(){
+  if(!MG_EDIT_ID) return;
+  var t = MG_TASKS.find(function(x){ return x.id===MG_EDIT_ID; });
+  var newStatus = (t && t.status==='done') ? 'planned' : 'done';
+  try{
+    await mgApiFetch('/wa/housekeepingTask/update', { method:'POST', body: JSON.stringify({ id: MG_EDIT_ID, status: newStatus }) });
+  }catch(e){}
+  mgCloseSheet();
+  mgLoadTasks();
+}
+</script>
+</body>
+</html>

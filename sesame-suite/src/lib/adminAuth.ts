@@ -1,7 +1,10 @@
 import jwt from "jsonwebtoken";
 import { config } from "../config";
 
-export type AdminRole = "sesame" | "hotel";
+// "housekeeping" : compte restreint à l'app tablette ménage/maintenance
+// (menage.html) — cf. middleware/housekeepingScope.ts pour la restriction
+// des routes API accessibles à ce rôle.
+export type AdminRole = "sesame" | "hotel" | "housekeeping";
 
 export interface AdminTokenPayload {
   entityId: string;
@@ -19,7 +22,7 @@ export function signAdminToken(payload: AdminTokenPayload): string {
 export function verifyAdminToken(token: string): AdminTokenPayload | null {
   try {
     const decoded = jwt.verify(token, config.jwtSecret) as AdminTokenPayload;
-    if (decoded.role !== "sesame" && decoded.role !== "hotel") return null;
+    if (decoded.role !== "sesame" && decoded.role !== "hotel" && decoded.role !== "housekeeping") return null;
     if (!decoded.adminId || !decoded.entityCode) return null;
     return decoded;
   } catch {

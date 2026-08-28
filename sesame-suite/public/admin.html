@@ -3434,6 +3434,15 @@ async function adminLogin(){
       return;
     }
     var data = await r.json();
+    if(data.admin.role === 'housekeeping'){
+      // Compte réservé à l'app tablette ménage/maintenance — jamais le
+      // back-office complet (cf. housekeepingScope.ts côté API). On lui
+      // évite une seconde saisie en transmettant directement le token.
+      sessionStorage.setItem('SESAME_MENAGE_TOKEN', data.token);
+      sessionStorage.setItem('SESAME_MENAGE_ENTITY', data.admin.entityCode);
+      location.href = '/menage.html';
+      return;
+    }
     ADMIN_TOKEN = data.token;
     ADMIN_ROLE  = data.admin.role;
     HOME_ENTITY_CODE = data.admin.entityCode;
