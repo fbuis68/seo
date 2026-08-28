@@ -94,6 +94,8 @@ function shapeConfig(c: {
   updateStatusParam: string | null;
   updateStatusValueMap: unknown;
   updateBookingTypeParam: string | null;
+  updateStartDateParam: string | null;
+  updateEndDateParam: string | null;
   syncIntervalMinutes: number | null;
   lastSyncAt: Date | null;
   lastSyncStatus: string | null;
@@ -177,6 +179,8 @@ function shapeConfig(c: {
     updateStatusParam: c.updateStatusParam || "",
     updateStatusValueMap: c.updateStatusValueMap || {},
     updateBookingTypeParam: c.updateBookingTypeParam || "",
+    updateStartDateParam: c.updateStartDateParam || "",
+    updateEndDateParam: c.updateEndDateParam || "",
     syncIntervalMinutes: c.syncIntervalMinutes,
     lastSyncAt: c.lastSyncAt,
     lastSyncStatus: c.lastSyncStatus,
@@ -277,6 +281,8 @@ interface ConfigBody {
   updateStatusParam?: string;
   updateStatusValueMap?: Record<string, string>;
   updateBookingTypeParam?: string;
+  updateStartDateParam?: string;
+  updateEndDateParam?: string;
   syncIntervalMinutes?: number | null;
 }
 
@@ -364,6 +370,8 @@ bookingSourceRouter.post(
       updateStatusParam: b.updateStatusParam,
       updateStatusValueMap: b.updateStatusValueMap as never,
       updateBookingTypeParam: b.updateBookingTypeParam,
+      updateStartDateParam: b.updateStartDateParam,
+      updateEndDateParam: b.updateEndDateParam,
       syncIntervalMinutes: b.syncIntervalMinutes ?? null,
     };
     const config = await prisma.bookingSourceConfig.upsert({

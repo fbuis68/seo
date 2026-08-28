@@ -155,20 +155,34 @@ bookingRouter.post(
       data.bookingType = bt || null;
       bookingTypeChanged = bt || null;
     }
+    // Dates de séjour — toujours envoyées par le formulaire d'édition (pas
+    // seulement en cas de changement réel), même convention que roomCode/
+    // bookingType ci-dessus : b.startDate/b.endDate !== undefined suffit à
+    // déclencher la répercussion.
+    const startDateChanged = b.startDate !== undefined ? startDate.toISOString().slice(0, 10) : undefined;
+    const endDateChanged = b.endDate !== undefined ? endDate.toISOString().slice(0, 10) : undefined;
 
     const updated = await prisma.booking.update({ where: { id: booking.id }, data });
 
-    // Répercussion best-effort vers la source externe (chambre, statut et/ou
-    // type de réservation) — jamais bloquante, cf. lib/bookingSource.ts
-    // pushBookingUpdate.
+    // Répercussion best-effort vers la source externe (chambre, statut,
+    // type de réservation et/ou dates) — jamais bloquante, cf.
+    // lib/bookingSource.ts pushBookingUpdate.
     let pushWarning: string | undefined;
-    if (roomCodeChanged !== undefined || b.status !== undefined || bookingTypeChanged !== undefined) {
+    if (
+      roomCodeChanged !== undefined ||
+      b.status !== undefined ||
+      bookingTypeChanged !== undefined ||
+      startDateChanged !== undefined ||
+      endDateChanged !== undefined
+    ) {
       const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
       if (config) {
         const result = await pushBookingUpdate(config, updated.code, {
           roomCode: roomCodeChanged,
           status: b.status,
           bookingType: bookingTypeChanged,
+          startDate: startDateChanged,
+          endDate: endDateChanged,
         }).catch((e) => ({ ok: false, error: String(e) }));
         if (!result.ok) pushWarning = result.error;
       }

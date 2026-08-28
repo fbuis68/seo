@@ -2130,6 +2130,16 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         <input type="text" id="bs-updateBookingTypeParam" placeholder="Ex : type — vide si non notifié">
       </div>
     </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Nom du paramètre portant la nouvelle date d'arrivée (optionnel)</label>
+        <input type="text" id="bs-updateStartDateParam" placeholder="Ex : startDate — vide si non notifié">
+      </div>
+      <div class="fi">
+        <label class="lb">Nom du paramètre portant la nouvelle date de départ (optionnel)</label>
+        <input type="text" id="bs-updateEndDateParam" placeholder="Ex : endDate — vide si non notifié">
+      </div>
+    </div>
     <div class="fi">
       <label class="lb">Correspondance des statuts (un par ligne : statut local=valeur source externe)</label>
       <textarea id="bs-updateStatusValueMap" rows="4" placeholder="confirmed=confirmed&#10;checkin_done=checkedin&#10;completed=checkedout&#10;cancelled=cancel"></textarea>
@@ -5719,6 +5729,8 @@ var PMS_PRESETS = {
       document.getElementById('bs-updateRoomParam').value = 'facilityCode';
       document.getElementById('bs-updateStatusParam').value = 'status';
       document.getElementById('bs-updateBookingTypeParam').value = 'typeCode';
+      document.getElementById('bs-updateStartDateParam').value = 'startDate';
+      document.getElementById('bs-updateEndDateParam').value = 'endDate';
       // Vocabulaire de statut Sesame ≠ vocabulaire local : traduction requise.
       document.getElementById('bs-updateStatusValueMap').value = 'confirmed=confirmed\ncheckin_done=checkedin\ncompleted=checkedout\ncancelled=cancel';
     },
@@ -5998,6 +6010,8 @@ function bsCollectFormValues(){
     updateRoomParam: document.getElementById('bs-updateRoomParam').value.trim(),
     updateStatusParam: document.getElementById('bs-updateStatusParam').value.trim(),
     updateBookingTypeParam: document.getElementById('bs-updateBookingTypeParam').value.trim(),
+    updateStartDateParam: document.getElementById('bs-updateStartDateParam').value.trim(),
+    updateEndDateParam: document.getElementById('bs-updateEndDateParam').value.trim(),
     updateStatusValueMap: bsTextToParams(document.getElementById('bs-updateStatusValueMap').value),
     updateEndpointBodyParams: bsTextToParams(document.getElementById('bs-updateEndpointBodyParams').value),
     syncIntervalMinutes: document.getElementById('bs-syncInterval').value ? parseInt(document.getElementById('bs-syncInterval').value) : null,
@@ -6078,6 +6092,8 @@ async function bsInit(){
   document.getElementById('bs-updateRoomParam').value = BS_CONFIG.updateRoomParam||'';
   document.getElementById('bs-updateStatusParam').value = BS_CONFIG.updateStatusParam||'';
   document.getElementById('bs-updateBookingTypeParam').value = BS_CONFIG.updateBookingTypeParam||'';
+  document.getElementById('bs-updateStartDateParam').value = BS_CONFIG.updateStartDateParam||'';
+  document.getElementById('bs-updateEndDateParam').value = BS_CONFIG.updateEndDateParam||'';
   document.getElementById('bs-updateStatusValueMap').value = bsParamsToText(BS_CONFIG.updateStatusValueMap);
   document.getElementById('bs-updateEndpointBodyParams').value = bsParamsToText(BS_CONFIG.updateEndpointBodyParams);
   bsRenderStatusBanner();

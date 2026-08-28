@@ -693,7 +693,7 @@ export async function encodeNfc(config: BookingSourceConfig, bookingCode: string
 export async function pushBookingUpdate(
   config: BookingSourceConfig,
   bookingCode: string,
-  changes: { roomCode?: string | null; status?: string; bookingType?: string | null }
+  changes: { roomCode?: string | null; status?: string; bookingType?: string | null; startDate?: string | null; endDate?: string | null }
 ): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
   if (!config.updateEndpointPath) return { ok: true, skipped: true };
   if (!config.baseUrl) return { ok: false, error: "URL de base non configurée" };
@@ -701,6 +701,8 @@ export async function pushBookingUpdate(
   const params: Record<string, unknown> = {};
   if (changes.roomCode !== undefined && config.updateRoomParam) params[config.updateRoomParam] = changes.roomCode ?? "";
   if (changes.bookingType !== undefined && config.updateBookingTypeParam) params[config.updateBookingTypeParam] = changes.bookingType ?? "";
+  if (changes.startDate !== undefined && config.updateStartDateParam) params[config.updateStartDateParam] = changes.startDate ?? "";
+  if (changes.endDate !== undefined && config.updateEndDateParam) params[config.updateEndDateParam] = changes.endDate ?? "";
   if (changes.status !== undefined && config.updateStatusParam) {
     // Le vocabulaire de statut local (confirmed/checkin_done/completed/
     // cancelled) ne correspond pas forcément à celui de la source — ex :
