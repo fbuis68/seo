@@ -103,9 +103,9 @@ function extractRows(json: any, ...candidateKeys: string[]): any[] {
 
 export async function fetchModules(
   config: LockerSourceConfig
-): Promise<{ id: string; name: string; location?: string; isOnline?: boolean }[]> {
+): Promise<{ modules: { id: string; name: string; location?: string; isOnline?: boolean }[]; raw: unknown }> {
   const json = await mcfGet(config, "/modules");
-  return extractRows(json, "modules");
+  return { modules: extractRows(json, "modules", "data"), raw: json };
 }
 
 interface McfLocker {

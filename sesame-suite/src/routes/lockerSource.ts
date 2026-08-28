@@ -117,8 +117,17 @@ lockerSourceRouter.post(
       updatedAt: new Date(),
     };
     try {
-      const modules = await fetchModules(draft as never);
-      res.json({ ok: true, modules });
+      const { modules, raw } = await fetchModules(draft as never);
+      // Si la liste revient vide, on renvoie aussi un aperçu de la réponse
+      // brute — la doc Mon Casier Frais ne montre pas l'enveloppe exacte de
+      // GET /v1/modules (contrairement aux endpoints catalogue), donc en cas
+      // de forme inattendue côté API réelle, ceci permet de diagnostiquer
+      // sans avoir à deviner à l'aveugle.
+      res.json({
+        ok: true,
+        modules,
+        ...(modules.length === 0 ? { debugRaw: JSON.stringify(raw).slice(0, 1500) } : {}),
+      });
     } catch (e) {
       if (e instanceof LockerSourceError) throw new HttpError(400, e.message);
       throw e;

@@ -8403,7 +8403,15 @@ async function lsLoadModules(){
           return '<option value="'+esc(m.id)+'">'+esc(m.name||m.id)+(m.location?' — '+esc(m.location):'')+(m.isOnline===false?' (hors ligne)':'')+'</option>';
         }).join('');
     modSel.value = current;
-    toast((data.modules||[]).length+' module(s) trouvé(s) ✓');
+    if((data.modules||[]).length === 0){
+      // La doc Mon Casier Frais ne documente pas l'enveloppe exacte de
+      // GET /v1/modules — si la liste revient vide malgré un jeton valide,
+      // debugRaw montre la réponse brute pour diagnostiquer sans deviner.
+      console.warn('Mon Casier Frais /modules — réponse brute :', data.debugRaw);
+      toast('⚠ 0 module trouvé — réponse brute copiée dans la console (F12), à transmettre pour diagnostic');
+    } else {
+      toast((data.modules||[]).length+' module(s) trouvé(s) ✓');
+    }
   }catch(e){ toast('⚠ Erreur de connexion au serveur'); }
 }
 async function lsImportNow(){
