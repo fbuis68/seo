@@ -584,6 +584,17 @@ async function main() {
   });
   console.log(`Admin hôtel seedé : ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
 
+  // ── Compte démo ménage/maintenance (app tablette menage.html) ──
+  const HOUSEKEEPING_EMAIL = "gouvernante@hotel-churchill.fr";
+  const HOUSEKEEPING_PASSWORD = "menage2026";
+  const housekeepingPasswordHash = await bcrypt.hash(HOUSEKEEPING_PASSWORD, 10);
+  await prisma.adminUser.upsert({
+    where: { email: HOUSEKEEPING_EMAIL },
+    update: {},
+    create: { entityId: entity.id, email: HOUSEKEEPING_EMAIL, passwordHash: housekeepingPasswordHash, name: "Gouvernante", role: "housekeeping" },
+  });
+  console.log(`Admin ménage seedé : ${HOUSEKEEPING_EMAIL} / ${HOUSEKEEPING_PASSWORD}`);
+
   // ── Entité technique "Sesame HQ" + compte super-admin Sesame ──
   // Sert uniquement à rattacher les comptes role="sesame" (aucune donnée
   // hôtelière) — ces comptes créent/gèrent les vrais établissements via le
