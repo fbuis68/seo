@@ -41,7 +41,20 @@ async function parseJsonResponse(res: Response): Promise<any> {
     }
   }
   if (!res.ok || json?.success === false) {
-    throw new LockerSourceError(json?.error || `Erreur HTTP ${res.status} — Mon Casier Frais`);
+    // Forme observée en pratique sur certaines erreurs (ex: jeton invalide) :
+    // {"success":false,"error":{"message":"Invalid token"}} — error est un
+    // OBJET, pas une chaîne, contrairement aux exemples de la doc officielle
+    // ({"error":"Invalid JSON: ..."}). new Error(objet) donnerait
+    // "[object Object]", un message inexploitable — on extrait donc
+    // error.message si error est un objet, sinon error tel quel.
+    const errVal = json?.error;
+    const message =
+      typeof errVal === "string"
+        ? errVal
+        : errVal && typeof errVal === "object" && typeof errVal.message === "string"
+          ? errVal.message
+          : `Erreur HTTP ${res.status} — Mon Casier Frais`;
+    throw new LockerSourceError(message);
   }
   return json;
 }
