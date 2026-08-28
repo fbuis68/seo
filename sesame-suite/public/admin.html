@@ -753,6 +753,11 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
           </div>
         </div>
         <div class="fi">
+          <label class="lb">Séjour moyen (jours)</label>
+          <input type="number" id="dashSimAvgStay" min="1" max="30" step="1" oninput="renderDashKpiSim()">
+          <div style="font-size:11px;color:var(--mu);margin-top:4px">Nb séjours/an = 365 ÷ séjour moyen × chambres × occupation</div>
+        </div>
+        <div class="fi">
           <label class="lb">Temps ménage gagné</label>
           <div class="slcol">
             <input type="range" id="dashSimMenage" min="15" max="120" step="5" oninput="renderDashKpiSim()">
@@ -793,10 +798,10 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     </div>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
       <div style="display:flex;gap:3px;background:var(--bdr);border-radius:var(--rs);padding:3px">
-        <div class="ptab on" data-preset="7d" onclick="setKpiPreset('7d')">7 jours</div>
+        <div class="ptab" data-preset="7d" onclick="setKpiPreset('7d')">7 jours</div>
         <div class="ptab" data-preset="month" onclick="setKpiPreset('month')">Ce mois-ci</div>
         <div class="ptab" data-preset="lastmonth" onclick="setKpiPreset('lastmonth')">Mois dernier</div>
-        <div class="ptab" data-preset="year" onclick="setKpiPreset('year')">Cette année</div>
+        <div class="ptab on" data-preset="year" onclick="setKpiPreset('year')">Cette année</div>
         <div class="ptab" data-preset="custom" onclick="setKpiPreset('custom')">Personnalisé</div>
       </div>
       <div id="kpi-custom-range" style="display:none;gap:8px;align-items:center">
@@ -5114,17 +5119,20 @@ function onDashRoomsChange(){
 
 function resetDashKpiSim(){
   var occEl=document.getElementById('dashSimOcc'), menEl=document.getElementById('dashSimMenage'),
-      ciEl=document.getElementById('dashSimCheckin'), nwEl=document.getElementById('dashSimNightWatch');
+      ciEl=document.getElementById('dashSimCheckin'), nwEl=document.getElementById('dashSimNightWatch'),
+      asEl=document.getElementById('dashSimAvgStay');
   if(!occEl||!menEl||!ciEl||!nwEl){ renderKpiPreview(); return; }
   var kpi=CFG.kpi||{minPerClean:45,minPerTowel:10,hourlyRate:22,annualStays:500,checkinMin:8,checkinAdoption:70};
   var roomsEl=document.getElementById('db-rooms');
   if(roomsEl) roomsEl.value=(CFG.rooms&&CFG.rooms.length)||1;
   var rooms=dashSimRoomsCount();
-  var occ=Math.max(0,Math.min(100,Math.round((kpi.annualStays*3)/(rooms*365)*100)));
+  var avgStay=kpi.avgStay||3;
+  var occ=Math.max(0,Math.min(100,Math.round((kpi.annualStays*avgStay)/(rooms*365)*100)));
   occEl.value=occ;
   menEl.value=kpi.minPerClean;
   ciEl.value=kpi.checkinMin;
   nwEl.checked=true;
+  if(asEl) asEl.value=avgStay;
   document.querySelectorAll('#dashSimModules .module-pill').forEach(function(b){ b.classList.add('on'); });
   renderDashKpiSim();
 }
@@ -5153,11 +5161,22 @@ function toggleDashSimVisibility(){
   body.style.display = willHide ? 'none' : '';
   if(ico) ico.className = 'ti '+(willHide?'ti-eye':'ti-eye-off');
   if(lbl) lbl.textContent = willHide ? 'Afficher' : 'Masquer';
+  if(willHide){
+    // Simulation désactivée : le hero KPI hôtelier revient aux vrais
+    // réglages (CFG.kpi) plutôt que de rester figé sur le dernier scénario
+    // simulé — sinon les chiffres affichés ne correspondent plus à rien de
+    // réel une fois les curseurs masqués.
+    renderKpiPreview();
+    if(typeof renderRealKpis==='function') renderRealKpis();
+  } else {
+    renderDashKpiSim();
+  }
 }
 
 function renderDashKpiSim(){
   var occEl=document.getElementById('dashSimOcc'), menEl=document.getElementById('dashSimMenage'),
-      ciEl=document.getElementById('dashSimCheckin'), nwEl=document.getElementById('dashSimNightWatch');
+      ciEl=document.getElementById('dashSimCheckin'), nwEl=document.getElementById('dashSimNightWatch'),
+      asEl=document.getElementById('dashSimAvgStay');
   if(!occEl||!menEl||!ciEl||!nwEl){ renderKpiPreview(); return; }
   var kpi=CFG.kpi||{minPerClean:45,minPerTowel:10,hourlyRate:22,annualStays:500,checkinMin:8,checkinAdoption:70};
   var rooms=dashSimRoomsCount();
@@ -5166,6 +5185,7 @@ function renderDashKpiSim(){
   var menage=parseInt(menEl.value)||kpi.minPerClean;
   var checkin=parseInt(ciEl.value); if(isNaN(checkin)) checkin=kpi.checkinMin;
   var nightWatch=nwEl.checked;
+  var avgStay=asEl?parseInt(asEl.value):NaN; if(isNaN(avgStay)||avgStay<1) avgStay=3;
   var menageOn=dashSimModuleOn('menage'), checkinOn=dashSimModuleOn('checkin');
 
   document.getElementById('dashSimOccV').textContent=occ+'%';
@@ -5173,7 +5193,8 @@ function renderDashKpiSim(){
   document.getElementById('dashSimCheckinV').textContent=checkin+' min';
   document.getElementById('dashSimNightWatchLbl').textContent=nightWatch?'Présent':'Absent';
 
-  var annualStays=Math.round(rooms*365*(occ/100)/3); // séjour type 3 nuits, même convention que le reste de l'app
+  // Nb séjours/an = 365 ÷ séjour moyen × chambres × taux d'occupation
+  var annualStays=Math.round(365/avgStay*rooms*(occ/100));
   var adoptionBonus=nightWatch?0:15; // sans veilleur de nuit, le check-in en ligne devient la seule option à l'arrivée tardive
   var checkinAdoption=Math.min(100,(kpi.checkinAdoption!=null?kpi.checkinAdoption:70)+adoptionBonus);
 
@@ -5183,7 +5204,8 @@ function renderDashKpiSim(){
     hourlyRate: kpi.hourlyRate!=null?kpi.hourlyRate:22,
     annualStays: annualStays,
     checkinMin: checkinOn ? checkin : 0,
-    checkinAdoption: checkinAdoption
+    checkinAdoption: checkinAdoption,
+    avgStay: avgStay
   });
 
   // Le fleuve "Indicateurs réels" grise ses étapes selon ces mêmes modules.
@@ -7420,7 +7442,7 @@ function renderKpiPreview(overrideKpi){
   // toucher à CFG.kpi — les vrais réglages restent ceux du panneau Gains.
   var kpi=overrideKpi||CFG.kpi||{minPerClean:45,minPerTowel:10,hourlyRate:22,annualStays:500,checkinMin:8,checkinAdoption:70};
   var sym=currencySymbol(CFG.currency||'EUR');
-  var n=3,mf=3,sf=3;
+  var n=kpi.avgStay||3,mf=3,sf=3;
   var menS=n-Math.ceil(n/mf), srvS=n-Math.ceil(n/sf);
 
   // ── Ménage ──
@@ -10263,7 +10285,7 @@ document.addEventListener('DOMContentLoaded', loadVersionBadge);
 // taxeSejourRecord/list, housekeepingTask/list (même convention que la
 // rubrique "Arrivées du jour" — filtrage par date côté client).
 var KPI_RAW = null; // {bookings, orders, taxe, tasks}
-var KPI_STATE = { preset: '7d', from: null, to: null };
+var KPI_STATE = { preset: 'year', from: null, to: null };
 
 function kpiIso(d){ return d.toISOString().slice(0,10); }
 function kpiAddDays(d,n){ var r=new Date(d); r.setDate(r.getDate()+n); return r; }
