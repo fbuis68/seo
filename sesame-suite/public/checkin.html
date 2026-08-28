@@ -3296,10 +3296,23 @@ async function espRenderBoutiqueTab(){
 
   el.innerHTML=mine.map(function(o){
     var st=ST[o.status]||ST.new;
+    // Accès casier Mon Casier Frais associé à la commande, le cas échéant
+    // (cf. lib/lockerSource.ts reserveLockersForOrder côté serveur) — affiché
+    // ici en permanence tant que la commande apparaît dans la liste, pas
+    // seulement dans le toast de confirmation ponctuel à la validation, pour
+    // que le client puisse retrouver son code de retrait pendant tout son
+    // séjour et ouvrir le casier correspondant.
+    var lockerLine = '';
+    if (o.lockerPickupCode && o.lockerNumbers && o.lockerNumbers.length){
+      lockerLine = '<div style="font-size:11px;color:var(--a);font-weight:700;margin-top:4px"><i class="ti ti-lock-open"></i> Casier n° '+esc(o.lockerNumbers.join(', '))+' — Code : '+esc(o.lockerPickupCode)+'</div>';
+    } else if (o.lockerSourceWarning){
+      lockerLine = '<div style="font-size:11px;color:var(--am);font-weight:700;margin-top:4px"><i class="ti ti-alert-triangle"></i> Casier en cours d\'attribution</div>';
+    }
     return '<div style="border:1px solid var(--bdr);border-radius:var(--rs);padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px">'
       +'<div style="flex:1">'
       +'<div style="font-size:12px;font-weight:700">'+(o.items||[]).map(function(it){return it.qty+'× '+it.label;}).join(', ')+'</div>'
       +'<div style="font-size:11px;color:var(--mu)">'+(o.total||0).toFixed(2)+' € · '+new Date(o.createdAt).toLocaleTimeString(localeForLang(),{hour:'2-digit',minute:'2-digit'})+'</div>'
+      +lockerLine
       +'</div>'
       +'<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;background:'+st.c+'22;color:'+st.c+'">'+st.l+'</span>'
       +'</div>';

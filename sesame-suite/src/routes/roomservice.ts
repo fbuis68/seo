@@ -22,6 +22,7 @@ function shapeProduct(p: {
   sortOrder: number;
   importedFrom: string | null;
   stockQty: number | null;
+  forceInStock: boolean;
 }) {
   return {
     id: p.id,
@@ -40,6 +41,11 @@ function shapeProduct(p: {
     // de suivi de stock, toujours affiché quelle que soit la quantité.
     source: p.importedFrom || "",
     stock: p.stockQty,
+    // Forçage PAR PRODUIT de l'affichage "disponible" malgré stockQty=0
+    // (cf. schema.prisma Product.forceInStock) — réglable depuis la fiche
+    // produit, contrairement à LockerSourceConfig.showOutOfStock qui est
+    // global à tout le connecteur.
+    forceInStock: p.forceInStock,
   };
 }
 
@@ -303,21 +309,26 @@ roomserviceRouter.get(
         entityId: entity.id,
         active: true,
         // Masque les produits importés (Mon Casier Frais) en rupture —
-        // stockQty=0 au dernier sync. Les produits boutique classiques
+        // stockQty=0 au dernier sync — sauf mode démo global
+        // (LockerSourceConfig.showOutOfStock) ou forçage individuel
+        // (Product.forceInStock). Les produits boutique classiques
         // (stockQty=null, pas de suivi de stock) restent toujours affichés.
-        ...(showOutOfStock ? {} : { NOT: { importedFrom: { not: null }, stockQty: 0 } }),
+        ...(showOutOfStock
+          ? {}
+          : { NOT: { importedFrom: { not: null }, stockQty: 0, forceInStock: false } }),
       },
       orderBy: { sortOrder: "asc" },
     });
     const shaped = products.map(shapeProduct);
-    if (showOutOfStock) {
-      // Masque aussi le compteur de stock côté client (sinon la limite de
-      // quantité au panier resterait bloquée à 0) — l'admin garde le vrai
-      // stock dans /product/list.
-      shaped.forEach((p) => {
-        if (p.source === "moncasierfrais") p.stock = null;
-      });
-    }
+    shaped.forEach((p) => {
+      // Masque aussi le compteur de stock côté client pour tout produit
+      // affiché malgré une rupture réelle (sinon la limite de quantité au
+      // panier resterait bloquée à 0) — l'admin garde le vrai stock dans
+      // /product/list.
+      if (p.source === "moncasierfrais" && (showOutOfStock || p.forceInStock) && p.stock === 0) {
+        p.stock = null;
+      }
+    });
     res.json(shaped);
   })
 );
@@ -333,6 +344,7 @@ interface ProductBody {
   videoUrl?: string;
   active?: boolean;
   sortOrder?: number;
+  forceInStock?: boolean;
 }
 
 roomserviceRouter.post(
@@ -387,6 +399,7 @@ roomserviceRouter.post(
         videoUrl: b.videoUrl,
         active: b.active,
         sortOrder: b.sortOrder,
+        forceInStock: b.forceInStock,
       },
     });
     res.json(shapeProduct(updated));

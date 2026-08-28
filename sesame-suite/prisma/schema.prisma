@@ -686,6 +686,13 @@ model Product {
   // casier (paramètre VAT de /order/bookLockers) — sans rapport avec la
   // fiscalité interne de l'hôtel.
   vatRate Float?
+  // Forcer l'affichage "disponible" malgré stockQty=0 — réglable PAR
+  // PRODUIT depuis la fiche (contrairement à LockerSourceConfig.showOutOfStock
+  // qui est global à tout le connecteur). Utile en environnement de
+  // démo/sandbox sans casiers physiquement garnis. N'affecte que l'affichage
+  // côté boutique client — jamais la réservation à la commande, qui
+  // revérifie toujours le stock réel en direct (cf. reserveLockersForOrder).
+  forceInStock Boolean @default(false)
 
   createdAt DateTime @default(now())
 

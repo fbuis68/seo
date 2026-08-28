@@ -1,0 +1,1 @@
+ALTER TABLE "Product" ADD COLUMN "forceInStock" BOOLEAN NOT NULL DEFAULT false;

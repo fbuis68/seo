@@ -3163,6 +3163,15 @@ Accès au salon Premium</textarea>
         <div id="rs-sync-note" class="alt alt-b" style="display:none;margin-bottom:12px"><i class="ti ti-building-warehouse"></i>
           <span>Produit importé automatiquement de Mon Casier Frais — nom, prix, description et photo seront écrasés à la prochaine synchronisation. Seuls "Visible dans l'app client" et l'icône restent sous votre contrôle.</span>
         </div>
+        <div id="rs-stock-wrap" style="display:none;margin-bottom:12px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:6px">
+            <input type="checkbox" id="rs-forceInStock" style="accent-color:var(--am)">
+            <span style="font-size:13px">Forcer disponible malgré la rupture (<span id="rs-stock-qty"></span>)</span>
+          </label>
+          <div class="alt alt-w"><i class="ti ti-alert-triangle"></i>
+            <span>N'affecte que l'affichage côté boutique client — la réservation de casier à la commande revérifie toujours le stock réel en direct et échouera proprement si rien n'est réellement disponible.</span>
+          </div>
+        </div>
         <div class="g2">
           <div class="fi"><label class="lb">Catégorie</label>
             <input type="text" id="rs-cat" list="rs-cat-list" placeholder="Boissons, Plats, Desserts…">
@@ -8493,7 +8502,7 @@ function renderRsCatalog(){
         +'<div style="font-size:11px;color:var(--mu);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(p.desc||'')+'</div>'
         +(p.source==='moncasierfrais'
           ?'<div style="font-size:10px;font-weight:700;color:var(--a);margin-top:3px"><i class="ti ti-building-warehouse"></i> Mon Casier Frais'
-            +(p.stock!=null?' · '+(p.stock>0?p.stock+' en stock':'rupture'):'')+'</div>'
+            +(p.stock!=null?' · '+(p.stock>0?p.stock+' en stock':(p.forceInStock?'rupture (forcé disponible)':'rupture')):'')+'</div>'
           :'')
         +'</div></div>'
         +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">'
@@ -8509,6 +8518,7 @@ function rsOpenCreate(){
   RS_EDITING = null;
   RS_PHOTOS  = [];
   document.getElementById('rs-sync-note').style.display = 'none';
+  document.getElementById('rs-stock-wrap').style.display = 'none';
   document.getElementById('rsModalTitle').textContent='Nouveau produit';
   document.getElementById('rs-cat').value='';
   document.getElementById('rs-price').value='';
@@ -8528,6 +8538,9 @@ function rsOpenEdit(idx){
   RS_EDITING = idx;
   RS_PHOTOS  = p.photos ? JSON.parse(JSON.stringify(p.photos)) : [];
   document.getElementById('rs-sync-note').style.display = p.source==='moncasierfrais' ? 'flex' : 'none';
+  document.getElementById('rs-stock-wrap').style.display = p.source==='moncasierfrais' ? 'block' : 'none';
+  document.getElementById('rs-stock-qty').textContent = p.stock!=null ? (p.stock>0?p.stock+' en stock':'0 en stock — rupture') : '';
+  document.getElementById('rs-forceInStock').checked = !!p.forceInStock;
   document.getElementById('rsModalTitle').textContent = p.label;
   document.getElementById('rs-cat').value   = p.cat||'';
   document.getElementById('rs-price').value = p.price||0;
@@ -8565,6 +8578,9 @@ async function rsSaveProduct(){
     var saveResp;
     if(RS_EDITING!=null){
       payload.id = CFG.roomServiceCatalog[RS_EDITING].id;
+      if(CFG.roomServiceCatalog[RS_EDITING].source==='moncasierfrais'){
+        payload.forceInStock = document.getElementById('rs-forceInStock').checked;
+      }
       saveResp = await adminFetch('/wa/roomservice/product/update', {method:'POST', body:JSON.stringify(payload)});
     } else {
       saveResp = await adminFetch('/wa/roomservice/product/create', {method:'POST', body:JSON.stringify(payload)});
