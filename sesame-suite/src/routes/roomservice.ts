@@ -4,6 +4,7 @@ import { resolveEntity } from "../lib/entity";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { fireTrigger } from "../lib/automation";
+import { reserveLockersForOrder, cancelLockerReservation, LockerReservationItem } from "../lib/lockerSource";
 
 export const roomserviceRouter = Router();
 
@@ -19,6 +20,8 @@ function shapeProduct(p: {
   videoUrl: string | null;
   active: boolean;
   sortOrder: number;
+  importedFrom: string | null;
+  stockQty: number | null;
 }) {
   return {
     id: p.id,
@@ -32,6 +35,11 @@ function shapeProduct(p: {
     videoUrl: p.videoUrl || "",
     active: p.active,
     sortOrder: p.sortOrder,
+    // Produit importé (ex : Mon Casier Frais) : source du produit et stock
+    // disponible au dernier sync — null = produit boutique classique, pas
+    // de suivi de stock, toujours affiché quelle que soit la quantité.
+    source: p.importedFrom || "",
+    stock: p.stockQty,
   };
 }
 
@@ -49,6 +57,9 @@ function shapeOrder(o: {
   note: string | null;
   status: string;
   createdAt: Date;
+  lockerNumbers: unknown;
+  lockerPickupCode: string | null;
+  lockerSourceWarning: string | null;
 }) {
   return {
     id: o.id,
@@ -62,6 +73,12 @@ function shapeOrder(o: {
     note: o.note || "",
     status: o.status,
     createdAt: o.createdAt.toISOString(),
+    // Réservation de casier Mon Casier Frais associée, si le panier
+    // contenait des articles importés — cf. lib/lockerSource.ts. Tableau
+    // vide/code vide = pas d'article "casier" dans cette commande.
+    lockerNumbers: (o.lockerNumbers as number[]) || [],
+    lockerPickupCode: o.lockerPickupCode || "",
+    lockerSourceWarning: o.lockerSourceWarning || null,
   };
 }
 
@@ -134,7 +151,53 @@ roomserviceRouter.post(
       }).catch((e) => console.error("[automation] order.created:", e));
     }
 
-    res.status(201).json(shapeOrder(order));
+    // Réservation best-effort d'un casier Mon Casier Frais pour les
+    // articles importés du panier (cf. lib/lockerSource.ts) — jamais
+    // bloquante : la commande locale existe déjà même si cette étape
+    // échoue, auquel cas lockerSourceWarning porte le message d'erreur
+    // plutôt qu'un faux succès.
+    let finalOrder = order;
+    const lockerProducts = await prisma.product.findMany({
+      where: { id: { in: b.items.map((it) => it.id) }, entityId: entity.id, importedFrom: "moncasierfrais" },
+    });
+    if (lockerProducts.length) {
+      const config = await prisma.lockerSourceConfig.findUnique({ where: { entityId: entity.id } });
+      const clientEmail = booking?.personEmail;
+      let warning: string | undefined;
+      if (!config || !config.enabled) {
+        warning = "Connecteur Mon Casier Frais non activé — articles casier non réservés";
+      } else if (!clientEmail) {
+        warning = "Email client indisponible — réservation de casier non effectuée";
+      } else {
+        const reservationItems: LockerReservationItem[] = lockerProducts.map((product) => ({
+          product,
+          qty: b.items.filter((it) => it.id === product.id).reduce((s, it) => s + it.qty, 0),
+        }));
+        const pickupCode = String(Math.floor(100000 + Math.random() * 900000));
+        const result = await reserveLockersForOrder(config, reservationItems, {
+          clientEmail,
+          pickupCode,
+          comments: b.note,
+        }).catch((e) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) }));
+        if (result.ok) {
+          finalOrder = await prisma.order.update({
+            where: { id: order.id },
+            data: {
+              lockerNumbers: result.lockerNumbers || [],
+              lockerPickupCode: pickupCode,
+              lockerSourceOrderId: result.mcfOrderId || null,
+            },
+          });
+        } else {
+          warning = result.error;
+        }
+      }
+      if (warning) {
+        finalOrder = await prisma.order.update({ where: { id: order.id }, data: { lockerSourceWarning: warning } });
+      }
+    }
+
+    res.status(201).json(shapeOrder(finalOrder));
   })
 );
 
@@ -178,7 +241,23 @@ roomserviceRouter.post(
       }
     }
 
-    res.json(shapeOrder(updated));
+    // Annulation best-effort de la réservation de casier associée, si la
+    // commande en avait une — jamais bloquante pour le changement de statut
+    // local, un avertissement remplace lockerSourceWarning en cas d'échec.
+    let finalUpdated = updated;
+    if (status === "cancelled" && order.status !== "cancelled" && updated.lockerSourceOrderId) {
+      const config = await prisma.lockerSourceConfig.findUnique({ where: { entityId: entity.id } });
+      if (config) {
+        const result = await cancelLockerReservation(config, updated.lockerSourceOrderId, "Commande annulée depuis Sesame Suite").catch(
+          (e) => ({ ok: false, error: e instanceof Error ? e.message : String(e) })
+        );
+        if (!result.ok) {
+          finalUpdated = await prisma.order.update({ where: { id }, data: { lockerSourceWarning: result.error } });
+        }
+      }
+    }
+
+    res.json(shapeOrder(finalUpdated));
   })
 );
 
@@ -211,7 +290,14 @@ roomserviceRouter.get(
   asyncHandler(async (req, res) => {
     const entity = await resolveEntity(req);
     const products = await prisma.product.findMany({
-      where: { entityId: entity.id, active: true },
+      where: {
+        entityId: entity.id,
+        active: true,
+        // Masque les produits importés (Mon Casier Frais) en rupture —
+        // stockQty=0 au dernier sync. Les produits boutique classiques
+        // (stockQty=null, pas de suivi de stock) restent toujours affichés.
+        NOT: { importedFrom: { not: null }, stockQty: 0 },
+      },
       orderBy: { sortOrder: "asc" },
     });
     res.json(products.map(shapeProduct));

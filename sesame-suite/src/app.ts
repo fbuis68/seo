@@ -20,6 +20,7 @@ import { entityRouter } from "./routes/entity";
 import { subscriptionRouter } from "./routes/subscription";
 import { groupRouter } from "./routes/group";
 import { bookingSourceRouter } from "./routes/bookingSource";
+import { lockerSourceRouter } from "./routes/lockerSource";
 import { onboardingRouter } from "./routes/onboarding";
 import { crmProspectRouter } from "./routes/crmProspect";
 import { crmDealRouter } from "./routes/crmDeal";
@@ -74,6 +75,7 @@ export function createApp() {
   app.use("/wa", subscriptionRouter);
   app.use("/wa", groupRouter);
   app.use("/wa", bookingSourceRouter);
+  app.use("/wa", lockerSourceRouter);
   app.use("/wa", crmProspectRouter);
   app.use("/wa", crmDealRouter);
   app.use("/wa", crmQuoteRouter);

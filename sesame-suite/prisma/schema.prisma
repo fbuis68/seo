@@ -41,6 +41,7 @@ model Entity {
   campaigns         Campaign[]
   subscriptions     Subscription[]
   bookingSource     BookingSourceConfig?
+  lockerSource      LockerSourceConfig?
   crmProspects      CrmProspect[]
   smtpConfig        SmtpConfig?
   messageTemplates  MessageTemplate[]
@@ -534,6 +535,48 @@ model BookingSourceConfig {
   updatedAt DateTime @updatedAt
 }
 
+// Connecteur Mon Casier Frais (docs.moncasierfrais.fr/api) — casiers réfrigérés
+// vendant des produits locaux, associés à ce Hôtel via un "module" (une
+// installation physique de casiers). Contrairement à BookingSourceConfig
+// (générique, forme d'API inconnue à l'avance), c'est une API réelle et
+// documentée avec des endpoints fixes — pas besoin de chemins/mapping
+// configurables, seulement les identifiants et le module concerné. API
+// externe en LECTURE SEULE côté leur documentation (2026) : on ne fait que
+// lire leur catalogue/stock et écrire pour réserver/annuler un casier.
+model LockerSourceConfig {
+  id       String @id @default(cuid())
+  entityId String @unique
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  enabled  Boolean @default(false)
+  baseUrl  String? @default("https://api.moncasierfrais.fr/v1")
+  // Jeton Bearer créé depuis le portail Mon Casier Frais (ApiToken).
+  apiToken String?
+  // En-tête HTTP optionnel "SellerGroupId" — nécessaire seulement si le
+  // jeton donne accès à plusieurs groupes vendeur.
+  sellerGroupId String?
+  // Identifiant du module (installation de casiers) associé à cet
+  // établissement — cf. GET /v1/modules pour aider l'admin à le trouver
+  // (bouton "Charger les modules" côté panneau).
+  moduleId String?
+  // Catégorie boutique appliquée aux produits importés (le catalogue temps
+  // réel de la source ne renvoie pas de nom de catégorie lisible par
+  // défaut — enrichi via GET /v1/products + /v1/product-types quand
+  // possible, ce champ sert de repli).
+  defaultCategory String? @default("Mon Casier Frais")
+
+  // null = synchronisation manuelle uniquement ("Importer maintenant").
+  syncIntervalMinutes Int?
+
+  lastSyncAt      DateTime?
+  lastSyncStatus  String? // success | error
+  lastSyncMessage String?
+  lastSyncCount   Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Occupant {
   id          String  @id @default(cuid())
   bookingId   String
@@ -605,7 +648,32 @@ model Product {
   active      Boolean @default(true)
   sortOrder   Int     @default(0)
 
+  // Produit importé d'une source externe (cf. LockerSourceConfig / Mon
+  // Casier Frais) plutôt que saisi manuellement par l'hôtel. importedFrom
+  // vide = produit boutique classique, non touché par la synchronisation.
+  // externalId identifie l'article précis côté source (un même produit
+  // physique avec plusieurs conditionnements — ex : Comté 0.5kg / 1kg —
+  // devient une ligne Product par conditionnement, cf. lib/lockerSource.ts)
+  // pour permettre une resynchronisation sans doublon.
+  importedFrom String?
+  externalId   String?
+  // Quantité actuellement disponible en casier au dernier sync — null =
+  // pas de suivi de stock (produit boutique classique, toujours affiché).
+  // 0 = en rupture, masqué côté boutique client (cf. /product/public).
+  stockQty Int?
+  // Casiers physiques actuellement associés à ce conditionnement au dernier
+  // sync ([{numberOnModule, lockerPrice, state}]) — indicatif seulement, la
+  // réservation réelle revérifie toujours la disponibilité en direct auprès
+  // de la source au moment de la commande (cf. reserveLockersForOrder).
+  lockerLayout Json?
+  // Taux de TVA transmis par la source, répercuté vers la réservation de
+  // casier (paramètre VAT de /order/bookLockers) — sans rapport avec la
+  // fiscalité interne de l'hôtel.
+  vatRate Float?
+
   createdAt DateTime @default(now())
+
+  @@unique([entityId, externalId])
 }
 
 // Commande — fusionne SCH_ORDERS (boutique) + SESAME_RS_ORDERS (room service)
@@ -630,6 +698,16 @@ model Order {
   note  String?
 
   status String @default("new") // new | preparing | delivering | delivered | cancelled
+
+  // Réservation de casier Mon Casier Frais associée à cette commande (créée
+  // en best-effort à la commande si des articles importés y figurent, cf.
+  // lib/lockerSource.ts reserveLockersForOrder) — jamais bloquante : la
+  // commande locale existe toujours même si cet appel échoue ou n'est pas
+  // configuré, auquel cas lockerSourceWarning porte le message d'erreur.
+  lockerNumbers       Json? // numéros de casier (numberOnModule) attribués, pour affichage client
+  lockerPickupCode    String? // code de retrait à 6 chiffres transmis à la source
+  lockerSourceOrderId String? // id de la réservation côté source (pour annulation)
+  lockerSourceWarning String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

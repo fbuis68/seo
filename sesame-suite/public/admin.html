@@ -3061,6 +3061,53 @@ Accès au salon Premium</textarea>
     <span style="flex:1">Le Room Service apparaît dans l'app client (onglet "Infos") une fois le check-in payé. Activez/désactivez le module dans <a href="#" onclick="showPan('hotel');return false" style="color:var(--a);font-weight:600">Hôtel &amp; Catégorie → Modules</a>.</span>
   </div>
 
+  <!-- Connecteur Mon Casier Frais -->
+  <details style="margin-bottom:16px" id="ls-details">
+    <summary style="cursor:pointer;font-weight:600;font-size:14px;padding:10px 0;display:flex;align-items:center;gap:8px">
+      <i class="ti ti-building-warehouse"></i> Connecteur Mon Casier Frais
+      <span id="ls-status-badge" style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:var(--bdr);color:var(--mu)">Non configuré</span>
+    </summary>
+    <div class="ca" style="margin-top:10px">
+      <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
+        <span>Importe automatiquement le catalogue et le stock en temps réel de vos casiers réfrigérés Mon Casier Frais dans cette boutique — les produits en rupture sont masqués côté client. Une commande sur un produit importé réserve un casier en retour auprès de Mon Casier Frais (docs.moncasierfrais.fr/api).</span>
+      </div>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px">
+        <input type="checkbox" id="ls-enabled" style="accent-color:var(--am)">
+        <span style="font-size:13px">Connecteur actif</span>
+      </label>
+      <div class="fi"><label class="lb">Jeton API (Bearer, créé depuis le portail Mon Casier Frais)</label>
+        <input type="password" id="ls-apiToken" placeholder="MCF-…" autocomplete="off"></div>
+      <div class="g2">
+        <div class="fi"><label class="lb">Module (installation de casiers)</label>
+          <select id="ls-moduleId"><option value="">— Sélectionner —</option></select>
+        </div>
+        <div class="fi"><label class="lb">&nbsp;</label>
+          <button class="btn btn-s" type="button" onclick="lsLoadModules()" style="width:100%"><i class="ti ti-refresh"></i> Charger les modules</button>
+        </div>
+      </div>
+      <div class="g2">
+        <div class="fi"><label class="lb">SellerGroupId (optionnel)</label>
+          <input type="text" id="ls-sellerGroupId" placeholder="Si le jeton couvre plusieurs groupes vendeur"></div>
+        <div class="fi"><label class="lb">Catégorie boutique par défaut</label>
+          <input type="text" id="ls-defaultCategory" placeholder="Mon Casier Frais"></div>
+      </div>
+      <div class="fi"><label class="lb">Synchronisation automatique</label>
+        <select id="ls-syncInterval">
+          <option value="">Manuelle uniquement</option>
+          <option value="5">Toutes les 5 min</option>
+          <option value="15">Toutes les 15 min</option>
+          <option value="30">Toutes les 30 min</option>
+          <option value="60">Toutes les heures</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button class="btn btn-p" onclick="lsSaveConfig()"><i class="ti ti-check"></i> Enregistrer</button>
+        <button class="btn btn-s" onclick="lsImportNow()"><i class="ti ti-refresh"></i> Importer maintenant</button>
+      </div>
+      <div id="ls-syncStatus" style="margin-top:10px;font-size:12px;color:var(--mu)"></div>
+    </div>
+  </details>
+
   <!-- Actions -->
   <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
     <button class="btn btn-p" onclick="rsOpenCreate()"><i class="ti ti-plus"></i> Nouveau produit</button>
@@ -3090,6 +3137,9 @@ Accès au salon Premium</textarea>
         <button onclick="rsCloseModal()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
       </div>
       <div style="padding:18px 20px">
+        <div id="rs-sync-note" class="alt alt-b" style="display:none;margin-bottom:12px"><i class="ti ti-building-warehouse"></i>
+          <span>Produit importé automatiquement de Mon Casier Frais — nom, prix, description et photo seront écrasés à la prochaine synchronisation. Seuls "Visible dans l'app client" et l'icône restent sous votre contrôle.</span>
+        </div>
         <div class="g2">
           <div class="fi"><label class="lb">Catégorie</label>
             <input type="text" id="rs-cat" list="rs-cat-list" placeholder="Boissons, Plats, Desserts…">
@@ -8240,6 +8290,95 @@ async function rsInit(){
   }catch(e){ console.error('rsInit error', e); }
   rsRenderCatFilter();
   renderRsCatalog();
+  lsInit();
+}
+
+// ─── Connecteur Mon Casier Frais — GET/POST /wa/lockerSource/* ───
+var LS_CONFIG = null;
+async function lsInit(){
+  try{
+    var r = await adminFetch('/wa/lockerSource/config');
+    if(!r.ok) return;
+    LS_CONFIG = await r.json();
+    document.getElementById('ls-enabled').checked = !!LS_CONFIG.enabled;
+    document.getElementById('ls-apiToken').value = LS_CONFIG.apiToken || '';
+    document.getElementById('ls-sellerGroupId').value = LS_CONFIG.sellerGroupId || '';
+    document.getElementById('ls-defaultCategory').value = LS_CONFIG.defaultCategory || '';
+    document.getElementById('ls-syncInterval').value = LS_CONFIG.syncIntervalMinutes || '';
+    var modSel = document.getElementById('ls-moduleId');
+    if(LS_CONFIG.moduleId && !Array.from(modSel.options).some(function(o){return o.value===LS_CONFIG.moduleId;})){
+      modSel.innerHTML += '<option value="'+esc(LS_CONFIG.moduleId)+'">'+esc(LS_CONFIG.moduleId)+'</option>';
+    }
+    modSel.value = LS_CONFIG.moduleId || '';
+    lsRenderStatus();
+  }catch(e){ console.error('lsInit error', e); }
+}
+function lsRenderStatus(){
+  var badge = document.getElementById('ls-status-badge');
+  var statusEl = document.getElementById('ls-syncStatus');
+  if(!LS_CONFIG) return;
+  if(!LS_CONFIG.enabled){
+    badge.textContent = 'Désactivé'; badge.style.background = 'var(--bdr)'; badge.style.color = 'var(--mu)';
+  } else if(LS_CONFIG.lastSyncStatus === 'error'){
+    badge.textContent = 'Erreur'; badge.style.background = 'rgba(231,76,60,.12)'; badge.style.color = '#E74C3C';
+  } else if(LS_CONFIG.lastSyncStatus === 'success'){
+    badge.textContent = 'Actif'; badge.style.background = 'rgba(26,107,71,.12)'; badge.style.color = '#1A6B47';
+  } else {
+    badge.textContent = 'Jamais synchronisé'; badge.style.background = 'rgba(230,162,60,.15)'; badge.style.color = '#E6A23C';
+  }
+  if(LS_CONFIG.lastSyncAt){
+    var d = new Date(LS_CONFIG.lastSyncAt).toLocaleString('fr-FR');
+    statusEl.textContent = 'Dernière synchro : '+d+(LS_CONFIG.lastSyncMessage ? ' — '+LS_CONFIG.lastSyncMessage : '');
+  } else {
+    statusEl.textContent = 'Jamais synchronisé.';
+  }
+}
+async function lsSaveConfig(){
+  var body = {
+    enabled: document.getElementById('ls-enabled').checked,
+    apiToken: document.getElementById('ls-apiToken').value.trim(),
+    sellerGroupId: document.getElementById('ls-sellerGroupId').value.trim(),
+    moduleId: document.getElementById('ls-moduleId').value,
+    defaultCategory: document.getElementById('ls-defaultCategory').value.trim(),
+    syncIntervalMinutes: document.getElementById('ls-syncInterval').value ? parseInt(document.getElementById('ls-syncInterval').value) : null,
+  };
+  try{
+    var r = await adminFetch('/wa/lockerSource/config/update', {method:'POST', body: JSON.stringify(body)});
+    var data = await r.json();
+    if(!r.ok){ toast('⚠ '+(data.error||'Échec de l\'enregistrement')); return; }
+    LS_CONFIG = data;
+    lsRenderStatus();
+    toast('Connecteur Mon Casier Frais enregistré ✓');
+  }catch(e){ toast('⚠ Erreur de connexion au serveur'); }
+}
+async function lsLoadModules(){
+  var body = {
+    apiToken: document.getElementById('ls-apiToken').value.trim(),
+    sellerGroupId: document.getElementById('ls-sellerGroupId').value.trim(),
+  };
+  if(!body.apiToken){ toast('⚠ Renseignez le jeton API avant de charger les modules'); return; }
+  try{
+    var r = await adminFetch('/wa/lockerSource/modules', {method:'POST', body: JSON.stringify(body)});
+    var data = await r.json();
+    if(!r.ok){ toast('⚠ '+(data.error||'Échec du chargement des modules')); return; }
+    var modSel = document.getElementById('ls-moduleId');
+    var current = modSel.value;
+    modSel.innerHTML = '<option value="">— Sélectionner —</option>'
+      + (data.modules||[]).map(function(m){
+          return '<option value="'+esc(m.id)+'">'+esc(m.name||m.id)+(m.location?' — '+esc(m.location):'')+(m.isOnline===false?' (hors ligne)':'')+'</option>';
+        }).join('');
+    modSel.value = current;
+    toast((data.modules||[]).length+' module(s) trouvé(s) ✓');
+  }catch(e){ toast('⚠ Erreur de connexion au serveur'); }
+}
+async function lsImportNow(){
+  try{
+    var r = await adminFetch('/wa/lockerSource/import', {method:'POST'});
+    var data = await r.json();
+    if(!r.ok){ toast('⚠ '+(data.error||'Échec de la synchronisation')); return; }
+    toast('Catalogue synchronisé : '+data.created+' créé(s), '+data.updated+' mis à jour ✓');
+    await rsInit(); // rafraîchit aussi le statut du connecteur (lsInit() appelé en fin de rsInit())
+  }catch(e){ toast('⚠ Erreur de connexion au serveur'); }
 }
 
 function rsRenderCatFilter(){
@@ -8293,6 +8432,10 @@ function renderRsCatalog(){
         +(p.videoUrl?' <i class="ti ti-video" style="font-size:11px;color:var(--mu)"></i>':'')
         +'</div>'
         +'<div style="font-size:11px;color:var(--mu);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(p.desc||'')+'</div>'
+        +(p.source==='moncasierfrais'
+          ?'<div style="font-size:10px;font-weight:700;color:var(--a);margin-top:3px"><i class="ti ti-building-warehouse"></i> Mon Casier Frais'
+            +(p.stock!=null?' · '+(p.stock>0?p.stock+' en stock':'rupture'):'')+'</div>'
+          :'')
         +'</div></div>'
         +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">'
         +'<span style="font-size:14px;font-weight:700;color:var(--primary)">'+(p.price>0?p.price.toFixed(2)+' '+sym:'Offert')+'</span>'
@@ -8306,6 +8449,7 @@ function renderRsCatalog(){
 function rsOpenCreate(){
   RS_EDITING = null;
   RS_PHOTOS  = [];
+  document.getElementById('rs-sync-note').style.display = 'none';
   document.getElementById('rsModalTitle').textContent='Nouveau produit';
   document.getElementById('rs-cat').value='';
   document.getElementById('rs-price').value='';
@@ -8324,6 +8468,7 @@ function rsOpenEdit(idx){
   var p = CFG.roomServiceCatalog[idx]; if(!p) return;
   RS_EDITING = idx;
   RS_PHOTOS  = p.photos ? JSON.parse(JSON.stringify(p.photos)) : [];
+  document.getElementById('rs-sync-note').style.display = p.source==='moncasierfrais' ? 'flex' : 'none';
   document.getElementById('rsModalTitle').textContent = p.label;
   document.getElementById('rs-cat').value   = p.cat||'';
   document.getElementById('rs-price').value = p.price||0;

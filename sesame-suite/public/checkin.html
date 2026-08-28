@@ -949,6 +949,9 @@ input:focus,select:focus{border-color:var(--accent)}
           </div>
         </div>
 
+        <!-- Confirmation casier Mon Casier Frais (affichée après commande) -->
+        <div id="rsOrderConfirm" style="display:none;margin-top:12px" class="alt alt-g"></div>
+
         <!-- Suivi des commandes en cours -->
         <div id="rsOrdersTracking" style="margin-top:18px"></div>
       </div>
@@ -3641,6 +3644,13 @@ function rsRenderProducts(){
 
 function rsChangeQty(productId, delta){
   var newQty = (S.rsCart[productId]||0) + delta;
+  // Casiers Mon Casier Frais : stock physique limité (un casier par unité),
+  // cf. bqChangeQty côté boutique check-in — même règle ici.
+  var p = rsGetCatalog().find(function(x){ return x.id === productId; });
+  if (p && p.stock != null && newQty > p.stock){
+    toast('Plus que ' + p.stock + ' disponible(s)');
+    return;
+  }
   if(newQty<=0) delete S.rsCart[productId];
   else S.rsCart[productId]=newQty;
   rsRenderProducts();
@@ -3766,6 +3776,20 @@ async function rsPlaceOrder(){
   rsRenderProducts();
   rsUpdateCartBar();
   rsRenderTracking();
+
+  // Réservation de casier Mon Casier Frais associée, si le panier contenait
+  // un article importé (cf. lib/lockerSource.ts côté serveur) — même
+  // principe que bqPlaceOrder côté boutique check-in.
+  var confirmEl = document.getElementById('rsOrderConfirm');
+  if (order.lockerPickupCode && order.lockerNumbers && order.lockerNumbers.length){
+    confirmEl.innerHTML = '<i class="ti ti-lock-open"></i><span><strong>Casier n° '+esc(order.lockerNumbers.join(', '))+'</strong> — Code de retrait : <strong>'+esc(order.lockerPickupCode)+'</strong></span>';
+    confirmEl.style.display = 'flex';
+  } else if (order.lockerSourceWarning){
+    confirmEl.innerHTML = '<i class="ti ti-alert-triangle"></i><span>Réservation du casier en cours — vous serez contacté par l\'hôtel pour le retrait.</span>';
+    confirmEl.style.display = 'flex';
+  } else {
+    confirmEl.style.display = 'none';
+  }
 
   toast(t('toast_order_sent_thanks'));
 }
@@ -4537,6 +4561,13 @@ function bqFilter(){
     desc.textContent = p.desc || '';
     body.appendChild(desc);
 
+    if (p.stock != null && p.stock <= 3){
+      var stockBadge = document.createElement('div');
+      stockBadge.style.cssText = 'font-size:10px;font-weight:700;color:var(--go);margin-bottom:6px';
+      stockBadge.textContent = 'Plus que ' + p.stock + ' en stock';
+      body.appendChild(stockBadge);
+    }
+
     // Footer
     var footer = document.createElement('div');
     footer.style.cssText = 'display:flex;align-items:center;justify-content:space-between';
@@ -4547,6 +4578,7 @@ function bqFilter(){
     footer.appendChild(priceEl);
 
     // Qty controls
+    var atMax = p.stock != null && qty >= p.stock;
     var qtyWrap = document.createElement('div');
     if (qty > 0){
       qtyWrap.style.cssText = 'display:flex;align-items:center;gap:1px';
@@ -4559,10 +4591,16 @@ function bqFilter(){
       valEl.style.cssText = 'width:22px;text-align:center;font-size:13px;font-weight:700';
       valEl.textContent = qty;
       var btnP = document.createElement('button');
-      btnP.style.cssText = 'width:24px;height:24px;border-radius:50%;border:1.5px solid var(--primary);background:none;color:var(--primary);font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center';
+      btnP.style.cssText = 'width:24px;height:24px;border-radius:50%;border:1.5px solid var(--primary);background:none;color:var(--primary);font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center' + (atMax ? ';opacity:.35;cursor:not-allowed' : '');
       btnP.textContent = '+';
+      btnP.disabled = atMax;
       btnP.onclick = function(e){ e.stopPropagation(); bqChangeQty(p.id, 1); bqFilter(); };
       qtyWrap.appendChild(btnM); qtyWrap.appendChild(valEl); qtyWrap.appendChild(btnP);
+    } else if (p.stock === 0){
+      var soldOut = document.createElement('span');
+      soldOut.style.cssText = 'font-size:10px;font-weight:700;color:var(--mu)';
+      soldOut.textContent = 'Rupture';
+      qtyWrap.appendChild(soldOut);
     } else {
       var addBtn = document.createElement('button');
       addBtn.style.cssText = 'width:28px;height:28px;border-radius:50%;background:var(--primary);color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px';
@@ -4635,11 +4673,20 @@ function bqOpenProduct(id){
     body.appendChild(catBadge);
   }
 
+  if (p.stock != null){
+    var stockEl = document.createElement('div');
+    stockEl.style.cssText = 'font-size:12px;font-weight:700;margin-bottom:16px;color:' + (p.stock > 0 ? 'var(--go)' : 'var(--mu)');
+    stockEl.textContent = p.stock > 0 ? p.stock + ' disponible(s) en casier' : 'Rupture de stock';
+    body.appendChild(stockEl);
+  }
+
+  var atMax = p.stock != null && qty >= p.stock;
   var addBtn = document.createElement('button');
   addBtn.className = 'btn btn-p';
-  addBtn.style.cssText = 'width:100%;justify-content:center;padding:13px;font-size:15px';
-  addBtn.innerHTML = '<i class="ti ti-shopping-cart"></i> ' + (qty > 0 ? t('btn_modify') : t('btn_add_to_cart'));
-  addBtn.onclick = function(){ bqChangeQty(p.id, 1); overlay.remove(); bqFilter(); bqUpdateCart(); };
+  addBtn.style.cssText = 'width:100%;justify-content:center;padding:13px;font-size:15px' + (atMax ? ';opacity:.5' : '');
+  addBtn.disabled = atMax;
+  addBtn.innerHTML = '<i class="ti ti-shopping-cart"></i> ' + (atMax ? 'Rupture de stock' : (qty > 0 ? t('btn_modify') : t('btn_add_to_cart')));
+  addBtn.onclick = function(){ if (atMax) return; bqChangeQty(p.id, 1); overlay.remove(); bqFilter(); bqUpdateCart(); };
   body.appendChild(addBtn);
 
   modal.appendChild(body);
@@ -4650,6 +4697,14 @@ function bqOpenProduct(id){
 function bqChangeQty(id, delta){
   var cur = BQ.cart[id] || 0;
   var nxt = cur + delta;
+  // Casiers Mon Casier Frais : un article importé a un stock physique
+  // limité (un casier par unité) — on ne laisse pas dépasser ce qui est
+  // réellement disponible, sinon la réservation échouerait à la commande.
+  var p = bqGetCatalog().find(function(x){ return x.id === id; });
+  if (p && p.stock != null && nxt > p.stock){
+    toast('Plus que ' + p.stock + ' disponible(s)');
+    return;
+  }
   if (nxt <= 0) delete BQ.cart[id];
   else BQ.cart[id] = nxt;
   bqUpdateCart();
@@ -4769,6 +4824,23 @@ async function bqPlaceOrder(){
     var tot = document.createElement('strong');
     tot.textContent = order.total.toFixed(2) + ' €';
     textEl.appendChild(tot);
+  }
+  // Réservation de casier Mon Casier Frais associée (cf. lib/lockerSource.ts
+  // côté serveur) — affiche le numéro de casier et le code de retrait dès
+  // que le panier contenait un article importé.
+  if (order.lockerPickupCode && order.lockerNumbers && order.lockerNumbers.length){
+    textEl.appendChild(document.createElement('br'));
+    textEl.appendChild(document.createElement('br'));
+    var lockerLine = document.createElement('strong');
+    lockerLine.style.cssText = 'display:block';
+    lockerLine.textContent = 'Casier n° ' + order.lockerNumbers.join(', ') + ' — Code de retrait : ' + order.lockerPickupCode;
+    textEl.appendChild(lockerLine);
+  } else if (order.lockerSourceWarning){
+    textEl.appendChild(document.createElement('br'));
+    var warnLine = document.createElement('div');
+    warnLine.style.cssText = 'color:var(--re);font-size:12px;margin-top:4px';
+    warnLine.textContent = 'Réservation du casier en cours — vous serez contacté par l\'hôtel pour le retrait.';
+    textEl.appendChild(warnLine);
   }
   confirmEl.style.display = 'flex';
   toast(t('step6_order_sent'));
