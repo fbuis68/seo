@@ -162,29 +162,55 @@ async function performLogin(
   config: BookingSourceConfig
 ): Promise<{ token: string; cookie?: string; resultFilterValue?: string; resultEntityField?: string }> {
   if (!config.baseUrl) throw new BookingSourceError("URL de base non configurée");
-  if (!config.loginEmail || !config.loginPassword) throw new BookingSourceError("Email et mot de passe de connexion requis");
+  if (!config.loginEmail || !config.loginPassword) throw new BookingSourceError("Identifiant et secret de connexion requis");
 
   const emailField = config.loginEmailField || "login";
   const passwordField = config.loginPasswordField || "password";
   const inQuery = (config.loginEmailLocation || "body") === "query";
+  const useBasicHeader = config.loginCredentialsIn === "basicHeader";
+  const bodyFormat = config.loginBodyFormat || "json";
 
-  let url = normalizeBaseUrl(config.baseUrl).replace(/\/$/, "") + (config.loginPath || "");
-  if (inQuery) url += (url.includes("?") ? "&" : "?") + `${encodeURIComponent(emailField)}=${encodeURIComponent(config.loginEmail)}`;
-  const body: Record<string, string> = { [passwordField]: config.loginPassword };
-  if (!inQuery) body[emailField] = config.loginEmail;
+  // loginPath accepte une URL absolue (le serveur d'authentification OAuth2
+  // vit parfois sur un autre hôte que baseUrl, ex : Apaleo — identity.apaleo.com
+  // vs api.apaleo.com) ; sinon concaténé à baseUrl comme les autres endpoints.
+  const isAbsolute = /^https?:\/\//i.test(config.loginPath || "");
+  let url = isAbsolute ? (config.loginPath as string) : normalizeBaseUrl(config.baseUrl).replace(/\/$/, "") + (config.loginPath || "");
+  if (inQuery && !useBasicHeader) url += (url.includes("?") ? "&" : "?") + `${encodeURIComponent(emailField)}=${encodeURIComponent(config.loginEmail)}`;
+
+  const body: Record<string, string> = {};
+  if (!useBasicHeader) {
+    body[passwordField] = config.loginPassword;
+    if (!inQuery) body[emailField] = config.loginEmail;
+  }
   if (config.loginExtraField) body[config.loginExtraField] = config.loginExtraValue || "";
+  const extraParams = config.loginExtraParams && typeof config.loginExtraParams === "object" ? (config.loginExtraParams as Record<string, string>) : {};
+  for (const [k, v] of Object.entries(extraParams)) {
+    if (k) body[k] = v ?? "";
+  }
 
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    // Node/undici n'envoie aucun User-Agent par défaut (contrairement aux
+    // navigateurs et à curl) — certains WAF/pare-feux applicatifs bloquent
+    // ou redirigent silencieusement vers une page HTML par défaut (souvent
+    // la page de login) les requêtes qui en sont dépourvues, d'où l'ajout
+    // explicite ci-dessous.
+    "User-Agent": "SesameSuite-BookingConnector/1.0",
+  };
+  if (useBasicHeader) {
+    headers.Authorization = "Basic " + Buffer.from(`${config.loginEmail}:${config.loginPassword}`).toString("base64");
+  }
+
+  const hasBody = Object.keys(body).length > 0;
   let res: Response;
   try {
     res = await fetchWithTimeout(url, {
       method: "POST",
-      // Node/undici n'envoie aucun User-Agent par défaut (contrairement aux
-      // navigateurs et à curl) — certains WAF/pare-feux applicatifs
-      // bloquent ou redirigent silencieusement vers une page HTML par
-      // défaut (souvent la page de login) les requêtes qui en sont
-      // dépourvues, d'où l'ajout explicite ci-dessous.
-      headers: { "Content-Type": "application/json", Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0" },
-      body: JSON.stringify(body),
+      headers: {
+        ...headers,
+        ...(hasBody ? { "Content-Type": bodyFormat === "form" ? "application/x-www-form-urlencoded" : "application/json" } : {}),
+      },
+      ...(hasBody ? { body: bodyFormat === "form" ? new URLSearchParams(body).toString() : JSON.stringify(body) } : {}),
     });
   } catch (e) {
     throw new BookingSourceError(`Connexion (login) impossible : ${describeFetchError(e)}`);

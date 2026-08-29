@@ -1807,6 +1807,11 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
           <option value="mews">Mews</option>
           <option value="opera">Opera Cloud (OHIP)</option>
           <option value="thais">Thaïs</option>
+          <option value="lodgify">Lodgify</option>
+          <option value="cloudbeds">Cloudbeds</option>
+          <option value="guesty">Guesty</option>
+          <option value="hostaway">Hostaway</option>
+          <option value="apaleo">Apaleo</option>
         </select>
         <button type="button" class="btn btn-s" id="bs-reapply-btn" style="display:none;white-space:nowrap;width:auto" onclick="bsReapplyPreset()" title="Recharge les valeurs par défaut techniques du modèle sélectionné — utile après une mise à jour du connecteur qui ajoute de nouveaux réglages (le modèle déjà sélectionné ne se réapplique pas tout seul en rouvrant ce panneau)">
           <i class="ti ti-refresh" style="font-size:12px"></i> Réappliquer les valeurs par défaut
@@ -5578,10 +5583,18 @@ function bsRenderAuthFields(){
     h += '<div class="fi"><label class="lb">Email / login</label><input type="email" id="bs-loginEmail" placeholder="api@hotel.com"></div>';
     h += '<div class="fi"><label class="lb">Mot de passe</label><input type="password" id="bs-loginPassword" placeholder="••••••••"></div>';
     h += '</div>';
+    h += '<div class="alt alt-b" style="margin:12px 0"><i class="ti ti-info-circle"></i>'
+      +'<span>Beaucoup de PMS modernes (Guesty, Hostaway, Apaleo…) utilisent OAuth2 client_credentials : identifiant/secret envoyés en <b>corps de requête encodé en formulaire</b> (pas JSON), parfois via un en-tête <b>Basic</b> plutôt que des champs — réglable ci-dessous.</span></div>';
     h += '<div class="g2">';
+    h += '<div class="fi"><label class="lb">Où passer identifiant/secret</label><select id="bs-loginCredentialsIn"><option value="body">Champs dans le corps</option><option value="basicHeader">En-tête Authorization: Basic</option></select></div>';
+    h += '<div class="fi"><label class="lb">Encodage du corps</label><select id="bs-loginBodyFormat"><option value="json">JSON</option><option value="form">Formulaire (x-www-form-urlencoded)</option></select></div>';
+    h += '</div>';
+    h += '<div class="g2" id="bs-loginFieldNames-wrap">';
     h += '<div class="fi"><label class="lb">Nom du champ email</label><input type="text" id="bs-loginEmailField" placeholder="login"></div>';
     h += '<div class="fi"><label class="lb">Nom du champ mot de passe</label><input type="text" id="bs-loginPasswordField" placeholder="password"></div>';
     h += '</div>';
+    h += '<div class="fi"><label class="lb">Champs statiques supplémentaires du corps (un par ligne, clé=valeur)</label><textarea id="bs-loginExtraParams" rows="2" placeholder="grant_type=client_credentials&#10;scope=open-api" style="font-family:monospace;font-size:12px"></textarea>'
+      +'<div style="font-size:11px;color:var(--mu);margin-top:3px">Ex : OAuth2 client_credentials exige souvent grant_type (+ scope) en plus de l\'identifiant/secret.</div></div>';
     h += '<div class="alt alt-b" style="margin:12px 0"><i class="ti ti-info-circle"></i>'
       +'<span>Optionnel — si la réponse de connexion contient un tableau avec un profil par établissement (ex : API Sesame Technology, un même compte peut avoir accès à plusieurs hôtels), indiquez ici comment retrouver celui du bon établissement plutôt que de dépendre de sa position dans le tableau. Laissez ces 3 champs vides si la réponse ne contient qu\'un seul token.</span></div>';
     h += '<div class="g2">';
@@ -5637,6 +5650,9 @@ function bsRenderAuthFields(){
     document.getElementById('bs-loginEmailField').value = BS_CONFIG.loginEmailField||'login';
     document.getElementById('bs-loginPasswordField').value = BS_CONFIG.loginPasswordField||'password';
     document.getElementById('bs-loginEmailLocation').value = BS_CONFIG.loginEmailLocation||'body';
+    document.getElementById('bs-loginCredentialsIn').value = BS_CONFIG.loginCredentialsIn||'body';
+    document.getElementById('bs-loginBodyFormat').value = BS_CONFIG.loginBodyFormat||'json';
+    document.getElementById('bs-loginExtraParams').value = bsParamsToText(BS_CONFIG.loginExtraParams);
     document.getElementById('bs-loginTokenPath').value = BS_CONFIG.loginTokenPath||'';
     document.getElementById('bs-loginTokenHeaderName').value = BS_CONFIG.loginTokenHeaderName||'Authorization';
     document.getElementById('bs-loginTokenPrefix').value = BS_CONFIG.loginTokenPrefix||'';
@@ -5833,6 +5849,121 @@ var PMS_PRESETS = {
       {label:'Code groupe / établissement', target:'bs-loginExtraValue'},
     ],
   },
+  lodgify: {
+    label: 'Lodgify',
+    noteType: 'w',
+    note: 'Chemins d\'après la documentation publique Lodgify (GET /v2/reservations/bookings, clé API en en-tête X-ApiKey) — non vérifiés en conditions réelles contre un compte Lodgify, à tester avant mise en production. Lodgify ne sépare pas prénom/nom (un seul champ "guest.name") : reçu ici dans "Prénom", "Nom" laissé vide.',
+    apply: function(){
+      document.getElementById('bs-baseUrl').value = 'https://api.lodgify.com';
+      document.getElementById('bs-endpointPath').value = '/v2/reservations/bookings';
+      document.getElementById('bs-endpointMethod').value = 'GET';
+      document.getElementById('bs-authType').value = 'apiKey';
+      bsRenderAuthFields();
+      document.getElementById('bs-authApiKeyHeader').value = 'X-ApiKey';
+      document.getElementById('bs-responseListPath').value = '';
+      bsRenderMappingFields({code:'id', personEmail:'guest.email', personFirstname:'guest.name', personLastname:'', personPhone:'guest.phone', startDate:'arrival', endDate:'departure', facilityCode:'property_id', status:'status'});
+    },
+    vars: [
+      {label:'Clé API (page "Public API" des réglages Lodgify)', type:'password', target:'bs-authApiKeyValue'},
+    ],
+  },
+  cloudbeds: {
+    label: 'Cloudbeds',
+    noteType: 'w',
+    note: 'Chemins d\'après la documentation publique Cloudbeds (GET /api/v1.2/getReservations, clé API longue durée en en-tête x-api-key) — non vérifiés en conditions réelles contre un compte Cloudbeds, à tester avant mise en production.',
+    apply: function(){
+      document.getElementById('bs-baseUrl').value = 'https://api.cloudbeds.com/api/v1.2';
+      document.getElementById('bs-endpointPath').value = '/getReservations';
+      document.getElementById('bs-endpointMethod').value = 'GET';
+      document.getElementById('bs-authType').value = 'apiKey';
+      bsRenderAuthFields();
+      document.getElementById('bs-authApiKeyHeader').value = 'x-api-key';
+      document.getElementById('bs-responseListPath').value = 'data';
+      bsRenderMappingFields({code:'reservationID', personEmail:'guestEmail', personFirstname:'guestFirstName', personLastname:'guestLastName', personPhone:'guestPhone', startDate:'startDate', endDate:'endDate', facilityCode:'roomTypeName', status:'status'});
+    },
+    vars: [
+      {label:'Clé API (x-api-key, générée depuis Cloudbeds)', type:'password', target:'bs-authApiKeyValue'},
+    ],
+  },
+  guesty: {
+    label: 'Guesty',
+    noteType: 'w',
+    note: 'D\'après la documentation publique Guesty Open API : jeton OAuth2 client_credentials obtenu via POST /oauth2/token (corps formulaire), puis GET /v1/reservations avec ce jeton en Bearer. Enveloppe de réponse ("results") et noms de champs non vérifiés en conditions réelles contre un compte Guesty — à tester avant mise en production. Guesty limite à 5 jetons/24h par client : gardez l\'intervalle de synchronisation à 1h ou plus.',
+    apply: function(){
+      document.getElementById('bs-baseUrl').value = 'https://open-api.guesty.com';
+      document.getElementById('bs-endpointPath').value = '/v1/reservations';
+      document.getElementById('bs-endpointMethod').value = 'GET';
+      document.getElementById('bs-authType').value = 'login';
+      bsRenderAuthFields();
+      document.getElementById('bs-loginPath').value = '/oauth2/token';
+      document.getElementById('bs-loginEmailField').value = 'client_id';
+      document.getElementById('bs-loginPasswordField').value = 'client_secret';
+      document.getElementById('bs-loginBodyFormat').value = 'form';
+      document.getElementById('bs-loginCredentialsIn').value = 'body';
+      document.getElementById('bs-loginExtraParams').value = 'grant_type=client_credentials\nscope=open-api';
+      document.getElementById('bs-loginTokenPath').value = 'access_token';
+      document.getElementById('bs-loginTokenHeaderName').value = 'Authorization';
+      document.getElementById('bs-loginTokenPrefix').value = 'Bearer ';
+      document.getElementById('bs-responseListPath').value = 'results';
+      bsRenderMappingFields({code:'_id', personEmail:'guest.email', personFirstname:'guest.firstName', personLastname:'guest.lastName', personPhone:'guest.phone', startDate:'checkInDateLocalized', endDate:'checkOutDateLocalized', facilityCode:'listingId', status:'status'});
+    },
+    vars: [
+      {label:'Client ID', target:'bs-loginEmail'},
+      {label:'Client Secret', type:'password', target:'bs-loginPassword'},
+    ],
+  },
+  hostaway: {
+    label: 'Hostaway',
+    noteType: 'w',
+    note: 'D\'après la documentation publique Hostaway : jeton OAuth2 client_credentials obtenu via POST /v1/accessTokens (corps formulaire, jeton valable jusqu\'à 24 mois), puis GET /v1/reservations avec ce jeton en Bearer. Enveloppe de réponse ("result") et noms de champs non vérifiés en conditions réelles contre un compte Hostaway — à tester avant mise en production.',
+    apply: function(){
+      document.getElementById('bs-baseUrl').value = 'https://api.hostaway.com';
+      document.getElementById('bs-endpointPath').value = '/v1/reservations';
+      document.getElementById('bs-endpointMethod').value = 'GET';
+      document.getElementById('bs-authType').value = 'login';
+      bsRenderAuthFields();
+      document.getElementById('bs-loginPath').value = '/v1/accessTokens';
+      document.getElementById('bs-loginEmailField').value = 'client_id';
+      document.getElementById('bs-loginPasswordField').value = 'client_secret';
+      document.getElementById('bs-loginBodyFormat').value = 'form';
+      document.getElementById('bs-loginCredentialsIn').value = 'body';
+      document.getElementById('bs-loginExtraParams').value = 'grant_type=client_credentials\nscope=general';
+      document.getElementById('bs-loginTokenPath').value = 'access_token';
+      document.getElementById('bs-loginTokenHeaderName').value = 'Authorization';
+      document.getElementById('bs-loginTokenPrefix').value = 'Bearer ';
+      document.getElementById('bs-responseListPath').value = 'result';
+      bsRenderMappingFields({code:'id', personEmail:'guestEmail', personFirstname:'guestFirstName', personLastname:'guestLastName', personPhone:'phone', startDate:'arrivalDate', endDate:'departureDate', facilityCode:'listingMapId', status:'status'});
+    },
+    vars: [
+      {label:'Account ID (client_id)', target:'bs-loginEmail'},
+      {label:'Clé API (client_secret)', type:'password', target:'bs-loginPassword'},
+    ],
+  },
+  apaleo: {
+    label: 'Apaleo',
+    noteType: 'w',
+    note: 'D\'après la documentation publique Apaleo : jeton OAuth2 client_credentials obtenu via POST https://identity.apaleo.com/connect/token (identifiant/secret en en-tête Basic — hôte différent de l\'API de données), puis GET /booking/v1/reservations sur api.apaleo.com avec ce jeton en Bearer. Enveloppe de réponse ("reservations") et noms de champs non vérifiés en conditions réelles contre un compte Apaleo — à tester avant mise en production.',
+    apply: function(){
+      document.getElementById('bs-baseUrl').value = 'https://api.apaleo.com';
+      document.getElementById('bs-endpointPath').value = '/booking/v1/reservations';
+      document.getElementById('bs-endpointMethod').value = 'GET';
+      document.getElementById('bs-authType').value = 'login';
+      bsRenderAuthFields();
+      document.getElementById('bs-loginPath').value = 'https://identity.apaleo.com/connect/token';
+      document.getElementById('bs-loginCredentialsIn').value = 'basicHeader';
+      document.getElementById('bs-loginBodyFormat').value = 'form';
+      document.getElementById('bs-loginExtraParams').value = 'grant_type=client_credentials';
+      document.getElementById('bs-loginTokenPath').value = 'access_token';
+      document.getElementById('bs-loginTokenHeaderName').value = 'Authorization';
+      document.getElementById('bs-loginTokenPrefix').value = 'Bearer ';
+      document.getElementById('bs-responseListPath').value = 'reservations';
+      bsRenderMappingFields({code:'id', personEmail:'booker.email', personFirstname:'booker.firstName', personLastname:'booker.lastName', personPhone:'booker.phone', startDate:'arrival', endDate:'departure', facilityCode:'unitGroup.id', status:'status'});
+    },
+    vars: [
+      {label:'Client ID', target:'bs-loginEmail'},
+      {label:'Client Secret', type:'password', target:'bs-loginPassword'},
+    ],
+  },
 };
 
 var CURRENT_PRESET = null;
@@ -6002,6 +6133,9 @@ function bsCollectFormValues(){
     loginEmailField: (document.getElementById('bs-loginEmailField')||{}).value||'',
     loginPasswordField: (document.getElementById('bs-loginPasswordField')||{}).value||'',
     loginEmailLocation: (document.getElementById('bs-loginEmailLocation')||{}).value||'',
+    loginCredentialsIn: (document.getElementById('bs-loginCredentialsIn')||{}).value||'body',
+    loginBodyFormat: (document.getElementById('bs-loginBodyFormat')||{}).value||'json',
+    loginExtraParams: bsTextToParams((document.getElementById('bs-loginExtraParams')||{}).value||''),
     loginTokenPath: (document.getElementById('bs-loginTokenPath')||{}).value||'',
     loginTokenHeaderName: (document.getElementById('bs-loginTokenHeaderName')||{}).value||'',
     loginTokenPrefix: (document.getElementById('bs-loginTokenPrefix')||{}).value||'',

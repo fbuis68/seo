@@ -298,8 +298,9 @@ model BookingSourceConfig {
   // Modèle de connecteur appliqué côté interface (panneau "Intégration
   // réservations") — purement informatif pour l'UI (savoir quelle section
   // "identifiants" afficher et quels réglages techniques pré-remplir/masquer
-  // par défaut) : none | sesame | mews | opera | thais. Le reste des champs
-  // ci-dessous reste la seule source de vérité utilisée par le connecteur.
+  // par défaut) : none | sesame | mews | opera | thais | lodgify | cloudbeds
+  // | guesty | hostaway | apaleo. Le reste des champs ci-dessous reste la
+  // seule source de vérité utilisée par le connecteur.
   presetId     String? @default("none")
   baseUrl      String?
   endpointPath String? // ex: "/v1/bookings" — concaténé à baseUrl
@@ -326,12 +327,26 @@ model BookingSourceConfig {
   // POST identifiants vers loginPath, extraction du token via
   // loginTokenPath, puis ce token est envoyé en en-tête sur chaque appel
   // suivant. Relancé à chaque synchronisation (pas de cache de token).
-  loginPath            String? // ex: "/ws/login/login" — concaténé à baseUrl
+  // loginPath accepte aussi une URL absolue (http/https) — nécessaire quand
+  // le serveur d'authentification est sur un hôte différent de baseUrl (ex :
+  // Apaleo, identity.apaleo.com vs api.apaleo.com) ; sinon concaténé à
+  // baseUrl comme les autres chemins de ce connecteur.
+  loginPath            String? // ex: "/ws/login/login" — concaténé à baseUrl, ou URL absolue
   loginEmail           String?
   loginPassword        String?
-  loginEmailField      String? @default("login") // nom du champ email (body ou query selon loginEmailLocation)
-  loginPasswordField   String? @default("password") // nom du champ mot de passe (toujours en body JSON)
+  loginEmailField      String? @default("login") // nom du champ identifiant (body ou query selon loginEmailLocation)
+  loginPasswordField   String? @default("password") // nom du champ secret
   loginEmailLocation   String? @default("body") // query | body
+  // Encodage du corps de la requête de connexion — "json" (défaut, ex : API
+  // Sesame Technology) ou "form" (application/x-www-form-urlencoded, ex :
+  // OAuth2 client_credentials — Guesty, Hostaway, Apaleo).
+  loginBodyFormat      String? @default("json") // json | form
+  // Où passer loginEmail/loginPassword sur l'appel de connexion — "body"
+  // (défaut, champs loginEmailField/loginPasswordField) ou "basicHeader"
+  // (Authorization: Basic base64(email:password) — ex : Apaleo, dont
+  // l'échange de token OAuth2 authentifie le client par Basic plutôt que
+  // par des champs dans le corps).
+  loginCredentialsIn   String? @default("body") // body | basicHeader
   loginTokenPath       String? // dot-path du token — dans la réponse complète, ou dans le profil sélectionné ci-dessous si loginProfileListPath est renseigné (ex: "token")
   loginTokenHeaderName String? @default("Authorization")
   loginTokenPrefix     String? // ex: "Bearer " — laisser vide pour envoyer le token brut
@@ -374,11 +389,19 @@ model BookingSourceConfig {
   // clients entre établissements est plus grave qu'une synchronisation
   // bloquée par erreur (visible et corrigeable immédiatement).
   skipEntityFilter Boolean @default(false)
-  // Champ optionnel supplémentaire envoyé dans le corps JSON de connexion, en
+  // Champ optionnel supplémentaire envoyé dans le corps de connexion, en
   // plus de l'email et du mot de passe — ex: certains systèmes multi-comptes
-  // exigent un identifiant de client/groupe ("client": "monGroupe").
+  // exigent un identifiant de client/groupe ("client": "monGroupe"). Conservé
+  // pour compatibilité — préférer loginExtraParams pour plusieurs champs.
   loginExtraField String?
   loginExtraValue String?
+  // Champs statiques supplémentaires envoyés dans le corps de connexion —
+  // {clé: valeur} — ex : OAuth2 client_credentials exige souvent
+  // grant_type=client_credentials (+ scope=xxx) en plus de l'identifiant/
+  // secret déjà portés par loginEmail/loginPassword (Guesty, Hostaway,
+  // Apaleo). Fusionné avec loginExtraField/loginExtraValue s'il est aussi
+  // renseigné.
+  loginExtraParams Json?
 
   // Chemin (dot-path) vers le tableau de réservations dans la réponse JSON —
   // vide/null si la réponse EST déjà le tableau.

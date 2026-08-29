@@ -38,11 +38,14 @@ function shapeConfig(c: {
   loginEmailField: string | null;
   loginPasswordField: string | null;
   loginEmailLocation: string | null;
+  loginBodyFormat: string | null;
+  loginCredentialsIn: string | null;
   loginTokenPath: string | null;
   loginTokenHeaderName: string | null;
   loginTokenPrefix: string | null;
   loginExtraField: string | null;
   loginExtraValue: string | null;
+  loginExtraParams: unknown;
   loginProfileListPath: string | null;
   loginProfileMatchField: string | null;
   loginProfileMatchValue: string | null;
@@ -123,11 +126,14 @@ function shapeConfig(c: {
     loginEmailField: c.loginEmailField || "login",
     loginPasswordField: c.loginPasswordField || "password",
     loginEmailLocation: c.loginEmailLocation || "body",
+    loginBodyFormat: c.loginBodyFormat || "json",
+    loginCredentialsIn: c.loginCredentialsIn || "body",
     loginTokenPath: c.loginTokenPath || "",
     loginTokenHeaderName: c.loginTokenHeaderName || "Authorization",
     loginTokenPrefix: c.loginTokenPrefix || "",
     loginExtraField: c.loginExtraField || "",
     loginExtraValue: c.loginExtraValue || "",
+    loginExtraParams: c.loginExtraParams || [],
     loginProfileListPath: c.loginProfileListPath || "",
     loginProfileMatchField: c.loginProfileMatchField || "",
     loginProfileMatchValue: c.loginProfileMatchValue || "",
@@ -225,11 +231,14 @@ interface ConfigBody {
   loginEmailField?: string;
   loginPasswordField?: string;
   loginEmailLocation?: string;
+  loginBodyFormat?: string;
+  loginCredentialsIn?: string;
   loginTokenPath?: string;
   loginTokenHeaderName?: string;
   loginTokenPrefix?: string;
   loginExtraField?: string;
   loginExtraValue?: string;
+  loginExtraParams?: Record<string, string>;
   loginProfileListPath?: string;
   loginProfileMatchField?: string;
   loginProfileMatchValue?: string;
@@ -314,11 +323,14 @@ bookingSourceRouter.post(
       loginEmailField: b.loginEmailField,
       loginPasswordField: b.loginPasswordField,
       loginEmailLocation: b.loginEmailLocation,
+      loginBodyFormat: b.loginBodyFormat,
+      loginCredentialsIn: b.loginCredentialsIn,
       loginTokenPath: b.loginTokenPath,
       loginTokenHeaderName: b.loginTokenHeaderName,
       loginTokenPrefix: b.loginTokenPrefix,
       loginExtraField: b.loginExtraField,
       loginExtraValue: b.loginExtraValue,
+      loginExtraParams: b.loginExtraParams as never,
       loginProfileListPath: b.loginProfileListPath,
       loginProfileMatchField: b.loginProfileMatchField,
       loginProfileMatchValue: b.loginProfileMatchValue,
@@ -417,11 +429,14 @@ bookingSourceRouter.post(
       loginEmailField: b.loginEmailField ?? saved?.loginEmailField ?? "login",
       loginPasswordField: b.loginPasswordField ?? saved?.loginPasswordField ?? "password",
       loginEmailLocation: b.loginEmailLocation ?? saved?.loginEmailLocation ?? "body",
+      loginBodyFormat: b.loginBodyFormat ?? saved?.loginBodyFormat ?? "json",
+      loginCredentialsIn: b.loginCredentialsIn ?? saved?.loginCredentialsIn ?? "body",
       loginTokenPath: b.loginTokenPath ?? saved?.loginTokenPath ?? null,
       loginTokenHeaderName: b.loginTokenHeaderName ?? saved?.loginTokenHeaderName ?? "Authorization",
       loginTokenPrefix: b.loginTokenPrefix ?? saved?.loginTokenPrefix ?? null,
       loginExtraField: b.loginExtraField ?? saved?.loginExtraField ?? null,
       loginExtraValue: b.loginExtraValue ?? saved?.loginExtraValue ?? null,
+      loginExtraParams: (b.loginExtraParams ?? saved?.loginExtraParams ?? []) as never,
       loginProfileListPath: b.loginProfileListPath ?? saved?.loginProfileListPath ?? null,
       loginProfileMatchField: b.loginProfileMatchField ?? saved?.loginProfileMatchField ?? null,
       loginProfileMatchValue: b.loginProfileMatchValue ?? saved?.loginProfileMatchValue ?? null,
@@ -511,11 +526,14 @@ bookingSourceRouter.post(
       loginEmailField: b.loginEmailField ?? saved?.loginEmailField ?? "login",
       loginPasswordField: b.loginPasswordField ?? saved?.loginPasswordField ?? "password",
       loginEmailLocation: b.loginEmailLocation ?? saved?.loginEmailLocation ?? "body",
+      loginBodyFormat: b.loginBodyFormat ?? saved?.loginBodyFormat ?? "json",
+      loginCredentialsIn: b.loginCredentialsIn ?? saved?.loginCredentialsIn ?? "body",
       loginTokenPath: b.loginTokenPath ?? saved?.loginTokenPath ?? null,
       loginTokenHeaderName: b.loginTokenHeaderName ?? saved?.loginTokenHeaderName ?? "Authorization",
       loginTokenPrefix: b.loginTokenPrefix ?? saved?.loginTokenPrefix ?? null,
       loginExtraField: b.loginExtraField ?? saved?.loginExtraField ?? null,
       loginExtraValue: b.loginExtraValue ?? saved?.loginExtraValue ?? null,
+      loginExtraParams: (b.loginExtraParams ?? saved?.loginExtraParams ?? []) as never,
       loginProfileListPath: b.loginProfileListPath ?? saved?.loginProfileListPath ?? null,
       loginProfileMatchField: b.loginProfileMatchField ?? saved?.loginProfileMatchField ?? null,
       loginProfileMatchValue: b.loginProfileMatchValue ?? saved?.loginProfileMatchValue ?? null,
