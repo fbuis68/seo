@@ -1812,6 +1812,9 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
           <option value="guesty">Guesty</option>
           <option value="hostaway">Hostaway</option>
           <option value="apaleo">Apaleo</option>
+          <option value="hostfully">Hostfully</option>
+          <option value="hostex">Hostex</option>
+          <option value="rmscloud">RMS Cloud</option>
         </select>
         <button type="button" class="btn btn-s" id="bs-reapply-btn" style="display:none;white-space:nowrap;width:auto" onclick="bsReapplyPreset()" title="Recharge les valeurs par défaut techniques du modèle sélectionné — utile après une mise à jour du connecteur qui ajoute de nouveaux réglages (le modèle déjà sélectionné ne se réapplique pas tout seul en rouvrant ce panneau)">
           <i class="ti ti-refresh" style="font-size:12px"></i> Réappliquer les valeurs par défaut
@@ -5962,6 +5965,63 @@ var PMS_PRESETS = {
     vars: [
       {label:'Client ID', target:'bs-loginEmail'},
       {label:'Client Secret', type:'password', target:'bs-loginPassword'},
+    ],
+  },
+  hostfully: {
+    label: 'Hostfully',
+    noteType: 'w',
+    note: 'Chemins d\'après la documentation publique Hostfully (GET /v3/reservations, clé API en en-tête X-HOSTFULLY-APIKEY) — non vérifiés en conditions réelles contre un compte Hostfully, à tester avant mise en production.',
+    apply: function(){
+      document.getElementById('bs-baseUrl').value = 'https://api.hostfully.com';
+      document.getElementById('bs-endpointPath').value = '/v3/reservations';
+      document.getElementById('bs-endpointMethod').value = 'GET';
+      document.getElementById('bs-authType').value = 'apiKey';
+      bsRenderAuthFields();
+      document.getElementById('bs-authApiKeyHeader').value = 'X-HOSTFULLY-APIKEY';
+      document.getElementById('bs-responseListPath').value = 'reservations';
+      bsRenderMappingFields({code:'uid', personEmail:'guest.email', personFirstname:'guest.firstName', personLastname:'guest.lastName', personPhone:'guest.phone', startDate:'checkInDate', endDate:'checkOutDate', facilityCode:'propertyUid', status:'status'});
+    },
+    vars: [
+      {label:'Clé API (X-HOSTFULLY-APIKEY)', type:'password', target:'bs-authApiKeyValue'},
+    ],
+  },
+  hostex: {
+    label: 'Hostex',
+    noteType: 'w',
+    note: 'Seule l\'authentification est confirmée par la documentation publique Hostex (en-tête Hostex-Access-Token). L\'URL de base et le chemin exact de l\'endpoint réservations sont derrière une documentation réservée aux comptes enregistrés — à récupérer auprès de Hostex avant de tester la connexion.',
+    apply: function(){
+      document.getElementById('bs-endpointMethod').value = 'GET';
+      document.getElementById('bs-authType').value = 'apiKey';
+      bsRenderAuthFields();
+      document.getElementById('bs-authApiKeyHeader').value = 'Hostex-Access-Token';
+    },
+    vars: [
+      {label:'URL de base', placeholder:'à confirmer avec Hostex', target:'bs-baseUrl'},
+      {label:'Chemin de l\'endpoint réservations', placeholder:'à confirmer avec Hostex', target:'bs-endpointPath'},
+      {label:'Jeton d\'accès (Hostex-Access-Token)', type:'password', target:'bs-authApiKeyValue'},
+    ],
+  },
+  rmscloud: {
+    label: 'RMS Cloud',
+    noteType: 'w',
+    note: 'Connexion confirmée par la documentation publique RMS : POST /login/implicit avec tenantName + identifiant + mot de passe en JSON, renvoie un jeton. L\'URL de base est propre à chaque compte RMS (ex : https://restapi8.rmscloud.com — à demander à RMS). L\'endpoint et les noms de champs de la recherche de réservations n\'ont pas pu être confirmés publiquement (recherche généralement par POST avec filtre de dates, pas un simple GET) — à compléter avec le support RMS avant de tester la connexion.',
+    apply: function(){
+      document.getElementById('bs-authType').value = 'login';
+      bsRenderAuthFields();
+      document.getElementById('bs-loginPath').value = '/login/implicit';
+      document.getElementById('bs-loginEmailField').value = 'username';
+      document.getElementById('bs-loginPasswordField').value = 'password';
+      document.getElementById('bs-loginBodyFormat').value = 'json';
+      document.getElementById('bs-loginExtraField').value = 'tenantName';
+      document.getElementById('bs-loginTokenPath').value = 'token';
+      document.getElementById('bs-loginTokenHeaderName').value = 'authtoken';
+      document.getElementById('bs-loginTokenPrefix').value = '';
+    },
+    vars: [
+      {label:'URL de base (propre à votre compte, ex : https://restapi8.rmscloud.com)', target:'bs-baseUrl'},
+      {label:'Nom du tenant (tenantName)', target:'bs-loginExtraValue'},
+      {label:'Identifiant', target:'bs-loginEmail'},
+      {label:'Mot de passe', type:'password', target:'bs-loginPassword'},
     ],
   },
 };
