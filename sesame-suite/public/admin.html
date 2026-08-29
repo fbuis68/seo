@@ -1815,6 +1815,8 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
           <option value="hostfully">Hostfully</option>
           <option value="hostex">Hostex</option>
           <option value="rmscloud">RMS Cloud</option>
+          <option value="sequoiasoft">SequoiaSoft (Septeo Hospitality)</option>
+          <option value="misterbooking">Misterbooking</option>
         </select>
         <button type="button" class="btn btn-s" id="bs-reapply-btn" style="display:none;white-space:nowrap;width:auto" onclick="bsReapplyPreset()" title="Recharge les valeurs par défaut techniques du modèle sélectionné — utile après une mise à jour du connecteur qui ajoute de nouveaux réglages (le modèle déjà sélectionné ne se réapplique pas tout seul en rouvrant ce panneau)">
           <i class="ti ti-refresh" style="font-size:12px"></i> Réappliquer les valeurs par défaut
@@ -6022,6 +6024,26 @@ var PMS_PRESETS = {
       {label:'Nom du tenant (tenantName)', target:'bs-loginExtraValue'},
       {label:'Identifiant', target:'bs-loginEmail'},
       {label:'Mot de passe', type:'password', target:'bs-loginPassword'},
+    ],
+  },
+  sequoiasoft: {
+    label: 'SequoiaSoft (Septeo Hospitality)',
+    noteType: 'w',
+    note: 'Aucune documentation technique publique trouvée — SequoiaSoft (racheté par Septeo, devenu Septeo Hospitality) ne semble pas proposer de portail développeur en libre accès. Leur documentation commerciale mentionne une "Customer API" avec authentification par identifiant/mot de passe ou badge magnétique, sans détail d\'endpoints ni de format de réponse. Ce connecteur ne peut pas être câblé sans la documentation technique — contactez SequoiaSoft/Septeo Hospitality (généralement via votre contact commercial ou leur support) pour l\'obtenir, ainsi que des identifiants d\'accès, avant de continuer.',
+    vars: [
+      {label:'URL de base', placeholder:'fournie par SequoiaSoft/Septeo Hospitality', target:'bs-baseUrl'},
+      {label:'Identifiant', target:'bs-loginEmail'},
+      {label:'Mot de passe', type:'password', target:'bs-loginPassword'},
+    ],
+  },
+  misterbooking: {
+    label: 'Misterbooking',
+    noteType: 'w',
+    note: 'Misterbooking propose une API partenaire ("interne" et "externe/ouverte"), mais son accès et sa documentation technique ne sont fournis que sur demande approuvée (formulaire de connexion partenaire sur pms.misterbooking.net/api-misterbooking) — aucun endpoint ni mécanisme d\'authentification n\'est documenté publiquement. Faites la demande d\'accès auprès de Misterbooking, puis revenez compléter ce connecteur avec la documentation technique qu\'ils vous transmettront (type d\'authentification, URL de base, endpoint réservations, noms de champs).',
+    vars: [
+      {label:'URL de base', placeholder:'fournie par Misterbooking après approbation', target:'bs-baseUrl'},
+      {label:'Identifiant / clé API', target:'bs-loginEmail'},
+      {label:'Mot de passe / secret', type:'password', target:'bs-loginPassword'},
     ],
   },
 };
