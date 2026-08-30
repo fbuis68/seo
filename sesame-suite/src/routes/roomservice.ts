@@ -66,6 +66,7 @@ function shapeOrder(o: {
   lockerNumbers: unknown;
   lockerPickupCode: string | null;
   lockerSourceWarning: string | null;
+  paymentStatus: string | null;
 }) {
   return {
     id: o.id,
@@ -85,6 +86,10 @@ function shapeOrder(o: {
     lockerNumbers: (o.lockerNumbers as number[]) || [],
     lockerPickupCode: o.lockerPickupCode || "",
     lockerSourceWarning: o.lockerSourceWarning || null,
+    // null pour les commandes gratuites/hors paiement en ligne (comportement
+    // historique inchangé) ; "pending"|"paid"|"failed" pour les commandes
+    // passées par le connecteur Stripe (cf. routes/payment.ts).
+    paymentStatus: o.paymentStatus || null,
   };
 }
 
@@ -105,6 +110,92 @@ roomserviceRouter.get(
     res.json(orders.map(shapeOrder));
   })
 );
+
+/**
+ * Effets de bord qui suivent la création d'une commande — email/SMS de
+ * confirmation (trigger "order.created") et réservation best-effort d'un
+ * casier Mon Casier Frais pour les articles importés du panier. Extrait de
+ * POST /roomservice/create pour être réutilisé par le webhook Stripe
+ * (routes/payment.ts) : une commande dont le paiement est encore en attente
+ * ne doit déclencher NI l'un ni l'autre — ils n'ont lieu qu'une fois la
+ * commande effectivement créée (paiement non requis) ou confirmée payée.
+ */
+export async function finalizeOrder(
+  entity: { id: string },
+  order: { id: string; total: number },
+  booking: { id: string; personEmail: string; personPhone: string | null; personFirstname: string; personLastname: string; lockerAccess: unknown } | null,
+  items: CartItem[],
+  note?: string
+) {
+  if (booking) {
+    fireTrigger("order.created", {
+      entityId: entity.id,
+      targetType: "order",
+      targetId: order.id,
+      recipient: { email: booking.personEmail, phone: booking.personPhone },
+      variables: { prenom: booking.personFirstname, nom: booking.personLastname, total: String(order.total) },
+    }).catch((e) => console.error("[automation] order.created:", e));
+  }
+
+  // Réservation best-effort d'un casier Mon Casier Frais pour les articles
+  // importés du panier (cf. lib/lockerSource.ts) — jamais bloquante : la
+  // commande locale existe déjà même si cette étape échoue, auquel cas
+  // lockerSourceWarning porte le message d'erreur plutôt qu'un faux succès.
+  let finalOrder = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+  const lockerProducts = await prisma.product.findMany({
+    where: { id: { in: items.map((it) => it.id) }, entityId: entity.id, importedFrom: "moncasierfrais" },
+  });
+  if (lockerProducts.length) {
+    const config = await prisma.lockerSourceConfig.findUnique({ where: { entityId: entity.id } });
+    const clientEmail = booking?.personEmail;
+    let warning: string | undefined;
+    if (!config || !config.enabled) {
+      warning = "Connecteur Mon Casier Frais non activé — articles casier non réservés";
+    } else if (!clientEmail) {
+      warning = "Email client indisponible — réservation de casier non effectuée";
+    } else {
+      const reservationItems: LockerReservationItem[] = lockerProducts.map((product) => ({
+        product,
+        qty: items.filter((it) => it.id === product.id).reduce((s, it) => s + it.qty, 0),
+      }));
+      const pickupCode = String(Math.floor(100000 + Math.random() * 900000));
+      const result = await reserveLockersForOrder(config, reservationItems, {
+        clientEmail,
+        pickupCode,
+        comments: note,
+      }).catch((e) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) }));
+      if (result.ok) {
+        finalOrder = await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            lockerNumbers: result.lockerNumbers || [],
+            lockerPickupCode: pickupCode,
+            lockerSourceOrderId: result.mcfOrderId || null,
+          },
+        });
+        // Rattache le(s) casier(s) obtenu(s) à la réservation en cours, en
+        // plus de la commande — la réservation devient la référence pour
+        // tout accès casier accordé pendant le séjour (cf.
+        // Booking.lockerAccess), pas seulement l'historique des commandes.
+        // Retiré si cette commande est ensuite annulée (cf. /roomservice/update).
+        if (booking && result.lockerNumbers?.length) {
+          const existingAccess = (booking.lockerAccess as { numberOnModule: number; pickupCode: string; orderId: string }[]) || [];
+          const newAccess = result.lockerNumbers.map((numberOnModule) => ({ numberOnModule, pickupCode, orderId: order.id }));
+          await prisma.booking.update({
+            where: { id: booking.id },
+            data: { lockerAccess: [...existingAccess, ...newAccess] },
+          });
+        }
+      } else {
+        warning = result.error;
+      }
+    }
+    if (warning) {
+      finalOrder = await prisma.order.update({ where: { id: order.id }, data: { lockerSourceWarning: warning } });
+    }
+  }
+  return finalOrder;
+}
 
 /**
  * POST /wa/roomservice/create
@@ -147,76 +238,7 @@ roomserviceRouter.post(
       },
     });
 
-    if (booking) {
-      fireTrigger("order.created", {
-        entityId: entity.id,
-        targetType: "order",
-        targetId: order.id,
-        recipient: { email: booking.personEmail, phone: booking.personPhone },
-        variables: { prenom: booking.personFirstname, nom: booking.personLastname, total: String(order.total) },
-      }).catch((e) => console.error("[automation] order.created:", e));
-    }
-
-    // Réservation best-effort d'un casier Mon Casier Frais pour les
-    // articles importés du panier (cf. lib/lockerSource.ts) — jamais
-    // bloquante : la commande locale existe déjà même si cette étape
-    // échoue, auquel cas lockerSourceWarning porte le message d'erreur
-    // plutôt qu'un faux succès.
-    let finalOrder = order;
-    const lockerProducts = await prisma.product.findMany({
-      where: { id: { in: b.items.map((it) => it.id) }, entityId: entity.id, importedFrom: "moncasierfrais" },
-    });
-    if (lockerProducts.length) {
-      const config = await prisma.lockerSourceConfig.findUnique({ where: { entityId: entity.id } });
-      const clientEmail = booking?.personEmail;
-      let warning: string | undefined;
-      if (!config || !config.enabled) {
-        warning = "Connecteur Mon Casier Frais non activé — articles casier non réservés";
-      } else if (!clientEmail) {
-        warning = "Email client indisponible — réservation de casier non effectuée";
-      } else {
-        const reservationItems: LockerReservationItem[] = lockerProducts.map((product) => ({
-          product,
-          qty: b.items.filter((it) => it.id === product.id).reduce((s, it) => s + it.qty, 0),
-        }));
-        const pickupCode = String(Math.floor(100000 + Math.random() * 900000));
-        const result = await reserveLockersForOrder(config, reservationItems, {
-          clientEmail,
-          pickupCode,
-          comments: b.note,
-        }).catch((e) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) }));
-        if (result.ok) {
-          finalOrder = await prisma.order.update({
-            where: { id: order.id },
-            data: {
-              lockerNumbers: result.lockerNumbers || [],
-              lockerPickupCode: pickupCode,
-              lockerSourceOrderId: result.mcfOrderId || null,
-            },
-          });
-          // Rattache le(s) casier(s) obtenu(s) à la réservation en cours,
-          // en plus de la commande — la réservation devient la référence
-          // pour tout accès casier accordé pendant le séjour (cf.
-          // Booking.lockerAccess), pas seulement l'historique des
-          // commandes. Retiré si cette commande est ensuite annulée
-          // (cf. /roomservice/update).
-          if (booking && result.lockerNumbers?.length) {
-            const existingAccess = (booking.lockerAccess as { numberOnModule: number; pickupCode: string; orderId: string }[]) || [];
-            const newAccess = result.lockerNumbers.map((numberOnModule) => ({ numberOnModule, pickupCode, orderId: order.id }));
-            await prisma.booking.update({
-              where: { id: booking.id },
-              data: { lockerAccess: [...existingAccess, ...newAccess] },
-            });
-          }
-        } else {
-          warning = result.error;
-        }
-      }
-      if (warning) {
-        finalOrder = await prisma.order.update({ where: { id: order.id }, data: { lockerSourceWarning: warning } });
-      }
-    }
-
+    const finalOrder = await finalizeOrder(entity, order, booking, b.items, b.note);
     res.status(201).json(shapeOrder(finalOrder));
   })
 );

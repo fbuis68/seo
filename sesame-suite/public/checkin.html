@@ -651,7 +651,7 @@ input:focus,select:focus{border-color:var(--accent)}
           <input type="text" id="bqNote" data-i18n-placeholder="step6_note_placeholder" placeholder="Allergie, heure souhaitée…">
         </div>
         <button class="btn btn-p btn-w" style="margin-top:8px" onclick="bqPlaceOrder()">
-          <i class="ti ti-send"></i> <span data-i18n="btn_order">Commander</span>
+          <i class="ti ti-send" id="bqPlaceOrderIcon"></i> <span id="bqPlaceOrderLabel" data-i18n="btn_order">Commander</span>
         </button>
       </div>
     </div>
@@ -943,7 +943,7 @@ input:focus,select:focus{border-color:var(--accent)}
             <input type="text" id="rsOrderNote" data-i18n-placeholder="esp_rs_note_placeholder" placeholder="Ex : sans glaçons, allergie aux fruits à coque…">
           </div>
 
-          <button class="btn btn-p" onclick="rsPlaceOrder()"><i class="ti ti-send"></i> <span data-i18n="esp_rs_place_order">Passer la commande</span></button>
+          <button class="btn btn-p" onclick="rsPlaceOrder()"><i class="ti ti-send" id="rsPlaceOrderIcon"></i> <span id="rsPlaceOrderLabel" data-i18n="esp_rs_place_order">Passer la commande</span></button>
           <div class="brow" style="margin-top:8px">
             <button class="btn btn-out" onclick="rsCloseCart()"><i class="ti ti-arrow-left"></i> <span data-i18n="esp_rs_continue_shopping">Continuer mes achats</span></button>
           </div>
@@ -1143,6 +1143,63 @@ async function loadCfg(){
     console.error('Impossible de charger le catalogue produits — repli sur le catalogue par défaut.', e);
   }
 }
+
+// GET /wa/payment/status — indique si le connecteur Stripe de cet hôtel est
+// actif, sans exposer sa configuration. Détermine si rsPlaceOrder/bqPlaceOrder
+// redirigent vers Stripe Checkout (payGoToCheckout) ou gardent le
+// comportement historique (commande ajoutée à la note de chambre, cf.
+// POST /wa/roomservice/create).
+async function fetchPaymentStatus(){
+  try{
+    var r = await apiFetch(API_BASE+'/wa/payment/status');
+    if(r.ok){ var data = await r.json(); S.paymentEnabled = !!data.enabled; }
+  }catch(e){
+    console.error('Impossible de vérifier le statut du paiement en ligne.', e);
+  }
+}
+
+/**
+ * Redirige le client vers Stripe Checkout pour payer le panier fourni.
+ * Le serveur recrée la commande (statut "pending") et recalcule les prix à
+ * partir du catalogue — les side-effects habituels (déclencheurs, casier Mon
+ * Casier Frais) ne s'exécutent qu'à la confirmation du paiement (webhook),
+ * pas ici. successUrl/cancelUrl ramènent sur cette même page avec un
+ * marqueur ?paymentReturn=… lu au chargement (cf. DOMContentLoaded) pour
+ * afficher la confirmation ou permettre de réessayer.
+ */
+async function payGoToCheckout(items, extra){
+  var base = window.location.origin + window.location.pathname
+    + (ENTITY_CODE ? '?entityCode='+encodeURIComponent(ENTITY_CODE)+'&' : '?');
+  var payload = Object.assign({
+    items: items,
+    successUrl: base + 'paymentReturn=success',
+    cancelUrl: base + 'paymentReturn=cancelled',
+  }, extra);
+  try{
+    var r = await apiFetch(API_BASE+'/wa/payment/checkout', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+    });
+    var data = await r.json();
+    if(!r.ok || !data.checkoutUrl) throw new Error(data.error||'HTTP '+r.status);
+    window.location.href = data.checkoutUrl;
+  }catch(e){
+    console.error('payGoToCheckout error', e);
+    toast(t('err_payment_redirect'));
+  }
+}
+
+// Retour depuis Stripe Checkout (?paymentReturn=success|cancelled) — la
+// commande a déjà été créée/confirmée côté serveur (webhook), on se contente
+// ici de rafraîchir l'affichage pour ce client.
+function handlePaymentReturn(){
+  var v = new URLSearchParams(window.location.search).get('paymentReturn');
+  if(!v) return;
+  if(v==='success') toast(t('step6_order_sent'));
+  else if(v==='cancelled') toast(t('err_payment_cancelled'));
+  var url = new URL(window.location.href);
+  url.searchParams.delete('paymentReturn');
+  window.history.replaceState({}, '', url.toString());
+}
 // Fuseau horaire de l'hôtel (CFG.timezone) — "aujourd'hui" côté client doit
 // refléter le fuseau de l'établissement, pas celui de l'appareil du client
 // (mobile en itinérance, hôtel à la Réunion consulté depuis la métropole…).
@@ -1256,6 +1313,8 @@ var I18N_FR = {
   badge_selected:'Sélectionnée',price_free:'Offert',
   cart_my_cart:'Mon panier',cart_total:'Total',cart_empty:'Votre panier est vide.',
   cart_per_unit:'/ unité',cart_added_to_room_bill:'Le montant sera ajouté à votre note de chambre.',
+  cart_pay_online:'Vous allez être redirigé vers une page de paiement sécurisée.',
+  btn_pay_now:'Payer maintenant',err_payment_redirect:'Impossible de démarrer le paiement, réessayez.',err_payment_cancelled:'Paiement annulé — votre panier a été conservé.',
   word_room:'Chambre',word_access:'Accès',loading_ellipsis:'Chargement…',processing_ellipsis:'Traitement…',
   occupant_sg:'occupant',occupant_pl:'occupants',word_for:'Pour',discount_suffix:'de réduction',
   rs_cat_other:'Autre',rs_watch_video:'Voir la vidéo',
@@ -1477,6 +1536,8 @@ var I18N_EN = {
   badge_selected:'Selected',price_free:'Free',
   cart_my_cart:'My cart',cart_total:'Total',cart_empty:'Your cart is empty.',
   cart_per_unit:'/ unit',cart_added_to_room_bill:'The amount will be added to your room bill.',
+  cart_pay_online:'You will be redirected to a secure payment page.',
+  btn_pay_now:'Pay now',err_payment_redirect:'Could not start payment, please try again.',err_payment_cancelled:'Payment cancelled — your cart was kept.',
   word_room:'Room',word_access:'Access',loading_ellipsis:'Loading…',processing_ellipsis:'Processing…',
   occupant_sg:'guest',occupant_pl:'guests',word_for:'For',discount_suffix:'discount',
   rs_cat_other:'Other',rs_watch_video:'Watch the video',
@@ -1686,6 +1747,8 @@ var I18N_ES = {
   badge_selected:'Seleccionada',price_free:'Gratis',
   cart_my_cart:'Mi carrito',cart_total:'Total',cart_empty:'Su carrito está vacío.',
   cart_per_unit:'/ unidad',cart_added_to_room_bill:'El importe se añadirá a la factura de su habitación.',
+  cart_pay_online:'Será redirigido a una página de pago segura.',
+  btn_pay_now:'Pagar ahora',err_payment_redirect:'No se pudo iniciar el pago, inténtelo de nuevo.',err_payment_cancelled:'Pago cancelado — su carrito se ha conservado.',
   word_room:'Habitación',word_access:'Acceso',loading_ellipsis:'Cargando…',processing_ellipsis:'Procesando…',
   occupant_sg:'huésped',occupant_pl:'huéspedes',word_for:'Para',discount_suffix:'de descuento',
   rs_cat_other:'Otro',rs_watch_video:'Ver el vídeo',
@@ -1951,7 +2014,8 @@ var S={
   activeRewards:[], activeRoomTags:[],
   redeemedItems:[],
   checkinDone:false, rsCart:{},
-  lang:'fr' // langue choisie par le client — voir initLang()/setLang()
+  lang:'fr', // langue choisie par le client — voir initLang()/setLang()
+  paymentEnabled:false // GET /wa/payment/status — voir fetchPaymentStatus()
 };
 
 // ═══════════════════ SCREEN / STEP NAV
@@ -3742,7 +3806,14 @@ function rsRenderCartView(){
   var total = rsCartTotal();
   summary.innerHTML = '<div style="display:flex;justify-content:space-between;font-size:16px;font-weight:700">'
     +'<span>'+t('cart_total')+'</span><span style="color:var(--primary)">'+total.toFixed(2)+' '+sym+'</span></div>'
-    +'<div style="font-size:11px;color:var(--mu);margin-top:4px">'+t('cart_added_to_room_bill')+'</div>';
+    +'<div style="font-size:11px;color:var(--mu);margin-top:4px">'+(S.paymentEnabled?t('cart_pay_online'):t('cart_added_to_room_bill'))+'</div>';
+
+  var rsLabelEl = document.getElementById('rsPlaceOrderLabel');
+  var rsIconEl = document.getElementById('rsPlaceOrderIcon');
+  if(rsLabelEl){
+    rsLabelEl.textContent = S.paymentEnabled ? t('btn_pay_now') : t('esp_rs_place_order');
+    if(rsIconEl) rsIconEl.className = S.paymentEnabled ? 'ti ti-credit-card' : 'ti ti-send';
+  }
 }
 
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -3767,6 +3838,15 @@ async function rsPlaceOrder(){
     total: rsCartTotal(),
     note: document.getElementById('rsOrderNote').value.trim()
   };
+
+  // Paiement en ligne actif — redirige vers Stripe Checkout au lieu
+  // d'ajouter la commande à la note de chambre (cf. payGoToCheckout).
+  if(S.paymentEnabled){
+    var rsExtra = Object.assign({}, payload);
+    delete rsExtra.total; // recalculé côté serveur, jamais transmis (cf. routes/payment.ts)
+    payGoToCheckout(items, rsExtra);
+    return;
+  }
 
   try{
     var r = await apiFetch(API_BASE+'/wa/roomservice/create', {
@@ -4743,6 +4823,13 @@ function bqUpdateCart(){
   cartBar.style.display = 'block';
   if(continueBtn) continueBtn.style.display = 'inline-flex';
 
+  var bqLabelEl = document.getElementById('bqPlaceOrderLabel');
+  var bqIconEl = document.getElementById('bqPlaceOrderIcon');
+  if(bqLabelEl){
+    bqLabelEl.textContent = S.paymentEnabled ? t('btn_pay_now') : t('btn_order');
+    if(bqIconEl) bqIconEl.className = S.paymentEnabled ? 'ti ti-credit-card' : 'ti ti-send';
+  }
+
   var cat = bqGetCatalog();
   var linesEl = document.getElementById('bqCartLines');
   linesEl.innerHTML = '';
@@ -4804,6 +4891,15 @@ async function bqPlaceOrder(){
     items: items, total: bqCartTotal(),
     note: document.getElementById('bqNote').value.trim()
   };
+
+  // Paiement en ligne actif — redirige vers Stripe Checkout au lieu
+  // d'ajouter la commande à la note de chambre (cf. payGoToCheckout).
+  if(S.paymentEnabled){
+    var bqExtra = Object.assign({}, payload);
+    delete bqExtra.total; // recalculé côté serveur, jamais transmis (cf. routes/payment.ts)
+    payGoToCheckout(items, bqExtra);
+    return;
+  }
 
   // POST /wa/roomservice/create — remplace l'écriture localStorage('SCH_ORDERS')
   var order;
@@ -4878,6 +4974,8 @@ window.addEventListener('DOMContentLoaded',async function(){
   initLang(); // langue du client — sessionStorage > CFG.lang (si fr/en/es) > fr
   applyBrand();
   applyStaticTranslations();
+  fetchPaymentStatus();
+  handlePaymentReturn();
   // Charger les réservations dès l'ouverture
   fetchBookings();
 });

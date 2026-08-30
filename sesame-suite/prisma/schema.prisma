@@ -42,6 +42,7 @@ model Entity {
   subscriptions     Subscription[]
   bookingSource     BookingSourceConfig?
   lockerSource      LockerSourceConfig?
+  paymentConfig     PaymentConfig?
   crmProspects      CrmProspect[]
   smtpConfig        SmtpConfig?
   messageTemplates  MessageTemplate[]
@@ -630,6 +631,45 @@ model LockerSourceConfig {
   updatedAt DateTime @updatedAt
 }
 
+// Connecteur de paiement en ligne (module "Paiement en ligne" du catalogue
+// d'abonnement) — un compte Stripe par établissement, sur le même principe
+// que les autres connecteurs tiers ci-dessus. Paie le panier client
+// (room-service/boutique + taxe de séjour) via Stripe Checkout : page de
+// paiement hébergée par Stripe, aucune donnée de carte ne transite par nos
+// serveurs. cf. lib/payment.ts.
+model PaymentConfig {
+  id       String @id @default(cuid())
+  entityId String @unique
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  enabled Boolean @default(false)
+  // Clé secrète Stripe (sk_live_... ou sk_test_...) — jamais renvoyée au
+  // client, utilisée uniquement côté serveur pour appeler l'API Stripe.
+  secretKey String?
+  // Secret de signature du endpoint webhook (whsec_...), fourni par Stripe
+  // à la création du endpoint dans leur dashboard — vérifie qu'un événement
+  // reçu sur /wa/payment/webhook vient bien de Stripe et n'a pas été rejoué
+  // (cf. verifyWebhookSignature dans lib/payment.ts).
+  webhookSecret String?
+  currency      String  @default("eur")
+  // "Fractionnement" (libellé du module dans le catalogue d'abonnement) —
+  // propose en plus de la carte bancaire les moyens de paiement en
+  // plusieurs fois que Stripe Checkout sait gérer pour cette devise/ce pays
+  // (ex : Klarna).
+  allowInstallments Boolean @default(false)
+  // Inclut la taxe de séjour dans le panier payable en ligne, calculée
+  // côté serveur à partir des occupants de la réservation (jamais transmise
+  // par le client) — cf. computeTaxeSejour dans lib/payment.ts. N'inclut
+  // JAMAIS le prix de la chambre elle-même : pour une réservation importée
+  // d'un canal externe (OTA/PMS, cf. Booking.importedFrom), la chambre est
+  // déjà réglée par ce canal — la refacturer ici créerait un double
+  // paiement.
+  includeTaxeSejour Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Occupant {
   id          String  @id @default(cuid())
   bookingId   String
@@ -768,6 +808,21 @@ model Order {
   lockerPickupCode    String? // code de retrait à 6 chiffres transmis à la source
   lockerSourceOrderId String? // id de la réservation côté source (pour annulation)
   lockerSourceWarning String?
+
+  // Paiement en ligne (Stripe) de cette commande — cf. lib/payment.ts. null
+  // tant qu'aucun paiement n'a été demandé (commande gratuite ou connecteur
+  // paiement désactivé, comportement historique inchangé : la commande est
+  // créée directement sans passer par cet état). Quand un paiement est
+  // demandé, la commande existe dès la création de la session Stripe
+  // (paymentStatus="pending", visible côté admin) mais les effets de bord
+  // qui suivent normalement une commande (email/SMS de confirmation,
+  // réservation de casier) sont différés jusqu'à la confirmation du
+  // paiement par le webhook Stripe — jamais déclenchés sur une commande non
+  // payée (cf. finalizeOrder dans roomservice.ts).
+  paymentStatus         String?   // pending | paid | failed | refunded
+  stripeSessionId       String?
+  stripePaymentIntentId String?
+  paidAt                DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

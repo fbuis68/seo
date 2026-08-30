@@ -634,6 +634,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   <div class="ns">Room Service</div>
   <div class="ni" data-pan="roomservice" onclick="showPan('roomservice')"><i class="ti ti-bell"></i>Catalogue produits</div>
   <div class="ni" data-pan="orders" onclick="showPan('orders')"><i class="ti ti-clipboard-list"></i>Commandes <span class="nibadge" id="ordersBadge" style="display:none">0</span></div>
+  <div class="ni" data-pan="payment" onclick="showPan('payment')"><i class="ti ti-credit-card"></i>Paiement en ligne</div>
   <div class="ni" data-pan="livret" onclick="showPan('livret')"><i class="ti ti-book"></i>Livret digital</div>
   <div class="ns">Planning</div>
   <div class="ni" data-pan="planning" onclick="showPan('planning')"><i class="ti ti-calendar-event"></i>Planning</div>
@@ -3282,6 +3283,89 @@ Accès au salon Premium</textarea>
 </div>
 
 <!-- ════════════════════════════════════════════════════════
+     PAN — PAIEMENT EN LIGNE (Stripe)
+     Un compte Stripe propre à l'hôtel encaisse le panier client
+     (boutique/room-service + taxe de séjour) via Stripe Checkout.
+     ════════════════════════════════════════════════════════ -->
+<div id="pan-payment" class="pan">
+  <div class="ph">
+    <h2>Paiement en ligne</h2>
+    <p>Encaissez le panier de vos clients (boutique, room-service, taxe de séjour) par carte via Stripe — page de paiement hébergée par Stripe, aucune donnée de carte ne transite par nos serveurs. Le prix de la chambre n'est jamais inclus : il reste géré par votre canal de réservation habituel.</p>
+  </div>
+
+  <div class="ca" id="pay-status-banner" style="display:none;margin-bottom:16px"></div>
+
+  <div class="ca">
+    <div class="ch"><i class="ti ti-brand-stripe"></i>Compte Stripe</div>
+    <div class="fi">
+      <label class="lb">Activer le paiement en ligne</label>
+      <label style="display:flex;align-items:center;gap:8px;height:38px;cursor:pointer">
+        <input type="checkbox" id="pay-enabled" style="accent-color:var(--am)">
+        <span style="font-size:13px">Le bouton de paiement apparaît dans le parcours client</span>
+      </label>
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Clé secrète Stripe</label>
+        <input type="password" id="pay-secretKey" placeholder="sk_live_… ou sk_test_…" autocomplete="off">
+        <div style="font-size:11px;color:var(--mu);margin-top:4px" id="pay-secretKey-hint">Depuis votre tableau de bord Stripe → Développeurs → Clés API.</div>
+      </div>
+      <div class="fi">
+        <label class="lb">Secret de signature du webhook</label>
+        <input type="password" id="pay-webhookSecret" placeholder="whsec_…" autocomplete="off">
+        <div style="font-size:11px;color:var(--mu);margin-top:4px" id="pay-webhookSecret-hint">Généré par Stripe à la création du endpoint webhook ci-dessous.</div>
+      </div>
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Devise</label>
+        <select id="pay-currency">
+          <option value="eur">Euro (EUR)</option>
+          <option value="usd">Dollar US (USD)</option>
+          <option value="chf">Franc suisse (CHF)</option>
+          <option value="gbp">Livre sterling (GBP)</option>
+        </select>
+      </div>
+      <div class="fi">
+        <label class="lb">Taxe de séjour</label>
+        <label style="display:flex;align-items:center;gap:8px;height:38px;cursor:pointer">
+          <input type="checkbox" id="pay-includeTaxeSejour" style="accent-color:var(--am)">
+          <span style="font-size:13px">Inclure la taxe de séjour dans le panier payé en ligne</span>
+        </label>
+      </div>
+    </div>
+    <div class="fi">
+      <label class="lb">Paiement en plusieurs fois</label>
+      <label style="display:flex;align-items:center;gap:8px;height:38px;cursor:pointer">
+        <input type="checkbox" id="pay-allowInstallments" style="accent-color:var(--am)">
+        <span style="font-size:13px">Proposer aussi Klarna (paiement différé/fractionné) en plus de la carte bancaire</span>
+      </label>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+      <button class="btn btn-p" onclick="paySave()"><i class="ti ti-device-floppy"></i> Enregistrer</button>
+      <button class="btn btn-s" onclick="payTest()"><i class="ti ti-flask"></i> Tester la connexion</button>
+    </div>
+    <div id="pay-test-result" style="margin-top:12px"></div>
+  </div>
+
+  <div class="ca">
+    <div class="ch"><i class="ti ti-webhook"></i>Endpoint webhook à déclarer côté Stripe</div>
+    <div class="fi">
+      <label class="lb">URL du webhook</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="text" id="pay-webhook-url" readonly style="flex:1;font-family:monospace;font-size:12px">
+        <button class="btn btn-s" type="button" onclick="payCopyWebhookUrl()" style="white-space:nowrap;width:auto"><i class="ti ti-copy" style="font-size:12px"></i> Copier</button>
+      </div>
+      <div style="font-size:11px;color:var(--mu);margin-top:6px">
+        Dans votre tableau de bord Stripe → Développeurs → Webhooks → Ajouter un endpoint : collez cette URL, écoutez les événements
+        <code>checkout.session.completed</code> et <code>checkout.session.expired</code>, puis copiez le "signing secret" généré dans le champ ci-dessus.
+        L'<code>entityCode</code> dans l'URL est indispensable : sans lui, les paiements ne pourraient pas être rattachés à votre établissement.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
      PAN — LIVRET DIGITAL
      CRUD de rubriques (templates de messages), éditeur riche,
      prévisualisation et publication vers l'app client
@@ -3783,6 +3867,7 @@ function showPan(id){
   if(id==='dash'){try{renderDash();}catch(e){}}
   if(id==='reservations'){ loadReservations(); }
   if(id==='api'){ bsInit(); }
+  if(id==='payment'){ payInit(); }
   if(id==='email'){ emlInit(); }
   if(id==='automation'){ autoInit(); }
   if(id==='hotels'){ hmRenderGrid(); }
@@ -6375,6 +6460,99 @@ async function bsSave(){
   }catch(e){ toast('Erreur de connexion au serveur'); }
 }
 
+// ═══════════════════════════════════════════════ PAIEMENT EN LIGNE (Stripe)
+// Un compte Stripe par établissement — cf. schema.prisma PaymentConfig,
+// routes/payment.ts, lib/payment.ts. La clé secrète et le secret webhook ne
+// sont jamais renvoyés en clair par le serveur une fois enregistrés (même
+// principe que les autres connecteurs de ce panneau) : un champ laissé vide
+// à l'enregistrement conserve la valeur déjà en base.
+var PAY_CONFIG = null;
+
+function payWebhookUrl(){
+  var checkinCode = (ADMIN_ROLE==='sesame' && ACTIVE_ENTITY_CODE) ? ACTIVE_ENTITY_CODE : HOME_ENTITY_CODE;
+  return checkinCode ? (window.location.origin+'/wa/payment/webhook?entityCode='+checkinCode) : '';
+}
+
+function payRenderStatusBanner(){
+  var el = document.getElementById('pay-status-banner');
+  if(!PAY_CONFIG){ el.style.display='none'; return; }
+  el.style.display='block';
+  if(PAY_CONFIG.enabled && PAY_CONFIG.secretKeySet){
+    el.innerHTML = '<div class="alt alt-g"><i class="ti ti-check-circle"></i><span>Paiement en ligne actif — le bouton de paiement est visible côté client.</span></div>';
+  } else if(PAY_CONFIG.enabled && !PAY_CONFIG.secretKeySet){
+    el.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Activé mais aucune clé secrète enregistrée — le paiement en ligne restera invisible côté client.</span></div>';
+  } else {
+    el.innerHTML = '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Paiement en ligne désactivé.</span></div>';
+  }
+}
+
+async function payInit(){
+  document.getElementById('pay-webhook-url').value = payWebhookUrl();
+  document.getElementById('pay-test-result').innerHTML = '';
+  try{
+    var r = await adminFetch('/wa/payment/config');
+    PAY_CONFIG = r.ok ? await r.json() : null;
+  }catch(e){ console.error('payInit error', e); PAY_CONFIG = null; }
+  if(!PAY_CONFIG) return;
+  document.getElementById('pay-enabled').checked = !!PAY_CONFIG.enabled;
+  document.getElementById('pay-currency').value = PAY_CONFIG.currency || 'eur';
+  document.getElementById('pay-includeTaxeSejour').checked = !!PAY_CONFIG.includeTaxeSejour;
+  document.getElementById('pay-allowInstallments').checked = !!PAY_CONFIG.allowInstallments;
+  document.getElementById('pay-secretKey').value = '';
+  document.getElementById('pay-secretKey').placeholder = PAY_CONFIG.secretKeySet ? ('Déjà enregistrée (…'+esc(PAY_CONFIG.secretKeyLast4)+') — laisser vide pour ne pas la changer') : 'sk_live_… ou sk_test_…';
+  document.getElementById('pay-webhookSecret').value = '';
+  document.getElementById('pay-webhookSecret').placeholder = PAY_CONFIG.webhookSecretSet ? 'Déjà enregistré — laisser vide pour ne pas le changer' : 'whsec_…';
+  payRenderStatusBanner();
+}
+
+async function paySave(){
+  var body = {
+    enabled: document.getElementById('pay-enabled').checked,
+    currency: document.getElementById('pay-currency').value,
+    includeTaxeSejour: document.getElementById('pay-includeTaxeSejour').checked,
+    allowInstallments: document.getElementById('pay-allowInstallments').checked,
+  };
+  var secretKey = document.getElementById('pay-secretKey').value.trim();
+  var webhookSecret = document.getElementById('pay-webhookSecret').value.trim();
+  if(secretKey) body.secretKey = secretKey;
+  if(webhookSecret) body.webhookSecret = webhookSecret;
+  try{
+    var r = await adminFetch('/wa/payment/config/update', {method:'POST', body:JSON.stringify(body)});
+    if(!r.ok){ toast('Erreur lors de l\'enregistrement'); return; }
+    PAY_CONFIG = await r.json();
+    document.getElementById('pay-secretKey').value = '';
+    document.getElementById('pay-secretKey').placeholder = PAY_CONFIG.secretKeySet ? ('Déjà enregistrée (…'+esc(PAY_CONFIG.secretKeyLast4)+') — laisser vide pour ne pas la changer') : 'sk_live_… ou sk_test_…';
+    document.getElementById('pay-webhookSecret').value = '';
+    document.getElementById('pay-webhookSecret').placeholder = PAY_CONFIG.webhookSecretSet ? 'Déjà enregistré — laisser vide pour ne pas le changer' : 'whsec_…';
+    payRenderStatusBanner();
+    toast('Configuration Stripe enregistrée ✓');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+async function payTest(){
+  var el = document.getElementById('pay-test-result');
+  el.innerHTML = '<div style="color:var(--mu);font-size:13px">Test en cours…</div>';
+  var secretKey = document.getElementById('pay-secretKey').value.trim();
+  try{
+    var r = await adminFetch('/wa/payment/test', {method:'POST', body:JSON.stringify(secretKey ? {secretKey:secretKey} : {})});
+    var data = await r.json();
+    if(!r.ok){
+      el.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>'+esc(data.error||'Erreur inconnue')+'</span></div>';
+      return;
+    }
+    el.innerHTML = '<div class="alt alt-g"><i class="ti ti-check-circle"></i><span>Connexion Stripe réussie'+(data.livemode?' — compte en mode LIVE (paiements réels)':' — compte en mode test')+'.</span></div>';
+  }catch(e){
+    el.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Erreur de connexion au serveur</span></div>';
+  }
+}
+
+function payCopyWebhookUrl(){
+  var input = document.getElementById('pay-webhook-url');
+  input.select();
+  try{ navigator.clipboard.writeText(input.value); toast('URL copiée ✓'); }
+  catch(e){ document.execCommand('copy'); toast('URL copiée ✓'); }
+}
+
 // ═══════════════════════════════════════════════ SERVEUR EMAIL — SMTP sortant + modèles
 // Même mécanisme générique que le module CRM (public/crm.html, ?scope=crm) :
 // ici sans paramètre "scope", adminFetch cible l'entité courante de l'hôtel.
@@ -8917,6 +9095,12 @@ function renderOrders(){
     var sourceBadge = isCheckin
       ? '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;background:var(--pl);color:var(--primary)"><i class="ti ti-login" style="font-size:10px"></i> Check-in</span>'
       : '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;background:var(--bluel);color:var(--blue)"><i class="ti ti-shopping-bag" style="font-size:10px"></i> Boutique</span>';
+    // Badge de paiement Stripe — absent (null) pour les commandes gratuites
+    // ou passées avant l'activation du module (comportement historique).
+    var payBadge = '';
+    if(o.paymentStatus === 'paid') payBadge = '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;background:rgba(26,107,71,.12);color:#1A6B47"><i class="ti ti-credit-card" style="font-size:10px"></i> Payé</span>';
+    else if(o.paymentStatus === 'pending') payBadge = '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;background:rgba(230,126,34,.12);color:#E67E22"><i class="ti ti-clock" style="font-size:10px"></i> Paiement en attente</span>';
+    else if(o.paymentStatus === 'failed') payBadge = '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;background:rgba(231,76,60,.12);color:#E74C3C"><i class="ti ti-credit-card-off" style="font-size:10px"></i> Paiement échoué</span>';
 
     var itemsHtml = (o.items||[]).map(function(it){
       return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:5px 0;border-bottom:1px solid var(--bdr)">'
@@ -8947,6 +9131,7 @@ function renderOrders(){
       +'<strong style="font-size:15px">'+esc(o.roomName || ('Chambre '+(o.roomCode||'—')))+'</strong>'
       +'<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:'+st.bg+';color:'+st.color+'"><i class="ti '+st.icon+'" style="font-size:11px"></i> '+st.label+'</span>'
       +sourceBadge
+      +payBadge
       +'</div>'
       +'<div style="font-size:12px;color:var(--mu)">'
       +'<i class="ti ti-user" style="font-size:11px"></i> '+esc(o.clientName||'Client')

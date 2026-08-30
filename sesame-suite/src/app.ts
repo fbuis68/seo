@@ -34,6 +34,7 @@ import { emailRouter } from "./routes/email";
 import { messagingRouter } from "./routes/messaging";
 import { automationRuleRouter } from "./routes/automationRule";
 import { adminUserRouter } from "./routes/adminUser";
+import { paymentRouter, stripeWebhookHandler } from "./routes/payment";
 import { housekeepingScope } from "./middleware/housekeepingScope";
 import { errorHandler } from "./middleware/errorHandler";
 import { VERSION } from "./lib/version";
@@ -43,6 +44,13 @@ export function createApp() {
   const app = express();
 
   app.use(cors());
+
+  // Webhook Stripe — DOIT être monté avant express.json() ci-dessous : la
+  // vérification de signature (cf. lib/payment.ts verifyWebhookSignature)
+  // porte sur l'octet exact du corps envoyé par Stripe, express.raw() le
+  // préserve tel quel là où express.json() l'aurait déjà parsé/consommé.
+  app.post("/wa/payment/webhook", express.raw({ type: "application/json" }), stripeWebhookHandler);
+
   // Limite relevée : logos, photos de chambres et plan d'hôtel transitent en
   // base64 dans le JSON (comme dans le prototype d'origine).
   app.use(express.json({ limit: "15mb" }));
@@ -87,6 +95,7 @@ export function createApp() {
   app.use("/wa", messagingRouter);
   app.use("/wa", automationRuleRouter);
   app.use("/wa", adminUserRouter);
+  app.use("/wa", paymentRouter);
 
   // Authentification espace client (hors convention /wa — pas de DAO CRUD dédié)
   app.use("/api", authRouter);
