@@ -5,6 +5,7 @@ import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { fireTrigger } from "../lib/automation";
 import { reserveLockersForOrder, cancelLockerReservation, LockerReservationItem } from "../lib/lockerSource";
+import { recordVendorCommissions } from "../lib/vendor";
 
 export const roomserviceRouter = Router();
 
@@ -23,6 +24,8 @@ function shapeProduct(p: {
   importedFrom: string | null;
   stockQty: number | null;
   forceInStock: boolean;
+  vendorId?: string | null;
+  vendor?: { name: string } | null;
 }) {
   return {
     id: p.id,
@@ -46,6 +49,12 @@ function shapeProduct(p: {
     // produit, contrairement à LockerSourceConfig.showOutOfStock qui est
     // global à tout le connecteur.
     forceInStock: p.forceInStock,
+    // Point de vente partenaire propriétaire de ce produit — vide = produit
+    // du catalogue propre de l'hôtel (cf. schema.prisma Vendor). vendorName
+    // est dénormalisé ici pour que la boutique client affiche "Vendu par…"
+    // sans requête supplémentaire.
+    vendorId: p.vendorId || "",
+    vendorName: p.vendor?.name || "",
   };
 }
 
@@ -194,6 +203,13 @@ export async function finalizeOrder(
       finalOrder = await prisma.order.update({ where: { id: order.id }, data: { lockerSourceWarning: warning } });
     }
   }
+
+  // Commission due par les points de vente partenaires dont des produits
+  // figurent dans ce panier (cf. lib/vendor.ts) — best-effort comme la
+  // réservation de casier ci-dessus : une erreur ici ne doit jamais faire
+  // échouer la commande elle-même.
+  await recordVendorCommissions(entity, order, items).catch((e) => console.error("[vendor] recordVendorCommissions:", e));
+
   return finalOrder;
 }
 
@@ -326,6 +342,7 @@ roomserviceRouter.get(
     const entity = await resolveEntity(req);
     const products = await prisma.product.findMany({
       where: { entityId: entity.id },
+      include: { vendor: { select: { name: true } } },
       orderBy: { sortOrder: "asc" },
     });
     res.json(products.map(shapeProduct));
@@ -363,7 +380,13 @@ roomserviceRouter.get(
         ...(showOutOfStock
           ? {}
           : { NOT: { importedFrom: { not: null }, stockQty: 0, forceInStock: false } }),
+        // Un produit d'un point de vente partenaire n'apparaît côté client
+        // que si l'hôtel l'a laissé actif (pas suspendu) — cf. schema.prisma
+        // Vendor.status. vendorId=null (catalogue propre de l'hôtel) n'est
+        // jamais concerné par ce filtre.
+        OR: [{ vendorId: null }, { vendor: { status: "active" } }],
       },
+      include: { vendor: { select: { name: true } } },
       orderBy: { sortOrder: "asc" },
     });
     const shaped = products.map(shapeProduct);

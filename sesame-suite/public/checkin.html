@@ -4654,6 +4654,16 @@ function bqFilter(){
     desc.textContent = p.desc || '';
     body.appendChild(desc);
 
+    // Point de vente partenaire propriétaire de ce produit (cf.
+    // schema.prisma Vendor) — vide pour le catalogue propre de l'hôtel.
+    if (p.vendorName){
+      var vendorBadge = document.createElement('div');
+      vendorBadge.style.cssText = 'font-size:10px;font-weight:600;color:var(--primary);margin-bottom:6px;display:flex;align-items:center;gap:3px';
+      vendorBadge.innerHTML = '<i class="ti ti-building-store" style="font-size:10px"></i>';
+      vendorBadge.appendChild(document.createTextNode(' ' + p.vendorName));
+      body.appendChild(vendorBadge);
+    }
+
     if (p.stock != null && p.stock <= 3){
       var stockBadge = document.createElement('div');
       stockBadge.style.cssText = 'font-size:10px;font-weight:700;color:var(--go);margin-bottom:6px';
@@ -4753,6 +4763,14 @@ function bqOpenProduct(id){
   priceEl.textContent = p.price > 0 ? p.price.toFixed(2) + ' €' : t('price_free');
   header.appendChild(titleEl); header.appendChild(priceEl);
   body.appendChild(header);
+
+  if (p.vendorName){
+    var vendorLine = document.createElement('div');
+    vendorLine.style.cssText = 'font-size:12px;font-weight:600;color:var(--primary);margin-bottom:8px;display:flex;align-items:center;gap:4px';
+    vendorLine.innerHTML = '<i class="ti ti-building-store" style="font-size:12px"></i>';
+    vendorLine.appendChild(document.createTextNode(' Vendu par ' + p.vendorName));
+    body.appendChild(vendorLine);
+  }
 
   var descEl = document.createElement('div');
   descEl.style.cssText = 'font-size:13px;color:var(--mu);margin-bottom:16px;line-height:1.6';

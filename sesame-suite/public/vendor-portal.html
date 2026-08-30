@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Portail partenaire — Sesame</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
+<style>
+:root{
+  --bg:#F5F3F0;--card:#FFF;--bdr:#E3DED8;
+  --tx:#14121E;--mu:#7A7870;
+  --a:#8B1A2E;--al:#FDEDF0;--primary:#8B1A2E;--pl:#FDEDF0;
+  --go:#1A6B47;--gol:#E9F5EE;
+  --re:#B83030;--rel:#FDEAEA;
+  --wa:#A85A0A;--wal:#FEF0DC;
+  --r:10px;--rs:6px;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:'DM Sans',Arial,sans-serif;background:var(--bg);color:var(--tx);font-size:14px}
+.wrap{max-width:760px;margin:0 auto;padding:24px 16px 60px}
+.top{display:flex;align-items:center;gap:12px;margin-bottom:22px}
+.top .mk{width:40px;height:40px;border-radius:10px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'DM Serif Display',serif;font-size:19px;flex-shrink:0}
+.top .ttl{font-family:'DM Serif Display',serif;font-size:19px;line-height:1.2}
+.top .sub{font-size:12px;color:var(--mu)}
+.card{background:var(--card);border:1px solid var(--bdr);border-radius:var(--r);padding:18px 20px;margin-bottom:16px}
+.ch{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--mu);margin-bottom:14px}
+.fi{margin-bottom:12px}
+.fi label{display:block;font-size:12px;font-weight:600;color:var(--mu);margin-bottom:5px}
+.fi input,.fi textarea,.fi select{width:100%;padding:9px 11px;border:1px solid var(--bdr);border-radius:var(--rs);font-family:inherit;font-size:13px;background:var(--card);color:var(--tx)}
+.fi textarea{resize:vertical;min-height:60px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:520px){.g2{grid-template-columns:1fr}}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:var(--rs);border:1px solid var(--bdr);background:var(--card);color:var(--tx);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+.btn-p{background:var(--primary);border-color:var(--primary);color:#fff}
+.btn-s{background:var(--card)}
+.btn-danger{color:var(--re);border-color:var(--re)}
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px}
+.badge-active{background:var(--gol);color:var(--go)}
+.badge-pending{background:var(--wal);color:var(--wa)}
+.badge-suspended{background:var(--rel);color:var(--re)}
+.alt{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:var(--rs);font-size:13px;margin-bottom:14px}
+.alt-w{background:var(--wal);color:var(--wa)}
+.alt-b{background:var(--al);color:var(--primary)}
+.prow{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--bdr)}
+.prow:last-child{border-bottom:none}
+.prow .ico{width:32px;height:32px;border-radius:8px;background:var(--pl);color:var(--primary);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.prow .info{flex:1;min-width:0}
+.prow .lbl{font-weight:600;font-size:13px}
+.prow .meta{font-size:11px;color:var(--mu)}
+.prow .price{font-weight:700;font-size:13px;white-space:nowrap}
+.stat{background:var(--pl);border-radius:var(--rs);padding:12px 14px;text-align:center}
+.stat .v{font-size:19px;font-weight:700;color:var(--primary)}
+.stat .l{font-size:11px;color:var(--mu);margin-top:2px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px}
+@media (max-width:520px){.g3{grid-template-columns:1fr 1fr}}
+#hidden-screen{display:none}
+.hist{font-size:12px;color:var(--mu)}
+.hist table{width:100%;border-collapse:collapse}
+.hist td{padding:6px 4px;border-bottom:1px solid var(--bdr)}
+.err-screen{max-width:420px;margin:80px auto;text-align:center;padding:0 16px}
+</style>
+</head>
+<body>
+
+<div id="err-screen" class="err-screen" style="display:none">
+  <i class="ti ti-link-off" style="font-size:36px;color:var(--mu)"></i>
+  <h2 style="font-family:'DM Serif Display',serif;margin:12px 0 6px">Lien invalide</h2>
+  <p style="color:var(--mu);font-size:13px" id="err-msg">Ce lien de portail partenaire n'est pas valide ou a expiré. Contactez l'établissement pour en obtenir un nouveau.</p>
+</div>
+
+<div id="app" class="wrap" style="display:none">
+  <div class="top">
+    <div class="mk">S</div>
+    <div>
+      <div class="ttl" id="hotelName">Portail partenaire</div>
+      <div class="sub" id="hotelSub">Gérez votre point de vente dans la boutique de l'hôtel</div>
+    </div>
+  </div>
+
+  <div id="statusBanner"></div>
+
+  <div class="g3" id="salesStats"></div>
+
+  <div class="card">
+    <div class="ch"><i class="ti ti-id-badge-2"></i>Mon profil</div>
+    <div class="fi"><label>Nom du point de vente *</label><input id="v-name" placeholder="Ex : Spa Bella Vita"></div>
+    <div class="fi"><label>Description</label><textarea id="v-desc" placeholder="Présentez votre activité en quelques mots — visible des clients de l'hôtel"></textarea></div>
+    <div class="g2">
+      <div class="fi"><label>Contact — nom</label><input id="v-contactName"></div>
+      <div class="fi"><label>Contact — téléphone</label><input id="v-contactPhone"></div>
+    </div>
+    <div class="fi"><label>Contact — email</label><input id="v-contactEmail" type="email"></div>
+    <button class="btn btn-p" onclick="saveProfile()"><i class="ti ti-device-floppy"></i> Enregistrer mon profil</button>
+    <span id="profileSaved" style="font-size:12px;color:var(--go);margin-left:10px;display:none"><i class="ti ti-check"></i> Enregistré</span>
+  </div>
+
+  <div class="card">
+    <div class="ch"><i class="ti ti-shopping-bag"></i>Mon catalogue</div>
+    <div id="productList"></div>
+    <div id="productEmpty" style="display:none;color:var(--mu);font-size:13px;text-align:center;padding:16px 0">Aucun produit pour l'instant.</div>
+    <button class="btn btn-s" style="margin-top:10px" onclick="openProductForm()"><i class="ti ti-plus"></i> Ajouter un produit</button>
+  </div>
+
+  <div class="card" id="commissionCard">
+    <div class="ch"><i class="ti ti-receipt-2"></i>Mes ventes</div>
+    <p style="font-size:12px;color:var(--mu);margin-top:-6px">Taux de commission reversée à l'hôtel : <strong id="commissionPctLabel">—</strong>. Le règlement se fait directement avec l'hôtel, hors application.</p>
+    <div class="hist" id="salesHistory"></div>
+  </div>
+</div>
+
+<!-- Formulaire produit (création/édition) -->
+<div id="productModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:440px;width:100%;max-height:90vh;overflow:auto">
+    <div class="ch" id="productModalTitle"><i class="ti ti-package"></i>Nouveau produit</div>
+    <div class="fi"><label>Nom *</label><input id="p-label"></div>
+    <div class="g2">
+      <div class="fi"><label>Catégorie *</label><input id="p-cat" placeholder="Ex : Bien-être"></div>
+      <div class="fi"><label>Prix (€) *</label><input id="p-price" type="number" step="0.01" min="0"></div>
+    </div>
+    <div class="fi"><label>Description</label><textarea id="p-desc"></textarea></div>
+    <div class="fi"><label>Icône Tabler (optionnel)</label><input id="p-ico" placeholder="ti-spa"></div>
+    <div class="fi"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="p-active" checked style="width:auto"> Actif (visible dans la boutique)</label></div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn btn-p" onclick="saveProduct()" style="flex:1;justify-content:center"><i class="ti ti-check"></i> Enregistrer</button>
+      <button class="btn btn-s" onclick="closeProductForm()">Annuler</button>
+      <button class="btn btn-danger" id="p-delete-btn" style="display:none" onclick="deleteProduct()"><i class="ti ti-trash"></i></button>
+    </div>
+  </div>
+</div>
+
+<script>
+var TOKEN = new URLSearchParams(window.location.search).get('token') || '';
+var VENDOR = null;
+var PRODUCTS = [];
+var EDITING_ID = null;
+
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function api(path, opts){
+  opts = opts || {};
+  opts.headers = Object.assign({'Content-Type':'application/json'}, opts.headers||{});
+  return fetch(path, opts);
+}
+function withToken(body){ return Object.assign({token:TOKEN}, body||{}); }
+
+async function init(){
+  if(!TOKEN){ showError('Aucun jeton fourni dans le lien.'); return; }
+  try{
+    var r = await api('/wa/vendor/portal?token='+encodeURIComponent(TOKEN));
+    if(!r.ok){ var e = await r.json().catch(function(){return {};}); showError(e.error||'Lien invalide.'); return; }
+    VENDOR = await r.json();
+  }catch(e){ showError('Impossible de contacter le serveur.'); return; }
+
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('hotelName').textContent = VENDOR.hotelName ? ('Boutique — ' + VENDOR.hotelName) : 'Portail partenaire';
+  fillProfileForm();
+  renderStatusBanner();
+  await Promise.all([loadProducts(), loadSales()]);
+}
+
+function showError(msg){
+  document.getElementById('err-msg').textContent = msg;
+  document.getElementById('err-screen').style.display = 'block';
+}
+
+function fillProfileForm(){
+  document.getElementById('v-name').value = VENDOR.name || '';
+  document.getElementById('v-desc').value = VENDOR.description || '';
+  document.getElementById('v-contactName').value = VENDOR.contactName || '';
+  document.getElementById('v-contactPhone').value = VENDOR.contactPhone || '';
+  document.getElementById('v-contactEmail').value = VENDOR.contactEmail || '';
+  document.getElementById('commissionPctLabel').textContent = VENDOR.commissionPct + ' %';
+}
+
+function renderStatusBanner(){
+  var el = document.getElementById('statusBanner');
+  if(VENDOR.status === 'pending'){
+    el.innerHTML = '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Complétez et enregistrez votre profil ci-dessous pour activer votre point de vente — il deviendra alors visible dans la boutique de l\'hôtel.</span></div>';
+  } else if(VENDOR.status === 'suspended'){
+    el.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Votre point de vente est actuellement suspendu par l\'hôtel et n\'apparaît plus dans la boutique. Contactez l\'établissement pour en savoir plus.</span></div>';
+  } else {
+    el.innerHTML = '';
+  }
+}
+
+async function saveProfile(){
+  var name = document.getElementById('v-name').value.trim();
+  if(!name){ alert('Le nom du point de vente est requis.'); return; }
+  var body = withToken({
+    name: name,
+    description: document.getElementById('v-desc').value.trim(),
+    contactName: document.getElementById('v-contactName').value.trim(),
+    contactPhone: document.getElementById('v-contactPhone').value.trim(),
+    contactEmail: document.getElementById('v-contactEmail').value.trim(),
+  });
+  try{
+    var r = await api('/wa/vendor/portal/profile', {method:'POST', body:JSON.stringify(body)});
+    if(!r.ok){ alert('Erreur lors de l\'enregistrement.'); return; }
+    VENDOR = Object.assign(VENDOR, await r.json());
+    renderStatusBanner();
+    var saved = document.getElementById('profileSaved');
+    saved.style.display = 'inline';
+    setTimeout(function(){ saved.style.display = 'none'; }, 2500);
+  }catch(e){ alert('Erreur de connexion au serveur.'); }
+}
+
+async function loadProducts(){
+  try{
+    var r = await api('/wa/vendor/portal/products?token='+encodeURIComponent(TOKEN));
+    PRODUCTS = r.ok ? await r.json() : [];
+  }catch(e){ PRODUCTS = []; }
+  renderProducts();
+}
+
+function renderProducts(){
+  var list = document.getElementById('productList');
+  var empty = document.getElementById('productEmpty');
+  if(!PRODUCTS.length){ list.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display = 'none';
+  list.innerHTML = PRODUCTS.map(function(p){
+    return '<div class="prow">'
+      + '<div class="ico"><i class="ti '+esc(p.ico||'ti-shopping-bag')+'"></i></div>'
+      + '<div class="info"><div class="lbl">'+esc(p.label)+(p.active?'':' <span style="color:var(--mu);font-weight:400">(masqué)</span>')+'</div>'
+      + '<div class="meta">'+esc(p.cat)+'</div></div>'
+      + '<div class="price">'+(p.price>0?p.price.toFixed(2)+' €':'Offert')+'</div>'
+      + '<button class="btn btn-s" style="padding:6px 10px" onclick="openProductForm(\''+p.id+'\')"><i class="ti ti-pencil" style="font-size:12px"></i></button>'
+      + '</div>';
+  }).join('');
+}
+
+function openProductForm(id){
+  EDITING_ID = id || null;
+  var p = id ? PRODUCTS.find(function(x){return x.id===id;}) : null;
+  document.getElementById('productModalTitle').innerHTML = '<i class="ti ti-package"></i>' + (p ? 'Modifier le produit' : 'Nouveau produit');
+  document.getElementById('p-label').value = p ? p.label : '';
+  document.getElementById('p-cat').value = p ? p.cat : '';
+  document.getElementById('p-price').value = p ? p.price : '';
+  document.getElementById('p-desc').value = p ? p.desc : '';
+  document.getElementById('p-ico').value = p ? p.ico : '';
+  document.getElementById('p-active').checked = p ? p.active !== false : true;
+  document.getElementById('p-delete-btn').style.display = p ? 'inline-flex' : 'none';
+  document.getElementById('productModal').style.display = 'flex';
+}
+function closeProductForm(){ document.getElementById('productModal').style.display = 'none'; }
+
+async function saveProduct(){
+  var label = document.getElementById('p-label').value.trim();
+  var cat = document.getElementById('p-cat').value.trim();
+  var price = parseFloat(document.getElementById('p-price').value);
+  if(!label || !cat){ alert('Nom et catégorie requis.'); return; }
+  var body = withToken({
+    id: EDITING_ID || undefined,
+    label: label, category: cat,
+    price: isNaN(price) ? 0 : price,
+    desc: document.getElementById('p-desc').value.trim(),
+    ico: document.getElementById('p-ico').value.trim(),
+    active: document.getElementById('p-active').checked,
+  });
+  var url = EDITING_ID ? '/wa/vendor/portal/products/update' : '/wa/vendor/portal/products/create';
+  try{
+    var r = await api(url, {method:'POST', body:JSON.stringify(body)});
+    if(!r.ok){ alert('Erreur lors de l\'enregistrement du produit.'); return; }
+    closeProductForm();
+    await loadProducts();
+  }catch(e){ alert('Erreur de connexion au serveur.'); }
+}
+
+async function deleteProduct(){
+  if(!EDITING_ID) return;
+  if(!confirm('Supprimer ce produit ?')) return;
+  try{
+    var r = await api('/wa/vendor/portal/products/delete', {method:'POST', body:JSON.stringify(withToken({id:EDITING_ID}))});
+    if(!r.ok){ alert('Erreur lors de la suppression.'); return; }
+    closeProductForm();
+    await loadProducts();
+  }catch(e){ alert('Erreur de connexion au serveur.'); }
+}
+
+async function loadSales(){
+  try{
+    var r = await api('/wa/vendor/portal/sales?token='+encodeURIComponent(TOKEN));
+    var data = r.ok ? await r.json() : null;
+    if(!data) return;
+    document.getElementById('salesStats').innerHTML =
+      '<div class="stat"><div class="v">'+(data.salesDue||0).toFixed(2)+' €</div><div class="l">Ventes en cours</div></div>'
+      + '<div class="stat"><div class="v">'+(data.commissionDue||0).toFixed(2)+' €</div><div class="l">Commission due</div></div>'
+      + '<div class="stat"><div class="v">'+(data.commissionSettled||0).toFixed(2)+' €</div><div class="l">Commission réglée</div></div>';
+    var hist = document.getElementById('salesHistory');
+    if(!data.recent || !data.recent.length){
+      hist.innerHTML = '<p style="color:var(--mu)">Aucune vente pour l\'instant.</p>';
+    } else {
+      hist.innerHTML = '<table>' + data.recent.map(function(r){
+        var d = new Date(r.createdAt).toLocaleDateString('fr-FR');
+        var statusLabel = r.status === 'settled' ? 'Réglée' : 'Due';
+        return '<tr><td>'+d+'</td><td>'+r.salesAmount.toFixed(2)+' € vendus</td><td>'+r.commissionAmount.toFixed(2)+' € commission</td><td>'+statusLabel+'</td></tr>';
+      }).join('') + '</table>';
+    }
+  }catch(e){ /* silencieux — section informative uniquement */ }
+}
+
+init();
+</script>
+</body>
+</html>

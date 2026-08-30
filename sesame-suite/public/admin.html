@@ -635,6 +635,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   <div class="ni" data-pan="roomservice" onclick="showPan('roomservice')"><i class="ti ti-bell"></i>Catalogue produits</div>
   <div class="ni" data-pan="orders" onclick="showPan('orders')"><i class="ti ti-clipboard-list"></i>Commandes <span class="nibadge" id="ordersBadge" style="display:none">0</span></div>
   <div class="ni" data-pan="payment" onclick="showPan('payment')"><i class="ti ti-credit-card"></i>Paiement en ligne</div>
+  <div class="ni" data-pan="vendors" onclick="showPan('vendors')"><i class="ti ti-building-store"></i>Points de vente</div>
   <div class="ni" data-pan="livret" onclick="showPan('livret')"><i class="ti ti-book"></i>Livret digital</div>
   <div class="ns">Planning</div>
   <div class="ni" data-pan="planning" onclick="showPan('planning')"><i class="ti ti-calendar-event"></i>Planning</div>
@@ -3366,6 +3367,83 @@ Accès au salon Premium</textarea>
 </div>
 
 <!-- ════════════════════════════════════════════════════════
+     PAN — POINTS DE VENTE (marketplace boutique)
+     Points de vente partenaires externes, chacun avec son propre
+     catalogue, référencés dans la boutique. L'hôtel envoie un lien
+     d'invitation à un partenaire qui crée et gère lui-même son
+     catalogue depuis un portail en libre-service (public/vendor-portal.html)
+     et lui reverse une commission sur ses ventes.
+     ════════════════════════════════════════════════════════ -->
+<div id="pan-vendors" class="pan">
+  <div class="ph">
+    <h2>Points de vente</h2>
+    <p>Référencez des partenaires externes (spa, traiteur, excursions…) dans votre boutique. Chacun gère son propre catalogue depuis un lien que vous lui envoyez, et vous reverse une commission sur ses ventes — réglée directement entre vous, hors application.</p>
+  </div>
+
+  <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+    <button class="btn btn-p" onclick="vndOpenCreate()"><i class="ti ti-plus"></i> Ajouter un point de vente</button>
+  </div>
+
+  <div id="vendors-list"></div>
+  <div id="vendors-empty" style="display:none">
+    <div class="alt alt-b" style="text-align:center;padding:24px">
+      <i class="ti ti-building-store" style="font-size:32px;display:block;margin-bottom:10px;opacity:.4"></i>
+      <div style="font-size:15px;font-weight:600;margin-bottom:6px">Aucun point de vente partenaire</div>
+      <div style="font-size:13px;color:var(--mu)">Ajoutez-en un pour obtenir un lien à envoyer à votre partenaire.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Modale création/édition point de vente -->
+<div id="vnd-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;align-items:center;justify-content:center;padding:16px">
+  <div class="ca" style="max-width:480px;width:100%;max-height:90vh;overflow:auto">
+    <div class="ch" id="vnd-modal-title"><i class="ti ti-building-store"></i>Nouveau point de vente</div>
+    <input type="hidden" id="vnd-id">
+    <div class="fi"><label class="lb">Nom du partenaire *</label><input id="vnd-name" placeholder="Ex : Spa Bella Vita"></div>
+    <div class="fi"><label class="lb">Description</label><textarea id="vnd-desc" style="width:100%;min-height:56px;padding:9px 11px;border:1px solid var(--bdr);border-radius:var(--rs);font-family:inherit;font-size:13px" placeholder="Visible par le partenaire uniquement, à titre de mémo"></textarea></div>
+    <div class="g2">
+      <div class="fi"><label class="lb">Contact — nom</label><input id="vnd-contactName"></div>
+      <div class="fi"><label class="lb">Contact — téléphone</label><input id="vnd-contactPhone"></div>
+    </div>
+    <div class="fi"><label class="lb">Contact — email</label><input id="vnd-contactEmail" type="email"></div>
+    <div class="fi"><label class="lb">Commission reversée à l'hôtel (%)</label><input id="vnd-commissionPct" type="number" min="0" max="100" step="0.5" value="10"></div>
+    <div class="fi" id="vnd-status-field" style="display:none">
+      <label class="lb">Statut</label>
+      <select id="vnd-status">
+        <option value="pending">En attente (lien envoyé, profil non complété)</option>
+        <option value="active">Actif (visible dans la boutique)</option>
+        <option value="suspended">Suspendu (masqué de la boutique)</option>
+      </select>
+    </div>
+    <div id="vnd-link-box" style="display:none;margin-top:4px">
+      <label class="lb">Lien à envoyer au partenaire</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="text" id="vnd-link" readonly style="flex:1;font-family:monospace;font-size:12px">
+        <button class="btn btn-s" type="button" onclick="vndCopyLink()" style="white-space:nowrap;width:auto"><i class="ti ti-copy" style="font-size:12px"></i> Copier</button>
+      </div>
+      <div style="font-size:11px;color:var(--mu);margin-top:6px">Ce lien donne accès à un portail sans mot de passe où le partenaire complète son profil et gère son catalogue. Ne le partagez qu'avec ce partenaire.</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-p" onclick="vndSave()" style="flex:1;justify-content:center"><i class="ti ti-check"></i> Enregistrer</button>
+      <button class="btn btn-s" onclick="vndCloseModal()">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modale relevé de commissions -->
+<div id="vnd-comm-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;align-items:center;justify-content:center;padding:16px">
+  <div class="ca" style="max-width:520px;width:100%;max-height:90vh;overflow:auto">
+    <div class="ch" id="vnd-comm-title"><i class="ti ti-receipt-2"></i>Relevé de commission</div>
+    <div id="vnd-comm-summary" class="g3" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px"></div>
+    <div id="vnd-comm-rows" style="font-size:12px;color:var(--mu)"></div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-p" onclick="vndSettle()" style="flex:1;justify-content:center"><i class="ti ti-check"></i> Marquer les commissions dues comme réglées</button>
+      <button class="btn btn-s" onclick="vndCloseCommModal()">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
      PAN — LIVRET DIGITAL
      CRUD de rubriques (templates de messages), éditeur riche,
      prévisualisation et publication vers l'app client
@@ -3868,6 +3946,7 @@ function showPan(id){
   if(id==='reservations'){ loadReservations(); }
   if(id==='api'){ bsInit(); }
   if(id==='payment'){ payInit(); }
+  if(id==='vendors'){ vndInit(); }
   if(id==='email'){ emlInit(); }
   if(id==='automation'){ autoInit(); }
   if(id==='hotels'){ hmRenderGrid(); }
@@ -6551,6 +6630,177 @@ function payCopyWebhookUrl(){
   input.select();
   try{ navigator.clipboard.writeText(input.value); toast('URL copiée ✓'); }
   catch(e){ document.execCommand('copy'); toast('URL copiée ✓'); }
+}
+
+// ═══════════════════════════════════════════════ POINTS DE VENTE (marketplace boutique)
+// Points de vente partenaires référencés dans la boutique — cf.
+// schema.prisma Vendor / VendorCommission, routes/vendor.ts. Chaque
+// partenaire gère son propre catalogue depuis public/vendor-portal.html via
+// un lien à jeton (portalToken) envoyé par l'hôtel — pas de gestion du
+// catalogue partenaire depuis cet écran, uniquement le profil du point de
+// vente, son statut et le relevé de commission.
+var VENDORS_CACHE = [];
+
+async function vndInit(){
+  try{
+    var r = await adminFetch('/wa/vendor/list');
+    VENDORS_CACHE = r.ok ? await r.json() : [];
+  }catch(e){ console.error('vndInit error', e); VENDORS_CACHE = []; }
+  vndRender();
+}
+
+function vndStatusBadge(status){
+  if(status==='active') return '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:rgba(26,107,71,.12);color:#1A6B47"><i class="ti ti-circle-check" style="font-size:11px"></i> Actif</span>';
+  if(status==='suspended') return '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:rgba(231,76,60,.12);color:#E74C3C"><i class="ti ti-player-pause" style="font-size:11px"></i> Suspendu</span>';
+  return '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:rgba(230,126,34,.12);color:#E67E22"><i class="ti ti-clock" style="font-size:11px"></i> En attente</span>';
+}
+
+function vndRender(){
+  var listEl = document.getElementById('vendors-list');
+  var emptyEl = document.getElementById('vendors-empty');
+  if(!VENDORS_CACHE.length){ listEl.innerHTML=''; emptyEl.style.display='block'; return; }
+  emptyEl.style.display = 'none';
+  var sym = getCurrSym();
+  listEl.innerHTML = VENDORS_CACHE.map(function(v){
+    return '<div style="border:1px solid var(--bdr);border-radius:var(--r);background:var(--card);padding:14px 16px;margin-bottom:10px">'
+      +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">'
+      +'<div style="flex:1;min-width:200px">'
+      +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">'
+      +'<strong style="font-size:15px">'+esc(v.name)+'</strong>'+vndStatusBadge(v.status)
+      +'</div>'
+      +(v.description?'<div style="font-size:12px;color:var(--mu);margin-bottom:4px">'+esc(v.description)+'</div>':'')
+      +'<div style="font-size:12px;color:var(--mu)">'
+      +'Commission '+v.commissionPct+'%'
+      +(v.contactEmail?' &nbsp;·&nbsp; <i class="ti ti-mail" style="font-size:11px"></i> '+esc(v.contactEmail):'')
+      +(v.contactPhone?' &nbsp;·&nbsp; <i class="ti ti-phone" style="font-size:11px"></i> '+esc(v.contactPhone):'')
+      +'</div>'
+      +'</div>'
+      +'<div style="text-align:right">'
+      +'<div style="font-size:11px;color:var(--mu)">Commission due</div>'
+      +'<div style="font-size:17px;font-weight:700;color:'+(v.commissionDue>0?'var(--am)':'var(--mu)')+'">'+v.commissionDue.toFixed(2)+' '+sym+'</div>'
+      +'</div>'
+      +'</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
+      +'<button class="btn btn-s" onclick="vndOpenEdit(\''+v.id+'\')"><i class="ti ti-pencil"></i> Modifier</button>'
+      +'<button class="btn btn-s" onclick="vndOpenComm(\''+v.id+'\')"><i class="ti ti-receipt-2"></i> Relevé de commission</button>'
+      +'</div>'
+      +'</div>';
+  }).join('');
+}
+
+function vndOpenCreate(){
+  document.getElementById('vnd-modal-title').innerHTML = '<i class="ti ti-building-store"></i>Nouveau point de vente';
+  document.getElementById('vnd-id').value = '';
+  document.getElementById('vnd-name').value = '';
+  document.getElementById('vnd-desc').value = '';
+  document.getElementById('vnd-contactName').value = '';
+  document.getElementById('vnd-contactPhone').value = '';
+  document.getElementById('vnd-contactEmail').value = '';
+  document.getElementById('vnd-commissionPct').value = 10;
+  document.getElementById('vnd-status-field').style.display = 'none';
+  document.getElementById('vnd-link-box').style.display = 'none';
+  document.getElementById('vnd-modal').style.display = 'flex';
+}
+
+function vndOpenEdit(id){
+  var v = VENDORS_CACHE.find(function(x){ return x.id===id; });
+  if(!v) return;
+  document.getElementById('vnd-modal-title').innerHTML = '<i class="ti ti-building-store"></i>'+esc(v.name);
+  document.getElementById('vnd-id').value = v.id;
+  document.getElementById('vnd-name').value = v.name;
+  document.getElementById('vnd-desc').value = v.description||'';
+  document.getElementById('vnd-contactName').value = v.contactName||'';
+  document.getElementById('vnd-contactPhone').value = v.contactPhone||'';
+  document.getElementById('vnd-contactEmail').value = v.contactEmail||'';
+  document.getElementById('vnd-commissionPct').value = v.commissionPct;
+  document.getElementById('vnd-status-field').style.display = 'block';
+  document.getElementById('vnd-status').value = v.status;
+  document.getElementById('vnd-link-box').style.display = 'block';
+  document.getElementById('vnd-link').value = window.location.origin+'/vendor-portal?token='+v.portalToken;
+  document.getElementById('vnd-modal').style.display = 'flex';
+}
+
+function vndCloseModal(){ document.getElementById('vnd-modal').style.display = 'none'; }
+
+function vndCopyLink(){
+  var input = document.getElementById('vnd-link');
+  input.select();
+  try{ navigator.clipboard.writeText(input.value); toast('Lien copié ✓'); }
+  catch(e){ document.execCommand('copy'); toast('Lien copié ✓'); }
+}
+
+async function vndSave(){
+  var id = document.getElementById('vnd-id').value;
+  var name = document.getElementById('vnd-name').value.trim();
+  if(!name){ toast('Le nom du point de vente est requis'); return; }
+  var body = {
+    name: name,
+    description: document.getElementById('vnd-desc').value.trim(),
+    contactName: document.getElementById('vnd-contactName').value.trim(),
+    contactPhone: document.getElementById('vnd-contactPhone').value.trim(),
+    contactEmail: document.getElementById('vnd-contactEmail').value.trim(),
+    commissionPct: parseFloat(document.getElementById('vnd-commissionPct').value) || 0,
+  };
+  if(id){ body.id = id; body.status = document.getElementById('vnd-status').value; }
+  var url = id ? '/wa/vendor/update' : '/wa/vendor/create';
+  try{
+    var r = await adminFetch(url, {method:'POST', body:JSON.stringify(body)});
+    if(!r.ok){ toast('Erreur lors de l\'enregistrement'); return; }
+    var saved = await r.json();
+    await vndInit();
+    if(!id){
+      // Nouveau point de vente : on ré-ouvre immédiatement sur l'onglet
+      // édition pour afficher le lien à envoyer au partenaire, plutôt que
+      // de fermer la modale et forcer un second clic pour le retrouver.
+      vndOpenEdit(saved.id);
+    } else {
+      toast('Point de vente enregistré ✓');
+    }
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+var VND_COMM_VENDOR_ID = null;
+
+async function vndOpenComm(id){
+  VND_COMM_VENDOR_ID = id;
+  var v = VENDORS_CACHE.find(function(x){ return x.id===id; });
+  document.getElementById('vnd-comm-title').innerHTML = '<i class="ti ti-receipt-2"></i>Relevé — '+esc(v?v.name:'');
+  document.getElementById('vnd-comm-modal').style.display = 'flex';
+  document.getElementById('vnd-comm-summary').innerHTML = '<div style="grid-column:1/-1;color:var(--mu);font-size:12px">Chargement…</div>';
+  document.getElementById('vnd-comm-rows').innerHTML = '';
+  try{
+    var r = await adminFetch('/wa/vendor/commissions?vendorId='+encodeURIComponent(id));
+    var rows = r.ok ? await r.json() : [];
+    var sym = getCurrSym();
+    var due = rows.filter(function(x){return x.status==='due';}).reduce(function(s,x){return s+x.commissionAmount;},0);
+    var settled = rows.filter(function(x){return x.status==='settled';}).reduce(function(s,x){return s+x.commissionAmount;},0);
+    document.getElementById('vnd-comm-summary').innerHTML =
+      '<div class="stat"><div class="sv" style="color:var(--am)">'+due.toFixed(2)+' '+sym+'</div><div class="sl">Due</div></div>'
+      +'<div class="stat"><div class="sv" style="color:var(--go)">'+settled.toFixed(2)+' '+sym+'</div><div class="sl">Réglée</div></div>'
+      +'<div class="stat"><div class="sv">'+rows.length+'</div><div class="sl">Vente(s)</div></div>';
+    document.getElementById('vnd-comm-rows').innerHTML = rows.length
+      ? '<table class="tbl"><tr><th>Date</th><th>Ventes</th><th>Commission</th><th>Statut</th></tr>'
+        + rows.map(function(r){
+            var d = new Date(r.createdAt).toLocaleDateString('fr-FR');
+            return '<tr><td>'+d+'</td><td>'+r.salesAmount.toFixed(2)+' '+sym+'</td><td>'+r.commissionAmount.toFixed(2)+' '+sym+'</td><td>'+(r.status==='settled'?'Réglée':'Due')+'</td></tr>';
+          }).join('')
+        + '</table>'
+      : '<p>Aucune vente enregistrée pour ce point de vente.</p>';
+  }catch(e){ document.getElementById('vnd-comm-summary').innerHTML = '<div style="grid-column:1/-1;color:var(--re);font-size:12px">Erreur de chargement</div>'; }
+}
+
+function vndCloseCommModal(){ document.getElementById('vnd-comm-modal').style.display = 'none'; VND_COMM_VENDOR_ID = null; }
+
+async function vndSettle(){
+  if(!VND_COMM_VENDOR_ID) return;
+  try{
+    var r = await adminFetch('/wa/vendor/commission/settle', {method:'POST', body:JSON.stringify({vendorId:VND_COMM_VENDOR_ID})});
+    if(!r.ok){ toast('Erreur lors du règlement'); return; }
+    var data = await r.json();
+    toast(data.settledCount+' commission(s) marquée(s) comme réglée(s) ✓');
+    await vndInit();
+    vndOpenComm(VND_COMM_VENDOR_ID);
+  }catch(e){ toast('Erreur de connexion au serveur'); }
 }
 
 // ═══════════════════════════════════════════════ SERVEUR EMAIL — SMTP sortant + modèles

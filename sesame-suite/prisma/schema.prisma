@@ -48,6 +48,8 @@ model Entity {
   messageTemplates  MessageTemplate[]
   channelConfigs    ChannelConfig[]
   automationRules   AutomationRule[]
+  vendors           Vendor[]
+  vendorCommissions VendorCommission[]
 }
 
 // Groupe d'établissements (ex : chaîne hôtelière) — gestion réservée aux
@@ -96,8 +98,8 @@ model AdminUser {
   // role="sesame" (un compte hôtel n'a pas de crmRole). "admin" = accès
   // complet au CRM interne (dont la gestion des utilisateurs CRM eux-mêmes,
   // cf. requireCrmAdmin) ; "commercial" = accès standard.
-  crmRole String  @default("commercial")
-  active  Boolean @default(true) // désactivation (départ, etc.) sans perdre l'historique — pas de suppression physique
+  crmRole      String  @default("commercial")
+  active       Boolean @default(true) // désactivation (départ, etc.) sans perdre l'historique — pas de suppression physique
 
   resetTokens PasswordResetToken[]
 
@@ -190,23 +192,23 @@ model Room {
   entityId String
   entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  code        String
-  name        String
-  floor       Int     @default(0)
-  surface     Float?
-  category    String?
-  type        String?
-  capacity    Int?
-  rate        Float?
-  description String?
-  pmr         Boolean @default(false)
-  nosmoking   Boolean @default(true)
-  connected   Boolean @default(false)
-  tags        Json // string[]
-  photos      Json // string[]
-  available   Boolean @default(true)
-  x           Float? // position sur le plan (coordonnées 540x380)
-  y           Float?
+  code               String
+  name               String
+  floor              Int     @default(0)
+  surface            Float?
+  category           String?
+  type               String?
+  capacity           Int?
+  rate               Float?
+  description        String?
+  pmr                Boolean @default(false)
+  nosmoking          Boolean @default(true)
+  connected          Boolean @default(false)
+  tags               Json // string[]
+  photos             Json // string[]
+  available          Boolean @default(true)
+  x                  Float? // position sur le plan (coordonnées 540x380)
+  y                  Float?
   // Exclut cet accès du parcours ménage (planning d'interventions, statut
   // de propreté, appli tablette du personnel) — utile pour les accès qui
   // n'en ont pas besoin (ex : casiers Mon Casier Frais, cf. type="casier").
@@ -256,7 +258,7 @@ model Booking {
   // qu'une commande obtient un casier (cf. reserveLockersForOrder dans
   // roomservice.ts /roomservice/create), retiré si la commande
   // correspondante est ensuite annulée (/roomservice/update).
-  lockerAccess Json?
+  lockerAccess     Json?
 
   // Encodage de cartes/badges NFC pour cette réservation (panneau
   // "Réservations", écran de détail — cf. BookingSourceConfig.nfcEndpointPath).
@@ -273,8 +275,8 @@ model Booking {
   doorOpenCount    Int       @default(0)
   doorLastOpenedAt DateTime? // dernière ouverture réelle réussie
 
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   occupants   Occupant[]
   taxeRecords TaxeSejourRecord[]
@@ -294,8 +296,8 @@ model BookingSourceConfig {
   entityId String @unique
   entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  enabled      Boolean @default(false)
-  sourceName   String? // libellé libre (ex: "Mews", "Opera", "PMS interne")
+  enabled            Boolean @default(false)
+  sourceName         String? // libellé libre (ex: "Mews", "Opera", "PMS interne")
   // Modèle de connecteur appliqué côté interface (panneau "Intégration
   // réservations") — purement informatif pour l'UI (savoir quelle section
   // "identifiants" afficher et quels réglages techniques pré-remplir/masquer
@@ -303,9 +305,9 @@ model BookingSourceConfig {
   // | guesty | hostaway | apaleo | hostfully | hostex | rmscloud |
   // sequoiasoft | misterbooking. Le reste des champs ci-dessous reste la
   // seule source de vérité utilisée par le connecteur.
-  presetId     String? @default("none")
-  baseUrl      String?
-  endpointPath String? // ex: "/v1/bookings" — concaténé à baseUrl
+  presetId           String? @default("none")
+  baseUrl            String?
+  endpointPath       String? // ex: "/v1/bookings" — concaténé à baseUrl
   // La plupart des API répondent à un simple GET, mais certaines (ex : API
   // Sesame Technology, /wa/booking/list) exigent un POST avec un corps
   // application/x-www-form-urlencoded — souvent juste de la pagination
@@ -333,33 +335,33 @@ model BookingSourceConfig {
   // le serveur d'authentification est sur un hôte différent de baseUrl (ex :
   // Apaleo, identity.apaleo.com vs api.apaleo.com) ; sinon concaténé à
   // baseUrl comme les autres chemins de ce connecteur.
-  loginPath            String? // ex: "/ws/login/login" — concaténé à baseUrl, ou URL absolue
-  loginEmail           String?
-  loginPassword        String?
-  loginEmailField      String? @default("login") // nom du champ identifiant (body ou query selon loginEmailLocation)
-  loginPasswordField   String? @default("password") // nom du champ secret
-  loginEmailLocation   String? @default("body") // query | body
+  loginPath                String? // ex: "/ws/login/login" — concaténé à baseUrl, ou URL absolue
+  loginEmail               String?
+  loginPassword            String?
+  loginEmailField          String? @default("login") // nom du champ identifiant (body ou query selon loginEmailLocation)
+  loginPasswordField       String? @default("password") // nom du champ secret
+  loginEmailLocation       String? @default("body") // query | body
   // Encodage du corps de la requête de connexion — "json" (défaut, ex : API
   // Sesame Technology) ou "form" (application/x-www-form-urlencoded, ex :
   // OAuth2 client_credentials — Guesty, Hostaway, Apaleo).
-  loginBodyFormat      String? @default("json") // json | form
+  loginBodyFormat          String? @default("json") // json | form
   // Où passer loginEmail/loginPassword sur l'appel de connexion — "body"
   // (défaut, champs loginEmailField/loginPasswordField) ou "basicHeader"
   // (Authorization: Basic base64(email:password) — ex : Apaleo, dont
   // l'échange de token OAuth2 authentifie le client par Basic plutôt que
   // par des champs dans le corps).
-  loginCredentialsIn   String? @default("body") // body | basicHeader
-  loginTokenPath       String? // dot-path du token — dans la réponse complète, ou dans le profil sélectionné ci-dessous si loginProfileListPath est renseigné (ex: "token")
-  loginTokenHeaderName String? @default("Authorization")
-  loginTokenPrefix     String? // ex: "Bearer " — laisser vide pour envoyer le token brut
+  loginCredentialsIn       String? @default("body") // body | basicHeader
+  loginTokenPath           String? // dot-path du token — dans la réponse complète, ou dans le profil sélectionné ci-dessous si loginProfileListPath est renseigné (ex: "token")
+  loginTokenHeaderName     String? @default("Authorization")
+  loginTokenPrefix         String? // ex: "Bearer " — laisser vide pour envoyer le token brut
   // Optionnel — quand la réponse de connexion contient un tableau avec un
   // profil par établissement (ex : API Sesame Technology, un même compte a
   // accès à plusieurs hôtels), ces 3 champs retrouvent le bon profil au lieu
   // de dépendre de sa position dans le tableau. loginTokenPath s'applique
   // alors au profil trouvé, pas à la réponse entière.
-  loginProfileListPath   String? // dot-path du tableau de profils (ex: "data.profiles")
-  loginProfileMatchField String? // nom du champ à comparer dans chaque profil (ex: "entityCode")
-  loginProfileMatchValue String? // valeur recherchée (ex: "CHURCHILL")
+  loginProfileListPath     String? // dot-path du tableau de profils (ex: "data.profiles")
+  loginProfileMatchField   String? // nom du champ à comparer dans chaque profil (ex: "entityCode")
+  loginProfileMatchValue   String? // valeur recherchée (ex: "CHURCHILL")
   // Filtre de sécurité inter-établissements — certaines API "login" à
   // profils multiples (ex : Sesame Technology) n'appliquent pas de
   // cloisonnement strict par profil sur tous leurs endpoints : le token
@@ -379,7 +381,7 @@ model BookingSourceConfig {
   // conservés. Si la valeur ne peut pas être extraite du profil, la
   // synchronisation échoue explicitement plutôt que d'importer sans filtrer
   // (cf. bookingSource.ts, performLogin) — sauf si skipEntityFilter est activé.
-  resultEntityField String?
+  resultEntityField        String?
   // Dot-path DANS LE PROFIL sélectionné pointant vers la valeur à comparer à
   // resultEntityField. Peut différer selon l'API (ex: "id", "hotelId",
   // "propertyId" au lieu de "entityId").
@@ -390,20 +392,20 @@ model BookingSourceConfig {
   // false dans tous les autres cas — le risque d'une fuite de données
   // clients entre établissements est plus grave qu'une synchronisation
   // bloquée par erreur (visible et corrigeable immédiatement).
-  skipEntityFilter Boolean @default(false)
+  skipEntityFilter         Boolean @default(false)
   // Champ optionnel supplémentaire envoyé dans le corps de connexion, en
   // plus de l'email et du mot de passe — ex: certains systèmes multi-comptes
   // exigent un identifiant de client/groupe ("client": "monGroupe"). Conservé
   // pour compatibilité — préférer loginExtraParams pour plusieurs champs.
-  loginExtraField String?
-  loginExtraValue String?
+  loginExtraField          String?
+  loginExtraValue          String?
   // Champs statiques supplémentaires envoyés dans le corps de connexion —
   // {clé: valeur} — ex : OAuth2 client_credentials exige souvent
   // grant_type=client_credentials (+ scope=xxx) en plus de l'identifiant/
   // secret déjà portés par loginEmail/loginPassword (Guesty, Hostaway,
   // Apaleo). Fusionné avec loginExtraField/loginExtraValue s'il est aussi
   // renseigné.
-  loginExtraParams Json?
+  loginExtraParams         Json?
 
   // Chemin (dot-path) vers le tableau de réservations dans la réponse JSON —
   // vide/null si la réponse EST déjà le tableau.
@@ -417,13 +419,13 @@ model BookingSourceConfig {
   // ci-dessus, sur un endpoint séparé (même connexion/auth). Les importer
   // avec les codes exacts de la source externe permet ensuite au mapping
   // "facilityCode" des réservations de retrouver la bonne chambre.
-  facilityEndpointPath     String? // ex: "/ws/facility/list" — concaténé à baseUrl
+  facilityEndpointPath       String? // ex: "/ws/facility/list" — concaténé à baseUrl
   facilityEndpointMethod     String? @default("GET") // GET | POST — cf. endpointMethod
   facilityEndpointBodyFormat String? @default("form") // form | json — cf. endpointBodyFormat
   facilityEndpointBodyParams Json?
-  facilityResponseListPath String?
+  facilityResponseListPath   String?
   // {code, name, floor, category, capacity, surface} -> chemin dot-path.
-  facilityFieldMapping     Json?
+  facilityFieldMapping       Json?
 
   // Encodage NFC (panneau "Réservations" → détail d'une réservation, bouton
   // "Encoder NFC") — même connexion/auth que ci-dessus, sur un endpoint
@@ -441,11 +443,11 @@ model BookingSourceConfig {
   nfcEndpointBodyParams Json?
   // Nom du paramètre (query si GET, corps si POST) qui porte le code de la
   // réservation à encoder.
-  nfcCodeParam String? @default("code")
+  nfcCodeParam          String? @default("code")
   // Dot-path optionnel dans la réponse pour lire le nombre de cartes
   // encodées (ex: "cardsEncoded") — si vide, un appel réussi (2xx) compte
   // simplement pour 1.
-  nfcResponseCountPath String?
+  nfcResponseCountPath  String?
 
   // Récupération du QR code / code d'accès (onglet "Clé digitale" de
   // l'espace client, cf. checkin.html espRenderQr) — même principe que
@@ -458,30 +460,30 @@ model BookingSourceConfig {
   // se rabattre silencieusement sur la démo (un faux QR qui a l'air valide
   // mais ne fonctionnerait pas sur un vrai lecteur serait pire qu'une
   // erreur visible).
-  qrEndpointPath       String? // ex: "/ws/access/qrcode" — concaténé à baseUrl
-  qrEndpointMethod     String? @default("GET") // GET | POST
-  qrEndpointBodyFormat String? @default("json") // form | json
-  qrEndpointBodyParams Json?
-  qrCodeParam          String? @default("code") // nom du paramètre code réservation
+  qrEndpointPath         String? // ex: "/ws/access/qrcode" — concaténé à baseUrl
+  qrEndpointMethod       String? @default("GET") // GET | POST
+  qrEndpointBodyFormat   String? @default("json") // form | json
+  qrEndpointBodyParams   Json?
+  qrCodeParam            String? @default("code") // nom du paramètre code réservation
   // Nom du paramètre optionnel portant l'email du client — certaines
   // sources (ex : API Sesame Technology, /ws/pass/findMimeSecret) exigent
   // un second identifiant en plus du code de réservation pour retrouver le
   // bon pass. Laisser vide si la source n'en a pas besoin.
-  qrEmailParam String?
+  qrEmailParam           String?
   // Dot-path vers une image déjà prête dans la réponse (base64/data URI/URL)
   // — prioritaire sur qrValuePath si les deux sont renseignés.
-  qrImagePath String?
+  qrImagePath            String?
   // Dot-path vers une valeur brute (texte/URL) à encoder nous-même en QR
   // (bibliothèque "qrcode") si la source ne renvoie pas d'image toute faite.
-  qrValuePath String?
+  qrValuePath            String?
   // Dot-path vers un code d'accès texte/numérique distinct du QR, s'il est
   // présent dans LA MÊME réponse que qrEndpointPath (ex: code à composer
   // sur un digicode en secours). Si vide et que qrPasscodeEndpointPath est
   // renseigné, ce second endpoint est appelé à la place (ex : API Sesame
   // Technology, dont le passcode est un appel séparé du QR).
-  qrAccessCodePath String?
+  qrAccessCodePath       String?
   // Dot-path optionnel vers la date/heure d'expiration du QR ou du code.
-  qrValidUntilPath String?
+  qrValidUntilPath       String?
   // Endpoint optionnel pour récupérer le code d'accès SÉPARÉMENT du QR (ex
   // : API Sesame Technology, /ws/pass/findPasscode — un appel distinct de
   // celui du QR). Mêmes connexion/méthode/format/paramètres que
@@ -490,7 +492,7 @@ model BookingSourceConfig {
   qrPasscodeEndpointPath String?
   // Dot-path du code dans la réponse de qrPasscodeEndpointPath — vide =
   // "passcode" par défaut.
-  qrPasscodeValuePath String?
+  qrPasscodeValuePath    String?
 
   // Ouverture de porte à distance (bouton "Ouvrir la porte" du même onglet
   // "Clé digitale") — même principe : endpoint séparé prenant UNE
@@ -499,14 +501,14 @@ model BookingSourceConfig {
   // le client garde alors le bouton "Simuler l'ouverture" existant. Une
   // fois configuré, un échec est remonté explicitement — jamais un faux
   // succès, une porte non ouverte doit rester visiblement non ouverte.
-  doorEndpointPath       String? // ex: "/ws/lock/open" — concaténé à baseUrl
-  doorEndpointMethod     String? @default("POST") // GET | POST
-  doorEndpointBodyFormat String? @default("json") // form | json
-  doorEndpointBodyParams Json?
-  doorCodeParam          String? @default("code") // nom du paramètre code réservation
+  doorEndpointPath        String? // ex: "/ws/lock/open" — concaténé à baseUrl
+  doorEndpointMethod      String? @default("POST") // GET | POST
+  doorEndpointBodyFormat  String? @default("json") // form | json
+  doorEndpointBodyParams  Json?
+  doorCodeParam           String? @default("code") // nom du paramètre code réservation
   // Nom du paramètre optionnel portant l'email du client — même principe
   // que qrEmailParam (ex : API Sesame Technology, /ws/booking/openAs).
-  doorEmailParam String?
+  doorEmailParam          String?
   // Noms des paramètres optionnels portant nom/prénom du client — certaines
   // sources exigent ces champs plutôt que (ou en plus de) l'email malgré ce
   // que suggère leur documentation : constaté en pratique sur l'API Sesame
@@ -514,12 +516,12 @@ model BookingSourceConfig {
   // facilityCode ("personLastname,bookingCode,facilityCode are mandatory")
   // et exige en réalité personLastname (variante bookingCode+personLastname
   // +personFirstname+facilityCode de la doc officielle).
-  doorLastnameParam  String?
-  doorFirstnameParam String?
+  doorLastnameParam       String?
+  doorFirstnameParam      String?
   // Nom du paramètre optionnel portant le code de la chambre sélectionnée
   // (facilityCode/selectedRoomCode) — laisser vide si la source n'a besoin
   // que du code réservation pour savoir quelle porte ouvrir.
-  doorRoomParam String?
+  doorRoomParam           String?
   // Dot-path optionnel dans la réponse pour vérifier un statut explicite
   // (ex: "success") — si vide, un appel réussi (2xx) suffit à considérer la
   // porte ouverte.
@@ -541,7 +543,7 @@ model BookingSourceConfig {
   // Nom du paramètre optionnel portant le nouveau code de chambre — laisser
   // vide si la source externe ne doit pas être notifiée des changements de
   // chambre.
-  updateRoomParam String?
+  updateRoomParam          String?
   // Nom du paramètre optionnel portant le nouveau statut local (confirmed |
   // checkin_done | completed | cancelled) — laisser vide si la source
   // externe ne doit pas être notifiée des annulations/réactivations. La
@@ -549,22 +551,22 @@ model BookingSourceConfig {
   // vocabulaire de statut local ne correspond pas forcément à celui de la
   // source — ex : l'API Sesame Technology attend "cancel"/"checkedin"/
   // "checkedout"/"confirmed", pas les valeurs locales telles quelles).
-  updateStatusParam String?
+  updateStatusParam        String?
   // {"confirmed":"...", "checkin_done":"...", "completed":"...",
   // "cancelled":"..."} — statut local -> valeur externe. Statut envoyé tel
   // quel si la map ou l'entrée correspondante est absente.
-  updateStatusValueMap Json?
+  updateStatusValueMap     Json?
   // Nom du paramètre optionnel portant le type de réservation
   // (Booking.bookingType, ex: "typeCode"/"typeId"/"type" côté API Sesame
   // Technology — code/id/nom du type selon ce que la source attend) —
   // laisser vide si la source externe ne doit pas être notifiée de ce
   // changement.
-  updateBookingTypeParam String?
+  updateBookingTypeParam   String?
   // Noms des paramètres optionnels portant les nouvelles dates de séjour
   // (format YYYY-MM-DD) — laisser vide si la source externe ne doit pas
   // être notifiée des changements de dates.
-  updateStartDateParam String?
-  updateEndDateParam   String?
+  updateStartDateParam     String?
+  updateEndDateParam       String?
 
   // null = synchronisation manuelle uniquement ("Importer maintenant").
   syncIntervalMinutes Int?
@@ -591,17 +593,17 @@ model LockerSourceConfig {
   entityId String @unique
   entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  enabled  Boolean @default(false)
-  baseUrl  String? @default("https://api.moncasierfrais.fr/v1")
+  enabled         Boolean @default(false)
+  baseUrl         String? @default("https://api.moncasierfrais.fr/v1")
   // Jeton Bearer créé depuis le portail Mon Casier Frais (ApiToken).
-  apiToken String?
+  apiToken        String?
   // En-tête HTTP optionnel "SellerGroupId" — nécessaire seulement si le
   // jeton donne accès à plusieurs groupes vendeur.
-  sellerGroupId String?
+  sellerGroupId   String?
   // Identifiant du module (installation de casiers) associé à cet
   // établissement — cf. GET /v1/modules pour aider l'admin à le trouver
   // (bouton "Charger les modules" côté panneau).
-  moduleId String?
+  moduleId        String?
   // Catégorie boutique appliquée aux produits importés (le catalogue temps
   // réel de la source ne renvoie pas de nom de catégorie lisible par
   // défaut — enrichi via GET /v1/products + /v1/product-types quand
@@ -617,7 +619,7 @@ model LockerSourceConfig {
   // et échoue proprement (avertissement non bloquant) si le stock est
   // toujours à 0 au moment de la commande, ce mode ne fabrique jamais une
   // fausse réservation.
-  showOutOfStock Boolean @default(false)
+  showOutOfStock  Boolean @default(false)
 
   // null = synchronisation manuelle uniquement ("Importer maintenant").
   syncIntervalMinutes Int?
@@ -642,16 +644,16 @@ model PaymentConfig {
   entityId String @unique
   entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  enabled Boolean @default(false)
+  enabled           Boolean @default(false)
   // Clé secrète Stripe (sk_live_... ou sk_test_...) — jamais renvoyée au
   // client, utilisée uniquement côté serveur pour appeler l'API Stripe.
-  secretKey String?
+  secretKey         String?
   // Secret de signature du endpoint webhook (whsec_...), fourni par Stripe
   // à la création du endpoint dans leur dashboard — vérifie qu'un événement
   // reçu sur /wa/payment/webhook vient bien de Stripe et n'a pas été rejoué
   // (cf. verifyWebhookSignature dans lib/payment.ts).
-  webhookSecret String?
-  currency      String  @default("eur")
+  webhookSecret     String?
+  currency          String  @default("eur")
   // "Fractionnement" (libellé du module dans le catalogue d'abonnement) —
   // propose en plus de la carte bancaire les moyens de paiement en
   // plusieurs fois que Stripe Checkout sait gérer pour cette devise/ce pays
@@ -741,6 +743,13 @@ model Product {
   active      Boolean @default(true)
   sortOrder   Int     @default(0)
 
+  // Point de vente partenaire propriétaire de ce produit — null = catalogue
+  // propre de l'hôtel (comportement historique inchangé). Non-null = géré en
+  // libre-service par le partenaire depuis son portail (cf. routes/vendor.ts,
+  // public/vendor-portal.html), jamais depuis le panneau admin de l'hôtel.
+  vendorId String?
+  vendor   Vendor? @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
   // Produit importé d'une source externe (cf. LockerSourceConfig / Mon
   // Casier Frais) plutôt que saisi manuellement par l'hôtel. importedFrom
   // vide = produit boutique classique, non touché par la synchronisation.
@@ -753,7 +762,7 @@ model Product {
   // Quantité actuellement disponible en casier au dernier sync — null =
   // pas de suivi de stock (produit boutique classique, toujours affiché).
   // 0 = en rupture, masqué côté boutique client (cf. /product/public).
-  stockQty Int?
+  stockQty     Int?
   // Casiers physiques actuellement associés à ce conditionnement au dernier
   // sync ([{numberOnModule, lockerPrice, state}]) — indicatif seulement, la
   // réservation réelle revérifie toujours la disponibilité en direct auprès
@@ -762,7 +771,7 @@ model Product {
   // Taux de TVA transmis par la source, répercuté vers la réservation de
   // casier (paramètre VAT de /order/bookLockers) — sans rapport avec la
   // fiscalité interne de l'hôtel.
-  vatRate Float?
+  vatRate      Float?
   // Forcer l'affichage "disponible" malgré stockQty=0 — réglable PAR
   // PRODUIT depuis la fiche (contrairement à LockerSourceConfig.showOutOfStock
   // qui est global à tout le connecteur). Utile en environnement de
@@ -774,6 +783,88 @@ model Product {
   createdAt DateTime @default(now())
 
   @@unique([entityId, externalId])
+}
+
+// Point de vente référencé dans la boutique — soit le catalogue propre de
+// l'hôtel (aucune ligne Vendor, Product.vendorId=null), soit un partenaire
+// externe (traiteur local, spa, excursions…) auquel l'hôtel a envoyé un lien
+// d'invitation (portalToken) pour qu'il crée et gère lui-même son catalogue
+// en libre-service, sans mot de passe (cf. routes/vendor.ts,
+// public/vendor-portal.html). Les ventes de ses produits transitent par le
+// même panier et le même compte Stripe que le reste de la boutique (un seul
+// compte Stripe par hôtel, cf. PaymentConfig) — le partenaire ne reçoit donc
+// jamais l'argent directement : une commission (commissionPct, en % du
+// montant vendu) qu'il doit reverser à l'hôtelier est calculée à chaque
+// vente (cf. VendorCommission) et réglée hors application (virement,
+// facture), à la fréquence choisie par l'hôtel.
+model Vendor {
+  id       String @id @default(cuid())
+  entityId String
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  name         String
+  description  String?
+  contactName  String?
+  contactEmail String?
+  contactPhone String?
+
+  // pending = lien envoyé, le partenaire n'a pas encore complété son profil
+  // via le portail ; active = en vente dans la boutique ; suspended = masqué
+  // de la boutique par l'hôtel (litige, pause saisonnière…) sans perdre
+  // l'historique des commissions déjà générées.
+  status String @default("pending")
+
+  // % du montant de chaque vente que le partenaire doit reverser à
+  // l'hôtelier — modifiable par l'hôtel à tout moment ; chaque
+  // VendorCommission enregistre le taux appliqué au moment de la vente, donc
+  // un changement ici n'affecte que les ventes futures.
+  commissionPct Float @default(10)
+
+  // Jeton d'accès permanent au portail partenaire en libre-service — tient
+  // lieu d'identifiant ET de mot de passe (URL à usage interne envoyée par
+  // l'hôtel, comme un lien de partage). Pas de rotation en v1 : si le lien
+  // fuite, l'hôtel suspend ce Vendor et en recrée un nouveau.
+  portalToken String @unique @default(cuid())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products    Product[]
+  commissions VendorCommission[]
+
+  @@index([entityId])
+}
+
+// Ligne de commission générée à chaque commande contenant au moins un
+// produit d'un Vendor partenaire (cf. recordVendorCommissions dans
+// lib/vendor.ts, appelé depuis finalizeOrder — donc au même moment que les
+// autres effets de bord d'une commande : immédiatement pour une commande
+// gratuite/ajoutée à la note, à la confirmation du paiement Stripe pour une
+// commande payée en ligne). Une commande avec des produits de plusieurs
+// vendeurs génère une ligne par vendeur. Sert de relevé pour le règlement
+// manuel hôtel <-> partenaire (status="due" jusqu'à ce que l'hôtel la
+// marque "settled").
+model VendorCommission {
+  id       String @id @default(cuid())
+  entityId String
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  vendorId String
+  vendor   Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  orderId  String
+  order    Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  salesAmount      Float // part du panier de cette commande vendue pour ce vendeur
+  commissionPct    Float // taux appliqué — copie de Vendor.commissionPct au moment de la vente
+  commissionAmount Float // salesAmount * commissionPct / 100, arrondi au centime
+
+  status    String    @default("due") // due | settled
+  settledAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([entityId])
+  @@index([vendorId])
+  @@index([orderId])
 }
 
 // Commande — fusionne SCH_ORDERS (boutique) + SESAME_RS_ORDERS (room service)
@@ -819,10 +910,14 @@ model Order {
   // réservation de casier) sont différés jusqu'à la confirmation du
   // paiement par le webhook Stripe — jamais déclenchés sur une commande non
   // payée (cf. finalizeOrder dans roomservice.ts).
-  paymentStatus         String?   // pending | paid | failed | refunded
+  paymentStatus         String? // pending | paid | failed | refunded
   stripeSessionId       String?
   stripePaymentIntentId String?
   paidAt                DateTime?
+
+  // Commissions dues à l'hôtelier par les points de vente partenaires dont
+  // des produits figurent dans cette commande — cf. VendorCommission.
+  vendorCommissions VendorCommission[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1042,13 +1137,13 @@ model CrmProspect {
   entityId String?
   entity   Entity? @relation(fields: [entityId], references: [id], onDelete: SetNull)
 
-  subscriptionId String?      @unique
+  subscriptionId String?       @unique
   subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
 
-  nom            String
-  type           String  @default("Client") // Prospect | Client — auto "Prospect" pour les arrivées onboarding/formulaire de contact
-  groupe         String?
-  secteur        String?
+  nom                 String
+  type                String  @default("Client") // Prospect | Client — auto "Prospect" pour les arrivées onboarding/formulaire de contact
+  groupe              String?
+  secteur             String?
   // Identité légale — "nom" reste le nom d'usage/commercial affiché partout
   // (listes, badges, graphiques) ; ces champs sont l'identité INSEE exacte,
   // remplissables à la main ou via la recherche d'entreprises (API publique
@@ -1057,13 +1152,13 @@ model CrmProspect {
   denominationSociale String?
   siret               String? // 14 chiffres (SIREN + NIC de l'établissement)
   siren               String? // 9 chiffres — 9 premiers du SIRET, gardé distinct : retourné tel quel par l'API
-  adresse        String? // adresse postale (numéro + voie) — ville reste un champ séparé
-  ville          String?
-  etoiles        String?
-  danger         String  @default("Modéré") // Bon client | Modéré | Élevé !!
-  potentiel      Int     @default(0) // 0-3
-  contrat        String  @default("non") // non | oui | en cours
-  modules        Int     @default(0)
+  adresse             String? // adresse postale (numéro + voie) — ville reste un champ séparé
+  ville               String?
+  etoiles             String?
+  danger              String  @default("Modéré") // Bon client | Modéré | Élevé !!
+  potentiel           Int     @default(0) // 0-3
+  contrat             String  @default("non") // non | oui | en cours
+  modules             Int     @default(0)
   // Type de module d'accès installé — indépendants l'un de l'autre (un
   // client peut avoir plusieurs cases cochées, ex : en transition de l'un
   // vers l'autre). Backfillés le 24/08/2026 depuis la colonne "Type Module"
@@ -1071,38 +1166,38 @@ model CrmProspect {
   // n'avaient jamais été renseignés pour la quasi-totalité des fiches
   // importées (ajoutés après l'import initial, sans backfill), d'où un
   // décompte "Type de module installé" très en dessous de la réalité.
-  moduleSesame Boolean @default(false)
-  moduleTtlock Boolean @default(false)
-  moduleOneway Boolean @default(false) // 3e type d'accès trouvé dans l'audit, absent du modèle jusqu'ici
-  nbAcces        Int     @default(0) // nombre de points d'accès (portes/serrures) installés chez le client
-  pms            String?
-  priorite       Int     @default(0) // 0-3
-  appel          String? // date libre ("16/10/25") ou "Ne pas appeler"
-  referent       String?
-  email          String?
-  tel            String?
-  site           String?
-  nfc            Int     @default(0) // % d'usage — les 4 se totalisent à 100% par fiche
-  qr             Int     @default(0)
-  mobile         Int     @default(0)
-  code           Int     @default(0)
-  webApp         Boolean @default(false)
-  mobileV2       Boolean @default(false)
-  checkin        Boolean @default(false)
-  livret         Boolean @default(false)
-  gestionDemande Boolean @default(false)
-  offline        Boolean @default(false)
+  moduleSesame        Boolean @default(false)
+  moduleTtlock        Boolean @default(false)
+  moduleOneway        Boolean @default(false) // 3e type d'accès trouvé dans l'audit, absent du modèle jusqu'ici
+  nbAcces             Int     @default(0) // nombre de points d'accès (portes/serrures) installés chez le client
+  pms                 String?
+  priorite            Int     @default(0) // 0-3
+  appel               String? // date libre ("16/10/25") ou "Ne pas appeler"
+  referent            String?
+  email               String?
+  tel                 String?
+  site                String?
+  nfc                 Int     @default(0) // % d'usage — les 4 se totalisent à 100% par fiche
+  qr                  Int     @default(0)
+  mobile              Int     @default(0)
+  code                Int     @default(0)
+  webApp              Boolean @default(false)
+  mobileV2            Boolean @default(false)
+  checkin             Boolean @default(false)
+  livret              Boolean @default(false)
+  gestionDemande      Boolean @default(false)
+  offline             Boolean @default(false)
   // Parcours activés côté client final — par défaut selon le secteur
   // (cf. sectorGroupFor() côté seed/front), éditables ensuite par fiche.
-  onbChoixChambres Boolean @default(false) // Onboarding : choix de la chambre
-  onbOccupant      Boolean @default(false) // Onboarding : déclaration des occupants
-  onbIdentite      Boolean @default(false) // Onboarding : vérification d'identité
-  onbMenage        Boolean @default(false) // Onboarding : préférences ménage
-  espBoutique      Boolean @default(false) // Espace client : boutique / room service
-  espPoint         Boolean @default(false) // Espace client : solde de points fidélité
-  espEvenement     Boolean @default(false) // Espace client : évènements/offres de l'établissement
-  messagerie     String  @default("Noreply") // Noreply | Client
-  note           String?
+  onbChoixChambres    Boolean @default(false) // Onboarding : choix de la chambre
+  onbOccupant         Boolean @default(false) // Onboarding : déclaration des occupants
+  onbIdentite         Boolean @default(false) // Onboarding : vérification d'identité
+  onbMenage           Boolean @default(false) // Onboarding : préférences ménage
+  espBoutique         Boolean @default(false) // Espace client : boutique / room service
+  espPoint            Boolean @default(false) // Espace client : solde de points fidélité
+  espEvenement        Boolean @default(false) // Espace client : évènements/offres de l'établissement
+  messagerie          String  @default("Noreply") // Noreply | Client
+  note                String?
 
   // Portefeuille financier — MRR importé du fichier de trésorerie (montant
   // mensuel récurrent, quand la fiche a pu être rapprochée par nom) ; signé
@@ -1173,14 +1268,14 @@ model CrmCashSettings {
   id    String @id @default(cuid())
   annee Int    @unique
 
-  revenuMode      String  @default("detail") // global | detail
-  revenuMontant   Float   @default(0)
-  revenuFrequence String  @default("mensuel") // mensuel | trimestriel | ponctuel
+  revenuMode      String @default("detail") // global | detail
+  revenuMontant   Float  @default(0)
+  revenuFrequence String @default("mensuel") // mensuel | trimestriel | ponctuel
   revenuMois      Int?
 
-  depenseMode      String  @default("detail")
-  depenseMontant   Float   @default(0)
-  depenseFrequence String  @default("mensuel") // mensuel | ponctuel
+  depenseMode      String @default("detail")
+  depenseMontant   Float  @default(0)
+  depenseFrequence String @default("mensuel") // mensuel | ponctuel
   depenseMois      Int?
 
   createdAt DateTime @default(now())
@@ -1221,8 +1316,8 @@ model CrmDeal {
   // retrouvaient additionnées dans le même mois de la Trésorerie affichée —
   // fiches déjà en base avant cet ajout traitées comme année civile en
   // cours au moment du calcul (cf. dealEncaissementYear()).
-  montantPonctuel  Float?
-  moisEncaissement Int?
+  montantPonctuel   Float?
+  moisEncaissement  Int?
   anneeEncaissement Int?
 
   quotes CrmQuote[]
@@ -1244,8 +1339,8 @@ model CrmQuote {
   number String @unique // ex: DEV-2026-0001
   status String @default("brouillon") // brouillon | envoyé | accepté | refusé
 
-  lines       Json    @default("[]") // [{label, description?, qty, unitPrice, recurring:bool}] — description = sous-texte verbeux affiché sous le libellé, comme sur les devis Sesame réels
-  discountPct Float   @default(0)
+  lines       Json      @default("[]") // [{label, description?, qty, unitPrice, recurring:bool}] — description = sous-texte verbeux affiché sous le libellé, comme sur les devis Sesame réels
+  discountPct Float     @default(0)
   notes       String?
   sentAt      DateTime?
 
@@ -1255,7 +1350,7 @@ model CrmQuote {
   // capture nom saisi + tracé + horodatage/IP à titre de preuve de
   // consentement, à la manière d'un "clic pour accepter" plutôt qu'une
   // signature certifiée par un tiers de confiance (Yousign/DocuSign...).
-  signToken String?             @unique
+  signToken String?            @unique
   signature CrmQuoteSignature?
 
   createdAt DateTime @default(now())
@@ -1269,7 +1364,7 @@ model CrmQuoteSignature {
 
   signerName       String
   signerEmail      String?
-  signatureDataUrl String @db.Text // image PNG (canvas) encodée en base64
+  signatureDataUrl String  @db.Text // image PNG (canvas) encodée en base64
   ip               String?
   userAgent        String?
 
@@ -1305,9 +1400,9 @@ model CrmProduct {
 // quantités à la marge lors de la création d'un devis à partir de ce
 // modèle (cf. POST /wa/crmQuote/create avec templateId).
 model CrmQuoteTemplate {
-  id    String @id @default(cuid())
+  id    String  @id @default(cuid())
   name  String
-  lines Json   @default("[]") // même forme que CrmQuote.lines
+  lines Json    @default("[]") // même forme que CrmQuote.lines
   notes String?
 
   createdAt DateTime @default(now())
@@ -1370,8 +1465,8 @@ model CrmTicketMessage {
   authorType  String // client | agent
   authorName  String?
   kind        String // reply (envoyé par email au client si authorType=agent) | note (interne, jamais envoyée)
-  body        String @db.Text
-  attachments Json   @default("[]") // string[] data URI — même convention que Room.photos
+  body        String  @db.Text
+  attachments Json    @default("[]") // string[] data URI — même convention que Room.photos
 
   createdAt DateTime @default(now())
 }
@@ -1390,11 +1485,11 @@ model SmtpConfig {
   entityId String? @unique
   entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  host     String
-  port     Int     @default(587)
-  secure   Boolean @default(false) // true = SMTPS (465), false = STARTTLS/plain (587/25)
-  username String
-  password String
+  host      String
+  port      Int     @default(587)
+  secure    Boolean @default(false) // true = SMTPS (465), false = STARTTLS/plain (587/25)
+  username  String
+  password  String
   fromName  String?
   fromEmail String
 
@@ -1421,7 +1516,7 @@ model MessageTemplate {
   entityId String?
   entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  channel  String  @default("email") // email | sms | whatsapp
+  channel  String @default("email") // email | sms | whatsapp
   key      String // slug interne, ex: "prospect-relance" — cible de sendMessage()
   name     String // libellé affiché dans le sélecteur de modèle
   subject  String // email uniquement ; supporte {{variable}}

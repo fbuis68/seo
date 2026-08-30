@@ -35,6 +35,7 @@ import { messagingRouter } from "./routes/messaging";
 import { automationRuleRouter } from "./routes/automationRule";
 import { adminUserRouter } from "./routes/adminUser";
 import { paymentRouter, stripeWebhookHandler } from "./routes/payment";
+import { vendorRouter } from "./routes/vendor";
 import { housekeepingScope } from "./middleware/housekeepingScope";
 import { errorHandler } from "./middleware/errorHandler";
 import { VERSION } from "./lib/version";
@@ -96,6 +97,7 @@ export function createApp() {
   app.use("/wa", automationRuleRouter);
   app.use("/wa", adminUserRouter);
   app.use("/wa", paymentRouter);
+  app.use("/wa", vendorRouter);
 
   // Authentification espace client (hors convention /wa — pas de DAO CRUD dédié)
   app.use("/api", authRouter);
@@ -124,6 +126,7 @@ export function createApp() {
   app.get("/crm", (_req, res) => res.sendFile(path.join(publicDir, "crm.html")));
   app.get("/support", (_req, res) => res.sendFile(path.join(publicDir, "support.html")));
   app.get("/menage", (_req, res) => res.sendFile(path.join(publicDir, "menage.html")));
+  app.get("/vendor-portal", (_req, res) => res.sendFile(path.join(publicDir, "vendor-portal.html")));
 
   app.use(errorHandler);
 
