@@ -1,12 +1,51 @@
 import { prisma } from "../db";
+import { HttpError } from "./asyncHandler";
 
-// Points de vente partenaires de la boutique — cf. schema.prisma Vendor /
+// Points de vente de la boutique — cf. schema.prisma Vendor / ProductVendor /
 // VendorCommission, routes/vendor.ts, public/vendor-portal.html. Ce module
-// ne contient que le calcul de commission déclenché à la vente ; le CRUD
-// (création de point de vente, portail partenaire, relevé/règlement) vit
-// dans routes/vendor.ts.
+// contient le calcul de commission déclenché à la vente et les helpers de
+// rattachement produit <-> point(s) de vente ; le CRUD (création de point de
+// vente, portail partenaire, relevé/règlement) vit dans routes/vendor.ts.
 
 type CartItem = { id: string; label: string; price: number; qty: number };
+
+/**
+ * Le point de vente interne créé automatiquement pour tout établissement qui
+ * n'en a pas encore — garantit qu'un produit du catalogue propre de l'hôtel
+ * créé sans sélection explicite de point de vente reste tout de même
+ * rattaché à un point de vente (règle : tout produit doit être vendu depuis
+ * au moins un point de vente). Les établissements existants avant cette
+ * fonctionnalité ont déjà ce point de vente via la migration
+ * vendor_points_of_sale ; ce helper couvre les nouveaux établissements créés
+ * depuis (onboarding, provisionEntity).
+ */
+export async function getOrCreateDefaultVendor(entityId: string) {
+  const existing = await prisma.vendor.findFirst({ where: { entityId, kind: "internal" }, orderBy: { createdAt: "asc" } });
+  if (existing) return existing;
+  return prisma.vendor.create({
+    data: { entityId, name: "Boutique principale", kind: "internal", status: "active", commissionPct: 0 },
+  });
+}
+
+/**
+ * Valide une liste de points de vente choisis par l'admin pour un produit du
+ * catalogue hôtel (jamais depuis le portail partenaire, qui fixe toujours
+ * son propre Vendor) — n'accepte que des points de vente "internal" de cet
+ * établissement ; un id invalide, d'un autre établissement, ou d'un
+ * partenaire fait échouer toute la requête plutôt que d'ignorer
+ * silencieusement une erreur de saisie. Liste vide/absente -> point de vente
+ * interne par défaut, pour que la règle "toujours au moins un point de
+ * vente" ne repose jamais sur la vigilance de l'admin.
+ */
+export async function resolveInternalVendorIds(entityId: string, vendorIds: string[] | undefined): Promise<string[]> {
+  if (!vendorIds || !vendorIds.length) {
+    const def = await getOrCreateDefaultVendor(entityId);
+    return [def.id];
+  }
+  const found = await prisma.vendor.findMany({ where: { id: { in: vendorIds }, entityId, kind: "internal" }, select: { id: true } });
+  if (found.length !== vendorIds.length) throw new HttpError(400, "Point de vente invalide");
+  return found.map((v) => v.id);
+}
 
 /**
  * Génère les lignes VendorCommission pour une commande qui vient d'être

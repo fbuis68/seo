@@ -5,7 +5,7 @@ import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { fireTrigger } from "../lib/automation";
 import { reserveLockersForOrder, cancelLockerReservation, LockerReservationItem } from "../lib/lockerSource";
-import { recordVendorCommissions } from "../lib/vendor";
+import { recordVendorCommissions, resolveInternalVendorIds } from "../lib/vendor";
 
 export const roomserviceRouter = Router();
 
@@ -26,6 +26,7 @@ function shapeProduct(p: {
   forceInStock: boolean;
   vendorId?: string | null;
   vendor?: { name: string } | null;
+  saleVendors?: { vendor: { id: string; name: string } }[];
 }) {
   return {
     id: p.id,
@@ -49,12 +50,18 @@ function shapeProduct(p: {
     // produit, contrairement à LockerSourceConfig.showOutOfStock qui est
     // global à tout le connecteur.
     forceInStock: p.forceInStock,
-    // Point de vente partenaire propriétaire de ce produit — vide = produit
-    // du catalogue propre de l'hôtel (cf. schema.prisma Vendor). vendorName
-    // est dénormalisé ici pour que la boutique client affiche "Vendu par…"
-    // sans requête supplémentaire.
+    // Point de vente partenaire GÉRANT de ce produit — vide = produit du
+    // catalogue propre de l'hôtel (cf. schema.prisma Vendor). vendorName est
+    // dénormalisé pour que la boutique client affiche "Vendu par…" sans
+    // requête supplémentaire.
     vendorId: p.vendorId || "",
     vendorName: p.vendor?.name || "",
+    // Point(s) de vente où ce produit est EN VENTE (cf. ProductVendor) — le
+    // client filtre son catalogue avec ces id, cf. checkin.html. Toujours
+    // non vide côté serveur (contrairement à vendorId ci-dessus, qui peut
+    // rester vide pour un produit du catalogue hôtel).
+    posIds: (p.saleVendors || []).map((sv) => sv.vendor.id),
+    posNames: (p.saleVendors || []).map((sv) => sv.vendor.name),
   };
 }
 
@@ -342,7 +349,7 @@ roomserviceRouter.get(
     const entity = await resolveEntity(req);
     const products = await prisma.product.findMany({
       where: { entityId: entity.id },
-      include: { vendor: { select: { name: true } } },
+      include: { vendor: { select: { name: true } }, saleVendors: { include: { vendor: { select: { id: true, name: true } } } } },
       orderBy: { sortOrder: "asc" },
     });
     res.json(products.map(shapeProduct));
@@ -380,14 +387,22 @@ roomserviceRouter.get(
         ...(showOutOfStock
           ? {}
           : { NOT: { importedFrom: { not: null }, stockQty: 0, forceInStock: false } }),
-        // Un produit d'un point de vente partenaire n'apparaît côté client
-        // que si l'hôtel l'a laissé actif (pas suspendu) — cf. schema.prisma
-        // Vendor.status. vendorId=null (catalogue propre de l'hôtel) n'est
-        // jamais concerné par ce filtre.
-        OR: [{ vendorId: null }, { vendor: { status: "active" } }],
+        // Un produit n'apparaît côté client que s'il reste vendu par au
+        // moins un point de vente actif (pas suspendu) — cf. schema.prisma
+        // Vendor.status, ProductVendor. Un produit rattaché à 2 points de
+        // vente dont un seul suspendu reste visible (filtré au bon point de
+        // vente côté client, cf. checkin.html posIds).
+        saleVendors: { some: { vendor: { status: "active" } } },
       },
-      include: { vendor: { select: { name: true } } },
+      include: { vendor: { select: { name: true } }, saleVendors: { include: { vendor: { select: { id: true, name: true, status: true } } } } },
       orderBy: { sortOrder: "asc" },
+    });
+    // Ne renvoie que les points de vente actifs de chaque produit (un
+    // rattachement à un point de vente suspendu ne doit jamais apparaître
+    // côté client, y compris dans posIds/posNames) — filtré ici plutôt qu'en
+    // SQL pour rester simple avec la relation many-to-many.
+    products.forEach((p) => {
+      p.saleVendors = p.saleVendors.filter((sv) => sv.vendor.status === "active");
     });
     const shaped = products.map(shapeProduct);
     shaped.forEach((p) => {
@@ -415,6 +430,18 @@ interface ProductBody {
   active?: boolean;
   sortOrder?: number;
   forceInStock?: boolean;
+  // Points de vente internes où ce produit est proposé (cf. schema.prisma
+  // ProductVendor) — absent/vide -> point de vente interne par défaut de
+  // l'établissement (cf. resolveInternalVendorIds), pour que la règle "tout
+  // produit a au moins un point de vente" ne dépende jamais de la saisie.
+  vendorIds?: string[];
+}
+
+async function includeProduct(id: string) {
+  return prisma.product.findUniqueOrThrow({
+    where: { id },
+    include: { vendor: { select: { name: true } }, saleVendors: { include: { vendor: { select: { id: true, name: true } } } } },
+  });
 }
 
 roomserviceRouter.post(
@@ -424,6 +451,7 @@ roomserviceRouter.post(
     const entity = await resolveEntity(req);
     const b = req.body as ProductBody;
     if (!b.label || !b.category) throw new HttpError(400, "label et category requis");
+    const vendorIds = await resolveInternalVendorIds(entity.id, b.vendorIds);
 
     const maxOrder = await prisma.product.count({ where: { entityId: entity.id } });
     const product = await prisma.product.create({
@@ -439,9 +467,10 @@ roomserviceRouter.post(
         videoUrl: b.videoUrl || null,
         active: b.active !== false,
         sortOrder: b.sortOrder ?? maxOrder,
+        saleVendors: { create: vendorIds.map((vendorId) => ({ vendorId })) },
       },
     });
-    res.status(201).json(shapeProduct(product));
+    res.status(201).json(shapeProduct(await includeProduct(product.id)));
   })
 );
 
@@ -456,7 +485,14 @@ roomserviceRouter.post(
     const product = await prisma.product.findFirst({ where: { id, entityId: entity.id } });
     if (!product) throw new HttpError(404, "Produit introuvable");
 
-    const updated = await prisma.product.update({
+    // Un produit géré par un partenaire (vendorId renseigné) garde toujours
+    // son unique point de vente (le partenaire lui-même) — seul le portail
+    // partenaire édite ses propres produits, jamais ce formulaire admin
+    // (cf. routes/vendor.ts /vendor/portal/products/update).
+    const touchesVendorIds = "vendorIds" in b && !product.vendorId;
+    const vendorIds = touchesVendorIds ? await resolveInternalVendorIds(entity.id, b.vendorIds) : null;
+
+    await prisma.product.update({
       where: { id },
       data: {
         category: b.category,
@@ -470,9 +506,10 @@ roomserviceRouter.post(
         active: b.active,
         sortOrder: b.sortOrder,
         forceInStock: b.forceInStock,
+        ...(vendorIds ? { saleVendors: { deleteMany: {}, create: vendorIds.map((vendorId) => ({ vendorId })) } } : {}),
       },
     });
-    res.json(shapeProduct(updated));
+    res.json(shapeProduct(await includeProduct(id)));
   })
 );
 

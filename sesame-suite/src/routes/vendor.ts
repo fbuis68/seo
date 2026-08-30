@@ -5,11 +5,16 @@ import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
 import type { Vendor } from "@prisma/client";
 
-// Points de vente partenaires de la boutique — cf. schema.prisma Vendor /
-// VendorCommission. Deux surfaces dans ce fichier :
-//  - Panneau admin (requireAdmin) : créer un point de vente (génère le lien
-//    d'invitation), l'activer/suspendre, ajuster le taux de commission,
-//    consulter et régler le relevé de commissions.
+// Points de vente de la boutique — internes à l'hôtel (ex : "Bar Piscine",
+// "Réception") ou partenaires externes — cf. schema.prisma Vendor /
+// ProductVendor / VendorCommission. Trois surfaces dans ce fichier :
+//  - Panneau admin (requireAdmin) : créer un point de vente interne ou
+//    partenaire (le second génère un lien d'invitation), l'activer/
+//    suspendre, ajuster le taux de commission, consulter et régler le
+//    relevé de commissions.
+//  - Client public (aucune authentification) : la liste des points de vente
+//    actifs, pour le sélecteur affiché à l'entrée de la boutique
+//    (cf. public/checkin.html).
 //  - Portail partenaire, public mais authentifié par jeton (portalToken) —
 //    pas de mot de passe, le lien fait office d'identifiant. Le partenaire y
 //    complète son profil et gère lui-même son catalogue en libre-service
@@ -25,6 +30,9 @@ function shapeVendor(v: Vendor) {
     contactName: v.contactName || "",
     contactEmail: v.contactEmail || "",
     contactPhone: v.contactPhone || "",
+    kind: v.kind,
+    icon: v.icon || "",
+    sortOrder: v.sortOrder,
     status: v.status,
     commissionPct: v.commissionPct,
     portalToken: v.portalToken,
@@ -66,11 +74,20 @@ interface VendorBody {
   contactName?: string;
   contactEmail?: string;
   contactPhone?: string;
+  kind?: string;
+  icon?: string;
+  sortOrder?: number;
   commissionPct?: number;
   status?: string;
 }
 
-/** POST /wa/vendor/create — crée un point de vente "pending" et son lien d'invitation permanent. */
+/**
+ * POST /wa/vendor/create — crée un point de vente. Un point de vente
+ * "internal" (ex : "Bar Piscine", géré directement par l'hôtel) est créé
+ * directement actif, sans lien d'invitation à envoyer ; un point de vente
+ * "partner" (par défaut, comportement historique) reste "pending" jusqu'à ce
+ * que le partenaire complète son profil via le lien généré ici.
+ */
 vendorRouter.post(
   "/vendor/create",
   requireAdmin,
@@ -79,6 +96,7 @@ vendorRouter.post(
     const b = req.body as VendorBody;
     const name = (b.name || "").trim();
     if (!name) throw new HttpError(400, "Nom du point de vente requis");
+    const kind = b.kind === "internal" ? "internal" : "partner";
     const vendor = await prisma.vendor.create({
       data: {
         entityId: entity.id,
@@ -87,7 +105,11 @@ vendorRouter.post(
         contactName: b.contactName || null,
         contactEmail: b.contactEmail || null,
         contactPhone: b.contactPhone || null,
-        commissionPct: b.commissionPct != null ? b.commissionPct : undefined,
+        kind,
+        icon: b.icon || null,
+        sortOrder: b.sortOrder ?? 0,
+        commissionPct: kind === "internal" ? 0 : b.commissionPct != null ? b.commissionPct : undefined,
+        status: kind === "internal" ? "active" : undefined,
       },
     });
     res.status(201).json({ ...shapeVendor(vendor), salesDue: 0, commissionDue: 0, commissionSettled: 0 });
@@ -112,11 +134,33 @@ vendorRouter.post(
         contactName: b.contactName,
         contactEmail: b.contactEmail,
         contactPhone: b.contactPhone,
-        commissionPct: b.commissionPct,
+        icon: b.icon,
+        sortOrder: b.sortOrder,
+        commissionPct: vendor.kind === "internal" ? undefined : b.commissionPct,
         status: b.status,
       },
     });
     res.json({ ...shapeVendor(updated), ...(await commissionTotals(updated.id)) });
+  })
+);
+
+/**
+ * GET /wa/vendor/public?entityCode= — points de vente actifs de cet
+ * établissement, pour le sélecteur affiché à l'entrée de la boutique
+ * client (cf. public/checkin.html) — aucune authentification, uniquement
+ * les champs utiles à l'affichage (jamais commission/contact/portalToken).
+ */
+vendorRouter.get(
+  "/vendor/public",
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const vendors = await prisma.vendor.findMany({
+      where: { entityId: entity.id, status: "active" },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    });
+    res.json(
+      vendors.map((v) => ({ id: v.id, name: v.name, description: v.description || "", icon: v.icon || "", kind: v.kind }))
+    );
   })
 );
 
@@ -240,7 +284,13 @@ interface PortalProductBody {
   active?: boolean;
 }
 
-/** POST /wa/vendor/portal/products/create?token= — le partenaire ajoute un produit à son propre point de vente. */
+/**
+ * POST /wa/vendor/portal/products/create?token= — le partenaire ajoute un
+ * produit à son propre point de vente. Toujours rattaché exclusivement au
+ * Vendor du jeton (cf. schema.prisma ProductVendor) — jamais un choix
+ * laissé au partenaire, qui ne peut pas se rattacher à un autre point de
+ * vente (interne ou partenaire concurrent).
+ */
 vendorRouter.post(
   "/vendor/portal/products/create",
   asyncHandler(async (req, res) => {
@@ -259,6 +309,7 @@ vendorRouter.post(
         icon: b.ico || null,
         active: b.active !== false,
         sortOrder: maxOrder,
+        saleVendors: { create: { vendorId: vendor.id } },
       },
     });
     res.status(201).json(shapePortalProduct(product));

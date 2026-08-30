@@ -743,12 +743,22 @@ model Product {
   active      Boolean @default(true)
   sortOrder   Int     @default(0)
 
-  // Point de vente partenaire propriétaire de ce produit — null = catalogue
-  // propre de l'hôtel (comportement historique inchangé). Non-null = géré en
-  // libre-service par le partenaire depuis son portail (cf. routes/vendor.ts,
-  // public/vendor-portal.html), jamais depuis le panneau admin de l'hôtel.
+  // Point de vente partenaire GÉRANT de ce produit — null = catalogue propre
+  // de l'hôtel, géré depuis le panneau admin (comportement historique
+  // inchangé). Non-null = géré en libre-service par le partenaire depuis son
+  // portail (cf. routes/vendor.ts, public/vendor-portal.html), jamais depuis
+  // le panneau admin de l'hôtel. Distinct de `saleVendors` ci-dessous : ce
+  // champ dit QUI édite le produit, pas OÙ il est en vente.
   vendorId String?
   vendor   Vendor? @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  // Point(s) de vente où ce produit est proposé à l'achat (cf. ProductVendor,
+  // Vendor.kind) — un produit du catalogue hôtel peut être rattaché à
+  // plusieurs points de vente internes ; un produit partenaire n'est
+  // rattaché qu'à son propre Vendor. TOUJOURS non vide : tout produit doit
+  // être rattaché à au moins un point de vente pour apparaître côté client
+  // (cf. GET /wa/roomservice/product/public, qui filtre dessus).
+  saleVendors ProductVendor[]
 
   // Produit importé d'une source externe (cf. LockerSourceConfig / Mon
   // Casier Frais) plutôt que saisi manuellement par l'hôtel. importedFrom
@@ -785,18 +795,17 @@ model Product {
   @@unique([entityId, externalId])
 }
 
-// Point de vente référencé dans la boutique — soit le catalogue propre de
-// l'hôtel (aucune ligne Vendor, Product.vendorId=null), soit un partenaire
-// externe (traiteur local, spa, excursions…) auquel l'hôtel a envoyé un lien
-// d'invitation (portalToken) pour qu'il crée et gère lui-même son catalogue
-// en libre-service, sans mot de passe (cf. routes/vendor.ts,
-// public/vendor-portal.html). Les ventes de ses produits transitent par le
-// même panier et le même compte Stripe que le reste de la boutique (un seul
-// compte Stripe par hôtel, cf. PaymentConfig) — le partenaire ne reçoit donc
-// jamais l'argent directement : une commission (commissionPct, en % du
-// montant vendu) qu'il doit reverser à l'hôtelier est calculée à chaque
-// vente (cf. VendorCommission) et réglée hors application (virement,
-// facture), à la fréquence choisie par l'hôtel.
+// Point de vente référencé dans la boutique — soit interne à l'hôtel (ex :
+// "Bar Piscine", "Réception", un point de retrait physique différent du
+// catalogue général), soit un partenaire externe auquel l'hôtel a envoyé un
+// lien d'invitation pour qu'il gère lui-même son catalogue (cf. `kind`
+// ci-dessous). Le client choisit son point de vente en arrivant sur la
+// boutique (cf. GET /wa/vendor/public, public/checkin.html) — utile sur un
+// resort avec plusieurs lieux de commande distincts. TOUT produit doit être
+// rattaché à au moins un point de vente (cf. ProductVendor) ; les
+// établissements existant avant cette fonctionnalité ont été migrés vers un
+// point de vente interne par défaut ("Boutique principale", cf. migration
+// vendor_points_of_sale).
 model Vendor {
   id       String @id @default(cuid())
   entityId String
@@ -808,31 +817,71 @@ model Vendor {
   contactEmail String?
   contactPhone String?
 
+  // internal = géré directement par l'hôtel depuis son panneau admin (pas de
+  // portail, pas de commission — un simple point de vente/lieu de commande
+  // parmi d'autres) ; partner = géré en libre-service par un partenaire
+  // externe via son portail à jeton, avec commission (cf. ci-dessous).
+  kind String @default("partner")
+
+  // Icône Tabler affichée sur la carte de sélection du point de vente côté
+  // client (cf. public/checkin.html) et ordre d'affichage relatif aux autres
+  // points de vente actifs du même établissement.
+  icon      String?
+  sortOrder Int     @default(0)
+
   // pending = lien envoyé, le partenaire n'a pas encore complété son profil
   // via le portail ; active = en vente dans la boutique ; suspended = masqué
   // de la boutique par l'hôtel (litige, pause saisonnière…) sans perdre
-  // l'historique des commissions déjà générées.
+  // l'historique des commissions déjà générées. Un point de vente "internal"
+  // est toujours créé directement "active" (pas d'étape d'onboarding).
   status String @default("pending")
 
   // % du montant de chaque vente que le partenaire doit reverser à
-  // l'hôtelier — modifiable par l'hôtel à tout moment ; chaque
-  // VendorCommission enregistre le taux appliqué au moment de la vente, donc
-  // un changement ici n'affecte que les ventes futures.
+  // l'hôtelier — sans objet pour un point de vente "internal" (toujours 0).
+  // Modifiable par l'hôtel à tout moment ; chaque VendorCommission enregistre
+  // le taux appliqué au moment de la vente, donc un changement ici n'affecte
+  // que les ventes futures.
   commissionPct Float @default(10)
 
   // Jeton d'accès permanent au portail partenaire en libre-service — tient
   // lieu d'identifiant ET de mot de passe (URL à usage interne envoyée par
-  // l'hôtel, comme un lien de partage). Pas de rotation en v1 : si le lien
-  // fuite, l'hôtel suspend ce Vendor et en recrée un nouveau.
+  // l'hôtel, comme un lien de partage). Sans objet pour un point de vente
+  // "internal" (jamais utilisé, généré quand même pour simplifier le
+  // modèle). Pas de rotation en v1 : si le lien fuite, l'hôtel suspend ce
+  // Vendor et en recrée un nouveau.
   portalToken String @unique @default(cuid())
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  products    Product[]
-  commissions VendorCommission[]
+  // Produits dont ce Vendor est le gérant (cf. Product.vendorId) — toujours
+  // vide pour un point de vente "internal" (les produits de l'hôtel restent
+  // gérés depuis le panneau admin, jamais "possédés" par un Vendor).
+  products     Product[]
+  commissions  VendorCommission[]
+  // Produits en vente à ce point de vente (cf. ProductVendor) — distinct de
+  // `products` ci-dessus : un produit géré par l'hôtel peut être en vente à
+  // PLUSIEURS points de vente internes à la fois (ex : "Eau minérale" au Bar
+  // Piscine ET en Room Service), alors qu'il n'a qu'UN SEUL gérant.
+  saleProducts ProductVendor[]
 
   @@index([entityId])
+}
+
+// Table de liaison "ce produit est en vente à ce point de vente" — distincte
+// de Product.vendorId (qui gère/édite le produit). Un produit du catalogue
+// propre de l'hôtel (vendorId=null) peut être rattaché à plusieurs points de
+// vente internes ; un produit d'un partenaire (vendorId=<son Vendor>) n'est
+// rattaché qu'à ce même Vendor (jamais choisi par le partenaire lui-même,
+// fixé automatiquement — cf. routes/vendor.ts portail).
+model ProductVendor {
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  vendorId  String
+  vendor    Vendor  @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@id([productId, vendorId])
+  @@index([vendorId])
 }
 
 // Ligne de commission générée à chaque commande contenant au moins un
