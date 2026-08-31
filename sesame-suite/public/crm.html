@@ -2181,7 +2181,7 @@ function trCategoryCard(kind, title, colorVar){
       <div class="card-head">
         <div class="ch-ico" style="background:${colorVar};border-color:${colorVar}"></div>
         <span class="ch-title">${title}</span>
-        <span class="num" style="margin-left:10px;font-weight:600">${fmtEUR(total)}/an</span>
+        <span class="num" id="tr-cardtotal-${kind}" style="margin-left:10px;font-weight:600">${fmtEUR(total)}/an</span>
         ${trModeToggle(kind)}
       </div>
       <div class="tr-panel-body">${body}</div>
@@ -2296,6 +2296,23 @@ function trRenderCharts(){
   trRenderBarChart(months);
   trRenderLineChart(months);
   trRenderMonthTable(months);
+
+  // Totaux annuels (puces "Recettes/Dépenses (année)" + en-tête des deux
+  // cartes catégorie) — recalculés et réinjectés ici à chaque frappe/édition
+  // d'une ligne (cf. trEditLocal), sans passer par un rendu complet de la
+  // page (qui ferait perdre le focus du champ en cours d'édition). Avant ce
+  // correctif, ces totaux restaient figés à leur valeur du dernier rendu
+  // complet — une dépense ajoutée/modifiée semblait alors ne "pas
+  // apparaître", alors qu'elle était bien enregistrée (visible dans le
+  // graphique et le tableau mensuel juste en dessous, déjà mis à jour ici).
+  const revenuAnnuel = trCategoryAnnual('revenu') + trPortfolioMrrMonthly()*12;
+  const depenseAnnuel = trCategoryAnnual('depense');
+  ['tr-chip-revenu','tr-cardtotal-revenu'].forEach(id=>{
+    const el = document.getElementById(id); if(el) el.textContent = fmtEUR(revenuAnnuel) + (id==='tr-cardtotal-revenu'?'/an':'');
+  });
+  ['tr-chip-depense','tr-cardtotal-depense'].forEach(id=>{
+    const el = document.getElementById(id); if(el) el.textContent = fmtEUR(depenseAnnuel) + (id==='tr-cardtotal-depense'?'/an':'');
+  });
 
   const last = months[months.length-1];
   const heroEl = document.getElementById('tr-hero-balance');
