@@ -72,6 +72,9 @@ input:focus,select:focus{border-color:var(--accent)}
 .btn-p:active{background:var(--accent)}
 .btn-out{background:transparent}
 .btn-sm{padding:7px 12px;font-size:13px;width:auto}
+.skip-top{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:16px 18px;margin-bottom:14px;border-radius:var(--rb);border:1.5px dashed var(--bdr);background:var(--card);color:var(--mu);font-family:var(--font-body,'Sora',sans-serif);font-size:15px;font-weight:700;cursor:pointer;transition:all .14s}
+.skip-top:active{transform:scale(.97);opacity:.85}
+.skip-top i{font-size:17px}
 .brow{display:flex;gap:8px;margin-top:14px}
 .brow .btn{flex:1}
 .brow .btn:first-child:not(:last-child){flex:0 0 auto;width:auto;padding:13px 13px}
@@ -354,6 +357,7 @@ input:focus,select:focus{border-color:var(--accent)}
   <!-- ── STEP 3: OCCUPANTS + TAXE ── -->
   <div id="step3" class="step-panel">
     <div class="slbl" data-i18n="step3_title">Occupants du séjour</div>
+    <div id="skipTop3" class="skip-top" style="display:none" onclick="skipStep(3)"><i class="ti ti-player-skip-forward"></i> <span data-i18n="kyc_skip">Passer cette étape</span></div>
     <div class="card">
       <div class="ch"><i class="ti ti-users"></i><span data-i18n="step3_occ_hdr">Déclarer les occupants</span></div>
       <div id="occList"></div>
@@ -388,6 +392,7 @@ input:focus,select:focus{border-color:var(--accent)}
   <!-- ── STEP 4: KYC VÉRIFICATION IDENTITÉ ── -->
   <div id="step4" class="step-panel">
     <div class="slbl" data-i18n="step4_title">Vérification d'identité</div>
+    <div id="skipTop4" class="skip-top" style="display:none" onclick="skipKyc()"><i class="ti ti-player-skip-forward"></i> <span data-i18n="kyc_skip">Passer cette étape</span></div>
 
     <!-- Hero optionnel -->
     <div class="kyc-hero">
@@ -552,6 +557,7 @@ input:focus,select:focus{border-color:var(--accent)}
   </div>
   <div id="step5" class="step-panel">
     <div class="slbl" data-i18n="step5_title">Vos préférences éco</div>
+    <div id="skipTop5" class="skip-top" style="display:none" onclick="skipStep(5)"><i class="ti ti-player-skip-forward"></i> <span data-i18n="kyc_skip">Passer cette étape</span></div>
     <div class="alt alt-g" id="altEco"><i class="ti ti-leaf"></i><span></span></div>
 
     <!-- TAXE SAVING LIVE METER -->
@@ -615,6 +621,7 @@ input:focus,select:focus{border-color:var(--accent)}
   <!-- ── STEP 6: BOUTIQUE ── -->
   <div id="step6" class="step-panel">
     <div class="slbl"><i class="ti ti-shopping-bag" style="font-size:16px;vertical-align:-2px;margin-right:4px"></i><span data-i18n="step6_title">Boutique Churchill</span></div>
+    <div id="skipTop6" class="skip-top" style="display:none" onclick="skipStep(6)"><i class="ti ti-player-skip-forward"></i> <span data-i18n="kyc_skip">Passer cette étape</span></div>
     <div class="alt alt-b" style="margin-bottom:12px">
       <i class="ti ti-info-circle"></i>
       <div data-i18n-html="step6_info">Commandez maintenant et vos articles seront livrés en chambre avant votre arrivée — ou après votre check-in.<br>
@@ -679,6 +686,7 @@ input:focus,select:focus{border-color:var(--accent)}
   <!-- ── STEP 7: REWARDS ── -->
   <div id="step7" class="step-panel">
     <div class="slbl" data-i18n="step7_title">Vos récompenses</div>
+    <div id="skipTop7" class="skip-top" style="display:none" onclick="skipStep(7)"><i class="ti ti-player-skip-forward"></i> <span data-i18n="kyc_skip">Passer cette étape</span></div>
 
     <!-- Points gagnés ce séjour -->
     <div id="rewardPointsHero" style="margin-bottom:12px"></div>
@@ -2215,14 +2223,19 @@ function gotoStep(n){
   updateSkipButtons();
 }
 function updateSkipButtons(){
-  [3,5,6].forEach(function(n){
+  [3,5,6,7].forEach(function(n){
     var mk = STEP_MODULES[n];
+    var show = !isModuleMandatory(mk);
     var el = document.getElementById('skipStep'+n);
-    if(!el) return;
-    el.style.display = (!isModuleMandatory(mk)) ? 'block' : 'none';
+    if(el) el.style.display = show ? 'block' : 'none';
+    var top = document.getElementById('skipTop'+n);
+    if(top) top.style.display = show ? 'flex' : 'none';
   });
+  var showKyc = !isModuleMandatory('kyc');
   var s4 = document.getElementById('skipStep4');
-  if(s4) s4.style.display = (!isModuleMandatory('kyc')) ? 'block' : 'none';
+  if(s4) s4.style.display = showKyc ? 'block' : 'none';
+  var t4 = document.getElementById('skipTop4');
+  if(t4) t4.style.display = showKyc ? 'flex' : 'none';
 }
 function skipStep(n){
   gotoStep(nextActiveStep(n));
