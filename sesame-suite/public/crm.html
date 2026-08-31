@@ -2070,10 +2070,10 @@ function openMonthDetail(m){
   const revenuTotal = revenuRows.reduce((s,r)=>s+r.montant,0) + mrr;
   const revenuHtml =
     (mrr>0 ? moneyRow('MRR portefeuille', 'Récurrent — somme des fiches clients (Portefeuille)', mrr) : '')
-    + revenuRows.map(r=>moneyRow(r.label, trFreqLabel(r.frequence))).join('');
+    + revenuRows.map(r=>moneyRow(r.label, trFreqLabel(r.frequence), r.montant)).join('');
 
   const depenseTotal = depenseRows.reduce((s,r)=>s+r.montant,0);
-  const depenseHtml = depenseRows.map(r=>moneyRow(r.label, trFreqLabel(r.frequence))).join('');
+  const depenseHtml = depenseRows.map(r=>moneyRow(r.label, trFreqLabel(r.frequence), r.montant)).join('');
 
   const dealsTotal = dealRows.reduce((s,d)=>s+(+d.montantPonctuel||0)*(+d.probability||0)/100, 0);
   const dealsHtml = dealRows.map(d=>{
