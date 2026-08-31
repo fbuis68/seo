@@ -30,6 +30,10 @@ export function normaliseBooking(b: Booking) {
     // fil des commandes contenant un article "casier" — cf.
     // roomservice.ts /roomservice/create et /roomservice/update.
     lockerAccess: (b.lockerAccess as { numberOnModule: number; pickupCode: string; orderId: string }[]) || [],
+    walletPassId: b.walletPassId || null,
+    walletShortLink: b.walletShortLink || null,
+    walletStatus: b.walletStatus || null,
+    walletCreatedAt: b.walletCreatedAt ? iso(b.walletCreatedAt) : null,
     createdAt: iso(b.createdAt),
     updatedAt: iso(b.updatedAt),
   };

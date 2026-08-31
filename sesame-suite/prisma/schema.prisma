@@ -50,6 +50,7 @@ model Entity {
   automationRules   AutomationRule[]
   vendors           Vendor[]
   vendorCommissions VendorCommission[]
+  walletConfig      WalletConfig?
 }
 
 // Groupe d'établissements (ex : chaîne hôtelière) — gestion réservée aux
@@ -274,6 +275,17 @@ model Booking {
   // connecteur configuré, ne sont pas comptées ici).
   doorOpenCount    Int       @default(0)
   doorLastOpenedAt DateTime? // dernière ouverture réelle réussie
+
+  // Pass Wallet (Apple Wallet / Google Wallet) généré via l'API EldoWallet
+  // pour cette réservation — cf. lib/eldoWallet.ts et routes/wallet.ts
+  // POST /wallet/booking/:code/pass (panneau "Réservations", écran de
+  // détail). walletPassId = "_id" renvoyé par EldoWallet, walletShortLink =
+  // lien à transmettre au client pour ajouter le pass à son Wallet. null
+  // tant qu'aucun pass n'a été généré.
+  walletPassId    String?
+  walletShortLink String?
+  walletStatus    String?
+  walletCreatedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -667,6 +679,27 @@ model PaymentConfig {
   // déjà réglée par ce canal — la refacturer ici créerait un double
   // paiement.
   includeTaxeSejour Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Connecteur EldoWallet (module "Wallet" — pass de séjour Apple Wallet /
+// Google Wallet généré par réservation) — un compte EldoWallet par
+// établissement, cf. lib/eldoWallet.ts et routes/wallet.ts. hotelId =
+// identifiant d'hôtel attribué par EldoWallet (ex: "yeucontinent"), utilisé
+// dans le chemin POST /hotels/{hotelId}/passes ; apiToken = jeton porteur
+// (Bearer) fourni par EldoWallet, jamais renvoyé au client une fois
+// enregistré (même principe que PaymentConfig.secretKey).
+model WalletConfig {
+  id       String @id @default(cuid())
+  entityId String @unique
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  enabled  Boolean @default(false)
+  hotelId  String?
+  apiToken String?
+  lang     String  @default("fr") // header x-lang envoyé à l'API EldoWallet
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

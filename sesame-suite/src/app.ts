@@ -36,6 +36,7 @@ import { automationRuleRouter } from "./routes/automationRule";
 import { adminUserRouter } from "./routes/adminUser";
 import { paymentRouter, stripeWebhookHandler } from "./routes/payment";
 import { vendorRouter } from "./routes/vendor";
+import { walletRouter } from "./routes/wallet";
 import { housekeepingScope } from "./middleware/housekeepingScope";
 import { errorHandler } from "./middleware/errorHandler";
 import { VERSION } from "./lib/version";
@@ -98,6 +99,7 @@ export function createApp() {
   app.use("/wa", adminUserRouter);
   app.use("/wa", paymentRouter);
   app.use("/wa", vendorRouter);
+  app.use("/wa", walletRouter);
 
   // Authentification espace client (hors convention /wa — pas de DAO CRUD dédié)
   app.use("/api", authRouter);

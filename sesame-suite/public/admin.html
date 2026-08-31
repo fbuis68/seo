@@ -644,6 +644,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   <div class="ni" data-pan="rooms" onclick="showPan('rooms')"><i class="ti ti-door"></i>Gestion des Accès</div>
   <div class="ns">Intégration</div>
   <div class="ni" data-pan="api" onclick="showPan('api')"><i class="ti ti-api"></i>Intégration réservations</div>
+  <div class="ni" data-pan="wallet" onclick="showPan('wallet')"><i class="ti ti-wallet"></i>Wallet</div>
   <div class="ni" data-pan="email" onclick="showPan('email')"><i class="ti ti-mail"></i>Canaux</div>
   <div class="ni" data-pan="automation" onclick="showPan('automation')"><i class="ti ti-bolt"></i>Automatisations</div>
   <div class="ni" data-pan="preview" onclick="showPan('preview')"><i class="ti ti-device-mobile"></i>Aperçu client</div>
@@ -3377,6 +3378,62 @@ Accès au salon Premium</textarea>
 </div>
 
 <!-- ════════════════════════════════════════════════════════
+     PAN — WALLET (EldoWallet)
+     Génère un pass Apple Wallet / Google Wallet par réservation, que le
+     client ajoute à son téléphone (infos de séjour, chambre, code-barres).
+     Un compte EldoWallet par établissement — cf. lib/eldoWallet.ts,
+     routes/wallet.ts, et le bouton "Générer le pass Wallet" sur la fiche
+     détail d'une réservation (panneau Réservations).
+     ════════════════════════════════════════════════════════ -->
+<div id="pan-wallet" class="pan">
+  <div class="ph">
+    <h2>Wallet</h2>
+    <p>Générez un pass Apple Wallet / Google Wallet pour chaque réservation via EldoWallet — le client l'ajoute à son téléphone et y retrouve ses dates de séjour, sa chambre et son code-barres d'accès.</p>
+  </div>
+
+  <div class="ca" id="wal-status-banner" style="display:none;margin-bottom:16px"></div>
+
+  <div class="ca">
+    <div class="ch"><i class="ti ti-wallet"></i>Compte EldoWallet</div>
+    <div class="fi">
+      <label class="lb">Activer le Wallet</label>
+      <label style="display:flex;align-items:center;gap:8px;height:38px;cursor:pointer">
+        <input type="checkbox" id="wal-enabled" style="accent-color:var(--am)">
+        <span style="font-size:13px">Le bouton "Générer le pass Wallet" apparaît sur les fiches réservation</span>
+      </label>
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Identifiant hôtel EldoWallet</label>
+        <input type="text" id="wal-hotelId" placeholder="ex : yeucontinent" autocomplete="off">
+        <div style="font-size:11px;color:var(--mu);margin-top:4px">Identifiant attribué par EldoWallet à votre établissement.</div>
+      </div>
+      <div class="fi">
+        <label class="lb">Token API EldoWallet</label>
+        <input type="password" id="wal-apiToken" placeholder="Jeton fourni par EldoWallet" autocomplete="off">
+        <div style="font-size:11px;color:var(--mu);margin-top:4px" id="wal-apiToken-hint">Fourni par EldoWallet pour votre compte.</div>
+      </div>
+    </div>
+    <div class="fi">
+      <label class="lb">Langue des passes générés</label>
+      <select id="wal-lang" style="max-width:200px">
+        <option value="fr">Français</option>
+        <option value="en">English</option>
+        <option value="es">Español</option>
+        <option value="de">Deutsch</option>
+        <option value="it">Italiano</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+      <button class="btn btn-p" onclick="walSave()"><i class="ti ti-device-floppy"></i> Enregistrer</button>
+    </div>
+    <div style="font-size:11px;color:var(--mu);margin-top:10px">
+      La connexion est validée au premier pass généré depuis une fiche réservation — aucun appel de test n'est effectué ici pour éviter de créer un pass fictif chez EldoWallet.
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
      PAN — POINTS DE VENTE (marketplace boutique)
      Points de vente partenaires externes, chacun avec son propre
      catalogue, référencés dans la boutique. L'hôtel envoie un lien
@@ -3966,6 +4023,7 @@ function showPan(id){
   if(id==='reservations'){ loadReservations(); }
   if(id==='api'){ bsInit(); }
   if(id==='payment'){ payInit(); }
+  if(id==='wallet'){ walInit(); }
   if(id==='vendors'){ vndInit(); }
   if(id==='email'){ emlInit(); }
   if(id==='automation'){ autoInit(); }
@@ -6650,6 +6708,55 @@ function payCopyWebhookUrl(){
   input.select();
   try{ navigator.clipboard.writeText(input.value); toast('URL copiée ✓'); }
   catch(e){ document.execCommand('copy'); toast('URL copiée ✓'); }
+}
+
+// ═══════════════════ WALLET (EldoWallet) ═══════════════════
+var WAL_CONFIG = null;
+
+function walRenderStatusBanner(){
+  var el = document.getElementById('wal-status-banner');
+  if(!WAL_CONFIG){ el.style.display='none'; return; }
+  el.style.display='block';
+  if(WAL_CONFIG.enabled && WAL_CONFIG.apiTokenSet && WAL_CONFIG.hotelId){
+    el.innerHTML = '<div class="alt alt-g"><i class="ti ti-check-circle"></i><span>Wallet actif — le bouton "Générer le pass Wallet" est disponible sur les fiches réservation.</span></div>';
+  } else if(WAL_CONFIG.enabled){
+    el.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Activé mais identifiant hôtel et/ou token manquant — la génération de pass échouera.</span></div>';
+  } else {
+    el.innerHTML = '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Wallet désactivé.</span></div>';
+  }
+}
+
+async function walInit(){
+  try{
+    var r = await adminFetch('/wa/wallet/config');
+    WAL_CONFIG = r.ok ? await r.json() : null;
+  }catch(e){ console.error('walInit error', e); WAL_CONFIG = null; }
+  if(!WAL_CONFIG) return;
+  document.getElementById('wal-enabled').checked = !!WAL_CONFIG.enabled;
+  document.getElementById('wal-hotelId').value = WAL_CONFIG.hotelId || '';
+  document.getElementById('wal-lang').value = WAL_CONFIG.lang || 'fr';
+  document.getElementById('wal-apiToken').value = '';
+  document.getElementById('wal-apiToken').placeholder = WAL_CONFIG.apiTokenSet ? ('Déjà enregistré (…'+esc(WAL_CONFIG.apiTokenLast4)+') — laisser vide pour ne pas le changer') : 'Jeton fourni par EldoWallet';
+  walRenderStatusBanner();
+}
+
+async function walSave(){
+  var body = {
+    enabled: document.getElementById('wal-enabled').checked,
+    hotelId: document.getElementById('wal-hotelId').value.trim(),
+    lang: document.getElementById('wal-lang').value,
+  };
+  var apiToken = document.getElementById('wal-apiToken').value.trim();
+  if(apiToken) body.apiToken = apiToken;
+  try{
+    var r = await adminFetch('/wa/wallet/config/update', {method:'POST', body:JSON.stringify(body)});
+    if(!r.ok){ toast('Erreur lors de l\'enregistrement'); return; }
+    WAL_CONFIG = await r.json();
+    document.getElementById('wal-apiToken').value = '';
+    document.getElementById('wal-apiToken').placeholder = WAL_CONFIG.apiTokenSet ? ('Déjà enregistré (…'+esc(WAL_CONFIG.apiTokenLast4)+') — laisser vide pour ne pas le changer') : 'Jeton fourni par EldoWallet';
+    walRenderStatusBanner();
+    toast('Configuration Wallet enregistrée ✓');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
 }
 
 // ═══════════════════════════════════════════════ POINTS DE VENTE (marketplace boutique)
@@ -11884,6 +11991,8 @@ function resaOpenDetail(code){
   var updated = b.updatedAt ? new Date(b.updatedAt).toLocaleString('fr-FR') : '—';
   var nfcColor = b.nfcCount>0 ? '#1A6B47' : 'var(--mu)';
   var nfcBg = b.nfcCount>0 ? 'rgba(26,107,71,.1)' : 'var(--bdr)';
+  var walColor = b.walletShortLink ? '#1A6B47' : 'var(--mu)';
+  var walBg = b.walletShortLink ? 'rgba(26,107,71,.1)' : 'var(--bdr)';
 
   var rows = [
     ['Code de réservation', esc(b.code)],
@@ -11904,6 +12013,7 @@ function resaOpenDetail(code){
   var html = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">'
     + '<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:rgba(139,26,46,.08);color:var(--a)">'+esc(resaStatusLabel(b))+'</span>'
     + '<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:'+nfcBg+';color:'+nfcColor+'"><i class="ti ti-nfc"></i> NFC ('+(b.nfcCount||0)+')</span>'
+    + '<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:'+walBg+';color:'+walColor+'"><i class="ti ti-wallet"></i> Wallet ('+(b.walletShortLink?'généré':'aucun')+')</span>'
     + '</div>';
   html += '<div style="border:1px solid var(--bdr);border-radius:var(--rs);overflow:hidden">'
     + rows.map(function(row, i){
@@ -11912,11 +12022,24 @@ function resaOpenDetail(code){
       }).join('')
     + '</div>';
   html += '<div id="resa-detail-nfc-error" class="alt alt-w" style="display:none;margin-top:12px"><i class="ti ti-alert-triangle"></i><span id="resa-detail-nfc-error-msg"></span></div>';
+  html += '<div id="resa-detail-wallet-error" class="alt alt-w" style="display:none;margin-top:12px"><i class="ti ti-alert-triangle"></i><span id="resa-detail-wallet-error-msg"></span></div>';
   html += '<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">'
     + '<button class="btn btn-p" style="flex:1" onclick="resaEncodeNfc(\''+esc(b.code)+'\')" id="resa-detail-nfc-btn"><i class="ti ti-nfc"></i> Encoder NFC</button>'
+    + (b.walletShortLink
+        ? '<button class="btn btn-s" onclick="resaCopyWalletLink()" id="resa-detail-wallet-btn"><i class="ti ti-copy"></i> Copier le lien Wallet</button>'
+        : '<button class="btn btn-s" onclick="resaCreateWalletPass(\''+esc(b.code)+'\')" id="resa-detail-wallet-btn"><i class="ti ti-wallet"></i> Générer le pass Wallet</button>')
     + '<button class="btn btn-s" onclick="resaToggleEmailCompose(\''+esc(b.code)+'\')" id="resa-detail-email-btn"'+(b.personEmail?'':' disabled title="Aucune adresse email sur cette réservation"')+'><i class="ti ti-mail"></i> Envoyer un email</button>'
     + '<button class="btn btn-s" onclick="event.stopPropagation();resaCloseDetail();resaOpenEdit(\''+esc(b.code)+'\')"><i class="ti ti-edit"></i> Modifier</button>'
     + '</div>';
+  if(b.walletShortLink){
+    html += '<div style="margin-top:12px;border:1px solid var(--bdr);border-radius:var(--rs);padding:12px;background:var(--bg)">'
+      + '<div class="fi" style="margin:0"><label class="lb">Lien du pass Wallet</label>'
+      + '<div style="display:flex;gap:8px;align-items:center">'
+      + '<input type="text" id="resa-detail-wallet-link" value="'+esc(b.walletShortLink)+'" readonly style="flex:1;font-family:monospace;font-size:12px">'
+      + '<a class="btn btn-s" href="'+esc(b.walletShortLink)+'" target="_blank" rel="noopener" style="white-space:nowrap;width:auto"><i class="ti ti-external-link" style="font-size:12px"></i> Ouvrir</a>'
+      + '</div></div>'
+      + '</div>';
+  }
   html += '<div id="resa-detail-email-compose" style="display:none;margin-top:12px;border:1px solid var(--bdr);border-radius:var(--rs);padding:14px;background:var(--bg)">'
     + '<div class="fi"><label class="lb">Destinataire</label><input type="text" value="'+esc(b.personEmail||'')+'" disabled></div>'
     + '<div class="fi"><label class="lb">Objet</label><input type="text" id="resa-email-subject" placeholder="Objet de l\'email"></div>'
@@ -12004,6 +12127,43 @@ async function resaEncodeNfc(code){
     btn.disabled = false;
     btn.innerHTML = orig;
   }
+}
+
+async function resaCreateWalletPass(code){
+  var btn = document.getElementById('resa-detail-wallet-btn');
+  var errEl = document.getElementById('resa-detail-wallet-error');
+  var errMsg = document.getElementById('resa-detail-wallet-error-msg');
+  errEl.style.display = 'none';
+  var orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spin"></div> Génération…';
+  try{
+    var r = await adminFetch('/wa/wallet/booking/'+encodeURIComponent(code)+'/pass', {method:'POST', body: JSON.stringify({})});
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error || 'Échec de la génération du pass Wallet');
+    var idx = RESA_CACHE.findIndex(function(x){ return x.booking.code === code; });
+    if(idx>-1){
+      RESA_CACHE[idx].booking.walletPassId = data.id;
+      RESA_CACHE[idx].booking.walletShortLink = data.shortLink;
+      RESA_CACHE[idx].booking.walletStatus = data.status;
+    }
+    toast('Pass Wallet généré ✓');
+    resaOpenDetail(code);
+    renderReservations();
+  }catch(e){
+    errMsg.textContent = e.message;
+    errEl.style.display = 'flex';
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+}
+
+function resaCopyWalletLink(){
+  var input = document.getElementById('resa-detail-wallet-link');
+  if(!input) return;
+  input.select();
+  try{ navigator.clipboard.writeText(input.value); toast('Lien copié ✓'); }
+  catch(e){ document.execCommand('copy'); toast('Lien copié ✓'); }
 }
 
 function fmtDMY(iso){
