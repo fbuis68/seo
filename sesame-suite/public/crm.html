@@ -445,6 +445,7 @@ svg.tr-chart{display:block;width:100%;height:auto;min-width:640px}
   <div class="tb-right">
     <div id="tb-actions" style="display:flex;gap:7px;align-items:center"></div>
     <button class="btn btn-ghost btn-icon" id="ui-theme-btn" onclick="toggleThemePicker(this)" title="Thème de l'interface">◐</button>
+    <button class="btn btn-ghost btn-icon" onclick="crmLogout()" title="Déconnexion">⏻</button>
   </div>
 </div>
 
@@ -453,7 +454,7 @@ svg.tr-chart{display:block;width:100%;height:auto;min-width:640px}
   <div class="sidebar" id="sidebar" onclick="if(event.target.closest('.nav-item,.vt'))closeSidebar()">
     <div class="nav-lbl">Navigation</div>
     <div class="nav-item" id="n-home" onclick="showHome()"><div class="nav-ico">⌂</div> Home</div>
-    <div class="nav-item" id="n-list" onclick="showList()"><div class="nav-ico">≡</div> Vue liste</div>
+    <div class="nav-item" id="n-list" onclick="showList()"><div class="nav-ico">≡</div> Client/Prospect</div>
     <div class="nav-item" id="n-affaires" onclick="showAffaires()"><div class="nav-ico">◆</div> Affaires</div>
     <div class="nav-item" id="n-portefeuille" onclick="showPortefeuille()"><div class="nav-ico">€</div> Portefeuille</div>
     <div class="nav-item" id="n-treso" onclick="showTresorerie()"><div class="nav-ico">Σ</div> Trésorerie</div>
@@ -590,6 +591,13 @@ function enterApp(){
   document.getElementById('layout').style.display='flex';
   if(ADMIN_CRM_ROLE==='admin') document.getElementById('n-crmusers').style.display='';
   init();
+}
+
+function crmLogout(){
+  sessionStorage.removeItem('SESAME_ADMIN_TOKEN');
+  sessionStorage.removeItem('SESAME_ADMIN_ROLE');
+  sessionStorage.removeItem('SESAME_ADMIN_CRMROLE');
+  location.reload();
 }
 
 // ── RESPONSIVE — tiroir latéral sur écran étroit ──
@@ -2014,6 +2022,78 @@ function openPipelineDetail(m){
     +'</div></div>';
 }
 
+/**
+ * Lignes qui composent le montant "encaissement"/"dépense" d'un mois donné —
+ * les lignes détaillées (CrmCashLine) si le mode "Détaillé" est actif, sinon
+ * la saisie globale unique, dans les deux cas uniquement ce qui contribue
+ * réellement au mois demandé (fréquence mensuelle, ou trimestrielle/
+ * ponctuelle tombant sur ce mois précisément) — même logique que
+ * trCategoryMonthlyBase, mais ligne par ligne plutôt qu'en somme.
+ */
+function trKindDetailRows(kind, m){
+  if(cashSettings[kind+'Mode']==='global'){
+    const montant = trMonthlyFromSpec({montant:cashSettings[kind+'Montant'], frequence:cashSettings[kind+'Frequence'], mois:cashSettings[kind+'Mois']}, m);
+    return montant ? [{label:'Saisie globale', montant, frequence:cashSettings[kind+'Frequence']}] : [];
+  }
+  return trRows(kind)
+    .map(r=>({label:r.label, montant:trMonthlyFromSpec(r,m), frequence:r.frequence}))
+    .filter(r=>r.montant);
+}
+
+/**
+ * Détail complet d'un mois — encaissements (dont MRR portefeuille),
+ * dépenses et affaires pondérées qui composent les totaux affichés dans le
+ * tableau récapitulatif de la Trésorerie, pour comprendre d'où vient
+ * chaque chiffre sans devoir recouper plusieurs panneaux.
+ */
+function openMonthDetail(m){
+  const mrr = trPortfolioMrrMonthly();
+  const revenuRows = trKindDetailRows('revenu', m);
+  const depenseRows = trKindDetailRows('depense', m);
+  const dealRows = trDealsFor(m);
+
+  function moneyRow(label, meta, montant, clickable){
+    return '<div class="kpi-detail-row"'+(clickable?'':' style="cursor:default"')+(clickable||'')+'>'
+      +'<div class="kpi-detail-main"><div class="kpi-detail-nom">'+esc(label)+'</div>'
+      +(meta?'<div class="kpi-detail-meta">'+meta+'</div>':'')+'</div>'
+      +'<span class="num" style="font-weight:600">'+fmtEUR(montant)+'</span>'
+      +'</div>';
+  }
+  function section(title, colorVar, total, rowsHtml, emptyLabel){
+    return '<div style="margin-bottom:18px">'
+      +'<div class="tr-chart-title" style="display:flex;align-items:center;gap:8px;margin-bottom:2px">'
+      +'<span class="tr-sw" style="background:'+colorVar+'"></span>'+title
+      +'<span class="num" style="margin-left:auto;font-weight:600">'+fmtEUR(total)+'</span></div>'
+      +(rowsHtml || '<div style="padding:10px 4px;color:var(--mu);font-size:12px">'+emptyLabel+'</div>');
+  }
+
+  const revenuTotal = revenuRows.reduce((s,r)=>s+r.montant,0) + mrr;
+  const revenuHtml =
+    (mrr>0 ? moneyRow('MRR portefeuille', 'Récurrent — somme des fiches clients (Portefeuille)', mrr) : '')
+    + revenuRows.map(r=>moneyRow(r.label, trFreqLabel(r.frequence))).join('');
+
+  const depenseTotal = depenseRows.reduce((s,r)=>s+r.montant,0);
+  const depenseHtml = depenseRows.map(r=>moneyRow(r.label, trFreqLabel(r.frequence))).join('');
+
+  const dealsTotal = dealRows.reduce((s,d)=>s+(+d.montantPonctuel||0)*(+d.probability||0)/100, 0);
+  const dealsHtml = dealRows.map(d=>{
+    const pondere = (+d.montantPonctuel||0)*(+d.probability||0)/100;
+    return moneyRow(d.title, esc(d.prospectNom||'')+' · '+fmtEUR(d.montantPonctuel)+' × '+(d.probability||0)+'%', pondere,
+      ' onclick="closeModal();openDealModal(\''+d.id+'\')"');
+  }).join('');
+
+  document.getElementById('modal-ct').innerHTML =
+    '<div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">'
+    +'<div class="modal-box" style="max-width:560px">'
+    +'<div class="modal-head"><div style="font-size:16px;font-weight:500">Détail — '+TR_MONTHS[m]+' '+cashYear+'</div>'
+    +'<button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>'
+    +'<div style="max-height:65vh;overflow-y:auto;padding-top:6px">'
+    +section('Encaissements', 'var(--tr-signe)', revenuTotal, revenuHtml, 'Aucun encaissement ce mois.')
+    +section('Dépenses', 'var(--tr-depense)', depenseTotal, depenseHtml, 'Aucune dépense ce mois.')
+    +section('Affaires pondérées (pipeline)', 'var(--tr-pipeline)', dealsTotal, dealsHtml, 'Aucune affaire ce mois.')
+    +'</div></div></div>';
+}
+
 /** Montant de la catégorie hors pipeline des affaires — lignes CrmCashLine ou saisie globale uniquement. */
 function trCategoryMonthlyBase(kind, m){
   return cashSettings[kind+'Mode']==='global'
@@ -2372,7 +2452,7 @@ function trRenderMonthTable(months){
     const before = mo.cum==null; // avant le mois du solde d'ouverture — période non suivie
     return `
     <tr${before?' style="opacity:.45"':''}>
-      <td>${TR_MONTHS[mo.m]}</td>
+      <td${before?'':' style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted" onclick="openMonthDetail('+mo.m+')" title="Détail du mois — encaissements, dépenses, affaires pondérées"'}>${TR_MONTHS[mo.m]}</td>
       <td class="num" style="text-align:right">${trCell(mo.mrr, before)}</td>
       <td class="num" style="text-align:right">${trCell(mo.revenuBase, before)}</td>
       <td class="num" style="text-align:right${!before&&mo.pipeline?';cursor:pointer;text-decoration:underline;text-decoration-style:dotted' : ''}" ${!before&&mo.pipeline?'onclick="openPipelineDetail('+mo.m+')" title="Voir les affaires qui composent ce pipeline"':''}>${trCell(mo.pipeline, before)}</td>
