@@ -196,6 +196,21 @@
   .suggest-btn { font: inherit; font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-tint); border: none; border-radius: 100px; padding: 6px 13px; cursor: pointer; }
   .suggest-btn:hover { filter: brightness(0.96); }
 
+  .btn { font: inherit; font-size: 13px; font-weight: 600; border-radius: 8px; padding: 8px 14px; cursor: pointer; border: 1px solid var(--border-2); background: var(--surface); color: var(--ink); }
+  .btn.primary { background: var(--accent); color: #ffffff; border-color: var(--accent); }
+  .btn.small { padding: 5px 11px; font-size: 11.5px; }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+
+  .import-box { border: 1px dashed var(--border-2); border-radius: 10px; padding: 18px 20px; margin-bottom: 20px; display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+  .import-box input[type="file"] { font: inherit; font-size: 12.5px; color: var(--ink-2); }
+  .import-meta { font-size: 12px; color: var(--ink-muted); flex: 1; min-width: 200px; }
+  .import-meta strong { color: var(--ink-2); }
+  .filter-input, .filter-select { font: inherit; font-size: 12.5px; color: var(--ink); background: var(--surface); border: 1px solid var(--border-2); border-radius: 8px; padding: 6px 10px; }
+  .bar-fill.ok { background: var(--good); }
+  .bar-fill.warn { background: var(--warning); }
+  .bar-fill.crit { background: var(--critical); }
+  .cell-sub { font-size: 11px; color: var(--ink-muted); }
+
   @media (max-width: 880px) {
     .kpis { grid-template-columns: repeat(2, 1fr); }
     .two-col, .three-col { grid-template-columns: 1fr; }
@@ -209,7 +224,7 @@
       <p class="eyebrow">Widget IA · MCDF</p>
       <h1>Génération de rapports</h1>
       <p class="lede">Données en direct, lecture seule — aucune action d'écriture n'est effectuée par ce widget.</p>
-      <p class="version-tag">Version du fichier : 2026-08-27</p>
+      <p class="version-tag">Version du fichier : 2026-08-31</p>
       <div class="suggest-row">
         <button type="button" class="suggest-btn" id="suggest-report-btn">💡 Suggérer un nouveau rapport</button>
         <button type="button" class="suggest-btn" id="suggest-filter-btn">🔎 Suggérer un nouveau filtre</button>
@@ -229,6 +244,8 @@
       <button class="tab-btn" type="button" data-tab="planning">Planning</button>
       <button class="tab-btn" type="button" data-tab="formateurs">Formateurs</button>
       <button class="tab-btn" type="button" data-tab="listing">Listing</button>
+      <button class="tab-btn" type="button" data-tab="cpf">CPF Sous-traitance</button>
+      <button class="tab-btn" type="button" data-tab="facturation">Facturation</button>
     </div>
 
     <!-- ============================= COMMERCIAL ============================= -->
@@ -431,6 +448,106 @@
 
     </div>
 
+    <!-- ============================= CPF SOUS-TRAITANCE (import Excel) ============================= -->
+    <div class="tab-panel" id="tab-cpf">
+      <div class="note">
+        Cet état n'est pas connecté à l'API MCDF (aucune notion de « sous-traitance » n'est confirmée dans les entités disponibles) : importez ci-dessous votre export habituel (ex. <code>85262129100024cpfsoustraitance.xlsx</code>, onglet « Dossiers »). Les données restent dans ce navigateur uniquement (<code>localStorage</code>), rien n'est envoyé à un serveur.
+      </div>
+      <div class="import-box">
+        <input type="file" id="cpf-file-input" accept=".xlsx,.xls,.csv">
+        <p class="import-meta" id="cpf-import-meta">Aucun fichier importé.</p>
+        <button type="button" class="btn small" id="cpf-clear-btn" style="display:none">Effacer les données importées</button>
+      </div>
+
+      <div id="cpf-content" style="display:none">
+        <div class="kpis" style="grid-template-columns: repeat(3, 1fr);" id="cpf-kpis"></div>
+
+        <section>
+          <div class="section-head" style="flex-wrap:wrap; row-gap:10px;">
+            <h2>Dossiers CPF</h2>
+            <input type="search" class="filter-input" id="cpf-search" placeholder="Rechercher un dossier ou un intitulé…" style="min-width:220px">
+          </div>
+          <div class="panel">
+            <div class="table-scroll" style="max-height:480px">
+              <table class="tight-table" id="cpf-table">
+                <colgroup>
+                  <col style="width:11%"><col style="width:27%"><col style="width:13%">
+                  <col style="width:10%"><col style="width:9%"><col style="width:9%">
+                  <col style="width:13%"><col style="width:8%">
+                </colgroup>
+                <thead><tr>
+                  <th>N° Dossier</th><th>Intitulé</th><th>Période</th>
+                  <th class="num">Facturé HT</th><th class="num">Heures décl.</th><th class="num">Heures s.t.</th>
+                  <th>% Sous-traitance</th><th class="num">CA s.t.</th>
+                </tr></thead>
+                <tbody id="tbl-cpf"></tbody>
+              </table>
+            </div>
+          </div>
+          <p class="hint" id="cpf-count-hint" style="margin-top:8px; font-size:12px; color:var(--ink-muted);"></p>
+        </section>
+      </div>
+    </div>
+
+    <!-- ============================= FACTURATION (import Excel) ============================= -->
+    <div class="tab-panel" id="tab-facturation">
+      <div class="note">
+        Cet état n'est pas connecté à l'API MCDF : importez ci-dessous votre export de facturation (ex. <code>MCDF_FACTU_2025.xls</code>). Les données restent dans ce navigateur uniquement (<code>localStorage</code>), rien n'est envoyé à un serveur.
+      </div>
+      <div class="import-box">
+        <input type="file" id="factu-file-input" accept=".xlsx,.xls,.csv">
+        <p class="import-meta" id="factu-import-meta">Aucun fichier importé.</p>
+        <button type="button" class="btn small" id="factu-clear-btn" style="display:none">Effacer les données importées</button>
+      </div>
+
+      <div id="factu-content" style="display:none">
+        <div class="kpis" id="factu-kpis"></div>
+
+        <section>
+          <div class="two-col">
+            <div>
+              <div class="section-head"><h2>Facturé HT par mois</h2><span class="hint" id="factu-chart-hint"></span></div>
+              <div class="panel chart-pad">
+                <div class="mini-chart" id="chart-factu"></div>
+                <div class="mini-labels" id="labels-factu"></div>
+              </div>
+            </div>
+            <div>
+              <div class="section-head"><h2>Top 5 payeurs / OPCO</h2><span class="hint">par montant HT net</span></div>
+              <div class="panel"><div class="rank-list" id="rank-payeurs"></div></div>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <div class="section-head" style="flex-wrap:wrap; row-gap:10px;">
+            <h2>Factures</h2>
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              <select class="filter-select" id="factu-month-filter"><option value="">Tous les mois</option></select>
+              <input type="search" class="filter-input" id="factu-search" placeholder="Client, payeur, n° facture…" style="min-width:220px">
+            </div>
+          </div>
+          <div class="panel">
+            <div class="table-scroll" style="max-height:480px">
+              <table class="tight-table" id="factu-table">
+                <colgroup>
+                  <col style="width:9%"><col style="width:9%"><col style="width:9%">
+                  <col style="width:23%"><col style="width:23%">
+                  <col style="width:9%"><col style="width:9%"><col style="width:9%">
+                </colgroup>
+                <thead><tr>
+                  <th>Date</th><th>N° facture</th><th>N° dossier</th><th>Client</th><th>Payeur</th>
+                  <th class="num">Montant HT</th><th class="num">Montant TTC</th><th class="num">Reste à payer</th>
+                </tr></thead>
+                <tbody id="tbl-factu"></tbody>
+              </table>
+            </div>
+          </div>
+          <p class="hint" id="factu-count-hint" style="margin-top:8px; font-size:12px; color:var(--ink-muted);"></p>
+        </section>
+      </div>
+    </div>
+
     <footer>
       Widget IA MCDF — module « génération de rapports » (lecture seule),
       structuré à partir des rapports Power BI existants (Suivi Commercial,
@@ -443,12 +560,23 @@
       partagent le même identifiant — un bandeau l'indique si ce n'est
       pas le cas sur ce compte. La répartition Training/Coaching (page
       d'accueil Power BI d'origine) n'a pas de champ MCDF confirmé, elle
-      n'a donc pas été reconstruite ici.
+      n'a donc pas été reconstruite ici. Les onglets « CPF Sous-traitance »
+      et « Facturation » sont différents des autres : ils ne lisent pas
+      l'API MCDF, ils affichent un export Excel (<code>.xlsx</code>/<code>.xls</code>/<code>.csv</code>)
+      importé manuellement et gardé uniquement dans ce navigateur — voir la
+      note en haut de chaque onglet.
     </footer>
 
   </div>
 </div>
 
+<!--
+  SheetJS (lecture .xlsx/.xls dans le navigateur) -- charge uniquement pour
+  les onglets "CPF Sous-traitance" et "Facturation" (import manuel, voir
+  plus haut). Si ce script ne charge pas (reseau/proxy/CSP), l'import CSV
+  reste utilisable sans lui -- voir importSheetFile() plus bas.
+-->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 function fmtDate(iso) {
   const [y, m, d] = iso.slice(0, 10).split('-');
@@ -1228,7 +1356,7 @@ function buildSuggestContext() {
     'Contexte technique (pré-rempli automatiquement) :',
     '- Widget : Génération de rapports (widget-ia.html)',
     '- Entités API MCDF déjà utilisées ici : customer, fullConventionQualiopi, invoice, conventionAttendee, session, sessionQualiopi (via /wa/{entity}/list?nopaging=1)',
-    '- Onglets existants : Commercial, Planning, Formateurs, Listing',
+    '- Onglets existants : Commercial, Planning, Formateurs, Listing, CPF Sous-traitance (import Excel manuel), Facturation (import Excel manuel)',
     '',
   ].join('\n');
 }
@@ -1258,4 +1386,441 @@ function openSuggest(kind) {
 }
 document.getElementById('suggest-report-btn').addEventListener('click', () => openSuggest('report'));
 document.getElementById('suggest-filter-btn').addEventListener('click', () => openSuggest('filter'));
+
+// ------------------------------------------------------------------
+// Onglets "CPF Sous-traitance" et "Facturation" -- pas d'API MCDF ici,
+// import manuel d'un export Excel/CSV existant (voir la note dans
+// chaque onglet). Fonctionnent independamment du chargement des donnees
+// live plus haut : purement client, localStorage uniquement.
+// ------------------------------------------------------------------
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function fmtEUR2(n) {
+  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+}
+function fmtDateShort(d) {
+  return d ? d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
+}
+function monthKeyFromDate(d) {
+  return d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : null;
+}
+function parseNumber(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  let s = String(v).trim().replace(/[€ \s]/g, '');
+  if (!s) return null;
+  const lastComma = s.lastIndexOf(',');
+  const lastDot = s.lastIndexOf('.');
+  if (lastComma > -1 && lastDot > -1) {
+    if (lastComma > lastDot) s = s.replace(/\./g, '').replace(',', '.');
+    else s = s.replace(/,/g, '');
+  } else if (lastComma > -1) {
+    s = s.replace(',', '.');
+  }
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : null;
+}
+function parseDateCell(v) {
+  if (!v) return null;
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v;
+  const s = String(v).trim();
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+function slugHeader(s) {
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9%]+/g, ' ')
+    .trim();
+}
+function buildHeaderIndex(headerRow) {
+  const idx = {};
+  (headerRow || []).forEach((h, i) => {
+    const slug = slugHeader(h);
+    if (slug && !(slug in idx)) idx[slug] = i;
+  });
+  return idx;
+}
+function pickCol(idx, candidates) {
+  for (const c of candidates) if (c in idx) return idx[c];
+  return -1;
+}
+// Parseur CSV minimal (virgule ou point-virgule auto-detecte, champs entre
+// guillemets geres) -- utilise en secours si SheetJS ne charge pas
+// (.xlsx/.xls necessitent SheetJS, .csv fonctionne sans).
+function parseCsv(text) {
+  const firstLine = text.split(/\r?\n/, 1)[0] || '';
+  const delim = (firstLine.match(/;/g) || []).length > (firstLine.match(/,/g) || []).length ? ';' : ',';
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else { inQuotes = false; } }
+      else field += c;
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === delim) {
+      row.push(field); field = '';
+    } else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(field); field = ''; rows.push(row); row = [];
+    } else {
+      field += c;
+    }
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows.filter((r) => r.some((c) => String(c).trim() !== ''));
+}
+function readWorkbookFile(file, sheetHint) {
+  return new Promise((resolve, reject) => {
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    if (ext === 'csv') {
+      const reader = new FileReader();
+      reader.onload = () => resolve(parseCsv(reader.result));
+      reader.onerror = () => reject(new Error('Lecture du fichier impossible.'));
+      reader.readAsText(file, 'utf-8');
+      return;
+    }
+    if (typeof XLSX === 'undefined') {
+      reject(new Error('La bibliothèque de lecture Excel (SheetJS, cdnjs.cloudflare.com) n\'a pas pu se charger — vérifiez la connexion internet, ou exportez le fichier en .csv et réessayez.'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const wb = XLSX.read(reader.result, { type: 'array', cellDates: true });
+        const sheetName = (sheetHint && wb.SheetNames.find((n) => sheetHint.test(n))) || wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null, blankrows: false });
+        resolve(rows);
+      } catch (e) {
+        reject(new Error(`Fichier illisible : ${e.message}`));
+      }
+    };
+    reader.onerror = () => reject(new Error('Lecture du fichier impossible.'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// ---- CPF Sous-traitance ----
+const CPF_STORAGE_KEY = 'mcdf-report-cpf-v1';
+let CPF_ROWS = [];
+
+function parseCpfRows(aoa) {
+  if (!aoa || !aoa.length) throw new Error('Fichier vide.');
+  const idx = buildHeaderIndex(aoa[0]);
+  const iDossier = pickCol(idx, ['n dossier cpf', 'n dossier', 'dossier']);
+  const iIntitule = pickCol(idx, ['intitule de formation', 'intitule']);
+  const iDebut = pickCol(idx, ['date de debut', 'debut']);
+  const iFin = pickCol(idx, ['date de fin', 'fin']);
+  const iFacture = pickCol(idx, ['total facture ht', 'total facture', 'facture']);
+  const iHeuresDecl = pickCol(idx, ['heures declarees']);
+  const iHeuresST = pickCol(idx, ['heures sous traitees']);
+  const iPctST = pickCol(idx, ['% sous traitance', 'pourcentage sous traitance']);
+  const iCAST = pickCol(idx, ['ca sous traitance']);
+  if (iDossier === -1 && iIntitule === -1) {
+    throw new Error('Colonnes non reconnues — vérifiez qu\'il s\'agit bien de l\'export « CPF sous-traitance » (onglet Dossiers).');
+  }
+  const rows = [];
+  for (let r = 1; r < aoa.length; r++) {
+    const row = aoa[r];
+    if (!row || !row.length) continue;
+    const intitule = iIntitule > -1 ? row[iIntitule] : null;
+    const dossier = iDossier > -1 ? row[iDossier] : null;
+    if (!intitule && !dossier) continue;
+    if (String(dossier || '').trim().toUpperCase() === 'TOTAL') continue;
+    const facture = parseNumber(iFacture > -1 ? row[iFacture] : null) || 0;
+    const heuresDecl = parseNumber(iHeuresDecl > -1 ? row[iHeuresDecl] : null) || 0;
+    const heuresST = parseNumber(iHeuresST > -1 ? row[iHeuresST] : null) || 0;
+    let pctST = parseNumber(iPctST > -1 ? row[iPctST] : null);
+    const caST = parseNumber(iCAST > -1 ? row[iCAST] : null) || 0;
+    if (pctST === null) pctST = facture > 0 ? caST / facture : 0;
+    rows.push({
+      dossier: dossier ? String(dossier) : '—',
+      intitule: intitule ? String(intitule) : '(sans intitulé)',
+      debut: parseDateCell(iDebut > -1 ? row[iDebut] : null),
+      fin: parseDateCell(iFin > -1 ? row[iFin] : null),
+      facture, heuresDecl, heuresST, pctST, caST,
+    });
+  }
+  if (!rows.length) throw new Error('Aucune ligne de dossier trouvée dans ce fichier.');
+  return rows;
+}
+function saveCpfData(rows, filename) {
+  localStorage.setItem(CPF_STORAGE_KEY, JSON.stringify({
+    rows: rows.map((r) => ({ ...r, debut: r.debut ? r.debut.toISOString() : null, fin: r.fin ? r.fin.toISOString() : null })),
+    filename, importedAt: new Date().toISOString(),
+  }));
+}
+function loadCpfData() {
+  try {
+    const raw = localStorage.getItem(CPF_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    parsed.rows = parsed.rows.map((r) => ({ ...r, debut: r.debut ? new Date(r.debut) : null, fin: r.fin ? new Date(r.fin) : null }));
+    return parsed;
+  } catch (e) { return null; }
+}
+function pctClass(pct) {
+  if (pct >= 70) return 'crit';
+  if (pct >= 30) return 'warn';
+  return 'ok';
+}
+function renderCpfTable(rows) {
+  const tbody = document.getElementById('tbl-cpf');
+  tbody.innerHTML = '';
+  const sorted = rows.slice().sort((a, b) => b.pctST - a.pctST);
+  sorted.forEach((r) => {
+    const tr = el('tr');
+    tr.appendChild(el('td', 'strong', escapeHtml(r.dossier)));
+    tr.appendChild(el('td', '', escapeHtml(r.intitule)));
+    tr.appendChild(el('td', '', `${fmtDateShort(r.debut)} → ${fmtDateShort(r.fin)}`));
+    tr.appendChild(el('td', 'num', fmtEUR(r.facture)));
+    tr.appendChild(el('td', 'num', fmtH(r.heuresDecl)));
+    tr.appendChild(el('td', 'num', fmtH(r.heuresST)));
+    const pctDisplay = Math.round(r.pctST * 100);
+    const barTd = el('td', 'badge-td', `<div class="bar-cell"><div class="bar-track"><div class="bar-fill ${pctClass(pctDisplay)}" style="width:${Math.min(Math.max(pctDisplay, 0), 100)}%"></div></div><div class="bar-pct">${pctDisplay}%</div></div>`);
+    tr.appendChild(barTd);
+    tr.appendChild(el('td', 'num', fmtEUR(r.caST)));
+    tbody.appendChild(tr);
+  });
+  document.getElementById('cpf-count-hint').textContent = `${sorted.length} dossier(s) affiché(s).`;
+}
+function renderCpfContent(stored) {
+  CPF_ROWS = stored.rows;
+  document.getElementById('cpf-import-meta').innerHTML = `Importé : <strong>${escapeHtml(stored.filename)}</strong> le ${escapeHtml(new Date(stored.importedAt).toLocaleString('fr-FR'))} — ${CPF_ROWS.length} dossier(s).`;
+  document.getElementById('cpf-clear-btn').style.display = 'inline-block';
+  document.getElementById('cpf-content').style.display = 'block';
+
+  const totalFacture = CPF_ROWS.reduce((s, r) => s + r.facture, 0);
+  const totalCAST = CPF_ROWS.reduce((s, r) => s + r.caST, 0);
+  const pctGlobal = totalFacture > 0 ? (totalCAST / totalFacture) * 100 : 0;
+  const dates = CPF_ROWS.flatMap((r) => [r.debut, r.fin]).filter(Boolean);
+  const periodeLabel = dates.length ? `${fmtDateShort(new Date(Math.min(...dates)))} → ${fmtDateShort(new Date(Math.max(...dates)))}` : '—';
+
+  const kpis = document.getElementById('cpf-kpis');
+  kpis.innerHTML = '';
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Total CA CPF</p><p class="kpi-value">${fmtEUR(totalFacture)}</p><p class="kpi-sub">${escapeHtml(periodeLabel)}</p>`));
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Total CA sous-traité</p><p class="kpi-value">${fmtEUR(totalCAST)}</p><p class="kpi-sub">${CPF_ROWS.length} dossier(s)</p>`));
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">% Sous-traitance globale</p><p class="kpi-value">${pctGlobal.toFixed(1)}%</p>`));
+
+  renderCpfTable(CPF_ROWS);
+}
+function initCpfTab() {
+  const stored = loadCpfData();
+  if (stored && stored.rows && stored.rows.length) renderCpfContent(stored);
+
+  document.getElementById('cpf-file-input').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const meta = document.getElementById('cpf-import-meta');
+    meta.textContent = 'Lecture du fichier…';
+    try {
+      const aoa = await readWorkbookFile(file, /dossier/i);
+      const rows = parseCpfRows(aoa);
+      saveCpfData(rows, file.name);
+      renderCpfContent(loadCpfData());
+    } catch (err) {
+      meta.innerHTML = `<span style="color:var(--critical)">Échec de l'import : ${escapeHtml(err.message)}</span>`;
+    }
+    e.target.value = '';
+  });
+  document.getElementById('cpf-clear-btn').addEventListener('click', () => {
+    localStorage.removeItem(CPF_STORAGE_KEY);
+    CPF_ROWS = [];
+    document.getElementById('cpf-content').style.display = 'none';
+    document.getElementById('cpf-import-meta').textContent = 'Aucun fichier importé.';
+    document.getElementById('cpf-clear-btn').style.display = 'none';
+    document.getElementById('cpf-file-input').value = '';
+  });
+  document.getElementById('cpf-search').addEventListener('input', (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    const filtered = !q ? CPF_ROWS : CPF_ROWS.filter((r) => r.dossier.toLowerCase().includes(q) || r.intitule.toLowerCase().includes(q));
+    renderCpfTable(filtered);
+  });
+}
+
+// ---- Facturation ----
+const FACTU_STORAGE_KEY = 'mcdf-report-facturation-v1';
+let FACTU_ROWS = [];
+
+function parseFactuRows(aoa) {
+  if (!aoa || !aoa.length) throw new Error('Fichier vide.');
+  const idx = buildHeaderIndex(aoa[0]);
+  const iDate = pickCol(idx, ['date facture']);
+  const iNumFacture = pickCol(idx, ['n facture']);
+  const iDossier = pickCol(idx, ['n dossier']);
+  const iHT = pickCol(idx, ['montant ht']);
+  const iTVA = pickCol(idx, ['montant tva']);
+  const iTTC = pickCol(idx, ['montant ttc']);
+  const iReste = pickCol(idx, ['reste a payer ttc', 'reste a payer']);
+  const iClient = pickCol(idx, ['client']);
+  const iPayeur = pickCol(idx, ['payeur']);
+  if (iDate === -1 || iHT === -1) {
+    throw new Error('Colonnes non reconnues — vérifiez qu\'il s\'agit bien d\'un export de facturation (Date facture, Montant HT…).');
+  }
+  const rows = [];
+  for (let r = 1; r < aoa.length; r++) {
+    const row = aoa[r];
+    if (!row || !row.length) continue;
+    const date = parseDateCell(row[iDate]);
+    if (!date) continue;
+    const numFacture = iNumFacture > -1 ? String(row[iNumFacture] || '') : '';
+    rows.push({
+      date, numFacture,
+      dossier: iDossier > -1 ? String(row[iDossier] || '') : '',
+      montantHT: parseNumber(row[iHT]) || 0,
+      montantTVA: iTVA > -1 ? (parseNumber(row[iTVA]) || 0) : 0,
+      montantTTC: iTTC > -1 ? (parseNumber(row[iTTC]) || 0) : 0,
+      resteAPayer: iReste > -1 ? (parseNumber(row[iReste]) || 0) : 0,
+      client: iClient > -1 ? String(row[iClient] || '') : '',
+      payeur: iPayeur > -1 ? String(row[iPayeur] || '') : '',
+      avoir: /^a/i.test(numFacture),
+    });
+  }
+  if (!rows.length) throw new Error('Aucune ligne de facture trouvée dans ce fichier.');
+  return rows;
+}
+function saveFactuData(rows, filename) {
+  localStorage.setItem(FACTU_STORAGE_KEY, JSON.stringify({
+    rows: rows.map((r) => ({ ...r, date: r.date.toISOString() })),
+    filename, importedAt: new Date().toISOString(),
+  }));
+}
+function loadFactuData() {
+  try {
+    const raw = localStorage.getItem(FACTU_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    parsed.rows = parsed.rows.map((r) => ({ ...r, date: new Date(r.date) }));
+    return parsed;
+  } catch (e) { return null; }
+}
+function renderFactuChart(rows) {
+  const byMonth = {};
+  rows.forEach((r) => {
+    const k = monthKeyFromDate(r.date);
+    byMonth[k] = (byMonth[k] || 0) + r.montantHT;
+  });
+  const chartRows = Object.keys(byMonth).sort().map((mois) => ({ mois, montant: byMonth[mois] }));
+  document.getElementById('chart-factu').innerHTML = '';
+  document.getElementById('labels-factu').innerHTML = '';
+  if (chartRows.length) renderMiniChart('chart-factu', 'labels-factu', chartRows, 'montant', 'mois', (v) => fmtEUR(v));
+}
+function renderFactuTopPayeurs(rows) {
+  const byPayeur = {};
+  rows.forEach((r) => {
+    const name = r.payeur || r.client || '(non renseigné)';
+    if (!byPayeur[name]) byPayeur[name] = { payeur: escapeHtml(name), montant: 0, count: 0 };
+    byPayeur[name].montant += r.montantHT;
+    byPayeur[name].count += 1;
+  });
+  const top = Object.values(byPayeur).sort((a, b) => b.montant - a.montant).slice(0, 5);
+  const wrap = document.getElementById('rank-payeurs');
+  wrap.innerHTML = '';
+  if (top.length) renderRankList('rank-payeurs', top, 'payeur', 'montant', (r) => `${r.count} facture(s)`, (v) => fmtEUR(v));
+}
+function populateFactuMonthFilter(rows) {
+  const select = document.getElementById('factu-month-filter');
+  const current = select.value;
+  const months = Array.from(new Set(rows.map((r) => monthKeyFromDate(r.date)))).sort();
+  select.innerHTML = '<option value="">Tous les mois</option>' + months.map((m) => `<option value="${m}">${escapeHtml(fmtMonth(m))}</option>`).join('');
+  if (months.includes(current)) select.value = current;
+}
+function applyFactuFilters(rows) {
+  const month = document.getElementById('factu-month-filter').value;
+  const q = document.getElementById('factu-search').value.trim().toLowerCase();
+  return rows.filter((r) => {
+    if (month && monthKeyFromDate(r.date) !== month) return false;
+    if (q && !`${r.client} ${r.payeur} ${r.numFacture}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+function renderFactuTable(rows) {
+  const filtered = applyFactuFilters(rows).slice().sort((a, b) => a.date - b.date);
+  const tbody = document.getElementById('tbl-factu');
+  tbody.innerHTML = '';
+  filtered.forEach((r) => {
+    const tr = el('tr');
+    tr.appendChild(el('td', '', fmtDateShort(r.date)));
+    const numTd = el('td', 'strong', escapeHtml(r.numFacture) + (r.avoir ? ' <span class="badge age-warn"><span class="dot"></span>Avoir</span>' : ''));
+    tr.appendChild(numTd);
+    tr.appendChild(el('td', '', escapeHtml(r.dossier)));
+    tr.appendChild(el('td', '', escapeHtml(r.client)));
+    tr.appendChild(el('td', '', escapeHtml(r.payeur)));
+    tr.appendChild(el('td', 'num', fmtEUR2(r.montantHT)));
+    tr.appendChild(el('td', 'num', fmtEUR2(r.montantTTC)));
+    const resteTd = el('td', 'num', fmtEUR2(r.resteAPayer));
+    if (r.resteAPayer > 0.01) resteTd.style.color = 'var(--warning)';
+    tr.appendChild(resteTd);
+    tbody.appendChild(tr);
+  });
+  document.getElementById('factu-count-hint').textContent = `${filtered.length} facture(s) affichée(s) sur ${rows.length}.`;
+}
+function renderFacturationContent(stored) {
+  FACTU_ROWS = stored.rows;
+  document.getElementById('factu-import-meta').innerHTML = `Importé : <strong>${escapeHtml(stored.filename)}</strong> le ${escapeHtml(new Date(stored.importedAt).toLocaleString('fr-FR'))} — ${FACTU_ROWS.length} ligne(s).`;
+  document.getElementById('factu-clear-btn').style.display = 'inline-block';
+  document.getElementById('factu-content').style.display = 'block';
+
+  const totalHT = FACTU_ROWS.reduce((s, r) => s + r.montantHT, 0);
+  const totalTTC = FACTU_ROWS.reduce((s, r) => s + r.montantTTC, 0);
+  const totalReste = FACTU_ROWS.reduce((s, r) => s + r.resteAPayer, 0);
+  const nbAvoirs = FACTU_ROWS.filter((r) => r.avoir).length;
+  const dates = FACTU_ROWS.map((r) => r.date);
+  const periodeLabel = dates.length ? `${fmtDateShort(new Date(Math.min(...dates)))} → ${fmtDateShort(new Date(Math.max(...dates)))}` : '—';
+
+  const kpis = document.getElementById('factu-kpis');
+  kpis.innerHTML = '';
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Total facturé HT</p><p class="kpi-value">${fmtEUR(totalHT)}</p><p class="kpi-sub">${escapeHtml(periodeLabel)}</p>`));
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Total facturé TTC</p><p class="kpi-value">${fmtEUR(totalTTC)}</p>`));
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Reste à payer TTC</p><p class="kpi-value">${fmtEUR(totalReste)}</p><p class="kpi-sub ${totalReste > 0 ? 'down' : ''}">${totalReste > 0 ? 'impayé restant' : 'tout encaissé'}</p>`));
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Factures</p><p class="kpi-value">${FACTU_ROWS.length}</p><p class="kpi-sub">dont ${nbAvoirs} avoir(s)</p>`));
+
+  document.getElementById('factu-chart-hint').textContent = periodeLabel;
+  renderFactuChart(FACTU_ROWS);
+  renderFactuTopPayeurs(FACTU_ROWS);
+  populateFactuMonthFilter(FACTU_ROWS);
+  renderFactuTable(FACTU_ROWS);
+}
+function initFacturationTab() {
+  const stored = loadFactuData();
+  if (stored && stored.rows && stored.rows.length) renderFacturationContent(stored);
+
+  document.getElementById('factu-file-input').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const meta = document.getElementById('factu-import-meta');
+    meta.textContent = 'Lecture du fichier…';
+    try {
+      const aoa = await readWorkbookFile(file, /report|factu/i);
+      const rows = parseFactuRows(aoa);
+      saveFactuData(rows, file.name);
+      renderFacturationContent(loadFactuData());
+    } catch (err) {
+      meta.innerHTML = `<span style="color:var(--critical)">Échec de l'import : ${escapeHtml(err.message)}</span>`;
+    }
+    e.target.value = '';
+  });
+  document.getElementById('factu-clear-btn').addEventListener('click', () => {
+    localStorage.removeItem(FACTU_STORAGE_KEY);
+    FACTU_ROWS = [];
+    document.getElementById('factu-content').style.display = 'none';
+    document.getElementById('factu-import-meta').textContent = 'Aucun fichier importé.';
+    document.getElementById('factu-clear-btn').style.display = 'none';
+    document.getElementById('factu-file-input').value = '';
+  });
+  document.getElementById('factu-month-filter').addEventListener('change', () => renderFactuTable(FACTU_ROWS));
+  document.getElementById('factu-search').addEventListener('input', () => renderFactuTable(FACTU_ROWS));
+}
+
+initCpfTab();
+initFacturationTab();
 </script>
