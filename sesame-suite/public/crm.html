@@ -2590,9 +2590,35 @@ function showAffaires(){
 
 var dealViewMode = 'kanban'; // kanban | monthly
 var dealMonthlyLayout = 'list'; // list | kanban — sous-bascule de la vue "monthly"
+// Funnel des affaires en cours (renderDealFunnel) — masquable pour laisser
+// plus de place au Kanban en dessous, préférence mémorisée par navigateur
+// (comme le thème d'interface, cf. SESAME_UI_THEME) plutôt que remise à
+// zéro à chaque rechargement.
+var dealFunnelVisible = (function(){ try{ return localStorage.getItem('SESAME_CRM_FUNNEL_HIDDEN')!=='1'; }catch(e){ return true; } })();
 
 function dealSetViewMode(v){ dealViewMode = v; renderAffaires(); }
 function dealSetMonthlyLayout(v){ dealMonthlyLayout = v; renderAffaires(); }
+function dealToggleFunnel(){
+  dealFunnelVisible = !dealFunnelVisible;
+  try{ localStorage.setItem('SESAME_CRM_FUNNEL_HIDDEN', dealFunnelVisible?'0':'1'); }catch(e){}
+  renderAffaires();
+}
+
+// Détail montant d'une affaire, sur les cartes Kanban — montant ponctuel,
+// montant pondéré (ponctuel × probabilité, même convention que le pipeline
+// Trésorerie, cf. trDealsPipelineFor) et MRR (montant récurrent mensuel,
+// champ "amount"), chacun affiché seulement s'il est renseigné.
+function dealCardAmounts(d){
+  const pondere = (+d.montantPonctuel||0)*(+d.probability||0)/100;
+  const rows = [];
+  if(d.montantPonctuel) rows.push(['Ponctuel', fmtEUR(d.montantPonctuel)]);
+  if(pondere) rows.push(['Pondéré', fmtEUR(pondere)]);
+  if(d.amount) rows.push(['MRR', fmtEUR(d.amount)+'/mois']);
+  if(!rows.length) return '<span class="kanban-card-amount">—</span>';
+  return '<div style="display:flex;flex-direction:column;gap:1px">' + rows.map(([l,v])=>
+    `<div style="font-size:10px;line-height:1.4;white-space:nowrap"><span style="color:var(--mu)">${l} </span><b class="num" style="color:var(--tx);font-weight:600">${v}</b></div>`
+  ).join('') + '</div>';
+}
 
 function renderAffaires(){
   const filtered = dealFilterCommercial ? deals.filter(d=>d.commercialId===dealFilterCommercial) : deals;
@@ -2609,6 +2635,7 @@ function renderAffaires(){
       <button onclick="dealSetMonthlyLayout('list')" style="border:none;cursor:pointer;padding:6px 12px;font-size:12px;font-weight:500;background:${dealMonthlyLayout==='list'?'var(--tx)':'var(--card)'};color:${dealMonthlyLayout==='list'?'var(--card)':'var(--tx)'}">Liste</button>
       <button onclick="dealSetMonthlyLayout('kanban')" style="border:none;cursor:pointer;padding:6px 12px;font-size:12px;font-weight:500;background:${dealMonthlyLayout==='kanban'?'var(--tx)':'var(--card)'};color:${dealMonthlyLayout==='kanban'?'var(--card)':'var(--tx)'}">Kanban</button>
     </div>`:''}
+    ${dealViewMode==='kanban'?`<button class="btn btn-ghost btn-sm" onclick="dealToggleFunnel()" title="${dealFunnelVisible?'Masquer le funnel pour laisser plus de place au Kanban':'Afficher le funnel des affaires en cours'}">${dealFunnelVisible?'▲ Masquer le funnel':'▼ Afficher le funnel'}</button>`:''}
     <span class="count-lbl">${filtered.length} affaire${filtered.length>1?'s':''}</span>
   </div>`;
 
@@ -2629,14 +2656,14 @@ function renderAffaires(){
             <div class="kanban-card-title">${esc(d.title)}</div>
             <div class="kanban-card-client">${esc(d.prospectNom)}</div>
             <div class="kanban-card-foot">
-              <span class="kanban-card-amount">${fmtEUR(d.amount)}${d.amount?'/mois':''}</span>
+              ${dealCardAmounts(d)}
               ${d.commercialName?`<span class="commercial-chip" title="${esc(d.commercialName)}">${ini(d.commercialName)}</span>`:''}
             </div>
           </div>`).join('')}
       </div>
     </div>`;
   }).join('');
-  document.getElementById('main').innerHTML = filterBar + renderDealFunnel(filtered) + `<div class="kanban-wrap">${cols}</div>`;
+  document.getElementById('main').innerHTML = filterBar + (dealFunnelVisible?renderDealFunnel(filtered):'') + `<div class="kanban-wrap">${cols}</div>`;
 }
 
 // ── Vue "Mois par mois" — regroupe les affaires par mois de leur date de
@@ -2684,9 +2711,9 @@ function renderAffairesMonthly(filtered){
               <div style="font-size:11px;color:var(--mu)">${esc(d.prospectNom)}${d.commercialName?' · '+esc(d.commercialName):''}</div>
             </div>
             <div style="text-align:right;font-size:12px;flex:0 0 auto">
-              ${d.amount?`<div>${fmtEUR(d.amount)}/mois</div>`:''}
-              ${d.montantPonctuel?`<div style="color:var(--mu)">+${fmtEUR(d.montantPonctuel)} ponctuel</div>`:''}
-              <div style="color:var(--mu)">${d.probability||0}%</div>
+              ${d.amount?`<div>MRR ${fmtEUR(d.amount)}</div>`:''}
+              ${d.montantPonctuel?`<div style="color:var(--mu)">Ponctuel ${fmtEUR(d.montantPonctuel)}</div>`:''}
+              ${d.montantPonctuel?`<div style="color:var(--mu)">Pondéré ${fmtEUR((+d.montantPonctuel||0)*(+d.probability||0)/100)} (${d.probability||0}%)</div>`:`<div style="color:var(--mu)">${d.probability||0}%</div>`}
             </div>
           </div>`).join('')}
       </div>
@@ -2728,7 +2755,7 @@ function renderAffairesMonthlyKanban(filtered){
             <div class="kanban-card-title">${esc(d.title)}</div>
             <div class="kanban-card-client">${esc(d.prospectNom)}</div>
             <div class="kanban-card-foot">
-              <span class="kanban-card-amount">${d.amount?fmtEUR(d.amount)+'/mois':(d.montantPonctuel?fmtEUR(d.montantPonctuel)+' ponctuel':'—')}</span>
+              ${dealCardAmounts(d)}
               ${d.commercialName?`<span class="commercial-chip" title="${esc(d.commercialName)}">${ini(d.commercialName)}</span>`:''}
             </div>
           </div>`).join('')}
