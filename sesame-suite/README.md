@@ -2432,23 +2432,61 @@ sesame-suite/
     admin.html             # prototype d'origine (back-office), rebranché sur l'API
 ```
 
-### Reverse proxy Caddy — sous-domaines publics admin.sesame.technology / guest.sesame.technology (01/09/2026)
+### Exposition publique admin.sesame.technology / guest.sesame.technology — via nginx (pas Caddy) (01/09/2026)
 
-Ajout de `deploy/Caddyfile` et d'un service `caddy` dans `docker-compose.yml`
-pour exposer l'app sur deux sous-domaines publics en HTTPS, plutôt que sur
-l'IP nue avec le port 3000 en clair :
+Une première tentative avait ajouté un service `caddy` dans
+`docker-compose.yml` pour exposer l'app en HTTPS sur ces deux
+sous-domaines. Ça s'est révélé inutile et conflictuel : le serveur cible a
+un **nginx déjà installé et configuré côté hôte** (avec des certificats
+Let's Encrypt gérés par Certbot) qui fait déjà ce travail — Caddy se
+battait avec lui pour les ports 80/443 sans jamais gagner. Le service
+`caddy` a donc été retiré ; l'app ne publie plus que
+`127.0.0.1:3000:3000`, exactement l'adresse que nginx cible déjà dans ses
+`proxy_pass`.
 
-- `admin.sesame.technology` → back-office hôtel (`/admin`)
-- `guest.sesame.technology` → parcours client (`/`)
+**Bug corrigé dans la config nginx existante** (pas dans ce dépôt — fichier
+serveur `/etc/nginx/sites-enabled/admin.sesame.technology`, hors Git) :
+le bloc `location / { proxy_pass http://127.0.0.1:3000/admin/; }`
+réécrivait *toutes* les requêtes avec le préfixe `/admin/`, pas seulement
+la racine — d'où des 404 systématiques sur `/wa/login/login`, `/version`,
+les assets statiques, etc. (la page de connexion elle-même chargeait,
+laissant croire à tort à un problème de mot de passe). Corrigé en séparant
+`location = /` (racine exacte → `/admin`) de `location /` (tout le reste,
+transmis tel quel — `guest.sesame.technology` n'a pas ce problème, son
+`proxy_pass` ne porte pas de chemin) :
 
-Caddy obtient et renouvelle automatiquement les certificats Let's Encrypt
-dès que le DNS des deux domaines pointe vers le serveur (enregistrements A
-chez le registrar) et que les ports 80/443 sont ouverts. Le port 3000 de
-l'app n'est plus publié que sur `127.0.0.1` (accessible depuis l'hôte via
-`docker compose exec`, plus depuis l'extérieur) — tout le trafic public
-passe désormais par Caddy.
+```nginx
+location = / {
+    proxy_pass http://127.0.0.1:3000/admin;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
 
-Déploiement (une fois le DNS propagé) :
+location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+}
+```
+
+`nginx -t && systemctl reload nginx` après modification.
+
+Ce même nginx route aussi `test.moncentredeformation.fr` /
+`saas.moncentredeformation.fr` vers Tomcat sur `127.0.0.1:8080` — Tomcat a
+dû être déplacé du port 80 vers 8080 dans `/opt/tomcat/conf/server.xml`
+(`<Connector port="80" .../>` → `port="8080"`, suivi d'un
+`systemctl restart tomcat`) pour libérer le port que nginx occupe
+désormais en permanence.
+
+Déploiement (une fois `git pull` fait) :
 
 ```bash
 cd ~/seo && git fetch origin claude/typescript-nodejs-postgres-app-tgm9ol \
@@ -2460,36 +2498,6 @@ Le port 5432 de PostgreSQL reste publié sur toutes les interfaces
 (`"5432:5432"`) avec des identifiants par défaut (`sesame`/`sesame`) — à
 restreindre également (`127.0.0.1:5432:5432`, ou changer les identifiants)
 si l'exposition n'est pas requise depuis l'extérieur.
-
-#### Cohabitation avec Tomcat (MonCentreDeFormation) déjà présent sur le serveur
-
-Le serveur cible héberge déjà une autre application (MonCentreDeFormation,
-`test.moncentredeformation.fr`) via Tomcat écoutant directement sur le port
-80 — pour *tous* les domaines de la machine, pas seulement le sien, d'où
-`admin.sesame.technology` qui affichait par erreur cette appli (site par
-défaut de Tomcat) avant toute config Caddy. Deux processus ne pouvant pas
-se partager le même port, Tomcat doit être déplacé sur un port interne
-avant de démarrer Caddy — `deploy/Caddyfile` route ensuite explicitement
-les trois domaines vers le bon backend (`test.moncentredeformation.fr` vers
-Tomcat via `host.docker.internal:8080`, cf. `extra_hosts` du service
-`caddy`).
-
-Étapes côté serveur (une seule fois) :
-
-1. Dans `/opt/tomcat/conf/server.xml`, repérer le connecteur HTTP
-   (`<Connector port="80" ... />`) et changer `port="80"` en `port="8080"`
-   (et de même pour un éventuel connecteur `port="443"` → `8443`, si Tomcat
-   sert du HTTPS directement).
-2. Redémarrer Tomcat (ex. `systemctl restart tomcat`, selon la configuration
-   du service sur ce serveur) et vérifier qu'il écoute bien désormais sur
-   8080 : `ss -tlnp | grep java`.
-3. Vérifier que le port 80 est libre : `ss -tlnp | grep ':80 '` ne doit plus
-   rien renvoyer.
-4. Lancer `docker compose up -d` (cf. ci-dessus) — Caddy peut maintenant
-   prendre les ports 80/443 et distribuer les trois domaines.
-5. Vérifier les trois : `curl -I https://admin.sesame.technology`,
-   `curl -I https://guest.sesame.technology`,
-   `curl -I https://test.moncentredeformation.fr`.
 
 ### Intégration réservations : webhook entrant (notifications temps réel, ex. Mews)
 

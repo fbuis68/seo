@@ -41,38 +41,13 @@ services:
       JWT_SECRET: change-me-in-production
       DEFAULT_ENTITY_CODE: E00000001
     ports:
-      # Réservé à la machine hôte (docker compose exec, scripts one-off,
-      # debug via SSH tunnel) — le trafic public passe désormais par le
-      # service caddy ci-dessous, qui termine le TLS et route par
-      # sous-domaine. Retirer le "127.0.0.1:" ci-dessous republierait le
-      # port 3000 en clair sur Internet, en plus des domaines HTTPS.
+      # Réservé à la machine hôte : nginx (déjà installé et configuré sur le
+      # serveur, certificats Let's Encrypt via Certbot — cf. README) fait
+      # office de reverse proxy public et route admin.sesame.technology /
+      # guest.sesame.technology vers cette adresse. Ne PAS republier sur
+      # 0.0.0.0, ça exposerait le port 3000 en clair sur Internet en plus
+      # du HTTPS servi par nginx.
       - "127.0.0.1:3000:3000"
-
-  # Reverse proxy — admin.sesame.technology / guest.sesame.technology vers
-  # l'app, avec certificats Let's Encrypt automatiques (cf. deploy/Caddyfile).
-  # Sert aussi test.moncentredeformation.fr (Tomcat, déplacé sur le port
-  # 8080 de l'hôte — cf. README) : Caddy est le seul service sur 80/443,
-  # Tomcat n'y écoute plus directement. Nécessite que le DNS des domaines
-  # pointe déjà vers ce serveur, et que les ports 80/443 soient ouverts sur
-  # le pare-feu.
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    depends_on:
-      - app
-    ports:
-      - "80:80"
-      - "443:443"
-    extra_hosts:
-      # Permet à Caddy (dans son propre réseau Docker) de joindre Tomcat,
-      # qui tourne directement sur la machine hôte et non dans un conteneur.
-      - "host.docker.internal:host-gateway"
-    volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
 
 volumes:
   sesame_pg_data:
-  caddy_data:
-  caddy_config:
