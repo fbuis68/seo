@@ -42,6 +42,7 @@ function shapeProspect(p: {
   effectifSalarie: string | null;
   adresse: string | null;
   ville: string | null;
+  pays: string | null;
   lat: number | null;
   lng: number | null;
   etoiles: string | null;
@@ -116,6 +117,7 @@ function shapeProspect(p: {
     effectifSalarie: p.effectifSalarie || "",
     adresse: p.adresse || "",
     ville: p.ville || "",
+    pays: p.pays || "",
     lat: p.lat,
     lng: p.lng,
     etoiles: p.etoiles || "",
@@ -195,6 +197,7 @@ interface ProspectBody {
   effectifSalarie?: string;
   adresse?: string;
   ville?: string;
+  pays?: string;
   lat?: number | null;
   lng?: number | null;
   etoiles?: string;
@@ -261,6 +264,7 @@ crmProspectRouter.post(
         effectifSalarie: b.effectifSalarie,
         adresse: b.adresse.trim(),
         ville: b.ville.trim(),
+        pays: b.pays || undefined,
         lat: b.lat ?? undefined,
         lng: b.lng ?? undefined,
         etoiles: b.etoiles,
@@ -349,6 +353,7 @@ crmProspectRouter.post(
         effectifSalarie: b.effectifSalarie,
         adresse: b.adresse?.trim(),
         ville: b.ville,
+        pays: b.pays,
         lat: b.lat,
         lng: b.lng,
         etoiles: b.etoiles,

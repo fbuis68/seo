@@ -1367,7 +1367,7 @@ function renderFiche(c){
       <div class="field"><div class="fl"><span class="fl-ico">J</span> Forme juridique</div><div class="fv">${c.formeJuridique?esc(c.formeJuridique):'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">C</span> Créée le</div><div class="fv">${c.dateCreationEntreprise?new Date(c.dateCreationEntreprise).toLocaleDateString('fr-FR'):'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">N</span> Effectif salarié</div><div class="fv">${c.effectifSalarie?esc(c.effectifSalarie):'—'}</div></div>
-      <div class="field"><div class="fl"><span class="fl-ico">A</span> Adresse</div><div class="fv">${c.adresse?esc(c.adresse)+(c.ville?', '+esc(c.ville):''):'—'}</div></div>
+      <div class="field"><div class="fl"><span class="fl-ico">A</span> Adresse</div><div class="fv">${c.adresse?esc(c.adresse)+(c.ville?', '+esc(c.ville):'')+(c.pays?', '+esc(c.pays):''):'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">R</span> Référent</div><div class="fv">${c.referent||'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">◆</span> Commercial</div><div class="fv">${c.commercialName||'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">@</span> Email</div><div class="fv">${c.email?`<a href="mailto:${c.email}">${c.email}</a>`:'—'}</div></div>
@@ -1681,7 +1681,7 @@ function supportBadge(c){
 // MODAL EDIT CLIENT
 // ════════════════════════════════════════
 function openModal(id){const c=clients.find(c=>c.id===id);if(c)renderModal({...c});}
-function openNewModal(){renderModal({id:null,nom:'',type:'Client',groupe:'',secteur:'Hôtellerie',denominationSociale:'',siret:'',siren:'',formeJuridique:'',dateCreationEntreprise:null,effectifSalarie:'',adresse:'',ville:'',lat:null,lng:null,etoiles:'',danger:'Modéré',potentiel:2,contrat:'non',modules:0,moduleSesame:false,moduleTtlock:false,moduleOneway:false,nbAcces:0,mrr:null,pms:'',priorite:1,appel:'',referent:'',email:'',tel:'',site:'',nfc:0,qr:0,mobile:0,webApp:false,mobileV2:false,checkin:false,livret:false,gestionDemande:false,offline:false,messagerie:'Noreply',note:'',commercialId:'',journal:[],_new:true});}
+function openNewModal(){renderModal({id:null,nom:'',type:'Client',groupe:'',secteur:'Hôtellerie',denominationSociale:'',siret:'',siren:'',formeJuridique:'',dateCreationEntreprise:null,effectifSalarie:'',adresse:'',ville:'',pays:'France',lat:null,lng:null,etoiles:'',danger:'Modéré',potentiel:2,contrat:'non',modules:0,moduleSesame:false,moduleTtlock:false,moduleOneway:false,nbAcces:0,mrr:null,pms:'',priorite:1,appel:'',referent:'',email:'',tel:'',site:'',nfc:0,qr:0,mobile:0,webApp:false,mobileV2:false,checkin:false,livret:false,gestionDemande:false,offline:false,messagerie:'Noreply',note:'',commercialId:'',journal:[],_new:true});}
 
 // Autocomplétion d'adresse via l'API Adresse (BAN — Base Adresse Nationale,
 // data.gouv.fr) : gratuite, sans clé, réponse CORS directement utilisable
@@ -1719,9 +1719,10 @@ function pickAdresse(i){
   const p=f.properties||{};
   const coords=(f.geometry&&f.geometry.coordinates)||null;
   const a=document.getElementById('m-adresse'), v=document.getElementById('m-ville'), box=document.getElementById('m-adresse-suggestions');
-  const lat=document.getElementById('m-lat'), lng=document.getElementById('m-lng');
+  const lat=document.getElementById('m-lat'), lng=document.getElementById('m-lng'), pays=document.getElementById('m-pays');
   if(a) a.value = p.name||'';
   if(v && p.city) v.value = p.city;
+  if(pays) pays.value = 'France'; // l'API Adresse (BAN) ne couvre que la France
   if(coords){ if(lat)lat.value=coords[1]; if(lng)lng.value=coords[0]; }
   if(box){ box.style.display='none'; box.innerHTML=''; }
 }
@@ -1812,7 +1813,7 @@ function pickEntreprise(i){
     : '';
 
   const d=document.getElementById('m-denomination'), s=document.getElementById('m-siret'), n=document.getElementById('m-siren');
-  const a=document.getElementById('m-adresse'), v=document.getElementById('m-ville');
+  const a=document.getElementById('m-adresse'), v=document.getElementById('m-ville'), pays=document.getElementById('m-pays');
   const fj=document.getElementById('m-forme-juridique'), dc=document.getElementById('m-date-creation'), ef=document.getElementById('m-effectif');
   const ref=document.getElementById('m-referent');
   const lat_=document.getElementById('m-lat'), lng_=document.getElementById('m-lng');
@@ -1822,6 +1823,7 @@ function pickEntreprise(i){
   if(n) n.value = siren;
   if(a && street) a.value = street;
   if(v && city) v.value = city;
+  if(pays) pays.value = 'France'; // le répertoire SIRENE ne couvre que la France
   if(fj) fj.value = formeJuridiqueLabel(e.nature_juridique);
   if(dc && e.date_creation) dc.value = e.date_creation;
   if(ef) ef.value = effectifLabel(e.tranche_effectif_salarie);
@@ -1861,6 +1863,11 @@ function renderModal(mc){
           <div id="m-adresse-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:var(--card,#fff);border:1px solid var(--bdr,#e2dfd9);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.1);max-height:180px;overflow-y:auto"></div>
         </div>
         <div class="ff"><label>Ville *</label><input id="m-ville" value="${esc(mc.ville)}" placeholder="—" oninput="clearMLatLng()"></div>
+        <div class="ff">
+          <label>Pays</label>
+          <input id="m-pays" value="${esc(mc.pays||'France')}" placeholder="France" list="m-pays-options" oninput="clearMLatLng()">
+          <datalist id="m-pays-options"><option value="France"><option value="Belgique"><option value="Suisse"><option value="Luxembourg"><option value="Monaco"><option value="Italie"><option value="Espagne"><option value="Allemagne"><option value="Royaume-Uni"><option value="Portugal"></datalist>
+        </div>
         <div class="ff"><label>Étoiles</label><input id="m-etoiles" value="${esc(mc.etoiles)}" placeholder="ex. ***"></div>
         <div class="ff"><label>Référent</label><input id="m-referent" value="${esc(mc.referent)}" placeholder="Nom, prénom"></div>
         <div class="ff"><label>Email</label><input type="email" id="m-email" value="${esc(mc.email)}" placeholder="—"></div>
@@ -1966,7 +1973,7 @@ async function saveModal(id,isNew){
     nom:g('m-nom').value.trim(),type:g('m-type').value,groupe:g('m-groupe').value,secteur:g('m-secteur').value,
     denominationSociale:g('m-denomination').value.trim(),siret:g('m-siret').value.trim(),siren:g('m-siren').value.trim(),
     formeJuridique:g('m-forme-juridique').value.trim(),dateCreationEntreprise:g('m-date-creation').value||null,effectifSalarie:g('m-effectif').value.trim(),
-    adresse:g('m-adresse').value.trim(),ville:g('m-ville').value.trim(),
+    adresse:g('m-adresse').value.trim(),ville:g('m-ville').value.trim(),pays:g('m-pays').value.trim(),
     // m-lat/m-lng : remplis par pickAdresse()/pickEntreprise() quand une
     // suggestion vient d'être choisie, vidés par clearMLatLng() dès que
     // adresse/ville est retapée à la main — sinon ils gardent la valeur déjà
@@ -4406,8 +4413,8 @@ async function testRule(id){
 // CSV EXPORT
 // ════════════════════════════════════════
 function exportCSV(){
-  const h=['ID','Type','Nom','Dénomination sociale','SIRET','SIREN','Forme juridique','Créée le','Effectif salarié','Groupe','Secteur','Adresse','Ville','Étoiles','Risque','Potentiel','Contrat','Modules','PMS','Priorité','Appel','Référent','Email','Tél','Site','NFC%','Mobile%','Code%','QR%','WebApp','MobileV2','Offline','Check-in','Onb. Choix chambre','Onb. Occupant','Onb. Identité','Onb. Ménage','Esp. Boutique','Esp. Points','Esp. Livret','Esp. Demande','Esp. Évènements','Messagerie','Note','Nb activités'];
-  const rows=clients.map(c=>[c.id,c.type,c.nom,c.denominationSociale,c.siret,c.siren,c.formeJuridique,c.dateCreationEntreprise?new Date(c.dateCreationEntreprise).toLocaleDateString('fr-FR'):'',c.effectifSalarie,c.groupe,c.secteur,c.adresse,c.ville,c.etoiles,c.danger,c.potentiel,c.contrat,c.modules,c.pms,c.priorite,c.appel,c.referent,c.email,c.tel,c.site,c.nfc,c.mobile,c.code,c.qr,c.webApp?'oui':'non',c.mobileV2?'oui':'non',c.offline?'oui':'non',c.checkin?'oui':'non',c.onbChoixChambres?'oui':'non',c.onbOccupant?'oui':'non',c.onbIdentite?'oui':'non',c.onbMenage?'oui':'non',c.espBoutique?'oui':'non',c.espPoint?'oui':'non',c.livret?'oui':'non',c.gestionDemande?'oui':'non',c.espEvenement?'oui':'non',c.messagerie,c.note,(c.journal||[]).length].map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`));
+  const h=['ID','Type','Nom','Dénomination sociale','SIRET','SIREN','Forme juridique','Créée le','Effectif salarié','Groupe','Secteur','Adresse','Ville','Pays','Étoiles','Risque','Potentiel','Contrat','Modules','PMS','Priorité','Appel','Référent','Email','Tél','Site','NFC%','Mobile%','Code%','QR%','WebApp','MobileV2','Offline','Check-in','Onb. Choix chambre','Onb. Occupant','Onb. Identité','Onb. Ménage','Esp. Boutique','Esp. Points','Esp. Livret','Esp. Demande','Esp. Évènements','Messagerie','Note','Nb activités'];
+  const rows=clients.map(c=>[c.id,c.type,c.nom,c.denominationSociale,c.siret,c.siren,c.formeJuridique,c.dateCreationEntreprise?new Date(c.dateCreationEntreprise).toLocaleDateString('fr-FR'):'',c.effectifSalarie,c.groupe,c.secteur,c.adresse,c.ville,c.pays,c.etoiles,c.danger,c.potentiel,c.contrat,c.modules,c.pms,c.priorite,c.appel,c.referent,c.email,c.tel,c.site,c.nfc,c.mobile,c.code,c.qr,c.webApp?'oui':'non',c.mobileV2?'oui':'non',c.offline?'oui':'non',c.checkin?'oui':'non',c.onbChoixChambres?'oui':'non',c.onbOccupant?'oui':'non',c.onbIdentite?'oui':'non',c.onbMenage?'oui':'non',c.espBoutique?'oui':'non',c.espPoint?'oui':'non',c.livret?'oui':'non',c.gestionDemande?'oui':'non',c.espEvenement?'oui':'non',c.messagerie,c.note,(c.journal||[]).length].map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`));
   const csv='﻿'+[h,...rows].map(r=>r.join(';')).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='sesame_crm_export.csv';a.click();
 }
