@@ -1,16 +1,26 @@
-# Reverse proxy Caddy — sous-domaines publics vers l'app Sesame Suite.
+# Reverse proxy Caddy — sous-domaines publics vers l'app Sesame Suite, ET
+# vers l'application Tomcat déjà présente sur ce même serveur.
 #
-# admin.sesame.technology  -> back-office hôtel (servi par l'app sur /admin)
-# guest.sesame.technology  -> parcours client   (servi par l'app sur /  )
+# admin.sesame.technology     -> back-office hôtel Sesame (servi par l'app sur /admin)
+# guest.sesame.technology     -> parcours client Sesame   (servi par l'app sur /  )
+# test.moncentredeformation.fr -> application MonCentreDeFormation (Tomcat, préexistante)
 #
-# Toutes les autres routes (API /wa/*, /version, assets statiques...) sont
-# partagées par les deux apps et vivent au même chemin quel que soit le
-# sous-domaine — seule la page d'accueil (/) est donc réécrite pour
+# Toutes les autres routes Sesame (API /wa/*, /version, assets statiques...)
+# sont partagées par les deux apps Sesame et vivent au même chemin quel que
+# soit le sous-domaine — seule la page d'accueil (/) est donc réécrite pour
 # admin.sesame.technology ; guest.sesame.technology n'a besoin d'aucune
 # réécriture puisque le parcours client est déjà servi à la racine.
 #
+# Avant ce fichier, Tomcat écoutait directement sur le port 80/443 pour
+# TOUS les domaines de ce serveur (pas seulement le sien) — d'où
+# admin.sesame.technology qui affichait par erreur MonCentreDeFormation
+# (site par défaut de Tomcat) tant que rien d'autre ne captait ce nom.
+# Tomcat doit être déplacé sur un port interne (8080, cf. README) pour
+# libérer 80/443 à Caddy, qui redevient alors le seul point d'entrée
+# public et distribue chaque domaine au bon backend.
+#
 # Caddy obtient et renouvelle automatiquement un certificat Let's Encrypt
-# pour chaque domaine listé ci-dessous dès que le DNS pointe vers ce
+# pour chaque domaine listé ci-dessous dès que son DNS pointe vers ce
 # serveur et que les ports 80/443 sont ouverts — aucune configuration
 # certbot séparée n'est nécessaire.
 
@@ -22,4 +32,8 @@ admin.sesame.technology {
 
 guest.sesame.technology {
 	reverse_proxy app:3000
+}
+
+test.moncentredeformation.fr {
+	reverse_proxy host.docker.internal:8080
 }

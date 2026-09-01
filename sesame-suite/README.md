@@ -2461,6 +2461,36 @@ Le port 5432 de PostgreSQL reste publié sur toutes les interfaces
 restreindre également (`127.0.0.1:5432:5432`, ou changer les identifiants)
 si l'exposition n'est pas requise depuis l'extérieur.
 
+#### Cohabitation avec Tomcat (MonCentreDeFormation) déjà présent sur le serveur
+
+Le serveur cible héberge déjà une autre application (MonCentreDeFormation,
+`test.moncentredeformation.fr`) via Tomcat écoutant directement sur le port
+80 — pour *tous* les domaines de la machine, pas seulement le sien, d'où
+`admin.sesame.technology` qui affichait par erreur cette appli (site par
+défaut de Tomcat) avant toute config Caddy. Deux processus ne pouvant pas
+se partager le même port, Tomcat doit être déplacé sur un port interne
+avant de démarrer Caddy — `deploy/Caddyfile` route ensuite explicitement
+les trois domaines vers le bon backend (`test.moncentredeformation.fr` vers
+Tomcat via `host.docker.internal:8080`, cf. `extra_hosts` du service
+`caddy`).
+
+Étapes côté serveur (une seule fois) :
+
+1. Dans `/opt/tomcat/conf/server.xml`, repérer le connecteur HTTP
+   (`<Connector port="80" ... />`) et changer `port="80"` en `port="8080"`
+   (et de même pour un éventuel connecteur `port="443"` → `8443`, si Tomcat
+   sert du HTTPS directement).
+2. Redémarrer Tomcat (ex. `systemctl restart tomcat`, selon la configuration
+   du service sur ce serveur) et vérifier qu'il écoute bien désormais sur
+   8080 : `ss -tlnp | grep java`.
+3. Vérifier que le port 80 est libre : `ss -tlnp | grep ':80 '` ne doit plus
+   rien renvoyer.
+4. Lancer `docker compose up -d` (cf. ci-dessus) — Caddy peut maintenant
+   prendre les ports 80/443 et distribuer les trois domaines.
+5. Vérifier les trois : `curl -I https://admin.sesame.technology`,
+   `curl -I https://guest.sesame.technology`,
+   `curl -I https://test.moncentredeformation.fr`.
+
 ## Prochaine itération suggérée
 
 1. App agent ménage (`sesame_menage.html`) branchée sur

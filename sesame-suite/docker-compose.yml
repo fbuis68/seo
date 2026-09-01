@@ -50,8 +50,11 @@ services:
 
   # Reverse proxy — admin.sesame.technology / guest.sesame.technology vers
   # l'app, avec certificats Let's Encrypt automatiques (cf. deploy/Caddyfile).
-  # Nécessite que le DNS des deux domaines pointe déjà vers ce serveur, et
-  # que les ports 80/443 soient ouverts sur le pare-feu.
+  # Sert aussi test.moncentredeformation.fr (Tomcat, déplacé sur le port
+  # 8080 de l'hôte — cf. README) : Caddy est le seul service sur 80/443,
+  # Tomcat n'y écoute plus directement. Nécessite que le DNS des domaines
+  # pointe déjà vers ce serveur, et que les ports 80/443 soient ouverts sur
+  # le pare-feu.
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
@@ -60,6 +63,10 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    extra_hosts:
+      # Permet à Caddy (dans son propre réseau Docker) de joindre Tomcat,
+      # qui tourne directement sur la machine hôte et non dans un conteneur.
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
