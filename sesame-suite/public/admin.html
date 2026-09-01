@@ -7099,6 +7099,7 @@ function emlRenderTemplates(){
   }
   el.innerHTML = tpls.map(function(t){
     var detail = t.channel==='email' ? ('Objet : '+esc(t.subject)) : esc(t.bodyHtml).slice(0,80);
+    if(t.channel==='whatsapp') detail += t.whatsappContentSid ? ' · Content SID : '+esc(t.whatsappContentSid) : ' · <span style="color:var(--bad,#b23b2c)">Content SID manquant — envoi impossible</span>';
     return '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--bdr)">'
       + '<div style="flex:1"><strong style="font-size:13px">'+esc(t.name)+'</strong> <span style="color:var(--mu);font-size:11px">('+esc(t.key)+')</span>'
       + '<div style="font-size:12px;color:var(--mu);margin-top:2px">'+detail+'</div></div>'
@@ -7127,6 +7128,8 @@ function emlOpenTemplateModal(id){
     + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'
     + EML_TPL_VARS.map(function(v){return '<span class="bdg bgb" style="cursor:pointer" title="'+esc(v.desc)+'" onclick="emlInsertVar(\''+v.key+'\')">{{'+v.key+'}}</span>';}).join('')
     + '</div></div>'
+    + '<div class="fi" id="eml-tpl-sid-wrap"><label class="lb">Content SID Twilio (WhatsApp)</label><input type="text" id="eml-tpl-sid" value="'+esc(t.whatsappContentSid||'')+'" placeholder="HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">'
+    + '<div style="font-size:11px;color:var(--mu);margin-top:4px">WhatsApp Business interdit le texte libre hors session client — créez d\'abord ce modèle dans Twilio (Messaging → Content Template Builder), faites-le approuver par Meta, puis collez ici son Content SID. Les variables {{var}} ci-dessus doivent apparaître dans le même ordre que les {{1}} {{2}}… du modèle approuvé.</div></div>'
     + '<div class="brow"><button class="btn btn-p" onclick="emlSaveTemplate('+(t.id?"'"+t.id+"'":'null')+')"><i class="ti ti-device-floppy"></i> Enregistrer</button>'
     + '<button class="btn btn-s" onclick="emlCloseTemplateModal()">Annuler</button></div>'
     + '</div></div>';
@@ -7153,7 +7156,9 @@ function emlInsertVar(key){
 function emlRenderTplSubjectVisibility(){
   var sel = document.getElementById('eml-tpl-channel');
   var wrap = document.getElementById('eml-tpl-subject-wrap');
+  var sidWrap = document.getElementById('eml-tpl-sid-wrap');
   if(sel && wrap) wrap.style.display = sel.value==='email' ? '' : 'none';
+  if(sel && sidWrap) sidWrap.style.display = sel.value==='whatsapp' ? '' : 'none';
 }
 
 function emlCloseTemplateModal(){
@@ -7167,8 +7172,9 @@ async function emlSaveTemplate(id){
     name: document.getElementById('eml-tpl-name').value.trim(),
     subject: document.getElementById('eml-tpl-subject').value.trim(),
     bodyHtml: document.getElementById('eml-tpl-body').value,
+    whatsappContentSid: document.getElementById('eml-tpl-sid').value.trim(),
   };
-  if(!body.key || !body.name || !body.bodyHtml || (body.channel==='email' && !body.subject)){ toast('Tous les champs sont requis'); return; }
+  if(!body.key || !body.name || !body.bodyHtml || (body.channel==='email' && !body.subject) || (body.channel==='whatsapp' && !body.whatsappContentSid)){ toast('Tous les champs sont requis'); return; }
   try{
     var r = await adminFetch('/wa/messageTemplate/upsert', {method:'POST', body:JSON.stringify(body)});
     var data = await r.json();

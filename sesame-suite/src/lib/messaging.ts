@@ -1,7 +1,7 @@
 import { prisma } from "../db";
 import { HttpError } from "./asyncHandler";
 import { sendEmailRaw } from "./email";
-import { sendChannelRaw } from "./sms";
+import { sendChannelRaw, sendWhatsAppTemplate } from "./sms";
 import { Channel } from "./messageTemplate";
 
 /**
@@ -13,6 +13,19 @@ import { Channel } from "./messageTemplate";
 
 function renderTemplate(str: string, vars: Record<string, string>): string {
   return str.replace(/\{\{\s*(\w+)\s*\}\}/g, (_match, key) => vars[key] ?? "");
+}
+
+/**
+ * Valeurs des variables {{var}} d'un modèle, dans leur ordre d'apparition —
+ * sert à construire les ContentVariables Twilio ("1","2",...) attendues par
+ * un Content Template WhatsApp approuvé, dont les emplacements numérotés
+ * suivent le même ordre que les {{var}} de notre bodyHtml (convention
+ * documentée dans l'éditeur de modèle).
+ */
+function extractOrderedVariableValues(str: string, vars: Record<string, string>): string[] {
+  const values: string[] = [];
+  for (const m of str.matchAll(/\{\{\s*(\w+)\s*\}\}/g)) values.push(vars[m[1]] ?? "");
+  return values;
 }
 
 export async function sendMessage(opts: {
@@ -35,6 +48,23 @@ export async function sendMessage(opts: {
 
   if (opts.channel === "email") {
     await sendEmailRaw(opts.entityId, opts.to, subject, body, opts.fromNameOverride);
+  } else if (opts.channel === "whatsapp") {
+    // WhatsApp Business interdit le texte libre business-initié en dehors
+    // d'une fenêtre de session client de 24h (règle Meta, pas une limite
+    // Twilio) : ce modèle doit obligatoirement avoir un Content Template
+    // approuvé lié (whatsappContentSid), sans quoi l'envoi échouerait
+    // silencieusement côté WhatsApp — on refuse donc explicitement plutôt
+    // que de retomber sur l'ancien envoi en texte libre.
+    if (!template.whatsappContentSid) {
+      throw new HttpError(
+        400,
+        "Ce modèle WhatsApp n'a pas de Content SID Twilio — créez le modèle correspondant dans Twilio (Content Template Builder), faites-le approuver par Meta, puis collez son Content SID dans ce modèle Sesame."
+      );
+    }
+    const contentVariables = Object.fromEntries(
+      extractOrderedVariableValues(template.bodyHtml, vars).map((v, i) => [String(i + 1), v])
+    );
+    await sendWhatsAppTemplate(opts.entityId, opts.to, template.whatsappContentSid, contentVariables);
   } else {
     await sendChannelRaw(opts.entityId, opts.channel, opts.to, body);
   }

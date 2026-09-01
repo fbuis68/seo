@@ -3942,7 +3942,7 @@ function renderCanauxPanel(){
         <div class="log-dot ld-b"></div>
         <div class="log-body">
           <div class="log-text"><strong>${esc(t.name)}</strong> <span style="color:#aaa;font-size:11px">(${esc(t.key)})</span></div>
-          <div class="log-meta">${t.channel==='email'?'Objet : '+esc(t.subject):esc(t.bodyHtml).slice(0,80)}</div>
+          <div class="log-meta">${t.channel==='email'?'Objet : '+esc(t.subject):esc(t.bodyHtml).slice(0,80)}${t.channel==='whatsapp'?(t.whatsappContentSid?' · Content SID : '+esc(t.whatsappContentSid):' · <span style="color:#b23b2c">Content SID manquant — envoi impossible</span>'):''}</div>
           <div class="log-acts">
             <button class="btn btn-sm btn-ghost" onclick="openTemplateModal('${t.id}')">Modifier</button>
             <button class="btn btn-sm btn-ghost" style="color:#a32d2d" onclick="deleteTemplate('${t.id}')">Supprimer</button>
@@ -4025,6 +4025,8 @@ function openTemplateModal(id){
       <div class="ff" id="tpl-subject-wrap" style="margin-top:8px"><label>Objet (email uniquement)</label><input id="tpl-subject" value="${esc(t.subject)}" placeholder="Sesame Technology — {{nom}}"></div>
       <div class="ff" style="margin-top:8px"><label>Corps (email : HTML ; SMS/WhatsApp : texte)</label><textarea id="tpl-body" style="height:160px">${t.bodyHtml||''}</textarea></div>
       <div style="font-size:11px;color:var(--text-muted,#888);margin-top:-4px">Variables — envoi depuis une fiche prospect : {{nom}} {{secteur}} {{referent}} {{ville}} · envoi depuis "Utilisateurs CRM" (identifiants de connexion) : {{login}} {{password}} {{loginUrl}}</div>
+      <div class="ff" id="tpl-sid-wrap" style="margin-top:8px"><label>Content SID Twilio (WhatsApp)</label><input id="tpl-sid" value="${esc(t.whatsappContentSid||'')}" placeholder="HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+        <div style="font-size:11px;color:#888;margin-top:4px">WhatsApp Business interdit le texte libre hors session client — créez d'abord ce modèle dans Twilio (Messaging → Content Template Builder), faites-le approuver par Meta, puis collez ici son Content SID. Les variables {{var}} ci-dessus doivent apparaître dans le même ordre que les {{1}} {{2}}… du modèle approuvé.</div></div>
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="saveTemplate(${t.id?`'${t.id}'`:'null'})">Enregistrer</button>
         <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
@@ -4037,13 +4039,15 @@ function openTemplateModal(id){
 function renderTplSubjectVisibility(){
   const sel=document.getElementById('tpl-channel');
   const wrap=document.getElementById('tpl-subject-wrap');
+  const sidWrap=document.getElementById('tpl-sid-wrap');
   if(sel&&wrap) wrap.style.display = sel.value==='email' ? '' : 'none';
+  if(sel&&sidWrap) sidWrap.style.display = sel.value==='whatsapp' ? '' : 'none';
 }
 
 async function saveTemplate(id){
   const g=i=>(document.getElementById(i)||{value:''}).value;
-  const body={channel:g('tpl-channel'),key:g('tpl-key').trim().toLowerCase(),name:g('tpl-name').trim(),subject:g('tpl-subject').trim(),bodyHtml:g('tpl-body'),scope:'crm'};
-  if(!body.key||!body.name||!body.bodyHtml||(body.channel==='email'&&!body.subject)){flash('Tous les champs sont requis');return;}
+  const body={channel:g('tpl-channel'),key:g('tpl-key').trim().toLowerCase(),name:g('tpl-name').trim(),subject:g('tpl-subject').trim(),bodyHtml:g('tpl-body'),whatsappContentSid:g('tpl-sid').trim(),scope:'crm'};
+  if(!body.key||!body.name||!body.bodyHtml||(body.channel==='email'&&!body.subject)||(body.channel==='whatsapp'&&!body.whatsappContentSid)){flash('Tous les champs sont requis');return;}
   try{
     var r = await apiFetch('/wa/messageTemplate/upsert', {method:'POST', body:JSON.stringify(body)});
     var data = await r.json();

@@ -102,8 +102,26 @@ messagingRouter.post(
   })
 );
 
-function shapeTemplate(t: { id: string; channel: string; key: string; name: string; subject: string; bodyHtml: string; updatedAt: Date }) {
-  return { id: t.id, channel: t.channel, key: t.key, name: t.name, subject: t.subject, bodyHtml: t.bodyHtml, updatedAt: t.updatedAt };
+function shapeTemplate(t: {
+  id: string;
+  channel: string;
+  key: string;
+  name: string;
+  subject: string;
+  bodyHtml: string;
+  whatsappContentSid: string | null;
+  updatedAt: Date;
+}) {
+  return {
+    id: t.id,
+    channel: t.channel,
+    key: t.key,
+    name: t.name,
+    subject: t.subject,
+    bodyHtml: t.bodyHtml,
+    whatsappContentSid: t.whatsappContentSid || "",
+    updatedAt: t.updatedAt,
+  };
 }
 
 messagingRouter.get(
@@ -123,6 +141,7 @@ interface TemplateBody {
   name: string;
   subject: string;
   bodyHtml: string;
+  whatsappContentSid?: string;
 }
 
 messagingRouter.post(
@@ -135,10 +154,18 @@ messagingRouter.post(
     if (!b.name || !b.name.trim()) throw new HttpError(400, "Nom du modèle requis");
     if (b.channel === "email" && (!b.subject || !b.subject.trim())) throw new HttpError(400, "Objet requis pour un modèle email");
     if (!b.bodyHtml || !b.bodyHtml.trim()) throw new HttpError(400, "Corps du message requis");
+    // WhatsApp Business interdit le texte libre business-initié en dehors
+    // d'une session client de 24h (règle Meta) — un modèle WhatsApp doit
+    // donc toujours pointer vers un Content Template approuvé, sans quoi
+    // l'envoi échouerait de toute façon (cf. src/lib/messaging.ts).
+    if (b.channel === "whatsapp" && (!b.whatsappContentSid || !b.whatsappContentSid.trim())) {
+      throw new HttpError(400, "Content SID Twilio requis pour un modèle WhatsApp (créez-le d'abord dans Twilio Content Template Builder, faites-le approuver, puis collez son SID ici)");
+    }
     const row = await upsertMessageTemplate(entityId, b.channel, (b.key || "").trim().toLowerCase(), {
       name: b.name.trim(),
       subject: (b.subject || "").trim(),
       bodyHtml: b.bodyHtml,
+      whatsappContentSid: b.channel === "whatsapp" ? (b.whatsappContentSid || "").trim() : "",
     });
     res.json(shapeTemplate(row));
   })

@@ -1623,6 +1623,14 @@ model MessageTemplate {
   subject  String // email uniquement ; supporte {{variable}}
   bodyHtml String // email : HTML ; sms/whatsapp : texte brut — supporte {{variable}}
 
+  // whatsapp uniquement — Content SID Twilio (ex. "HX...") du modèle
+  // approuvé par Meta correspondant à ce bodyHtml. WhatsApp Business
+  // interdit le texte libre en dehors d'une fenêtre de session client de
+  // 24h : tout envoi WhatsApp business-initié (nos automatisations) doit
+  // donc obligatoirement passer par un Content Template Twilio pré-approuvé
+  // plutôt que par le corps texte brut — cf. src/lib/messaging.ts.
+  whatsappContentSid String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

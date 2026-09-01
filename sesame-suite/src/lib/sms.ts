@@ -103,6 +103,71 @@ async function sendViaTwilio(
 }
 
 /**
+ * Envoi WhatsApp via un Content Template Twilio pré-approuvé par Meta
+ * (ContentSid), seul moyen d'envoyer un message business-initié en dehors
+ * d'une fenêtre de session client de 24h — cf. commentaire sur
+ * MessageTemplate.whatsappContentSid. contentVariables est l'objet attendu
+ * par Twilio, ex. {"1":"Dupont","2":"12h00"} (les variables numérotées du
+ * modèle approuvé, dans l'ordre où {{var}} apparaît dans notre bodyHtml).
+ */
+async function sendViaTwilioTemplate(
+  cfg: { accountSid: string | null; authToken: string | null; fromNumber: string | null },
+  to: string,
+  contentSid: string,
+  contentVariables: Record<string, string>
+) {
+  if (!cfg.accountSid || !cfg.authToken || !cfg.fromNumber) {
+    throw new HttpError(400, "Configuration WhatsApp incomplète (identifiants Twilio manquants)");
+  }
+  const toAddr = to.startsWith("whatsapp:") ? to : `whatsapp:${to}`;
+  const fromAddr = cfg.fromNumber.startsWith("whatsapp:") ? cfg.fromNumber : `whatsapp:${cfg.fromNumber}`;
+
+  const url = `${TWILIO_API_BASE}/Accounts/${cfg.accountSid}/Messages.json`;
+  const params = new URLSearchParams({
+    To: toAddr,
+    From: fromAddr,
+    ContentSid: contentSid,
+    ContentVariables: JSON.stringify(contentVariables),
+  });
+  const auth = Buffer.from(`${cfg.accountSid}:${cfg.authToken}`).toString("base64");
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/x-www-form-urlencoded" },
+      body: params,
+    });
+  } catch (err) {
+    throw new HttpError(502, "Échec de connexion à l'API Twilio : " + String(err instanceof Error ? err.message : err));
+  }
+
+  if (!res.ok) {
+    let detail: string;
+    try {
+      const j = (await res.json()) as { message?: string; code?: number; more_info?: string };
+      if (j.message) {
+        detail = j.message;
+        if (j.code) detail += ` [code Twilio ${j.code}]`;
+        if (j.more_info) detail += ` — voir ${j.more_info}`;
+      } else {
+        detail = JSON.stringify(j);
+      }
+    } catch {
+      detail = await res.text();
+    }
+    throw new HttpError(502, `Échec de l'envoi Twilio (HTTP ${res.status}) : ${detail}`);
+  }
+}
+
+/** Envoi WhatsApp par Content Template Twilio, appelé par messaging.ts. */
+export async function sendWhatsAppTemplate(entityId: string | null, to: string, contentSid: string, contentVariables: Record<string, string>) {
+  const cfg = await getChannelConfig(entityId, "whatsapp");
+  if (!cfg) throw new HttpError(400, "Aucune configuration WhatsApp pour cette portée");
+  await sendViaTwilioTemplate(cfg, to, contentSid, contentVariables);
+}
+
+/**
  * DocPartner / SMSPartner.fr — partenaire SMS de Sesame Technology, intégré
  * le 18/08/2026 à partir de la documentation officielle fournie par
  * l'utilisateur (api.smspartner.fr/v1, endpoint /send). SMS uniquement, pas
