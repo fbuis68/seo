@@ -402,12 +402,13 @@ input[type=checkbox]{accent-color:var(--a);cursor:pointer;width:14px;height:14px
 .tr-panel-body{max-height:360px;overflow-y:auto;margin:0 -6px}
 .tr-row{padding:8px 6px;border-radius:8px}
 .tr-row:hover{background:var(--hover)}
-.tr-row-top{display:flex;align-items:center;gap:7px}
+.tr-row-top{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 .tr-row-name{flex:1;font-size:12.5px;color:var(--tx)}
 .tr-name{flex:0 1 200px;min-width:80px}
 .tr-amt{width:96px;text-align:right;flex:none}
-.tr-row-more{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:5px;padding-left:2px}
-.tr-row-more select{font-size:11px;border:0.5px solid var(--bdr2);border-radius:6px;background:var(--card);color:var(--tx);padding:3px 5px;outline:none}
+.tr-row-top select{font-size:11px;border:0.5px solid var(--bdr2);border-radius:6px;background:var(--card);color:var(--tx);padding:3px 5px;outline:none;flex:none}
+.tr-freq{width:88px}
+.tr-mois{width:104px}
 .tr-pct{width:52px;text-align:right;flex:none}
 .tr-weighted{font-size:11px;color:var(--mu)}
 .tr-weighted b{color:var(--tx)}
@@ -2326,17 +2327,15 @@ function trModeToggle(kind){
 
 function trLineRow(r, kind){
   const showMois = r.frequence !== 'mensuel';
-  const moisLbl = r.frequence==='trimestriel' ? 'Départ (tous les 3 mois)' : 'Mois';
+  const moisTitle = r.frequence==='trimestriel' ? 'Départ (tous les 3 mois)' : 'Mois';
   return `
     <div class="tr-row">
       <div class="tr-row-top">
         <input class="ei tr-name" value="${esc(r.label)}" oninput="trEditLocal('${r.id}','label',this.value)" onchange="trSave('${r.id}','label',this.value)" placeholder="${kind==='revenu'?'Libellé (ex. Abonnements clients)':'Libellé (ex. Salaires)'}">
+        <select class="tr-freq" title="Fréquence" onchange="trFreqChange('${r.id}','${kind}',this.value)">${trFreqOpts(kind, r.frequence)}</select>
+        ${showMois?`<select class="tr-mois" title="${moisTitle}" onchange="trEditLocal('${r.id}','mois',+this.value);trSave('${r.id}','mois',+this.value)">${trMonthOptsSingle(r.mois)}</select>`:''}
         <input class="ei tr-amt num" type="number" step="10" value="${r.montant}" oninput="trEditLocal('${r.id}','montant',+this.value)" onchange="trSave('${r.id}','montant',+this.value)">
         <button class="ta-btn" title="Supprimer" onclick="trDelete('${r.id}')">✕</button>
-      </div>
-      <div class="tr-row-more">
-        <select onchange="trFreqChange('${r.id}','${kind}',this.value)">${trFreqOpts(kind, r.frequence)}</select>
-        ${showMois?`<span class="tr-sub-lbl">${moisLbl}</span><select onchange="trEditLocal('${r.id}','mois',+this.value);trSave('${r.id}','mois',+this.value)">${trMonthOptsSingle(r.mois)}</select>`:''}
       </div>
     </div>`;
 }
@@ -2352,9 +2351,9 @@ function trGlobalBlock(kind){
     <div class="tr-row">
       <div class="tr-row-top">
         <input class="ei tr-amt num" type="number" step="10" value="${montant}" oninput="trGlobalLocal('${kind}','Montant',+this.value)" onchange="trGlobalSave('${kind}','Montant',+this.value)" placeholder="Montant">
-        <select onchange="trGlobalFreqChange('${kind}',this.value)">${trFreqOpts(kind, freq)}</select>
+        <select class="tr-freq" title="Fréquence" onchange="trGlobalFreqChange('${kind}',this.value)">${trFreqOpts(kind, freq)}</select>
+        ${showMois?`<select class="tr-mois" title="${freq==='trimestriel'?'Départ (tous les 3 mois)':'Mois'}" onchange="trGlobalLocal('${kind}','Mois',+this.value);trGlobalSave('${kind}','Mois',+this.value)">${trMonthOptsSingle(mois)}</select>`:''}
       </div>
-      ${showMois?`<div class="tr-row-more"><span class="tr-sub-lbl">${freq==='trimestriel'?'Départ (tous les 3 mois)':'Mois'}</span><select onchange="trGlobalLocal('${kind}','Mois',+this.value);trGlobalSave('${kind}','Mois',+this.value)">${trMonthOptsSingle(mois)}</select></div>`:''}
     </div>
     ${rows.length ? `
       <div class="tr-caveat" style="margin-top:10px">Lignes détaillées existantes — modifiables ci-dessous (mensuel ou ponctuel par mois), sans compter dans le total "Global" ci-dessus tant que ce mode reste actif — somme annualisée <b class="num">${fmtEUR(linesSum)}</b>, écart avec la saisie globale : <b class="num" style="color:${Math.abs(delta)<1?'var(--good,#1a6b47)':'var(--bad,#b23b2c)'}">${delta>=0?'+':''}${fmtEUR(delta)}</b></div>
