@@ -2432,6 +2432,35 @@ sesame-suite/
     admin.html             # prototype d'origine (back-office), rebranché sur l'API
 ```
 
+### Reverse proxy Caddy — sous-domaines publics admin.sesame.technology / guest.sesame.technology (01/09/2026)
+
+Ajout de `deploy/Caddyfile` et d'un service `caddy` dans `docker-compose.yml`
+pour exposer l'app sur deux sous-domaines publics en HTTPS, plutôt que sur
+l'IP nue avec le port 3000 en clair :
+
+- `admin.sesame.technology` → back-office hôtel (`/admin`)
+- `guest.sesame.technology` → parcours client (`/`)
+
+Caddy obtient et renouvelle automatiquement les certificats Let's Encrypt
+dès que le DNS des deux domaines pointe vers le serveur (enregistrements A
+chez le registrar) et que les ports 80/443 sont ouverts. Le port 3000 de
+l'app n'est plus publié que sur `127.0.0.1` (accessible depuis l'hôte via
+`docker compose exec`, plus depuis l'extérieur) — tout le trafic public
+passe désormais par Caddy.
+
+Déploiement (une fois le DNS propagé) :
+
+```bash
+cd ~/seo && git fetch origin claude/typescript-nodejs-postgres-app-tgm9ol \
+  && git merge --ff-only origin/claude/typescript-nodejs-postgres-app-tgm9ol
+cd sesame-suite && docker compose up -d
+```
+
+Le port 5432 de PostgreSQL reste publié sur toutes les interfaces
+(`"5432:5432"`) avec des identifiants par défaut (`sesame`/`sesame`) — à
+restreindre également (`127.0.0.1:5432:5432`, ou changer les identifiants)
+si l'exposition n'est pas requise depuis l'extérieur.
+
 ## Prochaine itération suggérée
 
 1. App agent ménage (`sesame_menage.html`) branchée sur

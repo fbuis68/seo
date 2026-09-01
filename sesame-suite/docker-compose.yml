@@ -41,7 +41,31 @@ services:
       JWT_SECRET: change-me-in-production
       DEFAULT_ENTITY_CODE: E00000001
     ports:
-      - "3000:3000"
+      # Réservé à la machine hôte (docker compose exec, scripts one-off,
+      # debug via SSH tunnel) — le trafic public passe désormais par le
+      # service caddy ci-dessous, qui termine le TLS et route par
+      # sous-domaine. Retirer le "127.0.0.1:" ci-dessous republierait le
+      # port 3000 en clair sur Internet, en plus des domaines HTTPS.
+      - "127.0.0.1:3000:3000"
+
+  # Reverse proxy — admin.sesame.technology / guest.sesame.technology vers
+  # l'app, avec certificats Let's Encrypt automatiques (cf. deploy/Caddyfile).
+  # Nécessite que le DNS des deux domaines pointe déjà vers ce serveur, et
+  # que les ports 80/443 soient ouverts sur le pare-feu.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
 
 volumes:
   sesame_pg_data:
+  caddy_data:
+  caddy_config:
