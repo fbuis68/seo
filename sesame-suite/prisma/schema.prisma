@@ -588,6 +588,18 @@ model BookingSourceConfig {
   lastSyncMessage String?
   lastSyncCount   Int?
 
+  // Webhook entrant (ex: Mews Webhooks) — jeton opaque dans l'URL
+  // (/wa/bookingSource/webhook/mews/<webhookSecret>) servant à la fois
+  // d'identifiant de l'établissement et de secret d'authentification,
+  // faute d'en-tête de signature documenté côté Mews. Généré à la volée au
+  // premier chargement du panneau (cf. GET /wa/bookingSource/config).
+  // L'appel ne fait que déclencher un import complet existant (runImport)
+  // — Mews ne fournit pas le détail complet d'une réservation dans
+  // l'événement lui-même, il faut donc de toute façon rappeler l'API.
+  webhookSecret          String?   @unique
+  lastWebhookAt          DateTime?
+  lastWebhookEventCount  Int?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

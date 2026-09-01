@@ -2491,6 +2491,41 @@ Tomcat via `host.docker.internal:8080`, cf. `extra_hosts` du service
    `curl -I https://guest.sesame.technology`,
    `curl -I https://test.moncentredeformation.fr`.
 
+### Intégration réservations : webhook entrant (notifications temps réel, ex. Mews)
+
+Jusqu'ici le connecteur ne fonctionnait qu'en mode "tirage" (polling
+manuel ou périodique). Ajout d'un webhook entrant, complémentaire :
+certains fournisseurs (Mews en premier lieu) peuvent notifier Sesame dès
+qu'une réservation change, au lieu d'attendre le prochain cycle de
+synchronisation.
+
+- URL : `POST /wa/bookingSource/webhook/mews/<secret>` — le `secret` est
+  généré automatiquement au premier chargement du panneau "Intégration
+  réservations" (nouvelle carte "Webhook"), affiché prêt à copier-coller
+  dans la configuration webhook du fournisseur. Bouton "Régénérer l'URL"
+  en cas de fuite du secret.
+- Public (pas d'authentification `requireAdmin` : c'est le fournisseur qui
+  appelle), sécurisé par ce secret opaque dans l'URL plutôt qu'un en-tête
+  de signature — Mews ne documentant pas de mécanisme de signature pour
+  ses webhooks (contrairement à Stripe, cf. `PaymentConfig.webhookSecret`
+  et `src/routes/payment.ts`).
+- Le corps attendu reprend la forme `{"Events": [...]}` documentée pour
+  les WebSockets Mews (`Type`/`Id`/`State`, éventuellement
+  `StartUtc`/`EndUtc`) — un événement ne contient jamais le détail complet
+  d'une réservation, donc le handler ne fait que relancer un import
+  complet existant (`runImport`) plutôt que de traiter chaque événement
+  individuellement.
+- Répond `{"success":true}` immédiatement (bonne pratique webhook), puis
+  déclenche l'import en tâche de fond sans bloquer la réponse.
+- `BookingSourceConfig.lastWebhookAt`/`lastWebhookEventCount` tracent la
+  dernière notification reçue, affichés sous l'URL dans le panneau.
+
+Reste distinct et non résolu : le blocage d'authentification du
+connecteur de **réservations** Mews (`ClientToken` manquant, cf. sections
+précédentes de ce changelog) — ce webhook notifie qu'un changement a eu
+lieu, mais l'import qu'il déclenche a toujours besoin d'identifiants Mews
+valides pour aller chercher le détail des réservations.
+
 ## Prochaine itération suggérée
 
 1. App agent ménage (`sesame_menage.html`) branchée sur

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { randomBytes } from "crypto";
 import { prisma } from "../db";
 import { resolveEntity } from "../lib/entity";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
@@ -104,6 +105,9 @@ function shapeConfig(c: {
   lastSyncStatus: string | null;
   lastSyncMessage: string | null;
   lastSyncCount: number | null;
+  webhookSecret: string | null;
+  lastWebhookAt: Date | null;
+  lastWebhookEventCount: number | null;
 }) {
   return {
     enabled: c.enabled,
@@ -192,6 +196,9 @@ function shapeConfig(c: {
     lastSyncStatus: c.lastSyncStatus,
     lastSyncMessage: c.lastSyncMessage,
     lastSyncCount: c.lastSyncCount,
+    webhookSecret: c.webhookSecret || "",
+    lastWebhookAt: c.lastWebhookAt,
+    lastWebhookEventCount: c.lastWebhookEventCount,
   };
 }
 
@@ -201,10 +208,35 @@ bookingSourceRouter.get(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const entity = await resolveEntity(req);
-    const config = await prisma.bookingSourceConfig.upsert({
+    let config = await prisma.bookingSourceConfig.upsert({
       where: { entityId: entity.id },
       update: {},
       create: { entityId: entity.id },
+    });
+    // Généré à la volée au premier chargement du panneau plutôt qu'à la
+    // création de la ligne (upsert.create ci-dessus n'a pas de retry en cas
+    // de collision d'unicité) — un webhook n'a besoin d'un secret que si
+    // quelqu'un consulte effectivement l'URL à donner au fournisseur.
+    if (!config.webhookSecret) {
+      config = await prisma.bookingSourceConfig.update({
+        where: { id: config.id },
+        data: { webhookSecret: randomBytes(24).toString("hex") },
+      });
+    }
+    res.json(shapeConfig(config));
+  })
+);
+
+/** POST /wa/bookingSource/webhook/regenerate — invalide l'URL de webhook actuelle (ex : fuite du secret) et en émet une nouvelle. */
+bookingSourceRouter.post(
+  "/bookingSource/webhook/regenerate",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const config = await prisma.bookingSourceConfig.upsert({
+      where: { entityId: entity.id },
+      update: { webhookSecret: randomBytes(24).toString("hex") },
+      create: { entityId: entity.id, webhookSecret: randomBytes(24).toString("hex") },
     });
     res.json(shapeConfig(config));
   })
@@ -592,6 +624,47 @@ bookingSourceRouter.post(
     } catch (e) {
       if (e instanceof BookingSourceError) throw new HttpError(400, e.message);
       throw e;
+    }
+  })
+);
+
+interface WebhookEventsBody {
+  Events?: unknown[];
+}
+
+/**
+ * POST /wa/bookingSource/webhook/mews/:secret — reçoit les notifications
+ * Mews Webhooks (Reservation/Resource/PriceUpdate/DeviceCommand, même
+ * forme "Events": [...] que documentée pour les WebSockets Mews). Public
+ * (pas de requireAdmin — c'est Mews qui appelle) : authentifié par le
+ * secret opaque dans l'URL plutôt qu'un en-tête, faute de mécanisme de
+ * signature documenté côté Mews pour les webhooks (contrairement à
+ * Stripe, cf. src/routes/payment.ts). Le corps d'un événement ne contient
+ * que l'id/l'état, pas le détail complet d'une réservation — on se
+ * contente donc de relancer un import complet existant (runImport)
+ * plutôt que de traiter chaque événement individuellement.
+ */
+bookingSourceRouter.post(
+  "/bookingSource/webhook/mews/:secret",
+  asyncHandler(async (req, res) => {
+    const config = await prisma.bookingSourceConfig.findUnique({
+      where: { webhookSecret: req.params.secret },
+      include: { entity: true },
+    });
+    if (!config) throw new HttpError(404, "Webhook inconnu");
+
+    const events = Array.isArray((req.body as WebhookEventsBody)?.Events) ? (req.body as WebhookEventsBody).Events! : [];
+    await prisma.bookingSourceConfig.update({
+      where: { id: config.id },
+      data: { lastWebhookAt: new Date(), lastWebhookEventCount: events.length },
+    });
+
+    // Répond immédiatement (bonne pratique webhook — Mews n'attend pas la
+    // fin de la resynchronisation) ; l'import se fait ensuite sans bloquer
+    // la réponse, et journalise son propre résultat via runImport.
+    res.json({ success: true });
+    if (events.length > 0 && config.enabled && config.baseUrl) {
+      runImport(config.entity, config).catch(() => {});
     }
   })
 );

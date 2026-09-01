@@ -2193,6 +2193,23 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     </div>
   </div>
 
+  <!-- Webhook entrant (ex: Mews Webhooks) -->
+  <div class="ca">
+    <div class="ch"><i class="ti ti-webhook"></i>Webhook (notifications en temps réel)</div>
+    <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
+      <span>Certains fournisseurs (ex : Mews) peuvent notifier Sesame dès qu'une réservation change, sans attendre le prochain cycle de synchronisation ci-dessus. Copiez cette URL dans le panneau webhook du fournisseur — l'arrivée d'un événement relance automatiquement un import complet.</span>
+    </div>
+    <div class="fi">
+      <label class="lb">URL à donner au fournisseur</label>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="bs-webhookUrl" readonly style="flex:1;font-family:monospace;font-size:12px">
+        <button class="btn btn-s" onclick="bsCopyWebhookUrl()"><i class="ti ti-copy"></i></button>
+      </div>
+    </div>
+    <div id="bs-webhook-status" style="font-size:12px;color:var(--mu);margin:6px 0 10px"></div>
+    <button class="btn btn-s" onclick="bsRegenerateWebhook()"><i class="ti ti-refresh"></i> Régénérer l'URL (invalide l'ancienne)</button>
+  </div>
+
   <!-- Résultat du test / de l'import -->
   <div class="ca" id="bs-result-card" style="display:none">
     <div class="ch" id="bs-result-title"><i class="ti ti-list-check"></i>Résultat</div>
@@ -6540,6 +6557,40 @@ async function bsFetchConfig(){
   return BS_CONFIG;
 }
 
+function bsRenderWebhook(){
+  if(!BS_CONFIG) return;
+  var urlEl = document.getElementById('bs-webhookUrl');
+  if(urlEl) urlEl.value = BS_CONFIG.webhookSecret ? (location.origin+'/wa/bookingSource/webhook/mews/'+BS_CONFIG.webhookSecret) : '';
+  var statusEl = document.getElementById('bs-webhook-status');
+  if(!statusEl) return;
+  if(!BS_CONFIG.lastWebhookAt){ statusEl.textContent = 'Aucune notification reçue pour l\'instant.'; return; }
+  var when = new Date(BS_CONFIG.lastWebhookAt).toLocaleString('fr-FR');
+  statusEl.textContent = 'Dernière notification reçue : '+when+' — '+(BS_CONFIG.lastWebhookEventCount||0)+' événement(s).';
+}
+
+function bsCopyWebhookUrl(){
+  var el = document.getElementById('bs-webhookUrl');
+  if(!el.value) return;
+  el.select();
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(el.value).then(function(){ toast('URL copiée ✓'); }, function(){ document.execCommand('copy'); toast('URL copiée ✓'); });
+  } else {
+    document.execCommand('copy'); toast('URL copiée ✓');
+  }
+}
+
+async function bsRegenerateWebhook(){
+  if(!confirm('Régénérer l\'URL de webhook ? L\'ancienne cessera immédiatement de fonctionner — pensez à mettre à jour la config côté fournisseur (Mews...).')) return;
+  try{
+    var r = await adminFetch('/wa/bookingSource/webhook/regenerate', {method:'POST'});
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Erreur'); return; }
+    BS_CONFIG = data;
+    bsRenderWebhook();
+    toast('Nouvelle URL générée ✓');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
 async function bsInit(){
   await bsFetchConfig();
   if(!BS_CONFIG) return;
@@ -6601,6 +6652,7 @@ async function bsInit(){
   document.getElementById('bs-updateStatusValueMap').value = bsParamsToText(BS_CONFIG.updateStatusValueMap);
   document.getElementById('bs-updateEndpointBodyParams').value = bsParamsToText(BS_CONFIG.updateEndpointBodyParams);
   bsRenderStatusBanner();
+  bsRenderWebhook();
   document.getElementById('bs-result-card').style.display='none';
   document.getElementById('bs-preset').value = BS_CONFIG.presetId||'none';
   bsApplyPreset(false);
