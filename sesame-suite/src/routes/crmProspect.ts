@@ -39,6 +39,8 @@ function shapeProspect(p: {
   siren: string | null;
   adresse: string | null;
   ville: string | null;
+  lat: number | null;
+  lng: number | null;
   etoiles: string | null;
   danger: string;
   potentiel: number;
@@ -108,6 +110,8 @@ function shapeProspect(p: {
     siren: p.siren || "",
     adresse: p.adresse || "",
     ville: p.ville || "",
+    lat: p.lat,
+    lng: p.lng,
     etoiles: p.etoiles || "",
     danger: p.danger,
     potentiel: p.potentiel,
@@ -182,6 +186,8 @@ interface ProspectBody {
   siren?: string;
   adresse?: string;
   ville?: string;
+  lat?: number | null;
+  lng?: number | null;
   etoiles?: string;
   danger?: string;
   potentiel?: number;
@@ -326,6 +332,8 @@ crmProspectRouter.post(
         siren: b.siren,
         adresse: b.adresse?.trim(),
         ville: b.ville,
+        lat: b.lat,
+        lng: b.lng,
         etoiles: b.etoiles,
         danger: b.danger,
         potentiel: b.potentiel,
