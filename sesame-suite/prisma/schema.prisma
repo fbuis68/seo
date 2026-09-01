@@ -1234,6 +1234,15 @@ model CrmProspect {
   denominationSociale String?
   siret               String? // 14 chiffres (SIREN + NIC de l'établissement)
   siren               String? // 9 chiffres — 9 premiers du SIRET, gardé distinct : retourné tel quel par l'API
+  // Trois champs complémentaires renvoyés par la recherche d'entreprises
+  // (recherche-entreprises.api.gouv.fr) sans équivalent avant leur ajout —
+  // formeJuridique reste un libellé "best effort" (nomenclature INSEE des
+  // formes juridiques la plus courante mappée en dur, sinon code brut
+  // affiché tel quel : cf. FORME_JURIDIQUE_LABELS dans crm.html) plutôt
+  // qu'une table de correspondance exhaustive.
+  formeJuridique         String?
+  dateCreationEntreprise DateTime?
+  effectifSalarie        String? // tranche officielle INSEE (ex: "20 à 49 salariés")
   adresse             String? // adresse postale (numéro + voie) — ville reste un champ séparé
   ville               String?
   // Coordonnées géographiques (WGS84) pour la carte du CRM (public/crm.html,

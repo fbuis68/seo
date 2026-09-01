@@ -1364,6 +1364,9 @@ function renderFiche(c){
     <div class="fgrid">
       <div class="field"><div class="fl"><span class="fl-ico">D</span> Dénomination sociale</div><div class="fv">${c.denominationSociale?esc(c.denominationSociale):'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">S</span> SIRET</div><div class="fv">${c.siret?esc(c.siret)+(c.siren?' <span style="color:var(--mu,#888);font-size:11px">(SIREN '+esc(c.siren)+')</span>':''):'—'}</div></div>
+      <div class="field"><div class="fl"><span class="fl-ico">J</span> Forme juridique</div><div class="fv">${c.formeJuridique?esc(c.formeJuridique):'—'}</div></div>
+      <div class="field"><div class="fl"><span class="fl-ico">C</span> Créée le</div><div class="fv">${c.dateCreationEntreprise?new Date(c.dateCreationEntreprise).toLocaleDateString('fr-FR'):'—'}</div></div>
+      <div class="field"><div class="fl"><span class="fl-ico">N</span> Effectif salarié</div><div class="fv">${c.effectifSalarie?esc(c.effectifSalarie):'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">A</span> Adresse</div><div class="fv">${c.adresse?esc(c.adresse)+(c.ville?', '+esc(c.ville):''):'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">R</span> Référent</div><div class="fv">${c.referent||'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">◆</span> Commercial</div><div class="fv">${c.commercialName||'—'}</div></div>
@@ -1678,14 +1681,17 @@ function supportBadge(c){
 // MODAL EDIT CLIENT
 // ════════════════════════════════════════
 function openModal(id){const c=clients.find(c=>c.id===id);if(c)renderModal({...c});}
-function openNewModal(){renderModal({id:null,nom:'',type:'Client',groupe:'',secteur:'Hôtellerie',denominationSociale:'',siret:'',siren:'',adresse:'',ville:'',etoiles:'',danger:'Modéré',potentiel:2,contrat:'non',modules:0,moduleSesame:false,moduleTtlock:false,moduleOneway:false,nbAcces:0,mrr:null,pms:'',priorite:1,appel:'',referent:'',email:'',tel:'',site:'',nfc:0,qr:0,mobile:0,webApp:false,mobileV2:false,checkin:false,livret:false,gestionDemande:false,offline:false,messagerie:'Noreply',note:'',commercialId:'',journal:[],_new:true});}
+function openNewModal(){renderModal({id:null,nom:'',type:'Client',groupe:'',secteur:'Hôtellerie',denominationSociale:'',siret:'',siren:'',formeJuridique:'',dateCreationEntreprise:null,effectifSalarie:'',adresse:'',ville:'',lat:null,lng:null,etoiles:'',danger:'Modéré',potentiel:2,contrat:'non',modules:0,moduleSesame:false,moduleTtlock:false,moduleOneway:false,nbAcces:0,mrr:null,pms:'',priorite:1,appel:'',referent:'',email:'',tel:'',site:'',nfc:0,qr:0,mobile:0,webApp:false,mobileV2:false,checkin:false,livret:false,gestionDemande:false,offline:false,messagerie:'Noreply',note:'',commercialId:'',journal:[],_new:true});}
 
 // Autocomplétion d'adresse via l'API Adresse (BAN — Base Adresse Nationale,
 // data.gouv.fr) : gratuite, sans clé, réponse CORS directement utilisable
 // depuis le navigateur. Sélectionner une suggestion remplit l'adresse ET la
 // ville d'un coup — la saisie manuelle reste possible si l'API est
-// indisponible ou si l'adresse recherchée n'y figure pas.
-let adresseDebounce=null;
+// indisponible ou si l'adresse recherchée n'y figure pas. Les coordonnées
+// GPS renvoyées par cette même recherche sont aussi récupérées (champs
+// cachés m-lat/m-lng) pour alimenter directement la vue Carte du CRM sans
+// re-géocoder plus tard (cf. renderMapView).
+let adresseDebounce=null, adresseResults=[];
 function adresseAutocomplete(){
   clearTimeout(adresseDebounce);
   const inp = document.getElementById('m-adresse');
@@ -1698,30 +1704,68 @@ function adresseAutocomplete(){
       const r = await fetch('https://api-adresse.data.gouv.fr/search/?q='+encodeURIComponent(q)+'&limit=5');
       if(!r.ok){ box.style.display='none'; return; }
       const data = await r.json();
-      const feats = data.features||[];
-      if(!feats.length){ box.style.display='none'; box.innerHTML=''; return; }
-      box.innerHTML = feats.map(f=>{
+      adresseResults = data.features||[];
+      if(!adresseResults.length){ box.style.display='none'; box.innerHTML=''; return; }
+      box.innerHTML = adresseResults.map((f,i)=>{
         const p=f.properties||{};
-        return '<div style="padding:7px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--bdr,#e2dfd9)" onmousedown="pickAdresse(\''+jsStr(p.name||'')+'\',\''+jsStr(p.city||'')+'\')">'+esc(p.label||'')+'</div>';
+        return '<div style="padding:7px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--bdr,#e2dfd9)" onmousedown="pickAdresse('+i+')">'+esc(p.label||'')+'</div>';
       }).join('');
       box.style.display='block';
     }catch(e){ box.style.display='none'; }
   }, 300);
 }
-function pickAdresse(street, city){
+function pickAdresse(i){
+  const f=adresseResults[i]; if(!f) return;
+  const p=f.properties||{};
+  const coords=(f.geometry&&f.geometry.coordinates)||null;
   const a=document.getElementById('m-adresse'), v=document.getElementById('m-ville'), box=document.getElementById('m-adresse-suggestions');
-  if(a) a.value = street;
-  if(v && city) v.value = city;
+  const lat=document.getElementById('m-lat'), lng=document.getElementById('m-lng');
+  if(a) a.value = p.name||'';
+  if(v && p.city) v.value = p.city;
+  if(coords){ if(lat)lat.value=coords[1]; if(lng)lng.value=coords[0]; }
   if(box){ box.style.display='none'; box.innerHTML=''; }
 }
+function clearMLatLng(){
+  const lat=document.getElementById('m-lat'), lng=document.getElementById('m-lng');
+  if(lat) lat.value=''; if(lng) lng.value='';
+}
+
 // Recherche d'entreprises via l'API publique du même nom (data.gouv.fr,
 // recherche-entreprises.api.gouv.fr) : gratuite, sans clé, CORS activé,
 // interroge directement le répertoire SIRENE de l'INSEE par dénomination
-// ou SIRET/SIREN. Remplit dénomination sociale + SIRET + SIREN en un clic —
-// répond au besoin de retrouver ces informations sans ressaisie manuelle.
-// Même repli que l'autocomplétion d'adresse : API indisponible → liste
-// masquée, saisie manuelle toujours possible, jamais bloquant.
-let entrepriseDebounce=null;
+// ou SIRET/SIREN. Remplit toutes les informations disponibles ayant un
+// champ correspondant sur la fiche : dénomination sociale, SIRET, SIREN,
+// adresse du siège (+ ville, coordonnées GPS), forme juridique, date de
+// création et effectif salarié, et le nom du dirigeant principal dans
+// "Référent". Même repli que l'autocomplétion d'adresse : API indisponible
+// → liste masquée, saisie manuelle toujours possible, jamais bloquant.
+//
+// nature_juridique et tranche_effectif_salarie sont renvoyés par l'API sous
+// forme de codes INSEE (pas de libellé) — FORME_JURIDIQUE_LABELS ne couvre
+// que les formes les plus courantes ; le code brut est toujours affiché en
+// complément (ou seul si non couvert) pour ne jamais afficher un libellé
+// inventé. TRANCHE_EFFECTIF_LABELS couvre en revanche la nomenclature
+// officielle complète (17 tranches, stable).
+const FORME_JURIDIQUE_LABELS={
+  '1000':'Entrepreneur individuel','5202':'Société en nom collectif','5310':'SCS',
+  '5385':'SCA','5498':'SARL','5499':'EURL','5505':'SA à conseil d\'administration',
+  '5599':'SA à directoire','5710':'SAS','5720':'SASU','6540':'SCI','9220':'Association'
+};
+const TRANCHE_EFFECTIF_LABELS={
+  '00':'0 salarié','01':'1 à 2 salariés','02':'3 à 5 salariés','03':'6 à 9 salariés',
+  '11':'10 à 19 salariés','12':'20 à 49 salariés','21':'50 à 99 salariés','22':'100 à 199 salariés',
+  '31':'200 à 249 salariés','32':'250 à 499 salariés','41':'500 à 999 salariés','42':'1 000 à 1 999 salariés',
+  '51':'2 000 à 4 999 salariés','52':'5 000 à 9 999 salariés','53':'10 000 salariés et plus'
+};
+function formeJuridiqueLabel(code){
+  if(!code) return '';
+  return FORME_JURIDIQUE_LABELS[code] ? FORME_JURIDIQUE_LABELS[code]+' ('+code+')' : 'Code '+code;
+}
+function effectifLabel(code){
+  if(!code) return '';
+  return TRANCHE_EFFECTIF_LABELS[code] || ('Code '+code);
+}
+let entrepriseDebounce=null, entrepriseResults=[];
 function entrepriseAutocomplete(){
   clearTimeout(entrepriseDebounce);
   const inp = document.getElementById('m-entreprise-search');
@@ -1734,14 +1778,14 @@ function entrepriseAutocomplete(){
       const r = await fetch('https://recherche-entreprises.api.gouv.fr/search?q='+encodeURIComponent(q)+'&limit=5');
       if(!r.ok){ box.style.display='none'; return; }
       const data = await r.json();
-      const results = data.results||[];
-      if(!results.length){ box.style.display='none'; box.innerHTML=''; return; }
-      box.innerHTML = results.map(e=>{
+      entrepriseResults = data.results||[];
+      if(!entrepriseResults.length){ box.style.display='none'; box.innerHTML=''; return; }
+      box.innerHTML = entrepriseResults.map((e,i)=>{
         const nom = e.nom_complet || e.nom_raison_sociale || '';
         const siret = (e.siege&&e.siege.siret) || '';
         const siren = e.siren || '';
         const adresse = (e.siege&&e.siege.adresse) || '';
-        return '<div style="padding:7px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--bdr,#e2dfd9)" onmousedown="pickEntreprise(\''+jsStr(nom)+'\',\''+jsStr(siret)+'\',\''+jsStr(siren)+'\')">'
+        return '<div style="padding:7px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--bdr,#e2dfd9)" onmousedown="pickEntreprise('+i+')">'
           +'<div style="font-weight:600">'+esc(nom)+'</div>'
           +'<div style="color:var(--mu,#888);font-size:11px">SIREN '+esc(siren)+(adresse?' · '+esc(adresse):'')+'</div>'
           +'</div>';
@@ -1750,11 +1794,39 @@ function entrepriseAutocomplete(){
     }catch(e){ box.style.display='none'; }
   }, 300);
 }
-function pickEntreprise(nom, siret, siren){
-  const d=document.getElementById('m-denomination'), s=document.getElementById('m-siret'), n=document.getElementById('m-siren'), box=document.getElementById('m-entreprise-suggestions');
+function pickEntreprise(i){
+  const e = entrepriseResults[i]; if(!e) return;
+  const siege = e.siege || {};
+  const nom = e.nom_complet || e.nom_raison_sociale || '';
+  const siret = siege.siret || '';
+  const siren = e.siren || '';
+  const street = [siege.numero_voie, siege.type_voie, siege.libelle_voie].filter(Boolean).join(' ');
+  const city = siege.libelle_commune || '';
+  const lat = siege.latitude!=null ? parseFloat(siege.latitude) : null;
+  const lng = siege.longitude!=null ? parseFloat(siege.longitude) : null;
+  const dirigeants = e.dirigeants || [];
+  const dirigeant = dirigeants.find(d=>d.type_dirigeant==='personne physique') || dirigeants[0];
+  const referentName = dirigeant
+    ? (dirigeant.type_dirigeant==='personne morale' ? (dirigeant.denomination||'') : [dirigeant.prenoms, dirigeant.nom].filter(Boolean).join(' '))
+      + (dirigeant.qualite ? ' ('+dirigeant.qualite+')' : '')
+    : '';
+
+  const d=document.getElementById('m-denomination'), s=document.getElementById('m-siret'), n=document.getElementById('m-siren');
+  const a=document.getElementById('m-adresse'), v=document.getElementById('m-ville');
+  const fj=document.getElementById('m-forme-juridique'), dc=document.getElementById('m-date-creation'), ef=document.getElementById('m-effectif');
+  const ref=document.getElementById('m-referent');
+  const lat_=document.getElementById('m-lat'), lng_=document.getElementById('m-lng');
+  const box=document.getElementById('m-entreprise-suggestions');
   if(d) d.value = nom;
   if(s) s.value = siret;
   if(n) n.value = siren;
+  if(a && street) a.value = street;
+  if(v && city) v.value = city;
+  if(fj) fj.value = formeJuridiqueLabel(e.nature_juridique);
+  if(dc && e.date_creation) dc.value = e.date_creation;
+  if(ef) ef.value = effectifLabel(e.tranche_effectif_salarie);
+  if(ref && referentName && !ref.value.trim()) ref.value = referentName;
+  if(lat!=null && lng!=null){ if(lat_)lat_.value=lat; if(lng_)lng_.value=lng; }
   if(box){ box.style.display='none'; box.innerHTML=''; }
 }
 // SIRET = SIREN (9 chiffres) + NIC (5 chiffres) de l'établissement — un
@@ -1785,10 +1857,10 @@ function renderModal(mc){
         <div class="ff"><label>Secteur</label><select id="m-secteur">${sectAll.map(s=>`<option value="${s}" ${mc.secteur===s?'selected':''}>${s}</option>`).join('')}</select></div>
         <div class="ff" style="position:relative">
           <label>Adresse *</label>
-          <input id="m-adresse" value="${esc(mc.adresse)}" placeholder="Numéro et voie" autocomplete="off" oninput="adresseAutocomplete()">
+          <input id="m-adresse" value="${esc(mc.adresse)}" placeholder="Numéro et voie" autocomplete="off" oninput="adresseAutocomplete();clearMLatLng()">
           <div id="m-adresse-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:var(--card,#fff);border:1px solid var(--bdr,#e2dfd9);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.1);max-height:180px;overflow-y:auto"></div>
         </div>
-        <div class="ff"><label>Ville *</label><input id="m-ville" value="${esc(mc.ville)}" placeholder="—"></div>
+        <div class="ff"><label>Ville *</label><input id="m-ville" value="${esc(mc.ville)}" placeholder="—" oninput="clearMLatLng()"></div>
         <div class="ff"><label>Étoiles</label><input id="m-etoiles" value="${esc(mc.etoiles)}" placeholder="ex. ***"></div>
         <div class="ff"><label>Référent</label><input id="m-referent" value="${esc(mc.referent)}" placeholder="Nom, prénom"></div>
         <div class="ff"><label>Email</label><input type="email" id="m-email" value="${esc(mc.email)}" placeholder="—"></div>
@@ -1806,6 +1878,11 @@ function renderModal(mc){
         <div class="ff" style="grid-column:1/-1"><label>Dénomination sociale</label><input id="m-denomination" value="${esc(mc.denominationSociale)}" placeholder="Raison sociale exacte (INSEE)"></div>
         <div class="ff"><label>SIRET</label><input id="m-siret" value="${esc(mc.siret)}" placeholder="14 chiffres" oninput="siretToSiren()"></div>
         <div class="ff"><label>SIREN</label><input id="m-siren" value="${esc(mc.siren)}" placeholder="9 chiffres"></div>
+        <div class="ff"><label>Forme juridique</label><input id="m-forme-juridique" value="${esc(mc.formeJuridique)}" placeholder="ex. SAS"></div>
+        <div class="ff"><label>Date de création</label><input type="date" id="m-date-creation" value="${mc.dateCreationEntreprise?String(mc.dateCreationEntreprise).slice(0,10):''}"></div>
+        <div class="ff"><label>Effectif salarié</label><input id="m-effectif" value="${esc(mc.effectifSalarie)}" placeholder="ex. 20 à 49 salariés"></div>
+        <input type="hidden" id="m-lat" value="${mc.lat??''}">
+        <input type="hidden" id="m-lng" value="${mc.lng??''}">
       </div>
 
       <div class="modal-section">Installation &amp; commercial</div>
@@ -1888,7 +1965,15 @@ async function saveModal(id,isNew){
   const ch={
     nom:g('m-nom').value.trim(),type:g('m-type').value,groupe:g('m-groupe').value,secteur:g('m-secteur').value,
     denominationSociale:g('m-denomination').value.trim(),siret:g('m-siret').value.trim(),siren:g('m-siren').value.trim(),
-    adresse:g('m-adresse').value.trim(),ville:g('m-ville').value.trim(),etoiles:g('m-etoiles').value,referent:g('m-referent').value,
+    formeJuridique:g('m-forme-juridique').value.trim(),dateCreationEntreprise:g('m-date-creation').value||null,effectifSalarie:g('m-effectif').value.trim(),
+    adresse:g('m-adresse').value.trim(),ville:g('m-ville').value.trim(),
+    // m-lat/m-lng : remplis par pickAdresse()/pickEntreprise() quand une
+    // suggestion vient d'être choisie, vidés par clearMLatLng() dès que
+    // adresse/ville est retapée à la main — sinon ils gardent la valeur déjà
+    // en cache (géocodée précédemment par la vue Carte, cf. renderMapView),
+    // jamais écrasés par un géocodage qui n'a pas eu lieu dans cette édition.
+    lat:g('m-lat').value?+g('m-lat').value:null,lng:g('m-lng').value?+g('m-lng').value:null,
+    etoiles:g('m-etoiles').value,referent:g('m-referent').value,
     email:g('m-email').value,tel:g('m-tel').value,site:g('m-site').value,
     pms:(g('m-pms').value==='__other__'?g('m-pms-other').value.trim():g('m-pms').value),messagerie:g('m-msg').value,danger:g('m-danger').value,commercialId:g('m-commercial').value||null,
     potentiel:+g('m-pot').value,modules:+g('m-mod').value,moduleSesame:['sesame','mix'].includes(g('m-mod-type').value),moduleTtlock:['ttlock','mix'].includes(g('m-mod-type').value),moduleOneway:g('m-mod-type').value==='oneway',nbAcces:+g('m-nbacces').value,mrr:g('m-mrr').value.trim()?+g('m-mrr').value:null,contrat:g('m-contrat').value,
@@ -1902,13 +1987,6 @@ async function saveModal(id,isNew){
     note:g('m-note').value
   };
   if(!ch.nom){flash('Le nom est obligatoire');return;}
-  if(!isNew){
-    // Adresse/ville modifiée → les coordonnées mises en cache ne sont plus
-    // valables, on les efface pour forcer un nouveau géocodage la prochaine
-    // fois que la vue Carte est ouverte (cf. renderMapView).
-    const ex=clients.find(c=>c.id===id);
-    if(ex && (ex.adresse!==ch.adresse || ex.ville!==ch.ville)){ ch.lat=null; ch.lng=null; }
-  }
   try{
     var r;
     if(isNew){
@@ -4328,8 +4406,8 @@ async function testRule(id){
 // CSV EXPORT
 // ════════════════════════════════════════
 function exportCSV(){
-  const h=['ID','Type','Nom','Dénomination sociale','SIRET','SIREN','Groupe','Secteur','Adresse','Ville','Étoiles','Risque','Potentiel','Contrat','Modules','PMS','Priorité','Appel','Référent','Email','Tél','Site','NFC%','Mobile%','Code%','QR%','WebApp','MobileV2','Offline','Check-in','Onb. Choix chambre','Onb. Occupant','Onb. Identité','Onb. Ménage','Esp. Boutique','Esp. Points','Esp. Livret','Esp. Demande','Esp. Évènements','Messagerie','Note','Nb activités'];
-  const rows=clients.map(c=>[c.id,c.type,c.nom,c.denominationSociale,c.siret,c.siren,c.groupe,c.secteur,c.adresse,c.ville,c.etoiles,c.danger,c.potentiel,c.contrat,c.modules,c.pms,c.priorite,c.appel,c.referent,c.email,c.tel,c.site,c.nfc,c.mobile,c.code,c.qr,c.webApp?'oui':'non',c.mobileV2?'oui':'non',c.offline?'oui':'non',c.checkin?'oui':'non',c.onbChoixChambres?'oui':'non',c.onbOccupant?'oui':'non',c.onbIdentite?'oui':'non',c.onbMenage?'oui':'non',c.espBoutique?'oui':'non',c.espPoint?'oui':'non',c.livret?'oui':'non',c.gestionDemande?'oui':'non',c.espEvenement?'oui':'non',c.messagerie,c.note,(c.journal||[]).length].map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`));
+  const h=['ID','Type','Nom','Dénomination sociale','SIRET','SIREN','Forme juridique','Créée le','Effectif salarié','Groupe','Secteur','Adresse','Ville','Étoiles','Risque','Potentiel','Contrat','Modules','PMS','Priorité','Appel','Référent','Email','Tél','Site','NFC%','Mobile%','Code%','QR%','WebApp','MobileV2','Offline','Check-in','Onb. Choix chambre','Onb. Occupant','Onb. Identité','Onb. Ménage','Esp. Boutique','Esp. Points','Esp. Livret','Esp. Demande','Esp. Évènements','Messagerie','Note','Nb activités'];
+  const rows=clients.map(c=>[c.id,c.type,c.nom,c.denominationSociale,c.siret,c.siren,c.formeJuridique,c.dateCreationEntreprise?new Date(c.dateCreationEntreprise).toLocaleDateString('fr-FR'):'',c.effectifSalarie,c.groupe,c.secteur,c.adresse,c.ville,c.etoiles,c.danger,c.potentiel,c.contrat,c.modules,c.pms,c.priorite,c.appel,c.referent,c.email,c.tel,c.site,c.nfc,c.mobile,c.code,c.qr,c.webApp?'oui':'non',c.mobileV2?'oui':'non',c.offline?'oui':'non',c.checkin?'oui':'non',c.onbChoixChambres?'oui':'non',c.onbOccupant?'oui':'non',c.onbIdentite?'oui':'non',c.onbMenage?'oui':'non',c.espBoutique?'oui':'non',c.espPoint?'oui':'non',c.livret?'oui':'non',c.gestionDemande?'oui':'non',c.espEvenement?'oui':'non',c.messagerie,c.note,(c.journal||[]).length].map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`));
   const csv='﻿'+[h,...rows].map(r=>r.join(';')).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='sesame_crm_export.csv';a.click();
 }

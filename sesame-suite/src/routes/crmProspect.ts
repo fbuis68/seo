@@ -37,6 +37,9 @@ function shapeProspect(p: {
   denominationSociale: string | null;
   siret: string | null;
   siren: string | null;
+  formeJuridique: string | null;
+  dateCreationEntreprise: Date | null;
+  effectifSalarie: string | null;
   adresse: string | null;
   ville: string | null;
   lat: number | null;
@@ -108,6 +111,9 @@ function shapeProspect(p: {
     denominationSociale: p.denominationSociale || "",
     siret: p.siret || "",
     siren: p.siren || "",
+    formeJuridique: p.formeJuridique || "",
+    dateCreationEntreprise: p.dateCreationEntreprise,
+    effectifSalarie: p.effectifSalarie || "",
     adresse: p.adresse || "",
     ville: p.ville || "",
     lat: p.lat,
@@ -184,6 +190,9 @@ interface ProspectBody {
   denominationSociale?: string;
   siret?: string;
   siren?: string;
+  formeJuridique?: string;
+  dateCreationEntreprise?: string | null;
+  effectifSalarie?: string;
   adresse?: string;
   ville?: string;
   lat?: number | null;
@@ -247,8 +256,13 @@ crmProspectRouter.post(
         denominationSociale: b.denominationSociale,
         siret: b.siret,
         siren: b.siren,
+        formeJuridique: b.formeJuridique,
+        dateCreationEntreprise: b.dateCreationEntreprise ? new Date(b.dateCreationEntreprise) : undefined,
+        effectifSalarie: b.effectifSalarie,
         adresse: b.adresse.trim(),
         ville: b.ville.trim(),
+        lat: b.lat ?? undefined,
+        lng: b.lng ?? undefined,
         etoiles: b.etoiles,
         danger: b.danger || "Modéré",
         potentiel: b.potentiel ?? 0,
@@ -330,6 +344,9 @@ crmProspectRouter.post(
         denominationSociale: b.denominationSociale,
         siret: b.siret,
         siren: b.siren,
+        formeJuridique: b.formeJuridique,
+        dateCreationEntreprise: b.dateCreationEntreprise === undefined ? undefined : b.dateCreationEntreprise ? new Date(b.dateCreationEntreprise) : null,
+        effectifSalarie: b.effectifSalarie,
         adresse: b.adresse?.trim(),
         ville: b.ville,
         lat: b.lat,
