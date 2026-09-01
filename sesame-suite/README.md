@@ -2444,40 +2444,27 @@ battait avec lui pour les ports 80/443 sans jamais gagner. Le service
 `127.0.0.1:3000:3000`, exactement l'adresse que nginx cible déjà dans ses
 `proxy_pass`.
 
-**Bug corrigé dans la config nginx existante** (pas dans ce dépôt — fichier
-serveur `/etc/nginx/sites-enabled/admin.sesame.technology`, hors Git) :
-le bloc `location / { proxy_pass http://127.0.0.1:3000/admin/; }`
-réécrivait *toutes* les requêtes avec le préfixe `/admin/`, pas seulement
-la racine — d'où des 404 systématiques sur `/wa/login/login`, `/version`,
-les assets statiques, etc. (la page de connexion elle-même chargeait,
-laissant croire à tort à un problème de mot de passe). Corrigé en séparant
-`location = /` (racine exacte → `/admin`) de `location /` (tout le reste,
-transmis tel quel — `guest.sesame.technology` n'a pas ce problème, son
-`proxy_pass` ne porte pas de chemin) :
+**Bug corrigé dans la config nginx existante** (le fichier vit hors Git sur
+le serveur, `/etc/nginx/sites-enabled/admin.sesame.technology` — une copie
+corrigée est fournie dans ce dépôt sous
+`deploy/nginx/admin.sesame.technology.conf` pour déploiement sans édition
+manuelle, cf. commandes ci-dessous) : le bloc
+`location / { proxy_pass http://127.0.0.1:3000/admin/; }` réécrivait
+*toutes* les requêtes avec le préfixe `/admin/`, pas seulement la racine —
+d'où des 404 systématiques sur `/wa/login/login`, `/version`, les assets
+statiques, etc. (la page de connexion elle-même chargeait, laissant croire
+à tort à un problème de mot de passe). Corrigé en séparant `location = /`
+(racine exacte → `/admin`) de `location /` (tout le reste, transmis tel
+quel — `guest.sesame.technology` n'a pas ce problème, son `proxy_pass` ne
+porte pas de chemin).
 
-```nginx
-location = / {
-    proxy_pass http://127.0.0.1:3000/admin;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-}
+Déploiement de la correction (après le `git merge` ci-dessous) :
 
-location / {
-    proxy_pass http://127.0.0.1:3000;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-}
+```bash
+cp /etc/nginx/sites-enabled/admin.sesame.technology /etc/nginx/sites-enabled/admin.sesame.technology.bak
+cp sesame-suite/deploy/nginx/admin.sesame.technology.conf /etc/nginx/sites-enabled/admin.sesame.technology
+nginx -t && systemctl reload nginx
 ```
-
-`nginx -t && systemctl reload nginx` après modification.
 
 Ce même nginx route aussi `test.moncentredeformation.fr` /
 `saas.moncentredeformation.fr` vers Tomcat sur `127.0.0.1:8080` — Tomcat a
