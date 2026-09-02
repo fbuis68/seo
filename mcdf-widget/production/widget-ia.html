@@ -232,7 +232,7 @@
       <p class="eyebrow">Widget IA · MCDF</p>
       <h1>Génération de rapports</h1>
       <p class="lede">Données en direct, lecture seule — aucune action d'écriture n'est effectuée par ce widget.</p>
-      <p class="version-tag">Version du fichier : 2026-09-02c (CPF Sous-traitance en direct, filtré Caisse des Dépôts)</p>
+      <p class="version-tag">Version du fichier : 2026-09-02d (CPF Sous-traitance : chargement différé, ne bloque plus le widget)</p>
       <div class="suggest-row">
         <button type="button" class="suggest-btn" id="suggest-report-btn">💡 Suggérer un nouveau rapport</button>
         <button type="button" class="suggest-btn" id="suggest-filter-btn">🔎 Suggérer un nouveau filtre</button>
@@ -464,6 +464,8 @@
         Aucun champ « CPF » n'existe dans l'API MCDF : un dossier est considéré CPF ici si le payeur d'au moins une de ses lignes de facturation (<code>timetable.payerId</code>) est « Caisse des Dépôts et Consignations » (gestionnaire de Mon Compte Formation) — confirmé manuellement le 02/09/2026. La sous-traitance vient du champ <code>timetable.subcontracted</code>, regroupé par ligne de convention (<code>conventionTraining</code>) puis par dossier. Données en direct, aucun import.
       </div>
 
+      <p class="hint" id="cpf-loading-hint" style="display:none"><span class="spinner" style="display:inline-block; vertical-align:middle; margin-right:6px;"></span>Chargement des dossiers CPF (peut prendre du temps sur un historique important)…</p>
+      <p class="hint" id="cpf-error-hint" style="display:none; color:var(--critical)"></p>
       <p class="hint" id="cpf-empty-hint" style="display:none">Aucun dossier CPF détecté (payeur « Caisse des Dépôts et Consignations » introuvable dans les données de cette entité).</p>
 
       <div id="cpf-content">
@@ -774,20 +776,16 @@ async function fetchAll(entity, entityId) {
 }
 
 async function buildData(entityId) {
-  const [customers, conventions, invoices, attendees, sessions, sessionQualiopi, conventionTrainings, timetables] = await Promise.all([
+  const [customers, conventions, invoices, attendees, sessions, sessionQualiopi] = await Promise.all([
     fetchAll('customer', entityId),
     fetchAll('fullConventionQualiopi', entityId),
     fetchAll('invoice', entityId),
     fetchAll('conventionAttendee', entityId),
     fetchAll('session', entityId),
     fetchAll('sessionQualiopi', entityId).catch(() => []),
-    fetchAll('conventionTraining', entityId).catch(() => []),
-    fetchAll('timetable', entityId).catch(() => []),
   ]);
 
   const convById = new Map(conventions.map((c) => [c.id, c]));
-
-  const cpf_dossiers = buildCpfDossiers(customers, convById, conventionTrainings, timetables);
 
   const latestByAttendee = new Map();
   attendees.filter((a) => a.attendee).forEach((a) => {
@@ -932,9 +930,8 @@ async function buildData(entityId) {
     heures_par_mois, top_formateurs,
     sessions_a_venir: sessions_recentes_fallback, sessions_a_venir_is_future: sessions_a_venir.length > 0,
     sessions_listing, credit_restant, montant_vendu_facture, heures_formateur, join_ratio: joinRatio,
-    cpf_dossiers,
     ...commercial,
-    raw,
+    raw: { ...raw, convById },
   };
 }
 
@@ -1513,16 +1510,16 @@ function renderAll(DATA) {
     ['trainingName', 'strong'], ['name'], ['hours', 'num', fmtH], ['startDate', '', fmtDate],
   ]);
   renderMontant(DATA);
-
-  // CPF Sous-traitance
-  renderCpfLive(DATA);
 }
 
 // ------------------------------------------------------------------
 // Bootstrap
 // ------------------------------------------------------------------
+let CPF_ENTITY_ID = null;
+
 (async () => {
   const entityId = new URLSearchParams(location.search).get('entityId');
+  CPF_ENTITY_ID = entityId;
 
   setBanner('loading', 'Chargement des données MCDF en direct…');
   setStatus('', '<span class="dot"></span> Connexion…');
@@ -1539,6 +1536,12 @@ function renderAll(DATA) {
     document.getElementById('banner').style.display = 'none';
     document.getElementById('app').style.display = 'block';
     renderAll(DATA);
+
+    // CPF Sous-traitance : chargé uniquement à l'ouverture de l'onglet
+    // (voir loadCpfLive) pour ne jamais retarder le reste du widget.
+    document.querySelector('.tab-btn[data-tab="cpf"]').addEventListener('click', () => {
+      loadCpfLive(DATA.raw.customers, DATA.raw.convById);
+    });
   } catch (err) {
     setStatus('warn', '<span class="dot"></span> Non connecté');
     if (err && err.message === 'AUTH') {
@@ -1719,7 +1722,43 @@ function readWorkbookFile(file, sheetHint) {
 }
 
 // ---- CPF Sous-traitance (API MCDF en direct, voir buildCpfDossiers) ----
+// Chargement différé, déclenché au premier clic sur l'onglet : les
+// entités conventionTraining/timetable n'ont pas de filtre serveur
+// disponible (pas de paramètre date/dossier pour un appel en masse) et
+// l'historique complet peut être trop volumineux pour /wa/{entity}/list
+// (déjà observé : 504 Gateway Timeout côté MCDF sur un compte ancien).
+// On isole donc ce chargement pour ne jamais bloquer le reste du widget.
 let CPF_ROWS = [];
+let CPF_LOAD_STATE = 'idle'; // idle | loading | error | ready
+
+async function loadCpfLive(customers, convById) {
+  if (CPF_LOAD_STATE === 'loading' || CPF_LOAD_STATE === 'ready') return;
+  CPF_LOAD_STATE = 'loading';
+  setCpfHint('loading');
+  try {
+    const [conventionTrainings, timetables] = await Promise.all([
+      fetchAll('conventionTraining', CPF_ENTITY_ID),
+      fetchAll('timetable', CPF_ENTITY_ID),
+    ]);
+    CPF_ROWS = buildCpfDossiers(customers, convById, conventionTrainings, timetables);
+    CPF_LOAD_STATE = 'ready';
+    renderCpfLive();
+  } catch (err) {
+    CPF_LOAD_STATE = 'error';
+    const msg = err && err.message === 'AUTH'
+      ? 'Le serveur MCDF n\'a pas répondu correctement (délai dépassé ou volume de données trop important pour /wa/conventionTraining ou /wa/timetable sans filtre). Réessayez, ou contactez votre administrateur si ça persiste.'
+      : `Erreur au chargement : ${(err && err.message) || err}`;
+    setCpfHint('error', msg);
+    console.error('CPF Sous-traitance :', err);
+  }
+}
+function setCpfHint(state, errorMsg) {
+  document.getElementById('cpf-loading-hint').style.display = state === 'loading' ? 'block' : 'none';
+  document.getElementById('cpf-error-hint').style.display = state === 'error' ? 'block' : 'none';
+  if (state === 'error') document.getElementById('cpf-error-hint').textContent = errorMsg;
+  if (state !== 'ready') document.getElementById('cpf-content').style.display = 'none';
+  if (state !== 'error') document.getElementById('cpf-empty-hint').style.display = 'none';
+}
 
 function pctClass(pct) {
   if (pct >= 70) return 'crit';
@@ -1747,8 +1786,8 @@ function renderCpfTable(rows) {
   });
   document.getElementById('cpf-count-hint').textContent = `${sorted.length} dossier(s) affiché(s).`;
 }
-function renderCpfLive(DATA) {
-  CPF_ROWS = DATA.cpf_dossiers || [];
+function renderCpfLive() {
+  setCpfHint('ready');
   document.getElementById('cpf-content').style.display = CPF_ROWS.length ? 'block' : 'none';
   document.getElementById('cpf-empty-hint').style.display = CPF_ROWS.length ? 'none' : 'block';
   if (!CPF_ROWS.length) return;
