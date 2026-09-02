@@ -210,6 +210,8 @@
   .bar-fill.warn { background: var(--warning); }
   .bar-fill.crit { background: var(--critical); }
   .cell-sub { font-size: 11px; color: var(--ink-muted); }
+  .field-label { display: block; font-size: 11.5px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+  .field-block { margin-bottom: 14px; }
 
   @media (max-width: 880px) {
     .kpis { grid-template-columns: repeat(2, 1fr); }
@@ -224,7 +226,7 @@
       <p class="eyebrow">Widget IA · MCDF</p>
       <h1>Génération de rapports</h1>
       <p class="lede">Données en direct, lecture seule — aucune action d'écriture n'est effectuée par ce widget.</p>
-      <p class="version-tag">Version du fichier : 2026-08-31</p>
+      <p class="version-tag">Version du fichier : 2026-09-02</p>
       <div class="suggest-row">
         <button type="button" class="suggest-btn" id="suggest-report-btn">💡 Suggérer un nouveau rapport</button>
         <button type="button" class="suggest-btn" id="suggest-filter-btn">🔎 Suggérer un nouveau filtre</button>
@@ -246,6 +248,7 @@
       <button class="tab-btn" type="button" data-tab="listing">Listing</button>
       <button class="tab-btn" type="button" data-tab="cpf">CPF Sous-traitance</button>
       <button class="tab-btn" type="button" data-tab="facturation">Facturation</button>
+      <button class="tab-btn" type="button" data-tab="observatoire">Observatoire marché</button>
     </div>
 
     <!-- ============================= COMMERCIAL ============================= -->
@@ -548,6 +551,75 @@
       </div>
     </div>
 
+    <!-- ============================= OBSERVATOIRE MARCHÉ (open data CPF, en direct) ============================= -->
+    <div class="tab-panel" id="tab-observatoire">
+      <div class="note">
+        Cet état interroge en direct l'open data publique de Mon Compte Formation (Caisse des Dépôts / data.gouv.fr, licence ouverte Etalab) — ce n'est pas l'API MCDF. La recherche est toujours limitée à une région à la fois pour éviter de charger le catalogue national (plus de 200 000 offres). Catalogue mis à jour chaque semaine par la Caisse des Dépôts ; les entrées en formation (12 mois) sont nationales, ce jeu de données ne porte pas de champ région.
+      </div>
+
+      <div class="import-box" style="flex-direction:column; align-items:stretch;">
+        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:end;">
+          <div class="field-block" style="margin-bottom:0;">
+            <label class="field-label" for="obs-region">Région du centre</label>
+            <select class="filter-select" id="obs-region"></select>
+          </div>
+          <div class="field-block" style="margin-bottom:0;">
+            <label class="field-label" for="obs-type">Répertoire</label>
+            <select class="filter-select" id="obs-type">
+              <option value="rncp">RNCP</option>
+              <option value="rs">RS (spécifique)</option>
+            </select>
+          </div>
+          <div class="field-block" style="margin-bottom:0;">
+            <label class="field-label" for="obs-code">Code certification</label>
+            <input type="text" class="filter-input" id="obs-code" placeholder="ex. 38489" style="width:140px">
+          </div>
+          <button type="button" class="btn primary" id="obs-search-btn">Analyser le marché</button>
+        </div>
+        <p class="import-meta" id="obs-status" style="margin-top:10px;">Renseignez la région, le type de répertoire et le code de la certification à analyser.</p>
+      </div>
+
+      <div id="obs-content" style="display:none">
+        <h2 id="obs-title" style="font-family:var(--font-display); font-weight:500; font-size:18px; margin:0 0 4px;"></h2>
+        <p class="hint" id="obs-subtitle" style="margin:0 0 20px; font-size:12px; color:var(--ink-muted);"></p>
+
+        <div class="kpis" id="obs-kpis"></div>
+
+        <section>
+          <div class="two-col">
+            <div class="panel" style="padding:18px 20px;">
+              <div class="section-head" style="margin-bottom:10px;"><h2 style="font-size:15px;">Votre positionnement</h2></div>
+              <div class="field-block">
+                <label class="field-label" for="obs-your-price">Votre prix (€ TTC)</label>
+                <input type="text" class="filter-input" id="obs-your-price" placeholder="ex. 1890" style="max-width:160px">
+              </div>
+              <div id="obs-comparison"></div>
+            </div>
+            <div class="panel">
+              <div class="section-head" style="padding:16px 18px 0;"><h2 style="font-size:15px;">Entrées en formation (national, 12 derniers mois)</h2></div>
+              <div class="chart-pad">
+                <div class="mini-chart" id="chart-obs"></div>
+                <div class="mini-labels" id="labels-obs"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <div class="section-head"><h2>Offres concurrentes dans la région</h2><span class="hint" id="obs-count-hint"></span></div>
+          <div class="panel">
+            <div class="table-scroll" style="max-height:400px">
+              <table class="tight-table" id="obs-table">
+                <colgroup><col style="width:30%"><col style="width:20%"><col style="width:16%"><col style="width:17%"><col style="width:17%"></colgroup>
+                <thead><tr><th>Organisme</th><th>Lieu</th><th class="num">Durée</th><th>Modalité</th><th class="num">Prix moyen</th></tr></thead>
+                <tbody id="tbl-obs"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
     <footer>
       Widget IA MCDF — module « génération de rapports » (lecture seule),
       structuré à partir des rapports Power BI existants (Suivi Commercial,
@@ -564,7 +636,11 @@
       et « Facturation » sont différents des autres : ils ne lisent pas
       l'API MCDF, ils affichent un export Excel (<code>.xlsx</code>/<code>.xls</code>/<code>.csv</code>)
       importé manuellement et gardé uniquement dans ce navigateur — voir la
-      note en haut de chaque onglet.
+      note en haut de chaque onglet. L'onglet « Observatoire marché »
+      interroge en direct, depuis votre navigateur, l'open data publique de
+      Mon Compte Formation (<code>opendata.caissedesdepots.fr</code>,
+      licence ouverte Etalab) — ni MCDF ni ce widget n'hébergent ces
+      données, elles ne transitent par aucun serveur à nous.
     </footer>
 
   </div>
@@ -1356,7 +1432,7 @@ function buildSuggestContext() {
     'Contexte technique (pré-rempli automatiquement) :',
     '- Widget : Génération de rapports (widget-ia.html)',
     '- Entités API MCDF déjà utilisées ici : customer, fullConventionQualiopi, invoice, conventionAttendee, session, sessionQualiopi (via /wa/{entity}/list?nopaging=1)',
-    '- Onglets existants : Commercial, Planning, Formateurs, Listing, CPF Sous-traitance (import Excel manuel), Facturation (import Excel manuel)',
+    '- Onglets existants : Commercial, Planning, Formateurs, Listing, CPF Sous-traitance (import Excel manuel), Facturation (import Excel manuel), Observatoire marché (open data Mon Compte Formation en direct)',
     '',
   ].join('\n');
 }
@@ -1823,4 +1899,229 @@ function initFacturationTab() {
 
 initCpfTab();
 initFacturationTab();
+
+// ------------------------------------------------------------------
+// Onglet "Observatoire marché" -- interroge en direct, depuis le
+// navigateur, l'open data publique Mon Compte Formation (Caisse des
+// Depots, licence ouverte Etalab v2.0, aucune authentification requise) :
+//   - moncompteformation_catalogueformation ("l'offre de formation") :
+//     confirme via une capture reelle du schema le 02/09/2026 -- champs
+//     utilises : nom_region, code_rncp, code_inventaire (RS), siret,
+//     nom_of, nom_departement, intitule_formation, intitule_certification,
+//     nombre_heures_total_mean, frais_ttc_tot_mean, nb_session_a_distance.
+//   - entree_sortie_formation ("entrees et sorties de formation") :
+//     confirme le meme jour -- champs utilises : code_rncp, code_rs
+//     (absent de ce jeu, on y utilise en fait code_inventaire cote
+//     catalogue mais code_rncp/-1 cote entrees -- voir plus bas),
+//     annee_mois, entrees_formation. Ce jeu ne porte PAS de champ region :
+//     les KPI "Entrees 12 mois"/"Evolution 12 mois" sont donc nationaux,
+//     pas filtres sur la region choisie -- indique clairement a l'ecran.
+// Requete GET simple (pas de credentials, pas de body) vers l'API
+// Explore v2.1 d'Opendatasoft -- si le CORS ou le reseau bloque l'appel,
+// le message d'erreur affiche l'URL testee pour diagnostiquer.
+// ------------------------------------------------------------------
+const OBS_API_BASE = 'https://opendata.caissedesdepots.fr/api/explore/v2.1/catalog/datasets';
+const OBS_REGIONS = [
+  'Auvergne-Rhône-Alpes', 'Bourgogne-Franche-Comté', 'Bretagne', 'Centre-Val de Loire',
+  'Corse', 'Grand Est', 'Hauts-de-France', 'Île-de-France', 'Normandie',
+  'Nouvelle-Aquitaine', 'Occitanie', 'Pays de la Loire', "Provence-Alpes-Côte d'Azur",
+  'Guadeloupe', 'Martinique', 'Guyane', 'La Réunion', 'Mayotte',
+];
+const OBS_SETTINGS_KEY = 'mcdf-observatoire-settings-v1';
+const OBS_PRICES_KEY = 'mcdf-observatoire-prices-v1';
+let OBS_LAST_PRIX_MOYEN = null;
+
+function odsQuote(v) {
+  return `'${String(v).replace(/'/g, "\\'")}'`;
+}
+async function fetchOdsRecords(dataset, whereClauses, select, limit) {
+  const params = new URLSearchParams();
+  if (whereClauses && whereClauses.length) params.set('where', whereClauses.join(' and '));
+  if (select) params.set('select', select);
+  params.set('limit', String(limit || 100));
+  const url = `${OBS_API_BASE}/${dataset}/records?${params.toString()}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status} sur ${dataset} (${url})`);
+  const data = await res.json();
+  return { results: data.results || [], total: data.total_count || 0, url };
+}
+function median(arr) {
+  const sorted = arr.slice().sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+function loadObsPrices() {
+  try { return JSON.parse(localStorage.getItem(OBS_PRICES_KEY) || '{}'); } catch (e) { return {}; }
+}
+function saveObsPriceForCode() {
+  const code = document.getElementById('obs-code').value.trim();
+  if (!code) return;
+  const prices = loadObsPrices();
+  prices[code] = document.getElementById('obs-your-price').value;
+  localStorage.setItem(OBS_PRICES_KEY, JSON.stringify(prices));
+}
+function populateObsRegions() {
+  const select = document.getElementById('obs-region');
+  select.innerHTML = OBS_REGIONS.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
+  try {
+    const saved = JSON.parse(localStorage.getItem(OBS_SETTINGS_KEY) || 'null');
+    if (saved) {
+      if (saved.region) select.value = saved.region;
+      if (saved.type) document.getElementById('obs-type').value = saved.type;
+      if (saved.code) document.getElementById('obs-code').value = saved.code;
+    }
+  } catch (e) { /* reglages par defaut si localStorage illisible */ }
+}
+function saveObsSettings() {
+  localStorage.setItem(OBS_SETTINGS_KEY, JSON.stringify({
+    region: document.getElementById('obs-region').value,
+    type: document.getElementById('obs-type').value,
+    code: document.getElementById('obs-code').value,
+  }));
+}
+function computeObsEntreesStats(rows) {
+  const byMonth = {};
+  rows.forEach((r) => { byMonth[r.annee_mois] = (byMonth[r.annee_mois] || 0) + (r.entrees_formation || 0); });
+  const months24 = lastNMonths(24);
+  const prevMonths = months24.slice(0, 12);
+  const curMonths = months24.slice(12);
+  const totalCur = curMonths.reduce((s, m) => s + (byMonth[m] || 0), 0);
+  const totalPrev = prevMonths.reduce((s, m) => s + (byMonth[m] || 0), 0);
+  const evoPct = totalPrev > 0 ? ((totalCur - totalPrev) / totalPrev) * 100 : null;
+  const chartRows = curMonths.map((m) => ({ mois: m, entrees: byMonth[m] || 0 }));
+  return { totalCur, totalPrev, evoPct, chartRows };
+}
+function renderObsComparison(prixMoyen) {
+  const wrap = document.getElementById('obs-comparison');
+  const yourPrice = parseNumber(document.getElementById('obs-your-price').value);
+  wrap.innerHTML = '';
+  if (yourPrice === null || prixMoyen === null) {
+    wrap.appendChild(el('p', '', 'Renseignez votre prix pour voir la comparaison avec le marché.'));
+    wrap.lastChild.style.cssText = 'font-size:12.5px; color:var(--ink-muted); margin:0;';
+    return;
+  }
+  const row = el('div', '', `
+    <div style="display:flex; justify-content:space-between; font-size:13px; padding:4px 0;"><span style="color:var(--ink-muted)">Votre prix</span><strong>${fmtEUR(yourPrice)}</strong></div>
+    <div style="display:flex; justify-content:space-between; font-size:13px; padding:4px 0;"><span style="color:var(--ink-muted)">Moyenne marché</span><span>${fmtEUR(prixMoyen)}</span></div>
+  `);
+  wrap.appendChild(row);
+  const deltaPct = ((yourPrice - prixMoyen) / prixMoyen) * 100;
+  const positive = deltaPct < 0;
+  const msg = positive
+    ? `💡 Votre tarif se situe ${Math.abs(deltaPct).toFixed(1)} % sous la moyenne du marché — un argument commercial à valoriser.`
+    : `💡 Votre tarif se situe +${deltaPct.toFixed(1)} % au-dessus de la moyenne du marché.`;
+  const note = el('p', 'note', msg);
+  note.style.cssText = `margin:10px 0 0; background:${positive ? 'var(--good-tint)' : 'var(--warning-tint)'}; color:${positive ? 'var(--good-text)' : 'var(--warning)'};`;
+  wrap.appendChild(note);
+}
+function renderObsResults({ catalogue, entrees, region, type, code }) {
+  const rows = catalogue.results;
+  const title = rows[0].intitule_certification || '(intitulé inconnu)';
+  document.getElementById('obs-title').textContent = `${type === 'rs' ? 'RS' : 'RNCP'} ${code} — ${title}`;
+  document.getElementById('obs-subtitle').textContent = `Région : ${region} · ${rows.length} offre(s) trouvée(s) (max. 100 chargées) · catalogue mis à jour chaque semaine`;
+
+  const organismes = new Set(rows.map((r) => r.siret));
+  const prix = rows.map((r) => r.frais_ttc_tot_mean).filter((v) => typeof v === 'number');
+  const durees = rows.map((r) => r.nombre_heures_total_mean).filter((v) => typeof v === 'number');
+  const nbDistance = rows.filter((r) => (r.nb_session_a_distance || 0) > 0).length;
+  const prixMoyen = prix.length ? prix.reduce((s, v) => s + v, 0) / prix.length : null;
+  const prixMedian = prix.length ? median(prix) : null;
+  const dureeMoyenne = durees.length ? durees.reduce((s, v) => s + v, 0) / durees.length : null;
+  const entreesStats = computeObsEntreesStats(entrees.results);
+
+  const kpis = document.getElementById('obs-kpis');
+  kpis.innerHTML = '';
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Organismes concurrents</p><p class="kpi-value">${organismes.size}</p><p class="kpi-sub">dans ${escapeHtml(region)}</p>`));
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Prix moyen marché</p><p class="kpi-value">${prixMoyen !== null ? fmtEUR(prixMoyen) : '—'}</p><p class="kpi-sub">TTC</p>`));
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Prix médian marché</p><p class="kpi-value">${prixMedian !== null ? fmtEUR(prixMedian) : '—'}</p>`));
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Durée moyenne</p><p class="kpi-value">${dureeMoyenne !== null ? fmtH(dureeMoyenne) : '—'}</p>`));
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Formations à distance</p><p class="kpi-value">${nbDistance}</p><p class="kpi-sub">sur ${rows.length} offre(s)</p>`));
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Entrées 12 mois</p><p class="kpi-value">${entreesStats.totalCur}</p><p class="kpi-sub">national, hors filtre région</p>`));
+  const evoCls = entreesStats.evoPct > 0 ? 'up' : entreesStats.evoPct < 0 ? 'down' : '';
+  const evoVal = entreesStats.evoPct === null ? '—' : `${entreesStats.evoPct >= 0 ? '+' : ''}${entreesStats.evoPct.toFixed(0)}%`;
+  const evoSub = entreesStats.evoPct === null ? 'pas de donnée N-1' : 'vs 12 mois précédents (national)';
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Évolution 12 mois</p><p class="kpi-value">${evoVal}</p><p class="kpi-sub ${evoCls}">${escapeHtml(evoSub)}</p>`));
+
+  renderObsComparison(prixMoyen);
+  OBS_LAST_PRIX_MOYEN = prixMoyen;
+
+  document.getElementById('chart-obs').innerHTML = '';
+  document.getElementById('labels-obs').innerHTML = '';
+  if (entreesStats.chartRows.some((r) => r.entrees > 0)) {
+    renderMiniChart('chart-obs', 'labels-obs', entreesStats.chartRows, 'entrees', 'mois', (v) => `${v} entrée(s)`);
+  } else {
+    document.getElementById('chart-obs').parentElement.appendChild(el('p', 'hint', 'Aucune entrée en formation trouvée pour cette certification sur 24 mois.'));
+  }
+
+  const tbody = document.getElementById('tbl-obs');
+  tbody.innerHTML = '';
+  rows.slice().sort((a, b) => (a.frais_ttc_tot_mean ?? Infinity) - (b.frais_ttc_tot_mean ?? Infinity)).forEach((r) => {
+    const tr = el('tr');
+    tr.appendChild(el('td', 'strong', escapeHtml(r.nom_of || '(organisme non renseigné)')));
+    tr.appendChild(el('td', '', escapeHtml(r.nom_departement || '—')));
+    tr.appendChild(el('td', 'num', typeof r.nombre_heures_total_mean === 'number' ? fmtH(r.nombre_heures_total_mean) : '—'));
+    tr.appendChild(el('td', '', (r.nb_session_a_distance || 0) > 0 ? 'Distanciel possible' : 'Présentiel'));
+    tr.appendChild(el('td', 'num', typeof r.frais_ttc_tot_mean === 'number' ? fmtEUR(r.frais_ttc_tot_mean) : '—'));
+    tbody.appendChild(tr);
+  });
+  document.getElementById('obs-count-hint').textContent = `${rows.length} offre(s), triées par prix croissant.`;
+
+  document.getElementById('obs-content').style.display = 'block';
+}
+async function runObsSearch() {
+  const region = document.getElementById('obs-region').value;
+  const type = document.getElementById('obs-type').value;
+  const code = document.getElementById('obs-code').value.trim();
+  const status = document.getElementById('obs-status');
+  const btn = document.getElementById('obs-search-btn');
+  if (!code) {
+    status.innerHTML = '<span style="color:var(--critical)">Renseignez un code RNCP ou RS.</span>';
+    return;
+  }
+  saveObsSettings();
+  const storedPrices = loadObsPrices();
+  if (storedPrices[code] !== undefined) document.getElementById('obs-your-price').value = storedPrices[code];
+
+  btn.disabled = true;
+  status.innerHTML = '<span class="spinner" style="display:inline-block; vertical-align:middle; margin-right:6px;"></span>Recherche en cours…';
+  document.getElementById('obs-content').style.display = 'none';
+
+  try {
+    const codeField = type === 'rs' ? 'code_inventaire' : 'code_rncp';
+    const catalogue = await fetchOdsRecords(
+      'moncompteformation_catalogueformation',
+      [`${codeField}=${odsQuote(code)}`, `nom_region=${odsQuote(region)}`],
+      'nom_of,siret,intitule_formation,nom_departement,intitule_certification,nombre_heures_total_mean,frais_ttc_tot_mean,nb_session_active,nb_session_a_distance',
+      100
+    );
+    if (!catalogue.results.length) {
+      status.innerHTML = `<span style="color:var(--warning)">Aucune offre trouvée pour ce code dans cette région. Vérifiez le code, ou essayez l'autre répertoire (RNCP/RS). <a href="${escapeHtml(catalogue.url)}" target="_blank" rel="noopener" style="color:inherit">Tester la requête</a>.</span>`;
+      btn.disabled = false;
+      return;
+    }
+
+    let entrees = { results: [], url: '' };
+    try {
+      entrees = await fetchOdsRecords('entree_sortie_formation', [`${codeField}=${odsQuote(code)}`], 'annee_mois,entrees_formation', 200);
+    } catch (e) {
+      console.error('Échec entree_sortie_formation (non bloquant) :', e);
+    }
+
+    renderObsResults({ catalogue, entrees, region, type, code });
+    status.textContent = `Recherche effectuée le ${new Date().toLocaleString('fr-FR')}.`;
+  } catch (err) {
+    status.innerHTML = `<span style="color:var(--critical)">Échec de la recherche : ${escapeHtml(err.message)}. Vérifiez votre connexion, ou qu'un pare-feu/proxy ne bloque pas opendata.caissedesdepots.fr.</span>`;
+  }
+  btn.disabled = false;
+}
+function initObservatoireTab() {
+  populateObsRegions();
+  document.getElementById('obs-search-btn').addEventListener('click', runObsSearch);
+  document.getElementById('obs-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') runObsSearch(); });
+  document.getElementById('obs-your-price').addEventListener('input', () => {
+    renderObsComparison(OBS_LAST_PRIX_MOYEN);
+    saveObsPriceForCode();
+  });
+}
+initObservatoireTab();
 </script>
