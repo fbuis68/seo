@@ -1237,6 +1237,13 @@ model CrmProspect {
   nom                 String
   type                String  @default("Client") // Prospect | Client — auto "Prospect" pour les arrivées onboarding/formulaire de contact
   groupe              String?
+  // Groupes d'affiliation (exploitant/opérateur multi-établissements — ex :
+  // Machefert, LocBox, Village D+) auxquels ce client appartient — liste à
+  // choix multiple côté CRM (public/crm.html) plutôt qu'un champ libre unique
+  // comme "groupe" ci-dessus : un même client pourrait en théorie relever de
+  // plusieurs affiliations, et une liste à choix contrôlé évite les doublons
+  // de saisie (ex: "Loc Box" vs "LocBox" trouvés dans les données importées).
+  affiliations        String[] @default([])
   secteur             String?
   // Identité légale — "nom" reste le nom d'usage/commercial affiché partout
   // (listes, badges, graphiques) ; ces champs sont l'identité INSEE exacte,

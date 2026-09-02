@@ -14,6 +14,24 @@ import { config } from "../config";
  */
 export const crmProspectRouter = Router();
 
+/** Nettoie la liste d'affiliations envoyée par le formulaire (texte libre côté
+ * ajout d'une nouvelle option, cf. public/crm.html) — trim, retire les vides,
+ * déduplique sans tenir compte de la casse (garde la première graphie vue). */
+function normalizeAffiliations(list: unknown): string[] {
+  if (!Array.isArray(list)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of list) {
+    const v = typeof raw === "string" ? raw.trim() : "";
+    if (!v) continue;
+    const key = v.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(v);
+  }
+  return out;
+}
+
 function shapeActivity(a: { id: string; type: string; text: string; authorName: string | null; activityDate: Date | null; done: boolean; createdAt: Date }) {
   return {
     id: a.id,
@@ -33,6 +51,7 @@ function shapeProspect(p: {
   nom: string;
   type: string;
   groupe: string | null;
+  affiliations: string[];
   secteur: string | null;
   denominationSociale: string | null;
   siret: string | null;
@@ -108,6 +127,7 @@ function shapeProspect(p: {
     nom: p.nom,
     type: p.type,
     groupe: p.groupe || "",
+    affiliations: p.affiliations || [],
     secteur: p.secteur || "",
     denominationSociale: p.denominationSociale || "",
     siret: p.siret || "",
@@ -188,6 +208,7 @@ interface ProspectBody {
   nom: string;
   type?: string;
   groupe?: string;
+  affiliations?: string[];
   secteur?: string;
   denominationSociale?: string;
   siret?: string;
@@ -255,6 +276,7 @@ crmProspectRouter.post(
         nom: b.nom.trim(),
         type: b.type || "Client",
         groupe: b.groupe,
+        affiliations: normalizeAffiliations(b.affiliations),
         secteur: b.secteur,
         denominationSociale: b.denominationSociale,
         siret: b.siret,
@@ -344,6 +366,7 @@ crmProspectRouter.post(
         nom: b.nom?.trim(),
         type: b.type,
         groupe: b.groupe,
+        affiliations: b.affiliations === undefined ? undefined : normalizeAffiliations(b.affiliations),
         secteur: b.secteur,
         denominationSociale: b.denominationSociale,
         siret: b.siret,

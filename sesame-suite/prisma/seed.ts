@@ -644,12 +644,18 @@ async function main() {
   // commerciaux éditent statut/notes/journal directement depuis /crm).
   const existingProspects = await prisma.crmProspect.count();
   if (existingProspects === 0) {
+    // "Loc Box" / "LocBox" désignent le même exploitant (incohérence de
+    // graphie dans les données sources) — normalisé ici plutôt que dans les
+    // 72 lignes de CRM_SEED_PROSPECTS, pour dériver le champ "affiliations"
+    // (liste à choix multiple, cf. public/crm.html) à partir de "groupe".
+    const GROUPE_ALIASES: Record<string, string> = { "Loc Box": "LocBox" };
     for (const row of CRM_SEED_PROSPECTS) {
       const { journal, ...data } = row;
       const usage = AUDIT_USAGE[row.nom];
       const contact = AUDIT_CONTACT[row.nom];
+      const affiliations = row.groupe ? [GROUPE_ALIASES[row.groupe] || row.groupe] : [];
       const created = await prisma.crmProspect.create({
-        data: { ...data, ...(usage || {}), ...(contact || {}), ...journeyFlagsFor(row.secteur) },
+        data: { ...data, affiliations, ...(usage || {}), ...(contact || {}), ...journeyFlagsFor(row.secteur) },
       });
       if (journal) {
         for (const j of journal) {
