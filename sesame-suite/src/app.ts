@@ -37,6 +37,7 @@ import { adminUserRouter } from "./routes/adminUser";
 import { paymentRouter, stripeWebhookHandler } from "./routes/payment";
 import { vendorRouter } from "./routes/vendor";
 import { walletRouter } from "./routes/wallet";
+import { geocodeRouter } from "./routes/geocode";
 import { housekeepingScope } from "./middleware/housekeepingScope";
 import { errorHandler } from "./middleware/errorHandler";
 import { VERSION } from "./lib/version";
@@ -87,6 +88,7 @@ export function createApp() {
   app.use("/wa", bookingSourceRouter);
   app.use("/wa", lockerSourceRouter);
   app.use("/wa", crmProspectRouter);
+  app.use("/wa", geocodeRouter);
   app.use("/wa", crmDealRouter);
   app.use("/wa", crmQuoteRouter);
   app.use("/wa", crmUserRouter);
