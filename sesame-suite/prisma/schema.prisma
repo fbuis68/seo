@@ -1237,6 +1237,15 @@ model CrmProspect {
   nom                 String
   type                String  @default("Client") // Prospect | Client — auto "Prospect" pour les arrivées onboarding/formulaire de contact
   groupe              String?
+  // Affiliations hôtelières — enseigne/marque commerciale (Accor, Hilton,
+  // Best Western, The Originals...) et/ou collection/label auquel adhère
+  // l'établissement (Relais & Châteaux, Small Luxury Hotels...). Liste à
+  // choix multiple côté CRM (public/crm.html) : un établissement peut
+  // cumuler une marque ET un label (ex. Best Western + Relais & Châteaux).
+  // Sans lien avec "groupe" ci-dessus, qui désigne l'exploitant/opérateur
+  // (société propriétaire ou gestionnaire), une notion différente.
+  affiliations        String[] @default([])
+  secteur             String?
   secteur             String?
   // Identité légale — "nom" reste le nom d'usage/commercial affiché partout
   // (listes, badges, graphiques) ; ces champs sont l'identité INSEE exacte,

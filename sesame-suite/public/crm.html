@@ -666,6 +666,14 @@ document.addEventListener('DOMContentLoaded', function(){
 const DANGERS = ['Bon client','Modéré','Élevé !!'];
 const TYPES = ['Prospect','Client'];
 const SECTEURS = ['Hôtellerie','Location appartement','Appart Hotel','Location AirBnB','Bureaux','Sport','Garde meuble','Love hôtel','Location bureau','Agence gestion patrimoine'];
+// Affiliations hôtelières — enseignes/marques (un établissement en porte le
+// plus souvent une seule) et collections/labels (cumulables avec une marque,
+// ex. Best Western + Relais & Châteaux) : liste plate à choix multiple,
+// complétée à la volée depuis la fiche client (cf. addAffiliationOption).
+const AFFILIATIONS_KNOWN = [
+  'Accor','Best Western','Hilton','IHG','Marriott','Radisson','The Originals','Logis de France','Choice Hotels',
+  'Relais & Châteaux','Small Luxury Hotels of the World','Châteaux & Hôtels Collection','Design Hotels','Leading Hotels of the World',
+];
 // PMS effectivement rencontrés dans le portefeuille (audit clients Sesame) — la
 // fiche propose ces valeurs plus "Autre…" pour éviter les variantes orthographiques
 // libres (ex. "Medialog" / "Médialog" coexistaient avant ce champ en liste).
@@ -1350,6 +1358,7 @@ function renderFiche(c){
           ${typeBadge(c.type)}
           <span class="tag t-gray">${c.secteur?sectorIcon(c.secteur):'◻'} ${c.secteur||'—'}${c.etoiles?' '+c.etoiles:''}</span>
           ${c.ville?`<span class="tag t-blue">◉ ${c.ville}</span>`:''}
+          ${(c.affiliations||[]).map(a=>`<span class="tag t-purple">⛓ ${esc(a)}</span>`).join('')}
           ${c.danger==='Bon client'?'<span class="tag t-green">Bon client</span>':c.danger==='Élevé !!'?'<span class="tag t-red">Élevé !!</span>':'<span class="tag t-amber">Modéré</span>'}
           ${inboundBadge(c)}
           ${supportBadge(c)}
@@ -1842,8 +1851,28 @@ function siretToSiren(){
 }
 function closeModal(){document.getElementById('modal-ct').innerHTML='';}
 
+/** Ajoute une nouvelle option cochée à la liste à choix multiple "Affiliations"
+ * sans reconstruire tout le modal — l'option devient ensuite disponible pour
+ * toutes les fiches (cf. AFFILIATIONS_KNOWN + valeurs déjà utilisées, affAll
+ * dans renderModal). */
+function addAffiliationOption(){
+  const input=document.getElementById('m-aff-new');
+  const val=(input.value||'').trim();
+  if(!val) return;
+  const list=document.getElementById('m-affiliations-list');
+  const already=[...list.querySelectorAll('.m-aff-cb')].find(cb=>cb.value.toLowerCase()===val.toLowerCase());
+  if(already){ already.checked=true; input.value=''; return; }
+  const label=document.createElement('label');
+  label.style.cssText='display:flex;align-items:center;gap:5px;border:1px solid var(--bdr);border-radius:20px;padding:4px 10px;font-size:12px;cursor:pointer';
+  label.innerHTML=`<input type="checkbox" class="m-aff-cb" value="${esc(val)}" checked style="margin:0">${esc(val)}`;
+  list.appendChild(label);
+  input.value='';
+}
+
 function renderModal(mc){
   const sectAll=[...new Set([...SECTEURS,...clients.map(c=>c.secteur)].filter(Boolean))].sort();
+  const affAll=[...new Set([...AFFILIATIONS_KNOWN,...clients.flatMap(c=>c.affiliations||[])])].sort();
+  const mcAff=mc.affiliations||[];
   document.getElementById('modal-ct').innerHTML=`
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box">
@@ -1858,6 +1887,18 @@ function renderModal(mc){
         <div class="ff"><label>Type</label><select id="m-type">${TYPES.map(t=>`<option value="${t}" ${mc.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
         <div class="ff"><label>Groupe</label><input id="m-groupe" value="${esc(mc.groupe)}" placeholder="—"></div>
         <div class="ff"><label>Secteur</label><select id="m-secteur">${sectAll.map(s=>`<option value="${s}" ${mc.secteur===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div class="ff" style="grid-column:1/-1">
+          <label>Affiliations (enseigne et/ou label — cumulables)</label>
+          <div id="m-affiliations-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px">
+            ${affAll.map(a=>`<label style="display:flex;align-items:center;gap:5px;border:1px solid var(--bdr);border-radius:20px;padding:4px 10px;font-size:12px;cursor:pointer">
+              <input type="checkbox" class="m-aff-cb" value="${esc(a)}" ${mcAff.includes(a)?'checked':''} style="margin:0">${esc(a)}
+            </label>`).join('')}
+          </div>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            <input type="text" id="m-aff-new" placeholder="Ajouter une affiliation (ex. Radisson)…" style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();addAffiliationOption();}">
+            <button type="button" class="btn btn-s" onclick="addAffiliationOption()"><i class="ti ti-plus"></i></button>
+          </div>
+        </div>
         <div class="ff" style="position:relative">
           <label>Adresse *</label>
           <input id="m-adresse" value="${esc(mc.adresse)}" placeholder="Numéro et voie" autocomplete="off" oninput="adresseAutocomplete();clearMLatLng()">
@@ -1971,7 +2012,9 @@ async function saveModal(id,isNew){
     if(!g('m-ville').value.trim()){ flash('Ville requise'); return; }
   }
   const ch={
-    nom:g('m-nom').value.trim(),type:g('m-type').value,groupe:g('m-groupe').value,secteur:g('m-secteur').value,
+    nom:g('m-nom').value.trim(),type:g('m-type').value,groupe:g('m-groupe').value,
+    affiliations:[...document.querySelectorAll('.m-aff-cb:checked')].map(cb=>cb.value),
+    secteur:g('m-secteur').value,
     denominationSociale:g('m-denomination').value.trim(),siret:g('m-siret').value.trim(),siren:g('m-siren').value.trim(),
     formeJuridique:g('m-forme-juridique').value.trim(),dateCreationEntreprise:g('m-date-creation').value||null,effectifSalarie:g('m-effectif').value.trim(),
     adresse:g('m-adresse').value.trim(),ville:g('m-ville').value.trim(),pays:g('m-pays').value.trim(),
