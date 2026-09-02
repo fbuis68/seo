@@ -232,7 +232,7 @@
       <p class="eyebrow">Widget IA · MCDF</p>
       <h1>Génération de rapports</h1>
       <p class="lede">Données en direct, lecture seule — aucune action d'écriture n'est effectuée par ce widget.</p>
-      <p class="version-tag">Version du fichier : 2026-09-02</p>
+      <p class="version-tag">Version du fichier : 2026-09-02b (correctif Observatoire marché)</p>
       <div class="suggest-row">
         <button type="button" class="suggest-btn" id="suggest-report-btn">💡 Suggérer un nouveau rapport</button>
         <button type="button" class="suggest-btn" id="suggest-filter-btn">🔎 Suggérer un nouveau filtre</button>
@@ -2135,10 +2135,17 @@ async function runObsSearch() {
   document.getElementById('obs-content').style.display = 'none';
 
   try {
-    const codeField = type === 'rs' ? 'code_inventaire' : 'code_rncp';
+    // Attention : les 2 jeux de donnees ne partagent PAS le meme nom de
+    // champ pour le code RS -- confirme en direct le 02/09/2026 en
+    // observant que le champ "code_inventaire" du catalogue est bien
+    // rempli, mais que la requete "entrees" restait vide a chaque fois
+    // pour un code RS tant qu'elle interrogeait ce meme nom de champ,
+    // qui n'existe pas cote entree_sortie_formation (qui utilise "code_rs").
+    const catalogueCodeField = type === 'rs' ? 'code_inventaire' : 'code_rncp';
+    const entreesCodeField = type === 'rs' ? 'code_rs' : 'code_rncp';
     const catalogue = await fetchOdsRecords(
       'moncompteformation_catalogueformation',
-      [`${codeField}=${odsQuote(code)}`, `nom_region=${odsQuote(region)}`],
+      [`${catalogueCodeField}=${odsQuote(code)}`, `nom_region=${odsQuote(region)}`],
       'nom_of,siret,intitule_formation,nom_departement,intitule_certification,nombre_heures_total_mean,frais_ttc_tot_mean,nb_session_active,nb_session_a_distance',
       100
     );
@@ -2150,7 +2157,7 @@ async function runObsSearch() {
 
     let entrees = { results: [], url: '' };
     try {
-      entrees = await fetchOdsRecords('entree_sortie_formation', [`${codeField}=${odsQuote(code)}`], 'annee_mois,entrees_formation', 200);
+      entrees = await fetchOdsRecords('entree_sortie_formation', [`${entreesCodeField}=${odsQuote(code)}`], 'annee_mois,entrees_formation', 200);
     } catch (e) {
       console.error('Échec entree_sortie_formation (non bloquant) :', e);
     }
