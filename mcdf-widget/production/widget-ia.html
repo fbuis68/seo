@@ -232,7 +232,7 @@
       <p class="eyebrow">Widget IA · MCDF</p>
       <h1>Génération de rapports</h1>
       <p class="lede">Données en direct, lecture seule — aucune action d'écriture n'est effectuée par ce widget.</p>
-      <p class="version-tag">Version du fichier : 2026-09-02b (correctif Observatoire marché)</p>
+      <p class="version-tag">Version du fichier : 2026-09-02c (CPF Sous-traitance en direct, filtré Caisse des Dépôts)</p>
       <div class="suggest-row">
         <button type="button" class="suggest-btn" id="suggest-report-btn">💡 Suggérer un nouveau rapport</button>
         <button type="button" class="suggest-btn" id="suggest-filter-btn">🔎 Suggérer un nouveau filtre</button>
@@ -458,35 +458,32 @@
 
     </div>
 
-    <!-- ============================= CPF SOUS-TRAITANCE (import Excel) ============================= -->
+    <!-- ============================= CPF SOUS-TRAITANCE (API MCDF en direct) ============================= -->
     <div class="tab-panel" id="tab-cpf">
       <div class="note">
-        Cet état n'est pas connecté à l'API MCDF (aucune notion de « sous-traitance » n'est confirmée dans les entités disponibles) : importez ci-dessous votre export habituel (ex. <code>85262129100024cpfsoustraitance.xlsx</code>, onglet « Dossiers »). Les données restent dans ce navigateur uniquement (<code>localStorage</code>), rien n'est envoyé à un serveur.
-      </div>
-      <div class="import-box">
-        <input type="file" id="cpf-file-input" accept=".xlsx,.xls,.csv">
-        <p class="import-meta" id="cpf-import-meta">Aucun fichier importé.</p>
-        <button type="button" class="btn small" id="cpf-clear-btn" style="display:none">Effacer les données importées</button>
+        Aucun champ « CPF » n'existe dans l'API MCDF : un dossier est considéré CPF ici si le payeur d'au moins une de ses lignes de facturation (<code>timetable.payerId</code>) est « Caisse des Dépôts et Consignations » (gestionnaire de Mon Compte Formation) — confirmé manuellement le 02/09/2026. La sous-traitance vient du champ <code>timetable.subcontracted</code>, regroupé par ligne de convention (<code>conventionTraining</code>) puis par dossier. Données en direct, aucun import.
       </div>
 
-      <div id="cpf-content" style="display:none">
+      <p class="hint" id="cpf-empty-hint" style="display:none">Aucun dossier CPF détecté (payeur « Caisse des Dépôts et Consignations » introuvable dans les données de cette entité).</p>
+
+      <div id="cpf-content">
         <div class="kpis" style="grid-template-columns: repeat(3, 1fr);" id="cpf-kpis"></div>
 
         <section>
           <div class="section-head" style="flex-wrap:wrap; row-gap:10px;">
             <h2>Dossiers CPF</h2>
-            <input type="search" class="filter-input" id="cpf-search" placeholder="Rechercher un dossier ou un intitulé…" style="min-width:220px">
+            <input type="search" class="filter-input" id="cpf-search" placeholder="Rechercher un dossier, une session ou un intitulé…" style="min-width:220px">
           </div>
           <div class="panel">
             <div class="table-scroll" style="max-height:480px">
               <table class="tight-table" id="cpf-table">
                 <colgroup>
-                  <col style="width:11%"><col style="width:27%"><col style="width:13%">
-                  <col style="width:10%"><col style="width:9%"><col style="width:9%">
-                  <col style="width:13%"><col style="width:8%">
+                  <col style="width:10%"><col style="width:19%"><col style="width:17%"><col style="width:11%">
+                  <col style="width:9%"><col style="width:8%"><col style="width:8%">
+                  <col style="width:11%"><col style="width:7%">
                 </colgroup>
                 <thead><tr>
-                  <th>N° Dossier</th><th>Intitulé</th><th>Période</th>
+                  <th>N° Dossier</th><th>Intitulé</th><th>Session(s)</th><th>Période</th>
                   <th class="num">Facturé HT</th><th class="num">Heures décl.</th><th class="num">Heures s.t.</th>
                   <th>% Sous-traitance</th><th class="num">CA s.t.</th>
                 </tr></thead>
@@ -675,17 +672,22 @@
       partagent le même identifiant — un bandeau l'indique si ce n'est
       pas le cas sur ce compte. La répartition Training/Coaching (page
       d'accueil Power BI d'origine) n'a pas de champ MCDF confirmé, elle
-      n'a donc pas été reconstruite ici. Les onglets « CPF Sous-traitance »
-      et « Facturation » sont différents des autres : ils ne lisent pas
-      l'API MCDF, ils affichent un export Excel (<code>.xlsx</code>/<code>.xls</code>/<code>.csv</code>)
-      importé manuellement et gardé uniquement dans ce navigateur — voir la
-      note en haut de chaque onglet. L'onglet « Observatoire marché »
-      interroge en direct, depuis votre navigateur, l'open data publique de
-      Mon Compte Formation (<code>opendata.caissedesdepots.fr</code>,
-      licence ouverte Etalab) — ni MCDF ni ce widget n'hébergent ces
-      données, elles ne transitent par aucun serveur à nous. L'onglet
-      « Formation → compétences » fonctionne sur le même principe d'import
-      manuel que « CPF Sous-traitance »/« Facturation », à partir du
+      n'a donc pas été reconstruite ici. L'onglet « CPF Sous-traitance » lit
+      l'API MCDF en direct (<code>conventionTraining</code>/<code>timetable</code>) mais
+      approxime deux notions qui n'ont pas de champ dédié : un dossier est
+      retenu comme « CPF » si son payeur est la Caisse des Dépôts et
+      Consignations, et la sous-traitance vient du champ
+      <code>timetable.subcontracted</code> — voir la note en haut de
+      l'onglet. L'onglet « Facturation » reste différent : il n'y a pas
+      d'entité facturation confirmée dans l'API, il affiche un export Excel
+      (<code>.xlsx</code>/<code>.xls</code>/<code>.csv</code>) importé
+      manuellement et gardé uniquement dans ce navigateur. L'onglet
+      « Observatoire marché » interroge en direct, depuis votre navigateur,
+      l'open data publique de Mon Compte Formation
+      (<code>opendata.caissedesdepots.fr</code>, licence ouverte Etalab) —
+      ni MCDF ni ce widget n'hébergent ces données, elles ne transitent par
+      aucun serveur à nous. L'onglet « Formation → compétences » fonctionne
+      sur le même principe d'import manuel que « Facturation », à partir du
       référentiel ROME (France Travail) ; le prompt qu'il génère est à
       copier dans l'assistant IA de votre choix — ce widget n'appelle
       aucune IA lui-même.
@@ -696,9 +698,9 @@
 
 <!--
   SheetJS (lecture .xlsx/.xls dans le navigateur) -- charge uniquement pour
-  les onglets "CPF Sous-traitance" et "Facturation" (import manuel, voir
-  plus haut). Si ce script ne charge pas (reseau/proxy/CSP), l'import CSV
-  reste utilisable sans lui -- voir importSheetFile() plus bas.
+  les onglets "Facturation" et "Formation -> competences" (import manuel,
+  voir plus haut). Si ce script ne charge pas (reseau/proxy/CSP), l'import
+  CSV reste utilisable sans lui -- voir importSheetFile() plus bas.
 -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
@@ -772,16 +774,20 @@ async function fetchAll(entity, entityId) {
 }
 
 async function buildData(entityId) {
-  const [customers, conventions, invoices, attendees, sessions, sessionQualiopi] = await Promise.all([
+  const [customers, conventions, invoices, attendees, sessions, sessionQualiopi, conventionTrainings, timetables] = await Promise.all([
     fetchAll('customer', entityId),
     fetchAll('fullConventionQualiopi', entityId),
     fetchAll('invoice', entityId),
     fetchAll('conventionAttendee', entityId),
     fetchAll('session', entityId),
     fetchAll('sessionQualiopi', entityId).catch(() => []),
+    fetchAll('conventionTraining', entityId).catch(() => []),
+    fetchAll('timetable', entityId).catch(() => []),
   ]);
 
   const convById = new Map(conventions.map((c) => [c.id, c]));
+
+  const cpf_dossiers = buildCpfDossiers(customers, convById, conventionTrainings, timetables);
 
   const latestByAttendee = new Map();
   attendees.filter((a) => a.attendee).forEach((a) => {
@@ -926,9 +932,84 @@ async function buildData(entityId) {
     heures_par_mois, top_formateurs,
     sessions_a_venir: sessions_recentes_fallback, sessions_a_venir_is_future: sessions_a_venir.length > 0,
     sessions_listing, credit_restant, montant_vendu_facture, heures_formateur, join_ratio: joinRatio,
+    cpf_dossiers,
     ...commercial,
     raw,
   };
+}
+
+// ------------------------------------------------------------------
+// CPF Sous-traitance -- aucun champ "CPF" n'existe dans l'API MCDF ;
+// un dossier est retenu ici si le payeur (timetable.payerId) d'au
+// moins une de ses lignes de facturation est la Caisse des Dépôts et
+// Consignations (gestionnaire de Mon Compte Formation), confirmé
+// manuellement le 02/09/2026 sur cette entité. La sous-traitance vient
+// du champ timetable.subcontracted ("1"), regroupé par ligne de
+// convention (conventionTraining) puis par dossier (conventionId).
+// ------------------------------------------------------------------
+const CDC_NAME_RE = /caisse des d[ée]p[oô]ts/i;
+
+function buildCpfDossiers(customers, convById, conventionTrainings, timetables) {
+  const cdcIds = new Set(customers.filter((c) => CDC_NAME_RE.test(c.name || '')).map((c) => c.id));
+  if (!cdcIds.size) return [];
+
+  const ctById = new Map(conventionTrainings.map((ct) => [ct.id, ct]));
+
+  const byCt = new Map();
+  timetables.forEach((t) => {
+    const ct = ctById.get(t.conventionTrainingId);
+    if (!ct || !ct.conventionId) return;
+    if (!byCt.has(ct.id)) byCt.set(ct.id, { ct, facture: 0, subcontracted: false, caST: 0, isCpf: false });
+    const agg = byCt.get(ct.id);
+    agg.facture += t.discountedAmount || 0;
+    if (t.subcontracted === '1') {
+      agg.subcontracted = true;
+      agg.caST += t.discountedAmount || 0;
+    }
+    if (cdcIds.has(t.payerId)) agg.isCpf = true;
+  });
+
+  const byDossier = new Map();
+  byCt.forEach((agg) => {
+    if (!agg.isCpf) return;
+    const { ct } = agg;
+    const convId = ct.conventionId;
+    if (!byDossier.has(convId)) {
+      byDossier.set(convId, {
+        conventionId: convId, facture: 0, heuresDecl: 0, heuresST: 0, caST: 0,
+        sessions: new Set(), debut: null, fin: null,
+      });
+    }
+    const d = byDossier.get(convId);
+    d.facture += agg.facture;
+    d.heuresDecl += ct.soldHours || 0;
+    if (agg.subcontracted) {
+      d.heuresST += ct.soldHours || 0;
+      d.caST += agg.caST;
+    }
+    const sessionLabel = ct.sessionName || ct.sessionCode;
+    if (sessionLabel) d.sessions.add(sessionLabel);
+    if (ct.sessionStartDate) {
+      const dt = new Date(ct.sessionStartDate);
+      if (!d.debut || dt < d.debut) d.debut = dt;
+    }
+    if (ct.sessionEndDate) {
+      const dt = new Date(ct.sessionEndDate);
+      if (!d.fin || dt > d.fin) d.fin = dt;
+    }
+  });
+
+  return [...byDossier.values()].map((d) => {
+    const conv = convById.get(d.conventionId) || {};
+    return {
+      dossier: d.conventionId,
+      intitule: conv.name || conv.code || '(sans intitulé)',
+      sessions: [...d.sessions].join(', ') || '—',
+      debut: d.debut, fin: d.fin,
+      facture: d.facture, heuresDecl: d.heuresDecl, heuresST: d.heuresST, caST: d.caST,
+      pctST: d.facture > 0 ? d.caST / d.facture : 0,
+    };
+  });
 }
 
 // ------------------------------------------------------------------
@@ -1432,6 +1513,9 @@ function renderAll(DATA) {
     ['trainingName', 'strong'], ['name'], ['hours', 'num', fmtH], ['startDate', '', fmtDate],
   ]);
   renderMontant(DATA);
+
+  // CPF Sous-traitance
+  renderCpfLive(DATA);
 }
 
 // ------------------------------------------------------------------
@@ -1479,8 +1563,8 @@ function buildSuggestContext() {
   return [
     'Contexte technique (pré-rempli automatiquement) :',
     '- Widget : Génération de rapports (widget-ia.html)',
-    '- Entités API MCDF déjà utilisées ici : customer, fullConventionQualiopi, invoice, conventionAttendee, session, sessionQualiopi (via /wa/{entity}/list?nopaging=1)',
-    '- Onglets existants : Commercial, Planning, Formateurs, Listing, CPF Sous-traitance (import Excel manuel), Facturation (import Excel manuel), Observatoire marché (open data Mon Compte Formation en direct), Formation → compétences (import Excel du référentiel ROME + génération de prompt pédagogique à copier)',
+    '- Entités API MCDF déjà utilisées ici : customer, fullConventionQualiopi, invoice, conventionAttendee, session, sessionQualiopi, conventionTraining, timetable (via /wa/{entity}/list?nopaging=1)',
+    '- Onglets existants : Commercial, Planning, Formateurs, Listing, CPF Sous-traitance (API en direct, dossier retenu si payeur = Caisse des Dépôts et Consignations, sous-traitance = timetable.subcontracted), Facturation (import Excel manuel), Observatoire marché (open data Mon Compte Formation en direct), Formation → compétences (import Excel du référentiel ROME + génération de prompt pédagogique à copier)',
     '',
   ].join('\n');
 }
@@ -1512,10 +1596,11 @@ document.getElementById('suggest-report-btn').addEventListener('click', () => op
 document.getElementById('suggest-filter-btn').addEventListener('click', () => openSuggest('filter'));
 
 // ------------------------------------------------------------------
-// Onglets "CPF Sous-traitance" et "Facturation" -- pas d'API MCDF ici,
-// import manuel d'un export Excel/CSV existant (voir la note dans
-// chaque onglet). Fonctionnent independamment du chargement des donnees
-// live plus haut : purement client, localStorage uniquement.
+// Onglet "Facturation" -- pas d'entite facturation confirmee dans
+// l'API MCDF, import manuel d'un export Excel/CSV existant (voir la
+// note dans l'onglet). Fonctionne independamment du chargement des
+// donnees live plus haut : purement client, localStorage uniquement.
+// (CPF Sous-traitance est en direct depuis l'API -- voir buildCpfDossiers.)
 // ------------------------------------------------------------------
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -1633,65 +1718,9 @@ function readWorkbookFile(file, sheetHint) {
   });
 }
 
-// ---- CPF Sous-traitance ----
-const CPF_STORAGE_KEY = 'mcdf-report-cpf-v1';
+// ---- CPF Sous-traitance (API MCDF en direct, voir buildCpfDossiers) ----
 let CPF_ROWS = [];
 
-function parseCpfRows(aoa) {
-  if (!aoa || !aoa.length) throw new Error('Fichier vide.');
-  const idx = buildHeaderIndex(aoa[0]);
-  const iDossier = pickCol(idx, ['n dossier cpf', 'n dossier', 'dossier']);
-  const iIntitule = pickCol(idx, ['intitule de formation', 'intitule']);
-  const iDebut = pickCol(idx, ['date de debut', 'debut']);
-  const iFin = pickCol(idx, ['date de fin', 'fin']);
-  const iFacture = pickCol(idx, ['total facture ht', 'total facture', 'facture']);
-  const iHeuresDecl = pickCol(idx, ['heures declarees']);
-  const iHeuresST = pickCol(idx, ['heures sous traitees']);
-  const iPctST = pickCol(idx, ['% sous traitance', 'pourcentage sous traitance']);
-  const iCAST = pickCol(idx, ['ca sous traitance']);
-  if (iDossier === -1 && iIntitule === -1) {
-    throw new Error('Colonnes non reconnues — vérifiez qu\'il s\'agit bien de l\'export « CPF sous-traitance » (onglet Dossiers).');
-  }
-  const rows = [];
-  for (let r = 1; r < aoa.length; r++) {
-    const row = aoa[r];
-    if (!row || !row.length) continue;
-    const intitule = iIntitule > -1 ? row[iIntitule] : null;
-    const dossier = iDossier > -1 ? row[iDossier] : null;
-    if (!intitule && !dossier) continue;
-    if (String(dossier || '').trim().toUpperCase() === 'TOTAL') continue;
-    const facture = parseNumber(iFacture > -1 ? row[iFacture] : null) || 0;
-    const heuresDecl = parseNumber(iHeuresDecl > -1 ? row[iHeuresDecl] : null) || 0;
-    const heuresST = parseNumber(iHeuresST > -1 ? row[iHeuresST] : null) || 0;
-    let pctST = parseNumber(iPctST > -1 ? row[iPctST] : null);
-    const caST = parseNumber(iCAST > -1 ? row[iCAST] : null) || 0;
-    if (pctST === null) pctST = facture > 0 ? caST / facture : 0;
-    rows.push({
-      dossier: dossier ? String(dossier) : '—',
-      intitule: intitule ? String(intitule) : '(sans intitulé)',
-      debut: parseDateCell(iDebut > -1 ? row[iDebut] : null),
-      fin: parseDateCell(iFin > -1 ? row[iFin] : null),
-      facture, heuresDecl, heuresST, pctST, caST,
-    });
-  }
-  if (!rows.length) throw new Error('Aucune ligne de dossier trouvée dans ce fichier.');
-  return rows;
-}
-function saveCpfData(rows, filename) {
-  localStorage.setItem(CPF_STORAGE_KEY, JSON.stringify({
-    rows: rows.map((r) => ({ ...r, debut: r.debut ? r.debut.toISOString() : null, fin: r.fin ? r.fin.toISOString() : null })),
-    filename, importedAt: new Date().toISOString(),
-  }));
-}
-function loadCpfData() {
-  try {
-    const raw = localStorage.getItem(CPF_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    parsed.rows = parsed.rows.map((r) => ({ ...r, debut: r.debut ? new Date(r.debut) : null, fin: r.fin ? new Date(r.fin) : null }));
-    return parsed;
-  } catch (e) { return null; }
-}
 function pctClass(pct) {
   if (pct >= 70) return 'crit';
   if (pct >= 30) return 'warn';
@@ -1705,6 +1734,7 @@ function renderCpfTable(rows) {
     const tr = el('tr');
     tr.appendChild(el('td', 'strong', escapeHtml(r.dossier)));
     tr.appendChild(el('td', '', escapeHtml(r.intitule)));
+    tr.appendChild(el('td', '', escapeHtml(r.sessions)));
     tr.appendChild(el('td', '', `${fmtDateShort(r.debut)} → ${fmtDateShort(r.fin)}`));
     tr.appendChild(el('td', 'num', fmtEUR(r.facture)));
     tr.appendChild(el('td', 'num', fmtH(r.heuresDecl)));
@@ -1717,11 +1747,11 @@ function renderCpfTable(rows) {
   });
   document.getElementById('cpf-count-hint').textContent = `${sorted.length} dossier(s) affiché(s).`;
 }
-function renderCpfContent(stored) {
-  CPF_ROWS = stored.rows;
-  document.getElementById('cpf-import-meta').innerHTML = `Importé : <strong>${escapeHtml(stored.filename)}</strong> le ${escapeHtml(new Date(stored.importedAt).toLocaleString('fr-FR'))} — ${CPF_ROWS.length} dossier(s).`;
-  document.getElementById('cpf-clear-btn').style.display = 'inline-block';
-  document.getElementById('cpf-content').style.display = 'block';
+function renderCpfLive(DATA) {
+  CPF_ROWS = DATA.cpf_dossiers || [];
+  document.getElementById('cpf-content').style.display = CPF_ROWS.length ? 'block' : 'none';
+  document.getElementById('cpf-empty-hint').style.display = CPF_ROWS.length ? 'none' : 'block';
+  if (!CPF_ROWS.length) return;
 
   const totalFacture = CPF_ROWS.reduce((s, r) => s + r.facture, 0);
   const totalCAST = CPF_ROWS.reduce((s, r) => s + r.caST, 0);
@@ -1737,36 +1767,11 @@ function renderCpfContent(stored) {
 
   renderCpfTable(CPF_ROWS);
 }
-function initCpfTab() {
-  const stored = loadCpfData();
-  if (stored && stored.rows && stored.rows.length) renderCpfContent(stored);
-
-  document.getElementById('cpf-file-input').addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const meta = document.getElementById('cpf-import-meta');
-    meta.textContent = 'Lecture du fichier…';
-    try {
-      const aoa = await readWorkbookFile(file, /dossier/i);
-      const rows = parseCpfRows(aoa);
-      saveCpfData(rows, file.name);
-      renderCpfContent(loadCpfData());
-    } catch (err) {
-      meta.innerHTML = `<span style="color:var(--critical)">Échec de l'import : ${escapeHtml(err.message)}</span>`;
-    }
-    e.target.value = '';
-  });
-  document.getElementById('cpf-clear-btn').addEventListener('click', () => {
-    localStorage.removeItem(CPF_STORAGE_KEY);
-    CPF_ROWS = [];
-    document.getElementById('cpf-content').style.display = 'none';
-    document.getElementById('cpf-import-meta').textContent = 'Aucun fichier importé.';
-    document.getElementById('cpf-clear-btn').style.display = 'none';
-    document.getElementById('cpf-file-input').value = '';
-  });
+function initCpfSearch() {
   document.getElementById('cpf-search').addEventListener('input', (e) => {
     const q = e.target.value.trim().toLowerCase();
-    const filtered = !q ? CPF_ROWS : CPF_ROWS.filter((r) => r.dossier.toLowerCase().includes(q) || r.intitule.toLowerCase().includes(q));
+    const filtered = !q ? CPF_ROWS : CPF_ROWS.filter((r) =>
+      r.dossier.toLowerCase().includes(q) || r.intitule.toLowerCase().includes(q) || r.sessions.toLowerCase().includes(q));
     renderCpfTable(filtered);
   });
 }
@@ -1945,7 +1950,7 @@ function initFacturationTab() {
   document.getElementById('factu-search').addEventListener('input', () => renderFactuTable(FACTU_ROWS));
 }
 
-initCpfTab();
+initCpfSearch();
 initFacturationTab();
 
 // ------------------------------------------------------------------
