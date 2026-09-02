@@ -212,6 +212,12 @@
   .cell-sub { font-size: 11px; color: var(--ink-muted); }
   .field-label { display: block; font-size: 11.5px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
   .field-block { margin-bottom: 14px; }
+  .rome-card { border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; background: var(--surface); }
+  .rome-card-head { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; }
+  .rome-card-head input[type="checkbox"] { margin-top: 3px; flex: none; }
+  .rome-detail-list { margin: 8px 0 0 26px; padding-left: 16px; font-size: 12px; color: var(--ink-2); }
+  .rome-detail-list li { padding: 2px 0; }
+  .rome-detail-link { font-size: 11.5px; color: var(--accent); cursor: pointer; text-decoration: underline; margin-left: 26px; }
 
   @media (max-width: 880px) {
     .kpis { grid-template-columns: repeat(2, 1fr); }
@@ -249,6 +255,7 @@
       <button class="tab-btn" type="button" data-tab="cpf">CPF Sous-traitance</button>
       <button class="tab-btn" type="button" data-tab="facturation">Facturation</button>
       <button class="tab-btn" type="button" data-tab="observatoire">Observatoire marché</button>
+      <button class="tab-btn" type="button" data-tab="rome">Formation → compétences</button>
     </div>
 
     <!-- ============================= COMMERCIAL ============================= -->
@@ -620,6 +627,42 @@
       </div>
     </div>
 
+    <!-- ============================= FORMATION -> COMPETENCES ROME (import Excel, prompt IA) ============================= -->
+    <div class="tab-panel" id="tab-rome">
+      <div class="note">
+        Cet état n'est pas connecté à l'API MCDF : importez ci-dessous l'export ROME « Arborescence des compétences » (France Travail / data.gouv.fr, fichier <code>.xlsx</code>, onglets « Données brutes Macro-comp. » et « Données brutes Comp. »). Les 507 macro-compétences restent dans ce navigateur (<code>localStorage</code>) ; le détail des 19 462 compétences est trop volumineux pour être conservé automatiquement — réimportez le fichier à chaque ouverture du widget si vous voulez voir ce niveau de détail (la recherche par macro-compétence, elle, reste disponible sans réimport). Ce n'est pas un annuaire métier↔compétences officiel : c'est une recherche par mot-clé dans le référentiel de compétences ROME.
+      </div>
+
+      <div class="import-box">
+        <input type="file" id="rome-file-input" accept=".xlsx,.xls">
+        <p class="import-meta" id="rome-import-meta">Aucun fichier importé.</p>
+        <button type="button" class="btn small" id="rome-clear-btn" style="display:none">Effacer les données importées</button>
+      </div>
+
+      <div id="rome-content" style="display:none">
+        <div class="field-block">
+          <label class="field-label" for="rome-formation-title">Formation à concevoir (optionnel, repris dans le prompt généré)</label>
+          <input type="text" class="filter-input" id="rome-formation-title" placeholder="ex. Manager une équipe" style="max-width:360px">
+        </div>
+
+        <div class="field-block">
+          <label class="field-label" for="rome-search">Rechercher des compétences ROME (mot-clé, métier ou intitulé de formation)</label>
+          <input type="search" class="filter-input" id="rome-search" placeholder="ex. équipe, management, vente…" style="max-width:360px">
+          <p class="hint" id="rome-results-hint" style="margin-top:6px; font-size:12px; color:var(--ink-muted);"></p>
+        </div>
+
+        <div id="rome-results" style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;"></div>
+
+        <div class="panel" style="padding:16px 18px;">
+          <p class="hint" id="rome-selection-hint" style="margin:0 0 10px; font-size:12.5px; color:var(--ink-muted);">Cochez une ou plusieurs compétences ci-dessus pour générer un prompt pédagogique.</p>
+          <button type="button" class="btn primary" id="rome-generate-btn" disabled>Générer le prompt pédagogique</button>
+          <button type="button" class="btn small" id="rome-copy-btn" style="display:none; margin-left:8px;">Copier</button>
+          <textarea id="rome-prompt-box" readonly style="display:none; width:100%; min-height:220px; margin-top:14px; font-family:var(--font-mono); font-size:12px; padding:10px 12px; border-radius:8px; border:1px solid var(--border-2); background:var(--surface-2); color:var(--ink); box-sizing:border-box;"></textarea>
+          <p class="hint" style="margin:10px 0 0; font-size:11.5px; color:var(--ink-muted);">Ce prompt n'appelle aucune IA depuis ce widget : copiez-le et collez-le dans l'assistant IA de votre choix (Claude, ChatGPT…).</p>
+        </div>
+      </div>
+    </div>
+
     <footer>
       Widget IA MCDF — module « génération de rapports » (lecture seule),
       structuré à partir des rapports Power BI existants (Suivi Commercial,
@@ -640,7 +683,12 @@
       interroge en direct, depuis votre navigateur, l'open data publique de
       Mon Compte Formation (<code>opendata.caissedesdepots.fr</code>,
       licence ouverte Etalab) — ni MCDF ni ce widget n'hébergent ces
-      données, elles ne transitent par aucun serveur à nous.
+      données, elles ne transitent par aucun serveur à nous. L'onglet
+      « Formation → compétences » fonctionne sur le même principe d'import
+      manuel que « CPF Sous-traitance »/« Facturation », à partir du
+      référentiel ROME (France Travail) ; le prompt qu'il génère est à
+      copier dans l'assistant IA de votre choix — ce widget n'appelle
+      aucune IA lui-même.
     </footer>
 
   </div>
@@ -1432,7 +1480,7 @@ function buildSuggestContext() {
     'Contexte technique (pré-rempli automatiquement) :',
     '- Widget : Génération de rapports (widget-ia.html)',
     '- Entités API MCDF déjà utilisées ici : customer, fullConventionQualiopi, invoice, conventionAttendee, session, sessionQualiopi (via /wa/{entity}/list?nopaging=1)',
-    '- Onglets existants : Commercial, Planning, Formateurs, Listing, CPF Sous-traitance (import Excel manuel), Facturation (import Excel manuel), Observatoire marché (open data Mon Compte Formation en direct)',
+    '- Onglets existants : Commercial, Planning, Formateurs, Listing, CPF Sous-traitance (import Excel manuel), Facturation (import Excel manuel), Observatoire marché (open data Mon Compte Formation en direct), Formation → compétences (import Excel du référentiel ROME + génération de prompt pédagogique à copier)',
     '',
   ].join('\n');
 }
@@ -2124,4 +2172,284 @@ function initObservatoireTab() {
   });
 }
 initObservatoireTab();
+
+// ------------------------------------------------------------------
+// Onglet "Formation -> competences" -- import du referentiel ROME
+// (arborescence des competences, France Travail / data.gouv.fr,
+// fichier .xlsx confirme par capture reelle le 02/09/2026 : onglets
+// "Donnees brutes Macro-comp." (507 lignes : Domaine > Enjeu > Objectif
+// > Macro-competence) et "Donnees brutes Comp." (19 462 lignes :
+// Macro-competence -> Competence). Pas de lien direct metier(ROME)<->
+// formation/certification dans ce fichier -- l'onglet fait une
+// recherche par mot-cle dans les libelles, pas un annuaire officiel
+// metier -> competences.
+//
+// Le tableau macro-competences (petit, ~200 Ko) est persiste en
+// localStorage. Le detail competences (~7 Mo en JSON) ne l'est PAS --
+// trop volumineux a cote des autres donnees deja stockees (Qualiopi,
+// Suggestions, Observatoire...), garde en memoire pour la session
+// uniquement.
+//
+// Le bouton "Generer le prompt pedagogique" n'appelle aucune IA depuis
+// ce widget (pas de cle API, pas de backend) : il assemble un prompt
+// documente (competences ROME choisies + les 5 demandes -- objectifs
+// pedagogiques, programme, criteres d'evaluation, questionnaire,
+// rattachement aux competences ROME) que l'utilisateur copie dans
+// l'assistant IA de son choix, sur le meme principe que les boutons
+// "Suggerer..." plus haut.
+// ------------------------------------------------------------------
+const ROME_MACRO_KEY = 'mcdf-rome-macro-v1';
+let ROME_MACRO_ROWS = [];
+let ROME_DETAIL = [];
+const ROME_SELECTED = new Map();
+
+function findSheetByName(sheetNames, wanted) {
+  const wantedSlug = slugHeader(wanted);
+  return sheetNames.find((n) => slugHeader(n) === wantedSlug) || sheetNames.find((n) => slugHeader(n).includes(wantedSlug));
+}
+function readWorkbookSheetsFile(file, wantedSheets) {
+  return new Promise((resolve, reject) => {
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    if (ext === 'csv') {
+      reject(new Error('Ce fichier nécessite les 2 feuilles Excel du référentiel ROME (Macro-compétences + Compétences) — le .csv à feuille unique n\'est pas pris en charge ici, importez le fichier .xlsx original.'));
+      return;
+    }
+    if (typeof XLSX === 'undefined') {
+      reject(new Error('La bibliothèque de lecture Excel (SheetJS, cdnjs.cloudflare.com) n\'a pas pu se charger — vérifiez la connexion internet.'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const wb = XLSX.read(reader.result, { type: 'array', cellDates: true });
+        const out = {};
+        wantedSheets.forEach((wanted) => {
+          const name = findSheetByName(wb.SheetNames, wanted);
+          out[wanted] = name ? XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: null, blankrows: false }) : null;
+        });
+        resolve(out);
+      } catch (e) {
+        reject(new Error(`Fichier illisible : ${e.message}`));
+      }
+    };
+    reader.onerror = () => reject(new Error('Lecture du fichier impossible.'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+function parseRomeMacroRows(aoa) {
+  if (!aoa || !aoa.length) throw new Error('Feuille "Données brutes Macro-comp." vide ou introuvable.');
+  const idx = buildHeaderIndex(aoa[0]);
+  const iDomaine = pickCol(idx, ['1 domaine competence']);
+  const iEnjeu = pickCol(idx, ['2 enjeu']);
+  const iObjectif = pickCol(idx, ['3 objectif']);
+  const iMacro = pickCol(idx, ['4 macro competence']);
+  if (iMacro === -1) throw new Error('Colonnes non reconnues — vérifiez qu\'il s\'agit bien du fichier ROME "Arborescence des compétences" (onglet "Données brutes Macro-comp.").');
+  const rows = [];
+  for (let r = 1; r < aoa.length; r++) {
+    const row = aoa[r];
+    if (!row || !row.length) continue;
+    const macro = row[iMacro];
+    if (!macro) continue;
+    rows.push({
+      domaine: String(row[iDomaine] || ''),
+      enjeu: String(row[iEnjeu] || ''),
+      objectif: String(row[iObjectif] || ''),
+      macroCompetence: String(macro),
+    });
+  }
+  if (!rows.length) throw new Error('Aucune macro-compétence trouvée dans ce fichier.');
+  return rows;
+}
+function parseRomeDetailRows(aoa) {
+  if (!aoa || !aoa.length) return [];
+  const idx = buildHeaderIndex(aoa[0]);
+  const iMacro = pickCol(idx, ['4 macro competence']);
+  const iComp = pickCol(idx, ['5 competence']);
+  if (iMacro === -1 || iComp === -1) return [];
+  const rows = [];
+  for (let r = 1; r < aoa.length; r++) {
+    const row = aoa[r];
+    if (!row || !row.length) continue;
+    const comp = row[iComp];
+    if (!comp) continue;
+    rows.push({ macroCompetence: String(row[iMacro] || ''), competence: String(comp) });
+  }
+  return rows;
+}
+function loadRomeMacro() {
+  try {
+    const raw = localStorage.getItem(ROME_MACRO_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+function searchRomeMacro(query) {
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!terms.length) return [];
+  return ROME_MACRO_ROWS
+    .map((r) => {
+      const haystack = `${r.macroCompetence} ${r.objectif} ${r.enjeu} ${r.domaine}`.toLowerCase();
+      const score = terms.reduce((s, t) => s + (haystack.includes(t) ? 1 : 0), 0);
+      return { r, score };
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score || a.r.macroCompetence.localeCompare(b.r.macroCompetence))
+    .slice(0, 40)
+    .map((x) => x.r);
+}
+function updateRomeSelectionHint() {
+  document.getElementById('rome-selection-hint').textContent = ROME_SELECTED.size
+    ? `${ROME_SELECTED.size} compétence(s) sélectionnée(s) pour le prompt.`
+    : 'Cochez une ou plusieurs compétences ci-dessus pour générer un prompt pédagogique.';
+  document.getElementById('rome-generate-btn').disabled = ROME_SELECTED.size === 0;
+}
+function renderRomeResults(query) {
+  const wrap = document.getElementById('rome-results');
+  wrap.innerHTML = '';
+  const hint = document.getElementById('rome-results-hint');
+  if (!query.trim()) { hint.textContent = ''; return; }
+  const matches = searchRomeMacro(query);
+  hint.textContent = matches.length
+    ? `${matches.length} macro-compétence(s) trouvée(s)${matches.length === 40 ? ' (limité aux 40 meilleures)' : ''}.`
+    : '';
+  if (!matches.length) {
+    wrap.appendChild(el('p', 'hint', 'Aucune compétence ROME ne correspond à ce mot-clé. Essayez un terme plus général (ex. "équipe", "management", "vente").'));
+    return;
+  }
+  matches.forEach((r, i) => {
+    const card = el('div', 'rome-card');
+    const head = el('div', 'rome-card-head');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.id = `rome-cb-${i}`;
+    cb.checked = ROME_SELECTED.has(r.macroCompetence);
+    cb.addEventListener('change', () => {
+      if (cb.checked) ROME_SELECTED.set(r.macroCompetence, r);
+      else ROME_SELECTED.delete(r.macroCompetence);
+      updateRomeSelectionHint();
+    });
+    head.appendChild(cb);
+    const label = document.createElement('label');
+    label.htmlFor = cb.id;
+    label.innerHTML = `<strong>${escapeHtml(r.macroCompetence)}</strong><br><span class="cell-sub">${escapeHtml(r.domaine)} › ${escapeHtml(r.enjeu)} › ${escapeHtml(r.objectif)}</span>`;
+    head.appendChild(label);
+    card.appendChild(head);
+
+    const detailLink = el('a', 'rome-detail-link', 'Voir le détail');
+    const detailList = el('ul', 'rome-detail-list');
+    detailList.style.display = 'none';
+    detailLink.addEventListener('click', () => {
+      const isOpen = detailList.style.display !== 'none';
+      if (isOpen) { detailList.style.display = 'none'; detailLink.textContent = 'Voir le détail'; return; }
+      if (!detailList.childElementCount) {
+        const items = ROME_DETAIL.filter((d) => d.macroCompetence === r.macroCompetence);
+        if (!items.length) {
+          detailList.appendChild(el('li', '', 'Détail indisponible dans cette session — réimportez le fichier ROME pour afficher les compétences précises.'));
+        } else {
+          items.forEach((it) => detailList.appendChild(el('li', '', escapeHtml(it.competence))));
+        }
+      }
+      detailList.style.display = 'block';
+      detailLink.textContent = 'Masquer le détail';
+    });
+    card.appendChild(detailLink);
+    card.appendChild(detailList);
+    wrap.appendChild(card);
+  });
+}
+function buildRomePrompt(formationTitle) {
+  const grouped = {};
+  ROME_SELECTED.forEach((r) => {
+    if (!grouped[r.domaine]) grouped[r.domaine] = [];
+    grouped[r.domaine].push(r);
+  });
+  const lines = [
+    `Tu es ingénieur pédagogique. Conçois le contenu d'une formation intitulée « ${formationTitle || '(titre à préciser)'} », en t'appuyant strictement sur les compétences ROME suivantes (référentiel France Travail, arborescence des compétences, mise à jour juin 2026) :`,
+    '',
+  ];
+  Object.entries(grouped).forEach(([domaine, items]) => {
+    lines.push(`Domaine : ${domaine}`);
+    items.forEach((r) => {
+      lines.push(`- ${r.macroCompetence} (${r.enjeu} > ${r.objectif})`);
+      ROME_DETAIL.filter((d) => d.macroCompetence === r.macroCompetence).slice(0, 8).forEach((d) => lines.push(`  · ${d.competence}`));
+    });
+    lines.push('');
+  });
+  lines.push(
+    'À partir de ces compétences, génère :',
+    '1. Les objectifs pédagogiques de la formation (verbes d\'action, mesurables), alignés explicitement sur les compétences ROME ci-dessus.',
+    '2. Un programme de formation détaillé (séquencement des modules, durée indicative de chacun).',
+    '3. Des critères d\'évaluation pour chaque objectif pédagogique.',
+    '4. Un questionnaire d\'évaluation des acquis (QCM ou mise en situation), avec son barème.',
+    '5. Pour chaque objectif généré, indique explicitement à quelle(s) compétence(s) ROME listée(s) ci-dessus il se rattache.',
+  );
+  return lines.join('\n');
+}
+function renderRomeContent(stored) {
+  ROME_MACRO_ROWS = stored.rows;
+  document.getElementById('rome-import-meta').innerHTML = `Importé : <strong>${escapeHtml(stored.filename)}</strong> le ${escapeHtml(new Date(stored.importedAt).toLocaleString('fr-FR'))} — ${ROME_MACRO_ROWS.length} macro-compétence(s)${ROME_DETAIL.length ? `, ${ROME_DETAIL.length} compétence(s) détaillées (session en cours)` : ' (détail non chargé — réimportez pour l\'obtenir)'}.`;
+  document.getElementById('rome-clear-btn').style.display = 'inline-block';
+  document.getElementById('rome-content').style.display = 'block';
+  renderRomeResults(document.getElementById('rome-search').value);
+}
+function initRomeTab() {
+  const stored = loadRomeMacro();
+  if (stored && stored.rows && stored.rows.length) renderRomeContent(stored);
+
+  document.getElementById('rome-file-input').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const meta = document.getElementById('rome-import-meta');
+    meta.textContent = 'Lecture du fichier…';
+    try {
+      const sheets = await readWorkbookSheetsFile(file, ['Données brutes Macro-comp.', 'Données brutes Comp.']);
+      if (!sheets['Données brutes Macro-comp.']) throw new Error('Feuille "Données brutes Macro-comp." introuvable dans ce fichier.');
+      const macroRows = parseRomeMacroRows(sheets['Données brutes Macro-comp.']);
+      ROME_DETAIL = sheets['Données brutes Comp.'] ? parseRomeDetailRows(sheets['Données brutes Comp.']) : [];
+      const stored = { rows: macroRows, filename: file.name, importedAt: new Date().toISOString() };
+      localStorage.setItem(ROME_MACRO_KEY, JSON.stringify(stored));
+      renderRomeContent(stored);
+    } catch (err) {
+      meta.innerHTML = `<span style="color:var(--critical)">Échec de l'import : ${escapeHtml(err.message)}</span>`;
+    }
+    e.target.value = '';
+  });
+  document.getElementById('rome-clear-btn').addEventListener('click', () => {
+    localStorage.removeItem(ROME_MACRO_KEY);
+    ROME_MACRO_ROWS = [];
+    ROME_DETAIL = [];
+    ROME_SELECTED.clear();
+    document.getElementById('rome-content').style.display = 'none';
+    document.getElementById('rome-import-meta').textContent = 'Aucun fichier importé.';
+    document.getElementById('rome-clear-btn').style.display = 'none';
+    document.getElementById('rome-file-input').value = '';
+    document.getElementById('rome-prompt-box').style.display = 'none';
+    document.getElementById('rome-copy-btn').style.display = 'none';
+    updateRomeSelectionHint();
+  });
+  document.getElementById('rome-search').addEventListener('input', (e) => renderRomeResults(e.target.value));
+  document.getElementById('rome-generate-btn').addEventListener('click', () => {
+    const title = document.getElementById('rome-formation-title').value.trim();
+    const box = document.getElementById('rome-prompt-box');
+    box.value = buildRomePrompt(title);
+    box.style.display = 'block';
+    document.getElementById('rome-copy-btn').style.display = 'inline-block';
+  });
+  document.getElementById('rome-copy-btn').addEventListener('click', async () => {
+    const box = document.getElementById('rome-prompt-box');
+    const btn = document.getElementById('rome-copy-btn');
+    try {
+      await navigator.clipboard.writeText(box.value);
+    } catch (e) {
+      box.removeAttribute('readonly');
+      box.select();
+      document.execCommand('copy');
+      box.setAttribute('readonly', '');
+    }
+    const original = btn.textContent;
+    btn.textContent = 'Copié ✓';
+    setTimeout(() => { btn.textContent = original; }, 1800);
+  });
+  updateRomeSelectionHint();
+}
+initRomeTab();
 </script>
