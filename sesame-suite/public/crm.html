@@ -696,6 +696,10 @@ let srch='', fDanger='', fSecteur='', fContrat='', fType='', editingId=null, toa
 let deals=[], COMMERCIALS=[], tickets=[], cashLines=[];
 let cashSettings = {revenuMode:'detail',revenuMontant:0,revenuFrequence:'mensuel',revenuMois:null,depenseMode:'detail',depenseMontant:0,depenseFrequence:'mensuel',depenseMois:null};
 let cashYear = new Date().getFullYear();
+// Filtre d'affichage (vérification/modification) sur les listes de lignes
+// Recettes/Dépenses de la Trésorerie — null = tous les mois. N'affecte que
+// les lignes affichées, jamais les totaux/le graphique (cf. trCategoryCard).
+let trMonthFilter = null;
 
 async function loadData(){
   var r = await apiFetch('/wa/crmProspect/list');
@@ -2182,7 +2186,12 @@ const TR_MONTHS_SHORT = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep'
 
 function showTresorerie(){
   view='treso';curId=null;setNav('n-treso');bc([{label:'Trésorerie '+cashYear}]);
-  tba('');
+  tba(`<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu)">Vérifier/modifier
+    <select onchange="trSetMonthFilter(this.value)" style="font-size:12px;padding:5px 8px;border:1px solid var(--bdr);border-radius:8px;background:var(--card);color:var(--tx)">
+      <option value="">Tous les mois</option>
+      ${TR_MONTHS.map((m,i)=>`<option value="${i}" ${trMonthFilter===i?'selected':''}>${m}</option>`).join('')}
+    </select>
+  </label>`);
   renderTresorerie();
 }
 
@@ -2209,6 +2218,20 @@ function trMonthlyFromSpec(spec, m){
   if(spec.frequence==='trimestriel'){ const start = spec.mois ?? 0; return ((m-start+12)%3===0) ? val : 0; }
   if(spec.frequence==='ponctuel') return (spec.mois ?? 0)===m ? val : 0;
   return 0;
+}
+/** Une ligne mensuelle s'applique à tous les mois ; trimestrielle à ses
+ * échéances ; ponctuelle à son seul mois — indépendamment du montant saisi
+ * (contrairement à trMonthlyFromSpec, qui sert au calcul des totaux, ceci
+ * sert au filtre d'affichage : une ligne à 0 € reste visible sur ses mois). */
+function trLineAppliesToMonth(r, m){
+  if(r.frequence==='trimestriel'){ const start = r.mois ?? 0; return (m-start+12)%3===0; }
+  if(r.frequence==='ponctuel') return (r.mois ?? 0)===m;
+  return true; // mensuel (ou fréquence absente) — s'applique à tous les mois
+}
+/** Change le filtre "vérifier/modifier par mois" des listes Recettes/Dépenses. */
+function trSetMonthFilter(v){
+  trMonthFilter = v===''?null:+v;
+  if(view==='treso') renderTresorerie();
 }
 /** Montant annualisé d'une ligne (ou la saisie globale), pour les totaux affichés. */
 function trAnnualFromSpec(spec){
@@ -2344,16 +2367,27 @@ function openMonthDetail(m){
 }
 
 /** Montant de la catégorie hors pipeline des affaires — lignes CrmCashLine ou saisie globale uniquement. */
+// Le mode "Global" ne remplace la somme des lignes détaillées que tant
+// qu'aucune ligne n'existe encore pour la catégorie — sert de saisie rapide
+// avant d'avoir détaillé quoi que ce soit. Dès qu'une ligne existe, elle
+// compte TOUJOURS dans les totaux et le graphique, même en mode "Global"
+// (ce mode reste alors une simple bascule d'affichage, cf. trCategoryCard) :
+// avant ce correctif, passer en "Global" sur une catégorie déjà détaillée
+// faisait disparaître les dépenses/recettes déjà saisies du graphique dès
+// que le champ "Global" valait 0 (sa valeur par défaut).
 function trCategoryMonthlyBase(kind, m){
-  return cashSettings[kind+'Mode']==='global'
-    ? trMonthlyFromSpec({montant:cashSettings[kind+'Montant'], frequence:cashSettings[kind+'Frequence'], mois:cashSettings[kind+'Mois']}, m)
-    : trRows(kind).reduce((s,r)=>s+trMonthlyFromSpec(r,m),0);
+  const rows = trRows(kind);
+  if(cashSettings[kind+'Mode']==='global' && rows.length===0){
+    return trMonthlyFromSpec({montant:cashSettings[kind+'Montant'], frequence:cashSettings[kind+'Frequence'], mois:cashSettings[kind+'Mois']}, m);
+  }
+  return rows.reduce((s,r)=>s+trMonthlyFromSpec(r,m),0);
 }
-/** Total annuel de la catégorie, selon le mode actif (global ou somme des lignes détaillées). */
+/** Total annuel de la catégorie — somme des lignes détaillées dès qu'il en existe, sinon la saisie "Global" (cf. trCategoryMonthlyBase). */
 function trCategoryAnnual(kind){
-  const base = cashSettings[kind+'Mode']==='global'
+  const rows = trRows(kind);
+  const base = (cashSettings[kind+'Mode']==='global' && rows.length===0)
     ? trAnnualFromSpec({montant:cashSettings[kind+'Montant'], frequence:cashSettings[kind+'Frequence']})
-    : trRows(kind).reduce((s,r)=>s+trAnnualFromSpec(r),0);
+    : rows.reduce((s,r)=>s+trAnnualFromSpec(r),0);
   return kind==='revenu' ? base + trDealsPipelineAnnual() : base;
 }
 /** Montant de la catégorie pour le mois `m`, selon le mode actif (inclut le pipeline des affaires pour "revenu"). */
@@ -2393,10 +2427,18 @@ function trLineRow(r, kind){
     </div>`;
 }
 
+/** Lignes d'une catégorie, réduites au mois sélectionné par trMonthFilter
+ * (affichage seul — jamais utilisé pour les sommes/le graphique). */
+function trFilteredRows(kind){
+  const rows = trRows(kind);
+  return trMonthFilter===null ? rows : rows.filter(r=>trLineAppliesToMonth(r, trMonthFilter));
+}
+
 function trGlobalBlock(kind){
   const montant = cashSettings[kind+'Montant'], freq = cashSettings[kind+'Frequence'], mois = cashSettings[kind+'Mois'];
   const showMois = freq !== 'mensuel';
   const rows = trRows(kind);
+  const shownRows = trFilteredRows(kind);
   const linesSum = rows.reduce((s,r)=>s+trAnnualFromSpec(r),0);
   const globalAnnual = trAnnualFromSpec({montant, frequence:freq});
   const delta = linesSum - globalAnnual;
@@ -2407,21 +2449,24 @@ function trGlobalBlock(kind){
         <select class="tr-freq" title="Fréquence" onchange="trGlobalFreqChange('${kind}',this.value)">${trFreqOpts(kind, freq)}</select>
         ${showMois?`<select class="tr-mois" title="${freq==='trimestriel'?'Départ (tous les 3 mois)':'Mois'}" onchange="trGlobalLocal('${kind}','Mois',+this.value);trGlobalSave('${kind}','Mois',+this.value)">${trMonthOptsSingle(mois)}</select>`:''}
       </div>
+      ${rows.length?`<div class="tr-caveat" style="margin-top:2px">Saisie "Global" ci-dessus non utilisée tant qu'au moins une ligne détaillée existe ci-dessous — ce sont ces lignes qui comptent dans les totaux et le graphique.</div>`:''}
     </div>
     ${rows.length ? `
-      <div class="tr-caveat" style="margin-top:10px">Lignes détaillées existantes — modifiables ci-dessous (mensuel ou ponctuel par mois), sans compter dans le total "Global" ci-dessus tant que ce mode reste actif — somme annualisée <b class="num">${fmtEUR(linesSum)}</b>, écart avec la saisie globale : <b class="num" style="color:${Math.abs(delta)<1?'var(--good,#1a6b47)':'var(--bad,#b23b2c)'}">${delta>=0?'+':''}${fmtEUR(delta)}</b></div>
-      <div class="tr-panel-body">${rows.map(r=>trLineRow(r, kind)).join('')}</div>
+      <div class="tr-caveat" style="margin-top:10px">Lignes détaillées — somme annualisée <b class="num">${fmtEUR(linesSum)}</b>, écart avec la saisie "Global" ci-dessus : <b class="num" style="color:${Math.abs(delta)<1?'var(--good,#1a6b47)':'var(--bad,#b23b2c)'}">${delta>=0?'+':''}${fmtEUR(delta)}</b></div>
+      <div class="tr-panel-body">${shownRows.length ? shownRows.map(r=>trLineRow(r, kind)).join('') : `<div class="log-empty">Aucune ligne pour ${TR_MONTHS[trMonthFilter]}.</div>`}</div>
     ` : ''}`;
 }
 
 function trCategoryCard(kind, title, colorVar){
   const mode = cashSettings[kind+'Mode'];
   const rows = trRows(kind);
+  const shownRows = trFilteredRows(kind);
   const mrr = kind==='revenu' ? trPortfolioMrrMonthly()*12 : 0;
   const total = trCategoryAnnual(kind) + mrr;
   const body = mode==='global'
     ? trGlobalBlock(kind)
-    : (rows.length===0 ? `<div class="log-empty">Aucune ligne. Ajoutez ${kind==='revenu'?'un encaissement':'une dépense'}.</div>` : rows.map(r=>trLineRow(r,kind)).join(''));
+    : (rows.length===0 ? `<div class="log-empty">Aucune ligne. Ajoutez ${kind==='revenu'?'un encaissement':'une dépense'}.</div>`
+       : (shownRows.length===0 ? `<div class="log-empty">Aucune ligne pour ${TR_MONTHS[trMonthFilter]}.</div>` : shownRows.map(r=>trLineRow(r,kind)).join('')));
   const pipeline = kind==='revenu' ? trDealsPipelineAnnual() : 0;
   return `
     <div class="card" style="margin-bottom:0">
