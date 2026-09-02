@@ -674,6 +674,13 @@ const AFFILIATIONS_KNOWN = [
   'Accor','Best Western','Hilton','IHG','Marriott','Radisson','The Originals','Logis de France','Choice Hotels',
   'Relais & Châteaux','Small Luxury Hotels of the World','Châteaux & Hôtels Collection','Design Hotels','Leading Hotels of the World',
 ];
+// Secteurs pour lesquels les champs propres à l'hôtellerie (étoiles,
+// affiliations) n'ont pas de sens — masqués dans la fiche d'édition.
+const SECTEURS_NON_HOTEL = ['Garde meuble','Sport','Agence gestion patrimoine','Bureaux'];
+function toggleHotelOnlyFields(){
+  const show=!SECTEURS_NON_HOTEL.includes(document.getElementById('m-secteur').value);
+  document.querySelectorAll('.hotel-only-field').forEach(el=>{el.style.display=show?'':'none'});
+}
 // PMS effectivement rencontrés dans le portefeuille (audit clients Sesame) — la
 // fiche propose ces valeurs plus "Autre…" pour éviter les variantes orthographiques
 // libres (ex. "Medialog" / "Médialog" coexistaient avant ce champ en liste).
@@ -1886,8 +1893,8 @@ function renderModal(mc){
       <div class="form-grid">
         <div class="ff"><label>Type</label><select id="m-type">${TYPES.map(t=>`<option value="${t}" ${mc.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
         <div class="ff"><label>Groupe</label><input id="m-groupe" value="${esc(mc.groupe)}" placeholder="—"></div>
-        <div class="ff"><label>Secteur</label><select id="m-secteur">${sectAll.map(s=>`<option value="${s}" ${mc.secteur===s?'selected':''}>${s}</option>`).join('')}</select></div>
-        <div class="ff" style="grid-column:1/-1">
+        <div class="ff"><label>Secteur</label><select id="m-secteur" onchange="toggleHotelOnlyFields()">${sectAll.map(s=>`<option value="${s}" ${mc.secteur===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div class="ff hotel-only-field" style="grid-column:1/-1;${SECTEURS_NON_HOTEL.includes(mc.secteur)?'display:none':''}">
           <label>Affiliations (enseigne et/ou label — cumulables)</label>
           <div id="m-affiliations-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px">
             ${affAll.map(a=>`<label style="display:flex;align-items:center;gap:5px;border:1px solid var(--bdr);border-radius:20px;padding:4px 10px;font-size:12px;cursor:pointer">
@@ -1910,7 +1917,7 @@ function renderModal(mc){
           <input id="m-pays" value="${esc(mc.pays||'France')}" placeholder="France" list="m-pays-options" oninput="clearMLatLng()">
           <datalist id="m-pays-options"><option value="France"><option value="Belgique"><option value="Suisse"><option value="Luxembourg"><option value="Monaco"><option value="Italie"><option value="Espagne"><option value="Allemagne"><option value="Royaume-Uni"><option value="Portugal"></datalist>
         </div>
-        <div class="ff"><label>Étoiles</label><input id="m-etoiles" value="${esc(mc.etoiles)}" placeholder="ex. ***"></div>
+        <div class="ff hotel-only-field" style="${SECTEURS_NON_HOTEL.includes(mc.secteur)?'display:none':''}"><label>Étoiles</label><input id="m-etoiles" value="${esc(mc.etoiles)}" placeholder="ex. ***"></div>
         <div class="ff"><label>Référent</label><input id="m-referent" value="${esc(mc.referent)}" placeholder="Nom, prénom"></div>
         <div class="ff"><label>Email</label><input type="email" id="m-email" value="${esc(mc.email)}" placeholder="—"></div>
         <div class="ff"><label>Téléphone</label><input id="m-tel" value="${esc(mc.tel)}" placeholder="—"></div>
