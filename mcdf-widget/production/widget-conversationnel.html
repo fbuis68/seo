@@ -104,8 +104,8 @@
 <div class="wrap">
   <p class="eyebrow">Widget IA - MCDF</p>
   <h1>IA Conversationnelle -- v1</h1>
-  <p class="lede">Posez une question sur vos donnees MCDF (nouveaux clients, CA, devis a relancer, stagiaires, formateurs, comparaison N vs N-1), ou tapez directement un nom/numero (dossier, client, stagiaire, formateur, session) pour le retrouver -- chaque resultat propose un bouton "Ouvrir dans MCDF" qui bascule directement sur la fiche. V1 a base de regles sur des questions connues -- pas encore un vrai LLM, voir la note en bas de page.</p>
-  <p class="version-tag">Version du fichier : 2026-09-03 (recherche libre + bascule directe dans MCDF)</p>
+  <p class="lede">Posez une question sur vos donnees MCDF (nouveaux clients, CA, devis a relancer, stagiaires, formateurs, comparaison N vs N-1 -- precisez un mois pour filtrer, ex. "inscriptions en avril 2026"), ou tapez directement un nom/numero (dossier, client, stagiaire, formateur, session) pour le retrouver -- chaque resultat propose un bouton "Ouvrir dans MCDF" qui bascule directement sur la fiche. V1 a base de regles sur des questions connues -- pas encore un vrai LLM, voir la note en bas de page.</p>
+  <p class="version-tag">Version du fichier : 2026-09-03b (filtre mois/annee sur stagiaires, nouveaux clients, CA)</p>
   <div class="suggest-row">
     <button type="button" class="suggest-btn" id="suggest-report-btn">💡 Suggérer un nouveau rapport</button>
     <button type="button" class="suggest-btn" id="suggest-filter-btn">🔎 Suggérer un nouveau filtre</button>
@@ -141,6 +141,28 @@ function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 function norm(s) { return String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
+
+// Détecte un mois/année mentionné dans la question ("avril 2026", "en
+// mars") pour les intentions qui filtrent par mois -- sans ça, ces
+// intentions ignoraient silencieusement le mois demandé et répondaient
+// toujours pour le mois en cours.
+const MONTH_NAMES = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+function parseMonthYear(text) {
+  const t = norm(text);
+  let monthIdx = -1;
+  for (let i = 0; i < MONTH_NAMES.length; i++) {
+    if (t.includes(norm(MONTH_NAMES[i]))) { monthIdx = i; break; }
+  }
+  if (monthIdx === -1) return null;
+  const yearMatch = t.match(/\b(20\d{2})\b/);
+  const year = yearMatch ? parseInt(yearMatch[1], 10) : new Date().getFullYear();
+  return { year, month: monthIdx };
+}
+function monthKeyFrom(year, month) { return `${year}-${String(month + 1).padStart(2, '0')}`; }
+function resolveMonthKey(text) {
+  const my = parseMonthYear(text);
+  return my ? monthKeyFrom(my.year, my.month) : currentMonthKey();
+}
 
 async function fetchAll(entity, entityId) {
   const res = await fetch(`/wa/${entity}/list?nopaging=1&_dc=${Date.now()}`, { credentials: 'same-origin' });
@@ -284,8 +306,8 @@ function buildIntents(D) {
     },
     {
       test: /nouveaux? clients?/i,
-      answer: () => {
-        const mk = currentMonthKey();
+      answer: (text) => {
+        const mk = resolveMonthKey(text);
         const rows = D.customers.filter((c) => monthKey(c.created) === mk);
         if (!rows.length) return `Aucun nouveau client créé en ${fmtMonth(mk)}.`;
         const list = rows.slice(0, 8).map((c) => `<li>${escapeHtml(c.name || c.id)} ${openBtn(c.id, 'customer_tab')}</li>`).join('');
@@ -294,23 +316,35 @@ function buildIntents(D) {
     },
     {
       test: /\bca\b|chiffre d'affaires|facturé|facture/i,
-      answer: () => {
-        const mk = currentMonthKey();
+      answer: (text) => {
+        const mk = resolveMonthKey(text);
         const total = D.invoices.filter((i) => monthKey(i.billingDate) === mk).reduce((s, i) => s + (i.amount || 0), 0);
         return `CA facturé en ${fmtMonth(mk)} : <strong>${fmtEUR(total)}</strong>.`;
       },
     },
     {
       test: /stagiaires?|inscrits?|inscriptions?/i,
-      answer: () => {
+      answer: (text) => {
+        const my = parseMonthYear(text);
         const latestByAttendee = new Map();
         D.attendees.filter((a) => a.attendee).forEach((a) => {
           const prev = latestByAttendee.get(a.attendeeId);
           if (!prev || a.created > prev.created) latestByAttendee.set(a.attendeeId, a);
         });
-        const rows = [...latestByAttendee.values()].sort((a, b) => b.created.localeCompare(a.created)).slice(0, 5);
-        const list = rows.map((a) => `<li><strong>${escapeHtml(a.fullname)}</strong> — ${escapeHtml((D.convById.get(a.conventionId) || {}).name || 'convention inconnue')} ${a.attendeeId ? openBtn(a.attendeeId, 'actor_tab') : ''}</li>`).join('');
-        return `${latestByAttendee.size} stagiaire(s) au total. Les 5 dernières inscriptions :<ul>${list}</ul>`;
+        let rows = [...latestByAttendee.values()];
+        const renderList = (list) => list.map((a) => `<li><strong>${escapeHtml(a.fullname)}</strong> — ${escapeHtml((D.convById.get(a.conventionId) || {}).name || 'convention inconnue')} ${a.attendeeId ? openBtn(a.attendeeId, 'actor_tab') : ''}</li>`).join('');
+
+        if (my) {
+          const mk = monthKeyFrom(my.year, my.month);
+          const label = fmtMonth(mk);
+          rows = rows.filter((a) => monthKey(a.created) === mk).sort((a, b) => b.created.localeCompare(a.created));
+          if (!rows.length) return `Aucune inscription en ${label}.`;
+          const shown = rows.slice(0, 15);
+          const note = rows.length > shown.length ? ` (${rows.length} au total, 15 affichées)` : '';
+          return `${rows.length} inscription(s) en ${label}${note} :<ul>${renderList(shown)}</ul>`;
+        }
+        const top = rows.sort((a, b) => b.created.localeCompare(a.created)).slice(0, 5);
+        return `${latestByAttendee.size} stagiaire(s) au total. Les 5 dernières inscriptions :<ul>${renderList(top)}</ul>`;
       },
     },
     {
@@ -389,7 +423,7 @@ function addMsg(role, html) {
       addMsg('user', text);
       const hit = intents.find((i) => i.test.test(text));
       if (hit) {
-        addMsg('bot', hit.answer());
+        addMsg('bot', hit.answer(text));
       } else {
         const results = renderSearchResults(searchEntities(D, text));
         addMsg('bot', results || FALLBACK);
