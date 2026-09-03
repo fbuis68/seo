@@ -232,7 +232,7 @@
       <p class="eyebrow">Widget IA · MCDF</p>
       <h1>Génération de rapports</h1>
       <p class="lede">Données en direct, lecture seule — aucune action d'écriture n'est effectuée par ce widget.</p>
-      <p class="version-tag">Version du fichier : 2026-09-02e (CPF Sous-traitance : ciblé dossier par dossier, ne timeout plus)</p>
+      <p class="version-tag">Version du fichier : 2026-09-03 (CPF Sous-traitance : filtre année, limité à l'année en cours par défaut)</p>
       <div class="suggest-row">
         <button type="button" class="suggest-btn" id="suggest-report-btn">💡 Suggérer un nouveau rapport</button>
         <button type="button" class="suggest-btn" id="suggest-filter-btn">🔎 Suggérer un nouveau filtre</button>
@@ -462,6 +462,11 @@
     <div class="tab-panel" id="tab-cpf">
       <div class="note">
         Aucun champ « CPF » n'existe dans l'API MCDF : un dossier est considéré CPF ici si le payeur d'au moins une de ses factures (<code>invoice.payerId</code>/<code>payerName</code>) est « Caisse des Dépôts et Consignations » (gestionnaire de Mon Compte Formation) — confirmé manuellement le 02/09/2026. Le détail (heures, sous-traitance) est ensuite récupéré dossier par dossier via <code>conventionTraining/listWithTimetable</code> (même appel que l'interface MCDF sur une fiche dossier), la sous-traitance venant du champ <code>timetable.subcontracted</code>. Données en direct, aucun import.
+      </div>
+
+      <div class="field-block" style="margin-bottom:14px;">
+        <label class="field-label" for="cpf-year-filter">Année (d'après la date de facturation)</label>
+        <select class="filter-select" id="cpf-year-filter"></select>
       </div>
 
       <p class="hint" id="cpf-loading-hint" style="display:none"><span class="spinner" style="display:inline-block; vertical-align:middle; margin-right:6px;"></span>Chargement des dossiers CPF (peut prendre du temps sur un historique important)…</p>
@@ -951,11 +956,12 @@ async function buildData(entityId) {
 // ------------------------------------------------------------------
 const CDC_NAME_RE = /caisse des d[ée]p[oô]ts/i;
 
-function findCpfConventionIds(customers, invoices) {
+function findCpfConventionIds(customers, invoices, year) {
   const cdcIds = new Set(customers.filter((c) => CDC_NAME_RE.test(c.name || '')).map((c) => c.id));
   const ids = new Set();
   invoices.forEach((i) => {
     if (!i.conventionId) return;
+    if (year !== 'all' && (!i.billingDate || new Date(i.billingDate).getFullYear() !== year)) return;
     if (cdcIds.has(i.payerId) || CDC_NAME_RE.test(i.payerName || '')) ids.add(i.conventionId);
   });
   return [...ids];
@@ -1548,8 +1554,10 @@ let CPF_ENTITY_ID = null;
 
     // CPF Sous-traitance : chargé uniquement à l'ouverture de l'onglet
     // (voir loadCpfLive) pour ne jamais retarder le reste du widget.
+    initCpfYearFilter(DATA.raw.customers, DATA.raw.convById, DATA.raw.invoices);
     document.querySelector('.tab-btn[data-tab="cpf"]').addEventListener('click', () => {
-      loadCpfLive(DATA.raw.customers, DATA.raw.convById, DATA.raw.invoices);
+      const year = document.getElementById('cpf-year-filter').value;
+      loadCpfLive(DATA.raw.customers, DATA.raw.convById, DATA.raw.invoices, year === 'all' ? 'all' : Number(year));
     });
   } catch (err) {
     setStatus('warn', '<span class="dot"></span> Non connecté');
@@ -1740,13 +1748,16 @@ function readWorkbookFile(file, sheetHint) {
 const CPF_CONCURRENCY = 6;
 let CPF_ROWS = [];
 let CPF_LOAD_STATE = 'idle'; // idle | loading | error | ready
+let CPF_LOADED_YEAR = null; // année (nombre) ou 'all' déjà chargée, pour éviter un rechargement inutile
 
-async function loadCpfLive(customers, convById, invoices) {
-  if (CPF_LOAD_STATE === 'loading' || CPF_LOAD_STATE === 'ready') return;
+async function loadCpfLive(customers, convById, invoices, year) {
+  if (CPF_LOAD_STATE === 'loading') return;
+  if (CPF_LOAD_STATE === 'ready' && CPF_LOADED_YEAR === year) return;
   CPF_LOAD_STATE = 'loading';
+  CPF_LOADED_YEAR = year;
   setCpfHint('loading');
   try {
-    const cpfConvIds = findCpfConventionIds(customers, invoices);
+    const cpfConvIds = findCpfConventionIds(customers, invoices, year);
     const rows = [];
     for (let i = 0; i < cpfConvIds.length; i += CPF_CONCURRENCY) {
       const batch = cpfConvIds.slice(i, i + CPF_CONCURRENCY);
@@ -1780,6 +1791,36 @@ function setCpfHint(state, errorMsg, done, total) {
   if (state === 'error') document.getElementById('cpf-error-hint').textContent = errorMsg;
   if (state !== 'ready') document.getElementById('cpf-content').style.display = 'none';
   if (state !== 'error') document.getElementById('cpf-empty-hint').style.display = 'none';
+}
+// Filtre année : limité à l'année en cours par défaut (moins de dossiers
+// à interroger un par un -- voir CPF_CONCURRENCY -- et rapport plus
+// pertinent), avec la possibilité de choisir une autre année ou "Toutes".
+function initCpfYearFilter(customers, convById, invoices) {
+  const sel = document.getElementById('cpf-year-filter');
+  const currentYear = new Date().getFullYear();
+  const yearsInInvoices = new Set(
+    invoices.map((i) => i.billingDate && new Date(i.billingDate).getFullYear()).filter(Boolean)
+  );
+  yearsInInvoices.add(currentYear);
+  const years = [...yearsInInvoices].sort((a, b) => b - a);
+
+  sel.innerHTML = '';
+  years.forEach((y) => {
+    const opt = document.createElement('option');
+    opt.value = String(y);
+    opt.textContent = String(y);
+    sel.appendChild(opt);
+  });
+  const optAll = document.createElement('option');
+  optAll.value = 'all';
+  optAll.textContent = 'Toutes années (peut être lent)';
+  sel.appendChild(optAll);
+  sel.value = String(currentYear);
+
+  sel.addEventListener('change', () => {
+    CPF_LOAD_STATE = 'idle';
+    loadCpfLive(customers, convById, invoices, sel.value === 'all' ? 'all' : Number(sel.value));
+  });
 }
 
 function pctClass(pct) {
