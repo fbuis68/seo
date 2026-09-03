@@ -615,6 +615,18 @@ bookingSourceRouter.post(
     const entity = await resolveEntity(req);
     const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
     if (!config || !config.baseUrl) throw new HttpError(400, "Connecteur non configuré — enregistrez d'abord les réglages");
+    // Sans ce garde-fou, un endpoint chambres vide (ex : modèle "Sesame
+    // Technology", qui ne le pré-remplit pas faute de documentation
+    // confirmée pour cet endpoint — seul l'import des réservations l'est)
+    // appelait silencieusement la racine du serveur distant et échouait
+    // avec un message générique ("réponse invalide") sans rapport avec la
+    // vraie cause, faute d'un JSON valide en retour.
+    if (!config.facilityEndpointPath) {
+      throw new HttpError(
+        400,
+        "Aucun endpoint de chambres configuré — renseignez le champ « Endpoint chambres » dans les réglages du connecteur avant d'importer."
+      );
+    }
     try {
       const raw = await fetchExternalFacilities(config);
       const mapping = (config.facilityFieldMapping as FacilityMapping | null) || {};
