@@ -82,7 +82,12 @@
   .msg.user { align-self: flex-end; background: var(--accent); color: #ffffff; border-bottom-right-radius: 3px; }
   .msg.bot { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 3px; }
   .msg.bot ul { margin: 6px 0 0; padding-left: 18px; }
+  .msg.bot li { margin: 2px 0; }
   .msg.bot code { background: var(--surface-2); border-radius: 4px; padding: 0 4px; }
+  .mcdf-open-btn { font: inherit; font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-tint); border: none; border-radius: 100px; padding: 2px 10px; margin-left: 6px; cursor: pointer; white-space: nowrap; }
+  .mcdf-open-btn:hover { filter: brightness(0.96); }
+  .msg.bot .result-group-title { display: block; margin: 10px 0 0; font-size: 12px; font-weight: 600; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .msg.bot .result-group-title:first-child { margin-top: 0; }
 
   .suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
   .suggestion { font-size: 12px; border: 1px solid var(--border-2); border-radius: 100px; padding: 5px 12px; background: var(--surface); color: var(--ink-2); cursor: pointer; }
@@ -99,8 +104,8 @@
 <div class="wrap">
   <p class="eyebrow">Widget IA - MCDF</p>
   <h1>IA Conversationnelle -- v1</h1>
-  <p class="lede">Posez une question sur vos donnees MCDF (nouveaux clients, CA, devis a relancer, stagiaires, formateurs, comparaison N vs N-1). V1 a base de regles sur des questions connues -- pas encore un vrai LLM, voir la note en bas de page.</p>
-  <p class="version-tag">Version du fichier : 2026-08-27</p>
+  <p class="lede">Posez une question sur vos donnees MCDF (nouveaux clients, CA, devis a relancer, stagiaires, formateurs, comparaison N vs N-1), ou tapez directement un nom/numero (dossier, client, stagiaire, formateur, session) pour le retrouver -- chaque resultat propose un bouton "Ouvrir dans MCDF" qui bascule directement sur la fiche. V1 a base de regles sur des questions connues -- pas encore un vrai LLM, voir la note en bas de page.</p>
+  <p class="version-tag">Version du fichier : 2026-09-03 (recherche libre + bascule directe dans MCDF)</p>
   <div class="suggest-row">
     <button type="button" class="suggest-btn" id="suggest-report-btn">💡 Suggérer un nouveau rapport</button>
     <button type="button" class="suggest-btn" id="suggest-filter-btn">🔎 Suggérer un nouveau filtre</button>
@@ -112,7 +117,7 @@
     <div class="chat-log" id="chat-log"></div>
     <div class="suggestions" id="suggestions"></div>
     <div class="ask-row">
-      <input type="text" id="ask-input" placeholder="Ex. quels devis relancer cette semaine ?" autocomplete="off">
+      <input type="text" id="ask-input" placeholder="Ex. quels devis relancer ? ou un nom de dossier/client/stagiaire/formateur…" autocomplete="off">
       <button type="button" id="ask-btn">Envoyer</button>
     </div>
   </div>
@@ -132,6 +137,10 @@ function fmtMonth(ym) {
 function monthKey(iso) { return iso ? iso.slice(0, 7) : null; }
 function daysAgo(iso) { return iso ? Math.floor((Date.now() - new Date(iso)) / 86400000) : null; }
 function currentMonthKey() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function norm(s) { return String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
 
 async function fetchAll(entity, entityId) {
   const res = await fetch(`/wa/${entity}/list?nopaging=1&_dc=${Date.now()}`, { credentials: 'same-origin' });
@@ -143,14 +152,115 @@ async function fetchAll(entity, entityId) {
 }
 
 async function loadData(entityId) {
-  const [customers, conventions, invoices, attendees] = await Promise.all([
+  const [customers, conventions, invoices, attendees, sessions] = await Promise.all([
     fetchAll('customer', entityId),
     fetchAll('convention', entityId),
     fetchAll('invoice', entityId),
     fetchAll('conventionAttendee', entityId),
+    fetchAll('session', entityId).catch(() => []),
   ]);
   const convById = new Map(conventions.map((c) => [c.id, c]));
-  return { customers, conventions, invoices, attendees, convById };
+
+  // Formateurs -- pas d'entité dédiée confirmée, dérivés des sessions
+  // (trainerId/trainerName), comme dans widget-ia.html.
+  const trainersById = new Map();
+  sessions.filter((s) => s.trainerId).forEach((s) => {
+    if (!trainersById.has(s.trainerId)) trainersById.set(s.trainerId, { id: s.trainerId, label: s.trainerName || s.trainerId, sessionCount: 0 });
+    trainersById.get(s.trainerId).sessionCount += 1;
+  });
+  const trainers = [...trainersById.values()];
+
+  return { customers, conventions, invoices, attendees, sessions, trainers, convById };
+}
+
+// ------------------------------------------------------------------
+// Bascule directe dans MCDF : `Convention.linkToObject(id, tab)` est une
+// fonction interne à l'application MCDF elle-même (pas une vraie URL --
+// confirmé en inspectant ses liens internes, ex. <a href="javascript:
+// Convention.linkToObject('C00076271','convention_tab')">). Elle n'est
+// donc atteignable QUE si ce widget tourne dans l'iframe du bouton
+// flottant (launcher-embed.js), qui charge cette page à l'intérieur de
+// la page MCDF -- window.parent pointe alors vers cette page-là. Si le
+// widget est ouvert autrement (URL directe/favori), window.parent est
+// notre propre fenêtre : on bascule sur un copier-coller de l'identifiant.
+// Tabs confirmés : convention_tab (dossier), customer_tab (client),
+// actor_tab (formateur ET stagiaire), training_session_tab (session).
+// ------------------------------------------------------------------
+function mcdfOpen(id, tab) {
+  try {
+    if (window.parent && window.parent !== window && window.parent.Convention
+        && typeof window.parent.Convention.linkToObject === 'function') {
+      window.parent.Convention.linkToObject(id, tab);
+      return;
+    }
+  } catch (e) { /* parent inaccessible (origine différente, ou pas d'iframe) */ }
+  const done = () => addMsg('bot', `Identifiant <code>${escapeHtml(id)}</code> copié dans le presse-papiers. Ce widget n'est pas ouvert dans le panneau intégré de MCDF (bouton flottant 💡), donc pas de bascule directe possible ici — collez l'identifiant dans la recherche MCDF.`);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(id).then(done).catch(done);
+  } else {
+    done();
+  }
+}
+function openBtn(id, tab) {
+  return `<button type="button" class="mcdf-open-btn" onclick="mcdfOpen('${escapeHtml(id)}','${tab}')">Ouvrir dans MCDF →</button>`;
+}
+
+// ------------------------------------------------------------------
+// Recherche libre par nom/numéro -- utilisée quand la question ne
+// correspond à aucune intention connue (voir buildIntents). Cherche en
+// sous-chaîne, insensible à la casse et aux accents, dans les entités
+// déjà chargées.
+// ------------------------------------------------------------------
+function searchEntities(D, query) {
+  const q = norm(query);
+  const results = { dossiers: [], clients: [], stagiaires: [], formateurs: [], sessions: [] };
+  if (q.length < 2) return results;
+
+  D.conventions.forEach((c) => {
+    const label = c.name || c.code || c.id;
+    if (norm(label).includes(q) || norm(c.code || '').includes(q)) {
+      results.dossiers.push({ id: c.id, label, sub: c.code && c.code !== label ? c.code : null });
+    }
+  });
+  D.customers.forEach((c) => {
+    if (norm(c.name || '').includes(q)) results.clients.push({ id: c.id, label: c.name });
+  });
+  const seenAttendee = new Set();
+  D.attendees.filter((a) => a.attendee).forEach((a) => {
+    if (!a.attendeeId || seenAttendee.has(a.attendeeId)) return;
+    if (norm(a.fullname || '').includes(q)) {
+      seenAttendee.add(a.attendeeId);
+      results.stagiaires.push({ id: a.attendeeId, label: a.fullname, sub: (D.convById.get(a.conventionId) || {}).name || null });
+    }
+  });
+  D.trainers.forEach((t) => {
+    if (norm(t.label).includes(q)) results.formateurs.push({ id: t.id, label: t.label, sub: `${t.sessionCount} session(s)` });
+  });
+  D.sessions.forEach((s) => {
+    const label = s.name || s.trainingName;
+    if (label && norm(label).includes(q)) results.sessions.push({ id: s.id, label, sub: s.trainerName || null });
+  });
+
+  Object.keys(results).forEach((k) => { results[k] = results[k].slice(0, 6); });
+  return results;
+}
+const SEARCH_SECTIONS = [
+  ['dossiers', 'Dossiers', 'convention_tab'],
+  ['clients', 'Clients', 'customer_tab'],
+  ['stagiaires', 'Stagiaires', 'actor_tab'],
+  ['formateurs', 'Formateurs', 'actor_tab'],
+  ['sessions', 'Sessions', 'training_session_tab'],
+];
+function renderSearchResults(results) {
+  const parts = SEARCH_SECTIONS
+    .filter(([key]) => results[key].length)
+    .map(([key, title, tab]) => {
+      const items = results[key].map((it) =>
+        `<li><strong>${escapeHtml(it.label)}</strong>${it.sub ? ` — <span style="color:var(--ink-muted)">${escapeHtml(it.sub)}</span>` : ''} ${openBtn(it.id, tab)}</li>`
+      ).join('');
+      return `<span class="result-group-title">${title}</span><ul>${items}</ul>`;
+    });
+  return parts.length ? parts.join('') : null;
 }
 
 // ------------------------------------------------------------------
@@ -168,7 +278,7 @@ function buildIntents(D) {
           .filter((c) => c.age !== null && c.age > 10)
           .sort((a, b) => b.age - a.age);
         if (rows.length === 0) return 'Aucun devis à relancer (plus de 10 jours sans réponse) en ce moment.';
-        const top = rows.slice(0, 5).map((c) => `<li><strong>${c.name || c.proposalCode || c.id}</strong> — ${c.age} jours sans réponse</li>`).join('');
+        const top = rows.slice(0, 5).map((c) => `<li><strong>${escapeHtml(c.name || c.proposalCode || c.id)}</strong> — ${c.age} jours sans réponse ${openBtn(c.id, 'convention_tab')}</li>`).join('');
         return `${rows.length} devis à relancer (plus de 10 jours sans réponse). Les plus anciens :<ul>${top}</ul>`;
       },
     },
@@ -176,8 +286,10 @@ function buildIntents(D) {
       test: /nouveaux? clients?/i,
       answer: () => {
         const mk = currentMonthKey();
-        const n = D.customers.filter((c) => monthKey(c.created) === mk).length;
-        return `${n} nouveau(x) client(s) créé(s) en ${fmtMonth(mk)}.`;
+        const rows = D.customers.filter((c) => monthKey(c.created) === mk);
+        if (!rows.length) return `Aucun nouveau client créé en ${fmtMonth(mk)}.`;
+        const list = rows.slice(0, 8).map((c) => `<li>${escapeHtml(c.name || c.id)} ${openBtn(c.id, 'customer_tab')}</li>`).join('');
+        return `${rows.length} nouveau(x) client(s) créé(s) en ${fmtMonth(mk)} :<ul>${list}</ul>`;
       },
     },
     {
@@ -197,13 +309,18 @@ function buildIntents(D) {
           if (!prev || a.created > prev.created) latestByAttendee.set(a.attendeeId, a);
         });
         const rows = [...latestByAttendee.values()].sort((a, b) => b.created.localeCompare(a.created)).slice(0, 5);
-        const list = rows.map((a) => `<li><strong>${a.fullname}</strong> — ${(D.convById.get(a.conventionId) || {}).name || 'convention inconnue'}</li>`).join('');
+        const list = rows.map((a) => `<li><strong>${escapeHtml(a.fullname)}</strong> — ${escapeHtml((D.convById.get(a.conventionId) || {}).name || 'convention inconnue')} ${a.attendeeId ? openBtn(a.attendeeId, 'actor_tab') : ''}</li>`).join('');
         return `${latestByAttendee.size} stagiaire(s) au total. Les 5 dernières inscriptions :<ul>${list}</ul>`;
       },
     },
     {
       test: /formateurs?/i,
-      answer: () => 'Le classement des formateurs se base sur les sessions et n\'est pas encore branché sur cette interface conversationnelle — consultez la section « Top formateurs » de <code>widget-ia.html</code> en attendant.',
+      answer: () => {
+        const rows = [...D.trainers].sort((a, b) => b.sessionCount - a.sessionCount).slice(0, 5);
+        if (!rows.length) return 'Aucun formateur trouvé dans les sessions chargées.';
+        const list = rows.map((t) => `<li><strong>${escapeHtml(t.label)}</strong> — ${t.sessionCount} session(s) ${openBtn(t.id, 'actor_tab')}</li>`).join('');
+        return `Formateurs les plus actifs (par nombre de sessions) :<ul>${list}</ul>`;
+      },
     },
     {
       test: /comparaison|n-1|année dernière|annee derniere|évolution|evolution/i,
@@ -226,7 +343,7 @@ function buildIntents(D) {
   ];
 }
 
-const FALLBACK = 'Je ne sais pas encore répondre à cette question — cette v1 ne couvre que : nouveaux clients, CA facturé, devis à relancer, stagiaires récents, comparaison N vs N-1.';
+const FALLBACK = 'Aucune correspondance — cette v1 répond à des questions connues (nouveaux clients, CA facturé, devis à relancer, stagiaires récents, formateurs, comparaison N vs N-1) ou à une recherche par nom/numéro (dossier, client, stagiaire, formateur, session).';
 
 const SUGGESTIONS = [
   'Quels devis relancer ?',
@@ -271,7 +388,12 @@ function addMsg(role, html) {
       if (!text.trim()) return;
       addMsg('user', text);
       const hit = intents.find((i) => i.test.test(text));
-      addMsg('bot', hit ? hit.answer() : FALLBACK);
+      if (hit) {
+        addMsg('bot', hit.answer());
+      } else {
+        const results = renderSearchResults(searchEntities(D, text));
+        addMsg('bot', results || FALLBACK);
+      }
       document.getElementById('ask-input').value = '';
     }
 
@@ -298,8 +420,10 @@ function buildSuggestContext() {
   return [
     'Contexte technique (pré-rempli automatiquement) :',
     '- Widget : IA Conversationnelle (widget-conversationnel.html)',
-    '- Entités API MCDF déjà utilisées ici : customer, convention, invoice, conventionAttendee (via /wa/{entity}/list?nopaging=1)',
-    '- Fonctionnement : réponses par détection de motif (regex) sur la question posée, pas un vrai LLM -- voir les intentions déjà couvertes (devis à relancer, nouveaux clients, CA, stagiaires, comparaison N vs N-1)',
+    '- Entités API MCDF déjà utilisées ici : customer, convention, invoice, conventionAttendee, session (via /wa/{entity}/list?nopaging=1)',
+    '- Fonctionnement : réponses par détection de motif (regex) sur la question posée, pas un vrai LLM -- voir les intentions déjà couvertes (devis à relancer, nouveaux clients, CA, stagiaires, formateurs, comparaison N vs N-1)',
+    '- Recherche libre (repli quand aucune intention ne correspond) : sous-chaîne insensible accents/casse sur dossiers, clients, stagiaires, formateurs, sessions',
+    '- Bascule directe dans MCDF sur chaque résultat : window.parent.Convention.linkToObject(id, tab) -- fonction interne MCDF, atteignable seulement si le widget tourne dans l\'iframe du bouton flottant (repli copier-coller sinon). Tabs confirmés : convention_tab, customer_tab, actor_tab (formateur ET stagiaire), training_session_tab',
     '',
   ].join('\n');
 }
