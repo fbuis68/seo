@@ -261,8 +261,16 @@ model Booking {
   // correspondante est ensuite annulée (/roomservice/update).
   lockerAccess     Json?
 
+  // Identifiant "Pass" côté source externe (ex : API Sesame Technology,
+  // champ "personId" de /wa/booking/list — confirmé le 03/09/2026 via
+  // capture réseau, absent de la documentation officielle) : distinct du
+  // code de réservation, associé à la PERSONNE titulaire de la
+  // carte/badge. Requis pour l'encodage NFC (cf. nfcStartPassParam
+  // ci-dessous) — importé via fieldMapping.passId, jamais saisi à la main.
+  passId String?
+
   // Encodage de cartes/badges NFC pour cette réservation (panneau
-  // "Réservations", écran de détail — cf. BookingSourceConfig.nfcEndpointPath).
+  // "Réservations", écran de détail — cf. BookingSourceConfig.nfcStartEndpointPath).
   // Nombre cumulé de cartes encodées avec succès pour cette réservation ;
   // 0 tant qu'aucun encodage n'a été fait ou que le connecteur ne renvoie pas
   // de décompte exploitable.
@@ -440,26 +448,46 @@ model BookingSourceConfig {
   facilityFieldMapping       Json?
 
   // Encodage NFC (panneau "Réservations" → détail d'une réservation, bouton
-  // "Encoder NFC") — même connexion/auth que ci-dessus, sur un endpoint
-  // séparé qui prend UNE réservation en paramètre (pas une liste) et
-  // déclenche l'encodage d'une carte/badge côté source externe (ex : API
-  // Sesame Technology, si elle expose bien un tel endpoint — à confirmer/
-  // capturer depuis le produit réel avant de configurer ces champs). Inerte
-  // tant que nfcEndpointPath est vide : le bouton "Encoder NFC" échoue alors
-  // avec un message explicite plutôt que d'appeler une URL non configurée.
-  nfcEndpointPath       String? // ex: "/ws/nfc/encode" — concaténé à baseUrl
-  nfcEndpointMethod     String? @default("POST") // GET | POST
-  nfcEndpointBodyFormat String? @default("json") // form | json
-  // Paramètres statiques envoyés à chaque appel, en plus du code de
-  // réservation (cf. nfcCodeParam) — ex: {"cardType":"guest"}.
-  nfcEndpointBodyParams Json?
-  // Nom du paramètre (query si GET, corps si POST) qui porte le code de la
-  // réservation à encoder.
-  nfcCodeParam          String? @default("code")
-  // Dot-path optionnel dans la réponse pour lire le nombre de cartes
-  // encodées (ex: "cardsEncoded") — si vide, un appel réussi (2xx) compte
-  // simplement pour 1.
-  nfcResponseCountPath  String?
+  // "Encoder NFC") — flux en 2 appels confirmé le 03/09/2026 via capture
+  // réseau sur un client réel (absent de la documentation officielle) :
+  //  1. Démarre l'association : nfcStartEndpointPath, avec l'id du Pass
+  //     (Booking.passId — PAS le code de réservation, cf. son commentaire)
+  //     et l'id du lecteur physique choisi dans la liste ci-dessous.
+  //  2. Interroge nfcCheckEndpointPath en boucle (~1x/s, jusqu'à
+  //     nfcStartTimeoutSeconds) jusqu'à ce que la réponse indique l'arrêt
+  //     (carte approchée du lecteur, ou délai écoulé) — cf.
+  //     nfcCheckStopPath/nfcCheckSuccessPath/nfcCheckMessagePath.
+  // Inerte tant que nfcStartEndpointPath est vide : le bouton "Encoder NFC"
+  // échoue alors avec un message explicite plutôt que d'appeler une URL non
+  // configurée.
+  nfcStartEndpointPath   String? // ex: "/ws/deviceAdmin/startPassAssociation"
+  nfcStartEndpointMethod String? @default("GET")
+  nfcStartPassParam      String? @default("id") // porte Booking.passId
+  nfcStartDeviceParam    String? @default("deviceId") // porte l'id du device choisi
+  nfcStartTimeoutParam   String? @default("timeout")
+  nfcStartTimeoutSeconds Int?    @default(15)
+  // Paramètres statiques additionnels envoyés à chaque appel (ex :
+  // {"name":"secret2","description":"personName"} — observés sur un client
+  // réel, rôle exact non confirmé mais présents dans tous les appels vus).
+  nfcStartExtraParams    Json?
+
+  nfcCheckEndpointPath   String? // ex: "/ws/deviceAdmin/checkAssociation"
+  nfcCheckEndpointMethod String? @default("GET")
+  nfcCheckDeviceParam    String? @default("id") // porte l'id du device (PAS le passId)
+  nfcCheckStopPath       String? @default("stop")
+  nfcCheckSuccessPath    String? @default("success")
+  nfcCheckMessagePath    String? @default("message")
+
+  // Liste des lecteurs disponibles (menu déroulant "Device" du bouton
+  // "Encoder NFC") — un établissement peut avoir plusieurs postes
+  // d'encodage, l'admin choisit celui à utiliser à chaque encodage.
+  nfcDeviceListEndpointPath     String? // ex: "/ws/monitoredDevice/list"
+  nfcDeviceListEndpointMethod   String? @default("GET")
+  // ex: {"associable":"true","sort":"name","dir":"ASC","start":"0","limit":"500"}
+  nfcDeviceListBodyParams       Json?
+  nfcDeviceListResponseListPath String?
+  nfcDeviceIdField              String? @default("id")
+  nfcDeviceNameField            String? @default("name")
 
   // Récupération du QR code / code d'accès (onglet "Clé digitale" de
   // l'espace client, cf. checkin.html espRenderQr) — même principe que

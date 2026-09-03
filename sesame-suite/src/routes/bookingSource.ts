@@ -61,12 +61,25 @@ function shapeConfig(c: {
   facilityEndpointBodyParams: unknown;
   facilityResponseListPath: string | null;
   facilityFieldMapping: unknown;
-  nfcEndpointPath: string | null;
-  nfcEndpointMethod: string | null;
-  nfcEndpointBodyFormat: string | null;
-  nfcEndpointBodyParams: unknown;
-  nfcCodeParam: string | null;
-  nfcResponseCountPath: string | null;
+  nfcStartEndpointPath: string | null;
+  nfcStartEndpointMethod: string | null;
+  nfcStartPassParam: string | null;
+  nfcStartDeviceParam: string | null;
+  nfcStartTimeoutParam: string | null;
+  nfcStartTimeoutSeconds: number | null;
+  nfcStartExtraParams: unknown;
+  nfcCheckEndpointPath: string | null;
+  nfcCheckEndpointMethod: string | null;
+  nfcCheckDeviceParam: string | null;
+  nfcCheckStopPath: string | null;
+  nfcCheckSuccessPath: string | null;
+  nfcCheckMessagePath: string | null;
+  nfcDeviceListEndpointPath: string | null;
+  nfcDeviceListEndpointMethod: string | null;
+  nfcDeviceListBodyParams: unknown;
+  nfcDeviceListResponseListPath: string | null;
+  nfcDeviceIdField: string | null;
+  nfcDeviceNameField: string | null;
   qrEndpointPath: string | null;
   qrEndpointMethod: string | null;
   qrEndpointBodyFormat: string | null;
@@ -152,12 +165,25 @@ function shapeConfig(c: {
     facilityEndpointBodyParams: c.facilityEndpointBodyParams || {},
     facilityResponseListPath: c.facilityResponseListPath || "",
     facilityFieldMapping: c.facilityFieldMapping || {},
-    nfcEndpointPath: c.nfcEndpointPath || "",
-    nfcEndpointMethod: c.nfcEndpointMethod || "POST",
-    nfcEndpointBodyFormat: c.nfcEndpointBodyFormat || "json",
-    nfcEndpointBodyParams: c.nfcEndpointBodyParams || {},
-    nfcCodeParam: c.nfcCodeParam || "code",
-    nfcResponseCountPath: c.nfcResponseCountPath || "",
+    nfcStartEndpointPath: c.nfcStartEndpointPath || "",
+    nfcStartEndpointMethod: c.nfcStartEndpointMethod || "GET",
+    nfcStartPassParam: c.nfcStartPassParam || "id",
+    nfcStartDeviceParam: c.nfcStartDeviceParam || "deviceId",
+    nfcStartTimeoutParam: c.nfcStartTimeoutParam || "timeout",
+    nfcStartTimeoutSeconds: c.nfcStartTimeoutSeconds ?? 15,
+    nfcStartExtraParams: c.nfcStartExtraParams || {},
+    nfcCheckEndpointPath: c.nfcCheckEndpointPath || "",
+    nfcCheckEndpointMethod: c.nfcCheckEndpointMethod || "GET",
+    nfcCheckDeviceParam: c.nfcCheckDeviceParam || "id",
+    nfcCheckStopPath: c.nfcCheckStopPath || "stop",
+    nfcCheckSuccessPath: c.nfcCheckSuccessPath || "success",
+    nfcCheckMessagePath: c.nfcCheckMessagePath || "message",
+    nfcDeviceListEndpointPath: c.nfcDeviceListEndpointPath || "",
+    nfcDeviceListEndpointMethod: c.nfcDeviceListEndpointMethod || "GET",
+    nfcDeviceListBodyParams: c.nfcDeviceListBodyParams || {},
+    nfcDeviceListResponseListPath: c.nfcDeviceListResponseListPath || "",
+    nfcDeviceIdField: c.nfcDeviceIdField || "id",
+    nfcDeviceNameField: c.nfcDeviceNameField || "name",
     qrEndpointPath: c.qrEndpointPath || "",
     qrEndpointMethod: c.qrEndpointMethod || "GET",
     qrEndpointBodyFormat: c.qrEndpointBodyFormat || "json",
@@ -285,12 +311,25 @@ interface ConfigBody {
   facilityEndpointBodyParams?: Record<string, string>;
   facilityResponseListPath?: string;
   facilityFieldMapping?: FacilityMapping;
-  nfcEndpointPath?: string;
-  nfcEndpointMethod?: string;
-  nfcEndpointBodyFormat?: string;
-  nfcEndpointBodyParams?: Record<string, string>;
-  nfcCodeParam?: string;
-  nfcResponseCountPath?: string;
+  nfcStartEndpointPath?: string;
+  nfcStartEndpointMethod?: string;
+  nfcStartPassParam?: string;
+  nfcStartDeviceParam?: string;
+  nfcStartTimeoutParam?: string;
+  nfcStartTimeoutSeconds?: number;
+  nfcStartExtraParams?: Record<string, string>;
+  nfcCheckEndpointPath?: string;
+  nfcCheckEndpointMethod?: string;
+  nfcCheckDeviceParam?: string;
+  nfcCheckStopPath?: string;
+  nfcCheckSuccessPath?: string;
+  nfcCheckMessagePath?: string;
+  nfcDeviceListEndpointPath?: string;
+  nfcDeviceListEndpointMethod?: string;
+  nfcDeviceListBodyParams?: Record<string, string>;
+  nfcDeviceListResponseListPath?: string;
+  nfcDeviceIdField?: string;
+  nfcDeviceNameField?: string;
   qrEndpointPath?: string;
   qrEndpointMethod?: string;
   qrEndpointBodyFormat?: string;
@@ -377,12 +416,25 @@ bookingSourceRouter.post(
       facilityEndpointBodyParams: b.facilityEndpointBodyParams as never,
       facilityResponseListPath: b.facilityResponseListPath,
       facilityFieldMapping: b.facilityFieldMapping as never,
-      nfcEndpointPath: b.nfcEndpointPath,
-      nfcEndpointMethod: b.nfcEndpointMethod,
-      nfcEndpointBodyFormat: b.nfcEndpointBodyFormat,
-      nfcEndpointBodyParams: b.nfcEndpointBodyParams as never,
-      nfcCodeParam: b.nfcCodeParam,
-      nfcResponseCountPath: b.nfcResponseCountPath,
+      nfcStartEndpointPath: b.nfcStartEndpointPath,
+      nfcStartEndpointMethod: b.nfcStartEndpointMethod,
+      nfcStartPassParam: b.nfcStartPassParam,
+      nfcStartDeviceParam: b.nfcStartDeviceParam,
+      nfcStartTimeoutParam: b.nfcStartTimeoutParam,
+      nfcStartTimeoutSeconds: b.nfcStartTimeoutSeconds,
+      nfcStartExtraParams: b.nfcStartExtraParams as never,
+      nfcCheckEndpointPath: b.nfcCheckEndpointPath,
+      nfcCheckEndpointMethod: b.nfcCheckEndpointMethod,
+      nfcCheckDeviceParam: b.nfcCheckDeviceParam,
+      nfcCheckStopPath: b.nfcCheckStopPath,
+      nfcCheckSuccessPath: b.nfcCheckSuccessPath,
+      nfcCheckMessagePath: b.nfcCheckMessagePath,
+      nfcDeviceListEndpointPath: b.nfcDeviceListEndpointPath,
+      nfcDeviceListEndpointMethod: b.nfcDeviceListEndpointMethod,
+      nfcDeviceListBodyParams: b.nfcDeviceListBodyParams as never,
+      nfcDeviceListResponseListPath: b.nfcDeviceListResponseListPath,
+      nfcDeviceIdField: b.nfcDeviceIdField,
+      nfcDeviceNameField: b.nfcDeviceNameField,
       qrEndpointPath: b.qrEndpointPath,
       qrEndpointMethod: b.qrEndpointMethod,
       qrEndpointBodyFormat: b.qrEndpointBodyFormat,

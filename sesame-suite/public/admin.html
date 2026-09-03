@@ -1952,35 +1952,99 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   <div class="ca">
     <div class="ch"><i class="ti ti-nfc"></i>Encodage NFC</div>
     <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
-      <span>Optionnel — bouton "Encoder NFC" sur l'écran de détail d'une réservation (panneau Réservations). Même connexion/auth que ci-dessus, sur un endpoint séparé qui prend UNE réservation en paramètre. Laissez le chemin vide tant que vous n'avez pas confirmé que la source externe expose bien un tel endpoint (ex: capture réseau — F12 → onglet Réseau — sur le produit réel pendant un encodage) : le bouton échoue alors avec un message explicite plutôt que d'appeler une URL non configurée.</span>
+      <span>Optionnel — bouton "Encoder NFC" sur l'écran de détail d'une réservation (panneau Réservations). Flux en 2 appels : "démarrage" (le bouton appelle cet endpoint puis attend qu'une carte soit approchée d'un lecteur) et "vérification" (interrogé en boucle jusqu'à confirmation ou expiration du délai). Requiert que la réservation ait un identifiant "Pass" (cf. mapping des réservations ci-dessus) et un lecteur choisi dans la liste ci-dessous. Laissez le chemin de démarrage vide tant que vous n'avez pas confirmé ces endpoints (ex : capture réseau — F12 → onglet Réseau — sur le produit réel pendant un encodage) : le bouton échoue alors avec un message explicite plutôt que d'appeler une URL non configurée.</span>
     </div>
     <div class="fi">
-      <label class="lb">Chemin de l'endpoint d'encodage NFC</label>
-      <input type="text" id="bs-nfcEndpointPath" placeholder="Ex : /ws/nfc/encode — laisser vide pour désactiver" autocomplete="off">
+      <label class="lb">Chemin de l'endpoint de démarrage</label>
+      <input type="text" id="bs-nfcStartEndpointPath" placeholder="Ex : /ws/deviceAdmin/startPassAssociation — laisser vide pour désactiver" autocomplete="off">
     </div>
     <div class="g2">
       <div class="fi">
-        <label class="lb">Méthode HTTP</label>
-        <select id="bs-nfcEndpointMethod"><option value="POST">POST</option><option value="GET">GET</option></select>
+        <label class="lb">Méthode HTTP (démarrage)</label>
+        <select id="bs-nfcStartEndpointMethod"><option value="GET">GET</option><option value="POST">POST</option></select>
       </div>
       <div class="fi">
-        <label class="lb">Format du corps si POST</label>
-        <select id="bs-nfcEndpointBodyFormat"><option value="json">JSON</option><option value="form">Formulaire (application/x-www-form-urlencoded)</option></select>
+        <label class="lb">Délai d'association (secondes)</label>
+        <input type="number" id="bs-nfcStartTimeoutSeconds" placeholder="15" min="1" max="120">
       </div>
     </div>
     <div class="g2">
       <div class="fi">
-        <label class="lb">Nom du paramètre portant le code de réservation</label>
-        <input type="text" id="bs-nfcCodeParam" placeholder="code">
+        <label class="lb">Paramètre portant l'id du Pass</label>
+        <input type="text" id="bs-nfcStartPassParam" placeholder="id">
       </div>
       <div class="fi">
-        <label class="lb">Chemin du décompte de cartes dans la réponse (optionnel)</label>
-        <input type="text" id="bs-nfcResponseCountPath" placeholder="Ex : cardsEncoded — vide = 1 par appel réussi">
+        <label class="lb">Paramètre portant l'id du lecteur (device)</label>
+        <input type="text" id="bs-nfcStartDeviceParam" placeholder="deviceId">
+      </div>
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Paramètre portant le délai</label>
+        <input type="text" id="bs-nfcStartTimeoutParam" placeholder="timeout">
       </div>
     </div>
     <div class="fi">
-      <label class="lb">Paramètres additionnels du corps (un par ligne : clé=valeur)</label>
-      <textarea id="bs-nfcEndpointBodyParams" rows="2" placeholder="cardType=guest"></textarea>
+      <label class="lb">Paramètres additionnels (un par ligne : clé=valeur)</label>
+      <textarea id="bs-nfcStartExtraParams" rows="2" placeholder="name=secret2&#10;description=personName"></textarea>
+    </div>
+
+    <div class="fi" style="margin-top:14px">
+      <label class="lb">Chemin de l'endpoint de vérification</label>
+      <input type="text" id="bs-nfcCheckEndpointPath" placeholder="Ex : /ws/deviceAdmin/checkAssociation" autocomplete="off">
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Méthode HTTP (vérification)</label>
+        <select id="bs-nfcCheckEndpointMethod"><option value="GET">GET</option><option value="POST">POST</option></select>
+      </div>
+      <div class="fi">
+        <label class="lb">Paramètre portant l'id du lecteur (device)</label>
+        <input type="text" id="bs-nfcCheckDeviceParam" placeholder="id">
+      </div>
+    </div>
+    <div class="g3" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div class="fi">
+        <label class="lb">Chemin "arrêt" dans la réponse</label>
+        <input type="text" id="bs-nfcCheckStopPath" placeholder="stop">
+      </div>
+      <div class="fi">
+        <label class="lb">Chemin "succès" dans la réponse</label>
+        <input type="text" id="bs-nfcCheckSuccessPath" placeholder="success">
+      </div>
+      <div class="fi">
+        <label class="lb">Chemin "message" dans la réponse</label>
+        <input type="text" id="bs-nfcCheckMessagePath" placeholder="message">
+      </div>
+    </div>
+
+    <div class="fi" style="margin-top:14px">
+      <label class="lb">Chemin de l'endpoint de liste des lecteurs</label>
+      <input type="text" id="bs-nfcDeviceListEndpointPath" placeholder="Ex : /ws/monitoredDevice/list — menu déroulant du bouton Encoder NFC" autocomplete="off">
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Méthode HTTP (liste)</label>
+        <select id="bs-nfcDeviceListEndpointMethod"><option value="GET">GET</option><option value="POST">POST</option></select>
+      </div>
+      <div class="fi">
+        <label class="lb">Chemin vers le tableau dans la réponse</label>
+        <input type="text" id="bs-nfcDeviceListResponseListPath" placeholder="Ex : root — laisser vide si la réponse est directement un tableau">
+      </div>
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Champ portant l'id du lecteur</label>
+        <input type="text" id="bs-nfcDeviceIdField" placeholder="id">
+      </div>
+      <div class="fi">
+        <label class="lb">Champ portant le nom du lecteur</label>
+        <input type="text" id="bs-nfcDeviceNameField" placeholder="name">
+      </div>
+    </div>
+    <div class="fi">
+      <label class="lb">Paramètres de la liste (un par ligne : clé=valeur)</label>
+      <textarea id="bs-nfcDeviceListBodyParams" rows="2" placeholder="associable=true&#10;sort=name&#10;dir=ASC&#10;start=0&#10;limit=500"></textarea>
     </div>
   </div>
 
@@ -5807,6 +5871,10 @@ var BS_MAPPING_FIELDS = [
   {k:'facilityName', label:'Nom de la chambre', required:false},
   {k:'status', label:'Statut', required:false},
   {k:'bookingType', label:'Type de réservation', required:false},
+  // Identifiant "Pass" côté source (ex : "personId" de l'API Sesame
+  // Technology) — distinct du code de réservation, requis pour le bouton
+  // "Encoder NFC" (cf. carte "Encodage NFC" plus bas).
+  {k:'passId', label:'Identifiant "Pass" (encodage NFC)', required:false},
 ];
 
 var BS_FACILITY_MAPPING_FIELDS = [
@@ -5987,7 +6055,7 @@ var PMS_PRESETS = {
   sesame: {
     label: 'Sesame Technology',
     noteType: 'b',
-    note: 'Connexion et liste des réservations vérifiées en conditions réelles le 17/08/2026. Le compte utilisé doit avoir accès à l\'établissement voulu — il est retrouvé automatiquement par son code (entityCode) parmi les profils disponibles pour ce compte. Le 18/08/2026, une fuite entre établissements a été constatée sur /wa/booking/list (réservations d\'un autre hôtel accessible par le même compte) — un filtre de sécurité (entityId) est appliqué automatiquement ci-dessous depuis ce modèle. QR code / code d\'accès / ouverture de porte : chemins repris de la documentation officielle Sesame API (version 2023-11-23) fournie le 25/08/2026 — pas encore vérifiés en conditions réelles comme le reste ci-dessus, à tester avant mise en production. Import des chambres (/wa/facility/list, absent de la doc officielle) : vérifié en conditions réelles le 03/09/2026 — cette liste renvoie aussi bien les chambres que d\'autres accès (bagagerie, entrée…), volontairement PAS filtrés : Sesame permet de grouper plusieurs accès sur une même réservation (facilityCode en liste séparée par virgules), donc ces accès doivent être importés au même titre que les chambres pour que ce groupement se résolve correctement à l\'import des réservations.',
+    note: 'Connexion et liste des réservations vérifiées en conditions réelles le 17/08/2026. Le compte utilisé doit avoir accès à l\'établissement voulu — il est retrouvé automatiquement par son code (entityCode) parmi les profils disponibles pour ce compte. Le 18/08/2026, une fuite entre établissements a été constatée sur /wa/booking/list (réservations d\'un autre hôtel accessible par le même compte) — un filtre de sécurité (entityId) est appliqué automatiquement ci-dessous depuis ce modèle. QR code / code d\'accès / ouverture de porte : chemins repris de la documentation officielle Sesame API (version 2023-11-23) fournie le 25/08/2026 — pas encore vérifiés en conditions réelles comme le reste ci-dessus, à tester avant mise en production. Import des chambres (/wa/facility/list, absent de la doc officielle) : vérifié en conditions réelles le 03/09/2026 — cette liste renvoie aussi bien les chambres que d\'autres accès (bagagerie, entrée…), volontairement PAS filtrés : Sesame permet de grouper plusieurs accès sur une même réservation (facilityCode en liste séparée par virgules), donc ces accès doivent être importés au même titre que les chambres pour que ce groupement se résolve correctement à l\'import des réservations. Encodage NFC : flux "démarrage" + "vérification en boucle" confirmé le 03/09/2026 via capture réseau (absent de la doc officielle) — nécessite un identifiant "Pass" par réservation (champ "personId", PAS le code de réservation ni un id de chambre : cf. mapping ci-dessus) et un lecteur choisi dans la liste des devices, dont la forme de réponse n\'est PAS confirmée (à ajuster via "Tester" si besoin).',
     apply: function(){
       document.getElementById('bs-endpointPath').value = '/wa/booking/list';
       document.getElementById('bs-endpointMethod').value = 'POST';
@@ -6007,7 +6075,39 @@ var PMS_PRESETS = {
       document.getElementById('bs-resultEntityProfileField').value = 'entityId';
       document.getElementById('bs-skipEntityFilter').checked = false;
       document.getElementById('bs-responseListPath').value = 'root';
-      bsRenderMappingFields({code:'code', personEmail:'personEmail', personFirstname:'personFirstname', personLastname:'personLastname', personPhone:'', startDate:'startDate', endDate:'endDate', facilityCode:'facilityCode', facilityName:'facilityName', status:'status', bookingType:'typeCode'});
+      bsRenderMappingFields({code:'code', personEmail:'personEmail', personFirstname:'personFirstname', personLastname:'personLastname', personPhone:'', startDate:'startDate', endDate:'endDate', facilityCode:'facilityCode', facilityName:'facilityName', status:'status', bookingType:'typeCode', passId:'personId'});
+      // Encodage NFC — flux en 2 appels confirmé le 03/09/2026 via capture
+      // réseau sur un client réel (absent de la documentation officielle) :
+      // GET /ws/deviceAdmin/startPassAssociation?timeout=15&name=secret2&
+      // description=personName&id=<passId>&deviceId=<deviceId> démarre
+      // l'association ({"success":true,"message":"associating pass"}), puis
+      // GET /ws/deviceAdmin/checkAssociation?id=<deviceId> interrogé en
+      // boucle jusqu'à {"stop":true,...} (carte approchée du lecteur, ou
+      // délai écoulé) — {"stop":false,"success":false,"keep":true,
+      // "message":"not associated yet"} tant que ce n'est pas fini. Liste
+      // des lecteurs : GET /ws/monitoredDevice/list?associable=true&
+      // sort=name&dir=ASC&start=0&limit=500, forme de la réponse (racine
+      // "root" ou tableau direct, noms des champs id/name) non confirmée —
+      // à ajuster si "Tester" échoue.
+      document.getElementById('bs-nfcStartEndpointPath').value = '/ws/deviceAdmin/startPassAssociation';
+      document.getElementById('bs-nfcStartEndpointMethod').value = 'GET';
+      document.getElementById('bs-nfcStartPassParam').value = 'id';
+      document.getElementById('bs-nfcStartDeviceParam').value = 'deviceId';
+      document.getElementById('bs-nfcStartTimeoutParam').value = 'timeout';
+      document.getElementById('bs-nfcStartTimeoutSeconds').value = 15;
+      document.getElementById('bs-nfcStartExtraParams').value = 'name=secret2\ndescription=personName';
+      document.getElementById('bs-nfcCheckEndpointPath').value = '/ws/deviceAdmin/checkAssociation';
+      document.getElementById('bs-nfcCheckEndpointMethod').value = 'GET';
+      document.getElementById('bs-nfcCheckDeviceParam').value = 'id';
+      document.getElementById('bs-nfcCheckStopPath').value = 'stop';
+      document.getElementById('bs-nfcCheckSuccessPath').value = 'success';
+      document.getElementById('bs-nfcCheckMessagePath').value = 'message';
+      document.getElementById('bs-nfcDeviceListEndpointPath').value = '/ws/monitoredDevice/list';
+      document.getElementById('bs-nfcDeviceListEndpointMethod').value = 'GET';
+      document.getElementById('bs-nfcDeviceListBodyParams').value = 'associable=true\nsort=name\ndir=ASC\nstart=0\nlimit=500';
+      document.getElementById('bs-nfcDeviceListResponseListPath').value = 'root';
+      document.getElementById('bs-nfcDeviceIdField').value = 'id';
+      document.getElementById('bs-nfcDeviceNameField').value = 'name';
       // Import des chambres — /wa/facility/list, absent de la documentation
       // officielle (comme /wa/booking/list) mais vérifié en conditions
       // réelles le 03/09/2026 : réponse {"success":true,"root":[...]}, avec
@@ -6519,12 +6619,25 @@ function bsCollectFormValues(){
     facilityEndpointBodyParams: bsTextToParams(document.getElementById('bs-facilityEndpointBodyParams').value),
     facilityResponseListPath: document.getElementById('bs-facilityResponseListPath').value.trim(),
     facilityFieldMapping: bsCollectFacilityMapping(),
-    nfcEndpointPath: document.getElementById('bs-nfcEndpointPath').value.trim(),
-    nfcEndpointMethod: document.getElementById('bs-nfcEndpointMethod').value,
-    nfcEndpointBodyFormat: document.getElementById('bs-nfcEndpointBodyFormat').value,
-    nfcCodeParam: document.getElementById('bs-nfcCodeParam').value.trim(),
-    nfcResponseCountPath: document.getElementById('bs-nfcResponseCountPath').value.trim(),
-    nfcEndpointBodyParams: bsTextToParams(document.getElementById('bs-nfcEndpointBodyParams').value),
+    nfcStartEndpointPath: document.getElementById('bs-nfcStartEndpointPath').value.trim(),
+    nfcStartEndpointMethod: document.getElementById('bs-nfcStartEndpointMethod').value,
+    nfcStartPassParam: document.getElementById('bs-nfcStartPassParam').value.trim(),
+    nfcStartDeviceParam: document.getElementById('bs-nfcStartDeviceParam').value.trim(),
+    nfcStartTimeoutParam: document.getElementById('bs-nfcStartTimeoutParam').value.trim(),
+    nfcStartTimeoutSeconds: +document.getElementById('bs-nfcStartTimeoutSeconds').value || 15,
+    nfcStartExtraParams: bsTextToParams(document.getElementById('bs-nfcStartExtraParams').value),
+    nfcCheckEndpointPath: document.getElementById('bs-nfcCheckEndpointPath').value.trim(),
+    nfcCheckEndpointMethod: document.getElementById('bs-nfcCheckEndpointMethod').value,
+    nfcCheckDeviceParam: document.getElementById('bs-nfcCheckDeviceParam').value.trim(),
+    nfcCheckStopPath: document.getElementById('bs-nfcCheckStopPath').value.trim(),
+    nfcCheckSuccessPath: document.getElementById('bs-nfcCheckSuccessPath').value.trim(),
+    nfcCheckMessagePath: document.getElementById('bs-nfcCheckMessagePath').value.trim(),
+    nfcDeviceListEndpointPath: document.getElementById('bs-nfcDeviceListEndpointPath').value.trim(),
+    nfcDeviceListEndpointMethod: document.getElementById('bs-nfcDeviceListEndpointMethod').value,
+    nfcDeviceListBodyParams: bsTextToParams(document.getElementById('bs-nfcDeviceListBodyParams').value),
+    nfcDeviceListResponseListPath: document.getElementById('bs-nfcDeviceListResponseListPath').value.trim(),
+    nfcDeviceIdField: document.getElementById('bs-nfcDeviceIdField').value.trim(),
+    nfcDeviceNameField: document.getElementById('bs-nfcDeviceNameField').value.trim(),
     qrEndpointPath: document.getElementById('bs-qrEndpointPath').value.trim(),
     qrEndpointMethod: document.getElementById('bs-qrEndpointMethod').value,
     qrEndpointBodyFormat: document.getElementById('bs-qrEndpointBodyFormat').value,
@@ -6635,12 +6748,25 @@ async function bsInit(){
   document.getElementById('bs-facilityEndpointBodyParams').value = bsParamsToText(BS_CONFIG.facilityEndpointBodyParams);
   document.getElementById('bs-facilityResponseListPath').value = BS_CONFIG.facilityResponseListPath||'';
   bsRenderFacilityMappingFields(BS_CONFIG.facilityFieldMapping);
-  document.getElementById('bs-nfcEndpointPath').value = BS_CONFIG.nfcEndpointPath||'';
-  document.getElementById('bs-nfcEndpointMethod').value = BS_CONFIG.nfcEndpointMethod||'POST';
-  document.getElementById('bs-nfcEndpointBodyFormat').value = BS_CONFIG.nfcEndpointBodyFormat||'json';
-  document.getElementById('bs-nfcCodeParam').value = BS_CONFIG.nfcCodeParam||'';
-  document.getElementById('bs-nfcResponseCountPath').value = BS_CONFIG.nfcResponseCountPath||'';
-  document.getElementById('bs-nfcEndpointBodyParams').value = bsParamsToText(BS_CONFIG.nfcEndpointBodyParams);
+  document.getElementById('bs-nfcStartEndpointPath').value = BS_CONFIG.nfcStartEndpointPath||'';
+  document.getElementById('bs-nfcStartEndpointMethod').value = BS_CONFIG.nfcStartEndpointMethod||'GET';
+  document.getElementById('bs-nfcStartPassParam').value = BS_CONFIG.nfcStartPassParam||'id';
+  document.getElementById('bs-nfcStartDeviceParam').value = BS_CONFIG.nfcStartDeviceParam||'deviceId';
+  document.getElementById('bs-nfcStartTimeoutParam').value = BS_CONFIG.nfcStartTimeoutParam||'timeout';
+  document.getElementById('bs-nfcStartTimeoutSeconds').value = BS_CONFIG.nfcStartTimeoutSeconds||15;
+  document.getElementById('bs-nfcStartExtraParams').value = bsParamsToText(BS_CONFIG.nfcStartExtraParams);
+  document.getElementById('bs-nfcCheckEndpointPath').value = BS_CONFIG.nfcCheckEndpointPath||'';
+  document.getElementById('bs-nfcCheckEndpointMethod').value = BS_CONFIG.nfcCheckEndpointMethod||'GET';
+  document.getElementById('bs-nfcCheckDeviceParam').value = BS_CONFIG.nfcCheckDeviceParam||'id';
+  document.getElementById('bs-nfcCheckStopPath').value = BS_CONFIG.nfcCheckStopPath||'stop';
+  document.getElementById('bs-nfcCheckSuccessPath').value = BS_CONFIG.nfcCheckSuccessPath||'success';
+  document.getElementById('bs-nfcCheckMessagePath').value = BS_CONFIG.nfcCheckMessagePath||'message';
+  document.getElementById('bs-nfcDeviceListEndpointPath').value = BS_CONFIG.nfcDeviceListEndpointPath||'';
+  document.getElementById('bs-nfcDeviceListEndpointMethod').value = BS_CONFIG.nfcDeviceListEndpointMethod||'GET';
+  document.getElementById('bs-nfcDeviceListBodyParams').value = bsParamsToText(BS_CONFIG.nfcDeviceListBodyParams);
+  document.getElementById('bs-nfcDeviceListResponseListPath').value = BS_CONFIG.nfcDeviceListResponseListPath||'';
+  document.getElementById('bs-nfcDeviceIdField').value = BS_CONFIG.nfcDeviceIdField||'id';
+  document.getElementById('bs-nfcDeviceNameField').value = BS_CONFIG.nfcDeviceNameField||'name';
   document.getElementById('bs-qrEndpointPath').value = BS_CONFIG.qrEndpointPath||'';
   document.getElementById('bs-qrEndpointMethod').value = BS_CONFIG.qrEndpointMethod||'GET';
   document.getElementById('bs-qrEndpointBodyFormat').value = BS_CONFIG.qrEndpointBodyFormat||'json';
@@ -12115,6 +12241,14 @@ function resaOpenDetail(code){
       }).join('')
     + '</div>';
   html += '<div id="resa-detail-nfc-error" class="alt alt-w" style="display:none;margin-top:12px"><i class="ti ti-alert-triangle"></i><span id="resa-detail-nfc-error-msg"></span></div>';
+  // Sélecteur de lecteur NFC — révélé seulement si plusieurs lecteurs sont
+  // disponibles (cf. resaEncodeNfc) ; un seul lecteur configuré passe
+  // directement à l'encodage sans ce choix intermédiaire.
+  html += '<div id="resa-detail-nfc-devices" style="display:none;margin-top:12px;border:1px solid var(--bdr);border-radius:var(--rs);padding:14px;background:var(--bg)">'
+    + '<div class="fi"><label class="lb">Lecteur NFC</label><select id="resa-nfc-device-select"></select></div>'
+    + '<div style="display:flex;gap:8px"><button class="btn btn-p" onclick="resaConfirmNfcDevice(\''+esc(b.code)+'\')"><i class="ti ti-nfc"></i> Démarrer l\'encodage</button>'
+    + '<button class="btn btn-s" onclick="document.getElementById(\'resa-detail-nfc-devices\').style.display=\'none\'">Annuler</button></div>'
+    + '</div>';
   html += '<div id="resa-detail-wallet-error" class="alt alt-w" style="display:none;margin-top:12px"><i class="ti ti-alert-triangle"></i><span id="resa-detail-wallet-error-msg"></span></div>';
   html += '<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">'
     + '<button class="btn btn-p" style="flex:1" onclick="resaEncodeNfc(\''+esc(b.code)+'\')" id="resa-detail-nfc-btn"><i class="ti ti-nfc"></i> Encoder NFC</button>'
@@ -12197,16 +12331,63 @@ function resaCloseDetail(){
   document.getElementById('resaDetailModal').style.display = 'none';
 }
 
+/**
+ * Bouton "Encoder NFC" — récupère d'abord la liste des lecteurs disponibles
+ * (cf. lib/bookingSource.ts listNfcDevices) : un seul lecteur configuré
+ * passe directement à l'encodage, plusieurs révèlent un sélecteur inline
+ * (cf. resa-detail-nfc-devices) pour que l'admin choisisse lequel utiliser.
+ */
 async function resaEncodeNfc(code){
+  var btn = document.getElementById('resa-detail-nfc-btn');
+  var errEl = document.getElementById('resa-detail-nfc-error');
+  var errMsg = document.getElementById('resa-detail-nfc-error-msg');
+  errEl.style.display = 'none';
+  document.getElementById('resa-detail-nfc-devices').style.display = 'none';
+  var orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spin"></div> Recherche des lecteurs…';
+  try{
+    var r = await adminFetch('/wa/booking/nfcDevices');
+    var devices = await r.json();
+    if(!r.ok) throw new Error(devices.error || 'Impossible de récupérer la liste des lecteurs NFC');
+    if(!devices.length) throw new Error('Aucun lecteur NFC disponible pour cet établissement');
+    btn.disabled = false;
+    btn.innerHTML = orig;
+    if(devices.length === 1){
+      resaRunNfcEncode(code, devices[0].id);
+    } else {
+      var sel = document.getElementById('resa-nfc-device-select');
+      sel.innerHTML = devices.map(function(d){ return '<option value="'+esc(d.id)+'">'+esc(d.name)+'</option>'; }).join('');
+      document.getElementById('resa-detail-nfc-devices').style.display = 'block';
+    }
+  }catch(e){
+    errMsg.textContent = e.message;
+    errEl.style.display = 'flex';
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+}
+
+function resaConfirmNfcDevice(code){
+  var deviceId = (document.getElementById('resa-nfc-device-select')||{value:''}).value;
+  if(!deviceId) return;
+  document.getElementById('resa-detail-nfc-devices').style.display = 'none';
+  resaRunNfcEncode(code, deviceId);
+}
+
+/** Déclenche l'encodage proprement dit — bloquant côté serveur jusqu'à ~15s
+ * (durée de la fenêtre pendant laquelle la carte doit être approchée du
+ * lecteur, cf. lib/bookingSource.ts encodeNfc). */
+async function resaRunNfcEncode(code, deviceId){
   var btn = document.getElementById('resa-detail-nfc-btn');
   var errEl = document.getElementById('resa-detail-nfc-error');
   var errMsg = document.getElementById('resa-detail-nfc-error-msg');
   errEl.style.display = 'none';
   var orig = btn.innerHTML;
   btn.disabled = true;
-  btn.innerHTML = '<div class="spin"></div> Encodage…';
+  btn.innerHTML = '<div class="spin"></div> Approchez la carte du lecteur…';
   try{
-    var r = await adminFetch('/wa/booking/encodeNfc', {method:'POST', body: JSON.stringify({code:code})});
+    var r = await adminFetch('/wa/booking/encodeNfc', {method:'POST', body: JSON.stringify({code:code, deviceId:deviceId})});
     var data = await r.json();
     if(!r.ok) throw new Error(data.error || 'Échec de l\'encodage NFC');
     var idx = RESA_CACHE.findIndex(function(x){ return x.booking.code === code; });

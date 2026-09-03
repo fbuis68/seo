@@ -43,6 +43,11 @@ export interface FieldMapping {
   // occupée (Room.category), qui a son propre mapping (facilityCode ->
   // chambre importée).
   bookingType?: string;
+  // Identifiant "Pass" côté source (ex : "personId" de l'API Sesame
+  // Technology — confirmé le 03/09/2026 via capture réseau) : distinct du
+  // code de réservation, associé à la personne titulaire d'une éventuelle
+  // carte/badge NFC. Optionnel — requis uniquement pour l'encodage NFC.
+  passId?: string;
 }
 
 export interface MappedBooking {
@@ -57,6 +62,7 @@ export interface MappedBooking {
   facilityName: string;
   status: string;
   bookingType: string;
+  passId: string;
 }
 
 export interface MapError {
@@ -506,6 +512,7 @@ export function mapBookings(items: unknown[], mapping: FieldMapping): { mapped: 
       facilityName: mapping.facilityName ? firstOf(String(getPath(item, mapping.facilityName) ?? "")) : "",
       status: (mapping.status ? String(getPath(item, mapping.status) ?? "").trim() : "") || "confirmed",
       bookingType: mapping.bookingType ? String(getPath(item, mapping.bookingType) ?? "").trim() : "",
+      passId: mapping.passId ? String(getPath(item, mapping.passId) ?? "").trim() : "",
     });
   });
 
@@ -603,6 +610,7 @@ export async function upsertMappedBookings(entity: Entity, mapped: MappedBooking
       roomId: room?.id,
       status: b.status,
       bookingType: b.bookingType || existing?.bookingType || undefined,
+      passId: b.passId || existing?.passId || undefined,
       importedFrom: sourceName,
     };
     if (existing) {
@@ -648,75 +656,128 @@ export async function runImport(entity: Entity, config: BookingSourceConfig) {
   }
 }
 
+export interface NfcDevice {
+  id: string;
+  name: string;
+}
+
 /**
- * Déclenche l'encodage d'une carte/badge NFC pour UNE réservation auprès de
- * la source externe (même connexion/auth que la synchronisation des
- * réservations, cf. buildAuthHeaders), via l'endpoint dédié
- * config.nfcEndpointPath. Inerte tant que ce champ n'est pas configuré —
- * échoue explicitement plutôt que de tenter un appel sur une URL vide.
+ * Liste les lecteurs NFC disponibles (menu déroulant "Device" du bouton
+ * "Encoder NFC", panneau "Réservations") — config.nfcDeviceListEndpointPath.
+ * Inerte tant que ce champ n'est pas configuré.
  */
-export async function encodeNfc(config: BookingSourceConfig, bookingCode: string): Promise<{ count: number }> {
-  if (!config.nfcEndpointPath) {
+export async function listNfcDevices(config: BookingSourceConfig): Promise<NfcDevice[]> {
+  if (!config.nfcDeviceListEndpointPath) {
     throw new BookingSourceError(
-      'Encodage NFC non configuré pour cet établissement — renseignez "Encodage NFC" dans les réglages techniques avancés de l\'Intégration réservations (chemin d\'endpoint côté source externe).'
+      'Liste des lecteurs NFC non configurée — renseignez "Liste des lecteurs NFC" dans les réglages techniques avancés de l\'Intégration réservations.'
+    );
+  }
+  const raw = await fetchExternalList(
+    config,
+    config.nfcDeviceListEndpointPath,
+    config.nfcDeviceListResponseListPath,
+    "lecteurs NFC",
+    config.nfcDeviceListEndpointMethod,
+    "form",
+    config.nfcDeviceListBodyParams
+  );
+  const idField = config.nfcDeviceIdField || "id";
+  const nameField = config.nfcDeviceNameField || "name";
+  return raw
+    .map((item) => ({
+      id: String(getPath(item, idField) ?? ""),
+      name: String(getPath(item, nameField) ?? "") || String(getPath(item, idField) ?? ""),
+    }))
+    .filter((d) => d.id);
+}
+
+export interface NfcEncodeResult {
+  success: boolean;
+  message: string;
+}
+
+/**
+ * Encode une carte/badge NFC pour la personne titulaire d'UNE réservation
+ * (Booking.passId — PAS le code de réservation, cf. son commentaire dans
+ * schema.prisma), sur le lecteur `deviceId` choisi par l'admin. Flux en
+ * deux appels confirmé le 03/09/2026 via capture réseau sur un client réel
+ * (absent de la documentation officielle) :
+ *  1. Démarre l'association (config.nfcStartEndpointPath).
+ *  2. Interroge config.nfcCheckEndpointPath en boucle (~1x/s) jusqu'à ce
+ *     que la réponse indique l'arrêt (carte approchée du lecteur, ou délai
+ *     écoulé) — {stop,success,message} observés en pratique. Bloquant côté
+ *     serveur jusqu'à nfcStartTimeoutSeconds, pour que le bouton "Encoder
+ *     NFC" n'ait besoin que d'UN seul appel HTTP.
+ * Inerte tant que nfcStartEndpointPath n'est pas configuré — échoue
+ * explicitement plutôt que de tenter un appel sur une URL vide.
+ */
+export async function encodeNfc(config: BookingSourceConfig, passId: string, deviceId: string): Promise<NfcEncodeResult> {
+  if (!config.nfcStartEndpointPath) {
+    throw new BookingSourceError(
+      'Encodage NFC non configuré pour cet établissement — renseignez "Encodage NFC" dans les réglages techniques avancés de l\'Intégration réservations.'
     );
   }
   if (!config.baseUrl) throw new BookingSourceError("URL de base non configurée");
-  const url = normalizeBaseUrl(config.baseUrl).replace(/\/$/, "") + config.nfcEndpointPath;
   const { headers: authHeaders } = await buildAuthHeaders(config);
-  const codeParam = config.nfcCodeParam || "code";
-  const method = (config.nfcEndpointMethod || "POST").toUpperCase();
-  const staticParams: Record<string, unknown> =
-    config.nfcEndpointBodyParams && typeof config.nfcEndpointBodyParams === "object" ? (config.nfcEndpointBodyParams as Record<string, unknown>) : {};
+  const base = normalizeBaseUrl(config.baseUrl).replace(/\/$/, "");
+  const timeoutSeconds = config.nfcStartTimeoutSeconds || 15;
+  const commonHeaders = { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...authHeaders };
 
-  let res: Response;
+  // 1. Démarre l'association
+  const startParams: Record<string, unknown> =
+    config.nfcStartExtraParams && typeof config.nfcStartExtraParams === "object" ? { ...(config.nfcStartExtraParams as Record<string, unknown>) } : {};
+  startParams[config.nfcStartTimeoutParam || "timeout"] = timeoutSeconds;
+  startParams[config.nfcStartPassParam || "id"] = passId;
+  startParams[config.nfcStartDeviceParam || "deviceId"] = deviceId;
+  const startQs = new URLSearchParams();
+  Object.entries(startParams).forEach(([k, v]) => startQs.set(k, String(v)));
+  const startMethod = (config.nfcStartEndpointMethod || "GET").toUpperCase();
+  const startUrl = `${base}${config.nfcStartEndpointPath}${config.nfcStartEndpointPath.includes("?") ? "&" : "?"}${startQs.toString()}`;
+
+  let startRes: Response;
   try {
-    if (method === "GET") {
-      const qs = new URLSearchParams();
-      Object.entries(staticParams).forEach(([k, v]) => qs.set(k, String(v)));
-      qs.set(codeParam, bookingCode);
-      res = await fetchWithTimeout(`${url}${url.includes("?") ? "&" : "?"}${qs.toString()}`, {
-        headers: { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...authHeaders },
-      });
-    } else if ((config.nfcEndpointBodyFormat || "json") === "json") {
-      res = await fetchWithTimeout(url, {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          "User-Agent": "SesameSuite-BookingConnector/1.0",
-          ...authHeaders,
-        },
-        body: JSON.stringify({ ...staticParams, [codeParam]: bookingCode }),
-      });
-    } else {
-      const form = new URLSearchParams();
-      Object.entries(staticParams).forEach(([k, v]) => form.set(k, String(v)));
-      form.set(codeParam, bookingCode);
-      res = await fetchWithTimeout(url, {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/x-www-form-urlencoded",
-          "User-Agent": "SesameSuite-BookingConnector/1.0",
-          ...authHeaders,
-        },
-        body: form.toString(),
-      });
-    }
+    startRes = await fetchWithTimeout(startUrl, { method: startMethod === "GET" ? "GET" : "POST", headers: commonHeaders });
   } catch (e) {
-    throw new BookingSourceError(`Connexion à l'encodeur NFC impossible : ${describeFetchError(e)}`);
+    throw new BookingSourceError(`Connexion à l'encodeur NFC impossible (démarrage) : ${describeFetchError(e)}`);
   }
-  if (!res.ok) throw new BookingSourceError(`L'encodeur NFC a répondu ${res.status} ${res.statusText}`);
+  if (!startRes.ok) throw new BookingSourceError(`L'encodeur NFC a répondu ${startRes.status} ${startRes.statusText} au démarrage`);
+  const startBody = await parseJsonResponse(startRes, "La réponse de démarrage de l'encodeur NFC");
+  if (startBody && (startBody as { success?: unknown }).success === false) {
+    throw new BookingSourceError(String((startBody as { message?: unknown }).message || "Démarrage de l'association refusé par l'encodeur NFC"));
+  }
 
-  let count = 1;
-  if (config.nfcResponseCountPath) {
-    const body = await parseJsonResponse(res, "La réponse de l'encodeur NFC");
-    const raw = getPath(body, config.nfcResponseCountPath);
-    const n = Number(raw);
-    if (!isNaN(n)) count = n;
+  // 2. Interroge en boucle jusqu'à l'arrêt (carte approchée, ou délai écoulé)
+  if (!config.nfcCheckEndpointPath) {
+    throw new BookingSourceError(
+      'Vérification de l\'association NFC non configurée — renseignez "Vérification de l\'association NFC" dans les réglages techniques avancés.'
+    );
   }
-  return { count };
+  const checkMethod = (config.nfcCheckEndpointMethod || "GET").toUpperCase();
+  const checkQs = new URLSearchParams();
+  checkQs.set(config.nfcCheckDeviceParam || "id", deviceId);
+  const checkUrl = `${base}${config.nfcCheckEndpointPath}${config.nfcCheckEndpointPath.includes("?") ? "&" : "?"}${checkQs.toString()}`;
+  const stopPath = config.nfcCheckStopPath || "stop";
+  const successPath = config.nfcCheckSuccessPath || "success";
+  const messagePath = config.nfcCheckMessagePath || "message";
+
+  const deadline = Date.now() + timeoutSeconds * 1000;
+  let lastMessage = "";
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 1000));
+    let checkRes: Response;
+    try {
+      checkRes = await fetchWithTimeout(checkUrl, { method: checkMethod === "GET" ? "GET" : "POST", headers: commonHeaders });
+    } catch (e) {
+      throw new BookingSourceError(`Connexion à l'encodeur NFC impossible (vérification) : ${describeFetchError(e)}`);
+    }
+    if (!checkRes.ok) throw new BookingSourceError(`L'encodeur NFC a répondu ${checkRes.status} ${checkRes.statusText} (vérification)`);
+    const checkBody = await parseJsonResponse(checkRes, "La réponse de vérification de l'encodeur NFC");
+    lastMessage = String(getPath(checkBody, messagePath) ?? "");
+    if (getPath(checkBody, stopPath) === true) {
+      return { success: getPath(checkBody, successPath) === true, message: lastMessage };
+    }
+  }
+  return { success: false, message: lastMessage || "Délai écoulé — aucune carte approchée du lecteur" };
 }
 
 /**

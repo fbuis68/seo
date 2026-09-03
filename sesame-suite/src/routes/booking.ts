@@ -6,7 +6,7 @@ import { normaliseBooking } from "../lib/normalize";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { fireTrigger } from "../lib/automation";
 import { requireAdmin } from "../middleware/requireAdmin";
-import { encodeNfc, fetchAccessQr, openDoor, pushBookingUpdate, BookingSourceError } from "../lib/bookingSource";
+import { encodeNfc, listNfcDevices, fetchAccessQr, openDoor, pushBookingUpdate, BookingSourceError } from "../lib/bookingSource";
 import { sendEmailRaw } from "../lib/email";
 
 export const bookingRouter = Router();
@@ -193,10 +193,35 @@ bookingRouter.post(
 );
 
 /**
- * POST /wa/booking/encodeNfc — body: { code } — déclenche l'encodage d'une
- * carte/badge NFC pour cette réservation auprès de la source externe
- * configurée sur "Intégration réservations" (cf. lib/bookingSource.ts,
- * encodeNfc — inerte tant que nfcEndpointPath n'est pas renseigné).
+ * GET /wa/booking/nfcDevices — liste les lecteurs NFC disponibles (menu
+ * déroulant "Device" affiché avant de lancer un encodage, panneau
+ * "Réservations") — cf. lib/bookingSource.ts, listNfcDevices.
+ */
+bookingRouter.get(
+  "/booking/nfcDevices",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
+    if (!config) throw new HttpError(400, "Connecteur non configuré pour cet établissement");
+    try {
+      const devices = await listNfcDevices(config);
+      res.json(devices);
+    } catch (e) {
+      if (e instanceof BookingSourceError) throw new HttpError(400, e.message);
+      throw e;
+    }
+  })
+);
+
+/**
+ * POST /wa/booking/encodeNfc — body: { code, deviceId } — déclenche
+ * l'encodage d'une carte/badge NFC pour la personne titulaire de cette
+ * réservation (booking.passId), sur le lecteur `deviceId` choisi, auprès de
+ * la source externe configurée sur "Intégration réservations" (cf.
+ * lib/bookingSource.ts, encodeNfc — inerte tant que nfcStartEndpointPath
+ * n'est pas renseigné). Bloquant jusqu'à ~15s (durée de la fenêtre pendant
+ * laquelle la carte doit être approchée du lecteur).
  */
 bookingRouter.post(
   "/booking/encodeNfc",
@@ -204,19 +229,23 @@ bookingRouter.post(
   asyncHandler(async (req, res) => {
     const entity = await resolveEntity(req);
     const code = (req.body.code as string) || "";
+    const deviceId = (req.body.deviceId as string) || "";
     if (!code) throw new HttpError(400, "code requis");
+    if (!deviceId) throw new HttpError(400, "deviceId requis — sélectionnez un lecteur NFC");
 
     const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code } } });
     if (!booking) throw new HttpError(404, "Réservation introuvable");
+    if (!booking.passId) throw new HttpError(400, "Aucun identifiant \"Pass\" pour cette réservation — ré-importez-la depuis la source externe");
 
     const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
     if (!config) throw new HttpError(400, "Connecteur non configuré pour cet établissement");
 
     try {
-      const { count } = await encodeNfc(config, booking.code);
+      const { success, message } = await encodeNfc(config, booking.passId, deviceId);
+      if (!success) throw new HttpError(400, message || "Association NFC échouée");
       const updated = await prisma.booking.update({
         where: { id: booking.id },
-        data: { nfcCount: { increment: count }, nfcEncodedAt: new Date() },
+        data: { nfcCount: { increment: 1 }, nfcEncodedAt: new Date() },
       });
       res.json(normaliseBooking(updated));
     } catch (e) {
