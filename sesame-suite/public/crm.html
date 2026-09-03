@@ -692,6 +692,11 @@ const DOT_MAP = {Appel:'g',Email:'b',Visite:'g',Proposition:'b',Relance:'a','Not
 // STATE
 // ════════════════════════════════════════
 let clients=[], view='list', vmode='table', curId=null, sortC='nom', sortD=1;
+// Sélection multiple sur la vue liste (checkboxes par ligne) — sert à
+// l'envoi d'email groupé (cf. openBulkEmailModal). Un Set d'ids plutôt
+// qu'un flag par client : survit aux changements de filtre/tri sans que le
+// tableau `clients` porte un état de sélection qui n'a rien à y faire.
+let SELECTED_IDS = new Set();
 let srch='', fDanger='', fSecteur='', fContrat='', fType='', editingId=null, toastT=null;
 let deals=[], COMMERCIALS=[], tickets=[], cashLines=[];
 let cashSettings = {revenuMode:'detail',revenuMontant:0,revenuFrequence:'mensuel',revenuMois:null,depenseMode:'detail',depenseMontant:0,depenseFrequence:'mensuel',depenseMois:null};
@@ -1120,6 +1125,15 @@ function renderList(){
     <select class="lsel" onchange="fType=this.value;renderList()"><option value="">Tous types</option>${TYPES.map(t=>`<option value="${t}" ${fType===t?'selected':''}>${t}</option>`).join('')}</select>
     <span class="count-lbl">${data.length} résultat${data.length>1?'s':''}</span>
   </div>`;
+  // Barre d'actions groupées — n'apparaît que si au moins une ligne est
+  // cochée (checkboxes ajoutées à la vue tableau, cf. th('') plus bas et
+  // crmToggleSelect). La sélection survit aux changements de filtre — un
+  // client sélectionné puis filtré hors vue reste compté ici.
+  const selBar = SELECTED_IDS.size ? `<div class="list-toolbar" style="margin-top:-6px;margin-bottom:10px;padding:8px 12px;background:var(--pl,#fdedf0);border-radius:8px">
+    <span style="font-size:13px;font-weight:600">${SELECTED_IDS.size} sélectionné${SELECTED_IDS.size>1?'s':''}</span>
+    <button class="btn btn-primary btn-sm" onclick="openBulkEmailModal()">✉ Envoyer un email groupé</button>
+    <button class="btn btn-ghost btn-sm" onclick="crmClearSelection()">Désélectionner</button>
+  </div>` : '';
 
   let content='';
   if(vmode==='map'){
@@ -1151,6 +1165,7 @@ function renderList(){
     const th=(col,lbl,w)=>`<th style="width:${w}" onclick="srt('${col}')">${lbl}<span class="sarr">${sortC===col?(sortD===1?'↑':'↓'):'·'}</span></th>`;
     const rows=data.map(c=>{
       if(editingId===c.id)return`<tr class="erow">
+        <td><input type="checkbox" class="crm-sel-cb" ${SELECTED_IDS.has(c.id)?'checked':''} onchange="crmToggleSelect('${c.id}',this.checked)"></td>
         <td><div class="avatar" style="width:26px;height:26px;font-size:10px">${ini(c.nom)}</div></td>
         <td><div class="nom-cell">${c.nom}</div><div class="sub-cell">${c.groupe||'—'}</div></td>
         <td><select class="esel" onchange="ef('${c.id}','secteur',this.value)">${SECTEURS.map(s=>`<option value="${s}" ${c.secteur===s?'selected':''}>${s}</option>`).join('')}</select></td>
@@ -1164,6 +1179,7 @@ function renderList(){
         <td style="white-space:nowrap"><button class="ta-btn ta-save" onclick="saveRow('${c.id}')">✓</button></td>
       </tr>`;
       return`<tr>
+        <td><input type="checkbox" class="crm-sel-cb" ${SELECTED_IDS.has(c.id)?'checked':''} onchange="crmToggleSelect('${c.id}',this.checked)"></td>
         <td><div class="avatar" style="width:26px;height:26px;font-size:10px;cursor:pointer" onclick="showFiche('${c.id}')">${ini(c.nom)}</div></td>
         <td><div class="nom-cell" onclick="showFiche('${c.id}')">${typeBadge(c.type)} ${c.nom} ${inboundBadge(c)} ${supportBadge(c)} ${c.commercialName?`<span class="commercial-chip" title="Commercial : ${esc(c.commercialName)}">${ini(c.commercialName)}</span>`:''}</div><div class="sub-cell">${c.groupe||'—'}</div></td>
         <td style="font-size:12px;color:#666">${c.secteur||'—'}</td>
@@ -1180,8 +1196,10 @@ function renderList(){
         </td>
       </tr>`;
     }).join('');
+    const allSelected = data.length>0 && data.every(c=>SELECTED_IDS.has(c.id));
     content=`<div class="tbl-wrap"><table>
       <thead><tr>
+        <th style="width:26px"><input type="checkbox" class="crm-sel-cb" ${allSelected?'checked':''} onchange="crmToggleSelectAllVisible(this.checked)" title="Tout sélectionner (résultats affichés)"></th>
         <th style="width:34px"></th>
         ${th('nom','Client','160px')}${th('secteur','Secteur','135px')}${th('ville','Ville','85px')}
         ${th('danger','Risque','100px')}${th('potentiel','Potentiel','72px')}${th('appel','Appel','88px')}
@@ -1190,11 +1208,83 @@ function renderList(){
       <tbody>${rows}</tbody>
     </table></div>`;
   }
-  withFocusKept('.srch-wrap input', ()=>{ document.getElementById('main').innerHTML=stats+toolbar+content; });
+  withFocusKept('.srch-wrap input', ()=>{ document.getElementById('main').innerHTML=stats+toolbar+selBar+content; });
   if(vmode==='map') renderMapView(data);
 }
 
 function srt(c){if(sortC===c)sortD*=-1;else{sortC=c;sortD=1;}renderList();}
+
+// ── Sélection multiple (vue liste) — cf. SELECTED_IDS et openBulkEmailModal ──
+function crmToggleSelect(id, checked){
+  if(checked) SELECTED_IDS.add(id); else SELECTED_IDS.delete(id);
+  renderList();
+}
+function crmToggleSelectAllVisible(checked){
+  filtered().forEach(c=>{ if(checked) SELECTED_IDS.add(c.id); else SELECTED_IDS.delete(c.id); });
+  renderList();
+}
+function crmClearSelection(){ SELECTED_IDS.clear(); renderList(); }
+
+/** Fiches sélectionnées ayant un email valide — les autres sont exclues de l'envoi mais comptées pour prévenir l'utilisateur. */
+function crmSelectedWithEmail(){
+  return [...SELECTED_IDS].map(id=>clients.find(c=>c.id===id)).filter(c=>c && c.email && c.email.trim());
+}
+
+async function openBulkEmailModal(){
+  const total = SELECTED_IDS.size;
+  if(!total){ flash('Aucune fiche sélectionnée'); return; }
+  await ensureTemplatesLoaded();
+  const withEmail = crmSelectedWithEmail();
+  const skipped = total - withEmail.length;
+  const tpls = MSG_TEMPLATES.filter(t=>t.channel==='email');
+  if(!tpls.length){ flash('Aucun modèle email — créez-en un depuis "Canaux"'); return; }
+  document.getElementById('modal-ct').innerHTML=`
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:480px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Envoyer un email groupé</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div style="font-size:13px;color:var(--mu,#888);margin-bottom:10px">
+        ${withEmail.length} destinataire${withEmail.length>1?'s':''} avec email valide sur ${total} fiche${total>1?'s':''} sélectionnée${total>1?'s':''}${skipped?` — <b style="color:#854f0b">${skipped} ignorée${skipped>1?'s':''} (pas d'email)</b>`:''}.
+      </div>
+      <div class="ff"><label>Modèle</label><select id="bulk-send-tpl">${tpls.map(t=>`<option value="${esc(t.key)}">${esc(t.name)}</option>`).join('')}</select></div>
+      <div id="bulk-send-progress" style="display:none;font-size:13px;color:var(--mu,#888);margin-top:10px">Envoi en cours…</div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="bulk-send-btn" onclick="sendBulkEmail()" ${withEmail.length?'':'disabled'}>Envoyer à ${withEmail.length}</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function sendBulkEmail(){
+  const key=(document.getElementById('bulk-send-tpl')||{value:''}).value;
+  if(!key){ flash('Sélectionnez un modèle'); return; }
+  const recipients = crmSelectedWithEmail();
+  if(!recipients.length) return;
+  const btn=document.getElementById('bulk-send-btn'); if(btn){ btn.disabled=true; btn.textContent='Envoi…'; }
+  const progress=document.getElementById('bulk-send-progress'); if(progress) progress.style.display='block';
+
+  // Envois en parallèle, chacun indépendant (Promise.allSettled) — un échec
+  // isolé (email invalide côté serveur, timeout...) ne doit pas bloquer les
+  // autres destinataires ni empêcher le résumé final de s'afficher.
+  const results = await Promise.allSettled(recipients.map(async c=>{
+    const r = await apiFetch('/wa/message/send', {method:'POST', body:JSON.stringify({
+      scope:'crm', channel:'email', templateKey:key, to:c.email,
+      variables:{nom:c.nom, secteur:c.secteur||'', referent:c.referent||'', ville:c.ville||''}
+    })});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    const ar = await apiFetch('/wa/crmProspect/activity/create', {method:'POST', body:JSON.stringify({
+      prospectId:c.id, type:'Email', text:'Email envoyé (groupé) : "'+(data.subject||'')+'"', authorName:'CRM'
+    })});
+    if(ar.ok){ const entry=await ar.json(); if(!c.journal)c.journal=[]; c.journal.push(entry); }
+  }));
+
+  const ok = results.filter(r=>r.status==='fulfilled').length;
+  const fail = results.length - ok;
+  closeModal();
+  crmClearSelection();
+  flash(fail ? `${ok} email(s) envoyé(s), ${fail} échec(s)` : `${ok} email(s) envoyé(s)`);
+}
 function ef(id,f,v){const c=clients.find(c=>c.id===id);if(!c)return;c[f]=v;if(f==='ville'){c.lat=null;c.lng=null;}}
 async function saveRow(id){
   const c=clients.find(c=>c.id===id);if(!c)return;
