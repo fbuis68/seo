@@ -5816,6 +5816,12 @@ var BS_FACILITY_MAPPING_FIELDS = [
   {k:'category', label:'Catégorie', required:false},
   {k:'capacity', label:'Capacité (pers.)', required:false},
   {k:'surface', label:'Surface (m²)', required:false},
+  // Certaines sources renvoient dans la même liste des accès qui ne sont
+  // pas des chambres (espaces communs, bagagerie…) — sans ce filtre, ils
+  // seraient importés comme de fausses chambres. Comparé (insensible à la
+  // casse) à la valeur "Catégorie" ci-dessus, doit donc être rempli après
+  // elle. Sans "Catégorie" mappé ou sans valeur ici, rien n'est filtré.
+  {k:'excludeCategories', label:'Catégories à exclure (séparées par une virgule)', required:false},
 ];
 
 var BS_CONFIG = null;
@@ -5981,7 +5987,7 @@ var PMS_PRESETS = {
   sesame: {
     label: 'Sesame Technology',
     noteType: 'b',
-    note: 'Connexion et liste des réservations vérifiées en conditions réelles le 17/08/2026. Le compte utilisé doit avoir accès à l\'établissement voulu — il est retrouvé automatiquement par son code (entityCode) parmi les profils disponibles pour ce compte. Le 18/08/2026, une fuite entre établissements a été constatée sur /wa/booking/list (réservations d\'un autre hôtel accessible par le même compte) — un filtre de sécurité (entityId) est appliqué automatiquement ci-dessous depuis ce modèle. QR code / code d\'accès / ouverture de porte : chemins repris de la documentation officielle Sesame API (version 2023-11-23) fournie le 25/08/2026 — pas encore vérifiés en conditions réelles comme le reste ci-dessus, à tester avant mise en production. Import des chambres : NON pré-rempli par ce modèle, faute d\'un endpoint confirmé dans la documentation reçue — renseignez manuellement le bloc "Import des chambres" ci-dessous (Endpoint chambres + mapping des champs) avant de cliquer sur "Importer les chambres", sans quoi l\'import échoue.',
+    note: 'Connexion et liste des réservations vérifiées en conditions réelles le 17/08/2026. Le compte utilisé doit avoir accès à l\'établissement voulu — il est retrouvé automatiquement par son code (entityCode) parmi les profils disponibles pour ce compte. Le 18/08/2026, une fuite entre établissements a été constatée sur /wa/booking/list (réservations d\'un autre hôtel accessible par le même compte) — un filtre de sécurité (entityId) est appliqué automatiquement ci-dessous depuis ce modèle. QR code / code d\'accès / ouverture de porte : chemins repris de la documentation officielle Sesame API (version 2023-11-23) fournie le 25/08/2026 — pas encore vérifiés en conditions réelles comme le reste ci-dessus, à tester avant mise en production. Import des chambres (/wa/facility/list, absent de la doc officielle) : vérifié en conditions réelles le 03/09/2026 — cette liste mélange chambres et espaces communs (bagagerie, entrée…) chez ce client, filtrés ci-dessous via "Espace commun" ; à ajuster si votre installation utilise un autre libellé pour ses espaces communs.',
     apply: function(){
       document.getElementById('bs-endpointPath').value = '/wa/booking/list';
       document.getElementById('bs-endpointMethod').value = 'POST';
@@ -6002,6 +6008,20 @@ var PMS_PRESETS = {
       document.getElementById('bs-skipEntityFilter').checked = false;
       document.getElementById('bs-responseListPath').value = 'root';
       bsRenderMappingFields({code:'code', personEmail:'personEmail', personFirstname:'personFirstname', personLastname:'personLastname', personPhone:'', startDate:'startDate', endDate:'endDate', facilityCode:'facilityCode', facilityName:'facilityName', status:'status', bookingType:'typeCode'});
+      // Import des chambres — /wa/facility/list, absent de la documentation
+      // officielle (comme /wa/booking/list) mais vérifié en conditions
+      // réelles le 03/09/2026 : réponse {"success":true,"root":[...]}, avec
+      // code/name/typeName par élément. La liste renvoie AUSSI des accès qui
+      // ne sont pas des chambres (ex : "Espace commun" pour la bagagerie,
+      // l'entrée principale…) — filtrés via excludeCategories, à ajuster si
+      // le libellé diffère sur cette installation. floor/capacity/surface
+      // n'existent pas dans cette source, restent volontairement vides.
+      document.getElementById('bs-facilityEndpointPath').value = '/wa/facility/list';
+      document.getElementById('bs-facilityEndpointMethod').value = 'POST';
+      document.getElementById('bs-facilityEndpointBodyFormat').value = 'form';
+      document.getElementById('bs-facilityEndpointBodyParams').value = 'start=0\nlimit=1000';
+      document.getElementById('bs-facilityResponseListPath').value = 'root';
+      bsRenderFacilityMappingFields({code:'code', name:'name', category:'typeName', excludeCategories:'Espace commun'});
       // QR / code d'accès / ouverture de porte — d'après la documentation
       // officielle Sesame API (version 2023-11-23) : POST /ws/pass/findMimeSecret
       // (QR image prête, {"secret":"data:image/jpeg;base64,..."}) et

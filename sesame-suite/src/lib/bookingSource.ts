@@ -72,6 +72,14 @@ export interface FacilityMapping {
   category?: string;
   capacity?: string;
   surface?: string;
+  // Certaines sources (ex : API Sesame Technology) renvoient dans la même
+  // liste les vraies chambres ET d'autres accès (espaces communs,
+  // bagagerie, entrée principale…) — sans filtre, ceux-ci seraient importés
+  // comme de fausses chambres. Liste de valeurs de "category" (issu du
+  // mapping ci-dessus) à exclure de l'import, séparées par une virgule —
+  // comparaison insensible à la casse. Optionnel : sans category mappé ou
+  // sans valeur ici, rien n'est filtré.
+  excludeCategories?: string;
 }
 
 export interface MappedFacility {
@@ -515,15 +523,26 @@ export function mapFacilities(items: unknown[], mapping: FacilityMapping): { map
     return isNaN(n) ? null : n;
   };
 
+  const excluded = (mapping.excludeCategories || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+
   items.forEach((item, index) => {
     const code = mapping.code ? String(getPath(item, mapping.code) ?? "").trim() : "";
     if (!code) { errors.push({ index, reason: "code de chambre manquant" }); return; }
+
+    const category = mapping.category ? String(getPath(item, mapping.category) ?? "").trim() : "";
+    if (excluded.length && excluded.includes(category.toLowerCase())) {
+      errors.push({ index, reason: `catégorie exclue ("${category}")` });
+      return;
+    }
 
     mapped.push({
       code,
       name: mapping.name ? String(getPath(item, mapping.name) ?? "").trim() || code : code,
       floor: mapping.floor ? toNum(getPath(item, mapping.floor)) : null,
-      category: mapping.category ? String(getPath(item, mapping.category) ?? "").trim() : "",
+      category,
       capacity: mapping.capacity ? toNum(getPath(item, mapping.capacity)) : null,
       surface: mapping.surface ? toNum(getPath(item, mapping.surface)) : null,
     });
