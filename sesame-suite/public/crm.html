@@ -2395,6 +2395,16 @@ function trCategoryMonthly(kind, m){
   const base = trCategoryMonthlyBase(kind, m);
   return kind==='revenu' ? base + trDealsPipelineFor(m) : base;
 }
+/** Sous-total d'une catégorie pour un mois donné (affiché à côté du total
+ * annuel quand le filtre "Vérifier/modifier" est actif) — mêmes composantes
+ * que le total annuel (lignes/saisie globale + MRR + pipeline pour
+ * "revenu"), sans le masquage "avant solde d'ouverture" de trComputeMonthly
+ * qui sert au calcul de la trésorerie cumulée, pas à la vérification d'un
+ * mois donné. */
+function trMonthlySubtotal(kind, m){
+  const base = trCategoryMonthly(kind, m);
+  return kind==='revenu' ? base + trPortfolioMrrMonthly() : base;
+}
 
 // MRR du portefeuille (somme de CrmProspect.mrr, tous types confondus —
 // même somme que le pied de tableau Portefeuille) : un flux récurrent
@@ -2468,12 +2478,14 @@ function trCategoryCard(kind, title, colorVar){
     : (rows.length===0 ? `<div class="log-empty">Aucune ligne. Ajoutez ${kind==='revenu'?'un encaissement':'une dépense'}.</div>`
        : (shownRows.length===0 ? `<div class="log-empty">Aucune ligne pour ${TR_MONTHS[trMonthFilter]}.</div>` : shownRows.map(r=>trLineRow(r,kind)).join('')));
   const pipeline = kind==='revenu' ? trDealsPipelineAnnual() : 0;
+  const monthSub = trMonthFilter!==null ? trMonthlySubtotal(kind, trMonthFilter) : null;
   return `
     <div class="card" style="margin-bottom:0">
       <div class="card-head">
         <div class="ch-ico" style="background:${colorVar};border-color:${colorVar}"></div>
         <span class="ch-title">${title}</span>
         <span class="num" id="tr-cardtotal-${kind}" style="margin-left:10px;font-weight:600">${fmtEUR(total)}/an</span>
+        ${monthSub!==null ? `<span class="num" id="tr-cardsub-${kind}" style="margin-left:10px;font-weight:600;color:var(--mu)">· ${TR_MONTHS[trMonthFilter]} : ${fmtEUR(monthSub)}</span>` : ''}
         ${trModeToggle(kind)}
       </div>
       <div class="tr-panel-body">${body}</div>
@@ -2605,6 +2617,12 @@ function trRenderCharts(){
   ['tr-chip-depense','tr-cardtotal-depense'].forEach(id=>{
     const el = document.getElementById(id); if(el) el.textContent = fmtEUR(depenseAnnuel) + (id==='tr-cardtotal-depense'?'/an':'');
   });
+  if(trMonthFilter!==null){
+    ['revenu','depense'].forEach(kind=>{
+      const el = document.getElementById('tr-cardsub-'+kind);
+      if(el) el.textContent = '· '+TR_MONTHS[trMonthFilter]+' : '+fmtEUR(trMonthlySubtotal(kind, trMonthFilter));
+    });
+  }
 
   const last = months[months.length-1];
   const heroEl = document.getElementById('tr-hero-balance');
