@@ -894,6 +894,14 @@ input:focus,select:focus{border-color:var(--accent)}
         </div>
       </div>
 
+      <!-- Bouton Wallet — masqué tant que /wa/wallet/pass n'a pas répondu
+           enabled:true (connecteur EldoWallet non souscrit par l'hôtel, ou
+           en cours de chargement) : cf. espRenderWallet(). -->
+      <button class="btn btn-p" id="espWalletBtn" style="display:none;width:100%;justify-content:center;margin-bottom:12px" onclick="espAddToWallet()">
+        <i class="ti ti-wallet"></i> <span id="espWalletBtnLabel" data-i18n="esp_wallet_add">Ajouter à mon Wallet</span>
+      </button>
+      <div id="espWalletErrorBox" style="display:none;margin-bottom:12px" class="alt alt-w"><i class="ti ti-alert-triangle"></i><span id="espWalletErrorText"></span></div>
+
       <div class="alt alt-g" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
         <span data-i18n="esp_key_info">Approchez votre téléphone du lecteur ou présentez ce QR code pour chaque accès.</span>
       </div>
@@ -1604,6 +1612,7 @@ var I18N_FR = {
   esp_key_title:'Votre clé digitale',esp_key_present:'Présentez ce code au lecteur Sesame',
   esp_key_simulate_open:"Simuler l'ouverture",esp_key_unlocked:'Accès déverrouillé ✓',esp_key_pick_access:'Choisissez un accès précis ci-dessous.',
   esp_key_info:'Approchez votre téléphone du lecteur ou présentez ce QR code pour chaque accès.',
+  esp_wallet_add:'Ajouter à mon Wallet',esp_wallet_error:"Impossible de générer le pass Wallet pour l'instant.",
   esp_access_dedicated:'Accès dédié',esp_access_simulation:'Mode simulation',
   esp_valid_until:"Valable jusqu'au {date} à 11h00",
   esp_valid_whole_stay:'Valable pendant toute la durée de votre séjour',
@@ -1815,6 +1824,7 @@ var I18N_EN = {
   esp_key_title:'Your digital key',esp_key_present:'Present this code to the Sesame reader',
   esp_key_simulate_open:'Simulate unlocking',esp_key_unlocked:'Access unlocked ✓',esp_key_pick_access:'Pick a specific access point below.',
   esp_key_info:'Hold your phone near the reader or show this QR code for each access point.',
+  esp_wallet_add:'Add to my Wallet',esp_wallet_error:'Unable to generate the Wallet pass right now.',
   esp_access_dedicated:'Dedicated access',esp_access_simulation:'Simulation mode',
   esp_valid_until:'Valid until {date} at 11:00 AM',
   esp_valid_whole_stay:'Valid for the entire duration of your stay',
@@ -2028,6 +2038,7 @@ var I18N_ES = {
   esp_key_title:'Su llave digital',esp_key_present:'Presente este código en el lector Sesame',
   esp_key_simulate_open:'Simular apertura',esp_key_unlocked:'Acceso desbloqueado ✓',esp_key_pick_access:'Elige un acceso concreto abajo.',
   esp_key_info:'Acerque su teléfono al lector o muestre este código QR en cada acceso.',
+  esp_wallet_add:'Añadir a mi Wallet',esp_wallet_error:'No se ha podido generar el pase Wallet por ahora.',
   esp_access_dedicated:'Acceso dedicado',esp_access_simulation:'Modo simulación',
   esp_valid_until:'Válido hasta el {date} a las 11:00',
   esp_valid_whole_stay:'Válido durante toda su estancia',
@@ -3068,7 +3079,7 @@ function espSetTab(tab){
     var el = document.getElementById(id);
     if(el) el.style.display = (t===tab) ? 'block' : 'none';
   });
-  if(tab==='key')      { espRenderKey(); espRenderQr(); }
+  if(tab==='key')      { espRenderKey(); espRenderQr(); espRenderWallet(); }
   if(tab==='rs')       renderRoomService();
   if(tab==='loyalty')  espRenderLoyalty();
   if(tab==='menage')   espRenderMenage();
@@ -3313,6 +3324,49 @@ async function espRenderQr(){
     ESP_QR_STATE = { simulated: true };
     espShowQrError(t('esp_qr_fetch_error'));
   }
+}
+
+// ── WALLET (EldoWallet) ── Bouton "Ajouter à mon Wallet" sous la clé
+// digitale — appelle POST /wa/wallet/pass à chaque affichage de l'onglet
+// (idempotent côté serveur : ne recrée jamais le pass s'il existe déjà,
+// cf. routes/wallet.ts getOrCreateWalletPass). Masqué silencieusement si
+// l'hôtel n'a pas souscrit le module Wallet (enabled:false) — ce n'est pas
+// une erreur, juste une fonctionnalité non disponible pour cet
+// établissement.
+var ESP_WALLET_STATE = null;
+async function espRenderWallet(){
+  var btn = document.getElementById('espWalletBtn');
+  var errBox = document.getElementById('espWalletErrorBox');
+  if(!btn) return;
+  errBox.style.display = 'none';
+  btn.style.display = 'none';
+  var b = S.booking;
+  if(!b || !b.code) return;
+  try{
+    var r = await apiFetch(API_BASE+'/wa/wallet/pass', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ code: b.code })
+    });
+    var data = await r.json();
+    if(!r.ok){
+      // Connecteur souscrit mais l'appel échoue (ex : EldoWallet
+      // injoignable) — signalé, contrairement à enabled:false qui reste
+      // silencieux (hôtel n'ayant simplement pas ce module).
+      errBox.style.display = 'flex';
+      document.getElementById('espWalletErrorText').textContent = data.error || t('esp_wallet_error');
+      return;
+    }
+    ESP_WALLET_STATE = data;
+    if(data.enabled && data.shortLink) btn.style.display = 'flex';
+  }catch(e){
+    // Coupure réseau : pas d'erreur affichée, juste pas de bouton — cf.
+    // même choix que espRenderQr pour un souci de connectivité côté client.
+  }
+}
+function espAddToWallet(){
+  if(!ESP_WALLET_STATE || !ESP_WALLET_STATE.shortLink) return;
+  window.open(ESP_WALLET_STATE.shortLink, '_blank');
 }
 
 async function espOpenDoor(){
