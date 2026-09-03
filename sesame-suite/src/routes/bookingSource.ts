@@ -599,6 +599,11 @@ bookingSourceRouter.post(
         preview: mapped.slice(0, 10),
         validCount: mapped.length,
         errors: errors.slice(0, 10),
+        // Échantillon brut (avant mapping) — sert à lire les vrais noms de
+        // champs de la source externe quand le mapping configuré ne trouve
+        // rien (validCount:0) : sans ça, l'admin n'a aucun moyen de voir la
+        // forme réelle de la réponse pour corriger le mapping.
+        rawSample: raw.slice(0, 3),
       });
     } catch (e) {
       if (e instanceof BookingSourceError) throw new HttpError(400, e.message);
