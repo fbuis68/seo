@@ -7537,6 +7537,10 @@ async function bsTest(){
       h += '<div style="font-size:12px;color:var(--mu);margin-top:8px">Éléments ignorés : '
         + data.errors.map(function(e){return '#'+e.index+' ('+esc(e.reason)+')';}).join(', ') + '</div>';
     }
+    if(data.rawSample && data.rawSample.length){
+      h += '<div style="font-size:11px;color:var(--mu);margin-top:14px;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em">Réponse brute (avant mapping) — '+data.rawSample.length+' exemple(s)</div>'
+        + '<pre style="font-size:11px;background:var(--al);border-radius:8px;padding:10px;overflow-x:auto;max-height:280px">'+esc(JSON.stringify(data.rawSample, null, 2))+'</pre>';
+    }
     bsShowResult('Aperçu du test (10 premiers éléments)', h);
   }catch(e){
     bsShowResult('Échec du test', '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Erreur de connexion au serveur</span></div>');

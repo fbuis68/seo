@@ -502,6 +502,11 @@ bookingSourceRouter.post(
         preview: mapped.slice(0, 10).map((m) => ({ ...m, startDate: m.startDate.toISOString().slice(0, 10), endDate: m.endDate.toISOString().slice(0, 10) })),
         validCount: mapped.length,
         errors: errors.slice(0, 10),
+        // Échantillon brut (avant mapping) — même logique que testFacilities :
+        // permet de repérer un champ présent dans la réponse mais pas encore
+        // mappé (ex : un éventuel identifiant de "Pass" par réservation) sans
+        // avoir à toucher au code.
+        rawSample: raw.slice(0, 3),
       });
     } catch (e) {
       if (e instanceof BookingSourceError) throw new HttpError(400, e.message);
