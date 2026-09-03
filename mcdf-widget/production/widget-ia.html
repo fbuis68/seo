@@ -232,7 +232,7 @@
       <p class="eyebrow">Widget IA · MCDF</p>
       <h1>Génération de rapports</h1>
       <p class="lede">Données en direct, lecture seule — aucune action d'écriture n'est effectuée par ce widget.</p>
-      <p class="version-tag">Version du fichier : 2026-09-02d (CPF Sous-traitance : chargement différé, ne bloque plus le widget)</p>
+      <p class="version-tag">Version du fichier : 2026-09-02e (CPF Sous-traitance : ciblé dossier par dossier, ne timeout plus)</p>
       <div class="suggest-row">
         <button type="button" class="suggest-btn" id="suggest-report-btn">💡 Suggérer un nouveau rapport</button>
         <button type="button" class="suggest-btn" id="suggest-filter-btn">🔎 Suggérer un nouveau filtre</button>
@@ -461,7 +461,7 @@
     <!-- ============================= CPF SOUS-TRAITANCE (API MCDF en direct) ============================= -->
     <div class="tab-panel" id="tab-cpf">
       <div class="note">
-        Aucun champ « CPF » n'existe dans l'API MCDF : un dossier est considéré CPF ici si le payeur d'au moins une de ses lignes de facturation (<code>timetable.payerId</code>) est « Caisse des Dépôts et Consignations » (gestionnaire de Mon Compte Formation) — confirmé manuellement le 02/09/2026. La sous-traitance vient du champ <code>timetable.subcontracted</code>, regroupé par ligne de convention (<code>conventionTraining</code>) puis par dossier. Données en direct, aucun import.
+        Aucun champ « CPF » n'existe dans l'API MCDF : un dossier est considéré CPF ici si le payeur d'au moins une de ses factures (<code>invoice.payerId</code>/<code>payerName</code>) est « Caisse des Dépôts et Consignations » (gestionnaire de Mon Compte Formation) — confirmé manuellement le 02/09/2026. Le détail (heures, sous-traitance) est ensuite récupéré dossier par dossier via <code>conventionTraining/listWithTimetable</code> (même appel que l'interface MCDF sur une fiche dossier), la sous-traitance venant du champ <code>timetable.subcontracted</code>. Données en direct, aucun import.
       </div>
 
       <p class="hint" id="cpf-loading-hint" style="display:none"><span class="spinner" style="display:inline-block; vertical-align:middle; margin-right:6px;"></span>Chargement des dossiers CPF (peut prendre du temps sur un historique important)…</p>
@@ -936,77 +936,86 @@ async function buildData(entityId) {
 }
 
 // ------------------------------------------------------------------
-// CPF Sous-traitance -- aucun champ "CPF" n'existe dans l'API MCDF ;
-// un dossier est retenu ici si le payeur (timetable.payerId) d'au
-// moins une de ses lignes de facturation est la Caisse des Dépôts et
-// Consignations (gestionnaire de Mon Compte Formation), confirmé
-// manuellement le 02/09/2026 sur cette entité. La sous-traitance vient
-// du champ timetable.subcontracted ("1"), regroupé par ligne de
-// convention (conventionTraining) puis par dossier (conventionId).
+// CPF Sous-traitance -- aucun champ "CPF" n'existe dans l'API MCDF ; un
+// dossier est retenu ici si le payeur (invoice.payerId/payerName) d'au
+// moins une de ses factures est la Caisse des Dépôts et Consignations
+// (gestionnaire de Mon Compte Formation), confirmé manuellement le
+// 02/09/2026 sur cette entité. `invoice` est déjà chargé pour les
+// autres onglets et répond vite (contrairement à conventionTraining/
+// timetable en masse, qui timeout au-delà d'un certain historique --
+// voir loadCpfLive). Le détail par dossier (heures, sous-traitance) est
+// donc récupéré dossier par dossier via listWithTimetable, uniquement
+// pour les dossiers déjà identifiés comme CPF -- c'est l'appel que
+// l'interface MCDF elle-même utilise pour afficher une fiche dossier,
+// confirmé rapide sur un seul conventionId.
 // ------------------------------------------------------------------
 const CDC_NAME_RE = /caisse des d[ée]p[oô]ts/i;
 
-function buildCpfDossiers(customers, convById, conventionTrainings, timetables) {
+function findCpfConventionIds(customers, invoices) {
   const cdcIds = new Set(customers.filter((c) => CDC_NAME_RE.test(c.name || '')).map((c) => c.id));
-  if (!cdcIds.size) return [];
-
-  const ctById = new Map(conventionTrainings.map((ct) => [ct.id, ct]));
-
-  const byCt = new Map();
-  timetables.forEach((t) => {
-    const ct = ctById.get(t.conventionTrainingId);
-    if (!ct || !ct.conventionId) return;
-    if (!byCt.has(ct.id)) byCt.set(ct.id, { ct, facture: 0, subcontracted: false, caST: 0, isCpf: false });
-    const agg = byCt.get(ct.id);
-    agg.facture += t.discountedAmount || 0;
-    if (t.subcontracted === '1') {
-      agg.subcontracted = true;
-      agg.caST += t.discountedAmount || 0;
-    }
-    if (cdcIds.has(t.payerId)) agg.isCpf = true;
+  const ids = new Set();
+  invoices.forEach((i) => {
+    if (!i.conventionId) return;
+    if (cdcIds.has(i.payerId) || CDC_NAME_RE.test(i.payerName || '')) ids.add(i.conventionId);
   });
+  return [...ids];
+}
 
-  const byDossier = new Map();
-  byCt.forEach((agg) => {
-    if (!agg.isCpf) return;
-    const { ct } = agg;
-    const convId = ct.conventionId;
-    if (!byDossier.has(convId)) {
-      byDossier.set(convId, {
-        conventionId: convId, facture: 0, heuresDecl: 0, heuresST: 0, caST: 0,
-        sessions: new Set(), debut: null, fin: null,
-      });
-    }
-    const d = byDossier.get(convId);
-    d.facture += agg.facture;
-    d.heuresDecl += ct.soldHours || 0;
-    if (agg.subcontracted) {
-      d.heuresST += ct.soldHours || 0;
-      d.caST += agg.caST;
-    }
+async function fetchConventionTimetable(conventionId) {
+  const res = await fetch(
+    `/wa/conventionTraining/listWithTimetable?type=convention&conventionId=${encodeURIComponent(conventionId)}&nopaging=1&_dc=${Date.now()}`,
+    { credentials: 'same-origin' }
+  );
+  if (res.status === 401 || res.status === 403) throw new Error('AUTH');
+  let data;
+  try {
+    data = await res.json();
+  } catch (e) {
+    throw new Error('AUTH');
+  }
+  if (!data.success) throw new Error(`Appel listWithTimetable refusé (dossier ${conventionId})`);
+  return data.root || [];
+}
+
+function aggregateCpfDossier(conventionId, rows, convById) {
+  const cts = rows.filter((r) => r.object === 'conventiontraining');
+  const tts = rows.filter((r) => r.object === 'timetable');
+
+  const subcontractedCtIds = new Set(
+    tts.filter((t) => t.subcontracted === '1' && t.conventionTrainingId).map((t) => t.conventionTrainingId)
+  );
+
+  let facture = 0, caST = 0, heuresDecl = 0, heuresST = 0;
+  const sessions = new Set();
+  let debut = null, fin = null;
+
+  tts.forEach((t) => {
+    facture += t.discountedAmount || 0;
+    if (subcontractedCtIds.has(t.conventionTrainingId)) caST += t.discountedAmount || 0;
+  });
+  cts.forEach((ct) => {
+    heuresDecl += ct.soldHours || 0;
+    if (subcontractedCtIds.has(ct.id)) heuresST += ct.soldHours || 0;
     const sessionLabel = ct.sessionName || ct.sessionCode;
-    if (sessionLabel) d.sessions.add(sessionLabel);
+    if (sessionLabel) sessions.add(sessionLabel);
     if (ct.sessionStartDate) {
       const dt = new Date(ct.sessionStartDate);
-      if (!d.debut || dt < d.debut) d.debut = dt;
+      if (!debut || dt < debut) debut = dt;
     }
     if (ct.sessionEndDate) {
       const dt = new Date(ct.sessionEndDate);
-      if (!d.fin || dt > d.fin) d.fin = dt;
+      if (!fin || dt > fin) fin = dt;
     }
   });
 
-  return [...byDossier.values()].map((d) => {
-    const conv = convById.get(d.conventionId) || {};
-    return {
-      dossier: d.conventionId,
-      intitule: conv.name || conv.code || '(sans intitulé)',
-      sessions: [...d.sessions].join(', ') || '—',
-      debut: d.debut, fin: d.fin,
-      facture: d.facture, heuresDecl: d.heuresDecl, heuresST: d.heuresST, caST: d.caST,
-      pctST: d.facture > 0 ? d.caST / d.facture : 0,
-    };
-  });
+  const conv = convById.get(conventionId) || {};
+  return {
+    dossier: conventionId,
+    intitule: conv.name || conv.code || '(sans intitulé)',
+    sessions: [...sessions].join(', ') || '—',
+    debut, fin, facture, heuresDecl, heuresST, caST,
+    pctST: facture > 0 ? caST / facture : 0,
+  };
 }
 
 // ------------------------------------------------------------------
@@ -1540,7 +1549,7 @@ let CPF_ENTITY_ID = null;
     // CPF Sous-traitance : chargé uniquement à l'ouverture de l'onglet
     // (voir loadCpfLive) pour ne jamais retarder le reste du widget.
     document.querySelector('.tab-btn[data-tab="cpf"]').addEventListener('click', () => {
-      loadCpfLive(DATA.raw.customers, DATA.raw.convById);
+      loadCpfLive(DATA.raw.customers, DATA.raw.convById, DATA.raw.invoices);
     });
   } catch (err) {
     setStatus('warn', '<span class="dot"></span> Non connecté');
@@ -1721,39 +1730,52 @@ function readWorkbookFile(file, sheetHint) {
   });
 }
 
-// ---- CPF Sous-traitance (API MCDF en direct, voir buildCpfDossiers) ----
-// Chargement différé, déclenché au premier clic sur l'onglet : les
-// entités conventionTraining/timetable n'ont pas de filtre serveur
-// disponible (pas de paramètre date/dossier pour un appel en masse) et
-// l'historique complet peut être trop volumineux pour /wa/{entity}/list
-// (déjà observé : 504 Gateway Timeout côté MCDF sur un compte ancien).
-// On isole donc ce chargement pour ne jamais bloquer le reste du widget.
+// ---- CPF Sous-traitance (API MCDF en direct, voir plus haut) ----
+// Chargement différé, déclenché au premier clic sur l'onglet : la
+// liste des dossiers CPF vient de `invoice` (déjà chargé, rapide), puis
+// le détail (heures, sous-traitance) est allé chercher dossier par
+// dossier via listWithTimetable, en petits lots -- pas d'appel en masse
+// sur conventionTraining/timetable, qui timeout au-delà d'un certain
+// historique (déjà observé : 504 Gateway Timeout côté MCDF).
+const CPF_CONCURRENCY = 6;
 let CPF_ROWS = [];
 let CPF_LOAD_STATE = 'idle'; // idle | loading | error | ready
 
-async function loadCpfLive(customers, convById) {
+async function loadCpfLive(customers, convById, invoices) {
   if (CPF_LOAD_STATE === 'loading' || CPF_LOAD_STATE === 'ready') return;
   CPF_LOAD_STATE = 'loading';
   setCpfHint('loading');
   try {
-    const [conventionTrainings, timetables] = await Promise.all([
-      fetchAll('conventionTraining', CPF_ENTITY_ID),
-      fetchAll('timetable', CPF_ENTITY_ID),
-    ]);
-    CPF_ROWS = buildCpfDossiers(customers, convById, conventionTrainings, timetables);
+    const cpfConvIds = findCpfConventionIds(customers, invoices);
+    const rows = [];
+    for (let i = 0; i < cpfConvIds.length; i += CPF_CONCURRENCY) {
+      const batch = cpfConvIds.slice(i, i + CPF_CONCURRENCY);
+      const batchResults = await Promise.all(
+        batch.map((convId) => fetchConventionTimetable(convId).then((r) => aggregateCpfDossier(convId, r, convById)))
+      );
+      rows.push(...batchResults);
+      setCpfHint('loading', null, Math.min(i + CPF_CONCURRENCY, cpfConvIds.length), cpfConvIds.length);
+    }
+    CPF_ROWS = rows;
     CPF_LOAD_STATE = 'ready';
     renderCpfLive();
   } catch (err) {
     CPF_LOAD_STATE = 'error';
     const msg = err && err.message === 'AUTH'
-      ? 'Le serveur MCDF n\'a pas répondu correctement (délai dépassé ou volume de données trop important pour /wa/conventionTraining ou /wa/timetable sans filtre). Réessayez, ou contactez votre administrateur si ça persiste.'
+      ? 'Le serveur MCDF n\'a pas répondu correctement au chargement d\'un dossier (délai dépassé). Réessayez, ou contactez votre administrateur si ça persiste.'
       : `Erreur au chargement : ${(err && err.message) || err}`;
     setCpfHint('error', msg);
     console.error('CPF Sous-traitance :', err);
   }
 }
-function setCpfHint(state, errorMsg) {
-  document.getElementById('cpf-loading-hint').style.display = state === 'loading' ? 'block' : 'none';
+function setCpfHint(state, errorMsg, done, total) {
+  const loadingHint = document.getElementById('cpf-loading-hint');
+  loadingHint.style.display = state === 'loading' ? 'block' : 'none';
+  if (state === 'loading') {
+    loadingHint.innerHTML = total
+      ? `<span class="spinner" style="display:inline-block; vertical-align:middle; margin-right:6px;"></span>Chargement des dossiers CPF… (${done}/${total})`
+      : `<span class="spinner" style="display:inline-block; vertical-align:middle; margin-right:6px;"></span>Recherche des dossiers CPF…`;
+  }
   document.getElementById('cpf-error-hint').style.display = state === 'error' ? 'block' : 'none';
   if (state === 'error') document.getElementById('cpf-error-hint').textContent = errorMsg;
   if (state !== 'ready') document.getElementById('cpf-content').style.display = 'none';
