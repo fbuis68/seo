@@ -2935,6 +2935,16 @@ function dealToggleFunnel(){
 // montant pondéré (ponctuel × probabilité, même convention que le pipeline
 // Trésorerie, cf. trDealsPipelineFor) et MRR (montant récurrent mensuel,
 // champ "amount"), chacun affiché seulement s'il est renseigné.
+/** Repère visuel de la probabilité de réalisation d'une affaire — un smiley
+ * en plus du % chiffré, pour un coup d'œil rapide sur les cartes
+ * Kanban/listes : souriant au-dessus de 50%, neutre de 30 à 50%, inquiet
+ * en dessous de 30%. */
+function dealProbaSmiley(p){ return p>50 ? '😊' : p>=30 ? '😐' : '😟'; }
+function dealProbaBadge(p){
+  const cls = p>50 ? 'bg' : p>=30 ? 'bw' : 'bd';
+  return `<span class="badge ${cls}" title="Probabilité de réalisation">${dealProbaSmiley(p)} ${p}%</span>`;
+}
+
 function dealCardAmounts(d){
   const pondere = (+d.montantPonctuel||0)*(+d.probability||0)/100;
   const rows = [];
@@ -2984,7 +2994,10 @@ function renderAffaires(){
             <div class="kanban-card-client">${esc(d.prospectNom)}</div>
             <div class="kanban-card-foot">
               ${dealCardAmounts(d)}
-              ${d.commercialName?`<span class="commercial-chip" title="${esc(d.commercialName)}">${ini(d.commercialName)}</span>`:''}
+              <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
+                ${dealProbaBadge(d.probability||0)}
+                ${d.commercialName?`<span class="commercial-chip" title="${esc(d.commercialName)}">${ini(d.commercialName)}</span>`:''}
+              </div>
             </div>
           </div>`).join('')}
       </div>
@@ -3040,7 +3053,8 @@ function renderAffairesMonthly(filtered){
             <div style="text-align:right;font-size:12px;flex:0 0 auto">
               ${d.amount?`<div>MRR ${fmtEUR(d.amount)}</div>`:''}
               ${d.montantPonctuel?`<div style="color:var(--mu)">Ponctuel ${fmtEUR(d.montantPonctuel)}</div>`:''}
-              ${d.montantPonctuel?`<div style="color:var(--mu)">Pondéré ${fmtEUR((+d.montantPonctuel||0)*(+d.probability||0)/100)} (${d.probability||0}%)</div>`:`<div style="color:var(--mu)">${d.probability||0}%</div>`}
+              ${d.montantPonctuel?`<div style="color:var(--mu)">Pondéré ${fmtEUR((+d.montantPonctuel||0)*(+d.probability||0)/100)}</div>`:''}
+              <div style="margin-top:2px">${dealProbaBadge(d.probability||0)}</div>
             </div>
           </div>`).join('')}
       </div>
@@ -3083,7 +3097,10 @@ function renderAffairesMonthlyKanban(filtered){
             <div class="kanban-card-client">${esc(d.prospectNom)}</div>
             <div class="kanban-card-foot">
               ${dealCardAmounts(d)}
-              ${d.commercialName?`<span class="commercial-chip" title="${esc(d.commercialName)}">${ini(d.commercialName)}</span>`:''}
+              <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
+                ${dealProbaBadge(d.probability||0)}
+                ${d.commercialName?`<span class="commercial-chip" title="${esc(d.commercialName)}">${ini(d.commercialName)}</span>`:''}
+              </div>
             </div>
           </div>`).join('')}
       </div>
@@ -3173,6 +3190,10 @@ function captureDealDraft(){
   });
 }
 function dealStageChanged(v){ captureDealDraft(); DEAL_DRAFT.stage=v; renderDealModal(); }
+/** Rafraîchit le smiley de probabilité pendant la saisie, sans re-rendre
+ * tout le modal (qui ferait perdre le focus du champ en cours d'édition —
+ * même logique que trEditLocal pour la Trésorerie). */
+function dealProbaLive(v){ const el=document.getElementById('d-proba-badge'); if(el) el.innerHTML = dealProbaBadge(+v||0); }
 
 function renderDealModal(){
   const md = DEAL_DRAFT;
@@ -3194,7 +3215,12 @@ function renderDealModal(){
         </div>
         <div class="ff"><label>Étape</label><select id="d-stage" onchange="dealStageChanged(this.value)">${DEAL_STAGES.map(s=>`<option value="${s}" ${md.stage===s?'selected':''}>${s}</option>`).join('')}</select></div>
         <div class="ff"><label>Valeur mensuelle (€)</label><input type="number" id="d-amount" value="${md.amount||0}" min="0"></div>
-        <div class="ff"><label>Probabilité (%)</label><input type="number" id="d-proba" value="${md.probability||0}" min="0" max="100"></div>
+        <div class="ff"><label>Probabilité (%)</label>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="number" id="d-proba" value="${md.probability||0}" min="0" max="100" oninput="dealProbaLive(this.value)" style="flex:1">
+            <span id="d-proba-badge">${dealProbaBadge(md.probability||0)}</span>
+          </div>
+        </div>
         <div class="ff"><label>Date de clôture prévue</label><input type="date" id="d-close" value="${md.closeDate?String(md.closeDate).slice(0,10):''}"></div>
         <div class="ff"><label>Montant ponctuel (€)</label><input type="number" id="d-montant-ponctuel" value="${md.montantPonctuel??''}" min="0" placeholder="Ex : frais de mise en service"></div>
         <div class="ff"><label>Mois d'encaissement</label>
