@@ -5987,7 +5987,7 @@ var PMS_PRESETS = {
   sesame: {
     label: 'Sesame Technology',
     noteType: 'b',
-    note: 'Connexion et liste des réservations vérifiées en conditions réelles le 17/08/2026. Le compte utilisé doit avoir accès à l\'établissement voulu — il est retrouvé automatiquement par son code (entityCode) parmi les profils disponibles pour ce compte. Le 18/08/2026, une fuite entre établissements a été constatée sur /wa/booking/list (réservations d\'un autre hôtel accessible par le même compte) — un filtre de sécurité (entityId) est appliqué automatiquement ci-dessous depuis ce modèle. QR code / code d\'accès / ouverture de porte : chemins repris de la documentation officielle Sesame API (version 2023-11-23) fournie le 25/08/2026 — pas encore vérifiés en conditions réelles comme le reste ci-dessus, à tester avant mise en production. Import des chambres (/wa/facility/list, absent de la doc officielle) : vérifié en conditions réelles le 03/09/2026 — cette liste mélange chambres et espaces communs (bagagerie, entrée…) chez ce client, filtrés ci-dessous via "Espace commun" ; à ajuster si votre installation utilise un autre libellé pour ses espaces communs.',
+    note: 'Connexion et liste des réservations vérifiées en conditions réelles le 17/08/2026. Le compte utilisé doit avoir accès à l\'établissement voulu — il est retrouvé automatiquement par son code (entityCode) parmi les profils disponibles pour ce compte. Le 18/08/2026, une fuite entre établissements a été constatée sur /wa/booking/list (réservations d\'un autre hôtel accessible par le même compte) — un filtre de sécurité (entityId) est appliqué automatiquement ci-dessous depuis ce modèle. QR code / code d\'accès / ouverture de porte : chemins repris de la documentation officielle Sesame API (version 2023-11-23) fournie le 25/08/2026 — pas encore vérifiés en conditions réelles comme le reste ci-dessus, à tester avant mise en production. Import des chambres (/wa/facility/list, absent de la doc officielle) : vérifié en conditions réelles le 03/09/2026 — cette liste renvoie aussi bien les chambres que d\'autres accès (bagagerie, entrée…), volontairement PAS filtrés : Sesame permet de grouper plusieurs accès sur une même réservation (facilityCode en liste séparée par virgules), donc ces accès doivent être importés au même titre que les chambres pour que ce groupement se résolve correctement à l\'import des réservations.',
     apply: function(){
       document.getElementById('bs-endpointPath').value = '/wa/booking/list';
       document.getElementById('bs-endpointMethod').value = 'POST';
@@ -6013,15 +6013,18 @@ var PMS_PRESETS = {
       // réelles le 03/09/2026 : réponse {"success":true,"root":[...]}, avec
       // code/name/typeName par élément. La liste renvoie AUSSI des accès qui
       // ne sont pas des chambres (ex : "Espace commun" pour la bagagerie,
-      // l'entrée principale…) — filtrés via excludeCategories, à ajuster si
-      // le libellé diffère sur cette installation. floor/capacity/surface
-      // n'existent pas dans cette source, restent volontairement vides.
+      // l'entrée principale…) — volontairement PAS filtrés (cf. note) :
+      // Sesame permet de grouper plusieurs accès sur une réservation
+      // (facilityCode en liste séparée par virgules), un guest peut donc
+      // devoir ouvrir un espace commun avec son code/QR au même titre que sa
+      // chambre. floor/capacity/surface n'existent pas dans cette source,
+      // restent volontairement vides.
       document.getElementById('bs-facilityEndpointPath').value = '/wa/facility/list';
       document.getElementById('bs-facilityEndpointMethod').value = 'POST';
       document.getElementById('bs-facilityEndpointBodyFormat').value = 'form';
       document.getElementById('bs-facilityEndpointBodyParams').value = 'start=0\nlimit=1000';
       document.getElementById('bs-facilityResponseListPath').value = 'root';
-      bsRenderFacilityMappingFields({code:'code', name:'name', category:'typeName', excludeCategories:'Espace commun'});
+      bsRenderFacilityMappingFields({code:'code', name:'name', category:'typeName'});
       // QR / code d'accès / ouverture de porte — d'après la documentation
       // officielle Sesame API (version 2023-11-23) : POST /ws/pass/findMimeSecret
       // (QR image prête, {"secret":"data:image/jpeg;base64,..."}) et
