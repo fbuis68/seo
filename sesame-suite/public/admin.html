@@ -659,7 +659,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 <div id="pan-reservations" class="pan">
   <div class="ph">
     <h2>Réservations</h2>
-    <p>"En arrivées" regroupe tous les séjours pas encore terminés (avant ou après check-in) ; "En cours" n'affiche que les clients déjà arrivés ; "Check-out" les séjours terminés.</p>
+    <p>"En arrivées" regroupe tous les séjours pas encore terminés (avant ou après check-in) ; "En cours" n'affiche que les clients déjà arrivés (check-in fait, ou date d'arrivée déjà passée) ; "Check-out" les séjours terminés.</p>
   </div>
   <div class="ca">
     <div class="ch"><i class="ti ti-calendar-check"></i>Réservations — <span id="resa-count">0</span>
@@ -12107,16 +12107,20 @@ function renderReservations(){
 
   // "En arrivées" : tout séjour pas encore terminé (avant ou après check-in
   // — filtrable ensuite par le statut check-in via le sous-filtre dédié).
-  // "En cours" : sous-ensemble déjà arrivé (checkinDone). "Check-out" :
-  // séjour terminé (date de départ passée, ou statut "completed"). Les
-  // réservations annulées ne sortent que dans "Toutes".
+  // "En cours" : sous-ensemble déjà arrivé — checkinDone (passé par le
+  // check-in éco de cette app) OU date d'arrivée déjà passée (réservation
+  // importée d'un PMS externe, cf. bookingSource.ts, qui ne renseigne jamais
+  // checkinDone : sans ce second critère, "En cours" restait toujours vide
+  // pour ces réservations alors que le client est bien sur place).
+  // "Check-out" : séjour terminé (date de départ passée, ou statut
+  // "completed"). Les réservations annulées ne sortent que dans "Toutes".
   function matchesTab(b){
     if(b.status === 'cancelled') return RESA_TAB === 'all';
     var ended = (b.endDate||'').slice(0,10) < todayStr || b.status === 'completed';
     if(RESA_TAB === 'all') return true;
     if(RESA_TAB === 'checkedout') return ended;
     if(ended) return false;
-    if(RESA_TAB === 'inhouse') return !!b.checkinDone;
+    if(RESA_TAB === 'inhouse') return !!b.checkinDone || (b.startDate||'').slice(0,10) <= todayStr;
     return true; // 'arriving'
   }
 
