@@ -672,7 +672,7 @@ export async function listNfcDevices(config: BookingSourceConfig): Promise<NfcDe
       'Liste des lecteurs NFC non configurée — renseignez "Liste des lecteurs NFC" dans les réglages techniques avancés de l\'Intégration réservations.'
     );
   }
-  const raw = await fetchExternalList(
+  let raw = await fetchExternalList(
     config,
     config.nfcDeviceListEndpointPath,
     config.nfcDeviceListResponseListPath,
@@ -681,6 +681,13 @@ export async function listNfcDevices(config: BookingSourceConfig): Promise<NfcDe
     "form",
     config.nfcDeviceListBodyParams
   );
+  // Ne garder que les appareils réellement encodeurs (ex : Sesame renvoie
+  // dans la même liste des serrures TTLock qui ne savent pas encoder de
+  // carte) — cf. commentaire du champ nfcDeviceFilterField dans schema.prisma.
+  if (config.nfcDeviceFilterField) {
+    const expected = (config.nfcDeviceFilterValue || "true").trim().toLowerCase();
+    raw = raw.filter((item) => String(getPath(item, config.nfcDeviceFilterField!) ?? "").trim().toLowerCase() === expected);
+  }
   const idField = config.nfcDeviceIdField || "id";
   const nameField = config.nfcDeviceNameField || "name";
   return raw

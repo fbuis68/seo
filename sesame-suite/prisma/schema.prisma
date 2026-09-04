@@ -488,6 +488,15 @@ model BookingSourceConfig {
   nfcDeviceListResponseListPath String?
   nfcDeviceIdField              String? @default("id")
   nfcDeviceNameField            String? @default("name")
+  // Un poste "monitoredDevice" peut être un vrai encodeur NFC ou un tout
+  // autre type d'appareil (ex : une serrure TTLock, qui remonte dans la même
+  // liste mais ne sait pas encoder de carte) — confirmé le 04/09/2026 sur
+  // capture réseau réelle : le champ "associable" (true/false) distingue les
+  // deux, absent des serrures TTLock. Filtre appliqué côté app (pas
+  // forcément supporté par l'endpoint distant) avant d'afficher le sélecteur
+  // de lecteur du bouton "Encoder NFC".
+  nfcDeviceFilterField String? // ex: "associable"
+  nfcDeviceFilterValue String? @default("true")
 
   // Récupération du QR code / code d'accès (onglet "Clé digitale" de
   // l'espace client, cf. checkin.html espRenderQr) — même principe que

@@ -2046,6 +2046,19 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       <label class="lb">Paramètres de la liste (un par ligne : clé=valeur)</label>
       <textarea id="bs-nfcDeviceListBodyParams" rows="2" placeholder="associable=true&#10;sort=name&#10;dir=ASC&#10;start=0&#10;limit=500"></textarea>
     </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Champ identifiant un encodeur (optionnel)</label>
+        <input type="text" id="bs-nfcDeviceFilterField" placeholder="Ex : typeId — laisser vide pour ne pas filtrer">
+      </div>
+      <div class="fi">
+        <label class="lb">Valeur attendue pour ce champ</label>
+        <input type="text" id="bs-nfcDeviceFilterValue" placeholder="true">
+      </div>
+    </div>
+    <div class="alt alt-b" style="margin-top:8px"><i class="ti ti-info-circle"></i>
+      <span>La liste des lecteurs peut contenir des appareils qui ne sont pas des encodeurs (ex : des serrures). Si un champ de la réponse permet de le distinguer, indiquez-le ici pour ne garder que les vrais encodeurs dans le sélecteur du bouton "Encoder NFC".</span>
+    </div>
   </div>
 
   <!-- QR code / code d'accès -->
@@ -6638,6 +6651,8 @@ function bsCollectFormValues(){
     nfcDeviceListResponseListPath: document.getElementById('bs-nfcDeviceListResponseListPath').value.trim(),
     nfcDeviceIdField: document.getElementById('bs-nfcDeviceIdField').value.trim(),
     nfcDeviceNameField: document.getElementById('bs-nfcDeviceNameField').value.trim(),
+    nfcDeviceFilterField: document.getElementById('bs-nfcDeviceFilterField').value.trim(),
+    nfcDeviceFilterValue: document.getElementById('bs-nfcDeviceFilterValue').value.trim(),
     qrEndpointPath: document.getElementById('bs-qrEndpointPath').value.trim(),
     qrEndpointMethod: document.getElementById('bs-qrEndpointMethod').value,
     qrEndpointBodyFormat: document.getElementById('bs-qrEndpointBodyFormat').value,
@@ -6767,6 +6782,8 @@ async function bsInit(){
   document.getElementById('bs-nfcDeviceListResponseListPath').value = BS_CONFIG.nfcDeviceListResponseListPath||'';
   document.getElementById('bs-nfcDeviceIdField').value = BS_CONFIG.nfcDeviceIdField||'id';
   document.getElementById('bs-nfcDeviceNameField').value = BS_CONFIG.nfcDeviceNameField||'name';
+  document.getElementById('bs-nfcDeviceFilterField').value = BS_CONFIG.nfcDeviceFilterField||'';
+  document.getElementById('bs-nfcDeviceFilterValue').value = BS_CONFIG.nfcDeviceFilterValue||'true';
   document.getElementById('bs-qrEndpointPath').value = BS_CONFIG.qrEndpointPath||'';
   document.getElementById('bs-qrEndpointMethod').value = BS_CONFIG.qrEndpointMethod||'GET';
   document.getElementById('bs-qrEndpointBodyFormat').value = BS_CONFIG.qrEndpointBodyFormat||'json';

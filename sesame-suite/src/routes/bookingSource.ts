@@ -80,6 +80,8 @@ function shapeConfig(c: {
   nfcDeviceListResponseListPath: string | null;
   nfcDeviceIdField: string | null;
   nfcDeviceNameField: string | null;
+  nfcDeviceFilterField: string | null;
+  nfcDeviceFilterValue: string | null;
   qrEndpointPath: string | null;
   qrEndpointMethod: string | null;
   qrEndpointBodyFormat: string | null;
@@ -184,6 +186,8 @@ function shapeConfig(c: {
     nfcDeviceListResponseListPath: c.nfcDeviceListResponseListPath || "",
     nfcDeviceIdField: c.nfcDeviceIdField || "id",
     nfcDeviceNameField: c.nfcDeviceNameField || "name",
+    nfcDeviceFilterField: c.nfcDeviceFilterField || "",
+    nfcDeviceFilterValue: c.nfcDeviceFilterValue || "true",
     qrEndpointPath: c.qrEndpointPath || "",
     qrEndpointMethod: c.qrEndpointMethod || "GET",
     qrEndpointBodyFormat: c.qrEndpointBodyFormat || "json",
@@ -330,6 +334,8 @@ interface ConfigBody {
   nfcDeviceListResponseListPath?: string;
   nfcDeviceIdField?: string;
   nfcDeviceNameField?: string;
+  nfcDeviceFilterField?: string;
+  nfcDeviceFilterValue?: string;
   qrEndpointPath?: string;
   qrEndpointMethod?: string;
   qrEndpointBodyFormat?: string;
@@ -435,6 +441,8 @@ bookingSourceRouter.post(
       nfcDeviceListResponseListPath: b.nfcDeviceListResponseListPath,
       nfcDeviceIdField: b.nfcDeviceIdField,
       nfcDeviceNameField: b.nfcDeviceNameField,
+      nfcDeviceFilterField: b.nfcDeviceFilterField,
+      nfcDeviceFilterValue: b.nfcDeviceFilterValue,
       qrEndpointPath: b.qrEndpointPath,
       qrEndpointMethod: b.qrEndpointMethod,
       qrEndpointBodyFormat: b.qrEndpointBodyFormat,
