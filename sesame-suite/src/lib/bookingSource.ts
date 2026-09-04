@@ -86,6 +86,11 @@ export interface FacilityMapping {
   // comparaison insensible à la casse. Optionnel : sans category mappé ou
   // sans valeur ici, rien n'est filtré.
   excludeCategories?: string;
+  // Identifiant du lecteur/module Sesame associé à cet accès (ex :
+  // "deviceId" de l'API Sesame Technology, confirmé le 04/09/2026) — sert à
+  // l'encodage NFC une fois l'accès marqué "Encodeur NFC" (Room.isNfcEncoder,
+  // coché à la main dans la fiche accès, cf. listNfcDevices).
+  deviceId?: string;
 }
 
 export interface MappedFacility {
@@ -95,6 +100,7 @@ export interface MappedFacility {
   category: string;
   capacity: number | null;
   surface: number | null;
+  deviceId: string;
 }
 
 /** Lecture d'un chemin "a.b.c" (ou "a.0.b" pour un index de tableau) dans un objet. */
@@ -552,6 +558,7 @@ export function mapFacilities(items: unknown[], mapping: FacilityMapping): { map
       category,
       capacity: mapping.capacity ? toNum(getPath(item, mapping.capacity)) : null,
       surface: mapping.surface ? toNum(getPath(item, mapping.surface)) : null,
+      deviceId: mapping.deviceId ? String(getPath(item, mapping.deviceId) ?? "").trim() : "",
     });
   });
 
@@ -564,12 +571,16 @@ export async function upsertMappedFacilities(entity: Entity, mapped: MappedFacil
   let updated = 0;
   for (const f of mapped) {
     const existing = await prisma.room.findUnique({ where: { entityId_code: { entityId: entity.id, code: f.code } } });
+    // isNfcEncoder n'est jamais touché ici : c'est un réglage manuel de
+    // l'hôtel (fiche accès), pas une donnée qui vient de la source externe —
+    // un re-sync ne doit jamais l'écraser silencieusement.
     const data = {
       name: f.name,
       floor: f.floor ?? undefined,
       category: f.category || undefined,
       capacity: f.capacity ?? undefined,
       surface: f.surface ?? undefined,
+      deviceId: f.deviceId || undefined,
     };
     if (existing) {
       await prisma.room.update({ where: { id: existing.id }, data });
@@ -663,13 +674,27 @@ export interface NfcDevice {
 
 /**
  * Liste les lecteurs NFC disponibles (menu déroulant "Device" du bouton
- * "Encoder NFC", panneau "Réservations") — config.nfcDeviceListEndpointPath.
- * Inerte tant que ce champ n'est pas configuré.
+ * "Encoder NFC", panneau "Réservations"). Source privilégiée : les accès de
+ * la fiche "Chambres" cochés "Encodeur NFC" (Room.isNfcEncoder) — un réglage
+ * manuel de l'hôtel, fiable par construction, contrairement à un filtre basé
+ * sur un champ texte libre côté source externe (cf. historique du
+ * 04/09/2026 : "associable" et "name" côté Sesame se sont l'un et l'autre
+ * révélés être de mauvais candidats avant qu'on parte sur cette approche).
+ * Si aucun accès n'est ainsi marqué, on retombe sur l'ancien mécanisme
+ * (appel de config.nfcDeviceListEndpointPath + filtre configurable) pour ne
+ * pas casser une configuration existante.
  */
 export async function listNfcDevices(config: BookingSourceConfig): Promise<NfcDevice[]> {
+  const localEncoders = await prisma.room.findMany({
+    where: { entityId: config.entityId, isNfcEncoder: true, deviceId: { not: null } },
+    orderBy: { name: "asc" },
+  });
+  const local = localEncoders.filter((r) => r.deviceId).map((r) => ({ id: r.deviceId as string, name: r.name }));
+  if (local.length) return local;
+
   if (!config.nfcDeviceListEndpointPath) {
     throw new BookingSourceError(
-      'Liste des lecteurs NFC non configurée — renseignez "Liste des lecteurs NFC" dans les réglages techniques avancés de l\'Intégration réservations.'
+      'Aucun accès coché "Encodeur NFC" dans la fiche Chambres, et liste des lecteurs non configurée — cochez au moins un accès comme encodeur, ou renseignez "Liste des lecteurs NFC" dans les réglages techniques avancés de l\'Intégration réservations.'
     );
   }
   let raw = await fetchExternalList(

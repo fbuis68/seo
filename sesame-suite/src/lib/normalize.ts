@@ -59,5 +59,7 @@ export function normaliseRoom(r: Room) {
     x: r.x,
     y: r.y,
     housekeepingExempt: r.housekeepingExempt,
+    deviceId: r.deviceId || "",
+    isNfcEncoder: r.isNfcEncoder,
   };
 }

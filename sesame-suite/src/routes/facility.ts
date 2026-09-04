@@ -52,6 +52,8 @@ interface RoomBody {
   x?: number;
   y?: number;
   housekeepingExempt?: boolean;
+  deviceId?: string;
+  isNfcEncoder?: boolean;
 }
 
 /** POST /wa/facility/create — CRUD chambres (back-office, panneau "Gestion des chambres"). */
@@ -87,6 +89,8 @@ facilityRouter.post(
         x: b.x,
         y: b.y,
         housekeepingExempt: b.housekeepingExempt || false,
+        deviceId: b.deviceId || undefined,
+        isNfcEncoder: b.isNfcEncoder || false,
       },
     });
     await prisma.roomHousekeepingStatus.create({ data: { roomId: room.id, status: "libre" } });
@@ -127,6 +131,8 @@ facilityRouter.post(
         x: b.x,
         y: b.y,
         housekeepingExempt: b.housekeepingExempt,
+        deviceId: b.deviceId,
+        isNfcEncoder: b.isNfcEncoder,
       },
     });
     res.json(normaliseRoom(updated));

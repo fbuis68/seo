@@ -1732,6 +1732,15 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
             <input type="checkbox" id="rm-housekeepingExempt" style="accent-color:var(--am)">
             <span style="font-size:13px">Non soumis au ménage (absent du planning et de l'appli du personnel)</span>
           </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+            <input type="checkbox" id="rm-isNfcEncoder" style="accent-color:var(--am)">
+            <span style="font-size:13px">Encodeur NFC (ce lecteur peut encoder des cartes — apparaît dans le sélecteur du bouton "Encoder NFC")</span>
+          </label>
+        </div>
+
+        <div class="fi" id="rm-deviceId-wrap" style="margin-top:10px">
+          <label class="lb">Identifiant du lecteur (device)</label>
+          <input type="text" id="rm-deviceId" placeholder="Ex : D00005605 — importé automatiquement si mappé, sinon à saisir">
         </div>
 
         <!-- Actions du modal -->
@@ -5097,6 +5106,8 @@ function rmOpenCreate(){
   document.getElementById('rm-nosmoking').checked = true;
   document.getElementById('rm-connected').checked= false;
   document.getElementById('rm-housekeepingExempt').checked = false;
+  document.getElementById('rm-isNfcEncoder').checked = false;
+  document.getElementById('rm-deviceId').value = '';
   document.getElementById('rmDeleteBtn').style.display='none';
   document.getElementById('rm-currency-sym').textContent = getCurrSym();
   rmRenderTags();
@@ -5127,6 +5138,8 @@ function rmOpenEdit(code){
   document.getElementById('rm-nosmoking').checked = r.nosmoking!==false;
   document.getElementById('rm-connected').checked = !!r.connected;
   document.getElementById('rm-housekeepingExempt').checked = !!r.housekeepingExempt;
+  document.getElementById('rm-isNfcEncoder').checked = !!r.isNfcEncoder;
+  document.getElementById('rm-deviceId').value = r.deviceId||'';
   document.getElementById('rmDeleteBtn').style.display='';
   document.getElementById('rm-currency-sym').textContent = getCurrSym();
   rmRenderTags();
@@ -5187,6 +5200,8 @@ async function rmSaveRoom(){
     nosmoking:   document.getElementById('rm-nosmoking').checked,
     connected:   document.getElementById('rm-connected').checked,
     housekeepingExempt: document.getElementById('rm-housekeepingExempt').checked,
+    isNfcEncoder: document.getElementById('rm-isNfcEncoder').checked,
+    deviceId:    document.getElementById('rm-deviceId').value.trim(),
   };
   try{
     if(RM_EDITING){
@@ -5903,6 +5918,11 @@ var BS_FACILITY_MAPPING_FIELDS = [
   // casse) à la valeur "Catégorie" ci-dessus, doit donc être rempli après
   // elle. Sans "Catégorie" mappé ou sans valeur ici, rien n'est filtré.
   {k:'excludeCategories', label:'Catégories à exclure (séparées par une virgule)', required:false},
+  // Identifiant du lecteur/module associé à cet accès côté source externe —
+  // porté ensuite par la fiche Chambres (Room.deviceId), utilisé pour
+  // l'encodage NFC une fois l'accès coché "Encodeur NFC" dans cette même
+  // fiche (réglage manuel, cf. section "Encodage NFC" ci-dessous).
+  {k:'deviceId', label:'Identifiant du lecteur (device, encodage NFC)', required:false},
 ];
 
 var BS_CONFIG = null;
@@ -6151,7 +6171,7 @@ var PMS_PRESETS = {
       document.getElementById('bs-facilityEndpointBodyFormat').value = 'form';
       document.getElementById('bs-facilityEndpointBodyParams').value = 'start=0\nlimit=1000';
       document.getElementById('bs-facilityResponseListPath').value = 'root';
-      bsRenderFacilityMappingFields({code:'code', name:'name', category:'typeName'});
+      bsRenderFacilityMappingFields({code:'code', name:'name', category:'typeName', deviceId:'deviceId'});
       // QR / code d'accès / ouverture de porte — d'après la documentation
       // officielle Sesame API (version 2023-11-23) : POST /ws/pass/findMimeSecret
       // (QR image prête, {"secret":"data:image/jpeg;base64,..."}) et

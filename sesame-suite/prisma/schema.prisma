@@ -217,6 +217,20 @@ model Room {
   // panneau "Gestion des Accès").
   housekeepingExempt Boolean @default(false)
 
+  // Identifiant du lecteur/module Sesame associé à cet accès (ex :
+  // "D00005605") — importé automatiquement si mappé (cf.
+  // FacilityMapping.deviceId dans bookingSource.ts), sinon saisissable à la
+  // main. Porte le "deviceId" attendu par l'encodage NFC (cf. isNfcEncoder).
+  deviceId String?
+  // Ce lecteur peut encoder des cartes/badges NFC — coché manuellement par
+  // l'hôtel (jamais déduit automatiquement d'un champ côté source externe,
+  // ex : Sesame Technology, où seul un libellé texte libre distingue un
+  // poste d'encodage des autres appareils, cf. historique du 04/09/2026).
+  // Détermine à la fois l'affichage de cet accès dans le sélecteur du
+  // bouton "Encoder NFC" (panneau Réservations) et son utilisation pour
+  // lancer l'encodage — cf. listNfcDevices dans bookingSource.ts.
+  isNfcEncoder Boolean @default(false)
+
   createdAt DateTime @default(now())
 
   bookings           Booking[]
