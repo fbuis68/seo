@@ -683,10 +683,15 @@ export async function listNfcDevices(config: BookingSourceConfig): Promise<NfcDe
   );
   // Ne garder que les appareils réellement encodeurs (ex : Sesame renvoie
   // dans la même liste des serrures TTLock qui ne savent pas encoder de
-  // carte) — cf. commentaire du champ nfcDeviceFilterField dans schema.prisma.
+  // carte) — cf. commentaire du champ nfcDeviceFilterField dans
+  // schema.prisma. Comparaison "contient" (pas une égalité stricte) : côté
+  // Sesame, ce champ est "name" — un libellé libre attribué manuellement à
+  // chaque poste (ex : "encodeur", "Encodeur réception") — pas un vrai
+  // attribut système, donc une égalité stricte casserait dès qu'un
+  // établissement a plusieurs postes nommés différemment.
   if (config.nfcDeviceFilterField) {
     const expected = (config.nfcDeviceFilterValue || "true").trim().toLowerCase();
-    raw = raw.filter((item) => String(getPath(item, config.nfcDeviceFilterField!) ?? "").trim().toLowerCase() === expected);
+    raw = raw.filter((item) => String(getPath(item, config.nfcDeviceFilterField!) ?? "").trim().toLowerCase().includes(expected));
   }
   const idField = config.nfcDeviceIdField || "id";
   const nameField = config.nfcDeviceNameField || "name";

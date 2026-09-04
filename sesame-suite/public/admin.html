@@ -6101,7 +6101,12 @@ var PMS_PRESETS = {
       // des lecteurs : GET /ws/monitoredDevice/list?associable=true&
       // sort=name&dir=ASC&start=0&limit=500, forme de la réponse (racine
       // "root" ou tableau direct, noms des champs id/name) non confirmée —
-      // à ajuster si "Tester" échoue.
+      // à ajuster si "Tester" échoue. La liste renvoie aussi des appareils
+      // qui ne sont pas des encodeurs (ex : serrures TTLock) — confirmé le
+      // 04/09/2026 sur /wa/deviceAdmin/list (même famille d'appareils) :
+      // "associable" ne les distingue PAS (sert à lier deux accès en sas),
+      // c'est le champ "name" contenant "encodeur" (libellé manuel côté
+      // admin Sesame) qui identifie un poste d'encodage.
       document.getElementById('bs-nfcStartEndpointPath').value = '/ws/deviceAdmin/startPassAssociation';
       document.getElementById('bs-nfcStartEndpointMethod').value = 'GET';
       document.getElementById('bs-nfcStartPassParam').value = 'id';
@@ -6121,6 +6126,15 @@ var PMS_PRESETS = {
       document.getElementById('bs-nfcDeviceListResponseListPath').value = 'root';
       document.getElementById('bs-nfcDeviceIdField').value = 'id';
       document.getElementById('bs-nfcDeviceNameField').value = 'name';
+      // La liste des lecteurs remonte aussi des appareils qui ne sont pas
+      // des encodeurs (ex : serrures TTLock) — confirmé le 04/09/2026 :
+      // chez Sesame, un poste d'encodage est repéré par son champ "name"
+      // contenant "encodeur" (libellé attribué manuellement à l'appareil
+      // côté admin Sesame, pas un vrai attribut système — d'où la
+      // comparaison "contient" plutôt qu'une égalité stricte, cf.
+      // listNfcDevices dans bookingSource.ts).
+      document.getElementById('bs-nfcDeviceFilterField').value = 'name';
+      document.getElementById('bs-nfcDeviceFilterValue').value = 'encodeur';
       // Import des chambres — /wa/facility/list, absent de la documentation
       // officielle (comme /wa/booking/list) mais vérifié en conditions
       // réelles le 03/09/2026 : réponse {"success":true,"root":[...]}, avec
