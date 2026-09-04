@@ -2898,7 +2898,7 @@ async function trFreqChange(id, kind, freq){
   const row = cashLines.find(r=>r.id===id); if(!row) return;
   row.frequence = freq;
   if(freq==='mensuel') row.mois = null;
-  else if(row.mois==null) row.mois = 0;
+  else if(row.mois==null) row.mois = trMonthFilter!==null ? trMonthFilter : 0;
   renderTresorerie();
   try{
     const r = await apiFetch('/wa/crmCashLine/update', {method:'POST', body:JSON.stringify({id, frequence:freq, mois:row.mois})});
@@ -2906,7 +2906,13 @@ async function trFreqChange(id, kind, freq){
   }catch(e){ flash('Erreur d\'enregistrement'); }
 }
 async function trAdd(kind){
-  const defaults = { montant:0, frequence:'mensuel', mois:null };
+  // Un filtre "mois" actif exprime l'intention de saisir une ligne pour ce
+  // mois précis (typiquement une dépense ponctuelle) — sans ça, la ligne
+  // naissait "Mensuel" (donc visible partout, masquant l'intention), et si
+  // l'utilisateur la repassait ensuite en "Ponctuel" elle retombait sur
+  // Janvier (cf. trFreqChange) au lieu du mois filtré, la faisant disparaître
+  // de la vue courante — d'où l'impression que la saisie "ne marche pas".
+  const defaults = trMonthFilter!==null ? { montant:0, frequence:'ponctuel', mois:trMonthFilter } : { montant:0, frequence:'mensuel', mois:null };
   const label = kind==='revenu' ? 'Nouvel encaissement' : 'Nouvelle dépense';
   try{
     const r = await apiFetch('/wa/crmCashLine/create', {method:'POST', body:JSON.stringify({annee:cashYear, kind, label, ...defaults})});
