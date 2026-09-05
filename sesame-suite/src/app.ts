@@ -24,6 +24,7 @@ import { lockerSourceRouter } from "./routes/lockerSource";
 import { onboardingRouter } from "./routes/onboarding";
 import { crmProspectRouter } from "./routes/crmProspect";
 import { crmSectorRouter } from "./routes/crmSector";
+import { crmOrigineRouter } from "./routes/crmOrigine";
 import { crmDealRouter } from "./routes/crmDeal";
 import { crmQuoteRouter } from "./routes/crmQuote";
 import { crmUserRouter } from "./routes/crmUser";
@@ -90,6 +91,7 @@ export function createApp() {
   app.use("/wa", lockerSourceRouter);
   app.use("/wa", crmProspectRouter);
   app.use("/wa", crmSectorRouter);
+  app.use("/wa", crmOrigineRouter);
   app.use("/wa", geocodeRouter);
   app.use("/wa", crmDealRouter);
   app.use("/wa", crmQuoteRouter);

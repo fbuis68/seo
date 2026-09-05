@@ -1478,6 +1478,22 @@ model CrmSectorOption {
   createdAt DateTime @default(now())
 }
 
+// D'où vient un contact CrmProspect (ex : "FHT2026", "Site web", "Salon X")
+// — même principe que CrmSectorOption (05/09/2026) : liste éditable depuis
+// le CRM plutôt qu'un champ texte libre, pour pouvoir servir de filtre
+// fiable à la sélection des envois d'email groupés (deux saisies libres
+// différentes pour la même origine, ex. "FHT 2026" / "fht2026", ne
+// filtreraient pas ensemble). Vide au départ (aucune liste figée
+// préexistante, contrairement aux secteurs) — alimentée au fil des imports
+// (cf. impSubmit dans crm.html, qui crée l'option à la volée si absente).
+model CrmOrigineOption {
+  id    String @id @default(cuid())
+  label String @unique
+  order Int    @default(0)
+
+  createdAt DateTime @default(now())
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Module "Gestion des affaires" — pipeline commercial greffé sur le CRM
 // Sesame (18/08/2026). Une "affaire" (deal) représente une opportunité de

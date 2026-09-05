@@ -684,6 +684,11 @@ const TYPES = ['Suspect','Prospect','Client'];
 // toucher au code, ex : pour couvrir un secteur rencontré lors d'un import
 // externe absent de la liste d'origine.
 let SECTEURS = [];
+// Idem pour l'origine des contacts (d'où ils viennent — ex : "FHT2026",
+// "Site web") — chargée depuis CrmOrigineOption, éditable via "Gérer…" à
+// côté du champ Origine, et sert aussi de filtre à la sélection des envois
+// d'email groupés (cf. fOrigine dans filtered()).
+let ORIGINES = [];
 // Affiliations hôtelières — enseignes/marques (un établissement en porte le
 // plus souvent une seule) et collections/labels (cumulables avec une marque,
 // ex. Best Western + Relais & Châteaux) : liste plate à choix multiple,
@@ -724,8 +729,8 @@ let clients=[], view='list', vmode='table', curId=null, sortC='nom', sortD=1;
 // qu'un flag par client : survit aux changements de filtre/tri sans que le
 // tableau `clients` porte un état de sélection qui n'a rien à y faire.
 let SELECTED_IDS = new Set();
-let srch='', fDanger='', fSecteur='', fContrat='', fType='', editingId=null, toastT=null;
-let deals=[], COMMERCIALS=[], tickets=[], cashLines=[], SECTOR_OPTIONS=[];
+let srch='', fDanger='', fSecteur='', fOrigine='', fContrat='', fType='', editingId=null, toastT=null;
+let deals=[], COMMERCIALS=[], tickets=[], cashLines=[], SECTOR_OPTIONS=[], ORIGINE_OPTIONS=[];
 let cashSettings = {revenuMode:'detail',revenuMontant:0,revenuFrequence:'mensuel',revenuMois:null,depenseMode:'detail',depenseMontant:0,depenseFrequence:'mensuel',depenseMois:null};
 let cashYear = new Date().getFullYear();
 // Filtre d'affichage (vérification/modification) sur les listes de lignes
@@ -768,13 +773,19 @@ async function loadSectors(){
   if(!r.ok) throw new Error('http '+r.status);
   return await r.json();
 }
+async function loadOrigines(){
+  var r = await apiFetch('/wa/crmOrigine/list');
+  if(!r.ok) throw new Error('http '+r.status);
+  return await r.json();
+}
 async function init(){
   try{
-    const [c, d, com, t, cl, cs, sec] = await Promise.all([loadData(), loadDeals(), loadCommercials(), loadTickets(), loadCashLines(), loadCashSettings(), loadSectors()]);
+    const [c, d, com, t, cl, cs, sec, orig] = await Promise.all([loadData(), loadDeals(), loadCommercials(), loadTickets(), loadCashLines(), loadCashSettings(), loadSectors(), loadOrigines()]);
     clients = c; deals = d; COMMERCIALS = com; tickets = t; cashLines = cl; cashSettings = cs;
     SECTOR_OPTIONS = sec; SECTEURS = sec.map(s=>s.label);
+    ORIGINE_OPTIONS = orig; ORIGINES = orig.map(o=>o.label);
   }
-  catch(e){ flash('Erreur de chargement — rechargez la page'); clients = []; deals = []; COMMERCIALS = []; tickets = []; cashLines = []; SECTOR_OPTIONS = []; SECTEURS = []; }
+  catch(e){ flash('Erreur de chargement — rechargez la page'); clients = []; deals = []; COMMERCIALS = []; tickets = []; cashLines = []; SECTOR_OPTIONS = []; SECTEURS = []; ORIGINE_OPTIONS = []; ORIGINES = []; }
   updateBadges();showList();
   loadVersionBadge();
 }
@@ -801,7 +812,7 @@ function bc(parts){document.getElementById('bc').innerHTML=parts.map((p,i)=>i<pa
 function tba(html){document.getElementById('tb-actions').innerHTML=html;}
 
 // ── QUICK FILTER ──
-function qf(f,v){srch='';fDanger='';fSecteur='';fContrat='';fType='';if(f==='danger')fDanger=v;else if(f==='contrat')fContrat=v;showList();}
+function qf(f,v){srch='';fDanger='';fSecteur='';fOrigine='';fContrat='';fType='';if(f==='danger')fDanger=v;else if(f==='contrat')fContrat=v;showList();}
 
 // ════════════════════════════════════════
 // HOME — vue d'ensemble (indicateurs seuls, sans la liste des fiches)
@@ -848,6 +859,7 @@ function filtered(){
     if(srch){const s=srch.toLowerCase();if(![c.nom,c.ville||'',c.groupe||'',c.referent||''].some(x=>x.toLowerCase().includes(s)))return false;}
     if(fDanger&&c.danger!==fDanger)return false;
     if(fSecteur&&c.secteur!==fSecteur)return false;
+    if(fOrigine&&c.origine!==fOrigine)return false;
     if(fContrat&&c.contrat!==fContrat)return false;
     if(fType&&c.type!==fType)return false;
     return true;
@@ -1144,6 +1156,7 @@ function renderInsights(){
 function renderList(){
   const data=filtered();
   const sectAll=[...new Set([...SECTEURS,...clients.map(c=>c.secteur)].filter(Boolean))].sort();
+  const origAll=[...new Set([...ORIGINES,...clients.map(c=>c.origine)].filter(Boolean))].sort();
   const stats=`<div class="stats-row">
     <div class="stat-card"><div class="stat-lbl">Clients</div><div class="stat-val">${clients.length}</div></div>
     <div class="stat-card"><div class="stat-lbl">Risque élevé</div><div class="stat-val" style="color:#a32d2d">${clients.filter(c=>c.danger==='Élevé !!').length}</div></div>
@@ -1154,6 +1167,7 @@ function renderList(){
     <div class="srch-wrap"><span class="srch-ico">⌕</span><input type="text" placeholder="Client, ville, groupe…" value="${esc(srch)}" oninput="srch=this.value;renderList()"></div>
     <select class="lsel" onchange="fDanger=this.value;renderList()"><option value="">Tous risques</option>${DANGERS.map(d=>`<option value="${d}" ${fDanger===d?'selected':''}>${d}</option>`).join('')}</select>
     <select class="lsel" onchange="fSecteur=this.value;renderList()"><option value="">Tous secteurs</option>${sectAll.map(s=>`<option value="${s}" ${fSecteur===s?'selected':''}>${s}</option>`).join('')}</select>
+    <select class="lsel" onchange="fOrigine=this.value;renderList()"><option value="">Toutes origines</option>${origAll.map(o=>`<option value="${o}" ${fOrigine===o?'selected':''}>${o}</option>`).join('')}</select>
     <select class="lsel" onchange="fContrat=this.value;renderList()"><option value="">Tous contrats</option><option value="oui" ${fContrat==='oui'?'selected':''}>oui</option><option value="non" ${fContrat==='non'?'selected':''}>non</option><option value="en cours" ${fContrat==='en cours'?'selected':''}>en cours</option></select>
     <select class="lsel" onchange="fType=this.value;renderList()"><option value="">Tous types</option>${TYPES.map(t=>`<option value="${t}" ${fType===t?'selected':''}>${t}</option>`).join('')}</select>
     <span class="count-lbl">${data.length} résultat${data.length>1?'s':''}</span>
@@ -1990,65 +2004,97 @@ function closeModal(){document.getElementById('modal-ct').innerHTML='';}
 function closeModal2(){document.getElementById('modal-ct-2').innerHTML='';}
 
 // ════════════════════════════════════════
-// GESTION DES SECTEURS (CrmSectorOption)
+// GESTION DES LISTES PARAMÉTRABLES (secteurs, origines) — CrmSectorOption /
+// CrmOrigineOption, même forme {id,label,order} et mêmes routes REST
+// (/wa/crmSector/*, /wa/crmOrigine/*) : un seul jeu de fonctions génériques
+// paramétré par `kind` plutôt que deux copies quasi identiques. Ces deux
+// listes servent aussi de filtres fiables à la sélection des envois d'email
+// groupés (cf. filtered(), fSecteur/fOrigine) — un champ texte libre (avant
+// le 05/09/2026 pour les secteurs, l'origine n'ayant jamais été qu'un champ
+// texte) ne filtrerait pas ensemble deux saisies différentes pour la même
+// valeur (ex. "FHT 2026" / "fht2026").
 // ════════════════════════════════════════
-function openSectorManager(){
+const LIST_MANAGERS = {
+  secteur: { endpoint:'crmSector', title:'les secteurs', newPlaceholder:'Nouveau secteur…',
+    getOptions:()=>SECTOR_OPTIONS, setOptions:(v)=>{SECTOR_OPTIONS=v; SECTEURS=v.map(s=>s.label);} },
+  origine: { endpoint:'crmOrigine', title:'les origines', newPlaceholder:'Nouvelle origine…',
+    getOptions:()=>ORIGINE_OPTIONS, setOptions:(v)=>{ORIGINE_OPTIONS=v; ORIGINES=v.map(s=>s.label);} },
+};
+function openListManager(kind){
+  const m = LIST_MANAGERS[kind];
   document.getElementById('modal-ct-2').innerHTML=`
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal2()" style="z-index:400">
     <div class="modal-box" style="max-width:420px">
       <div class="modal-head">
-        <div style="font-size:16px;font-weight:600">Gérer les secteurs</div>
+        <div style="font-size:16px;font-weight:600">Gérer ${m.title}</div>
         <button class="btn btn-ghost btn-icon" onclick="closeModal2()">✕</button>
       </div>
-      <div id="sector-mgr-list" style="max-height:50vh;overflow-y:auto"></div>
+      <div id="lm-list" style="max-height:50vh;overflow-y:auto"></div>
       <div style="display:flex;gap:6px;margin-top:10px;padding:0 20px 16px">
-        <input type="text" id="sector-mgr-new" placeholder="Nouveau secteur…" style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();sectorCreate();}">
-        <button type="button" class="btn btn-s" onclick="sectorCreate()"><i class="ti ti-plus"></i></button>
+        <input type="text" id="lm-new" placeholder="${m.newPlaceholder}" style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();lmCreate('${kind}');}">
+        <button type="button" class="btn btn-s" onclick="lmCreate('${kind}')"><i class="ti ti-plus"></i></button>
       </div>
     </div>
   </div>`;
-  renderSectorManagerList();
+  renderListManager(kind);
 }
-function renderSectorManagerList(){
-  const el = document.getElementById('sector-mgr-list');
+function renderListManager(kind){
+  const m = LIST_MANAGERS[kind];
+  const el = document.getElementById('lm-list');
   if(!el) return;
-  el.innerHTML = SECTOR_OPTIONS.map(s=>`
+  el.innerHTML = m.getOptions().map(o=>`
     <div style="display:flex;align-items:center;gap:8px;padding:6px 20px">
-      <input type="text" value="${esc(s.label)}" style="flex:1" onchange="sectorRename('${s.id}',this.value)">
-      <button type="button" class="btn btn-ghost btn-icon" title="Supprimer" onclick="sectorDelete('${s.id}','${esc(s.label).replace(/'/g,"\\'")}')"><i class="ti ti-trash"></i></button>
-    </div>`).join('') || '<div class="log-empty" style="padding:12px 20px">Aucun secteur.</div>';
+      <input type="text" value="${esc(o.label)}" style="flex:1" onchange="lmRename('${kind}','${o.id}',this.value)">
+      <button type="button" class="btn btn-ghost btn-icon" title="Supprimer" onclick="lmDelete('${kind}','${o.id}','${esc(o.label).replace(/'/g,"\\'")}')"><i class="ti ti-trash"></i></button>
+    </div>`).join('') || '<div class="log-empty" style="padding:12px 20px">Aucune valeur.</div>';
 }
-async function sectorCreate(){
-  const inp = document.getElementById('sector-mgr-new');
+/** Crée une valeur si elle n'existe pas déjà (insensible à la casse) — utilisé
+ * par le gestionnaire de liste ET par l'import en masse (une origine saisie
+ * à l'import, ex. "FHT2026", rejoint la liste au lieu de rester hors-liste).
+ * Renvoie l'option existante ou nouvellement créée. */
+async function lmEnsureOption(kind,label){
+  label = label.trim();
+  if(!label) return null;
+  const m = LIST_MANAGERS[kind];
+  const existing = m.getOptions().find(o=>o.label.toLowerCase()===label.toLowerCase());
+  if(existing) return existing;
+  const r = await apiFetch('/wa/'+m.endpoint+'/create', {method:'POST', body:JSON.stringify({label})});
+  if(!r.ok) return null;
+  const row = await r.json();
+  m.setOptions([...m.getOptions(), row]);
+  return row;
+}
+async function lmCreate(kind){
+  const inp = document.getElementById('lm-new');
   const label = inp.value.trim();
   if(!label) return;
   try{
-    const r = await apiFetch('/wa/crmSector/create', {method:'POST', body:JSON.stringify({label})});
-    if(!r.ok){ const e=await r.json().catch(()=>({})); flash(e.error||'Erreur de création'); return; }
-    const row = await r.json();
-    SECTOR_OPTIONS.push(row); SECTEURS = SECTOR_OPTIONS.map(s=>s.label);
+    const row = await lmEnsureOption(kind,label);
+    if(!row){ flash('Erreur de création'); return; }
     inp.value='';
-    renderSectorManagerList();
+    renderListManager(kind);
   }catch(e){ flash('Erreur de création'); }
 }
-async function sectorRename(id,label){
+async function lmRename(kind,id,label){
   label = label.trim();
   if(!label) return;
+  const m = LIST_MANAGERS[kind];
   try{
-    const r = await apiFetch('/wa/crmSector/update', {method:'POST', body:JSON.stringify({id,label})});
-    if(!r.ok){ const e=await r.json().catch(()=>({})); flash(e.error||"Erreur d'enregistrement"); renderSectorManagerList(); return; }
+    const r = await apiFetch('/wa/'+m.endpoint+'/update', {method:'POST', body:JSON.stringify({id,label})});
+    if(!r.ok){ const e=await r.json().catch(()=>({})); flash(e.error||"Erreur d'enregistrement"); renderListManager(kind); return; }
     const row = await r.json();
-    const s = SECTOR_OPTIONS.find(x=>x.id===id); if(s) s.label = row.label;
-    SECTEURS = SECTOR_OPTIONS.map(s=>s.label);
+    const opts = m.getOptions(); const o = opts.find(x=>x.id===id); if(o) o.label = row.label;
+    m.setOptions(opts);
   }catch(e){ flash("Erreur d'enregistrement"); }
 }
-async function sectorDelete(id,label){
-  if(!confirm('Supprimer le secteur "'+label+'" ? Les fiches qui le portent déjà ne sont pas modifiées.')) return;
+async function lmDelete(kind,id,label){
+  const m = LIST_MANAGERS[kind];
+  if(!confirm('Supprimer "'+label+'" ? Les fiches qui la portent déjà ne sont pas modifiées.')) return;
   try{
-    const r = await apiFetch('/wa/crmSector/delete', {method:'POST', body:JSON.stringify({id})});
+    const r = await apiFetch('/wa/'+m.endpoint+'/delete', {method:'POST', body:JSON.stringify({id})});
     if(!r.ok) throw new Error('http '+r.status);
-    SECTOR_OPTIONS = SECTOR_OPTIONS.filter(s=>s.id!==id); SECTEURS = SECTOR_OPTIONS.map(s=>s.label);
-    renderSectorManagerList();
+    m.setOptions(m.getOptions().filter(o=>o.id!==id));
+    renderListManager(kind);
   }catch(e){ flash('Erreur de suppression'); }
 }
 
@@ -2139,7 +2185,11 @@ function impRenderMapping(){
           ${Object.keys(IMP_FIELD_LABELS).map(function(f){
             return '<div class="ff"><label>'+IMP_FIELD_LABELS[f]+'</label><select id="imp-map-'+f+'">'+opts(IMP_MAPPING[f]||'')+'</select></div>';
           }).join('')}
-          <div class="ff"><label>Origine</label><input id="imp-origine" value="${esc(IMP_ORIGINE)}" placeholder="ex. FHT2026"></div>
+          <div class="ff">
+            <label>Origine <a href="#" onclick="event.preventDefault();openListManager('origine')" style="font-weight:400;font-size:11px;margin-left:4px">Gérer…</a></label>
+            <input id="imp-origine" value="${esc(IMP_ORIGINE)}" placeholder="ex. FHT2026" list="imp-origine-options">
+            <datalist id="imp-origine-options">${ORIGINES.map(function(o){ return '<option value="'+esc(o)+'">'; }).join('')}</datalist>
+          </div>
         </div>
         <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer">
           <input type="checkbox" id="imp-lookup" checked style="accent-color:var(--am)">
@@ -2290,6 +2340,12 @@ async function impLookupAddresses(){
 async function impSubmit(){
   const btn = document.getElementById('imp-submit-btn');
   if(btn){ btn.disabled = true; btn.textContent = 'Import en cours…'; }
+  // Fait rejoindre la liste paramétrable des origines (CrmOrigineOption) une
+  // origine saisie ici pour la première fois (ex. "FHT2026") — sinon elle
+  // resterait un texte hors-liste, filtrable seulement parce qu'elle est
+  // déjà portée par au moins une fiche (cf. origAll dans renderList), pas
+  // proposée dans le gestionnaire tant qu'un admin ne l'y ajoute pas à la main.
+  if(IMP_ORIGINE) await lmEnsureOption('origine', IMP_ORIGINE);
   const rows = IMP_ROWS.map(function(r){
     return {
       nom: r.nom, origine: IMP_ORIGINE || undefined, secteur: r.secteur || undefined,
@@ -2331,6 +2387,7 @@ function addAffiliationOption(){
 
 function renderModal(mc){
   const sectAll=[...new Set([...SECTEURS,...clients.map(c=>c.secteur)].filter(Boolean))].sort();
+  const origAll=[...new Set([...ORIGINES,...clients.map(c=>c.origine)].filter(Boolean))].sort();
   const affAll=[...new Set([...AFFILIATIONS_KNOWN,...clients.flatMap(c=>c.affiliations||[])])].sort();
   const mcAff=mc.affiliations||[];
   document.getElementById('modal-ct').innerHTML=`
@@ -2347,10 +2404,13 @@ function renderModal(mc){
         <div class="ff"><label>Type</label><select id="m-type" onchange="toggleAdresseRequired()">${TYPES.map(t=>`<option value="${t}" ${mc.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
         <div class="ff"><label>Groupe</label><input id="m-groupe" value="${esc(mc.groupe)}" placeholder="—"></div>
         <div class="ff">
-          <label>Secteur <a href="#" onclick="event.preventDefault();openSectorManager()" style="font-weight:400;font-size:11px;margin-left:4px">Gérer…</a></label>
+          <label>Secteur <a href="#" onclick="event.preventDefault();openListManager('secteur')" style="font-weight:400;font-size:11px;margin-left:4px">Gérer…</a></label>
           <select id="m-secteur" onchange="toggleHotelOnlyFields()">${sectAll.map(s=>`<option value="${s}" ${mc.secteur===s?'selected':''}>${s}</option>`).join('')}</select>
         </div>
-        <div class="ff"><label>Origine</label><input id="m-origine" value="${esc(mc.origine)}" placeholder="ex. FHT2026, Site web…"></div>
+        <div class="ff">
+          <label>Origine <a href="#" onclick="event.preventDefault();openListManager('origine')" style="font-weight:400;font-size:11px;margin-left:4px">Gérer…</a></label>
+          <select id="m-origine"><option value="">—</option>${origAll.map(o=>`<option value="${o}" ${mc.origine===o?'selected':''}>${o}</option>`).join('')}</select>
+        </div>
         <div class="ff hotel-only-field" style="grid-column:1/-1;${SECTEURS_NON_HOTEL.includes(mc.secteur)?'display:none':''}">
           <label>Affiliations (enseigne et/ou label — cumulables)</label>
           <div id="m-affiliations-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px">
