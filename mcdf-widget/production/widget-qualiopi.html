@@ -1,0 +1,1020 @@
+<meta charset="utf-8">
+<title>Assistant Qualiopi - MCDF (v1 decouverte)</title>
+<!--
+  Assistant Qualiopi MCDF -- v1 "decouverte" (lecture seule).
+
+  Contrairement a widget-ia.html, ce module n'a JAMAIS ete confirme
+  contre l'API reelle : on sait seulement, par lecture du code source
+  cote serveur, que des DAO dedies Qualiopi existent probablement sous
+  les noms sessionQualiopi / conventionExportQualiopi /
+  fullConventionQualiopi (voir ARCHITECTURE.md). On ignore encore :
+    - si ces noms sont exacts
+    - quels champs ils renvoient reellement
+
+  Cette page teste donc les 3 noms en direct (meme pattern que
+  widget-ia.html : GET /wa/{entite}/list?nopaging=1, cookie de session
+  deja actif, aucune ecriture) et affiche ce qu'elle trouve tel quel --
+  pas d'indicateurs Qualiopi "habilles" (taux de satisfaction, actions
+  correctives...) tant que les vrais champs n'ont pas ete vus, pour ne
+  pas afficher de faux chiffres.
+
+  Une fois les champs confirmes ici, cette page sera remplacee par un
+  vrai tableau de bord d'indicateurs Qualiopi.
+-->
+<style>
+  :root {
+    color-scheme: light;
+    --page:        #f9f9f7;
+    --surface:     #fcfcfb;
+    --surface-2:   #f2f1ec;
+    --ink:         #0b0b0b;
+    --ink-2:       #52514e;
+    --ink-muted:   #898781;
+    --grid:        #e1e0d9;
+    --border:      rgba(11,11,11,0.10);
+    --border-2:    rgba(11,11,11,0.16);
+    --accent:      #256abf;
+    --accent-tint: #dbe8f8;
+    --good:        #0ca30c;
+    --good-text:   #006300;
+    --warning:     #b8860b;
+    --critical:    #b23327;
+    --critical-tint: #f6e2df;
+    --font-display: Charter, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322;
+      --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #8f8d86;
+      --grid: #2c2c2a; --border: rgba(255,255,255,0.10); --border-2: rgba(255,255,255,0.18);
+      --accent: #5b9bea; --accent-tint: #1c2e44;
+      --good: #3fc23f; --good-text: #4fd44f; --warning: #e0b03a;
+      --critical: #e2685c; --critical-tint: #3a201d;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322;
+    --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #8f8d86;
+    --grid: #2c2c2a; --border: rgba(255,255,255,0.10); --border-2: rgba(255,255,255,0.18);
+    --accent: #5b9bea; --accent-tint: #1c2e44;
+    --good: #3fc23f; --good-text: #4fd44f; --warning: #e0b03a;
+    --critical: #e2685c; --critical-tint: #3a201d;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink); font-family: var(--font-body); -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 28px 80px; }
+  .eyebrow { text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px; font-weight: 600; color: var(--accent); margin: 0 0 10px; }
+  h1 { font-family: var(--font-display); font-size: clamp(22px, 3vw, 30px); font-weight: 500; margin: 0 0 8px; }
+  .lede { max-width: 68ch; color: var(--ink-2); font-size: 14px; line-height: 1.6; margin: 0; }
+  .lede code { background: var(--surface-2); border-radius: 4px; padding: 1px 5px; font-size: 12.5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  header.top { padding-bottom: 22px; margin-bottom: 24px; border-bottom: 1px solid var(--border); }
+
+  #banner { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 8px; font-size: 13.5px; margin-bottom: 24px; background: var(--surface-2); color: var(--ink-2); }
+  .manual-note { display: flex; align-items: center; gap: 10px; }
+  .spinner { flex: none; width: 15px; height: 15px; border: 2px solid var(--border-2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.2s; } }
+
+  .entity-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 20px; overflow: hidden; }
+  .entity-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+  .entity-head h2 { font-family: var(--font-display); font-size: 16px; font-weight: 500; margin: 0; }
+  .entity-body { padding: 14px 18px; font-size: 13px; color: var(--ink-2); }
+  .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 100px; white-space: nowrap; }
+  .badge .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .badge.ok { background: var(--accent-tint); color: var(--accent); }
+  .badge.ok .dot { background: var(--accent); }
+  .badge.empty { background: var(--surface-2); color: var(--ink-muted); }
+  .badge.empty .dot { background: var(--ink-muted); }
+  .badge.missing { background: var(--critical-tint); color: var(--critical); }
+  .badge.missing .dot { background: var(--critical); }
+
+  .field-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; }
+  .field-chip { font-size: 11.5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--surface-2); border-radius: 5px; padding: 3px 8px; color: var(--ink); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 12px; }
+  thead th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-muted); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--border); background: var(--surface-2); white-space: nowrap; }
+  tbody td { padding: 7px 10px; border-bottom: 1px solid var(--border); color: var(--ink-2); white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+  .table-scroll { overflow-x: auto; }
+
+  footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 12px; color: var(--ink-muted); line-height: 1.7; max-width: 74ch; }
+  footer code { background: var(--surface-2); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+  .version-tag { font-size: 11px; color: var(--ink-muted); font-family: var(--font-mono); margin: 6px 0 0; }
+  .suggest-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .suggest-btn { font: inherit; font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-tint); border: none; border-radius: 100px; padding: 6px 13px; cursor: pointer; }
+  .suggest-btn:hover { filter: brightness(0.96); }
+
+  .tabs { display: flex; gap: 6px; margin-bottom: 22px; border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    font: inherit; font-size: 13px; font-weight: 600; color: var(--ink-muted);
+    background: none; border: none; border-bottom: 2px solid transparent;
+    padding: 10px 4px; margin-bottom: -1px; cursor: pointer;
+  }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .manual-note { padding: 12px 16px; border-radius: 8px; font-size: 13px; margin-bottom: 22px; background: var(--surface-2); color: var(--ink-2); }
+
+  .critere-block { margin-bottom: 26px; }
+  .critere-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .critere-num { font-family: var(--font-display); font-size: 13px; font-weight: 500; color: var(--accent); background: var(--accent-tint); border-radius: 100px; padding: 2px 11px; flex: none; }
+  .critere-head h2 { font-family: var(--font-display); font-size: 16px; font-weight: 500; margin: 0; }
+
+  .field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  .field-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .field-card label { display: block; font-size: 12.5px; color: var(--ink-2); margin-bottom: 8px; line-height: 1.4; }
+  .field-card input {
+    width: 100%; font: inherit; font-size: 14px; font-variant-numeric: tabular-nums;
+    color: var(--ink); background: var(--page); border: 1px solid var(--border-2);
+    border-radius: 7px; padding: 7px 10px;
+  }
+  .field-card input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .field-unit { font-size: 11px; color: var(--ink-muted); margin-left: 4px; }
+
+  .manual-actions { display: flex; align-items: center; gap: 12px; margin: 24px 0 8px; flex-wrap: wrap; }
+  .btn { font: inherit; font-size: 13px; font-weight: 600; border-radius: 8px; padding: 9px 16px; cursor: pointer; border: 1px solid var(--border-2); background: var(--surface); color: var(--ink); }
+  .btn.primary { background: var(--accent); color: #ffffff; border-color: var(--accent); }
+  .save-status { font-size: 12px; color: var(--ink-muted); }
+  .json-box { width: 100%; min-height: 120px; margin-top: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; background: var(--surface); border: 1px solid var(--border-2); border-radius: 8px; padding: 10px; color: var(--ink); display: none; }
+  .json-box.open { display: block; }
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-bottom: 30px; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+  .kpi-label { font-size: 12px; color: var(--ink-muted); margin: 0 0 10px; line-height: 1.4; }
+  .kpi-value { font-family: var(--font-display); font-size: 26px; font-weight: 500; line-height: 1; margin: 0 0 8px; font-variant-numeric: tabular-nums; }
+  .kpi-sub { font-size: 12px; color: var(--ink-2); }
+  .kpi-source { font-size: 10.5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink-muted); margin-top: 8px; display: block; }
+
+  .indic-section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-muted); font-weight: 600; margin: 0 0 12px; }
+
+  .ref-list { padding: 4px 18px 14px; }
+  .ref-row { display: flex; align-items: flex-start; gap: 14px; padding: 11px 0; border-top: 1px solid var(--border); }
+  .ref-row:first-child { border-top: none; }
+  .ref-num { flex: none; width: 24px; font-family: var(--font-display); color: var(--ink-muted); font-size: 13px; padding-top: 1px; }
+  .ref-text { flex: 1; font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+  .ref-source { font-size: 11.5px; color: var(--ink-muted); margin-top: 4px; font-family: var(--font-mono); }
+  .ref-badge { flex: none; }
+
+  .quality-block { margin-top: 14px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+  .quality-title { font-size: 12px; color: var(--ink-muted); margin: 0 0 12px; }
+  .quality-rows { display: flex; flex-direction: column; gap: 10px; }
+  .quality-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+  .quality-label { font-size: 13px; color: var(--ink-2); line-height: 1.4; }
+  .quality-btns { display: flex; gap: 6px; flex: none; }
+  .quality-dot {
+    width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border-2);
+    background: var(--dot-color); opacity: 0.35; cursor: pointer; padding: 0;
+    transition: opacity 0.12s ease, transform 0.12s ease;
+  }
+  .quality-dot:hover { opacity: 0.7; transform: scale(1.08); }
+  .quality-dot.active { opacity: 1; border-color: var(--ink); }
+  .ref-quality { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 100px; white-space: nowrap; }
+  .ref-quality .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--q-color); }
+  .ref-site-link { font-size: 11.5px; color: var(--accent); text-decoration: none; margin-left: 10px; }
+  .ref-site-link:hover { text-decoration: underline; }
+
+  .quality-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .quality-title-row .quality-title { margin: 0; }
+  .note { padding: 10px 14px; border-radius: 8px; font-size: 12.5px; margin: 10px 0; background: var(--surface-2); color: var(--ink-2); line-height: 1.55; }
+  .check-block { margin-top: 10px; padding: 12px 14px; background: var(--surface-2); border-radius: 8px; }
+  .check-block-title { font-size: 12px; font-weight: 600; color: var(--ink); margin: 0 0 6px; }
+  .check-ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+  .check-ul li { font-size: 12px; color: var(--ink-muted); }
+  .check-ul li.hit { color: var(--good-text); }
+  .check-ul li.miss { color: var(--critical); }
+  .extract-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; font-size: 12.5px; color: var(--ink); }
+  .extract-row .btn { padding: 5px 11px; font-size: 11.5px; }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <p class="eyebrow">Widget IA - MCDF</p>
+    <h1>Assistant Qualiopi</h1>
+    <p class="lede">Indicateurs calculés en direct à partir des entités confirmées (<code>sessionQualiopi</code>, <code>fullConventionQualiopi</code>) -- suivi horaire, documentaire et enquêtes pour les conventions/OPCO, pas les indicateurs qualité classiques (satisfaction, réclamations) qui restent en saisie manuelle faute de source MCDF connue.</p>
+    <p class="version-tag">Version du fichier : 2026-08-27</p>
+    <div class="suggest-row">
+      <button type="button" class="suggest-btn" id="suggest-report-btn">💡 Suggérer un nouvel indicateur</button>
+      <button type="button" class="suggest-btn" id="suggest-filter-btn">🔎 Suggérer un nouveau filtre</button>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab-btn active" type="button" data-tab="indicateurs">Indicateurs</button>
+    <button class="tab-btn" type="button" data-tab="referentiel">Référentiel (32 indicateurs)</button>
+    <button class="tab-btn" type="button" data-tab="api">Détection API</button>
+    <button class="tab-btn" type="button" data-tab="manual">Saisie manuelle</button>
+  </div>
+
+  <div class="tab-panel active" id="tab-indicateurs">
+    <div id="indic-banner" class="manual-note"><span class="spinner"></span><span>Chargement des indicateurs en direct...</span></div>
+    <div id="indic-kpis" class="kpis" style="display:none"></div>
+  </div>
+
+  <div class="tab-panel" id="tab-referentiel">
+    <div class="manual-note" id="ref-summary">Chargement...</div>
+    <div id="ref-list"></div>
+  </div>
+
+  <div class="tab-panel" id="tab-api">
+    <div id="banner"><span class="spinner"></span><span>Interrogation des entités candidates...</span></div>
+    <div id="results"></div>
+  </div>
+
+  <div class="tab-panel" id="tab-manual">
+    <div class="manual-note">
+      Ces indicateurs n'ont aucune source connue dans l'API MCDF (probablement saisis ailleurs -- écran de paramétrage, tableur externe -- comme les pages web du client). En attendant de trouver où les lire automatiquement, saisissez-les ici : <strong>enregistré uniquement dans ce navigateur</strong> (pas de base de données côté serveur pour ce widget), utilisez « Copier en JSON » pour transférer les valeurs vers un autre poste si besoin.
+    </div>
+    <div id="manual-form"></div>
+    <div class="manual-actions">
+      <button class="btn primary" type="button" id="manual-save">Enregistrer</button>
+      <button class="btn" type="button" id="manual-json-toggle">Copier / importer en JSON</button>
+      <span class="save-status" id="manual-status"></span>
+    </div>
+    <textarea class="json-box" id="manual-json" spellcheck="false"></textarea>
+  </div>
+
+  <footer>
+    Lecture seule -- mêmes règles que <code>widget-ia.html</code> (cookie de session déjà actif, aucun appel d'écriture). L'onglet « Référentiel » liste les 32 indicateurs officiels (catégorie « actions de formation ») et indique, pour chacun, s'il est déjà couvert par une preuve calculée en direct, par une saisie manuelle, ou par aucune preuve numérique pour le moment. L'onglet « Détection API » reste disponible pour explorer d'autres champs ; l'onglet « Saisie manuelle » couvre ce qui n'a aucune source connue dans MCDF -- dont l'analyse automatique du site web (résultats, satisfaction), déclenchée dès que l'URL est renseignée, avec extraction des valeurs chiffrées à confirmer avant utilisation.
+  </footer>
+</div>
+
+<script>
+const CANDIDATES = ['sessionQualiopi', 'conventionExportQualiopi', 'fullConventionQualiopi'];
+
+function el(tag, cls, html) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html !== undefined) e.innerHTML = html;
+  return e;
+}
+
+async function probe(entity) {
+  try {
+    const res = await fetch(`/wa/${entity}/list?nopaging=1&limit=8&_dc=${Date.now()}`, { credentials: 'same-origin' });
+    if (res.status === 401 || res.status === 403) return { entity, state: 'auth' };
+    let data;
+    try { data = await res.json(); } catch (e) { return { entity, state: 'missing' }; }
+    if (!data.success) return { entity, state: 'missing', detail: JSON.stringify(data).slice(0, 200) };
+    if (!data.root || data.root.length === 0) return { entity, state: 'empty' };
+    return { entity, state: 'ok', rows: data.root };
+  } catch (e) {
+    return { entity, state: 'error', detail: e.message };
+  }
+}
+
+function renderResult(r) {
+  const card = el('div', 'entity-card');
+  const head = el('div', 'entity-head');
+  head.appendChild(el('h2', '', `<code>/wa/${r.entity}/list</code>`));
+
+  const body = el('div', 'entity-body');
+
+  if (r.state === 'auth') {
+    head.appendChild(el('span', 'badge missing', '<span class="dot"></span> Non authentifié'));
+    body.textContent = 'Session MCDF non détectée. Ouvrez cette page depuis un onglet déjà connecté à MCDF.';
+  } else if (r.state === 'missing') {
+    head.appendChild(el('span', 'badge missing', '<span class="dot"></span> Entité introuvable'));
+    body.textContent = `Ce nom d'entité ne répond pas (404 ou réponse non exploitable)${r.detail ? ' -- ' + r.detail : ''}. Ce n'est probablement pas le bon nom, à corriger dans data-beans.xml côté serveur ou à chercher côté source.`;
+  } else if (r.state === 'error') {
+    head.appendChild(el('span', 'badge missing', '<span class="dot"></span> Erreur réseau'));
+    body.textContent = r.detail;
+  } else if (r.state === 'empty') {
+    head.appendChild(el('span', 'badge empty', '<span class="dot"></span> Entité valide, 0 résultat'));
+    body.textContent = 'Le nom est probablement correct mais aucune donnée sur ce compte/cette entité pour le moment.';
+  } else {
+    head.appendChild(el('span', 'badge ok', `<span class="dot"></span> OK -- ${r.rows.length} ligne(s)`));
+    const fields = Object.keys(r.rows[0]);
+    const fieldsWrap = el('div', 'field-list');
+    fields.forEach((f) => fieldsWrap.appendChild(el('span', 'field-chip', f)));
+    body.appendChild(el('p', '', 'Champs disponibles :'));
+    body.appendChild(fieldsWrap);
+
+    const scroll = el('div', 'table-scroll');
+    const table = el('table');
+    const thead = el('thead');
+    const trh = el('tr');
+    fields.slice(0, 10).forEach((f) => trh.appendChild(el('th', '', f)));
+    thead.appendChild(trh);
+    table.appendChild(thead);
+    const tbody = el('tbody');
+    r.rows.slice(0, 8).forEach((row) => {
+      const tr = el('tr');
+      fields.slice(0, 10).forEach((f) => {
+        const v = row[f];
+        tr.appendChild(el('td', '', v === null || v === undefined ? '—' : String(v)));
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    scroll.appendChild(table);
+    body.appendChild(scroll);
+  }
+
+  card.appendChild(head);
+  card.appendChild(body);
+  return card;
+}
+
+(async () => {
+  const results = await Promise.all(CANDIDATES.map(probe));
+  const banner = document.getElementById('banner');
+  const okCount = results.filter((r) => r.state === 'ok').length;
+  if (okCount === 0) {
+    banner.textContent = 'Aucune des entités candidates ne renvoie de données exploitables pour le moment -- voir le détail de chacune ci-dessous.';
+  } else {
+    banner.textContent = `${okCount} entité(s) sur ${results.length} répondent avec des données -- copiez les champs listés ci-dessous pour construire le vrai tableau de bord Qualiopi.`;
+  }
+  const wrap = document.getElementById('results');
+  results.forEach((r) => wrap.appendChild(renderResult(r)));
+})();
+
+// ------------------------------------------------------------------
+// Indicateurs en direct -- champs confirmes via l'onglet Detection API
+// (sessionQualiopi, fullConventionQualiopi). Suivi horaire/documentaire
+// des conventions vis-a-vis des financeurs, pas le referentiel qualite
+// 7 criteres (satisfaction, reclamations -- toujours sans source
+// connue, voir l'onglet Saisie manuelle).
+// ------------------------------------------------------------------
+function fmtPct(n) { return `${(n * 100).toFixed(0)}%`; }
+
+async function fetchQualiopiEntity(entity, entityId) {
+  const res = await fetch(`/wa/${entity}/list?nopaging=1&_dc=${Date.now()}`, { credentials: 'same-origin' });
+  if (res.status === 401 || res.status === 403) throw new Error('AUTH');
+  let data;
+  try { data = await res.json(); } catch (e) { throw new Error('AUTH'); }
+  if (!data.success) throw new Error(`Appel /wa/${entity}/list refusé.`);
+  return entityId ? data.root.filter((r) => r.entityId === entityId) : data.root;
+}
+
+function parseRatio(str) {
+  if (typeof str !== 'string' || str.indexOf('/') === -1) return null;
+  const [num, den] = str.split('/').map((s) => parseFloat(s.trim()));
+  if (!isFinite(num) || !isFinite(den) || den === 0) return null;
+  return { num, den };
+}
+
+function kpiCard({ label, value, sub, source }) {
+  const card = el('div', 'kpi');
+  card.appendChild(el('p', 'kpi-label', label));
+  card.appendChild(el('p', 'kpi-value', value));
+  if (sub) card.appendChild(el('p', 'kpi-sub', sub));
+  if (source) card.appendChild(el('span', 'kpi-source', source));
+  return card;
+}
+
+async function loadIndicateurs() {
+  const banner = document.getElementById('indic-banner');
+  const kpisWrap = document.getElementById('indic-kpis');
+  const entityId = new URLSearchParams(location.search).get('entityId');
+
+  try {
+    const [sessions, conventions] = await Promise.all([
+      fetchQualiopiEntity('sessionQualiopi', entityId),
+      fetchQualiopiEntity('fullConventionQualiopi', entityId),
+    ]);
+    const convs = conventions.filter((c) => c.isConvention);
+
+    // Documents obligatoires envoyes (format "N / total")
+    const ratios = convs.map((c) => parseRatio(c.documentSent)).filter(Boolean);
+    const docSentAvg = ratios.length
+      ? ratios.reduce((s, r) => s + r.num / r.den, 0) / ratios.length
+      : null;
+    const docComplete = ratios.filter((r) => r.num >= r.den).length;
+
+    // Documents signes
+    const withSigned = convs.filter((c) => typeof c.signedDocument === 'number');
+    const signedTotal = withSigned.reduce((s, c) => s + c.signedDocument, 0);
+    const signedConvs = withSigned.filter((c) => c.signedDocument > 0).length;
+
+    // Attestations sur conventions terminees
+    const now = new Date();
+    const ended = convs.filter((c) => c.endDate && new Date(c.endDate) < now);
+    const withAttestation = ended.filter((c) => c.attestationDate);
+
+    // Heures vendues vs realisees vs facturees
+    const sumField = (arr, f) => arr.reduce((s, c) => s + (typeof c[f] === 'number' ? c[f] : 0), 0);
+    const soldH = sumField(convs, 'soldHours');
+    const fulfilledH = sumField(convs, 'fulfilledHours');
+    const invoicedH = sumField(convs, 'invoicedHours');
+    const creditLeft = sumField(convs, 'creditLeftHours');
+
+    // Enquetes (sessionQualiopi)
+    const withSurvey = sessions.filter((s) => (s.survey || 0) > 0).length;
+    const surveyTotal = sumField(sessions, 'survey');
+    const comebackTotal = sumField(sessions, 'comeback');
+
+    const kpis = [
+      {
+        critere: 3, critereLabel: 'Adaptation aux publics bénéficiaires',
+        label: 'Documents obligatoires envoyés',
+        value: docSentAvg !== null ? fmtPct(docSentAvg) : '—',
+        sub: ratios.length ? `${docComplete}/${ratios.length} conventions au complet` : 'aucune donnée exploitable',
+        source: 'fullConventionQualiopi.documentSent',
+      },
+      {
+        critere: 3, critereLabel: 'Adaptation aux publics bénéficiaires',
+        label: 'Conventions avec document signé',
+        value: withSigned.length ? fmtPct(signedConvs / withSigned.length) : '—',
+        sub: `${signedTotal} document(s) signé(s) au total`,
+        source: 'fullConventionQualiopi.signedDocument',
+      },
+      {
+        critere: 3, critereLabel: 'Adaptation aux publics bénéficiaires',
+        label: 'Attestations délivrées (conventions terminées)',
+        value: ended.length ? fmtPct(withAttestation.length / ended.length) : '—',
+        sub: `${withAttestation.length}/${ended.length} conventions terminées`,
+        source: 'fullConventionQualiopi.attestationDate',
+      },
+      {
+        critere: 4, critereLabel: 'Moyens pédagogiques, techniques et encadrement',
+        label: 'Heures réalisées vs vendues',
+        value: soldH ? fmtPct(fulfilledH / soldH) : '—',
+        sub: `${Math.round(fulfilledH)} h réalisées / ${Math.round(soldH)} h vendues`,
+        source: 'fullConventionQualiopi.fulfilledHours / soldHours',
+      },
+      {
+        critere: 4, critereLabel: 'Moyens pédagogiques, techniques et encadrement',
+        label: 'Heures facturées vs réalisées',
+        value: fulfilledH ? fmtPct(invoicedH / fulfilledH) : '—',
+        sub: `${Math.round(invoicedH)} h facturées / ${Math.round(fulfilledH)} h réalisées`,
+        source: 'fullConventionQualiopi.invoicedHours / fulfilledHours',
+      },
+      {
+        critere: 6, critereLabel: 'Inscription dans l’environnement professionnel',
+        label: 'Crédit d’heures restant (OPCA)',
+        value: `${Math.round(creditLeft)} h`,
+        sub: `sur ${convs.length} convention(s)`,
+        source: 'fullConventionQualiopi.creditLeftHours',
+      },
+      {
+        critere: 7, critereLabel: 'Appréciations et réclamations',
+        label: 'Sessions avec retour d’enquête',
+        value: sessions.length ? fmtPct(withSurvey / sessions.length) : '—',
+        sub: `${surveyTotal} réponse(s) collectée(s) au total`,
+        source: 'sessionQualiopi.survey',
+      },
+      {
+        critere: 7, critereLabel: 'Appréciations et réclamations',
+        label: 'Relances / retours signalés',
+        value: String(comebackTotal),
+        sub: `sur ${sessions.length} session(s)`,
+        source: 'sessionQualiopi.comeback',
+      },
+    ];
+
+    banner.style.display = 'none';
+    kpisWrap.style.display = 'block';
+    const byCritere = new Map();
+    kpis.forEach((k) => {
+      if (!byCritere.has(k.critere)) byCritere.set(k.critere, { label: k.critereLabel, items: [] });
+      byCritere.get(k.critere).items.push(k);
+    });
+    [...byCritere.entries()].sort((a, b) => a[0] - b[0]).forEach(([num, group]) => {
+      const block = el('div', 'critere-block');
+      const head = el('div', 'critere-head');
+      head.appendChild(el('span', 'critere-num', `Critère ${num}`));
+      head.appendChild(el('h2', '', group.label));
+      block.appendChild(head);
+      const grid = el('div', 'kpis');
+      group.items.forEach((k) => grid.appendChild(kpiCard(k)));
+      block.appendChild(grid);
+      kpisWrap.appendChild(block);
+    });
+  } catch (err) {
+    if (err && err.message === 'AUTH') {
+      banner.innerHTML = 'Session MCDF non détectée. Ouvrez cette page depuis un onglet déjà connecté à MCDF.';
+    } else {
+      banner.textContent = `Erreur de chargement : ${(err && err.message) || err}`;
+      console.error(err);
+    }
+  }
+}
+loadIndicateurs();
+
+// ------------------------------------------------------------------
+// Referentiel national qualite (Qualiopi) -- 7 criteres, 32 indicateurs
+// (categorie "actions de formation"). Formulations reprises du
+// referentiel usuel -- a recouper avec la version exacte detenue par
+// le certificateur en cas de doute sur le libelle precis d'un
+// indicateur. Chaque ligne est reliee, quand c'est le cas, a une
+// preuve deja disponible dans ce widget : "auto" = calcule en direct
+// (onglet Indicateurs), "manuel" = champ de l'onglet Saisie manuelle,
+// "aucune" = aucune preuve numerique disponible pour le moment.
+// ------------------------------------------------------------------
+const REFERENTIEL_32 = [
+  { num: 1, critere: 1, text: "Le prestataire diffuse une information accessible au public, detaillee et verifiable sur les prestations proposees (prerequis, objectifs, duree, modalites et delais d'acces, tarifs, contacts, methodes mobilisees, modalites d'evaluation, accessibilite handicap).", status: 'aucune' },
+  { num: 2, critere: 1, text: "Le prestataire diffuse des indicateurs de resultats adaptes a la nature des prestations et des publics accueillis.", status: 'aucune' },
+  { num: 3, critere: 1, text: "Le prestataire informe le public des resultats obtenus (taux d'obtention des certifications, taux d'interruption, taux de retour a l'emploi, appreciations...).", status: 'manuel', source: 'resultats_publies' },
+  { num: 4, critere: 2, text: "Le prestataire analyse le besoin du beneficiaire en lien avec l'entreprise et/ou le financeur.", status: 'aucune' },
+  { num: 5, critere: 2, text: "Le prestataire definit les objectifs operationnels et evaluables de la prestation.", status: 'aucune' },
+  { num: 6, critere: 2, text: "Le prestataire etablit les contenus et modalites de mise en oeuvre (pedagogiques, techniques, encadrement) adaptes aux objectifs et publics.", status: 'aucune' },
+  { num: 7, critere: 3, text: "Le prestataire met en oeuvre et adapte la prestation, l'accompagnement et le suivi aux beneficiaires tout au long de la prestation.", status: 'auto', source: 'Documents obligatoires envoyes / Conventions avec document signe' },
+  { num: 8, critere: 3, text: "Le prestataire evalue l'atteinte par le beneficiaire des objectifs de la prestation.", status: 'auto', source: 'Attestations delivrees (conventions terminees)' },
+  { num: 9, critere: 3, text: "Le prestataire decrit et met en oeuvre les mesures pour favoriser l'engagement des beneficiaires et prevenir les ruptures de parcours.", status: 'aucune' },
+  { num: 10, critere: 3, text: "Le prestataire met en oeuvre des dispositifs facilitant l'accueil, l'accompagnement, le suivi des beneficiaires en situation de handicap.", status: 'manuel', source: 'handicap_accompagne' },
+  { num: 11, critere: 4, text: "Le prestataire mobilise et coordonne les differents intervenants internes et/ou externes (pedagogiques, administratifs, logistiques).", status: 'aucune' },
+  { num: 12, critere: 4, text: "Le prestataire met a disposition les moyens humains et techniques adaptes et un environnement approprie (locaux, equipements, plateau technique...).", status: 'auto', source: 'Heures realisees vs vendues' },
+  { num: 13, critere: 4, text: "Le prestataire met a disposition des ressources pedagogiques et permet leur appropriation par les beneficiaires.", status: 'aucune' },
+  { num: 14, critere: 4, text: "En cas de prestation a distance, le prestataire met en oeuvre des moyens et un dispositif permettant l'atteinte des objectifs.", status: 'aucune' },
+  { num: 15, critere: 4, text: "En cas d'apprentissage, le prestataire designe un maitre d'apprentissage et s'assure de sa mobilisation et de sa montee en competences.", status: 'aucune' },
+  { num: 16, critere: 4, text: "Le prestataire s'assure de l'adequation et de la mise en oeuvre des modalites d'evaluation aux objectifs de la prestation.", status: 'auto', source: 'Heures facturees vs realisees' },
+  { num: 17, critere: 5, text: "Le prestataire determine, mobilise et evalue les competences des personnels charges de la mise en oeuvre, adaptees aux prestations proposees.", status: 'manuel', source: 'heures_formation_formateur' },
+  { num: 18, critere: 5, text: "Le prestataire entretient et developpe les competences de ses salaries, adaptees aux prestations qu'il propose.", status: 'manuel', source: 'heures_formation_formateur' },
+  { num: 19, critere: 5, text: "Le prestataire mobilise les competences necessaires a la conception, a l'execution et a l'evaluation de la prestation.", status: 'aucune' },
+  { num: 20, critere: 5, text: "En cas de certification professionnelle, le prestataire s'assure de la conformite aux exigences prevues par le certificateur.", status: 'aucune' },
+  { num: 21, critere: 5, text: "En cas d'apprentissage, le prestataire s'assure des competences pedagogiques de ses formateurs d'apprentis.", status: 'aucune' },
+  { num: 22, critere: 6, text: "Le prestataire realise une veille legale et reglementaire sur le champ de la formation professionnelle et en accompagne la mise en oeuvre.", status: 'manuel', source: 'veille_reglementaire' },
+  { num: 23, critere: 6, text: "Le prestataire realise une veille sur les evolutions des competences, des metiers et des emplois dans son/ses secteur(s) d'intervention.", status: 'aucune' },
+  { num: 24, critere: 6, text: "Le prestataire realise une veille sur les innovations pedagogiques et technologiques permettant une evolution de ses prestations.", status: 'aucune' },
+  { num: 25, critere: 6, text: "En cas de sous-traitance ou de portage salarial, le prestataire s'assure du respect de la conformite au referentiel.", status: 'aucune' },
+  { num: 26, critere: 6, text: "Le prestataire mobilise les expertises, ressources et reseaux necessaires a la mise en oeuvre des prestations et/ou en lien avec son secteur d'activite.", status: 'aucune' },
+  { num: 27, critere: 7, text: "Le prestataire recueille les appreciations des parties prenantes (beneficiaires, financeurs, equipes pedagogiques, entreprises...).", status: 'auto', source: 'Sessions avec retour d’enquete' },
+  { num: 28, critere: 7, text: "Le prestataire met en oeuvre des modalites de traitement des difficultes rencontrees par les parties prenantes (reclamations, dysfonctionnements, abandons, litiges...).", status: 'manuel', source: 'reclamations_recues / reclamations_traitees / delai_traitement' },
+  { num: 29, critere: 7, text: "Le prestataire met en oeuvre des modalites de prise en compte des dysfonctionnements et des mesures d'amelioration ou correctives.", status: 'manuel', source: 'actions_correctives_cloturees / actions_correctives_ouvertes' },
+  { num: 30, critere: 7, text: "Le prestataire est en mesure d'assurer la tracabilite et la mise a jour des differentes actions et met a disposition les preuves necessaires.", status: 'aucune' },
+  { num: 31, critere: 7, text: "Les enquetes de satisfaction, les appreciations et les indicateurs de resultats sont mis a la disposition des parties prenantes.", status: 'aucune' },
+  { num: 32, critere: 7, text: "Le prestataire met en oeuvre au moins un moyen d'amelioration continue (codeveloppement entre pairs, travaux d'organismes professionnels de branche, recherche, colloques...).", status: 'aucune' },
+];
+const CRITERE_LABELS = {
+  1: "Conditions d'information du public",
+  2: 'Objectifs des prestations et adaptation au public (conception)',
+  3: 'Adaptation aux publics beneficiaires (mise en oeuvre)',
+  4: 'Moyens pedagogiques, techniques et encadrement',
+  5: 'Qualification et competences des personnels',
+  6: "Inscription dans l'environnement professionnel",
+  7: 'Appreciations et reclamations',
+};
+
+const QUALITY_BY_INDICATEUR = { 1: 'q_ind1', 2: 'q_ind2', 3: 'q_ind3' };
+
+function renderReferentiel32() {
+  const summary = document.getElementById('ref-summary');
+  const wrap = document.getElementById('ref-list');
+  wrap.innerHTML = '';
+  const stored = loadManualValues();
+  const quality = stored.quality || {};
+  const siteWeb = stored.values ? stored.values.site_web : null;
+
+  const counts = { auto: 0, manuel: 0, aucune: 0 };
+  REFERENTIEL_32.forEach((r) => counts[r.status]++);
+  const evaluated = Object.values(quality).filter(Boolean).length;
+  summary.innerHTML = `<strong>${counts.auto}</strong>/32 avec preuve calculee en direct · <strong>${counts.manuel}</strong>/32 en saisie manuelle · <strong>${counts.aucune}</strong>/32 sans preuve numerique pour le moment${evaluated ? ` · <strong>${evaluated}</strong>/3 indicateurs du critere 1 evalues manuellement` : ''}. Formulation des indicateurs a recouper avec la version exacte de votre certificateur.`;
+
+  const byCritere = new Map();
+  REFERENTIEL_32.forEach((r) => {
+    if (!byCritere.has(r.critere)) byCritere.set(r.critere, []);
+    byCritere.get(r.critere).push(r);
+  });
+
+  [...byCritere.entries()].sort((a, b) => a[0] - b[0]).forEach(([num, rows]) => {
+    const block = el('div', 'critere-block');
+    const head = el('div', 'critere-head');
+    head.appendChild(el('span', 'critere-num', `Critère ${num}`));
+    head.appendChild(el('h2', '', CRITERE_LABELS[num]));
+    if (num === 1 && siteWeb) {
+      const link = document.createElement('a');
+      link.className = 'ref-site-link';
+      link.href = siteWeb;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.textContent = '↗ Voir le site du client';
+      head.appendChild(link);
+    }
+    block.appendChild(head);
+
+    const panel = el('div', 'panel');
+    const list = el('div', 'ref-list');
+    rows.forEach((r) => {
+      const row = el('div', 'ref-row');
+      row.appendChild(el('div', 'ref-num', String(r.num).padStart(2, '0')));
+      const textWrap = el('div', 'ref-text');
+      textWrap.appendChild(document.createTextNode(r.text));
+      if (r.source) textWrap.appendChild(el('div', 'ref-source', r.source));
+      row.appendChild(textWrap);
+
+      const checkId = QUALITY_BY_INDICATEUR[r.num];
+      const level = checkId ? quality[checkId] : null;
+      if (level) {
+        const lvl = QUALITY_LEVELS.find((l) => l.key === level);
+        const badge = el('span', 'ref-quality', `<span class="dot"></span>${lvl.label}`);
+        badge.style.setProperty('--q-color', lvl.dot);
+        badge.style.background = `${lvl.dot}22`;
+        badge.style.color = lvl.dot;
+        row.appendChild(badge);
+      } else {
+        const badgeCls = r.status === 'auto' ? 'ok' : r.status === 'manuel' ? 'empty' : 'missing';
+        const badgeLabel = r.status === 'auto' ? 'Preuve auto' : r.status === 'manuel' ? 'Saisie manuelle' : 'Aucune preuve';
+        row.appendChild(el('span', `badge ${badgeCls} ref-badge`, `<span class="dot"></span>${badgeLabel}`));
+      }
+      list.appendChild(row);
+    });
+    panel.appendChild(list);
+    block.appendChild(panel);
+    wrap.appendChild(block);
+  });
+}
+// Appelée plus bas, une fois MANUAL_FIELDS/QUALITY_LEVELS déclarés
+// (renderReferentiel32 lit loadManualValues() et QUALITY_LEVELS).
+
+// ------------------------------------------------------------------
+// Onglets
+// ------------------------------------------------------------------
+document.querySelectorAll('.tab-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+  });
+});
+
+// ------------------------------------------------------------------
+// Saisie manuelle -- indicateurs sans source MCDF connue (voir
+// referentiel-qualiopi-kpi.html, badges "aucune source"). Stocke en
+// localStorage : pas de backend pour ce widget, donc pas de partage
+// automatique entre postes -- d'ou le bouton copier/importer en JSON.
+// ------------------------------------------------------------------
+const STORAGE_KEY = 'mcdf-qualiopi-manual-v1';
+
+const MANUAL_FIELDS = [
+  { critere: 1, label: 'Conditions d’information du public', fields: [
+    { id: 'site_web', label: 'Site web du client', unit: '', type: 'url' },
+    { id: 'resultats_publies', label: 'Résultats publiés (réussite, satisfaction)', unit: '%' },
+  ]},
+  { critere: 3, label: 'Adaptation aux publics bénéficiaires', fields: [
+    { id: 'handicap_accompagne', label: 'Situations de handicap accompagnées', unit: '%' },
+  ]},
+  { critere: 5, label: 'Qualification des personnels', fields: [
+    { id: 'heures_formation_formateur', label: 'Heures de formation continue / formateur / an', unit: 'h' },
+  ]},
+  { critere: 6, label: 'Environnement professionnel', fields: [
+    { id: 'insertion_pro', label: 'Taux d’insertion professionnelle à 6 mois', unit: '%' },
+    { id: 'veille_reglementaire', label: 'Mises à jour de veille réglementaire (trimestre)', unit: 'nb' },
+  ]},
+  { critere: 7, label: 'Appréciations et réclamations', fields: [
+    { id: 'satisfaction_stagiaires', label: 'Taux de satisfaction stagiaires', unit: '/5' },
+    { id: 'taux_reponse_enquetes', label: 'Taux de réponse aux enquêtes', unit: '%' },
+    { id: 'reclamations_recues', label: 'Réclamations reçues (période)', unit: 'nb' },
+    { id: 'reclamations_traitees', label: 'Réclamations traitées (période)', unit: 'nb' },
+    { id: 'delai_traitement', label: 'Délai moyen de traitement', unit: 'j' },
+    { id: 'actions_correctives_cloturees', label: 'Actions correctives clôturées', unit: 'nb' },
+    { id: 'actions_correctives_ouvertes', label: 'Actions correctives ouvertes', unit: 'nb' },
+  ]},
+];
+
+function loadManualValues() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : { values: {}, updatedAt: null };
+  } catch (e) {
+    return { values: {}, updatedAt: null };
+  }
+}
+
+// ------------------------------------------------------------------
+// Evaluation qualite manuelle (icones de couleur) -- pour l'instant
+// limitee au critere 1, dont les 3 indicateurs sont verifiables en
+// ouvrant le site web du client (champ site_web ci-dessus). Vert /
+// orange / rouge, stocke dans le meme payload localStorage que les
+// valeurs numeriques (cle "quality").
+// ------------------------------------------------------------------
+const QUALITY_CHECKS = [
+  { id: 'q_ind1', indicateur: 1, label: 'Infos publiques complètes (prérequis, objectifs, durée, tarifs, contacts, modalités, accessibilité handicap)' },
+  { id: 'q_ind2', indicateur: 2, label: 'Indicateurs de résultats diffusés (taux de réussite, satisfaction...)' },
+  { id: 'q_ind3', indicateur: 3, label: 'Résultats obtenus communiqués au public' },
+];
+const QUALITY_LEVELS = [
+  { key: 'green', label: 'Conforme', dot: '#0ca30c' },
+  { key: 'orange', label: 'Partiel', dot: '#b8860b' },
+  { key: 'red', label: 'Insuffisant', dot: '#b23327' },
+];
+
+// Regroupements de mots-clés par indicateur, pour l'analyse automatique
+// best-effort du site web (voir checkWebsite ci-dessous). Purement
+// indicatif -- une detection par mot-cle ne remplace pas une lecture
+// humaine, mais donne un premier reperage rapide quand le site est
+// lisible (CORS autorise).
+const CHECK_KEYWORDS = {
+  q_ind1: [
+    { label: 'Prérequis', words: ['prérequis', 'pré-requis', 'pre-requis'] },
+    { label: 'Objectifs', words: ['objectif'] },
+    { label: 'Durée', words: ['durée', 'heures', 'jours'] },
+    { label: 'Délais d’accès', words: ['délai'] },
+    { label: 'Tarifs', words: ['tarif', 'prix', '€', 'coût', 'cout'] },
+    { label: 'Contact', words: ['contact', 'téléphone', 'telephone', '@'] },
+    { label: 'Méthodes mobilisées', words: ['méthode', 'methode', 'pédagog', 'pedagog'] },
+    { label: 'Modalités d’évaluation', words: ['évaluation', 'evaluation', 'examen', 'certificat'] },
+    { label: 'Accessibilité handicap', words: ['handicap', 'accessib', 'pmr'] },
+  ],
+  q_ind2: [
+    { label: 'Taux de réussite', words: ['taux de réussite', 'taux de reussite'] },
+    { label: 'Taux de satisfaction', words: ['satisfaction'] },
+    { label: 'Indicateurs de résultats', words: ['indicateur', 'résultat', 'resultat'] },
+  ],
+  q_ind3: [
+    { label: 'Taux d’obtention / certification', words: ['obtention', 'certifi'] },
+    { label: 'Taux de retour à l’emploi', words: ['emploi', 'insertion'] },
+    { label: 'Avis / témoignages', words: ['avis', 'témoignage', 'temoignage'] },
+  ],
+};
+
+// Extraction best-effort de valeurs chiffrees pres d'un mot-cle, pour
+// pre-remplir un champ de Saisie manuelle -- seulement les indicateurs
+// qui sont normalement publies publiquement sur un site vitrine
+// (resultats, satisfaction). Le reste (reclamations, actions
+// correctives, veille...) n'a pas vocation a etre publie, donc pas de
+// tentative d'extraction pour ces champs-la.
+const VALUE_EXTRACTORS = [
+  { fieldId: 'resultats_publies', keywordRe: /taux de r[ée]ussite|r[ée]sultats?/i, valueRe: /(\d{1,3}(?:[.,]\d+)?)\s*%/, unit: '%' },
+  { fieldId: 'satisfaction_stagiaires', keywordRe: /satisfaction/i, valueRe: /(\d{1,2}(?:[.,]\d+)?)\s*\/\s*5/, unit: '/5' },
+];
+
+function findManualFieldLabel(fieldId) {
+  for (const group of MANUAL_FIELDS) {
+    const f = group.fields.find((x) => x.id === fieldId);
+    if (f) return f.label;
+  }
+  return fieldId;
+}
+
+function extractValues(text) {
+  const results = [];
+  VALUE_EXTRACTORS.forEach((ex) => {
+    const idx = text.search(ex.keywordRe);
+    if (idx === -1) return;
+    const windowText = text.slice(Math.max(0, idx - 40), idx + 80);
+    const m = windowText.match(ex.valueRe);
+    if (m) results.push({ fieldId: ex.fieldId, value: m[1].replace(',', '.'), unit: ex.unit });
+  });
+  return results;
+}
+
+function applyExtractedValue(fieldId, value, btn) {
+  const input = document.getElementById(`manual-${fieldId}`);
+  if (!input) return;
+  input.value = value;
+  saveManualValues();
+  btn.textContent = 'Valeur appliquée ✓';
+  btn.disabled = true;
+}
+
+async function checkWebsite() {
+  const url = (document.getElementById('manual-site_web') || {}).value;
+  const resultEl = document.getElementById('site-check-result');
+  if (!url || !url.trim()) {
+    resultEl.innerHTML = '<div class="note">Renseignez d’abord l’URL du site avant de lancer la vérification.</div>';
+    return;
+  }
+  resultEl.innerHTML = '<div class="note">Lecture du site en cours…</div>';
+  let text;
+  try {
+    const res = await fetch(url, { mode: 'cors' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const html = await res.text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    text = (doc.body ? doc.body.innerText || doc.body.textContent : '').toLowerCase();
+  } catch (e) {
+    renderCheckFallback(resultEl, url);
+    return;
+  }
+  renderCheckResults(resultEl, text);
+}
+
+function renderCheckFallback(resultEl, url) {
+  resultEl.innerHTML = '';
+  resultEl.appendChild(el('div', 'note',
+    `Lecture automatique impossible depuis le navigateur : ce site ne renvoie pas d’autorisation CORS pour être lu par un autre site (restriction de sécurité standard des navigateurs, pas une erreur de ce widget). ` +
+    `Ouvrez <a href="${url}" target="_blank" rel="noopener" style="color:var(--accent)">${url}</a> et vérifiez vous-même les points ci-dessous, puis notez avec les pastilles au-dessus.`));
+  Object.entries(CHECK_KEYWORDS).forEach(([checkId, groups]) => {
+    const check = QUALITY_CHECKS.find((c) => c.id === checkId);
+    const block = el('div', 'check-block');
+    block.appendChild(el('p', 'check-block-title', `Indicateur ${check.indicateur} — à vérifier manuellement :`));
+    const ul = el('ul', 'check-ul');
+    groups.forEach((g) => ul.appendChild(el('li', '', g.label)));
+    block.appendChild(ul);
+    resultEl.appendChild(block);
+  });
+}
+
+function renderCheckResults(resultEl, text) {
+  resultEl.innerHTML = '';
+  resultEl.appendChild(el('div', 'note',
+    'Analyse automatique par mots-clés dans le contenu de la page — indicative seulement (ne remplace pas une lecture humaine, et ne vérifie qu’une seule page, pas tout le site).'));
+
+  const extracted = extractValues(text);
+  if (extracted.length) {
+    const block = el('div', 'check-block');
+    block.appendChild(el('p', 'check-block-title', 'Valeurs détectées automatiquement — à confirmer :'));
+    extracted.forEach((r) => {
+      const row = el('div', 'extract-row');
+      row.appendChild(el('span', '', `${findManualFieldLabel(r.fieldId)} : ${r.value}${r.unit}`));
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn';
+      btn.textContent = 'Utiliser cette valeur';
+      btn.addEventListener('click', () => applyExtractedValue(r.fieldId, r.value, btn));
+      row.appendChild(btn);
+      block.appendChild(row);
+    });
+    resultEl.appendChild(block);
+  }
+
+  Object.entries(CHECK_KEYWORDS).forEach(([checkId, groups]) => {
+    const check = QUALITY_CHECKS.find((c) => c.id === checkId);
+    const found = groups.filter((g) => g.words.some((w) => text.includes(w)));
+    const pct = Math.round((found.length / groups.length) * 100);
+    const block = el('div', 'check-block');
+    block.appendChild(el('p', 'check-block-title', `Indicateur ${check.indicateur} — ${found.length}/${groups.length} éléments détectés (${pct}%)`));
+    const ul = el('ul', 'check-ul');
+    groups.forEach((g) => {
+      const hit = g.words.some((w) => text.includes(w));
+      ul.appendChild(el('li', hit ? 'hit' : 'miss', `${hit ? '✓' : '✕'} ${g.label}`));
+    });
+    block.appendChild(ul);
+    resultEl.appendChild(block);
+  });
+}
+
+function renderQualityBlock(stored) {
+  const wrap = el('div', 'quality-block');
+  const titleRow = el('div', 'quality-title-row');
+  titleRow.appendChild(el('p', 'quality-title', 'Évaluation de la qualité (ouvrir le site web ci-dessus pour vérifier)'));
+  const checkBtn = document.createElement('button');
+  checkBtn.type = 'button';
+  checkBtn.className = 'btn';
+  checkBtn.textContent = 'Vérifier automatiquement';
+  checkBtn.addEventListener('click', checkWebsite);
+  titleRow.appendChild(checkBtn);
+  wrap.appendChild(titleRow);
+  const resultEl = document.createElement('div');
+  resultEl.id = 'site-check-result';
+  const rows = el('div', 'quality-rows');
+  QUALITY_CHECKS.forEach((c) => {
+    const row = el('div', 'quality-row');
+    row.appendChild(el('span', 'quality-label', `${c.indicateur}. ${c.label}`));
+    const btns = el('div', 'quality-btns');
+    const current = (stored.quality || {})[c.id];
+    QUALITY_LEVELS.forEach((lvl) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `quality-dot${current === lvl.key ? ' active' : ''}`;
+      btn.style.setProperty('--dot-color', lvl.dot);
+      btn.title = lvl.label;
+      btn.dataset.checkId = c.id;
+      btn.dataset.level = lvl.key;
+      btn.addEventListener('click', () => setQuality(c.id, lvl.key));
+      btns.appendChild(btn);
+    });
+    row.appendChild(btns);
+    rows.appendChild(row);
+  });
+  wrap.appendChild(rows);
+  wrap.appendChild(resultEl);
+  return wrap;
+}
+
+function setQuality(checkId, level) {
+  const stored = loadManualValues();
+  if (!stored.quality) stored.quality = {};
+  stored.quality[checkId] = stored.quality[checkId] === level ? undefined : level; // re-cliquer desactive
+  stored.values = { ...stored.values, ...collectManualValues() }; // ne pas perdre une saisie en cours
+  stored.updatedAt = new Date().toISOString();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+  document.getElementById('manual-form').innerHTML = '';
+  renderManualForm();
+  document.getElementById('ref-list').innerHTML = '';
+  renderReferentiel32();
+}
+
+function renderManualForm() {
+  const stored = loadManualValues();
+  const formWrap = document.getElementById('manual-form');
+  MANUAL_FIELDS.forEach((group) => {
+    const block = el('div', 'critere-block');
+    const head = el('div', 'critere-head');
+    head.appendChild(el('span', 'critere-num', `Critère ${group.critere}`));
+    head.appendChild(el('h2', '', group.label));
+    block.appendChild(head);
+
+    const grid = el('div', 'field-grid');
+    group.fields.forEach((f) => {
+      const card = el('div', 'field-card');
+      const label = el('label', '', `${f.label}<span class="field-unit">${f.unit}</span>`);
+      label.htmlFor = `manual-${f.id}`;
+      const input = document.createElement('input');
+      input.type = f.type === 'url' ? 'url' : 'number';
+      if (f.type !== 'url') input.step = 'any';
+      else input.placeholder = 'https://...';
+      input.id = `manual-${f.id}`;
+      input.dataset.fieldId = f.id;
+      input.dataset.fieldType = f.type || 'number';
+      const v = stored.values[f.id];
+      if (v !== undefined && v !== null) input.value = v;
+      if (f.type === 'url') {
+        input.addEventListener('blur', () => { if (input.value.trim()) checkWebsite(); });
+      }
+      card.appendChild(label);
+      card.appendChild(input);
+      grid.appendChild(card);
+    });
+    block.appendChild(grid);
+
+    if (group.critere === 1) block.appendChild(renderQualityBlock(stored));
+
+    formWrap.appendChild(block);
+  });
+
+  updateStatus(stored.updatedAt);
+}
+
+function updateStatus(updatedAt) {
+  const status = document.getElementById('manual-status');
+  status.textContent = updatedAt
+    ? `Dernière mise à jour (ce navigateur) : ${new Date(updatedAt).toLocaleString('fr-FR')}`
+    : 'Aucune valeur enregistrée pour le moment.';
+}
+
+function collectManualValues() {
+  const values = {};
+  document.querySelectorAll('#manual-form input').forEach((input) => {
+    if (input.value === '') return;
+    values[input.dataset.fieldId] = input.dataset.fieldType === 'url' ? input.value : parseFloat(input.value);
+  });
+  return values;
+}
+
+function saveManualValues() {
+  const prev = loadManualValues();
+  const payload = { values: collectManualValues(), quality: prev.quality || {}, updatedAt: new Date().toISOString() };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  updateStatus(payload.updatedAt);
+  document.getElementById('ref-list').innerHTML = '';
+  renderReferentiel32();
+}
+
+renderManualForm();
+renderReferentiel32();
+document.getElementById('manual-save').addEventListener('click', saveManualValues);
+
+const jsonBox = document.getElementById('manual-json');
+document.getElementById('manual-json-toggle').addEventListener('click', () => {
+  const open = jsonBox.classList.toggle('open');
+  if (open) jsonBox.value = JSON.stringify(loadManualValues(), null, 2);
+});
+jsonBox.addEventListener('change', () => {
+  try {
+    const parsed = JSON.parse(jsonBox.value);
+    if (!parsed.values) throw new Error('format inattendu');
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+    document.getElementById('manual-form').innerHTML = '';
+    renderManualForm();
+  } catch (e) {
+    alert('JSON invalide, valeurs non importées.');
+  }
+});
+
+// ------------------------------------------------------------------
+// Boutons "Suggerer..." -- ouvrent widget-suggestions.html avec un
+// prompt deja documente (module, fichier, entites API confirmees ici)
+// pour que la demande d'evolution soit exploitable sans aller-retour.
+// ------------------------------------------------------------------
+const SUGGEST_MODULE = 'Assistant Qualiopi';
+function buildSuggestContext() {
+  return [
+    'Contexte technique (pré-rempli automatiquement) :',
+    '- Widget : Assistant Qualiopi (widget-qualiopi.html)',
+    '- Entités API MCDF déjà utilisées ici : sessionQualiopi, fullConventionQualiopi (via /wa/{entity}/list?nopaging=1)',
+    '- Onglets existants : Indicateurs, Référentiel (32 indicateurs), Détection API, Saisie manuelle',
+    '',
+  ].join('\n');
+}
+function openSuggest(kind) {
+  const context = buildSuggestContext();
+  let titre, desc;
+  if (kind === 'report') {
+    titre = 'Nouvel indicateur : ';
+    desc = context + [
+      'Décrivez le nouvel indicateur Qualiopi souhaité :',
+      '- Numéro/critère Qualiopi concerné (si connu) : ',
+      '- Donnée nécessaire pour le calculer : ',
+      '- Source envisagée (API MCDF, saisie manuelle, site web du client) : ',
+      '- Exemple concret attendu : ',
+    ].join('\n');
+  } else {
+    titre = 'Nouveau filtre : ';
+    desc = context + [
+      'Décrivez le nouveau filtre souhaité :',
+      '- Sur quel onglet/section doit-il s\'appliquer : ',
+      '- Valeurs ou critère du filtre : ',
+      '- Doit-il se cumuler avec les filtres existants ou les remplacer : ',
+    ].join('\n');
+  }
+  const url = `widget-suggestions.html?module=${encodeURIComponent(SUGGEST_MODULE)}&titre=${encodeURIComponent(titre)}&desc=${encodeURIComponent(desc)}`;
+  window.open(url, '_blank');
+}
+document.getElementById('suggest-report-btn').addEventListener('click', () => openSuggest('report'));
+document.getElementById('suggest-filter-btn').addEventListener('click', () => openSuggest('filter'));
+</script>
