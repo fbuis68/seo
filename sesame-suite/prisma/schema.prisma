@@ -1286,7 +1286,17 @@ model CrmProspect {
   subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
 
   nom                 String
-  type                String  @default("Client") // Prospect | Client — auto "Prospect" pour les arrivées onboarding/formulaire de contact
+  // Prospect | Client | Suspect — "Suspect" (ajouté le 04/09/2026) désigne un
+  // contact non qualifié (ex : badge scanné sur un salon), pour lequel
+  // l'adresse postale n'est pas exigée à la création (cf. validation dans
+  // crmProspect.ts) contrairement à Prospect/Client. Auto "Prospect" pour
+  // les arrivées onboarding/formulaire de contact.
+  type                String  @default("Client")
+  // D'où vient ce contact (ex : "FHT2026", "Site web", "Salon X") — libre,
+  // éditable par fiche. Distinct de `groupe`/`affiliations` (identité de
+  // l'établissement) : sert à tracer l'origine commerciale du contact,
+  // utile pour trier/filtrer un import ponctuel (ex : badges d'un salon).
+  origine             String?
   groupe              String?
   // Affiliations hôtelières — enseigne/marque commerciale (Accor, Hilton,
   // Best Western, The Originals...) et/ou collection/label auquel adhère
@@ -1452,6 +1462,20 @@ model CrmCashSettings {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Secteurs d'activité proposés sur la fiche Client/Prospect/Suspect
+// (public/crm.html, remplace la liste SECTEURS codée en dur jusqu'au
+// 04/09/2026) — éditable depuis le CRM (ajout/renommage/suppression) sans
+// toucher au code, ex : pour couvrir les secteurs rencontrés lors d'un
+// import externe (salon, etc.) absents de la liste d'origine. `order`
+// pilote l'ordre d'affichage dans le menu déroulant.
+model CrmSectorOption {
+  id    String @id @default(cuid())
+  label String @unique
+  order Int    @default(0)
+
+  createdAt DateTime @default(now())
 }
 
 // ─────────────────────────────────────────────────────────────────────────

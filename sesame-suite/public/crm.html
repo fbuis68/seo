@@ -431,6 +431,11 @@ svg.tr-chart{display:block;width:100%;height:auto;min-width:640px}
 .tr-tooltip{position:absolute;pointer-events:none;background:var(--tx);color:var(--card);font-size:11.5px;padding:8px 10px;border-radius:8px;box-shadow:0 8px 24px -8px rgba(0,0,0,.3);transform:translate(-50%,-100%);white-space:nowrap;opacity:0;transition:opacity .1s;z-index:5;line-height:1.5}
 .tr-tt-row{display:flex;justify-content:space-between;gap:14px}
 </style>
+<!-- Lecture de fichiers .xlsx/.csv côté navigateur (import "Suspects", cf.
+     openImportModal) — aucun parsing xlsx côté serveur (pas de dépendance
+     Node dédiée), le fichier ne quitte donc le poste de l'admin que sous
+     forme de lignes déjà structurées, envoyées à /wa/crmProspect/importBulk. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -489,6 +494,12 @@ svg.tr-chart{display:block;width:100%;height:auto;min-width:640px}
 </div>
 
 <div id="modal-ct"></div>
+<!-- Second conteneur de modale — pour un dialogue ouvert par-dessus la fiche
+     client (ex : "Gérer les secteurs" depuis la fiche) sans fermer celle-ci,
+     ou pour un dialogue autonome (ex : import de suspects) : #modal-ct sert
+     la fiche/les autres modales existantes, réutiliser le même conteneur
+     remplacerait leur contenu au lieu d'empiler. -->
+<div id="modal-ct-2"></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -664,8 +675,15 @@ document.addEventListener('DOMContentLoaded', function(){
 // DATA
 // ════════════════════════════════════════
 const DANGERS = ['Bon client','Modéré','Élevé !!'];
-const TYPES = ['Prospect','Client'];
-const SECTEURS = ['Hôtellerie','Location appartement','Appart Hotel','Location AirBnB','Bureaux','Sport','Garde meuble','Love hôtel','Location bureau','Agence gestion patrimoine'];
+// "Suspect" (04/09/2026) = contact non qualifié (ex : badge scanné sur un
+// salon) — adresse non exigée à la création côté serveur, cf. crmProspect.ts.
+const TYPES = ['Suspect','Prospect','Client'];
+// Chargée depuis CrmSectorOption (GET /wa/crmSector/list) au démarrage —
+// remplace la liste jusque-là codée en dur ici, pour être éditable depuis le
+// CRM (bouton "Gérer les secteurs" à côté du champ Secteur de la fiche) sans
+// toucher au code, ex : pour couvrir un secteur rencontré lors d'un import
+// externe absent de la liste d'origine.
+let SECTEURS = [];
 // Affiliations hôtelières — enseignes/marques (un établissement en porte le
 // plus souvent une seule) et collections/labels (cumulables avec une marque,
 // ex. Best Western + Relais & Châteaux) : liste plate à choix multiple,
@@ -677,6 +695,15 @@ const AFFILIATIONS_KNOWN = [
 // Secteurs pour lesquels les champs propres à l'hôtellerie (étoiles,
 // affiliations) n'ont pas de sens — masqués dans la fiche d'édition.
 const SECTEURS_NON_HOTEL = ['Garde meuble','Sport','Agence gestion patrimoine','Bureaux'];
+// "Suspect" = contact non qualifié (ex : badge de salon) — l'adresse n'est
+// pas exigée pour ce type, contrairement à Prospect/Client (cf. validation
+// miroir côté serveur dans crmProspect.ts).
+function toggleAdresseRequired(){
+  const isSuspect = document.getElementById('m-type').value==='Suspect';
+  const a=document.getElementById('m-adresse-req'), v=document.getElementById('m-ville-req');
+  if(a) a.textContent = isSuspect?'':'*';
+  if(v) v.textContent = isSuspect?'':'*';
+}
 function toggleHotelOnlyFields(){
   const show=!SECTEURS_NON_HOTEL.includes(document.getElementById('m-secteur').value);
   document.querySelectorAll('.hotel-only-field').forEach(el=>{el.style.display=show?'':'none'});
@@ -698,7 +725,7 @@ let clients=[], view='list', vmode='table', curId=null, sortC='nom', sortD=1;
 // tableau `clients` porte un état de sélection qui n'a rien à y faire.
 let SELECTED_IDS = new Set();
 let srch='', fDanger='', fSecteur='', fContrat='', fType='', editingId=null, toastT=null;
-let deals=[], COMMERCIALS=[], tickets=[], cashLines=[];
+let deals=[], COMMERCIALS=[], tickets=[], cashLines=[], SECTOR_OPTIONS=[];
 let cashSettings = {revenuMode:'detail',revenuMontant:0,revenuFrequence:'mensuel',revenuMois:null,depenseMode:'detail',depenseMontant:0,depenseFrequence:'mensuel',depenseMois:null};
 let cashYear = new Date().getFullYear();
 // Filtre d'affichage (vérification/modification) sur les listes de lignes
@@ -736,12 +763,18 @@ async function loadCashSettings(){
   if(!r.ok) throw new Error('http '+r.status);
   return await r.json();
 }
+async function loadSectors(){
+  var r = await apiFetch('/wa/crmSector/list');
+  if(!r.ok) throw new Error('http '+r.status);
+  return await r.json();
+}
 async function init(){
   try{
-    const [c, d, com, t, cl, cs] = await Promise.all([loadData(), loadDeals(), loadCommercials(), loadTickets(), loadCashLines(), loadCashSettings()]);
+    const [c, d, com, t, cl, cs, sec] = await Promise.all([loadData(), loadDeals(), loadCommercials(), loadTickets(), loadCashLines(), loadCashSettings(), loadSectors()]);
     clients = c; deals = d; COMMERCIALS = com; tickets = t; cashLines = cl; cashSettings = cs;
+    SECTOR_OPTIONS = sec; SECTEURS = sec.map(s=>s.label);
   }
-  catch(e){ flash('Erreur de chargement — rechargez la page'); clients = []; deals = []; COMMERCIALS = []; tickets = []; cashLines = []; }
+  catch(e){ flash('Erreur de chargement — rechargez la page'); clients = []; deals = []; COMMERCIALS = []; tickets = []; cashLines = []; SECTOR_OPTIONS = []; SECTEURS = []; }
   updateBadges();showList();
   loadVersionBadge();
 }
@@ -808,7 +841,7 @@ function renderPipelineKpis(){
 // ════════════════════════════════════════
 // LIST VIEW
 // ════════════════════════════════════════
-function showList(){view='list';editingId=null;setNav('n-list');bc([{label:'Clients'}]);tba(`<button class="btn btn-green" onclick="exportCSV()">↓ CSV</button><button class="btn btn-primary" onclick="openNewModal()">+ Nouveau client</button>`);renderList();}
+function showList(){view='list';editingId=null;setNav('n-list');bc([{label:'Clients'}]);tba(`<button class="btn btn-green" onclick="exportCSV()">↓ CSV</button><button class="btn btn-s" onclick="openImportModal()"><i class="ti ti-upload"></i> Importer des suspects</button><button class="btn btn-primary" onclick="openNewModal()">+ Nouveau client</button>`);renderList();}
 
 function filtered(){
   return clients.filter(c=>{
@@ -824,7 +857,7 @@ function filtered(){
 function dBadge(d){if(d==='Élevé !!')return'<span class="badge bd">⚠ Élevé</span>';if(d==='Bon client')return'<span class="badge bg">✓ Bon client</span>';if(d==='Modéré')return'<span class="badge bw">Modéré</span>';return'<span class="badge bn">—</span>';}
 function pBadge(p){const c=['bn','bi','bw','bg'];return p?`<span class="badge ${c[p]||'bn'}">${p}/3</span>`:'<span class="badge bn">—</span>';}
 function cPill(v){const m={oui:'bg',non:'bd','en cours':'bw'};return`<span class="tpill ${m[v]||'bn'}">${v||'—'}</span>`;}
-function typeBadge(t){return t==='Prospect'?'<span class="tpill bi">Prospect</span>':'<span class="tpill bg">Client</span>';}
+function typeBadge(t){return t==='Suspect'?'<span class="tpill bw">Suspect</span>':t==='Prospect'?'<span class="tpill bi">Prospect</span>':'<span class="tpill bg">Client</span>';}
 // Signal d'engagement entrant (POST /wa/crmProspect/inboundSignal) — nombre
 // d'emails reçus de ce contact, alimenté par le flux Power Automate sur les
 // boîtes partagées fbuis@/jtlod@sesame-technology.com. Masqué à 0 pour ne
@@ -1795,7 +1828,7 @@ function supportBadge(c){
 // MODAL EDIT CLIENT
 // ════════════════════════════════════════
 function openModal(id){const c=clients.find(c=>c.id===id);if(c)renderModal({...c});}
-function openNewModal(){renderModal({id:null,nom:'',type:'Client',groupe:'',secteur:'Hôtellerie',denominationSociale:'',siret:'',siren:'',formeJuridique:'',dateCreationEntreprise:null,effectifSalarie:'',adresse:'',ville:'',pays:'France',lat:null,lng:null,etoiles:'',danger:'Modéré',potentiel:2,contrat:'non',modules:0,moduleSesame:false,moduleTtlock:false,moduleOneway:false,nbAcces:0,mrr:null,pms:'',priorite:1,appel:'',referent:'',email:'',tel:'',site:'',nfc:0,qr:0,mobile:0,webApp:false,mobileV2:false,checkin:false,livret:false,gestionDemande:false,offline:false,messagerie:'Noreply',note:'',commercialId:'',journal:[],_new:true});}
+function openNewModal(){renderModal({id:null,nom:'',type:'Client',origine:'',groupe:'',secteur:'Hôtellerie',denominationSociale:'',siret:'',siren:'',formeJuridique:'',dateCreationEntreprise:null,effectifSalarie:'',adresse:'',ville:'',pays:'France',lat:null,lng:null,etoiles:'',danger:'Modéré',potentiel:2,contrat:'non',modules:0,moduleSesame:false,moduleTtlock:false,moduleOneway:false,nbAcces:0,mrr:null,pms:'',priorite:1,appel:'',referent:'',email:'',tel:'',site:'',nfc:0,qr:0,mobile:0,webApp:false,mobileV2:false,checkin:false,livret:false,gestionDemande:false,offline:false,messagerie:'Noreply',note:'',commercialId:'',journal:[],_new:true});}
 
 // Autocomplétion d'adresse via l'API Adresse (BAN — Base Adresse Nationale,
 // data.gouv.fr) : gratuite, sans clé, réponse CORS directement utilisable
@@ -1954,6 +1987,329 @@ function siretToSiren(){
   if(/^\d{14}$/.test(digits)) n.value = digits.slice(0,9);
 }
 function closeModal(){document.getElementById('modal-ct').innerHTML='';}
+function closeModal2(){document.getElementById('modal-ct-2').innerHTML='';}
+
+// ════════════════════════════════════════
+// GESTION DES SECTEURS (CrmSectorOption)
+// ════════════════════════════════════════
+function openSectorManager(){
+  document.getElementById('modal-ct-2').innerHTML=`
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal2()" style="z-index:400">
+    <div class="modal-box" style="max-width:420px">
+      <div class="modal-head">
+        <div style="font-size:16px;font-weight:600">Gérer les secteurs</div>
+        <button class="btn btn-ghost btn-icon" onclick="closeModal2()">✕</button>
+      </div>
+      <div id="sector-mgr-list" style="max-height:50vh;overflow-y:auto"></div>
+      <div style="display:flex;gap:6px;margin-top:10px;padding:0 20px 16px">
+        <input type="text" id="sector-mgr-new" placeholder="Nouveau secteur…" style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();sectorCreate();}">
+        <button type="button" class="btn btn-s" onclick="sectorCreate()"><i class="ti ti-plus"></i></button>
+      </div>
+    </div>
+  </div>`;
+  renderSectorManagerList();
+}
+function renderSectorManagerList(){
+  const el = document.getElementById('sector-mgr-list');
+  if(!el) return;
+  el.innerHTML = SECTOR_OPTIONS.map(s=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 20px">
+      <input type="text" value="${esc(s.label)}" style="flex:1" onchange="sectorRename('${s.id}',this.value)">
+      <button type="button" class="btn btn-ghost btn-icon" title="Supprimer" onclick="sectorDelete('${s.id}','${esc(s.label).replace(/'/g,"\\'")}')"><i class="ti ti-trash"></i></button>
+    </div>`).join('') || '<div class="log-empty" style="padding:12px 20px">Aucun secteur.</div>';
+}
+async function sectorCreate(){
+  const inp = document.getElementById('sector-mgr-new');
+  const label = inp.value.trim();
+  if(!label) return;
+  try{
+    const r = await apiFetch('/wa/crmSector/create', {method:'POST', body:JSON.stringify({label})});
+    if(!r.ok){ const e=await r.json().catch(()=>({})); flash(e.error||'Erreur de création'); return; }
+    const row = await r.json();
+    SECTOR_OPTIONS.push(row); SECTEURS = SECTOR_OPTIONS.map(s=>s.label);
+    inp.value='';
+    renderSectorManagerList();
+  }catch(e){ flash('Erreur de création'); }
+}
+async function sectorRename(id,label){
+  label = label.trim();
+  if(!label) return;
+  try{
+    const r = await apiFetch('/wa/crmSector/update', {method:'POST', body:JSON.stringify({id,label})});
+    if(!r.ok){ const e=await r.json().catch(()=>({})); flash(e.error||"Erreur d'enregistrement"); renderSectorManagerList(); return; }
+    const row = await r.json();
+    const s = SECTOR_OPTIONS.find(x=>x.id===id); if(s) s.label = row.label;
+    SECTEURS = SECTOR_OPTIONS.map(s=>s.label);
+  }catch(e){ flash("Erreur d'enregistrement"); }
+}
+async function sectorDelete(id,label){
+  if(!confirm('Supprimer le secteur "'+label+'" ? Les fiches qui le portent déjà ne sont pas modifiées.')) return;
+  try{
+    const r = await apiFetch('/wa/crmSector/delete', {method:'POST', body:JSON.stringify({id})});
+    if(!r.ok) throw new Error('http '+r.status);
+    SECTOR_OPTIONS = SECTOR_OPTIONS.filter(s=>s.id!==id); SECTEURS = SECTOR_OPTIONS.map(s=>s.label);
+    renderSectorManagerList();
+  }catch(e){ flash('Erreur de suppression'); }
+}
+
+// ════════════════════════════════════════
+// IMPORT EN MASSE — "Suspects" (ex : badges scannés sur un salon)
+// Parsing .xlsx/.csv 100% côté navigateur (SheetJS, cf. <head>) : le fichier
+// ne quitte le poste de l'admin que sous forme de lignes déjà mappées,
+// envoyées à /wa/crmProspect/importBulk (toujours type="Suspect").
+// ════════════════════════════════════════
+let IMP_FILE_ROWS = [], IMP_HEADERS = [], IMP_MAPPING = {}, IMP_ROWS = [], IMP_ORIGINE = '';
+
+// Alias reconnus par en-tête (insensible à la casse/accents) pour préremplir
+// automatiquement le mapping — l'admin peut toujours corriger avant l'aperçu.
+const IMP_FIELD_ALIASES = {
+  nom: ['société','societe','entreprise','company','nom entreprise','établissement'],
+  secteur: ["secteur d'activité",'secteur'],
+  ville: ['ville','city'],
+  adresse: ['adresse','adresse postale'],
+  pays: ['pays','country'],
+  prenom: ['prénom','prenom','firstname'],
+  nomContact: ['nom'],
+  email: ['email','e-mail','mail'],
+  tel: ['téléphone','telephone',"numéro de téléphone",'numero de telephone','tel'],
+};
+function impNorm(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim(); }
+
+function openImportModal(){
+  IMP_FILE_ROWS=[]; IMP_HEADERS=[]; IMP_MAPPING={}; IMP_ROWS=[]; IMP_ORIGINE='';
+  document.getElementById('modal-ct-2').innerHTML=`
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal2()" style="z-index:400">
+    <div class="modal-box" style="max-width:640px">
+      <div class="modal-head">
+        <div style="font-size:16px;font-weight:600">Importer des suspects</div>
+        <button class="btn btn-ghost btn-icon" onclick="closeModal2()">✕</button>
+      </div>
+      <div style="padding:0 20px 20px">
+        <div class="alt alt-b" style="margin-bottom:14px"><i class="ti ti-info-circle"></i>
+          <span>Fichier .xlsx ou .csv — une ligne par contact (ex : export de badges scannés sur un salon). Les fiches créées seront de type <b>Suspect</b> : l'adresse n'est pas obligatoire, contrairement à un Prospect/Client.</span>
+        </div>
+        <input type="file" id="imp-file" accept=".xlsx,.xls,.csv" onchange="impHandleFile(this)">
+      </div>
+    </div>
+  </div>`;
+}
+
+function impHandleFile(input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
+      if(!rows.length){ flash('Fichier vide ou illisible'); return; }
+      IMP_FILE_ROWS = rows;
+      IMP_HEADERS = Object.keys(rows[0]);
+      IMP_MAPPING = {};
+      Object.keys(IMP_FIELD_ALIASES).forEach(function(field){
+        const aliases = IMP_FIELD_ALIASES[field].map(impNorm);
+        const match = IMP_HEADERS.find(function(h){ return aliases.includes(impNorm(h)); });
+        if(match) IMP_MAPPING[field] = match;
+      });
+      const base = (file.name||'').replace(/\.[^.]+$/,'');
+      IMP_ORIGINE = base;
+      impRenderMapping();
+    }catch(err){ flash('Impossible de lire ce fichier'); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+const IMP_FIELD_LABELS = {
+  nom: 'Société / établissement *', secteur: 'Secteur', ville: 'Ville', adresse: 'Adresse',
+  pays: 'Pays', prenom: 'Prénom (contact)', nomContact: 'Nom (contact)', email: 'Email', tel: 'Téléphone',
+};
+function impRenderMapping(){
+  const opts = h => '<option value="">— Ignorer —</option>'+IMP_HEADERS.map(function(hh){ return '<option value="'+esc(hh)+'" '+(h===hh?'selected':'')+'>'+esc(hh)+'</option>'; }).join('');
+  document.getElementById('modal-ct-2').innerHTML=`
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal2()" style="z-index:400">
+    <div class="modal-box" style="max-width:640px">
+      <div class="modal-head">
+        <div style="font-size:16px;font-weight:600">Importer des suspects — colonnes</div>
+        <button class="btn btn-ghost btn-icon" onclick="closeModal2()">✕</button>
+      </div>
+      <div style="padding:0 20px 20px">
+        <div style="font-size:12px;color:var(--mu);margin-bottom:10px">${IMP_FILE_ROWS.length} ligne(s) détectée(s). Vérifiez la correspondance des colonnes ci-dessous (préremplie automatiquement quand possible).</div>
+        <div class="form-grid">
+          ${Object.keys(IMP_FIELD_LABELS).map(function(f){
+            return '<div class="ff"><label>'+IMP_FIELD_LABELS[f]+'</label><select id="imp-map-'+f+'">'+opts(IMP_MAPPING[f]||'')+'</select></div>';
+          }).join('')}
+          <div class="ff"><label>Origine</label><input id="imp-origine" value="${esc(IMP_ORIGINE)}" placeholder="ex. FHT2026"></div>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer">
+          <input type="checkbox" id="imp-lookup" checked style="accent-color:var(--am)">
+          <span style="font-size:13px">Rechercher l'adresse manquante via l'annuaire public des entreprises (data.gouv.fr) — best effort, ne remplace pas une vérification manuelle</span>
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="impBuildPreview()">Aperçu →</button>
+        <button class="btn btn-ghost" onclick="closeModal2()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function impBuildPreview(){
+  const g = id => (document.getElementById(id)||{value:''}).value;
+  const mapping = {};
+  Object.keys(IMP_FIELD_LABELS).forEach(function(f){ mapping[f] = g('imp-map-'+f); });
+  IMP_MAPPING = mapping;
+  IMP_ORIGINE = g('imp-origine').trim();
+  const doLookup = document.getElementById('imp-lookup').checked;
+  const mappedHeaders = new Set(Object.values(mapping).filter(Boolean));
+  const extraHeaders = IMP_HEADERS.filter(function(h){ return !mappedHeaders.has(h); });
+
+  IMP_ROWS = IMP_FILE_ROWS.map(function(raw){
+    const nom = mapping.nom ? String(raw[mapping.nom]||'').trim() : '';
+    const prenom = mapping.prenom ? String(raw[mapping.prenom]||'').trim() : '';
+    const nomContact = mapping.nomContact ? String(raw[mapping.nomContact]||'').trim() : '';
+    const noteLines = extraHeaders.map(function(h){
+      const v = String(raw[h]==null?'':raw[h]).trim();
+      return v ? (h+' : '+v) : '';
+    }).filter(Boolean);
+    return {
+      nom: nom,
+      secteur: mapping.secteur ? String(raw[mapping.secteur]||'').trim() : '',
+      ville: mapping.ville ? String(raw[mapping.ville]||'').trim() : '',
+      adresse: mapping.adresse ? String(raw[mapping.adresse]||'').trim() : '',
+      pays: mapping.pays ? String(raw[mapping.pays]||'').trim() : '',
+      referent: [prenom,nomContact].filter(Boolean).join(' '),
+      email: mapping.email ? String(raw[mapping.email]||'').trim() : '',
+      tel: mapping.tel ? String(raw[mapping.tel]||'').trim() : '',
+      note: noteLines.join('\n'),
+      _addr: 'pending',
+    };
+  }).filter(function(r){ return r.nom; });
+
+  renderImportPreview(doLookup);
+  if(doLookup) impLookupAddresses();
+}
+
+function impStatusBadge(r){
+  if(r.adresse && r.ville) return '<span class="tpill bg">'+(r._addr==='found'?'trouvée':'ok')+'</span>';
+  if(r._addr==='searching') return '<span class="tpill bi">recherche…</span>';
+  if(r._addr==='none') return '<span class="tpill bn">non trouvée</span>';
+  return '<span class="tpill bn">—</span>';
+}
+function renderImportPreview(doLookup){
+  const rows = IMP_ROWS;
+  document.getElementById('modal-ct-2').innerHTML=`
+  <div class="modal-bg" style="z-index:400">
+    <div class="modal-box" style="max-width:760px">
+      <div class="modal-head">
+        <div style="font-size:16px;font-weight:600">Importer des suspects — aperçu</div>
+        <button class="btn btn-ghost btn-icon" onclick="closeModal2()">✕</button>
+      </div>
+      <div style="padding:0 20px 20px">
+        <div id="imp-progress" style="font-size:12px;color:var(--mu);margin-bottom:8px">${rows.length} contact(s) prêt(s) à importer — origine : <b>${esc(IMP_ORIGINE)||'—'}</b>.</div>
+        <div style="max-height:44vh;overflow-y:auto;border:1px solid var(--bdr);border-radius:8px">
+          <table style="width:100%;font-size:12px;border-collapse:collapse">
+            <thead><tr style="text-align:left;background:var(--bg)">
+              <th style="padding:6px 8px">Société</th><th style="padding:6px 8px">Contact</th><th style="padding:6px 8px">Ville</th><th style="padding:6px 8px">Adresse</th>
+            </tr></thead>
+            <tbody id="imp-preview-body">
+              ${rows.map(function(r){
+                return '<tr><td style="padding:6px 8px">'+esc(r.nom)+'</td><td style="padding:6px 8px">'+esc(r.referent)+'</td><td style="padding:6px 8px">'+esc(r.ville)+'</td><td style="padding:6px 8px">'+esc(r.adresse)+' '+impStatusBadge(r)+'</td></tr>';
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="imp-submit-btn" onclick="impSubmit()">Importer ${rows.length} suspect(s)</button>
+        <button class="btn btn-ghost" onclick="closeModal2()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+function impRefreshPreviewRow(i){
+  const body = document.getElementById('imp-preview-body');
+  if(!body) return;
+  const r = IMP_ROWS[i];
+  const tr = body.children[i];
+  if(tr) tr.innerHTML = '<td style="padding:6px 8px">'+esc(r.nom)+'</td><td style="padding:6px 8px">'+esc(r.referent)+'</td><td style="padding:6px 8px">'+esc(r.ville)+'</td><td style="padding:6px 8px">'+esc(r.adresse)+' '+impStatusBadge(r)+'</td>';
+}
+/**
+ * Recherche best-effort l'adresse du siège via l'annuaire public des
+ * entreprises (recherche-entreprises.api.gouv.fr, même API que la fiche
+ * client, cf. entrepriseAutocomplete) — uniquement pour les lignes sans
+ * adresse. N'accepte le résultat que si la ville trouvée correspond à celle
+ * du fichier (quand elle est renseignée) : une société très commune (ex.
+ * "Le Relais") peut exister sous ce nom dans plusieurs villes, mieux vaut ne
+ * rien remplir que remplir une mauvaise adresse. Séquentiel avec une pause
+ * entre chaque appel — API publique gratuite sans clé, pas de raison de la
+ * marteler avec 50+ requêtes simultanées.
+ */
+async function impLookupAddresses(){
+  const btn = document.getElementById('imp-submit-btn');
+  if(btn) btn.disabled = true;
+  for(let i=0;i<IMP_ROWS.length;i++){
+    const r = IMP_ROWS[i];
+    if(r.adresse && r.ville){ r._addr='ok'; impRefreshPreviewRow(i); continue; }
+    if(!r.nom){ continue; }
+    r._addr='searching'; impRefreshPreviewRow(i);
+    const prog = document.getElementById('imp-progress');
+    if(prog) prog.textContent = 'Recherche des adresses… '+(i+1)+'/'+IMP_ROWS.length;
+    try{
+      const resp = await fetch('https://recherche-entreprises.api.gouv.fr/search?q='+encodeURIComponent(r.nom)+'&limit=3');
+      if(resp.ok){
+        const data = await resp.json();
+        const results = data.results||[];
+        const villeNorm = impNorm(r.ville);
+        const match = results.find(function(e){
+          const siege=e.siege||{}; const commune=impNorm(siege.libelle_commune||'');
+          return !villeNorm || commune===villeNorm;
+        });
+        if(match){
+          const siege = match.siege||{};
+          const street = [siege.numero_voie, siege.type_voie, siege.libelle_voie].filter(Boolean).join(' ');
+          if(street) r.adresse = street;
+          if(siege.libelle_commune) r.ville = siege.ville || r.ville || siege.libelle_commune;
+          if(siege.libelle_commune && !r.ville) r.ville = siege.libelle_commune;
+          if(!r.pays) r.pays = 'France';
+          r._addr = street ? 'found' : 'none';
+        } else {
+          r._addr = 'none';
+        }
+      } else {
+        r._addr = 'none';
+      }
+    }catch(e){ r._addr = 'none'; }
+    impRefreshPreviewRow(i);
+    await new Promise(function(res){ setTimeout(res, 250); });
+  }
+  const prog = document.getElementById('imp-progress');
+  if(prog) prog.textContent = IMP_ROWS.length+' contact(s) prêt(s) à importer — origine : '+(IMP_ORIGINE||'—')+'.';
+  if(btn) btn.disabled = false;
+}
+async function impSubmit(){
+  const btn = document.getElementById('imp-submit-btn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Import en cours…'; }
+  const rows = IMP_ROWS.map(function(r){
+    return {
+      nom: r.nom, origine: IMP_ORIGINE || undefined, secteur: r.secteur || undefined,
+      adresse: r.adresse || undefined, ville: r.ville || undefined, pays: r.pays || undefined,
+      referent: r.referent || undefined, email: r.email || undefined, tel: r.tel || undefined, note: r.note || undefined,
+    };
+  });
+  try{
+    const resp = await apiFetch('/wa/crmProspect/importBulk', {method:'POST', body:JSON.stringify({rows})});
+    if(!resp.ok) throw new Error('http '+resp.status);
+    const result = await resp.json();
+    flash(result.created+' suspect(s) importé(s)'+(result.errors.length?(' — '+result.errors.length+' erreur(s)'):''));
+    closeModal2();
+    clients = await loadData();
+    renderList();
+  }catch(e){
+    flash("Erreur pendant l'import");
+    if(btn){ btn.disabled = false; btn.textContent = 'Importer '+IMP_ROWS.length+' suspect(s)'; }
+  }
+}
 
 /** Ajoute une nouvelle option cochée à la liste à choix multiple "Affiliations"
  * sans reconstruire tout le modal — l'option devient ensuite disponible pour
@@ -1988,9 +2344,13 @@ function renderModal(mc){
 
       <div class="modal-section">Identité &amp; contact</div>
       <div class="form-grid">
-        <div class="ff"><label>Type</label><select id="m-type">${TYPES.map(t=>`<option value="${t}" ${mc.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
+        <div class="ff"><label>Type</label><select id="m-type" onchange="toggleAdresseRequired()">${TYPES.map(t=>`<option value="${t}" ${mc.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
         <div class="ff"><label>Groupe</label><input id="m-groupe" value="${esc(mc.groupe)}" placeholder="—"></div>
-        <div class="ff"><label>Secteur</label><select id="m-secteur" onchange="toggleHotelOnlyFields()">${sectAll.map(s=>`<option value="${s}" ${mc.secteur===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div class="ff">
+          <label>Secteur <a href="#" onclick="event.preventDefault();openSectorManager()" style="font-weight:400;font-size:11px;margin-left:4px">Gérer…</a></label>
+          <select id="m-secteur" onchange="toggleHotelOnlyFields()">${sectAll.map(s=>`<option value="${s}" ${mc.secteur===s?'selected':''}>${s}</option>`).join('')}</select>
+        </div>
+        <div class="ff"><label>Origine</label><input id="m-origine" value="${esc(mc.origine)}" placeholder="ex. FHT2026, Site web…"></div>
         <div class="ff hotel-only-field" style="grid-column:1/-1;${SECTEURS_NON_HOTEL.includes(mc.secteur)?'display:none':''}">
           <label>Affiliations (enseigne et/ou label — cumulables)</label>
           <div id="m-affiliations-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px">
@@ -2004,11 +2364,11 @@ function renderModal(mc){
           </div>
         </div>
         <div class="ff" style="position:relative">
-          <label>Adresse *</label>
+          <label>Adresse <span id="m-adresse-req">${mc.type==='Suspect'?'':'*'}</span></label>
           <input id="m-adresse" value="${esc(mc.adresse)}" placeholder="Numéro et voie" autocomplete="off" oninput="adresseAutocomplete();clearMLatLng()">
           <div id="m-adresse-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:var(--card,#fff);border:1px solid var(--bdr,#e2dfd9);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.1);max-height:180px;overflow-y:auto"></div>
         </div>
-        <div class="ff"><label>Ville *</label><input id="m-ville" value="${esc(mc.ville)}" placeholder="—" oninput="clearMLatLng()"></div>
+        <div class="ff"><label>Ville <span id="m-ville-req">${mc.type==='Suspect'?'':'*'}</span></label><input id="m-ville" value="${esc(mc.ville)}" placeholder="—" oninput="clearMLatLng()"></div>
         <div class="ff">
           <label>Pays</label>
           <input id="m-pays" value="${esc(mc.pays||'France')}" placeholder="France" list="m-pays-options" oninput="clearMLatLng()">
@@ -2110,13 +2470,14 @@ async function saveModal(id,isNew){
   // Adresse/ville requises seulement à la création — sur une fiche déjà
   // existante, les bloquer empêcherait de modifier un tout autre champ (ex :
   // type de module) tant qu'une adresse absente depuis l'import n'est pas
-  // renseignée, un blocage silencieux repéré le 24/08/2026.
-  if(isNew){
+  // renseignée, un blocage silencieux repéré le 24/08/2026. "Suspect" (contact
+  // non qualifié, ex : badge de salon) en est dispensé même à la création.
+  if(isNew && g('m-type').value!=='Suspect'){
     if(!g('m-adresse').value.trim()){ flash('Adresse requise'); return; }
     if(!g('m-ville').value.trim()){ flash('Ville requise'); return; }
   }
   const ch={
-    nom:g('m-nom').value.trim(),type:g('m-type').value,groupe:g('m-groupe').value,
+    nom:g('m-nom').value.trim(),type:g('m-type').value,origine:g('m-origine').value.trim(),groupe:g('m-groupe').value,
     affiliations:[...document.querySelectorAll('.m-aff-cb:checked')].map(cb=>cb.value),
     secteur:g('m-secteur').value,
     denominationSociale:g('m-denomination').value.trim(),siret:g('m-siret').value.trim(),siren:g('m-siren').value.trim(),

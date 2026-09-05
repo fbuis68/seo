@@ -50,6 +50,7 @@ function shapeProspect(p: {
   subscriptionId: string | null;
   nom: string;
   type: string;
+  origine: string | null;
   groupe: string | null;
   affiliations: string[];
   secteur: string | null;
@@ -126,6 +127,7 @@ function shapeProspect(p: {
     subscriptionId: p.subscriptionId,
     nom: p.nom,
     type: p.type,
+    origine: p.origine || "",
     groupe: p.groupe || "",
     affiliations: p.affiliations || [],
     secteur: p.secteur || "",
@@ -207,6 +209,7 @@ crmProspectRouter.get(
 interface ProspectBody {
   nom: string;
   type?: string;
+  origine?: string;
   groupe?: string;
   affiliations?: string[];
   secteur?: string;
@@ -269,12 +272,18 @@ crmProspectRouter.post(
   asyncHandler(async (req, res) => {
     const b = req.body as ProspectBody;
     if (!b.nom || !b.nom.trim()) throw new HttpError(400, "Nom requis");
-    if (!b.adresse || !b.adresse.trim()) throw new HttpError(400, "Adresse requise");
-    if (!b.ville || !b.ville.trim()) throw new HttpError(400, "Ville requise");
+    // "Suspect" = contact non qualifié (ex : badge de salon) — l'adresse
+    // postale n'est pas toujours connue à ce stade, contrairement à un
+    // Prospect/Client qu'on a déjà qualifié.
+    if (b.type !== "Suspect") {
+      if (!b.adresse || !b.adresse.trim()) throw new HttpError(400, "Adresse requise");
+      if (!b.ville || !b.ville.trim()) throw new HttpError(400, "Ville requise");
+    }
     const row = await prisma.crmProspect.create({
       data: {
         nom: b.nom.trim(),
         type: b.type || "Client",
+        origine: b.origine,
         groupe: b.groupe,
         affiliations: normalizeAffiliations(b.affiliations),
         secteur: b.secteur,
@@ -284,8 +293,8 @@ crmProspectRouter.post(
         formeJuridique: b.formeJuridique,
         dateCreationEntreprise: b.dateCreationEntreprise ? new Date(b.dateCreationEntreprise) : undefined,
         effectifSalarie: b.effectifSalarie,
-        adresse: b.adresse.trim(),
-        ville: b.ville.trim(),
+        adresse: b.adresse?.trim(),
+        ville: b.ville?.trim(),
         pays: b.pays || undefined,
         lat: b.lat ?? undefined,
         lng: b.lng ?? undefined,
@@ -342,6 +351,72 @@ crmProspectRouter.post(
   })
 );
 
+interface ImportRow {
+  nom: string;
+  origine?: string;
+  secteur?: string;
+  adresse?: string;
+  ville?: string;
+  pays?: string;
+  lat?: number | null;
+  lng?: number | null;
+  referent?: string;
+  email?: string;
+  tel?: string;
+  note?: string;
+}
+
+/**
+ * POST /wa/crmProspect/importBulk — import en masse (ex : badges scannés sur
+ * un salon, cf. public/crm.html panneau "Importer des suspects"). Toujours
+ * type="Suspect" (adresse/ville jamais exigées, cf. /crmProspect/create) —
+ * ne déclenche PAS crm.prospect_created (contrairement à une création
+ * unitaire) : un envoi automatique déclenché par une automatisation sur 50+
+ * contacts non qualifiés d'un coup serait une mauvaise surprise, la relance
+ * doit rester une action volontaire une fois les fiches triées.
+ */
+crmProspectRouter.post(
+  "/crmProspect/importBulk",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const rows = (req.body.rows as ImportRow[]) || [];
+    if (!Array.isArray(rows) || !rows.length) throw new HttpError(400, "Aucune ligne à importer");
+    let created = 0;
+    const errors: { index: number; reason: string }[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      if (!r.nom || !r.nom.trim()) {
+        errors.push({ index: i, reason: "nom manquant" });
+        continue;
+      }
+      try {
+        await prisma.crmProspect.create({
+          data: {
+            nom: r.nom.trim(),
+            type: "Suspect",
+            origine: r.origine || undefined,
+            secteur: r.secteur || undefined,
+            adresse: r.adresse || undefined,
+            ville: r.ville || undefined,
+            pays: r.pays || undefined,
+            lat: r.lat ?? undefined,
+            lng: r.lng ?? undefined,
+            referent: r.referent || undefined,
+            email: r.email || undefined,
+            tel: r.tel || undefined,
+            note: r.note || undefined,
+          },
+        });
+        created++;
+      } catch (e) {
+        errors.push({ index: i, reason: e instanceof Error ? e.message : "erreur inconnue" });
+      }
+    }
+    res.status(201).json({ created, errors });
+  })
+);
+
 crmProspectRouter.post(
   "/crmProspect/update",
   requireAdmin,
@@ -365,6 +440,7 @@ crmProspectRouter.post(
       data: {
         nom: b.nom?.trim(),
         type: b.type,
+        origine: b.origine,
         groupe: b.groupe,
         affiliations: b.affiliations === undefined ? undefined : normalizeAffiliations(b.affiliations),
         secteur: b.secteur,
