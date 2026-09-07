@@ -8,7 +8,12 @@ import type { WalletConfig, Booking } from "@prisma/client";
 // téléphone — cf. routes/wallet.ts et le bouton "Générer le pass Wallet"
 // du panneau admin Réservations.
 
-const ELDOWALLET_API_BASE = process.env.ELDOWALLET_API_BASE_OVERRIDE || "https://api-v2.eldowallet.fr";
+// EldoWallet fournit un environnement "beta" séparé (identifiants hôtel/
+// token distincts de la production) — cf. WalletConfig.apiBase, réglable
+// dans le panneau admin ("Compte EldoWallet"). ELDOWALLET_API_BASE_OVERRIDE
+// reste disponible pour les tests locaux (mock serveur), mais l'URL choisie
+// par établissement (config.apiBase) prime dès qu'elle est renseignée.
+const ELDOWALLET_API_BASE_DEFAULT = process.env.ELDOWALLET_API_BASE_OVERRIDE || "https://api-v2.eldowallet.fr";
 const ELDOWALLET_TIMEOUT_MS = 15000;
 
 export class WalletError extends Error {}
@@ -39,14 +44,15 @@ async function parseJsonResponse(res: Response, context: string): Promise<any> {
 }
 
 async function eldoWalletRequest(
-  config: { hotelId: string | null; apiToken: string | null; lang: string },
+  config: { hotelId: string | null; apiToken: string | null; lang: string; apiBase?: string | null },
   method: "GET" | "POST",
   path: string,
   body?: Record<string, unknown>
 ): Promise<any> {
   if (!config.apiToken) throw new WalletError("Token EldoWallet non configuré");
   if (!config.hotelId) throw new WalletError("Identifiant hôtel EldoWallet non configuré");
-  const url = `${ELDOWALLET_API_BASE}${path}`;
+  const base = config.apiBase || ELDOWALLET_API_BASE_DEFAULT;
+  const url = `${base}${path}`;
   let res: Response;
   try {
     res = await fetchWithTimeout(url, {

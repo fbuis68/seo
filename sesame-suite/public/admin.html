@@ -3517,15 +3517,27 @@ Accès au salon Premium</textarea>
         <div style="font-size:11px;color:var(--mu);margin-top:4px" id="wal-apiToken-hint">Fourni par EldoWallet pour votre compte.</div>
       </div>
     </div>
-    <div class="fi">
-      <label class="lb">Langue des passes générés</label>
-      <select id="wal-lang" style="max-width:200px">
-        <option value="fr">Français</option>
-        <option value="en">English</option>
-        <option value="es">Español</option>
-        <option value="de">Deutsch</option>
-        <option value="it">Italiano</option>
-      </select>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Langue des passes générés</label>
+        <select id="wal-lang" style="max-width:200px">
+          <option value="fr">Français</option>
+          <option value="en">English</option>
+          <option value="es">Español</option>
+          <option value="de">Deutsch</option>
+          <option value="it">Italiano</option>
+        </select>
+      </div>
+      <div class="fi">
+        <label class="lb">Environnement EldoWallet</label>
+        <select id="wal-env" onchange="document.getElementById('wal-apiBase-other').style.display=this.value==='__other__'?'':'none'">
+          <option value="">Production (api-v2.eldowallet.fr)</option>
+          <option value="https://api-v2.beta.eldowallet.fr">Beta / test (api-v2.beta.eldowallet.fr)</option>
+          <option value="__other__">URL personnalisée…</option>
+        </select>
+        <input type="text" id="wal-apiBase-other" placeholder="https://…" autocomplete="off" style="margin-top:6px;display:none">
+        <div style="font-size:11px;color:var(--mu);margin-top:4px">EldoWallet fournit un compte "beta" distinct de la production, avec ses propres identifiant hôtel et token — vérifiez que les deux correspondent au même environnement.</div>
+      </div>
     </div>
     <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
       <button class="btn btn-p" onclick="walSave()"><i class="ti ti-device-floppy"></i> Enregistrer</button>
@@ -6989,14 +7001,23 @@ async function walInit(){
   document.getElementById('wal-lang').value = WAL_CONFIG.lang || 'fr';
   document.getElementById('wal-apiToken').value = '';
   document.getElementById('wal-apiToken').placeholder = WAL_CONFIG.apiTokenSet ? ('Déjà enregistré (…'+esc(WAL_CONFIG.apiTokenLast4)+') — laisser vide pour ne pas le changer') : 'Jeton fourni par EldoWallet';
+  var apiBase = WAL_CONFIG.apiBase || '';
+  var envSel = document.getElementById('wal-env');
+  var isKnown = !apiBase || apiBase==='https://api-v2.beta.eldowallet.fr';
+  envSel.value = isKnown ? apiBase : '__other__';
+  document.getElementById('wal-apiBase-other').style.display = isKnown ? 'none' : '';
+  document.getElementById('wal-apiBase-other').value = isKnown ? '' : apiBase;
   walRenderStatusBanner();
 }
 
 async function walSave(){
+  var envVal = document.getElementById('wal-env').value;
+  var apiBase = envVal==='__other__' ? document.getElementById('wal-apiBase-other').value.trim() : envVal;
   var body = {
     enabled: document.getElementById('wal-enabled').checked,
     hotelId: document.getElementById('wal-hotelId').value.trim(),
     lang: document.getElementById('wal-lang').value,
+    apiBase: apiBase,
   };
   var apiToken = document.getElementById('wal-apiToken').value.trim();
   if(apiToken) body.apiToken = apiToken;

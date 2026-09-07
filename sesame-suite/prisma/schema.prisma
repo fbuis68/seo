@@ -763,6 +763,13 @@ model WalletConfig {
   hotelId  String?
   apiToken String?
   lang     String  @default("fr") // header x-lang envoyé à l'API EldoWallet
+  // URL de base de l'API EldoWallet — EldoWallet fournit un environnement
+  // "beta" séparé (api-v2.beta.eldowallet.fr) avec ses propres identifiants
+  // hôtel/token, distinct de la production (api-v2.eldowallet.fr) : un token
+  // beta appelé sur l'URL de prod (ou l'inverse) échoue en "Non autorisé"
+  // sans que rien ne l'indique — confirmé le 05/09/2026. Vide = production
+  // (comportement par défaut inchangé, cf. lib/eldoWallet.ts).
+  apiBase  String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -8,7 +8,7 @@ import type { Booking, WalletConfig } from "@prisma/client";
 
 export const walletRouter = Router();
 
-function shapeConfig(c: { enabled: boolean; hotelId: string | null; apiToken: string | null; lang: string }) {
+function shapeConfig(c: { enabled: boolean; hotelId: string | null; apiToken: string | null; lang: string; apiBase: string | null }) {
   return {
     enabled: c.enabled,
     hotelId: c.hotelId || "",
@@ -17,6 +17,7 @@ function shapeConfig(c: { enabled: boolean; hotelId: string | null; apiToken: st
     apiTokenSet: !!c.apiToken,
     apiTokenLast4: c.apiToken ? c.apiToken.slice(-4) : "",
     lang: c.lang,
+    apiBase: c.apiBase || "",
   };
 }
 
@@ -65,6 +66,7 @@ interface ConfigBody {
   hotelId?: string;
   apiToken?: string;
   lang?: string;
+  apiBase?: string;
 }
 
 /** POST /wa/wallet/config/update — un apiToken vide conserve la valeur déjà enregistrée. */
@@ -79,6 +81,7 @@ walletRouter.post(
       hotelId: b.hotelId,
       ...(b.apiToken ? { apiToken: b.apiToken } : {}),
       lang: b.lang || "fr",
+      apiBase: b.apiBase || null,
     };
     const config = await prisma.walletConfig.upsert({
       where: { entityId: entity.id },
