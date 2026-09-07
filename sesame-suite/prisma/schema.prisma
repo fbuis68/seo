@@ -750,10 +750,13 @@ model PaymentConfig {
 // Connecteur EldoWallet (module "Wallet" — pass de séjour Apple Wallet /
 // Google Wallet généré par réservation) — un compte EldoWallet par
 // établissement, cf. lib/eldoWallet.ts et routes/wallet.ts. hotelId =
-// identifiant d'hôtel attribué par EldoWallet (ex: "yeucontinent"), utilisé
-// dans le chemin POST /hotels/{hotelId}/passes ; apiToken = jeton porteur
-// (Bearer) fourni par EldoWallet, jamais renvoyé au client une fois
-// enregistré (même principe que PaymentConfig.secretKey).
+// identifiant TECHNIQUE interne EldoWallet (format ObjectId 24 caractères,
+// ex: "6a9e714b2eeb65c95b74f71a" — PAS le nom de l'hôtel, confirmé le
+// 07/09/2026 via leur documentation Swagger), utilisé dans le chemin
+// POST /hotels/{hotelId}/passes ; apiToken = jeton porteur (Bearer +
+// x-access-token, les deux envoyés avec la même valeur) fourni par
+// EldoWallet, jamais renvoyé au client une fois enregistré (même principe
+// que PaymentConfig.secretKey).
 model WalletConfig {
   id       String @id @default(cuid())
   entityId String @unique

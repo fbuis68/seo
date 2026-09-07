@@ -59,6 +59,11 @@ async function eldoWalletRequest(
       method,
       headers: {
         Authorization: `Bearer ${config.apiToken}`,
+        // EldoWallet exige aussi ce second en-tête, distinct du Bearer
+        // standard (confirmé le 07/09/2026 via leur documentation Swagger,
+        // dont l'exemple "Try it out" envoie systématiquement les deux avec
+        // la même valeur de token).
+        "x-access-token": config.apiToken,
         "Content-Type": "application/json",
         Accept: "application/json",
         ...(config.lang ? { "x-lang": config.lang } : {}),
