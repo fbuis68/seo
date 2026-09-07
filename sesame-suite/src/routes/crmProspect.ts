@@ -106,11 +106,13 @@ function shapeProspect(p: {
   inboundReplyCount: number;
   lastInboundReplyAt: Date | null;
   commercialId: string | null;
+  qualificationSentAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   entity?: { code: string; config: { lang: string; currency: string; timezone: string } | null } | null;
   commercial?: { id: string; name: string | null; email: string } | null;
   activities?: Parameters<typeof shapeActivity>[0][];
+  qualificationResponses?: { moduleKey: string; interested: string; note: string | null }[];
 }) {
   return {
     id: p.id,
@@ -184,6 +186,8 @@ function shapeProspect(p: {
     lastInboundReplyAt: p.lastInboundReplyAt,
     commercialId: p.commercialId,
     commercialName: p.commercial ? p.commercial.name || p.commercial.email : "",
+    qualificationSentAt: p.qualificationSentAt,
+    qualificationResponses: (p.qualificationResponses || []).map((r) => ({ moduleKey: r.moduleKey, interested: r.interested, note: r.note || "" })),
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
     journal: (p.activities || []).map(shapeActivity),
@@ -194,6 +198,7 @@ const PROSPECT_INCLUDE = {
   entity: { select: { code: true, config: { select: { lang: true, currency: true, timezone: true } } } },
   activities: { orderBy: { createdAt: "asc" as const } },
   commercial: { select: { id: true, name: true, email: true } },
+  qualificationResponses: true,
 };
 
 crmProspectRouter.get(

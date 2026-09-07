@@ -1413,6 +1413,16 @@ model CrmProspect {
 
   deals CrmDeal[]
 
+  // Questionnaire de qualification (intérêt pour chaque module du catalogue
+  // Souscriptions) — lien public à durée illimitée, même principe que
+  // CrmQuote.signToken/CrmTicket.publicToken (cf. routes/crmQualification.ts).
+  // qualificationToken est généré à la première demande d'envoi puis réutilisé
+  // (un contact relancé garde le même lien, ses réponses précédentes restent
+  // visibles/modifiables) ; qualificationSentAt trace le dernier envoi.
+  qualificationToken     String?                     @unique
+  qualificationSentAt    DateTime?
+  qualificationResponses CrmQualificationResponse[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1643,6 +1653,29 @@ model CrmActivity {
   done         Boolean   @default(false)
 
   createdAt DateTime @default(now())
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Questionnaire de qualification (07/09/2026) — une ligne par module du
+// catalogue Souscriptions (cf. QUALIFICATION_MODULES dans
+// lib/qualificationModules.ts, source unique partagée par le lien public et
+// l'admin CRM) sur lequel le contact a répondu, via le lien public
+// CrmProspect.qualificationToken. @@unique permet de renvoyer le même
+// contact plusieurs fois sur son lien sans dupliquer ses réponses (upsert).
+// ─────────────────────────────────────────────────────────────────────────
+model CrmQualificationResponse {
+  id            String      @id @default(cuid())
+  prospectId    String
+  prospect      CrmProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  moduleKey     String
+  interested    String // oui | non | peut-etre
+  note          String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([prospectId, moduleKey])
+  @@index([prospectId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────

@@ -730,7 +730,7 @@ let clients=[], view='list', vmode='table', curId=null, sortC='nom', sortD=1;
 // tableau `clients` porte un état de sélection qui n'a rien à y faire.
 let SELECTED_IDS = new Set();
 let srch='', fDanger='', fSecteur='', fOrigine='', fContrat='', fType='', editingId=null, toastT=null;
-let deals=[], COMMERCIALS=[], tickets=[], cashLines=[], SECTOR_OPTIONS=[], ORIGINE_OPTIONS=[];
+let deals=[], COMMERCIALS=[], tickets=[], cashLines=[], SECTOR_OPTIONS=[], ORIGINE_OPTIONS=[], QUALIFICATION_MODULES_CATALOG=[];
 let cashSettings = {revenuMode:'detail',revenuMontant:0,revenuFrequence:'mensuel',revenuMois:null,depenseMode:'detail',depenseMontant:0,depenseFrequence:'mensuel',depenseMois:null};
 let cashYear = new Date().getFullYear();
 // Filtre d'affichage (vérification/modification) sur les listes de lignes
@@ -778,14 +778,20 @@ async function loadOrigines(){
   if(!r.ok) throw new Error('http '+r.status);
   return await r.json();
 }
+async function loadQualificationModules(){
+  var r = await apiFetch('/wa/crmQualification/modules');
+  if(!r.ok) throw new Error('http '+r.status);
+  return await r.json();
+}
 async function init(){
   try{
-    const [c, d, com, t, cl, cs, sec, orig] = await Promise.all([loadData(), loadDeals(), loadCommercials(), loadTickets(), loadCashLines(), loadCashSettings(), loadSectors(), loadOrigines()]);
+    const [c, d, com, t, cl, cs, sec, orig, qm] = await Promise.all([loadData(), loadDeals(), loadCommercials(), loadTickets(), loadCashLines(), loadCashSettings(), loadSectors(), loadOrigines(), loadQualificationModules()]);
     clients = c; deals = d; COMMERCIALS = com; tickets = t; cashLines = cl; cashSettings = cs;
     SECTOR_OPTIONS = sec; SECTEURS = sec.map(s=>s.label);
     ORIGINE_OPTIONS = orig; ORIGINES = orig.map(o=>o.label);
+    QUALIFICATION_MODULES_CATALOG = qm;
   }
-  catch(e){ flash('Erreur de chargement — rechargez la page'); clients = []; deals = []; COMMERCIALS = []; tickets = []; cashLines = []; SECTOR_OPTIONS = []; SECTEURS = []; ORIGINE_OPTIONS = []; ORIGINES = []; }
+  catch(e){ flash('Erreur de chargement — rechargez la page'); clients = []; deals = []; COMMERCIALS = []; tickets = []; cashLines = []; SECTOR_OPTIONS = []; SECTEURS = []; ORIGINE_OPTIONS = []; ORIGINES = []; QUALIFICATION_MODULES_CATALOG = []; }
   updateBadges();showList();
   loadVersionBadge();
 }
@@ -1179,6 +1185,7 @@ function renderList(){
   const selBar = SELECTED_IDS.size ? `<div class="list-toolbar" style="margin-top:-6px;margin-bottom:10px;padding:8px 12px;background:var(--pl,#fdedf0);border-radius:8px">
     <span style="font-size:13px;font-weight:600">${SELECTED_IDS.size} sélectionné${SELECTED_IDS.size>1?'s':''}</span>
     <button class="btn btn-primary btn-sm" onclick="openBulkEmailModal()">✉ Envoyer un email groupé</button>
+    <button class="btn btn-primary btn-sm" onclick="openQualificationSendModal()">📋 Envoyer le questionnaire de qualification</button>
     <button class="btn btn-ghost btn-sm" onclick="crmClearSelection()">Désélectionner</button>
   </div>` : '';
 
@@ -1332,6 +1339,100 @@ async function sendBulkEmail(){
   crmClearSelection();
   flash(fail ? `${ok} email(s) envoyé(s), ${fail} échec(s)` : `${ok} email(s) envoyé(s)`);
 }
+
+// ── Questionnaire de qualification (intérêt par module Souscriptions) ──
+// Chaque destinataire reçoit un lien personnel (token, cf.
+// CrmProspect.qualificationToken) vers public/qualification.html, dont les
+// réponses reviennent automatiquement sur sa fiche (CrmQualificationResponse).
+// Réutilise l'infrastructure existante (modèle email + /wa/message/send +
+// journal d'activité) au lieu d'un pipeline d'envoi dédié — cf. sendBulkEmail
+// ci-dessus, dont ce flux est la variante "lien personnalisé par contact".
+const QUALIFICATION_DEFAULT_TEMPLATE = {
+  key: 'qualification',
+  name: 'Questionnaire de qualification',
+  subject: 'Un dernier point rapide, {{nom}}',
+  bodyHtml: '<p>Bonjour,</p><p>Pour ne vous proposer que les fonctionnalités Sesame qui vous seront réellement utiles, pourriez-vous prendre trois minutes pour répondre à ce court questionnaire ?</p><p><a href="{{lienQuestionnaire}}">Répondre au questionnaire</a></p><p>Merci !</p>',
+};
+
+async function openQualificationSendModal(){
+  const total = SELECTED_IDS.size;
+  if(!total){ flash('Aucune fiche sélectionnée'); return; }
+  const withEmail = crmSelectedWithEmail();
+  const skipped = total - withEmail.length;
+  document.getElementById('modal-ct').innerHTML=`
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:480px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Envoyer le questionnaire de qualification</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div style="font-size:13px;color:var(--mu,#888);margin-bottom:10px">
+        ${withEmail.length} destinataire${withEmail.length>1?'s':''} avec email valide sur ${total} fiche${total>1?'s':''} sélectionnée${total>1?'s':''}${skipped?` — <b style="color:#854f0b">${skipped} ignorée${skipped>1?'s':''} (pas d'email)</b>`:''}.
+      </div>
+      <div style="font-size:12px;color:var(--mu,#888);margin-bottom:10px">Chaque destinataire reçoit un lien personnel vers un court questionnaire (intérêt pour chaque module Sesame) — les réponses reviennent automatiquement sur sa fiche. Le texte de l'email envoyé est modifiable ensuite depuis "Canaux" → modèle <code>qualification</code>.</div>
+      <div id="qual-send-progress" style="display:none;font-size:13px;color:var(--mu,#888);margin-top:10px">Envoi en cours…</div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="qual-send-btn" onclick="sendQualificationBulk()" ${withEmail.length?'':'disabled'}>Envoyer à ${withEmail.length}</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function ensureQualificationTemplate(){
+  await ensureTemplatesLoaded();
+  let tpl = MSG_TEMPLATES.find(t=>t.channel==='email' && t.key==='qualification');
+  if(tpl) return tpl;
+  const r = await apiFetch('/wa/messageTemplate/upsert', {method:'POST', body:JSON.stringify({
+    channel:'email', key:QUALIFICATION_DEFAULT_TEMPLATE.key, name:QUALIFICATION_DEFAULT_TEMPLATE.name,
+    subject:QUALIFICATION_DEFAULT_TEMPLATE.subject, bodyHtml:QUALIFICATION_DEFAULT_TEMPLATE.bodyHtml
+  })});
+  tpl = await r.json();
+  if(r.ok) MSG_TEMPLATES.push(tpl);
+  return tpl;
+}
+
+async function sendQualificationBulk(){
+  const recipients = crmSelectedWithEmail();
+  if(!recipients.length) return;
+  const btn=document.getElementById('qual-send-btn'); if(btn){ btn.disabled=true; btn.textContent='Envoi…'; }
+  const progress=document.getElementById('qual-send-progress'); if(progress) progress.style.display='block';
+
+  try{
+    await ensureQualificationTemplate();
+    const pr = await apiFetch('/wa/crmQualification/prepareLinks', {method:'POST', body:JSON.stringify({ids: recipients.map(c=>c.id)})});
+    const prData = await pr.json();
+    if(!pr.ok){ flash(prData.error||'Erreur lors de la préparation des liens'); if(btn){btn.disabled=false;btn.textContent='Réessayer';} return; }
+    const links = prData.links||{};
+
+    const results = await Promise.allSettled(recipients.map(async c=>{
+      const lien = links[c.id];
+      if(!lien) throw new Error('lien manquant');
+      const r = await apiFetch('/wa/message/send', {method:'POST', body:JSON.stringify({
+        scope:'crm', channel:'email', templateKey:'qualification', to:c.email,
+        variables:{nom:c.nom, secteur:c.secteur||'', referent:c.referent||'', ville:c.ville||'', lienQuestionnaire:lien}
+      })});
+      const data = await r.json();
+      if(!r.ok) throw new Error(data.error||'http '+r.status);
+      const ar = await apiFetch('/wa/crmProspect/activity/create', {method:'POST', body:JSON.stringify({
+        prospectId:c.id, type:'Email', text:'Questionnaire de qualification envoyé : "'+(data.subject||'')+'"', authorName:'CRM'
+      })});
+      if(ar.ok){ const entry=await ar.json(); if(!c.journal)c.journal=[]; c.journal.push(entry); }
+      return c.id;
+    }));
+
+    const okIds = results.filter(r=>r.status==='fulfilled').map(r=>r.value);
+    if(okIds.length) await apiFetch('/wa/crmQualification/markSent', {method:'POST', body:JSON.stringify({ids: okIds})});
+    okIds.forEach(id=>{ const c=clients.find(c=>c.id===id); if(c) c.qualificationSentAt=new Date().toISOString(); });
+
+    const ok = okIds.length;
+    const fail = results.length - ok;
+    closeModal();
+    crmClearSelection();
+    flash(fail ? `${ok} questionnaire(s) envoyé(s), ${fail} échec(s)` : `${ok} questionnaire(s) envoyé(s)`);
+  }catch(e){
+    flash('Erreur : '+(e.message||e));
+    if(btn){ btn.disabled=false; btn.textContent='Réessayer'; }
+  }
+}
+
 function ef(id,f,v){const c=clients.find(c=>c.id===id);if(!c)return;c[f]=v;if(f==='ville'){c.lat=null;c.lng=null;}}
 async function saveRow(id){
   const c=clients.find(c=>c.id===id);if(!c)return;
@@ -1600,6 +1701,31 @@ function renderFiche(c){
     </div>
     <div id="act-form-slot"></div>
     <div id="journal-items">${journalHtml}</div>
+  </div>
+
+  ${qualificationCardHtml(c)}`;
+}
+
+/** Carte "Questionnaire de qualification" de la fiche (renderFiche ci-dessus) — masquée tant qu'aucun envoi n'a eu lieu. */
+function qualificationCardHtml(c){
+  if(!c.qualificationSentAt && !(c.qualificationResponses||[]).length) return '';
+  const byKey = {}; (c.qualificationResponses||[]).forEach(r=>{ byKey[r.moduleKey]=r; });
+  const interestLabel = {oui:'Oui', 'peut-etre':'Peut-être', non:'Non'};
+  const interestClass = {oui:'t-green', 'peut-etre':'t-purple', non:'t-red'};
+  const rowsHtml = QUALIFICATION_MODULES_CATALOG.map(m=>{
+    const r = byKey[m.key];
+    if(!r) return `<div class="gc-row"><span class="gc-rl">${m.label}</span><span class="gc-rv" style="color:#aaa">— pas de réponse —</span></div>`;
+    return `<div class="gc-row"><span class="gc-rl">${m.label}</span><span class="gc-rv"><span class="tag ${interestClass[r.interested]||''}" style="font-size:11px">${interestLabel[r.interested]||r.interested}</span>${r.note?` <span style="color:#aaa;font-size:11px">— ${esc(r.note)}</span>`:''}</span></div>`;
+  }).join('');
+  const sentStr = c.qualificationSentAt ? new Date(c.qualificationSentAt).toLocaleDateString('fr-FR') : '';
+  return `
+  <div class="card" id="qualification-card">
+    <div class="card-head">
+      <div class="ch-ico">📋</div>
+      <span class="ch-title">Questionnaire de qualification</span>
+      <span style="font-size:12px;color:#aaa;margin-left:8px">${sentStr?'Envoyé le '+sentStr:'Non envoyé'}</span>
+    </div>
+    ${rowsHtml || '<div class="log-empty">Envoyé, en attente de réponse.</div>'}
   </div>`;
 }
 
@@ -4830,6 +4956,7 @@ const TRIGGERS_CRM = [
   {key:'crm.newsletter', label:'Newsletter récurrente', timingModes:['recurring']},
   {key:'crm.ticket_created', label:'Nouveau ticket support', timingModes:['immediate']},
   {key:'crm.ticket_client_replied', label:'Client a répondu à un ticket', timingModes:['immediate']},
+  {key:'crm.qualification_submitted', label:'Questionnaire de qualification rempli', timingModes:['immediate']},
 ];
 let AUTO_RULES=[];
 
