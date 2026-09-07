@@ -64,9 +64,12 @@ async function eldoWalletRequest(
   }
   const json = await parseJsonResponse(res, "La réponse d'EldoWallet");
   if (!res.ok) {
-    // Format d'erreur EldoWallet observé : { message, errorCode, path, date }
+    // Format d'erreur EldoWallet observé : { message, errorCode, path, date }.
+    // errorCode ajouté au message affiché (04/09/2026) : un "Non autorisé !"
+    // seul ne dit pas si c'est le token, l'identifiant hôtel, ou autre chose
+    // — le code renvoyé par EldoWallet aide à distinguer sans deviner.
     const message = json?.message || `Erreur HTTP ${res.status}`;
-    throw new WalletError(message);
+    throw new WalletError(json?.errorCode ? `${message} (code : ${json.errorCode})` : message);
   }
   return json;
 }
