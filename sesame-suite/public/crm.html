@@ -2263,22 +2263,20 @@ function renderImportPreview(doLookup){
   const rows = IMP_ROWS;
   document.getElementById('modal-ct-2').innerHTML=`
   <div class="modal-bg" style="z-index:400">
-    <div class="modal-box" style="max-width:760px">
+    <div class="modal-box" style="max-width:960px">
       <div class="modal-head">
         <div style="font-size:16px;font-weight:600">Importer des suspects — aperçu</div>
         <button class="btn btn-ghost btn-icon" onclick="closeModal2()">✕</button>
       </div>
       <div style="padding:0 20px 20px">
         <div id="imp-progress" style="font-size:12px;color:var(--mu);margin-bottom:8px">${rows.length} contact(s) prêt(s) à importer — origine : <b>${esc(IMP_ORIGINE)||'—'}</b>${IMP_SECTEUR_DEFAULT?' — secteur : <b>'+esc(IMP_SECTEUR_DEFAULT)+'</b> (pour tous)':''}.</div>
-        <div style="max-height:44vh;overflow-y:auto;border:1px solid var(--bdr);border-radius:8px">
+        <div style="max-height:44vh;overflow:auto;border:1px solid var(--bdr);border-radius:8px">
           <table style="width:100%;font-size:12px;border-collapse:collapse">
             <thead><tr style="text-align:left;background:var(--bg)">
-              <th style="padding:6px 8px">Société</th><th style="padding:6px 8px">Contact</th><th style="padding:6px 8px">Secteur</th><th style="padding:6px 8px">Ville</th><th style="padding:6px 8px">Adresse</th>
+              <th style="padding:6px 8px">Société</th><th style="padding:6px 8px">Contact</th><th style="padding:6px 8px">Email</th><th style="padding:6px 8px">Téléphone</th><th style="padding:6px 8px">Secteur</th><th style="padding:6px 8px">Ville</th><th style="padding:6px 8px">Pays</th><th style="padding:6px 8px">Adresse</th><th style="padding:6px 8px">Autres infos</th>
             </tr></thead>
             <tbody id="imp-preview-body">
-              ${rows.map(function(r){
-                return '<tr><td style="padding:6px 8px">'+esc(r.nom)+'</td><td style="padding:6px 8px">'+esc(r.referent)+'</td><td style="padding:6px 8px">'+esc(r.secteur)+'</td><td style="padding:6px 8px">'+esc(r.ville)+'</td><td style="padding:6px 8px">'+esc(r.adresse)+' '+impStatusBadge(r)+'</td></tr>';
-              }).join('')}
+              ${rows.map(function(r){ return impPreviewRowHtml(r); }).join('')}
             </tbody>
           </table>
         </div>
@@ -2290,12 +2288,25 @@ function renderImportPreview(doLookup){
     </div>
   </div>`;
 }
+function impPreviewRowHtml(r){
+  return '<tr>'
+    + '<td style="padding:6px 8px">'+esc(r.nom)+'</td>'
+    + '<td style="padding:6px 8px">'+esc(r.referent)+'</td>'
+    + '<td style="padding:6px 8px">'+esc(r.email)+'</td>'
+    + '<td style="padding:6px 8px">'+esc(r.tel)+'</td>'
+    + '<td style="padding:6px 8px">'+esc(r.secteur)+'</td>'
+    + '<td style="padding:6px 8px">'+esc(r.ville)+'</td>'
+    + '<td style="padding:6px 8px">'+esc(r.pays)+'</td>'
+    + '<td style="padding:6px 8px">'+esc(r.adresse)+' '+impStatusBadge(r)+'</td>'
+    + '<td style="padding:6px 8px;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(r.note)+'">'+esc(r.note.replace(/\n/g,' · '))+'</td>'
+    + '</tr>';
+}
 function impRefreshPreviewRow(i){
   const body = document.getElementById('imp-preview-body');
   if(!body) return;
   const r = IMP_ROWS[i];
   const tr = body.children[i];
-  if(tr) tr.innerHTML = '<td style="padding:6px 8px">'+esc(r.nom)+'</td><td style="padding:6px 8px">'+esc(r.referent)+'</td><td style="padding:6px 8px">'+esc(r.secteur)+'</td><td style="padding:6px 8px">'+esc(r.ville)+'</td><td style="padding:6px 8px">'+esc(r.adresse)+' '+impStatusBadge(r)+'</td>';
+  if(tr) tr.outerHTML = impPreviewRowHtml(r);
 }
 /**
  * Recherche best-effort l'adresse du siège via l'annuaire public des
