@@ -2104,7 +2104,7 @@ async function lmDelete(kind,id,label){
 // ne quitte le poste de l'admin que sous forme de lignes déjà mappées,
 // envoyées à /wa/crmProspect/importBulk (toujours type="Suspect").
 // ════════════════════════════════════════
-let IMP_FILE_ROWS = [], IMP_HEADERS = [], IMP_MAPPING = {}, IMP_ROWS = [], IMP_ORIGINE = '';
+let IMP_FILE_ROWS = [], IMP_HEADERS = [], IMP_MAPPING = {}, IMP_ROWS = [], IMP_ORIGINE = '', IMP_SECTEUR_DEFAULT = '';
 
 // Alias reconnus par en-tête (insensible à la casse/accents) pour préremplir
 // automatiquement le mapping — l'admin peut toujours corriger avant l'aperçu.
@@ -2122,7 +2122,7 @@ const IMP_FIELD_ALIASES = {
 function impNorm(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim(); }
 
 function openImportModal(){
-  IMP_FILE_ROWS=[]; IMP_HEADERS=[]; IMP_MAPPING={}; IMP_ROWS=[]; IMP_ORIGINE='';
+  IMP_FILE_ROWS=[]; IMP_HEADERS=[]; IMP_MAPPING={}; IMP_ROWS=[]; IMP_ORIGINE=''; IMP_SECTEUR_DEFAULT='';
   document.getElementById('modal-ct-2').innerHTML=`
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal2()" style="z-index:400">
     <div class="modal-box" style="max-width:640px">
@@ -2186,11 +2186,19 @@ function impRenderMapping(){
             return '<div class="ff"><label>'+IMP_FIELD_LABELS[f]+'</label><select id="imp-map-'+f+'">'+opts(IMP_MAPPING[f]||'')+'</select></div>';
           }).join('')}
           <div class="ff">
-            <label>Origine <a href="#" onclick="event.preventDefault();openListManager('origine')" style="font-weight:400;font-size:11px;margin-left:4px">Gérer…</a></label>
+            <label>Origine (s'applique à tous les contacts importés) <a href="#" onclick="event.preventDefault();openListManager('origine')" style="font-weight:400;font-size:11px;margin-left:4px">Gérer…</a></label>
             <input id="imp-origine" value="${esc(IMP_ORIGINE)}" placeholder="ex. FHT2026" list="imp-origine-options">
             <datalist id="imp-origine-options">${ORIGINES.map(function(o){ return '<option value="'+esc(o)+'">'; }).join('')}</datalist>
           </div>
+          <div class="ff">
+            <label>Secteur par défaut (optionnel) <a href="#" onclick="event.preventDefault();openListManager('secteur')" style="font-weight:400;font-size:11px;margin-left:4px">Gérer…</a></label>
+            <select id="imp-secteur-default">
+              <option value="">— Utiliser la colonne mappée ci-dessus —</option>
+              ${SECTEURS.map(function(s){ return '<option value="'+esc(s)+'" '+(IMP_SECTEUR_DEFAULT===s?'selected':'')+'>'+esc(s)+'</option>'; }).join('')}
+            </select>
+          </div>
         </div>
+        <div style="font-size:11px;color:var(--mu);margin-top:-4px">Un secteur par défaut s'applique à <b>tous</b> les contacts importés, quelle que soit la colonne "Secteur" mappée ci-dessus.</div>
         <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer">
           <input type="checkbox" id="imp-lookup" checked style="accent-color:var(--am)">
           <span style="font-size:13px">Rechercher l'adresse manquante via l'annuaire public des entreprises (data.gouv.fr) — best effort, ne remplace pas une vérification manuelle</span>
@@ -2210,6 +2218,7 @@ function impBuildPreview(){
   Object.keys(IMP_FIELD_LABELS).forEach(function(f){ mapping[f] = g('imp-map-'+f); });
   IMP_MAPPING = mapping;
   IMP_ORIGINE = g('imp-origine').trim();
+  IMP_SECTEUR_DEFAULT = g('imp-secteur-default');
   const doLookup = document.getElementById('imp-lookup').checked;
   const mappedHeaders = new Set(Object.values(mapping).filter(Boolean));
   const extraHeaders = IMP_HEADERS.filter(function(h){ return !mappedHeaders.has(h); });
@@ -2224,7 +2233,11 @@ function impBuildPreview(){
     }).filter(Boolean);
     return {
       nom: nom,
-      secteur: mapping.secteur ? String(raw[mapping.secteur]||'').trim() : '',
+      // Un secteur par défaut (choisi une fois pour tout le lot) prime sur la
+      // colonne mappée ci-dessus — sert à forcer un secteur uniforme (ex :
+      // "Hôtellerie") sur un import dont la colonne "Secteur d'activité"
+      // contient des valeurs trop variées ou hors-sujet pour ce lot.
+      secteur: IMP_SECTEUR_DEFAULT || (mapping.secteur ? String(raw[mapping.secteur]||'').trim() : ''),
       ville: mapping.ville ? String(raw[mapping.ville]||'').trim() : '',
       adresse: mapping.adresse ? String(raw[mapping.adresse]||'').trim() : '',
       pays: mapping.pays ? String(raw[mapping.pays]||'').trim() : '',
@@ -2256,15 +2269,15 @@ function renderImportPreview(doLookup){
         <button class="btn btn-ghost btn-icon" onclick="closeModal2()">✕</button>
       </div>
       <div style="padding:0 20px 20px">
-        <div id="imp-progress" style="font-size:12px;color:var(--mu);margin-bottom:8px">${rows.length} contact(s) prêt(s) à importer — origine : <b>${esc(IMP_ORIGINE)||'—'}</b>.</div>
+        <div id="imp-progress" style="font-size:12px;color:var(--mu);margin-bottom:8px">${rows.length} contact(s) prêt(s) à importer — origine : <b>${esc(IMP_ORIGINE)||'—'}</b>${IMP_SECTEUR_DEFAULT?' — secteur : <b>'+esc(IMP_SECTEUR_DEFAULT)+'</b> (pour tous)':''}.</div>
         <div style="max-height:44vh;overflow-y:auto;border:1px solid var(--bdr);border-radius:8px">
           <table style="width:100%;font-size:12px;border-collapse:collapse">
             <thead><tr style="text-align:left;background:var(--bg)">
-              <th style="padding:6px 8px">Société</th><th style="padding:6px 8px">Contact</th><th style="padding:6px 8px">Ville</th><th style="padding:6px 8px">Adresse</th>
+              <th style="padding:6px 8px">Société</th><th style="padding:6px 8px">Contact</th><th style="padding:6px 8px">Secteur</th><th style="padding:6px 8px">Ville</th><th style="padding:6px 8px">Adresse</th>
             </tr></thead>
             <tbody id="imp-preview-body">
               ${rows.map(function(r){
-                return '<tr><td style="padding:6px 8px">'+esc(r.nom)+'</td><td style="padding:6px 8px">'+esc(r.referent)+'</td><td style="padding:6px 8px">'+esc(r.ville)+'</td><td style="padding:6px 8px">'+esc(r.adresse)+' '+impStatusBadge(r)+'</td></tr>';
+                return '<tr><td style="padding:6px 8px">'+esc(r.nom)+'</td><td style="padding:6px 8px">'+esc(r.referent)+'</td><td style="padding:6px 8px">'+esc(r.secteur)+'</td><td style="padding:6px 8px">'+esc(r.ville)+'</td><td style="padding:6px 8px">'+esc(r.adresse)+' '+impStatusBadge(r)+'</td></tr>';
               }).join('')}
             </tbody>
           </table>
@@ -2282,7 +2295,7 @@ function impRefreshPreviewRow(i){
   if(!body) return;
   const r = IMP_ROWS[i];
   const tr = body.children[i];
-  if(tr) tr.innerHTML = '<td style="padding:6px 8px">'+esc(r.nom)+'</td><td style="padding:6px 8px">'+esc(r.referent)+'</td><td style="padding:6px 8px">'+esc(r.ville)+'</td><td style="padding:6px 8px">'+esc(r.adresse)+' '+impStatusBadge(r)+'</td>';
+  if(tr) tr.innerHTML = '<td style="padding:6px 8px">'+esc(r.nom)+'</td><td style="padding:6px 8px">'+esc(r.referent)+'</td><td style="padding:6px 8px">'+esc(r.secteur)+'</td><td style="padding:6px 8px">'+esc(r.ville)+'</td><td style="padding:6px 8px">'+esc(r.adresse)+' '+impStatusBadge(r)+'</td>';
 }
 /**
  * Recherche best-effort l'adresse du siège via l'annuaire public des
