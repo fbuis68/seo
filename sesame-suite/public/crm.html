@@ -1381,7 +1381,7 @@ async function ensureQualificationTemplate(){
   let tpl = MSG_TEMPLATES.find(t=>t.channel==='email' && t.key==='qualification');
   if(tpl) return tpl;
   const r = await apiFetch('/wa/messageTemplate/upsert', {method:'POST', body:JSON.stringify({
-    channel:'email', key:QUALIFICATION_DEFAULT_TEMPLATE.key, name:QUALIFICATION_DEFAULT_TEMPLATE.name,
+    scope:'crm', channel:'email', key:QUALIFICATION_DEFAULT_TEMPLATE.key, name:QUALIFICATION_DEFAULT_TEMPLATE.name,
     subject:QUALIFICATION_DEFAULT_TEMPLATE.subject, bodyHtml:QUALIFICATION_DEFAULT_TEMPLATE.bodyHtml
   })});
   tpl = await r.json();
