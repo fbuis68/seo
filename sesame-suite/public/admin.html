@@ -1651,7 +1651,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         <div class="g2">
           <div class="fi">
             <label class="lb">Type d'accès</label>
-            <select id="rm-type">
+            <select id="rm-type" onchange="rmToggleCasierFields()">
               <option value="">Non spécifié</option>
               <option value="single">Single</option>
               <option value="double">Double</option>
@@ -1664,7 +1664,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
               <option value="casier">Casier</option>
             </select>
           </div>
-          <div class="fi">
+          <div class="fi room-only-field">
             <label class="lb">Capacité max (personnes)</label>
             <input type="number" id="rm-capacity" min="1" max="10" value="2">
           </div>
@@ -1677,7 +1677,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         <!-- Surface & tarif -->
         <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin:14px 0 10px;padding-top:12px;border-top:1px solid var(--bdr)">Tarification</div>
         <div class="g2">
-          <div class="fi">
+          <div class="fi room-only-field">
             <label class="lb">Surface (m²)</label>
             <input type="number" id="rm-surface" min="1" max="500" placeholder="25">
           </div>
@@ -1716,15 +1716,15 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
             <input type="checkbox" id="rm-avail" checked style="accent-color:var(--am)">
             <span style="font-size:13px">Visible et sélectionnable par le client</span>
           </label>
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <label class="room-only-field" style="display:flex;align-items:center;gap:10px;cursor:pointer">
             <input type="checkbox" id="rm-pmr" style="accent-color:var(--am)">
             <span style="font-size:13px">Chambre PMR (accessibilité renforcée)</span>
           </label>
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <label class="room-only-field" style="display:flex;align-items:center;gap:10px;cursor:pointer">
             <input type="checkbox" id="rm-nosmoking" checked style="accent-color:var(--am)">
             <span style="font-size:13px">Non-fumeur</span>
           </label>
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <label class="room-only-field" style="display:flex;align-items:center;gap:10px;cursor:pointer">
             <input type="checkbox" id="rm-connected" style="accent-color:var(--am)">
             <span style="font-size:13px">Chambre communicante disponible</span>
           </label>
@@ -5100,6 +5100,14 @@ function renderRoomList(){
 }
 
 // ── Ouvrir le modal création ──
+// Masque les champs propres à une chambre (capacité, surface, PMR,
+// non-fumeur, communicante) quand le type d'accès est "casier" — un casier
+// n'a ni occupants ni ces caractéristiques, les afficher n'aurait aucun sens.
+function rmToggleCasierFields(){
+  var isCasier = document.getElementById('rm-type').value === 'casier';
+  document.querySelectorAll('.room-only-field').forEach(function(el){ el.style.display = isCasier ? 'none' : ''; });
+}
+
 function rmOpenCreate(){
   RM_EDITING = null;
   RM_PHOTOS  = [];
@@ -5125,6 +5133,7 @@ function rmOpenCreate(){
   rmRenderTags();
   rmRenderPhotos();
   rmRenderPresetTags();
+  rmToggleCasierFields();
   document.getElementById('rmModal').style.display='flex';
   setTimeout(function(){ document.getElementById('rm-code').focus(); }, 100);
 }
@@ -5157,6 +5166,7 @@ function rmOpenEdit(code){
   rmRenderTags();
   rmRenderPhotos();
   rmRenderPresetTags();
+  rmToggleCasierFields();
   document.getElementById('rmModal').style.display='flex';
 }
 
@@ -5196,21 +5206,28 @@ async function rmSaveRoom(){
   if(!RM_EDITING && CFG.rooms.find(function(r){return r.code===code;})){
     toast('Code "'+code+'" déjà utilisé'); return;
   }
+  var type = document.getElementById('rm-type').value||'';
+  var isCasier = type==='casier';
+  // Un casier n'a ni occupants ni ces caractéristiques de chambre — les
+  // champs sont masqués dans le formulaire (cf. rmToggleCasierFields) mais
+  // gardent leur valeur en mémoire tant qu'ils ne sont pas vidés ici :
+  // sans ça, un casier hériterait silencieusement des valeurs par défaut
+  // (2 pers., etc.) et les afficherait quand même sur sa carte.
   var room = {
     code:        code,
     floor:       parseInt(document.getElementById('rm-floor').value)||0,
     name:        document.getElementById('rm-name').value.trim()||code,
-    type:        document.getElementById('rm-type').value||'',
-    capacity:    parseInt(document.getElementById('rm-capacity').value)||2,
-    surface:     parseFloat(document.getElementById('rm-surface').value)||0,
+    type:        type,
+    capacity:    isCasier ? null : (parseInt(document.getElementById('rm-capacity').value)||2),
+    surface:     isCasier ? null : (parseFloat(document.getElementById('rm-surface').value)||0),
     rate:        parseFloat(document.getElementById('rm-rate').value)||0,
     description: document.getElementById('rm-desc').value.trim(),
     tags:        JSON.parse(JSON.stringify(RM_TAGS)),
     photos:      JSON.parse(JSON.stringify(RM_PHOTOS)),
     available:   document.getElementById('rm-avail').checked,
-    pmr:         document.getElementById('rm-pmr').checked,
-    nosmoking:   document.getElementById('rm-nosmoking').checked,
-    connected:   document.getElementById('rm-connected').checked,
+    pmr:         isCasier ? false : document.getElementById('rm-pmr').checked,
+    nosmoking:   isCasier ? false : document.getElementById('rm-nosmoking').checked,
+    connected:   isCasier ? false : document.getElementById('rm-connected').checked,
     housekeepingExempt: document.getElementById('rm-housekeepingExempt').checked,
     isNfcEncoder: document.getElementById('rm-isNfcEncoder').checked,
     deviceId:    document.getElementById('rm-deviceId').value.trim(),
