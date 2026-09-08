@@ -170,6 +170,31 @@ facilityRouter.post(
   })
 );
 
+/**
+ * POST /wa/facility/bulkResetPositions — body: { floor } — remet à zéro la
+ * position (x/y) de TOUS les accès d'un étage, en un clic. Sert après le
+ * remplacement de l'image du plan d'un étage (Plan de l'hôtel → "Changer") :
+ * les anciennes coordonnées ne correspondent plus au nouveau visuel, sans
+ * ça il faudrait décocher chaque chambre une par une. Les accès repassent
+ * dans la liste "chambre à positionner" pour être replacés sur le nouveau
+ * plan ; rien d'autre n'est modifié (nom, photos, disponibilité…).
+ */
+facilityRouter.post(
+  "/facility/bulkResetPositions",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const floor = req.body.floor;
+    if (floor === undefined || floor === null) throw new HttpError(400, "floor requis");
+
+    const { count } = await prisma.room.updateMany({
+      where: { entityId: entity.id, floor: Number(floor) },
+      data: { x: null, y: null },
+    });
+    res.json({ ok: true, count });
+  })
+);
+
 /** POST /wa/facility/delete — body: { code } */
 facilityRouter.post(
   "/facility/delete",
