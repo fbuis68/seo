@@ -4917,7 +4917,12 @@ document.addEventListener('DOMContentLoaded',function(){
 });
 /** Chambres déjà créées (Gestion des Accès) mais pas encore positionnées sur un plan. */
 function prfUnpositionedRooms(){
-  return CFG.rooms.filter(function(r){ return r.x==null || r.y==null; });
+  // Les casiers (type="casier") n'ont pas vocation à apparaître sur le plan
+  // de l'hôtel — importés en masse depuis Mon Casier Frais, ils n'ont donc
+  // jamais de position (x/y) et noieraient sinon la liste des vraies
+  // chambres encore à placer (cf. retour utilisateur : la liste ne montrait
+  // plus que des casiers une fois toutes les chambres déjà positionnées).
+  return CFG.rooms.filter(function(r){ return (r.x==null || r.y==null) && r.type!=='casier'; });
 }
 function openNewRoom(x,y,floor){
   prfPhotos=[];
