@@ -474,6 +474,7 @@ svg.tr-chart{display:block;width:100%;height:auto;min-width:640px}
     <div class="nav-item" id="n-canaux" onclick="showCanauxPanel()"><div class="nav-ico">✉</div> Canaux</div>
     <div class="nav-item" id="n-auto" onclick="showAutomationPanel()"><div class="nav-ico">◈</div> Automatisations</div>
     <div class="nav-item" id="n-questionnaires" onclick="showQuestionnaires()"><div class="nav-ico">▤</div> Questionnaires</div>
+    <div class="nav-item" id="n-scoring" onclick="showScoringPanel()"><div class="nav-ico">⚡</div> Scoring</div>
     <div class="nav-item" id="n-produits" onclick="showCrmProducts()"><div class="nav-ico">◫</div> Produits</div>
     <div class="nav-item" id="n-crmusers" onclick="showCrmUsers()" style="display:none"><div class="nav-ico">◉</div> Utilisateurs CRM</div>
     <hr class="s-hr">
@@ -720,7 +721,7 @@ function toggleHotelOnlyFields(){
 // fiche propose ces valeurs plus "Autre…" pour éviter les variantes orthographiques
 // libres (ex. "Medialog" / "Médialog" coexistaient avant ce champ en liste).
 const PMS_OPTIONS = ['Chloé','Easy Space','Escobe','Lodgify','Medialog','Médialog','Mews','Mews Intégration','MisterBooking','MyGuest Check','Reservit','TeamR','Thais'];
-const ACT_TYPES = ['Appel','Email','Visite','Proposition','Relance','Note interne','Autre'];
+const ACT_TYPES = ['Appel','Email','Visite','Proposition','Relance','Tâche commerciale','Note interne','Autre'];
 const DOT_MAP = {Appel:'g',Email:'b',Visite:'g',Proposition:'b',Relance:'a','Note interne':'b',Autre:'b'};
 
 // ════════════════════════════════════════
@@ -1319,7 +1320,7 @@ async function sendBulkEmail(){
   // autres destinataires ni empêcher le résumé final de s'afficher.
   const results = await Promise.allSettled(recipients.map(async c=>{
     const r = await apiFetch('/wa/message/send', {method:'POST', body:JSON.stringify({
-      scope:'crm', channel:'email', templateKey:key, to:c.email,
+      scope:'crm', channel:'email', templateKey:key, to:c.email, prospectId:c.id,
       variables:{nom:c.nom, secteur:c.secteur||'', referent:c.referent||'', ville:c.ville||''}
     })});
     const data = await r.json();
@@ -1394,7 +1395,7 @@ async function sendQuestionnaireBulk(){
       const lien = links[c.id];
       if(!lien) throw new Error('lien manquant');
       const r = await apiFetch('/wa/message/send', {method:'POST', body:JSON.stringify({
-        scope:'crm', channel:'email', templateKey:templateKey, to:c.email,
+        scope:'crm', channel:'email', templateKey:templateKey, to:c.email, prospectId:c.id,
         variables:{nom:c.nom, secteur:c.secteur||'', referent:c.referent||'', ville:c.ville||'', lienQuestionnaire:lien}
       })});
       const data = await r.json();
@@ -1917,6 +1918,7 @@ function showFiche(id){
   renderFiche(c);
   loadAdminAccessCard(c);
   loadQuestionnaireSendsCard(c);
+  loadScoringCard(c);
 }
 
 function riskScore(c){let s=0;if(c.danger==='Élevé !!')s+=5;else if(c.danger==='Modéré')s+=3;if(c.contrat==='non')s+=2;if(!c.webApp&&!c.mobileV2)s+=1;if(!c.nfc&&!c.qr&&!c.mobile&&!c.code)s+=1;return Math.min(s,10);}
@@ -2011,6 +2013,11 @@ function renderFiche(c){
     </div>
   </div>
 
+  <div class="card" id="scoring-card">
+    <div class="card-head"><div class="ch-ico">⚡</div><span class="ch-title">Score d'intérêt</span></div>
+    <div class="log-empty">Chargement…</div>
+  </div>
+
   <div class="card" id="admin-access-card">
     <div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Accès admin</span></div>
     <div class="log-empty">Chargement…</div>
@@ -2101,6 +2108,48 @@ async function loadQuestionnaireSendsCard(c){
       ${rowsHtml || '<div class="log-empty">En attente de réponse.</div>'}
     </div>`;
   }).join('');
+}
+
+// ════════════════════════════════════════
+// SCORE D'INTÉRÊT — cf. panneau "Scoring" pour le barème, lib/crmScoring.ts
+// côté serveur. Distinct du "Score de risque" déjà affiché en haut de
+// fiche (risque contractuel/technique), celui-ci mesure l'engagement du
+// prospect (ouvertures, clics, usage du calculateur ROI…).
+// ════════════════════════════════════════
+const SCORE_EVENT_LABEL = {
+  email_opened: 'Email ouvert', module_click: 'Clic sur un module',
+  module_page_visit: 'Visite page module', roi_calculator: 'Calculateur ROI utilisé',
+  two_modules_viewed: '2 modules consultés', doc_request: 'Documentation demandée',
+  demo_request: 'Démonstration demandée',
+};
+async function loadScoringCard(c){
+  const el=document.getElementById('scoring-card');
+  if(!el)return;
+  let events=[];
+  try{
+    const r = await apiFetch('/wa/crmScoring/events?prospectId='+encodeURIComponent(c.id));
+    events = r.ok ? await r.json() : [];
+  }catch(e){}
+  const score = c.score||0;
+  const color = score>=40 ? '#a32d2d' : score>=20 ? '#854f0b' : '#27500a';
+  const rowsHtml = events.length===0
+    ? '<div class="log-empty">Aucun événement enregistré pour l\'instant.</div>'
+    : events.map(ev=>`<div class="log-item">
+        <div class="log-dot ld-b"></div>
+        <div class="log-body">
+          <div class="log-text">${esc(SCORE_EVENT_LABEL[ev.eventType]||ev.eventType)}${ev.module?' — <strong>'+esc(ev.module)+'</strong>':''} <span class="tag t-gray" style="font-size:10px;padding:1px 7px">+${ev.points}</span></div>
+          <div class="log-meta">${new Date(ev.createdAt).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+        </div>
+      </div>`).join('');
+  el.innerHTML = `<div class="card-head"><div class="ch-ico">⚡</div><span class="ch-title">Score d'intérêt</span></div>
+    <div class="hero-row" style="margin-bottom:10px">
+      <div class="score-box" style="margin-left:0">
+        <div class="score-lbl">Score cumulé</div>
+        <div class="score-num" style="color:${color}">${score}</div>
+        <div class="score-sub">${c.hotLeadTaskCreatedAt?'Contact chaud — tâche commerciale créée le '+new Date(c.hotLeadTaskCreatedAt).toLocaleDateString('fr-FR'):'Seuil non atteint'}</div>
+      </div>
+    </div>
+    ${rowsHtml}`;
 }
 
 // ════════════════════════════════════════
@@ -5029,6 +5078,66 @@ function ticketSendReply(id, kind){
 }
 
 // ════════════════════════════════════════
+// SCORING — barème de points d'intérêt (panneau global, Sesame uniquement)
+// cf. lib/crmScoring.ts. Chaque action du prospect ajoute des points ;
+// au-delà du seuil, une tâche commerciale "Contact chaud" est créée
+// automatiquement sur sa fiche (cf. loadScoringCard, section FICHE VIEW).
+// ════════════════════════════════════════
+let SCORING_CFG = null;
+const SCORING_FIELDS = [
+  {k:'pointsEmailOpened', label:'Ouverture d\'un email'},
+  {k:'pointsModuleClick', label:'Clic sur un module (lien de questionnaire)'},
+  {k:'pointsModulePageVisit', label:'Visite d\'une page module (site externe)'},
+  {k:'pointsRoiCalculator', label:'Utilisation du calculateur ROI (site externe)'},
+  {k:'pointsTwoModulesViewed', label:'Consultation de 2 modules distincts (bonus, une fois)'},
+  {k:'pointsDocRequest', label:'Demande de documentation (site externe)'},
+  {k:'pointsDemoRequest', label:'Demande de démonstration (site externe)'},
+];
+
+function showScoringPanel(){
+  view='scoring';setNav('n-scoring');
+  bc([{label:'Scoring'}]);tba('');
+  document.getElementById('main').innerHTML='<div class="card">Chargement…</div>';
+  loadScoringPanelData();
+}
+
+async function loadScoringPanelData(){
+  try{
+    const r = await apiFetch('/wa/crmScoring/config');
+    SCORING_CFG = r.ok ? await r.json() : null;
+  }catch(e){ flash('Erreur de chargement'); }
+  renderScoringPanel();
+}
+
+function renderScoringPanel(){
+  const c = SCORING_CFG || {threshold:40, pointsEmailOpened:1, pointsModuleClick:5, pointsModulePageVisit:5, pointsRoiCalculator:10, pointsTwoModulesViewed:5, pointsDocRequest:10, pointsDemoRequest:30};
+  document.getElementById('main').innerHTML = `
+  <div class="card">
+    <div class="card-head"><div class="ch-ico">⚡</div><span class="ch-title">Barème du score d'intérêt</span></div>
+    <div class="log-empty" style="margin-bottom:14px">Chaque action d'un prospect ajoute des points à sa fiche. Une fois le seuil atteint, une tâche commerciale "Contact chaud" est créée automatiquement (une seule fois par fiche) avec les modules qui l'intéressent.</div>
+    <div class="form-grid">
+      ${SCORING_FIELDS.map(f=>`<div class="ff"><label>${esc(f.label)}</label><input type="number" min="0" id="sc-${f.k}" value="${c[f.k]}"></div>`).join('')}
+    </div>
+    <div class="ff" style="margin-top:8px;max-width:260px"><label>Seuil "Contact chaud"</label><input type="number" min="1" id="sc-threshold" value="${c.threshold}"></div>
+    <div class="modal-footer" style="border-top:none;padding-top:14px">
+      <button class="btn btn-primary" onclick="saveScoringConfig()">Enregistrer</button>
+    </div>
+  </div>`;
+}
+
+async function saveScoringConfig(){
+  const body = {threshold: +(document.getElementById('sc-threshold')||{value:40}).value || 0};
+  SCORING_FIELDS.forEach(f=>{ body[f.k] = +(document.getElementById('sc-'+f.k)||{value:0}).value || 0; });
+  try{
+    const r = await apiFetch('/wa/crmScoring/config/update', {method:'POST', body:JSON.stringify(body)});
+    const data = await r.json();
+    if(!r.ok){ flash(data.error||'Erreur'); return; }
+    SCORING_CFG = data;
+    flash('Barème enregistré');
+  }catch(e){ flash('Erreur de connexion au serveur'); }
+}
+
+// ════════════════════════════════════════
 // CANAUX — SMTP (email) + Twilio (SMS/WhatsApp) + modèles multi-canal
 // (portée CRM/Sesame, scope=crm — même mécanisme générique repris à
 // l'identique côté back-office de chaque hôtel, voir admin.html)
@@ -5306,7 +5415,7 @@ async function sendClientEmail(id){
   if(!key){flash('Sélectionnez un modèle');return;}
   try{
     var r = await apiFetch('/wa/message/send', {method:'POST', body:JSON.stringify({
-      scope:'crm', channel:channel, templateKey:key, to:to,
+      scope:'crm', channel:channel, templateKey:key, to:to, prospectId:id,
       variables:{nom:c.nom, secteur:c.secteur||'', referent:c.referent||'', ville:c.ville||''}
     })});
     var data = await r.json();

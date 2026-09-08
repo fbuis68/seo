@@ -19,6 +19,8 @@
   .q:first-of-type{border-top:none;margin-top:8px;padding-top:8px}
   .q-label{font-size:14px;font-weight:500;margin-bottom:10px}
   .q-label .req{color:var(--a)}
+  .q-link{display:inline-block;font-size:12.5px;color:var(--a);font-weight:600;text-decoration:none;margin-bottom:10px}
+  .q-link:hover{text-decoration:underline}
   .choices{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap}
   .choice{flex:1;min-width:90px;text-align:center;padding:9px 8px;border:1.5px solid var(--bdr);border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;color:var(--mu);user-select:none;transition:all .12s}
   .choice.on{border-color:var(--a);color:var(--a);background:#fbeeee}
@@ -70,6 +72,12 @@ function renderError(msg){
 
 function questionHtml(q){
   const label = '<div class="q-label">'+esc(q.label)+(q.required?' <span class="req">*</span>':'')+'</div>';
+  // Jamais l'URL brute (q.linkUrl) directement dans href : ce détour par
+  // linkClick journalise le clic (score CRM) avant de rediriger, cf.
+  // GET /wa/questionnaire/linkClick côté serveur.
+  const link = q.linkUrl
+    ? '<a class="q-link" href="/wa/questionnaire/linkClick?token='+encodeURIComponent(TOKEN)+'&questionId='+encodeURIComponent(q.id)+'" target="_blank" rel="noopener">'+esc(q.linkLabel||q.linkUrl)+' &rarr;</a>'
+    : '';
   let body = '';
   if(q.type === 'single'){
     const opts = q.options || [];
@@ -104,7 +112,7 @@ function questionHtml(q){
       return '<div class="rating-pill'+(on?' on':'')+'" onclick="setRating(\''+q.id+'\','+v+')">'+v+'</div>';
     }).join('') + '</div>';
   }
-  return '<div class="q">' + label + body + '</div>';
+  return '<div class="q">' + label + link + body + '</div>';
 }
 
 function render(){
