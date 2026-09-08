@@ -3,6 +3,7 @@ import { HttpError } from "./asyncHandler";
 import { sendEmailRaw } from "./email";
 import { sendChannelRaw, sendWhatsAppTemplate } from "./sms";
 import { Channel } from "./messageTemplate";
+import { config } from "../config";
 
 /**
  * Point de convergence unique : quel que soit le canal (email/sms/whatsapp),
@@ -36,6 +37,15 @@ export async function sendMessage(opts: {
   variables?: Record<string, string>;
   /** Email uniquement — nom d'expéditeur affiché, remplace celui de la config SMTP pour cet envoi. */
   fromNameOverride?: string;
+  /**
+   * Email + portée CRM uniquement — id du CrmProspect destinataire. Quand
+   * renseigné, un pixel de suivi d'ouverture (1×1, cf.
+   * GET /wa/crmScoring/trackOpen) est ajouté en fin de corps ; son
+   * chargement enregistre +1 point de score ("email_opened", cf.
+   * lib/crmScoring.ts). Sans effet pour les hôtels — le score d'intérêt est
+   * une notion CRM Sesame, pas un outil hôtelier.
+   */
+  trackOpenProspectId?: string;
 }) {
   const template = await prisma.messageTemplate.findFirst({
     where: { entityId: opts.entityId, channel: opts.channel, key: opts.templateKey },
@@ -44,7 +54,12 @@ export async function sendMessage(opts: {
 
   const vars = opts.variables || {};
   const subject = renderTemplate(template.subject, vars);
-  const body = renderTemplate(template.bodyHtml, vars);
+  let body = renderTemplate(template.bodyHtml, vars);
+
+  if (opts.channel === "email" && opts.entityId === null && opts.trackOpenProspectId) {
+    const pixelUrl = `${config.publicBaseUrl}/wa/crmScoring/trackOpen?pid=${encodeURIComponent(opts.trackOpenProspectId)}`;
+    body += `<img src="${pixelUrl}" width="1" height="1" alt="" style="display:none">`;
+  }
 
   if (opts.channel === "email") {
     await sendEmailRaw(opts.entityId, opts.to, subject, body, opts.fromNameOverride);

@@ -5,6 +5,7 @@ import { requireAdmin } from "../middleware/requireAdmin";
 import { resolveScope } from "../lib/scope";
 import { fireTrigger } from "../lib/automation";
 import { getOrCreateQuestionnaireSend, questionnaireLinkUrl } from "../lib/questionnaire";
+import { recordScoreEvent } from "../lib/crmScoring";
 
 /**
  * Gestionnaire de questionnaires générique (08/09/2026) — cf.
@@ -22,8 +23,26 @@ function targetTypeForScope(entityId: string | null): "crmProspect" | "booking" 
   return entityId === null ? "crmProspect" : "booking";
 }
 
-function shapeQuestion(q: { id: string; order: number; type: string; label: string; required: boolean; options: unknown }) {
-  return { id: q.id, order: q.order, type: q.type, label: q.label, required: q.required, options: q.options ?? null };
+function shapeQuestion(q: {
+  id: string;
+  order: number;
+  type: string;
+  label: string;
+  required: boolean;
+  options: unknown;
+  linkUrl: string | null;
+  linkLabel: string | null;
+}) {
+  return {
+    id: q.id,
+    order: q.order,
+    type: q.type,
+    label: q.label,
+    required: q.required,
+    options: q.options ?? null,
+    linkUrl: q.linkUrl || "",
+    linkLabel: q.linkLabel || "",
+  };
 }
 
 function shapeQuestionnaire(q: {
@@ -58,7 +77,7 @@ questionnaireRouter.get(
     const rows = await prisma.questionnaire.findMany({
       where: { entityId },
       orderBy: { createdAt: "asc" },
-      include: { questions: { select: { id: true, order: true, type: true, label: true, required: true, options: true } }, _count: { select: { sends: true } } },
+      include: { questions: { select: { id: true, order: true, type: true, label: true, required: true, options: true, linkUrl: true, linkLabel: true } }, _count: { select: { sends: true } } },
     });
     res.json(rows.map(shapeQuestionnaire));
   })
@@ -173,6 +192,15 @@ interface QuestionBody {
   label: string;
   required?: boolean;
   options?: unknown;
+  linkUrl?: string;
+  linkLabel?: string;
+}
+
+function validateLink(linkUrl?: string): string | null {
+  const url = (linkUrl || "").trim();
+  if (!url) return null;
+  if (!/^https?:\/\//i.test(url)) throw new HttpError(400, "Le lien doit commencer par http:// ou https://");
+  return url;
 }
 
 async function ownedQuestionnaire(entityId: string | null, id: string) {
@@ -191,6 +219,7 @@ questionnaireRouter.post(
     await ownedQuestionnaire(entityId, b.questionnaireId);
     if (!QUESTION_TYPES.has(b.type)) throw new HttpError(400, "Type de question invalide");
     if (!b.label || !b.label.trim()) throw new HttpError(400, "Intitulé requis");
+    const linkUrl = validateLink(b.linkUrl);
     const agg = await prisma.questionnaireQuestion.aggregate({ where: { questionnaireId: b.questionnaireId }, _max: { order: true } });
     const row = await prisma.questionnaireQuestion.create({
       data: {
@@ -200,6 +229,8 @@ questionnaireRouter.post(
         label: b.label.trim(),
         required: !!b.required,
         options: (b.options as never) ?? undefined,
+        linkUrl,
+        linkLabel: linkUrl ? (b.linkLabel || "").trim() || null : null,
       },
     });
     res.status(201).json(shapeQuestion(row));
@@ -212,6 +243,8 @@ interface QuestionUpdateBody {
   label?: string;
   required?: boolean;
   options?: unknown;
+  linkUrl?: string;
+  linkLabel?: string;
 }
 
 questionnaireRouter.post(
@@ -225,6 +258,7 @@ questionnaireRouter.post(
     if (!existing || existing.questionnaire.entityId !== entityId) throw new HttpError(404, "Question introuvable");
     if (b.type !== undefined && !QUESTION_TYPES.has(b.type)) throw new HttpError(400, "Type de question invalide");
     if (b.label !== undefined && !b.label.trim()) throw new HttpError(400, "Intitulé requis");
+    const linkUrl = b.linkUrl !== undefined ? validateLink(b.linkUrl) : undefined;
     const row = await prisma.questionnaireQuestion.update({
       where: { id: b.id },
       data: {
@@ -232,6 +266,8 @@ questionnaireRouter.post(
         label: b.label !== undefined ? b.label.trim() : undefined,
         required: b.required,
         options: (b.options as never) ?? undefined,
+        linkUrl,
+        linkLabel: linkUrl !== undefined ? (linkUrl ? (b.linkLabel || "").trim() || null : null) : undefined,
       },
     });
     res.json(shapeQuestion(row));
@@ -425,6 +461,34 @@ questionnaireRouter.get(
       answers: send.answers.map((a) => ({ questionId: a.questionId, value: a.value })),
       completed: !!send.completedAt,
     });
+  })
+);
+
+/**
+ * GET /wa/questionnaire/linkClick?token=...&questionId=... — jamais l'URL
+ * brute (QuestionnaireQuestion.linkUrl) n'est utilisée directement côté
+ * public/questionnaire.html : ce détour journalise le clic (score CRM +5
+ * "module_click", cf. lib/crmScoring.ts) avant de rediriger, uniquement
+ * quand la cible de l'envoi est un CrmProspect — un envoi côté hôtel
+ * (cible Booking) redirige quand même, simplement sans scoring.
+ */
+questionnaireRouter.get(
+  "/questionnaire/linkClick",
+  asyncHandler(async (req, res) => {
+    const token = (req.query.token as string) || "";
+    const questionId = (req.query.questionId as string) || "";
+    if (!token || !questionId) throw new HttpError(400, "Lien invalide");
+    const send = await prisma.questionnaireSend.findUnique({ where: { token } });
+    if (!send) throw new HttpError(404, "Lien invalide ou expiré");
+    const question = await prisma.questionnaireQuestion.findFirst({ where: { id: questionId, questionnaireId: send.questionnaireId } });
+    if (!question || !question.linkUrl) throw new HttpError(404, "Lien introuvable");
+
+    if (send.targetType === "crmProspect") {
+      await recordScoreEvent(send.targetId, "module_click", question.linkLabel || question.label, "internal").catch((e) =>
+        console.error("[crmScoring] linkClick:", e)
+      );
+    }
+    res.redirect(302, question.linkUrl);
   })
 );
 

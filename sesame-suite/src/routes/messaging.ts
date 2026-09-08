@@ -187,6 +187,8 @@ interface SendBody {
   templateKey: string;
   to: string;
   variables?: Record<string, string>;
+  /** Portée CRM uniquement — cf. sendMessage() trackOpenProspectId (score d'intérêt, +1 à l'ouverture). */
+  prospectId?: string;
 }
 
 messagingRouter.post(
@@ -198,7 +200,14 @@ messagingRouter.post(
     if (!isChannel(b.channel)) throw new HttpError(400, "channel doit être email, sms ou whatsapp");
     if (!b.to) throw new HttpError(400, "Destinataire requis");
     if (!b.templateKey) throw new HttpError(400, "Modèle requis");
-    const sent = await sendMessage({ entityId, channel: b.channel, templateKey: b.templateKey, to: b.to, variables: b.variables });
+    const sent = await sendMessage({
+      entityId,
+      channel: b.channel,
+      templateKey: b.templateKey,
+      to: b.to,
+      variables: b.variables,
+      trackOpenProspectId: entityId === null ? b.prospectId : undefined,
+    });
     res.json({ ok: true, ...sent });
   })
 );

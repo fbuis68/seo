@@ -1430,6 +1430,19 @@ model CrmProspect {
 
   deals CrmDeal[]
 
+  // Score d'intérêt (08/09/2026) — cf. lib/crmScoring.ts. Chaque action
+  // (ouverture d'email, clic sur un lien de question, signal reçu du site
+  // externe via /wa/crmScoring/engagementSignal…) crée une ligne
+  // CrmScoreEvent et incrémente ce total dénormalisé (évite de resommer les
+  // événements à chaque affichage). hotLeadTaskCreatedAt trace le
+  // franchissement du seuil (CrmScoringConfig.threshold) : la tâche
+  // commerciale automatique n'est créée qu'UNE fois par fiche — ce champ
+  // reste renseigné même si le score redescend ensuite, pour ne jamais la
+  // recréer en double.
+  score                Int       @default(0)
+  hotLeadTaskCreatedAt DateTime?
+  scoreEvents          CrmScoreEvent[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1653,13 +1666,65 @@ model CrmActivity {
   prospectId String
   prospect   CrmProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
 
-  type         String // Appel | Email | Visite | Proposition | Relance | Note interne | Autre
+  type         String // Appel | Email | Visite | Proposition | Relance | Note interne | Tâche commerciale | Autre
   text         String
   authorName   String?
   activityDate DateTime?
   done         Boolean   @default(false)
 
   createdAt DateTime @default(now())
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Score d'intérêt CRM (08/09/2026) — cf. lib/crmScoring.ts, routes/crmScoring.ts.
+// Une ligne par action qualifiante d'un prospect (email ouvert, clic sur un
+// lien de question, signal reçu du site externe…), journal append-only qui
+// sert à la fois d'audit et de source pour le texte de la tâche commerciale
+// auto-créée ("intérêt Fidélité + Boutique" = modules distincts vus).
+// CrmProspect.score est le total dénormalisé (somme de `points`), mis à
+// jour à chaque insertion plutôt que resommé à la volée.
+// ─────────────────────────────────────────────────────────────────────────
+model CrmScoreEvent {
+  id         String      @id @default(cuid())
+  prospectId String
+  prospect   CrmProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  // email_opened | module_click | module_page_visit | roi_calculator |
+  // two_modules_viewed | doc_request | demo_request — cf. CrmScoringConfig
+  // pour le barème de points associé à chaque clé.
+  eventType String
+  points    Int
+  // Libellé libre du module concerné (ex: "Fidélité", "Boutique") — permet
+  // de composer le texte de la tâche commerciale et de compter les modules
+  // distincts pour le bonus "two_modules_viewed". Sans objet pour
+  // email_opened/doc_request/demo_request.
+  module String?
+  // internal = généré par cette app (pixel d'ouverture, clic sur un lien de
+  // question) ; webhook = signalé par le site externe via engagementSignal.
+  source String @default("internal")
+
+  createdAt DateTime @default(now())
+
+  @@index([prospectId])
+}
+
+// Barème de points + seuil de déclenchement — ligne unique (id fixe
+// "singleton"), réglable depuis le panneau CRM "Scoring" plutôt que figé en
+// dur, comme les autres barèmes de l'app (taxe de séjour, gains).
+model CrmScoringConfig {
+  id String @id @default("singleton")
+
+  threshold Int @default(40)
+
+  pointsEmailOpened      Int @default(1)
+  pointsModuleClick      Int @default(5)
+  pointsModulePageVisit  Int @default(5)
+  pointsRoiCalculator    Int @default(10)
+  pointsTwoModulesViewed Int @default(5)
+  pointsDocRequest       Int @default(10)
+  pointsDemoRequest      Int @default(30)
+
+  updatedAt DateTime @updatedAt
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -1715,6 +1780,16 @@ model QuestionnaireQuestion {
   // single/multi : [{key,label}, …] — boolean/text : ignoré — rating :
   // {min,max,minLabel?,maxLabel?} (défaut 1-5 si absent).
   options Json?
+
+  // Lien cliquable optionnel affiché sous la question (08/09/2026) — ex :
+  // "Calculer le retour sur investissement" vers le calculateur ROI du site
+  // sesame-technology.com. Le clic passe par GET /wa/questionnaire/linkClick
+  // (jamais l'URL brute) pour être journalisé côté scoring CRM (+5, cf.
+  // lib/crmScoring.ts) quand la cible de l'envoi est un CrmProspect —
+  // aucune incidence côté hôtel (cible Booking), le lien fonctionne quand
+  // même mais sans scoring.
+  linkUrl   String?
+  linkLabel String?
 
   answers QuestionnaireAnswer[]
 

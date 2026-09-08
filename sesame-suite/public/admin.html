@@ -3343,6 +3343,10 @@ Accès au salon Premium</textarea>
         </div>
         <div class="fi"><label class="lb">Intitulé de la question</label><input type="text" id="qn-new-label" placeholder="Ex : Comment évaluez-vous votre séjour ?"></div>
         <div id="qn-new-options"></div>
+        <div class="g2">
+          <div class="fi"><label class="lb">Lien cliquable (optionnel)</label><input type="text" id="qn-new-linkLabel" placeholder="Ex : Calculer le retour sur investissement"></div>
+          <div class="fi"><label class="lb">URL du lien</label><input type="text" id="qn-new-linkUrl" placeholder="https://…"></div>
+        </div>
         <button class="btn btn-p" onclick="qnAddQuestion()"><i class="ti ti-plus"></i> Ajouter la question</button>
       </div>
     </div>
@@ -11017,6 +11021,7 @@ function qnRenderQuestions(){
         + '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu);font-weight:700;margin-bottom:2px">'+QN_TYPE_LABEL[q.type]+(q.required?' · Obligatoire':'')+'</div>'
         + '<div style="font-size:13px;font-weight:600">'+esc(q.label)+'</div>'
         + (optsSummary?'<div style="font-size:12px;color:var(--mu);margin-top:2px">'+optsSummary+'</div>':'')
+        + (q.linkUrl?'<div style="font-size:12px;margin-top:4px"><i class="ti ti-link"></i> <a href="'+esc(q.linkUrl)+'" target="_blank" rel="noopener" style="color:var(--a)">'+esc(q.linkLabel||q.linkUrl)+'</a></div>':'')
       + '</div>'
       + '<div style="display:flex;gap:4px;flex-shrink:0">'
         + (idx>0?'<button class="btn btn-s" style="padding:6px 9px" onclick="qnMoveQuestion(\''+q.id+'\',-1)" title="Monter"><i class="ti ti-arrow-up"></i></button>':'')
@@ -11097,13 +11102,18 @@ async function qnAddQuestion(){
   if(!label){ toast('Intitulé requis'); return; }
   var options = qnBuildOptions('new', type);
   if((type==='single'||type==='multi') && (!options || options.length<2)){ toast('Ajoutez au moins deux options'); return; }
+  var linkUrl = document.getElementById('qn-new-linkUrl').value.trim();
+  var linkLabel = document.getElementById('qn-new-linkLabel').value.trim();
+  if(linkUrl && !/^https?:\/\//i.test(linkUrl)){ toast('Le lien doit commencer par http:// ou https://'); return; }
   try{
-    var r = await adminFetch('/wa/questionnaire/question/create', {method:'POST', body:JSON.stringify({questionnaireId:QNP_CURRENT.id, type:type, label:label, required:required, options:options})});
+    var r = await adminFetch('/wa/questionnaire/question/create', {method:'POST', body:JSON.stringify({questionnaireId:QNP_CURRENT.id, type:type, label:label, required:required, options:options, linkUrl:linkUrl, linkLabel:linkLabel})});
     var data = await r.json();
     if(!r.ok){ toast(data.error||'Erreur'); return; }
     QNP_CURRENT.questions.push(data);
     document.getElementById('qn-new-label').value = '';
     document.getElementById('qn-new-required').checked = false;
+    document.getElementById('qn-new-linkUrl').value = '';
+    document.getElementById('qn-new-linkLabel').value = '';
     qnRenderNewOptions();
     qnRenderQuestions();
     var i = QNP_LIST.findIndex(function(q){return q.id===QNP_CURRENT.id;});
