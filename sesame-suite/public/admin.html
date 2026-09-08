@@ -1570,6 +1570,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     <button class="btn btn-p" onclick="rmOpenCreate()"><i class="ti ti-plus"></i> Nouvel accès</button>
     <button class="btn btn-s" onclick="rmOpenBulk()"><i class="ti ti-table-import"></i> Import en masse</button>
     <button class="btn btn-s" onclick="rmImportLockers()"><i class="ti ti-building-warehouse"></i> Importer les casiers</button>
+    <button class="btn btn-s" onclick="rmBulkHideCasiers()"><i class="ti ti-eye-off"></i> Masquer les casiers au client</button>
     <button class="btn btn-s" onclick="showPan('plan')"><i class="ti ti-map"></i> Vue plan</button>
     <button class="btn btn-s" onclick="window.open('sesame_menage.html')"><i class="ti ti-device-mobile"></i> App ménage</button>
     <div style="flex:1"></div>
@@ -5198,6 +5199,26 @@ async function rmImportLockers(){
     var data = await r.json();
     if(!r.ok){ toast('⚠ '+(data.error||'Échec de l\'import des casiers')); return; }
     toast(data.created+' casier(s) importé(s)'+(data.skipped?', '+data.skipped+' déjà présent(s)':'')+' ✓');
+    await refreshRooms();
+    renderRoomGrid();
+  }catch(e){ toast('⚠ Erreur de connexion au serveur'); }
+}
+
+/**
+ * Masque en un clic tous les accès de type "casier" côté client (Room.
+ * available=false) — ex : ne garder que quelques chambres visibles pour une
+ * démo, sans repasser casier par casier. Ne touche à rien d'autre (les
+ * casiers restent gérables normalement ici) ; ré-affichable un par un
+ * ensuite via la case "Visible et sélectionnable par le client" de chaque
+ * fiche.
+ */
+async function rmBulkHideCasiers(){
+  if(!confirm('Masquer tous les casiers pour le client ? Ils resteront gérables ici, juste non sélectionnables côté client.')) return;
+  try{
+    var r = await adminFetch('/wa/facility/bulkSetAvailable', {method:'POST', body:JSON.stringify({type:'casier', available:false})});
+    var data = await r.json();
+    if(!r.ok){ toast('⚠ '+(data.error||'Échec')); return; }
+    toast(data.count+' casier(s) masqué(s) au client ✓');
     await refreshRooms();
     renderRoomGrid();
   }catch(e){ toast('⚠ Erreur de connexion au serveur'); }

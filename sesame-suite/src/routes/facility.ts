@@ -139,6 +139,31 @@ facilityRouter.post(
   })
 );
 
+/**
+ * POST /wa/facility/bulkSetAvailable — body: { type, available } — bascule
+ * "Visible et sélectionnable par le client" (Room.available) pour TOUS les
+ * accès d'un type donné (ex : masquer tous les casiers d'un coup) sans
+ * repasser fiche par fiche. Purement une modification de visibilité client
+ * — ne supprime ni ne désactive rien d'autre (les accès restent gérables
+ * depuis "Gestion des Accès").
+ */
+facilityRouter.post(
+  "/facility/bulkSetAvailable",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const type = (req.body.type as string) || "";
+    const available = req.body.available !== false;
+    if (!type) throw new HttpError(400, "type requis");
+
+    const { count } = await prisma.room.updateMany({
+      where: { entityId: entity.id, type },
+      data: { available },
+    });
+    res.json({ ok: true, count });
+  })
+);
+
 /** POST /wa/facility/delete — body: { code } */
 facilityRouter.post(
   "/facility/delete",
