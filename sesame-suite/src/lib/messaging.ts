@@ -46,6 +46,15 @@ export async function sendMessage(opts: {
    * une notion CRM Sesame, pas un outil hôtelier.
    */
   trackOpenProspectId?: string;
+  /**
+   * Base absolue (ex: "https://crm.sesame.technology") pour le pixel de
+   * suivi — cf. questionnaireLinkUrl() dans lib/questionnaire.ts, même
+   * logique : sans ceci, on retombe sur config.publicBaseUrl qui vaut ""
+   * tant que PUBLIC_BASE_URL n'est pas défini en env, et le pixel devient
+   * une URL relative (<img src="/wa/...">) — invalide dans un email, donc
+   * jamais chargée, donc aucun score jamais enregistré à l'ouverture.
+   */
+  baseUrl?: string;
 }) {
   const template = await prisma.messageTemplate.findFirst({
     where: { entityId: opts.entityId, channel: opts.channel, key: opts.templateKey },
@@ -57,8 +66,13 @@ export async function sendMessage(opts: {
   let body = renderTemplate(template.bodyHtml, vars);
 
   if (opts.channel === "email" && opts.entityId === null && opts.trackOpenProspectId) {
-    const pixelUrl = `${config.publicBaseUrl}/wa/crmScoring/trackOpen?pid=${encodeURIComponent(opts.trackOpenProspectId)}`;
-    body += `<img src="${pixelUrl}" width="1" height="1" alt="" style="display:none">`;
+    const base = opts.baseUrl || config.publicBaseUrl;
+    const pixelUrl = `${base}/wa/crmScoring/trackOpen?pid=${encodeURIComponent(opts.trackOpenProspectId)}`;
+    // Pas de style="display:none" : un pixel 1×1 est déjà invisible, et ce
+    // marqueur est justement la signature que certaines passerelles de
+    // sécurité (Proofpoint, Mimecast...) utilisent pour détecter et retirer
+    // les pixels de suivi avant remise du mail.
+    body += `<img src="${pixelUrl}" width="1" height="1" alt="">`;
   }
 
   if (opts.channel === "email") {

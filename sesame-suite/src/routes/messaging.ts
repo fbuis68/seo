@@ -207,6 +207,7 @@ messagingRouter.post(
       to: b.to,
       variables: b.variables,
       trackOpenProspectId: entityId === null ? b.prospectId : undefined,
+      baseUrl: `${req.protocol}://${req.get("host")}`,
     });
     res.json({ ok: true, ...sent });
   })
