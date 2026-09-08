@@ -1525,11 +1525,12 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         <div id="planRoomForm" style="display:none;margin-top:10px;background:var(--bg);border-radius:var(--rs);padding:14px;border:1px solid var(--bdr)">
           <div style="font-size:12px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px" id="prfTitle">Nouvelle chambre</div>
           <div class="irow">
-            <div class="fi"><label class="lb">Code chambre</label><input type="text" id="prf-code" placeholder="room214"></div>
+            <div class="fi"><label class="lb" id="prfCodeLabel">Chambre à positionner</label><select id="prf-code" onchange="prfCodeChanged()"></select></div>
             <div class="fi"><label class="lb">Étage</label><select id="prf-floor">
               <option value="0">RDC</option><option value="1">1er</option><option value="2">2ème</option><option value="3">3ème</option><option value="4">4ème</option>
             </select></div>
           </div>
+          <div class="alt alt-b" id="prfNoRoomsHint" style="display:none;font-size:11px;margin-top:-4px;margin-bottom:8px"><i class="ti ti-info-circle"></i><span>Toutes les chambres configurées sont déjà placées sur un plan. Créez-en une nouvelle depuis <b>Gestion des Accès</b> pour pouvoir la positionner ici.</span></div>
           <div class="fi"><label class="lb">Nom / libellé affiché</label><input type="text" id="prf-name" placeholder="Chambre 214 — Supérieure"></div>
           <div class="fi"><label class="lb">Critères / tags</label><div class="tag-wrap" id="prf-tags"></div></div>
           <!-- PHOTOS -->
@@ -1548,7 +1549,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
             </label>
           </div>
           <div style="display:flex;gap:8px;margin-top:12px">
-            <button class="btn btn-p btn-s" onclick="confirmRoom()"><i class="ti ti-check"></i> Valider</button>
+            <button class="btn btn-p btn-s" id="prfConfirmBtn" onclick="confirmRoom()"><i class="ti ti-check"></i> Valider</button>
             <button class="btn btn-s btn-d" id="prfDeleteBtn" style="display:none" onclick="deleteEditRoom()"><i class="ti ti-trash"></i> Supprimer</button>
             <button class="btn btn-s" onclick="cancelRoom()"><i class="ti ti-x"></i></button>
           </div>
@@ -4914,22 +4915,50 @@ document.addEventListener('DOMContentLoaded',function(){
     renderPlanCanvas();
   });
 });
+/** Chambres déjà créées (Gestion des Accès) mais pas encore positionnées sur un plan. */
+function prfUnpositionedRooms(){
+  return CFG.rooms.filter(function(r){ return r.x==null || r.y==null; });
+}
 function openNewRoom(x,y,floor){
   prfPhotos=[];
-  document.getElementById('prfTitle').textContent='Nouvelle chambre';
-  document.getElementById('prf-code').value='';
+  document.getElementById('prfTitle').textContent='Positionner une chambre';
+  document.getElementById('prfCodeLabel').textContent='Chambre à positionner';
+  var sel=document.getElementById('prf-code');
+  var avail=prfUnpositionedRooms();
+  sel.disabled=false;
+  document.getElementById('prfNoRoomsHint').style.display=avail.length?'none':'block';
+  sel.innerHTML=avail.length
+    ? avail.map(function(r){return '<option value="'+r.code+'">'+r.code+(r.name&&r.name!==r.code?' — '+r.name:'')+'</option>';}).join('')
+    : '<option value="">—</option>';
   document.getElementById('prf-name').value='';
   document.getElementById('prf-floor').value=floor;
   document.getElementById('prf-avail').checked=true;
   document.getElementById('prfDeleteBtn').style.display='none';
+  document.getElementById('prfConfirmBtn').disabled=!avail.length;
   renderPrfTags([]);renderPrfPhotos();
   document.getElementById('planRoomForm').style.display='block';
-  document.getElementById('prf-code').focus();
+  if(avail.length){ sel.value=avail[0].code; prfCodeChanged(); }
+}
+/** Sélection d'une chambre dans la liste (mode ajout) — préremplit le formulaire depuis sa fiche existante (Gestion des Accès), rien à ressaisir. */
+function prfCodeChanged(){
+  var code=document.getElementById('prf-code').value;
+  var r=CFG.rooms.find(function(rm){return rm.code===code;});
+  if(!r) return;
+  prfPhotos=(r.photos||[]).slice();
+  document.getElementById('prf-name').value=r.name||'';
+  if(r.floor!=null) document.getElementById('prf-floor').value=r.floor;
+  document.getElementById('prf-avail').checked=r.available!==false;
+  renderPrfTags(r.tags||[]);renderPrfPhotos();
 }
 function openEditRoom(r){
   prfPhotos=(r.photos||[]).slice();
   document.getElementById('prfTitle').textContent='Modifier — '+r.code;
-  document.getElementById('prf-code').value=r.code;
+  document.getElementById('prfCodeLabel').textContent='Chambre';
+  var sel=document.getElementById('prf-code');
+  sel.innerHTML='<option value="'+r.code+'" selected>'+r.code+(r.name&&r.name!==r.code?' — '+r.name:'')+'</option>';
+  sel.disabled=true;
+  document.getElementById('prfNoRoomsHint').style.display='none';
+  document.getElementById('prfConfirmBtn').disabled=false;
   document.getElementById('prf-name').value=r.name||'';
   document.getElementById('prf-floor').value=r.floor||0;
   document.getElementById('prf-avail').checked=r.available!==false;
@@ -4961,28 +4990,28 @@ function addRoomPhotos(inp){
   });
 }
 function removePrfPhoto(i){prfPhotos.splice(i,1);renderPrfPhotos();}
+/**
+ * Positionne (ou repositionne) une chambre déjà créée dans "Gestion des
+ * Accès" sur le plan — n'a plus vocation à créer une chambre à la volée
+ * (ça reste le rôle de "Gestion des Accès", seule source de vérité pour la
+ * création) : toujours un /wa/facility/update sur un code existant, jamais
+ * de /wa/facility/create depuis cet écran.
+ */
 async function confirmRoom(){
   var code=getVal('prf-code'),name=getVal('prf-name'),floor=parseInt(getVal('prf-floor'));
-  if(!code){toast('Entrez un code chambre');return;}
+  if(!code){toast('Sélectionnez une chambre à positionner');return;}
   var tags=[];document.querySelectorAll('#prf-tags .rtag.on').forEach(function(el){tags.push(el.dataset.tag);});
   var avail=document.getElementById('prf-avail')?.checked!==false;
   var pos=pendingRoom||(editingRoom?CFG.rooms.find(function(r){return r.code===editingRoom;}):null);
   if(!pos){toast('Cliquez sur le plan pour positionner la chambre');return;}
-  var isEdit = !!editingRoom;
   var payload={code:code,name:name||code,floor:floor,tags:tags,x:pos.x,y:pos.y,available:avail,photos:prfPhotos.slice()};
   try{
-    if(isEdit){
-      payload.newCode = code!==editingRoom ? code : undefined;
-      payload.code = editingRoom;
-      await adminFetch('/wa/facility/update', {method:'POST', body:JSON.stringify(payload)});
-    } else {
-      await adminFetch('/wa/facility/create', {method:'POST', body:JSON.stringify(payload)});
-    }
+    await adminFetch('/wa/facility/update', {method:'POST', body:JSON.stringify(payload)});
   }catch(e){ toast('Erreur serveur'); return; }
   await refreshRooms();
   pendingRoom=null;editingRoom=null;prfPhotos=[];
   document.getElementById('planRoomForm').style.display='none';
-  renderPlanCanvas();toast('Chambre '+code+' '+(isEdit?'mise à jour':'ajoutée'));
+  renderPlanCanvas();toast('Chambre '+code+' positionnée sur le plan');
 }
 async function deleteEditRoom(){
   if(!editingRoom)return;
