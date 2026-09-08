@@ -1998,7 +1998,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     </div>
     <div class="fi">
       <label class="lb">Chemin de l'endpoint de démarrage</label>
-      <input type="text" id="bs-nfcStartEndpointPath" placeholder="Ex : /ws/deviceAdmin/startPassAssociation — laisser vide pour désactiver" autocomplete="off">
+      <input type="text" id="bs-nfcStartEndpointPath" placeholder="Ex : /wa/deviceAdmin/startPassAssociation — laisser vide pour désactiver" autocomplete="off">
     </div>
     <div class="g2">
       <div class="fi">
@@ -2033,7 +2033,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 
     <div class="fi" style="margin-top:14px">
       <label class="lb">Chemin de l'endpoint de vérification</label>
-      <input type="text" id="bs-nfcCheckEndpointPath" placeholder="Ex : /ws/deviceAdmin/checkAssociation" autocomplete="off">
+      <input type="text" id="bs-nfcCheckEndpointPath" placeholder="Ex : /wa/deviceAdmin/checkAssociation" autocomplete="off">
     </div>
     <div class="g2">
       <div class="fi">
@@ -6437,7 +6437,7 @@ var PMS_PRESETS = {
   sesame: {
     label: 'Sesame Technology',
     noteType: 'b',
-    note: 'Connexion et liste des réservations vérifiées en conditions réelles le 17/08/2026. Le compte utilisé doit avoir accès à l\'établissement voulu — il est retrouvé automatiquement par son code (entityCode) parmi les profils disponibles pour ce compte. Le 18/08/2026, une fuite entre établissements a été constatée sur /wa/booking/list (réservations d\'un autre hôtel accessible par le même compte) — un filtre de sécurité (entityId) est appliqué automatiquement ci-dessous depuis ce modèle. QR code / code d\'accès / ouverture de porte : chemins repris de la documentation officielle Sesame API (version 2023-11-23) fournie le 25/08/2026 — pas encore vérifiés en conditions réelles comme le reste ci-dessus, à tester avant mise en production. Import des chambres (/wa/facility/list, absent de la doc officielle) : vérifié en conditions réelles le 03/09/2026 — cette liste renvoie aussi bien les chambres que d\'autres accès (bagagerie, entrée…), volontairement PAS filtrés : Sesame permet de grouper plusieurs accès sur une même réservation (facilityCode en liste séparée par virgules), donc ces accès doivent être importés au même titre que les chambres pour que ce groupement se résolve correctement à l\'import des réservations. Encodage NFC : flux "démarrage" + "vérification en boucle" confirmé le 03/09/2026 via capture réseau (absent de la doc officielle) — nécessite un identifiant "Pass" par réservation (champ "personId", PAS le code de réservation ni un id de chambre : cf. mapping ci-dessus) et un lecteur choisi dans la liste des devices, dont la forme de réponse n\'est PAS confirmée (à ajuster via "Tester" si besoin).',
+    note: 'Connexion et liste des réservations vérifiées en conditions réelles le 17/08/2026. Le compte utilisé doit avoir accès à l\'établissement voulu — il est retrouvé automatiquement par son code (entityCode) parmi les profils disponibles pour ce compte. Le 18/08/2026, une fuite entre établissements a été constatée sur /wa/booking/list (réservations d\'un autre hôtel accessible par le même compte) — un filtre de sécurité (entityId) est appliqué automatiquement ci-dessous depuis ce modèle. QR code / code d\'accès / ouverture de porte : chemins repris de la documentation officielle Sesame API (version 2023-11-23) fournie le 25/08/2026 — pas encore vérifiés en conditions réelles comme le reste ci-dessus, à tester avant mise en production. Import des chambres (/wa/facility/list, absent de la doc officielle) : vérifié en conditions réelles le 03/09/2026 — cette liste renvoie aussi bien les chambres que d\'autres accès (bagagerie, entrée…), volontairement PAS filtrés : Sesame permet de grouper plusieurs accès sur une même réservation (facilityCode en liste séparée par virgules), donc ces accès doivent être importés au même titre que les chambres pour que ce groupement se résolve correctement à l\'import des réservations. Encodage NFC : flux "démarrage" + "vérification en boucle" confirmé le 03/09/2026 via capture réseau (absent de la doc officielle) — nécessite un identifiant "Pass" par réservation (champ "personId", PAS le code de réservation ni un id de chambre : cf. mapping ci-dessus) et un lecteur choisi dans la liste des devices, dont la forme de réponse n\'est PAS confirmée (à ajuster via "Tester" si besoin). Corrigé le 08/09/2026 : les chemins de démarrage/vérification de l\'association utilisent le préfixe "/wa/", pas "/ws/" (celui-ci n\'est utilisé que par la connexion, /ws/login/login) — une config restée sur "/ws/deviceAdmin/..." répond 200 sans erreur visible mais ne voit jamais l\'association réelle, d\'où un timeout systématique malgré une carte bien lue au lecteur.',
     apply: function(){
       document.getElementById('bs-endpointPath').value = '/wa/booking/list';
       document.getElementById('bs-endpointMethod').value = 'POST';
@@ -6460,14 +6460,20 @@ var PMS_PRESETS = {
       bsRenderMappingFields({code:'code', personEmail:'personEmail', personFirstname:'personFirstname', personLastname:'personLastname', personPhone:'', startDate:'startDate', endDate:'endDate', facilityCode:'facilityCode', facilityName:'facilityName', status:'status', bookingType:'typeCode', passId:'personId'});
       // Encodage NFC — flux en 2 appels confirmé le 03/09/2026 via capture
       // réseau sur un client réel (absent de la documentation officielle) :
-      // GET /ws/deviceAdmin/startPassAssociation?timeout=15&name=secret2&
+      // GET /wa/deviceAdmin/startPassAssociation?timeout=15&name=secret2&
       // description=personName&id=<passId>&deviceId=<deviceId> démarre
-      // l'association ({"success":true,"message":"associating pass"}), puis
-      // GET /ws/deviceAdmin/checkAssociation?id=<deviceId> interrogé en
-      // boucle jusqu'à {"stop":true,...} (carte approchée du lecteur, ou
-      // délai écoulé) — {"stop":false,"success":false,"keep":true,
-      // "message":"not associated yet"} tant que ce n'est pas fini. Liste
-      // des lecteurs : GET /ws/monitoredDevice/list?associable=true&
+      // l'association ({"cmd":"open<n>","success":true,"message":"associating
+      // pass"} — le "cmd" n'est utile qu'à titre indicatif, PAS à réinjecter
+      // dans l'appel suivant), puis GET /wa/deviceAdmin/checkAssociation?
+      // id=<deviceId> interrogé en boucle jusqu'à {"stop":true,...} (carte
+      // approchée du lecteur, ou délai écoulé) — {"stop":false,"success":
+      // false,"keep":true,"message":"not associated yet"} tant que ce n'est
+      // pas fini. Chemins corrigés le 08/09/2026 : confondus par erreur avec
+      // le préfixe "/ws/" de l'endpoint de connexion (/ws/login/login) lors
+      // de la 1ère capture — un hôtel resté sur "/ws/deviceAdmin/..." obtient
+      // bien un 200 (l'endpoint existe) mais ne voit jamais l'association
+      // réelle, d'où un timeout systématique malgré une carte bien lue.
+      // Liste des lecteurs : GET /ws/monitoredDevice/list?associable=true&
       // sort=name&dir=ASC&start=0&limit=500, forme de la réponse (racine
       // "root" ou tableau direct, noms des champs id/name) non confirmée —
       // à ajuster si "Tester" échoue. La liste renvoie aussi des appareils
@@ -6476,14 +6482,14 @@ var PMS_PRESETS = {
       // "associable" ne les distingue PAS (sert à lier deux accès en sas),
       // c'est le champ "name" contenant "encodeur" (libellé manuel côté
       // admin Sesame) qui identifie un poste d'encodage.
-      document.getElementById('bs-nfcStartEndpointPath').value = '/ws/deviceAdmin/startPassAssociation';
+      document.getElementById('bs-nfcStartEndpointPath').value = '/wa/deviceAdmin/startPassAssociation';
       document.getElementById('bs-nfcStartEndpointMethod').value = 'GET';
       document.getElementById('bs-nfcStartPassParam').value = 'id';
       document.getElementById('bs-nfcStartDeviceParam').value = 'deviceId';
       document.getElementById('bs-nfcStartTimeoutParam').value = 'timeout';
       document.getElementById('bs-nfcStartTimeoutSeconds').value = 15;
       document.getElementById('bs-nfcStartExtraParams').value = 'name=secret2\ndescription=personName';
-      document.getElementById('bs-nfcCheckEndpointPath').value = '/ws/deviceAdmin/checkAssociation';
+      document.getElementById('bs-nfcCheckEndpointPath').value = '/wa/deviceAdmin/checkAssociation';
       document.getElementById('bs-nfcCheckEndpointMethod').value = 'GET';
       document.getElementById('bs-nfcCheckDeviceParam').value = 'id';
       document.getElementById('bs-nfcCheckStopPath').value = 'stop';
