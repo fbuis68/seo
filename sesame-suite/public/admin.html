@@ -4928,6 +4928,17 @@ function prfUnpositionedRooms(){
   // encore à placer, mais reste modifiable fiche par fiche au besoin.
   return CFG.rooms.filter(function(r){ return (r.x==null || r.y==null) && r.showOnPlan!==false; });
 }
+/** Détaille pourquoi la liste "chambre à positionner" est vide — évite de deviner (déjà toutes positionnées ? "Afficher sur le plan" décoché ?). */
+function prfDiagnoseNoRooms(){
+  var total=CFG.rooms.length;
+  var positioned=CFG.rooms.filter(function(r){return r.x!=null&&r.y!=null;}).length;
+  var hiddenFromPlan=CFG.rooms.filter(function(r){return (r.x==null||r.y==null)&&r.showOnPlan===false;}).length;
+  if(!total) return 'Aucun accès configuré — créez-en un depuis Gestion des Accès.';
+  var parts=[total+' accès au total'];
+  if(positioned) parts.push(positioned+' déjà positionné(s) sur un plan');
+  if(hiddenFromPlan) parts.push(hiddenFromPlan+' avec "Afficher sur le plan de l\'hôtel" décoché');
+  return parts.join(' — ');
+}
 function openNewRoom(x,y,floor){
   prfPhotos=[];
   document.getElementById('prfTitle').textContent='Positionner une chambre';
@@ -4936,6 +4947,7 @@ function openNewRoom(x,y,floor){
   var avail=prfUnpositionedRooms();
   sel.disabled=false;
   document.getElementById('prfNoRoomsHint').style.display=avail.length?'none':'block';
+  if(!avail.length) document.getElementById('prfNoRoomsHint').querySelector('span').innerHTML='Toutes les chambres configurées sont déjà placées sur un plan, ou masquées du plan. Créez-en une nouvelle (ou modifiez son critère "Afficher sur le plan") depuis <b>Gestion des Accès</b>.<br><span style="opacity:.75">'+esc(prfDiagnoseNoRooms())+'</span>';
   sel.innerHTML=avail.length
     ? avail.map(function(r){return '<option value="'+r.code+'">'+r.code+(r.name&&r.name!==r.code?' — '+r.name:'')+'</option>';}).join('')
     : '<option value="">—</option>';
