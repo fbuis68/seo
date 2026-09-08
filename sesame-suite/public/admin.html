@@ -10884,6 +10884,7 @@ var QNP_CURRENT = null; // questionnaire détaillé actuellement ouvert (avec .q
 var QN_TYPE_LABEL = { single: 'Choix unique', multi: 'Choix multiple', boolean: 'Oui / Non', text: 'Texte libre', rating: 'Note / échelle' };
 var QN_OPT_ROWS = {}; // ctx ('new' | questionId) -> [{key,label}]
 var QN_RATING = {}; // ctx -> {min,max,minLabel,maxLabel}
+var QN_EDITING_ID = null; // id de la question en cours d'édition (une seule à la fois)
 
 async function qnInit(){
   try{
@@ -11009,6 +11010,7 @@ function qnRenderQuestions(){
   document.getElementById('qn-d-qcount').textContent = qs.length;
   if(!qs.length){ wrap.innerHTML = '<div style="font-size:13px;color:var(--mu)">Aucune question pour l\'instant — ajoutez-en une ci-dessous.</div>'; return; }
   wrap.innerHTML = qs.map(function(q, idx){
+    if(q.id === QN_EDITING_ID) return qnEditRowHtml(q);
     var optsSummary = '';
     if(q.type==='single' || q.type==='multi'){
       optsSummary = (q.options||[]).map(function(o){return esc(o.label);}).join(' · ');
@@ -11026,10 +11028,90 @@ function qnRenderQuestions(){
       + '<div style="display:flex;gap:4px;flex-shrink:0">'
         + (idx>0?'<button class="btn btn-s" style="padding:6px 9px" onclick="qnMoveQuestion(\''+q.id+'\',-1)" title="Monter"><i class="ti ti-arrow-up"></i></button>':'')
         + (idx<qs.length-1?'<button class="btn btn-s" style="padding:6px 9px" onclick="qnMoveQuestion(\''+q.id+'\',1)" title="Descendre"><i class="ti ti-arrow-down"></i></button>':'')
+        + '<button class="btn btn-s" style="padding:6px 9px" onclick="qnEditQuestion(\''+q.id+'\')" title="Modifier"><i class="ti ti-pencil"></i></button>'
         + '<button class="btn btn-s" style="padding:6px 9px;color:var(--re)" onclick="qnDeleteQuestion(\''+q.id+'\')" title="Supprimer"><i class="ti ti-trash"></i></button>'
       + '</div>'
       + '</div>';
   }).join('');
+}
+
+/** État d'édition en place d'une question existante — même formulaire que
+ * "Ajouter une question", pré-rempli, avec ctx=q.id pour QN_OPT_ROWS/QN_RATING
+ * (déjà prévu par qnRerenderOptionsEditor, jamais câblé jusqu'ici). */
+function qnEditRowHtml(q){
+  return '<div class="alt alt-b" id="qn-q-row-'+q.id+'" style="align-items:flex-start;flex-direction:column;gap:10px">'
+    + '<div class="g2" style="width:100%">'
+      + '<div class="fi"><label class="lb">Type</label>'
+        + '<select id="qn-edit-type-'+q.id+'" onchange="qnEditTypeChanged(\''+q.id+'\')">'
+          + Object.keys(QN_TYPE_LABEL).map(function(t){ return '<option value="'+t+'"'+(t===q.type?' selected':'')+'>'+QN_TYPE_LABEL[t]+'</option>'; }).join('')
+        + '</select>'
+      + '</div>'
+      + '<div class="fi"><label class="lb">Obligatoire</label>'
+        + '<label style="display:flex;align-items:center;gap:8px;height:38px;cursor:pointer">'
+          + '<input type="checkbox" id="qn-edit-required-'+q.id+'" style="accent-color:var(--am)"'+(q.required?' checked':'')+'><span style="font-size:13px">Réponse requise</span>'
+        + '</label>'
+      + '</div>'
+    + '</div>'
+    + '<div class="fi" style="width:100%"><label class="lb">Intitulé de la question</label><input type="text" id="qn-edit-label-'+q.id+'" value="'+esc(q.label)+'"></div>'
+    + '<div id="qn-edit-options-'+q.id+'" style="width:100%">'+qnOptionsEditorHtml(q.id, q.type)+'</div>'
+    + '<div class="g2" style="width:100%">'
+      + '<div class="fi"><label class="lb">Lien cliquable (optionnel)</label><input type="text" id="qn-edit-linkLabel-'+q.id+'" value="'+esc(q.linkLabel||'')+'" placeholder="Ex : Calculer le retour sur investissement"></div>'
+      + '<div class="fi"><label class="lb">URL du lien</label><input type="text" id="qn-edit-linkUrl-'+q.id+'" value="'+esc(q.linkUrl||'')+'" placeholder="https://…"></div>'
+    + '</div>'
+    + '<div style="display:flex;gap:8px">'
+      + '<button class="btn btn-p" onclick="qnSaveQuestion(\''+q.id+'\')"><i class="ti ti-check"></i> Enregistrer</button>'
+      + '<button class="btn btn-s" onclick="qnCancelEditQuestion()">Annuler</button>'
+    + '</div>'
+  + '</div>';
+}
+
+function qnEditQuestion(id){
+  var q = (QNP_CURRENT.questions||[]).find(function(x){return x.id===id;});
+  if(!q) return;
+  if(q.type==='single' || q.type==='multi'){
+    QN_OPT_ROWS[id] = (q.options||[]).map(function(o,i){ return {key:o.key||('o'+i), label:o.label||''}; });
+    while(QN_OPT_ROWS[id].length<2) QN_OPT_ROWS[id].push({key:'o'+QN_OPT_ROWS[id].length, label:''});
+  } else if(q.type==='rating'){
+    var o = q.options||{};
+    QN_RATING[id] = {min:o.min!=null?o.min:1, max:o.max!=null?o.max:5, minLabel:o.minLabel||'', maxLabel:o.maxLabel||''};
+  }
+  QN_EDITING_ID = id;
+  qnRenderQuestions();
+}
+
+function qnCancelEditQuestion(){
+  if(QN_EDITING_ID){ delete QN_OPT_ROWS[QN_EDITING_ID]; delete QN_RATING[QN_EDITING_ID]; }
+  QN_EDITING_ID = null;
+  qnRenderQuestions();
+}
+
+function qnEditTypeChanged(id){
+  var type = document.getElementById('qn-edit-type-'+id).value;
+  delete QN_OPT_ROWS[id]; delete QN_RATING[id];
+  qnRerenderOptionsEditor(id, type);
+}
+
+async function qnSaveQuestion(id){
+  var type = document.getElementById('qn-edit-type-'+id).value;
+  var label = document.getElementById('qn-edit-label-'+id).value.trim();
+  var required = document.getElementById('qn-edit-required-'+id).checked;
+  if(!label){ toast('Intitulé requis'); return; }
+  var options = qnBuildOptions(id, type);
+  if((type==='single'||type==='multi') && (!options || options.length<2)){ toast('Ajoutez au moins deux options'); return; }
+  var linkUrl = document.getElementById('qn-edit-linkUrl-'+id).value.trim();
+  var linkLabel = document.getElementById('qn-edit-linkLabel-'+id).value.trim();
+  if(linkUrl && !/^https?:\/\//i.test(linkUrl)){ toast('Le lien doit commencer par http:// ou https://'); return; }
+  try{
+    var r = await adminFetch('/wa/questionnaire/question/update', {method:'POST', body:JSON.stringify({id:id, type:type, label:label, required:required, options:options, linkUrl:linkUrl, linkLabel:linkLabel})});
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Erreur'); return; }
+    var idx = QNP_CURRENT.questions.findIndex(function(x){return x.id===id;});
+    if(idx>-1) QNP_CURRENT.questions[idx] = data;
+    delete QN_OPT_ROWS[id]; delete QN_RATING[id];
+    QN_EDITING_ID = null;
+    qnRenderQuestions();
+    toast('Question modifiée ✓');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
 }
 
 /** Construit les options JSON envoyées au serveur pour le type sélectionné, à partir de l'état QN_OPT_ROWS/QN_RATING du contexte ctx. */

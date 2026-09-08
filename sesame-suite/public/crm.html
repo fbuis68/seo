@@ -1428,6 +1428,7 @@ async function sendQuestionnaireBulk(){
 let QNP_LIST=[], QNP_CURRENT=null;
 const QN_TYPE_LABEL = { single:'Choix unique', multi:'Choix multiple', boolean:'Oui / Non', text:'Texte libre', rating:'Note / échelle' };
 let QN_OPT_ROWS={}, QN_RATING={};
+let QN_EDITING_ID = null; // id de la question en cours d'édition (une seule à la fois)
 
 async function showQuestionnaires(){
   view='questionnaires';setNav('n-questionnaires');bc([{label:'Questionnaires'}]);
@@ -1510,6 +1511,10 @@ function renderQnDetail(){
         </div>
         <div class="ff"><label>Intitulé de la question</label><input id="qn-new-label" placeholder="Ex : Comment évaluez-vous votre séjour ?"></div>
         <div id="qn-new-options"></div>
+        <div class="form-grid">
+          <div class="ff"><label>Lien cliquable (optionnel)</label><input id="qn-new-linkLabel" placeholder="Ex : Calculer le retour sur investissement"></div>
+          <div class="ff"><label>URL du lien</label><input id="qn-new-linkUrl" placeholder="https://…"></div>
+        </div>
         <button class="btn btn-primary btn-sm" onclick="qnAddQuestion()">+ Ajouter la question</button>
       </div>
     </div>
@@ -1569,6 +1574,7 @@ function qnRenderQuestions(){
   document.getElementById('qn-d-qcount').textContent = qs.length;
   if(!qs.length){ wrap.innerHTML = '<div class="log-empty">Aucune question pour l\'instant.</div>'; return; }
   wrap.innerHTML = qs.map((q,idx)=>{
+    if(q.id === QN_EDITING_ID) return qnEditRowHtml(q);
     let optsSummary='';
     if(q.type==='single'||q.type==='multi') optsSummary = (q.options||[]).map(o=>esc(o.label)).join(' · ');
     else if(q.type==='rating'){ const o=q.options||{}; optsSummary = 'Échelle '+(o.min!=null?o.min:1)+' à '+(o.max!=null?o.max:5); }
@@ -1577,14 +1583,88 @@ function qnRenderQuestions(){
         <div style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#aaa;font-weight:700">${QN_TYPE_LABEL[q.type]}${q.required?' · Obligatoire':''}</div>
         <div style="font-size:13px;font-weight:600">${esc(q.label)}</div>
         ${optsSummary?`<div style="font-size:12px;color:#888">${optsSummary}</div>`:''}
+        ${q.linkUrl?`<div style="font-size:12px;margin-top:2px"><a href="${esc(q.linkUrl)}" target="_blank" rel="noopener" style="color:var(--a,#4c6fe7)">🔗 ${esc(q.linkLabel||q.linkUrl)}</a></div>`:''}
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0">
         ${idx>0?`<button class="ta-btn" onclick="qnMoveQuestion('${q.id}',-1)" title="Monter">↑</button>`:''}
         ${idx<qs.length-1?`<button class="ta-btn" onclick="qnMoveQuestion('${q.id}',1)" title="Descendre">↓</button>`:''}
+        <button class="ta-btn" onclick="qnEditQuestion('${q.id}')" title="Modifier">✎</button>
         <button class="ta-btn" style="color:#a32d2d" onclick="qnDeleteQuestion('${q.id}')" title="Supprimer">🗑</button>
       </div>
     </div>`;
   }).join('');
+}
+
+/** État d'édition en place d'une question existante — même formulaire que
+ * "Ajouter une question", pré-rempli, avec ctx=q.id pour QN_OPT_ROWS/QN_RATING. */
+function qnEditRowHtml(q){
+  return `<div style="display:flex;flex-direction:column;gap:8px;padding:10px;background:var(--bg2,#f5f3ee);border-radius:8px">
+    <div class="form-grid">
+      <div class="ff"><label>Type</label><select id="qn-edit-type-${q.id}" onchange="qnEditTypeChanged('${q.id}')">
+        ${Object.keys(QN_TYPE_LABEL).map(t=>`<option value="${t}"${t===q.type?' selected':''}>${QN_TYPE_LABEL[t]}</option>`).join('')}
+      </select></div>
+      <div class="ff"><label>Obligatoire</label><select id="qn-edit-required-${q.id}"><option value="0"${!q.required?' selected':''}>Non</option><option value="1"${q.required?' selected':''}>Oui</option></select></div>
+    </div>
+    <div class="ff"><label>Intitulé de la question</label><input id="qn-edit-label-${q.id}" value="${esc(q.label)}"></div>
+    <div id="qn-edit-options-${q.id}">${qnOptionsEditorHtml(q.id, q.type)}</div>
+    <div class="form-grid">
+      <div class="ff"><label>Lien cliquable (optionnel)</label><input id="qn-edit-linkLabel-${q.id}" value="${esc(q.linkLabel||'')}" placeholder="Ex : Calculer le retour sur investissement"></div>
+      <div class="ff"><label>URL du lien</label><input id="qn-edit-linkUrl-${q.id}" value="${esc(q.linkUrl||'')}" placeholder="https://…"></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary btn-sm" onclick="qnSaveQuestion('${q.id}')">Enregistrer</button>
+      <button class="btn btn-ghost btn-sm" onclick="qnCancelEditQuestion()">Annuler</button>
+    </div>
+  </div>`;
+}
+
+function qnEditQuestion(id){
+  const q = (QNP_CURRENT.questions||[]).find(x=>x.id===id);
+  if(!q) return;
+  if(q.type==='single' || q.type==='multi'){
+    QN_OPT_ROWS[id] = (q.options||[]).map((o,i)=>({key:o.key||('o'+i), label:o.label||''}));
+    while(QN_OPT_ROWS[id].length<2) QN_OPT_ROWS[id].push({key:'o'+QN_OPT_ROWS[id].length, label:''});
+  } else if(q.type==='rating'){
+    const o = q.options||{};
+    QN_RATING[id] = {min:o.min!=null?o.min:1, max:o.max!=null?o.max:5, minLabel:o.minLabel||'', maxLabel:o.maxLabel||''};
+  }
+  QN_EDITING_ID = id;
+  qnRenderQuestions();
+}
+
+function qnCancelEditQuestion(){
+  if(QN_EDITING_ID){ delete QN_OPT_ROWS[QN_EDITING_ID]; delete QN_RATING[QN_EDITING_ID]; }
+  QN_EDITING_ID = null;
+  qnRenderQuestions();
+}
+
+function qnEditTypeChanged(id){
+  const type = document.getElementById('qn-edit-type-'+id).value;
+  delete QN_OPT_ROWS[id]; delete QN_RATING[id];
+  qnRerenderOptionsEditor(id, type);
+}
+
+async function qnSaveQuestion(id){
+  const type = document.getElementById('qn-edit-type-'+id).value;
+  const label = document.getElementById('qn-edit-label-'+id).value.trim();
+  const required = document.getElementById('qn-edit-required-'+id).value==='1';
+  if(!label){ flash('Intitulé requis'); return; }
+  const options = qnBuildOptions(id, type);
+  if((type==='single'||type==='multi') && (!options || options.length<2)){ flash('Ajoutez au moins deux options'); return; }
+  const linkUrl = document.getElementById('qn-edit-linkUrl-'+id).value.trim();
+  const linkLabel = document.getElementById('qn-edit-linkLabel-'+id).value.trim();
+  if(linkUrl && !/^https?:\/\//i.test(linkUrl)){ flash('Le lien doit commencer par http:// ou https://'); return; }
+  try{
+    const r = await apiFetch('/wa/questionnaire/question/update', {method:'POST', body:JSON.stringify({scope:'crm', id, type, label, required, options, linkUrl, linkLabel})});
+    const data = await r.json();
+    if(!r.ok){ flash(data.error||'Erreur'); return; }
+    const idx = QNP_CURRENT.questions.findIndex(x=>x.id===id);
+    if(idx>-1) QNP_CURRENT.questions[idx] = data;
+    delete QN_OPT_ROWS[id]; delete QN_RATING[id];
+    QN_EDITING_ID = null;
+    qnRenderQuestions();
+    flash('Question modifiée');
+  }catch(e){ flash('Erreur de connexion au serveur'); }
 }
 
 function qnBuildOptions(ctx, type){
@@ -1624,8 +1704,13 @@ function qnOptionsEditorHtml(ctx, type){
   return '';
 }
 
-function qnAddOption(ctx, type){ const rows=QN_OPT_ROWS[ctx]||(QN_OPT_ROWS[ctx]=[]); rows.push({key:'o'+rows.length,label:''}); qnRenderNewOptions(); }
-function qnRemoveOption(ctx, idx, type){ QN_OPT_ROWS[ctx].splice(idx,1); qnRenderNewOptions(); }
+function qnAddOption(ctx, type){ const rows=QN_OPT_ROWS[ctx]||(QN_OPT_ROWS[ctx]=[]); rows.push({key:'o'+rows.length,label:''}); qnRerenderOptionsEditor(ctx, type); }
+function qnRemoveOption(ctx, idx, type){ QN_OPT_ROWS[ctx].splice(idx,1); qnRerenderOptionsEditor(ctx, type); }
+function qnRerenderOptionsEditor(ctx, type){
+  if(ctx==='new'){ qnRenderNewOptions(); return; }
+  const el = document.getElementById('qn-edit-options-'+ctx);
+  if(el) el.innerHTML = qnOptionsEditorHtml(ctx, type);
+}
 
 function qnRenderNewOptions(){
   const type = document.getElementById('qn-new-type').value;
@@ -1641,13 +1726,18 @@ async function qnAddQuestion(){
   if(!label){ flash('Intitulé requis'); return; }
   const options = qnBuildOptions('new', type);
   if((type==='single'||type==='multi') && (!options || options.length<2)){ flash('Ajoutez au moins deux options'); return; }
+  const linkUrl = document.getElementById('qn-new-linkUrl').value.trim();
+  const linkLabel = document.getElementById('qn-new-linkLabel').value.trim();
+  if(linkUrl && !/^https?:\/\//i.test(linkUrl)){ flash('Le lien doit commencer par http:// ou https://'); return; }
   try{
-    const r = await apiFetch('/wa/questionnaire/question/create', {method:'POST', body:JSON.stringify({scope:'crm', questionnaireId:QNP_CURRENT.id, type, label, required, options})});
+    const r = await apiFetch('/wa/questionnaire/question/create', {method:'POST', body:JSON.stringify({scope:'crm', questionnaireId:QNP_CURRENT.id, type, label, required, options, linkUrl, linkLabel})});
     const data = await r.json();
     if(!r.ok){ flash(data.error||'Erreur'); return; }
     QNP_CURRENT.questions.push(data);
     document.getElementById('qn-new-label').value='';
     document.getElementById('qn-new-required').value='0';
+    document.getElementById('qn-new-linkUrl').value='';
+    document.getElementById('qn-new-linkLabel').value='';
     qnRenderNewOptions();
     qnRenderQuestions();
     const i = QNP_LIST.findIndex(x=>x.id===QNP_CURRENT.id);
