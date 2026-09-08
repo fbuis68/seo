@@ -1112,6 +1112,12 @@ var API_BASE = '';
 // pointe vers le bon hôtel. Sans ce paramètre, le serveur applique son
 // tenant par défaut (comportement historique mono-tenant).
 var ENTITY_CODE = new URLSearchParams(window.location.search).get('entityCode') || '';
+// Lien de démo commerciale (?demoCode=XXXX) : ouvre directement sur l'étape
+// "Choisir ma chambre" d'une réservation précise, sans passer par l'écran de
+// recherche (conçu pour un vrai client qui retrouve SA réservation, pas
+// adapté à un visiteur externe qui n'a ni email ni code à saisir) — cf.
+// loadDemoBooking() dans le DOMContentLoaded plus bas.
+var DEMO_CODE = new URLSearchParams(window.location.search).get('demoCode') || '';
 function apiFetch(url, opts){
   if(!ENTITY_CODE) return fetch(url, opts);
   opts = opts || {};
@@ -2318,6 +2324,25 @@ function renderBookingResults(list) {
   });
   res.innerHTML = h;
   if (S.booking) document.getElementById('step1next').style.display = 'block';
+}
+
+/**
+ * Entrée directe pour un lien de démo commerciale (?demoCode=XXXX) — cf.
+ * DEMO_CODE ci-dessus. Recherche la réservation par son code exact, la
+ * sélectionne, et saute directement à l'étape "Choisir ma chambre" : un
+ * visiteur externe n'a jamais à voir l'écran de recherche ni à connaître un
+ * email/nom, un seul lien suffit à démarrer la démo.
+ */
+async function loadDemoBooking(code){
+  document.getElementById('searchQ').value = code;
+  await fetchBookings();
+  var b = SESAME_CACHE.bookings.find(function(bk){ return bk.code===code; });
+  if(!b){
+    document.getElementById('bookingResults').innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-circle"></i><span>'+t('booking_none_found')+'</span></div>';
+    return;
+  }
+  selectBooking(b.id);
+  gotoStep(2);
 }
 
 function selectBooking(id) {
@@ -5208,8 +5233,9 @@ window.addEventListener('DOMContentLoaded',async function(){
   fetchPaymentStatus();
   handlePaymentReturn();
   fetchPosList();
-  // Charger les réservations dès l'ouverture
-  fetchBookings();
+  // Charger les réservations dès l'ouverture — ou sauter directement à la
+  // démo si le lien porte ?demoCode=XXXX (cf. loadDemoBooking).
+  if(DEMO_CODE) loadDemoBooking(DEMO_CODE); else fetchBookings();
 });
 </script>
 </body>
