@@ -1351,12 +1351,17 @@ async function openQuestionnaireSendModal(){
   const withEmail = crmSelectedWithEmail();
   const skipped = total - withEmail.length;
   await ensureTemplatesLoaded();
-  const tpls = MSG_TEMPLATES.filter(t=>t.channel==='email');
+  // Restreint aux modèles qui contiennent réellement {{lienQuestionnaire}} —
+  // sans ce filtre, le sélecteur proposait n'importe quel modèle email (ex :
+  // "Bienvenue nouveau prospect"), facile à choisir par erreur (premier de
+  // la liste) : l'envoi partait bien, mais sans lien de questionnaire dans
+  // le corps, avec un contenu qui ressemblait à un tout autre message.
+  const tpls = MSG_TEMPLATES.filter(t=>t.channel==='email' && /\{\{\s*lienQuestionnaire\s*\}\}/.test(t.bodyHtml||''));
   if(!QN_CRM_LIST_CACHE){
     try{ const r = await apiFetch('/wa/questionnaire/list?scope=crm'); QN_CRM_LIST_CACHE = r.ok ? await r.json() : []; }catch(e){ QN_CRM_LIST_CACHE = []; }
   }
   if(!QN_CRM_LIST_CACHE.length){ flash('Aucun questionnaire — créez-en un depuis "Questionnaires"'); return; }
-  if(!tpls.length){ flash('Aucun modèle email — créez-en un depuis "Canaux"'); return; }
+  if(!tpls.length){ flash('Aucun modèle email ne contient la variable {{lienQuestionnaire}} — créez-en un (ou ajoutez cette variable à un modèle existant) depuis "Canaux"'); return; }
   document.getElementById('modal-ct').innerHTML=`
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box" style="max-width:480px">
