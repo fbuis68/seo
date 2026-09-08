@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Questionnaire — Sesame Technology</title>
+<style>
+  :root{--bg:#f5f4f0;--card:#fff;--bdr:#e2dfd9;--tx:#1a1a1a;--mu:#888;--a:#8a2b2b;--ok:#1a6b47}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--tx);font-size:14px}
+  .wrap{max-width:640px;margin:0 auto;padding:32px 20px 60px}
+  .logo{font-size:18px;font-weight:700;margin-bottom:4px}
+  .logo em{color:var(--a);font-style:normal}
+  .card{background:var(--card);border:0.5px solid var(--bdr);border-radius:12px;padding:22px;margin-top:18px}
+  h1{font-size:18px;margin:0 0 4px}
+  .sub{color:var(--mu);font-size:12px;margin-bottom:4px}
+  .intro{font-size:13px;color:#555;margin-top:10px;line-height:1.5}
+  .q{border-top:1px solid var(--bdr);padding-top:16px;margin-top:16px}
+  .q:first-of-type{border-top:none;margin-top:8px;padding-top:8px}
+  .q-label{font-size:14px;font-weight:500;margin-bottom:10px}
+  .q-label .req{color:var(--a)}
+  .choices{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+  .choice{flex:1;min-width:90px;text-align:center;padding:9px 8px;border:1.5px solid var(--bdr);border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;color:var(--mu);user-select:none;transition:all .12s}
+  .choice.on{border-color:var(--a);color:var(--a);background:#fbeeee}
+  .rating-row{display:flex;gap:6px;margin-bottom:8px}
+  .rating-pill{flex:1;text-align:center;padding:9px 4px;border:1.5px solid var(--bdr);border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;color:var(--mu);user-select:none;transition:all .12s}
+  .rating-pill.on{border-color:var(--a);color:#fff;background:var(--a)}
+  .rating-labels{display:flex;justify-content:space-between;font-size:11px;color:var(--mu);margin-bottom:4px}
+  .q-note,.q-text{width:100%;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--bdr);border-radius:8px;margin-top:2px;resize:vertical;min-height:36px}
+  .q-note{font-size:12px;min-height:34px}
+  .q-note::placeholder,.q-text::placeholder{color:#b5b2ac}
+  .btn{font-family:inherit;font-size:13px;padding:11px 18px;border-radius:8px;border:none;background:var(--a);color:#fff;cursor:pointer;width:100%;font-weight:500;margin-top:18px}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .err{color:#a32d2d;font-size:12px;margin-top:8px;display:none}
+  .ok-box{text-align:center;padding:30px 10px}
+  .ok-icon{font-size:36px;color:var(--ok);margin-bottom:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">SESAME <em>TECHNOLOGY</em></div>
+  <div id="app"><div class="card">Chargement…</div></div>
+</div>
+
+<script>
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+const params = new URLSearchParams(location.search);
+const TOKEN = params.get('token') || '';
+let DATA = null;
+let ANSWERS = {}; // questionId -> value object (shape depends on question type)
+
+function ans(id){ if(!ANSWERS[id]) ANSWERS[id] = {}; return ANSWERS[id]; }
+
+async function init(){
+  if(!TOKEN){ renderError('Lien invalide.'); return; }
+  try{
+    const r = await fetch('/wa/questionnaire/public?token='+encodeURIComponent(TOKEN));
+    const data = await r.json();
+    if(!r.ok){ renderError(data.error || 'Lien invalide ou expiré.'); return; }
+    DATA = data;
+    (data.answers||[]).forEach(function(a){ ANSWERS[a.questionId] = a.value || {}; });
+    render();
+  }catch(e){ renderError('Erreur de connexion au serveur.'); }
+}
+
+function renderError(msg){
+  document.getElementById('app').innerHTML = '<div class="card"><h1>Questionnaire</h1><div class="sub">'+esc(msg)+'</div></div>';
+}
+
+function questionHtml(q){
+  const label = '<div class="q-label">'+esc(q.label)+(q.required?' <span class="req">*</span>':'')+'</div>';
+  let body = '';
+  if(q.type === 'single'){
+    const opts = q.options || [];
+    body = '<div class="choices">' + opts.map(function(o){
+      const on = (ans(q.id).choice === o.key);
+      return '<div class="choice'+(on?' on':'')+'" onclick="pickSingle(\''+q.id+'\',\''+o.key+'\')">'+esc(o.label)+'</div>';
+    }).join('') + '</div>'
+    + '<textarea class="q-note" rows="1" placeholder="Un commentaire ? (optionnel)" oninput="setNote(\''+q.id+'\',this.value)">'+esc(ans(q.id).note||'')+'</textarea>';
+  } else if(q.type === 'multi'){
+    const opts = q.options || [];
+    body = '<div class="choices">' + opts.map(function(o){
+      const on = ((ans(q.id).choices)||[]).indexOf(o.key) > -1;
+      return '<div class="choice'+(on?' on':'')+'" onclick="toggleMulti(\''+q.id+'\',\''+o.key+'\')">'+esc(o.label)+'</div>';
+    }).join('') + '</div>'
+    + '<textarea class="q-note" rows="1" placeholder="Un commentaire ? (optionnel)" oninput="setNote(\''+q.id+'\',this.value)">'+esc(ans(q.id).note||'')+'</textarea>';
+  } else if(q.type === 'boolean'){
+    body = '<div class="choices">'
+      + '<div class="choice'+(ans(q.id).value===true?' on':'')+'" onclick="setBool(\''+q.id+'\',true)">Oui</div>'
+      + '<div class="choice'+(ans(q.id).value===false?' on':'')+'" onclick="setBool(\''+q.id+'\',false)">Non</div>'
+      + '</div>';
+  } else if(q.type === 'text'){
+    body = '<textarea class="q-text" rows="3" placeholder="Votre réponse…" oninput="setText(\''+q.id+'\',this.value)">'+esc(ans(q.id).text||'')+'</textarea>';
+  } else if(q.type === 'rating'){
+    const opts = q.options || {};
+    const min = opts.min!=null ? opts.min : 1;
+    const max = opts.max!=null ? opts.max : 5;
+    const vals = [];
+    for(let i=min;i<=max;i++) vals.push(i);
+    body = (opts.minLabel||opts.maxLabel) ? ('<div class="rating-labels"><span>'+esc(opts.minLabel||'')+'</span><span>'+esc(opts.maxLabel||'')+'</span></div>') : '';
+    body += '<div class="rating-row">' + vals.map(function(v){
+      const on = ans(q.id).rating === v;
+      return '<div class="rating-pill'+(on?' on':'')+'" onclick="setRating(\''+q.id+'\','+v+')">'+v+'</div>';
+    }).join('') + '</div>';
+  }
+  return '<div class="q">' + label + body + '</div>';
+}
+
+function render(){
+  document.getElementById('app').innerHTML = `
+    <div class="card">
+      <h1>${esc(DATA.name)}</h1>
+      ${DATA.description ? '<div class="intro">'+esc(DATA.description)+'</div>' : ''}
+    </div>
+    <div class="card">
+      ${DATA.questions.map(questionHtml).join('')}
+      <button class="btn" id="submitBtn" onclick="submitAnswers()">Envoyer mes réponses</button>
+      <div class="err" id="err"></div>
+    </div>
+  `;
+}
+
+function pickSingle(id, key){ ans(id).choice = key; render(); }
+function toggleMulti(id, key){
+  const a = ans(id);
+  if(!a.choices) a.choices = [];
+  const i = a.choices.indexOf(key);
+  if(i>-1) a.choices.splice(i,1); else a.choices.push(key);
+  render();
+}
+function setBool(id, v){ ans(id).value = v; render(); }
+function setText(id, v){ ans(id).text = v; }
+function setRating(id, v){ ans(id).rating = v; render(); }
+function setNote(id, v){ ans(id).note = v; }
+
+async function submitAnswers(){
+  const errEl = document.getElementById('err');
+  errEl.style.display='none';
+  const answers = Object.keys(ANSWERS).map(function(id){ return {questionId:id, value:ANSWERS[id]}; });
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true; btn.textContent = 'Envoi en cours…';
+  try{
+    const r = await fetch('/wa/questionnaire/submit', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ token: TOKEN, answers: answers })
+    });
+    const data = await r.json();
+    if(!r.ok){ errEl.textContent = data.error || 'Erreur lors de l\'envoi.'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Envoyer mes réponses'; return; }
+  }catch(e){ errEl.textContent = 'Erreur de connexion au serveur.'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Envoyer mes réponses'; return; }
+  document.getElementById('app').innerHTML = `
+    <div class="card">
+      <div class="ok-box">
+        <div class="ok-icon">✓</div>
+        <div><strong>Merci !</strong></div>
+        <div class="sub">Vos réponses ont bien été enregistrées.</div>
+      </div>
+    </div>`;
+}
+
+init();
+</script>
+</body>
+</html>

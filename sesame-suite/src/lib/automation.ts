@@ -2,6 +2,7 @@ import { prisma } from "../db";
 import { sendMessage } from "./messaging";
 import { Channel } from "./messageTemplate";
 import { todayInTz } from "./timezone";
+import { getOrCreateQuestionnaireSend, questionnaireLinkUrl, QuestionnaireTargetType } from "./questionnaire";
 
 /**
  * Catalogue fixe des déclencheurs métier — c'est la seule source de vérité
@@ -51,7 +52,8 @@ export const TRIGGERS: TriggerDef[] = [
   { key: "crm.newsletter", label: "Newsletter récurrente", scope: "crm", timingModes: ["recurring"] },
   { key: "crm.ticket_created", label: "Nouveau ticket support", scope: "crm", timingModes: ["immediate"] },
   { key: "crm.ticket_client_replied", label: "Client a répondu à un ticket", scope: "crm", timingModes: ["immediate"] },
-  { key: "crm.qualification_submitted", label: "Questionnaire de qualification rempli", scope: "crm", timingModes: ["immediate"] },
+  { key: "questionnaire.completed", label: "Questionnaire complété", scope: "hotel", timingModes: ["immediate"] },
+  { key: "crm.questionnaire_completed", label: "Questionnaire complété", scope: "crm", timingModes: ["immediate"] },
 ];
 
 export function getTrigger(key: string) {
@@ -83,6 +85,35 @@ function resolveRecipient(
 
 function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+const QUESTIONNAIRE_TARGET_TYPES = new Set(["crmProspect", "booking"]);
+
+/**
+ * Quand la règle référence un questionnaire (AutomationRule.questionnaireId),
+ * génère/réutilise son lien pour la cible de l'événement et l'injecte comme
+ * variable {{lienQuestionnaire}} — le modèle de message (subject/bodyHtml)
+ * doit alors contenir cette variable pour que le lien apparaisse réellement
+ * dans l'envoi. Cible non compatible (ex: questionnaire attaché à une règle
+ * "order.created", dont la cible est une commande, pas un booking/prospect)
+ * → lève, pour que l'appelant l'enregistre via recordRuleError plutôt que
+ * d'envoyer silencieusement un message sans lien.
+ */
+async function attachQuestionnaireLink(
+  questionnaireId: string | null | undefined,
+  targetType: string,
+  targetId: string,
+  variables: Record<string, string>
+): Promise<Record<string, string>> {
+  if (!questionnaireId) return variables;
+  if (!QUESTIONNAIRE_TARGET_TYPES.has(targetType)) {
+    throw new Error(`Questionnaire non applicable à ce déclencheur (cible "${targetType}" non prise en charge)`);
+  }
+  const send = await getOrCreateQuestionnaireSend(questionnaireId, targetType as QuestionnaireTargetType, targetId);
+  if (!send.sentAt) {
+    await prisma.questionnaireSend.update({ where: { id: send.id }, data: { sentAt: new Date() } });
+  }
+  return { ...variables, lienQuestionnaire: questionnaireLinkUrl(send.token) };
 }
 
 /**
@@ -145,12 +176,13 @@ export async function fireTrigger(triggerKey: string, ctx: FireContext): Promise
         where: { ruleId_targetType_targetId: { ruleId: rule.id, targetType: ctx.targetType, targetId: ctx.targetId } },
       });
       if (already) continue;
+      const variables = await attachQuestionnaireLink(rule.questionnaireId, ctx.targetType, ctx.targetId, ctx.variables);
       await sendMessage({
         entityId: ctx.entityId,
         channel: rule.channel as Channel,
         templateKey: rule.templateKey,
         to,
-        variables: ctx.variables,
+        variables,
         fromNameOverride: rule.senderName || undefined,
       });
       await prisma.automationRuleLog.create({ data: { ruleId: rule.id, targetType: ctx.targetType, targetId: ctx.targetId } });
@@ -221,6 +253,7 @@ async function sweepDateRule(rule: {
   recipientMode: string;
   recipientOverride: string | null;
   senderName: string | null;
+  questionnaireId: string | null;
 }) {
   const trigger = getTrigger(rule.trigger);
   if (!trigger?.dateField) return;
@@ -255,12 +288,18 @@ async function sweepDateRule(rule: {
         where: { ruleId_targetType_targetId: { ruleId: rule.id, targetType: "booking", targetId: b.id } },
       });
       if (already) continue;
+      const variables = await attachQuestionnaireLink(
+        rule.questionnaireId,
+        "booking",
+        b.id,
+        { prenom: b.personFirstname, nom: b.personLastname, code: b.code }
+      );
       await sendMessage({
         entityId: rule.entityId,
         channel: rule.channel as Channel,
         templateKey: rule.templateKey,
         to,
-        variables: { prenom: b.personFirstname, nom: b.personLastname, code: b.code },
+        variables,
         fromNameOverride: rule.senderName || undefined,
       });
       await prisma.automationRuleLog.create({ data: { ruleId: rule.id, targetType: "booking", targetId: b.id } });
@@ -361,6 +400,7 @@ async function sweepRecurringRule(rule: {
   recipientMode: string;
   recipientOverride: string | null;
   senderName: string | null;
+  questionnaireId: string | null;
 }) {
   const now = new Date();
   if (!isRecurringDueThisHour(rule, now)) return;
@@ -415,12 +455,13 @@ async function sweepRecurringRule(rule: {
     const to = rule.channel === "email" ? p.email : p.tel;
     if (!to) continue;
     try {
+      const variables = await attachQuestionnaireLink(rule.questionnaireId, "crmProspect", p.id, { nom: p.nom, secteur: p.secteur || "" });
       await sendMessage({
         entityId: null,
         channel: rule.channel as Channel,
         templateKey: rule.templateKey,
         to,
-        variables: { nom: p.nom, secteur: p.secteur || "" },
+        variables,
         fromNameOverride: rule.senderName || undefined,
       });
       anySent = true;

@@ -32,6 +32,7 @@ function shapeRule(r: {
   recipientOverride: string | null;
   senderName: string | null;
   audienceFilter: unknown;
+  questionnaireId: string | null;
   lastRunAt: Date | null;
   lastError: string | null;
   lastErrorAt: Date | null;
@@ -55,6 +56,7 @@ function shapeRule(r: {
     recipientOverride: r.recipientOverride || "",
     senderName: r.senderName || "",
     audienceFilter: r.audienceFilter || null,
+    questionnaireId: r.questionnaireId,
     lastRunAt: r.lastRunAt,
     lastError: r.lastError,
     lastErrorAt: r.lastErrorAt,
@@ -89,6 +91,7 @@ interface RuleBody {
   recipientOverride?: string | null;
   senderName?: string | null;
   audienceFilter?: unknown;
+  questionnaireId?: string | null;
 }
 
 const TIMING_MODES = ["immediate", "offset", "recurring"];
@@ -130,6 +133,14 @@ function validateRuleBody(b: RuleBody) {
   }
 }
 
+/** Un questionnaire attaché doit appartenir à la même portée que la règle
+ * (jamais un questionnaire CRM sur une règle hôtel, ni l'inverse). */
+async function validateQuestionnaireId(entityId: string | null, questionnaireId: string | null | undefined) {
+  if (!questionnaireId) return;
+  const q = await prisma.questionnaire.findFirst({ where: { id: questionnaireId, entityId } });
+  if (!q) throw new HttpError(400, "Questionnaire introuvable pour cette portée");
+}
+
 automationRuleRouter.post(
   "/automationRule/create",
   requireAdmin,
@@ -137,6 +148,7 @@ automationRuleRouter.post(
     const entityId = await resolveScope(req);
     const b = req.body as RuleBody;
     validateRuleBody(b);
+    await validateQuestionnaireId(entityId, b.questionnaireId);
     const row = await prisma.automationRule.create({
       data: {
         entityId,
@@ -156,6 +168,7 @@ automationRuleRouter.post(
         recipientOverride: b.recipientMode === "custom" ? (b.recipientOverride || "").trim() : null,
         senderName: b.senderName?.trim() || null,
         audienceFilter: b.audienceFilter ?? undefined,
+        questionnaireId: b.questionnaireId || null,
       },
     });
     res.status(201).json(shapeRule(row));
@@ -173,6 +186,7 @@ automationRuleRouter.post(
     if (!existing) throw new HttpError(404, "Règle introuvable");
     const b = rest;
     validateRuleBody(b);
+    await validateQuestionnaireId(entityId, b.questionnaireId);
     const row = await prisma.automationRule.update({
       where: { id },
       data: {
@@ -191,6 +205,7 @@ automationRuleRouter.post(
         recipientMode: b.recipientMode || "event",
         recipientOverride: b.recipientMode === "custom" ? (b.recipientOverride || "").trim() : null,
         senderName: b.senderName?.trim() || null,
+        questionnaireId: b.questionnaireId || null,
         audienceFilter: b.audienceFilter ?? undefined,
       },
     });

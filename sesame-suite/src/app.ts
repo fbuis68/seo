@@ -30,7 +30,7 @@ import { crmQuoteRouter } from "./routes/crmQuote";
 import { crmUserRouter } from "./routes/crmUser";
 import { crmProductRouter } from "./routes/crmProduct";
 import { crmTicketRouter } from "./routes/crmTicket";
-import { crmQualificationRouter } from "./routes/crmQualification";
+import { questionnaireRouter } from "./routes/questionnaire";
 import { crmCashLineRouter } from "./routes/crmCashLine";
 import { contactRouter } from "./routes/contact";
 import { emailRouter } from "./routes/email";
@@ -100,7 +100,7 @@ export function createApp() {
   app.use("/wa", crmUserRouter);
   app.use("/wa", crmProductRouter);
   app.use("/wa", crmTicketRouter);
-  app.use("/wa", crmQualificationRouter);
+  app.use("/wa", questionnaireRouter);
   app.use("/wa", crmCashLineRouter);
   app.use("/wa", emailRouter);
   app.use("/wa", messagingRouter);

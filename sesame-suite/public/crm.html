@@ -473,6 +473,7 @@ svg.tr-chart{display:block;width:100%;height:auto;min-width:640px}
     <div class="nav-lbl">Paramètres</div>
     <div class="nav-item" id="n-canaux" onclick="showCanauxPanel()"><div class="nav-ico">✉</div> Canaux</div>
     <div class="nav-item" id="n-auto" onclick="showAutomationPanel()"><div class="nav-ico">◈</div> Automatisations</div>
+    <div class="nav-item" id="n-questionnaires" onclick="showQuestionnaires()"><div class="nav-ico">▤</div> Questionnaires</div>
     <div class="nav-item" id="n-produits" onclick="showCrmProducts()"><div class="nav-ico">◫</div> Produits</div>
     <div class="nav-item" id="n-crmusers" onclick="showCrmUsers()" style="display:none"><div class="nav-ico">◉</div> Utilisateurs CRM</div>
     <hr class="s-hr">
@@ -732,7 +733,7 @@ let clients=[], view='list', vmode='table', curId=null, sortC='nom', sortD=1;
 // tableau `clients` porte un état de sélection qui n'a rien à y faire.
 let SELECTED_IDS = new Set();
 let srch='', fDanger='', fSecteur='', fOrigine='', fContrat='', fType='', editingId=null, toastT=null;
-let deals=[], COMMERCIALS=[], tickets=[], cashLines=[], SECTOR_OPTIONS=[], ORIGINE_OPTIONS=[], QUALIFICATION_MODULES_CATALOG=[];
+let deals=[], COMMERCIALS=[], tickets=[], cashLines=[], SECTOR_OPTIONS=[], ORIGINE_OPTIONS=[];
 let cashSettings = {revenuMode:'detail',revenuMontant:0,revenuFrequence:'mensuel',revenuMois:null,depenseMode:'detail',depenseMontant:0,depenseFrequence:'mensuel',depenseMois:null};
 let cashYear = new Date().getFullYear();
 // Filtre d'affichage (vérification/modification) sur les listes de lignes
@@ -780,20 +781,14 @@ async function loadOrigines(){
   if(!r.ok) throw new Error('http '+r.status);
   return await r.json();
 }
-async function loadQualificationModules(){
-  var r = await apiFetch('/wa/crmQualification/modules');
-  if(!r.ok) throw new Error('http '+r.status);
-  return await r.json();
-}
 async function init(){
   try{
-    const [c, d, com, t, cl, cs, sec, orig, qm] = await Promise.all([loadData(), loadDeals(), loadCommercials(), loadTickets(), loadCashLines(), loadCashSettings(), loadSectors(), loadOrigines(), loadQualificationModules()]);
+    const [c, d, com, t, cl, cs, sec, orig] = await Promise.all([loadData(), loadDeals(), loadCommercials(), loadTickets(), loadCashLines(), loadCashSettings(), loadSectors(), loadOrigines()]);
     clients = c; deals = d; COMMERCIALS = com; tickets = t; cashLines = cl; cashSettings = cs;
     SECTOR_OPTIONS = sec; SECTEURS = sec.map(s=>s.label);
     ORIGINE_OPTIONS = orig; ORIGINES = orig.map(o=>o.label);
-    QUALIFICATION_MODULES_CATALOG = qm;
   }
-  catch(e){ flash('Erreur de chargement — rechargez la page'); clients = []; deals = []; COMMERCIALS = []; tickets = []; cashLines = []; SECTOR_OPTIONS = []; SECTEURS = []; ORIGINE_OPTIONS = []; ORIGINES = []; QUALIFICATION_MODULES_CATALOG = []; }
+  catch(e){ flash('Erreur de chargement — rechargez la page'); clients = []; deals = []; COMMERCIALS = []; tickets = []; cashLines = []; SECTOR_OPTIONS = []; SECTEURS = []; ORIGINE_OPTIONS = []; ORIGINES = []; }
   updateBadges();showList();
   loadVersionBadge();
 }
@@ -814,7 +809,7 @@ function ini(n){return(n||'?').split(' ').slice(0,2).map(w=>w[0]||'').join('').t
 function today(){const d=new Date();return d.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});}
 
 // ── NAV ──
-function setNav(id){['n-home','n-list','n-affaires','n-portefeuille','n-treso','n-tickets','n-produits','n-activite','n-contrats','n-canaux','n-auto','n-crmusers'].forEach(n=>document.getElementById(n).classList.remove('active'));var el=document.getElementById(id);if(el)el.classList.add('active');}
+function setNav(id){['n-home','n-list','n-affaires','n-portefeuille','n-treso','n-tickets','n-produits','n-activite','n-contrats','n-canaux','n-auto','n-crmusers','n-questionnaires'].forEach(n=>document.getElementById(n).classList.remove('active'));var el=document.getElementById(id);if(el)el.classList.add('active');}
 function setVMode(m){vmode=m;document.getElementById('vt-tbl').classList.toggle('active',m==='table');document.getElementById('vt-grd').classList.toggle('active',m==='grid');document.getElementById('vt-map').classList.toggle('active',m==='map');if(view==='list')renderList();}
 function bc(parts){document.getElementById('bc').innerHTML=parts.map((p,i)=>i<parts.length-1?`<span class="bc-link" onclick="${p.fn}">${p.label}</span><span class="bc-sep"> / </span>`:`<span class="bc-cur">${p.label}</span>`).join('');}
 function tba(html){document.getElementById('tb-actions').innerHTML=html;}
@@ -1187,7 +1182,7 @@ function renderList(){
   const selBar = SELECTED_IDS.size ? `<div class="list-toolbar" style="margin-top:-6px;margin-bottom:10px;padding:8px 12px;background:var(--pl,#fdedf0);border-radius:8px">
     <span style="font-size:13px;font-weight:600">${SELECTED_IDS.size} sélectionné${SELECTED_IDS.size>1?'s':''}</span>
     <button class="btn btn-primary btn-sm" onclick="openBulkEmailModal()">✉ Envoyer un email groupé</button>
-    <button class="btn btn-primary btn-sm" onclick="openQualificationSendModal()">📋 Envoyer le questionnaire de qualification</button>
+    <button class="btn btn-primary btn-sm" onclick="openQuestionnaireSendModal()">📋 Envoyer un questionnaire</button>
     <button class="btn btn-ghost btn-sm" onclick="crmClearSelection()">Désélectionner</button>
   </div>` : '';
 
@@ -1342,64 +1337,55 @@ async function sendBulkEmail(){
   flash(fail ? `${ok} email(s) envoyé(s), ${fail} échec(s)` : `${ok} email(s) envoyé(s)`);
 }
 
-// ── Questionnaire de qualification (intérêt par module Souscriptions) ──
-// Chaque destinataire reçoit un lien personnel (token, cf.
-// CrmProspect.qualificationToken) vers public/qualification.html, dont les
-// réponses reviennent automatiquement sur sa fiche (CrmQualificationResponse).
-// Réutilise l'infrastructure existante (modèle email + /wa/message/send +
-// journal d'activité) au lieu d'un pipeline d'envoi dédié — cf. sendBulkEmail
-// ci-dessus, dont ce flux est la variante "lien personnalisé par contact".
-const QUALIFICATION_DEFAULT_TEMPLATE = {
-  key: 'qualification',
-  name: 'Questionnaire de qualification',
-  subject: 'Un dernier point rapide, {{nom}}',
-  bodyHtml: '<p>Bonjour,</p><p>Pour ne vous proposer que les fonctionnalités Sesame qui vous seront réellement utiles, pourriez-vous prendre trois minutes pour répondre à ce court questionnaire ?</p><p><a href="{{lienQuestionnaire}}">Répondre au questionnaire</a></p><p>Merci !</p>',
-};
+// ── Envoi groupé d'un questionnaire (générique, cf. panneau "Questionnaires") ──
+// Chaque destinataire reçoit un lien personnel (QuestionnaireSend.token) vers
+// public/questionnaire.html — réutilise l'infrastructure existante (modèle
+// email + /wa/message/send + journal d'activité), variante "lien
+// personnalisé par contact" de sendBulkEmail ci-dessus.
+let QN_CRM_LIST_CACHE = null;
 
-async function openQualificationSendModal(){
+async function openQuestionnaireSendModal(){
   const total = SELECTED_IDS.size;
   if(!total){ flash('Aucune fiche sélectionnée'); return; }
   const withEmail = crmSelectedWithEmail();
   const skipped = total - withEmail.length;
+  await ensureTemplatesLoaded();
+  const tpls = MSG_TEMPLATES.filter(t=>t.channel==='email');
+  if(!QN_CRM_LIST_CACHE){
+    try{ const r = await apiFetch('/wa/questionnaire/list?scope=crm'); QN_CRM_LIST_CACHE = r.ok ? await r.json() : []; }catch(e){ QN_CRM_LIST_CACHE = []; }
+  }
+  if(!QN_CRM_LIST_CACHE.length){ flash('Aucun questionnaire — créez-en un depuis "Questionnaires"'); return; }
+  if(!tpls.length){ flash('Aucun modèle email — créez-en un depuis "Canaux"'); return; }
   document.getElementById('modal-ct').innerHTML=`
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box" style="max-width:480px">
-      <div class="modal-head"><div style="font-size:16px;font-weight:500">Envoyer le questionnaire de qualification</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Envoyer un questionnaire</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
       <div style="font-size:13px;color:var(--mu,#888);margin-bottom:10px">
         ${withEmail.length} destinataire${withEmail.length>1?'s':''} avec email valide sur ${total} fiche${total>1?'s':''} sélectionnée${total>1?'s':''}${skipped?` — <b style="color:#854f0b">${skipped} ignorée${skipped>1?'s':''} (pas d'email)</b>`:''}.
       </div>
-      <div style="font-size:12px;color:var(--mu,#888);margin-bottom:10px">Chaque destinataire reçoit un lien personnel vers un court questionnaire (intérêt pour chaque module Sesame) — les réponses reviennent automatiquement sur sa fiche. Le texte de l'email envoyé est modifiable ensuite depuis "Canaux" → modèle <code>qualification</code>.</div>
-      <div id="qual-send-progress" style="display:none;font-size:13px;color:var(--mu,#888);margin-top:10px">Envoi en cours…</div>
+      <div class="ff"><label>Questionnaire</label><select id="qsend-questionnaire">${QN_CRM_LIST_CACHE.map(q=>`<option value="${esc(q.id)}">${esc(q.name)}</option>`).join('')}</select></div>
+      <div class="ff"><label>Modèle d'email</label><select id="qsend-tpl">${tpls.map(t=>`<option value="${esc(t.key)}">${esc(t.name)}</option>`).join('')}</select></div>
+      <div style="font-size:12px;color:var(--mu,#888);margin-top:4px">Le modèle doit contenir la variable <code>{{lienQuestionnaire}}</code> pour que le lien apparaisse dans l'email.</div>
+      <div id="qsend-progress" style="display:none;font-size:13px;color:var(--mu,#888);margin-top:10px">Envoi en cours…</div>
       <div class="modal-footer">
-        <button class="btn btn-primary" id="qual-send-btn" onclick="sendQualificationBulk()" ${withEmail.length?'':'disabled'}>Envoyer à ${withEmail.length}</button>
+        <button class="btn btn-primary" id="qsend-btn" onclick="sendQuestionnaireBulk()" ${withEmail.length?'':'disabled'}>Envoyer à ${withEmail.length}</button>
         <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
       </div>
     </div>
   </div>`;
 }
 
-async function ensureQualificationTemplate(){
-  await ensureTemplatesLoaded();
-  let tpl = MSG_TEMPLATES.find(t=>t.channel==='email' && t.key==='qualification');
-  if(tpl) return tpl;
-  const r = await apiFetch('/wa/messageTemplate/upsert', {method:'POST', body:JSON.stringify({
-    scope:'crm', channel:'email', key:QUALIFICATION_DEFAULT_TEMPLATE.key, name:QUALIFICATION_DEFAULT_TEMPLATE.name,
-    subject:QUALIFICATION_DEFAULT_TEMPLATE.subject, bodyHtml:QUALIFICATION_DEFAULT_TEMPLATE.bodyHtml
-  })});
-  tpl = await r.json();
-  if(r.ok) MSG_TEMPLATES.push(tpl);
-  return tpl;
-}
-
-async function sendQualificationBulk(){
+async function sendQuestionnaireBulk(){
   const recipients = crmSelectedWithEmail();
   if(!recipients.length) return;
-  const btn=document.getElementById('qual-send-btn'); if(btn){ btn.disabled=true; btn.textContent='Envoi…'; }
-  const progress=document.getElementById('qual-send-progress'); if(progress) progress.style.display='block';
+  const questionnaireId = (document.getElementById('qsend-questionnaire')||{value:''}).value;
+  const templateKey = (document.getElementById('qsend-tpl')||{value:''}).value;
+  if(!questionnaireId || !templateKey){ flash('Sélectionnez un questionnaire et un modèle'); return; }
+  const btn=document.getElementById('qsend-btn'); if(btn){ btn.disabled=true; btn.textContent='Envoi…'; }
+  const progress=document.getElementById('qsend-progress'); if(progress) progress.style.display='block';
 
   try{
-    await ensureQualificationTemplate();
-    const pr = await apiFetch('/wa/crmQualification/prepareLinks', {method:'POST', body:JSON.stringify({ids: recipients.map(c=>c.id)})});
+    const pr = await apiFetch('/wa/questionnaire/prepareLinks', {method:'POST', body:JSON.stringify({scope:'crm', questionnaireId:questionnaireId, targetIds: recipients.map(c=>c.id)})});
     const prData = await pr.json();
     if(!pr.ok){ flash(prData.error||'Erreur lors de la préparation des liens'); if(btn){btn.disabled=false;btn.textContent='Réessayer';} return; }
     const links = prData.links||{};
@@ -1408,21 +1394,20 @@ async function sendQualificationBulk(){
       const lien = links[c.id];
       if(!lien) throw new Error('lien manquant');
       const r = await apiFetch('/wa/message/send', {method:'POST', body:JSON.stringify({
-        scope:'crm', channel:'email', templateKey:'qualification', to:c.email,
+        scope:'crm', channel:'email', templateKey:templateKey, to:c.email,
         variables:{nom:c.nom, secteur:c.secteur||'', referent:c.referent||'', ville:c.ville||'', lienQuestionnaire:lien}
       })});
       const data = await r.json();
       if(!r.ok) throw new Error(data.error||'http '+r.status);
       const ar = await apiFetch('/wa/crmProspect/activity/create', {method:'POST', body:JSON.stringify({
-        prospectId:c.id, type:'Email', text:'Questionnaire de qualification envoyé : "'+(data.subject||'')+'"', authorName:'CRM'
+        prospectId:c.id, type:'Email', text:'Questionnaire envoyé : "'+(data.subject||'')+'"', authorName:'CRM'
       })});
       if(ar.ok){ const entry=await ar.json(); if(!c.journal)c.journal=[]; c.journal.push(entry); }
       return c.id;
     }));
 
     const okIds = results.filter(r=>r.status==='fulfilled').map(r=>r.value);
-    if(okIds.length) await apiFetch('/wa/crmQualification/markSent', {method:'POST', body:JSON.stringify({ids: okIds})});
-    okIds.forEach(id=>{ const c=clients.find(c=>c.id===id); if(c) c.qualificationSentAt=new Date().toISOString(); });
+    if(okIds.length) await apiFetch('/wa/questionnaire/markSent', {method:'POST', body:JSON.stringify({scope:'crm', questionnaireId:questionnaireId, targetIds:okIds})});
 
     const ok = okIds.length;
     const fail = results.length - ok;
@@ -1433,6 +1418,289 @@ async function sendQualificationBulk(){
     flash('Erreur : '+(e.message||e));
     if(btn){ btn.disabled=false; btn.textContent='Réessayer'; }
   }
+}
+
+// ════════════════════════════════════════
+// QUESTIONNAIRES (portée CRM) — gestionnaire générique, mêmes types de
+// question et mêmes routes que le panneau équivalent d'admin.html (portée
+// hôtel), cf. src/routes/questionnaire.ts.
+// ════════════════════════════════════════
+let QNP_LIST=[], QNP_CURRENT=null;
+const QN_TYPE_LABEL = { single:'Choix unique', multi:'Choix multiple', boolean:'Oui / Non', text:'Texte libre', rating:'Note / échelle' };
+let QN_OPT_ROWS={}, QN_RATING={};
+
+async function showQuestionnaires(){
+  view='questionnaires';setNav('n-questionnaires');bc([{label:'Questionnaires'}]);
+  tba('<button class="btn btn-primary btn-sm" onclick="qnCreate()">+ Nouveau questionnaire</button>');
+  document.getElementById('main').innerHTML='<div class="card">Chargement…</div>';
+  try{
+    const r = await apiFetch('/wa/questionnaire/list?scope=crm');
+    QNP_LIST = r.ok ? await r.json() : [];
+  }catch(e){ QNP_LIST=[]; }
+  QN_CRM_LIST_CACHE = QNP_LIST;
+  renderQnList();
+}
+
+function renderQnList(){
+  if(!QNP_LIST.length){ document.getElementById('main').innerHTML = '<div class="card log-empty">Aucun questionnaire — créez-en un pour recueillir l\'avis de vos prospects/clients.</div>'; return; }
+  document.getElementById('main').innerHTML = '<div class="grid-view">' + QNP_LIST.map(q=>`
+    <div class="gc" onclick="qnOpenDetail('${q.id}')">
+      <div class="gc-head"><div class="gc-info"><div class="gc-name">${esc(q.name)}${q.active?'':' <span class="tag t-red" style="font-size:10px">Inactif</span>'}</div><div class="gc-sub">${q.description?esc(q.description):'Aucune description'}</div></div></div>
+      <hr class="gc-divider">
+      <div class="gc-fields">
+        <div class="gc-row"><span class="gc-rl">Questions</span><span class="gc-rv">${q.questionCount}</span></div>
+        <div class="gc-row"><span class="gc-rl">Envois</span><span class="gc-rv">${q.sendCount}</span></div>
+      </div>
+    </div>`).join('') + '</div>';
+}
+
+async function qnCreate(){
+  const name = prompt('Nom du questionnaire :');
+  if(!name || !name.trim()) return;
+  try{
+    const r = await apiFetch('/wa/questionnaire/create', {method:'POST', body:JSON.stringify({scope:'crm', name:name.trim()})});
+    const data = await r.json();
+    if(!r.ok){ flash(data.error||'Erreur lors de la création'); return; }
+    QNP_LIST.push(data);
+    qnOpenDetail(data.id);
+  }catch(e){ flash('Erreur de connexion au serveur'); }
+}
+
+async function qnOpenDetail(id){
+  try{
+    const r = await apiFetch('/wa/questionnaire/get?scope=crm&id='+encodeURIComponent(id));
+    const data = await r.json();
+    if(!r.ok){ flash(data.error||'Questionnaire introuvable'); return; }
+    QNP_CURRENT = data;
+  }catch(e){ flash('Erreur de connexion au serveur'); return; }
+  view='questionnaires';setNav('n-questionnaires');bc([{label:'Questionnaires',fn:'showQuestionnaires()'},{label:QNP_CURRENT.name}]);
+  tba('<button class="btn btn-ghost" onclick="showQuestionnaires()">← Retour</button>');
+  renderQnDetail();
+  qnFetchResults();
+}
+
+function renderQnDetail(){
+  const q = QNP_CURRENT;
+  document.getElementById('main').innerHTML = `
+    <div class="card">
+      <div class="card-head"><span class="ch-title">Réglages</span></div>
+      <div class="form-grid">
+        <div class="ff"><label>Nom</label><input id="qn-d-name" value="${esc(q.name)}"></div>
+        <div class="ff"><label>Actif</label><select id="qn-d-active"><option value="1" ${q.active?'selected':''}>Oui</option><option value="0" ${!q.active?'selected':''}>Non</option></select></div>
+      </div>
+      <div class="ff"><label>Description (optionnelle, affichée en haut du questionnaire)</label><textarea id="qn-d-description">${esc(q.description||'')}</textarea></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button class="btn btn-primary btn-sm" onclick="qnSaveSettings()">Enregistrer</button>
+        <button class="btn btn-ghost btn-sm" onclick="qnDuplicate()">Dupliquer</button>
+        <button class="btn btn-ghost btn-sm" style="color:#a32d2d" onclick="qnDeleteCurrent()">Supprimer</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="ch-title">Questions — <span id="qn-d-qcount">0</span></span></div>
+      <div id="qn-d-questions" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px"></div>
+      <div style="border-top:1px solid var(--bdr,#e2dfd9);padding-top:12px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px">Ajouter une question</div>
+        <div class="form-grid">
+          <div class="ff"><label>Type</label><select id="qn-new-type" onchange="qnRenderNewOptions()">
+            <option value="single">Choix unique</option><option value="multi">Choix multiple</option>
+            <option value="boolean">Oui / Non</option><option value="text">Texte libre</option><option value="rating">Note / échelle</option>
+          </select></div>
+          <div class="ff"><label>Obligatoire</label><select id="qn-new-required"><option value="0">Non</option><option value="1">Oui</option></select></div>
+        </div>
+        <div class="ff"><label>Intitulé de la question</label><input id="qn-new-label" placeholder="Ex : Comment évaluez-vous votre séjour ?"></div>
+        <div id="qn-new-options"></div>
+        <button class="btn btn-primary btn-sm" onclick="qnAddQuestion()">+ Ajouter la question</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="ch-title">Résultats — <span id="qn-res-count">0</span> réponse(s)</span></div>
+      <div id="qn-res-body" class="tbl-wrap"></div>
+    </div>
+  `;
+  qnRenderQuestions();
+  qnRenderNewOptions();
+}
+
+async function qnSaveSettings(){
+  if(!QNP_CURRENT) return;
+  const body = { id:QNP_CURRENT.id, scope:'crm', name:document.getElementById('qn-d-name').value.trim(), description:document.getElementById('qn-d-description').value.trim(), active:document.getElementById('qn-d-active').value==='1' };
+  if(!body.name){ flash('Le nom est requis'); return; }
+  try{
+    const r = await apiFetch('/wa/questionnaire/update', {method:'POST', body:JSON.stringify(body)});
+    const data = await r.json();
+    if(!r.ok){ flash(data.error||'Erreur'); return; }
+    Object.assign(QNP_CURRENT, data);
+    const i = QNP_LIST.findIndex(x=>x.id===QNP_CURRENT.id);
+    if(i>-1) QNP_LIST[i] = Object.assign({}, QNP_LIST[i], data);
+    flash('Questionnaire enregistré');
+  }catch(e){ flash('Erreur de connexion au serveur'); }
+}
+
+async function qnDuplicate(){
+  if(!QNP_CURRENT) return;
+  try{
+    const r = await apiFetch('/wa/questionnaire/duplicate', {method:'POST', body:JSON.stringify({scope:'crm', id:QNP_CURRENT.id})});
+    const data = await r.json();
+    if(!r.ok){ flash(data.error||'Erreur'); return; }
+    flash('Questionnaire dupliqué');
+    QNP_LIST.push(data);
+    qnOpenDetail(data.id);
+  }catch(e){ flash('Erreur de connexion au serveur'); }
+}
+
+async function qnDeleteCurrent(){
+  if(!QNP_CURRENT) return;
+  if(!confirm('Supprimer définitivement "'+QNP_CURRENT.name+'" et tous ses envois/réponses ?')) return;
+  try{
+    const r = await apiFetch('/wa/questionnaire/delete', {method:'POST', body:JSON.stringify({scope:'crm', id:QNP_CURRENT.id})});
+    if(!r.ok){ flash('Erreur lors de la suppression'); return; }
+    QNP_LIST = QNP_LIST.filter(x=>x.id!==QNP_CURRENT.id);
+    flash('Questionnaire supprimé');
+    QNP_CURRENT=null;
+    showQuestionnaires();
+  }catch(e){ flash('Erreur de connexion au serveur'); }
+}
+
+function qnRenderQuestions(){
+  const wrap = document.getElementById('qn-d-questions');
+  const qs = QNP_CURRENT.questions||[];
+  document.getElementById('qn-d-qcount').textContent = qs.length;
+  if(!qs.length){ wrap.innerHTML = '<div class="log-empty">Aucune question pour l\'instant.</div>'; return; }
+  wrap.innerHTML = qs.map((q,idx)=>{
+    let optsSummary='';
+    if(q.type==='single'||q.type==='multi') optsSummary = (q.options||[]).map(o=>esc(o.label)).join(' · ');
+    else if(q.type==='rating'){ const o=q.options||{}; optsSummary = 'Échelle '+(o.min!=null?o.min:1)+' à '+(o.max!=null?o.max:5); }
+    return `<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;background:var(--bg2,#f5f3ee);border-radius:8px">
+      <div style="flex:1">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#aaa;font-weight:700">${QN_TYPE_LABEL[q.type]}${q.required?' · Obligatoire':''}</div>
+        <div style="font-size:13px;font-weight:600">${esc(q.label)}</div>
+        ${optsSummary?`<div style="font-size:12px;color:#888">${optsSummary}</div>`:''}
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0">
+        ${idx>0?`<button class="ta-btn" onclick="qnMoveQuestion('${q.id}',-1)" title="Monter">↑</button>`:''}
+        ${idx<qs.length-1?`<button class="ta-btn" onclick="qnMoveQuestion('${q.id}',1)" title="Descendre">↓</button>`:''}
+        <button class="ta-btn" style="color:#a32d2d" onclick="qnDeleteQuestion('${q.id}')" title="Supprimer">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function qnBuildOptions(ctx, type){
+  if(type==='single'||type==='multi'){
+    const rows=(QN_OPT_ROWS[ctx]||[]).filter(o=>o.label&&o.label.trim());
+    return rows.map((o,i)=>({key:o.key||('o'+i), label:o.label.trim()}));
+  }
+  if(type==='rating'){
+    const r=QN_RATING[ctx]||{};
+    const out={min:r.min!=null&&r.min!==''?+r.min:1, max:r.max!=null&&r.max!==''?+r.max:5};
+    if(r.minLabel) out.minLabel=r.minLabel;
+    if(r.maxLabel) out.maxLabel=r.maxLabel;
+    return out;
+  }
+  return null;
+}
+
+function qnOptionsEditorHtml(ctx, type){
+  if(type==='single'||type==='multi'){
+    const rows = QN_OPT_ROWS[ctx] || (QN_OPT_ROWS[ctx]=[{key:'o0',label:''},{key:'o1',label:''}]);
+    return `<div class="ff"><label>Options de réponse</label>`
+      + rows.map((o,i)=>`<div style="display:flex;gap:6px;margin-bottom:6px">
+          <input value="${esc(o.label)}" placeholder="Option ${i+1}" style="flex:1" oninput="QN_OPT_ROWS['${ctx}'][${i}].label=this.value">
+          <button class="ta-btn" onclick="qnRemoveOption('${ctx}',${i},'${type}')">✕</button>
+        </div>`).join('')
+      + `<button class="btn btn-ghost btn-sm" onclick="qnAddOption('${ctx}','${type}')">+ Ajouter une option</button></div>`;
+  }
+  if(type==='rating'){
+    const r = QN_RATING[ctx] || (QN_RATING[ctx]={min:1,max:5,minLabel:'',maxLabel:''});
+    return `<div class="form-grid">
+      <div class="ff"><label>Min</label><input type="number" value="${r.min}" oninput="QN_RATING['${ctx}'].min=this.value"></div>
+      <div class="ff"><label>Max</label><input type="number" value="${r.max}" oninput="QN_RATING['${ctx}'].max=this.value"></div>
+      <div class="ff"><label>Légende min (optionnel)</label><input value="${esc(r.minLabel||'')}" oninput="QN_RATING['${ctx}'].minLabel=this.value"></div>
+      <div class="ff"><label>Légende max (optionnel)</label><input value="${esc(r.maxLabel||'')}" oninput="QN_RATING['${ctx}'].maxLabel=this.value"></div>
+    </div>`;
+  }
+  return '';
+}
+
+function qnAddOption(ctx, type){ const rows=QN_OPT_ROWS[ctx]||(QN_OPT_ROWS[ctx]=[]); rows.push({key:'o'+rows.length,label:''}); qnRenderNewOptions(); }
+function qnRemoveOption(ctx, idx, type){ QN_OPT_ROWS[ctx].splice(idx,1); qnRenderNewOptions(); }
+
+function qnRenderNewOptions(){
+  const type = document.getElementById('qn-new-type').value;
+  delete QN_OPT_ROWS['new']; delete QN_RATING['new'];
+  document.getElementById('qn-new-options').innerHTML = qnOptionsEditorHtml('new', type);
+}
+
+async function qnAddQuestion(){
+  if(!QNP_CURRENT) return;
+  const type = document.getElementById('qn-new-type').value;
+  const label = document.getElementById('qn-new-label').value.trim();
+  const required = document.getElementById('qn-new-required').value==='1';
+  if(!label){ flash('Intitulé requis'); return; }
+  const options = qnBuildOptions('new', type);
+  if((type==='single'||type==='multi') && (!options || options.length<2)){ flash('Ajoutez au moins deux options'); return; }
+  try{
+    const r = await apiFetch('/wa/questionnaire/question/create', {method:'POST', body:JSON.stringify({scope:'crm', questionnaireId:QNP_CURRENT.id, type, label, required, options})});
+    const data = await r.json();
+    if(!r.ok){ flash(data.error||'Erreur'); return; }
+    QNP_CURRENT.questions.push(data);
+    document.getElementById('qn-new-label').value='';
+    document.getElementById('qn-new-required').value='0';
+    qnRenderNewOptions();
+    qnRenderQuestions();
+    const i = QNP_LIST.findIndex(x=>x.id===QNP_CURRENT.id);
+    if(i>-1) QNP_LIST[i].questionCount = QNP_CURRENT.questions.length;
+    flash('Question ajoutée');
+  }catch(e){ flash('Erreur de connexion au serveur'); }
+}
+
+async function qnDeleteQuestion(id){
+  if(!confirm('Supprimer cette question ?')) return;
+  try{
+    const r = await apiFetch('/wa/questionnaire/question/delete', {method:'POST', body:JSON.stringify({scope:'crm', id})});
+    if(!r.ok){ flash('Erreur lors de la suppression'); return; }
+    QNP_CURRENT.questions = QNP_CURRENT.questions.filter(q=>q.id!==id);
+    qnRenderQuestions();
+    const i = QNP_LIST.findIndex(x=>x.id===QNP_CURRENT.id);
+    if(i>-1) QNP_LIST[i].questionCount = QNP_CURRENT.questions.length;
+  }catch(e){ flash('Erreur de connexion au serveur'); }
+}
+
+async function qnMoveQuestion(id, dir){
+  const qs = QNP_CURRENT.questions;
+  const idx = qs.findIndex(q=>q.id===id);
+  const swapWith = idx+dir;
+  if(swapWith<0||swapWith>=qs.length) return;
+  const tmp=qs[idx]; qs[idx]=qs[swapWith]; qs[swapWith]=tmp;
+  qnRenderQuestions();
+  try{
+    await apiFetch('/wa/questionnaire/question/reorder', {method:'POST', body:JSON.stringify({scope:'crm', questionnaireId:QNP_CURRENT.id, orderedIds:qs.map(q=>q.id)})});
+  }catch(e){ flash('Erreur de connexion au serveur'); }
+}
+
+async function qnFetchResults(){
+  if(!QNP_CURRENT) return;
+  let sends=[];
+  try{
+    const r = await apiFetch('/wa/questionnaire/results?scope=crm&questionnaireId='+encodeURIComponent(QNP_CURRENT.id));
+    sends = r.ok ? await r.json() : [];
+  }catch(e){}
+  document.getElementById('qn-res-count').textContent = sends.length;
+  const body = document.getElementById('qn-res-body');
+  if(!sends.length){ body.innerHTML = '<div class="log-empty">Aucun envoi pour l\'instant.</div>'; return; }
+  const qs = (QNP_CURRENT&&QNP_CURRENT.questions)||[];
+  body.innerHTML = `<table><thead><tr><th>Contact</th><th>Envoyé</th><th>Complété</th><th>Réponses</th></tr></thead><tbody>` + sends.map(s=>{
+    const answersSummary = s.answers.map(a=>{
+      const q = qs.find(q=>q.id===a.questionId);
+      const label = q ? q.label : a.questionId;
+      const v = a.value||{};
+      const txt = v.choice || (v.choices||[]).join(', ') || v.text || (v.rating!=null?String(v.rating):'') || (v.value!=null?(v.value?'Oui':'Non'):'');
+      return `<div><b>${esc(label)} :</b> ${esc(txt)}${v.note?' — '+esc(v.note):''}</div>`;
+    }).join('') || '<span style="color:#aaa">—</span>';
+    return `<tr><td>${esc(s.targetName)}</td><td style="font-size:12px">${s.sentAt?new Date(s.sentAt).toLocaleDateString('fr-FR'):'—'}</td><td style="font-size:12px">${s.completedAt?new Date(s.completedAt).toLocaleDateString('fr-FR'):'<span style="color:#aaa">En attente</span>'}</td><td style="font-size:12px">${answersSummary}</td></tr>`;
+  }).join('') + '</tbody></table>';
 }
 
 function ef(id,f,v){const c=clients.find(c=>c.id===id);if(!c)return;c[f]=v;if(f==='ville'){c.lat=null;c.lng=null;}}
@@ -1558,6 +1826,7 @@ function showFiche(id){
   tba(`<button class="btn btn-ghost" onclick="openModal('${id}')">✎ Modifier</button><button class="btn btn-ghost" onclick="openSendEmailModal('${id}')">✉ Email</button><button class="btn btn-primary" onclick="addActForm('${id}')">+ Activité</button><button class="btn btn-ghost" style="color:#a32d2d" onclick="deleteClient('${id}')">🗑 Supprimer</button>`);
   renderFiche(c);
   loadAdminAccessCard(c);
+  loadQuestionnaireSendsCard(c);
 }
 
 function riskScore(c){let s=0;if(c.danger==='Élevé !!')s+=5;else if(c.danger==='Modéré')s+=3;if(c.contrat==='non')s+=2;if(!c.webApp&&!c.mobileV2)s+=1;if(!c.nfc&&!c.qr&&!c.mobile&&!c.code)s+=1;return Math.min(s,10);}
@@ -1705,30 +1974,43 @@ function renderFiche(c){
     <div id="journal-items">${journalHtml}</div>
   </div>
 
-  ${qualificationCardHtml(c)}`;
+  ${questionnaireSendsCardHtml(c)}`;
 }
 
-/** Carte "Questionnaire de qualification" de la fiche (renderFiche ci-dessus) — masquée tant qu'aucun envoi n'a eu lieu. */
-function qualificationCardHtml(c){
-  if(!c.qualificationSentAt && !(c.qualificationResponses||[]).length) return '';
-  const byKey = {}; (c.qualificationResponses||[]).forEach(r=>{ byKey[r.moduleKey]=r; });
+/** Carte "Questionnaires" de la fiche (renderFiche ci-dessus) — envois de
+ * n'importe quel questionnaire (portée CRM) reçus par ce contact, chargée à
+ * part (async, cf. loadQuestionnaireSendsCard) car ce n'est plus une donnée
+ * statique de la fiche comme l'ancien mécanisme figé. */
+function questionnaireSendsCardHtml(c){
+  return `<div class="card" id="questionnaire-sends-card" data-prospect-id="${esc(c.id)}" style="display:none"></div>`;
+}
+
+async function loadQuestionnaireSendsCard(c){
+  const el = document.getElementById('questionnaire-sends-card');
+  if(!el) return;
+  let sends;
+  try{
+    const r = await apiFetch('/wa/questionnaire/sendsForTarget?scope=crm&targetId='+encodeURIComponent(c.id));
+    sends = r.ok ? await r.json() : [];
+  }catch(e){ sends = []; }
+  if(!sends.length){ el.style.display='none'; return; }
+  el.style.display='';
   const interestLabel = {oui:'Oui', 'peut-etre':'Peut-être', non:'Non'};
   const interestClass = {oui:'t-green', 'peut-etre':'t-purple', non:'t-red'};
-  const rowsHtml = QUALIFICATION_MODULES_CATALOG.map(m=>{
-    const r = byKey[m.key];
-    if(!r) return `<div class="gc-row"><span class="gc-rl">${m.label}</span><span class="gc-rv" style="color:#aaa">— pas de réponse —</span></div>`;
-    return `<div class="gc-row"><span class="gc-rl">${m.label}</span><span class="gc-rv"><span class="tag ${interestClass[r.interested]||''}" style="font-size:11px">${interestLabel[r.interested]||r.interested}</span>${r.note?` <span style="color:#aaa;font-size:11px">— ${esc(r.note)}</span>`:''}</span></div>`;
+  el.innerHTML = `<div class="card-head"><div class="ch-ico">📋</div><span class="ch-title">Questionnaires</span></div>` + sends.map(s=>{
+    const sentStr = s.sentAt ? new Date(s.sentAt).toLocaleDateString('fr-FR') : '';
+    const rowsHtml = s.answers.map(a=>{
+      const v = a.value||{};
+      let txt = v.choice ? (interestLabel[v.choice]||v.choice) : (v.choices||[]).map(k=>interestLabel[k]||k).join(', ') || v.text || (v.rating!=null?String(v.rating):'') || (v.value!=null?(v.value?'Oui':'Non'):'');
+      const cls = v.choice ? (interestClass[v.choice]||'') : '';
+      return `<div class="gc-row"><span class="gc-rl">${esc(a.questionLabel)}</span><span class="gc-rv"><span class="tag ${cls}" style="font-size:11px">${esc(txt)}</span>${v.note?` <span style="color:#aaa;font-size:11px">— ${esc(v.note)}</span>`:''}</span></div>`;
+    }).join('');
+    return `<div style="padding:8px 0;border-top:1px solid var(--bdr,#e2dfd9)">
+      <div style="font-size:13px;font-weight:600">${esc(s.questionnaireName)}</div>
+      <div style="font-size:12px;color:#aaa;margin-bottom:4px">${sentStr?'Envoyé le '+sentStr:'Non envoyé'}${s.completedAt?' · Complété le '+new Date(s.completedAt).toLocaleDateString('fr-FR'):''}</div>
+      ${rowsHtml || '<div class="log-empty">En attente de réponse.</div>'}
+    </div>`;
   }).join('');
-  const sentStr = c.qualificationSentAt ? new Date(c.qualificationSentAt).toLocaleDateString('fr-FR') : '';
-  return `
-  <div class="card" id="qualification-card">
-    <div class="card-head">
-      <div class="ch-ico">📋</div>
-      <span class="ch-title">Questionnaire de qualification</span>
-      <span style="font-size:12px;color:#aaa;margin-left:8px">${sentStr?'Envoyé le '+sentStr:'Non envoyé'}</span>
-    </div>
-    ${rowsHtml || '<div class="log-empty">Envoyé, en attente de réponse.</div>'}
-  </div>`;
 }
 
 // ════════════════════════════════════════
@@ -4958,7 +5240,7 @@ const TRIGGERS_CRM = [
   {key:'crm.newsletter', label:'Newsletter récurrente', timingModes:['recurring']},
   {key:'crm.ticket_created', label:'Nouveau ticket support', timingModes:['immediate']},
   {key:'crm.ticket_client_replied', label:'Client a répondu à un ticket', timingModes:['immediate']},
-  {key:'crm.qualification_submitted', label:'Questionnaire de qualification rempli', timingModes:['immediate']},
+  {key:'crm.questionnaire_completed', label:'Questionnaire complété', timingModes:['immediate']},
 ];
 let AUTO_RULES=[];
 
@@ -5019,9 +5301,12 @@ function renderAutomationPanel(){
   </div>`;
 }
 
-function openRuleModal(id){
-  const r = id ? AUTO_RULES.find(r=>r.id===id) : {id:null,name:'',trigger:TRIGGERS_CRM[0].key,enabled:true,timingMode:'immediate',offsetValue:1,offsetUnit:'days',recurrence:'monthly',atTime:'11:00',dayOfWeek:1,dayOfMonth:1,channel:'email',templateKey:'',recipientMode:'event',recipientOverride:'',senderName:'',audienceFilter:{type:'all',secteur:''}};
+async function openRuleModal(id){
+  const r = id ? AUTO_RULES.find(r=>r.id===id) : {id:null,name:'',trigger:TRIGGERS_CRM[0].key,enabled:true,timingMode:'immediate',offsetValue:1,offsetUnit:'days',recurrence:'monthly',atTime:'11:00',dayOfWeek:1,dayOfMonth:1,channel:'email',templateKey:'',recipientMode:'event',recipientOverride:'',senderName:'',audienceFilter:{type:'all',secteur:''},questionnaireId:null};
   if(!r)return;
+  if(!QN_CRM_LIST_CACHE){
+    try{ const qr = await apiFetch('/wa/questionnaire/list?scope=crm'); QN_CRM_LIST_CACHE = qr.ok ? await qr.json() : []; }catch(e){ QN_CRM_LIST_CACHE = []; }
+  }
   document.getElementById('modal-ct').innerHTML=`
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box">
@@ -5041,6 +5326,11 @@ function openRuleModal(id){
       <div id="rule-recipient-fields"></div>
       <div id="rule-sender-fields"></div>
       <div id="rule-audience-fields"></div>
+      <div class="ff"><label>Questionnaire à joindre (optionnel)</label><select id="rule-questionnaire">
+        <option value="">Aucun</option>
+        ${QN_CRM_LIST_CACHE.map(q=>`<option value="${esc(q.id)}" ${r.questionnaireId===q.id?'selected':''}>${esc(q.name)}</option>`).join('')}
+      </select>
+      <div style="font-size:11px;color:var(--mu,#888);margin-top:4px">Génère un lien vers ce questionnaire et l'insère dans le modèle via la variable <code>{{lienQuestionnaire}}</code>.</div></div>
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="saveRule(${r.id?`'${r.id}'`:'null'})">Enregistrer</button>
         <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
@@ -5168,6 +5458,7 @@ async function saveRule(id){
     recipientMode: recipientMode,
     recipientOverride: document.getElementById('rule-recipientOverride') ? g('rule-recipientOverride').trim() : null,
     senderName: document.getElementById('rule-senderName') ? g('rule-senderName').trim() : null,
+    questionnaireId: document.getElementById('rule-questionnaire') ? (g('rule-questionnaire')||null) : null,
     scope:'crm',
   };
   if(triggerKey==='crm.newsletter'){

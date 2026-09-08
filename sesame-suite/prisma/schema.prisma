@@ -51,6 +51,7 @@ model Entity {
   vendors           Vendor[]
   vendorCommissions VendorCommission[]
   walletConfig      WalletConfig?
+  questionnaires    Questionnaire[]
 }
 
 // Groupe d'établissements (ex : chaîne hôtelière) — gestion réservée aux
@@ -1429,16 +1430,6 @@ model CrmProspect {
 
   deals CrmDeal[]
 
-  // Questionnaire de qualification (intérêt pour chaque module du catalogue
-  // Souscriptions) — lien public à durée illimitée, même principe que
-  // CrmQuote.signToken/CrmTicket.publicToken (cf. routes/crmQualification.ts).
-  // qualificationToken est généré à la première demande d'envoi puis réutilisé
-  // (un contact relancé garde le même lien, ses réponses précédentes restent
-  // visibles/modifiables) ; qualificationSentAt trace le dernier envoi.
-  qualificationToken     String?                     @unique
-  qualificationSentAt    DateTime?
-  qualificationResponses CrmQualificationResponse[]
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1672,26 +1663,114 @@ model CrmActivity {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Questionnaire de qualification (07/09/2026) — une ligne par module du
-// catalogue Souscriptions (cf. QUALIFICATION_MODULES dans
-// lib/qualificationModules.ts, source unique partagée par le lien public et
-// l'admin CRM) sur lequel le contact a répondu, via le lien public
-// CrmProspect.qualificationToken. @@unique permet de renvoyer le même
-// contact plusieurs fois sur son lien sans dupliquer ses réponses (upsert).
+// Questionnaires (08/09/2026) — générateur générique de questionnaires
+// (types de question : single/multi/boolean/text/rating), remplace l'ancien
+// mécanisme figé "Questionnaire de qualification" (une question par module
+// du catalogue, cf. git history lib/qualificationModules.ts) — celui-ci est
+// désormais SEMÉ comme premier Questionnaire (scope CRM) plutôt qu'un
+// mécanisme séparé, cf. script de migration.
+//
+// Portée identique à AutomationRule (entityId=null → CRM/Sesame,
+// entityId=<hôtel> → back-office de cet établissement) : un questionnaire
+// n'appartient qu'à une seule portée, jamais partagé entre hôtels.
+//
+// Diffusion : un lien public par (questionnaire, cible) — QuestionnaireSend,
+// même principe que CrmQuote.signToken / CrmTicket.publicToken. La cible est
+// soit un CrmProspect (portée CRM), soit un Booking (portée hôtel) — jamais
+// les deux pour un même envoi. Un envoi peut être créé manuellement (bouton
+// "Envoyer" du panneau) ou automatiquement par une règle d'automatisation
+// (AutomationRule.questionnaireId, cf. fireTrigger() dans lib/automation.ts,
+// qui génère le lien à la volée et l'injecte comme variable
+// {{lienQuestionnaire}} du modèle de message envoyé).
 // ─────────────────────────────────────────────────────────────────────────
-model CrmQualificationResponse {
-  id            String      @id @default(cuid())
-  prospectId    String
-  prospect      CrmProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
-  moduleKey     String
-  interested    String // oui | non | peut-etre
-  note          String?
+model Questionnaire {
+  id       String  @id @default(cuid())
+  entityId String? // null = portée CRM/Sesame
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  active      Boolean @default(true)
+
+  questions        QuestionnaireQuestion[]
+  sends            QuestionnaireSend[]
+  automationRules  AutomationRule[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([prospectId, moduleKey])
-  @@index([prospectId])
+  @@index([entityId])
+}
+
+model QuestionnaireQuestion {
+  id              String        @id @default(cuid())
+  questionnaireId String
+  questionnaire   Questionnaire @relation(fields: [questionnaireId], references: [id], onDelete: Cascade)
+
+  order    Int
+  type     String // single | multi | boolean | text | rating
+  label    String
+  required Boolean @default(false)
+
+  // single/multi : [{key,label}, …] — boolean/text : ignoré — rating :
+  // {min,max,minLabel?,maxLabel?} (défaut 1-5 si absent).
+  options Json?
+
+  answers QuestionnaireAnswer[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([questionnaireId])
+}
+
+// Un envoi = un lien public token pour UNE cible (prospect CRM ou
+// réservation hôtel) vers UN questionnaire. Réutilisé (jamais recréé) si un
+// envoi existe déjà pour ce couple (questionnaire, cible) — même logique que
+// l'ancien CrmProspect.qualificationToken "généré une fois puis réutilisé".
+model QuestionnaireSend {
+  id              String        @id @default(cuid())
+  questionnaireId String
+  questionnaire   Questionnaire @relation(fields: [questionnaireId], references: [id], onDelete: Cascade)
+
+  targetType String // "crmProspect" | "booking"
+  targetId   String
+  token      String @unique
+
+  sentAt      DateTime?
+  completedAt DateTime?
+
+  answers QuestionnaireAnswer[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([questionnaireId, targetType, targetId])
+  @@index([targetType, targetId])
+}
+
+// Une réponse par (envoi, question) — @@unique permet de rejouer une
+// soumission (le répondant revient sur son lien) sans dupliquer ses
+// réponses, comme l'ancien CrmQualificationResponse. `value` est un JSON
+// dont la forme dépend du type de question :
+//   single  → {choice:"key", note?:"…"}
+//   multi   → {choices:["key1","key2"], note?:"…"}
+//   boolean → {value:true|false}
+//   text    → {text:"…"}
+//   rating  → {rating:4}
+model QuestionnaireAnswer {
+  id         String                @id @default(cuid())
+  sendId     String
+  send       QuestionnaireSend     @relation(fields: [sendId], references: [id], onDelete: Cascade)
+  questionId String
+  question   QuestionnaireQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  value Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sendId, questionId])
+  @@index([sendId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -1869,6 +1948,15 @@ model AutomationRule {
   senderName String?
 
   audienceFilter Json? // segment cible pour les règles sans record source unique (ex: crm.newsletter)
+
+  // Questionnaire à joindre à l'envoi (optionnel) — cf. Questionnaire,
+  // fireTrigger() dans lib/automation.ts : quand renseigné, un lien
+  // QuestionnaireSend est généré/réutilisé pour la cible de l'événement et
+  // injecté comme variable {{lienQuestionnaire}} du modèle avant l'envoi.
+  // SetNull plutôt que Cascade : la suppression d'un questionnaire ne doit
+  // pas supprimer la règle qui le référence, seulement désactiver ce lien.
+  questionnaireId String?
+  questionnaire   Questionnaire? @relation(fields: [questionnaireId], references: [id], onDelete: SetNull)
 
   lastRunAt DateTime?
 

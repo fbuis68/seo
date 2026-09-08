@@ -653,6 +653,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   <div class="ns">Clients</div>
   <div class="ni" data-pan="crm" onclick="showPan('crm')"><i class="ti ti-address-book"></i>Base clients <span class="nibadge">CRM</span></div>
   <div class="ni" data-pan="marketing" onclick="showPan('marketing')"><i class="ti ti-speakerphone"></i>Actions marketing</div>
+  <div class="ni" data-pan="questionnaires" onclick="showPan('questionnaires')"><i class="ti ti-clipboard-text"></i>Questionnaires</div>
   <div class="ns">Room Service</div>
   <div class="ni" data-pan="roomservice" onclick="showPan('roomservice')"><i class="ti ti-bell"></i>Catalogue produits</div>
   <div class="ni" data-pan="orders" onclick="showPan('orders')"><i class="ti ti-clipboard-list"></i>Commandes <span class="nibadge" id="ordersBadge" style="display:none">0</span></div>
@@ -3267,6 +3268,107 @@ Accès au salon Premium</textarea>
       <button class="chact" onclick="mktRenderHistory()"><i class="ti ti-refresh" style="font-size:12px"></i> Actualiser</button>
     </div>
     <div id="mkt-history"></div>
+  </div>
+</div>
+
+<!-- ════════════════ QUESTIONNAIRES ════════════════ -->
+<div id="pan-questionnaires" class="pan">
+  <div id="qn-list-view">
+    <div class="ph">
+      <h2>Questionnaires</h2>
+      <p>Créez vos propres questionnaires (satisfaction, pré-arrivée…) avec le type de question de votre choix, et déclenchez leur envoi automatiquement depuis <a href="#" onclick="showPan('automation');return false" style="color:var(--a);font-weight:600">Automatisations</a>.</p>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+      <button class="btn btn-p" onclick="qnCreate()"><i class="ti ti-plus"></i> Nouveau questionnaire</button>
+    </div>
+    <div id="qn-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px"></div>
+    <div id="qn-empty" style="display:none">
+      <div class="alt alt-b" style="text-align:center;padding:24px">
+        <i class="ti ti-clipboard-text" style="font-size:32px;display:block;margin-bottom:10px;opacity:.4"></i>
+        <div style="font-size:15px;font-weight:600;margin-bottom:6px">Aucun questionnaire</div>
+        <div style="font-size:13px;color:var(--mu)">Créez-en un pour recueillir l'avis de vos clients.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Détail / constructeur — remplace la liste tant qu'un questionnaire est ouvert -->
+  <div id="qn-detail-view" style="display:none">
+    <div class="ph" style="display:flex;align-items:center;gap:10px">
+      <button class="btn btn-s" onclick="qnBackToList()"><i class="ti ti-arrow-left"></i> Retour</button>
+      <div>
+        <h2 id="qn-d-name" style="margin:0">—</h2>
+      </div>
+    </div>
+
+    <div class="ca" style="margin-bottom:16px">
+      <div class="ch"><i class="ti ti-settings"></i>Réglages</div>
+      <div class="g2">
+        <div class="fi"><label class="lb">Nom</label><input type="text" id="qn-d-name-input"></div>
+        <div class="fi"><label class="lb">Actif</label>
+          <label style="display:flex;align-items:center;gap:8px;height:38px;cursor:pointer">
+            <input type="checkbox" id="qn-d-active" style="accent-color:var(--am)">
+            <span style="font-size:13px">Les liens déjà envoyés restent utilisables si désactivé plus tard</span>
+          </label>
+        </div>
+      </div>
+      <div class="fi"><label class="lb">Description (optionnelle, affichée en haut du questionnaire)</label><textarea id="qn-d-description" rows="2"></textarea></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-p" onclick="qnSaveSettings()"><i class="ti ti-device-floppy"></i> Enregistrer</button>
+        <button class="btn btn-s" onclick="qnDuplicate()"><i class="ti ti-copy"></i> Dupliquer</button>
+        <button class="btn btn-s" style="color:var(--re)" onclick="qnDeleteCurrent()"><i class="ti ti-trash"></i> Supprimer</button>
+      </div>
+    </div>
+
+    <div class="ca" style="margin-bottom:16px">
+      <div class="ch"><i class="ti ti-list-check"></i>Questions — <span id="qn-d-qcount">0</span></div>
+      <div id="qn-d-questions" style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px"></div>
+
+      <div style="border-top:1px solid var(--bdr);padding-top:14px;margin-top:4px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:10px">Ajouter une question</div>
+        <div class="g2">
+          <div class="fi"><label class="lb">Type</label>
+            <select id="qn-new-type" onchange="qnRenderNewOptions()">
+              <option value="single">Choix unique</option>
+              <option value="multi">Choix multiple</option>
+              <option value="boolean">Oui / Non</option>
+              <option value="text">Texte libre</option>
+              <option value="rating">Note / échelle</option>
+            </select>
+          </div>
+          <div class="fi"><label class="lb">Obligatoire</label>
+            <label style="display:flex;align-items:center;gap:8px;height:38px;cursor:pointer">
+              <input type="checkbox" id="qn-new-required" style="accent-color:var(--am)"><span style="font-size:13px">Réponse requise</span>
+            </label>
+          </div>
+        </div>
+        <div class="fi"><label class="lb">Intitulé de la question</label><input type="text" id="qn-new-label" placeholder="Ex : Comment évaluez-vous votre séjour ?"></div>
+        <div id="qn-new-options"></div>
+        <button class="btn btn-p" onclick="qnAddQuestion()"><i class="ti ti-plus"></i> Ajouter la question</button>
+      </div>
+    </div>
+
+    <div class="ca">
+      <div class="ch"><i class="ti ti-link"></i>Envoyer manuellement à une réservation</div>
+      <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
+        <span>Pour un envoi automatique (recommandé), attachez ce questionnaire à une règle dans <a href="#" onclick="showPan('automation');return false" style="color:var(--a);font-weight:600">Automatisations</a> (champ "Questionnaire à joindre").</span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+        <div class="fi" style="flex:1;min-width:180px;margin-bottom:0"><label class="lb">Code de réservation</label><input type="text" id="qn-manual-code" placeholder="Ex : FNITRLEM"></div>
+        <button class="btn btn-p" onclick="qnManualLink()"><i class="ti ti-link"></i> Générer le lien</button>
+      </div>
+      <div id="qn-manual-result" style="margin-top:10px;font-size:13px"></div>
+    </div>
+
+    <div class="ca" style="margin-top:16px">
+      <div class="ch"><i class="ti ti-chart-bar"></i>Résultats — <span id="qn-res-count">0</span> réponse(s)</div>
+      <div style="overflow-x:auto">
+        <table class="tbl" id="qn-res-table">
+          <thead><tr><th>Réservation</th><th>Envoyé</th><th>Complété</th><th>Réponses</th></tr></thead>
+          <tbody id="qn-res-tbody"></tbody>
+        </table>
+      </div>
+      <div id="qn-res-empty" style="display:none;text-align:center;padding:24px;color:var(--mu)">Aucun envoi pour l'instant.</div>
+    </div>
   </div>
 </div>
 
@@ -7712,9 +7814,11 @@ var TRIGGERS_HOTEL = [
   {key:'order.cancelled', label:'Commande annulée', timingModes:['immediate']},
   {key:'stay.start', label:'Début de séjour', timingModes:['offset']},
   {key:'stay.end', label:'Fin de séjour', timingModes:['offset']},
+  {key:'questionnaire.completed', label:'Questionnaire complété', timingModes:['immediate']},
 ];
 var AUTO_RULES = [];
 var AUTO_RULE_EDITING = null;
+var QN_LIST = []; // questionnaires (portée hôtel) — cf. panneau Questionnaires
 
 function autoTriggerLabel(key){ var t=TRIGGERS_HOTEL.find(function(t){return t.key===key;}); return t?t.label:key; }
 function autoUnitLabel(u){ return {minutes:'min',hours:'h',days:'j',months:'mois'}[u]||u||''; }
@@ -7737,6 +7841,7 @@ async function autoInit(){
     AUTO_RULES = r.ok ? await r.json() : [];
   }catch(e){ AUTO_RULES = []; }
   if(!EML_TEMPLATES.length){ try{ var tr = await adminFetch('/wa/messageTemplate/list'); EML_TEMPLATES = tr.ok ? await tr.json() : []; }catch(e){} }
+  try{ var qr = await adminFetch('/wa/questionnaire/list'); QN_LIST = qr.ok ? await qr.json() : []; }catch(e){ QN_LIST = []; }
   autoRenderRules();
 }
 
@@ -7765,7 +7870,7 @@ function autoRenderRules(){
 }
 
 function autoOpenRuleModal(id){
-  var r = id ? AUTO_RULES.find(function(r){return r.id===id;}) : {id:null,name:'',trigger:TRIGGERS_HOTEL[0].key,enabled:true,timingMode:'immediate',offsetValue:1,offsetUnit:'days',channel:'email',templateKey:'',recipientMode:'event',recipientOverride:'',senderName:''};
+  var r = id ? AUTO_RULES.find(function(r){return r.id===id;}) : {id:null,name:'',trigger:TRIGGERS_HOTEL[0].key,enabled:true,timingMode:'immediate',offsetValue:1,offsetUnit:'days',channel:'email',templateKey:'',recipientMode:'event',recipientOverride:'',senderName:'',questionnaireId:null};
   if(!r) return;
   AUTO_RULE_EDITING = r;
   document.getElementById('auto-rule-modal').innerHTML =
@@ -7785,6 +7890,11 @@ function autoOpenRuleModal(id){
     + '<div class="fi"><label class="lb">Destinataire</label><select id="auto-recipientMode" onchange="autoRenderRecipientFields()"><option value="event" '+(r.recipientMode!=='custom'?'selected':'')+'>Automatique (client de l\'événement)</option><option value="custom" '+(r.recipientMode==='custom'?'selected':'')+'>Personnalisé (ex. équipe interne)</option></select></div>'
     + '<div id="auto-recipient-fields"></div>'
     + '<div id="auto-sender-fields"></div>'
+    + '<div class="fi"><label class="lb">Questionnaire à joindre (optionnel)</label><select id="auto-questionnaire">'
+      + '<option value="">Aucun</option>'
+      + QN_LIST.map(function(q){return '<option value="'+q.id+'" '+(r.questionnaireId===q.id?'selected':'')+'>'+esc(q.name)+'</option>';}).join('')
+      + '</select>'
+      + '<div style="font-size:11px;color:var(--mu);margin-top:4px">Génère un lien vers ce questionnaire et l\'insère dans le modèle via la variable <code>{{lienQuestionnaire}}</code>.</div></div>'
     + '<div class="brow"><button class="btn btn-p" onclick="autoSaveRule('+(r.id?"'"+r.id+"'":'null')+')"><i class="ti ti-device-floppy"></i> Enregistrer</button>'
     + '<button class="btn btn-s" onclick="autoCloseRuleModal()">Annuler</button></div>'
     + '</div></div>';
@@ -7878,6 +7988,7 @@ async function autoSaveRule(id){
     recipientMode: recipientMode,
     recipientOverride: document.getElementById('auto-recipientOverride') ? document.getElementById('auto-recipientOverride').value.trim() : null,
     senderName: document.getElementById('auto-senderName') ? document.getElementById('auto-senderName').value.trim() : null,
+    questionnaireId: document.getElementById('auto-questionnaire') ? (document.getElementById('auto-questionnaire').value || null) : null,
   };
   if(!body.name){ toast('Le nom est requis'); return; }
   if(!body.templateKey){ toast('Sélectionnez un modèle pour ce canal'); return; }
@@ -10173,6 +10284,7 @@ showPan=function(id){
   if(id==='hotels'){ renderHotelsPanel(); }
   if(id==='crm'){ crmInit(); }
   if(id==='marketing'){ mktInit(); }
+  if(id==='questionnaires'){ qnInit(); }
   if(id==='roomservice'){ rsInit(); }
   if(id==='orders'){ ordInit(); }
   if(id==='subscriptions'){ subInit(); }
@@ -10757,6 +10869,335 @@ async function usDelete(id){
     toast('Accès supprimé');
     await usFetchList();
   }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+// ═══════════════════════════════════════════════ QUESTIONNAIRES (gestionnaire générique, portée hôtel)
+var QNP_LIST = [];
+var QNP_CURRENT = null; // questionnaire détaillé actuellement ouvert (avec .questions)
+var QN_TYPE_LABEL = { single: 'Choix unique', multi: 'Choix multiple', boolean: 'Oui / Non', text: 'Texte libre', rating: 'Note / échelle' };
+var QN_OPT_ROWS = {}; // ctx ('new' | questionId) -> [{key,label}]
+var QN_RATING = {}; // ctx -> {min,max,minLabel,maxLabel}
+
+async function qnInit(){
+  try{
+    var r = await adminFetch('/wa/questionnaire/list');
+    QNP_LIST = r.ok ? await r.json() : [];
+  }catch(e){ QNP_LIST = []; }
+  QNP_CURRENT = null;
+  document.getElementById('qn-list-view').style.display = '';
+  document.getElementById('qn-detail-view').style.display = 'none';
+  qnRenderGrid();
+}
+
+function qnRenderGrid(){
+  var grid = document.getElementById('qn-grid');
+  var empty = document.getElementById('qn-empty');
+  if(!QNP_LIST.length){ grid.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  grid.innerHTML = QNP_LIST.map(function(q){
+    return '<div class="ca" style="cursor:pointer" onclick="qnOpenDetail(\''+q.id+'\')">'
+      + '<div class="ch">'+esc(q.name)+(q.active?'':' <span class="bdg" style="background:rgba(231,76,60,.1);color:var(--re);margin-left:6px">Inactif</span>')+'</div>'
+      + '<div style="padding:2px 4px 10px;font-size:12px;color:var(--mu)">'+(q.description?esc(q.description):'Aucune description')+'</div>'
+      + '<div style="padding:0 4px 10px;font-size:12px;color:var(--mu);display:flex;gap:14px">'
+        + '<span><i class="ti ti-list-check"></i> '+q.questionCount+' question'+(q.questionCount>1?'s':'')+'</span>'
+        + '<span><i class="ti ti-send"></i> '+q.sendCount+' envoi'+(q.sendCount>1?'s':'')+'</span>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+async function qnCreate(){
+  var name = prompt('Nom du questionnaire :');
+  if(!name || !name.trim()) return;
+  try{
+    var r = await adminFetch('/wa/questionnaire/create', {method:'POST', body:JSON.stringify({name:name.trim()})});
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Erreur lors de la création'); return; }
+    QNP_LIST.push(data);
+    qnOpenDetail(data.id);
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+function qnBackToList(){
+  QNP_CURRENT = null;
+  document.getElementById('qn-list-view').style.display = '';
+  document.getElementById('qn-detail-view').style.display = 'none';
+  qnRenderGrid();
+}
+
+async function qnOpenDetail(id){
+  try{
+    var r = await adminFetch('/wa/questionnaire/get?id='+encodeURIComponent(id));
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Questionnaire introuvable'); return; }
+    QNP_CURRENT = data;
+  }catch(e){ toast('Erreur de connexion au serveur'); return; }
+  document.getElementById('qn-list-view').style.display = 'none';
+  document.getElementById('qn-detail-view').style.display = '';
+  document.getElementById('qn-d-name').textContent = QNP_CURRENT.name;
+  document.getElementById('qn-d-name-input').value = QNP_CURRENT.name;
+  document.getElementById('qn-d-active').checked = QNP_CURRENT.active;
+  document.getElementById('qn-d-description').value = QNP_CURRENT.description || '';
+  document.getElementById('qn-manual-result').innerHTML = '';
+  document.getElementById('qn-manual-code').value = '';
+  qnRenderQuestions();
+  document.getElementById('qn-new-label').value = '';
+  document.getElementById('qn-new-required').checked = false;
+  document.getElementById('qn-new-type').value = 'single';
+  qnRenderNewOptions();
+  qnRenderResults([]);
+  qnFetchResults();
+}
+
+async function qnSaveSettings(){
+  if(!QNP_CURRENT) return;
+  var body = {
+    id: QNP_CURRENT.id,
+    name: document.getElementById('qn-d-name-input').value.trim(),
+    description: document.getElementById('qn-d-description').value.trim(),
+    active: document.getElementById('qn-d-active').checked,
+  };
+  if(!body.name){ toast('Le nom est requis'); return; }
+  try{
+    var r = await adminFetch('/wa/questionnaire/update', {method:'POST', body:JSON.stringify(body)});
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Erreur'); return; }
+    Object.assign(QNP_CURRENT, data);
+    document.getElementById('qn-d-name').textContent = QNP_CURRENT.name;
+    var i = QNP_LIST.findIndex(function(q){return q.id===QNP_CURRENT.id;});
+    if(i>-1) QNP_LIST[i] = Object.assign({}, QNP_LIST[i], data);
+    toast('Questionnaire enregistré ✓');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+async function qnDuplicate(){
+  if(!QNP_CURRENT) return;
+  try{
+    var r = await adminFetch('/wa/questionnaire/duplicate', {method:'POST', body:JSON.stringify({id:QNP_CURRENT.id})});
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Erreur'); return; }
+    toast('Questionnaire dupliqué ✓');
+    QNP_LIST.push(data);
+    qnOpenDetail(data.id);
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+async function qnDeleteCurrent(){
+  if(!QNP_CURRENT) return;
+  if(!confirm('Supprimer définitivement "'+QNP_CURRENT.name+'" et tous ses envois/réponses ?')) return;
+  try{
+    var r = await adminFetch('/wa/questionnaire/delete', {method:'POST', body:JSON.stringify({id:QNP_CURRENT.id})});
+    if(!r.ok){ toast('Erreur lors de la suppression'); return; }
+    QNP_LIST = QNP_LIST.filter(function(q){return q.id!==QNP_CURRENT.id;});
+    toast('Questionnaire supprimé');
+    qnBackToList();
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+// ── Questions ──
+
+function qnRenderQuestions(){
+  var wrap = document.getElementById('qn-d-questions');
+  var qs = QNP_CURRENT.questions || [];
+  document.getElementById('qn-d-qcount').textContent = qs.length;
+  if(!qs.length){ wrap.innerHTML = '<div style="font-size:13px;color:var(--mu)">Aucune question pour l\'instant — ajoutez-en une ci-dessous.</div>'; return; }
+  wrap.innerHTML = qs.map(function(q, idx){
+    var optsSummary = '';
+    if(q.type==='single' || q.type==='multi'){
+      optsSummary = (q.options||[]).map(function(o){return esc(o.label);}).join(' · ');
+    } else if(q.type==='rating'){
+      var o = q.options||{};
+      optsSummary = 'Échelle '+(o.min!=null?o.min:1)+' à '+(o.max!=null?o.max:5);
+    }
+    return '<div class="alt alt-b" id="qn-q-row-'+q.id+'" style="align-items:flex-start">'
+      + '<div style="flex:1">'
+        + '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu);font-weight:700;margin-bottom:2px">'+QN_TYPE_LABEL[q.type]+(q.required?' · Obligatoire':'')+'</div>'
+        + '<div style="font-size:13px;font-weight:600">'+esc(q.label)+'</div>'
+        + (optsSummary?'<div style="font-size:12px;color:var(--mu);margin-top:2px">'+optsSummary+'</div>':'')
+      + '</div>'
+      + '<div style="display:flex;gap:4px;flex-shrink:0">'
+        + (idx>0?'<button class="btn btn-s" style="padding:6px 9px" onclick="qnMoveQuestion(\''+q.id+'\',-1)" title="Monter"><i class="ti ti-arrow-up"></i></button>':'')
+        + (idx<qs.length-1?'<button class="btn btn-s" style="padding:6px 9px" onclick="qnMoveQuestion(\''+q.id+'\',1)" title="Descendre"><i class="ti ti-arrow-down"></i></button>':'')
+        + '<button class="btn btn-s" style="padding:6px 9px;color:var(--re)" onclick="qnDeleteQuestion(\''+q.id+'\')" title="Supprimer"><i class="ti ti-trash"></i></button>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+/** Construit les options JSON envoyées au serveur pour le type sélectionné, à partir de l'état QN_OPT_ROWS/QN_RATING du contexte ctx. */
+function qnBuildOptions(ctx, type){
+  if(type==='single' || type==='multi'){
+    var rows = (QN_OPT_ROWS[ctx]||[]).filter(function(o){return o.label && o.label.trim();});
+    return rows.map(function(o, i){ return {key: o.key || ('o'+i), label: o.label.trim()}; });
+  }
+  if(type==='rating'){
+    var r = QN_RATING[ctx] || {};
+    var out = { min: r.min!=null && r.min!=='' ? +r.min : 1, max: r.max!=null && r.max!=='' ? +r.max : 5 };
+    if(r.minLabel) out.minLabel = r.minLabel;
+    if(r.maxLabel) out.maxLabel = r.maxLabel;
+    return out;
+  }
+  return null;
+}
+
+function qnOptionsEditorHtml(ctx, type){
+  if(type==='single' || type==='multi'){
+    var rows = QN_OPT_ROWS[ctx] || (QN_OPT_ROWS[ctx] = [{key:'o0',label:''},{key:'o1',label:''}]);
+    return '<div class="fi"><label class="lb">Options de réponse</label>'
+      + rows.map(function(o, i){
+        return '<div style="display:flex;gap:6px;margin-bottom:6px">'
+          + '<input type="text" value="'+esc(o.label)+'" placeholder="Option '+(i+1)+'" style="flex:1" oninput="QN_OPT_ROWS[\''+ctx+'\']['+i+'].label=this.value">'
+          + '<button class="btn btn-s" style="padding:6px 9px" onclick="qnRemoveOption(\''+ctx+'\','+i+',\''+type+'\')"><i class="ti ti-x"></i></button>'
+          + '</div>';
+      }).join('')
+      + '<button class="btn btn-s" onclick="qnAddOption(\''+ctx+'\',\''+type+'\')"><i class="ti ti-plus"></i> Ajouter une option</button>'
+      + '</div>';
+  }
+  if(type==='rating'){
+    var r = QN_RATING[ctx] || (QN_RATING[ctx] = {min:1,max:5,minLabel:'',maxLabel:''});
+    return '<div class="g2">'
+      + '<div class="fi"><label class="lb">Min</label><input type="number" value="'+r.min+'" oninput="QN_RATING[\''+ctx+'\'].min=this.value"></div>'
+      + '<div class="fi"><label class="lb">Max</label><input type="number" value="'+r.max+'" oninput="QN_RATING[\''+ctx+'\'].max=this.value"></div>'
+      + '<div class="fi"><label class="lb">Légende côté min (optionnel)</label><input type="text" value="'+esc(r.minLabel||'')+'" oninput="QN_RATING[\''+ctx+'\'].minLabel=this.value"></div>'
+      + '<div class="fi"><label class="lb">Légende côté max (optionnel)</label><input type="text" value="'+esc(r.maxLabel||'')+'" oninput="QN_RATING[\''+ctx+'\'].maxLabel=this.value"></div>'
+      + '</div>';
+  }
+  return '';
+}
+
+function qnAddOption(ctx, type){
+  var rows = QN_OPT_ROWS[ctx] || (QN_OPT_ROWS[ctx] = []);
+  rows.push({key:'o'+rows.length, label:''});
+  qnRerenderOptionsEditor(ctx, type);
+}
+function qnRemoveOption(ctx, idx, type){
+  QN_OPT_ROWS[ctx].splice(idx, 1);
+  qnRerenderOptionsEditor(ctx, type);
+}
+function qnRerenderOptionsEditor(ctx, type){
+  if(ctx==='new'){ qnRenderNewOptions(); return; }
+  var el = document.getElementById('qn-edit-options-'+ctx);
+  if(el) el.innerHTML = qnOptionsEditorHtml(ctx, type);
+}
+
+function qnRenderNewOptions(){
+  var type = document.getElementById('qn-new-type').value;
+  delete QN_OPT_ROWS['new']; delete QN_RATING['new'];
+  document.getElementById('qn-new-options').innerHTML = qnOptionsEditorHtml('new', type);
+}
+
+async function qnAddQuestion(){
+  if(!QNP_CURRENT) return;
+  var type = document.getElementById('qn-new-type').value;
+  var label = document.getElementById('qn-new-label').value.trim();
+  var required = document.getElementById('qn-new-required').checked;
+  if(!label){ toast('Intitulé requis'); return; }
+  var options = qnBuildOptions('new', type);
+  if((type==='single'||type==='multi') && (!options || options.length<2)){ toast('Ajoutez au moins deux options'); return; }
+  try{
+    var r = await adminFetch('/wa/questionnaire/question/create', {method:'POST', body:JSON.stringify({questionnaireId:QNP_CURRENT.id, type:type, label:label, required:required, options:options})});
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Erreur'); return; }
+    QNP_CURRENT.questions.push(data);
+    document.getElementById('qn-new-label').value = '';
+    document.getElementById('qn-new-required').checked = false;
+    qnRenderNewOptions();
+    qnRenderQuestions();
+    var i = QNP_LIST.findIndex(function(q){return q.id===QNP_CURRENT.id;});
+    if(i>-1) QNP_LIST[i].questionCount = QNP_CURRENT.questions.length;
+    toast('Question ajoutée ✓');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+async function qnDeleteQuestion(id){
+  if(!confirm('Supprimer cette question ?')) return;
+  try{
+    var r = await adminFetch('/wa/questionnaire/question/delete', {method:'POST', body:JSON.stringify({id:id})});
+    if(!r.ok){ toast('Erreur lors de la suppression'); return; }
+    QNP_CURRENT.questions = QNP_CURRENT.questions.filter(function(q){return q.id!==id;});
+    qnRenderQuestions();
+    var i = QNP_LIST.findIndex(function(q){return q.id===QNP_CURRENT.id;});
+    if(i>-1) QNP_LIST[i].questionCount = QNP_CURRENT.questions.length;
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+async function qnMoveQuestion(id, dir){
+  var qs = QNP_CURRENT.questions;
+  var idx = qs.findIndex(function(q){return q.id===id;});
+  var swapWith = idx + dir;
+  if(swapWith<0 || swapWith>=qs.length) return;
+  var tmp = qs[idx]; qs[idx] = qs[swapWith]; qs[swapWith] = tmp;
+  qnRenderQuestions();
+  try{
+    await adminFetch('/wa/questionnaire/question/reorder', {method:'POST', body:JSON.stringify({questionnaireId:QNP_CURRENT.id, orderedIds: qs.map(function(q){return q.id;})})});
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+// ── Envoi manuel (une réservation) ──
+
+async function qnManualLink(){
+  if(!QNP_CURRENT) return;
+  var code = document.getElementById('qn-manual-code').value.trim();
+  var resEl = document.getElementById('qn-manual-result');
+  if(!code){ toast('Indiquez un code de réservation'); return; }
+  resEl.innerHTML = 'Recherche…';
+  try{
+    var br = await adminFetch('/wa/booking/list?q='+encodeURIComponent(code));
+    var bookings = br.ok ? await br.json() : [];
+    var booking = bookings.find(function(b){return b.code.toLowerCase()===code.toLowerCase();});
+    if(!booking){ resEl.innerHTML = '<span style="color:var(--re)">Aucune réservation avec ce code.</span>'; return; }
+    var r = await adminFetch('/wa/questionnaire/prepareLinks', {method:'POST', body:JSON.stringify({questionnaireId:QNP_CURRENT.id, targetIds:[booking.id]})});
+    var data = await r.json();
+    if(!r.ok){ resEl.innerHTML = '<span style="color:var(--re)">'+(data.error||'Erreur')+'</span>'; return; }
+    var link = data.links[booking.id];
+    if(!link){ resEl.innerHTML = '<span style="color:var(--re)">Échec de génération du lien.</span>'; return; }
+    resEl.innerHTML = '<input type="text" readonly value="'+esc(link)+'" style="width:100%;margin-bottom:6px" onclick="this.select()">'
+      + '<button class="btn btn-s" onclick="navigator.clipboard.writeText(\''+link.replace(/'/g,"\\'")+'\');toast(\'Lien copié ✓\')"><i class="ti ti-copy"></i> Copier</button>';
+    await adminFetch('/wa/questionnaire/markSent', {method:'POST', body:JSON.stringify({questionnaireId:QNP_CURRENT.id, targetIds:[booking.id]})});
+    qnFetchResults();
+  }catch(e){ resEl.innerHTML = '<span style="color:var(--re)">Erreur de connexion au serveur</span>'; }
+}
+
+// ── Résultats ──
+
+async function qnFetchResults(){
+  if(!QNP_CURRENT) return;
+  try{
+    var r = await adminFetch('/wa/questionnaire/results?questionnaireId='+encodeURIComponent(QNP_CURRENT.id));
+    var data = r.ok ? await r.json() : [];
+    qnRenderResults(data);
+  }catch(e){ qnRenderResults([]); }
+}
+
+function qnFmtDate(iso){
+  if(!iso) return '—';
+  var d = new Date(iso);
+  return d.toLocaleDateString('fr-FR') + ' ' + d.toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'});
+}
+
+function qnRenderResults(sends){
+  document.getElementById('qn-res-count').textContent = sends.length;
+  var table = document.getElementById('qn-res-table');
+  var empty = document.getElementById('qn-res-empty');
+  var tbody = document.getElementById('qn-res-tbody');
+  if(!sends.length){ table.style.display='none'; empty.style.display='block'; return; }
+  table.style.display=''; empty.style.display='none';
+  var qs = (QNP_CURRENT && QNP_CURRENT.questions) || [];
+  tbody.innerHTML = sends.map(function(s){
+    var answersSummary = s.answers.map(function(a){
+      var q = qs.find(function(q){return q.id===a.questionId;});
+      var label = q ? q.label : a.questionId;
+      var v = a.value || {};
+      var txt = v.choice || (v.choices||[]).join(', ') || (v.text) || (v.rating!=null?String(v.rating):'') || (v.value!=null?(v.value?'Oui':'Non'):'');
+      return '<div><b>'+esc(label)+' :</b> '+esc(txt)+(v.note?' — '+esc(v.note):'')+'</div>';
+    }).join('') || '<span style="color:var(--mu)">—</span>';
+    return '<tr>'
+      + '<td>'+esc(s.targetName)+'</td>'
+      + '<td style="font-size:12px">'+qnFmtDate(s.sentAt)+'</td>'
+      + '<td style="font-size:12px">'+(s.completedAt?qnFmtDate(s.completedAt):'<span style="color:var(--mu)">En attente</span>')+'</td>'
+      + '<td style="font-size:12px">'+answersSummary+'</td>'
+      + '</tr>';
+  }).join('');
 }
 
 async function subInit(){
