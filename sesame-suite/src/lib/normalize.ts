@@ -22,10 +22,12 @@ export function normaliseBooking(b: Booking) {
     bookingType: b.bookingType || "",
     otaId: b.otaId || "",
     checkinDone: b.checkinDone,
+    checkinStartedAt: b.checkinStartedAt ? iso(b.checkinStartedAt) : null,
     selectedRoomCode: b.selectedRoomCode || null,
     importedFrom: b.importedFrom || "",
     nfcCount: b.nfcCount,
     nfcEncodedAt: b.nfcEncodedAt ? iso(b.nfcEncodedAt) : null,
+    doorLastOpenedAt: b.doorLastOpenedAt ? iso(b.doorLastOpenedAt) : null,
     // Casiers Mon Casier Frais associés à cette réservation, accumulés au
     // fil des commandes contenant un article "casier" — cf.
     // roomservice.ts /roomservice/create et /roomservice/update.

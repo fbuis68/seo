@@ -193,6 +193,66 @@ bookingRouter.post(
 );
 
 /**
+ * POST /wa/booking/checkinStart — body: { code } — marque le début du
+ * check-in en ligne côté client (étape "Connecté" de la frise du parcours
+ * client, panneau Réservations). Public (pas requireAdmin) : appelé par
+ * checkin.html au moment où le client sélectionne sa réservation dans
+ * l'appli de check-in — avant que le formulaire ne soit rempli/terminé
+ * (checkinDone), donc distinct. Idempotent : n'écrase jamais une date déjà
+ * posée (le client peut revenir plusieurs fois sur son check-in).
+ */
+bookingRouter.post(
+  "/booking/checkinStart",
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const code = (req.body.code as string) || "";
+    if (!code) throw new HttpError(400, "code requis");
+    const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code } } });
+    if (!booking) throw new HttpError(404, "Réservation introuvable");
+    if (!booking.checkinStartedAt) {
+      await prisma.booking.update({ where: { id: booking.id }, data: { checkinStartedAt: new Date() } });
+    }
+    res.json({ ok: true });
+  })
+);
+
+/**
+ * POST /wa/booking/delete — body: { code } — suppression DÉFINITIVE d'une
+ * réservation (distincte de "Désactiver", qui ne fait que passer status à
+ * "cancelled" et reste réversible). Bloquée si des commandes room service
+ * ou un enregistrement de taxe de séjour existent pour cette réservation
+ * (données comptables/fiscales — ne doivent jamais disparaître
+ * silencieusement) : ces cas doivent passer par "Désactiver" à la place.
+ * Occupants et vérifications d'identité (KYC) sont supprimés en cascade
+ * (données annexes propres à la réservation, cf. schema.prisma).
+ */
+bookingRouter.post(
+  "/booking/delete",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const code = (req.body.code as string) || "";
+    if (!code) throw new HttpError(400, "code requis");
+    const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code } } });
+    if (!booking) throw new HttpError(404, "Réservation introuvable");
+
+    const [orderCount, taxeCount] = await Promise.all([
+      prisma.order.count({ where: { bookingId: booking.id } }),
+      prisma.taxeSejourRecord.count({ where: { bookingId: booking.id } }),
+    ]);
+    if (orderCount > 0 || taxeCount > 0) {
+      throw new HttpError(
+        400,
+        "Impossible de supprimer : des commandes ou un enregistrement de taxe de séjour sont liés à cette réservation — utilisez plutôt \"Désactiver\"."
+      );
+    }
+
+    await prisma.booking.delete({ where: { id: booking.id } });
+    res.json({ ok: true });
+  })
+);
+
+/**
  * GET /wa/booking/nfcDevices — liste les lecteurs NFC disponibles (menu
  * déroulant "Device" affiché avant de lancer un encodage, panneau
  * "Réservations") — cf. lib/bookingSource.ts, listNfcDevices.

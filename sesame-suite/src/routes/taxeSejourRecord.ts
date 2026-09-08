@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../db";
 import { resolveEntity } from "../lib/entity";
-import { asyncHandler } from "../lib/asyncHandler";
+import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
 
 export const taxeSejourRecordRouter = Router();
@@ -79,6 +79,7 @@ taxeSejourRecordRouter.get(
     });
     res.json(
       records.map((r) => ({
+        id: r.id,
         hotelName: cfg?.hotelName || "",
         entityId: entity.code,
         stars: cfg?.stars || 0,
@@ -97,9 +98,33 @@ taxeSejourRecordRouter.get(
         montantDeduction: r.montantDeduction,
         montantNet: r.montantNet,
         devise: r.devise,
+        paid: r.paid,
+        paidAt: r.paidAt ? r.paidAt.toISOString() : null,
         createdAt: r.createdAt.toISOString(),
       }))
     );
+  })
+);
+
+/**
+ * POST /wa/taxeSejourRecord/markPaid — body: { id } — marque un
+ * enregistrement de taxe de séjour comme réglé (étape "Taxe payée" de la
+ * frise du parcours client, panneau Réservations). Le calcul du montant dû
+ * (création du record) et son règlement sont deux moments distincts — pas
+ * de paiement en ligne dans cette app, réglé en direct à la réception,
+ * simplement coché ici une fois fait.
+ */
+taxeSejourRecordRouter.post(
+  "/taxeSejourRecord/markPaid",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const id = (req.body.id as string) || "";
+    if (!id) throw new HttpError(400, "id requis");
+    const record = await prisma.taxeSejourRecord.findUnique({ where: { id } });
+    if (!record || record.entityId !== entity.id) throw new HttpError(404, "Enregistrement introuvable");
+    const updated = await prisma.taxeSejourRecord.update({ where: { id }, data: { paid: true, paidAt: new Date() } });
+    res.json({ id: updated.id, paid: updated.paid, paidAt: updated.paidAt!.toISOString() });
   })
 );
 

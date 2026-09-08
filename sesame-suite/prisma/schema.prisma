@@ -282,6 +282,13 @@ model Booking {
   bookingType      String?
   otaId            String?
   checkinDone      Boolean  @default(false)
+  // Marque le début (pas la fin) du check-in en ligne côté client — posé une
+  // seule fois, au moment où il sélectionne sa réservation dans l'appli
+  // check-in (cf. POST /wa/booking/checkinStart, appelé par checkin.html
+  // selectBooking()), jamais réécrit ensuite. Distinct de checkinDone (le
+  // formulaire est bien terminé) : sert d'étape "Connecté" dans la frise du
+  // parcours client (panneau Réservations, écran de détail).
+  checkinStartedAt DateTime?
   selectedRoomCode String? // chambre choisie à l'étape 2 (peut différer de facilityCode)
   importedFrom     String? // nom de la source si créée par le connecteur externe (cf. BookingSourceConfig), sinon null
   // Casiers Mon Casier Frais actuellement associés à cette réservation,
@@ -839,6 +846,13 @@ model TaxeSejourRecord {
   montantDeduction       Float
   montantNet             Float
   devise                 String @default("EUR")
+
+  // Paiement de la taxe collectée — distinct du calcul lui-même (ce record
+  // existe dès que les occupants sont déclarés, que le montant soit réglé
+  // ou non). Marqué manuellement depuis le panneau Réservations (étape
+  // "Taxe payée" de la frise du parcours client).
+  paid    Boolean   @default(false)
+  paidAt  DateTime?
 
   createdAt DateTime @default(now())
 }

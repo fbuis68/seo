@@ -2364,6 +2364,9 @@ function selectBooking(id) {
   toast(t('toast_booking_selected')+' · '+S.booking.personFirstname+' '+S.booking.personLastname);
   fetchLoyalty(S.booking.personEmail); // préchargement en tâche de fond pour l'étape 7
   fetchOrders(S.booking.code);
+  // Étape "Connecté" de la frise du parcours client (panneau Réservations,
+  // admin) — signal best-effort, ne doit jamais bloquer le check-in.
+  apiFetch(API_BASE+'/wa/booking/checkinStart', {method:'POST', body: JSON.stringify({code: S.booking.code})}).catch(function(){});
 }
 
 function fmtD(d) {

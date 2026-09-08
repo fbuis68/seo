@@ -746,6 +746,10 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bdr)">
         <button class="btn btn-s btn-d" id="resa-e-cancel-btn" onclick="resaToggleCancel()" style="width:100%"><i class="ti ti-ban"></i> <span id="resa-e-cancel-lbl">Désactiver la réservation</span></button>
       </div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bdr)">
+        <button class="btn btn-s btn-d" onclick="resaDeleteBooking()" style="width:100%"><i class="ti ti-trash"></i> Supprimer définitivement</button>
+        <div style="font-size:11px;color:var(--mu);margin-top:6px">Irréversible, contrairement à "Désactiver" — bloqué s'il existe des commandes ou une taxe de séjour liées à cette réservation.</div>
+      </div>
     </div>
   </div>
 </div>
@@ -13042,10 +13046,12 @@ async function loadReservations(){
       adminFetch('/wa/booking/list'),
       adminFetch('/wa/roomservice/list'),
       adminFetch('/wa/taxeSejourRecord/list'),
+      adminFetch('/wa/housekeepingTask/list'),
     ]);
     var bookings = results[0].ok ? await results[0].json() : [];
     var orders = results[1].ok ? await results[1].json() : [];
     var taxeRecords = results[2].ok ? await results[2].json() : [];
+    var houseTasks = results[3].ok ? await results[3].json() : [];
 
     // Contrairement à avant, les réservations annulées ne sont plus exclues
     // ici : le panneau doit pouvoir les afficher (onglet "Toutes") pour
@@ -13067,6 +13073,10 @@ async function loadReservations(){
         orders: orders.filter(function(o){ return o.bookingCode === b.code; }),
         taxe: taxeRecords.find(function(t){ return t.bookingCode === b.code; }) || null,
         prefs: prefsByEmail[(b.personEmail||'').trim().toLowerCase()] || null,
+        // "Ménage déclaré" (frise du parcours client) : au moins une tâche
+        // de ménage liée à cette réservation marquée terminée par le
+        // personnel — cf. panneau "Planning ménage".
+        housekeepingDone: houseTasks.some(function(t){ return t.bookingCode === b.code && t.status === 'done'; }),
       };
     });
 
@@ -13199,6 +13209,53 @@ function renderReservations(){
   }).join('');
 }
 
+// ═══════════════════════════════════════════════ RÉSERVATIONS — FRISE DU PARCOURS CLIENT
+// 8 étapes construites à partir de signaux déjà en base (aucune saisie
+// manuelle dédiée, sauf "Taxe payée" — cf. resaMarkTaxePaid). L'étape la
+// plus avancée atteinte (dernier true, dans l'ordre ci-dessous) est mise en
+// avant (pastille plus grande, libellé en gras) ; les précédentes atteintes
+// sont en vert, les suivantes en gris. Ordre volontairement chronologique
+// "normal" — une réservation peut en pratique atteindre ces jalons dans un
+// autre ordre (ex : ménage déclaré avant que la taxe soit pointée payée),
+// auquel cas la coloration reste honnête étape par étape mais la mise en
+// avant "dernière atteinte" perd un peu de sens : cas rare, non traité
+// spécifiquement.
+function resaJourneySteps(r){
+  var b = r.booking;
+  var today = hotelToday();
+  var arrived = !!(b.nfcEncodedAt || b.doorLastOpenedAt) || (b.checkinDone && (b.startDate||'').slice(0,10) <= today);
+  return [
+    {label:'Réservé', ico:'ti-calendar-check', done:true},
+    {label:'Connecté', ico:'ti-device-mobile', done:!!b.checkinStartedAt},
+    {label:'Wallet', ico:'ti-wallet', done:!!b.walletCreatedAt},
+    {label:'Enregistré', ico:'ti-clipboard-check', done:!!b.checkinDone},
+    {label:'Arrivée', ico:'ti-door-enter', done:arrived},
+    {label:'Taxe payée', ico:'ti-receipt', done:!!(r.taxe && r.taxe.paid)},
+    {label:'Check-out', ico:'ti-calendar-x', done: b.status==='completed' || (b.endDate||'').slice(0,10) < today},
+    {label:'Ménage déclaré', ico:'ti-spray', done:!!r.housekeepingDone},
+  ];
+}
+
+function resaJourneyHtml(r){
+  var steps = resaJourneySteps(r);
+  var lastDoneIdx = -1;
+  steps.forEach(function(s,i){ if(s.done) lastDoneIdx = i; });
+  var green = '#1A6B47';
+  var cells = steps.map(function(s, i){
+    var isCurrent = i === lastDoneIdx;
+    var dotColor = s.done ? green : 'var(--bdr)';
+    var dotSize = isCurrent ? 14 : 10;
+    var lineColor = i <= lastDoneIdx ? green : 'var(--bdr)';
+    return '<div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;position:relative">'
+      + (i>0 ? '<div style="position:absolute;top:'+(isCurrent?11:13)+'px;right:50%;width:100%;height:2px;background:'+lineColor+';z-index:0"></div>' : '')
+      + '<div style="width:'+dotSize+'px;height:'+dotSize+'px;border-radius:50%;background:'+dotColor+(isCurrent?';box-shadow:0 0 0 3px rgba(26,107,71,.2)':'')+';position:relative;z-index:1;margin-bottom:8px"></div>'
+      + '<i class="ti '+s.ico+'" style="font-size:16px;color:'+(s.done?green:'var(--mu)')+'"></i>'
+      + '<div style="font-size:10px;text-align:center;margin-top:4px;color:'+(isCurrent?'var(--tx)':'var(--mu)')+';font-weight:'+(isCurrent?'700':'500')+'">'+esc(s.label)+'</div>'
+      + '</div>';
+  }).join('');
+  return '<div style="display:flex;padding:16px 6px 4px;margin-bottom:14px;border:1px solid var(--bdr);border-radius:var(--rs);background:var(--bg)">'+cells+'</div>';
+}
+
 // ═══════════════════════════════════════════════ RÉSERVATIONS — DÉTAIL + ENCODAGE NFC
 
 function resaStatusLabel(b){
@@ -13240,6 +13297,7 @@ function resaOpenDetail(code){
     + '<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:'+nfcBg+';color:'+nfcColor+'"><i class="ti ti-nfc"></i> NFC ('+(b.nfcCount||0)+')</span>'
     + '<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:'+walBg+';color:'+walColor+'"><i class="ti ti-wallet"></i> Wallet ('+(b.walletShortLink?'généré':'aucun')+')</span>'
     + '</div>';
+  html += resaJourneyHtml(r);
   html += '<div style="border:1px solid var(--bdr);border-radius:var(--rs);overflow:hidden">'
     + rows.map(function(row, i){
         return '<div style="display:flex;justify-content:space-between;gap:12px;padding:9px 12px;font-size:13px'+(i<rows.length-1?';border-bottom:1px solid var(--bdr)':'')+'">'
@@ -13261,6 +13319,9 @@ function resaOpenDetail(code){
     + (b.walletShortLink
         ? '<button class="btn btn-s" onclick="resaCopyWalletLink()" id="resa-detail-wallet-btn"><i class="ti ti-copy"></i> Copier le lien Wallet</button>'
         : '<button class="btn btn-s" onclick="resaCreateWalletPass(\''+esc(b.code)+'\')" id="resa-detail-wallet-btn"><i class="ti ti-wallet"></i> Générer le pass Wallet</button>')
+    + (r.taxe && !r.taxe.paid
+        ? '<button class="btn btn-s" onclick="resaMarkTaxePaid(\''+esc(r.taxe.id)+'\')"><i class="ti ti-receipt"></i> Marquer la taxe payée</button>'
+        : '')
     + '<button class="btn btn-s" onclick="resaToggleEmailCompose(\''+esc(b.code)+'\')" id="resa-detail-email-btn"'+(b.personEmail?'':' disabled title="Aucune adresse email sur cette réservation"')+'><i class="ti ti-mail"></i> Envoyer un email</button>'
     + '<button class="btn btn-s" onclick="event.stopPropagation();resaCloseDetail();resaOpenEdit(\''+esc(b.code)+'\')"><i class="ti ti-edit"></i> Modifier</button>'
     + '</div>';
@@ -13522,6 +13583,43 @@ async function resaToggleCancel(){
     toast(willCancel ? 'Réservation désactivée ✓' : 'Réservation réactivée ✓');
     if(data.sourcePushWarning) toast('⚠ Non répercuté vers la source externe : '+data.sourcePushWarning);
     loadReservations();
+  }catch(e){
+    errMsg.textContent = 'Erreur de connexion au serveur';
+    errEl.style.display='block';
+  }
+}
+
+async function resaMarkTaxePaid(taxeId){
+  try{
+    var res = await adminFetch('/wa/taxeSejourRecord/markPaid', {method:'POST', body: JSON.stringify({id: taxeId})});
+    var data = await res.json();
+    if(!res.ok){ toast(data.error||'Échec de la mise à jour'); return; }
+    var r = RESA_CACHE.find(function(x){ return x.taxe && x.taxe.id === taxeId; });
+    if(r){
+      r.taxe.paid = true;
+      r.taxe.paidAt = data.paidAt;
+      toast('Taxe de séjour marquée payée ✓');
+      resaOpenDetail(r.booking.code);
+    }
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+async function resaDeleteBooking(){
+  var code = document.getElementById('resa-e-code').value;
+  var r = RESA_CACHE.find(function(x){ return x.booking.code === code; });
+  if(!r) return;
+  if(!confirm('Supprimer DÉFINITIVEMENT la réservation '+code+' ('+r.booking.personFirstname+' '+r.booking.personLastname+') ? Cette action est irréversible — préférez "Désactiver" si vous n\'êtes pas sûr.')) return;
+  var errEl = document.getElementById('resa-e-error');
+  var errMsg = document.getElementById('resa-e-error-msg');
+  errEl.style.display = 'none';
+  try{
+    var res = await adminFetch('/wa/booking/delete', {method:'POST', body: JSON.stringify({code: code})});
+    var data = await res.json();
+    if(!res.ok){ errMsg.textContent = data.error||'Échec de la suppression'; errEl.style.display='block'; return; }
+    resaCloseEdit();
+    toast('Réservation supprimée ✓');
+    RESA_CACHE = RESA_CACHE.filter(function(x){ return x.booking.code !== code; });
+    renderReservations();
   }catch(e){
     errMsg.textContent = 'Erreur de connexion au serveur';
     errEl.style.display='block';
