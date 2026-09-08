@@ -231,6 +231,14 @@ model Room {
   // lancer l'encodage — cf. listNfcDevices dans bookingSource.ts.
   isNfcEncoder Boolean @default(false)
 
+  // Cet accès doit-il apparaître dans la liste "chambre à positionner" du
+  // panneau Plan de l'hôtel (public/admin.html, prfUnpositionedRooms) ?
+  // Remplace le tri auparavant codé en dur sur type==="casier" (07/09/2026) —
+  // un casier n'a normalement pas sa place sur le plan, mais certains
+  // établissements exceptés voudraient pouvoir l'y placer quand même,
+  // d'où un critère explicite plutôt qu'une règle fixée par le type.
+  showOnPlan Boolean @default(true)
+
   createdAt DateTime @default(now())
 
   bookings           Booking[]

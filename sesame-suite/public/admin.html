@@ -1739,6 +1739,10 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
             <span style="font-size:13px">Non soumis au ménage (absent du planning et de l'appli du personnel)</span>
           </label>
           <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+            <input type="checkbox" id="rm-showOnPlan" checked style="accent-color:var(--am)">
+            <span style="font-size:13px">Afficher sur le plan de l'hôtel (proposé dans la liste "chambre à positionner")</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
             <input type="checkbox" id="rm-isNfcEncoder" style="accent-color:var(--am)">
             <span style="font-size:13px">Encodeur NFC (ce lecteur peut encoder des cartes — apparaît dans le sélecteur du bouton "Encoder NFC")</span>
           </label>
@@ -4917,12 +4921,12 @@ document.addEventListener('DOMContentLoaded',function(){
 });
 /** Chambres déjà créées (Gestion des Accès) mais pas encore positionnées sur un plan. */
 function prfUnpositionedRooms(){
-  // Les casiers (type="casier") n'ont pas vocation à apparaître sur le plan
-  // de l'hôtel — importés en masse depuis Mon Casier Frais, ils n'ont donc
-  // jamais de position (x/y) et noieraient sinon la liste des vraies
-  // chambres encore à placer (cf. retour utilisateur : la liste ne montrait
-  // plus que des casiers une fois toutes les chambres déjà positionnées).
-  return CFG.rooms.filter(function(r){ return (r.x==null || r.y==null) && r.type!=='casier'; });
+  // Room.showOnPlan (case "Afficher sur le plan de l'hôtel", Gestion des
+  // Accès) — critère explicite plutôt qu'une règle fixée sur le type : par
+  // défaut décoché pour les casiers (importés en masse, sans position, cf.
+  // lib/lockerSource.ts) pour ne pas noyer la liste des vraies chambres
+  // encore à placer, mais reste modifiable fiche par fiche au besoin.
+  return CFG.rooms.filter(function(r){ return (r.x==null || r.y==null) && r.showOnPlan!==false; });
 }
 function openNewRoom(x,y,floor){
   prfPhotos=[];
@@ -5166,6 +5170,7 @@ function rmOpenCreate(){
   document.getElementById('rm-connected').checked= false;
   document.getElementById('rm-housekeepingExempt').checked = false;
   document.getElementById('rm-isNfcEncoder').checked = false;
+  document.getElementById('rm-showOnPlan').checked = true;
   document.getElementById('rm-deviceId').value = '';
   document.getElementById('rmDeleteBtn').style.display='none';
   document.getElementById('rm-currency-sym').textContent = getCurrSym();
@@ -5199,6 +5204,7 @@ function rmOpenEdit(code){
   document.getElementById('rm-connected').checked = !!r.connected;
   document.getElementById('rm-housekeepingExempt').checked = !!r.housekeepingExempt;
   document.getElementById('rm-isNfcEncoder').checked = !!r.isNfcEncoder;
+  document.getElementById('rm-showOnPlan').checked = r.showOnPlan!==false;
   document.getElementById('rm-deviceId').value = r.deviceId||'';
   document.getElementById('rmDeleteBtn').style.display='';
   document.getElementById('rm-currency-sym').textContent = getCurrSym();
@@ -5289,6 +5295,7 @@ async function rmSaveRoom(){
     connected:   isCasier ? false : document.getElementById('rm-connected').checked,
     housekeepingExempt: document.getElementById('rm-housekeepingExempt').checked,
     isNfcEncoder: document.getElementById('rm-isNfcEncoder').checked,
+    showOnPlan:  document.getElementById('rm-showOnPlan').checked,
     deviceId:    document.getElementById('rm-deviceId').value.trim(),
   };
   try{

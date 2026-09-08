@@ -54,6 +54,7 @@ interface RoomBody {
   housekeepingExempt?: boolean;
   deviceId?: string;
   isNfcEncoder?: boolean;
+  showOnPlan?: boolean;
 }
 
 /** POST /wa/facility/create — CRUD chambres (back-office, panneau "Gestion des chambres"). */
@@ -91,6 +92,10 @@ facilityRouter.post(
         housekeepingExempt: b.housekeepingExempt || false,
         deviceId: b.deviceId || undefined,
         isNfcEncoder: b.isNfcEncoder || false,
+        // Un casier n'a normalement pas sa place sur le plan de l'hôtel
+        // (cf. Room.showOnPlan) — décoché par défaut à la création, mais
+        // reste un critère explicite que l'admin peut inverser au besoin.
+        showOnPlan: b.showOnPlan !== undefined ? b.showOnPlan : b.type !== "casier",
       },
     });
     await prisma.roomHousekeepingStatus.create({ data: { roomId: room.id, status: "libre" } });
@@ -133,6 +138,7 @@ facilityRouter.post(
         housekeepingExempt: b.housekeepingExempt,
         deviceId: b.deviceId,
         isNfcEncoder: b.isNfcEncoder,
+        showOnPlan: b.showOnPlan,
       },
     });
     res.json(normaliseRoom(updated));

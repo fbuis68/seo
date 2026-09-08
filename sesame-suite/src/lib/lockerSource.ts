@@ -461,6 +461,9 @@ export async function runLockerRoomImport(entity: Entity, config: LockerSourceCo
         // parcours ménage par défaut (modifiable ensuite depuis la fiche
         // accès si besoin).
         housekeepingExempt: true,
+        // Un casier n'a normalement pas sa place sur le plan de l'hôtel —
+        // décoché par défaut, modifiable ensuite depuis la fiche accès.
+        showOnPlan: false,
       },
     });
     created++;
