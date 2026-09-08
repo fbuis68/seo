@@ -202,10 +202,14 @@ bookingRouter.get(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const entity = await resolveEntity(req);
+    // Pas de garde sur l'existence du connecteur ici : un accès coché
+    // "Encodeur NFC" (Gestion des Accès) doit apparaître dans ce sélecteur
+    // même si l'établissement n'a jamais configuré l'Intégration
+    // réservations — seul listNfcDevices() sait si un repli sur la liste
+    // externe est nécessaire (aucun encodeur local marqué).
     const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
-    if (!config) throw new HttpError(400, "Connecteur non configuré pour cet établissement");
     try {
-      const devices = await listNfcDevices(config);
+      const devices = await listNfcDevices(entity.id, config);
       res.json(devices);
     } catch (e) {
       if (e instanceof BookingSourceError) throw new HttpError(400, e.message);

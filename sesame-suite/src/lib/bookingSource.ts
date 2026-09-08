@@ -682,17 +682,22 @@ export interface NfcDevice {
  * révélés être de mauvais candidats avant qu'on parte sur cette approche).
  * Si aucun accès n'est ainsi marqué, on retombe sur l'ancien mécanisme
  * (appel de config.nfcDeviceListEndpointPath + filtre configurable) pour ne
- * pas casser une configuration existante.
+ * pas casser une configuration existante. `config` peut être null : un
+ * établissement qui n'a jamais configuré le connecteur externe (pas de ligne
+ * BookingSourceConfig) doit quand même pouvoir utiliser des encodeurs
+ * locaux — seul le repli sur la liste externe a réellement besoin d'une
+ * configuration (corrigé le 08/09/2026 : la route appelante bloquait
+ * jusque-là AVANT même de tenter les encodeurs locaux).
  */
-export async function listNfcDevices(config: BookingSourceConfig): Promise<NfcDevice[]> {
+export async function listNfcDevices(entityId: string, config: BookingSourceConfig | null): Promise<NfcDevice[]> {
   const localEncoders = await prisma.room.findMany({
-    where: { entityId: config.entityId, isNfcEncoder: true, deviceId: { not: null } },
+    where: { entityId, isNfcEncoder: true, deviceId: { not: null } },
     orderBy: { name: "asc" },
   });
   const local = localEncoders.filter((r) => r.deviceId).map((r) => ({ id: r.deviceId as string, name: r.name }));
   if (local.length) return local;
 
-  if (!config.nfcDeviceListEndpointPath) {
+  if (!config || !config.nfcDeviceListEndpointPath) {
     throw new BookingSourceError(
       'Aucun accès coché "Encodeur NFC" dans la fiche Chambres, et liste des lecteurs non configurée — cochez au moins un accès comme encodeur, ou renseignez "Liste des lecteurs NFC" dans les réglages techniques avancés de l\'Intégration réservations.'
     );

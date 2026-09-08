@@ -3053,7 +3053,10 @@ function showPortefeuille(){
 
 function pfRows(){
   const q = pfFilter.trim().toLowerCase();
-  return clients.filter(c=>!q || c.nom.toLowerCase().includes(q)).slice().sort((a,b)=>a.nom.localeCompare(b.nom));
+  // Un "Suspect" (contact non qualifié, ex. badge scanné sur un salon) n'a
+  // pas encore de valeur commerciale réelle — il n'a rien à faire dans le
+  // portefeuille financier, réservé aux prospects/clients qualifiés.
+  return clients.filter(c=>c.type!=='Suspect' && (!q || c.nom.toLowerCase().includes(q))).slice().sort((a,b)=>a.nom.localeCompare(b.nom));
 }
 
 function pfTotal(c){ return (+c.mrr||0)+(+c.signe||0)+(+c.previsionnel||0); }

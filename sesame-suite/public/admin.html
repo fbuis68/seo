@@ -8569,7 +8569,10 @@ async function fetchPlanBookings(){
     var r = await adminFetch('/wa/booking/list');
     if(r.ok){
       var data = await r.json();
-      PLAN.bookings = data.map(function(b){
+      // Une réservation désactivée ne doit plus occuper la chambre sur le
+      // plan (sinon elle continue d'apparaître comme "en cours" dans le
+      // planning alors qu'elle a été annulée depuis le panneau Réservations).
+      PLAN.bookings = data.filter(function(b){ return b.status !== 'cancelled'; }).map(function(b){
         return {id:b.id, code:b.code, room:b.facilityCode, personFirstname:b.personFirstname,
           personLastname:b.personLastname, start:b.startDate, end:b.endDate, nights:b.nights, adults:1, status:''};
       });
