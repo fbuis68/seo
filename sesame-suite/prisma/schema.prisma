@@ -491,23 +491,34 @@ model BookingSourceConfig {
   // Inerte tant que nfcStartEndpointPath est vide : le bouton "Encoder NFC"
   // échoue alors avec un message explicite plutôt que d'appeler une URL non
   // configurée.
-  nfcStartEndpointPath   String? // ex: "/wa/deviceAdmin/startPassAssociation"
+  nfcStartEndpointPath   String? // ex: "/ws/deviceAdmin/startPassAssociation"
   nfcStartEndpointMethod String? @default("GET")
   nfcStartPassParam      String? @default("id") // porte Booking.passId
   nfcStartDeviceParam    String? @default("deviceId") // porte l'id du device choisi
   nfcStartTimeoutParam   String? @default("timeout")
   nfcStartTimeoutSeconds Int?    @default(15)
   // Paramètres statiques additionnels envoyés à chaque appel (ex :
-  // {"name":"secret2","description":"personName"} — observés sur un client
+  // {"name":"secret3","description":"personName"} — observés sur un client
   // réel, rôle exact non confirmé mais présents dans tous les appels vus).
   nfcStartExtraParams    Json?
 
-  nfcCheckEndpointPath   String? // ex: "/wa/deviceAdmin/checkAssociation"
+  nfcCheckEndpointPath   String? // ex: "/ws/deviceAdmin/checkAssociation"
   nfcCheckEndpointMethod String? @default("GET")
   nfcCheckDeviceParam    String? @default("id") // porte l'id du device (PAS le passId)
   nfcCheckStopPath       String? @default("stop")
   nfcCheckSuccessPath    String? @default("success")
   nfcCheckMessagePath    String? @default("message")
+
+  // Libère le lecteur une fois la vérification terminée (succès, échec ou
+  // délai écoulé) — appelé défensivement AVANT ET APRÈS chaque encodage
+  // (cf. lib/bookingSource.ts encodeNfc). Sans cet appel, une session
+  // d'association non refermée laisse le lecteur "occupé" et toute
+  // tentative suivante échoue en timeout même avec un identifiant et des
+  // chemins par ailleurs corrects — confirmé le 08/09/2026 sur un
+  // établissement resté bloqué après plusieurs tentatives ratées.
+  nfcStopEndpointPath   String? // ex: "/ws/deviceAdmin/stopAssociation"
+  nfcStopEndpointMethod String? @default("GET")
+  nfcStopDeviceParam    String? @default("id") // porte l'id du device
 
   // Liste des lecteurs disponibles (menu déroulant "Device" du bouton
   // "Encoder NFC") — un établissement peut avoir plusieurs postes

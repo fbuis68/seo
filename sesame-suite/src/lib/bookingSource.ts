@@ -739,17 +739,51 @@ export interface NfcEncodeResult {
 }
 
 /**
+ * Appelle config.nfcStopEndpointPath pour libérer le lecteur `deviceId` —
+ * best-effort, n'échoue jamais (erreurs avalées) : c'est une opération de
+ * nettoyage, pas une étape dont le succès conditionne l'encodage. Sans elle,
+ * un lecteur reste "occupé" par une session non refermée (association
+ * précédente ratée, page fermée en cours d'attente…) et toute tentative
+ * suivante échoue en timeout même avec un identifiant et des chemins par
+ * ailleurs corrects — confirmé le 08/09/2026 sur un établissement resté
+ * bloqué après plusieurs essais dont aucun n'avait atteint cet appel (code
+ * antérieur qui ne l'appelait jamais du tout).
+ */
+async function stopNfcAssociation(
+  config: BookingSourceConfig,
+  deviceId: string,
+  base: string,
+  commonHeaders: Record<string, string>
+): Promise<void> {
+  if (!config.nfcStopEndpointPath) return;
+  try {
+    const stopQs = new URLSearchParams();
+    stopQs.set(config.nfcStopDeviceParam || "id", deviceId);
+    const stopMethod = (config.nfcStopEndpointMethod || "GET").toUpperCase();
+    const stopUrl = `${base}${config.nfcStopEndpointPath}${config.nfcStopEndpointPath.includes("?") ? "&" : "?"}${stopQs.toString()}`;
+    await fetchWithTimeout(stopUrl, { method: stopMethod === "GET" ? "GET" : "POST", headers: commonHeaders });
+  } catch {
+    // Best-effort — un échec ici ne doit jamais faire échouer l'encodage.
+  }
+}
+
+/**
  * Encode une carte/badge NFC pour la personne titulaire d'UNE réservation
  * (Booking.passId — PAS le code de réservation, cf. son commentaire dans
- * schema.prisma), sur le lecteur `deviceId` choisi par l'admin. Flux en
- * deux appels confirmé le 03/09/2026 via capture réseau sur un client réel
- * (absent de la documentation officielle) :
+ * schema.prisma), sur le lecteur `deviceId` choisi par l'admin. Flux confirmé
+ * le 08/09/2026 via capture réseau du back-office Sesame lui-même (absent de
+ * la documentation officielle) :
+ *  0. Appelle défensivement config.nfcStopEndpointPath AVANT de démarrer,
+ *     pour libérer un éventuel lecteur resté occupé par une session
+ *     précédente non refermée (cf. stopNfcAssociation).
  *  1. Démarre l'association (config.nfcStartEndpointPath).
  *  2. Interroge config.nfcCheckEndpointPath en boucle (~1x/s) jusqu'à ce
  *     que la réponse indique l'arrêt (carte approchée du lecteur, ou délai
  *     écoulé) — {stop,success,message} observés en pratique. Bloquant côté
  *     serveur jusqu'à nfcStartTimeoutSeconds, pour que le bouton "Encoder
  *     NFC" n'ait besoin que d'UN seul appel HTTP.
+ *  3. Dans tous les cas (succès, échec, exception), rappelle
+ *     config.nfcStopEndpointPath pour libérer le lecteur.
  * Inerte tant que nfcStartEndpointPath n'est pas configuré — échoue
  * explicitement plutôt que de tenter un appel sur une URL vide.
  */
@@ -765,61 +799,69 @@ export async function encodeNfc(config: BookingSourceConfig, passId: string, dev
   const timeoutSeconds = config.nfcStartTimeoutSeconds || 15;
   const commonHeaders = { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...authHeaders };
 
-  // 1. Démarre l'association
-  const startParams: Record<string, unknown> =
-    config.nfcStartExtraParams && typeof config.nfcStartExtraParams === "object" ? { ...(config.nfcStartExtraParams as Record<string, unknown>) } : {};
-  startParams[config.nfcStartTimeoutParam || "timeout"] = timeoutSeconds;
-  startParams[config.nfcStartPassParam || "id"] = passId;
-  startParams[config.nfcStartDeviceParam || "deviceId"] = deviceId;
-  const startQs = new URLSearchParams();
-  Object.entries(startParams).forEach(([k, v]) => startQs.set(k, String(v)));
-  const startMethod = (config.nfcStartEndpointMethod || "GET").toUpperCase();
-  const startUrl = `${base}${config.nfcStartEndpointPath}${config.nfcStartEndpointPath.includes("?") ? "&" : "?"}${startQs.toString()}`;
+  // 0. Nettoyage défensif d'une éventuelle session précédente non refermée
+  await stopNfcAssociation(config, deviceId, base, commonHeaders);
 
-  let startRes: Response;
   try {
-    startRes = await fetchWithTimeout(startUrl, { method: startMethod === "GET" ? "GET" : "POST", headers: commonHeaders });
-  } catch (e) {
-    throw new BookingSourceError(`Connexion à l'encodeur NFC impossible (démarrage) : ${describeFetchError(e)}`);
-  }
-  if (!startRes.ok) throw new BookingSourceError(`L'encodeur NFC a répondu ${startRes.status} ${startRes.statusText} au démarrage`);
-  const startBody = await parseJsonResponse(startRes, "La réponse de démarrage de l'encodeur NFC");
-  if (startBody && (startBody as { success?: unknown }).success === false) {
-    throw new BookingSourceError(String((startBody as { message?: unknown }).message || "Démarrage de l'association refusé par l'encodeur NFC"));
-  }
+    // 1. Démarre l'association
+    const startParams: Record<string, unknown> =
+      config.nfcStartExtraParams && typeof config.nfcStartExtraParams === "object" ? { ...(config.nfcStartExtraParams as Record<string, unknown>) } : {};
+    startParams[config.nfcStartTimeoutParam || "timeout"] = timeoutSeconds;
+    startParams[config.nfcStartPassParam || "id"] = passId;
+    startParams[config.nfcStartDeviceParam || "deviceId"] = deviceId;
+    const startQs = new URLSearchParams();
+    Object.entries(startParams).forEach(([k, v]) => startQs.set(k, String(v)));
+    const startMethod = (config.nfcStartEndpointMethod || "GET").toUpperCase();
+    const startUrl = `${base}${config.nfcStartEndpointPath}${config.nfcStartEndpointPath.includes("?") ? "&" : "?"}${startQs.toString()}`;
 
-  // 2. Interroge en boucle jusqu'à l'arrêt (carte approchée, ou délai écoulé)
-  if (!config.nfcCheckEndpointPath) {
-    throw new BookingSourceError(
-      'Vérification de l\'association NFC non configurée — renseignez "Vérification de l\'association NFC" dans les réglages techniques avancés.'
-    );
-  }
-  const checkMethod = (config.nfcCheckEndpointMethod || "GET").toUpperCase();
-  const checkQs = new URLSearchParams();
-  checkQs.set(config.nfcCheckDeviceParam || "id", deviceId);
-  const checkUrl = `${base}${config.nfcCheckEndpointPath}${config.nfcCheckEndpointPath.includes("?") ? "&" : "?"}${checkQs.toString()}`;
-  const stopPath = config.nfcCheckStopPath || "stop";
-  const successPath = config.nfcCheckSuccessPath || "success";
-  const messagePath = config.nfcCheckMessagePath || "message";
-
-  const deadline = Date.now() + timeoutSeconds * 1000;
-  let lastMessage = "";
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 1000));
-    let checkRes: Response;
+    let startRes: Response;
     try {
-      checkRes = await fetchWithTimeout(checkUrl, { method: checkMethod === "GET" ? "GET" : "POST", headers: commonHeaders });
+      startRes = await fetchWithTimeout(startUrl, { method: startMethod === "GET" ? "GET" : "POST", headers: commonHeaders });
     } catch (e) {
-      throw new BookingSourceError(`Connexion à l'encodeur NFC impossible (vérification) : ${describeFetchError(e)}`);
+      throw new BookingSourceError(`Connexion à l'encodeur NFC impossible (démarrage) : ${describeFetchError(e)}`);
     }
-    if (!checkRes.ok) throw new BookingSourceError(`L'encodeur NFC a répondu ${checkRes.status} ${checkRes.statusText} (vérification)`);
-    const checkBody = await parseJsonResponse(checkRes, "La réponse de vérification de l'encodeur NFC");
-    lastMessage = String(getPath(checkBody, messagePath) ?? "");
-    if (getPath(checkBody, stopPath) === true) {
-      return { success: getPath(checkBody, successPath) === true, message: lastMessage };
+    if (!startRes.ok) throw new BookingSourceError(`L'encodeur NFC a répondu ${startRes.status} ${startRes.statusText} au démarrage`);
+    const startBody = await parseJsonResponse(startRes, "La réponse de démarrage de l'encodeur NFC");
+    if (startBody && (startBody as { success?: unknown }).success === false) {
+      throw new BookingSourceError(String((startBody as { message?: unknown }).message || "Démarrage de l'association refusé par l'encodeur NFC"));
     }
+
+    // 2. Interroge en boucle jusqu'à l'arrêt (carte approchée, ou délai écoulé)
+    if (!config.nfcCheckEndpointPath) {
+      throw new BookingSourceError(
+        'Vérification de l\'association NFC non configurée — renseignez "Vérification de l\'association NFC" dans les réglages techniques avancés.'
+      );
+    }
+    const checkMethod = (config.nfcCheckEndpointMethod || "GET").toUpperCase();
+    const checkQs = new URLSearchParams();
+    checkQs.set(config.nfcCheckDeviceParam || "id", deviceId);
+    const checkUrl = `${base}${config.nfcCheckEndpointPath}${config.nfcCheckEndpointPath.includes("?") ? "&" : "?"}${checkQs.toString()}`;
+    const stopPath = config.nfcCheckStopPath || "stop";
+    const successPath = config.nfcCheckSuccessPath || "success";
+    const messagePath = config.nfcCheckMessagePath || "message";
+
+    const deadline = Date.now() + timeoutSeconds * 1000;
+    let lastMessage = "";
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 1000));
+      let checkRes: Response;
+      try {
+        checkRes = await fetchWithTimeout(checkUrl, { method: checkMethod === "GET" ? "GET" : "POST", headers: commonHeaders });
+      } catch (e) {
+        throw new BookingSourceError(`Connexion à l'encodeur NFC impossible (vérification) : ${describeFetchError(e)}`);
+      }
+      if (!checkRes.ok) throw new BookingSourceError(`L'encodeur NFC a répondu ${checkRes.status} ${checkRes.statusText} (vérification)`);
+      const checkBody = await parseJsonResponse(checkRes, "La réponse de vérification de l'encodeur NFC");
+      lastMessage = String(getPath(checkBody, messagePath) ?? "");
+      if (getPath(checkBody, stopPath) === true) {
+        return { success: getPath(checkBody, successPath) === true, message: lastMessage };
+      }
+    }
+    return { success: false, message: lastMessage || "Délai écoulé — aucune carte approchée du lecteur" };
+  } finally {
+    // 3. Libère systématiquement le lecteur, quelle que soit l'issue.
+    await stopNfcAssociation(config, deviceId, base, commonHeaders);
   }
-  return { success: false, message: lastMessage || "Délai écoulé — aucune carte approchée du lecteur" };
 }
 
 /**

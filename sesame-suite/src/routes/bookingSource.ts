@@ -74,6 +74,9 @@ function shapeConfig(c: {
   nfcCheckStopPath: string | null;
   nfcCheckSuccessPath: string | null;
   nfcCheckMessagePath: string | null;
+  nfcStopEndpointPath: string | null;
+  nfcStopEndpointMethod: string | null;
+  nfcStopDeviceParam: string | null;
   nfcDeviceListEndpointPath: string | null;
   nfcDeviceListEndpointMethod: string | null;
   nfcDeviceListBodyParams: unknown;
@@ -180,6 +183,9 @@ function shapeConfig(c: {
     nfcCheckStopPath: c.nfcCheckStopPath || "stop",
     nfcCheckSuccessPath: c.nfcCheckSuccessPath || "success",
     nfcCheckMessagePath: c.nfcCheckMessagePath || "message",
+    nfcStopEndpointPath: c.nfcStopEndpointPath || "",
+    nfcStopEndpointMethod: c.nfcStopEndpointMethod || "GET",
+    nfcStopDeviceParam: c.nfcStopDeviceParam || "id",
     nfcDeviceListEndpointPath: c.nfcDeviceListEndpointPath || "",
     nfcDeviceListEndpointMethod: c.nfcDeviceListEndpointMethod || "GET",
     nfcDeviceListBodyParams: c.nfcDeviceListBodyParams || {},
@@ -328,6 +334,9 @@ interface ConfigBody {
   nfcCheckStopPath?: string;
   nfcCheckSuccessPath?: string;
   nfcCheckMessagePath?: string;
+  nfcStopEndpointPath?: string;
+  nfcStopEndpointMethod?: string;
+  nfcStopDeviceParam?: string;
   nfcDeviceListEndpointPath?: string;
   nfcDeviceListEndpointMethod?: string;
   nfcDeviceListBodyParams?: Record<string, string>;
@@ -435,6 +444,9 @@ bookingSourceRouter.post(
       nfcCheckStopPath: b.nfcCheckStopPath,
       nfcCheckSuccessPath: b.nfcCheckSuccessPath,
       nfcCheckMessagePath: b.nfcCheckMessagePath,
+      nfcStopEndpointPath: b.nfcStopEndpointPath,
+      nfcStopEndpointMethod: b.nfcStopEndpointMethod,
+      nfcStopDeviceParam: b.nfcStopDeviceParam,
       nfcDeviceListEndpointPath: b.nfcDeviceListEndpointPath,
       nfcDeviceListEndpointMethod: b.nfcDeviceListEndpointMethod,
       nfcDeviceListBodyParams: b.nfcDeviceListBodyParams as never,
