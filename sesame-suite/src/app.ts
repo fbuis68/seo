@@ -5,6 +5,7 @@ import { configRouter } from "./routes/config";
 import { facilityRouter } from "./routes/facility";
 import { bookingRouter } from "./routes/booking";
 import { taxeSejourRecordRouter } from "./routes/taxeSejourRecord";
+import { kycRecordRouter } from "./routes/kycRecord";
 import { roomserviceRouter } from "./routes/roomservice";
 import { clientPrefsRouter } from "./routes/clientPrefs";
 import { loyaltyRouter } from "./routes/loyalty";
@@ -77,6 +78,7 @@ export function createApp() {
   app.use("/wa", facilityRouter);
   app.use("/wa", bookingRouter);
   app.use("/wa", taxeSejourRecordRouter);
+  app.use("/wa", kycRecordRouter);
   app.use("/wa", roomserviceRouter);
   app.use("/wa", clientPrefsRouter);
   app.use("/wa", loyaltyRouter);

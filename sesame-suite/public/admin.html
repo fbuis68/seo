@@ -756,7 +756,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 
 <!-- ════════════════ DÉTAIL RÉSERVATION ════════════════ -->
 <div id="resaDetailModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center;padding:16px">
-  <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:540px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.3)">
+  <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:680px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.3)">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--bdr)">
       <h2 style="font-size:17px">Détail de la réservation</h2>
       <button onclick="resaCloseDetail()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
@@ -13047,11 +13047,13 @@ async function loadReservations(){
       adminFetch('/wa/roomservice/list'),
       adminFetch('/wa/taxeSejourRecord/list'),
       adminFetch('/wa/housekeepingTask/list'),
+      adminFetch('/wa/kycRecord/list'),
     ]);
     var bookings = results[0].ok ? await results[0].json() : [];
     var orders = results[1].ok ? await results[1].json() : [];
     var taxeRecords = results[2].ok ? await results[2].json() : [];
     var houseTasks = results[3].ok ? await results[3].json() : [];
+    var kycRecords = results[4].ok ? await results[4].json() : [];
 
     // Contrairement à avant, les réservations annulées ne sont plus exclues
     // ici : le panneau doit pouvoir les afficher (onglet "Toutes") pour
@@ -13077,6 +13079,9 @@ async function loadReservations(){
         // de ménage liée à cette réservation marquée terminée par le
         // personnel — cf. panneau "Planning ménage".
         housekeepingDone: houseTasks.some(function(t){ return t.bookingCode === b.code && t.status === 'done'; }),
+        // "Pièce d'identité" (frise) : record le plus récent (kycRecord/list
+        // trié par date décroissante côté serveur) si plusieurs tentatives.
+        kyc: kycRecords.find(function(k){ return k.bookingCode === b.code; }) || null,
       };
     });
 
@@ -13210,30 +13215,39 @@ function renderReservations(){
 }
 
 // ═══════════════════════════════════════════════ RÉSERVATIONS — FRISE DU PARCOURS CLIENT
-// 8 étapes construites à partir de signaux déjà en base (aucune saisie
+// 10 étapes construites à partir de signaux déjà en base (aucune saisie
 // manuelle dédiée, sauf "Taxe payée" — cf. resaMarkTaxePaid). L'étape la
 // plus avancée atteinte (dernier true, dans l'ordre ci-dessous) est mise en
-// avant (pastille plus grande, libellé en gras) ; les précédentes atteintes
-// sont en vert, les suivantes en gris. Ordre volontairement chronologique
+// avant (pastille cerclée, libellé en gras) ; les précédentes atteintes sont
+// en vert, les suivantes en gris. Ordre volontairement chronologique
 // "normal" — une réservation peut en pratique atteindre ces jalons dans un
 // autre ordre (ex : ménage déclaré avant que la taxe soit pointée payée),
 // auquel cas la coloration reste honnête étape par étape mais la mise en
 // avant "dernière atteinte" perd un peu de sens : cas rare, non traité
-// spécifiquement.
+// spécifiquement. Interactive selon les modules activés côté check-in
+// (CFG.checkinModules) : une étape dont le module optionnel correspondant
+// est désactivé pour l'établissement (taxe, kyc, room service) ne
+// s'affiche pas — inutile d'annoncer un jalon qui ne peut jamais être
+// atteint. Les autres étapes (cœur du parcours) restent toujours visibles.
 function resaJourneySteps(r){
   var b = r.booking;
   var today = hotelToday();
   var arrived = !!(b.nfcEncodedAt || b.doorLastOpenedAt) || (b.checkinDone && (b.startDate||'').slice(0,10) <= today);
-  return [
+  var modules = CFG.checkinModules || {};
+  function moduleActive(k){ return !modules[k] || modules[k].active !== false; }
+  var all = [
     {label:'Réservé', ico:'ti-calendar-check', done:true},
     {label:'Connecté', ico:'ti-device-mobile', done:!!b.checkinStartedAt},
     {label:'Wallet', ico:'ti-wallet', done:!!b.walletCreatedAt},
     {label:'Enregistré', ico:'ti-clipboard-check', done:!!b.checkinDone},
+    {label:'Taxe payée', ico:'ti-receipt', done:!!(r.taxe && r.taxe.paid), module:'taxe'},
+    {label:"Pièce d'identité", ico:'ti-shield-check', done:!!(r.kyc && !r.kyc.skipped && (r.kyc.idVerified || r.kyc.selfieVerified)), module:'kyc'},
     {label:'Arrivée', ico:'ti-door-enter', done:arrived},
-    {label:'Taxe payée', ico:'ti-receipt', done:!!(r.taxe && r.taxe.paid)},
+    {label:'Commande boutique', ico:'ti-shopping-bag', done: r.orders.length>0, module:'roomservice'},
     {label:'Check-out', ico:'ti-calendar-x', done: b.status==='completed' || (b.endDate||'').slice(0,10) < today},
     {label:'Ménage déclaré', ico:'ti-spray', done:!!r.housekeepingDone},
   ];
+  return all.filter(function(s){ return !s.module || moduleActive(s.module); });
 }
 
 function resaJourneyHtml(r){
@@ -13241,14 +13255,14 @@ function resaJourneyHtml(r){
   var lastDoneIdx = -1;
   steps.forEach(function(s,i){ if(s.done) lastDoneIdx = i; });
   var green = '#1A6B47';
+  var dotSize = 10;
   var cells = steps.map(function(s, i){
     var isCurrent = i === lastDoneIdx;
     var dotColor = s.done ? green : 'var(--bdr)';
-    var dotSize = isCurrent ? 14 : 10;
     var lineColor = i <= lastDoneIdx ? green : 'var(--bdr)';
     return '<div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;position:relative">'
-      + (i>0 ? '<div style="position:absolute;top:'+(isCurrent?11:13)+'px;right:50%;width:100%;height:2px;background:'+lineColor+';z-index:0"></div>' : '')
-      + '<div style="width:'+dotSize+'px;height:'+dotSize+'px;border-radius:50%;background:'+dotColor+(isCurrent?';box-shadow:0 0 0 3px rgba(26,107,71,.2)':'')+';position:relative;z-index:1;margin-bottom:8px"></div>'
+      + (i>0 ? '<div style="position:absolute;top:'+(dotSize/2-1)+'px;right:50%;width:100%;height:2px;background:'+lineColor+';z-index:0"></div>' : '')
+      + '<div style="width:'+dotSize+'px;height:'+dotSize+'px;border-radius:50%;background:'+dotColor+(isCurrent?';box-shadow:0 0 0 3px rgba(26,107,71,.25)':'')+';position:relative;z-index:1;margin-bottom:8px"></div>'
       + '<i class="ti '+s.ico+'" style="font-size:16px;color:'+(s.done?green:'var(--mu)')+'"></i>'
       + '<div style="font-size:10px;text-align:center;margin-top:4px;color:'+(isCurrent?'var(--tx)':'var(--mu)')+';font-weight:'+(isCurrent?'700':'500')+'">'+esc(s.label)+'</div>'
       + '</div>';

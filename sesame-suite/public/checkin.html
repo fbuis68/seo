@@ -4337,9 +4337,33 @@ async function finalizeCheckin(syncStatus){
   }
   await creditPointsAfterStay();
   await pushTaxeRecord();
+  await pushKycRecord();
   S.checkinDone = true;
   var infoBadge=document.getElementById('bnInfosBadge'); if(infoBadge && isModuleActive('roomservice')) infoBadge.style.display='block';
   return result;
+}
+
+// ── Enregistre le résultat de la vérification d'identité — POST /wa/kycRecord/create ──
+// (étape 4, optionnelle — jamais persisté jusqu'ici malgré la simulation
+// complète côté client, cf. objet KYC). Sert l'étape "Pièce d'identité" de
+// la frise du parcours client (panneau Réservations, admin).
+async function pushKycRecord(){
+  if(!isModuleActive('kyc')) return;
+  if(!S.booking) return;
+  try{
+    await apiFetch(API_BASE+'/wa/kycRecord/create', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        bookingCode: S.booking.code,
+        docType: KYC.docType || '',
+        fields: KYC.extractedData || null,
+        idVerified: !!KYC.idVerified,
+        selfieVerified: !!KYC.selfieVerified,
+        matchScore: KYC.matchScore || 0,
+        skipped: !!KYC.skipped,
+      })
+    });
+  }catch(e){}
 }
 
 // ── Enregistre les données de taxe de séjour — POST /wa/taxeSejourRecord/create ──
