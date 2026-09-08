@@ -41,6 +41,8 @@ loginRouter.post(
       email: admin.email,
       role: admin.role as AdminRole,
       crmRole: admin.crmRole,
+      groupScoped: admin.groupScoped,
+      groupId: admin.groupScoped ? admin.entity.groupId : null,
     });
     res.json({
       token,
@@ -51,6 +53,8 @@ loginRouter.post(
         crmRole: admin.crmRole,
         entityCode: admin.entity.code,
         hotelName: admin.entity.config?.hotelName || admin.entity.name,
+        groupScoped: admin.groupScoped,
+        groupId: admin.groupScoped ? admin.entity.groupId : null,
       },
     });
   })

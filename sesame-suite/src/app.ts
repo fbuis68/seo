@@ -37,6 +37,7 @@ import { emailRouter } from "./routes/email";
 import { messagingRouter } from "./routes/messaging";
 import { automationRuleRouter } from "./routes/automationRule";
 import { adminUserRouter } from "./routes/adminUser";
+import { hotelUserRouter } from "./routes/hotelUser";
 import { paymentRouter, stripeWebhookHandler } from "./routes/payment";
 import { vendorRouter } from "./routes/vendor";
 import { walletRouter } from "./routes/wallet";
@@ -105,6 +106,7 @@ export function createApp() {
   app.use("/wa", messagingRouter);
   app.use("/wa", automationRuleRouter);
   app.use("/wa", adminUserRouter);
+  app.use("/wa", hotelUserRouter);
   app.use("/wa", paymentRouter);
   app.use("/wa", vendorRouter);
   app.use("/wa", walletRouter);

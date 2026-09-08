@@ -91,6 +91,19 @@ html{scrollbar-width:thin;scrollbar-color:var(--mu) transparent}
 .sidebar-overlay{display:none}
 .tbmk{width:26px;height:26px;background:#8B1A2E;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;font-family:'DM Serif Display',serif;flex-shrink:0}
 .tbtl{font-family:'DM Serif Display',serif;font-size:16px;color:#fff;font-weight:400}
+/* Logo Sesame Technology (éditeur) — rendu en blanc/translucide plutôt que
+   dans ses couleurs de marque (bordeaux/anthracite) : le fond du bandeau
+   change selon le thème d'interface choisi (5 teintes, cf. UI_THEMES), donc
+   seul un rendu clair reste toujours lisible et cohérent sur tous les fonds. */
+.sesame-wordmark{display:flex;flex-direction:column;line-height:1;gap:2px;flex-shrink:0}
+.sesame-wordmark .sw-main{font-family:'DM Serif Display',serif;font-size:14px;font-weight:400;letter-spacing:.05em;color:#fff}
+.sesame-wordmark .sw-sub{font-family:'DM Sans',sans-serif;font-size:7px;font-weight:600;letter-spacing:.2em;color:rgba(255,255,255,.5)}
+/* Même logo, variante pour surface claire (carte de connexion) — couleurs
+   de texte du thème (var(--tx)/var(--mu)) plutôt que blanc, puisque cette
+   carte est blanche sur 4 des 5 thèmes mais sombre sur le thème "Nuit". */
+.sesame-wordmark-card{display:flex;flex-direction:column;line-height:1;gap:2px;flex-shrink:0}
+.sesame-wordmark-card .sw-main{font-family:'DM Serif Display',serif;font-size:15px;font-weight:400;letter-spacing:.05em;color:var(--tx)}
+.sesame-wordmark-card .sw-sub{font-family:'DM Sans',sans-serif;font-size:7px;font-weight:600;letter-spacing:.2em;color:var(--mu)}
 .tbsp{flex:1}
 .tbpl{display:flex;align-items:center;gap:5px;font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(139,26,46,.2);color:#F4A0B0}
 .dot{width:6px;height:6px;border-radius:50%;background:#F4A0B0;animation:pulse 2s infinite}
@@ -343,6 +356,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 @media (max-width: 560px){
   .ct{padding:12px}
   .tbtl{font-size:14px}
+  .sesame-wordmark{display:none}
   .g2,.g3,.g4,.gtiles{grid-template-columns:1fr}
   .resa-opts{grid-template-columns:1fr 1fr}
 }
@@ -605,10 +619,13 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 <header class="tb">
   <button class="menu-toggle" id="menu-toggle" onclick="toggleSidebar()" aria-label="Menu"><i class="ti ti-menu-2"></i></button>
   <div class="tbmk">S</div>
+  <div class="sesame-wordmark" title="Sesame Technology"><span class="sw-main">Sesame</span><span class="sw-sub">TECHNOLOGY</span></div>
+  <span style="color:rgba(255,255,255,.2);margin:0 4px">·</span>
   <span class="tbtl">Sesame Éco</span>
   <span style="color:rgba(255,255,255,.2);margin:0 4px">·</span>
   <span style="font-size:12px;color:rgba(255,255,255,.38)">Administration</span>
   <div class="tbsp"></div>
+  <select id="tbGroupSwitch" onchange="activateEntity(this.value)" style="display:none;background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:6px 10px;font-size:12px;margin-right:8px" title="Établissement actif (groupe)"></select>
   <div class="tbpl"><span class="dot"></span>En ligne</div>
   <div class="tbav" id="tbHotelInitials">HL</div>
   <button class="btn btn-g" id="ui-theme-btn" style="color:rgba(255,255,255,.55)" onclick="toggleThemePicker(this)" title="Thème de l'interface"><i class="ti ti-palette"></i></button>
@@ -622,6 +639,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   <div class="ni sesame-only" data-pan="hotels" onclick="showPan('hotels')" style="display:none;background:rgba(46,204,113,.06);border-left:3px solid var(--a)"><i class="ti ti-building-skyscraper"></i>Hôtels <span class="nibadge">Multi</span></div>
   <div class="ni sesame-only" data-pan="groups" onclick="showPan('groups')" style="display:none"><i class="ti ti-hierarchy-3"></i>Groupes</div>
   <div class="ni sesame-only" data-pan="subscriptions" onclick="showPan('subscriptions')" style="display:none"><i class="ti ti-rocket"></i>Souscriptions</div>
+  <div class="ni hotel-only" data-pan="users" onclick="showPan('users')" style="display:none"><i class="ti ti-users"></i>Utilisateurs</div>
   <div class="ns">Réservations</div>
   <div class="ni" data-pan="reservations" onclick="showPan('reservations')"><i class="ti ti-calendar-check"></i>Réservations</div>
   <div class="ns">Identité &amp; Charte</div>
@@ -2565,6 +2583,61 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   </div>
 </div>
 
+<!-- ════════════════ UTILISATEURS ════════════════ -->
+<div id="pan-users" class="pan">
+  <div class="ph">
+    <h2>Utilisateurs</h2>
+    <p>Gérez les accès de votre équipe : qui peut administrer l'établissement (Admin) et qui n'a accès qu'aux tâches ménage/maintenance (Ménage). <span id="us-group-hint"></span></p>
+  </div>
+
+  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+    <button class="btn btn-p" onclick="usOpenInvite()"><i class="ti ti-user-plus"></i> Inviter un utilisateur</button>
+  </div>
+
+  <div class="ca">
+    <div class="ch"><i class="ti ti-users"></i>Équipe — <span id="us-count">0</span></div>
+    <div style="overflow-x:auto">
+      <table class="tbl" id="us-table">
+        <thead><tr>
+          <th>Utilisateur</th><th>Rôle</th><th>Portée</th><th>Statut</th><th>Actions</th>
+        </tr></thead>
+        <tbody id="us-tbody"></tbody>
+      </table>
+    </div>
+    <div id="us-empty" style="display:none;text-align:center;padding:30px;color:var(--mu)">
+      <i class="ti ti-users" style="font-size:32px;display:block;margin-bottom:10px;opacity:.4"></i>
+      Aucun autre utilisateur pour l'instant.
+    </div>
+  </div>
+
+  <!-- Modal invitation -->
+  <div id="us-invite-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center;padding:20px">
+    <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:460px;box-shadow:0 24px 60px rgba(0,0,0,.3)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--bdr)">
+        <h2 style="font-size:18px">Inviter un utilisateur</h2>
+        <button onclick="usCloseInvite()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="padding:20px 22px;display:flex;flex-direction:column;gap:12px">
+        <label>Email<input type="email" id="us-inv-email" placeholder="prenom.nom@hotel.fr"></label>
+        <label>Nom (optionnel)<input type="text" id="us-inv-name" placeholder="Prénom Nom"></label>
+        <label>Rôle
+          <select id="us-inv-role">
+            <option value="hotel">Admin — accès complet au back-office</option>
+            <option value="housekeeping">Ménage — app tablette ménage/maintenance uniquement</option>
+          </select>
+        </label>
+        <label id="us-inv-scope-wrap" style="display:none">Portée
+          <select id="us-inv-scope">
+            <option value="entity">Cet établissement uniquement</option>
+            <option value="group">Tout le groupe</option>
+          </select>
+        </label>
+        <button class="btn btn-p" style="width:100%;justify-content:center" onclick="usSubmitInvite()"><i class="ti ti-user-plus"></i> Créer l'accès</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ════════════════ SOUSCRIPTIONS ════════════════ -->
 <div id="pan-subscriptions" class="pan">
   <div class="ph"><h2>Souscriptions</h2><p>Grille tarifaire et suivi des essais — l'activation d'une souscription provisionne automatiquement l'établissement et son compte admin</p></div>
@@ -3898,6 +3971,12 @@ var HOME_ENTITY_CODE = sessionStorage.getItem('SESAME_HOME_ENTITY') || null;
 // façon — cf. resolveEntity). Pour un compte "sesame", c'est l'hôtel activé
 // depuis le panneau "Hôtels" (bascule de contexte multi-établissements).
 var ACTIVE_ENTITY_CODE = sessionStorage.getItem('SESAME_ACTIVE_ENTITY') || null;
+// Compte "hotel" dont le rôle s'applique à tout le groupe de son
+// établissement (AdminUser.groupScoped, cf. panneau Utilisateurs) — peut
+// alors, comme un compte "sesame", basculer ACTIVE_ENTITY_CODE sur un
+// autre établissement du même groupe.
+var GROUP_SCOPED = sessionStorage.getItem('SESAME_GROUP_SCOPED') === '1';
+var GROUP_ID = sessionStorage.getItem('SESAME_GROUP_ID') || null;
 
 function setActiveEntity(code){
   ACTIVE_ENTITY_CODE = code;
@@ -3905,7 +3984,7 @@ function setActiveEntity(code){
 }
 
 function withEntityCode(url, opts){
-  if(!(ADMIN_ROLE==='sesame' && ACTIVE_ENTITY_CODE)) return {url:url, opts:opts};
+  if(!(((ADMIN_ROLE==='sesame')||(ADMIN_ROLE==='hotel'&&GROUP_SCOPED)) && ACTIVE_ENTITY_CODE)) return {url:url, opts:opts};
   opts = opts || {};
   var method = (opts.method||'GET').toUpperCase();
   if(method!=='GET' && opts.body){
@@ -3931,7 +4010,8 @@ function renderLoginBox(okMsg){
   document.getElementById('login-box').innerHTML =
     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:24px">'
     + '<div class="tbmk">S</div>'
-    + '<div><div style="font-family:\'DM Serif Display\',serif;font-size:17px">Sesame Éco</div>'
+    + '<div class="sesame-wordmark-card"><span class="sw-main">Sesame</span><span class="sw-sub">TECHNOLOGY</span></div>'
+    + '<div style="margin-left:4px"><div style="font-family:\'DM Serif Display\',serif;font-size:17px">Sesame Éco</div>'
     + '<div style="font-size:11px;color:var(--mu)">Administration</div></div></div>'
     + '<div class="fi"><label class="lb">Email</label><input type="email" id="login-email" placeholder="admin@hotel-churchill.fr" onkeydown="if(event.key===\'Enter\')adminLogin()"></div>'
     + '<div class="fi" style="margin-top:12px"><label class="lb">Mot de passe</label><input type="password" id="login-password" placeholder="••••••••" onkeydown="if(event.key===\'Enter\')adminLogin()"></div>'
@@ -3945,7 +4025,8 @@ function renderForgotBox(){
   document.getElementById('login-box').innerHTML =
     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:24px">'
     + '<div class="tbmk">S</div>'
-    + '<div><div style="font-family:\'DM Serif Display\',serif;font-size:17px">Mot de passe oublié</div>'
+    + '<div class="sesame-wordmark-card"><span class="sw-main">Sesame</span><span class="sw-sub">TECHNOLOGY</span></div>'
+    + '<div style="margin-left:4px"><div style="font-family:\'DM Serif Display\',serif;font-size:17px">Mot de passe oublié</div>'
     + '<div style="font-size:11px;color:var(--mu)">Administration</div></div></div>'
     + '<div class="fi"><label class="lb">Email</label><input type="email" id="fg-email" placeholder="admin@hotel-churchill.fr" onkeydown="if(event.key===\'Enter\')sendForgotEmailAdmin()"></div>'
     + '<button class="btn btn-p" style="width:100%;justify-content:center;margin-top:18px" onclick="sendForgotEmailAdmin()">Envoyer le lien</button>'
@@ -3970,7 +4051,8 @@ function renderResetBox(token){
   document.getElementById('login-box').innerHTML =
     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:24px">'
     + '<div class="tbmk">S</div>'
-    + '<div><div style="font-family:\'DM Serif Display\',serif;font-size:17px">Nouveau mot de passe</div>'
+    + '<div class="sesame-wordmark-card"><span class="sw-main">Sesame</span><span class="sw-sub">TECHNOLOGY</span></div>'
+    + '<div style="margin-left:4px"><div style="font-family:\'DM Serif Display\',serif;font-size:17px">Nouveau mot de passe</div>'
     + '<div style="font-size:11px;color:var(--mu)">Administration</div></div></div>'
     + '<div class="fi"><label class="lb">Nouveau mot de passe</label><input type="password" id="rp-password" placeholder="••••••••"></div>'
     + '<div class="fi" style="margin-top:12px"><label class="lb">Confirmer</label><input type="password" id="rp-password2" placeholder="••••••••" onkeydown="if(event.key===\'Enter\')submitResetPasswordAdmin(\''+token+'\')"></div>'
@@ -4021,9 +4103,13 @@ async function adminLogin(){
     ADMIN_TOKEN = data.token;
     ADMIN_ROLE  = data.admin.role;
     HOME_ENTITY_CODE = data.admin.entityCode;
+    GROUP_SCOPED = !!data.admin.groupScoped;
+    GROUP_ID = data.admin.groupId || null;
     sessionStorage.setItem('SESAME_ADMIN_TOKEN', ADMIN_TOKEN);
     sessionStorage.setItem('SESAME_ADMIN_ROLE', ADMIN_ROLE);
     sessionStorage.setItem('SESAME_HOME_ENTITY', HOME_ENTITY_CODE);
+    sessionStorage.setItem('SESAME_GROUP_SCOPED', GROUP_SCOPED ? '1' : '0');
+    if(GROUP_ID) sessionStorage.setItem('SESAME_GROUP_ID', GROUP_ID); else sessionStorage.removeItem('SESAME_GROUP_ID');
     setActiveEntity(HOME_ENTITY_CODE);
     document.getElementById('loginGate').style.display='none';
     await bootAdminApp();
@@ -4037,6 +4123,8 @@ function adminLogout(){
   sessionStorage.removeItem('SESAME_ADMIN_ROLE');
   sessionStorage.removeItem('SESAME_HOME_ENTITY');
   sessionStorage.removeItem('SESAME_ACTIVE_ENTITY');
+  sessionStorage.removeItem('SESAME_GROUP_SCOPED');
+  sessionStorage.removeItem('SESAME_GROUP_ID');
   location.reload();
 }
 
@@ -4159,6 +4247,7 @@ function showPan(id){
   if(id==='hotels'){ hmRenderGrid(); }
   if(id==='groups'){ grpRenderGrid(); }
   if(id==='subscriptions'){ subInit(); }
+  if(id==='users'){ usInit(); }
   if(id==='planning'){
     Promise.all([loadPlanTasks(), fetchPlanBookings(), fetchStaffList()]).then(function(){
       try{ renderPlanGrid(); }catch(e){ console.warn('planning render error:', e); }
@@ -8214,6 +8303,28 @@ function applyRoleVisibility(){
   document.querySelectorAll('.sesame-only').forEach(function(el){
     el.style.display = (ADMIN_ROLE==='sesame') ? '' : 'none';
   });
+  document.querySelectorAll('.hotel-only').forEach(function(el){
+    el.style.display = (ADMIN_ROLE==='hotel') ? '' : 'none';
+  });
+  var sw = document.getElementById('tbGroupSwitch');
+  if(sw) sw.style.display = (ADMIN_ROLE==='hotel' && GROUP_SCOPED) ? '' : 'none';
+  if(ADMIN_ROLE==='hotel' && GROUP_SCOPED) usRefreshGroupSwitch();
+}
+
+/** Peuple le sélecteur d'établissement du topbar pour un compte hôtel
+ * groupScoped (bascule multi-établissements restreinte au groupe). */
+async function usRefreshGroupSwitch(){
+  var sw = document.getElementById('tbGroupSwitch');
+  if(!sw) return;
+  try{
+    var r = await adminFetch('/wa/hotelUser/context');
+    if(!r.ok) return;
+    var ctx = await r.json();
+    if(!ctx.groupEntities || ctx.groupEntities.length < 2){ sw.style.display='none'; return; }
+    sw.innerHTML = ctx.groupEntities.map(function(e){
+      return '<option value="'+esc(e.code)+'"'+(e.code===ACTIVE_ENTITY_CODE?' selected':'')+'>'+esc(e.name)+'</option>';
+    }).join('');
+  }catch(e){}
 }
 
 /** Compte sesame fraîchement connecté : "Sesame HQ" (son entité de rattachement)
@@ -10539,6 +10650,113 @@ async function subFetchList(){
     var r = await adminFetch('/wa/subscription/list');
     if(r.ok) SUB_CACHE = await r.json();
   }catch(e){}
+}
+
+// ═══════════════════════════════════════════════ UTILISATEURS (gestion d'équipe hôtel en libre-service)
+var US_LIST = [];
+var US_CTX = { groupId: null, groupName: null, groupEntities: [] };
+
+var US_ROLE_LABEL = { hotel: 'Admin', housekeeping: 'Ménage' };
+
+async function usInit(){
+  try{
+    var rc = await adminFetch('/wa/hotelUser/context');
+    US_CTX = rc.ok ? await rc.json() : { groupId:null, groupName:null, groupEntities:[] };
+  }catch(e){ US_CTX = { groupId:null, groupName:null, groupEntities:[] }; }
+  var hint = document.getElementById('us-group-hint');
+  if(hint) hint.textContent = US_CTX.groupId ? ('Votre établissement fait partie du groupe "'+US_CTX.groupName+'" — un compte peut être limité à cet hôtel ou étendu à tout le groupe.') : '';
+  await usFetchList();
+}
+
+async function usFetchList(){
+  try{
+    var r = await adminFetch('/wa/hotelUser/list');
+    US_LIST = r.ok ? await r.json() : [];
+  }catch(e){ US_LIST = []; }
+  usRenderList();
+}
+
+function usRenderList(){
+  var tbody = document.getElementById('us-tbody');
+  var count = document.getElementById('us-count');
+  var empty = document.getElementById('us-empty');
+  var table = document.getElementById('us-table');
+  if(!tbody) return;
+  count.textContent = US_LIST.length;
+  if(!US_LIST.length){ table.style.display='none'; empty.style.display='block'; return; }
+  table.style.display=''; empty.style.display='none';
+  tbody.innerHTML = US_LIST.map(function(u){
+    var scope = u.groupScoped ? '<span class="bdg" style="background:rgba(46,204,113,.1);color:var(--go)">Tout le groupe</span>' : '<span style="color:var(--mu);font-size:12px">Cet établissement</span>';
+    var status = u.active ? '<span class="bdg" style="background:rgba(46,204,113,.1);color:var(--go)">Actif</span>' : '<span class="bdg" style="background:rgba(231,76,60,.1);color:var(--re)">Désactivé</span>';
+    return '<tr>'
+      + '<td><div style="font-weight:600">'+esc(u.name||u.email)+'</div><div style="font-size:12px;color:var(--mu)">'+esc(u.email)+'</div></td>'
+      + '<td>'+esc(US_ROLE_LABEL[u.role]||u.role)+'</td>'
+      + '<td>'+scope+'</td>'
+      + '<td>'+status+'</td>'
+      + '<td style="white-space:nowrap;display:flex;gap:6px">'
+        + '<button class="btn btn-s" style="padding:6px 10px" onclick="usResetPassword(\''+u.id+'\')" title="Réinitialiser le mot de passe"><i class="ti ti-key"></i></button>'
+        + '<button class="btn btn-s" style="padding:6px 10px" onclick="usToggleActive(\''+u.id+'\','+(!u.active)+')" title="'+(u.active?'Désactiver':'Réactiver')+'"><i class="ti ti-'+(u.active?'lock':'lock-open')+'"></i></button>'
+        + '<button class="btn btn-s" style="padding:6px 10px;color:var(--re)" onclick="usDelete(\''+u.id+'\')" title="Supprimer"><i class="ti ti-trash"></i></button>'
+      + '</td>'
+      + '</tr>';
+  }).join('');
+}
+
+function usOpenInvite(){
+  document.getElementById('us-inv-email').value = '';
+  document.getElementById('us-inv-name').value = '';
+  document.getElementById('us-inv-role').value = 'hotel';
+  document.getElementById('us-inv-scope').value = 'entity';
+  document.getElementById('us-inv-scope-wrap').style.display = US_CTX.groupId ? '' : 'none';
+  document.getElementById('us-invite-modal').style.display = 'flex';
+}
+function usCloseInvite(){ document.getElementById('us-invite-modal').style.display = 'none'; }
+
+async function usSubmitInvite(){
+  var email = (document.getElementById('us-inv-email').value||'').trim();
+  var name = (document.getElementById('us-inv-name').value||'').trim();
+  var role = document.getElementById('us-inv-role').value;
+  var groupScoped = US_CTX.groupId && document.getElementById('us-inv-scope').value === 'group';
+  if(!email){ toast('Email requis'); return; }
+  try{
+    var r = await adminFetch('/wa/hotelUser/create', {method:'POST', body:JSON.stringify({email:email, name:name, role:role, groupScoped:groupScoped})});
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Erreur lors de la création'); return; }
+    usCloseInvite();
+    alert('Accès créé pour '+email+' ✓\n\nMot de passe temporaire : '+data.password+'\n\nCommuniquez-le au nouvel utilisateur — il ne sera plus jamais affiché.');
+    await usFetchList();
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+async function usResetPassword(id){
+  if(!confirm('Générer un nouveau mot de passe temporaire pour cet utilisateur ?')) return;
+  try{
+    var r = await adminFetch('/wa/hotelUser/resetPassword', {method:'POST', body:JSON.stringify({id:id})});
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Erreur'); return; }
+    alert('Nouveau mot de passe temporaire :\n\n'+data.password+'\n\nCommuniquez-le à l\'utilisateur — il ne sera plus jamais affiché.');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+async function usToggleActive(id, nextActive){
+  try{
+    var r = await adminFetch('/wa/hotelUser/update', {method:'POST', body:JSON.stringify({id:id, active:nextActive})});
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Erreur'); return; }
+    toast(nextActive ? 'Utilisateur réactivé' : 'Utilisateur désactivé');
+    await usFetchList();
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+async function usDelete(id){
+  if(!confirm('Supprimer définitivement cet accès ?')) return;
+  try{
+    var r = await adminFetch('/wa/hotelUser/delete', {method:'POST', body:JSON.stringify({id:id})});
+    var data = await r.json().catch(function(){return{};});
+    if(!r.ok){ toast(data.error||'Erreur'); return; }
+    toast('Accès supprimé');
+    await usFetchList();
+  }catch(e){ toast('Erreur de connexion au serveur'); }
 }
 
 async function subInit(){

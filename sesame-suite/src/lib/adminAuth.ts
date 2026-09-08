@@ -13,6 +13,12 @@ export interface AdminTokenPayload {
   email: string;
   role: AdminRole;
   crmRole?: string; // "admin" | "commercial" — uniquement significatif pour role="sesame"
+  // Compte hôtel/ménage dont le rôle s'applique à tout le groupe de son
+  // établissement plutôt qu'à ce seul établissement — cf. AdminUser.groupScoped
+  // et resolveEntity(), qui autorise alors ce compte à cibler tout
+  // ?entityCode= appartenant au même groupId. Sans effet pour role="sesame".
+  groupScoped?: boolean;
+  groupId?: string | null;
 }
 
 export function signAdminToken(payload: AdminTokenPayload): string {

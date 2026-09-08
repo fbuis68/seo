@@ -101,6 +101,14 @@ model AdminUser {
   // cf. requireCrmAdmin) ; "commercial" = accès standard.
   crmRole      String  @default("commercial")
   active       Boolean @default(true) // désactivation (départ, etc.) sans perdre l'historique — pas de suppression physique
+  // Portée du rôle pour un compte hôtel (role="hotel"|"housekeeping") : par
+  // défaut limité à son propre établissement (entityId). Si true ET que cet
+  // établissement appartient à un groupe (Entity.groupId), le rôle
+  // s'applique à TOUS les hôtels du groupe — cf. resolveEntity(), qui
+  // autorise alors ce compte à cibler n'importe quel ?entityCode= du même
+  // groupe (bascule multi-établissements, comme un compte "sesame" mais
+  // restreint au groupe). Sans effet pour role="sesame" (déjà global).
+  groupScoped  Boolean @default(false)
 
   resetTokens PasswordResetToken[]
 
