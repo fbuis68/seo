@@ -727,6 +727,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     <div class="ns-items">
       <div class="ni" data-pan="api" onclick="showPan('api')"><i class="ti ti-api"></i>Intégration réservations</div>
       <div class="ni" data-pan="wallet" onclick="showPan('wallet')"><i class="ti ti-wallet"></i>Wallet</div>
+      <div class="ni" data-pan="bookingEngine" onclick="showPan('bookingEngine')"><i class="ti ti-calendar-plus"></i>Réservation en ligne</div>
       <div class="ni" data-pan="email" onclick="showPan('email')"><i class="ti ti-mail"></i>Canaux</div>
       <div class="ni" data-pan="automation" onclick="showPan('automation')"><i class="ti ti-bolt"></i>Automatisations</div>
       <div class="ni" data-pan="preview" onclick="showPan('preview')"><i class="ti ti-device-mobile"></i>Aperçu client</div>
@@ -3898,6 +3899,47 @@ Accès au salon Premium</textarea>
 </div>
 
 <!-- ════════════════════════════════════════════════════════
+     PAN — RÉSERVATION EN LIGNE
+     Page publique (public/booking.html) où un visiteur choisit ses dates,
+     voit les chambres disponibles (calculées à partir de Room.rate et des
+     réservations déjà posées) et paie directement en ligne (chambre + taxe
+     de séjour) — cf. lib/bookingEngine.ts, routes/bookingEngine.ts.
+     Nécessite le module Paiement en ligne configuré et activé.
+     ════════════════════════════════════════════════════════ -->
+<div id="pan-bookingEngine" class="pan">
+  <div class="ph">
+    <h2>Réservation en ligne</h2>
+    <p>Une page publique où un visiteur choisit ses dates, voit les chambres disponibles et paie directement en ligne (chambre + taxe de séjour). La réservation n'est créée qu'une fois le paiement confirmé.</p>
+  </div>
+
+  <div class="ca" id="bke-status-banner" style="display:none;margin-bottom:16px"></div>
+
+  <div class="ca">
+    <div class="ch"><i class="ti ti-calendar-plus"></i>Activation</div>
+    <div class="fi">
+      <label class="lb">Activer la réservation en ligne</label>
+      <label style="display:flex;align-items:center;gap:8px;height:38px;cursor:pointer">
+        <input type="checkbox" id="bke-enabled" style="accent-color:var(--am)">
+        <span style="font-size:13px">La page de réservation devient accessible au public</span>
+      </label>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+      <button class="btn btn-p" onclick="bkeSave()"><i class="ti ti-device-floppy"></i> Enregistrer</button>
+    </div>
+  </div>
+
+  <div class="ca">
+    <div class="ch"><i class="ti ti-link"></i>Lien de la page</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input type="text" id="bke-url" readonly style="flex:1;font-family:monospace;font-size:12px">
+      <button class="btn btn-s" type="button" onclick="bkeCopyUrl()" style="white-space:nowrap;width:auto"><i class="ti ti-copy" style="font-size:12px"></i> Copier</button>
+      <a id="bke-url-open" class="btn btn-s" href="#" target="_blank" rel="noopener" style="white-space:nowrap;width:auto"><i class="ti ti-external-link" style="font-size:12px"></i> Ouvrir</a>
+    </div>
+    <div style="font-size:11px;color:var(--mu);margin-top:6px">C'est ce lien qu'il faut partager (site web, réseaux sociaux, signature email…) pour que vos visiteurs puissent réserver directement.</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
      PAN — POINTS DE VENTE (marketplace boutique)
      Points de vente partenaires externes, chacun avec son propre
      catalogue, référencés dans la boutique. L'hôtel envoie un lien
@@ -4503,6 +4545,7 @@ function showPan(id){
   if(id==='api'){ bsInit(); }
   if(id==='payment'){ payInit(); }
   if(id==='wallet'){ walInit(); }
+  if(id==='bookingEngine'){ bkeInit(); }
   if(id==='vendors'){ vndInit(); }
   if(id==='email'){ emlInit(); }
   if(id==='automation'){ autoInit(); }
@@ -7636,6 +7679,51 @@ async function walFetchTemplate(){
     el.style.color = 'var(--rd, #c00)';
     el.textContent = 'Erreur de connexion au serveur';
   }
+}
+
+// ═══════════════════ RÉSERVATION EN LIGNE ═══════════════════
+function bkeUrl(){
+  var checkinCode = (ADMIN_ROLE==='sesame' && ACTIVE_ENTITY_CODE) ? ACTIVE_ENTITY_CODE : HOME_ENTITY_CODE;
+  return checkinCode ? (window.location.origin+'/booking.html?entityCode='+checkinCode) : '';
+}
+
+async function bkeInit(){
+  var url = bkeUrl();
+  document.getElementById('bke-url').value = url;
+  document.getElementById('bke-url-open').href = url || '#';
+
+  try{
+    var r = await adminFetch('/wa/bookingEngine/config');
+    var cfg = r.ok ? await r.json() : null;
+    document.getElementById('bke-enabled').checked = !!(cfg && cfg.enabled);
+  }catch(e){}
+
+  var el = document.getElementById('bke-status-banner');
+  try{
+    var pr = await adminFetch('/wa/payment/config');
+    var pay = pr.ok ? await pr.json() : null;
+    var paymentReady = !!(pay && pay.enabled && pay.secretKeySet);
+    el.style.display='block';
+    el.innerHTML = paymentReady
+      ? '<div class="alt alt-g"><i class="ti ti-check-circle"></i><span>Paiement en ligne configuré — la réservation peut être encaissée.</span></div>'
+      : '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Le module Paiement en ligne n\'est pas configuré/activé — la page de réservation ne pourra pas encaisser de paiement tant que ce n\'est pas fait (panneau "Paiement").</span></div>';
+  }catch(e){ el.style.display='none'; }
+}
+
+async function bkeSave(){
+  var body = { enabled: document.getElementById('bke-enabled').checked };
+  try{
+    var r = await adminFetch('/wa/bookingEngine/config/update', {method:'POST', body:JSON.stringify(body)});
+    if(!r.ok){ toast('Erreur lors de l\'enregistrement'); return; }
+    toast('Configuration enregistrée ✓');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+function bkeCopyUrl(){
+  var input = document.getElementById('bke-url');
+  input.select();
+  try{ navigator.clipboard.writeText(input.value); toast('Lien copié ✓'); }
+  catch(e){ document.execCommand('copy'); toast('Lien copié ✓'); }
 }
 
 // ═══════════════════════════════════════════════ POINTS DE VENTE (marketplace boutique)
@@ -11180,6 +11268,7 @@ var SUB_MODULES = [
   {k:'crm',         label:'CRM & Marketing',          required:false, defaultPrice:25},
   {k:'wallet',      label:'Wallet',                   required:false, defaultPrice:15},
   {k:'sms',         label:'SMS & WhatsApp',           required:false, defaultPrice:12},
+  {k:'bookingEngine', label:'Réservation en ligne',   required:false, defaultPrice:20},
 ];
 
 var SUB_CACHE = [];
@@ -14238,6 +14327,7 @@ var MODULE_GATE_MAP = {
   roomservice: 'roomservice',
   orders: 'roomservice',
   wallet: 'wallet',
+  bookingEngine: 'bookingEngine',
   // "sms" n'est PAS un data-pan de la nav — le panneau "Canaux" reste
   // toujours accessible (l'email n'est pas concerné par ce module), seules
   // les cartes SMS et WhatsApp qu'il contient sont verrouillées
@@ -14273,6 +14363,7 @@ var HELP_TEXT = {
   preview: "Prévisualisez exactement ce que vos clients voient sur leur mobile, avant de publier vos changements.",
   wallet: "Générez un pass Apple Wallet / Google Wallet pour chaque réservation — le client l'ajoute à son téléphone et y retrouve ses dates de séjour, sa chambre et son code-barres d'accès.",
   sms: "Envoyez des SMS et des messages WhatsApp à vos clients (confirmations, rappels, modèles automatisés) via Twilio, Infobip ou SMSPartner.",
+  bookingEngine: "Une page publique où un visiteur choisit ses dates, voit les chambres disponibles et paie directement en ligne (chambre + taxe de séjour) — nécessite le module Paiement en ligne configuré et activé.",
 };
 
 var MY_MODULES = null; // null = pas de restriction (établissement sans souscription formelle) ; sinon string[]

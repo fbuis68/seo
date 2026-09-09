@@ -1,0 +1,213 @@
+import type { Entity, Order } from "@prisma/client";
+import { prisma } from "../db";
+import { fireTrigger } from "./automation";
+import { computeTaxeSejourAmount } from "./payment";
+
+// Module "Réservation en ligne" (09/09/2026) — page publique
+// (public/booking.html) : un visiteur choisit ses dates, voit les chambres
+// disponibles et paie directement en ligne (chambre + taxe de séjour). La
+// disponibilité se calcule à la volée à partir de Room.rate et des Booking
+// déjà posées sur la période — pas de calendrier de disponibilité ni de
+// tarification saisonnière dédiés (hors périmètre v1, cf. Room.rate = tarif
+// fixe par nuit).
+
+export const OCCUPANT_AGE_CATEGORIES = ["adulte", "ado", "enfant", "bebe"] as const;
+export type OccupantAgeCategory = (typeof OCCUPANT_AGE_CATEGORIES)[number];
+
+export interface BookingDraft {
+  roomId: string;
+  startDate: string; // ISO
+  endDate: string; // ISO
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  occupants: Record<string, number>; // ageCategory -> count
+}
+
+function nightsBetween(start: Date, end: Date): number {
+  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
+}
+
+/** Une chambre est indisponible sur la période si une réservation ACTIVE
+ * (tout statut sauf "cancelled") chevauche l'intervalle demandé — même
+ * logique de chevauchement standard (début < fin demandée ET fin > début
+ * demandé). */
+async function isRoomAvailable(roomId: string, start: Date, end: Date, excludeBookingId?: string): Promise<boolean> {
+  const overlapping = await prisma.booking.findFirst({
+    where: {
+      roomId,
+      status: { not: "cancelled" },
+      startDate: { lt: end },
+      endDate: { gt: start },
+      ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
+    },
+    select: { id: true },
+  });
+  return !overlapping;
+}
+
+export interface AvailableRoom {
+  id: string;
+  code: string;
+  name: string;
+  category: string | null;
+  type: string | null;
+  capacity: number | null;
+  description: string | null;
+  photos: string[];
+  rate: number;
+  nights: number;
+  roomTotal: number;
+}
+
+/** Chambres disponibles pour cet établissement sur la période demandée,
+ * avec le prix total déjà calculé (Room.rate × nuits) — jamais 0 nuit ni
+ * chambre sans tarif renseigné (rate null/0), sinon rien à facturer. */
+export async function listAvailableRooms(entityId: string, start: Date, end: Date): Promise<AvailableRoom[]> {
+  const nights = nightsBetween(start, end);
+  if (nights <= 0) return [];
+
+  const rooms = await prisma.room.findMany({
+    where: { entityId, available: true, rate: { gt: 0 } },
+    orderBy: { name: "asc" },
+  });
+
+  const results: AvailableRoom[] = [];
+  for (const room of rooms) {
+    if (await isRoomAvailable(room.id, start, end)) {
+      results.push({
+        id: room.id,
+        code: room.code,
+        name: room.name,
+        category: room.category,
+        type: room.type,
+        capacity: room.capacity,
+        description: room.description,
+        photos: (room.photos as string[]) || [],
+        rate: room.rate || 0,
+        nights,
+        roomTotal: Math.round((room.rate || 0) * nights * 100) / 100,
+      });
+    }
+  }
+  return results;
+}
+
+export interface BookingQuote {
+  room: AvailableRoom;
+  taxeSejour: { amount: number; label: string } | null;
+  total: number;
+}
+
+/** Calcule le montant total à facturer (chambre + taxe de séjour si
+ * applicable) pour un brouillon de réservation — jamais fait confiance à un
+ * montant transmis par le client, recalculé ici côté serveur avant chaque
+ * session Stripe Checkout (cf. routes/bookingEngine.ts /checkout). */
+export async function quoteBooking(entityId: string, draft: BookingDraft): Promise<BookingQuote> {
+  const start = new Date(draft.startDate);
+  const end = new Date(draft.endDate);
+  const nights = nightsBetween(start, end);
+  if (nights <= 0) throw new Error("Dates invalides");
+
+  const room = await prisma.room.findFirst({ where: { id: draft.roomId, entityId, available: true } });
+  if (!room || !room.rate) throw new Error("Chambre introuvable ou indisponible");
+  if (!(await isRoomAvailable(room.id, start, end))) throw new Error("Cette chambre n'est plus disponible sur ces dates");
+
+  const roomTotal = Math.round(room.rate * nights * 100) / 100;
+  const availableRoom: AvailableRoom = {
+    id: room.id,
+    code: room.code,
+    name: room.name,
+    category: room.category,
+    type: room.type,
+    capacity: room.capacity,
+    description: room.description,
+    photos: (room.photos as string[]) || [],
+    rate: room.rate,
+    nights,
+    roomTotal,
+  };
+
+  const cfg = await prisma.entityModuleConfig.findUnique({ where: { entityId } });
+  const taxeSejour = cfg
+    ? computeTaxeSejourAmount({ tarifs: (cfg.tarifs as number[]) || [], stars: cfg.stars, exoEnf: cfg.exoEnf, reducAdos: cfg.reducAdos }, draft.occupants, nights)
+    : null;
+
+  return { room: availableRoom, taxeSejour, total: Math.round((roomTotal + (taxeSejour?.amount || 0)) * 100) / 100 };
+}
+
+/** Génère un code de réservation lisible et unique pour l'établissement
+ * (contrairement aux réservations importées, dont le code vient de la
+ * source externe — cf. Booking.code) — préfixe "RES" + date + suffixe
+ * aléatoire, quelques essais en cas de collision improbable. */
+async function generateBookingCode(entityId: string): Promise<string> {
+  for (let i = 0; i < 5; i++) {
+    const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+    const code = `RES${datePart}${suffix}`;
+    const existing = await prisma.booking.findUnique({ where: { entityId_code: { entityId, code } } });
+    if (!existing) return code;
+  }
+  throw new Error("Impossible de générer un code de réservation unique");
+}
+
+/**
+ * Crée la Booking (+ Occupant) correspondant à un Order "bookingEngine" dont
+ * le paiement vient d'être confirmé (cf. webhook checkout.session.completed
+ * dans routes/payment.ts) — jamais appelée avant, pour ne jamais bloquer une
+ * chambre sur un panier abandonné. Revérifie la disponibilité de la chambre
+ * une dernière fois (fenêtre de course rare entre deux paiements simultanés
+ * sur la même chambre) : si elle a entre-temps été prise, la réservation est
+ * quand même créée (le client a payé, il ne doit jamais perdre sa chambre
+ * silencieusement) mais un avertissement est loggé pour un suivi manuel côté
+ * hôtel — pas de remboursement automatique en v1.
+ */
+export async function createBookingFromPaidOrder(entity: Entity, order: Order) {
+  const draft = order.bookingDraft as unknown as BookingDraft | null;
+  if (!draft) throw new Error(`Order ${order.id} (bookingEngine) sans bookingDraft`);
+
+  const start = new Date(draft.startDate);
+  const end = new Date(draft.endDate);
+  const room = await prisma.room.findFirst({ where: { id: draft.roomId, entityId: entity.id } });
+  if (!room) throw new Error(`Chambre ${draft.roomId} introuvable pour la réservation payée ${order.id}`);
+
+  if (!(await isRoomAvailable(room.id, start, end))) {
+    console.error(`[bookingEngine] chambre ${room.code} déjà prise sur la période pour l'order payé ${order.id} — réservation créée quand même (paiement déjà encaissé), à vérifier manuellement`);
+  }
+
+  const code = await generateBookingCode(entity.id);
+  const booking = await prisma.booking.create({
+    data: {
+      entityId: entity.id,
+      code,
+      personEmail: draft.email,
+      personFirstname: draft.firstName,
+      personLastname: draft.lastName,
+      personPhone: draft.phone || null,
+      startDate: start,
+      endDate: end,
+      roomId: room.id,
+      facilityCode: room.code,
+      facilityName: room.name,
+      status: "confirmed",
+      occupants: {
+        create: Object.entries(draft.occupants || {})
+          .filter(([, count]) => count > 0)
+          .flatMap(([ageCategory, count]) => Array.from({ length: count }, () => ({ ageCategory }))),
+      },
+    },
+  });
+
+  await prisma.order.update({ where: { id: order.id }, data: { bookingId: booking.id, bookingCode: booking.code } });
+
+  fireTrigger("booking.created", {
+    entityId: entity.id,
+    targetType: "booking",
+    targetId: booking.id,
+    recipient: { email: booking.personEmail, phone: booking.personPhone },
+    variables: { prenom: booking.personFirstname, nom: booking.personLastname, code: booking.code },
+  }).catch((e) => console.error("[automation] booking.created:", e));
+
+  return booking;
+}

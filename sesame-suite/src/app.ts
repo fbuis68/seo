@@ -43,6 +43,7 @@ import { hotelUserRouter } from "./routes/hotelUser";
 import { paymentRouter, stripeWebhookHandler } from "./routes/payment";
 import { vendorRouter } from "./routes/vendor";
 import { walletRouter } from "./routes/wallet";
+import { bookingEngineRouter } from "./routes/bookingEngine";
 import { geocodeRouter } from "./routes/geocode";
 import { housekeepingScope } from "./middleware/housekeepingScope";
 import { errorHandler } from "./middleware/errorHandler";
@@ -114,6 +115,7 @@ export function createApp() {
   app.use("/wa", paymentRouter);
   app.use("/wa", vendorRouter);
   app.use("/wa", walletRouter);
+  app.use("/wa", bookingEngineRouter);
 
   // Authentification espace client (hors convention /wa — pas de DAO CRUD dédié)
   app.use("/api", authRouter);

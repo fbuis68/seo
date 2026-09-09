@@ -29,6 +29,7 @@ export const ONBOARDING_MODULES = [
   { k: "crm", ico: "ti-address-book", label: "CRM & Marketing", desc: "Base clients, campagnes Email/SMS/WhatsApp", required: false, price: 25 },
   { k: "wallet", ico: "ti-wallet", label: "Wallet", desc: "Pass Apple Wallet / Google Wallet pour chaque réservation (EldoWallet)", required: false, price: 15 },
   { k: "sms", ico: "ti-message", label: "SMS & WhatsApp", desc: "Envoi de SMS et de messages WhatsApp aux clients (Twilio, Infobip, SMSPartner…)", required: false, price: 12 },
+  { k: "bookingEngine", ico: "ti-calendar-plus", label: "Réservation en ligne", desc: "Page publique de réservation : chambres disponibles, coordonnées client et paiement en ligne (chambre + taxe de séjour)", required: false, price: 20 },
 ] as const;
 
 const MODULE_KEYS = new Set(ONBOARDING_MODULES.map((m) => m.k));

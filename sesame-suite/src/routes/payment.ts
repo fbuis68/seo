@@ -5,6 +5,7 @@ import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { createCheckoutSession, verifyWebhookSignature, computeTaxeSejour, testConnection, PaymentError, CheckoutLineItem } from "../lib/payment";
 import { finalizeOrder } from "./roomservice";
+import { createBookingFromPaidOrder } from "../lib/bookingEngine";
 
 export const paymentRouter = Router();
 
@@ -257,8 +258,16 @@ export const stripeWebhookHandler = asyncHandler(async (req: Request, res: Respo
           where: { id: orderId },
           data: { paymentStatus: "paid", paidAt: new Date(), stripePaymentIntentId: session.payment_intent || null },
         });
-        const booking = updated.bookingId ? await prisma.booking.findUnique({ where: { id: updated.bookingId } }) : null;
-        await finalizeOrder(entity, updated, booking, (updated.items as CartItem[]) || [], updated.note || undefined);
+        if (updated.source === "bookingEngine") {
+          // La Booking n'existe pas encore (créée seulement à la
+          // confirmation du paiement, cf. lib/bookingEngine.ts) — pas de
+          // finalizeOrder ici, qui suppose une commande room-service/
+          // boutique rattachée à une réservation déjà existante.
+          await createBookingFromPaidOrder(entity, updated);
+        } else {
+          const booking = updated.bookingId ? await prisma.booking.findUnique({ where: { id: updated.bookingId } }) : null;
+          await finalizeOrder(entity, updated, booking, (updated.items as CartItem[]) || [], updated.note || undefined);
+        }
       }
     }
   } else if (event.type === "checkout.session.expired") {

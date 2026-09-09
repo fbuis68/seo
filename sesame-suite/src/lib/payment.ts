@@ -159,29 +159,35 @@ export function verifyWebhookSignature(rawBody: string, sigHeader: string | unde
 
 const TAXE_LABELS: Record<string, string> = { adulte: "Adulte", ado: "Ado (12-17 ans)", enfant: "Enfant", bebe: "Bébé" };
 
-/**
- * Calcule la taxe de séjour d'une réservation côté serveur — reprend
- * exactement la formule déjà utilisée côté client dans checkin.html
- * (calcTaxe) : tarif par catégorie d'étoiles, exonération enfants/bébés
- * (exoEnf), demi-tarif ados (reducAdos). Calculée ici (jamais transmise par
- * le client) pour que le montant facturé via Stripe soit fiable — cf.
- * routes/payment.ts /checkout.
- */
-export async function computeTaxeSejour(entityId: string, booking: Booking): Promise<{ amount: number; label: string } | null> {
-  const cfg = await prisma.entityModuleConfig.findUnique({ where: { entityId } });
-  if (!cfg) return null;
-  const tarifs = (cfg.tarifs as number[]) || [];
-  const tarif = tarifs[cfg.stars - 1] ?? 1.65;
-  const nights = Math.max(0, Math.round((booking.endDate.getTime() - booking.startDate.getTime()) / 86400000));
-  const occupants = await prisma.occupant.findMany({ where: { bookingId: booking.id } });
-  if (!occupants.length || !nights) return null;
+export interface TaxeSejourConfig {
+  tarifs: number[];
+  stars: number;
+  exoEnf: boolean;
+  reducAdos: boolean;
+}
 
-  const groups: Record<string, number> = {};
-  for (const o of occupants) groups[o.ageCategory] = (groups[o.ageCategory] || 0) + 1;
+/**
+ * Cœur du calcul de taxe de séjour — reprend exactement la formule déjà
+ * utilisée côté client dans checkin.html (calcTaxe) : tarif par catégorie
+ * d'étoiles, exonération enfants/bébés (exoEnf), demi-tarif ados
+ * (reducAdos). Extrait de computeTaxeSejour (09/09/2026) pour être
+ * réutilisable AVANT qu'une Booking/Occupant n'existe en base — cf.
+ * lib/bookingEngine.ts, qui calcule le montant à facturer à partir d'un
+ * simple décompte d'occupants saisi sur la page de réservation, sans encore
+ * de Booking associée (créée seulement après paiement confirmé).
+ */
+export function computeTaxeSejourAmount(
+  cfg: TaxeSejourConfig,
+  occupantCounts: Record<string, number>,
+  nights: number
+): { amount: number; label: string } | null {
+  if (!nights) return null;
+  const tarif = cfg.tarifs[cfg.stars - 1] ?? 1.65;
 
   let total = 0;
   const lines: string[] = [];
-  for (const [age, count] of Object.entries(groups)) {
+  for (const [age, count] of Object.entries(occupantCounts)) {
+    if (!count) continue;
     const isExo = cfg.exoEnf && (age === "enfant" || age === "bebe");
     const isHalf = cfg.reducAdos && age === "ado";
     const rate = isExo ? 0 : tarif * (isHalf ? 0.5 : 1);
@@ -191,4 +197,23 @@ export async function computeTaxeSejour(entityId: string, booking: Booking): Pro
   }
   if (total <= 0) return null;
   return { amount: Math.round(total * 100) / 100, label: `Taxe de séjour (${lines.join(", ")} × ${nights}n)` };
+}
+
+/**
+ * Calcule la taxe de séjour d'une réservation déjà en base, à partir de ses
+ * Occupant réels — cf. routes/payment.ts /checkout (parcours check-in,
+ * réservation existante). Jamais transmise par le client : le montant
+ * facturé via Stripe doit être fiable.
+ */
+export async function computeTaxeSejour(entityId: string, booking: Booking): Promise<{ amount: number; label: string } | null> {
+  const cfg = await prisma.entityModuleConfig.findUnique({ where: { entityId } });
+  if (!cfg) return null;
+  const nights = Math.max(0, Math.round((booking.endDate.getTime() - booking.startDate.getTime()) / 86400000));
+  const occupants = await prisma.occupant.findMany({ where: { bookingId: booking.id } });
+  if (!occupants.length || !nights) return null;
+
+  const occupantCounts: Record<string, number> = {};
+  for (const o of occupants) occupantCounts[o.ageCategory] = (occupantCounts[o.ageCategory] || 0) + 1;
+
+  return computeTaxeSejourAmount({ tarifs: (cfg.tarifs as number[]) || [], stars: cfg.stars, exoEnf: cfg.exoEnf, reducAdos: cfg.reducAdos }, occupantCounts, nights);
 }

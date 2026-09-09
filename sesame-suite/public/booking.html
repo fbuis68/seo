@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Réservation</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600&family=Fraunces:opsz,wght@9..144,300;9..144,500&display=swap" rel="stylesheet">
+<style>
+:root{--primary:#8B1A2E;--pl:#FDEDF0;--accent:#8B1A2E;--hbg:#8B1A2E;--htx:#FFFFFF;--bg:#F5F3F0;--card:#FFFFFF;--bdr:#E3DED8;--tx:#14121E;--r:14px;--rb:8px;--font-title:'Fraunces',serif;--font-body:'Sora',sans-serif;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-body);background:var(--bg);color:var(--tx);min-height:100vh;-webkit-font-smoothing:antialiased}
+.hdr{background:var(--hbg);color:var(--htx);padding:16px 20px;display:flex;align-items:center;gap:12px}
+.hdr img{max-height:30px;max-width:150px;object-fit:contain}
+.hdr .name{font-family:var(--font-title);font-size:19px;font-weight:500}
+.wrap{max-width:760px;margin:0 auto;padding:24px 16px 60px}
+h1{font-family:var(--font-title);font-size:26px;font-weight:500;margin-bottom:6px}
+.sub{color:#6b6660;font-size:14px;margin-bottom:24px}
+.card{background:var(--card);border:1px solid var(--bdr);border-radius:var(--r);padding:20px;margin-bottom:16px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.ff{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.ff label{font-size:12px;font-weight:600;color:#6b6660;text-transform:uppercase;letter-spacing:.03em}
+.ff input,.ff select{border:1px solid var(--bdr);border-radius:var(--rb);padding:10px 12px;font-size:14px;font-family:var(--font-body);color:var(--tx);background:#fff}
+.ff input:focus,.ff select:focus{outline:2px solid var(--primary);outline-offset:1px}
+.stepper{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--bdr);border-radius:var(--rb);padding:8px 12px}
+.stepper .lbl{font-size:13px}
+.stepper .lbl small{display:block;color:#8a8580;font-size:11px}
+.stepper .ctl{display:flex;align-items:center;gap:10px}
+.stepper button{width:28px;height:28px;border-radius:50%;border:1px solid var(--bdr);background:#fff;font-size:16px;cursor:pointer;line-height:1}
+.stepper button:disabled{opacity:.35;cursor:default}
+.stepper .val{min-width:18px;text-align:center;font-weight:600}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:var(--rb);padding:12px 20px;font-size:14px;font-weight:600;font-family:var(--font-body);cursor:pointer;transition:opacity .15s}
+.btn:hover{opacity:.9}
+.btn:disabled{opacity:.5;cursor:default}
+.btn-p{background:var(--primary);color:#fff;width:100%}
+.btn-ghost{background:transparent;color:var(--primary);padding:8px 4px}
+.room-card{border:1px solid var(--bdr);border-radius:var(--r);overflow:hidden;margin-bottom:14px;background:#fff;display:flex;flex-direction:column}
+.room-photo{height:150px;background:var(--bdr) center/cover no-repeat}
+.room-body{padding:16px}
+.room-name{font-family:var(--font-title);font-size:17px;font-weight:500;margin-bottom:3px}
+.room-meta{font-size:12px;color:#8a8580;margin-bottom:10px}
+.room-desc{font-size:13px;color:#4a4640;margin-bottom:12px;line-height:1.4}
+.room-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.room-price{font-size:18px;font-weight:600}
+.room-price small{display:block;font-size:11px;font-weight:400;color:#8a8580}
+.recap-line{display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid var(--bdr)}
+.recap-line:last-child{border-bottom:0}
+.recap-total{display:flex;justify-content:space-between;font-size:16px;font-weight:600;margin-top:8px;padding-top:10px;border-top:1.5px solid var(--tx)}
+.msg{text-align:center;padding:40px 20px}
+.msg .ico{font-size:40px;margin-bottom:12px}
+.err{color:#a32d2d;font-size:13px;margin-top:8px}
+.empty{text-align:center;color:#8a8580;padding:30px;font-size:14px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--tx);color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;z-index:100;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.on{opacity:1}
+.scr{display:none}
+.scr.on{display:block}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <img id="hdrLogo" style="display:none">
+  <div class="name" id="hdrName">Hôtel</div>
+</div>
+
+<div class="wrap">
+
+  <!-- ═══════ ÉCRAN : module désactivé ═══════ -->
+  <div class="scr" id="scr-unavailable">
+    <div class="msg">
+      <div class="ico">🔒</div>
+      <h1>Réservation en ligne indisponible</h1>
+      <p class="sub">Ce lien n'est pas (ou plus) actif pour cet établissement.</p>
+    </div>
+  </div>
+
+  <!-- ═══════ ÉCRAN 1 : recherche ═══════ -->
+  <div class="scr" id="scr-search">
+    <h1>Réserver un séjour</h1>
+    <p class="sub">Choisissez vos dates et le nombre d'occupants pour voir les chambres disponibles.</p>
+    <div class="card">
+      <div class="grid2">
+        <div class="ff"><label>Arrivée</label><input type="date" id="in-start"></div>
+        <div class="ff"><label>Départ</label><input type="date" id="in-end"></div>
+      </div>
+      <div id="occupant-steppers" style="display:flex;flex-direction:column;gap:10px;margin:14px 0"></div>
+      <button class="btn btn-p" onclick="searchRooms()">Voir les chambres disponibles</button>
+      <div class="err" id="search-err" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- ═══════ ÉCRAN 2 : liste des chambres ═══════ -->
+  <div class="scr" id="scr-rooms">
+    <button class="btn btn-ghost" onclick="gotoScr('search')">← Modifier les dates</button>
+    <h1 style="margin-top:10px">Chambres disponibles</h1>
+    <p class="sub" id="rooms-sub"></p>
+    <div id="rooms-list"></div>
+  </div>
+
+  <!-- ═══════ ÉCRAN 3 : coordonnées + récapitulatif ═══════ -->
+  <div class="scr" id="scr-form">
+    <button class="btn btn-ghost" onclick="gotoScr('rooms')">← Choisir une autre chambre</button>
+    <h1 style="margin-top:10px">Vos coordonnées</h1>
+    <div class="card">
+      <div class="grid2">
+        <div class="ff"><label>Prénom</label><input type="text" id="f-firstname"></div>
+        <div class="ff"><label>Nom</label><input type="text" id="f-lastname"></div>
+      </div>
+      <div class="grid2">
+        <div class="ff"><label>Email</label><input type="email" id="f-email"></div>
+        <div class="ff"><label>Téléphone (optionnel)</label><input type="tel" id="f-phone"></div>
+      </div>
+    </div>
+    <div class="card" id="recap-card"></div>
+    <button class="btn btn-p" onclick="goToCheckout()" id="pay-btn">Payer et confirmer</button>
+    <div class="err" id="form-err" style="display:none"></div>
+  </div>
+
+  <!-- ═══════ ÉCRAN : retour paiement ═══════ -->
+  <div class="scr" id="scr-return">
+    <div class="msg" id="return-content"></div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var ENTITY_CODE = new URLSearchParams(window.location.search).get('entityCode') || '';
+function apiFetch(url, opts){
+  if(!ENTITY_CODE) return fetch(url, opts);
+  opts = opts || {};
+  var method = (opts.method||'GET').toUpperCase();
+  if(method!=='GET' && opts.body){
+    try{ var b=JSON.parse(opts.body); if(!b.entityCode) b.entityCode=ENTITY_CODE; opts.body=JSON.stringify(b); }catch(e){}
+  } else if(url.indexOf('entityCode=')===-1){
+    url += (url.indexOf('?')>-1?'&':'?') + 'entityCode=' + encodeURIComponent(ENTITY_CODE);
+  }
+  return fetch(url, opts);
+}
+
+var DEFAULT_CFG = {
+  hotelName:'Hôtel', stars:3, colors:{primary:'#8B1A2E',primaryLight:'#FDEDF0',accent:'#8B1A2E',headerBg:'#8B1A2E',headerText:'#FFFFFF',bg:'#F5F3F0',cardBg:'#FFFFFF',border:'#E3DED8',text:'#14121E'},
+  radius:14, radiusBtn:8, fontTitle:"'Fraunces',serif", fontBody:"'Sora',sans-serif", logoMain:null,
+  tarifs:[0.88,1.65,2.60,4.20,6.00], exoEnf:true, reducAdos:true, currency:'EUR'
+};
+var CFG = JSON.parse(JSON.stringify(DEFAULT_CFG));
+
+function applyBrand(){
+  var c=CFG.colors, r=CFG.radius||14, rb=CFG.radiusBtn||8;
+  var el=document.getElementById('brandVars');
+  if(!el){ el=document.createElement('style'); el.id='brandVars'; document.head.appendChild(el); }
+  el.textContent=':root{--primary:'+c.primary+';--pl:'+c.primaryLight+';--accent:'+c.accent+';--hbg:'+c.headerBg+';--htx:'+c.headerText+';--bg:'+c.bg+';--card:'+c.cardBg+';--bdr:'+c.border+';--tx:'+c.text+';--r:'+r+'px;--rb:'+rb+'px;--font-title:'+CFG.fontTitle+';--font-body:'+CFG.fontBody+';}';
+  var hl=document.getElementById('hdrLogo');
+  if(CFG.logoMain){ hl.src=CFG.logoMain; hl.style.display='block'; document.getElementById('hdrName').style.display='none'; }
+  else { document.getElementById('hdrName').textContent=CFG.hotelName; }
+  document.title='Réserver — '+CFG.hotelName;
+}
+
+function toast(msg){
+  var el=document.getElementById('toast');
+  el.textContent=msg; el.classList.add('on');
+  setTimeout(function(){ el.classList.remove('on'); }, 2600);
+}
+
+function gotoScr(id){
+  document.querySelectorAll('.scr').forEach(function(el){ el.classList.remove('on'); });
+  document.getElementById('scr-'+id).classList.add('on');
+  window.scrollTo(0,0);
+}
+
+// ═══════════════════ OCCUPANTS ═══════════════════
+var OCC_LABELS = [
+  {k:'adulte', label:'Adultes', hint:''},
+  {k:'ado', label:'Ados', hint:'12-17 ans'},
+  {k:'enfant', label:'Enfants', hint:'2-11 ans'},
+  {k:'bebe', label:'Bébés', hint:'moins de 2 ans'}
+];
+var OCC = {adulte:2, ado:0, enfant:0, bebe:0};
+
+function renderOccupantSteppers(){
+  var el = document.getElementById('occupant-steppers');
+  el.innerHTML = OCC_LABELS.map(function(o){
+    return '<div class="stepper">'
+      + '<div class="lbl">'+o.label+(o.hint?'<small>'+o.hint+'</small>':'')+'</div>'
+      + '<div class="ctl">'
+      + '<button onclick="occChange(\''+o.k+'\',-1)" '+(OCC[o.k]<=(o.k==='adulte'?1:0)?'disabled':'')+'>−</button>'
+      + '<span class="val">'+OCC[o.k]+'</span>'
+      + '<button onclick="occChange(\''+o.k+'\',1)">+</button>'
+      + '</div></div>';
+  }).join('');
+}
+function occChange(k, delta){
+  var min = k==='adulte' ? 1 : 0;
+  OCC[k] = Math.max(min, Math.min(20, OCC[k]+delta));
+  renderOccupantSteppers();
+}
+
+// ═══════════════════ TAXE DE SÉJOUR — estimation client (le montant
+// facturé est toujours recalculé côté serveur, jamais transmis) ═══════════════════
+function estimateTaxeSejour(nights){
+  var tarif = CFG.tarifs[CFG.stars-1] || 1.65;
+  var total = 0;
+  OCC_LABELS.forEach(function(o){
+    var cnt = OCC[o.k]; if(!cnt) return;
+    var isExo = CFG.exoEnf && (o.k==='enfant'||o.k==='bebe');
+    var isHalf = CFG.reducAdos && o.k==='ado';
+    var rate = isExo ? 0 : tarif * (isHalf?0.5:1);
+    total += rate * nights * cnt;
+  });
+  return Math.round(total*100)/100;
+}
+
+// ═══════════════════ RECHERCHE / DISPONIBILITÉ ═══════════════════
+var STATE = { start:null, end:null, nights:0, rooms:[], selectedRoom:null };
+
+async function searchRooms(){
+  var errEl = document.getElementById('search-err');
+  errEl.style.display='none';
+  var start = document.getElementById('in-start').value;
+  var end = document.getElementById('in-end').value;
+  if(!start || !end || end<=start){ errEl.textContent='Merci de choisir des dates valides (départ après arrivée).'; errEl.style.display='block'; return; }
+  STATE.start = start; STATE.end = end;
+  STATE.nights = Math.round((new Date(end)-new Date(start))/86400000);
+
+  try{
+    var r = await apiFetch('/wa/bookingEngine/availability?start='+encodeURIComponent(start)+'&end='+encodeURIComponent(end));
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error||'Erreur');
+    STATE.rooms = data.rooms || [];
+  }catch(e){
+    errEl.textContent = 'Impossible de charger les chambres disponibles.'; errEl.style.display='block';
+    return;
+  }
+  renderRooms();
+  gotoScr('rooms');
+}
+
+function fmtEUR(n){ return (n||0).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'; }
+
+function renderRooms(){
+  document.getElementById('rooms-sub').textContent = STATE.nights+' nuit'+(STATE.nights>1?'s':'')+' · '+new Date(STATE.start).toLocaleDateString('fr-FR')+' → '+new Date(STATE.end).toLocaleDateString('fr-FR');
+  var el = document.getElementById('rooms-list');
+  if(!STATE.rooms.length){
+    el.innerHTML = '<div class="empty">Aucune chambre disponible sur ces dates. Essayez une autre période.</div>';
+    return;
+  }
+  el.innerHTML = STATE.rooms.map(function(r, i){
+    var photo = (r.photos && r.photos[0]) ? r.photos[0] : null;
+    return '<div class="room-card">'
+      + (photo ? '<div class="room-photo" style="background-image:url(\''+photo+'\')"></div>' : '')
+      + '<div class="room-body">'
+      + '<div class="room-name">'+r.name+'</div>'
+      + '<div class="room-meta">'+[r.category, r.capacity?('jusqu’à '+r.capacity+' pers.'):null].filter(Boolean).join(' · ')+'</div>'
+      + (r.description ? '<div class="room-desc">'+r.description+'</div>' : '')
+      + '<div class="room-foot">'
+      + '<div class="room-price">'+fmtEUR(r.roomTotal)+'<small>pour '+r.nights+' nuit'+(r.nights>1?'s':'')+'</small></div>'
+      + '<button class="btn btn-p" style="width:auto" onclick="selectRoom('+i+')">Choisir</button>'
+      + '</div></div></div>';
+  }).join('');
+}
+
+function selectRoom(i){
+  STATE.selectedRoom = STATE.rooms[i];
+  renderRecap();
+  gotoScr('form');
+}
+
+function renderRecap(){
+  var r = STATE.selectedRoom;
+  var taxe = estimateTaxeSejour(STATE.nights);
+  var total = r.roomTotal + taxe;
+  var totalOcc = OCC_LABELS.reduce(function(s,o){ return s+OCC[o.k]; }, 0);
+  var html = '<div class="recap-line"><span>'+r.name+' · '+r.nights+' nuit'+(r.nights>1?'s':'')+'</span><span>'+fmtEUR(r.roomTotal)+'</span></div>';
+  if(taxe>0) html += '<div class="recap-line"><span>Taxe de séjour ('+totalOcc+' pers.)</span><span>'+fmtEUR(taxe)+'</span></div>';
+  html += '<div class="recap-total"><span>Total</span><span>'+fmtEUR(total)+'</span></div>';
+  document.getElementById('recap-card').innerHTML = html;
+}
+
+// ═══════════════════ PAIEMENT ═══════════════════
+async function goToCheckout(){
+  var errEl = document.getElementById('form-err');
+  errEl.style.display='none';
+  var firstName = document.getElementById('f-firstname').value.trim();
+  var lastName = document.getElementById('f-lastname').value.trim();
+  var email = document.getElementById('f-email').value.trim();
+  var phone = document.getElementById('f-phone').value.trim();
+  if(!firstName || !lastName){ errEl.textContent='Merci de renseigner votre nom et prénom.'; errEl.style.display='block'; return; }
+  if(!email || email.indexOf('@')===-1){ errEl.textContent='Merci de renseigner un email valide.'; errEl.style.display='block'; return; }
+
+  var btn = document.getElementById('pay-btn');
+  btn.disabled = true; btn.textContent = 'Redirection…';
+
+  var base = window.location.origin + window.location.pathname
+    + (ENTITY_CODE ? '?entityCode='+encodeURIComponent(ENTITY_CODE)+'&' : '?');
+
+  try{
+    var r = await apiFetch('/wa/bookingEngine/checkout', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        roomId: STATE.selectedRoom.id, startDate: STATE.start, endDate: STATE.end,
+        firstName: firstName, lastName: lastName, email: email, phone: phone,
+        occupants: OCC,
+        successUrl: base+'bookingReturn=success', cancelUrl: base+'bookingReturn=cancelled'
+      })
+    });
+    var data = await r.json();
+    if(!r.ok || !data.checkoutUrl) throw new Error(data.error||'Erreur');
+    window.location.href = data.checkoutUrl;
+  }catch(e){
+    errEl.textContent = e.message || 'Erreur lors de la redirection vers le paiement.'; errEl.style.display='block';
+    btn.disabled = false; btn.textContent = 'Payer et confirmer';
+  }
+}
+
+function handleBookingReturn(){
+  var v = new URLSearchParams(window.location.search).get('bookingReturn');
+  if(!v) return false;
+  var el = document.getElementById('return-content');
+  if(v==='success'){
+    el.innerHTML = '<div class="ico">✅</div><h1>Réservation confirmée !</h1><p class="sub">Merci, votre paiement a bien été reçu. Un email de confirmation vous sera envoyé.</p>';
+  } else {
+    el.innerHTML = '<div class="ico">✕</div><h1>Paiement annulé</h1><p class="sub">Votre réservation n\'a pas été finalisée — aucun montant n\'a été débité.</p><button class="btn btn-p" style="width:auto;margin-top:10px" onclick="window.location.href=window.location.pathname+(ENTITY_CODE?\'?entityCode=\'+ENTITY_CODE:\'\')">Recommencer</button>';
+  }
+  gotoScr('return');
+  return true;
+}
+
+// ═══════════════════ BOOT ═══════════════════
+window.addEventListener('DOMContentLoaded', async function(){
+  var today = new Date();
+  var tomorrow = new Date(today.getTime()+86400000);
+  document.getElementById('in-start').min = today.toISOString().slice(0,10);
+  document.getElementById('in-start').value = today.toISOString().slice(0,10);
+  document.getElementById('in-end').min = tomorrow.toISOString().slice(0,10);
+  document.getElementById('in-end').value = tomorrow.toISOString().slice(0,10);
+  renderOccupantSteppers();
+
+  try{
+    var r = await apiFetch('/wa/entityModuleConfig/list');
+    if(r.ok){ var data = await r.json(); CFG = Object.assign({}, DEFAULT_CFG, data); }
+  }catch(e){}
+  applyBrand();
+
+  if(handleBookingReturn()) return;
+
+  try{
+    var sr = await apiFetch('/wa/bookingEngine/status');
+    var sd = await sr.json();
+    if(!sr.ok || !sd.enabled){ gotoScr('unavailable'); return; }
+  }catch(e){ gotoScr('unavailable'); return; }
+
+  gotoScr('search');
+});
+</script>
+</body>
+</html>

@@ -53,6 +53,7 @@ model Entity {
   walletConfig      WalletConfig?
   questionnaires    Questionnaire[]
   passes            Pass[]
+  bookingEngineConfig BookingEngineConfig?
 }
 
 // Groupe d'établissements (ex : chaîne hôtelière) — gestion réservée aux
@@ -902,6 +903,29 @@ model WalletConfig {
   updatedAt DateTime @updatedAt
 }
 
+// Module "Réservation en ligne" du catalogue d'abonnement (09/09/2026) — page
+// publique (public/booking.html) où un visiteur choisit ses dates, voit les
+// chambres disponibles (calculées à partir de Room.rate et des Booking déjà
+// posées sur la période, cf. lib/bookingEngine.ts) et paie directement en
+// ligne. Contrairement au reste du parcours check-in (qui suppose une
+// réservation déjà existante, généralement importée d'un PMS/OTA externe,
+// cf. Booking.importedFrom), la réservation elle-même est créée ICI par
+// Sesame — d'où un chemin de paiement dédié qui facture le prix de la
+// chambre (cf. PaymentConfig.includeTaxeSejour, qui l'exclut expressément
+// pour les réservations importées). La Booking n'est créée qu'APRÈS
+// confirmation du paiement par le webhook Stripe (cf. Order.bookingDraft) —
+// jamais avant, pour ne jamais bloquer une chambre sur un panier abandonné.
+model BookingEngineConfig {
+  id       String @id @default(cuid())
+  entityId String @unique
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  enabled Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Occupant {
   id          String  @id @default(cuid())
   bookingId   String
@@ -1165,7 +1189,7 @@ model Order {
   booking     Booking? @relation(fields: [bookingId], references: [id])
   bookingCode String?
 
-  source     String // checkin | roomservice | boutique_standalone
+  source     String // checkin | roomservice | boutique_standalone | bookingEngine
   clientName String?
   roomCode   String?
   roomName   String?
@@ -1173,6 +1197,16 @@ model Order {
   items Json // [{id,label,price,qty}]
   total Float
   note  String?
+
+  // Brouillon de réservation en attente de paiement (source="bookingEngine"
+  // uniquement) — {roomId, startDate, endDate, firstName, lastName, email,
+  // phone, occupants:[{ageCategory}]}. La Booking correspondante n'est créée
+  // qu'à la confirmation du paiement (cf. webhook checkout.session.completed
+  // dans routes/payment.ts, lib/bookingEngine.ts createBookingFromPaidOrder)
+  // — jamais avant, pour ne pas bloquer une chambre sur un panier abandonné.
+  // Vidé une fois la Booking créée (bookingId/bookingCode renseignés à la
+  // place).
+  bookingDraft Json?
 
   status String @default("new") // new | preparing | delivering | delivered | cancelled
 
