@@ -432,6 +432,16 @@ svg.tr-chart{display:block;width:100%;height:auto;min-width:640px}
 .tr-grid-line{stroke:var(--bdr);stroke-width:1}
 .tr-tooltip{position:absolute;pointer-events:none;background:var(--tx);color:var(--card);font-size:11.5px;padding:8px 10px;border-radius:8px;box-shadow:0 8px 24px -8px rgba(0,0,0,.3);transform:translate(-50%,-100%);white-space:nowrap;opacity:0;transition:opacity .1s;z-index:5;line-height:1.5}
 .tr-tt-row{display:flex;justify-content:space-between;gap:14px}
+.htmled{border:1px solid var(--bdr);border-radius:8px;overflow:hidden}
+.htmled-tb{display:flex;flex-wrap:wrap;gap:2px;padding:5px;background:var(--bg);border-bottom:1px solid var(--bdr)}
+.htmled-btn{background:none;border:1px solid transparent;border-radius:5px;padding:4px 7px;font-size:12px;line-height:1;cursor:pointer;color:var(--tx);min-width:24px}
+.htmled-btn:hover{background:var(--hover);border-color:var(--bdr2)}
+.htmled-btn.on{background:var(--al);border-color:var(--a);color:var(--a)}
+.htmled-sep{width:1px;background:var(--bdr);margin:2px 4px}
+.htmled-ce{min-height:160px;max-height:340px;overflow-y:auto;padding:10px 12px;font-size:13px;line-height:1.5;background:var(--card);color:var(--tx)}
+.htmled-ce:empty:before{content:attr(data-placeholder);color:var(--mu)}
+.htmled-ce a{color:var(--a)}
+.htmled-src{display:block;width:100%;box-sizing:border-box;border:none;min-height:160px;max-height:340px;padding:10px 12px;font-family:ui-monospace,Menlo,monospace;font-size:12px;resize:vertical;background:var(--card);color:var(--tx)}
 </style>
 <!-- Lecture de fichiers .xlsx/.csv côté navigateur (import "Suspects", cf.
      openImportModal) — aucun parsing xlsx côté serveur (pas de dépendance
@@ -5310,6 +5320,78 @@ async function testChannelConfig(channel){
   }catch(e){ flash(e.message||'Échec de l\'envoi — vérifiez la configuration'); }
 }
 
+// ── Éditeur HTML léger (modèles d'email) — contenteditable + document.execCommand,
+// avec bascule vers le code source brut. Pas de dépendance externe (cohérent avec
+// le reste de l'app, tout en JS natif) ; le textarea #id reste la source de vérité
+// lue par saveTemplate(), synchronisée à chaque frappe (oninput) des deux côtés. ──
+var HTMLED_STATE = {};
+function htmlEdInit(id, initialHtml){
+  const ce = document.getElementById(id+'-ce'), src = document.getElementById(id);
+  if(!ce || !src) return;
+  src.value = initialHtml || '';
+  ce.innerHTML = initialHtml || '';
+  ce.style.display = ''; src.style.display = 'none';
+  HTMLED_STATE[id] = 'wysiwyg';
+  const btn = document.getElementById(id+'-togglebtn'); if(btn) btn.classList.remove('on');
+}
+function htmlEdCmd(id, cmd, arg){
+  const ce = document.getElementById(id+'-ce'); if(!ce) return;
+  ce.focus();
+  document.execCommand(cmd, false, arg||null);
+  htmlEdSync(id);
+}
+function htmlEdLink(id){
+  const ce = document.getElementById(id+'-ce'); if(!ce) return;
+  const url = prompt('URL du lien :', 'https://');
+  if(!url) return;
+  ce.focus();
+  document.execCommand('createLink', false, url);
+  htmlEdSync(id);
+}
+function htmlEdSync(id){
+  const ce = document.getElementById(id+'-ce'), src = document.getElementById(id);
+  if(ce && src) src.value = ce.innerHTML;
+}
+function htmlEdSyncFromSrc(id){
+  const ce = document.getElementById(id+'-ce'), src = document.getElementById(id);
+  if(ce && src) ce.innerHTML = src.value;
+}
+function htmlEdToggleSource(id){
+  const ce = document.getElementById(id+'-ce'), src = document.getElementById(id), btn = document.getElementById(id+'-togglebtn');
+  if(!ce || !src) return;
+  if(HTMLED_STATE[id] === 'source'){
+    ce.innerHTML = src.value;
+    ce.style.display = ''; src.style.display = 'none';
+    HTMLED_STATE[id] = 'wysiwyg';
+    if(btn) btn.classList.remove('on');
+  } else {
+    src.value = ce.innerHTML;
+    ce.style.display = 'none'; src.style.display = 'block';
+    HTMLED_STATE[id] = 'source';
+    if(btn) btn.classList.add('on');
+  }
+}
+/** Canal non-email (SMS/WhatsApp) : texte brut, pas d'éditeur riche — la barre
+ * d'outils et le contenteditable seraient trompeurs (le corps n'est pas du HTML). */
+function htmlEdSetEmailMode(id, isEmail){
+  const wrap = document.getElementById(id+'-wrap'), tb = document.getElementById(id+'-tb');
+  const ce = document.getElementById(id+'-ce'), src = document.getElementById(id);
+  if(!src) return;
+  if(isEmail){
+    if(tb) tb.style.display = '';
+    if(HTMLED_STATE[id] !== 'source'){
+      if(ce){ ce.innerHTML = src.value; ce.style.display = ''; }
+      src.style.display = 'none';
+      HTMLED_STATE[id] = 'wysiwyg';
+    }
+  } else {
+    if(tb) tb.style.display = 'none';
+    if(ce) ce.style.display = 'none';
+    src.style.display = 'block';
+    HTMLED_STATE[id] = 'plain';
+  }
+}
+
 function openTemplateModal(id){
   const t = id ? MSG_TEMPLATES.find(t=>t.id===id) : {id:null,channel:tplChannelTab,key:'',name:'',subject:'',bodyHtml:''};
   if(!t)return;
@@ -5323,8 +5405,26 @@ function openTemplateModal(id){
       </div>
       <div class="ff" style="margin-top:8px"><label>Nom affiché</label><input id="tpl-name" value="${esc(t.name)}" placeholder="Relance prospect"></div>
       <div class="ff" id="tpl-subject-wrap" style="margin-top:8px"><label>Objet (email uniquement)</label><input id="tpl-subject" value="${esc(t.subject)}" placeholder="Sesame Technology — {{nom}}"></div>
-      <div class="ff" style="margin-top:8px"><label>Corps (email : HTML ; SMS/WhatsApp : texte)</label><textarea id="tpl-body" style="height:160px">${t.bodyHtml||''}</textarea></div>
-      <div style="font-size:11px;color:var(--text-muted,#888);margin-top:-4px">Variables — envoi depuis une fiche prospect : {{nom}} {{secteur}} {{referent}} {{ville}} · envoi depuis "Utilisateurs CRM" (identifiants de connexion) : {{login}} {{password}} {{loginUrl}}</div>
+      <div class="ff" style="margin-top:8px"><label>Corps (email : éditeur HTML ; SMS/WhatsApp : texte)</label>
+        <div class="htmled" id="tpl-body-wrap">
+          <div class="htmled-tb" id="tpl-body-tb">
+            <button type="button" class="htmled-btn" onmousedown="event.preventDefault()" onclick="htmlEdCmd('tpl-body','bold')" title="Gras"><b>G</b></button>
+            <button type="button" class="htmled-btn" onmousedown="event.preventDefault()" onclick="htmlEdCmd('tpl-body','italic')" title="Italique"><i>I</i></button>
+            <button type="button" class="htmled-btn" onmousedown="event.preventDefault()" onclick="htmlEdCmd('tpl-body','underline')" title="Souligné" style="text-decoration:underline">S</button>
+            <span class="htmled-sep"></span>
+            <button type="button" class="htmled-btn" onmousedown="event.preventDefault()" onclick="htmlEdCmd('tpl-body','insertUnorderedList')" title="Liste à puces"><i class="ti ti-list"></i></button>
+            <button type="button" class="htmled-btn" onmousedown="event.preventDefault()" onclick="htmlEdCmd('tpl-body','insertOrderedList')" title="Liste numérotée"><i class="ti ti-list-numbers"></i></button>
+            <span class="htmled-sep"></span>
+            <button type="button" class="htmled-btn" onmousedown="event.preventDefault()" onclick="htmlEdLink('tpl-body')" title="Insérer un lien"><i class="ti ti-link"></i></button>
+            <button type="button" class="htmled-btn" onmousedown="event.preventDefault()" onclick="htmlEdCmd('tpl-body','removeFormat')" title="Effacer la mise en forme"><i class="ti ti-clear-formatting"></i></button>
+            <span class="htmled-sep" style="margin-left:auto"></span>
+            <button type="button" class="htmled-btn" id="tpl-body-togglebtn" onclick="htmlEdToggleSource('tpl-body')" title="Basculer vers/depuis le code source HTML"><i class="ti ti-code"></i> HTML</button>
+          </div>
+          <div class="htmled-ce" id="tpl-body-ce" contenteditable="true" data-placeholder="Corps de l'email…" oninput="htmlEdSync('tpl-body')"></div>
+          <textarea class="htmled-src" id="tpl-body" style="display:none" oninput="htmlEdSyncFromSrc('tpl-body')">${esc(t.bodyHtml||'')}</textarea>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--mu);margin-top:6px">Variables — envoi depuis une fiche prospect : {{nom}} {{secteur}} {{referent}} {{ville}} · envoi depuis "Utilisateurs CRM" (identifiants de connexion) : {{login}} {{password}} {{loginUrl}}</div>
       <div class="ff" id="tpl-sid-wrap" style="margin-top:8px"><label>Content SID Twilio (WhatsApp)</label><input id="tpl-sid" value="${esc(t.whatsappContentSid||'')}" placeholder="HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
         <div style="font-size:11px;color:#888;margin-top:4px">WhatsApp Business interdit le texte libre hors session client — créez d'abord ce modèle dans Twilio (Messaging → Content Template Builder), faites-le approuver par Meta, puis collez ici son Content SID. Les variables {{var}} ci-dessus doivent apparaître dans le même ordre que les {{1}} {{2}}… du modèle approuvé.</div></div>
       <div class="modal-footer">
@@ -5333,6 +5433,7 @@ function openTemplateModal(id){
       </div>
     </div>
   </div>`;
+  htmlEdInit('tpl-body', t.bodyHtml||'');
   renderTplSubjectVisibility();
 }
 
@@ -5342,6 +5443,7 @@ function renderTplSubjectVisibility(){
   const sidWrap=document.getElementById('tpl-sid-wrap');
   if(sel&&wrap) wrap.style.display = sel.value==='email' ? '' : 'none';
   if(sel&&sidWrap) sidWrap.style.display = sel.value==='whatsapp' ? '' : 'none';
+  if(sel) htmlEdSetEmailMode('tpl-body', sel.value==='email');
 }
 
 async function saveTemplate(id){

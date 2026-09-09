@@ -155,6 +155,16 @@ input:focus,select:focus,textarea:focus{border-color:var(--am);box-shadow:0 0 0 
 input[type=color]{width:38px;height:30px;padding:2px 3px;border:1px solid var(--bdr);border-radius:var(--rs);cursor:pointer;background:var(--bg)}
 input[type=range]{width:100%;accent-color:var(--am);cursor:pointer;height:4px}
 input[type=checkbox]{accent-color:var(--am);width:15px;height:15px;cursor:pointer}
+.htmled{border:1px solid var(--bdr);border-radius:var(--rs);overflow:hidden}
+.htmled-tb{display:flex;flex-wrap:wrap;gap:2px;padding:5px;background:var(--bg);border-bottom:1px solid var(--bdr)}
+.htmled-btn{background:none;border:1px solid transparent;border-radius:5px;padding:4px 7px;font-size:12px;line-height:1;cursor:pointer;color:var(--tx);min-width:24px}
+.htmled-btn:hover{background:var(--bg);border-color:var(--bdr)}
+.htmled-btn.on{background:var(--al);border-color:var(--a);color:var(--a)}
+.htmled-sep{width:1px;background:var(--bdr);margin:2px 4px}
+.htmled-ce{min-height:160px;max-height:340px;overflow-y:auto;padding:10px 12px;font-size:13px;line-height:1.5;background:var(--card);color:var(--tx)}
+.htmled-ce:empty:before{content:attr(data-placeholder);color:var(--mu)}
+.htmled-ce a{color:var(--a)}
+.htmled-src{display:block;width:100%;box-sizing:border-box;border:none;min-height:160px;max-height:340px;padding:10px 12px;font-family:ui-monospace,Menlo,monospace;font-size:12px;resize:vertical;background:var(--card);color:var(--tx)}
 .irow{display:flex;gap:10px}.irow .fi{flex:1;margin-bottom:0}
 /* TOGGLE */
 .tg{position:relative;width:38px;height:22px;flex-shrink:0}
@@ -762,6 +772,17 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       <button onclick="resaCloseDetail()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
     </div>
     <div style="padding:18px 20px" id="resa-detail-body"></div>
+  </div>
+</div>
+
+<!-- ════════════════ SOUS-DÉTAIL RÉSERVATION (ménage / commandes / taxe) ════════════════ -->
+<div id="resaSubDetailModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:310;align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:560px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.3)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--bdr)">
+      <h2 style="font-size:17px" id="resa-subdetail-title">Détail</h2>
+      <button onclick="resaCloseSubDetail()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
+    </div>
+    <div style="padding:18px 20px" id="resa-subdetail-body"></div>
   </div>
 </div>
 
@@ -7770,7 +7791,24 @@ function emlOpenTemplateModal(id){
     + '</div>'
     + '<div class="fi"><label class="lb">Nom affiché</label><input type="text" id="eml-tpl-name" value="'+esc(t.name)+'" placeholder="Email de bienvenue"></div>'
     + '<div class="fi" id="eml-tpl-subject-wrap"><label class="lb">Objet (email uniquement)</label><input type="text" id="eml-tpl-subject" value="'+esc(t.subject)+'" placeholder="Bienvenue {{nom}} !"></div>'
-    + '<div class="fi"><label class="lb">Corps (email : HTML ; SMS/WhatsApp : texte)</label><textarea id="eml-tpl-body" style="height:160px">'+(t.bodyHtml||'')+'</textarea></div>'
+    + '<div class="fi"><label class="lb">Corps (email : éditeur HTML ; SMS/WhatsApp : texte)</label>'
+    + '<div class="htmled" id="eml-tpl-body-wrap">'
+    + '<div class="htmled-tb" id="eml-tpl-body-tb">'
+    + '<button type="button" class="htmled-btn" onmousedown="event.preventDefault()" onclick="htmlEdCmd(\'eml-tpl-body\',\'bold\')" title="Gras"><b>G</b></button>'
+    + '<button type="button" class="htmled-btn" onmousedown="event.preventDefault()" onclick="htmlEdCmd(\'eml-tpl-body\',\'italic\')" title="Italique"><i>I</i></button>'
+    + '<button type="button" class="htmled-btn" onmousedown="event.preventDefault()" onclick="htmlEdCmd(\'eml-tpl-body\',\'underline\')" title="Souligné" style="text-decoration:underline">S</button>'
+    + '<span class="htmled-sep"></span>'
+    + '<button type="button" class="htmled-btn" onmousedown="event.preventDefault()" onclick="htmlEdCmd(\'eml-tpl-body\',\'insertUnorderedList\')" title="Liste à puces"><i class="ti ti-list"></i></button>'
+    + '<button type="button" class="htmled-btn" onmousedown="event.preventDefault()" onclick="htmlEdCmd(\'eml-tpl-body\',\'insertOrderedList\')" title="Liste numérotée"><i class="ti ti-list-numbers"></i></button>'
+    + '<span class="htmled-sep"></span>'
+    + '<button type="button" class="htmled-btn" onmousedown="event.preventDefault()" onclick="htmlEdLink(\'eml-tpl-body\')" title="Insérer un lien"><i class="ti ti-link"></i></button>'
+    + '<button type="button" class="htmled-btn" onmousedown="event.preventDefault()" onclick="htmlEdCmd(\'eml-tpl-body\',\'removeFormat\')" title="Effacer la mise en forme"><i class="ti ti-clear-formatting"></i></button>'
+    + '<span class="htmled-sep" style="margin-left:auto"></span>'
+    + '<button type="button" class="htmled-btn" id="eml-tpl-body-togglebtn" onclick="htmlEdToggleSource(\'eml-tpl-body\')" title="Basculer vers/depuis le code source HTML"><i class="ti ti-code"></i> HTML</button>'
+    + '</div>'
+    + '<div class="htmled-ce" id="eml-tpl-body-ce" contenteditable="true" data-placeholder="Corps de l\'email…" oninput="htmlEdSync(\'eml-tpl-body\')"></div>'
+    + '<textarea class="htmled-src" id="eml-tpl-body" style="display:none" oninput="htmlEdSyncFromSrc(\'eml-tpl-body\')">'+esc(t.bodyHtml||'')+'</textarea>'
+    + '</div></div>'
     + '<div style="font-size:11px;color:var(--mu);margin:-6px 0 12px">'
     + 'Variables disponibles (cliquer pour insérer) — non fournies par le déclencheur choisi, elles restent vides à l\'envoi :<br>'
     + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'
@@ -7781,6 +7819,7 @@ function emlOpenTemplateModal(id){
     + '<div class="brow"><button class="btn btn-p" onclick="emlSaveTemplate('+(t.id?"'"+t.id+"'":'null')+')"><i class="ti ti-device-floppy"></i> Enregistrer</button>'
     + '<button class="btn btn-s" onclick="emlCloseTemplateModal()">Annuler</button></div>'
     + '</div></div>';
+  htmlEdInit('eml-tpl-body', t.bodyHtml||'');
   emlRenderTplSubjectVisibility();
 }
 
@@ -7793,12 +7832,7 @@ var EML_TPL_VARS = [
   {key:'total', desc:'Montant total de la commande (room service / boutique)'},
 ];
 function emlInsertVar(key){
-  var el = document.getElementById('eml-tpl-body');
-  if(!el) return;
-  var start = el.selectionStart||0, end = el.selectionEnd||0, token = '{{'+key+'}}';
-  el.value = el.value.slice(0,start) + token + el.value.slice(end);
-  el.focus();
-  el.selectionStart = el.selectionEnd = start + token.length;
+  htmlEdInsertText('eml-tpl-body', '{{'+key+'}}');
 }
 
 function emlRenderTplSubjectVisibility(){
@@ -7807,6 +7841,96 @@ function emlRenderTplSubjectVisibility(){
   var sidWrap = document.getElementById('eml-tpl-sid-wrap');
   if(sel && wrap) wrap.style.display = sel.value==='email' ? '' : 'none';
   if(sel && sidWrap) sidWrap.style.display = sel.value==='whatsapp' ? '' : 'none';
+  if(sel) htmlEdSetEmailMode('eml-tpl-body', sel.value==='email');
+}
+
+// ── Éditeur HTML léger (modèles d'email, ce panneau + CRM Canaux) —
+// contenteditable + document.execCommand, avec bascule vers le code source
+// brut. Pas de dépendance externe ; le textarea #id reste la source de
+// vérité lue par emlSaveTemplate(), synchronisée à chaque frappe (oninput)
+// des deux côtés. ──
+var HTMLED_STATE = {};
+function htmlEdInit(id, initialHtml){
+  var ce = document.getElementById(id+'-ce'), src = document.getElementById(id);
+  if(!ce || !src) return;
+  src.value = initialHtml || '';
+  ce.innerHTML = initialHtml || '';
+  ce.style.display = ''; src.style.display = 'none';
+  HTMLED_STATE[id] = 'wysiwyg';
+  var btn = document.getElementById(id+'-togglebtn'); if(btn) btn.classList.remove('on');
+}
+function htmlEdCmd(id, cmd, arg){
+  var ce = document.getElementById(id+'-ce'); if(!ce) return;
+  ce.focus();
+  document.execCommand(cmd, false, arg||null);
+  htmlEdSync(id);
+}
+function htmlEdLink(id){
+  var ce = document.getElementById(id+'-ce'); if(!ce) return;
+  var url = prompt('URL du lien :', 'https://');
+  if(!url) return;
+  ce.focus();
+  document.execCommand('createLink', false, url);
+  htmlEdSync(id);
+}
+function htmlEdSync(id){
+  var ce = document.getElementById(id+'-ce'), src = document.getElementById(id);
+  if(ce && src) src.value = ce.innerHTML;
+}
+function htmlEdSyncFromSrc(id){
+  var ce = document.getElementById(id+'-ce'), src = document.getElementById(id);
+  if(ce && src) ce.innerHTML = src.value;
+}
+function htmlEdToggleSource(id){
+  var ce = document.getElementById(id+'-ce'), src = document.getElementById(id), btn = document.getElementById(id+'-togglebtn');
+  if(!ce || !src) return;
+  if(HTMLED_STATE[id] === 'source'){
+    ce.innerHTML = src.value;
+    ce.style.display = ''; src.style.display = 'none';
+    HTMLED_STATE[id] = 'wysiwyg';
+    if(btn) btn.classList.remove('on');
+  } else {
+    src.value = ce.innerHTML;
+    ce.style.display = 'none'; src.style.display = 'block';
+    HTMLED_STATE[id] = 'source';
+    if(btn) btn.classList.add('on');
+  }
+}
+/** Canal non-email (SMS/WhatsApp) : texte brut, pas d'éditeur riche — la barre
+ * d'outils et le contenteditable seraient trompeurs (le corps n'est pas du HTML). */
+function htmlEdSetEmailMode(id, isEmail){
+  var tb = document.getElementById(id+'-tb');
+  var ce = document.getElementById(id+'-ce'), src = document.getElementById(id);
+  if(!src) return;
+  if(isEmail){
+    if(tb) tb.style.display = '';
+    if(HTMLED_STATE[id] !== 'source'){
+      if(ce){ ce.innerHTML = src.value; ce.style.display = ''; }
+      src.style.display = 'none';
+      HTMLED_STATE[id] = 'wysiwyg';
+    }
+  } else {
+    if(tb) tb.style.display = 'none';
+    if(ce) ce.style.display = 'none';
+    src.style.display = 'block';
+    HTMLED_STATE[id] = 'plain';
+  }
+}
+/** Insère du texte au point d'insertion actif — dans le contenteditable en
+ * mode WYSIWYG, sinon directement dans le textarea (source ou canal texte). */
+function htmlEdInsertText(id, text){
+  var ce = document.getElementById(id+'-ce'), src = document.getElementById(id);
+  if(!src) return;
+  if(HTMLED_STATE[id] === 'wysiwyg' && ce && ce.style.display !== 'none'){
+    ce.focus();
+    document.execCommand('insertText', false, text);
+    htmlEdSync(id);
+  } else {
+    var start = src.selectionStart||0, end = src.selectionEnd||0;
+    src.value = src.value.slice(0,start) + text + src.value.slice(end);
+    src.focus();
+    src.selectionStart = src.selectionEnd = start + text.length;
+  }
 }
 
 function emlCloseTemplateModal(){
@@ -13075,6 +13199,9 @@ async function loadReservations(){
         orders: orders.filter(function(o){ return o.bookingCode === b.code; }),
         taxe: taxeRecords.find(function(t){ return t.bookingCode === b.code; }) || null,
         prefs: prefsByEmail[(b.personEmail||'').trim().toLowerCase()] || null,
+        // Tâches de ménage liées à cette réservation (cf. panneau "Planning
+        // ménage") — sert au sous-détail "Ménage" cliquable de la carte.
+        houseTasks: houseTasks.filter(function(t){ return t.bookingCode === b.code; }),
         // "Ménage déclaré" (frise du parcours client) : au moins une tâche
         // de ménage liée à cette réservation marquée terminée par le
         // personnel — cf. panneau "Planning ménage".
@@ -13206,9 +13333,9 @@ function renderReservations(){
       + '</div>'
       + '</div>'
       + '<div class="resa-opts">'
-      + '<div class="resa-opt"><div class="ro-lbl"><i class="ti ti-spray"></i> Ménage</div><div class="ro-val">'+esc(menageVal)+'</div></div>'
-      + '<div class="resa-opt"><div class="ro-lbl"><i class="ti ti-shopping-bag"></i> Boutique / Room service</div><div class="ro-val">'+esc(boutiqueVal)+'</div></div>'
-      + '<div class="resa-opt"><div class="ro-lbl"><i class="ti ti-receipt"></i> Taxe de séjour</div><div class="ro-val">'+esc(taxeVal)+'</div></div>'
+      + '<div class="resa-opt" style="cursor:pointer" onclick="event.stopPropagation();resaOpenSubDetail(\''+esc(b.code)+'\',\'menage\')"><div class="ro-lbl"><i class="ti ti-spray"></i> Ménage</div><div class="ro-val">'+esc(menageVal)+'</div></div>'
+      + '<div class="resa-opt" style="cursor:pointer" onclick="event.stopPropagation();resaOpenSubDetail(\''+esc(b.code)+'\',\'boutique\')"><div class="ro-lbl"><i class="ti ti-shopping-bag"></i> Boutique / Room service</div><div class="ro-val">'+esc(boutiqueVal)+'</div></div>'
+      + '<div class="resa-opt" style="cursor:pointer" onclick="event.stopPropagation();resaOpenSubDetail(\''+esc(b.code)+'\',\'taxe\')"><div class="ro-lbl"><i class="ti ti-receipt"></i> Taxe de séjour</div><div class="ro-val">'+esc(taxeVal)+'</div></div>'
       + '</div>'
       + '</div>';
   }).join('');
@@ -13406,6 +13533,91 @@ async function resaSendEmail(code){
     btn.disabled = false;
     btn.innerHTML = orig;
   }
+}
+
+var RESA_ORDER_STATUS_LABEL = {new:'Nouvelle', preparing:'En préparation', delivering:'En livraison', delivered:'Livrée', cancelled:'Annulée'};
+var RESA_TASK_STATUS_LABEL = {planned:'Planifiée', done:'Terminée', cancelled:'Annulée'};
+var RESA_TASK_TYPE_LABEL = {menage:'Ménage', linge:'Linge', entretien:'Entretien', controle:'Contrôle', autre:'Autre'};
+
+/**
+ * Sous-détail cliquable depuis la carte de la liste "Réservations" (Ménage /
+ * Boutique / Taxe de séjour) — jusqu'ici ces trois lignes n'affichaient
+ * qu'un résumé en une phrase (ex : "3 commande(s) — 42,00 €") sans moyen
+ * d'en voir le détail (articles, statut, historique) sans quitter le
+ * panneau. Réutilise RESA_CACHE (déjà chargé par loadReservations), aucun
+ * appel réseau supplémentaire.
+ */
+function resaOpenSubDetail(code, kind){
+  var r = RESA_CACHE.find(function(x){ return x.booking.code === code; });
+  if(!r) return;
+  var sym = getCurrSym();
+  var title = 'Détail', html = '';
+
+  if(kind === 'menage'){
+    title = 'Ménage — '+esc(r.booking.personFirstname)+' '+esc(r.booking.personLastname);
+    var tasks = (r.houseTasks||[]).slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+    html = !tasks.length
+      ? '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Aucune tâche de ménage liée à cette réservation.</span></div>'
+      : '<div style="display:flex;flex-direction:column;gap:8px">' + tasks.map(function(t){
+          return '<div style="border:1px solid var(--bdr);border-radius:var(--rs);padding:10px 12px">'
+            + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center">'
+            + '<span style="font-weight:700;font-size:13px">'+esc(fmtDMY(t.date))+' — '+esc(RESA_TASK_TYPE_LABEL[t.type]||t.type)+(t.subtype?' ('+esc(t.subtype)+')':'')+'</span>'
+            + '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;'+(t.status==='done'?'background:rgba(26,107,71,.1);color:#1A6B47':t.status==='cancelled'?'background:rgba(184,48,48,.1);color:#B83030':'background:var(--gol);color:var(--go)')+'">'+esc(RESA_TASK_STATUS_LABEL[t.status]||t.status)+'</span>'
+            + '</div>'
+            + '<div style="font-size:12px;color:var(--mu);margin-top:4px">Chambre '+esc(t.roomCode)+(t.priority==='urgent'?' · <span style="color:#B83030;font-weight:700">Urgent</span>':'')+(t.durationMinutes?' · '+t.durationMinutes+' min':'')+'</div>'
+            + (t.notes ? '<div style="font-size:12px;margin-top:6px">'+esc(t.notes)+'</div>' : '')
+            + '</div>';
+        }).join('') + '</div>';
+  } else if(kind === 'boutique'){
+    title = 'Commandes — '+esc(r.booking.personFirstname)+' '+esc(r.booking.personLastname);
+    var orders = (r.orders||[]).slice().sort(function(a,b){ return (b.createdAt||'').localeCompare(a.createdAt||''); });
+    html = !orders.length
+      ? '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Aucune commande pour cette réservation.</span></div>'
+      : '<div style="display:flex;flex-direction:column;gap:10px">' + orders.map(function(o){
+          var items = Array.isArray(o.items) ? o.items : [];
+          return '<div style="border:1px solid var(--bdr);border-radius:var(--rs);padding:10px 12px">'
+            + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center">'
+            + '<span style="font-weight:700;font-size:13px">'+esc(o.createdAt ? new Date(o.createdAt).toLocaleString('fr-FR') : '')+'</span>'
+            + '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;'+(o.status==='delivered'?'background:rgba(26,107,71,.1);color:#1A6B47':o.status==='cancelled'?'background:rgba(184,48,48,.1);color:#B83030':'background:var(--gol);color:var(--go)')+'">'+esc(RESA_ORDER_STATUS_LABEL[o.status]||o.status)+'</span>'
+            + '</div>'
+            + '<div style="margin-top:6px;font-size:12px">' + items.map(function(it){
+                return '<div style="display:flex;justify-content:space-between;gap:8px;padding:2px 0"><span>'+(it.qty||1)+' × '+esc(it.label||'')+'</span><span style="color:var(--mu)">'+((it.price||0)*(it.qty||1)).toFixed(2)+' '+sym+'</span></div>';
+              }).join('') + '</div>'
+            + (o.note ? '<div style="font-size:12px;color:var(--mu);margin-top:6px">Note : '+esc(o.note)+'</div>' : '')
+            + '<div style="display:flex;justify-content:flex-end;font-weight:700;font-size:13px;margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr)">Total : '+(o.total||0).toFixed(2)+' '+sym+'</div>'
+            + '</div>';
+        }).join('') + '</div>';
+  } else if(kind === 'taxe'){
+    title = 'Taxe de séjour — '+esc(r.booking.personFirstname)+' '+esc(r.booking.personLastname);
+    var t2 = r.taxe;
+    html = !t2
+      ? '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Taxe de séjour non calculée pour cette réservation.</span></div>'
+      : (function(){
+          var rows = [
+            ['Séjour', esc(fmtDMY(t2.checkinDate))+' → '+esc(t2.checkoutDate?fmtDMY(t2.checkoutDate):'—')+' ('+t2.nights+' nuit(s))'],
+            ['Occupants', t2.occupantsTotal+' au total — '+t2.occupantsAdultes+' adulte(s), '+t2.occupantsAdos+' ado(s), '+t2.occupantsEnfants+' enfant(s), '+t2.occupantsBebes+' bébé(s)'],
+            ['Tarif / nuit / personne', t2.tarifPerNightPerPerson.toFixed(2)+' '+t2.devise],
+            ['Montant brut', t2.montantBrut.toFixed(2)+' '+t2.devise],
+            ['Déduction', t2.montantDeduction.toFixed(2)+' '+t2.devise],
+            ['Montant net', '<span style="font-weight:700">'+t2.montantNet.toFixed(2)+' '+t2.devise+'</span>'],
+            ['Statut', t2.paid ? '<span style="color:#1A6B47;font-weight:700"><i class="ti ti-check"></i> Payée'+(t2.paidAt?(' le '+new Date(t2.paidAt).toLocaleDateString('fr-FR')):'')+'</span>' : '<span style="color:var(--go);font-weight:700">Non payée</span>'],
+          ];
+          return '<div style="border:1px solid var(--bdr);border-radius:var(--rs);overflow:hidden">'
+            + rows.map(function(row,i){
+                return '<div style="display:flex;justify-content:space-between;gap:12px;padding:9px 12px;font-size:13px'+(i<rows.length-1?';border-bottom:1px solid var(--bdr)':'')+'">'
+                  + '<span style="color:var(--mu)">'+row[0]+'</span><span style="text-align:right">'+row[1]+'</span></div>';
+              }).join('')
+            + '</div>'
+            + (!t2.paid ? '<button class="btn btn-p" style="margin-top:14px;width:100%" onclick="resaMarkTaxePaid(\''+esc(t2.id)+'\');resaCloseSubDetail()"><i class="ti ti-receipt"></i> Marquer la taxe payée</button>' : '');
+        })();
+  }
+
+  document.getElementById('resa-subdetail-title').textContent = title;
+  document.getElementById('resa-subdetail-body').innerHTML = html;
+  document.getElementById('resaSubDetailModal').style.display = 'flex';
+}
+function resaCloseSubDetail(){
+  document.getElementById('resaSubDetailModal').style.display = 'none';
 }
 
 function resaCloseDetail(){
