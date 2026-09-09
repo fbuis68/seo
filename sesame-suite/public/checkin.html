@@ -864,14 +864,18 @@ input:focus,select:focus{border-color:var(--accent)}
     <div class="slbl" data-i18n="esp_title">Mon espace</div>
 
     <!-- Tabs internes -->
-    <div id="espTabs" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px;scrollbar-width:none">
-      <div class="pill on" data-tab="key"      onclick="espSetTab('key')"><i class="ti ti-key"></i> <span data-i18n="esp_tab_key">Clé digitale</span></div>
-      <div class="pill"    data-tab="loyalty"  onclick="espSetTab('loyalty')"><i class="ti ti-star"></i> <span data-i18n="esp_tab_loyalty">Points</span></div>
-      <div class="pill"    data-tab="menage"   onclick="espSetTab('menage')"><i class="ti ti-vacuum-cleaner"></i> <span data-i18n="esp_tab_menage">Ménage</span></div>
-      <div class="pill"    data-tab="histo"    onclick="espSetTab('histo')"><i class="ti ti-history"></i> <span data-i18n="esp_tab_histo">Historique</span></div>
-      <div class="pill"    data-tab="livret"   onclick="espSetTab('livret')"><i class="ti ti-book"></i> <span data-i18n="esp_tab_livret">Livret</span></div>
-      <div class="pill"    data-tab="boutique" onclick="espSetTab('boutique')"><i class="ti ti-shopping-bag"></i> <span data-i18n="esp_tab_boutique">Boutique</span></div>
-      <div class="pill"    data-tab="rs"       onclick="espSetTab('rs')"><i class="ti ti-bell"></i> <span data-i18n="esp_tab_rs">Room Service</span></div>
+    <div class="cat-tabs-wrap" style="margin-bottom:14px">
+      <div id="espTabs" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;scrollbar-width:none" onscroll="updateCatTabsArrows('espTabs')">
+        <div class="pill on" data-tab="key"      onclick="espSetTab('key')"><i class="ti ti-key"></i> <span data-i18n="esp_tab_key">Clé digitale</span></div>
+        <div class="pill"    data-tab="loyalty"  onclick="espSetTab('loyalty')"><i class="ti ti-star"></i> <span data-i18n="esp_tab_loyalty">Points</span></div>
+        <div class="pill"    data-tab="menage"   onclick="espSetTab('menage')"><i class="ti ti-vacuum-cleaner"></i> <span data-i18n="esp_tab_menage">Ménage</span></div>
+        <div class="pill"    data-tab="histo"    onclick="espSetTab('histo')"><i class="ti ti-history"></i> <span data-i18n="esp_tab_histo">Historique</span></div>
+        <div class="pill"    data-tab="livret"   onclick="espSetTab('livret')"><i class="ti ti-book"></i> <span data-i18n="esp_tab_livret">Livret</span></div>
+        <div class="pill"    data-tab="boutique" onclick="espSetTab('boutique')"><i class="ti ti-shopping-bag"></i> <span data-i18n="esp_tab_boutique">Boutique</span></div>
+        <div class="pill"    data-tab="rs"       onclick="espSetTab('rs')"><i class="ti ti-bell"></i> <span data-i18n="esp_tab_rs">Room Service</span></div>
+      </div>
+      <button type="button" class="cat-tabs-arrow cat-tabs-arrow-l" id="espTabsArrowL" onclick="scrollCatTabs('espTabs',-1)"><i class="ti ti-chevron-left"></i></button>
+      <button type="button" class="cat-tabs-arrow cat-tabs-arrow-r" id="espTabsArrowR" onclick="scrollCatTabs('espTabs',1)"><i class="ti ti-chevron-right"></i></button>
     </div>
 
     <!-- ═══ TAB: CLÉ DIGITALE ═══ -->
@@ -3121,6 +3125,7 @@ function renderEspace(){
   }
 
   espSetTab(ESP_ACTIVE_TAB);
+  updateCatTabsArrows('espTabs');
 }
 
 function espSetTab(tab){
