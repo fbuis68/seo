@@ -27,6 +27,8 @@ export const ONBOARDING_MODULES = [
   { k: "payment", ico: "ti-credit-card", label: "Paiement en ligne", desc: "Carte bancaire, fractionnement", required: false, price: 15 },
   { k: "roomservice", ico: "ti-bell", label: "Room Service", desc: "Commande de produits depuis la chambre", required: false, price: 12 },
   { k: "crm", ico: "ti-address-book", label: "CRM & Marketing", desc: "Base clients, campagnes Email/SMS/WhatsApp", required: false, price: 25 },
+  { k: "wallet", ico: "ti-wallet", label: "Wallet", desc: "Pass Apple Wallet / Google Wallet pour chaque réservation (EldoWallet)", required: false, price: 15 },
+  { k: "sms", ico: "ti-message", label: "SMS & WhatsApp", desc: "Envoi de SMS et de messages WhatsApp aux clients (Twilio, Infobip, SMSPartner…)", required: false, price: 12 },
 ] as const;
 
 const MODULE_KEYS = new Set(ONBOARDING_MODULES.map((m) => m.k));
