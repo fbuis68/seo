@@ -75,6 +75,8 @@ function shapeProspect(p: {
   moduleOneway: boolean;
   nbAcces: number;
   pms: string | null;
+  logo1: string | null;
+  logo2: string | null;
   priorite: number;
   appel: string | null;
   referent: string | null;
@@ -154,6 +156,12 @@ function shapeProspect(p: {
     moduleOneway: p.moduleOneway,
     nbAcces: p.nbAcces,
     pms: p.pms || "",
+    logo1: p.logo1 || "",
+    logo2: p.logo2 || "",
+    // Calculé à l'affichage (mois courant, horloge serveur — usage interne
+    // Sesame, pas besoin du fuseau de l'établissement) plutôt que stocké :
+    // jamais de tâche planifiée nécessaire pour "faire le changement".
+    activeLogoSlot: new Date().getMonth() < 6 ? 1 : 2,
     priorite: p.priorite,
     appel: p.appel || "",
     referent: p.referent || "",
@@ -238,6 +246,8 @@ interface ProspectBody {
   moduleOneway?: boolean;
   nbAcces?: number;
   pms?: string;
+  logo1?: string;
+  logo2?: string;
   priorite?: number;
   appel?: string;
   referent?: string;
@@ -312,6 +322,8 @@ crmProspectRouter.post(
         moduleOneway: !!b.moduleOneway,
         nbAcces: b.nbAcces ?? 0,
         pms: b.pms,
+        logo1: b.logo1,
+        logo2: b.logo2,
         priorite: b.priorite ?? 0,
         appel: b.appel,
         referent: b.referent,
@@ -469,6 +481,8 @@ crmProspectRouter.post(
         moduleOneway: b.moduleOneway,
         nbAcces: b.nbAcces,
         pms: b.pms,
+        logo1: b.logo1,
+        logo2: b.logo2,
         priorite: b.priorite,
         appel: b.appel,
         referent: b.referent,

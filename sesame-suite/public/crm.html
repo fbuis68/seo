@@ -2020,6 +2020,19 @@ function renderFiche(c){
       <div class="field"><div class="fl"><span class="fl-ico">€</span> MRR</div><div class="fv">${c.mrr?fmtEUR(c.mrr)+'/mois':'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">P</span> PMS intégré</div><div class="fv">${c.pms?pmsBadge(c.pms):'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">✉</span> Messagerie</div><div class="fv">${c.messagerie==='Client'?'<span class="tag t-green" style="font-size:11px">Client</span>':'<span class="tag t-gray" style="font-size:11px">Noreply</span>'}</div></div>
+      <div class="field" style="grid-column:1/-1">
+        <div class="fl"><span class="fl-ico">◫</span> Logos (rotation semestrielle, usage interne)</div>
+        <div class="fv" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">
+          <div style="text-align:center">
+            ${c.logo1?`<img src="${c.logo1}" style="max-height:36px;max-width:120px;object-fit:contain;display:block;margin:0 auto 4px">`:'<div style="font-size:11px;color:var(--mu,#888);margin-bottom:4px">Non défini</div>'}
+            <div style="font-size:10px;color:var(--mu,#888)">Logo 1 (janv.–juin)${c.activeLogoSlot===1?' <span class="tag t-green" style="font-size:9px;padding:0 6px">Actif</span>':''}</div>
+          </div>
+          <div style="text-align:center">
+            ${c.logo2?`<img src="${c.logo2}" style="max-height:36px;max-width:120px;object-fit:contain;display:block;margin:0 auto 4px">`:'<div style="font-size:11px;color:var(--mu,#888);margin-bottom:4px">Non défini</div>'}
+            <div style="font-size:10px;color:var(--mu,#888)">Logo 2 (juil.–déc.)${c.activeLogoSlot===2?' <span class="tag t-green" style="font-size:9px;padding:0 6px">Actif</span>':''}</div>
+          </div>
+        </div>
+      </div>
     </div>
     <hr class="divl">
     <div class="alert-row">
@@ -2979,7 +2992,35 @@ function addAffiliationOption(){
   input.value='';
 }
 
+// Logos 1/2 du formulaire d'édition — un input file ne peut pas être
+// pré-rempli avec une image déjà enregistrée (contrairement aux autres
+// champs), donc gardés à part ici (pas d'id de champ à relire dans
+// saveModal) plutôt que dans un attribut value. Réinitialisés à chaque
+// ouverture de la modale (cf. renderModal), lus par saveModal.
+var M_LOGO1 = null, M_LOGO2 = null;
+function crmModalUploadLogo(inp, slot){
+  var f=inp.files[0]; if(!f) return;
+  var r=new FileReader();
+  r.onload=function(e){
+    if(slot===1) M_LOGO1=e.target.result; else M_LOGO2=e.target.result;
+    var prev=document.getElementById('m-logo'+slot+'-preview');
+    if(prev) prev.innerHTML='<img src="'+e.target.result+'" style="max-height:44px;max-width:160px;object-fit:contain">';
+    var rm=document.getElementById('m-logo'+slot+'-remove');
+    if(rm) rm.style.display='inline';
+  };
+  r.readAsDataURL(f);
+}
+function crmModalRemoveLogo(slot){
+  if(slot===1) M_LOGO1=null; else M_LOGO2=null;
+  var prev=document.getElementById('m-logo'+slot+'-preview');
+  if(prev) prev.innerHTML='<span style="font-size:12px;color:var(--mu,#888)">Cliquer pour choisir une image</span>';
+  var rm=document.getElementById('m-logo'+slot+'-remove');
+  if(rm) rm.style.display='none';
+}
+
 function renderModal(mc){
+  M_LOGO1 = mc.logo1 || null;
+  M_LOGO2 = mc.logo2 || null;
   const sectAll=[...new Set([...SECTEURS,...clients.map(c=>c.secteur)].filter(Boolean))].sort();
   const origAll=[...new Set([...ORIGINES,...clients.map(c=>c.origine)].filter(Boolean))].sort();
   const affAll=[...new Set([...AFFILIATIONS_KNOWN,...clients.flatMap(c=>c.affiliations||[])])].sort();
@@ -3083,6 +3124,26 @@ function renderModal(mc){
         <div class="ff"><label>Commercial</label><select id="m-commercial"><option value="">—</option>${COMMERCIALS.map(c=>`<option value="${c.id}" ${mc.commercialId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
       </div>
 
+      <div class="modal-section">Logos (rotation semestrielle — usage interne, sans effet côté client)</div>
+      <div class="form-grid">
+        <div class="ff">
+          <label>Logo 1 (actif janv.–juin)</label>
+          <div style="border:1px dashed var(--bdr,#e2dfd9);border-radius:8px;padding:10px;text-align:center;cursor:pointer" onclick="document.getElementById('m-logo1-file').click()">
+            <input type="file" id="m-logo1-file" accept="image/*" style="display:none" onchange="crmModalUploadLogo(this,1)">
+            <div id="m-logo1-preview">${mc.logo1?`<img src="${mc.logo1}" style="max-height:44px;max-width:160px;object-fit:contain">`:'<span style="font-size:12px;color:var(--mu,#888)">Cliquer pour choisir une image</span>'}</div>
+          </div>
+          <a href="#" id="m-logo1-remove" onclick="event.preventDefault();crmModalRemoveLogo(1)" style="font-size:11px;color:#a32d2d;display:${mc.logo1?'inline':'none'}">Supprimer</a>
+        </div>
+        <div class="ff">
+          <label>Logo 2 (actif juil.–déc.)</label>
+          <div style="border:1px dashed var(--bdr,#e2dfd9);border-radius:8px;padding:10px;text-align:center;cursor:pointer" onclick="document.getElementById('m-logo2-file').click()">
+            <input type="file" id="m-logo2-file" accept="image/*" style="display:none" onchange="crmModalUploadLogo(this,2)">
+            <div id="m-logo2-preview">${mc.logo2?`<img src="${mc.logo2}" style="max-height:44px;max-width:160px;object-fit:contain">`:'<span style="font-size:12px;color:var(--mu,#888)">Cliquer pour choisir une image</span>'}</div>
+          </div>
+          <a href="#" id="m-logo2-remove" onclick="event.preventDefault();crmModalRemoveLogo(2)" style="font-size:11px;color:#a32d2d;display:${mc.logo2?'inline':'none'}">Supprimer</a>
+        </div>
+      </div>
+
       <div class="modal-section">Taux d'usage (%) — les 4 se totalisent à 100%</div>
       <div class="form-grid">
         <div class="ff"><label>NFC %</label><input type="number" id="m-nfc" value="${mc.nfc||0}" min="0" max="100"></div>
@@ -3146,6 +3207,7 @@ async function saveModal(id,isNew){
     etoiles:g('m-etoiles').value,referent:g('m-referent').value,
     email:g('m-email').value,tel:g('m-tel').value,site:g('m-site').value,
     pms:(g('m-pms').value==='__other__'?g('m-pms-other').value.trim():g('m-pms').value),messagerie:g('m-msg').value,danger:g('m-danger').value,commercialId:g('m-commercial').value||null,
+    logo1:M_LOGO1,logo2:M_LOGO2,
     potentiel:+g('m-pot').value,modules:+g('m-mod').value,moduleSesame:['sesame','mix'].includes(g('m-mod-type').value),moduleTtlock:['ttlock','mix'].includes(g('m-mod-type').value),moduleOneway:g('m-mod-type').value==='oneway',nbAcces:+g('m-nbacces').value,mrr:g('m-mrr').value.trim()?+g('m-mrr').value:null,contrat:g('m-contrat').value,
     priorite:+g('m-prio').value,appel:g('m-appel').value,
     nfc:+g('m-nfc').value,qr:+g('m-qr').value,mobile:+g('m-mob').value,code:+g('m-code').value,

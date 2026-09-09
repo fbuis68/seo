@@ -1494,6 +1494,15 @@ model CrmProspect {
   moduleOneway        Boolean @default(false) // 3e type d'accès trouvé dans l'audit, absent du modèle jusqu'ici
   nbAcces             Int     @default(0) // nombre de points d'accès (portes/serrures) installés chez le client
   pms                 String?
+  // Deux logos alternés automatiquement tous les 6 mois sur la fiche CRM —
+  // usage interne Sesame uniquement (aucun effet côté client de
+  // l'établissement, cf. EntityModuleConfig.logoMain/logoIcon pour ça).
+  // Actif = logo1 sur janvier-juin, logo2 sur juillet-décembre, calculé à
+  // l'affichage (mois courant) plutôt que stocké — jamais besoin de tâche
+  // planifiée pour "faire le changement". Data URI base64, même convention
+  // que EntityModuleConfig.logoMain.
+  logo1               String?
+  logo2               String?
   priorite            Int     @default(0) // 0-3
   appel               String? // date libre ("16/10/25") ou "Ne pas appeler"
   referent            String?
