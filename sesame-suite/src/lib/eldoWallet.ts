@@ -53,27 +53,34 @@ async function eldoWalletRequest(
   if (!config.hotelId) throw new WalletError("Identifiant hôtel EldoWallet non configuré");
   const base = config.apiBase || ELDOWALLET_API_BASE_DEFAULT;
   const url = `${base}${path}`;
+  const requestHeaders = {
+    Authorization: `Bearer ${config.apiToken}`,
+    // EldoWallet exige aussi ce second en-tête, distinct du Bearer
+    // standard (confirmé le 07/09/2026 via leur documentation Swagger,
+    // dont l'exemple "Try it out" envoie systématiquement les deux avec
+    // la même valeur de token).
+    "x-access-token": config.apiToken,
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    ...(config.lang ? { "x-lang": config.lang } : {}),
+  };
+  // Log de diagnostic temporaire (09/09/2026) — demandé par le support
+  // EldoWallet (capture Postman entête + corps) : reproduit ici la requête
+  // RÉELLEMENT envoyée par l'app, à copier telle quelle plutôt que de la
+  // reconstituer à la main.
+  console.log("[diag eldoWallet] %s %s\nheaders=%s\nbody=%s", method, url, JSON.stringify(requestHeaders), body ? JSON.stringify(body) : "(aucun)");
   let res: Response;
   try {
     res = await fetchWithTimeout(url, {
       method,
-      headers: {
-        Authorization: `Bearer ${config.apiToken}`,
-        // EldoWallet exige aussi ce second en-tête, distinct du Bearer
-        // standard (confirmé le 07/09/2026 via leur documentation Swagger,
-        // dont l'exemple "Try it out" envoie systématiquement les deux avec
-        // la même valeur de token).
-        "x-access-token": config.apiToken,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        ...(config.lang ? { "x-lang": config.lang } : {}),
-      },
+      headers: requestHeaders,
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
   } catch (e) {
     throw new WalletError(`Appel à EldoWallet impossible : ${describeFetchError(e)}`);
   }
   const json = await parseJsonResponse(res, "La réponse d'EldoWallet");
+  console.log("[diag eldoWallet] status=%d response=%s", res.status, JSON.stringify(json).slice(0, 800));
   if (!res.ok) {
     // Format d'erreur EldoWallet observé : { message, errorCode, path, date }.
     // errorCode ajouté au message affiché (04/09/2026) : un "Non autorisé !"
