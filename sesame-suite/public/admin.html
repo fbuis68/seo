@@ -6382,15 +6382,15 @@ var BS_FACILITY_MAPPING_FIELDS = [
 // par personne invitée, chacun avec son propre identifiant (distinct de
 // l'identifiant externe de la réservation ET du personId) — cf. modèle Pass.
 var BS_PASS_MAPPING_FIELDS = [
-  {k:'externalId', label:'Identifiant du Pass', required:true},
-  {k:'personFirstname', label:'Prénom de l\'invité', required:false},
-  {k:'personLastname', label:'Nom de l\'invité', required:false},
-  {k:'personEmail', label:'Email de l\'invité', required:false},
-  {k:'master', label:'Invité principal (booléen)', required:false},
-  {k:'facilityCode', label:'Code(s) d\'accès de ce Pass', required:false},
-  {k:'facilityName', label:'Nom(s) d\'accès de ce Pass', required:false},
-  {k:'status', label:'Statut', required:false},
-  {k:'activated', label:'Actif (booléen)', required:false},
+  {k:'externalId', label:'Identifiant du Pass', required:true, ex:'id'},
+  {k:'personFirstname', label:'Prénom de l\'invité', required:false, ex:'personFirstname'},
+  {k:'personLastname', label:'Nom de l\'invité', required:false, ex:'personLastname'},
+  {k:'personEmail', label:'Email de l\'invité', required:false, ex:'personEmail'},
+  {k:'master', label:'Invité principal (booléen)', required:false, ex:'master'},
+  {k:'facilityCode', label:'Code(s) d\'accès de ce Pass', required:false, ex:'facilityCode'},
+  {k:'facilityName', label:'Nom(s) d\'accès de ce Pass', required:false, ex:'facilityName'},
+  {k:'status', label:'Statut', required:false, ex:'status'},
+  {k:'activated', label:'Actif (booléen)', required:false, ex:'activated'},
 ];
 
 var BS_CONFIG = null;
@@ -7123,7 +7123,7 @@ function bsRenderPassMappingFields(mapping){
   document.getElementById('bs-pass-mapping-fields').innerHTML = BS_PASS_MAPPING_FIELDS.map(function(f){
     return '<div class="fi" style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
       + '<label class="lb" style="flex:0 0 200px;margin-bottom:0;text-transform:none;font-size:13px;font-weight:500;color:var(--tx)">'+f.label+(f.required?' <span style="color:var(--re)">*</span>':'')+'</label>'
-      + '<input type="text" id="bs-pmap-'+f.k+'" value="'+esc(mapping[f.k]||'')+'" placeholder="Ex : id" style="flex:1">'
+      + '<input type="text" id="bs-pmap-'+f.k+'" value="'+esc(mapping[f.k]||'')+'" placeholder="Ex : '+f.ex+'" style="flex:1">'
       + '</div>';
   }).join('');
 }
