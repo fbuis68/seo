@@ -3195,6 +3195,14 @@ const DEAL_STAGES = ['Nouveau','Qualification','Devis envoyé','Négociation','G
 const STAGE_TAG = {Nouveau:'t-gray',Qualification:'t-blue','Devis envoyé':'t-purple',Négociation:'t-amber',Gagné:'t-green',Perdu:'t-red'};
 let dealFilterCommercial = '';
 let DEAL_DRAFT = null;
+// Création rapide d'un client/prospect directement depuis le modal
+// "Affaire" (18/08/2026 → ajouté le 09/09/2026) — évite d'aller créer la
+// fiche à part avant de pouvoir saisir l'affaire. Crée toujours en
+// type="Suspect" (adresse/ville non exigées côté crmProspect/create, cf.
+// routes/crmProspect.ts) : à ce stade on ne connaît souvent que le nom du
+// client, la fiche pourra être complétée ensuite depuis le CRM.
+let DEAL_NEW_PROSPECT_MODE = false;
+let DEAL_NEW_PROSPECT_DRAFT = {nom:'', email:'', tel:''};
 
 function fmtEUR(n){ return (n||0).toLocaleString('fr-FR',{maximumFractionDigits:0})+' €'; }
 var LANG_LABELS = {fr:'🇫🇷 Français',en:'🇬🇧 English',es:'🇪🇸 Español',de:'🇩🇪 Deutsch',it:'🇮🇹 Italiano',nl:'🇳🇱 Nederlands',pt:'🇵🇹 Português',ar:'🇲🇦 العربية',zh:'🇨🇳 中文',ja:'🇯🇵 日本語'};
@@ -4285,11 +4293,15 @@ function renderDealFunnel(filtered){
 
 function openNewDealModal(prospectId){
   DEAL_DRAFT = {id:null, prospectId: prospectId||'', commercialId:'', title:'', stage:'Nouveau', amount:0, probability:20, closeDate:'', lostReason:'', montantPonctuel:null, moisEncaissement:null, anneeEncaissement:new Date().getFullYear(), quotes:[], _new:true};
+  DEAL_NEW_PROSPECT_MODE = false;
+  DEAL_NEW_PROSPECT_DRAFT = {nom:'', email:'', tel:''};
   renderDealModal();
 }
 function openDealModal(id){
   const d = deals.find(x=>x.id===id); if(!d) return;
   DEAL_DRAFT = {...d};
+  DEAL_NEW_PROSPECT_MODE = false;
+  DEAL_NEW_PROSPECT_DRAFT = {nom:'', email:'', tel:''};
   renderDealModal();
 }
 function captureDealDraft(){
@@ -4302,8 +4314,22 @@ function captureDealDraft(){
     anneeEncaissement: g('d-annee-encaissement').trim()===''?null:+g('d-annee-encaissement'),
     lostReason: document.getElementById('d-lost') ? g('d-lost') : DEAL_DRAFT.lostReason
   });
+  if(DEAL_NEW_PROSPECT_MODE){
+    DEAL_NEW_PROSPECT_DRAFT = {nom:g('d-new-prospect-nom'), email:g('d-new-prospect-email'), tel:g('d-new-prospect-tel')};
+  } else if(document.getElementById('d-prospect')){
+    DEAL_DRAFT.prospectId = g('d-prospect');
+  }
 }
 function dealStageChanged(v){ captureDealDraft(); DEAL_DRAFT.stage=v; renderDealModal(); }
+/** Bascule le champ "Client" du modal Affaire entre sélection d'une fiche
+ * existante et création rapide d'une nouvelle fiche (Nom + coordonnées) —
+ * cf. saveDeal(), qui crée la fiche via crmProspect/create avant l'affaire
+ * elle-même si ce mode est actif. */
+function dealToggleNewProspect(show){
+  captureDealDraft();
+  DEAL_NEW_PROSPECT_MODE = show;
+  renderDealModal();
+}
 /** Rafraîchit le smiley de probabilité pendant la saisie, sans re-rendre
  * tout le modal (qui ferait perdre le focus du champ en cours d'édition —
  * même logique que trEditLocal pour la Trésorerie). */
@@ -4322,7 +4348,17 @@ function renderDealModal(){
       <div class="form-grid">
         <div class="ff"><label>Titre</label><input id="d-title" value="${esc(md.title)}" placeholder="Ex : Upsell module CRM"></div>
         <div class="ff"><label>Client</label>
+          ${DEAL_NEW_PROSPECT_MODE?`
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <input id="d-new-prospect-nom" value="${esc(DEAL_NEW_PROSPECT_DRAFT.nom)}" placeholder="Nom du client *">
+            <input id="d-new-prospect-email" type="email" value="${esc(DEAL_NEW_PROSPECT_DRAFT.email)}" placeholder="Email (optionnel)">
+            <input id="d-new-prospect-tel" value="${esc(DEAL_NEW_PROSPECT_DRAFT.tel)}" placeholder="Téléphone (optionnel)">
+            <a href="#" onclick="event.preventDefault();dealToggleNewProspect(false)" style="font-size:12px">← Sélectionner un client existant</a>
+          </div>
+          `:`
           <select id="d-prospect">${md._new?`<option value="" ${md.prospectId?'':'selected'}>— Sélectionner un client —</option>`:''}${prospectOptions.map(c=>`<option value="${c.id}" ${md.prospectId===c.id?'selected':''}>${esc(c.nom)}</option>`).join('')}</select>
+          <a href="#" onclick="event.preventDefault();dealToggleNewProspect(true)" style="font-size:12px;display:inline-block;margin-top:4px">+ Nouveau client</a>
+          `}
         </div>
         <div class="ff"><label>Commercial</label>
           <select id="d-commercial"><option value="">—</option>${COMMERCIALS.map(c=>`<option value="${c.id}" ${md.commercialId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select>
@@ -4373,8 +4409,26 @@ function renderDealModal(){
 async function saveDeal(id,isNew){
   captureDealDraft();
   const md = DEAL_DRAFT;
-  const prospectId = (document.getElementById('d-prospect')||{value:md.prospectId}).value;
+  let prospectId = (document.getElementById('d-prospect')||{value:md.prospectId}).value;
   if(!md.title || !md.title.trim()){ flash('Le titre est obligatoire'); return; }
+
+  if(DEAL_NEW_PROSPECT_MODE){
+    const nom = (DEAL_NEW_PROSPECT_DRAFT.nom||'').trim();
+    if(!nom){ flash('Le nom du nouveau client est obligatoire'); return; }
+    try{
+      var pr = await apiFetch('/wa/crmProspect/create', {method:'POST', body:JSON.stringify({
+        nom, email:(DEAL_NEW_PROSPECT_DRAFT.email||'').trim()||undefined, tel:(DEAL_NEW_PROSPECT_DRAFT.tel||'').trim()||undefined, type:'Suspect'
+      })});
+      if(!pr.ok) throw new Error('http '+pr.status);
+      var newProspect = await pr.json();
+    }catch(e){ flash('Erreur lors de la création du client'); return; }
+    clients.push(newProspect);
+    prospectId = newProspect.id;
+    md.prospectId = newProspect.id;
+    DEAL_NEW_PROSPECT_MODE = false;
+    flash('Client "'+newProspect.nom+'" créé ✓');
+  }
+
   if(!prospectId){ flash('Sélectionnez un client'); return; }
   const body = {
     prospectId, commercialId: md.commercialId||null, title: md.title.trim(), stage: md.stage,
