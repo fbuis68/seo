@@ -3062,6 +3062,15 @@ async function espDoLogin(){
       ENTITY_CODE = data.entityCode;
       await loadCfg();
       applyBrand();
+      // S.posList/selectedPosId et S.paymentEnabled ont été chargés au
+      // démarrage de la page pour l'établissement par défaut (avant toute
+      // connexion, cf. DOMContentLoaded) — sans ce rafraîchissement, le
+      // point de vente sélectionné restait celui de l'AUTRE établissement,
+      // et bqGetCatalog()/posMatchesSelection() filtraient alors le vrai
+      // catalogue du client contre un ID de point de vente qui ne lui
+      // correspondait pas (boutique vide ou incohérente après connexion).
+      S.selectedPosId = undefined;
+      await Promise.all([fetchPosList(), fetchPaymentStatus()]);
     }
 
     // Injecter dans l'état S comme si le check-in était fait
