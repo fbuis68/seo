@@ -486,17 +486,26 @@ export async function fetchExternalPasses(config: BookingSourceConfig, bookingEx
   const bookingIdParam = config.passListBookingIdParam || "bookingId";
   const commonHeaders = { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...authHeaders };
 
+  // Pagination systématique (start/limit) — confirmée le 09/09/2026 par
+  // capture réseau du back-office Sesame lui-même sur /ws/pass/list, qui
+  // l'envoie toujours (start=0&limit=50). Sans elle, une source qui pagine
+  // par défaut sur une petite taille de page tronquerait silencieusement la
+  // liste des invités d'une réservation de groupe nombreuse — 200 laisse
+  // une marge large au-delà des 50 observés, sans risque connu pour une
+  // source qui l'ignorerait simplement (paramètre superflu, pas d'erreur).
   let res: Response;
   try {
     if (method === "POST" && bodyFormat === "json") {
       res = await fetchWithTimeout(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...commonHeaders },
-        body: JSON.stringify({ [bookingIdParam]: bookingExternalId }),
+        body: JSON.stringify({ [bookingIdParam]: bookingExternalId, start: 0, limit: 200 }),
       });
     } else if (method === "POST") {
       const form = new URLSearchParams();
       form.set(bookingIdParam, bookingExternalId);
+      form.set("start", "0");
+      form.set("limit", "200");
       res = await fetchWithTimeout(url, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded", ...commonHeaders },
@@ -505,6 +514,8 @@ export async function fetchExternalPasses(config: BookingSourceConfig, bookingEx
     } else {
       const qs = new URLSearchParams();
       qs.set(bookingIdParam, bookingExternalId);
+      qs.set("start", "0");
+      qs.set("limit", "200");
       const getUrl = `${url}${url.includes("?") ? "&" : "?"}${qs.toString()}`;
       res = await fetchWithTimeout(getUrl, { headers: commonHeaders });
     }

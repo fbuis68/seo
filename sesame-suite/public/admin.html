@@ -6655,15 +6655,15 @@ var PMS_PRESETS = {
       // GET /wa/pass/itemById?id=<passId> renvoie un Pass, avec son propre
       // "id" — ex "P01023645" — distinct du personId ET de l'id du booking ;
       // /wa/booking/list ne renseigne jamais cet id de Pass, seulement
-      // personId). La FORME de la réponse liste (racine "root", champs
+      // personId). URL de l'endpoint liste (par réservation) confirmée le
+      // 09/09/2026 via capture réseau du back-office Sesame lui-même :
+      // GET /ws/pass/list?bookingId=<bookingExternalId>&sort=created&dir=ASC
+      // &start=0&limit=50 (les paramètres de tri/pagination sont ajoutés
+      // automatiquement par fetchExternalPasses, pas besoin de les
+      // configurer ici). Forme de la réponse liste (racine "root", champs
       // id/personFirstname/personLastname/personEmail/master/facilityCode/
-      // facilityName/status/activated) est confirmée par la même capture,
-      // MAIS l'URL exacte de l'endpoint liste (par réservation) n'a, elle,
-      // pas été confirmée avec certitude — laissée VIDE volontairement
-      // plutôt que de deviner (l'app affiche alors juste 0 invité, sans
-      // rien casser) : à renseigner une fois confirmée (probablement
-      // "/ws/pass/list", même préfixe deviceAdmin que l'encodage NFC).
-      document.getElementById('bs-passListEndpointPath').value = '';
+      // facilityName/status/activated) déjà confirmée précédemment.
+      document.getElementById('bs-passListEndpointPath').value = '/ws/pass/list';
       document.getElementById('bs-passListEndpointMethod').value = 'GET';
       document.getElementById('bs-passListBookingIdParam').value = 'bookingId';
       document.getElementById('bs-passListResponseListPath').value = 'root';
