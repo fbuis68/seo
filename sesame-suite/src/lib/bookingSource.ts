@@ -1028,6 +1028,13 @@ export async function encodeNfc(config: BookingSourceConfig, passId: string, dev
     }
     if (!startRes.ok) throw new BookingSourceError(`L'encodeur NFC a répondu ${startRes.status} ${startRes.statusText} au démarrage`);
     const startBody = await parseJsonResponse(startRes, "La réponse de démarrage de l'encodeur NFC");
+    // Log de diagnostic temporaire (09/09/2026) — signalé : timeout "aucune
+    // carte approchée" même carte réellement présentée au lecteur après le
+    // fix du 08/09 (préfixe /ws/ + appel d'arrêt manquant, cf. 9e59696).
+    // Objectif : voir la réponse brute de chaque appel de vérification pour
+    // savoir si le lecteur détecte bien la carte (et sous quel champ) ou si
+    // le problème est en amont (matériel, deviceId, démarrage).
+    console.log("[diag encodeNfc-start] status=%d deviceId=%s body=%s", startRes.status, deviceId, JSON.stringify(startBody).slice(0, 800));
     if (startBody && (startBody as { success?: unknown }).success === false) {
       throw new BookingSourceError(String((startBody as { message?: unknown }).message || "Démarrage de l'association refusé par l'encodeur NFC"));
     }
@@ -1058,6 +1065,9 @@ export async function encodeNfc(config: BookingSourceConfig, passId: string, dev
       }
       if (!checkRes.ok) throw new BookingSourceError(`L'encodeur NFC a répondu ${checkRes.status} ${checkRes.statusText} (vérification)`);
       const checkBody = await parseJsonResponse(checkRes, "La réponse de vérification de l'encodeur NFC");
+      // Log de diagnostic temporaire (09/09/2026) — cf. commentaire au-dessus
+      // de l'appel de démarrage.
+      console.log("[diag encodeNfc-check] status=%d deviceId=%s body=%s", checkRes.status, deviceId, JSON.stringify(checkBody).slice(0, 800));
       lastMessage = String(getPath(checkBody, messagePath) ?? "");
       if (getPath(checkBody, stopPath) === true) {
         return { success: getPath(checkBody, successPath) === true, message: lastMessage };
