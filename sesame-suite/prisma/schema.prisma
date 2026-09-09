@@ -52,6 +52,7 @@ model Entity {
   vendorCommissions VendorCommission[]
   walletConfig      WalletConfig?
   questionnaires    Questionnaire[]
+  passes            Pass[]
 }
 
 // Groupe d'établissements (ex : chaîne hôtelière) — gestion réservée aux
@@ -305,7 +306,23 @@ model Booking {
   // code de réservation, associé à la PERSONNE titulaire de la
   // carte/badge. Requis pour l'encodage NFC (cf. nfcStartPassParam
   // ci-dessous) — importé via fieldMapping.passId, jamais saisi à la main.
+  // CONSERVÉ pour compatibilité (réservations importées avant l'ajout du
+  // modèle Pass ci-dessous, ou connecteur non configuré pour l'import des
+  // Pass) — sert de repli quand `passes` est vide. Nouvelles réservations :
+  // préférer le Pass marqué `master` dans `passes`.
   passId String?
+
+  // Identifiant de la réservation côté source EXTERNE (ex : "id" de l'API
+  // Sesame Technology, "B01024128" — distinct de `code`, le code de
+  // réservation lisible "STB01024128") — confirmé le 09/09/2026 via capture
+  // réseau. Nécessaire pour interroger séparément la liste des Pass de
+  // cette réservation (cf. BookingSourceConfig.passListEndpointPath) :
+  // certaines sources (Sesame Technology) associent PLUSIEURS Pass à une
+  // même réservation, un par personne invitée ("invitations"), chacun avec
+  // son propre identifiant et ses propres accès — un simple `passId` unique
+  // ne peut en représenter qu'un seul. Importé via fieldMapping.externalId,
+  // jamais saisi à la main.
+  externalId String?
 
   // Encodage de cartes/badges NFC pour cette réservation (panneau
   // "Réservations", écran de détail — cf. BookingSourceConfig.nfcStartEndpointPath).
@@ -340,9 +357,59 @@ model Booking {
   taxeRecords TaxeSejourRecord[]
   kycRecords  KycRecord[]
   orders      Order[]
+  passes      Pass[]
 
   @@unique([entityId, code])
   @@index([personEmail])
+}
+
+// Invité(e) d'une réservation, avec son propre badge/carte d'accès — un
+// Booking Sesame peut associer PLUSIEURS Pass, un par personne invitée
+// (concept "invitation" côté Sesame, confirmé le 09/09/2026 via capture
+// réseau sur un client réel) : chaque Pass porte un identifiant DISTINCT à
+// la fois du booking et de la personne (Booking.externalId / personId), et
+// ses propres accès (facilityCode) — généralement les mêmes que les autres
+// Pass du même booking, mais représentés séparément côté source. Nécessaire
+// pour encoder une carte NFC PAR PERSONNE : Booking.passId (un seul champ)
+// ne pouvait représenter qu'un seul invité, laissant les réservations à
+// plusieurs personnes inutilisables pour l'encodage des autres invités.
+model Pass {
+  id       String @id @default(cuid())
+  entityId String
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  // Identifiant du Pass côté source externe (ex : "id" de l'API Sesame
+  // Technology, "P01023645") — c'est CETTE valeur qui doit être envoyée à
+  // l'encodeur NFC (nfcStartPassParam), pas Booking.externalId ni personId.
+  externalId      String
+  personFirstname String
+  personLastname  String
+  personEmail     String?
+  // Invité "principal" de la réservation (généralement celui qui a réservé)
+  // — cf. champ "master" côté source externe. Une réservation peut avoir
+  // plusieurs Pass "master" en pratique (ex : un invité rattaché à sa propre
+  // réservation d'origine avant d'être associé à un groupe) — champ purement
+  // indicatif, jamais utilisé comme identifiant unique.
+  master          Boolean @default(false)
+  // Accès de CE pass, séparés par virgules (ex : "SSO,PR,ENT2") — même
+  // convention que Booking.facilityCode.
+  facilityCode    String?
+  facilityName    String?
+  status          String?
+  activated       Boolean @default(true)
+
+  // Encodage NFC pour CE pass précis (une carte par personne) — même
+  // principe que Booking.nfcCount/nfcEncodedAt, mais par invité.
+  nfcCount     Int       @default(0)
+  nfcEncodedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([bookingId, externalId])
 }
 
 // Connecteur générique de réservations externes — permet de récupérer les
@@ -665,6 +732,28 @@ model BookingSourceConfig {
   // être notifiée des changements de dates.
   updateStartDateParam     String?
   updateEndDateParam       String?
+
+  // Liste des Pass (invitations) d'une réservation — endpoint séparé pris
+  // PAR RÉSERVATION (contrairement aux endpoints ci-dessus, un appel par
+  // Booking.externalId plutôt qu'un fetch global) — cf. Booking.externalId
+  // et le modèle Pass. Confirmé le 09/09/2026 via capture réseau (ex :
+  // "/ws/pass/list", absent de la documentation officielle). Inerte tant
+  // que passListEndpointPath est vide : aucun Pass importé, une réservation
+  // garde alors son comportement historique (Booking.passId seul, un
+  // encodage NFC possible pour une seule personne).
+  passListEndpointPath       String? // ex: "/ws/pass/list" — concaténé à baseUrl
+  passListEndpointMethod     String? @default("GET")
+  passListEndpointBodyFormat String? @default("form")
+  // Nom du paramètre portant Booking.externalId (PAS notre Booking.id
+  // interne, ni le code de réservation) — ex: "bookingId".
+  passListBookingIdParam     String? @default("bookingId")
+  // Chemin (dot-path) vers le tableau de Pass dans la réponse JSON — vide/
+  // null si la réponse EST déjà le tableau (ex : Sesame renvoie {"root":[...]}).
+  passListResponseListPath   String? @default("root")
+  // {externalId, personFirstname, personLastname, personEmail, master,
+  //  facilityCode, facilityName, status, activated} -> chemin dot-path dans
+  // chaque élément du tableau (ex : {"externalId":"id","master":"master"}).
+  passFieldMapping           Json?
 
   // null = synchronisation manuelle uniquement ("Importer maintenant").
   syncIntervalMinutes Int?

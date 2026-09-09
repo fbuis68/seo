@@ -2015,6 +2015,40 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     </div>
   </div>
 
+  <!-- Pass (invitations) -->
+  <div class="ca">
+    <div class="ch"><i class="ti ti-users"></i>Pass (invitations)</div>
+    <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
+      <span>Optionnel — certaines sources (ex : API Sesame Technology) associent PLUSIEURS Pass à une même réservation, un par personne invitée ("invitations") : chacun a son propre identifiant et ses propres accès, distincts de la réservation elle-même et de l'identifiant "Pass" historique ci-dessus (qui ne couvre qu'une seule personne). Sans cette configuration, l'encodage NFC reste possible mais limité au titulaire principal de la réservation. Requiert "Identifiant externe de la réservation" renseigné dans la correspondance des champs plus haut — appelé une fois par réservation lors de chaque synchronisation.</span>
+    </div>
+    <div class="fi">
+      <label class="lb">Chemin de l'endpoint de liste des Pass</label>
+      <input type="text" id="bs-passListEndpointPath" placeholder="Ex : /ws/pass/list — laisser vide pour désactiver" autocomplete="off">
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Méthode HTTP de l'endpoint</label>
+        <select id="bs-passListEndpointMethod"><option value="GET">GET</option><option value="POST">POST</option></select>
+      </div>
+      <div class="fi">
+        <label class="lb">Format du corps si POST</label>
+        <select id="bs-passListEndpointBodyFormat"><option value="form">Formulaire (application/x-www-form-urlencoded)</option><option value="json">JSON</option></select>
+      </div>
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Paramètre portant l'identifiant externe de la réservation</label>
+        <input type="text" id="bs-passListBookingIdParam" placeholder="bookingId">
+      </div>
+      <div class="fi">
+        <label class="lb">Chemin vers la liste des Pass dans la réponse</label>
+        <input type="text" id="bs-passListResponseListPath" placeholder="root">
+      </div>
+    </div>
+    <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin:14px 0 8px">Correspondance des champs</div>
+    <div id="bs-pass-mapping-fields"></div>
+  </div>
+
   <!-- Encodage NFC -->
   <div class="ca">
     <div class="ch"><i class="ti ti-nfc"></i>Encodage NFC</div>
@@ -6293,8 +6327,16 @@ var BS_MAPPING_FIELDS = [
   {k:'bookingType', label:'Type de réservation', required:false},
   // Identifiant "Pass" côté source (ex : "personId" de l'API Sesame
   // Technology) — distinct du code de réservation, requis pour le bouton
-  // "Encoder NFC" (cf. carte "Encodage NFC" plus bas).
-  {k:'passId', label:'Identifiant "Pass" (encodage NFC)', required:false},
+  // "Encoder NFC" (cf. carte "Encodage NFC" plus bas). CONSERVÉ pour
+  // compatibilité — préférer désormais Identifiant externe + la carte
+  // "Pass (invitations)" plus bas si la source associe plusieurs Pass à une
+  // réservation (un par invité).
+  {k:'passId', label:'Identifiant "Pass" (encodage NFC, historique)', required:false},
+  // Identifiant de LA RÉSERVATION côté source externe (ex : "id" de l'API
+  // Sesame Technology, "B01024128") — distinct du code de réservation.
+  // Nécessaire uniquement pour importer la liste des Pass (invitations) de
+  // cette réservation, cf. carte "Pass (invitations)" plus bas.
+  {k:'externalId', label:'Identifiant externe de la réservation (Pass/invitations)', required:false},
 ];
 
 var BS_FACILITY_MAPPING_FIELDS = [
@@ -6315,6 +6357,21 @@ var BS_FACILITY_MAPPING_FIELDS = [
   // l'encodage NFC une fois l'accès coché "Encodeur NFC" dans cette même
   // fiche (réglage manuel, cf. section "Encodage NFC" ci-dessous).
   {k:'deviceId', label:'Identifiant du lecteur (device, encodage NFC)', required:false},
+];
+
+// Pass (invitations) — un Booking Sesame peut associer PLUSIEURS Pass, un
+// par personne invitée, chacun avec son propre identifiant (distinct de
+// l'identifiant externe de la réservation ET du personId) — cf. modèle Pass.
+var BS_PASS_MAPPING_FIELDS = [
+  {k:'externalId', label:'Identifiant du Pass', required:true},
+  {k:'personFirstname', label:'Prénom de l\'invité', required:false},
+  {k:'personLastname', label:'Nom de l\'invité', required:false},
+  {k:'personEmail', label:'Email de l\'invité', required:false},
+  {k:'master', label:'Invité principal (booléen)', required:false},
+  {k:'facilityCode', label:'Code(s) d\'accès de ce Pass', required:false},
+  {k:'facilityName', label:'Nom(s) d\'accès de ce Pass', required:false},
+  {k:'status', label:'Statut', required:false},
+  {k:'activated', label:'Actif (booléen)', required:false},
 ];
 
 var BS_CONFIG = null;
@@ -6500,7 +6557,7 @@ var PMS_PRESETS = {
       document.getElementById('bs-resultEntityProfileField').value = 'entityId';
       document.getElementById('bs-skipEntityFilter').checked = false;
       document.getElementById('bs-responseListPath').value = 'root';
-      bsRenderMappingFields({code:'code', personEmail:'personEmail', personFirstname:'personFirstname', personLastname:'personLastname', personPhone:'', startDate:'startDate', endDate:'endDate', facilityCode:'facilityCode', facilityName:'facilityName', status:'status', bookingType:'typeCode', passId:'personId'});
+      bsRenderMappingFields({code:'code', personEmail:'personEmail', personFirstname:'personFirstname', personLastname:'personLastname', personPhone:'', startDate:'startDate', endDate:'endDate', facilityCode:'facilityCode', facilityName:'facilityName', status:'status', bookingType:'typeCode', passId:'personId', externalId:'id'});
       // Encodage NFC — flux en 3 appels, confirmé le 08/09/2026 via capture
       // réseau du back-office Sesame lui-même (associable de bout en bout,
       // absent de la documentation officielle) — corrige une capture du
@@ -6574,6 +6631,24 @@ var PMS_PRESETS = {
       document.getElementById('bs-facilityEndpointBodyParams').value = 'start=0\nlimit=1000';
       document.getElementById('bs-facilityResponseListPath').value = 'root';
       bsRenderFacilityMappingFields({code:'code', name:'name', category:'typeName', deviceId:'deviceId'});
+      // Pass (invitations) — un booking Sesame peut associer PLUSIEURS Pass,
+      // un par personne invitée (confirmé le 09/09/2026 via capture réseau :
+      // GET /wa/pass/itemById?id=<passId> renvoie un Pass, avec son propre
+      // "id" — ex "P01023645" — distinct du personId ET de l'id du booking ;
+      // /wa/booking/list ne renseigne jamais cet id de Pass, seulement
+      // personId). La FORME de la réponse liste (racine "root", champs
+      // id/personFirstname/personLastname/personEmail/master/facilityCode/
+      // facilityName/status/activated) est confirmée par la même capture,
+      // MAIS l'URL exacte de l'endpoint liste (par réservation) n'a, elle,
+      // pas été confirmée avec certitude — laissée VIDE volontairement
+      // plutôt que de deviner (l'app affiche alors juste 0 invité, sans
+      // rien casser) : à renseigner une fois confirmée (probablement
+      // "/ws/pass/list", même préfixe deviceAdmin que l'encodage NFC).
+      document.getElementById('bs-passListEndpointPath').value = '';
+      document.getElementById('bs-passListEndpointMethod').value = 'GET';
+      document.getElementById('bs-passListBookingIdParam').value = 'bookingId';
+      document.getElementById('bs-passListResponseListPath').value = 'root';
+      bsRenderPassMappingFields({externalId:'id', personFirstname:'personFirstname', personLastname:'personLastname', personEmail:'personEmail', master:'master', facilityCode:'facilityCode', facilityName:'facilityName', status:'status', activated:'activated'});
       // QR / code d'accès / ouverture de porte — d'après la documentation
       // officielle Sesame API (version 2023-11-23) : POST /ws/pass/findMimeSecret
       // (QR image prête, {"secret":"data:image/jpeg;base64,..."}) et
@@ -7024,6 +7099,25 @@ function bsCollectFacilityMapping(){
   return mapping;
 }
 
+function bsRenderPassMappingFields(mapping){
+  mapping = mapping || {};
+  document.getElementById('bs-pass-mapping-fields').innerHTML = BS_PASS_MAPPING_FIELDS.map(function(f){
+    return '<div class="fi" style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
+      + '<label class="lb" style="flex:0 0 200px;margin-bottom:0;text-transform:none;font-size:13px;font-weight:500;color:var(--tx)">'+f.label+(f.required?' <span style="color:var(--re)">*</span>':'')+'</label>'
+      + '<input type="text" id="bs-pmap-'+f.k+'" value="'+esc(mapping[f.k]||'')+'" placeholder="Ex : id" style="flex:1">'
+      + '</div>';
+  }).join('');
+}
+
+function bsCollectPassMapping(){
+  var mapping = {};
+  BS_PASS_MAPPING_FIELDS.forEach(function(f){
+    var el = document.getElementById('bs-pmap-'+f.k);
+    if(el && el.value.trim()) mapping[f.k] = el.value.trim();
+  });
+  return mapping;
+}
+
 function bsCollectFormValues(){
   return {
     enabled: document.getElementById('bs-enabled').checked,
@@ -7068,6 +7162,12 @@ function bsCollectFormValues(){
     facilityEndpointBodyParams: bsTextToParams(document.getElementById('bs-facilityEndpointBodyParams').value),
     facilityResponseListPath: document.getElementById('bs-facilityResponseListPath').value.trim(),
     facilityFieldMapping: bsCollectFacilityMapping(),
+    passListEndpointPath: document.getElementById('bs-passListEndpointPath').value.trim(),
+    passListEndpointMethod: document.getElementById('bs-passListEndpointMethod').value,
+    passListEndpointBodyFormat: document.getElementById('bs-passListEndpointBodyFormat').value,
+    passListBookingIdParam: document.getElementById('bs-passListBookingIdParam').value.trim(),
+    passListResponseListPath: document.getElementById('bs-passListResponseListPath').value.trim(),
+    passFieldMapping: bsCollectPassMapping(),
     nfcStartEndpointPath: document.getElementById('bs-nfcStartEndpointPath').value.trim(),
     nfcStartEndpointMethod: document.getElementById('bs-nfcStartEndpointMethod').value,
     nfcStartPassParam: document.getElementById('bs-nfcStartPassParam').value.trim(),
@@ -7202,6 +7302,12 @@ async function bsInit(){
   document.getElementById('bs-facilityEndpointBodyParams').value = bsParamsToText(BS_CONFIG.facilityEndpointBodyParams);
   document.getElementById('bs-facilityResponseListPath').value = BS_CONFIG.facilityResponseListPath||'';
   bsRenderFacilityMappingFields(BS_CONFIG.facilityFieldMapping);
+  document.getElementById('bs-passListEndpointPath').value = BS_CONFIG.passListEndpointPath||'';
+  document.getElementById('bs-passListEndpointMethod').value = BS_CONFIG.passListEndpointMethod||'GET';
+  document.getElementById('bs-passListEndpointBodyFormat').value = BS_CONFIG.passListEndpointBodyFormat||'form';
+  document.getElementById('bs-passListBookingIdParam').value = BS_CONFIG.passListBookingIdParam||'bookingId';
+  document.getElementById('bs-passListResponseListPath').value = BS_CONFIG.passListResponseListPath||'root';
+  bsRenderPassMappingFields(BS_CONFIG.passFieldMapping);
   document.getElementById('bs-nfcStartEndpointPath').value = BS_CONFIG.nfcStartEndpointPath||'';
   document.getElementById('bs-nfcStartEndpointMethod').value = BS_CONFIG.nfcStartEndpointMethod||'GET';
   document.getElementById('bs-nfcStartPassParam').value = BS_CONFIG.nfcStartPassParam||'id';
@@ -13220,6 +13326,17 @@ async function loadReservations(){
 }
 
 var RESA_TAB = 'inhouse';
+// Pass (invités) de la réservation actuellement ouverte dans le détail —
+// chargés à part (GET /wa/booking/passes, cf. resaLoadPasses) car pris par
+// réservation, contrairement au reste de RESA_CACHE déjà chargé en bloc.
+var RESA_PASSES_CACHE = [];
+// Cible du prochain encodage NFC lancé depuis le détail — null = la
+// réservation elle-même (bouton historique, booking.passId), sinon l'id
+// interne d'un Pass précis (bouton "Encoder" d'un invité) — cf.
+// resaEncodeNfc/resaEncodeNfcForPass, qui partagent le même flux de
+// sélection de lecteur (resaConfirmNfcDevice/resaRunNfcEncode).
+var RESA_NFC_TARGET_PASS_ID = null;
+var RESA_NFC_TARGET_BTN_ID = 'resa-detail-nfc-btn';
 
 function resaSetTab(tab){
   RESA_TAB = tab;
@@ -13445,6 +13562,10 @@ function resaOpenDetail(code){
           + '<span style="color:var(--mu)">'+row[0]+'</span><span style="font-weight:600;text-align:right">'+row[1]+'</span></div>';
       }).join('')
     + '</div>';
+  // Invités (Pass) — chargés à part, cf. resaLoadPasses appelé après avoir
+  // posé ce placeholder dans le DOM (une réservation Sesame peut associer
+  // PLUSIEURS Pass, un par personne invitée — "invitations").
+  html += '<div id="resa-detail-passes"></div>';
   html += '<div id="resa-detail-nfc-error" class="alt alt-w" style="display:none;margin-top:12px"><i class="ti ti-alert-triangle"></i><span id="resa-detail-nfc-error-msg"></span></div>';
   // Sélecteur de lecteur NFC — révélé seulement si plusieurs lecteurs sont
   // disponibles (cf. resaEncodeNfc) ; un seul lecteur configuré passe
@@ -13486,6 +13607,44 @@ function resaOpenDetail(code){
 
   document.getElementById('resa-detail-body').innerHTML = html;
   document.getElementById('resaDetailModal').style.display = 'flex';
+  resaLoadPasses(b.code);
+}
+
+/**
+ * Invités (Pass) d'une réservation — GET /wa/booking/passes, cf. modèle
+ * Pass (une réservation Sesame peut associer PLUSIEURS Pass, un par
+ * personne invitée). Pris à part de RESA_CACHE (chargé en bloc pour toutes
+ * les réservations) car un appel par réservation, seulement nécessaire à
+ * l'ouverture du détail.
+ */
+async function resaLoadPasses(code){
+  try{
+    var r = await adminFetch('/wa/booking/passes?code='+encodeURIComponent(code));
+    RESA_PASSES_CACHE = r.ok ? await r.json() : [];
+  }catch(e){ RESA_PASSES_CACHE = []; }
+  resaRenderPassesSection(code);
+}
+function resaRenderPassesSection(code){
+  var el = document.getElementById('resa-detail-passes');
+  if(!el) return;
+  if(!RESA_PASSES_CACHE.length){ el.innerHTML = ''; return; }
+  el.innerHTML = '<div style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;margin:16px 0 8px">Invités ('+RESA_PASSES_CACHE.length+')</div>'
+    + RESA_PASSES_CACHE.map(function(p){
+        var nfcOn = p.nfcCount > 0;
+        return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--bdr);border-radius:var(--rs);margin-bottom:6px">'
+          + '<div style="min-width:0">'
+          + '<div style="font-weight:700;font-size:13px">'+esc(p.personFirstname)+' '+esc(p.personLastname)
+          + (p.master ? ' <span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:8px;background:var(--al);color:var(--a)">Principal</span>' : '')
+          + '</div>'
+          + '<div style="font-size:11px;color:var(--mu);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+          + (p.personEmail ? esc(p.personEmail) : '')+(p.personEmail && p.facilityCode ? ' · ' : '')+(p.facilityCode ? 'Accès : '+esc(p.facilityCode) : '')
+          + '</div></div>'
+          + '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">'
+          + '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;'+(nfcOn?'background:rgba(26,107,71,.1);color:#1A6B47':'background:var(--bdr);color:var(--mu)')+'"><i class="ti ti-nfc" style="font-size:11px"></i> '+(p.nfcCount||0)+'</span>'
+          + '<button class="btn btn-s" id="resa-pass-nfc-btn-'+esc(p.id)+'" onclick="resaEncodeNfcForPass(\''+esc(code)+'\',\''+esc(p.id)+'\')"><i class="ti ti-nfc"></i> Encoder</button>'
+          + '</div>'
+          + '</div>';
+      }).join('');
 }
 
 function resaToggleEmailCompose(code){
@@ -13625,17 +13784,34 @@ function resaCloseDetail(){
 }
 
 /**
- * Bouton "Encoder NFC" — récupère d'abord la liste des lecteurs disponibles
- * (cf. lib/bookingSource.ts listNfcDevices) : un seul lecteur configuré
- * passe directement à l'encodage, plusieurs révèlent un sélecteur inline
- * (cf. resa-detail-nfc-devices) pour que l'admin choisisse lequel utiliser.
+ * Bouton "Encoder NFC" (historique, cible la réservation elle-même —
+ * booking.passId) — récupère d'abord la liste des lecteurs disponibles (cf.
+ * lib/bookingSource.ts listNfcDevices) : un seul lecteur configuré passe
+ * directement à l'encodage, plusieurs révèlent un sélecteur inline (cf.
+ * resa-detail-nfc-devices) pour que l'admin choisisse lequel utiliser.
  */
 async function resaEncodeNfc(code){
-  var btn = document.getElementById('resa-detail-nfc-btn');
+  return resaEncodeNfcCommon(code, 'resa-detail-nfc-btn', null);
+}
+
+/** Bouton "Encoder" d'un invité précis (cf. resaRenderPassesSection) — même
+ * flux que resaEncodeNfc, mais cible ce Pass (son propre externalId côté
+ * source) plutôt que booking.passId. Une réservation peut associer
+ * PLUSIEURS Pass, un par personne invitée ("invitations" Sesame) : chacun a
+ * besoin de sa propre carte. */
+async function resaEncodeNfcForPass(code, passId){
+  return resaEncodeNfcCommon(code, 'resa-pass-nfc-btn-'+passId, passId);
+}
+
+async function resaEncodeNfcCommon(code, btnId, passId){
+  var btn = document.getElementById(btnId);
+  if(!btn) return;
   var errEl = document.getElementById('resa-detail-nfc-error');
   var errMsg = document.getElementById('resa-detail-nfc-error-msg');
   errEl.style.display = 'none';
   document.getElementById('resa-detail-nfc-devices').style.display = 'none';
+  RESA_NFC_TARGET_PASS_ID = passId || null;
+  RESA_NFC_TARGET_BTN_ID = btnId;
   var orig = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<div class="spin"></div> Recherche des lecteurs…';
@@ -13670,19 +13846,22 @@ function resaConfirmNfcDevice(code){
 
 /** Déclenche l'encodage proprement dit — bloquant côté serveur jusqu'à ~15s
  * (durée de la fenêtre pendant laquelle la carte doit être approchée du
- * lecteur, cf. lib/bookingSource.ts encodeNfc). */
+ * lecteur, cf. lib/bookingSource.ts encodeNfc). Cible RESA_NFC_TARGET_PASS_ID
+ * (posé par resaEncodeNfc/resaEncodeNfcForPass) si renseigné. */
 async function resaRunNfcEncode(code, deviceId){
-  var btn = document.getElementById('resa-detail-nfc-btn');
+  var btn = document.getElementById(RESA_NFC_TARGET_BTN_ID || 'resa-detail-nfc-btn');
   var errEl = document.getElementById('resa-detail-nfc-error');
   var errMsg = document.getElementById('resa-detail-nfc-error-msg');
   errEl.style.display = 'none';
-  var orig = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = '<div class="spin"></div> Approchez la carte du lecteur…';
+  var orig = btn ? btn.innerHTML : '';
+  if(btn){ btn.disabled = true; btn.innerHTML = '<div class="spin"></div> Approchez la carte du lecteur…'; }
   try{
-    var r = await adminFetch('/wa/booking/encodeNfc', {method:'POST', body: JSON.stringify({code:code, deviceId:deviceId})});
+    var body = {code:code, deviceId:deviceId};
+    if(RESA_NFC_TARGET_PASS_ID) body.passId = RESA_NFC_TARGET_PASS_ID;
+    var r = await adminFetch('/wa/booking/encodeNfc', {method:'POST', body: JSON.stringify(body)});
     var data = await r.json();
     if(!r.ok) throw new Error(data.error || 'Échec de l\'encodage NFC');
+    delete data.pass; // fusionné à part dans normaliseBooking — pas un champ de Booking
     var idx = RESA_CACHE.findIndex(function(x){ return x.booking.code === code; });
     if(idx>-1) RESA_CACHE[idx].booking = data;
     toast('Encodage NFC réussi');
@@ -13691,8 +13870,7 @@ async function resaRunNfcEncode(code, deviceId){
   }catch(e){
     errMsg.textContent = e.message;
     errEl.style.display = 'flex';
-    btn.disabled = false;
-    btn.innerHTML = orig;
+    if(btn){ btn.disabled = false; btn.innerHTML = orig; }
   }
 }
 

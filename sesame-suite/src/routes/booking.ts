@@ -279,13 +279,17 @@ bookingRouter.get(
 );
 
 /**
- * POST /wa/booking/encodeNfc — body: { code, deviceId } — déclenche
- * l'encodage d'une carte/badge NFC pour la personne titulaire de cette
- * réservation (booking.passId), sur le lecteur `deviceId` choisi, auprès de
- * la source externe configurée sur "Intégration réservations" (cf.
+ * POST /wa/booking/encodeNfc — body: { code, deviceId, passId? } — déclenche
+ * l'encodage d'une carte/badge NFC sur le lecteur `deviceId` choisi, auprès
+ * de la source externe configurée sur "Intégration réservations" (cf.
  * lib/bookingSource.ts, encodeNfc — inerte tant que nfcStartEndpointPath
  * n'est pas renseigné). Bloquant jusqu'à ~15s (durée de la fenêtre pendant
  * laquelle la carte doit être approchée du lecteur).
+ *
+ * `passId` (notre id interne Pass.id, PAS l'externalId Sesame) cible
+ * l'invité précis à encoder — une réservation avec plusieurs Pass
+ * (invitations, cf. modèle Pass) nécessite une carte par personne. Omis =
+ * comportement historique (booking.passId, un seul invité).
  */
 bookingRouter.post(
   "/booking/encodeNfc",
@@ -294,28 +298,108 @@ bookingRouter.post(
     const entity = await resolveEntity(req);
     const code = (req.body.code as string) || "";
     const deviceId = (req.body.deviceId as string) || "";
+    const passId = (req.body.passId as string) || "";
     if (!code) throw new HttpError(400, "code requis");
     if (!deviceId) throw new HttpError(400, "deviceId requis — sélectionnez un lecteur NFC");
 
     const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code } } });
     if (!booking) throw new HttpError(404, "Réservation introuvable");
-    if (!booking.passId) throw new HttpError(400, "Aucun identifiant \"Pass\" pour cette réservation — ré-importez-la depuis la source externe");
 
     const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
     if (!config) throw new HttpError(400, "Connecteur non configuré pour cet établissement");
 
+    let pass: { id: string; externalId: string } | null = null;
+    if (passId) {
+      const row = await prisma.pass.findUnique({ where: { id: passId } });
+      if (!row || row.bookingId !== booking.id) throw new HttpError(404, "Pass introuvable pour cette réservation");
+      pass = row;
+    }
+    const targetPassId = pass ? pass.externalId : booking.passId;
+    if (!targetPassId) throw new HttpError(400, "Aucun identifiant \"Pass\" pour cette réservation — ré-importez-la depuis la source externe");
+
     try {
-      const { success, message } = await encodeNfc(config, booking.passId, deviceId);
+      const { success, message } = await encodeNfc(config, targetPassId, deviceId);
       if (!success) throw new HttpError(400, message || "Association NFC échouée");
-      const updated = await prisma.booking.update({
-        where: { id: booking.id },
-        data: { nfcCount: { increment: 1 }, nfcEncodedAt: new Date() },
-      });
-      res.json(normaliseBooking(updated));
+      const updatedBooking = pass
+        ? booking
+        : await prisma.booking.update({ where: { id: booking.id }, data: { nfcCount: { increment: 1 }, nfcEncodedAt: new Date() } });
+      const updatedPass = pass
+        ? await prisma.pass.update({ where: { id: pass.id }, data: { nfcCount: { increment: 1 }, nfcEncodedAt: new Date() } })
+        : null;
+      res.json({ ...normaliseBooking(updatedBooking), pass: updatedPass ? shapePass(updatedPass) : undefined });
     } catch (e) {
       if (e instanceof BookingSourceError) throw new HttpError(400, e.message);
       throw e;
     }
+  })
+);
+
+function shapePass(p: {
+  id: string;
+  bookingId: string;
+  externalId: string;
+  personFirstname: string;
+  personLastname: string;
+  personEmail: string | null;
+  master: boolean;
+  facilityCode: string | null;
+  facilityName: string | null;
+  status: string | null;
+  activated: boolean;
+  nfcCount: number;
+  nfcEncodedAt: Date | null;
+}) {
+  return {
+    id: p.id,
+    bookingId: p.bookingId,
+    externalId: p.externalId,
+    personFirstname: p.personFirstname,
+    personLastname: p.personLastname,
+    personEmail: p.personEmail || "",
+    master: p.master,
+    facilityCode: p.facilityCode || "",
+    facilityName: p.facilityName || "",
+    status: p.status || "",
+    activated: p.activated,
+    nfcCount: p.nfcCount,
+    nfcEncodedAt: p.nfcEncodedAt ? p.nfcEncodedAt.toISOString() : null,
+  };
+}
+
+/**
+ * GET /wa/booking/passes?code= — liste les Pass (invitations) d'une
+ * réservation (panneau "Réservations", écran de détail) — admin uniquement.
+ */
+bookingRouter.get(
+  "/booking/passes",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const code = (req.query.code as string) || "";
+    if (!code) throw new HttpError(400, "code requis");
+    const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code } } });
+    if (!booking) throw new HttpError(404, "Réservation introuvable");
+    const passes = await prisma.pass.findMany({ where: { bookingId: booking.id }, orderBy: [{ master: "desc" }, { createdAt: "asc" }] });
+    res.json(passes.map(shapePass));
+  })
+);
+
+/**
+ * GET /wa/booking/passesPublic?code= — même chose, sans authentification
+ * (espace client, cf. checkin.html) — affiche la liste des invités de SA
+ * PROPRE réservation. Ne renvoie rien de plus sensible que ce que le client
+ * voit déjà de sa propre réservation (noms/emails des co-invités).
+ */
+bookingRouter.get(
+  "/booking/passesPublic",
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const code = (req.query.code as string) || "";
+    if (!code) throw new HttpError(400, "code requis");
+    const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code } } });
+    if (!booking) throw new HttpError(404, "Réservation introuvable");
+    const passes = await prisma.pass.findMany({ where: { bookingId: booking.id }, orderBy: [{ master: "desc" }, { createdAt: "asc" }] });
+    res.json(passes.map(shapePass));
   })
 );
 

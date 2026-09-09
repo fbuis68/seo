@@ -47,7 +47,16 @@ export interface FieldMapping {
   // Technology — confirmé le 03/09/2026 via capture réseau) : distinct du
   // code de réservation, associé à la personne titulaire d'une éventuelle
   // carte/badge NFC. Optionnel — requis uniquement pour l'encodage NFC.
+  // CONSERVÉ pour compatibilité — préférer désormais externalId ci-dessous
+  // + le modèle Pass (une réservation Sesame peut avoir plusieurs Pass,
+  // chacun avec son propre identifiant, cf. son commentaire).
   passId?: string;
+  // Identifiant de la réservation côté source EXTERNE (ex : "id" de l'API
+  // Sesame Technology, "B01024128") — distinct de `code` (le code de
+  // réservation lisible). Optionnel — requis uniquement pour importer la
+  // liste des Pass de cette réservation (cf.
+  // BookingSourceConfig.passListEndpointPath).
+  externalId?: string;
 }
 
 export interface MappedBooking {
@@ -63,6 +72,7 @@ export interface MappedBooking {
   status: string;
   bookingType: string;
   passId: string;
+  externalId: string;
 }
 
 export interface MapError {
@@ -458,6 +468,62 @@ export async function fetchExternalFacilities(config: BookingSourceConfig): Prom
 }
 
 /**
+ * Appelle la source externe pour UNE réservation précise (bookingExternalId
+ * = Booking.externalId, pas notre id interne ni le code de réservation) et
+ * renvoie son tableau brut de Pass (pas encore mappé). Contrairement à
+ * fetchExternalBookings/fetchExternalFacilities (un seul appel global),
+ * cette liste est prise par réservation — best-effort, ne fait jamais
+ * échouer toute une synchronisation : un appel qui échoue pour UNE
+ * réservation ne doit pas empêcher les suivantes d'être traitées (cf.
+ * syncPassesForBooking, qui capture les erreurs de cette fonction).
+ */
+export async function fetchExternalPasses(config: BookingSourceConfig, bookingExternalId: string): Promise<unknown[]> {
+  if (!config.baseUrl) throw new BookingSourceError("URL de base non configurée");
+  const url = normalizeBaseUrl(config.baseUrl).replace(/\/$/, "") + (config.passListEndpointPath || "");
+  const { headers: authHeaders } = await buildAuthHeaders(config);
+  const method = (config.passListEndpointMethod || "GET").toUpperCase();
+  const bodyFormat = config.passListEndpointBodyFormat || "form";
+  const bookingIdParam = config.passListBookingIdParam || "bookingId";
+  const commonHeaders = { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...authHeaders };
+
+  let res: Response;
+  try {
+    if (method === "POST" && bodyFormat === "json") {
+      res = await fetchWithTimeout(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...commonHeaders },
+        body: JSON.stringify({ [bookingIdParam]: bookingExternalId }),
+      });
+    } else if (method === "POST") {
+      const form = new URLSearchParams();
+      form.set(bookingIdParam, bookingExternalId);
+      res = await fetchWithTimeout(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", ...commonHeaders },
+        body: form.toString(),
+      });
+    } else {
+      const qs = new URLSearchParams();
+      qs.set(bookingIdParam, bookingExternalId);
+      const getUrl = `${url}${url.includes("?") ? "&" : "?"}${qs.toString()}`;
+      res = await fetchWithTimeout(getUrl, { headers: commonHeaders });
+    }
+  } catch (e) {
+    throw new BookingSourceError(`Connexion impossible : ${describeFetchError(e)}`);
+  }
+  if (!res.ok) throw new BookingSourceError(`Le serveur distant a répondu ${res.status} ${res.statusText}`);
+
+  const body = await parseJsonResponse(res, "La réponse");
+  const responseListPath = config.passListResponseListPath || "root";
+  const list = getPath(body, responseListPath);
+  if (!Array.isArray(list)) {
+    const snippet = JSON.stringify(body).slice(0, 300);
+    throw new BookingSourceError(`Le chemin "${responseListPath}" ne pointe pas vers un tableau de Pass — réponse reçue : "${snippet}"`);
+  }
+  return list;
+}
+
+/**
  * Certaines sources (ex : API Sesame Technology) renvoient un seul
  * enregistrement pour une réservation de groupe (plusieurs chambres/
  * occupants liés) avec ces champs concaténés par une virgule (ex :
@@ -519,6 +585,7 @@ export function mapBookings(items: unknown[], mapping: FieldMapping): { mapped: 
       status: (mapping.status ? String(getPath(item, mapping.status) ?? "").trim() : "") || "confirmed",
       bookingType: mapping.bookingType ? String(getPath(item, mapping.bookingType) ?? "").trim() : "",
       passId: mapping.passId ? String(getPath(item, mapping.passId) ?? "").trim() : "",
+      externalId: mapping.externalId ? String(getPath(item, mapping.externalId) ?? "").trim() : "",
     });
   });
 
@@ -593,10 +660,14 @@ export async function upsertMappedFacilities(entity: Entity, mapped: MappedFacil
   return { created, updated };
 }
 
-/** Crée/met à jour les réservations mappées (upsert par entityId+code). */
+/** Crée/met à jour les réservations mappées (upsert par entityId+code).
+ * Renvoie aussi `synced` (id interne + externalId de chaque réservation
+ * traitée) — utilisé par runImport pour enchaîner la synchronisation des
+ * Pass de chacune, qui a besoin de l'externalId (pas notre id ni le code). */
 export async function upsertMappedBookings(entity: Entity, mapped: MappedBooking[], sourceName: string) {
   let created = 0;
   let updated = 0;
+  const synced: { id: string; externalId: string }[] = [];
   for (const b of mapped) {
     // b.facilityCode peut désormais lister plusieurs accès ("201,203") — Room
     // reste à une seule chambre, donc on ne cherche que sur le premier code
@@ -622,14 +693,18 @@ export async function upsertMappedBookings(entity: Entity, mapped: MappedBooking
       status: b.status,
       bookingType: b.bookingType || existing?.bookingType || undefined,
       passId: b.passId || existing?.passId || undefined,
+      externalId: b.externalId || existing?.externalId || undefined,
       importedFrom: sourceName,
     };
+    let rowId: string;
     if (existing) {
       await prisma.booking.update({ where: { id: existing.id }, data });
       updated++;
+      rowId = existing.id;
     } else {
       const row = await prisma.booking.create({ data: { entityId: entity.id, code: b.code, ...data } });
       created++;
+      rowId = row.id;
       fireTrigger("booking.created", {
         entityId: entity.id,
         targetType: "booking",
@@ -638,8 +713,116 @@ export async function upsertMappedBookings(entity: Entity, mapped: MappedBooking
         variables: { prenom: row.personFirstname, nom: row.personLastname, code: row.code },
       }).catch((e) => console.error("[automation] booking.created:", e));
     }
+    const externalId = b.externalId || existing?.externalId || "";
+    if (externalId) synced.push({ id: rowId, externalId });
+  }
+  return { created, updated, synced };
+}
+
+/** Champs Pass que le mapping peut renseigner — valeur = dot-path dans
+ * chaque élément du tableau JSON retourné par la source externe. */
+export interface PassFieldMapping {
+  externalId?: string;
+  personFirstname?: string;
+  personLastname?: string;
+  personEmail?: string;
+  master?: string;
+  facilityCode?: string;
+  facilityName?: string;
+  status?: string;
+  activated?: string;
+}
+
+export interface MappedPass {
+  externalId: string;
+  personFirstname: string;
+  personLastname: string;
+  personEmail: string;
+  master: boolean;
+  facilityCode: string;
+  facilityName: string;
+  status: string;
+  activated: boolean;
+}
+
+/** Applique le mapping de champs à la liste brute de Pass — même principe
+ * que mapBookings/mapFacilities. Un Pass sans externalId est ignoré (ne
+ * peut pas être upserté sans identifiant stable). */
+export function mapPasses(items: unknown[], mapping: PassFieldMapping): { mapped: MappedPass[]; errors: MapError[] } {
+  const mapped: MappedPass[] = [];
+  const errors: MapError[] = [];
+  items.forEach((item, index) => {
+    const externalId = mapping.externalId ? String(getPath(item, mapping.externalId) ?? "").trim() : "";
+    if (!externalId) { errors.push({ index, reason: "identifiant de Pass manquant" }); return; }
+    const masterRaw = mapping.master ? getPath(item, mapping.master) : undefined;
+    const activatedRaw = mapping.activated ? getPath(item, mapping.activated) : undefined;
+    mapped.push({
+      externalId,
+      personFirstname: mapping.personFirstname ? String(getPath(item, mapping.personFirstname) ?? "").trim() : "",
+      personLastname: mapping.personLastname ? String(getPath(item, mapping.personLastname) ?? "").trim() : "",
+      personEmail: mapping.personEmail ? String(getPath(item, mapping.personEmail) ?? "").trim() : "",
+      master: masterRaw === true || masterRaw === "true",
+      facilityCode: mapping.facilityCode ? String(getPath(item, mapping.facilityCode) ?? "").trim() : "",
+      facilityName: mapping.facilityName ? String(getPath(item, mapping.facilityName) ?? "").trim() : "",
+      status: mapping.status ? String(getPath(item, mapping.status) ?? "").trim() : "",
+      activated: activatedRaw === undefined ? true : activatedRaw === true || activatedRaw === "true",
+    });
+  });
+  return { mapped, errors };
+}
+
+/** Crée/met à jour les Pass d'UNE réservation (upsert par bookingId+externalId).
+ * Un Pass disparu de la source (invité retiré) n'est PAS supprimé ici — le
+ * connecteur n'a aucune notion de suppression fiable côté Sesame, mieux vaut
+ * garder une trace obsolète que perdre silencieusement l'historique
+ * d'encodage NFC d'un invité. */
+export async function upsertMappedPasses(entity: Entity, bookingId: string, mapped: MappedPass[]) {
+  let created = 0;
+  let updated = 0;
+  for (const p of mapped) {
+    const existing = await prisma.pass.findUnique({ where: { bookingId_externalId: { bookingId, externalId: p.externalId } } });
+    const data = {
+      personFirstname: p.personFirstname,
+      personLastname: p.personLastname,
+      personEmail: p.personEmail || undefined,
+      master: p.master,
+      facilityCode: p.facilityCode || undefined,
+      facilityName: p.facilityName || undefined,
+      status: p.status || undefined,
+      activated: p.activated,
+    };
+    if (existing) {
+      await prisma.pass.update({ where: { id: existing.id }, data });
+      updated++;
+    } else {
+      await prisma.pass.create({ data: { entityId: entity.id, bookingId, externalId: p.externalId, ...data } });
+      created++;
+    }
   }
   return { created, updated };
+}
+
+/**
+ * Synchronise les Pass d'UNE réservation déjà importée — best-effort,
+ * n'interrompt jamais runImport : une réservation dont l'appel Pass échoue
+ * (source temporairement indisponible, endpoint mal configuré) ne doit pas
+ * bloquer l'import des suivantes ni faire échouer toute la synchronisation.
+ */
+async function syncPassesForBooking(
+  entity: Entity,
+  config: BookingSourceConfig,
+  booking: { id: string; externalId: string }
+): Promise<{ ok: boolean; created: number; updated: number; error?: string }> {
+  try {
+    const raw = await fetchExternalPasses(config, booking.externalId);
+    const mapping = (config.passFieldMapping as PassFieldMapping | null) || {};
+    const { mapped } = mapPasses(raw, mapping);
+    const { created, updated } = await upsertMappedPasses(entity, booking.id, mapped);
+    return { ok: true, created, updated };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Erreur inconnue";
+    return { ok: false, created: 0, updated: 0, error: message };
+  }
 }
 
 /** Exécute une synchronisation complète pour un établissement — utilisé par
@@ -650,8 +833,31 @@ export async function runImport(entity: Entity, config: BookingSourceConfig) {
   try {
     const raw = await fetchExternalBookings(config);
     const { mapped, errors } = mapBookings(raw, mapping);
-    const { created, updated } = await upsertMappedBookings(entity, mapped, sourceName);
-    const message = `${created} créée(s), ${updated} mise(s) à jour${errors.length ? `, ${errors.length} ignorée(s)` : ""}`;
+    const { created, updated, synced } = await upsertMappedBookings(entity, mapped, sourceName);
+    let message = `${created} créée(s), ${updated} mise(s) à jour${errors.length ? `, ${errors.length} ignorée(s)` : ""}`;
+
+    // Pass (invitations) — un appel PAR réservation, best-effort : inerte
+    // tant que passListEndpointPath n'est pas configuré, et une réservation
+    // dont l'appel échoue ne bloque jamais les suivantes ni le message de
+    // succès global (cf. syncPassesForBooking).
+    if (config.passListEndpointPath && synced.length) {
+      let passCreated = 0;
+      let passUpdated = 0;
+      let passFailed = 0;
+      for (const b of synced) {
+        const result = await syncPassesForBooking(entity, config, b);
+        if (result.ok) {
+          passCreated += result.created;
+          passUpdated += result.updated;
+        } else {
+          passFailed++;
+        }
+      }
+      if (passCreated || passUpdated || passFailed) {
+        message += ` — Pass : ${passCreated} créé(s), ${passUpdated} mis à jour${passFailed ? `, ${passFailed} réservation(s) en échec` : ""}`;
+      }
+    }
+
     await prisma.bookingSourceConfig.update({
       where: { id: config.id },
       data: { lastSyncAt: new Date(), lastSyncStatus: "success", lastSyncMessage: message, lastSyncCount: created + updated },

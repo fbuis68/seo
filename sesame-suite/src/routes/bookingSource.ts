@@ -14,6 +14,7 @@ import {
   BookingSourceError,
   FieldMapping,
   FacilityMapping,
+  PassFieldMapping,
 } from "../lib/bookingSource";
 
 export const bookingSourceRouter = Router();
@@ -61,6 +62,12 @@ function shapeConfig(c: {
   facilityEndpointBodyParams: unknown;
   facilityResponseListPath: string | null;
   facilityFieldMapping: unknown;
+  passListEndpointPath: string | null;
+  passListEndpointMethod: string | null;
+  passListEndpointBodyFormat: string | null;
+  passListBookingIdParam: string | null;
+  passListResponseListPath: string | null;
+  passFieldMapping: unknown;
   nfcStartEndpointPath: string | null;
   nfcStartEndpointMethod: string | null;
   nfcStartPassParam: string | null;
@@ -170,6 +177,12 @@ function shapeConfig(c: {
     facilityEndpointBodyParams: c.facilityEndpointBodyParams || {},
     facilityResponseListPath: c.facilityResponseListPath || "",
     facilityFieldMapping: c.facilityFieldMapping || {},
+    passListEndpointPath: c.passListEndpointPath || "",
+    passListEndpointMethod: c.passListEndpointMethod || "GET",
+    passListEndpointBodyFormat: c.passListEndpointBodyFormat || "form",
+    passListBookingIdParam: c.passListBookingIdParam || "bookingId",
+    passListResponseListPath: c.passListResponseListPath || "root",
+    passFieldMapping: c.passFieldMapping || {},
     nfcStartEndpointPath: c.nfcStartEndpointPath || "",
     nfcStartEndpointMethod: c.nfcStartEndpointMethod || "GET",
     nfcStartPassParam: c.nfcStartPassParam || "id",
@@ -321,6 +334,12 @@ interface ConfigBody {
   facilityEndpointBodyParams?: Record<string, string>;
   facilityResponseListPath?: string;
   facilityFieldMapping?: FacilityMapping;
+  passListEndpointPath?: string;
+  passListEndpointMethod?: string;
+  passListEndpointBodyFormat?: string;
+  passListBookingIdParam?: string;
+  passListResponseListPath?: string;
+  passFieldMapping?: PassFieldMapping;
   nfcStartEndpointPath?: string;
   nfcStartEndpointMethod?: string;
   nfcStartPassParam?: string;
@@ -431,6 +450,12 @@ bookingSourceRouter.post(
       facilityEndpointBodyParams: b.facilityEndpointBodyParams as never,
       facilityResponseListPath: b.facilityResponseListPath,
       facilityFieldMapping: b.facilityFieldMapping as never,
+      passListEndpointPath: b.passListEndpointPath,
+      passListEndpointMethod: b.passListEndpointMethod,
+      passListEndpointBodyFormat: b.passListEndpointBodyFormat,
+      passListBookingIdParam: b.passListBookingIdParam,
+      passListResponseListPath: b.passListResponseListPath,
+      passFieldMapping: b.passFieldMapping as never,
       nfcStartEndpointPath: b.nfcStartEndpointPath,
       nfcStartEndpointMethod: b.nfcStartEndpointMethod,
       nfcStartPassParam: b.nfcStartPassParam,

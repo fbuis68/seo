@@ -911,6 +911,13 @@ input:focus,select:focus{border-color:var(--accent)}
         <span data-i18n="esp_key_info">Approchez votre téléphone du lecteur ou présentez ce QR code pour chaque accès.</span>
       </div>
       <div id="espAccessList"></div>
+      <!-- Invités de cette réservation (Pass Sesame) — lecture seule pour
+           l'instant ; l'ajout/l'invitation d'un accompagnant depuis
+           l'espace client viendra dans une prochaine étape. -->
+      <div id="espGuestsSection" style="display:none;margin-top:16px">
+        <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px" data-i18n="esp_guests_title">Invités</div>
+        <div id="espGuestsList"></div>
+      </div>
     </div>
 
     <!-- ════ MODAL DÉTAIL ACCÈS ════ -->
@@ -1626,6 +1633,7 @@ var I18N_FR = {
   esp_key_title:'Votre clé digitale',esp_key_present:'Présentez ce code au lecteur Sesame',
   esp_key_simulate_open:"Simuler l'ouverture",esp_key_unlocked:'Accès déverrouillé ✓',esp_key_pick_access:'Choisissez un accès précis ci-dessous.',
   esp_key_info:'Approchez votre téléphone du lecteur ou présentez ce QR code pour chaque accès.',
+  esp_guests_title:'Invités',esp_guests_master:'Principal',
   esp_wallet_add:'Ajouter à mon Wallet',esp_wallet_error:"Impossible de générer le pass Wallet pour l'instant.",
   esp_access_dedicated:'Accès dédié',esp_access_simulation:'Mode simulation',
   esp_valid_until:"Valable jusqu'au {date} à 11h00",
@@ -1837,6 +1845,7 @@ var I18N_EN = {
   esp_key_title:'Your digital key',esp_key_present:'Present this code to the Sesame reader',
   esp_key_simulate_open:'Simulate unlocking',esp_key_unlocked:'Access unlocked ✓',esp_key_pick_access:'Pick a specific access point below.',
   esp_key_info:'Hold your phone near the reader or show this QR code for each access point.',
+  esp_guests_title:'Guests',esp_guests_master:'Primary',
   esp_wallet_add:'Add to my Wallet',esp_wallet_error:'Unable to generate the Wallet pass right now.',
   esp_access_dedicated:'Dedicated access',esp_access_simulation:'Simulation mode',
   esp_valid_until:'Valid until {date} at 11:00 AM',
@@ -2050,6 +2059,7 @@ var I18N_ES = {
   esp_key_title:'Su llave digital',esp_key_present:'Presente este código en el lector Sesame',
   esp_key_simulate_open:'Simular apertura',esp_key_unlocked:'Acceso desbloqueado ✓',esp_key_pick_access:'Elige un acceso concreto abajo.',
   esp_key_info:'Acerque su teléfono al lector o muestre este código QR en cada acceso.',
+  esp_guests_title:'Invitados',esp_guests_master:'Principal',
   esp_wallet_add:'Añadir a mi Wallet',esp_wallet_error:'No se ha podido generar el pase Wallet por ahora.',
   esp_access_dedicated:'Acceso dedicado',esp_access_simulation:'Modo simulación',
   esp_valid_until:'Válido hasta el {date} a las 11:00',
@@ -3124,7 +3134,7 @@ function espSetTab(tab){
     var el = document.getElementById(id);
     if(el) el.style.display = (t===tab) ? 'block' : 'none';
   });
-  if(tab==='key')      { espRenderKey(); espRenderQr(); espRenderWallet(); }
+  if(tab==='key')      { espRenderKey(); espRenderQr(); espRenderWallet(); espRenderGuests(); }
   if(tab==='rs')       renderRoomService();
   if(tab==='loyalty')  espRenderLoyalty();
   if(tab==='menage')   espRenderMenage();
@@ -3181,6 +3191,34 @@ function espRenderKey(){
       +'<div style="font-size:12px;color:var(--mu)">'+esc(sub)+'</div>'
       +'</div>'
       +'<i class="ti ti-chevron-right" style="color:var(--mu)"></i>'
+      +'</div>';
+  }).join('');
+}
+
+/**
+ * Invités de cette réservation (Pass Sesame, concept "invitations") —
+ * lecture seule pour l'instant : GET /wa/booking/passesPublic. Masqué s'il
+ * n'y a qu'0 ou 1 Pass (pas d'invité supplémentaire à afficher). L'ajout
+ * d'un invité depuis l'espace client viendra dans une prochaine étape.
+ */
+async function espRenderGuests(){
+  var section = document.getElementById('espGuestsSection');
+  var list = document.getElementById('espGuestsList');
+  if(!section || !list || !S.booking) return;
+  var passes = [];
+  try{
+    var r = await apiFetch(API_BASE+'/wa/booking/passesPublic?code='+encodeURIComponent(S.booking.code));
+    passes = r.ok ? await r.json() : [];
+  }catch(e){ passes = []; }
+  if(passes.length <= 1){ section.style.display = 'none'; list.innerHTML = ''; return; }
+  section.style.display = 'block';
+  list.innerHTML = passes.map(function(p){
+    return '<div class="card" style="display:flex;align-items:center;gap:12px;padding:12px 14px;margin-bottom:8px">'
+      +'<div style="width:38px;height:38px;border-radius:10px;background:var(--pl);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0">'+esc((p.personFirstname||'?').charAt(0).toUpperCase())+'</div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:13.5px;font-weight:700">'+esc(p.personFirstname)+' '+esc(p.personLastname)+'</div>'
+      +(p.master ? '<div style="font-size:11px;color:var(--mu)">'+esc(t('esp_guests_master'))+'</div>' : '')
+      +'</div>'
       +'</div>';
   }).join('');
 }
