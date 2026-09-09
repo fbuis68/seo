@@ -1012,6 +1012,18 @@ export async function encodeNfc(config: BookingSourceConfig, passId: string, dev
     // 1. Démarre l'association
     const startParams: Record<string, unknown> =
       config.nfcStartExtraParams && typeof config.nfcStartExtraParams === "object" ? { ...(config.nfcStartExtraParams as Record<string, unknown>) } : {};
+    // La valeur "name" de nfcStartExtraParams sert de PRÉFIXE, pas de valeur
+    // littérale — confirmé le 09/09/2026 par capture réseau du back-office
+    // Sesame lui-même : leur UI envoie un nom différent à chaque tentative
+    // (secret3, secret4…), alors que le préréglage Sesame envoyait jusqu'ici
+    // toujours la même valeur statique. Sesame refuse silencieusement de
+    // recréer un "secret" du même nom (200 OK, "success":true en façade),
+    // ce qui laissait le lecteur physique bloqué en mode lecture au lieu de
+    // basculer en mode association — d'où le timeout systématique observé
+    // ("aucune carte approchée du lecteur") même carte réellement présentée.
+    if (typeof startParams.name === "string" && startParams.name) {
+      startParams.name = `${startParams.name}-${Date.now()}`;
+    }
     startParams[config.nfcStartTimeoutParam || "timeout"] = timeoutSeconds;
     startParams[config.nfcStartPassParam || "id"] = passId;
     startParams[config.nfcStartDeviceParam || "deviceId"] = deviceId;
