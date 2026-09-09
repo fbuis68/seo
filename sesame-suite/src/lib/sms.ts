@@ -241,6 +241,22 @@ function infobipBaseUrl(cfg: { baseUrl: string | null }): string {
 }
 
 /**
+ * Infobip attend un MSISDN brut (indicatif + numéro, chiffres uniquement —
+ * ex. "447860088970"), sans "+" ni espaces, et rejette tout expéditeur qui
+ * ne correspond pas EXACTEMENT à l'expéditeur tel qu'enregistré sur le
+ * compte ("Invalid Source address" / REJECTED_SOURCE) même si le numéro
+ * "+44 7860 088970" désigne le même expéditeur — confirmé le 09/09/2026 via
+ * une capture réseau Infobip (l'expéditeur "447860088970" était pourtant
+ * bien actif côté portail Infobip). Les champs "Numéro expéditeur"/"to" de
+ * ce projet acceptent le format E.164 habituel (+33612345678) pour rester
+ * cohérents avec Twilio/DocPartner — cette fonction fait la conversion
+ * uniquement pour les appels vers l'API Infobip.
+ */
+function toInfobipMsisdn(n: string): string {
+  return n.replace(/[^0-9]/g, "");
+}
+
+/**
  * Infobip — SMS + WhatsApp sous un seul compte/API (contrairement à
  * DocPartner, SMS uniquement), intégré le 09/09/2026 d'après la
  * documentation officielle Infobip (api.infobip.com). Authentification par
@@ -293,9 +309,15 @@ async function sendViaInfobip(
     throw new HttpError(400, `Configuration ${channel === "whatsapp" ? "WhatsApp" : "SMS"} incomplète (expéditeur Infobip manquant)`);
   }
   if (channel === "whatsapp") {
-    await infobipRequest(cfg, INFOBIP_WHATSAPP_TEXT_PATH, { from: cfg.fromNumber, to, content: { text: body } });
+    await infobipRequest(cfg, INFOBIP_WHATSAPP_TEXT_PATH, {
+      from: toInfobipMsisdn(cfg.fromNumber),
+      to: toInfobipMsisdn(to),
+      content: { text: body },
+    });
   } else {
-    await infobipRequest(cfg, INFOBIP_SMS_PATH, { messages: [{ destinations: [{ to }], from: cfg.fromNumber, text: body }] });
+    await infobipRequest(cfg, INFOBIP_SMS_PATH, {
+      messages: [{ destinations: [{ to: toInfobipMsisdn(to) }], from: toInfobipMsisdn(cfg.fromNumber), text: body }],
+    });
   }
 }
 
@@ -318,8 +340,8 @@ async function sendViaInfobipTemplate(
   await infobipRequest(cfg, INFOBIP_WHATSAPP_TEMPLATE_PATH, {
     messages: [
       {
-        from: cfg.fromNumber,
-        to,
+        from: toInfobipMsisdn(cfg.fromNumber),
+        to: toInfobipMsisdn(to),
         content: {
           templateName,
           // Langue du template tel qu'approuvé côté Meta/Infobip — "fr" par
