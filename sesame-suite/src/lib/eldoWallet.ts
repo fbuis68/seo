@@ -126,3 +126,38 @@ export async function createHotelPass(
   const json = await eldoWalletRequest(config, "POST", `/hotels/${encodeURIComponent(config.hotelId!)}/passes`, body);
   return { id: json._id, shortLink: json.shortLink || null, status: json.status || null };
 }
+
+export interface HotelWalletInfo {
+  passBuilderPassTemplateId: string | null;
+  name: string | null;
+  logo: string | null;
+}
+
+/**
+ * Récupère le modèle de pass (visuel) actuellement lié au compte EldoWallet
+ * de l'hôtel — GET /hotels/{hotelId}. Le modèle n'est PAS un paramètre de
+ * chaque appel de création de pass : il est configuré une fois côté
+ * EldoWallet (créé via leur API POST /hotels ou via leur "manager"), et
+ * c'est ce champ wallet.passBuilderPassTemplateId qui sert de confirmation
+ * qu'un modèle personnalisé est bien rattaché (plutôt que le modèle par
+ * défaut) — cf. panneau admin "Wallet", bouton "Récupérer le modèle actif".
+ * La forme exacte de la réponse (objet hôtel direct, ou wrappé sous une clé
+ * "hotel") n'est pas garantie par la documentation Swagger fournie — les
+ * deux formes sont donc lues ici, et l'appel reste loggé par le diagnostic
+ * temporaire d'eldoWalletRequest en cas de forme imprévue.
+ */
+export async function getHotelInfo(config: {
+  hotelId: string | null;
+  apiToken: string | null;
+  lang: string;
+  apiBase?: string | null;
+}): Promise<HotelWalletInfo> {
+  const json = await eldoWalletRequest(config, "GET", `/hotels/${encodeURIComponent(config.hotelId!)}`);
+  const hotel = json?.hotel || json;
+  const wallet = hotel?.wallet || {};
+  return {
+    passBuilderPassTemplateId: wallet.passBuilderPassTemplateId || null,
+    name: wallet.name || null,
+    logo: wallet.logo || null,
+  };
+}

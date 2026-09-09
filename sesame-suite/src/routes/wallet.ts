@@ -3,7 +3,7 @@ import { prisma } from "../db";
 import { resolveEntity } from "../lib/entity";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
-import { createHotelPass, WalletError } from "../lib/eldoWallet";
+import { createHotelPass, getHotelInfo, WalletError } from "../lib/eldoWallet";
 import type { Booking, WalletConfig } from "@prisma/client";
 
 export const walletRouter = Router();
@@ -89,6 +89,31 @@ walletRouter.post(
       create: { entityId: entity.id, ...data },
     });
     res.json(shapeConfig(config));
+  })
+);
+
+/**
+ * GET /wa/wallet/config/template — interroge EldoWallet (GET
+ * /hotels/{hotelId}) pour afficher le modèle de pass (visuel) actuellement
+ * rattaché au compte, à titre de confirmation (le modèle se configure côté
+ * EldoWallet, pas depuis Sesame — cf. lib/eldoWallet.ts getHotelInfo).
+ */
+walletRouter.get(
+  "/wallet/config/template",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const config = await prisma.walletConfig.findUnique({ where: { entityId: entity.id } });
+    if (!config || !config.hotelId || !config.apiToken) {
+      throw new HttpError(400, "Identifiant hôtel et token EldoWallet requis pour interroger le modèle");
+    }
+    try {
+      const info = await getHotelInfo(config);
+      res.json(info);
+    } catch (e) {
+      if (e instanceof WalletError) throw new HttpError(400, e.message);
+      throw e;
+    }
   })
 );
 

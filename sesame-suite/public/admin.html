@@ -3886,6 +3886,15 @@ Accès au salon Premium</textarea>
       La connexion est validée au premier pass généré depuis une fiche réservation — aucun appel de test n'est effectué ici pour éviter de créer un pass fictif chez EldoWallet.
     </div>
   </div>
+
+  <div class="ca">
+    <div class="ch"><i class="ti ti-id"></i>Modèle de pass</div>
+    <p style="font-size:12px;color:var(--mu);margin:0 0 10px">Le visuel du pass (logo, couleurs, champs) se configure directement chez EldoWallet — via leur API <code>POST /hotels</code>, ou via leur "manager" — pas depuis Sesame. Utilisez ce bouton pour vérifier quel modèle est actuellement rattaché à votre compte.</p>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-s" type="button" onclick="walFetchTemplate()"><i class="ti ti-refresh"></i> Récupérer le modèle actif</button>
+      <span id="wal-template-result" style="font-size:13px"></span>
+    </div>
+  </div>
 </div>
 
 <!-- ════════════════════════════════════════════════════════
@@ -7602,6 +7611,31 @@ async function walSave(){
     walRenderStatusBanner();
     toast('Configuration Wallet enregistrée ✓');
   }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+async function walFetchTemplate(){
+  var el = document.getElementById('wal-template-result');
+  el.style.color = 'var(--mu)';
+  el.textContent = 'Interrogation d\'EldoWallet…';
+  try{
+    var r = await adminFetch('/wa/wallet/config/template');
+    var j = await r.json().catch(function(){ return {}; });
+    if(!r.ok){
+      el.style.color = 'var(--rd, #c00)';
+      el.textContent = j.error || 'Erreur lors de la récupération du modèle';
+      return;
+    }
+    if(j.passBuilderPassTemplateId){
+      el.style.color = 'var(--gr, #0a0)';
+      el.textContent = 'Modèle actif : ' + j.passBuilderPassTemplateId + (j.name ? ' (' + j.name + ')' : '');
+    } else {
+      el.style.color = 'var(--mu)';
+      el.textContent = 'Aucun modèle personnalisé rattaché — EldoWallet utilise son modèle par défaut.';
+    }
+  }catch(e){
+    el.style.color = 'var(--rd, #c00)';
+    el.textContent = 'Erreur de connexion au serveur';
+  }
 }
 
 // ═══════════════════════════════════════════════ POINTS DE VENTE (marketplace boutique)
