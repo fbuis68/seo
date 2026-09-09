@@ -893,6 +893,15 @@ function inboundBadge(c){
   const d = c.lastInboundReplyAt ? new Date(c.lastInboundReplyAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short'}) : '';
   return `<span class="badge bg" title="${c.inboundReplyCount} email${c.inboundReplyCount>1?'s':''} reçu${c.inboundReplyCount>1?'s':''} de ce contact${d?' — dernier le '+d:''}">✉ ${c.inboundReplyCount}</span>`;
 }
+// Score d'intérêt cumulé (module Scoring, cf. lib/crmScoring.ts) — mêmes
+// seuils de couleur que le "Score cumulé" affiché sur la fiche détaillée
+// (loadScoringCard). Masqué à 0 pour ne pas surcharger la grille de fiches
+// qui n'ont encore déclenché aucun événement de scoring.
+function scoreBadge(c){
+  if(!c.score) return '';
+  const cls = c.score>=40?'bd':c.score>=20?'bw':'bg';
+  return `<span class="badge ${cls}" title="Score d'intérêt cumulé${c.hotLeadTaskCreatedAt?' — contact chaud, tâche commerciale créée':''}">⚡ ${c.score}</span>`;
+}
 function chk(v){return v?'<span class="tpill bg">oui</span>':'<span class="tpill" style="background:#f1efe8;color:#bbb">—</span>';}
 function esc(s){return String(s==null?'':s).replace(/"/g,'&quot;');}
 // Échappement pour une chaîne interpolée dans un argument JS entre quotes
@@ -1212,7 +1221,7 @@ function renderList(){
           <div class="gc-info"><div class="gc-name">${c.nom}</div><div class="gc-sub">${c.groupe||c.secteur||'—'}</div></div>
           ${c.commercialName?`<span class="commercial-chip" title="Commercial : ${esc(c.commercialName)}">${ini(c.commercialName)}</span>`:''}
         </div>
-        <div class="gc-tags">${typeBadge(c.type)}<span class="badge ${dc}" style="font-size:10px">${c.danger||'—'}</span>${c.ville?`<span class="tag t-blue" style="font-size:10px">${c.ville}</span>`:''}${inboundBadge(c)}${supportBadge(c)}</div>
+        <div class="gc-tags">${typeBadge(c.type)}<span class="badge ${dc}" style="font-size:10px">${c.danger||'—'}</span>${c.ville?`<span class="tag t-blue" style="font-size:10px">${c.ville}</span>`:''}${scoreBadge(c)}${inboundBadge(c)}${supportBadge(c)}</div>
         <hr class="gc-divider">
         <div class="gc-fields">
           <div class="gc-row"><span class="gc-rl">Contrat</span>${cPill(c.contrat)}</div>
