@@ -1031,6 +1031,13 @@ export async function encodeNfc(config: BookingSourceConfig, passId: string, dev
     Object.entries(startParams).forEach(([k, v]) => startQs.set(k, String(v)));
     const startMethod = (config.nfcStartEndpointMethod || "GET").toUpperCase();
     const startUrl = `${base}${config.nfcStartEndpointPath}${config.nfcStartEndpointPath.includes("?") ? "&" : "?"}${startQs.toString()}`;
+    // Log de diagnostic temporaire (09/09/2026) — le fix sur l'unicité du
+    // "name" n'a pas résolu le timeout persistant : ce log montre l'URL
+    // RÉELLEMENT envoyée (query complète) pour vérifier si nfcStartExtraParams
+    // contient bien "name"/"description" pour cet établissement, ou si le
+    // champ est vide/absent côté config (auquel cas le fix précédent n'avait
+    // rien à préfixer et n'a logiquement rien changé).
+    console.log("[diag encodeNfc-start-url] %s", startUrl);
 
     let startRes: Response;
     try {
