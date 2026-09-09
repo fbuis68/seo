@@ -2179,50 +2179,56 @@ async function loadAdminAccessCard(c){
       <div class="log-empty">Aucun établissement Sesame rattaché à ce contact — l'accès admin nécessite une souscription activée (panneau Souscriptions) pour provisionner l'établissement.</div>`;
     return;
   }
-  if(!c.email){
-    el.innerHTML=`<div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Accès admin</span></div>
-      <div class="log-empty">Renseignez une adresse email sur la fiche pour pouvoir créer un accès admin.</div>`;
-    return;
-  }
+  var users = [];
   try{
-    var r = await apiFetch('/wa/adminUser/status?entityId='+encodeURIComponent(c.entityId)+'&email='+encodeURIComponent(c.email));
-    var data = r.ok ? await r.json() : {exists:false};
-  }catch(e){ data={exists:false}; }
-  renderAdminAccessCard(c, data);
+    var r = await apiFetch('/wa/adminUser/listByEntity?entityId='+encodeURIComponent(c.entityId));
+    users = r.ok ? await r.json() : [];
+  }catch(e){ users = []; }
+  renderAdminAccessCard(c, users);
 }
 
-function renderAdminAccessCard(c, data){
+var ADMIN_ACCESS_ROLE_LABEL = {hotel:'Établissement', housekeeping:'Ménage / Maintenance', sesame:'Sesame'};
+
+// Plusieurs comptes possibles par établissement (réception, associés…), pas
+// seulement celui du contact lui-même — cf. /adminUser/listByEntity. Le
+// formulaire de création reste pré-rempli avec le nom/email du contact par
+// commodité (cas le plus fréquent) mais les deux champs restent modifiables.
+function renderAdminAccessCard(c, users){
   const el=document.getElementById('admin-access-card');
   if(!el)return;
-  if(data.exists){
-    const u=data.user;
-    el.innerHTML=`<div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Accès admin</span></div>
+  const list = !users.length
+    ? '<div class="log-empty">Aucun compte admin pour cet établissement.</div>'
+    : users.map(u=>`
       <div class="log-item">
-        <div class="log-dot ld-g"></div>
+        <div class="log-dot ${u.active?'ld-g':'ld-r'}"></div>
         <div class="log-body">
-          <div class="log-text"><strong>Compte actif</strong> — ${esc(u.email)} <span class="tag t-gray" style="font-size:10px;padding:1px 7px">${u.role==='sesame'?'Sesame':'Établissement'}</span></div>
+          <div class="log-text"><strong>${esc(u.name||u.email)}</strong> — ${esc(u.email)} <span class="tag t-gray" style="font-size:10px;padding:1px 7px">${esc(ADMIN_ACCESS_ROLE_LABEL[u.role]||u.role)}</span>${u.active?'':' <span class="tag" style="font-size:10px;padding:1px 7px;background:#f3d9d9;color:#a32d2d">Désactivé</span>'}</div>
           <div class="log-meta">Créé le ${new Date(u.createdAt).toLocaleDateString('fr-FR')}</div>
           <div class="log-acts">
             <button class="btn btn-sm btn-ghost" onclick="resetAdminAccess('${c.id}','${u.id}')">Réinitialiser le mot de passe</button>
             <button class="btn btn-sm btn-ghost" style="color:#a32d2d" onclick="revokeAdminAccess('${c.id}','${u.id}')">Révoquer l'accès</button>
           </div>
         </div>
-      </div>`;
-  } else {
-    el.innerHTML=`<div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Accès admin</span></div>
-      <div class="log-empty">Ce contact n'a pas encore d'accès à l'espace admin de son établissement.</div>
-      <div class="form-grid" style="margin-top:8px">
-        <div class="ff"><label>Rôle</label><select id="admin-access-role"><option value="hotel" selected>Établissement</option><option value="housekeeping">Ménage / Maintenance (app tablette)</option><option value="sesame">Sesame (accès complet)</option></select></div>
-      </div>
-      <div class="log-acts" style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="createAdminAccess('${c.id}')">Créer un accès admin</button></div>`;
-  }
+      </div>`).join('');
+
+  el.innerHTML=`<div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Accès admin</span></div>
+    ${list}
+    <div class="form-grid" style="margin-top:12px">
+      <div class="ff"><label>Nom</label><input type="text" id="admin-access-name" value="${esc(c.nom||'')}" placeholder="Nom de la personne"></div>
+      <div class="ff"><label>Email</label><input type="email" id="admin-access-email" value="${esc(c.email||'')}" placeholder="email@hotel.fr"></div>
+      <div class="ff"><label>Rôle</label><select id="admin-access-role"><option value="hotel" selected>Établissement</option><option value="housekeeping">Ménage / Maintenance (app tablette)</option><option value="sesame">Sesame (accès complet)</option></select></div>
+    </div>
+    <div class="log-acts" style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="createAdminAccess('${c.id}')">+ Créer un accès</button></div>`;
 }
 
 async function createAdminAccess(id){
   const c=clients.find(c=>c.id===id);if(!c)return;
+  const name=(document.getElementById('admin-access-name')||{value:''}).value.trim();
+  const email=(document.getElementById('admin-access-email')||{value:''}).value.trim();
   const role=(document.getElementById('admin-access-role')||{value:'hotel'}).value;
+  if(!email){ flash('Email requis'); return; }
   try{
-    var r = await apiFetch('/wa/adminUser/create', {method:'POST', body:JSON.stringify({entityId:c.entityId, email:c.email, name:c.nom, role:role})});
+    var r = await apiFetch('/wa/adminUser/create', {method:'POST', body:JSON.stringify({entityId:c.entityId, email:email, name:name, role:role})});
     var data = await r.json();
     if(!r.ok) throw new Error(data.error||'http '+r.status);
   }catch(e){ flash(e.message||'Erreur de création'); return; }

@@ -14,16 +14,10 @@ import { randomPassword } from "../lib/password";
  */
 export const adminUserRouter = Router();
 
-function shapeUser(u: { id: string; email: string; name: string | null; role: string; createdAt: Date }) {
-  return { id: u.id, email: u.email, name: u.name || "", role: u.role, createdAt: u.createdAt };
+function shapeUser(u: { id: string; email: string; name: string | null; role: string; active: boolean; createdAt: Date }) {
+  return { id: u.id, email: u.email, name: u.name || "", role: u.role, active: u.active, createdAt: u.createdAt };
 }
 
-/**
- * GET /wa/adminUser/status?entityId=&email=
- * Utilisé par la fiche CRM pour savoir si ce contact a déjà un accès admin
- * sur l'établissement qui lui est rattaché, avant d'afficher "Créer un
- * accès" ou "Compte actif".
- */
 /**
  * GET /wa/commercial/list — comptes Sesame (role="sesame") pouvant être
  * désignés comme commercial responsable d'une fiche/affaire CRM (module
@@ -43,16 +37,22 @@ adminUserRouter.get(
   })
 );
 
+/**
+ * GET /wa/adminUser/listByEntity?entityId=
+ * Utilisé par la fiche CRM pour lister TOUS les comptes admin déjà
+ * provisionnés sur l'établissement rattaché à ce contact (un établissement
+ * peut avoir plusieurs comptes — un par personne de l'équipe), avant
+ * d'afficher le formulaire "Créer un accès" pour en ajouter un autre.
+ */
 adminUserRouter.get(
-  "/adminUser/status",
+  "/adminUser/listByEntity",
   requireAdmin,
   requireSesame,
   asyncHandler(async (req, res) => {
     const entityId = (req.query.entityId as string) || "";
-    const email = ((req.query.email as string) || "").trim().toLowerCase();
-    if (!entityId || !email) throw new HttpError(400, "entityId et email requis");
-    const user = await prisma.adminUser.findFirst({ where: { entityId, email } });
-    res.json(user ? { exists: true, user: shapeUser(user) } : { exists: false });
+    if (!entityId) throw new HttpError(400, "entityId requis");
+    const rows = await prisma.adminUser.findMany({ where: { entityId }, orderBy: { createdAt: "asc" } });
+    res.json(rows.map(shapeUser));
   })
 );
 
@@ -63,9 +63,12 @@ interface CreateBody {
   role?: string;
 }
 
-/** POST /wa/adminUser/create — provisionne un compte admin pour un contact
- * CRM déjà rattaché à un établissement (CrmProspect.entityId non nul).
- * Le mot de passe généré n'est retourné qu'une fois, en clair. */
+/** POST /wa/adminUser/create — provisionne un compte admin sur l'établissement
+ * rattaché à un contact CRM (CrmProspect.entityId non nul). L'email peut
+ * être celui du contact ou celui de n'importe quel membre de son équipe
+ * (réception, associé…) — un établissement peut avoir plusieurs comptes,
+ * cf. /adminUser/listByEntity. Le mot de passe généré n'est retourné qu'une
+ * fois, en clair. */
 adminUserRouter.post(
   "/adminUser/create",
   requireAdmin,
@@ -74,7 +77,7 @@ adminUserRouter.post(
     const b = req.body as CreateBody;
     const email = (b.email || "").trim().toLowerCase();
     if (!b.entityId) throw new HttpError(400, "Aucun établissement rattaché à ce contact");
-    if (!email) throw new HttpError(400, "Ce contact n'a pas d'adresse email");
+    if (!email) throw new HttpError(400, "Email requis");
     const role = b.role === "sesame" ? "sesame" : b.role === "housekeeping" ? "housekeeping" : "hotel";
 
     const entity = await prisma.entity.findUnique({ where: { id: b.entityId } });
