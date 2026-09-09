@@ -2085,11 +2085,16 @@ model ChannelConfig {
   entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
   channel    String // sms | whatsapp
-  provider   String  @default("twilio") // twilio | smspartner (SMS uniquement — pas de WhatsApp chez ce partenaire)
+  provider   String  @default("twilio") // twilio | smspartner (SMS uniquement — pas de WhatsApp chez ce partenaire) | infobip (SMS + WhatsApp)
   accountSid String?
   authToken  String?
-  fromNumber String? // numéro Twilio (SMS/WhatsApp) ou nom d'émetteur DocPartner/SMSPartner (SMS, 3-11 car.)
-  apiKey     String? // clé API DocPartner/SMSPartner.fr — auth par clé unique (provider=smspartner)
+  fromNumber String? // numéro Twilio/Infobip (SMS/WhatsApp) ou nom d'émetteur DocPartner/SMSPartner (SMS, 3-11 car.)
+  apiKey     String? // clé API DocPartner/SMSPartner.fr ou Infobip (auth par clé unique — provider=smspartner|infobip)
+  // Sous-domaine de compte Infobip (ex: "xxxxx.api.infobip.com", attribué à
+  // la création du compte, propre à chaque client — contrairement à
+  // Twilio/DocPartner dont l'URL d'API est fixe pour tous). Ignoré par les
+  // autres providers.
+  baseUrl    String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

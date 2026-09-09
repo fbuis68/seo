@@ -5188,8 +5188,8 @@ async function loadCanauxPanelData(){
 
 function renderCanauxPanel(){
   const s = SMTP_CFG || {host:'',port:587,secure:false,username:'',password:'',fromName:'',fromEmail:'',supportFromName:'',supportFromEmail:''};
-  const sms = SMS_CFG || {provider:'twilio',accountSid:'',authToken:'',fromNumber:'',apiKey:''};
-  const wa = WA_CFG || {accountSid:'',authToken:'',fromNumber:''};
+  const sms = SMS_CFG || {provider:'twilio',accountSid:'',authToken:'',fromNumber:'',apiKey:'',baseUrl:''};
+  const wa = WA_CFG || {provider:'twilio',accountSid:'',authToken:'',fromNumber:'',apiKey:'',baseUrl:''};
   const tpls = MSG_TEMPLATES.filter(t=>t.channel===tplChannelTab);
   document.getElementById('main').innerHTML = `
   <div class="card">
@@ -5214,16 +5214,21 @@ function renderCanauxPanel(){
   <div class="two-col">
     <div class="card">
       <div class="card-head"><div class="ch-ico">✆</div><span class="ch-title">SMS</span></div>
-      <div class="ff"><label>Fournisseur</label><select id="sms-provider" onchange="chanProviderChanged()">
-        <option value="twilio" ${sms.provider!=='smspartner'?'selected':''}>Twilio</option>
+      <div class="ff"><label>Fournisseur</label><select id="sms-provider" onchange="chanProviderChanged('sms')">
+        <option value="twilio" ${sms.provider==='twilio'?'selected':''}>Twilio</option>
         <option value="smspartner" ${sms.provider==='smspartner'?'selected':''}>DocPartner (SMSPartner.fr)</option>
+        <option value="infobip" ${sms.provider==='infobip'?'selected':''}>Infobip</option>
       </select></div>
-      <div id="sms-fields-twilio" style="${sms.provider==='smspartner'?'display:none':''}">
+      <div id="sms-fields-twilio" style="${sms.provider!=='twilio'?'display:none':''}">
         <div class="ff" style="margin-top:8px"><label>Account SID</label><input id="sms-sid" value="${esc(sms.accountSid)}" placeholder="ACxxxxxxxxxxxxxxxx"></div>
         <div class="ff" style="margin-top:8px"><label>Auth Token</label><input type="password" id="sms-token" value="${esc(sms.authToken)}" placeholder="${sms.authToken?'':'••••••••'}"></div>
       </div>
       <div id="sms-fields-smspartner" style="${sms.provider==='smspartner'?'':'display:none'}">
         <div class="ff" style="margin-top:8px"><label>Clé API</label><input type="password" id="sms-apikey" value="${esc(sms.apiKey)}" placeholder="${sms.apiKey?'':'••••••••'}"></div>
+      </div>
+      <div id="sms-fields-infobip" style="${sms.provider==='infobip'?'':'display:none'}">
+        <div class="ff" style="margin-top:8px"><label>Clé API</label><input type="password" id="sms-apikey-ib" value="${esc(sms.apiKey)}" placeholder="${sms.apiKey?'':'••••••••'}"></div>
+        <div class="ff" style="margin-top:8px"><label>Sous-domaine du compte</label><input id="sms-baseurl" value="${esc(sms.baseUrl)}" placeholder="xxxxx.api.infobip.com"></div>
       </div>
       <div class="ff" style="margin-top:8px"><label id="sms-from-label">${sms.provider==='smspartner'?"Nom d'expéditeur (3-11 caractères)":'Numéro expéditeur'}</label><input id="sms-from" value="${esc(sms.fromNumber)}" placeholder="${sms.provider==='smspartner'?'MonHotel':'+33612345678'}"></div>
       <div class="modal-footer" style="border-top:none;padding-top:8px;flex-wrap:wrap">
@@ -5233,9 +5238,19 @@ function renderCanauxPanel(){
       </div>
     </div>
     <div class="card">
-      <div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">WhatsApp (Twilio)</span></div>
-      <div class="ff"><label>Account SID</label><input id="wa-sid" value="${esc(wa.accountSid)}" placeholder="ACxxxxxxxxxxxxxxxx"></div>
-      <div class="ff" style="margin-top:8px"><label>Auth Token</label><input type="password" id="wa-token" value="${esc(wa.authToken)}" placeholder="${wa.authToken?'':'••••••••'}"></div>
+      <div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">WhatsApp</span></div>
+      <div class="ff"><label>Fournisseur</label><select id="wa-provider" onchange="chanProviderChanged('wa')">
+        <option value="twilio" ${wa.provider==='twilio'?'selected':''}>Twilio</option>
+        <option value="infobip" ${wa.provider==='infobip'?'selected':''}>Infobip</option>
+      </select></div>
+      <div id="wa-fields-twilio" style="${wa.provider!=='twilio'?'display:none':''}">
+        <div class="ff" style="margin-top:8px"><label>Account SID</label><input id="wa-sid" value="${esc(wa.accountSid)}" placeholder="ACxxxxxxxxxxxxxxxx"></div>
+        <div class="ff" style="margin-top:8px"><label>Auth Token</label><input type="password" id="wa-token" value="${esc(wa.authToken)}" placeholder="${wa.authToken?'':'••••••••'}"></div>
+      </div>
+      <div id="wa-fields-infobip" style="${wa.provider==='infobip'?'':'display:none'}">
+        <div class="ff" style="margin-top:8px"><label>Clé API</label><input type="password" id="wa-apikey-ib" value="${esc(wa.apiKey)}" placeholder="${wa.apiKey?'':'••••••••'}"></div>
+        <div class="ff" style="margin-top:8px"><label>Sous-domaine du compte</label><input id="wa-baseurl" value="${esc(wa.baseUrl)}" placeholder="xxxxx.api.infobip.com"></div>
+      </div>
       <div class="ff" style="margin-top:8px"><label>Numéro expéditeur</label><input id="wa-from" value="${esc(wa.fromNumber)}" placeholder="+14155238886"></div>
       <div class="modal-footer" style="border-top:none;padding-top:8px;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="saveChannelConfig('whatsapp')">Enregistrer</button>
@@ -5284,22 +5299,43 @@ async function testSmtpConfig(){
   }catch(e){ flash(e.message||'Échec de l\'envoi — vérifiez la configuration'); }
 }
 
-// DocPartner (SMSPartner.fr) — provider SMS alternatif à Twilio, sans
-// WhatsApp. La clé API remplace le couple SID/Token, et le "Numéro
-// expéditeur" devient un nom d'émetteur alphanumérique (3-11 caractères).
-function chanProviderChanged(){
-  const isSp = document.getElementById('sms-provider').value === 'smspartner';
-  document.getElementById('sms-fields-twilio').style.display = isSp ? 'none' : '';
-  document.getElementById('sms-fields-smspartner').style.display = isSp ? '' : 'none';
-  document.getElementById('sms-from-label').textContent = isSp ? "Nom d'expéditeur (3-11 caractères)" : 'Numéro expéditeur';
-  document.getElementById('sms-from').placeholder = isSp ? 'MonHotel' : '+33612345678';
+// Providers alternatifs à Twilio — DocPartner (SMSPartner.fr, SMS
+// uniquement, clé API à la place du couple SID/Token, "Numéro expéditeur"
+// devient un nom d'émetteur alphanumérique 3-11 caractères) et Infobip
+// (SMS + WhatsApp, clé API + sous-domaine de compte propre à chaque
+// client). prefix = 'sms' ou 'wa' (les deux cartes partagent cette logique).
+function chanProviderChanged(prefix){
+  const sel = document.getElementById(prefix+'-provider');
+  const val = sel ? sel.value : 'twilio';
+  const twilioEl = document.getElementById(prefix+'-fields-twilio');
+  const spEl = document.getElementById(prefix+'-fields-smspartner');
+  const ibEl = document.getElementById(prefix+'-fields-infobip');
+  if(twilioEl) twilioEl.style.display = val==='twilio' ? '' : 'none';
+  if(spEl) spEl.style.display = val==='smspartner' ? '' : 'none';
+  if(ibEl) ibEl.style.display = val==='infobip' ? '' : 'none';
+  const fromLabel = document.getElementById(prefix+'-from-label');
+  const fromInput = document.getElementById(prefix+'-from');
+  if(fromLabel && fromInput){
+    const isSp = val==='smspartner';
+    fromLabel.textContent = isSp ? "Nom d'expéditeur (3-11 caractères)" : 'Numéro expéditeur';
+    fromInput.placeholder = isSp ? 'MonHotel' : (prefix==='wa' ? '+14155238886' : '+33612345678');
+  }
 }
 
 async function saveChannelConfig(channel){
   const p = channel==='sms'?'sms':'wa';
   const g=i=>(document.getElementById(i)||{value:''}).value;
-  const body={channel:channel, accountSid:g(p+'-sid').trim(), authToken:g(p+'-token'), fromNumber:g(p+'-from').trim(), scope:'crm'};
-  if(p==='sms'){ body.provider = g('sms-provider'); body.apiKey = g('sms-apikey').trim(); }
+  const provider = g(p+'-provider') || 'twilio';
+  const body={channel:channel, provider:provider, fromNumber:g(p+'-from').trim(), scope:'crm'};
+  if(provider==='infobip'){
+    body.apiKey = g(p+'-apikey-ib').trim();
+    body.baseUrl = g(p+'-baseurl').trim();
+  } else if(provider==='smspartner'){
+    body.apiKey = g('sms-apikey').trim();
+  } else {
+    body.accountSid = g(p+'-sid').trim();
+    body.authToken = g(p+'-token');
+  }
   try{
     var r = await apiFetch('/wa/channelConfig/update', {method:'POST', body:JSON.stringify(body)});
     var data = await r.json();
@@ -5425,8 +5461,10 @@ function openTemplateModal(id){
         </div>
       </div>
       <div style="font-size:11px;color:var(--mu);margin-top:6px">Variables — envoi depuis une fiche prospect : {{nom}} {{secteur}} {{referent}} {{ville}} · envoi depuis "Utilisateurs CRM" (identifiants de connexion) : {{login}} {{password}} {{loginUrl}}</div>
-      <div class="ff" id="tpl-sid-wrap" style="margin-top:8px"><label>Content SID Twilio (WhatsApp)</label><input id="tpl-sid" value="${esc(t.whatsappContentSid||'')}" placeholder="HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
-        <div style="font-size:11px;color:#888;margin-top:4px">WhatsApp Business interdit le texte libre hors session client — créez d'abord ce modèle dans Twilio (Messaging → Content Template Builder), faites-le approuver par Meta, puis collez ici son Content SID. Les variables {{var}} ci-dessus doivent apparaître dans le même ordre que les {{1}} {{2}}… du modèle approuvé.</div></div>
+      <div class="ff" id="tpl-sid-wrap" style="margin-top:8px"><label>${(WA_CFG&&WA_CFG.provider==='infobip')?"Nom du modèle Infobip (WhatsApp)":'Content SID Twilio (WhatsApp)'}</label><input id="tpl-sid" value="${esc(t.whatsappContentSid||'')}" placeholder="${(WA_CFG&&WA_CFG.provider==='infobip')?'mon_modele_whatsapp':'HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'}">
+        <div style="font-size:11px;color:#888;margin-top:4px">${(WA_CFG&&WA_CFG.provider==='infobip')
+          ? "WhatsApp Business interdit le texte libre hors session client — créez d'abord ce modèle dans le portail Infobip, faites-le approuver par Meta, puis collez ici son nom exact. Les variables {{var}} ci-dessus doivent apparaître dans le même ordre que les paramètres du modèle approuvé."
+          : "WhatsApp Business interdit le texte libre hors session client — créez d'abord ce modèle dans Twilio (Messaging → Content Template Builder), faites-le approuver par Meta, puis collez ici son Content SID. Les variables {{var}} ci-dessus doivent apparaître dans le même ordre que les {{1}} {{2}}… du modèle approuvé."}</div></div>
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="saveTemplate(${t.id?`'${t.id}'`:'null'})">Enregistrer</button>
         <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>

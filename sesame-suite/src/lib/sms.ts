@@ -26,18 +26,19 @@ export async function getChannelConfig(entityId: string | null, channel: SmsChan
 export async function upsertChannelConfig(
   entityId: string | null,
   channel: SmsChannel,
-  data: { provider?: string; accountSid?: string; authToken?: string; fromNumber?: string; apiKey?: string }
+  data: { provider?: string; accountSid?: string; authToken?: string; fromNumber?: string; apiKey?: string; baseUrl?: string }
 ) {
   // Le provider change la forme des identifiants stockés (SID+Token pour
-  // Twilio, une seule clé pour DocPartner/SMSPartner) : on réécrit toujours
-  // la ligne complète pour éviter qu'un changement de provider ne laisse des
-  // identifiants de l'ancien provider traîner dans la ligne.
+  // Twilio, une seule clé pour DocPartner/SMSPartner/Infobip) : on réécrit
+  // toujours la ligne complète pour éviter qu'un changement de provider ne
+  // laisse des identifiants de l'ancien provider traîner dans la ligne.
   const payload = {
     provider: data.provider || "twilio",
     accountSid: data.accountSid ?? null,
     authToken: data.authToken ?? null,
     fromNumber: data.fromNumber ?? null,
     apiKey: data.apiKey ?? null,
+    baseUrl: data.baseUrl ?? null,
   };
   const existingRows = await prisma.channelConfig.findMany({ where: { entityId, channel }, orderBy: { updatedAt: "desc" } });
   if (existingRows.length > 0) {
@@ -164,6 +165,17 @@ async function sendViaTwilioTemplate(
 export async function sendWhatsAppTemplate(entityId: string | null, to: string, contentSid: string, contentVariables: Record<string, string>) {
   const cfg = await getChannelConfig(entityId, "whatsapp");
   if (!cfg) throw new HttpError(400, "Aucune configuration WhatsApp pour cette portée");
+  if (cfg.provider === "infobip") {
+    // contentVariables est numéroté ("1","2",...) pour matcher le format
+    // Twilio (ContentVariables) — Infobip attend un tableau positionnel,
+    // reconstruit ici dans l'ordre plutôt que de dupliquer cette logique
+    // côté messaging.ts pour chaque provider.
+    const placeholders = Object.keys(contentVariables)
+      .sort((a, b) => Number(a) - Number(b))
+      .map((k) => contentVariables[k]);
+    await sendViaInfobipTemplate(cfg, to, contentSid, placeholders);
+    return;
+  }
   await sendViaTwilioTemplate(cfg, to, contentSid, contentVariables);
 }
 
@@ -218,14 +230,122 @@ async function sendViaSmsPartner(cfg: { apiKey: string | null; fromNumber: strin
   }
 }
 
+const INFOBIP_SMS_PATH = "/sms/2/text/advanced";
+const INFOBIP_WHATSAPP_TEXT_PATH = "/whatsapp/1/message/text";
+const INFOBIP_WHATSAPP_TEMPLATE_PATH = "/whatsapp/1/message/template";
+
+function infobipBaseUrl(cfg: { baseUrl: string | null }): string {
+  if (!cfg.baseUrl) throw new HttpError(400, "Configuration incomplète (sous-domaine de compte Infobip manquant)");
+  const trimmed = cfg.baseUrl.trim().replace(/^https?:\/\//i, "").replace(/\/$/, "");
+  return `https://${trimmed}`;
+}
+
+/**
+ * Infobip — SMS + WhatsApp sous un seul compte/API (contrairement à
+ * DocPartner, SMS uniquement), intégré le 09/09/2026 d'après la
+ * documentation officielle Infobip (api.infobip.com). Authentification par
+ * clé API unique (en-tête Authorization: App <clé>, distinct du couple
+ * SID/Token Twilio). L'URL d'API est propre à chaque compte (sous-domaine
+ * attribué à la création, cf. ChannelConfig.baseUrl) — contrairement à
+ * Twilio/DocPartner dont l'URL est fixe pour tous les clients.
+ */
+async function infobipRequest(cfg: { apiKey: string | null; baseUrl: string | null }, path: string, payload: unknown) {
+  if (!cfg.apiKey) throw new HttpError(400, "Configuration incomplète (clé API Infobip manquante)");
+  const url = `${infobipBaseUrl(cfg)}${path}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `App ${cfg.apiKey}`, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    throw new HttpError(502, "Échec de connexion à l'API Infobip : " + String(err instanceof Error ? err.message : err));
+  }
+  const text = await res.text();
+  let j: { messages?: { status?: { groupId?: number; name?: string; description?: string } }[]; requestError?: { serviceException?: { messageId?: string; text?: string } } } = {};
+  try {
+    j = JSON.parse(text);
+  } catch {
+    // corps non-JSON, géré ci-dessous via `text` brut
+  }
+  if (!res.ok) {
+    const detail = j.requestError?.serviceException?.text || j.requestError?.serviceException?.messageId || text || `HTTP ${res.status}`;
+    throw new HttpError(502, `Échec de l'envoi Infobip (HTTP ${res.status}) : ${detail}`);
+  }
+  // Un envoi accepté (HTTP 200) peut quand même contenir un message
+  // individuel en échec (numéro invalide, expéditeur non autorisé...) — cf.
+  // messages[].status.groupId dans la réponse Infobip (1-2 = en cours/livré,
+  // 3+ = échec/rejeté/en attente d'expiration).
+  const status = j.messages?.[0]?.status;
+  if (status && typeof status.groupId === "number" && status.groupId >= 3) {
+    throw new HttpError(502, `Échec de l'envoi Infobip : ${status.name || status.description || "statut " + status.groupId}`);
+  }
+}
+
+async function sendViaInfobip(
+  cfg: { apiKey: string | null; fromNumber: string | null; baseUrl: string | null },
+  to: string,
+  body: string,
+  channel: SmsChannel
+) {
+  if (!cfg.fromNumber) {
+    throw new HttpError(400, `Configuration ${channel === "whatsapp" ? "WhatsApp" : "SMS"} incomplète (expéditeur Infobip manquant)`);
+  }
+  if (channel === "whatsapp") {
+    await infobipRequest(cfg, INFOBIP_WHATSAPP_TEXT_PATH, { from: cfg.fromNumber, to, content: { text: body } });
+  } else {
+    await infobipRequest(cfg, INFOBIP_SMS_PATH, { messages: [{ destinations: [{ to }], from: cfg.fromNumber, text: body }] });
+  }
+}
+
+/**
+ * Envoi WhatsApp via un template Infobip pré-approuvé par Meta — même
+ * principe que sendViaTwilioTemplate (Content Template Twilio), avec une
+ * forme de requête différente : templateName + langue + variables
+ * POSITIONNELLES (tableau), pas un objet numéroté comme ContentVariables
+ * chez Twilio. MessageTemplate.whatsappContentSid est réutilisé pour
+ * stocker le nom du template Infobip (libellé adapté côté UI selon le
+ * provider choisi) plutôt que d'ajouter un champ dédié.
+ */
+async function sendViaInfobipTemplate(
+  cfg: { apiKey: string | null; fromNumber: string | null; baseUrl: string | null },
+  to: string,
+  templateName: string,
+  placeholders: string[]
+) {
+  if (!cfg.fromNumber) throw new HttpError(400, "Configuration WhatsApp incomplète (expéditeur Infobip manquant)");
+  await infobipRequest(cfg, INFOBIP_WHATSAPP_TEMPLATE_PATH, {
+    messages: [
+      {
+        from: cfg.fromNumber,
+        to,
+        content: {
+          templateName,
+          // Langue du template tel qu'approuvé côté Meta/Infobip — "fr" par
+          // défaut (marché de cette app), pas encore configurable par
+          // modèle : à ajuster si un établissement a besoin d'une autre
+          // langue de template WhatsApp.
+          language: "fr",
+          templateData: { body: { placeholders } },
+        },
+      },
+    ],
+  });
+}
+
 async function sendViaProvider(
-  cfg: { provider: string; accountSid: string | null; authToken: string | null; fromNumber: string | null; apiKey: string | null },
+  cfg: { provider: string; accountSid: string | null; authToken: string | null; fromNumber: string | null; apiKey: string | null; baseUrl: string | null },
   to: string,
   body: string,
   channel: SmsChannel
 ) {
   if (channel === "sms" && cfg.provider === "smspartner") {
     await sendViaSmsPartner(cfg, to, body);
+    return;
+  }
+  if (cfg.provider === "infobip") {
+    await sendViaInfobip(cfg, to, body, channel);
     return;
   }
   await sendViaTwilio(cfg, to, body, channel);

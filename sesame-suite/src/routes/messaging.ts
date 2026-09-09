@@ -23,7 +23,14 @@ function isChannel(v: unknown): v is Channel {
 }
 
 function shapeChannelConfig(
-  c: { provider: string; accountSid: string | null; authToken: string | null; fromNumber: string | null; apiKey: string | null } | null
+  c: {
+    provider: string;
+    accountSid: string | null;
+    authToken: string | null;
+    fromNumber: string | null;
+    apiKey: string | null;
+    baseUrl: string | null;
+  } | null
 ) {
   if (!c) return null;
   return {
@@ -32,6 +39,7 @@ function shapeChannelConfig(
     authToken: c.authToken || "",
     fromNumber: c.fromNumber || "",
     apiKey: c.apiKey || "",
+    baseUrl: c.baseUrl || "",
   };
 }
 
@@ -53,6 +61,7 @@ interface ChannelConfigBody {
   authToken?: string;
   fromNumber?: string;
   apiKey?: string;
+  baseUrl?: string;
 }
 
 messagingRouter.post(
@@ -64,13 +73,28 @@ messagingRouter.post(
     if (!isSmsChannel(b.channel)) throw new HttpError(400, "channel doit être sms ou whatsapp");
     // DocPartner/SMSPartner ne couvre que le SMS, pas le WhatsApp — un choix
     // de provider "smspartner" sur le canal whatsapp retombe sur Twilio.
-    const provider = b.provider === "smspartner" && b.channel === "sms" ? "smspartner" : "twilio";
+    // Infobip couvre les deux canaux (comme Twilio), donc pas cette
+    // restriction pour lui.
+    const provider = b.provider === "smspartner" && b.channel === "sms" ? "smspartner" : b.provider === "infobip" ? "infobip" : "twilio";
     if (provider === "smspartner") {
       if (!b.apiKey || !b.apiKey.trim()) throw new HttpError(400, "Clé API DocPartner requise");
       const row = await upsertChannelConfig(entityId, b.channel, {
         provider,
         apiKey: b.apiKey.trim(),
         fromNumber: (b.fromNumber || "").trim(),
+      });
+      res.json(shapeChannelConfig(row));
+      return;
+    }
+    if (provider === "infobip") {
+      if (!b.apiKey || !b.apiKey.trim()) throw new HttpError(400, "Clé API Infobip requise");
+      if (!b.baseUrl || !b.baseUrl.trim()) throw new HttpError(400, "Sous-domaine de compte Infobip requis (ex : xxxxx.api.infobip.com)");
+      if (!b.fromNumber || !b.fromNumber.trim()) throw new HttpError(400, "Expéditeur requis");
+      const row = await upsertChannelConfig(entityId, b.channel, {
+        provider,
+        apiKey: b.apiKey.trim(),
+        fromNumber: b.fromNumber.trim(),
+        baseUrl: b.baseUrl.trim(),
       });
       res.json(shapeChannelConfig(row));
       return;
