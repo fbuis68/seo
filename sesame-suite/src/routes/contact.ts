@@ -45,6 +45,16 @@ contactRouter.post(
         recipient: { email: prospect.email, phone: prospect.tel },
         variables: { nom: prospect.nom, secteur: prospect.secteur || "" },
       }).catch((e) => console.error("[automation] crm.prospect_created:", e));
+      // En plus du trigger générique ci-dessus (déclenché pour toute
+      // création de prospect, quelle que soit son origine) — permet de
+      // cibler une automatisation dédiée aux leads du site web.
+      fireTrigger("crm.prospect_created_web", {
+        entityId: null,
+        targetType: "crmProspect",
+        targetId: prospect.id,
+        recipient: { email: prospect.email, phone: prospect.tel },
+        variables: { nom: prospect.nom, secteur: prospect.secteur || "" },
+      }).catch((e) => console.error("[automation] crm.prospect_created_web:", e));
     } else if (secteur && !prospect.secteur) {
       prospect = await prisma.crmProspect.update({ where: { id: prospect.id }, data: { secteur } });
     }

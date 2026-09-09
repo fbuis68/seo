@@ -38,6 +38,12 @@ export const TRIGGERS: TriggerDef[] = [
   { key: "stay.start", label: "Début de séjour", scope: "hotel", timingModes: ["offset"], dateField: "startDate" },
   { key: "stay.end", label: "Fin de séjour", scope: "hotel", timingModes: ["offset"], dateField: "endDate" },
   { key: "crm.prospect_created", label: "Nouveau prospect CRM", scope: "crm", timingModes: ["immediate"] },
+  // Sous-ensemble de crm.prospect_created : uniquement les prospects créés
+  // via le formulaire de contact public du site web (cf. routes/contact.ts,
+  // qui déclenche les deux triggers) — permet une automatisation dédiée à
+  // ces leads sans devoir filtrer les prospects créés manuellement dans le
+  // CRM, via le wizard d'inscription, une affaire, etc.
+  { key: "crm.prospect_created_web", label: "Nouveau prospect du site web", scope: "crm", timingModes: ["immediate"] },
   { key: "crm.contract_signed", label: "Contrat signé", scope: "crm", timingModes: ["immediate"] },
   { key: "crm.subscription_activated", label: "Souscription activée", scope: "crm", timingModes: ["immediate"] },
   { key: "crm.subscription_cancelled", label: "Souscription annulée", scope: "crm", timingModes: ["immediate"] },
