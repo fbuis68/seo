@@ -1,0 +1,781 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Réservations — Sesame</title>
+<link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap">
+<style>
+/* ════════════════ SPLASH SCREEN ════════════════
+   Même mécanique que menage.html (marque Sesame, halo, animation
+   "journey" en 4 étapes, loader) — parcours adapté au sujet
+   Réservations : Arrivées → Fiche → Invités → NFC. */
+:root{
+  --sesame-burgundy: #8B1A2E;
+  --sesame-wine: #6B1423;
+  --sesame-black: #2B0E14;
+  --sesame-rose: #D9A93A;
+  --sesame-white: #FFFBF3;
+}
+
+.sesame-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: var(--sesame-white);
+  background:
+    radial-gradient(circle at 18% 18%, rgba(184, 134, 10, .4), transparent 38%),
+    linear-gradient(118deg, var(--sesame-burgundy) 0%, var(--sesame-wine) 38%, var(--sesame-black) 88%);
+  transition: opacity .55s ease, visibility .55s ease;
+}
+
+.sesame-splash::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 25%, rgba(255,255,255,.045) 48%, transparent 68%);
+  transform: translateX(-100%);
+  animation: sheen 6.5s ease-in-out infinite;
+}
+
+.sesame-splash__halo {
+  position: absolute;
+  width: min(760px, 80vw);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: rgba(139, 26, 46, .22);
+  filter: blur(90px);
+}
+
+.sesame-splash__content {
+  position: relative;
+  z-index: 1;
+  width: min(1120px, calc(100vw - 48px));
+  text-align: center;
+}
+
+.sesame-splash__logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: clamp(245px, 32vw, 470px);
+  height: auto;
+  margin: 0 auto clamp(54px, 8vh, 90px);
+  filter: drop-shadow(0 12px 28px rgba(0,0,0,.28));
+  animation: logo-in 1.4s cubic-bezier(.2,.75,.25,1) both;
+}
+
+.splash-mark { color: var(--sesame-white); }
+.splash-mark svg { width: 82px; height: 82px; }
+.splash-word__sesame { font-family:'DM Serif Display',serif; font-size: clamp(28px,4vw,40px); letter-spacing: .06em; line-height: 1; color: var(--sesame-white); }
+.splash-word__tech { font-family:'DM Sans',Arial,sans-serif; font-size: clamp(12px,1.3vw,15px); font-weight: 600; letter-spacing: .38em; color: var(--sesame-rose); margin-top: 6px; }
+.splash-word__tag { font-family:'DM Sans',Arial,sans-serif; font-style: italic; font-size: 13px; font-weight: 300; letter-spacing: .02em; color: rgba(255,255,255,.62); margin-top: 10px; }
+
+.journey {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: clamp(22px, 6vw, 88px);
+  margin-bottom: clamp(48px, 7vh, 74px);
+}
+
+.journey__line {
+  position: absolute;
+  top: 39px;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  overflow: hidden;
+  background: rgba(255,255,255,.14);
+}
+
+.journey__line span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, var(--sesame-white) 15%, var(--sesame-rose) 85%, transparent);
+  transform-origin: left;
+  animation: draw-line 3.6s .2s ease both;
+}
+
+.journey__step {
+  position: relative;
+  opacity: 0;
+  transform: translateY(10px);
+  animation: step-in .85s var(--delay) ease forwards;
+}
+
+.journey__step::after {
+  content: "";
+  position: absolute;
+  top: 35px;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sesame-white);
+  box-shadow: 0 0 18px 4px rgba(217, 169, 58, .5);
+  transform: translate(-50%, -50%);
+}
+
+.journey__icon {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 15px;
+  color: #f6e3c3;
+  background: rgba(42, 14, 4, .28);
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 22px;
+  backdrop-filter: blur(8px);
+}
+
+.journey__icon svg {
+  width: 46px;
+  height: 46px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.journey__step > span {
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: .08em;
+  color: rgba(255,255,255,.72);
+}
+
+.loader {
+  width: min(360px, 62vw);
+  height: 2px;
+  margin: 0 auto 18px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: rgba(255,255,255,.17);
+}
+
+.loader span {
+  display: block;
+  width: 55%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--sesame-rose), white);
+  box-shadow: 0 0 12px rgba(255,255,255,.7);
+  animation: loading 2.6s ease-in-out infinite;
+}
+
+.sesame-splash__status {
+  margin: 0;
+  font-size: clamp(14px, 1.35vw, 18px);
+  font-weight: 300;
+  letter-spacing: .025em;
+  color: rgba(255,255,255,.84);
+}
+
+.sesame-splash.is-leaving { opacity: 0; visibility: hidden; }
+
+@keyframes logo-in {
+  from { opacity: 0; transform: translateY(-12px) scale(.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes step-in { to { opacity: 1; transform: none; } }
+@keyframes draw-line { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes sheen { 0%, 45% { transform: translateX(-100%); } 75%, 100% { transform: translateX(100%); } }
+@keyframes loading { 0% { transform: translateX(-110%); } 50%, 100% { transform: translateX(185%); } }
+
+@media (max-width: 680px) {
+  .sesame-splash__content { width: min(92vw, 430px); }
+  .sesame-splash__logo { margin-bottom: 44px; }
+  .journey { gap: 8px; margin-bottom: 52px; }
+  .journey__line { top: 31px; }
+  .journey__icon { width: 58px; height: 58px; border-radius: 18px; }
+  .journey__icon svg { width: 36px; height: 36px; }
+  .journey__step::after { top: 31px; width: 6px; height: 6px; }
+  .journey__step > span { font-size: 10px; letter-spacing: .02em; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sesame-splash *, .sesame-splash *::before, .sesame-splash *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+}
+
+:root{
+  --wine:#8B1A2E; --wine-d:#6B1423; --wine-l:#FDEDF0;
+  --good:#1A8A4E; --good-l:#E7F7EE;
+  --wait:#B8720A; --wait-l:#FBF2DC;
+  --info:#1A6FA8; --info-l:#E9F2FA;
+  --urgent:#C23B2E; --urgent-l:#FBEAE8;
+  --bg:#F4F2EF; --card:#FFFFFF; --ink:#22181C; --mu:#7E7570; --bdr:#E6E0DA;
+  --r:16px; --rs:12px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--ink);font-family:'DM Sans',Arial,sans-serif;font-size:17px;-webkit-tap-highlight-color:transparent}
+button,input{font-family:inherit}
+h1,h2,h3{font-family:'DM Serif Display',Georgia,serif;font-weight:400;margin:0}
+::-webkit-scrollbar{width:0;height:0}
+
+/* ── Login ── */
+#loginGate{position:fixed;inset:0;background:linear-gradient(150deg,var(--wine) 0%,var(--wine-d) 60%,#2B0E14 100%);display:flex;align-items:center;justify-content:center;padding:24px;z-index:500}
+.login-box{width:100%;max-width:380px;background:#fff;border-radius:var(--r);padding:34px 30px;box-shadow:0 24px 60px rgba(0,0,0,.35)}
+.login-mark{width:52px;height:52px;border-radius:14px;background:var(--wine);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'DM Serif Display',serif;font-size:26px;margin-bottom:14px}
+.login-box h1{font-size:22px;margin-bottom:2px}
+.login-sub{font-size:14px;color:var(--mu);margin-bottom:24px}
+.lf{margin-bottom:16px}
+.lf label{display:block;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--mu);margin-bottom:6px}
+.lf input{width:100%;font-size:18px;padding:14px 16px;border:1.5px solid var(--bdr);border-radius:var(--rs);background:var(--bg)}
+.lf input:focus{outline:none;border-color:var(--wine)}
+.login-btn{width:100%;padding:16px;border:none;border-radius:var(--rs);background:var(--wine);color:#fff;font-size:17px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:4px}
+.login-btn:active{background:var(--wine-d)}
+.login-err{margin-top:14px;color:var(--urgent);font-size:14px;text-align:center;display:none}
+
+/* ── App shell ── */
+#app{display:none;min-height:100%;flex-direction:column}
+header.top{position:sticky;top:0;z-index:40;background:var(--wine);color:#fff;padding:14px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;box-shadow:0 2px 10px rgba(0,0,0,.15)}
+header.top .hn{font-family:'DM Serif Display',serif;font-size:20px;line-height:1.1}
+header.top .hs{font-size:12px;opacity:.75}
+header.top .spacer{flex:1}
+.iconbtn{width:38px;height:38px;flex-shrink:0;border-radius:10px;border:none;background:rgba(255,255,255,.16);color:#fff;font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.iconbtn:active{background:rgba(255,255,255,.3)}
+
+.tabs{display:flex;gap:3px;background:#fff;border:1px solid var(--bdr);border-radius:12px;padding:3px;margin:14px 18px 0;overflow-x:auto}
+.tab{flex:1;white-space:nowrap;padding:9px 14px;border-radius:9px;font-size:13px;font-weight:600;color:var(--mu);cursor:pointer;text-align:center}
+.tab.on{background:var(--wine);color:#fff}
+.searchrow{padding:12px 18px 0;display:flex;gap:8px;align-items:center}
+.searchrow input{flex:1;font-size:16px;padding:11px 14px;border:1.5px solid var(--bdr);border-radius:var(--rs);background:#fff}
+.searchrow input:focus{outline:none;border-color:var(--wine)}
+
+main{flex:1;padding:12px 18px 60px}
+.daysum{font-size:13px;color:var(--mu);padding:2px 2px 12px}
+
+.rescard{background:var(--card);border:1px solid var(--bdr);border-radius:var(--r);padding:14px 16px;margin-bottom:10px;cursor:pointer}
+.rescard:active{background:var(--bg)}
+.rescard .rname{font-family:'DM Serif Display',serif;font-size:18px;line-height:1.2}
+.rescard .rroom{font-weight:400;color:var(--mu);font-size:13px}
+.rescard .rmeta{font-size:12px;color:var(--mu);margin-top:4px;display:flex;flex-wrap:wrap;gap:2px 10px;align-items:center}
+.rescard .rmeta i{font-size:11px}
+.badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.bdg{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px}
+.bdg-good{background:var(--good-l);color:var(--good)}
+.bdg-wait{background:var(--wait-l);color:var(--wait)}
+.bdg-info{background:var(--info-l);color:var(--info)}
+.bdg-urgent{background:var(--urgent-l);color:var(--urgent)}
+.bdg-mu{background:var(--bdr);color:var(--mu)}
+
+.empty{text-align:center;padding:60px 20px;color:var(--mu)}
+.empty i{font-size:40px;opacity:.4;display:block;margin-bottom:10px}
+.loading{text-align:center;padding:60px 20px;color:var(--mu)}
+.spin{width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;display:inline-block;animation:spin .7s linear infinite;vertical-align:-2px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Bottom sheet ── */
+.sheet-bg{position:fixed;inset:0;background:rgba(20,10,12,.4);z-index:200;display:none;align-items:flex-end;justify-content:center}
+.sheet-bg.show{display:flex}
+.sheet{width:100%;max-width:560px;background:#fff;border-radius:22px 22px 0 0;max-height:90vh;overflow-y:auto;padding:22px 22px calc(22px + env(safe-area-inset-bottom))}
+.sheet-handle{width:40px;height:4px;background:var(--bdr);border-radius:2px;margin:0 auto 16px}
+.sheet h2{font-size:20px;margin-bottom:2px}
+.sheet .shsub{font-size:13px;color:var(--mu);margin-bottom:16px}
+.rows{border:1px solid var(--bdr);border-radius:var(--rs);overflow:hidden;margin-bottom:16px}
+.rowitem{display:flex;justify-content:space-between;gap:12px;padding:10px 13px;font-size:13px;border-bottom:1px solid var(--bdr)}
+.rowitem:last-child{border-bottom:none}
+.rowitem .rk{color:var(--mu)}
+.rowitem .rv{font-weight:600;text-align:right}
+.guest{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 13px;border:1px solid var(--bdr);border-radius:var(--rs);margin-bottom:7px}
+.guest .gname{font-weight:700;font-size:13px}
+.guest .gmeta{font-size:11px;color:var(--mu);margin-top:2px}
+.sechead{font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;margin:14px 0 8px}
+.sf{margin-bottom:14px}
+.sf label{display:block;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--mu);margin-bottom:7px}
+.sf select{width:100%;font-size:16px;padding:12px 14px;border:1.5px solid var(--bdr);border-radius:var(--rs);background:var(--bg);font-family:inherit}
+.acts{display:flex;gap:10px;margin-top:6px;flex-wrap:wrap}
+.btn{flex:1;min-width:140px;padding:14px;border-radius:var(--rs);border:none;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px}
+.btn-primary{background:var(--wine);color:#fff}
+.btn-primary:active{background:var(--wine-d)}
+.btn-primary:disabled{opacity:.6}
+.btn-ghost{background:var(--bg);color:var(--ink)}
+.btn-sm{flex:none;min-width:0;padding:8px 12px;font-size:12px}
+.alt{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:var(--rs);font-size:13px;margin-bottom:12px}
+.alt-w{background:var(--urgent-l);color:var(--urgent)}
+.alt-b{background:var(--info-l);color:var(--info)}
+.linkfield{display:flex;gap:8px;align-items:center;margin-top:8px}
+.linkfield input{flex:1;font-family:monospace;font-size:12px;padding:9px 10px;border:1.5px solid var(--bdr);border-radius:var(--rs);background:var(--bg)}
+
+@media (min-width:820px){
+  main{padding-left:32px;padding-right:32px}
+  .rescard{max-width:760px}
+}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+</style>
+</head>
+<body>
+
+<!-- ════════════════ SPLASH SCREEN ════════════════ -->
+<div class="sesame-splash" id="sesameSplash" role="status" aria-live="polite" aria-label="Chargement de l'espace Réservations">
+  <div class="sesame-splash__halo" aria-hidden="true"></div>
+  <div class="sesame-splash__content">
+    <div class="sesame-splash__logo">
+      <div class="splash-mark" aria-hidden="true">
+        <svg viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-dasharray="72 40" transform="rotate(-18 50 50)"/>
+          <circle cx="50" cy="50" r="27" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-dasharray="48 32" transform="rotate(40 50 50)"/>
+          <circle cx="50" cy="50" r="14" fill="none" stroke="var(--sesame-rose)" stroke-width="6" stroke-linecap="round" stroke-dasharray="28 20" transform="rotate(-65 50 50)"/>
+        </svg>
+      </div>
+      <div>
+        <div class="splash-word__sesame">SESAME</div>
+        <div class="splash-word__tech">TECHNOLOGY</div>
+        <div class="splash-word__tag">Réservations</div>
+      </div>
+    </div>
+    <div class="journey" aria-label="Arrivées, fiche, invités et encodage NFC">
+      <div class="journey__line" aria-hidden="true"><span></span></div>
+      <div class="journey__step" style="--delay:.25s">
+        <div class="journey__icon"><svg viewBox="0 0 64 64" aria-hidden="true"><rect x="10" y="15" width="44" height="39" rx="6"/><path d="M10 25h44M21 10v10M43 10v10"/><path d="m24 40 6 6 12-14"/></svg></div>
+        <span>Arrivées</span>
+      </div>
+      <div class="journey__step" style="--delay:1.05s">
+        <div class="journey__icon"><svg viewBox="0 0 64 64" aria-hidden="true"><rect x="16" y="10" width="32" height="44" rx="5"/><path d="M23 22h18M23 30h18M23 38h10"/></svg></div>
+        <span>Fiche</span>
+      </div>
+      <div class="journey__step" style="--delay:1.85s">
+        <div class="journey__icon"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="24" cy="24" r="9"/><path d="M10 52c0-9 6-16 14-16s14 7 14 16"/><circle cx="46" cy="20" r="7"/><path d="M40 40c6 1 12 6 12 12"/></svg></div>
+        <span>Invités</span>
+      </div>
+      <div class="journey__step" style="--delay:2.65s">
+        <div class="journey__icon"><svg viewBox="0 0 64 64" aria-hidden="true"><rect x="14" y="14" width="36" height="36" rx="6"/><path d="M24 24a8 8 0 0 1 12 7c0 6-8 6-8 12M32 50h.01"/></svg></div>
+        <span>NFC</span>
+      </div>
+    </div>
+    <div class="loader" aria-hidden="true"><span></span></div>
+    <p class="sesame-splash__status">Préparation de vos arrivées…</p>
+  </div>
+</div>
+
+<div id="loginGate">
+  <div class="login-box">
+    <div class="login-mark">S</div>
+    <h1>Réservations</h1>
+    <div class="login-sub">Espace mobile du personnel — Sesame</div>
+    <div class="lf"><label for="rs-email">Email</label><input type="email" id="rs-email" autocomplete="username" placeholder="reception@hotel.fr"></div>
+    <div class="lf"><label for="rs-password">Mot de passe</label><input type="password" id="rs-password" autocomplete="current-password" placeholder="••••••••"></div>
+    <button class="login-btn" onclick="rsLogin()"><i class="ti ti-login"></i> Se connecter</button>
+    <div class="login-err" id="rs-login-err"></div>
+  </div>
+</div>
+
+<div id="app">
+  <header class="top">
+    <div>
+      <div class="hn" id="hn">Sesame</div>
+      <div class="hs">Réservations</div>
+    </div>
+    <div class="spacer"></div>
+    <button class="iconbtn" onclick="rsLoadBookings()" aria-label="Actualiser"><i class="ti ti-refresh"></i></button>
+    <button class="iconbtn" onclick="rsLogout()" aria-label="Déconnexion"><i class="ti ti-logout"></i></button>
+  </header>
+
+  <div class="tabs" id="tabs">
+    <div class="tab" data-t="all" onclick="rsSetTab('all')">Toutes</div>
+    <div class="tab" data-t="arriving" onclick="rsSetTab('arriving')">En arrivées</div>
+    <div class="tab on" data-t="inhouse" onclick="rsSetTab('inhouse')">En cours</div>
+    <div class="tab" data-t="checkedout" onclick="rsSetTab('checkedout')">Check-out</div>
+  </div>
+
+  <div class="searchrow">
+    <input type="text" id="rs-search" placeholder="Rechercher un nom…" oninput="rsRender()">
+  </div>
+
+  <main>
+    <div class="daysum" id="daysum"></div>
+    <div id="resList"><div class="loading"><i class="ti ti-loader"></i> Chargement…</div></div>
+  </main>
+</div>
+
+<div class="sheet-bg" id="sheetBg" onclick="if(event.target===this)rsCloseSheet()">
+  <div class="sheet" id="sheet"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════ ÉTAT
+var API_BASE = '';
+var RS_TOKEN = null, RS_ENTITY = null;
+var RS_BOOKINGS = [];      // [{booking, passes:null|[...]}] — passes chargés à la demande (détail)
+var RS_TAB = 'inhouse';
+var RS_NFC_TARGET_PASS_ID = null;
+var RS_NFC_TARGET_BTN_ID = 'rs-nfc-btn';
+var RS_TZ = 'Europe/Paris';
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function fmtDMY(iso){
+  if(!iso) return '—';
+  var d = new Date(iso);
+  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('fr-FR');
+}
+function hotelToday(){
+  try{
+    var fmt = new Intl.DateTimeFormat('en-CA', {timeZone: RS_TZ, year:'numeric', month:'2-digit', day:'2-digit'});
+    return fmt.format(new Date());
+  }catch(e){ return new Date().toISOString().slice(0,10); }
+}
+
+// ═══════════════════════════════════════════════ AUTH
+function rsSavedToken(){
+  return sessionStorage.getItem('SESAME_RESA_TOKEN') || sessionStorage.getItem('SESAME_ADMIN_TOKEN');
+}
+function rsSavedEntity(){
+  return sessionStorage.getItem('SESAME_RESA_ENTITY') || sessionStorage.getItem('SESAME_ADMIN_ROLE_ENTITY') || sessionStorage.getItem('SESAME_HOME_ENTITY');
+}
+
+async function rsLogin(){
+  var email=(document.getElementById('rs-email').value||'').trim();
+  var password=document.getElementById('rs-password').value||'';
+  var errEl=document.getElementById('rs-login-err');
+  errEl.style.display='none';
+  if(!email||!password){ errEl.textContent='Email et mot de passe requis'; errEl.style.display='block'; return; }
+  try{
+    var r=await fetch(API_BASE+'/wa/login/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email,password:password})});
+    var data=await r.json();
+    if(!r.ok){ errEl.textContent=data.error||'Identifiants incorrects'; errEl.style.display='block'; return; }
+    sessionStorage.setItem('SESAME_RESA_TOKEN', data.token);
+    sessionStorage.setItem('SESAME_RESA_ENTITY', data.admin.entityCode);
+    rsBoot(data.token, data.admin.entityCode, data.admin.hotelName);
+  }catch(e){
+    errEl.textContent='Erreur de connexion au serveur'; errEl.style.display='block';
+  }
+}
+function rsLogout(){
+  sessionStorage.removeItem('SESAME_RESA_TOKEN');
+  sessionStorage.removeItem('SESAME_RESA_ENTITY');
+  sessionStorage.removeItem('SESAME_ADMIN_TOKEN');
+  sessionStorage.removeItem('SESAME_ADMIN_ROLE');
+  location.reload();
+}
+
+function rsApiFetch(path, opts){
+  opts = opts || {};
+  opts.headers = Object.assign({'Content-Type':'application/json','Authorization':'Bearer '+RS_TOKEN}, opts.headers||{});
+  var sep = path.indexOf('?')>=0 ? '&' : '?';
+  return fetch(API_BASE+path+sep+'entityCode='+encodeURIComponent(RS_ENTITY), opts);
+}
+
+// ═══════════════════════════════════════════════ BOOT
+window.closeSesameSplash = function () {
+  var splash = document.getElementById('sesameSplash');
+  if (!splash) return;
+  splash.classList.add('is-leaving');
+  window.setTimeout(function () { splash.remove(); }, 650);
+};
+
+window.addEventListener('DOMContentLoaded', function(){
+  var splashMinDelay = new Promise(function(resolve){ setTimeout(resolve, 3900); });
+  var t = rsSavedToken(), e = rsSavedEntity();
+  var appReady = (t && e) ? rsBoot(t, e, null) : Promise.resolve();
+  Promise.all([splashMinDelay, appReady]).catch(function(){}).then(function(){
+    window.closeSesameSplash();
+  });
+});
+
+async function rsBoot(token, entityCode, hotelName){
+  RS_TOKEN = token; RS_ENTITY = entityCode;
+  document.getElementById('loginGate').style.display='none';
+  document.getElementById('app').style.display='flex';
+  if(hotelName) document.getElementById('hn').textContent = hotelName;
+
+  try{
+    var r = await rsApiFetch('/wa/entityModuleConfig/list');
+    if(r.status===401 || r.status===403){ rsLogout(); return; }
+    var cfg = await r.json();
+    document.getElementById('hn').textContent = cfg.hotelName || 'Sesame';
+    RS_TZ = cfg.timezone || 'Europe/Paris';
+  }catch(e){}
+
+  await rsLoadBookings();
+}
+
+// ═══════════════════════════════════════════════ LISTE
+async function rsLoadBookings(){
+  var listEl = document.getElementById('resList');
+  listEl.innerHTML = '<div class="loading"><i class="ti ti-loader"></i> Chargement…</div>';
+  try{
+    var r = await rsApiFetch('/wa/booking/list');
+    if(r.status===401 || r.status===403){ rsLogout(); return; }
+    RS_BOOKINGS = r.ok ? await r.json() : [];
+  }catch(e){
+    RS_BOOKINGS = [];
+    listEl.innerHTML = '<div class="empty"><i class="ti ti-alert-triangle"></i>Erreur de chargement des réservations.</div>';
+    return;
+  }
+  rsRender();
+}
+
+function rsSetTab(t){
+  RS_TAB = t;
+  document.querySelectorAll('#tabs .tab').forEach(function(el){ el.classList.toggle('on', el.getAttribute('data-t')===t); });
+  rsRender();
+}
+
+function rsStatusLabel(b){
+  if(b.checkinDone) return 'Check-in fait';
+  if(b.status==='cancelled') return 'Annulée';
+  if(b.status==='completed') return 'Terminée';
+  return 'Réservé';
+}
+
+function rsMatchesTab(b, todayStr){
+  if(b.status === 'cancelled') return RS_TAB === 'all';
+  var ended = (b.endDate||'').slice(0,10) < todayStr || b.status === 'completed';
+  if(RS_TAB === 'all') return true;
+  if(RS_TAB === 'checkedout') return ended;
+  if(ended) return false;
+  if(RS_TAB === 'inhouse') return !!b.checkinDone || (b.startDate||'').slice(0,10) <= todayStr;
+  return true; // 'arriving'
+}
+
+function rsRender(){
+  var listEl = document.getElementById('resList');
+  var todayStr = hotelToday();
+  var q = (document.getElementById('rs-search').value||'').trim().toLowerCase();
+
+  var list = RS_BOOKINGS.filter(function(b){
+    if(!rsMatchesTab(b, todayStr)) return false;
+    if(q){
+      var hay = ((b.personFirstname||'')+' '+(b.personLastname||'')+' '+(b.code||'')).toLowerCase();
+      if(hay.indexOf(q) === -1) return false;
+    }
+    return true;
+  }).slice().sort(function(a,b){ return (b.startDate||'').localeCompare(a.startDate||''); });
+
+  document.getElementById('daysum').textContent = list.length
+    ? list.length+' réservation(s)'
+    : '';
+
+  if(!list.length){
+    listEl.innerHTML = '<div class="empty"><i class="ti ti-calendar-off"></i>Aucune réservation pour ce filtre.</div>';
+    return;
+  }
+
+  listEl.innerHTML = list.map(function(b){
+    var room = b.facilityName || b.selectedRoomCode || b.facilityCode || '—';
+    var expired = (b.endDate||'').slice(0,10) < todayStr;
+    var checkinBadge = b.status === 'cancelled'
+      ? '<span class="bdg bdg-urgent"><i class="ti ti-ban"></i> Annulée</span>'
+      : b.checkinDone
+      ? '<span class="bdg bdg-good"><i class="ti ti-check"></i> Check-in fait</span>'
+      : (expired
+        ? '<span class="bdg bdg-mu"><i class="ti ti-history"></i> Expirée</span>'
+        : '<span class="bdg bdg-wait"><i class="ti ti-clock"></i> Pas encore arrivé</span>');
+    var nfcBadge = '<span class="bdg '+(b.nfcCount>0?'bdg-good':'bdg-mu')+'"><i class="ti ti-nfc"></i> NFC ('+(b.nfcCount||0)+')</span>';
+    var dates = fmtDMY(b.startDate)+' → '+fmtDMY(b.endDate);
+
+    return '<div class="rescard" onclick="rsOpenDetail(\''+esc(b.code)+'\')">'
+      + '<div class="rname">'+esc(b.personFirstname)+' '+esc(b.personLastname)+' <span class="rroom">— Chambre '+esc(room)+'</span></div>'
+      + '<div class="rmeta"><span><i class="ti ti-ticket"></i> '+esc(b.code)+'</span><span><i class="ti ti-calendar"></i> '+esc(dates)+'</span></div>'
+      + '<div class="badges">'+checkinBadge+nfcBadge+'</div>'
+      + '</div>';
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════ DÉTAIL
+var RS_PASSES_CACHE = [];
+
+function rsOpenDetail(code){
+  var b = RS_BOOKINGS.find(function(x){ return x.code === code; });
+  if(!b) return;
+  var room = b.facilityName || b.selectedRoomCode || b.facilityCode || '—';
+  var nfcColor = b.nfcCount>0 ? 'bdg-good' : 'bdg-mu';
+  var walColor = b.walletShortLink ? 'bdg-good' : 'bdg-mu';
+
+  var rows = [
+    ['Code', esc(b.code)],
+    ['Statut', esc(rsStatusLabel(b))],
+    ['Au nom de', esc(b.personFirstname)+' '+esc(b.personLastname)],
+    ['Email', b.personEmail ? esc(b.personEmail) : '—'],
+    ['Téléphone', b.personPhone ? esc(b.personPhone) : '—'],
+    ['Accès (chambre)', esc(room)],
+    ['Date de début', esc(fmtDMY(b.startDate))],
+    ['Date de fin', esc(fmtDMY(b.endDate))],
+  ];
+
+  var html = '<div class="sheet-handle"></div>'
+    + '<h2>'+esc(b.personFirstname)+' '+esc(b.personLastname)+'</h2>'
+    + '<div class="shsub">Chambre '+esc(room)+'</div>'
+    + '<div class="badges" style="margin-bottom:16px">'
+    + '<span class="bdg bdg-info">'+esc(rsStatusLabel(b))+'</span>'
+    + '<span class="bdg '+nfcColor+'"><i class="ti ti-nfc"></i> NFC ('+(b.nfcCount||0)+')</span>'
+    + '<span class="bdg '+walColor+'"><i class="ti ti-wallet"></i> Wallet ('+(b.walletShortLink?'généré':'aucun')+')</span>'
+    + '</div>'
+    + '<div class="rows">' + rows.map(function(row){
+        return '<div class="rowitem"><span class="rk">'+row[0]+'</span><span class="rv">'+row[1]+'</span></div>';
+      }).join('') + '</div>'
+    + '<div id="rs-detail-passes"></div>'
+    + '<div class="alt alt-w" id="rs-nfc-error" style="display:none"><i class="ti ti-alert-triangle"></i><span id="rs-nfc-error-msg"></span></div>'
+    + '<div class="sf" id="rs-nfc-devices" style="display:none">'
+    +   '<label>Lecteur NFC</label><select id="rs-nfc-device-select"></select>'
+    +   '<div class="acts"><button class="btn btn-primary" onclick="rsConfirmNfcDevice(\''+esc(b.code)+'\')"><i class="ti ti-nfc"></i> Démarrer l\'encodage</button>'
+    +   '<button class="btn btn-ghost" onclick="document.getElementById(\'rs-nfc-devices\').style.display=\'none\'">Annuler</button></div>'
+    + '</div>'
+    + '<div class="alt alt-w" id="rs-wallet-error" style="display:none"><i class="ti ti-alert-triangle"></i><span id="rs-wallet-error-msg"></span></div>'
+    + '<div class="acts">'
+    +   '<button class="btn btn-primary" onclick="rsEncodeNfc(\''+esc(b.code)+'\')" id="rs-nfc-btn"><i class="ti ti-nfc"></i> Encoder NFC</button>'
+    +   (b.walletShortLink
+          ? '<button class="btn btn-ghost" onclick="rsCopyWalletLink()" id="rs-wallet-btn"><i class="ti ti-copy"></i> Copier le lien Wallet</button>'
+          : '<button class="btn btn-ghost" onclick="rsCreateWalletPass(\''+esc(b.code)+'\')" id="rs-wallet-btn"><i class="ti ti-wallet"></i> Générer le pass Wallet</button>')
+    + '</div>';
+  if(b.walletShortLink){
+    html += '<div class="linkfield"><input type="text" id="rs-wallet-link" value="'+esc(b.walletShortLink)+'" readonly>'
+      + '<a class="btn btn-ghost btn-sm" href="'+esc(b.walletShortLink)+'" target="_blank" rel="noopener"><i class="ti ti-external-link"></i></a></div>';
+  }
+
+  document.getElementById('sheet').innerHTML = html;
+  document.getElementById('sheetBg').classList.add('show');
+  rsLoadPasses(code);
+}
+function rsCloseSheet(){ document.getElementById('sheetBg').classList.remove('show'); }
+
+async function rsLoadPasses(code){
+  try{
+    var r = await rsApiFetch('/wa/booking/passes?code='+encodeURIComponent(code));
+    RS_PASSES_CACHE = r.ok ? await r.json() : [];
+  }catch(e){ RS_PASSES_CACHE = []; }
+  rsRenderPasses(code);
+}
+function rsRenderPasses(code){
+  var el = document.getElementById('rs-detail-passes');
+  if(!el) return;
+  if(!RS_PASSES_CACHE.length){ el.innerHTML = ''; return; }
+  el.innerHTML = '<div class="sechead">Invités ('+RS_PASSES_CACHE.length+')</div>'
+    + RS_PASSES_CACHE.map(function(p){
+        var nfcOn = p.nfcCount > 0;
+        return '<div class="guest">'
+          + '<div style="min-width:0">'
+          + '<div class="gname">'+esc(p.personFirstname)+' '+esc(p.personLastname)
+          + (p.master ? ' <span class="bdg bdg-info" style="padding:1px 7px">Principal</span>' : '')
+          + '</div>'
+          + '<div class="gmeta">'+(p.personEmail ? esc(p.personEmail) : '')+(p.personEmail && p.facilityCode ? ' · ' : '')+(p.facilityCode ? 'Accès : '+esc(p.facilityCode) : '')+'</div>'
+          + '</div>'
+          + '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">'
+          + '<span class="bdg '+(nfcOn?'bdg-good':'bdg-mu')+'"><i class="ti ti-nfc"></i> '+(p.nfcCount||0)+'</span>'
+          + '<button class="btn btn-ghost btn-sm" id="rs-pass-nfc-btn-'+esc(p.id)+'" onclick="rsEncodeNfcForPass(\''+esc(code)+'\',\''+esc(p.id)+'\')"><i class="ti ti-nfc"></i> Encoder</button>'
+          + '</div>'
+          + '</div>';
+      }).join('');
+}
+
+// ═══════════════════════════════════════════════ NFC
+async function rsEncodeNfc(code){
+  return rsEncodeNfcCommon(code, 'rs-nfc-btn', null);
+}
+async function rsEncodeNfcForPass(code, passId){
+  return rsEncodeNfcCommon(code, 'rs-pass-nfc-btn-'+passId, passId);
+}
+async function rsEncodeNfcCommon(code, btnId, passId){
+  var btn = document.getElementById(btnId);
+  if(!btn) return;
+  var errEl = document.getElementById('rs-nfc-error');
+  var errMsg = document.getElementById('rs-nfc-error-msg');
+  errEl.style.display = 'none';
+  document.getElementById('rs-nfc-devices').style.display = 'none';
+  RS_NFC_TARGET_PASS_ID = passId || null;
+  RS_NFC_TARGET_BTN_ID = btnId;
+  var orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spin"></div> Recherche des lecteurs…';
+  try{
+    var r = await rsApiFetch('/wa/booking/nfcDevices');
+    var devices = await r.json();
+    if(!r.ok) throw new Error(devices.error || 'Impossible de récupérer la liste des lecteurs NFC');
+    if(!devices.length) throw new Error('Aucun lecteur NFC disponible pour cet établissement');
+    btn.disabled = false;
+    btn.innerHTML = orig;
+    if(devices.length === 1){
+      rsRunNfcEncode(code, devices[0].id);
+    } else {
+      var sel = document.getElementById('rs-nfc-device-select');
+      sel.innerHTML = devices.map(function(d){ return '<option value="'+esc(d.id)+'">'+esc(d.name)+'</option>'; }).join('');
+      document.getElementById('rs-nfc-devices').style.display = 'block';
+    }
+  }catch(e){
+    errMsg.textContent = e.message;
+    errEl.style.display = 'flex';
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+}
+function rsConfirmNfcDevice(code){
+  var deviceId = (document.getElementById('rs-nfc-device-select')||{value:''}).value;
+  if(!deviceId) return;
+  document.getElementById('rs-nfc-devices').style.display = 'none';
+  rsRunNfcEncode(code, deviceId);
+}
+async function rsRunNfcEncode(code, deviceId){
+  var btn = document.getElementById(RS_NFC_TARGET_BTN_ID || 'rs-nfc-btn');
+  var errEl = document.getElementById('rs-nfc-error');
+  var errMsg = document.getElementById('rs-nfc-error-msg');
+  errEl.style.display = 'none';
+  var orig = btn ? btn.innerHTML : '';
+  if(btn){ btn.disabled = true; btn.innerHTML = '<div class="spin"></div> Approchez la carte du lecteur…'; }
+  try{
+    var body = {code:code, deviceId:deviceId};
+    if(RS_NFC_TARGET_PASS_ID) body.passId = RS_NFC_TARGET_PASS_ID;
+    var r = await rsApiFetch('/wa/booking/encodeNfc', {method:'POST', body: JSON.stringify(body)});
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error || 'Échec de l\'encodage NFC');
+    delete data.pass;
+    var idx = RS_BOOKINGS.findIndex(function(x){ return x.code === code; });
+    if(idx>-1) RS_BOOKINGS[idx] = data;
+    rsOpenDetail(code);
+    rsRender();
+  }catch(e){
+    errMsg.textContent = e.message;
+    errEl.style.display = 'flex';
+    if(btn){ btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
+// ═══════════════════════════════════════════════ WALLET
+async function rsCreateWalletPass(code){
+  var btn = document.getElementById('rs-wallet-btn');
+  var errEl = document.getElementById('rs-wallet-error');
+  var errMsg = document.getElementById('rs-wallet-error-msg');
+  errEl.style.display = 'none';
+  var orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spin"></div> Génération…';
+  try{
+    var r = await rsApiFetch('/wa/wallet/booking/'+encodeURIComponent(code)+'/pass', {method:'POST', body: JSON.stringify({})});
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error || 'Échec de la génération du pass Wallet');
+    var idx = RS_BOOKINGS.findIndex(function(x){ return x.code === code; });
+    if(idx>-1){
+      RS_BOOKINGS[idx].walletPassId = data.id;
+      RS_BOOKINGS[idx].walletShortLink = data.shortLink;
+      RS_BOOKINGS[idx].walletStatus = data.status;
+    }
+    rsOpenDetail(code);
+    rsRender();
+  }catch(e){
+    errMsg.textContent = e.message;
+    errEl.style.display = 'flex';
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+}
+function rsCopyWalletLink(){
+  var input = document.getElementById('rs-wallet-link');
+  if(!input) return;
+  input.select();
+  try{ navigator.clipboard.writeText(input.value); }
+  catch(e){ document.execCommand('copy'); }
+}
+</script>
+</body>
+</html>
