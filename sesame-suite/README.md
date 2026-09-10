@@ -165,7 +165,10 @@ s'agisse ou non d'un client Sesame :
   login?login=email` (email en paramètre d'URL, mot de passe en body JSON)
   renvoie un token, à réutiliser tel quel (sans préfixe) dans l'en-tête
   `Authorization` des appels suivants. Vérifié en direct le 17/08/2026 contre
-  `newtest.sesame.technology` (curl brut, hors application) : la réponse est
+  `newtest.sesame.technology` (curl brut, hors application) — **corrigé le
+  10/09/2026 : le vrai serveur de production est `sesame.technology`, pas ce
+  sous-domaine** (confirmé par l'hôtelier, modification de réservation
+  poussée avec succès en conditions réelles). La réponse est
   `{"data":{"profiles":[{"entityCode":"...","token":"..."},...]}}` — **un
   profil par établissement auquel le compte a accès**, pas un token unique
   (`data.token` seul n'existe pas). Le serveur se reconnecte à chaque
