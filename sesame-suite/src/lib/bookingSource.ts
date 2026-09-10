@@ -1562,7 +1562,9 @@ export async function openDoor(
     }
     const raw = getPath(body, config.doorResponseSuccessPath);
     if (raw === false || raw === "false" || raw === 0) {
-      throw new BookingSourceError("La serrure a refusé l'ouverture de la porte (réponse négative)");
+      const messageRaw = config.doorResponseMessagePath ? getPath(body, config.doorResponseMessagePath) : undefined;
+      const message = typeof messageRaw === "string" && messageRaw ? ` : ${messageRaw}` : "";
+      throw new BookingSourceError(`La serrure a refusé l'ouverture de la porte (réponse négative)${message}`);
     }
   }
   return { opened: true };

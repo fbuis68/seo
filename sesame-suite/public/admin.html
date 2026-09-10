@@ -2356,6 +2356,12 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         <input type="text" id="bs-doorLastnameParam" placeholder="Ex : personLastname — vide si non nécessaire">
       </div>
       <div class="fi">
+        <label class="lb">Chemin du motif de refus dans la réponse (optionnel)</label>
+        <input type="text" id="bs-doorResponseMessagePath" placeholder="Ex : message — affiché au personnel en cas de refus">
+      </div>
+    </div>
+    <div class="g2">
+      <div class="fi">
         <label class="lb">Nom du paramètre portant le prénom du client (optionnel)</label>
         <input type="text" id="bs-doorFirstnameParam" placeholder="Ex : personFirstname — vide si non nécessaire">
       </div>
@@ -6840,6 +6846,7 @@ var PMS_PRESETS = {
       // logique, avec {"success":false,"message":"..."} — sans ce mapping,
       // un tel refus était silencieusement traité comme une porte ouverte.
       document.getElementById('bs-doorResponseSuccessPath').value = 'success';
+      document.getElementById('bs-doorResponseMessagePath').value = 'message';
       // Mise à jour ET création d'une réservation — POST
       // /ws/booking/createOrUpdate, d'après la doc officielle : crée la
       // réservation si son code est inconnu de Sesame, sinon se comporte
@@ -7376,6 +7383,7 @@ function bsCollectFormValues(){
     doorFirstnameParam: document.getElementById('bs-doorFirstnameParam').value.trim(),
     doorRoomParam: document.getElementById('bs-doorRoomParam').value.trim(),
     doorResponseSuccessPath: document.getElementById('bs-doorResponseSuccessPath').value.trim(),
+    doorResponseMessagePath: document.getElementById('bs-doorResponseMessagePath').value.trim(),
     doorEndpointBodyParams: bsTextToParams(document.getElementById('bs-doorEndpointBodyParams').value),
     updateEndpointPath: document.getElementById('bs-updateEndpointPath').value.trim(),
     updateEndpointMethod: document.getElementById('bs-updateEndpointMethod').value,
@@ -7520,6 +7528,7 @@ async function bsInit(){
   document.getElementById('bs-doorFirstnameParam').value = BS_CONFIG.doorFirstnameParam||'';
   document.getElementById('bs-doorRoomParam').value = BS_CONFIG.doorRoomParam||'';
   document.getElementById('bs-doorResponseSuccessPath').value = BS_CONFIG.doorResponseSuccessPath||'';
+  document.getElementById('bs-doorResponseMessagePath').value = BS_CONFIG.doorResponseMessagePath||'';
   document.getElementById('bs-doorEndpointBodyParams').value = bsParamsToText(BS_CONFIG.doorEndpointBodyParams);
   document.getElementById('bs-updateEndpointPath').value = BS_CONFIG.updateEndpointPath||'';
   document.getElementById('bs-updateEndpointMethod').value = BS_CONFIG.updateEndpointMethod||'POST';

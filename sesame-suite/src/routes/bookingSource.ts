@@ -114,6 +114,7 @@ function shapeConfig(c: {
   doorFirstnameParam: string | null;
   doorRoomParam: string | null;
   doorResponseSuccessPath: string | null;
+  doorResponseMessagePath: string | null;
   updateEndpointPath: string | null;
   updateEndpointMethod: string | null;
   updateEndpointBodyFormat: string | null;
@@ -233,6 +234,7 @@ function shapeConfig(c: {
     doorFirstnameParam: c.doorFirstnameParam || "",
     doorRoomParam: c.doorRoomParam || "",
     doorResponseSuccessPath: c.doorResponseSuccessPath || "",
+    doorResponseMessagePath: c.doorResponseMessagePath || "",
     updateEndpointPath: c.updateEndpointPath || "",
     updateEndpointMethod: c.updateEndpointMethod || "POST",
     updateEndpointBodyFormat: c.updateEndpointBodyFormat || "json",
@@ -394,6 +396,7 @@ interface ConfigBody {
   doorFirstnameParam?: string;
   doorRoomParam?: string;
   doorResponseSuccessPath?: string;
+  doorResponseMessagePath?: string;
   updateEndpointPath?: string;
   updateEndpointMethod?: string;
   updateEndpointBodyFormat?: string;
@@ -514,6 +517,7 @@ bookingSourceRouter.post(
       doorFirstnameParam: b.doorFirstnameParam,
       doorRoomParam: b.doorRoomParam,
       doorResponseSuccessPath: b.doorResponseSuccessPath,
+      doorResponseMessagePath: b.doorResponseMessagePath,
       updateEndpointPath: b.updateEndpointPath,
       updateEndpointMethod: b.updateEndpointMethod,
       updateEndpointBodyFormat: b.updateEndpointBodyFormat,

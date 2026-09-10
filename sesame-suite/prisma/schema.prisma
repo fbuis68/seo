@@ -692,6 +692,13 @@ model BookingSourceConfig {
   // (ex: "success") — si vide, un appel réussi (2xx) suffit à considérer la
   // porte ouverte.
   doorResponseSuccessPath String?
+  // Dot-path optionnel vers le motif du refus dans la réponse (ex : API
+  // Sesame Technology, /ws/booking/openAs renvoie {"success":false,
+  // "message":"..."} en cas de refus logique) — inclus dans l'erreur
+  // remontée au personnel quand doorResponseSuccessPath détecte un refus.
+  // Sans ce mapping, seul "réponse négative" était visible, impossible à
+  // diagnostiquer sans consulter les logs serveur.
+  doorResponseMessagePath String?
 
   // Mise à jour d'une réservation (panneau "Réservations" — changement de
   // chambre ou annulation/réactivation) — même principe que les endpoints
