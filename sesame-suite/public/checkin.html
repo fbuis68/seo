@@ -44,7 +44,7 @@ body{font-family:var(--font-body,'Sora',sans-serif);background:var(--bg);color:v
 .sdots{display:flex;align-items:center;margin-bottom:20px}
 .sd{width:26px;height:26px;border-radius:50%;border:2px solid var(--bdr);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--mu);background:var(--card);flex-shrink:0;transition:all .2s}
 .sd.on{border-color:var(--primary);background:var(--primary);color:#fff}
-.sd.done{border-color:var(--accent);background:var(--pl);color:var(--primary)}
+.sd.done{border-color:var(--accent);background:var(--pl);color:var(--primary);cursor:pointer}
 .sline{flex:1;height:2px;background:var(--bdr);margin:0 3px}
 .sline.done{background:var(--accent)}
 .slbl{font-family:var(--font-title,'Fraunces',serif);font-size:20px;font-weight:300;margin-bottom:16px;color:var(--tx)}
@@ -305,15 +305,15 @@ input:focus,select:focus{border-color:var(--accent)}
 
   <!-- STEP DOTS — 7 étapes -->
   <div class="sdots" id="stepDots">
-    <div class="sd on" id="sd1">1</div><div class="sline" id="sl1"></div>
-    <div class="sd" id="sd2">2</div><div class="sline" id="sl2"></div>
-    <div class="sd" id="sd3">3</div><div class="sline" id="sl3"></div>
-    <div class="sd" id="sd4" data-i18n-title="step_dot_kyc_title" title="Vérification identité">
+    <div class="sd on" id="sd1" onclick="gotoStepFromDot(1)">1</div><div class="sline" id="sl1"></div>
+    <div class="sd" id="sd2" onclick="gotoStepFromDot(2)">2</div><div class="sline" id="sl2"></div>
+    <div class="sd" id="sd3" onclick="gotoStepFromDot(3)">3</div><div class="sline" id="sl3"></div>
+    <div class="sd" id="sd4" data-i18n-title="step_dot_kyc_title" title="Vérification identité" onclick="gotoStepFromDot(4)">
       <i class="ti ti-shield-check" style="font-size:11px"></i>
     </div><div class="sline" id="sl4"></div>
-    <div class="sd" id="sd5">5</div><div class="sline" id="sl5"></div>
-    <div class="sd" id="sd6" data-i18n-title="step_dot_boutique_title" title="Boutique"><i class="ti ti-shopping-bag" style="font-size:11px"></i></div><div class="sline" id="sl6"></div>
-    <div class="sd" id="sd7">7</div>
+    <div class="sd" id="sd5" onclick="gotoStepFromDot(5)">5</div><div class="sline" id="sl5"></div>
+    <div class="sd" id="sd6" data-i18n-title="step_dot_boutique_title" title="Boutique" onclick="gotoStepFromDot(6)"><i class="ti ti-shopping-bag" style="font-size:11px"></i></div><div class="sline" id="sl6"></div>
+    <div class="sd" id="sd7" onclick="gotoStepFromDot(7)">7</div>
   </div>
 
   <!-- ── STEP 1: BOOKING ── -->
@@ -2248,9 +2248,12 @@ function gotoStep(n){
   }
   document.querySelectorAll('.step-panel').forEach(function(el){el.classList.remove('on')});
   var sp=document.getElementById('step'+n);if(sp)sp.classList.add('on');
-  // Hide inactive step dots
-  updateDots();
+  // S.step doit être à jour AVANT updateDots() (qui compare i à S.step) —
+  // sinon les puces affichent l'étape précédente jusqu'à la navigation
+  // suivante (visible depuis l'ajout de la navigation par clic sur les
+  // puces : le curseur pointer/l'état "done" resteraient en retard d'un cran).
   S.step=n;
+  updateDots();
   document.getElementById('scrollArea').scrollTop=0;
   if(n===2){S.activeRoomTags=[];renderRoomStep();}
   if(n===3){if(!S.occupants.length)S.occupants=[{age:'adulte'},{age:'adulte'}];renderOcc();}
@@ -2276,6 +2279,12 @@ function updateSkipButtons(){
 }
 function skipStep(n){
   gotoStep(nextActiveStep(n));
+}
+function gotoStepFromDot(n){
+  if(n>=S.step) return;
+  var mk=STEP_MODULES[n];
+  if(mk && !isModuleActive(mk)) return;
+  gotoStep(n);
 }
 function updateDots(){
   for(var i=1;i<=7;i++){
@@ -4147,7 +4156,7 @@ async function rsPlaceOrder(){
   var products = rsGetCatalog();
   var items = entries.map(function(id){
     var p = products.find(function(x){return x.id===id;});
-    return p ? {id:p.id, label:p.label, price:p.price||0, qty:S.rsCart[id]} : null;
+    return p ? {id:p.id, label:p.label, price:p.price||0, qty:S.rsCart[id], posNames:p.posNames||[]} : null;
   }).filter(Boolean);
 
   var payload = {
@@ -4930,11 +4939,33 @@ function bqGetCats(){
 }
 
 function renderBoutiqueStep(){
-  posEnsureSelected(renderBoutiqueStepInner);
+  // L'étape boutique n'impose plus le choix d'un point de vente avant
+  // d'accéder au catalogue (overlay bloquant posEnsureSelected) — tous les
+  // articles sont affichés d'emblée, avec un simple filtre en ligne pour
+  // affiner par point de vente si l'établissement en compte plusieurs (cf.
+  // bqPosFilterBar). '__all__' = aucun filtre, comportement par défaut.
+  if(S.selectedPosId === undefined) S.selectedPosId = '__all__';
+  renderBoutiqueStepInner();
+}
+
+/** Filtre en ligne (remplace l'ancien sélecteur bloquant) — une puce "Tous" + une puce par point de vente actif. */
+function bqPosFilterBar(){
+  if(S.posList.length <= 1) return '';
+  var chips = [{id:'__all__', name:t('pos_all')}].concat(S.posList);
+  return '<div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;padding-bottom:2px">'
+    + chips.map(function(v){
+        var on = (S.selectedPosId||'__all__') === v.id;
+        return '<button onclick="bqSetPosFilter(\''+v.id+'\')" style="flex-shrink:0;display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border-radius:14px;border:1px solid '+(on?'var(--primary)':'var(--bdr)')+';background:'+(on?'var(--primary)':'var(--card)')+';color:'+(on?'#fff':'var(--mu)')+';font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">'+esc(v.name)+'</button>';
+      }).join('')
+    + '</div>';
+}
+function bqSetPosFilter(id){
+  S.selectedPosId = id;
+  renderBoutiqueStepInner();
 }
 
 function renderBoutiqueStepInner(){
-  document.getElementById('bqPosChip').innerHTML = posSwitchChip('renderBoutiqueStepInner');
+  document.getElementById('bqPosChip').innerHTML = bqPosFilterBar();
   var cats = bqGetCats();
   if (!BQ.activeCat || cats.indexOf(BQ.activeCat) === -1) BQ.activeCat = cats[0] || null;
 
@@ -5255,7 +5286,7 @@ async function bqPlaceOrder(){
   var cat = bqGetCatalog();
   var items = Object.keys(BQ.cart).map(function(id){
     var p = cat.find(function(x){ return x.id === id; });
-    return p ? {id:p.id, label:p.label, price:p.price, qty:BQ.cart[id]} : null;
+    return p ? {id:p.id, label:p.label, price:p.price, qty:BQ.cart[id], posNames:p.posNames||[]} : null;
   }).filter(Boolean);
 
   var payload = {

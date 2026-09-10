@@ -65,7 +65,7 @@ function shapeProduct(p: {
   };
 }
 
-type CartItem = { id: string; label: string; price: number; qty: number };
+type CartItem = { id: string; label: string; price: number; qty: number; posNames?: string[] };
 
 function shapeOrder(o: {
   id: string;
@@ -245,6 +245,17 @@ roomserviceRouter.post(
       ? await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code: b.bookingCode } } })
       : null;
 
+    // Point(s) de vente de chaque article, recalculés côté serveur (jamais
+    // depuis le catalogue client, qui peut être périmé) — cf.
+    // Product.saleVendors, affiché ensuite dans le panneau admin Commandes
+    // pour différencier les articles vendus par point de vente.
+    const posProducts = await prisma.product.findMany({
+      where: { id: { in: b.items.map((it) => it.id) }, entityId: entity.id },
+      select: { id: true, saleVendors: { select: { vendor: { select: { name: true } } } } },
+    });
+    const posNamesById = new Map(posProducts.map((p) => [p.id, p.saleVendors.map((sv) => sv.vendor.name)]));
+    const itemsWithPos: CartItem[] = b.items.map((it) => ({ ...it, posNames: posNamesById.get(it.id) || [] }));
+
     const order = await prisma.order.create({
       data: {
         entityId: entity.id,
@@ -254,14 +265,14 @@ roomserviceRouter.post(
         clientName: b.clientName || "Client",
         roomCode: b.roomCode || null,
         roomName: b.roomName || null,
-        items: b.items,
+        items: itemsWithPos,
         total: b.total || 0,
         note: b.note || null,
         status: "new",
       },
     });
 
-    const finalOrder = await finalizeOrder(entity, order, booking, b.items, b.note);
+    const finalOrder = await finalizeOrder(entity, order, booking, itemsWithPos, b.note);
     res.status(201).json(shapeOrder(finalOrder));
   })
 );

@@ -9,7 +9,7 @@ import { createBookingFromPaidOrder } from "../lib/bookingEngine";
 
 export const paymentRouter = Router();
 
-type CartItem = { id: string; label: string; price: number; qty: number };
+type CartItem = { id: string; label: string; price: number; qty: number; posNames?: string[] };
 
 function shapeConfig(c: {
   enabled: boolean;
@@ -154,6 +154,7 @@ paymentRouter.post(
     if (!cartItems.length && !config.includeTaxeSejour) throw new HttpError(400, "Le panier est vide");
     const products = await prisma.product.findMany({
       where: { id: { in: cartItems.map((it) => it.id) }, entityId: entity.id, active: true },
+      include: { saleVendors: { select: { vendor: { select: { name: true } } } } },
     });
     const productById = new Map(products.map((p) => [p.id, p]));
 
@@ -163,7 +164,13 @@ paymentRouter.post(
       const product = productById.get(it.id);
       if (!product) continue; // article inconnu/désactivé — ignoré plutôt que de bloquer tout le panier
       lineItems.push({ label: product.label, unitAmount: Math.round(product.price * 100), qty: it.qty });
-      orderItems.push({ id: product.id, label: product.label, price: product.price, qty: it.qty });
+      orderItems.push({
+        id: product.id,
+        label: product.label,
+        price: product.price,
+        qty: it.qty,
+        posNames: product.saleVendors.map((sv) => sv.vendor.name),
+      });
     }
 
     if (config.includeTaxeSejour && booking) {

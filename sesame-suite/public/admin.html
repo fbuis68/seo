@@ -10870,9 +10870,15 @@ function renderOrders(){
     else if(o.paymentStatus === 'failed') payBadge = '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;background:rgba(231,76,60,.12);color:#E74C3C"><i class="ti ti-credit-card-off" style="font-size:10px"></i> Paiement échoué</span>';
 
     var itemsHtml = (o.items||[]).map(function(it){
-      return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:5px 0;border-bottom:1px solid var(--bdr)">'
-        +'<span><strong>'+it.qty+'×</strong> '+esc(it.label)+'</span>'
-        +'<span style="font-weight:600;color:'+(it.price>0?'var(--tx)':'var(--go)')+'">'
+      // Point(s) de vente où cet article est en vente (cf. Product.saleVendors
+      // côté serveur) — permet de différencier, dans une même commande, les
+      // articles issus de plusieurs points de vente (Bar Piscine, Réception…).
+      var posBadge = (it.posNames && it.posNames.length)
+        ? '<span style="font-size:9px;font-weight:600;padding:1px 6px;border-radius:7px;background:var(--pl);color:var(--primary);margin-left:6px;white-space:nowrap"><i class="ti ti-building-store" style="font-size:9px"></i> '+esc(it.posNames.join(', '))+'</span>'
+        : '';
+      return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:5px 0;border-bottom:1px solid var(--bdr);gap:8px">'
+        +'<span style="display:flex;align-items:center;flex-wrap:wrap"><strong>'+it.qty+'×</strong>&nbsp;'+esc(it.label)+posBadge+'</span>'
+        +'<span style="font-weight:600;color:'+(it.price>0?'var(--tx)':'var(--go)')+';white-space:nowrap">'
         +(it.price>0?(it.price*it.qty).toFixed(2)+' '+sym:'Offert')+'</span></div>';
     }).join('');
 
