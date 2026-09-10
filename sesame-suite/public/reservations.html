@@ -364,13 +364,14 @@ main{flex:1;padding:12px 18px 60px}
 </div>
 
 <div id="loginGate">
-  <div class="login-box">
+  <div class="login-box" id="rs-login-box">
     <div class="login-mark">S</div>
     <h1>Réservations</h1>
     <div class="login-sub">Espace mobile du personnel — Sesame</div>
     <div class="lf"><label for="rs-email">Email</label><input type="email" id="rs-email" autocomplete="username" placeholder="reception@hotel.fr"></div>
-    <div class="lf"><label for="rs-password">Mot de passe</label><input type="password" id="rs-password" autocomplete="current-password" placeholder="••••••••"></div>
+    <div class="lf"><label for="rs-password">Mot de passe</label><input type="password" id="rs-password" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')rsLogin()"></div>
     <button class="login-btn" onclick="rsLogin()"><i class="ti ti-login"></i> Se connecter</button>
+    <div style="text-align:center;margin-top:14px"><a href="#" onclick="renderRsForgotBox();return false;" style="font-size:13px;color:var(--wine)">Mot de passe oublié ?</a></div>
     <div class="login-err" id="rs-login-err"></div>
   </div>
 </div>
@@ -445,6 +446,49 @@ function rsSavedToken(){
 }
 function rsSavedEntity(){
   return sessionStorage.getItem('SESAME_RESA_ENTITY') || sessionStorage.getItem('SESAME_ADMIN_ROLE_ENTITY') || sessionStorage.getItem('SESAME_HOME_ENTITY');
+}
+
+/** Formulaire "mot de passe oublié" — même route backend générique que
+ * admin.html/crm.html/menage.html (POST /wa/login/forgotPassword). Pas de
+ * formulaire "nouveau mot de passe" ici : pour un compte role="hotel"
+ * (celui utilisé par reservations.html), le serveur choisit toujours
+ * admin.html comme page de retour du lien envoyé par email (cf.
+ * src/routes/login.ts) — c'est donc là que la réinitialisation se termine,
+ * même quand elle a été demandée depuis cet écran mobile. */
+function renderRsLoginBox(){
+  document.getElementById('rs-login-box').innerHTML =
+    '<div class="login-mark">S</div>'
+    + '<h1>Réservations</h1>'
+    + '<div class="login-sub">Espace mobile du personnel — Sesame</div>'
+    + '<div class="lf"><label for="rs-email">Email</label><input type="email" id="rs-email" autocomplete="username" placeholder="reception@hotel.fr"></div>'
+    + '<div class="lf"><label for="rs-password">Mot de passe</label><input type="password" id="rs-password" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key===\'Enter\')rsLogin()"></div>'
+    + '<button class="login-btn" onclick="rsLogin()"><i class="ti ti-login"></i> Se connecter</button>'
+    + '<div style="text-align:center;margin-top:14px"><a href="#" onclick="renderRsForgotBox();return false;" style="font-size:13px;color:var(--wine)">Mot de passe oublié ?</a></div>'
+    + '<div class="login-err" id="rs-login-err"></div>';
+}
+
+function renderRsForgotBox(){
+  document.getElementById('rs-login-box').innerHTML =
+    '<div class="login-mark">S</div>'
+    + '<h1>Mot de passe oublié</h1>'
+    + '<div class="login-sub">Un lien de réinitialisation vous sera envoyé par email.</div>'
+    + '<div class="lf"><label for="rs-fg-email">Email</label><input type="email" id="rs-fg-email" autocomplete="username" placeholder="reception@hotel.fr" onkeydown="if(event.key===\'Enter\')sendRsForgotEmail()"></div>'
+    + '<button class="login-btn" onclick="sendRsForgotEmail()"><i class="ti ti-send"></i> Envoyer le lien</button>'
+    + '<div style="text-align:center;margin-top:14px"><a href="#" onclick="renderRsLoginBox();return false;" style="font-size:13px;color:var(--wine)">Retour à la connexion</a></div>'
+    + '<div class="login-err" id="rs-login-err"></div>'
+    + '<div id="rs-login-ok" style="display:none;color:#1A6B47;font-size:14px;margin-top:14px;text-align:center"></div>';
+}
+
+async function sendRsForgotEmail(){
+  var email = (document.getElementById('rs-fg-email').value||'').trim();
+  var errEl = document.getElementById('rs-login-err'), okEl = document.getElementById('rs-login-ok');
+  errEl.style.display='none';
+  if(!email){ errEl.textContent='Email requis'; errEl.style.display='block'; return; }
+  try{
+    await fetch(API_BASE+'/wa/login/forgotPassword', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email:email})});
+  }catch(e){}
+  okEl.textContent = "Si un compte existe avec cette adresse, un email de réinitialisation vient d'être envoyé.";
+  okEl.style.display='block';
 }
 
 async function rsLogin(){

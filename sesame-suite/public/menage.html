@@ -381,13 +381,14 @@ main{flex:1;padding:10px 18px 110px}
 </div>
 
 <div id="loginGate">
-  <div class="login-box">
+  <div class="login-box" id="mg-login-box">
     <div class="login-mark">S</div>
     <h1>Ménage &amp; Maintenance</h1>
     <div class="login-sub">Espace tablette du personnel — Sesame</div>
     <div class="lf"><label for="mg-email">Email</label><input type="email" id="mg-email" autocomplete="username" placeholder="gouvernante@hotel.fr"></div>
-    <div class="lf"><label for="mg-password">Mot de passe</label><input type="password" id="mg-password" autocomplete="current-password" placeholder="••••••••"></div>
+    <div class="lf"><label for="mg-password">Mot de passe</label><input type="password" id="mg-password" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')mgLogin()"></div>
     <button class="login-btn" onclick="mgLogin()"><i class="ti ti-login"></i> Se connecter</button>
+    <div style="text-align:center;margin-top:14px"><a href="#" onclick="renderMgForgotBox();return false;" style="font-size:13px;color:var(--wine)">Mot de passe oublié ?</a></div>
     <div class="login-err" id="mg-login-err"></div>
   </div>
 </div>
@@ -503,6 +504,86 @@ function mgSavedEntity(){
   return sessionStorage.getItem('SESAME_MENAGE_ENTITY') || sessionStorage.getItem('SESAME_ADMIN_ROLE_ENTITY') || sessionStorage.getItem('SESAME_HOME_ENTITY');
 }
 
+/** Formulaires "mot de passe oublié" / "nouveau mot de passe" — même
+ * principe que renderLoginBox/renderForgotBox/renderResetBox (admin.html)
+ * et renderForgotForm/renderResetForm (crm.html) : remplacent le contenu de
+ * #mg-login-box, mêmes routes backend génériques (/wa/login/forgotPassword,
+ * /wa/login/resetPassword), qui fonctionnent quel que soit le rôle du
+ * compte — POST /wa/login/forgotPassword choisit déjà menage.html comme
+ * page de retour du lien envoyé par email pour un compte role="housekeeping"
+ * (cf. src/routes/login.ts), mais rien ne traitait ce lien avant : le
+ * personnel de ménage/maintenance n'avait donc aucun moyen de fonctionner
+ * jusqu'ici s'il oubliait son mot de passe. */
+function renderMgLoginBox(){
+  document.getElementById('mg-login-box').innerHTML =
+    '<div class="login-mark">S</div>'
+    + '<h1>Ménage &amp; Maintenance</h1>'
+    + '<div class="login-sub">Espace tablette du personnel — Sesame</div>'
+    + '<div class="lf"><label for="mg-email">Email</label><input type="email" id="mg-email" autocomplete="username" placeholder="gouvernante@hotel.fr"></div>'
+    + '<div class="lf"><label for="mg-password">Mot de passe</label><input type="password" id="mg-password" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key===\'Enter\')mgLogin()"></div>'
+    + '<button class="login-btn" onclick="mgLogin()"><i class="ti ti-login"></i> Se connecter</button>'
+    + '<div style="text-align:center;margin-top:14px"><a href="#" onclick="renderMgForgotBox();return false;" style="font-size:13px;color:var(--wine)">Mot de passe oublié ?</a></div>'
+    + '<div class="login-err" id="mg-login-err"></div>';
+}
+
+function renderMgForgotBox(){
+  document.getElementById('mg-login-box').innerHTML =
+    '<div class="login-mark">S</div>'
+    + '<h1>Mot de passe oublié</h1>'
+    + '<div class="login-sub">Espace tablette du personnel — Sesame</div>'
+    + '<div class="lf"><label for="mg-fg-email">Email</label><input type="email" id="mg-fg-email" autocomplete="username" placeholder="gouvernante@hotel.fr" onkeydown="if(event.key===\'Enter\')sendMgForgotEmail()"></div>'
+    + '<button class="login-btn" onclick="sendMgForgotEmail()"><i class="ti ti-send"></i> Envoyer le lien</button>'
+    + '<div style="text-align:center;margin-top:14px"><a href="#" onclick="renderMgLoginBox();return false;" style="font-size:13px;color:var(--wine)">Retour à la connexion</a></div>'
+    + '<div class="login-err" id="mg-login-err"></div>'
+    + '<div id="mg-login-ok" style="display:none;color:#1A6B47;font-size:14px;margin-top:14px;text-align:center"></div>';
+}
+
+async function sendMgForgotEmail(){
+  var email = (document.getElementById('mg-fg-email').value||'').trim();
+  var errEl = document.getElementById('mg-login-err'), okEl = document.getElementById('mg-login-ok');
+  errEl.style.display='none';
+  if(!email){ errEl.textContent='Email requis'; errEl.style.display='block'; return; }
+  try{
+    await fetch(API_BASE+'/wa/login/forgotPassword', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email:email})});
+  }catch(e){}
+  okEl.textContent = "Si un compte existe avec cette adresse, un email de réinitialisation vient d'être envoyé.";
+  okEl.style.display='block';
+}
+
+function renderMgResetBox(token){
+  document.getElementById('mg-login-box').innerHTML =
+    '<div class="login-mark">S</div>'
+    + '<h1>Nouveau mot de passe</h1>'
+    + '<div class="login-sub">Espace tablette du personnel — Sesame</div>'
+    + '<div class="lf"><label for="mg-rp-password">Nouveau mot de passe</label><input type="password" id="mg-rp-password" placeholder="••••••••"></div>'
+    + '<div class="lf"><label for="mg-rp-password2">Confirmer</label><input type="password" id="mg-rp-password2" placeholder="••••••••" onkeydown="if(event.key===\'Enter\')submitMgResetPassword(\''+token+'\')"></div>'
+    + '<button class="login-btn" onclick="submitMgResetPassword(\''+token+'\')"><i class="ti ti-check"></i> Valider</button>'
+    + '<div class="login-err" id="mg-login-err"></div>';
+}
+
+async function submitMgResetPassword(token){
+  var p1 = document.getElementById('mg-rp-password').value||'';
+  var p2 = document.getElementById('mg-rp-password2').value||'';
+  var errEl = document.getElementById('mg-login-err');
+  errEl.style.display='none';
+  if(p1.length<8){ errEl.textContent='Le mot de passe doit contenir au moins 8 caractères'; errEl.style.display='block'; return; }
+  if(p1!==p2){ errEl.textContent='Les mots de passe ne correspondent pas'; errEl.style.display='block'; return; }
+  try{
+    var r = await fetch(API_BASE+'/wa/login/resetPassword', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({token:token, password:p1})});
+    var data = await r.json();
+    if(!r.ok){ errEl.textContent = data.error||'Erreur'; errEl.style.display='block'; return; }
+    history.replaceState(null, '', location.pathname);
+    renderMgLoginBox();
+    document.getElementById('mg-login-err').style.display='none';
+    var okEl = document.createElement('div');
+    okEl.style.cssText='color:#1A6B47;font-size:14px;margin-top:14px;text-align:center';
+    okEl.textContent = 'Mot de passe mis à jour ✓ Vous pouvez vous connecter.';
+    document.getElementById('mg-login-box').appendChild(okEl);
+  }catch(e){
+    errEl.textContent='Erreur de connexion au serveur'; errEl.style.display='block';
+  }
+}
+
 async function mgLogin(){
   var email=(document.getElementById('mg-email').value||'').trim();
   var password=document.getElementById('mg-password').value||'';
@@ -551,7 +632,18 @@ window.addEventListener('DOMContentLoaded', function(){
   // en cas d'échec de chargement (cf. même mécanique que admin.html).
   var splashMinDelay = new Promise(function(resolve){ setTimeout(resolve, 3900); });
   var t = mgSavedToken(), e = mgSavedEntity();
-  var appReady = (t && e) ? mgBoot(t, e, null) : Promise.resolve();
+  var appReady;
+  if(t && e){
+    appReady = mgBoot(t, e, null);
+  } else {
+    // Page de retour du lien "mot de passe oublié" pour un compte
+    // role="housekeeping" (cf. POST /wa/login/forgotPassword côté serveur)
+    // — le formulaire de connexion normal reste le contenu par défaut de
+    // #mg-login-box, donc rien à faire ici en l'absence de resetToken.
+    var resetToken = new URLSearchParams(location.search).get('resetToken');
+    if(resetToken) renderMgResetBox(resetToken);
+    appReady = Promise.resolve();
+  }
   Promise.all([splashMinDelay, appReady]).catch(function(){}).then(function(){
     window.closeSesameSplash();
   });
