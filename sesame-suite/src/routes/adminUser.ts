@@ -21,7 +21,11 @@ function shapeUser(u: { id: string; email: string; name: string | null; role: st
 /**
  * GET /wa/commercial/list — comptes Sesame (role="sesame") pouvant être
  * désignés comme commercial responsable d'une fiche/affaire CRM (module
- * "Gestion des affaires", 18/08/2026).
+ * "Gestion des affaires", 18/08/2026). N'inclut que les comptes actifs
+ * (active:true) — un compte désactivé (départ, etc.) ne doit plus être
+ * assignable ni apparaître dans le filtre "Tous commerciaux", même s'il
+ * reste consultable dans l'historique des affaires déjà assignées
+ * (commercialId n'est pas modifié par cette désactivation).
  */
 adminUserRouter.get(
   "/commercial/list",
@@ -29,7 +33,7 @@ adminUserRouter.get(
   requireSesame,
   asyncHandler(async (_req, res) => {
     const rows = await prisma.adminUser.findMany({
-      where: { role: "sesame" },
+      where: { role: "sesame", active: true },
       orderBy: { name: "asc" },
       select: { id: true, email: true, name: true },
     });
