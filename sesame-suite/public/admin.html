@@ -14015,7 +14015,7 @@ function resaStatusLabel(b){
   return 'Réservé';
 }
 
-function resaOpenDetail(code){
+async function resaOpenDetail(code){
   var r = RESA_CACHE.find(function(x){ return x.booking.code === code; });
   if(!r) return;
   var b = r.booking;
@@ -14109,17 +14109,53 @@ function resaOpenDetail(code){
 
   document.getElementById('resa-detail-body').innerHTML = html;
   document.getElementById('resaDetailModal').style.display = 'flex';
-  resaLoadPasses(b.code);
-  resaLoadKey(b.code);
+  // resaLoadKey a besoin des Pass (invités) déjà chargés pour détecter les
+  // réservations à accès multiples (cf. resaAccessCodesFor) — donc attendu
+  // avant, contrairement à avant où les deux partaient en parallèle.
+  await resaLoadPasses(b.code);
+  resaLoadKey(b.code, b.facilityCode);
+}
+
+/** Liste des codes d'accès distincts rattachés à une réservation — union du
+ * facilityCode de la réservation elle-même (souvent vide, ex : réservation
+ * "accès seul" sans chambre) et de ceux de chacun de ses Pass (RESA_PASSES_
+ * CACHE, un Pass par invité). Chaque champ peut déjà être une LISTE de
+ * codes séparés par des virgules côté Sesame (ex : "SSO,PR,ENT2" — une
+ * réservation groupée sur plusieurs accès). Repéré en pratique le
+ * 10/09/2026 : une réservation à 3 accès (entrée principale + 2 autres)
+ * n'a AUCUN facilityCode au niveau réservation — sans cette union, le
+ * bouton "toucher le QR pour ouvrir" n'avait alors aucun code à envoyer et
+ * la serrure refusait systématiquement (aucun accès identifiable).
+ */
+function resaAccessCodesFor(bookingFacilityCode){
+  var seen = {}, out = [];
+  function add(list){
+    (list||'').split(',').forEach(function(c){
+      c = c.trim();
+      if(c && !seen[c]){ seen[c] = true; out.push(c); }
+    });
+  }
+  add(bookingFacilityCode);
+  RESA_PASSES_CACHE.forEach(function(p){ add(p.facilityCode); });
+  return out;
 }
 
 /** Clé numérique de la réservation — QR récupéré depuis le connecteur réel
  * s'il est configuré (cf. GET /wa/booking/accessQr), sinon un QR généré
  * côté serveur encodant le code de réservation (simulated:true — toujours
  * un vrai QR scannable ici, contrairement à espRenderQr côté client qui
- * affiche un motif factice). Toucher le QR ouvre directement la porte
- * (resaKeyOpenDoor) — pas de bouton séparé. */
-async function resaLoadKey(code){
+ * affiche un motif factice).
+ *
+ * Ouverture à distance : un seul code d'accès (ou aucun, cf.
+ * resaAccessCodesFor) → toucher le QR ouvre directement (resaKeyOpenDoorFor
+ * avec ce code, ou sans code si aucun trouvé — comportement historique).
+ * Plusieurs codes distincts → impossible de
+ * savoir lequel ouvrir en touchant le QR seul (RESA_PASSES_CACHE doit donc
+ * être chargé avant d'appeler cette fonction, cf. resaOpenDetail) : un
+ * bouton par accès est affiché à la place, chacun ciblant précisément UN
+ * code (resaKeyOpenDoorFor).
+ */
+async function resaLoadKey(code, bookingFacilityCode){
   var body = document.getElementById('resa-detail-key-body');
   if(!body) return;
   try{
@@ -14147,28 +14183,50 @@ async function resaLoadKey(code){
       var vD = new Date(data.validUntil);
       validLine = '<div style="font-size:11px;color:var(--mu);margin-top:4px">Valide jusqu\'au '+(isNaN(vD.getTime())?esc(data.validUntil):vD.toLocaleDateString('fr-FR'))+'</div>';
     }
-    body.innerHTML = '<button type="button" onclick="resaKeyOpenDoor(\''+esc(code)+'\',this)" style="border:0;background:none;padding:0;cursor:pointer" title="Toucher pour ouvrir la porte">'
-      + '<img src="'+data.qrImage+'" alt="Clé numérique" style="width:160px;height:160px;border-radius:10px;border:1px solid var(--bdr);display:block;margin:0 auto">'
-      + '</button>'
-      + '<div style="font-size:11px;color:var(--mu);margin-top:8px">Touchez le QR code pour ouvrir la porte'+(data.simulated?' (simulation)':'')+'</div>'
-      + (data.simulated && data.simulatedReason ? '<div style="font-size:11px;color:#b45309;margin-top:4px">⚠ '+esc(data.simulatedReason)+'</div>' : '')
-      + validLine;
+    var warnLine = (data.simulated && data.simulatedReason ? '<div style="font-size:11px;color:#b45309;margin-top:4px">⚠ '+esc(data.simulatedReason)+'</div>' : '');
+    var codes = resaAccessCodesFor(bookingFacilityCode);
+    var qrImgTag = '<img src="'+data.qrImage+'" alt="Clé numérique" style="width:160px;height:160px;border-radius:10px;border:1px solid var(--bdr);display:block;margin:0 auto">';
+    if(codes.length > 1){
+      // QR non cliquable ici (ambigu, cf. commentaire resaAccessCodesFor) —
+      // reste affiché pour un lecteur physique qui le scannerait directement.
+      body.innerHTML = qrImgTag
+        + '<div style="font-size:11px;color:var(--mu);margin-top:10px">Plusieurs accès sont rattachés à cette réservation — touchez celui à ouvrir :</div>'
+        + '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;justify-content:center">'
+        + codes.map(function(c){
+            return '<button type="button" class="btn btn-s" id="resa-key-openbtn-'+esc(c)+'" onclick="resaKeyOpenDoorFor(\''+esc(code)+'\',\''+esc(c)+'\',this)"><i class="ti ti-door"></i> '+esc(c)+'</button>';
+          }).join('')
+        + '</div>'
+        + warnLine + validLine;
+    } else {
+      var singleCode = codes[0] || '';
+      body.innerHTML = '<button type="button" onclick="resaKeyOpenDoorFor(\''+esc(code)+'\',\''+esc(singleCode)+'\',this)" style="border:0;background:none;padding:0;cursor:pointer" title="Toucher pour ouvrir la porte">'
+        + qrImgTag
+        + '</button>'
+        + '<div style="font-size:11px;color:var(--mu);margin-top:8px">Touchez le QR code pour ouvrir la porte'+(data.simulated?' (simulation)':'')+'</div>'
+        + warnLine + validLine;
+    }
   }catch(e){
     body.innerHTML = '<div style="font-size:12px;color:var(--mu)">QR indisponible pour cette réservation</div>';
   }
 }
-async function resaKeyOpenDoor(code, btn){
+/** facilityCode vide (chaîne '') si resaAccessCodesFor n'a trouvé aucun
+ * code : comportement inchangé dans ce cas (backend se rabat sur booking.
+ * facilityCode/selectedRoomCode, cf. /wa/booking/openDoor). */
+async function resaKeyOpenDoorFor(code, facilityCode, btn){
   if(btn) btn.disabled = true;
   try{
-    var r = await adminFetch('/wa/booking/openDoor', {method:'POST', body: JSON.stringify({code:code})});
+    var body = {code:code};
+    if(facilityCode) body.facilityCode = facilityCode;
+    var r = await adminFetch('/wa/booking/openDoor', {method:'POST', body: JSON.stringify(body)});
     var data = await r.json().catch(function(){ return {}; });
     if(!r.ok) throw new Error(data.error || 'Erreur');
-    toast(data.simulated ? ('Ouverture simulée ✓' + (data.simulatedReason ? ' — ' + data.simulatedReason : '')) : 'Porte ouverte ✓');
+    var label = facilityCode ? 'Accès "'+facilityCode+'"' : 'Porte';
+    toast(data.simulated ? ('Ouverture simulée ✓' + (data.simulatedReason ? ' — ' + data.simulatedReason : '')) : (label+' ouvert(e) ✓'));
   }catch(e){
     // Affiche le message réel (ex : erreur renvoyée par Sesame) plutôt
     // qu'un texte générique, indispensable pour diagnostiquer un vrai appel
     // qui échoue côté source (connecteur configuré, réservation reconnue).
-    toast('Erreur lors de l\'ouverture de la porte' + (e && e.message ? ' — ' + e.message : ''));
+    toast('Erreur lors de l\'ouverture' + (facilityCode ? ' de "'+facilityCode+'"' : '') + (e && e.message ? ' — ' + e.message : ''));
   }finally{
     if(btn) btn.disabled = false;
   }

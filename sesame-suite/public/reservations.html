@@ -734,7 +734,7 @@ function rsRender(){
 // ═══════════════════════════════════════════════ DÉTAIL
 var RS_PASSES_CACHE = [];
 
-function rsOpenDetail(code){
+async function rsOpenDetail(code){
   var b = RS_BOOKINGS.find(function(x){ return x.code === code; });
   if(!b) return;
   var room = b.facilityName || b.selectedRoomCode || b.facilityCode || '—';
@@ -789,17 +789,43 @@ function rsOpenDetail(code){
 
   document.getElementById('sheet').innerHTML = html;
   document.getElementById('sheetBg').classList.add('show');
-  rsLoadPasses(code);
-  rsLoadKey(code);
+  // rsLoadKey a besoin des Pass (invités) déjà chargés pour détecter les
+  // réservations à accès multiples (cf. rsAccessCodesFor), donc attendu
+  // avant plutôt que lancé en parallèle.
+  await rsLoadPasses(code);
+  rsLoadKey(code, b.facilityCode);
 }
 function rsCloseSheet(){ document.getElementById('sheetBg').classList.remove('show'); }
+
+/** Cf. resaAccessCodesFor (admin.html) : union du facilityCode de la
+ * réservation elle-même (souvent vide pour une réservation "accès seul")
+ * et de ceux de chacun de ses Pass (RS_PASSES_CACHE) — chaque champ peut
+ * déjà être une liste séparée par des virgules côté Sesame. */
+function rsAccessCodesFor(bookingFacilityCode){
+  var seen = {}, out = [];
+  function add(list){
+    (list||'').split(',').forEach(function(c){
+      c = c.trim();
+      if(c && !seen[c]){ seen[c] = true; out.push(c); }
+    });
+  }
+  add(bookingFacilityCode);
+  RS_PASSES_CACHE.forEach(function(p){ add(p.facilityCode); });
+  return out;
+}
 
 /** Clé numérique de la réservation — même logique que resaLoadKey côté
  * admin.html : QR réel si le connecteur est configuré (GET
  * /wa/booking/accessQr), sinon un QR généré côté serveur encodant le code
- * de réservation. Toucher le QR ouvre directement la porte (rsKeyOpenDoor)
- * — pas de bouton séparé, pratique à une main sur mobile. */
-async function rsLoadKey(code){
+ * de réservation.
+ *
+ * Ouverture à distance : un seul code d'accès (ou aucun) → toucher le QR
+ * ouvre directement. Plusieurs codes distincts (ex : réservation groupée
+ * sur entrée principale + 2 autres accès, sans chambre propre) →
+ * impossible de savoir lequel ouvrir en touchant le QR seul (RS_PASSES_
+ * CACHE doit donc être chargé avant d'appeler cette fonction, cf.
+ * rsOpenDetail) : un bouton par accès est affiché à la place. */
+async function rsLoadKey(code, bookingFacilityCode){
   var body = document.getElementById('rs-detail-key-body');
   if(!body) return;
   try{
@@ -819,27 +845,48 @@ async function rsLoadKey(code){
       var vD = new Date(data.validUntil);
       validLine = '<div style="font-size:11px;color:var(--mu);margin-top:4px">Valide jusqu\'au '+(isNaN(vD.getTime())?esc(data.validUntil):vD.toLocaleDateString('fr-FR'))+'</div>';
     }
-    body.innerHTML = '<button type="button" onclick="rsKeyOpenDoor(\''+esc(code)+'\',this)" style="border:0;background:none;padding:0;cursor:pointer" title="Toucher pour ouvrir la porte">'
-      + '<img src="'+data.qrImage+'" alt="Clé numérique" style="width:150px;height:150px;border-radius:10px;border:1px solid var(--bdr);display:block;margin:0 auto">'
-      + '</button>'
-      + '<div style="font-size:11px;color:var(--mu);margin-top:8px" id="rs-key-caption">Touchez le QR code pour ouvrir la porte'+(data.simulated?' (simulation)':'')+'</div>'
-      + (data.simulated && data.simulatedReason ? '<div style="font-size:11px;color:#b45309;margin-top:4px">⚠ '+esc(data.simulatedReason)+'</div>' : '')
-      + validLine;
+    var warnLine = (data.simulated && data.simulatedReason ? '<div style="font-size:11px;color:#b45309;margin-top:4px">⚠ '+esc(data.simulatedReason)+'</div>' : '');
+    var codes = rsAccessCodesFor(bookingFacilityCode);
+    var qrImgTag = '<img src="'+data.qrImage+'" alt="Clé numérique" style="width:150px;height:150px;border-radius:10px;border:1px solid var(--bdr);display:block;margin:0 auto">';
+    if(codes.length > 1){
+      body.innerHTML = qrImgTag
+        + '<div style="font-size:11px;color:var(--mu);margin-top:10px">Plusieurs accès sont rattachés à cette réservation — touchez celui à ouvrir :</div>'
+        + '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;justify-content:center">'
+        + codes.map(function(c){
+            return '<button type="button" class="btn btn-ghost btn-sm" id="rs-key-openbtn-'+esc(c)+'" onclick="rsKeyOpenDoorFor(\''+esc(code)+'\',\''+esc(c)+'\',this)"><i class="ti ti-door"></i> '+esc(c)+'</button>';
+          }).join('')
+        + '</div>'
+        + '<div style="font-size:11px;color:var(--mu);margin-top:8px" id="rs-key-caption"></div>'
+        + warnLine + validLine;
+    } else {
+      var singleCode = codes[0] || '';
+      body.innerHTML = '<button type="button" onclick="rsKeyOpenDoorFor(\''+esc(code)+'\',\''+esc(singleCode)+'\',this)" style="border:0;background:none;padding:0;cursor:pointer" title="Toucher pour ouvrir la porte">'
+        + qrImgTag
+        + '</button>'
+        + '<div style="font-size:11px;color:var(--mu);margin-top:8px" id="rs-key-caption">Touchez le QR code pour ouvrir la porte'+(data.simulated?' (simulation)':'')+'</div>'
+        + warnLine + validLine;
+    }
   }catch(e){
     body.innerHTML = '<div style="font-size:12px;color:var(--mu)">QR indisponible pour cette réservation</div>';
   }
 }
-async function rsKeyOpenDoor(code, btn){
+/** facilityCode vide si rsAccessCodesFor n'a trouvé aucun code : comportement
+ * inchangé dans ce cas (backend se rabat sur booking.facilityCode/
+ * selectedRoomCode, cf. /wa/booking/openDoor). */
+async function rsKeyOpenDoorFor(code, facilityCode, btn){
   var errEl = document.getElementById('rs-key-error');
   var errMsg = document.getElementById('rs-key-error-msg');
   var caption = document.getElementById('rs-key-caption');
   if(errEl) errEl.style.display = 'none';
   if(btn) btn.disabled = true;
   try{
-    var r = await rsApiFetch('/wa/booking/openDoor', {method:'POST', body: JSON.stringify({code:code})});
+    var body = {code:code};
+    if(facilityCode) body.facilityCode = facilityCode;
+    var r = await rsApiFetch('/wa/booking/openDoor', {method:'POST', body: JSON.stringify(body)});
     var data = await r.json().catch(function(){ return {}; });
     if(!r.ok) throw new Error(data.error || 'Erreur');
-    if(caption) caption.textContent = data.simulated ? ('Ouverture simulée ✓' + (data.simulatedReason ? ' — ' + data.simulatedReason : '')) : 'Porte ouverte ✓';
+    var label = facilityCode ? 'Accès "'+facilityCode+'"' : 'Porte';
+    if(caption) caption.textContent = data.simulated ? ('Ouverture simulée ✓' + (data.simulatedReason ? ' — ' + data.simulatedReason : '')) : (label+' ouvert(e) ✓');
   }catch(e){
     if(errMsg) errMsg.textContent = e.message;
     if(errEl) errEl.style.display = 'flex';
