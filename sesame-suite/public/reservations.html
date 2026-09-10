@@ -734,10 +734,18 @@ async function rsLoadKey(code){
     var r = await rsApiFetch('/wa/booking/accessQr?code='+encodeURIComponent(code));
     var data = await r.json();
     if(!r.ok || !data.qrImage){ body.innerHTML = '<div style="font-size:12px;color:var(--mu)">QR indisponible pour cette réservation</div>'; return; }
+    // Cf. resaLoadKey (admin.html) : le QR ne change pas visuellement quand
+    // les dates sont modifiées, on affiche donc validUntil explicitement.
+    var validLine = '';
+    if(data.validUntil){
+      var vD = new Date(data.validUntil);
+      validLine = '<div style="font-size:11px;color:var(--mu);margin-top:4px">Valide jusqu\'au '+(isNaN(vD.getTime())?esc(data.validUntil):vD.toLocaleDateString('fr-FR'))+'</div>';
+    }
     body.innerHTML = '<button type="button" onclick="rsKeyOpenDoor(\''+esc(code)+'\',this)" style="border:0;background:none;padding:0;cursor:pointer" title="Toucher pour ouvrir la porte">'
       + '<img src="'+data.qrImage+'" alt="Clé numérique" style="width:150px;height:150px;border-radius:10px;border:1px solid var(--bdr);display:block;margin:0 auto">'
       + '</button>'
-      + '<div style="font-size:11px;color:var(--mu);margin-top:8px" id="rs-key-caption">Touchez le QR code pour ouvrir la porte'+(data.simulated?' (simulation)':'')+'</div>';
+      + '<div style="font-size:11px;color:var(--mu);margin-top:8px" id="rs-key-caption">Touchez le QR code pour ouvrir la porte'+(data.simulated?' (simulation)':'')+'</div>'
+      + validLine;
   }catch(e){
     body.innerHTML = '<div style="font-size:12px;color:var(--mu)">QR indisponible pour cette réservation</div>';
   }

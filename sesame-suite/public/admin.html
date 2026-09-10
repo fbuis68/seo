@@ -14060,10 +14060,24 @@ async function resaLoadKey(code){
     var r = await adminFetch('/wa/booking/accessQr?code='+encodeURIComponent(code));
     var data = await r.json();
     if(!r.ok || !data.qrImage){ body.innerHTML = '<div style="font-size:12px;color:var(--mu)">QR indisponible pour cette réservation</div>'; return; }
+    // Le QR/secret est un jeton opaque renvoyé tel quel par la source (ex :
+    // Sesame /ws/pass/findMimeSecret) : il ne change PAS visuellement quand
+    // les dates de la réservation sont modifiées (la fenêtre de validité est
+    // vérifiée côté source au moment du scan, pas encodée dans l'image).
+    // On affiche donc explicitement validUntil (quand la source le fournit)
+    // pour que le personnel puisse constater que la mise à jour a bien été
+    // prise en compte, plutôt que de se fier à tort à un changement visuel
+    // du QR lui-même.
+    var validLine = '';
+    if(data.validUntil){
+      var vD = new Date(data.validUntil);
+      validLine = '<div style="font-size:11px;color:var(--mu);margin-top:4px">Valide jusqu\'au '+(isNaN(vD.getTime())?esc(data.validUntil):vD.toLocaleDateString('fr-FR'))+'</div>';
+    }
     body.innerHTML = '<button type="button" onclick="resaKeyOpenDoor(\''+esc(code)+'\',this)" style="border:0;background:none;padding:0;cursor:pointer" title="Toucher pour ouvrir la porte">'
       + '<img src="'+data.qrImage+'" alt="Clé numérique" style="width:160px;height:160px;border-radius:10px;border:1px solid var(--bdr);display:block;margin:0 auto">'
       + '</button>'
-      + '<div style="font-size:11px;color:var(--mu);margin-top:8px">Touchez le QR code pour ouvrir la porte'+(data.simulated?' (simulation — aucun connecteur réel configuré)':'')+'</div>';
+      + '<div style="font-size:11px;color:var(--mu);margin-top:8px">Touchez le QR code pour ouvrir la porte'+(data.simulated?' (simulation — aucun connecteur réel configuré)':'')+'</div>'
+      + validLine;
   }catch(e){
     body.innerHTML = '<div style="font-size:12px;color:var(--mu)">QR indisponible pour cette réservation</div>';
   }
