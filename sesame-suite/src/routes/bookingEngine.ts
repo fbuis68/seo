@@ -4,7 +4,7 @@ import { resolveEntity } from "../lib/entity";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { createCheckoutSession, PaymentError } from "../lib/payment";
-import { listAvailableRooms, quoteBooking, BookingDraft, OCCUPANT_AGE_CATEGORIES } from "../lib/bookingEngine";
+import { listAvailableRooms, quoteBooking, createBookingDirectUnpaid, BookingDraft, OCCUPANT_AGE_CATEGORIES } from "../lib/bookingEngine";
 
 export const bookingEngineRouter = Router();
 
@@ -19,7 +19,7 @@ bookingEngineRouter.get(
       update: {},
       create: { entityId: entity.id },
     });
-    res.json({ enabled: config.enabled });
+    res.json({ enabled: config.enabled, requirePayment: config.requirePayment });
   })
 );
 
@@ -30,16 +30,23 @@ bookingEngineRouter.post(
   asyncHandler(async (req, res) => {
     const entity = await resolveEntity(req);
     const enabled = !!req.body.enabled;
+    const requirePayment = req.body.requirePayment !== undefined ? !!req.body.requirePayment : undefined;
+    const data = { enabled, ...(requirePayment !== undefined ? { requirePayment } : {}) };
     const config = await prisma.bookingEngineConfig.upsert({
       where: { entityId: entity.id },
-      update: { enabled },
-      create: { entityId: entity.id, enabled },
+      update: data,
+      create: { entityId: entity.id, ...data },
     });
-    res.json({ enabled: config.enabled });
+    res.json({ enabled: config.enabled, requirePayment: config.requirePayment });
   })
 );
 
-/** GET /wa/bookingEngine/status?entityCode= — public, permet à la page de réservation de savoir si le module est activé, sans exposer la config. Le paiement en ligne (obligatoire pour réserver) doit lui aussi être configuré. */
+/**
+ * GET /wa/bookingEngine/status?entityCode= — public, permet à la page de
+ * réservation de savoir si le module est activé et si le paiement en ligne
+ * est obligatoire (requirePayment) ou juste disponible en option
+ * (paymentAvailable, module Paiement configuré) — sans exposer la config.
+ */
 bookingEngineRouter.get(
   "/bookingEngine/status",
   asyncHandler(async (req, res) => {
@@ -48,20 +55,23 @@ bookingEngineRouter.get(
       prisma.bookingEngineConfig.findUnique({ where: { entityId: entity.id } }),
       prisma.paymentConfig.findUnique({ where: { entityId: entity.id } }),
     ]);
-    const enabled = !!engineConfig?.enabled && !!paymentConfig?.enabled && !!paymentConfig.secretKey;
-    res.json({ enabled });
+    const paymentAvailable = !!paymentConfig?.enabled && !!paymentConfig.secretKey;
+    const requirePayment = engineConfig?.requirePayment ?? true;
+    // Activé seulement si le module l'est, ET si le paiement (obligatoire ou
+    // non) est disponible dès que requis — un établissement avec
+    // requirePayment=true mais sans Stripe configuré reste indisponible,
+    // comme avant.
+    const enabled = !!engineConfig?.enabled && (!requirePayment || paymentAvailable);
+    res.json({ enabled, requirePayment, paymentAvailable });
   })
 );
 
-async function requireEnabled(entityId: string) {
-  const [engineConfig, paymentConfig] = await Promise.all([
-    prisma.bookingEngineConfig.findUnique({ where: { entityId } }),
-    prisma.paymentConfig.findUnique({ where: { entityId } }),
-  ]);
-  if (!engineConfig?.enabled || !paymentConfig?.enabled || !paymentConfig.secretKey) {
-    throw new HttpError(400, "Réservation en ligne non disponible pour cet établissement");
-  }
-  return paymentConfig;
+/** Le module doit être activé pour cet établissement — condition commune à
+ * toutes les routes publiques ci-dessous, indépendamment du paiement. */
+async function requireEngineEnabled(entityId: string) {
+  const engineConfig = await prisma.bookingEngineConfig.findUnique({ where: { entityId } });
+  if (!engineConfig?.enabled) throw new HttpError(400, "Réservation en ligne non disponible pour cet établissement");
+  return engineConfig;
 }
 
 /** GET /wa/bookingEngine/availability?entityCode=&start=&end= — public, chambres disponibles sur la période avec prix. */
@@ -69,7 +79,7 @@ bookingEngineRouter.get(
   "/bookingEngine/availability",
   asyncHandler(async (req, res) => {
     const entity = await resolveEntity(req);
-    await requireEnabled(entity.id);
+    await requireEngineEnabled(entity.id);
     const start = new Date(req.query.start as string);
     const end = new Date(req.query.end as string);
     if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) {
@@ -93,6 +103,33 @@ interface CheckoutBody {
   cancelUrl: string;
 }
 
+function parseOccupants(raw: Record<string, number> | undefined): Record<string, number> {
+  const occupants: Record<string, number> = {};
+  for (const cat of OCCUPANT_AGE_CATEGORIES) {
+    const n = Math.max(0, Math.floor(Number(raw?.[cat]) || 0));
+    if (n) occupants[cat] = n;
+  }
+  return occupants;
+}
+
+function parseDraft(b: CheckoutBody): BookingDraft {
+  if (!b.roomId) throw new HttpError(400, "Chambre requise");
+  if (!b.firstName?.trim() || !b.lastName?.trim()) throw new HttpError(400, "Nom et prénom requis");
+  if (!b.email?.trim() || !b.email.includes("@")) throw new HttpError(400, "Email valide requis");
+  const occupants = parseOccupants(b.occupants);
+  if (!Object.values(occupants).reduce((s, n) => s + n, 0)) throw new HttpError(400, "Au moins un occupant requis");
+  return {
+    roomId: b.roomId,
+    startDate: b.startDate,
+    endDate: b.endDate,
+    firstName: b.firstName.trim(),
+    lastName: b.lastName.trim(),
+    email: b.email.trim().toLowerCase(),
+    phone: b.phone?.trim() || undefined,
+    occupants,
+  };
+}
+
 /**
  * POST /wa/bookingEngine/checkout — public. Crée un Order "bookingEngine"
  * (avec le brouillon de réservation dans bookingDraft, statut de paiement
@@ -100,36 +137,21 @@ interface CheckoutBody {
  * taxe de séjour). La Booking elle-même n'est créée qu'à la confirmation du
  * paiement (cf. lib/bookingEngine.ts createBookingFromPaidOrder, appelée
  * depuis le webhook dans routes/payment.ts) — jamais ici, pour ne jamais
- * bloquer la chambre sur un panier abandonné.
+ * bloquer la chambre sur un panier abandonné. Accessible que le paiement
+ * soit obligatoire ou simplement proposé en option (cf. /bookDirect pour
+ * l'alternative "payer sur place").
  */
 bookingEngineRouter.post(
   "/bookingEngine/checkout",
   asyncHandler(async (req, res) => {
     const entity = await resolveEntity(req);
-    const paymentConfig = await requireEnabled(entity.id);
+    await requireEngineEnabled(entity.id);
+    const paymentConfig = await prisma.paymentConfig.findUnique({ where: { entityId: entity.id } });
+    if (!paymentConfig?.enabled || !paymentConfig.secretKey) throw new HttpError(400, "Paiement en ligne non configuré pour cet établissement");
 
     const b = req.body as CheckoutBody;
-    if (!b.roomId) throw new HttpError(400, "Chambre requise");
-    if (!b.firstName?.trim() || !b.lastName?.trim()) throw new HttpError(400, "Nom et prénom requis");
-    if (!b.email?.trim() || !b.email.includes("@")) throw new HttpError(400, "Email valide requis");
     if (!b.successUrl || !b.cancelUrl) throw new HttpError(400, "successUrl et cancelUrl requis");
-    const occupants: Record<string, number> = {};
-    for (const cat of OCCUPANT_AGE_CATEGORIES) {
-      const n = Math.max(0, Math.floor(Number(b.occupants?.[cat]) || 0));
-      if (n) occupants[cat] = n;
-    }
-    if (!Object.values(occupants).reduce((s, n) => s + n, 0)) throw new HttpError(400, "Au moins un occupant requis");
-
-    const draft: BookingDraft = {
-      roomId: b.roomId,
-      startDate: b.startDate,
-      endDate: b.endDate,
-      firstName: b.firstName.trim(),
-      lastName: b.lastName.trim(),
-      email: b.email.trim().toLowerCase(),
-      phone: b.phone?.trim() || undefined,
-      occupants,
-    };
+    const draft = parseDraft(b);
 
     let quote;
     try {
@@ -173,6 +195,30 @@ bookingEngineRouter.post(
       const message = e instanceof PaymentError ? e.message : "Erreur Stripe";
       await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: "failed" } });
       throw new HttpError(400, message);
+    }
+  })
+);
+
+/**
+ * POST /wa/bookingEngine/bookDirect — public. Réservation "payer sur
+ * place" : crée la Booking immédiatement, sans passer par Stripe — refusé
+ * si BookingEngineConfig.requirePayment est vrai (le paiement en ligne
+ * n'est alors pas optionnel, cf. /checkout).
+ */
+bookingEngineRouter.post(
+  "/bookingEngine/bookDirect",
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const engineConfig = await requireEngineEnabled(entity.id);
+    if (engineConfig.requirePayment) throw new HttpError(400, "Le paiement en ligne est obligatoire pour réserver auprès de cet établissement");
+
+    const draft = parseDraft(req.body as CheckoutBody);
+    try {
+      await quoteBooking(entity.id, draft); // valide dates/chambre/disponibilité avant création
+      const booking = await createBookingDirectUnpaid(entity, draft, "réservation directe (paiement sur place)");
+      res.status(201).json({ code: booking.code });
+    } catch (e) {
+      throw new HttpError(400, e instanceof Error ? e.message : "Réservation impossible");
     }
   })
 );

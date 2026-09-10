@@ -750,6 +750,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     <div class="ch"><i class="ti ti-calendar-check"></i>Réservations — <span id="resa-count">0</span>
       <button class="chact" onclick="loadReservations()"><i class="ti ti-refresh" style="font-size:12px"></i> Actualiser</button>
       <a class="chact" href="/reservations.html" target="_blank" rel="noopener"><i class="ti ti-device-mobile" style="font-size:12px"></i> Version mobile</a>
+      <button class="chact" onclick="resaOpenCreate()"><i class="ti ti-plus" style="font-size:12px"></i> Créer une réservation</button>
     </div>
     <div id="resa-tabs" style="display:flex;gap:3px;background:var(--bdr);border-radius:var(--rs);padding:3px;width:fit-content;margin-bottom:10px">
       <div class="ptab" data-filter="all" onclick="resaSetTab('all')">Toutes</div>
@@ -825,6 +826,22 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       <button onclick="resaCloseDetail()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
     </div>
     <div style="padding:18px 20px" id="resa-detail-body"></div>
+  </div>
+</div>
+
+<!-- ════════════════ CRÉER UNE RÉSERVATION (saisie manuelle) ════════════════
+     Bouton "Créer une réservation" du panneau Réservations — pour une
+     réservation prise par téléphone/guichet, sans passer par la page
+     publique booking.html ni par un paiement (cf. routes/booking.ts POST
+     /booking/createManual, lib/bookingEngine.ts createBookingDirectUnpaid).
+     ════════════════════════════════════════ -->
+<div id="resaCreateModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:680px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.3)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--bdr)">
+      <h2 style="font-size:17px">Créer une réservation</h2>
+      <button onclick="resaCloseCreate()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
+    </div>
+    <div style="padding:18px 20px" id="resa-create-body"></div>
   </div>
 </div>
 
@@ -3921,6 +3938,13 @@ Accès au salon Premium</textarea>
       <label style="display:flex;align-items:center;gap:8px;height:38px;cursor:pointer">
         <input type="checkbox" id="bke-enabled" style="accent-color:var(--am)">
         <span style="font-size:13px">La page de réservation devient accessible au public</span>
+      </label>
+    </div>
+    <div class="fi">
+      <label class="lb">Paiement en ligne obligatoire pour réserver</label>
+      <label style="display:flex;align-items:center;gap:8px;height:38px;cursor:pointer">
+        <input type="checkbox" id="bke-require-payment" style="accent-color:var(--am)">
+        <span style="font-size:13px">Décochez pour laisser le client choisir "Payer en ligne" ou "Payer sur place"</span>
       </label>
     </div>
     <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
@@ -7681,6 +7705,107 @@ async function walFetchTemplate(){
   }
 }
 
+// ═══════════════════ CRÉER UNE RÉSERVATION (saisie manuelle, personnel) ═══════════════════
+var RC_STATE = { rooms: [], selectedRoom: null };
+
+function resaOpenCreate(){
+  var today = new Date();
+  var tomorrow = new Date(today.getTime()+86400000);
+  RC_STATE = { rooms: [], selectedRoom: null };
+  document.getElementById('resa-create-body').innerHTML =
+    '<div class="g2">'
+    + '<div class="fi"><label class="lb">Arrivée</label><input type="date" id="rc-start" value="'+today.toISOString().slice(0,10)+'"></div>'
+    + '<div class="fi"><label class="lb">Départ</label><input type="date" id="rc-end" value="'+tomorrow.toISOString().slice(0,10)+'"></div>'
+    + '</div>'
+    + '<button class="btn btn-s" type="button" onclick="rcSearchRooms()"><i class="ti ti-search"></i> Voir les chambres disponibles</button>'
+    + '<div class="alt alt-w" id="rc-err" style="display:none;margin-top:10px"><i class="ti ti-alert-triangle"></i><span id="rc-err-msg"></span></div>'
+    + '<div id="rc-rooms" style="margin-top:14px"></div>'
+    + '<div id="rc-guest-section"></div>';
+  document.getElementById('resaCreateModal').style.display = 'flex';
+}
+function resaCloseCreate(){ document.getElementById('resaCreateModal').style.display = 'none'; }
+
+function rcShowError(msg){
+  var el = document.getElementById('rc-err'), msgEl = document.getElementById('rc-err-msg');
+  msgEl.textContent = msg; el.style.display = 'flex';
+}
+
+async function rcSearchRooms(){
+  document.getElementById('rc-err').style.display = 'none';
+  var start = document.getElementById('rc-start').value;
+  var end = document.getElementById('rc-end').value;
+  if(!start || !end || end<=start){ rcShowError('Dates invalides (départ après arrivée).'); return; }
+  RC_STATE.start = start; RC_STATE.end = end;
+  RC_STATE.selectedRoom = null;
+  document.getElementById('rc-guest-section').innerHTML = '';
+  try{
+    var r = await adminFetch('/wa/booking/availableRooms?start='+encodeURIComponent(start)+'&end='+encodeURIComponent(end));
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error||'Erreur');
+    RC_STATE.rooms = data.rooms || [];
+  }catch(e){ rcShowError(e.message||'Impossible de charger les chambres disponibles'); return; }
+  rcRenderRooms();
+}
+
+function rcRenderRooms(){
+  var el = document.getElementById('rc-rooms');
+  if(!RC_STATE.rooms.length){ el.innerHTML = '<div style="color:var(--mu);font-size:12px;padding:8px 0">Aucune chambre disponible sur ces dates.</div>'; return; }
+  el.innerHTML = '<div style="font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px">Chambres disponibles</div>'
+    + RC_STATE.rooms.map(function(rm, i){
+        var on = RC_STATE.selectedRoom && RC_STATE.selectedRoom.id===rm.id;
+        return '<div onclick="rcSelectRoom('+i+')" style="border:1.5px solid '+(on?'var(--am)':'var(--bdr)')+';border-radius:var(--rs);padding:10px 12px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center'+(on?';background:rgba(139,26,46,.05)':'')+'">'
+          + '<div><div style="font-weight:600;font-size:13px">'+esc(rm.name)+'</div><div style="font-size:11px;color:var(--mu)">'+[rm.category, rm.capacity?('jusqu’à '+rm.capacity+' pers.'):null].filter(Boolean).map(esc).join(' · ')+'</div></div>'
+          + '<div style="font-weight:600;font-size:13px">'+(rm.roomTotal||0).toLocaleString('fr-FR')+' € <span style="font-weight:400;color:var(--mu);font-size:11px">/ '+rm.nights+'n</span></div>'
+          + '</div>';
+      }).join('');
+}
+
+function rcSelectRoom(i){
+  RC_STATE.selectedRoom = RC_STATE.rooms[i];
+  rcRenderRooms();
+  document.getElementById('rc-guest-section').innerHTML =
+    '<div style="font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.03em;margin:14px 0 8px">Coordonnées du client</div>'
+    + '<div class="g2">'
+    + '<div class="fi"><label class="lb">Prénom</label><input type="text" id="rc-firstname"></div>'
+    + '<div class="fi"><label class="lb">Nom</label><input type="text" id="rc-lastname"></div>'
+    + '</div>'
+    + '<div class="g2">'
+    + '<div class="fi"><label class="lb">Email</label><input type="email" id="rc-email"></div>'
+    + '<div class="fi"><label class="lb">Téléphone (optionnel)</label><input type="tel" id="rc-phone"></div>'
+    + '</div>'
+    + '<div style="display:flex;gap:8px;margin-top:10px">'
+    + '<button class="btn btn-p" onclick="rcCreateBooking()" id="rc-create-btn"><i class="ti ti-check"></i> Créer la réservation</button>'
+    + '<button class="btn btn-ghost" onclick="resaCloseCreate()">Annuler</button>'
+    + '</div>';
+}
+
+async function rcCreateBooking(){
+  document.getElementById('rc-err').style.display = 'none';
+  var firstName = document.getElementById('rc-firstname').value.trim();
+  var lastName = document.getElementById('rc-lastname').value.trim();
+  var email = document.getElementById('rc-email').value.trim();
+  var phone = document.getElementById('rc-phone').value.trim();
+  if(!firstName || !lastName){ rcShowError('Nom et prénom requis.'); return; }
+  if(!email || email.indexOf('@')===-1){ rcShowError('Email valide requis.'); return; }
+
+  var btn = document.getElementById('rc-create-btn');
+  btn.disabled = true; btn.innerHTML = '<div class="spin"></div> Création…';
+  try{
+    var r = await adminFetch('/wa/booking/createManual', {method:'POST', body:JSON.stringify({
+      roomId: RC_STATE.selectedRoom.id, startDate: RC_STATE.start, endDate: RC_STATE.end,
+      firstName: firstName, lastName: lastName, email: email, phone: phone
+    })});
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error||'Erreur');
+    resaCloseCreate();
+    toast('Réservation '+data.code+' créée ✓');
+    loadReservations();
+  }catch(e){
+    rcShowError(e.message||'Erreur lors de la création de la réservation');
+    btn.disabled = false; btn.innerHTML = '<i class="ti ti-check"></i> Créer la réservation';
+  }
+}
+
 // ═══════════════════ RÉSERVATION EN LIGNE ═══════════════════
 function bkeUrl(){
   var checkinCode = (ADMIN_ROLE==='sesame' && ACTIVE_ENTITY_CODE) ? ACTIVE_ENTITY_CODE : HOME_ENTITY_CODE;
@@ -7692,10 +7817,13 @@ async function bkeInit(){
   document.getElementById('bke-url').value = url;
   document.getElementById('bke-url-open').href = url || '#';
 
+  var requirePayment = true;
   try{
     var r = await adminFetch('/wa/bookingEngine/config');
     var cfg = r.ok ? await r.json() : null;
     document.getElementById('bke-enabled').checked = !!(cfg && cfg.enabled);
+    requirePayment = cfg ? cfg.requirePayment !== false : true;
+    document.getElementById('bke-require-payment').checked = requirePayment;
   }catch(e){}
 
   var el = document.getElementById('bke-status-banner');
@@ -7704,18 +7832,23 @@ async function bkeInit(){
     var pay = pr.ok ? await pr.json() : null;
     var paymentReady = !!(pay && pay.enabled && pay.secretKeySet);
     el.style.display='block';
-    el.innerHTML = paymentReady
-      ? '<div class="alt alt-g"><i class="ti ti-check-circle"></i><span>Paiement en ligne configuré — la réservation peut être encaissée.</span></div>'
-      : '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Le module Paiement en ligne n\'est pas configuré/activé — la page de réservation ne pourra pas encaisser de paiement tant que ce n\'est pas fait (panneau "Paiement").</span></div>';
+    if(paymentReady){
+      el.innerHTML = '<div class="alt alt-g"><i class="ti ti-check-circle"></i><span>Paiement en ligne configuré'+(requirePayment?' — la réservation peut être encaissée.':' — proposé en option, en plus du paiement sur place.')+'</span></div>';
+    } else if(requirePayment){
+      el.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Le module Paiement en ligne n\'est pas configuré/activé — la page de réservation ne pourra pas encaisser de paiement tant que ce n\'est pas fait (panneau "Paiement"), ou décochez "Paiement en ligne obligatoire" ci-dessus pour accepter les réservations sans paiement en ligne.</span></div>';
+    } else {
+      el.innerHTML = '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Paiement en ligne non configuré — vos clients ne pourront que réserver et payer sur place à l\'hôtel.</span></div>';
+    }
   }catch(e){ el.style.display='none'; }
 }
 
 async function bkeSave(){
-  var body = { enabled: document.getElementById('bke-enabled').checked };
+  var body = { enabled: document.getElementById('bke-enabled').checked, requirePayment: document.getElementById('bke-require-payment').checked };
   try{
     var r = await adminFetch('/wa/bookingEngine/config/update', {method:'POST', body:JSON.stringify(body)});
     if(!r.ok){ toast('Erreur lors de l\'enregistrement'); return; }
     toast('Configuration enregistrée ✓');
+    bkeInit();
   }catch(e){ toast('Erreur de connexion au serveur'); }
 }
 

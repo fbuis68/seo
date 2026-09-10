@@ -32,6 +32,7 @@ h1{font-family:var(--font-title);font-size:26px;font-weight:500;margin-bottom:6p
 .btn:hover{opacity:.9}
 .btn:disabled{opacity:.5;cursor:default}
 .btn-p{background:var(--primary);color:#fff;width:100%}
+.btn-s{background:var(--pl);color:var(--primary);width:100%}
 .btn-ghost{background:transparent;color:var(--primary);padding:8px 4px}
 .room-card{border:1px solid var(--bdr);border-radius:var(--r);overflow:hidden;margin-bottom:14px;background:#fff;display:flex;flex-direction:column}
 .room-photo{height:150px;background:var(--bdr) center/cover no-repeat}
@@ -111,7 +112,7 @@ h1{font-family:var(--font-title);font-size:26px;font-weight:500;margin-bottom:6p
       </div>
     </div>
     <div class="card" id="recap-card"></div>
-    <button class="btn btn-p" onclick="goToCheckout()" id="pay-btn">Payer et confirmer</button>
+    <div id="pay-actions" style="display:flex;flex-direction:column;gap:10px"></div>
     <div class="err" id="form-err" style="display:none"></div>
   </div>
 
@@ -274,20 +275,44 @@ function renderRecap(){
   if(taxe>0) html += '<div class="recap-line"><span>Taxe de séjour ('+totalOcc+' pers.)</span><span>'+fmtEUR(taxe)+'</span></div>';
   html += '<div class="recap-total"><span>Total</span><span>'+fmtEUR(total)+'</span></div>';
   document.getElementById('recap-card').innerHTML = html;
+  renderPayActions();
 }
 
 // ═══════════════════ PAIEMENT ═══════════════════
-async function goToCheckout(){
-  var errEl = document.getElementById('form-err');
-  errEl.style.display='none';
+// Le choix des boutons dépend du statut du module (cf. BOOK_STATUS, chargé
+// au démarrage) : paiement obligatoire (comportement historique, un seul
+// bouton) ou optionnel (le client choisit payer en ligne maintenant — si
+// Stripe est configuré — ou payer sur place, qui crée la réservation
+// directement sans paiement, cf. POST /wa/bookingEngine/bookDirect).
+function renderPayActions(){
+  var el = document.getElementById('pay-actions');
+  if(BOOK_STATUS.requirePayment){
+    el.innerHTML = '<button class="btn btn-p" onclick="goToCheckout(this)" id="pay-btn">Payer et confirmer</button>';
+    return;
+  }
+  var html = '';
+  if(BOOK_STATUS.paymentAvailable) html += '<button class="btn btn-p" onclick="goToCheckout(this)" id="pay-btn">Payer en ligne maintenant</button>';
+  html += '<button class="btn btn-s" onclick="bookDirect(this)" id="book-direct-btn">Réserver — payer sur place</button>';
+  el.innerHTML = html;
+}
+
+function readGuestForm(errEl){
   var firstName = document.getElementById('f-firstname').value.trim();
   var lastName = document.getElementById('f-lastname').value.trim();
   var email = document.getElementById('f-email').value.trim();
   var phone = document.getElementById('f-phone').value.trim();
-  if(!firstName || !lastName){ errEl.textContent='Merci de renseigner votre nom et prénom.'; errEl.style.display='block'; return; }
-  if(!email || email.indexOf('@')===-1){ errEl.textContent='Merci de renseigner un email valide.'; errEl.style.display='block'; return; }
+  if(!firstName || !lastName){ errEl.textContent='Merci de renseigner votre nom et prénom.'; errEl.style.display='block'; return null; }
+  if(!email || email.indexOf('@')===-1){ errEl.textContent='Merci de renseigner un email valide.'; errEl.style.display='block'; return null; }
+  return {firstName:firstName, lastName:lastName, email:email, phone:phone};
+}
 
-  var btn = document.getElementById('pay-btn');
+async function goToCheckout(btn){
+  var errEl = document.getElementById('form-err');
+  errEl.style.display='none';
+  var guest = readGuestForm(errEl);
+  if(!guest) return;
+
+  var origLabel = btn.textContent;
   btn.disabled = true; btn.textContent = 'Redirection…';
 
   var base = window.location.origin + window.location.pathname
@@ -298,7 +323,7 @@ async function goToCheckout(){
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         roomId: STATE.selectedRoom.id, startDate: STATE.start, endDate: STATE.end,
-        firstName: firstName, lastName: lastName, email: email, phone: phone,
+        firstName: guest.firstName, lastName: guest.lastName, email: guest.email, phone: guest.phone,
         occupants: OCC,
         successUrl: base+'bookingReturn=success', cancelUrl: base+'bookingReturn=cancelled'
       })
@@ -308,9 +333,43 @@ async function goToCheckout(){
     window.location.href = data.checkoutUrl;
   }catch(e){
     errEl.textContent = e.message || 'Erreur lors de la redirection vers le paiement.'; errEl.style.display='block';
-    btn.disabled = false; btn.textContent = 'Payer et confirmer';
+    btn.disabled = false; btn.textContent = origLabel;
   }
 }
+
+async function bookDirect(btn){
+  var errEl = document.getElementById('form-err');
+  errEl.style.display='none';
+  var guest = readGuestForm(errEl);
+  if(!guest) return;
+
+  var origLabel = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Réservation…';
+
+  try{
+    var r = await apiFetch('/wa/bookingEngine/bookDirect', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        roomId: STATE.selectedRoom.id, startDate: STATE.start, endDate: STATE.end,
+        firstName: guest.firstName, lastName: guest.lastName, email: guest.email, phone: guest.phone,
+        occupants: OCC
+      })
+    });
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error||'Erreur');
+    showDirectBookingSuccess(data.code);
+  }catch(e){
+    errEl.textContent = e.message || 'Erreur lors de la création de la réservation.'; errEl.style.display='block';
+    btn.disabled = false; btn.textContent = origLabel;
+  }
+}
+
+function showDirectBookingSuccess(code){
+  var el = document.getElementById('return-content');
+  el.innerHTML = '<div class="ico">✅</div><h1>Réservation confirmée !</h1><p class="sub">Merci, votre réservation ('+esc(code)+') est enregistrée — le paiement se fera sur place à l\'hôtel. Un email de confirmation vous sera envoyé.</p>';
+  gotoScr('return');
+}
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
 function handleBookingReturn(){
   var v = new URLSearchParams(window.location.search).get('bookingReturn');
@@ -326,6 +385,7 @@ function handleBookingReturn(){
 }
 
 // ═══════════════════ BOOT ═══════════════════
+var BOOK_STATUS = { enabled:false, requirePayment:true, paymentAvailable:false };
 window.addEventListener('DOMContentLoaded', async function(){
   var today = new Date();
   var tomorrow = new Date(today.getTime()+86400000);
@@ -347,6 +407,7 @@ window.addEventListener('DOMContentLoaded', async function(){
     var sr = await apiFetch('/wa/bookingEngine/status');
     var sd = await sr.json();
     if(!sr.ok || !sd.enabled){ gotoScr('unavailable'); return; }
+    BOOK_STATUS = sd;
   }catch(e){ gotoScr('unavailable'); return; }
 
   gotoScr('search');

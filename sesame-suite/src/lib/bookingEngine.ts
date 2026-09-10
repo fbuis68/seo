@@ -153,27 +153,25 @@ async function generateBookingCode(entityId: string): Promise<string> {
 }
 
 /**
- * Crée la Booking (+ Occupant) correspondant à un Order "bookingEngine" dont
- * le paiement vient d'être confirmé (cf. webhook checkout.session.completed
- * dans routes/payment.ts) — jamais appelée avant, pour ne jamais bloquer une
- * chambre sur un panier abandonné. Revérifie la disponibilité de la chambre
- * une dernière fois (fenêtre de course rare entre deux paiements simultanés
- * sur la même chambre) : si elle a entre-temps été prise, la réservation est
- * quand même créée (le client a payé, il ne doit jamais perdre sa chambre
- * silencieusement) mais un avertissement est loggé pour un suivi manuel côté
- * hôtel — pas de remboursement automatique en v1.
+ * Crée la Booking (+ Occupant) à partir d'un brouillon — cœur commun à
+ * createBookingFromPaidOrder (paiement en ligne confirmé) et à la création
+ * directe (paiement sur place choisi par le client sur booking.html, ou
+ * réservation saisie manuellement par le personnel depuis le panneau
+ * Réservations, cf. routes/booking.ts POST /booking/createManual). Revérifie
+ * la disponibilité de la chambre une dernière fois (fenêtre de course rare
+ * entre deux réservations simultanées sur la même chambre) : `onRaceLost`
+ * décide quoi faire selon l'appelant (paiement déjà encaissé → créer quand
+ * même et avertir, vs. pas encore payé → refuser proprement).
  */
-export async function createBookingFromPaidOrder(entity: Entity, order: Order) {
-  const draft = order.bookingDraft as unknown as BookingDraft | null;
-  if (!draft) throw new Error(`Order ${order.id} (bookingEngine) sans bookingDraft`);
-
+async function createBookingDirect(entity: Entity, draft: BookingDraft, opts: { source: string; onRaceLost: "createAnyway" | "reject" }) {
   const start = new Date(draft.startDate);
   const end = new Date(draft.endDate);
   const room = await prisma.room.findFirst({ where: { id: draft.roomId, entityId: entity.id } });
-  if (!room) throw new Error(`Chambre ${draft.roomId} introuvable pour la réservation payée ${order.id}`);
+  if (!room) throw new Error(`Chambre ${draft.roomId} introuvable`);
 
   if (!(await isRoomAvailable(room.id, start, end))) {
-    console.error(`[bookingEngine] chambre ${room.code} déjà prise sur la période pour l'order payé ${order.id} — réservation créée quand même (paiement déjà encaissé), à vérifier manuellement`);
+    if (opts.onRaceLost === "reject") throw new Error("Cette chambre n'est plus disponible sur ces dates");
+    console.error(`[bookingEngine] chambre ${room.code} déjà prise sur la période (${opts.source}) — réservation créée quand même, à vérifier manuellement`);
   }
 
   const code = await generateBookingCode(entity.id);
@@ -199,8 +197,6 @@ export async function createBookingFromPaidOrder(entity: Entity, order: Order) {
     },
   });
 
-  await prisma.order.update({ where: { id: order.id }, data: { bookingId: booking.id, bookingCode: booking.code } });
-
   fireTrigger("booking.created", {
     entityId: entity.id,
     targetType: "booking",
@@ -210,4 +206,36 @@ export async function createBookingFromPaidOrder(entity: Entity, order: Order) {
   }).catch((e) => console.error("[automation] booking.created:", e));
 
   return booking;
+}
+
+/**
+ * Crée la Booking correspondant à un Order "bookingEngine" dont le paiement
+ * vient d'être confirmé (cf. webhook checkout.session.completed dans
+ * routes/payment.ts) — jamais appelée avant, pour ne jamais bloquer une
+ * chambre sur un panier abandonné. Le client a déjà payé : la réservation
+ * est créée même si la chambre a été prise entre-temps (onRaceLost:
+ * "createAnyway"), plutôt que de lui faire perdre sa chambre silencieusement
+ * — pas de remboursement automatique en v1.
+ */
+export async function createBookingFromPaidOrder(entity: Entity, order: Order) {
+  const draft = order.bookingDraft as unknown as BookingDraft | null;
+  if (!draft) throw new Error(`Order ${order.id} (bookingEngine) sans bookingDraft`);
+
+  const booking = await createBookingDirect(entity, draft, { source: `order payé ${order.id}`, onRaceLost: "createAnyway" });
+  await prisma.order.update({ where: { id: order.id }, data: { bookingId: booking.id, bookingCode: booking.code } });
+  return booking;
+}
+
+/**
+ * Réservation créée directement sans paiement — soit le client a choisi
+ * "payer sur place" sur booking.html (cf. routes/bookingEngine.ts POST
+ * /bookingEngine/bookDirect, uniquement si BookingEngineConfig.requirePayment
+ * est false), soit le personnel la saisit manuellement depuis le panneau
+ * Réservations (cf. routes/booking.ts POST /booking/createManual, jamais
+ * soumis à requirePayment — une saisie manuelle n'a pas besoin du module
+ * "Réservation en ligne"). Aucun paiement encaissé : si la chambre a été
+ * prise entre-temps, la demande est refusée plutôt que de créer un doublon.
+ */
+export async function createBookingDirectUnpaid(entity: Entity, draft: BookingDraft, source: string) {
+  return createBookingDirect(entity, draft, { source, onRaceLost: "reject" });
 }

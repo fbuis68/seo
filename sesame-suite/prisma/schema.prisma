@@ -921,6 +921,13 @@ model BookingEngineConfig {
   entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
   enabled Boolean @default(false)
+  // Paiement en ligne obligatoire pour réserver (comportement historique,
+  // conservé par défaut) — quand false, le client choisit sur la page entre
+  // payer en ligne (si le module Paiement est configuré) ou payer sur place
+  // à l'hôtel, auquel cas la Booking est créée directement, sans passer par
+  // Stripe (cf. lib/bookingEngine.ts createBookingDirect, routes/
+  // bookingEngine.ts POST /bookingEngine/bookDirect).
+  requirePayment Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
