@@ -386,6 +386,11 @@ main{flex:1;padding:12px 18px 60px}
     <button class="iconbtn" onclick="rsLogout()" aria-label="Déconnexion"><i class="ti ti-logout"></i></button>
   </header>
 
+  <div class="tabs" id="viewTabs">
+    <div class="tab on" data-v="bookings" onclick="rsSetView('bookings')"><i class="ti ti-calendar-check"></i> Réservations</div>
+    <div class="tab" data-v="access" onclick="rsSetView('access')"><i class="ti ti-door"></i> Accès</div>
+  </div>
+
   <div class="tabs" id="tabs">
     <div class="tab" data-t="all" onclick="rsSetTab('all')">Toutes</div>
     <div class="tab" data-t="arriving" onclick="rsSetTab('arriving')">En arrivées</div>
@@ -407,11 +412,15 @@ main{flex:1;padding:12px 18px 60px}
   <div class="sheet" id="sheet"></div>
 </div>
 
+<div class="alt alt-b" id="rsToast" style="display:none;position:fixed;bottom:20px;left:16px;right:16px;z-index:500;box-shadow:0 8px 24px rgba(0,0,0,.15)"><i class="ti ti-info-circle"></i><span id="rsToastMsg"></span></div>
+
 <script>
 // ═══════════════════════════════════════════════ ÉTAT
 var API_BASE = '';
 var RS_TOKEN = null, RS_ENTITY = null;
 var RS_BOOKINGS = [];      // [{booking, passes:null|[...]}] — passes chargés à la demande (détail)
+var RS_ROOMS = [];         // accès (chambres) de l'établissement, cf. onglet "Accès"
+var RS_VIEW = 'bookings';  // 'bookings' | 'access' — cf. rsSetView
 var RS_TAB = 'inhouse';
 var RS_NFC_TARGET_PASS_ID = null;
 var RS_NFC_TARGET_BTN_ID = 'rs-nfc-btn';
@@ -499,6 +508,7 @@ async function rsBoot(token, entityCode, hotelName){
     var cfg = await r.json();
     document.getElementById('hn').textContent = cfg.hotelName || 'Sesame';
     RS_TZ = cfg.timezone || 'Europe/Paris';
+    RS_ROOMS = cfg.rooms || [];
   }catch(e){}
 
   await rsLoadBookings();
@@ -543,7 +553,69 @@ function rsMatchesTab(b, todayStr){
   return true; // 'arriving'
 }
 
+/** Bascule entre la liste des réservations et celle des accès (chambres) — cf. RS_VIEW. */
+function rsSetView(v){
+  RS_VIEW = v;
+  document.querySelectorAll('#viewTabs .tab').forEach(function(el){ el.classList.toggle('on', el.getAttribute('data-v')===v); });
+  document.getElementById('tabs').style.display = v === 'bookings' ? 'flex' : 'none';
+  document.getElementById('rs-search').placeholder = v === 'bookings' ? 'Rechercher un nom…' : 'Rechercher un accès…';
+  rsRender();
+}
+
+function rsToast(msg){
+  var t = document.getElementById('rsToast');
+  document.getElementById('rsToastMsg').textContent = msg;
+  t.style.display = 'flex';
+  clearTimeout(t._hideTimer);
+  t._hideTimer = setTimeout(function(){ t.style.display = 'none'; }, 2600);
+}
+
+/**
+ * Ouverture à distance depuis l'onglet Accès — cherche la réservation
+ * active sur cette chambre aujourd'hui (dates couvrant aujourd'hui, statut
+ * non annulé) dans RS_BOOKINGS (déjà chargé intégralement, cf.
+ * rsLoadBookings) puis rouvre son détail (section "Clé numérique", cf.
+ * rsOpenDetail/rsLoadKey) — même connecteur et même comportement (réel ou
+ * simulé selon la config) que depuis l'onglet Réservations.
+ */
+function rsOpenAccess(roomCode){
+  var todayStr = hotelToday();
+  var match = RS_BOOKINGS.find(function(b){
+    if(b.status === 'cancelled') return false;
+    var room = b.selectedRoomCode || b.facilityCode || '';
+    if(room !== roomCode) return false;
+    return (b.startDate||'').slice(0,10) <= todayStr && (b.endDate||'').slice(0,10) >= todayStr;
+  });
+  if(!match){ rsToast('Aucune réservation active sur cet accès aujourd\'hui'); return; }
+  rsOpenDetail(match.code);
+}
+
+function rsRenderAccess(){
+  var listEl = document.getElementById('resList');
+  var q = (document.getElementById('rs-search').value||'').trim().toLowerCase();
+
+  document.getElementById('daysum').textContent = RS_ROOMS.length ? RS_ROOMS.length+' accès' : '';
+
+  var rooms = RS_ROOMS.filter(function(r){
+    if(!q) return true;
+    return (r.code||'').toLowerCase().indexOf(q)!==-1 || (r.name||'').toLowerCase().indexOf(q)!==-1;
+  });
+
+  if(!rooms.length){
+    listEl.innerHTML = '<div class="empty"><i class="ti ti-door-off"></i>Aucun accès pour ce filtre.</div>';
+    return;
+  }
+
+  listEl.innerHTML = rooms.map(function(r){
+    return '<div class="rescard" onclick="rsOpenAccess(\''+esc(r.code)+'\')">'
+      + '<div class="rname">'+esc(r.name||r.code)+(r.name&&r.name!==r.code?' <span class="rroom">— '+esc(r.code)+'</span>':'')+'</div>'
+      + '<div class="rmeta"><span><i class="ti ti-key"></i> Ouverture à distance</span></div>'
+      + '</div>';
+  }).join('');
+}
+
 function rsRender(){
+  if(RS_VIEW === 'access'){ rsRenderAccess(); return; }
   var listEl = document.getElementById('resList');
   var todayStr = hotelToday();
   var q = (document.getElementById('rs-search').value||'').trim().toLowerCase();

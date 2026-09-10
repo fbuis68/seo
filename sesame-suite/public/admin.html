@@ -5495,6 +5495,11 @@ function renderRoomGrid(){
       // Photo or placeholder
       +'<div style="height:100px;background:'+(photo?'url(\''+photo+'\') center/cover':'var(--bg)')+';position:relative">'
       +(photo?'':' <i class="ti '+(r.type==='casier'?'ti-building-warehouse':'ti-door')+'" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:28px;color:var(--bdr)"></i>')
+      // Ouverture à distance — cherche la réservation active sur cet accès
+      // aujourd'hui et ouvre son détail (section "Clé numérique", cf.
+      // resaOpenDetail/resaLoadKey) ; même mécanisme que le panneau
+      // Réservations, accessible ici directement depuis Gestion des Accès.
+      +'<button onclick="event.stopPropagation();rmOpenAccess(\''+r.code+'\')" title="Ouverture à distance" style="position:absolute;top:6px;left:6px;width:26px;height:26px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer"><i class="ti ti-key" style="font-size:13px"></i></button>'
       +'<div style="position:absolute;top:6px;right:6px;display:flex;gap:4px">'
       +(r.available===false?'<span style="font-size:10px;padding:2px 7px;border-radius:8px;background:rgba(231,76,60,.9);color:#fff;font-weight:600">Masquée</span>':'')
       +(r.pmr?'<span style="font-size:10px;padding:2px 7px;border-radius:8px;background:rgba(58,155,213,.9);color:#fff;font-weight:600">PMR</span>':'')
@@ -5523,6 +5528,33 @@ function renderRoomGrid(){
 
   // Also update old roomListAdmin if it exists (plan panel)
   renderRoomList();
+}
+
+/**
+ * Ouverture à distance depuis Gestion des Accès — cherche la réservation
+ * active sur cet accès aujourd'hui (même établissement, dates couvrant
+ * aujourd'hui, statut non annulé) puis rouvre son détail (section "Clé
+ * numérique", cf. resaOpenDetail/resaLoadKey) : même connecteur et même
+ * comportement (réel ou simulé selon la config) que depuis le panneau
+ * Réservations, accessible ici sans devoir chercher la réservation
+ * manuellement. RESA_CACHE est chargé à la demande s'il ne l'est pas déjà
+ * (l'utilisateur peut arriver directement sur Gestion des Accès sans être
+ * passé par Réservations).
+ */
+async function rmOpenAccess(roomCode){
+  if(!RESA_CACHE.length){
+    try{ await loadReservations(); }catch(e){}
+  }
+  var today = hotelToday();
+  var match = RESA_CACHE.find(function(x){
+    var b = x.booking;
+    if(b.status === 'cancelled') return false;
+    var room = b.selectedRoomCode || b.facilityCode || '';
+    if(room !== roomCode) return false;
+    return (b.startDate||'').slice(0,10) <= today && (b.endDate||'').slice(0,10) >= today;
+  });
+  if(!match){ toast('Aucune réservation active sur cet accès aujourd\'hui'); return; }
+  resaOpenDetail(match.booking.code);
 }
 
 // Alias pour compatibilité avec le plan
