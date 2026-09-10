@@ -125,6 +125,10 @@ function shapeConfig(c: {
   updateBookingTypeParam: string | null;
   updateStartDateParam: string | null;
   updateEndDateParam: string | null;
+  updateEmailParam: string | null;
+  updateLastnameParam: string | null;
+  updateFirstnameParam: string | null;
+  updatePhoneParam: string | null;
   syncIntervalMinutes: number | null;
   lastSyncAt: Date | null;
   lastSyncStatus: string | null;
@@ -240,6 +244,10 @@ function shapeConfig(c: {
     updateBookingTypeParam: c.updateBookingTypeParam || "",
     updateStartDateParam: c.updateStartDateParam || "",
     updateEndDateParam: c.updateEndDateParam || "",
+    updateEmailParam: c.updateEmailParam || "",
+    updateLastnameParam: c.updateLastnameParam || "",
+    updateFirstnameParam: c.updateFirstnameParam || "",
+    updatePhoneParam: c.updatePhoneParam || "",
     syncIntervalMinutes: c.syncIntervalMinutes,
     lastSyncAt: c.lastSyncAt,
     lastSyncStatus: c.lastSyncStatus,
@@ -397,6 +405,10 @@ interface ConfigBody {
   updateBookingTypeParam?: string;
   updateStartDateParam?: string;
   updateEndDateParam?: string;
+  updateEmailParam?: string;
+  updateLastnameParam?: string;
+  updateFirstnameParam?: string;
+  updatePhoneParam?: string;
   syncIntervalMinutes?: number | null;
 }
 
@@ -513,6 +525,10 @@ bookingSourceRouter.post(
       updateBookingTypeParam: b.updateBookingTypeParam,
       updateStartDateParam: b.updateStartDateParam,
       updateEndDateParam: b.updateEndDateParam,
+      updateEmailParam: b.updateEmailParam,
+      updateLastnameParam: b.updateLastnameParam,
+      updateFirstnameParam: b.updateFirstnameParam,
+      updatePhoneParam: b.updatePhoneParam,
       syncIntervalMinutes: b.syncIntervalMinutes ?? null,
     };
     const config = await prisma.bookingSourceConfig.upsert({

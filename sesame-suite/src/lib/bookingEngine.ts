@@ -23,6 +23,13 @@ export interface BookingDraft {
   email: string;
   phone?: string;
   occupants: Record<string, number>; // ageCategory -> count
+  // Groupe/catégorie de réservation (Booking.bookingType) — optionnel,
+  // saisi uniquement depuis la création manuelle (panneau Réservations).
+  // Porte aussi, côté source externe (ex : API Sesame Technology), la
+  // notion de "grouping" qui rattache la réservation à un ensemble
+  // d'accès plutôt qu'à un seul (cf. lib/bookingSource.ts pushBookingUpsert) —
+  // transmis dès la création si renseigné, plutôt que seulement à l'édition.
+  bookingType?: string;
 }
 
 function nightsBetween(start: Date, end: Date): number {
@@ -188,6 +195,7 @@ async function createBookingDirect(entity: Entity, draft: BookingDraft, opts: { 
       roomId: room.id,
       facilityCode: room.code,
       facilityName: room.name,
+      bookingType: draft.bookingType || null,
       status: "confirmed",
       occupants: {
         create: Object.entries(draft.occupants || {})

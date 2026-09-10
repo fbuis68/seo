@@ -733,6 +733,27 @@ model BookingSourceConfig {
   // être notifiée des changements de dates.
   updateStartDateParam     String?
   updateEndDateParam       String?
+  // Identité du client — utilisés UNIQUEMENT pour l'envoi initial d'une
+  // réservation encore inconnue de la source externe (créée manuellement
+  // depuis le panneau Réservations, ou depuis booking.html), jamais sur une
+  // réservation déjà importée (dont l'identité vient déjà de la source).
+  // Si updateEndpointPath pointe vers un endpoint capable de créer ET
+  // mettre à jour (ex : /ws/booking/createOrUpdate côté API Sesame
+  // Technology), cet envoi initial fait alors exister la réservation
+  // côté source ; sinon (endpoint "update" strict) l'appel échoue
+  // proprement (la source ne connaît pas encore ce code) et la
+  // réservation reste en mode simulé pour le QR/l'ouverture de porte —
+  // cf. pushBookingUpsert, appelé depuis POST /booking/createManual et
+  // POST /booking/update (uniquement tant que Booking.importedFrom est
+  // vide). Ne PAS renseigner si l'établissement n'a pas d'endpoint de
+  // création côté source — laisser vide désactive uniquement cet envoi
+  // initial, sans effet sur les mises à jour ciblées existantes
+  // (updateRoomParam/updateStatusParam/etc., toujours actives dès qu'une
+  // réservation est déjà connue de la source).
+  updateEmailParam         String?
+  updateLastnameParam      String?
+  updateFirstnameParam     String?
+  updatePhoneParam         String?
 
   // Liste des Pass (invitations) d'une réservation — endpoint séparé pris
   // PAR RÉSERVATION (contrairement aux endpoints ci-dessus, un appel par

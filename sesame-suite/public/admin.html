@@ -2420,6 +2420,29 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       <label class="lb">Correspondance des statuts (un par ligne : statut local=valeur source externe)</label>
       <textarea id="bs-updateStatusValueMap" rows="4" placeholder="confirmed=confirmed&#10;checkin_done=checkedin&#10;completed=checkedout&#10;cancelled=cancel"></textarea>
     </div>
+    <div class="alt alt-b" style="margin:14px 0 12px"><i class="ti ti-info-circle"></i>
+      <span>Renseignez ces 2 champs UNIQUEMENT si l'endpoint ci-dessus sait aussi <b>créer</b> une réservation inconnue (ex : <code>/ws/booking/createOrUpdate</code> côté API Sesame Technology) — c'est ce qui permet à une réservation créée manuellement ou depuis la réservation en ligne d'exister aussi côté source, et donc d'utiliser le QR/l'ouverture de porte réels au lieu du mode simulé. Laissez vide si l'endpoint ne fait que mettre à jour une réservation déjà connue : aucun impact sur les réglages ci-dessus.</span>
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Nom du paramètre portant l'email du client</label>
+        <input type="text" id="bs-updateEmailParam" placeholder="Ex : personEmail — vide pour ne jamais tenter la création">
+      </div>
+      <div class="fi">
+        <label class="lb">Nom du paramètre portant le nom du client</label>
+        <input type="text" id="bs-updateLastnameParam" placeholder="Ex : personLastname — vide pour ne jamais tenter la création">
+      </div>
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Nom du paramètre portant le prénom du client (optionnel)</label>
+        <input type="text" id="bs-updateFirstnameParam" placeholder="Ex : personFirstname">
+      </div>
+      <div class="fi">
+        <label class="lb">Nom du paramètre portant le téléphone du client (optionnel)</label>
+        <input type="text" id="bs-updatePhoneParam" placeholder="Ex : personPhone">
+      </div>
+    </div>
     <div class="fi">
       <label class="lb">Paramètres additionnels du corps (un par ligne : clé=valeur)</label>
       <textarea id="bs-updateEndpointBodyParams" rows="2" placeholder=""></textarea>
@@ -6814,12 +6837,18 @@ var PMS_PRESETS = {
       // logique, avec {"success":false,"message":"..."} — sans ce mapping,
       // un tel refus était silencieusement traité comme une porte ouverte.
       document.getElementById('bs-doorResponseSuccessPath').value = 'success';
-      // Mise à jour d'une réservation — POST /ws/booking/update, d'après la
-      // doc officielle (chambre via facilityCode, type via typeCode/typeId/
-      // type, statut via status parmi booked/confirmed/cancel/checkedin/
-      // checkedout). La réponse est juste {"success":true}, sans miroir du
-      // statut appliqué — rien à mapper côté "réponse".
-      document.getElementById('bs-updateEndpointPath').value = '/ws/booking/update';
+      // Mise à jour ET création d'une réservation — POST
+      // /ws/booking/createOrUpdate, d'après la doc officielle : crée la
+      // réservation si son code est inconnu de Sesame, sinon se comporte
+      // exactement comme /ws/booking/update (chambre via facilityCode, type
+      // via typeCode/typeId/type, statut via status parmi
+      // booked/confirmed/cancel/checkedin/checkedout). La réponse est juste
+      // {"success":true}, sans miroir du statut appliqué — rien à mapper
+      // côté "réponse". Utiliser cet endpoint plutôt que le simple
+      // /ws/booking/update est ce qui permet à une réservation créée
+      // manuellement (ou depuis la réservation en ligne) d'exister aussi
+      // côté Sesame, donc d'utiliser le QR/l'ouverture de porte réels.
+      document.getElementById('bs-updateEndpointPath').value = '/ws/booking/createOrUpdate';
       document.getElementById('bs-updateEndpointMethod').value = 'POST';
       document.getElementById('bs-updateEndpointBodyFormat').value = 'json';
       document.getElementById('bs-updateCodeParam').value = 'code';
@@ -6828,6 +6857,13 @@ var PMS_PRESETS = {
       document.getElementById('bs-updateBookingTypeParam').value = 'typeCode';
       document.getElementById('bs-updateStartDateParam').value = 'startDate';
       document.getElementById('bs-updateEndDateParam').value = 'endDate';
+      // Identité du client — n'entre en jeu que pour l'envoi initial d'une
+      // réservation encore inconnue de Sesame (cf. pushBookingUpsert) ;
+      // sans effet sur les mises à jour d'une réservation déjà connue.
+      document.getElementById('bs-updateEmailParam').value = 'personEmail';
+      document.getElementById('bs-updateLastnameParam').value = 'personLastname';
+      document.getElementById('bs-updateFirstnameParam').value = 'personFirstname';
+      document.getElementById('bs-updatePhoneParam').value = 'personPhone';
       // Vocabulaire de statut Sesame ≠ vocabulaire local : traduction requise.
       document.getElementById('bs-updateStatusValueMap').value = 'confirmed=confirmed\ncheckin_done=checkedin\ncompleted=checkedout\ncancelled=cancel';
     },
@@ -7347,6 +7383,10 @@ function bsCollectFormValues(){
     updateBookingTypeParam: document.getElementById('bs-updateBookingTypeParam').value.trim(),
     updateStartDateParam: document.getElementById('bs-updateStartDateParam').value.trim(),
     updateEndDateParam: document.getElementById('bs-updateEndDateParam').value.trim(),
+    updateEmailParam: document.getElementById('bs-updateEmailParam').value.trim(),
+    updateLastnameParam: document.getElementById('bs-updateLastnameParam').value.trim(),
+    updateFirstnameParam: document.getElementById('bs-updateFirstnameParam').value.trim(),
+    updatePhoneParam: document.getElementById('bs-updatePhoneParam').value.trim(),
     updateStatusValueMap: bsTextToParams(document.getElementById('bs-updateStatusValueMap').value),
     updateEndpointBodyParams: bsTextToParams(document.getElementById('bs-updateEndpointBodyParams').value),
     syncIntervalMinutes: document.getElementById('bs-syncInterval').value ? parseInt(document.getElementById('bs-syncInterval').value) : null,
@@ -7487,6 +7527,10 @@ async function bsInit(){
   document.getElementById('bs-updateBookingTypeParam').value = BS_CONFIG.updateBookingTypeParam||'';
   document.getElementById('bs-updateStartDateParam').value = BS_CONFIG.updateStartDateParam||'';
   document.getElementById('bs-updateEndDateParam').value = BS_CONFIG.updateEndDateParam||'';
+  document.getElementById('bs-updateEmailParam').value = BS_CONFIG.updateEmailParam||'';
+  document.getElementById('bs-updateLastnameParam').value = BS_CONFIG.updateLastnameParam||'';
+  document.getElementById('bs-updateFirstnameParam').value = BS_CONFIG.updateFirstnameParam||'';
+  document.getElementById('bs-updatePhoneParam').value = BS_CONFIG.updatePhoneParam||'';
   document.getElementById('bs-updateStatusValueMap').value = bsParamsToText(BS_CONFIG.updateStatusValueMap);
   document.getElementById('bs-updateEndpointBodyParams').value = bsParamsToText(BS_CONFIG.updateEndpointBodyParams);
   bsRenderStatusBanner();
@@ -7755,10 +7799,19 @@ function rcSelectRoom(i){
     + '<div class="fi"><label class="lb">Email</label><input type="email" id="rc-email"></div>'
     + '<div class="fi"><label class="lb">Téléphone (optionnel)</label><input type="tel" id="rc-phone"></div>'
     + '</div>'
+    // Type de réservation (Booking.bookingType) — au-delà de l'étiquette
+    // affichée, ce champ porte côté Sesame la notion de "grouping" qui
+    // rattache la réservation à un ensemble d'accès (peut ouvrir plusieurs
+    // facilities). Renseignable dès la création plutôt que seulement à
+    // l'édition, pour que le premier envoi à la source externe (cf.
+    // adoptBookingIntoSource) le transmette déjà.
+    + '<div class="fi"><label class="lb">Type de réservation (optionnel)</label><input type="text" id="rc-bookingtype" list="rc-bookingtype-options" placeholder="Ex : Standard, Groupe, Corporate…" autocomplete="off"><datalist id="rc-bookingtype-options"></datalist></div>'
     + '<div style="display:flex;gap:8px;margin-top:10px">'
     + '<button class="btn btn-p" onclick="rcCreateBooking()" id="rc-create-btn"><i class="ti ti-check"></i> Créer la réservation</button>'
     + '<button class="btn btn-ghost" onclick="resaCloseCreate()">Annuler</button>'
     + '</div>';
+  var knownTypes = Array.from(new Set(RESA_CACHE.map(function(x){ return x.booking.bookingType||''; }).filter(Boolean)));
+  document.getElementById('rc-bookingtype-options').innerHTML = knownTypes.map(function(t){ return '<option value="'+esc(t)+'">'; }).join('');
 }
 
 async function rcCreateBooking(){
@@ -7767,6 +7820,7 @@ async function rcCreateBooking(){
   var lastName = document.getElementById('rc-lastname').value.trim();
   var email = document.getElementById('rc-email').value.trim();
   var phone = document.getElementById('rc-phone').value.trim();
+  var bookingType = document.getElementById('rc-bookingtype').value.trim();
   if(!firstName || !lastName){ rcShowError('Nom et prénom requis.'); return; }
   if(!email || email.indexOf('@')===-1){ rcShowError('Email valide requis.'); return; }
 
@@ -7775,7 +7829,7 @@ async function rcCreateBooking(){
   try{
     var r = await adminFetch('/wa/booking/createManual', {method:'POST', body:JSON.stringify({
       roomId: RC_STATE.selectedRoom.id, startDate: RC_STATE.start, endDate: RC_STATE.end,
-      firstName: firstName, lastName: lastName, email: email, phone: phone
+      firstName: firstName, lastName: lastName, email: email, phone: phone, bookingType: bookingType
     })});
     var data = await r.json();
     if(!r.ok) throw new Error(data.error||'Erreur');

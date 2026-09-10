@@ -1,5 +1,5 @@
 import { prisma } from "../db";
-import type { BookingSourceConfig, Entity } from "@prisma/client";
+import type { BookingSourceConfig, Booking, Entity } from "@prisma/client";
 import { fireTrigger } from "./automation";
 
 /** L'admin accepte de saisir "sesame.technology" sans schéma — `fetch()`
@@ -1187,6 +1187,154 @@ export async function pushBookingUpdate(
   }
   if (!res.ok) return { ok: false, error: `La source externe a répondu ${res.status} ${res.statusText}` };
   return { ok: true };
+}
+
+/**
+ * Envoie l'INTÉGRALITÉ d'une réservation encore inconnue de la source
+ * externe (jamais importée — Booking.importedFrom vide), via le même
+ * endpoint que pushBookingUpdate (config.updateEndpointPath), afin de la
+ * lui faire connaître — appelé depuis POST /booking/createManual (réservation
+ * saisie manuellement) et POST /booking/update (première modification d'une
+ * réservation encore locale-only). Contrairement à pushBookingUpdate, qui
+ * n'envoie QUE les champs changés (l'identité du client étant déjà connue
+ * de la source), cet envoi initial inclut l'identité (email/nom/prénom/
+ * téléphone) — indispensable pour qu'une source comme l'API Sesame
+ * Technology (endpoint /ws/booking/createOrUpdate, qui crée la réservation
+ * si son code est inconnu) accepte l'appel : sans updateEmailParam ET
+ * updateLastnameParam configurés, l'appelant n'a pas de quoi identifier le
+ * client, donc rien n'est tenté (skipped:true) plutôt que d'échouer à
+ * chaque appel avec une erreur inévitable. Le statut ok:true indique que la
+ * source a accepté la réservation : l'appelant peut alors marquer
+ * Booking.importedFrom, ce qui active le QR/l'ouverture de porte réels pour
+ * cette réservation (cf. routes/booking.ts accessQr/openDoor, dont la
+ * condition d'activation est justement importedFrom === sourceName).
+ */
+export async function pushBookingUpsert(
+  config: BookingSourceConfig,
+  booking: {
+    code: string;
+    personEmail: string;
+    personLastname: string;
+    personFirstname: string;
+    personPhone?: string | null;
+    startDate: Date;
+    endDate: Date;
+    facilityCode?: string | null;
+    // Groupe/catégorie de réservation (Booking.bookingType) — envoyé quand
+    // configuré (updateBookingTypeParam) : côté Sesame, ce champ porte
+    // aussi la notion de "grouping" qui rattache la réservation à un
+    // ensemble d'accès (une réservation peut ainsi ouvrir plusieurs
+    // facilities plutôt qu'une seule), donc important à transmettre dès la
+    // création, pas seulement sur les mises à jour ciblées.
+    bookingType?: string | null;
+    status: string;
+  }
+): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
+  if (!config.updateEndpointPath) return { ok: true, skipped: true };
+  if (!config.updateEmailParam || !config.updateLastnameParam) return { ok: true, skipped: true };
+  if (!config.baseUrl) return { ok: false, error: "URL de base non configurée" };
+
+  const params: Record<string, unknown> = {};
+  params[config.updateEmailParam] = booking.personEmail;
+  params[config.updateLastnameParam] = booking.personLastname;
+  if (config.updateFirstnameParam) params[config.updateFirstnameParam] = booking.personFirstname || "";
+  if (config.updatePhoneParam) params[config.updatePhoneParam] = booking.personPhone || "";
+  if (config.updateRoomParam && booking.facilityCode) params[config.updateRoomParam] = booking.facilityCode;
+  if (config.updateBookingTypeParam && booking.bookingType) params[config.updateBookingTypeParam] = booking.bookingType;
+  if (config.updateStartDateParam) params[config.updateStartDateParam] = booking.startDate.toISOString().slice(0, 10);
+  if (config.updateEndDateParam) params[config.updateEndDateParam] = booking.endDate.toISOString().slice(0, 10);
+  if (config.updateStatusParam) {
+    const statusMap =
+      config.updateStatusValueMap && typeof config.updateStatusValueMap === "object"
+        ? (config.updateStatusValueMap as Record<string, string>)
+        : {};
+    params[config.updateStatusParam] = statusMap[booking.status] ?? booking.status;
+  }
+
+  const url = normalizeBaseUrl(config.baseUrl).replace(/\/$/, "") + config.updateEndpointPath;
+  const { headers: authHeaders } = await buildAuthHeaders(config);
+  const codeParam = config.updateCodeParam || "code";
+  const method = (config.updateEndpointMethod || "POST").toUpperCase();
+  const staticParams: Record<string, unknown> =
+    config.updateEndpointBodyParams && typeof config.updateEndpointBodyParams === "object"
+      ? (config.updateEndpointBodyParams as Record<string, unknown>)
+      : {};
+
+  let res: Response;
+  try {
+    if (method === "GET") {
+      const qs = new URLSearchParams();
+      Object.entries(staticParams).forEach(([k, v]) => qs.set(k, String(v)));
+      Object.entries(params).forEach(([k, v]) => qs.set(k, String(v)));
+      qs.set(codeParam, booking.code);
+      res = await fetchWithTimeout(`${url}${url.includes("?") ? "&" : "?"}${qs.toString()}`, {
+        headers: { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...authHeaders },
+      });
+    } else if ((config.updateEndpointBodyFormat || "json") === "json") {
+      res = await fetchWithTimeout(url, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "User-Agent": "SesameSuite-BookingConnector/1.0",
+          ...authHeaders,
+        },
+        body: JSON.stringify({ ...staticParams, ...params, [codeParam]: booking.code }),
+      });
+    } else {
+      const form = new URLSearchParams();
+      Object.entries(staticParams).forEach(([k, v]) => form.set(k, String(v)));
+      Object.entries(params).forEach(([k, v]) => form.set(k, String(v)));
+      form.set(codeParam, booking.code);
+      res = await fetchWithTimeout(url, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/x-www-form-urlencoded",
+          "User-Agent": "SesameSuite-BookingConnector/1.0",
+          ...authHeaders,
+        },
+        body: form.toString(),
+      });
+    }
+  } catch (e) {
+    return { ok: false, error: `Connexion à la source externe impossible : ${describeFetchError(e)}` };
+  }
+  if (!res.ok) return { ok: false, error: `La source externe a répondu ${res.status} ${res.statusText}` };
+  return { ok: true };
+}
+
+/**
+ * Répercute la création/premier envoi d'une réservation encore inconnue de
+ * la source externe (cf. pushBookingUpsert) et, si acceptée, la marque
+ * localement comme "connue" (Booking.importedFrom = config.sourceName) —
+ * condition d'activation du QR/de l'ouverture de porte réels pour cette
+ * réservation (cf. routes/booking.ts accessQr/openDoor, qui comparent
+ * justement importedFrom à sourceName). Best-effort comme pushBookingUpdate :
+ * jamais bloquant, no-op silencieux si la réservation est déjà connue ou si
+ * aucun connecteur n'est configuré. Appelé depuis POST /booking/createManual
+ * et POST /booking/update (uniquement tant que importedFrom est vide — une
+ * fois connue, les modifications suivantes repassent par pushBookingUpdate,
+ * plus léger).
+ */
+export async function adoptBookingIntoSource(entityId: string, booking: Booking): Promise<Booking> {
+  if (booking.importedFrom) return booking;
+  const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId } });
+  if (!config) return booking;
+  const result = await pushBookingUpsert(config, {
+    code: booking.code,
+    personEmail: booking.personEmail,
+    personLastname: booking.personLastname,
+    personFirstname: booking.personFirstname,
+    personPhone: booking.personPhone,
+    startDate: booking.startDate,
+    endDate: booking.endDate,
+    facilityCode: booking.facilityCode,
+    bookingType: booking.bookingType,
+    status: booking.status,
+  }).catch((e) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) }));
+  if (!result.ok) return booking;
+  return prisma.booking.update({ where: { id: booking.id }, data: { importedFrom: config.sourceName || "Connecteur externe" } });
 }
 
 /**

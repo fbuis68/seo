@@ -6,7 +6,7 @@ import { normaliseBooking } from "../lib/normalize";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { fireTrigger } from "../lib/automation";
 import { requireAdmin } from "../middleware/requireAdmin";
-import { encodeNfc, listNfcDevices, fetchAccessQr, openDoor, pushBookingUpdate, BookingSourceError } from "../lib/bookingSource";
+import { encodeNfc, listNfcDevices, fetchAccessQr, openDoor, pushBookingUpdate, adoptBookingIntoSource, BookingSourceError } from "../lib/bookingSource";
 import { sendEmailRaw } from "../lib/email";
 import { listRoomsForStaff, validateManualBookingDraft, createBookingDirectUnpaid, BookingDraft, OCCUPANT_AGE_CATEGORIES } from "../lib/bookingEngine";
 
@@ -163,30 +163,40 @@ bookingRouter.post(
     const startDateChanged = b.startDate !== undefined ? startDate.toISOString().slice(0, 10) : undefined;
     const endDateChanged = b.endDate !== undefined ? endDate.toISOString().slice(0, 10) : undefined;
 
-    const updated = await prisma.booking.update({ where: { id: booking.id }, data });
+    let updated = await prisma.booking.update({ where: { id: booking.id }, data });
 
-    // Répercussion best-effort vers la source externe (chambre, statut,
-    // type de réservation et/ou dates) — jamais bloquante, cf.
-    // lib/bookingSource.ts pushBookingUpdate.
+    // Répercussion best-effort vers la source externe — jamais bloquante.
     let pushWarning: string | undefined;
-    if (
-      roomCodeChanged !== undefined ||
-      b.status !== undefined ||
-      bookingTypeChanged !== undefined ||
-      startDateChanged !== undefined ||
-      endDateChanged !== undefined
-    ) {
-      const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
-      if (config) {
-        const result = await pushBookingUpdate(config, updated.code, {
-          roomCode: roomCodeChanged,
-          status: b.status,
-          bookingType: bookingTypeChanged,
-          startDate: startDateChanged,
-          endDate: endDateChanged,
-        }).catch((e) => ({ ok: false, error: String(e) }));
-        if (!result.ok) pushWarning = result.error;
+    if (updated.importedFrom) {
+      // Réservation déjà connue de la source (chambre, statut, type de
+      // réservation et/ou dates) — cf. lib/bookingSource.ts pushBookingUpdate.
+      if (
+        roomCodeChanged !== undefined ||
+        b.status !== undefined ||
+        bookingTypeChanged !== undefined ||
+        startDateChanged !== undefined ||
+        endDateChanged !== undefined
+      ) {
+        const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
+        if (config) {
+          const result = await pushBookingUpdate(config, updated.code, {
+            roomCode: roomCodeChanged,
+            status: b.status,
+            bookingType: bookingTypeChanged,
+            startDate: startDateChanged,
+            endDate: endDateChanged,
+          }).catch((e) => ({ ok: false, error: String(e) }));
+          if (!result.ok) pushWarning = result.error;
+        }
       }
+    } else {
+      // Réservation encore locale-only (jamais importée) — tentative
+      // d'adoption complète (cf. adoptBookingIntoSource) : si acceptée par
+      // la source, active le QR/l'ouverture de porte réels pour cette
+      // réservation. Silencieuse en cas d'échec (pas de sourcePushWarning
+      // ici) — un établissement sans connecteur capable de créer ne doit
+      // pas voir un avertissement à chaque modification.
+      updated = await adoptBookingIntoSource(entity.id, updated).catch(() => updated);
     }
 
     res.json({ ...normaliseBooking(updated), sourcePushWarning: pushWarning || null });
@@ -596,6 +606,7 @@ interface CreateManualBody {
   email: string;
   phone?: string;
   occupants?: Record<string, number>;
+  bookingType?: string;
 }
 
 /**
@@ -634,12 +645,19 @@ bookingRouter.post(
       lastName: b.lastName.trim(),
       email: b.email.trim().toLowerCase(),
       phone: b.phone?.trim() || undefined,
+      bookingType: b.bookingType?.trim() || undefined,
       occupants,
     };
 
     try {
       await validateManualBookingDraft(entity.id, draft); // dates + existence de la chambre uniquement
-      const booking = await createBookingDirectUnpaid(entity, draft, "saisie manuelle (personnel)", "createAnyway");
+      let booking = await createBookingDirectUnpaid(entity, draft, "saisie manuelle (personnel)", "createAnyway");
+      // Tentative best-effort de faire connaître cette réservation à la
+      // source externe (cf. adoptBookingIntoSource) — jamais bloquante :
+      // sans connecteur capable de créer, ou si l'appel échoue, la
+      // réservation reste utilisable, seuls le QR/l'ouverture de porte
+      // resteront en mode simulé.
+      booking = await adoptBookingIntoSource(entity.id, booking).catch(() => booking);
       res.status(201).json(normaliseBooking(booking));
     } catch (e) {
       throw new HttpError(400, e instanceof Error ? e.message : "Réservation impossible");
