@@ -4,6 +4,7 @@ import { resolveEntity } from "../lib/entity";
 import { normaliseRoom } from "../lib/normalize";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
+import { openFacilityDirect, BookingSourceError } from "../lib/bookingSource";
 
 export const facilityRouter = Router();
 
@@ -192,6 +193,51 @@ facilityRouter.post(
       data: { x: null, y: null },
     });
     res.json({ ok: true, count });
+  })
+);
+
+/**
+ * POST /wa/facility/openDirect — body: { code } — ouvre directement l'accès
+ * `code` via Room.externalFacilityId, SANS passer par une réservation (cf.
+ * openFacilityDirect dans lib/bookingSource.ts) — contrairement à
+ * /wa/booking/openDoor. Utilisé par le bouton "Ouverture à distance" du
+ * panneau "Gestion des Accès" : accès de service (ménage, etc.) ouvrable
+ * indépendamment de toute réservation active ce jour-là sur cette chambre.
+ * Réservé au personnel (requireAdmin) — Gestion des Accès n'est pas exposé
+ * côté client.
+ */
+facilityRouter.post(
+  "/facility/openDirect",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const code = (req.body.code as string) || "";
+    if (!code) throw new HttpError(400, "code requis");
+
+    const room = await prisma.room.findUnique({ where: { entityId_code: { entityId: entity.id, code } } });
+    if (!room) throw new HttpError(404, "Accès introuvable");
+
+    const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
+    let simulatedReason: string | undefined;
+    if (!config) {
+      simulatedReason = "Aucune intégration réservations configurée pour cet établissement.";
+    } else if (!config.facilityOpenEndpointPath) {
+      simulatedReason = "Ouverture directe d'un accès non configurée (réglages techniques avancés).";
+    } else if (!room.externalFacilityId) {
+      simulatedReason = "Cet accès n'a pas d'identifiant source connu — relancez l'import des chambres.";
+    }
+    if (simulatedReason || !config || !room.externalFacilityId) {
+      res.json({ simulated: true, simulatedReason });
+      return;
+    }
+
+    try {
+      await openFacilityDirect(config, room.externalFacilityId);
+      res.json({ simulated: false, opened: true });
+    } catch (e) {
+      if (e instanceof BookingSourceError) throw new HttpError(502, e.message);
+      throw e;
+    }
   })
 );
 

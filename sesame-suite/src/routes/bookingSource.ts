@@ -115,6 +115,11 @@ function shapeConfig(c: {
   doorRoomParam: string | null;
   doorResponseSuccessPath: string | null;
   doorResponseMessagePath: string | null;
+  facilityOpenEndpointPath: string | null;
+  facilityOpenEndpointMethod: string | null;
+  facilityOpenIdParam: string | null;
+  facilityOpenResponseSuccessPath: string | null;
+  facilityOpenResponseMessagePath: string | null;
   updateEndpointPath: string | null;
   updateEndpointMethod: string | null;
   updateEndpointBodyFormat: string | null;
@@ -235,6 +240,11 @@ function shapeConfig(c: {
     doorRoomParam: c.doorRoomParam || "",
     doorResponseSuccessPath: c.doorResponseSuccessPath || "",
     doorResponseMessagePath: c.doorResponseMessagePath || "",
+    facilityOpenEndpointPath: c.facilityOpenEndpointPath || "",
+    facilityOpenEndpointMethod: c.facilityOpenEndpointMethod || "GET",
+    facilityOpenIdParam: c.facilityOpenIdParam || "id",
+    facilityOpenResponseSuccessPath: c.facilityOpenResponseSuccessPath || "",
+    facilityOpenResponseMessagePath: c.facilityOpenResponseMessagePath || "",
     updateEndpointPath: c.updateEndpointPath || "",
     updateEndpointMethod: c.updateEndpointMethod || "POST",
     updateEndpointBodyFormat: c.updateEndpointBodyFormat || "json",
@@ -397,6 +407,11 @@ interface ConfigBody {
   doorRoomParam?: string;
   doorResponseSuccessPath?: string;
   doorResponseMessagePath?: string;
+  facilityOpenEndpointPath?: string;
+  facilityOpenEndpointMethod?: string;
+  facilityOpenIdParam?: string;
+  facilityOpenResponseSuccessPath?: string;
+  facilityOpenResponseMessagePath?: string;
   updateEndpointPath?: string;
   updateEndpointMethod?: string;
   updateEndpointBodyFormat?: string;
@@ -518,6 +533,11 @@ bookingSourceRouter.post(
       doorRoomParam: b.doorRoomParam,
       doorResponseSuccessPath: b.doorResponseSuccessPath,
       doorResponseMessagePath: b.doorResponseMessagePath,
+      facilityOpenEndpointPath: b.facilityOpenEndpointPath,
+      facilityOpenEndpointMethod: b.facilityOpenEndpointMethod,
+      facilityOpenIdParam: b.facilityOpenIdParam,
+      facilityOpenResponseSuccessPath: b.facilityOpenResponseSuccessPath,
+      facilityOpenResponseMessagePath: b.facilityOpenResponseMessagePath,
       updateEndpointPath: b.updateEndpointPath,
       updateEndpointMethod: b.updateEndpointMethod,
       updateEndpointBodyFormat: b.updateEndpointBodyFormat,

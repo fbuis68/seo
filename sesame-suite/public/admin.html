@@ -2372,6 +2372,38 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     </div>
   </div>
 
+  <!-- Ouverture directe d'un accès (sans réservation) -->
+  <div class="ca">
+    <div class="ch"><i class="ti ti-door-enter"></i>Ouverture directe d'un accès (sans réservation)</div>
+    <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
+      <span>Optionnel — bouton "Ouverture à distance" du panneau "Gestion des Accès". Contrairement à "Ouverture de porte à distance" ci-dessus (qui exige une réservation active ce jour-là sur l'accès), ce mécanisme ouvre directement un accès par son identifiant source (ex : accès de service, ménage), sans réservation. Nécessite d'avoir mappé "Identifiant source de l'accès" dans la section Chambres de l'Intégration réservations. Laissez le chemin vide tant que vous n'avez pas confirmé cet endpoint côté source réelle.</span>
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Chemin de l'endpoint d'ouverture</label>
+        <input type="text" id="bs-facilityOpenEndpointPath" placeholder="Ex : /wa/allFacility/open — laisser vide pour garder la simulation" autocomplete="off">
+      </div>
+      <div class="fi">
+        <label class="lb">Méthode HTTP</label>
+        <input type="text" id="bs-facilityOpenEndpointMethod" placeholder="GET">
+      </div>
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Nom du paramètre portant l'identifiant de l'accès</label>
+        <input type="text" id="bs-facilityOpenIdParam" placeholder="id">
+      </div>
+      <div class="fi">
+        <label class="lb">Chemin d'un statut de succès dans la réponse (optionnel)</label>
+        <input type="text" id="bs-facilityOpenResponseSuccessPath" placeholder="Ex : success — vide = un appel réussi (2xx) suffit">
+      </div>
+    </div>
+    <div class="fi">
+      <label class="lb">Chemin du motif de refus dans la réponse (optionnel)</label>
+      <input type="text" id="bs-facilityOpenResponseMessagePath" placeholder="Ex : message — affiché au personnel en cas de refus">
+    </div>
+  </div>
+
   <!-- Mise à jour d'une réservation -->
   <div class="ca">
     <div class="ch"><i class="ti ti-refresh-dot"></i>Mise à jour d'une réservation</div>
@@ -5560,41 +5592,23 @@ function renderRoomGrid(){
 }
 
 /**
- * Ouverture à distance depuis Gestion des Accès — cherche la réservation
- * active sur cet accès aujourd'hui (même établissement, dates couvrant
- * aujourd'hui, statut non annulé) puis rouvre son détail (section "Clé
- * numérique", cf. resaOpenDetail/resaLoadKey) : même connecteur et même
- * comportement (réel ou simulé selon la config) que depuis le panneau
- * Réservations, accessible ici sans devoir chercher la réservation
- * manuellement. RESA_CACHE est chargé à la demande s'il ne l'est pas déjà
- * (l'utilisateur peut arriver directement sur Gestion des Accès sans être
- * passé par Réservations).
+ * Ouverture à distance depuis Gestion des Accès — appelle directement
+ * POST /wa/facility/openDirect avec le code de la chambre/accès cliqué.
+ * Aucune recherche de réservation : ce mécanisme (cf. openFacilityDirect
+ * dans lib/bookingSource.ts, GET /wa/allFacility/open côté Sesame) ouvre
+ * l'accès par son identifiant source propre (Room.externalFacilityId),
+ * donc fonctionne même sans réservation active ce jour-là (accès de
+ * service, ménage, etc.) — contrairement à /wa/booking/openDoor (utilisé
+ * depuis la fiche réservation elle-même), qui exige un bookingCode.
  */
 async function rmOpenAccess(roomCode){
-  // Action directe (le bouton porte déjà le libellé "Ouverture à distance")
-  // — ouvrir la réservation entière ici n'avait aucun sens pour ce parcours
-  // "gestion des accès" (on veut juste ouvrir la porte, pas consulter/éditer
-  // une réservation) : on déclenche donc /wa/booking/openDoor directement,
-  // sans passer par la modale "Détail de la réservation".
-  if(!RESA_CACHE.length){
-    try{ await loadReservations(); }catch(e){}
-  }
-  var today = hotelToday();
-  var match = RESA_CACHE.find(function(x){
-    var b = x.booking;
-    if(b.status === 'cancelled') return false;
-    var room = b.selectedRoomCode || b.facilityCode || '';
-    if(room !== roomCode) return false;
-    return (b.startDate||'').slice(0,10) <= today && (b.endDate||'').slice(0,10) >= today;
-  });
-  if(!match){ toast('Aucune réservation active sur cet accès aujourd\'hui'); return; }
   try{
-    var r = await adminFetch('/wa/booking/openDoor', {method:'POST', body: JSON.stringify({code: match.booking.code, facilityCode: roomCode})});
+    var r = await adminFetch('/wa/facility/openDirect', {method:'POST', body: JSON.stringify({code: roomCode})});
     var data = await r.json().catch(function(){ return {}; });
     if(!r.ok) throw new Error(data.error || 'Erreur');
-    toast(data.simulated ? ('Ouverture simulée ✓' + (data.simulatedReason ? ' — ' + data.simulatedReason : '')) : 'Porte ouverte ✓');
+    toast(data.simulated ? ('Ouverture simulée ✓' + (data.simulatedReason ? ' — ' + data.simulatedReason : '')) : 'Accès ouvert ✓');
   }catch(e){
-    toast('Erreur lors de l\'ouverture de la porte' + (e && e.message ? ' — ' + e.message : ''));
+    toast('Erreur lors de l\'ouverture de l\'accès' + (e && e.message ? ' — ' + e.message : ''));
   }
 }
 
@@ -6522,6 +6536,12 @@ var BS_FACILITY_MAPPING_FIELDS = [
   // l'encodage NFC une fois l'accès coché "Encodeur NFC" dans cette même
   // fiche (réglage manuel, cf. section "Encodage NFC" ci-dessous).
   {k:'deviceId', label:'Identifiant du lecteur (device, encodage NFC)', required:false},
+  // Identifiant interne de l'accès côté source externe (distinct du "Code
+  // chambre" lisible et du deviceId ci-dessus) — porté ensuite par la fiche
+  // Chambres (Room.externalFacilityId), utilisé pour l'ouverture directe
+  // d'un accès sans réservation (cf. section "Ouverture directe d'un accès"
+  // ci-dessus).
+  {k:'externalId', label:"Identifiant source de l'accès (ouverture directe)", required:false},
 ];
 
 // Pass (invitations) — un Booking Sesame peut associer PLUSIEURS Pass, un
@@ -6785,20 +6805,35 @@ var PMS_PRESETS = {
       // Import des chambres — /wa/facility/list, absent de la documentation
       // officielle (comme /wa/booking/list) mais vérifié en conditions
       // réelles le 03/09/2026 : réponse {"success":true,"root":[...]}, avec
-      // code/name/typeName par élément. La liste renvoie AUSSI des accès qui
-      // ne sont pas des chambres (ex : "Espace commun" pour la bagagerie,
-      // l'entrée principale…) — volontairement PAS filtrés (cf. note) :
-      // Sesame permet de grouper plusieurs accès sur une réservation
-      // (facilityCode en liste séparée par virgules), un guest peut donc
-      // devoir ouvrir un espace commun avec son code/QR au même titre que sa
-      // chambre. floor/capacity/surface n'existent pas dans cette source,
-      // restent volontairement vides.
+      // code/name/typeName par élément — et un identifiant interne "id" (ex :
+      // "F00003255", même convention que "B..." pour les réservations et
+      // "P..." pour les Pass), confirmé le 10/09/2026 comme étant celui
+      // attendu par l'ouverture directe d'un accès (cf. bs-facilityOpenIdParam
+      // plus bas). La liste renvoie AUSSI des accès qui ne sont pas des
+      // chambres (ex : "Espace commun" pour la bagagerie, l'entrée
+      // principale…) — volontairement PAS filtrés (cf. note) : Sesame permet
+      // de grouper plusieurs accès sur une réservation (facilityCode en
+      // liste séparée par virgules), un guest peut donc devoir ouvrir un
+      // espace commun avec son code/QR au même titre que sa chambre.
+      // floor/capacity/surface n'existent pas dans cette source, restent
+      // volontairement vides.
       document.getElementById('bs-facilityEndpointPath').value = '/wa/facility/list';
       document.getElementById('bs-facilityEndpointMethod').value = 'POST';
       document.getElementById('bs-facilityEndpointBodyFormat').value = 'form';
       document.getElementById('bs-facilityEndpointBodyParams').value = 'start=0\nlimit=1000';
       document.getElementById('bs-facilityResponseListPath').value = 'root';
-      bsRenderFacilityMappingFields({code:'code', name:'name', category:'typeName', deviceId:'deviceId'});
+      bsRenderFacilityMappingFields({code:'code', name:'name', category:'typeName', deviceId:'deviceId', externalId:'id'});
+      // Ouverture directe d'un accès (sans réservation) — GET
+      // /wa/allFacility/open?id=<id de l'accès> (endpoint interne non
+      // documenté du back-office Sesame, même session que /wa/facility/list),
+      // confirmé en conditions réelles le 10/09/2026 : renvoie {"success":true}
+      // et ouvre l'accès correspondant, contrairement à /ws/booking/openAs
+      // qui exige un bookingCode et échoue donc pour un accès sans
+      // réservation active ce jour-là.
+      document.getElementById('bs-facilityOpenEndpointPath').value = '/wa/allFacility/open';
+      document.getElementById('bs-facilityOpenEndpointMethod').value = 'GET';
+      document.getElementById('bs-facilityOpenIdParam').value = 'id';
+      document.getElementById('bs-facilityOpenResponseSuccessPath').value = 'success';
       // Pass (invitations) — un booking Sesame peut associer PLUSIEURS Pass,
       // un par personne invitée (confirmé le 09/09/2026 via capture réseau :
       // GET /wa/pass/itemById?id=<passId> renvoie un Pass, avec son propre
@@ -7397,6 +7432,11 @@ function bsCollectFormValues(){
     doorResponseSuccessPath: document.getElementById('bs-doorResponseSuccessPath').value.trim(),
     doorResponseMessagePath: document.getElementById('bs-doorResponseMessagePath').value.trim(),
     doorEndpointBodyParams: bsTextToParams(document.getElementById('bs-doorEndpointBodyParams').value),
+    facilityOpenEndpointPath: document.getElementById('bs-facilityOpenEndpointPath').value.trim(),
+    facilityOpenEndpointMethod: document.getElementById('bs-facilityOpenEndpointMethod').value.trim(),
+    facilityOpenIdParam: document.getElementById('bs-facilityOpenIdParam').value.trim(),
+    facilityOpenResponseSuccessPath: document.getElementById('bs-facilityOpenResponseSuccessPath').value.trim(),
+    facilityOpenResponseMessagePath: document.getElementById('bs-facilityOpenResponseMessagePath').value.trim(),
     updateEndpointPath: document.getElementById('bs-updateEndpointPath').value.trim(),
     updateEndpointMethod: document.getElementById('bs-updateEndpointMethod').value,
     updateEndpointBodyFormat: document.getElementById('bs-updateEndpointBodyFormat').value,
@@ -7542,6 +7582,11 @@ async function bsInit(){
   document.getElementById('bs-doorResponseSuccessPath').value = BS_CONFIG.doorResponseSuccessPath||'';
   document.getElementById('bs-doorResponseMessagePath').value = BS_CONFIG.doorResponseMessagePath||'';
   document.getElementById('bs-doorEndpointBodyParams').value = bsParamsToText(BS_CONFIG.doorEndpointBodyParams);
+  document.getElementById('bs-facilityOpenEndpointPath').value = BS_CONFIG.facilityOpenEndpointPath||'';
+  document.getElementById('bs-facilityOpenEndpointMethod').value = BS_CONFIG.facilityOpenEndpointMethod||'GET';
+  document.getElementById('bs-facilityOpenIdParam').value = BS_CONFIG.facilityOpenIdParam||'id';
+  document.getElementById('bs-facilityOpenResponseSuccessPath').value = BS_CONFIG.facilityOpenResponseSuccessPath||'';
+  document.getElementById('bs-facilityOpenResponseMessagePath').value = BS_CONFIG.facilityOpenResponseMessagePath||'';
   document.getElementById('bs-updateEndpointPath').value = BS_CONFIG.updateEndpointPath||'';
   document.getElementById('bs-updateEndpointMethod').value = BS_CONFIG.updateEndpointMethod||'POST';
   document.getElementById('bs-updateEndpointBodyFormat').value = BS_CONFIG.updateEndpointBodyFormat||'json';

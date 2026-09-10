@@ -242,6 +242,18 @@ model Room {
   // lancer l'encodage — cf. listNfcDevices dans bookingSource.ts.
   isNfcEncoder Boolean @default(false)
 
+  // Identifiant interne Sesame de cet accès (ex : "F00003255", distinct du
+  // deviceId ci-dessus qui identifie le LECTEUR NFC) — importé
+  // automatiquement si mappé (cf. FacilityMapping.externalId dans
+  // bookingSource.ts). Sert à l'ouverture directe d'un accès SANS
+  // réservation associée (cf. openFacilityDirect, GET /wa/allFacility/open
+  // côté Sesame, confirmé en conditions réelles le 10/09/2026) — contrairement
+  // à openDoor (/ws/booking/openAs) qui exige un bookingCode, ce mécanisme
+  // permet d'ouvrir un accès de service (ménage, etc.) même sans réservation
+  // active ce jour-là, ce qui est justement l'usage du panneau "Gestion des
+  // Accès".
+  externalFacilityId String?
+
   // Cet accès doit-il apparaître dans la liste "chambre à positionner" du
   // panneau Plan de l'hôtel (public/admin.html, prfUnpositionedRooms) ?
   // Remplace le tri auparavant codé en dur sur type==="casier" (07/09/2026) —
@@ -699,6 +711,24 @@ model BookingSourceConfig {
   // Sans ce mapping, seul "réponse négative" était visible, impossible à
   // diagnostiquer sans consulter les logs serveur.
   doorResponseMessagePath String?
+
+  // Ouverture directe d'UN accès (bouton "Ouverture à distance" du panneau
+  // "Gestion des Accès"), SANS passer par une réservation — contrairement à
+  // doorEndpointPath ci-dessus (/ws/booking/openAs, qui exige un
+  // bookingCode et échoue donc pour un accès sans réservation active ce
+  // jour-là, ex : accès de service/ménage). Confirmé en conditions réelles
+  // le 10/09/2026 : GET /wa/allFacility/open?id=<facilityId> (endpoint
+  // interne non documenté du back-office Sesame, même session que les
+  // autres appels /wa/, cf. buildAuthHeaders) renvoie {"success":true} et
+  // ouvre l'accès correspondant à son identifiant interne (Room.
+  // externalFacilityId), indépendamment de toute réservation. Inerte tant
+  // que facilityOpenEndpointPath est vide (repli simulé, même logique que
+  // doorEndpointPath).
+  facilityOpenEndpointPath        String? // ex: "/wa/allFacility/open"
+  facilityOpenEndpointMethod      String? @default("GET") // GET | POST
+  facilityOpenIdParam             String? @default("id") // nom du paramètre portant Room.externalFacilityId
+  facilityOpenResponseSuccessPath String?
+  facilityOpenResponseMessagePath String?
 
   // Mise à jour d'une réservation (panneau "Réservations" — changement de
   // chambre ou annulation/réactivation) — même principe que les endpoints

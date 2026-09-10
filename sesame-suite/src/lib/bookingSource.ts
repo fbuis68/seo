@@ -101,6 +101,11 @@ export interface FacilityMapping {
   // l'encodage NFC une fois l'accès marqué "Encodeur NFC" (Room.isNfcEncoder,
   // coché à la main dans la fiche accès, cf. listNfcDevices).
   deviceId?: string;
+  // Identifiant interne Sesame de cet accès (ex : champ "id" de l'API
+  // Sesame Technology, distinct de deviceId ci-dessus) — sert à l'ouverture
+  // directe d'un accès sans réservation associée (cf. openFacilityDirect,
+  // Room.externalFacilityId, confirmé le 10/09/2026).
+  externalId?: string;
 }
 
 export interface MappedFacility {
@@ -111,6 +116,7 @@ export interface MappedFacility {
   capacity: number | null;
   surface: number | null;
   deviceId: string;
+  externalId: string;
 }
 
 /** Lecture d'un chemin "a.b.c" (ou "a.0.b" pour un index de tableau) dans un objet. */
@@ -637,6 +643,7 @@ export function mapFacilities(items: unknown[], mapping: FacilityMapping): { map
       capacity: mapping.capacity ? toNum(getPath(item, mapping.capacity)) : null,
       surface: mapping.surface ? toNum(getPath(item, mapping.surface)) : null,
       deviceId: mapping.deviceId ? String(getPath(item, mapping.deviceId) ?? "").trim() : "",
+      externalId: mapping.externalId ? String(getPath(item, mapping.externalId) ?? "").trim() : "",
     });
   });
 
@@ -659,6 +666,7 @@ export async function upsertMappedFacilities(entity: Entity, mapped: MappedFacil
       capacity: f.capacity ?? undefined,
       surface: f.surface ?? undefined,
       deviceId: f.deviceId || undefined,
+      externalFacilityId: f.externalId || undefined,
     };
     if (existing) {
       await prisma.room.update({ where: { id: existing.id }, data });
@@ -1565,6 +1573,77 @@ export async function openDoor(
       const messageRaw = config.doorResponseMessagePath ? getPath(body, config.doorResponseMessagePath) : undefined;
       const message = typeof messageRaw === "string" && messageRaw ? ` : ${messageRaw}` : "";
       throw new BookingSourceError(`La serrure a refusé l'ouverture de la porte (réponse négative)${message}`);
+    }
+  }
+  return { opened: true };
+}
+
+/**
+ * Déclenche l'ouverture à distance d'UN accès directement par son
+ * identifiant interne Sesame (Room.externalFacilityId), SANS passer par une
+ * réservation — contrairement à openDoor ci-dessus (/ws/booking/openAs, qui
+ * exige un bookingCode et échoue donc pour un accès sans réservation active
+ * ce jour-là, ex : accès de service/ménage). Confirmé en conditions réelles
+ * le 10/09/2026 : GET /wa/allFacility/open?id=<facilityId> (endpoint interne
+ * non documenté du back-office Sesame, même session que les autres appels
+ * /wa/, cf. buildAuthHeaders) renvoie {"success":true} et ouvre l'accès
+ * correspondant, indépendamment de toute réservation — exactement l'usage
+ * visé par le bouton "Ouverture à distance" du panneau "Gestion des Accès".
+ * Inerte tant que facilityOpenEndpointPath n'est pas configuré (l'appelant
+ * décide alors du repli — cf. routes/facility.ts).
+ */
+export async function openFacilityDirect(config: BookingSourceConfig, externalFacilityId: string): Promise<{ opened: boolean }> {
+  if (!config.facilityOpenEndpointPath) {
+    throw new BookingSourceError(
+      'Ouverture directe d\'un accès non configurée pour cet établissement — renseignez "Ouverture directe d\'un accès (sans réservation)" dans les réglages techniques avancés de l\'Intégration réservations.'
+    );
+  }
+  if (!config.baseUrl) throw new BookingSourceError("URL de base non configurée");
+  const url = normalizeBaseUrl(config.baseUrl).replace(/\/$/, "") + config.facilityOpenEndpointPath;
+  const { headers: authHeaders } = await buildAuthHeaders(config);
+  const idParam = config.facilityOpenIdParam || "id";
+  const method = (config.facilityOpenEndpointMethod || "GET").toUpperCase();
+
+  let res: Response;
+  try {
+    if (method === "GET") {
+      const qs = new URLSearchParams();
+      qs.set(idParam, externalFacilityId);
+      res = await fetchWithTimeout(`${url}${url.includes("?") ? "&" : "?"}${qs.toString()}`, {
+        headers: { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...authHeaders },
+      });
+    } else {
+      res = await fetchWithTimeout(url, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "User-Agent": "SesameSuite-BookingConnector/1.0",
+          ...authHeaders,
+        },
+        body: JSON.stringify({ [idParam]: externalFacilityId }),
+      });
+    }
+  } catch (e) {
+    throw new BookingSourceError(`Connexion à la serrure impossible : ${describeFetchError(e)}`);
+  }
+  if (!res.ok) throw new BookingSourceError(`La serrure a répondu ${res.status} ${res.statusText}`);
+
+  const rawText = await res.text();
+  console.log("[diag openFacilityDirect] status=%d id=%s body=%s", res.status, externalFacilityId, rawText.slice(0, 800));
+
+  if (config.facilityOpenResponseSuccessPath) {
+    let body: unknown;
+    try {
+      body = JSON.parse(rawText);
+    } catch {
+      throw new BookingSourceError(`La réponse d'ouverture n'est pas un JSON valide — début : "${rawText.trim().slice(0, 200)}"`);
+    }
+    const raw = getPath(body, config.facilityOpenResponseSuccessPath);
+    if (raw === false || raw === "false" || raw === 0) {
+      const messageRaw = config.facilityOpenResponseMessagePath ? getPath(body, config.facilityOpenResponseMessagePath) : undefined;
+      const message = typeof messageRaw === "string" && messageRaw ? ` : ${messageRaw}` : "";
+      throw new BookingSourceError(`La serrure a refusé l'ouverture de cet accès (réponse négative)${message}`);
     }
   }
   return { opened: true };
