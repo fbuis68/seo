@@ -5571,6 +5571,11 @@ function renderRoomGrid(){
  * passé par Réservations).
  */
 async function rmOpenAccess(roomCode){
+  // Action directe (le bouton porte déjà le libellé "Ouverture à distance")
+  // — ouvrir la réservation entière ici n'avait aucun sens pour ce parcours
+  // "gestion des accès" (on veut juste ouvrir la porte, pas consulter/éditer
+  // une réservation) : on déclenche donc /wa/booking/openDoor directement,
+  // sans passer par la modale "Détail de la réservation".
   if(!RESA_CACHE.length){
     try{ await loadReservations(); }catch(e){}
   }
@@ -5583,7 +5588,14 @@ async function rmOpenAccess(roomCode){
     return (b.startDate||'').slice(0,10) <= today && (b.endDate||'').slice(0,10) >= today;
   });
   if(!match){ toast('Aucune réservation active sur cet accès aujourd\'hui'); return; }
-  resaOpenDetail(match.booking.code);
+  try{
+    var r = await adminFetch('/wa/booking/openDoor', {method:'POST', body: JSON.stringify({code: match.booking.code, facilityCode: roomCode})});
+    var data = await r.json().catch(function(){ return {}; });
+    if(!r.ok) throw new Error(data.error || 'Erreur');
+    toast(data.simulated ? ('Ouverture simulée ✓' + (data.simulatedReason ? ' — ' + data.simulatedReason : '')) : 'Porte ouverte ✓');
+  }catch(e){
+    toast('Erreur lors de l\'ouverture de la porte' + (e && e.message ? ' — ' + e.message : ''));
+  }
 }
 
 // Alias pour compatibilité avec le plan

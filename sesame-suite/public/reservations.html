@@ -574,11 +574,15 @@ function rsToast(msg){
  * Ouverture à distance depuis l'onglet Accès — cherche la réservation
  * active sur cette chambre aujourd'hui (dates couvrant aujourd'hui, statut
  * non annulé) dans RS_BOOKINGS (déjà chargé intégralement, cf.
- * rsLoadBookings) puis rouvre son détail (section "Clé numérique", cf.
- * rsOpenDetail/rsLoadKey) — même connecteur et même comportement (réel ou
- * simulé selon la config) que depuis l'onglet Réservations.
+ * rsLoadBookings) puis appelle directement /wa/booking/openDoor — ce
+ * parcours sert à ouvrir la porte, pas à consulter/éditer la réservation,
+ * inutile donc d'ouvrir sa fiche complète.
  */
-function rsOpenAccess(roomCode){
+async function rsOpenAccess(roomCode){
+  // Action directe, cf. rmOpenAccess (admin.html) : ce parcours "gestion des
+  // accès" sert à ouvrir la porte, pas à consulter/éditer une réservation —
+  // on appelle donc /wa/booking/openDoor directement plutôt que d'ouvrir la
+  // modale "Détail de la réservation".
   var todayStr = hotelToday();
   var match = RS_BOOKINGS.find(function(b){
     if(b.status === 'cancelled') return false;
@@ -587,7 +591,14 @@ function rsOpenAccess(roomCode){
     return (b.startDate||'').slice(0,10) <= todayStr && (b.endDate||'').slice(0,10) >= todayStr;
   });
   if(!match){ rsToast('Aucune réservation active sur cet accès aujourd\'hui'); return; }
-  rsOpenDetail(match.code);
+  try{
+    var r = await rsApiFetch('/wa/booking/openDoor', {method:'POST', body: JSON.stringify({code: match.code, facilityCode: roomCode})});
+    var data = await r.json().catch(function(){ return {}; });
+    if(!r.ok) throw new Error(data.error || 'Erreur');
+    rsToast(data.simulated ? ('Ouverture simulée ✓' + (data.simulatedReason ? ' — ' + data.simulatedReason : '')) : 'Porte ouverte ✓');
+  }catch(e){
+    rsToast('Erreur lors de l\'ouverture de la porte' + (e && e.message ? ' — ' + e.message : ''));
+  }
 }
 
 function rsRenderAccess(){
