@@ -733,7 +733,13 @@ async function rsLoadKey(code){
   try{
     var r = await rsApiFetch('/wa/booking/accessQr?code='+encodeURIComponent(code));
     var data = await r.json();
-    if(!r.ok || !data.qrImage){ body.innerHTML = '<div style="font-size:12px;color:var(--mu)">QR indisponible pour cette réservation</div>'; return; }
+    if(!r.ok){
+      // Cf. resaLoadKey (admin.html) : un vrai appel à la source a échoué,
+      // on affiche le message renvoyé par l'API plutôt qu'un texte générique.
+      body.innerHTML = '<div style="font-size:12px;color:#b45309">⚠ '+esc(data.error||'QR indisponible pour cette réservation')+'</div>';
+      return;
+    }
+    if(!data.qrImage){ body.innerHTML = '<div style="font-size:12px;color:var(--mu)">QR indisponible pour cette réservation</div>'; return; }
     // Cf. resaLoadKey (admin.html) : le QR ne change pas visuellement quand
     // les dates sont modifiées, on affiche donc validUntil explicitement.
     var validLine = '';

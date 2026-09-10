@@ -14059,7 +14059,15 @@ async function resaLoadKey(code){
   try{
     var r = await adminFetch('/wa/booking/accessQr?code='+encodeURIComponent(code));
     var data = await r.json();
-    if(!r.ok || !data.qrImage){ body.innerHTML = '<div style="font-size:12px;color:var(--mu)">QR indisponible pour cette réservation</div>'; return; }
+    if(!r.ok){
+      // Un vrai appel à la source a été tenté (le connecteur est configuré
+      // et la réservation lui est reconnue) mais a échoué — afficher le
+      // message renvoyé par l'API (ex : erreur Sesame) plutôt qu'un message
+      // générique, sinon impossible à diagnostiquer pour le personnel.
+      body.innerHTML = '<div style="font-size:12px;color:#b45309">⚠ '+esc(data.error||'QR indisponible pour cette réservation')+'</div>';
+      return;
+    }
+    if(!data.qrImage){ body.innerHTML = '<div style="font-size:12px;color:var(--mu)">QR indisponible pour cette réservation</div>'; return; }
     // Le QR/secret est un jeton opaque renvoyé tel quel par la source (ex :
     // Sesame /ws/pass/findMimeSecret) : il ne change PAS visuellement quand
     // les dates de la réservation sont modifiées (la fenêtre de validité est
@@ -14091,7 +14099,10 @@ async function resaKeyOpenDoor(code, btn){
     if(!r.ok) throw new Error(data.error || 'Erreur');
     toast(data.simulated ? ('Ouverture simulée ✓' + (data.simulatedReason ? ' — ' + data.simulatedReason : '')) : 'Porte ouverte ✓');
   }catch(e){
-    toast('Erreur lors de l\'ouverture de la porte');
+    // Affiche le message réel (ex : erreur renvoyée par Sesame) plutôt
+    // qu'un texte générique, indispensable pour diagnostiquer un vrai appel
+    // qui échoue côté source (connecteur configuré, réservation reconnue).
+    toast('Erreur lors de l\'ouverture de la porte' + (e && e.message ? ' — ' + e.message : ''));
   }finally{
     if(btn) btn.disabled = false;
   }
