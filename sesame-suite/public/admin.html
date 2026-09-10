@@ -164,6 +164,10 @@ html{scrollbar-width:thin;scrollbar-color:var(--mu) transparent}
 /* FORM */
 .fi{margin-bottom:12px}.fi:last-child{margin-bottom:0}
 .lb{font-size:11px;font-weight:600;color:var(--mu);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em}
+.pwwrap{position:relative}
+.pwwrap input{padding-right:38px}
+.pwtoggle-btn{position:absolute;right:2px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--mu);padding:6px;display:flex;align-items:center;justify-content:center;font-size:15px}
+.pwtoggle-btn:hover{color:var(--tx)}
 input[type=text],input[type=number],input[type=email],input[type=password],select,textarea{width:100%;padding:8px 10px;border:1px solid var(--bdr);border-radius:var(--rs);font-family:'DM Sans',sans-serif;font-size:13px;color:var(--tx);background:var(--bg);outline:none;transition:border-color .15s;-webkit-appearance:none}
 input:focus,select:focus,textarea:focus{border-color:var(--am);box-shadow:0 0 0 3px rgba(45,155,106,.1)}
 input[type=color]{width:38px;height:30px;padding:2px 3px;border:1px solid var(--bdr);border-radius:var(--rs);cursor:pointer;background:var(--bg)}
@@ -4385,6 +4389,17 @@ function adminFetch(url, opts){
   return fetch(API_BASE+w.url, w.opts);
 }
 
+/** Bouton "œil" affiché dans chaque champ mot de passe (login, réinitialisation)
+ * pour basculer sa visibilité — pratique sur mobile/tablette où une faute de
+ * frappe silencieuse est plus facile à commettre qu'au clavier. */
+function togglePwVisibility(id, btn){
+  var input = document.getElementById(id);
+  if(!input) return;
+  var showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  var icon = btn.querySelector('i');
+  if(icon) icon.className = showing ? 'ti ti-eye' : 'ti ti-eye-off';
+}
 function renderLoginBox(okMsg){
   document.getElementById('login-box').innerHTML =
     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:24px">'
@@ -4393,7 +4408,7 @@ function renderLoginBox(okMsg){
     + '<div style="margin-left:4px"><div style="font-family:\'DM Serif Display\',serif;font-size:17px">Sesame Éco</div>'
     + '<div style="font-size:11px;color:var(--mu)">Administration</div></div></div>'
     + '<div class="fi"><label class="lb">Email</label><input type="email" id="login-email" placeholder="admin@hotel-churchill.fr" onkeydown="if(event.key===\'Enter\')adminLogin()"></div>'
-    + '<div class="fi" style="margin-top:12px"><label class="lb">Mot de passe</label><input type="password" id="login-password" placeholder="••••••••" onkeydown="if(event.key===\'Enter\')adminLogin()"></div>'
+    + '<div class="fi" style="margin-top:12px"><label class="lb">Mot de passe</label><div class="pwwrap"><input type="password" id="login-password" placeholder="••••••••" onkeydown="if(event.key===\'Enter\')adminLogin()"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility(\'login-password\',this)"><i class="ti ti-eye"></i></button></div></div>'
     + '<button class="btn btn-p" style="width:100%;justify-content:center;margin-top:18px" onclick="adminLogin()"><i class="ti ti-login"></i> Se connecter</button>'
     + '<div style="text-align:center;margin-top:10px"><a href="#" onclick="renderForgotBox();return false;" style="font-size:12px;color:var(--a)">Mot de passe oublié ?</a></div>'
     + '<div id="login-err" style="display:none;color:var(--re);font-size:12px;margin-top:10px;text-align:center"></div>'
@@ -4433,8 +4448,8 @@ function renderResetBox(token){
     + '<div class="sesame-wordmark-card"><span class="sw-main">Sesame</span><span class="sw-sub">TECHNOLOGY</span></div>'
     + '<div style="margin-left:4px"><div style="font-family:\'DM Serif Display\',serif;font-size:17px">Nouveau mot de passe</div>'
     + '<div style="font-size:11px;color:var(--mu)">Administration</div></div></div>'
-    + '<div class="fi"><label class="lb">Nouveau mot de passe</label><input type="password" id="rp-password" placeholder="••••••••"></div>'
-    + '<div class="fi" style="margin-top:12px"><label class="lb">Confirmer</label><input type="password" id="rp-password2" placeholder="••••••••" onkeydown="if(event.key===\'Enter\')submitResetPasswordAdmin(\''+token+'\')"></div>'
+    + '<div class="fi"><label class="lb">Nouveau mot de passe</label><div class="pwwrap"><input type="password" id="rp-password" placeholder="••••••••"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility(\'rp-password\',this)"><i class="ti ti-eye"></i></button></div></div>'
+    + '<div class="fi" style="margin-top:12px"><label class="lb">Confirmer</label><div class="pwwrap"><input type="password" id="rp-password2" placeholder="••••••••" onkeydown="if(event.key===\'Enter\')submitResetPasswordAdmin(\''+token+'\')"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility(\'rp-password2\',this)"><i class="ti ti-eye"></i></button></div></div>'
     + '<button class="btn btn-p" style="width:100%;justify-content:center;margin-top:18px" onclick="submitResetPasswordAdmin(\''+token+'\')">Valider</button>'
     + '<div id="login-err" style="display:none;color:var(--re);font-size:12px;margin-top:10px;text-align:center"></div>';
 }
