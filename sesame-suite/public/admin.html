@@ -871,6 +871,120 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     </div>
   </div>
 
+  <!-- ══════════ KPI — gains hôtelier & impact client (fusionné) ══════════ -->
+  <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;display:flex;align-items:center;gap:6px">
+    <i class="ti ti-chart-donut-3"></i>KPI — gains hôtelier &amp; impact client (estimation)
+  </div>
+  <div id="kpi-hero" style="border-radius:var(--r);overflow:hidden;margin-bottom:20px">
+    <div style="background:linear-gradient(135deg,#0A1628,#1A3A60);padding:24px;color:#fff;position:relative;overflow:hidden">
+      <div style="position:absolute;right:-40px;top:-40px;width:200px;height:200px;border-radius:50%;background:rgba(255,255,255,.03)"></div>
+      <div style="position:absolute;right:60px;bottom:-60px;width:150px;height:150px;border-radius:50%;background:rgba(58,155,213,.06)"></div>
+
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;opacity:.55;margin-bottom:14px;display:flex;align-items:center;gap:6px"><i class="ti ti-building-store"></i>Hôtelier — gains opérationnels</div>
+
+      <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+        <!-- SVG Ring chart : temps total gagné /an (ménage + check-in auto) -->
+        <div style="position:relative;flex-shrink:0">
+          <svg id="kpiRing" width="140" height="140" viewBox="0 0 140 140">
+            <circle cx="70" cy="70" r="54" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="14"/>
+            <circle id="kpiRingFill" cx="70" cy="70" r="54" fill="none" stroke="#2ECC71" stroke-width="14"
+              stroke-dasharray="339" stroke-dashoffset="339" stroke-linecap="round"
+              transform="rotate(-90 70 70)" style="transition:stroke-dashoffset 1s ease"/>
+            <text x="70" y="64" text-anchor="middle" fill="#fff" font-size="22" font-weight="300" font-family="Fraunces,serif" id="kpiRingVal">0</text>
+            <text x="70" y="80" text-anchor="middle" fill="rgba(255,255,255,.5)" font-size="10">heures/an</text>
+          </svg>
+          <div style="text-align:center;font-size:10px;opacity:.55;margin-top:6px">temps total gagné / an</div>
+        </div>
+        <!-- Bonhomme : symbolise le temps homme gagné, rempli proportionnellement -->
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex-shrink:0" id="kpi-h-total-picto"></div>
+        <!-- KPI tiles -->
+        <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:12px;min-width:280px">
+          <div style="background:rgba(255,255,255,.07);border-radius:10px;padding:14px">
+            <div style="font-size:11px;opacity:.6;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Ménage — min / séjour</div>
+            <div style="font-family:Fraunces,serif;font-size:28px;font-weight:300;color:#7EC8E3" id="kpi-h-min">—</div>
+            <div style="font-size:11px;opacity:.5;margin-top:2px">ménage + serviettes évités</div>
+          </div>
+          <div style="background:rgba(255,255,255,.07);border-radius:10px;padding:14px">
+            <div style="font-size:11px;opacity:.6;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Check-in — min / séjour</div>
+            <div style="font-family:Fraunces,serif;font-size:28px;font-weight:300;color:#F5C84C" id="kpi-h-checkin">—</div>
+            <div style="font-size:11px;opacity:.5;margin-top:2px">traitement automatisé (KYC, taxe, paiement)</div>
+          </div>
+          <div style="background:rgba(46,204,113,.15);border-radius:10px;padding:14px">
+            <div style="font-size:11px;opacity:.7;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Économie / séjour</div>
+            <div style="font-family:Fraunces,serif;font-size:28px;font-weight:300;color:#6EE7B7" id="kpi-h-csej">—</div>
+            <div style="font-size:11px;opacity:.5;margin-top:2px" id="kpi-h-rate">@ — €/h</div>
+          </div>
+          <div style="background:rgba(46,204,113,.25);border-radius:10px;padding:14px">
+            <div style="font-size:11px;opacity:.7;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Total / an</div>
+            <div style="font-family:Fraunces,serif;font-size:28px;font-weight:300;color:#fff" id="kpi-h-can">—</div>
+            <div style="font-size:11px;opacity:.6;margin-top:2px" id="kpi-h-stays">— séjours estimés</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Détail temps gagné -->
+      <div style="margin-top:18px;padding-top:16px;border-top:1px solid rgba(255,255,255,.1)">
+        <div style="display:flex;justify-content:space-between;font-size:11px;opacity:.55;margin-bottom:6px">
+          <span>Répartition du temps gagné par an</span>
+          <button onclick="showPan('hotel')" style="background:none;border:none;color:rgba(255,255,255,.5);font-size:11px;cursor:pointer">⚙ Configurer</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px">
+              <span style="opacity:.7">🧹 Ménage &amp; serviettes</span>
+              <span id="kpi-h-hrs-menage" style="color:#7EC8E3;font-weight:600">— h/an</span>
+            </div>
+            <div style="height:28px;background:rgba(255,255,255,.1);border-radius:5px">
+              <div id="kpi-bar-menage" style="height:100%;background:#7EC8E3;border-radius:5px;width:0%;transition:width 1s ease"></div>
+            </div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px">
+              <span style="opacity:.7">📋 Check-in automatisé</span>
+              <span id="kpi-h-hrs-checkin" style="color:#F5C84C;font-weight:600">— h/an</span>
+            </div>
+            <div style="height:28px;background:rgba(255,255,255,.1);border-radius:5px">
+              <div id="kpi-bar-checkin" style="height:100%;background:#F5C84C;border-radius:5px;width:0%;transition:width 1s ease"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:linear-gradient(135deg,#0D3320,#1A5C36);padding:24px;color:#fff;position:relative;overflow:hidden">
+      <div style="position:absolute;right:-30px;top:-30px;width:160px;height:160px;border-radius:50%;background:rgba(255,255,255,.04)"></div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;opacity:.55;margin-bottom:14px;display:flex;align-items:center;gap:6px"><i class="ti ti-leaf"></i>Client — impact affiché dans l'app éco-séjour</div>
+      <div style="font-size:11px;opacity:.55;margin-bottom:14px">Impact environnemental moyen affiché au client (séjour type 3 nuits)</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <!-- Eau -->
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <div style="width:48px;height:48px;border-radius:12px;background:rgba(58,155,213,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            <i class="ti ti-droplet-filled" style="font-size:24px;color:#7EC8E3"></i>
+          </div>
+          <div style="flex:1;min-width:80px">
+            <div style="font-family:Fraunces,serif;font-size:32px;font-weight:300;line-height:1;color:#7EC8E3" id="kpi-c-eau">— L</div>
+            <div style="font-size:12px;opacity:.7;margin-top:2px" id="kpi-c-eau-eq">eau économisée</div>
+          </div>
+          <div id="kpi-c-eau-picto" style="flex-shrink:0;display:flex;align-items:center;min-height:46px"></div>
+        </div>
+        <!-- CO2 -->
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <div style="width:48px;height:48px;border-radius:12px;background:rgba(46,204,113,.25);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            <i class="ti ti-cloud" style="font-size:24px;color:#6EE7B7"></i>
+          </div>
+          <div style="flex:1;min-width:80px">
+            <div style="font-family:Fraunces,serif;font-size:32px;font-weight:300;line-height:1;color:#6EE7B7" id="kpi-c-co2">— kg</div>
+            <div style="font-size:12px;opacity:.7;margin-top:2px" id="kpi-c-co2-eq">CO₂ évité</div>
+          </div>
+          <div id="kpi-c-co2-picto" style="flex-shrink:0;display:flex;align-items:center;min-height:42px"></div>
+        </div>
+      </div>
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.12);font-size:11px;opacity:.6">
+        Cet encart est identique à celui visible par le client à l'étape "Préférences éco" du parcours de check-in.
+      </div>
+    </div>
+  </div>
+
   <!-- ══════════ ARRIVÉES DE LA SEMAINE ══════════ -->
   <div class="ca" style="margin-bottom:20px">
     <div class="ch"><i class="ti ti-calendar-stats"></i>Arrivées de la semaine
@@ -970,122 +1084,6 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     <div id="kpi-real-grid" class="kpi-real-grid"><div class="alt alt-b"><i class="ti ti-loader"></i><span>Chargement…</span></div></div>
   </div>
 
-  <!-- ══════════ KPI HÔTELIER ══════════ -->
-  <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;display:flex;align-items:center;gap:6px">
-    <i class="ti ti-building-store"></i>KPI hôtelier — gains opérationnels (estimation)
-  </div>
-  <div id="kpi-hero-hotelier" style="margin-bottom:20px">
-    <div style="background:linear-gradient(135deg,#0A1628,#1A3A60);border-radius:var(--r);padding:24px;color:#fff;margin-bottom:14px;position:relative;overflow:hidden">
-      <div style="position:absolute;right:-40px;top:-40px;width:200px;height:200px;border-radius:50%;background:rgba(255,255,255,.03)"></div>
-      <div style="position:absolute;right:60px;bottom:-60px;width:150px;height:150px;border-radius:50%;background:rgba(58,155,213,.06)"></div>
-
-      <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
-        <!-- SVG Ring chart : temps total gagné /an (ménage + check-in auto) -->
-        <div style="position:relative;flex-shrink:0">
-          <svg id="kpiRing" width="140" height="140" viewBox="0 0 140 140">
-            <circle cx="70" cy="70" r="54" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="14"/>
-            <circle id="kpiRingFill" cx="70" cy="70" r="54" fill="none" stroke="#2ECC71" stroke-width="14"
-              stroke-dasharray="339" stroke-dashoffset="339" stroke-linecap="round"
-              transform="rotate(-90 70 70)" style="transition:stroke-dashoffset 1s ease"/>
-            <text x="70" y="64" text-anchor="middle" fill="#fff" font-size="22" font-weight="300" font-family="Fraunces,serif" id="kpiRingVal">0</text>
-            <text x="70" y="80" text-anchor="middle" fill="rgba(255,255,255,.5)" font-size="10">heures/an</text>
-          </svg>
-          <div style="text-align:center;font-size:10px;opacity:.55;margin-top:6px">temps total gagné / an</div>
-        </div>
-        <!-- Bonhomme : symbolise le temps homme gagné, rempli proportionnellement -->
-        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex-shrink:0" id="kpi-h-total-picto"></div>
-        <!-- KPI tiles -->
-        <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:12px;min-width:280px">
-          <div style="background:rgba(255,255,255,.07);border-radius:10px;padding:14px">
-            <div style="font-size:11px;opacity:.6;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Ménage — min / séjour</div>
-            <div style="font-family:Fraunces,serif;font-size:28px;font-weight:300;color:#7EC8E3" id="kpi-h-min">—</div>
-            <div style="font-size:11px;opacity:.5;margin-top:2px">ménage + serviettes évités</div>
-          </div>
-          <div style="background:rgba(255,255,255,.07);border-radius:10px;padding:14px">
-            <div style="font-size:11px;opacity:.6;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Check-in — min / séjour</div>
-            <div style="font-family:Fraunces,serif;font-size:28px;font-weight:300;color:#F5C84C" id="kpi-h-checkin">—</div>
-            <div style="font-size:11px;opacity:.5;margin-top:2px">traitement automatisé (KYC, taxe, paiement)</div>
-          </div>
-          <div style="background:rgba(46,204,113,.15);border-radius:10px;padding:14px">
-            <div style="font-size:11px;opacity:.7;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Économie / séjour</div>
-            <div style="font-family:Fraunces,serif;font-size:28px;font-weight:300;color:#6EE7B7" id="kpi-h-csej">—</div>
-            <div style="font-size:11px;opacity:.5;margin-top:2px" id="kpi-h-rate">@ — €/h</div>
-          </div>
-          <div style="background:rgba(46,204,113,.25);border-radius:10px;padding:14px">
-            <div style="font-size:11px;opacity:.7;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Total / an</div>
-            <div style="font-family:Fraunces,serif;font-size:28px;font-weight:300;color:#fff" id="kpi-h-can">—</div>
-            <div style="font-size:11px;opacity:.6;margin-top:2px" id="kpi-h-stays">— séjours estimés</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Détail temps gagné -->
-      <div style="margin-top:18px;padding-top:16px;border-top:1px solid rgba(255,255,255,.1)">
-        <div style="display:flex;justify-content:space-between;font-size:11px;opacity:.55;margin-bottom:6px">
-          <span>Répartition du temps gagné par an</span>
-          <button onclick="showPan('hotel')" style="background:none;border:none;color:rgba(255,255,255,.5);font-size:11px;cursor:pointer">⚙ Configurer</button>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div>
-            <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px">
-              <span style="opacity:.7">🧹 Ménage &amp; serviettes</span>
-              <span id="kpi-h-hrs-menage" style="color:#7EC8E3;font-weight:600">— h/an</span>
-            </div>
-            <div style="height:28px;background:rgba(255,255,255,.1);border-radius:5px">
-              <div id="kpi-bar-menage" style="height:100%;background:#7EC8E3;border-radius:5px;width:0%;transition:width 1s ease"></div>
-            </div>
-          </div>
-          <div>
-            <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px">
-              <span style="opacity:.7">📋 Check-in automatisé</span>
-              <span id="kpi-h-hrs-checkin" style="color:#F5C84C;font-weight:600">— h/an</span>
-            </div>
-            <div style="height:28px;background:rgba(255,255,255,.1);border-radius:5px">
-              <div id="kpi-bar-checkin" style="height:100%;background:#F5C84C;border-radius:5px;width:0%;transition:width 1s ease"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ══════════ KPI CLIENT (impact CO2 / Eau) ══════════ -->
-  <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;display:flex;align-items:center;gap:6px">
-    <i class="ti ti-leaf"></i>KPI client — impact affiché dans l'app éco-séjour
-  </div>
-  <div id="kpi-hero-client" style="margin-bottom:20px">
-    <div style="background:linear-gradient(135deg,#0D3320,#1A5C36);border-radius:var(--r);padding:24px;color:#fff;position:relative;overflow:hidden">
-      <div style="position:absolute;right:-30px;top:-30px;width:160px;height:160px;border-radius:50%;background:rgba(255,255,255,.04)"></div>
-      <div style="font-size:11px;opacity:.55;margin-bottom:14px">Impact environnemental moyen affiché au client (séjour type 3 nuits)</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-        <!-- Eau -->
-        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-          <div style="width:48px;height:48px;border-radius:12px;background:rgba(58,155,213,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-            <i class="ti ti-droplet-filled" style="font-size:24px;color:#7EC8E3"></i>
-          </div>
-          <div style="flex:1;min-width:80px">
-            <div style="font-family:Fraunces,serif;font-size:32px;font-weight:300;line-height:1;color:#7EC8E3" id="kpi-c-eau">— L</div>
-            <div style="font-size:12px;opacity:.7;margin-top:2px" id="kpi-c-eau-eq">eau économisée</div>
-          </div>
-          <div id="kpi-c-eau-picto" style="flex-shrink:0;display:flex;align-items:center;min-height:46px"></div>
-        </div>
-        <!-- CO2 -->
-        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-          <div style="width:48px;height:48px;border-radius:12px;background:rgba(46,204,113,.25);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-            <i class="ti ti-cloud" style="font-size:24px;color:#6EE7B7"></i>
-          </div>
-          <div style="flex:1;min-width:80px">
-            <div style="font-family:Fraunces,serif;font-size:32px;font-weight:300;line-height:1;color:#6EE7B7" id="kpi-c-co2">— kg</div>
-            <div style="font-size:12px;opacity:.7;margin-top:2px" id="kpi-c-co2-eq">CO₂ évité</div>
-          </div>
-          <div id="kpi-c-co2-picto" style="flex-shrink:0;display:flex;align-items:center;min-height:42px"></div>
-        </div>
-      </div>
-      <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.12);font-size:11px;opacity:.6">
-        Cet encart est identique à celui visible par le client à l'étape "Préférences éco" du parcours de check-in.
-      </div>
-    </div>
-  </div>
 </div>
 
 <!-- ════════════════ CHARTE ════════════════ -->
