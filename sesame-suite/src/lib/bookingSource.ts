@@ -1333,7 +1333,14 @@ export async function adoptBookingIntoSource(entityId: string, booking: Booking)
     bookingType: booking.bookingType,
     status: booking.status,
   }).catch((e) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) }));
-  if (!result.ok) return booking;
+  // ok:true ET skipped:true signifie que rien n'a été envoyé (endpoint ou
+  // identité non configurés, cf. pushBookingUpsert) — ne JAMAIS marquer
+  // importedFrom dans ce cas : Sesame n'a reçu aucune confirmation, la
+  // réservation resterait alors à tort éligible au QR/à l'ouverture de
+  // porte "réels" (accessQr/openDoor) alors qu'elle est inconnue de la
+  // source, provoquant un échec (ou pire, un appel silencieusement inerte)
+  // au lieu du repli simulé attendu.
+  if (!result.ok || result.skipped) return booking;
   return prisma.booking.update({ where: { id: booking.id }, data: { importedFrom: config.sourceName || "Connecteur externe" } });
 }
 
