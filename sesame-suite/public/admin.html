@@ -7749,13 +7749,17 @@ async function rcSearchRooms(){
 
 function rcRenderRooms(){
   var el = document.getElementById('rc-rooms');
-  if(!RC_STATE.rooms.length){ el.innerHTML = '<div style="color:var(--mu);font-size:12px;padding:8px 0">Aucune chambre disponible sur ces dates.</div>'; return; }
-  el.innerHTML = '<div style="font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px">Chambres disponibles</div>'
+  if(!RC_STATE.rooms.length){ el.innerHTML = '<div style="color:var(--mu);font-size:12px;padding:8px 0">Aucune chambre pour cet établissement.</div>'; return; }
+  // Toutes les chambres sont sélectionnables, y compris déjà occupées
+  // (simple badge d'info, jamais bloquant) — le personnel peut avoir
+  // besoin de rajouter une clé à une réservation existante ou de créer une
+  // clé "staff" sans rapport avec l'occupation réelle.
+  el.innerHTML = '<div style="font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px">Chambres</div>'
     + RC_STATE.rooms.map(function(rm, i){
         var on = RC_STATE.selectedRoom && RC_STATE.selectedRoom.id===rm.id;
         return '<div onclick="rcSelectRoom('+i+')" style="border:1.5px solid '+(on?'var(--am)':'var(--bdr)')+';border-radius:var(--rs);padding:10px 12px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center'+(on?';background:rgba(139,26,46,.05)':'')+'">'
-          + '<div><div style="font-weight:600;font-size:13px">'+esc(rm.name)+'</div><div style="font-size:11px;color:var(--mu)">'+[rm.category, rm.capacity?('jusqu’à '+rm.capacity+' pers.'):null].filter(Boolean).map(esc).join(' · ')+'</div></div>'
-          + '<div style="font-weight:600;font-size:13px">'+(rm.roomTotal||0).toLocaleString('fr-FR')+' € <span style="font-weight:400;color:var(--mu);font-size:11px">/ '+rm.nights+'n</span></div>'
+          + '<div><div style="font-weight:600;font-size:13px;display:flex;align-items:center;gap:6px">'+esc(rm.name)+(rm.occupied?'<span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:8px;background:rgba(133,79,11,.1);color:#854f0b">Occupée</span>':'')+'</div><div style="font-size:11px;color:var(--mu)">'+[rm.category, rm.capacity?('jusqu’à '+rm.capacity+' pers.'):null].filter(Boolean).map(esc).join(' · ')+'</div></div>'
+          + (rm.roomTotal ? '<div style="font-weight:600;font-size:13px">'+rm.roomTotal.toLocaleString('fr-FR')+' € <span style="font-weight:400;color:var(--mu);font-size:11px">/ '+rm.nights+'n</span></div>' : '')
           + '</div>';
       }).join('');
 }

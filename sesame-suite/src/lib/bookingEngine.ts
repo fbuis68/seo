@@ -230,12 +230,67 @@ export async function createBookingFromPaidOrder(entity: Entity, order: Order) {
  * Réservation créée directement sans paiement — soit le client a choisi
  * "payer sur place" sur booking.html (cf. routes/bookingEngine.ts POST
  * /bookingEngine/bookDirect, uniquement si BookingEngineConfig.requirePayment
- * est false), soit le personnel la saisit manuellement depuis le panneau
- * Réservations (cf. routes/booking.ts POST /booking/createManual, jamais
- * soumis à requirePayment — une saisie manuelle n'a pas besoin du module
- * "Réservation en ligne"). Aucun paiement encaissé : si la chambre a été
- * prise entre-temps, la demande est refusée plutôt que de créer un doublon.
+ * est false — onRaceLost:"reject", un visiteur public ne doit pas pouvoir
+ * doubler une chambre déjà prise sans même payer), soit le personnel la
+ * saisit manuellement depuis le panneau Réservations (cf. routes/booking.ts
+ * POST /booking/createManual — onRaceLost:"createAnyway" : le personnel
+ * peut délibérément vouloir une chambre déjà occupée, ex. rajouter une clé
+ * pour un accompagnant sur une réservation existante, ou créer une clé
+ * "staff" sans lien avec l'occupation réelle — jamais bloqué).
  */
-export async function createBookingDirectUnpaid(entity: Entity, draft: BookingDraft, source: string) {
-  return createBookingDirect(entity, draft, { source, onRaceLost: "reject" });
+export async function createBookingDirectUnpaid(entity: Entity, draft: BookingDraft, source: string, onRaceLost: "createAnyway" | "reject" = "reject") {
+  return createBookingDirect(entity, draft, { source, onRaceLost });
+}
+
+export interface StaffRoomOption extends AvailableRoom {
+  occupied: boolean;
+}
+
+/**
+ * Chambres pour le sélecteur du panneau admin "Créer une réservation" —
+ * contrairement à listAvailableRooms (page publique, qui ne montre QUE les
+ * chambres libres et avec un tarif renseigné), ceci renvoie TOUTES les
+ * chambres actives, avec un simple indicateur `occupied` : le personnel
+ * peut avoir besoin de choisir une chambre déjà occupée (clé
+ * supplémentaire pour un accompagnant, clé staff) ou sans tarif configuré
+ * (aucune facturation prévue pour ce type de clé).
+ */
+export async function listRoomsForStaff(entityId: string, start: Date, end: Date): Promise<StaffRoomOption[]> {
+  const nights = Math.max(0, nightsBetween(start, end));
+  const rooms = await prisma.room.findMany({ where: { entityId, available: true }, orderBy: { name: "asc" } });
+
+  const results: StaffRoomOption[] = [];
+  for (const room of rooms) {
+    const occupied = nights > 0 ? !(await isRoomAvailable(room.id, start, end)) : false;
+    results.push({
+      id: room.id,
+      code: room.code,
+      name: room.name,
+      category: room.category,
+      type: room.type,
+      capacity: room.capacity,
+      description: room.description,
+      photos: (room.photos as string[]) || [],
+      rate: room.rate || 0,
+      nights,
+      roomTotal: Math.round((room.rate || 0) * nights * 100) / 100,
+      occupied,
+    });
+  }
+  return results;
+}
+
+/**
+ * Valide un brouillon de réservation saisi manuellement — dates + existence
+ * de la chambre uniquement, JAMAIS sa disponibilité ni son tarif
+ * (contrairement à quoteBooking, utilisé par le parcours payant) : le
+ * personnel choisit délibérément la chambre depuis listRoomsForStaff, en
+ * connaissance de cause si elle est déjà occupée ou sans tarif.
+ */
+export async function validateManualBookingDraft(entityId: string, draft: BookingDraft): Promise<void> {
+  const start = new Date(draft.startDate);
+  const end = new Date(draft.endDate);
+  if (nightsBetween(start, end) <= 0) throw new Error("Dates invalides");
+  const room = await prisma.room.findFirst({ where: { id: draft.roomId, entityId } });
+  if (!room) throw new Error("Chambre introuvable");
 }

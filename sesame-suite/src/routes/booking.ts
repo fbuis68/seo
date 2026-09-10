@@ -8,7 +8,7 @@ import { fireTrigger } from "../lib/automation";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { encodeNfc, listNfcDevices, fetchAccessQr, openDoor, pushBookingUpdate, BookingSourceError } from "../lib/bookingSource";
 import { sendEmailRaw } from "../lib/email";
-import { listAvailableRooms, quoteBooking, createBookingDirectUnpaid, BookingDraft, OCCUPANT_AGE_CATEGORIES } from "../lib/bookingEngine";
+import { listRoomsForStaff, validateManualBookingDraft, createBookingDirectUnpaid, BookingDraft, OCCUPANT_AGE_CATEGORIES } from "../lib/bookingEngine";
 
 export const bookingRouter = Router();
 
@@ -565,12 +565,14 @@ bookingRouter.post(
 
 /**
  * GET /wa/booking/availableRooms?start=&end= — réservé au personnel
- * (panneau Réservations, bouton "Créer une réservation"). Réutilise le
- * même calcul de disponibilité que la page publique booking.html (cf.
- * lib/bookingEngine.ts) mais N'EST PAS soumis au module "Réservation en
- * ligne" (BookingEngineConfig) : une saisie manuelle par le personnel est
- * une fonctionnalité de gestion des réservations à part entière, pas
- * l'usage self-service que ce module active pour le public.
+ * (panneau Réservations, bouton "Créer une réservation"). N'EST PAS soumis
+ * au module "Réservation en ligne" (BookingEngineConfig) : une saisie
+ * manuelle par le personnel est une fonctionnalité de gestion des
+ * réservations à part entière, pas l'usage self-service que ce module
+ * active pour le public. Contrairement à la page publique booking.html,
+ * renvoie TOUTES les chambres (avec un indicateur `occupied`, jamais
+ * filtrées) : le personnel peut avoir besoin de choisir une chambre déjà
+ * occupée (clé supplémentaire pour un accompagnant, clé staff).
  */
 bookingRouter.get(
   "/booking/availableRooms",
@@ -580,7 +582,7 @@ bookingRouter.get(
     const start = new Date(req.query.start as string);
     const end = new Date(req.query.end as string);
     if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) throw new HttpError(400, "Dates invalides");
-    const rooms = await listAvailableRooms(entity.id, start, end);
+    const rooms = await listRoomsForStaff(entity.id, start, end);
     res.json({ rooms });
   })
 );
@@ -603,7 +605,11 @@ interface CreateManualBody {
  * jamais soumise à BookingEngineConfig.requirePayment, qui ne concerne que
  * la page publique booking.html. Les occupants sont optionnels ici
  * (contrairement à la réservation en ligne) : le personnel les collecte
- * souvent plus tard, au check-in.
+ * souvent plus tard, au check-in. AUCUN contrôle bloquant de disponibilité
+ * ni de tarif (cf. validateManualBookingDraft) : le personnel peut avoir
+ * besoin de rajouter une clé à une réservation déjà en place (chambre
+ * occupée), ou de créer une clé "staff" sans rapport avec l'occupation
+ * réelle — toujours créée, jamais refusée pour un chevauchement.
  */
 bookingRouter.post(
   "/booking/createManual",
@@ -632,8 +638,8 @@ bookingRouter.post(
     };
 
     try {
-      await quoteBooking(entity.id, draft); // valide dates/chambre/disponibilité
-      const booking = await createBookingDirectUnpaid(entity, draft, "saisie manuelle (personnel)");
+      await validateManualBookingDraft(entity.id, draft); // dates + existence de la chambre uniquement
+      const booking = await createBookingDirectUnpaid(entity, draft, "saisie manuelle (personnel)", "createAnyway");
       res.status(201).json(normaliseBooking(booking));
     } catch (e) {
       throw new HttpError(400, e instanceof Error ? e.message : "Réservation impossible");
