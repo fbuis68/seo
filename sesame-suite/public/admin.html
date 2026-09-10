@@ -1392,17 +1392,6 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     <div id="moduleFlow" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:8px 0"></div>
   </div>
 
-  <!-- ── ACCÈS NUMÉRIQUES (ESPACE CLIENT) ── -->
-  <div class="ca" style="margin-top:12px">
-    <div class="ch"><i class="ti ti-key"></i>Accès numériques — Espace client
-      <button class="chact" onclick="apAddPoint()"><i class="ti ti-plus" style="font-size:12px"></i> Ajouter un accès</button>
-    </div>
-    <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
-      <span>Définissez les accès proposés au client dans l'onglet "Clé digitale" de son espace (chambre, porte d'entrée, bagagerie, parking…). Le code <code>facilityCode</code> correspond à l'identifiant Sesame de l'accès ; laissez vide pour utiliser un mode simulé.</span>
-    </div>
-    <div id="apList"></div>
-  </div>
-
   <div class="brow"><button class="btn btn-p" onclick="savePan()"><i class="ti ti-device-floppy"></i> Sauvegarder</button></div>
 </div>
 
@@ -4556,7 +4545,7 @@ function showPan(id){
   closeSidebar();
   // Panel-specific init
   if(id==='charte'){renderColorList();}
-  if(id==='hotel'){try{renderModuleCards();renderAccessPoints();}catch(e){}}
+  if(id==='hotel'){try{renderModuleCards();}catch(e){}}
   if(id==='gains'){renderGains();}
   if(id==='eco'){renderEcoBanner();}
   if(id==='plan'){try{renderPlanCanvas();}catch(e){} try{renderAdminTags();}catch(e){}}
@@ -5137,50 +5126,6 @@ function toggleKycSelfie(required){
   if(!CFG.checkinModules.kyc) CFG.checkinModules.kyc={};
   CFG.checkinModules.kyc.selfieRequired = required;
   renderModuleCards();
-}
-
-// ═══════════════════════════════════════════════ ACCÈS NUMÉRIQUES (ESPACE CLIENT)
-
-var AP_ICONS = ['ti-door','ti-door-enter','ti-building','ti-briefcase','ti-parking','ti-pool','ti-barbell',
-  'ti-elevator','ti-stairs','ti-key','ti-lock','ti-car','ti-bike','ti-umbrella','ti-coffee','ti-glass'];
-
-function renderAccessPoints(){
-  if(!CFG.accessPoints) CFG.accessPoints=[];
-  var el = document.getElementById('apList');
-  if(!el) return;
-
-  if(!CFG.accessPoints.length){
-    el.innerHTML = '<div style="font-size:13px;color:var(--mu);padding:8px">Aucun accès configuré.</div>';
-    return;
-  }
-
-  el.innerHTML = CFG.accessPoints.map(function(ap, idx){
-    return '<div style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--bdr);border-radius:var(--rs);margin-bottom:8px;background:var(--bg)">'
-      +'<select onchange="apUpdate('+idx+',\'ico\',this.value)" style="width:60px;flex-shrink:0">'
-      + AP_ICONS.map(function(ic){return '<option value="'+ic+'"'+(ap.ico===ic?' selected':'')+'>'+ic.replace('ti-','')+'</option>';}).join('')
-      +'</select>'
-      +'<i class="ti '+ap.ico+'" style="font-size:18px;color:var(--a);flex-shrink:0"></i>'
-      +'<input type="text" value="'+esc(ap.label)+'" placeholder="Nom de l\'accès" oninput="apUpdate('+idx+',\'label\',this.value)" style="flex:1;min-width:100px">'
-      +'<input type="text" value="'+esc(ap.facilityCode||'')+'" placeholder="facilityCode Sesame (optionnel)" oninput="apUpdate('+idx+',\'facilityCode\',this.value)" style="flex:1;min-width:120px;font-family:monospace;font-size:12px">'
-      +'<label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--mu);flex-shrink:0;cursor:pointer">'
-      +'<input type="checkbox" '+(ap.auto?'checked ':'')+'onchange="apUpdate('+idx+',\'auto\',this.checked)" style="accent-color:var(--am)">Auto (chambre attribuée)</label>'
-      +'<button class="btn btn-s" onclick="apRemove('+idx+')" style="padding:5px 8px;color:var(--re);flex-shrink:0"><i class="ti ti-trash"></i></button>'
-      +'</div>';
-  }).join('');
-}
-function apAddPoint(){
-  if(!CFG.accessPoints) CFG.accessPoints=[];
-  CFG.accessPoints.push({id:'ap_'+Date.now(), label:'Nouvel accès', ico:'ti-door', facilityCode:'', auto:false});
-  renderAccessPoints();
-}
-function apUpdate(idx, field, value){
-  if(!CFG.accessPoints[idx]) return;
-  CFG.accessPoints[idx][field] = value;
-  if(field==='ico') renderAccessPoints();
-}
-function apRemove(idx){
-  CFG.accessPoints.splice(idx,1);
-  renderAccessPoints();
 }
 
 function toggleModule(k, active){
