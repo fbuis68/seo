@@ -266,6 +266,21 @@ main{flex:1;padding:12px 18px 60px}
 .rescard .rroom{font-weight:400;color:var(--mu);font-size:13px}
 .rescard .rmeta{font-size:12px;color:var(--mu);margin-top:4px;display:flex;flex-wrap:wrap;gap:2px 10px;align-items:center}
 .rescard .rmeta i{font-size:11px}
+
+/* Onglet Accès — carte non cliquable dans son ensemble (contrairement à
+   .rescard) : seul le gros bouton rond fait l'action, pour que ce soit sans
+   ambiguïté que toucher le bouton — pas la carte — ouvre l'accès. */
+.acccard{background:var(--card);border:1px solid var(--bdr);border-radius:var(--r);padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:14px}
+.acccard .accinfo{flex:1;min-width:0}
+.acccard .rname{font-family:'DM Serif Display',serif;font-size:18px;line-height:1.2}
+.acccard .accstatus{font-size:12px;color:var(--mu);margin-top:4px;min-height:16px}
+.acccard .accstatus.ok{color:#1A6B47}
+.acccard .accstatus.err{color:var(--urgent)}
+.accopenbtn{flex-shrink:0;width:56px;height:56px;border-radius:50%;border:none;background:var(--wine);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer;box-shadow:0 4px 10px rgba(139,26,46,.3)}
+.accopenbtn:active{background:var(--wine-d)}
+.accopenbtn:disabled{opacity:.6;cursor:default}
+.accopenbtn .ti-loader-2{animation:accspin .8s linear infinite}
+@keyframes accspin{to{transform:rotate(360deg)}}
 .badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
 .bdg{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px}
 .bdg-good{background:var(--good-l);color:var(--good)}
@@ -623,13 +638,23 @@ function rsToast(msg){
  * ce jour-là (accès de service, ménage, etc.).
  */
 async function rsOpenAccess(roomCode){
+  var btn = document.getElementById('accbtn-'+roomCode);
+  var statusEl = document.getElementById('accstatus-'+roomCode);
+  if(btn){ btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i>'; }
+  if(statusEl){ statusEl.className = 'accstatus'; statusEl.textContent = 'Ouverture en cours…'; }
   try{
     var r = await rsApiFetch('/wa/facility/openDirect', {method:'POST', body: JSON.stringify({code: roomCode})});
     var data = await r.json().catch(function(){ return {}; });
     if(!r.ok) throw new Error(data.error || 'Erreur');
-    rsToast(data.simulated ? ('Ouverture simulée ✓' + (data.simulatedReason ? ' — ' + data.simulatedReason : '')) : 'Accès ouvert ✓');
+    var okMsg = data.simulated ? ('Ouverture simulée ✓' + (data.simulatedReason ? ' — ' + data.simulatedReason : '')) : 'Accès ouvert ✓';
+    rsToast(okMsg);
+    if(statusEl){ statusEl.className = 'accstatus ok'; statusEl.textContent = okMsg; }
   }catch(e){
+    var errMsg = 'Erreur' + (e && e.message ? ' — ' + e.message : '');
     rsToast('Erreur lors de l\'ouverture de l\'accès' + (e && e.message ? ' — ' + e.message : ''));
+    if(statusEl){ statusEl.className = 'accstatus err'; statusEl.textContent = errMsg; }
+  }finally{
+    if(btn){ btn.disabled = false; btn.innerHTML = '<i class="ti ti-door"></i>'; }
   }
 }
 
@@ -650,9 +675,13 @@ function rsRenderAccess(){
   }
 
   listEl.innerHTML = rooms.map(function(r){
-    return '<div class="rescard" onclick="rsOpenAccess(\''+esc(r.code)+'\')">'
-      + '<div class="rname">'+esc(r.name||r.code)+(r.name&&r.name!==r.code?' <span class="rroom">— '+esc(r.code)+'</span>':'')+'</div>'
-      + '<div class="rmeta"><span><i class="ti ti-key"></i> Ouverture à distance</span></div>'
+    var safeCode = esc(r.code);
+    return '<div class="acccard">'
+      + '<div class="accinfo">'
+      + '<div class="rname">'+esc(r.name||r.code)+(r.name&&r.name!==r.code?' <span class="rroom">— '+safeCode+'</span>':'')+'</div>'
+      + '<div class="accstatus" id="accstatus-'+safeCode+'">Toucher pour ouvrir</div>'
+      + '</div>'
+      + '<button type="button" class="accopenbtn" id="accbtn-'+safeCode+'" onclick="rsOpenAccess(\''+safeCode+'\')" title="Ouvrir cet accès" aria-label="Ouvrir '+esc(r.name||r.code)+'"><i class="ti ti-door"></i></button>'
       + '</div>';
   }).join('');
 }
