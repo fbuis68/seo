@@ -7,6 +7,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/favicon-192.png">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
 <script>try{document.documentElement.setAttribute('data-theme', localStorage.getItem('SESAME_UI_THEME')||'signature');}catch(e){}</script>
 <style>
 /*
@@ -294,6 +295,10 @@ tr.erow td{background:var(--al)}
 .ff label{font-size:11px;color:var(--mu);display:block;margin-bottom:2px}
 .ff input,.ff select,.ff textarea{font-family:inherit;font-size:12px;width:100%;padding:0 8px;height:32px;border:0.5px solid var(--bdr2);border-radius:7px;background:var(--card);color:var(--tx);outline:none}
 .ff input:focus,.ff select:focus{border-color:var(--a);box-shadow:0 0 0 2px var(--al)}
+.pwwrap{position:relative}
+.pwwrap input{padding-right:34px}
+.pwtoggle-btn{position:absolute;right:2px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--mu);padding:5px;display:flex;align-items:center;justify-content:center;font-size:14px}
+.pwtoggle-btn:hover{color:var(--tx)}
 .ff textarea{height:60px;padding:6px 8px;resize:vertical}
 .feat-checks{display:flex;flex-wrap:wrap;gap:10px 16px}
 .feat-checks label{font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--tx)}
@@ -534,12 +539,21 @@ function apiFetch(url, opts){
   return fetch(API_BASE+url, opts);
 }
 
+/** Cf. togglePwVisibility (admin.html) : bouton "œil" pour afficher le mot de passe saisi. */
+function togglePwVisibility(id, btn){
+  var input = document.getElementById(id);
+  if(!input) return;
+  var showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  var icon = btn.querySelector('i');
+  if(icon) icon.className = showing ? 'ti ti-eye' : 'ti ti-eye-off';
+}
 function renderLoginForm(okMsg){
   document.getElementById('lg-box').innerHTML = `
     <div class="lg-title">Sesame <em style="color:#8a2b2b;font-style:normal">CRM</em></div>
     <div class="lg-sub">Réservé aux comptes Sesame Technology.</div>
     <div class="ff"><label>Email</label><input type="email" id="lg-email" placeholder="vous@sesame.technology"></div>
-    <div class="ff"><label>Mot de passe</label><input type="password" id="lg-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')crmLogin()"></div>
+    <div class="ff"><label>Mot de passe</label><div class="pwwrap"><input type="password" id="lg-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')crmLogin()"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility('lg-password',this)"><i class="ti ti-eye"></i></button></div></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="crmLogin()">Se connecter</button>
     <div style="text-align:center;margin-top:10px"><a href="#" onclick="renderForgotForm();return false;" style="font-size:12px;color:#8a2b2b">Mot de passe oublié ?</a></div>
     <div class="lg-err" id="lg-err"></div>
@@ -574,8 +588,8 @@ function renderResetForm(token){
   document.getElementById('lg-box').innerHTML = `
     <div class="lg-title">Nouveau mot de passe</div>
     <div class="lg-sub">Choisissez un nouveau mot de passe (8 caractères minimum).</div>
-    <div class="ff"><label>Nouveau mot de passe</label><input type="password" id="rp-password" placeholder="••••••••"></div>
-    <div class="ff"><label>Confirmer</label><input type="password" id="rp-password2" placeholder="••••••••" onkeydown="if(event.key==='Enter')submitResetPassword('${token}')"></div>
+    <div class="ff"><label>Nouveau mot de passe</label><div class="pwwrap"><input type="password" id="rp-password" placeholder="••••••••"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility('rp-password',this)"><i class="ti ti-eye"></i></button></div></div>
+    <div class="ff"><label>Confirmer</label><div class="pwwrap"><input type="password" id="rp-password2" placeholder="••••••••" onkeydown="if(event.key==='Enter')submitResetPassword('${token}')"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility('rp-password2',this)"><i class="ti ti-eye"></i></button></div></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="submitResetPassword('${token}')">Valider</button>
     <div class="lg-err" id="lg-err"></div>`;
 }
