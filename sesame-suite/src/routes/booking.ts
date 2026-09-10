@@ -473,7 +473,14 @@ bookingRouter.get(
 
     const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
     if (!config || !config.qrEndpointPath || booking.importedFrom !== (config.sourceName || "Connecteur externe")) {
-      res.json({ simulated: true });
+      // Sans connecteur réel, checkin.html ignore ce champ et affiche son
+      // propre pattern de démonstration (cf. espRenderQr) — généré quand
+      // même ici pour les panneaux staff (admin.html/reservations.html, cf.
+      // "Générer une clé"), qui affichent toujours un vrai QR scannable
+      // plutôt qu'un motif factice, encodant simplement le code de
+      // réservation.
+      const demoQrImage = await QRCode.toDataURL(booking.code, { margin: 1, width: 320 });
+      res.json({ simulated: true, qrImage: demoQrImage });
       return;
     }
 

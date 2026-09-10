@@ -13810,6 +13810,16 @@ function resaOpenDetail(code){
           + '<span style="color:var(--mu)">'+row[0]+'</span><span style="font-weight:600;text-align:right">'+row[1]+'</span></div>';
       }).join('')
     + '</div>';
+  // Clé numérique (QR code) — le bouton "Ouvrir la porte" tient DANS le QR
+  // lui-même (le toucher déclenche l'ouverture) plutôt qu'à côté, pour un
+  // geste unique côté personnel : montrer le QR au client ET ouvrir la
+  // porte si besoin. Chargée à part (cf. resaLoadKey), même connecteur que
+  // l'onglet "Clé digitale" côté client (GET /wa/booking/accessQr, PUBLIC
+  // — le code de réservation fait office de jeton).
+  html += '<div id="resa-detail-key" style="margin-top:12px;border:1px solid var(--bdr);border-radius:var(--rs);padding:16px;background:var(--bg);text-align:center">'
+    + '<div style="font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.03em;margin-bottom:10px">Clé numérique</div>'
+    + '<div id="resa-detail-key-body"><div class="spin" style="margin:0 auto"></div></div>'
+    + '</div>';
   // Invités (Pass) — chargés à part, cf. resaLoadPasses appelé après avoir
   // posé ce placeholder dans le DOM (une réservation Sesame peut associer
   // PLUSIEURS Pass, un par personne invitée — "invitations").
@@ -13856,6 +13866,42 @@ function resaOpenDetail(code){
   document.getElementById('resa-detail-body').innerHTML = html;
   document.getElementById('resaDetailModal').style.display = 'flex';
   resaLoadPasses(b.code);
+  resaLoadKey(b.code);
+}
+
+/** Clé numérique de la réservation — QR récupéré depuis le connecteur réel
+ * s'il est configuré (cf. GET /wa/booking/accessQr), sinon un QR généré
+ * côté serveur encodant le code de réservation (simulated:true — toujours
+ * un vrai QR scannable ici, contrairement à espRenderQr côté client qui
+ * affiche un motif factice). Toucher le QR ouvre directement la porte
+ * (resaKeyOpenDoor) — pas de bouton séparé. */
+async function resaLoadKey(code){
+  var body = document.getElementById('resa-detail-key-body');
+  if(!body) return;
+  try{
+    var r = await adminFetch('/wa/booking/accessQr?code='+encodeURIComponent(code));
+    var data = await r.json();
+    if(!r.ok || !data.qrImage){ body.innerHTML = '<div style="font-size:12px;color:var(--mu)">QR indisponible pour cette réservation</div>'; return; }
+    body.innerHTML = '<button type="button" onclick="resaKeyOpenDoor(\''+esc(code)+'\',this)" style="border:0;background:none;padding:0;cursor:pointer" title="Toucher pour ouvrir la porte">'
+      + '<img src="'+data.qrImage+'" alt="Clé numérique" style="width:160px;height:160px;border-radius:10px;border:1px solid var(--bdr);display:block;margin:0 auto">'
+      + '</button>'
+      + '<div style="font-size:11px;color:var(--mu);margin-top:8px">Touchez le QR code pour ouvrir la porte'+(data.simulated?' (simulation — aucun connecteur réel configuré)':'')+'</div>';
+  }catch(e){
+    body.innerHTML = '<div style="font-size:12px;color:var(--mu)">QR indisponible pour cette réservation</div>';
+  }
+}
+async function resaKeyOpenDoor(code, btn){
+  if(btn) btn.disabled = true;
+  try{
+    var r = await adminFetch('/wa/booking/openDoor', {method:'POST', body: JSON.stringify({code:code})});
+    var data = await r.json().catch(function(){ return {}; });
+    if(!r.ok) throw new Error(data.error || 'Erreur');
+    toast(data.simulated ? 'Ouverture simulée ✓' : 'Porte ouverte ✓');
+  }catch(e){
+    toast('Erreur lors de l\'ouverture de la porte');
+  }finally{
+    if(btn) btn.disabled = false;
+  }
 }
 
 /**
