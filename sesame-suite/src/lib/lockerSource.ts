@@ -1,5 +1,6 @@
 import { prisma } from "../db";
 import type { LockerSourceConfig, Entity, Product } from "@prisma/client";
+import { getOrCreateLockerVendor } from "./vendor";
 
 // Connecteur Mon Casier Frais (docs.moncasierfrais.fr/api, version consultée
 // le 28/08/2026) — casiers réfrigérés vendant des produits locaux, associés
@@ -227,6 +228,12 @@ export async function runCatalogImport(entity: Entity, config: LockerSourceConfi
       config,
       catalog.map((p) => p.id)
     );
+    // Rattache chaque article importé à un point de vente dédié "Mon Casier
+    // Frais" (cf. lib/vendor.ts) — le connecteur apparaît ainsi comme un
+    // point de vente à part entière, filtrable côté client et distinguable
+    // sur les commandes admin, au même titre que "Bar Piscine" ou tout autre
+    // point de vente interne.
+    const lockerVendor = await getOrCreateLockerVendor(entity.id);
 
     let created = 0;
     let updated = 0;
@@ -263,12 +270,22 @@ export async function runCatalogImport(entity: Entity, config: LockerSourceConfi
         };
 
         if (existing) {
-          await prisma.product.update({ where: { id: existing.id }, data });
+          await prisma.product.update({
+            where: { id: existing.id },
+            data: {
+              ...data,
+              // connectOrCreate plutôt que create seul : un produit importé
+              // avant l'introduction de ce point de vente dédié (ou dont le
+              // lien aurait été retiré manuellement) doit le récupérer au
+              // prochain sync, sans jamais dupliquer le lien s'il existe déjà.
+              saleVendors: { connectOrCreate: [{ where: { productId_vendorId: { productId: existing.id, vendorId: lockerVendor.id } }, create: { vendorId: lockerVendor.id } }] },
+            },
+          });
           updated++;
         } else {
           const maxOrder = await prisma.product.count({ where: { entityId: entity.id } });
           await prisma.product.create({
-            data: { ...data, entityId: entity.id, active: true, sortOrder: maxOrder },
+            data: { ...data, entityId: entity.id, active: true, sortOrder: maxOrder, saleVendors: { create: [{ vendorId: lockerVendor.id }] } },
           });
           created++;
         }

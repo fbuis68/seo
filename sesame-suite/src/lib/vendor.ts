@@ -9,6 +9,15 @@ import { HttpError } from "./asyncHandler";
 
 type CartItem = { id: string; label: string; price: number; qty: number };
 
+// Nom du point de vente interne dédié au connecteur Mon Casier Frais (cf.
+// getOrCreateLockerVendor ci-dessous) — exclu explicitement de
+// getOrCreateDefaultVendor pour ne jamais être pris à tort pour LE point de
+// vente générique de l'hôtel (ex : un établissement qui active le
+// connecteur casier avant d'avoir jamais créé de produit boutique classique
+// verrait sinon son tout premier produit "Boutique principale" rattaché par
+// erreur au casier, faute d'un autre point de vente interne existant).
+const LOCKER_VENDOR_NAME = "Mon Casier Frais";
+
 /**
  * Le point de vente interne créé automatiquement pour tout établissement qui
  * n'en a pas encore — garantit qu'un produit du catalogue propre de l'hôtel
@@ -20,10 +29,31 @@ type CartItem = { id: string; label: string; price: number; qty: number };
  * depuis (onboarding, provisionEntity).
  */
 export async function getOrCreateDefaultVendor(entityId: string) {
-  const existing = await prisma.vendor.findFirst({ where: { entityId, kind: "internal" }, orderBy: { createdAt: "asc" } });
+  const existing = await prisma.vendor.findFirst({
+    where: { entityId, kind: "internal", name: { not: LOCKER_VENDOR_NAME } },
+    orderBy: { createdAt: "asc" },
+  });
   if (existing) return existing;
   return prisma.vendor.create({
     data: { entityId, name: "Boutique principale", kind: "internal", status: "active", commissionPct: 0 },
+  });
+}
+
+/**
+ * Point de vente interne dédié au connecteur Mon Casier Frais — chaque
+ * article importé (cf. lib/lockerSource.ts runCatalogImport) y est rattaché
+ * automatiquement, pour que le connecteur apparaisse comme un point de
+ * vente à part entière : filtrable côté client (cf. checkin.html,
+ * posMatchesSelection) et affiché comme tel sur les commandes admin (cf.
+ * roomservice.ts shapeProduct posNames), au même titre qu'un point de vente
+ * interne classique ("Bar Piscine"…) — jamais choisi manuellement par
+ * l'admin, entièrement piloté par la présence du connecteur.
+ */
+export async function getOrCreateLockerVendor(entityId: string) {
+  const existing = await prisma.vendor.findFirst({ where: { entityId, name: LOCKER_VENDOR_NAME } });
+  if (existing) return existing;
+  return prisma.vendor.create({
+    data: { entityId, name: LOCKER_VENDOR_NAME, kind: "internal", status: "active", commissionPct: 0, icon: "ti-fridge" },
   });
 }
 
