@@ -14076,7 +14076,8 @@ async function resaLoadKey(code){
     body.innerHTML = '<button type="button" onclick="resaKeyOpenDoor(\''+esc(code)+'\',this)" style="border:0;background:none;padding:0;cursor:pointer" title="Toucher pour ouvrir la porte">'
       + '<img src="'+data.qrImage+'" alt="Clé numérique" style="width:160px;height:160px;border-radius:10px;border:1px solid var(--bdr);display:block;margin:0 auto">'
       + '</button>'
-      + '<div style="font-size:11px;color:var(--mu);margin-top:8px">Touchez le QR code pour ouvrir la porte'+(data.simulated?' (simulation — aucun connecteur réel configuré)':'')+'</div>'
+      + '<div style="font-size:11px;color:var(--mu);margin-top:8px">Touchez le QR code pour ouvrir la porte'+(data.simulated?' (simulation)':'')+'</div>'
+      + (data.simulated && data.simulatedReason ? '<div style="font-size:11px;color:#b45309;margin-top:4px">⚠ '+esc(data.simulatedReason)+'</div>' : '')
       + validLine;
   }catch(e){
     body.innerHTML = '<div style="font-size:12px;color:var(--mu)">QR indisponible pour cette réservation</div>';
@@ -14088,7 +14089,7 @@ async function resaKeyOpenDoor(code, btn){
     var r = await adminFetch('/wa/booking/openDoor', {method:'POST', body: JSON.stringify({code:code})});
     var data = await r.json().catch(function(){ return {}; });
     if(!r.ok) throw new Error(data.error || 'Erreur');
-    toast(data.simulated ? 'Ouverture simulée ✓' : 'Porte ouverte ✓');
+    toast(data.simulated ? ('Ouverture simulée ✓' + (data.simulatedReason ? ' — ' + data.simulatedReason : '')) : 'Porte ouverte ✓');
   }catch(e){
     toast('Erreur lors de l\'ouverture de la porte');
   }finally{

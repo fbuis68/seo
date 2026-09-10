@@ -483,7 +483,26 @@ bookingRouter.get(
     if (!booking) throw new HttpError(404, "Réservation introuvable");
 
     const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
-    if (!config || !config.qrEndpointPath || booking.importedFrom !== (config.sourceName || "Connecteur externe")) {
+    // simulatedReason distingue explicitement POURQUOI le repli simulé est
+    // pris (endpoint non configuré vs réservation non "adoptée" par CETTE
+    // source) — sans ça, ce dernier cas (le plus piégeux : une réservation
+    // créée/modifiée dont l'adoption a échoué, ou dont importedFrom ne
+    // correspond plus à sourceName après un renommage du connecteur) était
+    // indiscernable côté personnel d'un simple oubli de configuration.
+    let simulatedReason: string | undefined;
+    if (!config) {
+      simulatedReason = "Aucune intégration réservations configurée pour cet établissement.";
+    } else if (!config.qrEndpointPath) {
+      simulatedReason = "Récupération QR / code d'accès non configurée (réglages techniques avancés).";
+    } else {
+      const expectedSource = config.sourceName || "Connecteur externe";
+      if (booking.importedFrom !== expectedSource) {
+        simulatedReason = booking.importedFrom
+          ? `Réservation reconnue par "${booking.importedFrom}", pas par la source actuellement configurée ("${expectedSource}") — le nom de la source a peut-être changé depuis l'import/l'adoption de cette réservation.`
+          : `Réservation non reconnue par "${expectedSource}" (jamais synchronisée ni créée avec succès côté source).`;
+      }
+    }
+    if (simulatedReason || !config) {
       // Sans connecteur réel, checkin.html ignore ce champ et affiche son
       // propre pattern de démonstration (cf. espRenderQr) — généré quand
       // même ici pour les panneaux staff (admin.html/reservations.html, cf.
@@ -491,7 +510,7 @@ bookingRouter.get(
       // plutôt qu'un motif factice, encodant simplement le code de
       // réservation.
       const demoQrImage = await QRCode.toDataURL(booking.code, { margin: 1, width: 320 });
-      res.json({ simulated: true, qrImage: demoQrImage });
+      res.json({ simulated: true, simulatedReason, qrImage: demoQrImage });
       return;
     }
 
@@ -547,8 +566,24 @@ bookingRouter.post(
     if (!booking) throw new HttpError(404, "Réservation introuvable");
 
     const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
-    if (!config || !config.doorEndpointPath || booking.importedFrom !== (config.sourceName || "Connecteur externe")) {
-      res.json({ simulated: true });
+    // Cf. commentaire équivalent sur /booking/accessQr : simulatedReason
+    // distingue endpoint non configuré vs réservation non "adoptée" par
+    // cette source (le cas le plus piégeux à diagnostiquer sans lui).
+    let simulatedReason: string | undefined;
+    if (!config) {
+      simulatedReason = "Aucune intégration réservations configurée pour cet établissement.";
+    } else if (!config.doorEndpointPath) {
+      simulatedReason = "Ouverture de porte à distance non configurée (réglages techniques avancés).";
+    } else {
+      const expectedSource = config.sourceName || "Connecteur externe";
+      if (booking.importedFrom !== expectedSource) {
+        simulatedReason = booking.importedFrom
+          ? `Réservation reconnue par "${booking.importedFrom}", pas par la source actuellement configurée ("${expectedSource}") — le nom de la source a peut-être changé depuis l'import/l'adoption de cette réservation.`
+          : `Réservation non reconnue par "${expectedSource}" (jamais synchronisée ni créée avec succès côté source).`;
+      }
+    }
+    if (simulatedReason || !config) {
+      res.json({ simulated: true, simulatedReason });
       return;
     }
 
