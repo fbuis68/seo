@@ -5,7 +5,7 @@ import { resolveEntity } from "../lib/entity";
 import { normaliseBooking } from "../lib/normalize";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { fireTrigger } from "../lib/automation";
-import { bookingTemplateVars } from "../lib/templateVars";
+import { bookingTemplateVars, hotelContactInfo } from "../lib/templateVars";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { encodeNfc, listNfcDevices, fetchAccessQr, openDoor, pushBookingUpdate, adoptBookingIntoSource, BookingSourceError } from "../lib/bookingSource";
 import { sendEmailRaw } from "../lib/email";
@@ -81,13 +81,15 @@ bookingRouter.post(
       },
     });
 
-    fireTrigger("checkin.completed", {
-      entityId: entity.id,
-      targetType: "booking",
-      targetId: updated.id,
-      recipient: { email: updated.personEmail, phone: updated.personPhone },
-      variables: bookingTemplateVars(updated, entity.name),
-    }).catch((e) => console.error("[automation] checkin.completed:", e));
+    hotelContactInfo(entity.id).then((hotel) =>
+      fireTrigger("checkin.completed", {
+        entityId: entity.id,
+        targetType: "booking",
+        targetId: updated.id,
+        recipient: { email: updated.personEmail, phone: updated.personPhone },
+        variables: bookingTemplateVars(updated, hotel),
+      })
+    ).catch((e) => console.error("[automation] checkin.completed:", e));
 
     res.json(normaliseBooking(updated));
   })

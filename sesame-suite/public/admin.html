@@ -1234,7 +1234,10 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         </div>
       </div>
       <div class="fi"><label class="lb">Adresse</label><input type="text" id="h-addr" placeholder="12 rue des Lilas, 44000 Nantes"></div>
-      <div class="fi"><label class="lb">Email contact</label><input type="email" id="h-email"></div>
+      <div class="g2">
+        <div class="fi"><label class="lb">Email contact</label><input type="email" id="h-email"></div>
+        <div class="fi"><label class="lb">Téléphone contact</label><input type="text" id="h-phone" placeholder="+33 2 40 00 00 00"></div>
+      </div>
       <div class="g2">
         <div class="fi"><label class="lb">Devise</label>
           <select id="h-currency" onchange="liveSync()">
@@ -4242,7 +4245,7 @@ Accès au salon Premium</textarea>
 // ═══════════════════════════════════════════════ CONFIG ENGINE
 var DEFAULT = {
   hotelName:'Hôtel Les Jardins',hotelSlogan:'Séjour responsable & récompensé',entityId:'E00000001',
-  stars:3,hotelAddr:'',hotelEmail:'',timezone:'Europe/Paris',
+  stars:3,hotelAddr:'',hotelEmail:'',hotelPhone:'',timezone:'Europe/Paris',
   colors:{primary:'#8B1A2E',primaryLight:'#FDEDF0',accent:'#8B1A2E',headerBg:'#17121E',
     headerText:'#FFFFFF',bg:'#F5F3F0',cardBg:'#FFFFFF',border:'#E3DED8',text:'#14121E',btnNav:'#8B1A2E'},
   radius:14,radiusBtn:8,shadow:true,darkH:true,
@@ -4687,7 +4690,7 @@ function populateAll(){
   setVal('h-name',CFG.hotelName);setVal('h-entityId',CFG.entityId);
   var checkinCode = (ADMIN_ROLE==='sesame' && ACTIVE_ENTITY_CODE) ? ACTIVE_ENTITY_CODE : HOME_ENTITY_CODE;
   setVal('h-checkinUrl', checkinCode ? (window.location.origin+'/?entityCode='+checkinCode) : '');
-  setVal('h-addr',CFG.hotelAddr||'');setVal('h-email',CFG.hotelEmail||'');
+  setVal('h-addr',CFG.hotelAddr||'');setVal('h-email',CFG.hotelEmail||'');setVal('h-phone',CFG.hotelPhone||'');
   setVal('h-stars',CFG.stars);
   setVal('h-currency',CFG.currency||'EUR');
   setVal('h-lang',CFG.lang||'fr');
@@ -4744,7 +4747,7 @@ function collectAll(){
   CFG.shadow=getChk('c-shadow');CFG.darkH=getChk('c-darkH');
   var hn=getVal('h-name');if(hn)CFG.hotelName=hn;
   var ei=getVal('h-entityId');if(ei)CFG.entityId=ei;
-  CFG.hotelAddr=getVal('h-addr')||'';CFG.hotelEmail=getVal('h-email')||'';
+  CFG.hotelAddr=getVal('h-addr')||'';CFG.hotelEmail=getVal('h-email')||'';CFG.hotelPhone=getVal('h-phone')||'';
   CFG.stars=parseInt(getVal('h-stars'))||3;
   CFG.currency=getVal('h-currency')||'EUR';
   CFG.lang=getVal('h-lang')||'fr';
@@ -8463,8 +8466,10 @@ function emlOpenTemplateModal(id){
 var EML_TPL_VARS = [
   {key:'prenom', desc:'Prénom du client (réservation)'},
   {key:'nom', desc:'Nom du client, ou nom de l\'établissement/prospect selon le déclencheur'},
-  {key:'code', desc:'Code de réservation'},
+  {key:'code', desc:'Code de réservation (numéro de booking) — présent aussi sur les déclencheurs commande, quand la commande est rattachée à une réservation'},
   {key:'hotel', desc:'Nom de l\'établissement (déclencheurs réservation/commande/ménage)'},
+  {key:'adresseHotel', desc:'Adresse de l\'établissement (réglée dans Hôtel & Catégorie)'},
+  {key:'telephoneHotel', desc:'Téléphone de contact de l\'établissement (réglé dans Hôtel & Catégorie)'},
   {key:'chambre', desc:'Numéro ou nom de la chambre (déclencheurs réservation/commande/ménage)'},
   {key:'dateArrivee', desc:'Date d\'arrivée du séjour (déclencheurs réservation)'},
   {key:'dateDepart', desc:'Date de départ du séjour (déclencheurs réservation)'},

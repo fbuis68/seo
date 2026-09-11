@@ -4,7 +4,7 @@ import { resolveEntity } from "../lib/entity";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { fireTrigger } from "../lib/automation";
-import { orderTemplateVars } from "../lib/templateVars";
+import { orderTemplateVars, hotelContactInfo } from "../lib/templateVars";
 import { reserveLockersForOrder, cancelLockerReservation, LockerReservationItem } from "../lib/lockerSource";
 import { recordVendorCommissions, resolveInternalVendorIds } from "../lib/vendor";
 
@@ -138,25 +138,26 @@ roomserviceRouter.get(
  * commande effectivement créée (paiement non requis) ou confirmée payée.
  */
 export async function finalizeOrder(
-  entity: { id: string; name: string },
+  entity: { id: string },
   order: { id: string; total: number; bookingCode: string | null; roomCode: string | null; roomName: string | null },
   booking: { id: string; personEmail: string; personPhone: string | null; personFirstname: string; personLastname: string; lockerAccess: unknown } | null,
   items: CartItem[],
   note?: string
 ) {
   if (booking) {
-    fireTrigger("order.created", {
-      entityId: entity.id,
-      targetType: "order",
-      targetId: order.id,
-      recipient: { email: booking.personEmail, phone: booking.personPhone },
-      variables: {
-        prenom: booking.personFirstname,
-        nom: booking.personLastname,
-        hotel: entity.name,
-        ...orderTemplateVars(order, items),
-      },
-    }).catch((e) => console.error("[automation] order.created:", e));
+    hotelContactInfo(entity.id).then((hotel) =>
+      fireTrigger("order.created", {
+        entityId: entity.id,
+        targetType: "order",
+        targetId: order.id,
+        recipient: { email: booking.personEmail, phone: booking.personPhone },
+        variables: {
+          prenom: booking.personFirstname,
+          nom: booking.personLastname,
+          ...orderTemplateVars(order, items, hotel),
+        },
+      })
+    ).catch((e) => console.error("[automation] order.created:", e));
   }
 
   // Réservation best-effort d'un casier Mon Casier Frais pour les articles
@@ -297,39 +298,23 @@ roomserviceRouter.post(
 
     const updated = await prisma.order.update({ where: { id }, data: { status } });
 
-    if (status === "delivered" && order.status !== "delivered" && updated.bookingId) {
-      const booking = await prisma.booking.findUnique({ where: { id: updated.bookingId } });
+    if ((status === "delivered" && order.status !== "delivered") || (status === "cancelled" && order.status !== "cancelled")) {
+      const booking = updated.bookingId ? await prisma.booking.findUnique({ where: { id: updated.bookingId } }) : null;
       if (booking) {
-        fireTrigger("order.delivered", {
-          entityId: entity.id,
-          targetType: "order",
-          targetId: updated.id,
-          recipient: { email: booking.personEmail, phone: booking.personPhone },
-          variables: {
-            prenom: booking.personFirstname,
-            nom: booking.personLastname,
-            hotel: entity.name,
-            ...orderTemplateVars(updated, (updated.items as CartItem[]) || []),
-          },
-        }).catch((e) => console.error("[automation] order.delivered:", e));
-      }
-    }
-
-    if (status === "cancelled" && order.status !== "cancelled" && updated.bookingId) {
-      const booking = await prisma.booking.findUnique({ where: { id: updated.bookingId } });
-      if (booking) {
-        fireTrigger("order.cancelled", {
-          entityId: entity.id,
-          targetType: "order",
-          targetId: updated.id,
-          recipient: { email: booking.personEmail, phone: booking.personPhone },
-          variables: {
-            prenom: booking.personFirstname,
-            nom: booking.personLastname,
-            hotel: entity.name,
-            ...orderTemplateVars(updated, (updated.items as CartItem[]) || []),
-          },
-        }).catch((e) => console.error("[automation] order.cancelled:", e));
+        const triggerKey = status === "delivered" ? "order.delivered" : "order.cancelled";
+        hotelContactInfo(entity.id).then((hotel) =>
+          fireTrigger(triggerKey, {
+            entityId: entity.id,
+            targetType: "order",
+            targetId: updated.id,
+            recipient: { email: booking.personEmail, phone: booking.personPhone },
+            variables: {
+              prenom: booking.personFirstname,
+              nom: booking.personLastname,
+              ...orderTemplateVars(updated, (updated.items as CartItem[]) || [], hotel),
+            },
+          })
+        ).catch((e) => console.error(`[automation] ${triggerKey}:`, e));
       }
     }
 

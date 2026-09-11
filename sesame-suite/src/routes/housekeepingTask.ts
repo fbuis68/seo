@@ -4,7 +4,7 @@ import { resolveEntity } from "../lib/entity";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { fireTrigger } from "../lib/automation";
-import { bookingTemplateVars } from "../lib/templateVars";
+import { bookingTemplateVars, hotelContactInfo } from "../lib/templateVars";
 
 export const housekeepingTaskRouter = Router();
 
@@ -249,13 +249,15 @@ housekeepingTaskRouter.post(
     if (updated.status === "done" && task.status !== "done" && updated.bookingCode) {
       const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code: updated.bookingCode } } });
       if (booking) {
-        fireTrigger("housekeeping.completed", {
-          entityId: entity.id,
-          targetType: "housekeepingTask",
-          targetId: updated.id,
-          recipient: { email: booking.personEmail, phone: booking.personPhone },
-          variables: bookingTemplateVars(booking, entity.name),
-        }).catch((e) => console.error("[automation] housekeeping.completed:", e));
+        hotelContactInfo(entity.id).then((hotel) =>
+          fireTrigger("housekeeping.completed", {
+            entityId: entity.id,
+            targetType: "housekeepingTask",
+            targetId: updated.id,
+            recipient: { email: booking.personEmail, phone: booking.personPhone },
+            variables: bookingTemplateVars(booking, hotel),
+          })
+        ).catch((e) => console.error("[automation] housekeeping.completed:", e));
       }
     }
 

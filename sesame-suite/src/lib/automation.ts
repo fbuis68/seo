@@ -3,7 +3,7 @@ import { sendMessage } from "./messaging";
 import { Channel } from "./messageTemplate";
 import { todayInTz } from "./timezone";
 import { getOrCreateQuestionnaireSend, questionnaireLinkUrl, QuestionnaireTargetType } from "./questionnaire";
-import { bookingTemplateVars } from "./templateVars";
+import { bookingTemplateVars, hotelContactInfo } from "./templateVars";
 
 /**
  * Catalogue fixe des déclencheurs métier — c'est la seule source de vérité
@@ -287,7 +287,7 @@ async function sweepDateRule(rule: {
     console.error(`[automation] lecture des réservations échouée pour la règle "${rule.name}":`, err);
     return;
   }
-  const hotel = rule.entityId ? await prisma.entity.findUnique({ where: { id: rule.entityId }, select: { name: true } }) : null;
+  const hotel = rule.entityId ? await hotelContactInfo(rule.entityId) : { name: "" };
 
   for (const b of bookings) {
     const to = resolveRecipient(rule, b.personEmail, b.personPhone);
@@ -301,7 +301,7 @@ async function sweepDateRule(rule: {
         rule.questionnaireId,
         "booking",
         b.id,
-        bookingTemplateVars(b, hotel?.name || "")
+        bookingTemplateVars(b, hotel)
       );
       await sendMessage({
         entityId: rule.entityId,
