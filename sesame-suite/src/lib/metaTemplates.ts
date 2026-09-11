@@ -75,6 +75,30 @@ export function toMetaTemplateBody(bodyHtml: string): string {
   return bodyHtml.replace(/\{\{\s*\w+\s*\}\}/g, () => `{{${++i}}}`);
 }
 
+/**
+ * Meta renvoie ce code générique sur un rejet automatique (analyse de
+ * contenu synchrone, avant toute revue humaine) — la valeur brute (ex.
+ * "INCORRECT_CATEGORY", "TAG_CONTENT_MISMATCH", "SCAM"...) n'est ni traduite
+ * ni toujours limpide pour un non-initié, d'où ce lexique best-effort.
+ * Liste non exhaustive : Meta peut renvoyer d'autres valeurs, affichées
+ * telles quelles si absentes d'ici plutôt que masquées.
+ */
+const REJECTED_REASON_FR: Record<string, string> = {
+  INCORRECT_CATEGORY:
+    "Catégorie incorrecte — le contenu ne correspond pas à la catégorie choisie (ex. un ton d'accueil/promotionnel soumis en \"Utilitaire\" doit souvent passer en \"Marketing\").",
+  TAG_CONTENT_MISMATCH: "Le contenu ne correspond pas à la catégorie déclarée.",
+  INVALID_FORMAT: "Format invalide (variables mal placées, composants incohérents).",
+  ABUSIVE_CONTENT: "Contenu jugé abusif ou trompeur.",
+  SCAM: "Contenu jugé relever d'une tentative d'hameçonnage/arnaque — souvent déclenché par une demande d'identifiants (email + code) couplée à un lien externe.",
+  PROMOTIONAL: "Contenu jugé promotionnel — à soumettre en catégorie \"Marketing\" plutôt qu'\"Utilitaire\".",
+  NONE: "Aucun motif détaillé fourni par Meta.",
+};
+
+function explainRejectedReason(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  return REJECTED_REASON_FR[raw] ? `${raw} — ${REJECTED_REASON_FR[raw]}` : raw;
+}
+
 export async function createMetaMessageTemplate(
   cfg: MetaCfg,
   opts: { name: string; category: string; bodyHtml: string }
@@ -93,19 +117,37 @@ export async function createMetaMessageTemplate(
       components: [{ type: "BODY", text: bodyText }],
     },
   });
+  const status = (j.status as string) || "PENDING";
+  let rejectedReason: string | undefined;
+  // La réponse de création ne porte jamais le motif de rejet (même pour un
+  // rejet synchrone immédiat) — il faut une requête de lecture séparée pour
+  // l'obtenir, cf. listMetaMessageTemplates.
+  if (status === "REJECTED") {
+    try {
+      const rows = await listMetaMessageTemplates(cfg);
+      const match = rows.find((r) => r.name === name);
+      rejectedReason = explainRejectedReason(match?.rejectedReason);
+    } catch (e) {
+      console.error("[metaTemplates] échec de la lecture du motif de rejet :", e);
+    }
+  }
   return {
     name,
     id: (j.id as string) || "",
-    status: (j.status as string) || "PENDING",
+    status,
     category: (j.category as string) || category,
+    rejectedReason,
   };
 }
 
 export async function listMetaMessageTemplates(cfg: MetaCfg) {
   const j = await metaGraphRequest(
     cfg,
-    `/${wabaId(cfg)}/message_templates?fields=name,status,category,language&limit=200`,
+    `/${wabaId(cfg)}/message_templates?fields=name,status,category,language,rejected_reason&limit=200`,
     { method: "GET" }
   );
-  return (j.data || []) as { name: string; status: string; category: string; language: string }[];
+  const rows = (j.data || []) as { name: string; status: string; category: string; language: string; rejected_reason?: string }[];
+  // Meta renvoie rejected_reason en snake_case (comme tous ses champs) —
+  // reformaté ici en camelCase pour rester cohérent avec le reste du code TS.
+  return rows.map((r) => ({ name: r.name, status: r.status, category: r.category, language: r.language, rejectedReason: r.rejected_reason }));
 }

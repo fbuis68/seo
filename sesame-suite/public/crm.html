@@ -5614,8 +5614,11 @@ async function createMetaTemplate(){
     if(!r.ok) throw new Error(data.error||'http '+r.status);
     const sidInput = document.getElementById('tpl-sid');
     if(sidInput) sidInput.value = data.name;
-    if(statusEl) statusEl.innerHTML = 'Modèle <b>'+esc(data.name)+'</b> soumis — statut Meta : <b>'+esc(data.status)+'</b>'+(data.status==='PENDING'?' (approbation généralement sous 24h, revenez vérifier ensuite)':'');
-    flash('Modèle soumis à Meta');
+    let statusMsg = 'Modèle <b>'+esc(data.name)+'</b> soumis — statut Meta : <b>'+esc(data.status)+'</b>';
+    if(data.status==='PENDING') statusMsg += ' (approbation généralement sous 24h, revenez vérifier ensuite)';
+    if(data.status==='REJECTED' && data.rejectedReason) statusMsg += '<br><span style="color:#a32d2d">Motif : '+esc(data.rejectedReason)+'</span>';
+    if(statusEl) statusEl.innerHTML = statusMsg;
+    flash(data.status==='REJECTED' ? 'Modèle rejeté par Meta' : 'Modèle soumis à Meta');
   }catch(e){ if(statusEl) statusEl.textContent=''; flash(e.message||'Échec de la création du modèle'); }
 }
 

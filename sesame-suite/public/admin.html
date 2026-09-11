@@ -8499,8 +8499,11 @@ async function emlCreateMetaTemplate(){
     if(!r.ok){ if(statusEl) statusEl.textContent=''; toast(data.error||'Échec de la création du modèle'); return; }
     var sidInput = document.getElementById('eml-tpl-sid');
     if(sidInput) sidInput.value = data.name;
-    if(statusEl) statusEl.innerHTML = 'Modèle <b>'+esc(data.name)+'</b> soumis — statut Meta : <b>'+esc(data.status)+'</b>'+(data.status==='PENDING'?' (approbation généralement sous 24h, revenez vérifier ensuite)':'');
-    toast('Modèle soumis à Meta ✓');
+    var statusMsg = 'Modèle <b>'+esc(data.name)+'</b> soumis — statut Meta : <b>'+esc(data.status)+'</b>';
+    if(data.status==='PENDING') statusMsg += ' (approbation généralement sous 24h, revenez vérifier ensuite)';
+    if(data.status==='REJECTED' && data.rejectedReason) statusMsg += '<br><span style="color:var(--bad,#b23b2c)">Motif : '+esc(data.rejectedReason)+'</span>';
+    if(statusEl) statusEl.innerHTML = statusMsg;
+    toast(data.status==='REJECTED' ? 'Modèle rejeté par Meta' : 'Modèle soumis à Meta ✓');
   }catch(e){ if(statusEl) statusEl.textContent=''; toast('Erreur de connexion au serveur'); }
 }
 
