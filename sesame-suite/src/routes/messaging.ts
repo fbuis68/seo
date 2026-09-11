@@ -74,14 +74,34 @@ messagingRouter.post(
     // DocPartner/SMSPartner ne couvre que le SMS, pas le WhatsApp — un choix
     // de provider "smspartner" sur le canal whatsapp retombe sur Twilio.
     // Infobip couvre les deux canaux (comme Twilio), donc pas cette
-    // restriction pour lui.
-    const provider = b.provider === "smspartner" && b.channel === "sms" ? "smspartner" : b.provider === "infobip" ? "infobip" : "twilio";
+    // restriction pour lui. Meta (WhatsApp Cloud API, compte développeur
+    // Facebook) ne couvre que le WhatsApp — un choix "meta" sur le canal sms
+    // retombe sur Twilio, comme smspartner sur whatsapp.
+    const provider =
+      b.provider === "smspartner" && b.channel === "sms"
+        ? "smspartner"
+        : b.provider === "infobip"
+          ? "infobip"
+          : b.provider === "meta" && b.channel === "whatsapp"
+            ? "meta"
+            : "twilio";
     if (provider === "smspartner") {
       if (!b.apiKey || !b.apiKey.trim()) throw new HttpError(400, "Clé API DocPartner requise");
       const row = await upsertChannelConfig(entityId, b.channel, {
         provider,
         apiKey: b.apiKey.trim(),
         fromNumber: (b.fromNumber || "").trim(),
+      });
+      res.json(shapeChannelConfig(row));
+      return;
+    }
+    if (provider === "meta") {
+      if (!b.apiKey || !b.apiKey.trim()) throw new HttpError(400, "Jeton d'accès Meta requis");
+      if (!b.fromNumber || !b.fromNumber.trim()) throw new HttpError(400, "ID du numéro de téléphone Meta requis");
+      const row = await upsertChannelConfig(entityId, b.channel, {
+        provider,
+        apiKey: b.apiKey.trim(),
+        fromNumber: b.fromNumber.trim(),
       });
       res.json(shapeChannelConfig(row));
       return;

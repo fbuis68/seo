@@ -165,15 +165,19 @@ async function sendViaTwilioTemplate(
 export async function sendWhatsAppTemplate(entityId: string | null, to: string, contentSid: string, contentVariables: Record<string, string>) {
   const cfg = await getChannelConfig(entityId, "whatsapp");
   if (!cfg) throw new HttpError(400, "Aucune configuration WhatsApp pour cette portée");
-  if (cfg.provider === "infobip") {
+  if (cfg.provider === "infobip" || cfg.provider === "meta") {
     // contentVariables est numéroté ("1","2",...) pour matcher le format
-    // Twilio (ContentVariables) — Infobip attend un tableau positionnel,
-    // reconstruit ici dans l'ordre plutôt que de dupliquer cette logique
-    // côté messaging.ts pour chaque provider.
+    // Twilio (ContentVariables) — Infobip et Meta attendent un tableau
+    // positionnel, reconstruit ici dans l'ordre plutôt que de dupliquer
+    // cette logique côté messaging.ts pour chaque provider.
     const placeholders = Object.keys(contentVariables)
       .sort((a, b) => Number(a) - Number(b))
       .map((k) => contentVariables[k]);
-    await sendViaInfobipTemplate(cfg, to, contentSid, placeholders);
+    if (cfg.provider === "meta") {
+      await sendViaMetaTemplate(cfg, to, contentSid, placeholders);
+    } else {
+      await sendViaInfobipTemplate(cfg, to, contentSid, placeholders);
+    }
     return;
   }
   await sendViaTwilioTemplate(cfg, to, contentSid, contentVariables);
@@ -241,18 +245,19 @@ function infobipBaseUrl(cfg: { baseUrl: string | null }): string {
 }
 
 /**
- * Infobip attend un MSISDN brut (indicatif + numéro, chiffres uniquement —
- * ex. "447860088970"), sans "+" ni espaces, et rejette tout expéditeur qui
- * ne correspond pas EXACTEMENT à l'expéditeur tel qu'enregistré sur le
- * compte ("Invalid Source address" / REJECTED_SOURCE) même si le numéro
- * "+44 7860 088970" désigne le même expéditeur — confirmé le 09/09/2026 via
- * une capture réseau Infobip (l'expéditeur "447860088970" était pourtant
- * bien actif côté portail Infobip). Les champs "Numéro expéditeur"/"to" de
- * ce projet acceptent le format E.164 habituel (+33612345678) pour rester
- * cohérents avec Twilio/DocPartner — cette fonction fait la conversion
- * uniquement pour les appels vers l'API Infobip.
+ * Infobip et Meta (WhatsApp Cloud API) attendent tous deux un MSISDN brut
+ * (indicatif + numéro, chiffres uniquement — ex. "447860088970"), sans "+"
+ * ni espaces ; Infobip rejette en plus tout expéditeur qui ne correspond pas
+ * EXACTEMENT à l'expéditeur tel qu'enregistré sur le compte ("Invalid Source
+ * address" / REJECTED_SOURCE) même si le numéro "+44 7860 088970" désigne le
+ * même expéditeur — confirmé le 09/09/2026 via une capture réseau Infobip
+ * (l'expéditeur "447860088970" était pourtant bien actif côté portail
+ * Infobip). Les champs "Numéro expéditeur"/"to" de ce projet acceptent le
+ * format E.164 habituel (+33612345678) pour rester cohérents avec
+ * Twilio/DocPartner — cette fonction fait la conversion uniquement pour les
+ * appels vers ces API.
  */
-function toInfobipMsisdn(n: string): string {
+function toMsisdn(n: string): string {
   return n.replace(/[^0-9]/g, "");
 }
 
@@ -310,13 +315,13 @@ async function sendViaInfobip(
   }
   if (channel === "whatsapp") {
     await infobipRequest(cfg, INFOBIP_WHATSAPP_TEXT_PATH, {
-      from: toInfobipMsisdn(cfg.fromNumber),
-      to: toInfobipMsisdn(to),
+      from: toMsisdn(cfg.fromNumber),
+      to: toMsisdn(to),
       content: { text: body },
     });
   } else {
     await infobipRequest(cfg, INFOBIP_SMS_PATH, {
-      messages: [{ destinations: [{ to: toInfobipMsisdn(to) }], from: toInfobipMsisdn(cfg.fromNumber), text: body }],
+      messages: [{ destinations: [{ to: toMsisdn(to) }], from: toMsisdn(cfg.fromNumber), text: body }],
     });
   }
 }
@@ -340,8 +345,8 @@ async function sendViaInfobipTemplate(
   await infobipRequest(cfg, INFOBIP_WHATSAPP_TEMPLATE_PATH, {
     messages: [
       {
-        from: toInfobipMsisdn(cfg.fromNumber),
-        to: toInfobipMsisdn(to),
+        from: toMsisdn(cfg.fromNumber),
+        to: toMsisdn(to),
         content: {
           templateName,
           // Langue du template tel qu'approuvé côté Meta/Infobip — "fr" par
@@ -353,6 +358,84 @@ async function sendViaInfobipTemplate(
         },
       },
     ],
+  });
+}
+
+const META_GRAPH_API_BASE = "https://graph.facebook.com/v21.0";
+
+/**
+ * Meta WhatsApp Cloud API — connecteur "direct" (compte développeur
+ * Facebook/Meta, sans intermédiaire Twilio/Infobip), ajouté le 11/09/2026 à
+ * la demande de l'utilisateur. Deux identifiants suffisent, stockés dans les
+ * colonnes génériques déjà en place : ChannelConfig.apiKey porte le jeton
+ * d'accès (System User token, permanent) et ChannelConfig.fromNumber porte
+ * le "Phone Number ID" Meta — un identifiant interne Meta, PAS le numéro de
+ * téléphone lui-même — qui figure dans l'URL de chaque appel. Pas de
+ * baseUrl : l'URL de l'API Graph est fixe pour tous les comptes.
+ */
+async function metaRequest(cfg: { apiKey: string | null; fromNumber: string | null }, payload: unknown) {
+  if (!cfg.apiKey) throw new HttpError(400, "Configuration WhatsApp incomplète (jeton d'accès Meta manquant)");
+  if (!cfg.fromNumber) throw new HttpError(400, "Configuration WhatsApp incomplète (ID du numéro de téléphone Meta manquant)");
+  const url = `${META_GRAPH_API_BASE}/${cfg.fromNumber}/messages`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${cfg.apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    throw new HttpError(502, "Échec de connexion à l'API Meta (WhatsApp Cloud) : " + String(err instanceof Error ? err.message : err));
+  }
+  const text = await res.text();
+  let j: { error?: { message?: string; code?: number; error_subcode?: number; error_user_msg?: string } } = {};
+  try {
+    j = JSON.parse(text);
+  } catch {
+    // corps non-JSON, géré ci-dessous via `text` brut
+  }
+  if (!res.ok) {
+    const e = j.error;
+    const detail = e?.error_user_msg || e?.message || text || `HTTP ${res.status}`;
+    const code = e?.code !== undefined ? ` [code Meta ${e.code}${e.error_subcode ? "." + e.error_subcode : ""}]` : "";
+    throw new HttpError(502, `Échec de l'envoi Meta (HTTP ${res.status}) : ${detail}${code}`);
+  }
+}
+
+async function sendViaMeta(cfg: { apiKey: string | null; fromNumber: string | null }, to: string, body: string) {
+  await metaRequest(cfg, {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: toMsisdn(to),
+    type: "text",
+    text: { body },
+  });
+}
+
+/**
+ * Envoi WhatsApp via un template Meta pré-approuvé (Meta Business Manager) —
+ * même principe que sendViaInfobipTemplate/sendViaTwilioTemplate, requis en
+ * dehors d'une fenêtre de session client de 24h. MessageTemplate.whatsappContentSid
+ * est réutilisé pour stocker le nom du template Meta (libellé adapté côté UI
+ * selon le provider choisi) plutôt que d'ajouter un champ dédié.
+ */
+async function sendViaMetaTemplate(
+  cfg: { apiKey: string | null; fromNumber: string | null },
+  to: string,
+  templateName: string,
+  placeholders: string[]
+) {
+  await metaRequest(cfg, {
+    messaging_product: "whatsapp",
+    to: toMsisdn(to),
+    type: "template",
+    template: {
+      name: templateName,
+      // Langue du template tel qu'approuvé côté Meta — "fr" par défaut
+      // (marché de cette app), pas encore configurable par modèle.
+      language: { code: "fr" },
+      components: placeholders.length ? [{ type: "body", parameters: placeholders.map((text) => ({ type: "text", text })) }] : [],
+    },
   });
 }
 
@@ -368,6 +451,10 @@ async function sendViaProvider(
   }
   if (cfg.provider === "infobip") {
     await sendViaInfobip(cfg, to, body, channel);
+    return;
+  }
+  if (channel === "whatsapp" && cfg.provider === "meta") {
+    await sendViaMeta(cfg, to, body);
     return;
   }
   await sendViaTwilio(cfg, to, body, channel);

@@ -2603,6 +2603,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         <select id="wa-provider" onchange="chanProviderChanged('wa')">
           <option value="twilio">Twilio</option>
           <option value="infobip">Infobip</option>
+          <option value="meta">Meta (compte développeur Facebook)</option>
         </select>
       </div>
       <div id="wa-fields-twilio">
@@ -2613,7 +2614,11 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         <div class="fi"><label class="lb">Clé API</label><input type="password" id="wa-apikey-ib" autocomplete="off"></div>
         <div class="fi"><label class="lb">Sous-domaine du compte</label><input type="text" id="wa-baseurl" placeholder="xxxxx.api.infobip.com"></div>
       </div>
-      <div class="fi"><label class="lb">Numéro expéditeur</label><input type="text" id="wa-from" placeholder="+14155238886"></div>
+      <div id="wa-fields-meta" style="display:none">
+        <div class="fi"><label class="lb">Jeton d'accès (Meta)</label><input type="password" id="wa-token-meta" autocomplete="off" placeholder="Jeton System User permanent"></div>
+        <div style="font-size:11px;color:var(--mu);margin:-6px 0 10px">Généré depuis Meta Business Manager → Système → Utilisateurs système, avec la permission whatsapp_business_messaging.</div>
+      </div>
+      <div class="fi"><label class="lb" id="wa-from-label">Numéro expéditeur</label><input type="text" id="wa-from" placeholder="+14155238886"></div>
       <div class="brow" style="align-items:center;flex-wrap:wrap">
         <button class="btn btn-p btn-s" onclick="chanSaveConfig('whatsapp')"><i class="ti ti-device-floppy"></i> Enregistrer</button>
         <input type="text" id="whatsapp-test-to" placeholder="+33612345678" style="max-width:150px">
@@ -8235,15 +8240,18 @@ function chanProviderChanged(prefix){
   var twilioEl = document.getElementById(prefix+'-fields-twilio');
   var spEl = document.getElementById(prefix+'-fields-smspartner');
   var ibEl = document.getElementById(prefix+'-fields-infobip');
+  var metaEl = document.getElementById(prefix+'-fields-meta');
   if(twilioEl) twilioEl.style.display = val==='twilio' ? '' : 'none';
   if(spEl) spEl.style.display = val==='smspartner' ? '' : 'none';
   if(ibEl) ibEl.style.display = val==='infobip' ? '' : 'none';
+  if(metaEl) metaEl.style.display = val==='meta' ? '' : 'none';
   var fromLabel = document.getElementById(prefix+'-from-label');
   var fromInput = document.getElementById(prefix+'-from');
   if(fromLabel && fromInput){
     var isSp = val==='smspartner';
-    fromLabel.textContent = isSp ? "Nom d'expéditeur (3-11 caractères)" : 'Numéro expéditeur';
-    fromInput.placeholder = isSp ? 'MonHotel' : (prefix==='wa' ? '+14155238886' : '+33612345678');
+    var isMeta = val==='meta';
+    fromLabel.textContent = isSp ? "Nom d'expéditeur (3-11 caractères)" : isMeta ? 'ID du numéro de téléphone (Meta)' : 'Numéro expéditeur';
+    fromInput.placeholder = isSp ? 'MonHotel' : isMeta ? '109876543212345' : (prefix==='wa' ? '+14155238886' : '+33612345678');
   }
 }
 
@@ -8266,6 +8274,8 @@ async function chanLoadConfig(channel){
     document.getElementById(p+'-sid').value = cfg.accountSid||'';
     document.getElementById(p+'-token').value = cfg.authToken||'';
     document.getElementById(p+'-from').value = cfg.fromNumber||'';
+    var metaTokenEl = document.getElementById(p+'-token-meta');
+    if(metaTokenEl) metaTokenEl.value = cfg.apiKey||'';
     chanProviderChanged(p);
   }catch(e){ toast('Erreur de chargement de la configuration '+CHAN_LABEL[channel]); }
 }
@@ -8279,6 +8289,8 @@ async function chanSaveConfig(channel){
     body.baseUrl = document.getElementById(p+'-baseurl').value.trim();
   } else if(provider==='smspartner'){
     body.apiKey = document.getElementById('sms-apikey').value.trim();
+  } else if(provider==='meta'){
+    body.apiKey = document.getElementById(p+'-token-meta').value.trim();
   } else {
     body.accountSid = document.getElementById(p+'-sid').value.trim();
     body.authToken = document.getElementById(p+'-token').value;
@@ -8416,9 +8428,11 @@ function emlOpenTemplateModal(id){
     + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'
     + EML_TPL_VARS.map(function(v){return '<span class="bdg bgb" style="cursor:pointer" title="'+esc(v.desc)+'" onclick="emlInsertVar(\''+v.key+'\')">{{'+v.key+'}}</span>';}).join('')
     + '</div></div>'
-    + '<div class="fi" id="eml-tpl-sid-wrap"><label class="lb">'+(CHAN_WA_PROVIDER==='infobip'?'Nom du modèle Infobip (WhatsApp)':'Content SID Twilio (WhatsApp)')+'</label><input type="text" id="eml-tpl-sid" value="'+esc(t.whatsappContentSid||'')+'" placeholder="'+(CHAN_WA_PROVIDER==='infobip'?'mon_modele_whatsapp':'HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')+'">'
+    + '<div class="fi" id="eml-tpl-sid-wrap"><label class="lb">'+(CHAN_WA_PROVIDER==='infobip'?'Nom du modèle Infobip (WhatsApp)':CHAN_WA_PROVIDER==='meta'?'Nom du modèle Meta (WhatsApp)':'Content SID Twilio (WhatsApp)')+'</label><input type="text" id="eml-tpl-sid" value="'+esc(t.whatsappContentSid||'')+'" placeholder="'+(CHAN_WA_PROVIDER==='infobip'?'mon_modele_whatsapp':CHAN_WA_PROVIDER==='meta'?'mon_modele_whatsapp':'HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')+'">'
     + '<div style="font-size:11px;color:var(--mu);margin-top:4px">'+(CHAN_WA_PROVIDER==='infobip'
         ? "WhatsApp Business interdit le texte libre hors session client — créez d'abord ce modèle dans le portail Infobip, faites-le approuver par Meta, puis collez ici son nom exact. Les variables {{var}} ci-dessus doivent apparaître dans le même ordre que les paramètres du modèle approuvé."
+        : CHAN_WA_PROVIDER==='meta'
+        ? "WhatsApp Business interdit le texte libre hors session client — créez d'abord ce modèle dans Meta Business Manager (Compte WhatsApp → Modèles de message), faites-le approuver, puis collez ici son nom exact. Les variables {{var}} ci-dessus doivent apparaître dans le même ordre que les {{1}} {{2}}… du modèle approuvé."
         : "WhatsApp Business interdit le texte libre hors session client — créez d'abord ce modèle dans Twilio (Messaging → Content Template Builder), faites-le approuver par Meta, puis collez ici son Content SID. Les variables {{var}} ci-dessus doivent apparaître dans le même ordre que les {{1}} {{2}}… du modèle approuvé.")+'</div></div>'
     + '<div class="brow"><button class="btn btn-p" onclick="emlSaveTemplate('+(t.id?"'"+t.id+"'":'null')+')"><i class="ti ti-device-floppy"></i> Enregistrer</button>'
     + '<button class="btn btn-s" onclick="emlCloseTemplateModal()">Annuler</button></div>'
