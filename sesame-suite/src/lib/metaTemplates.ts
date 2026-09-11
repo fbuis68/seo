@@ -106,6 +106,19 @@ export async function createMetaMessageTemplate(
   const name = normalizeMetaTemplateName(opts.name);
   if (!name) throw new HttpError(400, "Nom de modèle invalide (lettres, chiffres et underscores uniquement)");
   const category = META_TEMPLATE_CATEGORIES.includes(opts.category as MetaTemplateCategory) ? opts.category : "UTILITY";
+  // La catégorie "Authentification" est réservée aux codes à usage unique
+  // (OTP) : Meta génère lui-même l'intégralité du texte du composant BODY
+  // (langue + formule fixes) et rejette tout texte personnalisé avec l'erreur
+  // "Le composant de type BODY a un ou des champs inattendus (text)". Aucun
+  // modèle de contenu libre (bienvenue, confirmation...) ne peut donc passer
+  // par cette catégorie — on le signale clairement plutôt que de laisser
+  // remonter l'erreur brute de Meta.
+  if (category === "AUTHENTICATION") {
+    throw new HttpError(
+      400,
+      "La catégorie \"Authentification\" est réservée aux codes de vérification à usage unique (OTP) — Meta génère lui-même le texte, sans possibilité d'y mettre votre propre contenu. Choisissez \"Marketing\" ou \"Utilitaire\" selon le ton du message."
+    );
+  }
   const bodyText = toMetaTemplateBody(opts.bodyHtml);
   if (!bodyText.trim()) throw new HttpError(400, "Corps du message requis");
   const j = await metaGraphRequest(cfg, `/${wabaId(cfg)}/message_templates`, {
