@@ -1264,6 +1264,7 @@ function renderList(){
           <div class="avatar" style="width:36px;height:36px;font-size:12px">${ini(c.nom)}</div>
           <div class="gc-info"><div class="gc-name">${c.nom}</div><div class="gc-sub">${c.groupe||c.secteur||'—'}</div></div>
           ${c.commercialName?`<span class="commercial-chip" title="Commercial : ${esc(c.commercialName)}">${ini(c.commercialName)}</span>`:''}
+          <button type="button" class="btn btn-ghost btn-icon" style="flex-shrink:0" title="Envoyer un message (email, SMS, WhatsApp)" onclick="event.stopPropagation();openSendEmailModal('${c.id}')"><i class="ti ti-send"></i></button>
         </div>
         <div class="gc-tags">${typeBadge(c.type)}<span class="badge ${dc}" style="font-size:10px">${c.danger||'—'}</span>${c.ville?`<span class="tag t-blue" style="font-size:10px">${c.ville}</span>`:''}${scoreBadge(c)}${inboundBadge(c)}${supportBadge(c)}</div>
         <hr class="gc-divider">
@@ -1982,7 +1983,7 @@ function showFiche(id){
   const c=clients.find(c=>c.id===id);if(!c)return;
   curId=id;view='fiche';setNav('n-fiche');
   bc([{label:'Clients',fn:'showList()'},{label:c.nom}]);
-  tba(`<button class="btn btn-ghost" onclick="openModal('${id}')">✎ Modifier</button><button class="btn btn-ghost" onclick="openSendEmailModal('${id}')">✉ Email</button><button class="btn btn-primary" onclick="addActForm('${id}')">+ Activité</button><button class="btn btn-ghost" style="color:#a32d2d" onclick="deleteClient('${id}')">🗑 Supprimer</button>`);
+  tba(`<button class="btn btn-ghost" onclick="openModal('${id}')">✎ Modifier</button><button class="btn btn-ghost" onclick="openSendEmailModal('${id}')">✉ Message</button><button class="btn btn-primary" onclick="addActForm('${id}')">+ Activité</button><button class="btn btn-ghost" style="color:#a32d2d" onclick="deleteClient('${id}')">🗑 Supprimer</button>`);
   renderFiche(c);
   loadAdminAccessCard(c);
   loadQuestionnaireSendsCard(c);
