@@ -5341,6 +5341,8 @@ function renderCanauxPanel(){
       <div id="wa-fields-meta" style="${wa.provider==='meta'?'':'display:none'}">
         <div class="ff" style="margin-top:8px"><label>Jeton d'accès (Meta)</label><input type="password" id="wa-token-meta" value="${esc(wa.apiKey)}" placeholder="${wa.apiKey?'':'Jeton System User permanent'}"></div>
         <div style="font-size:11px;color:#8a8a8a;margin-top:4px">Généré depuis Meta Business Manager → Système → Utilisateurs système, avec la permission whatsapp_business_messaging.</div>
+        <div class="ff" style="margin-top:8px"><label>ID du compte WhatsApp Business (WABA)</label><input id="wa-wabaid-meta" value="${wa.provider==='meta'?esc(wa.baseUrl):''}" placeholder="1098765432123456"></div>
+        <div style="font-size:11px;color:#8a8a8a;margin-top:4px">Facultatif pour l'envoi de messages — requis pour créer des modèles directement depuis Sesame Suite. Meta Business Manager → Comptes → Comptes WhatsApp → votre compte → ID affiché en haut de la fiche.</div>
       </div>
       <div class="ff" style="margin-top:8px"><label id="wa-from-label">${wa.provider==='meta'?'ID du numéro de téléphone (Meta)':'Numéro expéditeur'}</label><input id="wa-from" value="${esc(wa.fromNumber)}" placeholder="${wa.provider==='meta'?'109876543212345':'+14155238886'}"></div>
       <div class="modal-footer" style="border-top:none;padding-top:8px;flex-wrap:wrap">
@@ -5428,6 +5430,7 @@ async function saveChannelConfig(channel){
     body.apiKey = g('sms-apikey').trim();
   } else if(provider==='meta'){
     body.apiKey = g(p+'-token-meta').trim();
+    body.baseUrl = g(p+'-wabaid-meta').trim();
   } else {
     body.accountSid = g(p+'-sid').trim();
     body.authToken = g(p+'-token');
@@ -5561,8 +5564,22 @@ function openTemplateModal(id){
         <div style="font-size:11px;color:#888;margin-top:4px">${(WA_CFG&&WA_CFG.provider==='infobip')
           ? "WhatsApp Business interdit le texte libre hors session client — créez d'abord ce modèle dans le portail Infobip, faites-le approuver par Meta, puis collez ici son nom exact. Les variables {{var}} ci-dessus doivent apparaître dans le même ordre que les paramètres du modèle approuvé."
           : (WA_CFG&&WA_CFG.provider==='meta')
-          ? "WhatsApp Business interdit le texte libre hors session client — créez d'abord ce modèle dans Meta Business Manager (Compte WhatsApp → Modèles de message), faites-le approuver, puis collez ici son nom exact. Les variables {{var}} ci-dessus doivent apparaître dans le même ordre que les {{1}} {{2}}… du modèle approuvé."
-          : "WhatsApp Business interdit le texte libre hors session client — créez d'abord ce modèle dans Twilio (Messaging → Content Template Builder), faites-le approuver par Meta, puis collez ici son Content SID. Les variables {{var}} ci-dessus doivent apparaître dans le même ordre que les {{1}} {{2}}… du modèle approuvé."}</div></div>
+          ? "WhatsApp Business interdit le texte libre hors session client — créez d'abord ce modèle dans Meta Business Manager (Compte WhatsApp → Modèles de message), faites-le approuver, puis collez ici son nom exact — ou utilisez le bouton ci-dessous pour le créer et le soumettre directement depuis Sesame CRM. Les variables {{var}} ci-dessus doivent apparaître dans le même ordre que les {{1}} {{2}}… du modèle approuvé."
+          : "WhatsApp Business interdit le texte libre hors session client — créez d'abord ce modèle dans Twilio (Messaging → Content Template Builder), faites-le approuver par Meta, puis collez ici son Content SID. Les variables {{var}} ci-dessus doivent apparaître dans le même ordre que les {{1}} {{2}}… du modèle approuvé."}</div>
+        ${(WA_CFG&&WA_CFG.provider==='meta') ? `
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bdr,#e5e5e5)">
+          <label>Créer ce modèle chez Meta</label>
+          <div class="brow" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px">
+            <select id="tpl-meta-category" style="max-width:170px">
+              <option value="UTILITY">Utilitaire</option>
+              <option value="MARKETING">Marketing</option>
+              <option value="AUTHENTICATION">Authentification</option>
+            </select>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="createMetaTemplate()">Créer et soumettre à Meta</button>
+          </div>
+          <div id="tpl-meta-status" style="font-size:11px;color:#888;margin-top:6px"></div>
+        </div>` : ''}
+      </div>
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="saveTemplate(${t.id?`'${t.id}'`:'null'})">Enregistrer</button>
         <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
@@ -5580,6 +5597,26 @@ function renderTplSubjectVisibility(){
   if(sel&&wrap) wrap.style.display = sel.value==='email' ? '' : 'none';
   if(sel&&sidWrap) sidWrap.style.display = sel.value==='whatsapp' ? '' : 'none';
   if(sel) htmlEdSetEmailMode('tpl-body', sel.value==='email');
+}
+
+async function createMetaTemplate(){
+  const g=i=>(document.getElementById(i)||{value:''}).value;
+  const name = g('tpl-key').trim() || g('tpl-name').trim();
+  const bodyHtml = g('tpl-body');
+  const category = g('tpl-meta-category') || 'UTILITY';
+  const statusEl = document.getElementById('tpl-meta-status');
+  if(!name){flash('Renseignez la clé ou le nom du modèle avant de le soumettre à Meta');return;}
+  if(!bodyHtml.trim()){flash('Corps du message requis avant de le soumettre à Meta');return;}
+  if(statusEl) statusEl.textContent = 'Envoi à Meta…';
+  try{
+    var r = await apiFetch('/wa/metaTemplate/create', {method:'POST', body:JSON.stringify({name:name, category:category, bodyHtml:bodyHtml, scope:'crm'})});
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    const sidInput = document.getElementById('tpl-sid');
+    if(sidInput) sidInput.value = data.name;
+    if(statusEl) statusEl.innerHTML = 'Modèle <b>'+esc(data.name)+'</b> soumis — statut Meta : <b>'+esc(data.status)+'</b>'+(data.status==='PENDING'?' (approbation généralement sous 24h, revenez vérifier ensuite)':'');
+    flash('Modèle soumis à Meta');
+  }catch(e){ if(statusEl) statusEl.textContent=''; flash(e.message||'Échec de la création du modèle'); }
 }
 
 async function saveTemplate(id){

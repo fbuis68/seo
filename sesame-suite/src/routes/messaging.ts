@@ -5,6 +5,7 @@ import { resolveScope } from "../lib/scope";
 import { getChannelConfig, upsertChannelConfig, sendTestMessage, SmsChannel } from "../lib/sms";
 import { listMessageTemplates, upsertMessageTemplate, deleteMessageTemplate, Channel } from "../lib/messageTemplate";
 import { sendMessage } from "../lib/messaging";
+import { createMetaMessageTemplate, listMetaMessageTemplates } from "../lib/metaTemplates";
 
 /**
  * Config des canaux SMS/WhatsApp (Twilio), modèles de message multi-canal,
@@ -98,10 +99,16 @@ messagingRouter.post(
     if (provider === "meta") {
       if (!b.apiKey || !b.apiKey.trim()) throw new HttpError(400, "Jeton d'accès Meta requis");
       if (!b.fromNumber || !b.fromNumber.trim()) throw new HttpError(400, "ID du numéro de téléphone Meta requis");
+      // L'ID du compte WhatsApp Business (WABA) réutilise ChannelConfig.baseUrl
+      // (inutilisé par le provider Meta pour l'envoi lui-même — seul l'envoi de
+      // messages a besoin de apiKey+fromNumber). Optionnel à l'enregistrement
+      // pour ne pas bloquer une config déjà fonctionnelle pour l'envoi ; requis
+      // uniquement au moment de créer un modèle (cf. metaTemplates.ts).
       const row = await upsertChannelConfig(entityId, b.channel, {
         provider,
         apiKey: b.apiKey.trim(),
         fromNumber: b.fromNumber.trim(),
+        baseUrl: (b.baseUrl || "").trim(),
       });
       res.json(shapeChannelConfig(row));
       return;
@@ -143,6 +150,47 @@ messagingRouter.post(
     if (!to) throw new HttpError(400, "Destinataire de test requis");
     await sendTestMessage(entityId, channel, to);
     res.json({ ok: true });
+  })
+);
+
+/**
+ * Création/consultation de modèles WhatsApp directement chez Meta, sans
+ * passer par l'interface Meta Business Manager — réservé au provider
+ * "meta" (Twilio et Infobip n'exposent pas cette API depuis Sesame Suite,
+ * leurs modèles restent créés dans leurs consoles respectives). Le corps
+ * soumis à Meta réutilise le bodyHtml déjà saisi dans l'éditeur de modèle
+ * Sesame Suite, avec ses {{var}} nommés convertis en emplacements
+ * positionnels {{1}}, {{2}}... (cf. toMetaTemplateBody) — le nom retourné
+ * est ensuite à coller dans MessageTemplate.whatsappContentSid comme pour
+ * un modèle créé manuellement chez Meta.
+ */
+messagingRouter.post(
+  "/metaTemplate/create",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const cfg = await getChannelConfig(entityId, "whatsapp");
+    if (!cfg || cfg.provider !== "meta") throw new HttpError(400, "Le canal WhatsApp n'est pas configuré avec le provider Meta");
+    const b = req.body as { name?: string; category?: string; bodyHtml?: string };
+    if (!b.name || !b.name.trim()) throw new HttpError(400, "Nom du modèle requis");
+    if (!b.bodyHtml || !b.bodyHtml.trim()) throw new HttpError(400, "Corps du message requis");
+    const result = await createMetaMessageTemplate(cfg, { name: b.name, category: b.category || "UTILITY", bodyHtml: b.bodyHtml });
+    res.json(result);
+  })
+);
+
+messagingRouter.get(
+  "/metaTemplate/list",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const cfg = await getChannelConfig(entityId, "whatsapp");
+    if (!cfg || cfg.provider !== "meta") {
+      res.json([]);
+      return;
+    }
+    const rows = await listMetaMessageTemplates(cfg);
+    res.json(rows);
   })
 );
 
