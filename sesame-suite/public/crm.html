@@ -215,6 +215,33 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,san
 
 /* JOURNAL */
 .log-item{display:flex;gap:10px;padding:9px 0;border-bottom:0.5px solid var(--div)}
+/* AUTOMATISATIONS — bascule vue liste/workflow */
+.autoviewtoggle{display:flex;border:0.5px solid var(--bdr);border-radius:8px;overflow:hidden}
+.autoviewtoggle button{border:none;background:var(--card);color:var(--mu);padding:6px 10px;cursor:pointer;font-size:13px;display:flex;align-items:center;line-height:1}
+.autoviewtoggle button+button{border-left:0.5px solid var(--bdr)}
+.autoviewtoggle button:hover{color:var(--tx);background:var(--hover)}
+.autoviewtoggle button.on{background:var(--a);color:#fff}
+/* AUTOMATISATIONS — vue workflow */
+.wf-canvas{overflow-x:auto;padding-bottom:4px}
+.wf-lane{display:flex;align-items:flex-start;gap:0;margin-bottom:24px}
+.wf-lane:last-child{margin-bottom:0}
+.wf-node{border:0.5px solid var(--bdr);border-radius:8px;background:var(--card);padding:9px 12px;font-size:12.5px;min-width:150px;flex-shrink:0}
+.wf-node .wf-title{display:flex;align-items:center;gap:6px;font-weight:600;color:var(--tx)}
+.wf-node .wf-title i{font-size:13px}
+.wf-node .wf-sub{color:var(--mu);font-size:11px;margin-top:3px;line-height:1.4}
+.wf-trigger{background:var(--al);border-color:var(--a);min-width:190px}
+.wf-trigger .wf-title{color:var(--a)}
+.wf-branches{position:relative;padding-left:28px;display:flex;flex-direction:column;gap:12px;margin-left:14px}
+.wf-branches::before{content:'';position:absolute;left:0;top:22px;bottom:22px;width:1px;background:var(--bdr)}
+.wf-branch{position:relative;display:flex;align-items:center;gap:0}
+.wf-branch::before{content:'';position:absolute;left:-28px;top:50%;width:28px;height:1px;background:var(--bdr)}
+.wf-arrow{width:22px;height:1px;background:var(--bdr);flex-shrink:0}
+.wf-timing{background:rgba(26,72,128,.08);border-color:#1A4880;min-width:110px;text-align:center}
+.wf-timing .wf-title{color:#1A4880;justify-content:center}
+.wf-action{cursor:pointer;transition:box-shadow .12s}
+.wf-action:hover{box-shadow:0 0 0 2px var(--a)}
+.wf-action.off{opacity:.5}
+.wf-action .wf-err{color:#a32d2d;font-size:11px;margin-top:4px;display:flex;align-items:center;gap:4px}
 .log-item:last-child{border-bottom:none}
 .log-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:5px}
 .ld-g{background:#639922}.ld-a{background:#ef9f27}.ld-r{background:#e24b4a}.ld-b{background:#185fa5}
@@ -5764,11 +5791,36 @@ function timingSummary(r){
 }
 function unitLabel(u){ return {minutes:'min',hours:'h',days:'j',months:'mois'}[u]||u||''; }
 
+// Vue "liste" (historique) ou "workflow" (blocs reliés par déclencheur) —
+// mémorisée par navigateur, purement une préférence d'affichage.
+let AUTO_VIEW_MODE='list';
+try{ AUTO_VIEW_MODE = localStorage.getItem('sesame_auto_view_mode') || 'list'; }catch(e){}
+
+function autoSetViewMode(mode){
+  AUTO_VIEW_MODE = mode;
+  try{ localStorage.setItem('sesame_auto_view_mode', mode); }catch(e){}
+  renderAutomationPanel();
+}
+
 function renderAutomationPanel(){
   document.getElementById('main').innerHTML=`
   <div class="card">
-    <div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Règles d'automatisation</span><button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="openRuleModal(null)">+ Nouvelle règle</button></div>
-    ${AUTO_RULES.length===0?'<div class="log-empty">Aucune règle. Ex : envoyer une newsletter tous les mois à 11h00, ou relancer automatiquement un nouveau prospect.</div>':AUTO_RULES.map(r=>`
+    <div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Règles d'automatisation</span>
+      <div class="autoviewtoggle" style="margin-left:auto">
+        <button type="button" id="auto-view-list-btn" class="${AUTO_VIEW_MODE==='list'?'on':''}" onclick="autoSetViewMode('list')" title="Vue liste"><i class="ti ti-list"></i></button>
+        <button type="button" id="auto-view-wf-btn" class="${AUTO_VIEW_MODE==='workflow'?'on':''}" onclick="autoSetViewMode('workflow')" title="Vue workflow"><i class="ti ti-sitemap"></i></button>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="openRuleModal(null)">+ Nouvelle règle</button>
+    </div>
+    <div id="auto-rules-body"></div>
+  </div>`;
+  if(AUTO_VIEW_MODE==='workflow') renderAutomationPanelWorkflow(); else renderAutomationPanelList();
+}
+
+function renderAutomationPanelList(){
+  const el = document.getElementById('auto-rules-body');
+  if(!el) return;
+  el.innerHTML = AUTO_RULES.length===0?'<div class="log-empty">Aucune règle. Ex : envoyer une newsletter tous les mois à 11h00, ou relancer automatiquement un nouveau prospect.</div>':AUTO_RULES.map(r=>`
       <div class="log-item">
         <div class="log-dot ${r.enabled?'ld-g':'ld-r'}"></div>
         <div class="log-body">
@@ -5782,8 +5834,45 @@ function renderAutomationPanel(){
             <button class="btn btn-sm btn-ghost" style="color:#a32d2d" onclick="deleteRule('${r.id}')">Supprimer</button>
           </div>
         </div>
-      </div>`).join('')}
-  </div>`;
+      </div>`).join('');
+}
+
+/**
+ * Vue workflow — regroupe les règles par déclencheur : un bloc déclencheur
+ * en tête de "voie", relié par des connecteurs à un bloc Délai puis un bloc
+ * Action (canal + modèle) par règle. Purement une autre présentation des
+ * mêmes données que la vue liste (pas de moteur à embranchements réel) —
+ * cliquer un bloc Action ouvre le même modal d'édition.
+ */
+function renderAutomationPanelWorkflow(){
+  const el = document.getElementById('auto-rules-body');
+  if(!el) return;
+  if(!AUTO_RULES.length){
+    el.innerHTML = '<div class="log-empty">Aucune règle. Ex : envoyer une newsletter tous les mois à 11h00, ou relancer automatiquement un nouveau prospect.</div>';
+    return;
+  }
+  const order=[], byTrigger={};
+  AUTO_RULES.forEach(r=>{ if(!byTrigger[r.trigger]){ byTrigger[r.trigger]=[]; order.push(r.trigger); } byTrigger[r.trigger].push(r); });
+  const chanIcon = {email:'ti-mail', sms:'ti-message', whatsapp:'ti-brand-whatsapp'};
+  el.innerHTML = '<div class="wf-canvas">' + order.map(trigger=>{
+    const rules = byTrigger[trigger];
+    return `<div class="wf-lane">
+      <div class="wf-node wf-trigger"><div class="wf-title"><i class="ti ti-bolt"></i>${esc(triggerLabel(trigger))}</div>
+      <div class="wf-sub">${rules.length} règle${rules.length>1?'s':''}</div></div>
+      <div class="wf-branches">${rules.map(r=>{
+        const recipient = r.recipientMode==='custom' ? esc(r.recipientOverride||'') : 'auto';
+        return `<div class="wf-branch">
+          <div class="wf-node wf-timing"><div class="wf-title"><i class="ti ti-clock"></i>${esc(timingSummary(r))}</div></div>
+          <div class="wf-arrow"></div>
+          <div class="wf-node wf-action${r.enabled?'':' off'}" onclick="openRuleModal('${r.id}')" title="Cliquer pour modifier">
+            <div class="wf-title"><i class="ti ${chanIcon[r.channel]||'ti-send'}"></i>${esc(r.name)}</div>
+            <div class="wf-sub">${CHANNEL_LABEL[r.channel]} · ${esc(r.templateKey)} · ${recipient}${r.enabled?'':' · désactivée'}</div>
+            ${r.lastError?`<div class="wf-err"><i class="ti ti-alert-triangle"></i>${esc(r.lastError)}</div>`:''}
+          </div>
+        </div>`;
+      }).join('')}</div>
+    </div>`;
+  }).join('') + '</div>';
 }
 
 async function openRuleModal(id){
