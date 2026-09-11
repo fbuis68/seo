@@ -3217,9 +3217,9 @@ async function saveModal(id,isNew){
     } else {
       r = await apiFetch('/wa/crmProspect/update', {method:'POST', body:JSON.stringify({id:id, ...ch})});
     }
-    if(!r.ok) throw new Error('http '+r.status);
+    if(!r.ok){ const e2=await r.json().catch(()=>({})); flash(e2.error||('Erreur d\'enregistrement (HTTP '+r.status+')')); return; }
     var saved = await r.json();
-  }catch(e){ flash('Erreur d\'enregistrement'); return; }
+  }catch(e){ flash('Erreur d\'enregistrement — vérifiez votre connexion'); return; }
   if(isNew){ clients.push(saved); }
   else{ const ex=clients.find(c=>c.id===id); if(ex) Object.assign(ex, saved); }
   closeModal();updateBadges();flash('Fiche enregistrée');
