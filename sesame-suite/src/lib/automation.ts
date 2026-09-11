@@ -3,6 +3,7 @@ import { sendMessage } from "./messaging";
 import { Channel } from "./messageTemplate";
 import { todayInTz } from "./timezone";
 import { getOrCreateQuestionnaireSend, questionnaireLinkUrl, QuestionnaireTargetType } from "./questionnaire";
+import { bookingTemplateVars } from "./templateVars";
 
 /**
  * Catalogue fixe des déclencheurs métier — c'est la seule source de vérité
@@ -37,6 +38,7 @@ export const TRIGGERS: TriggerDef[] = [
   { key: "order.cancelled", label: "Commande annulée", scope: "hotel", timingModes: ["immediate"] },
   { key: "stay.start", label: "Début de séjour", scope: "hotel", timingModes: ["offset"], dateField: "startDate" },
   { key: "stay.end", label: "Fin de séjour", scope: "hotel", timingModes: ["offset"], dateField: "endDate" },
+  { key: "housekeeping.completed", label: "Ménage terminé", scope: "hotel", timingModes: ["immediate"] },
   { key: "crm.prospect_created", label: "Nouveau prospect CRM", scope: "crm", timingModes: ["immediate"] },
   // Sous-ensemble de crm.prospect_created : uniquement les prospects créés
   // via le formulaire de contact public du site web (cf. routes/contact.ts,
@@ -285,6 +287,7 @@ async function sweepDateRule(rule: {
     console.error(`[automation] lecture des réservations échouée pour la règle "${rule.name}":`, err);
     return;
   }
+  const hotel = rule.entityId ? await prisma.entity.findUnique({ where: { id: rule.entityId }, select: { name: true } }) : null;
 
   for (const b of bookings) {
     const to = resolveRecipient(rule, b.personEmail, b.personPhone);
@@ -298,7 +301,7 @@ async function sweepDateRule(rule: {
         rule.questionnaireId,
         "booking",
         b.id,
-        { prenom: b.personFirstname, nom: b.personLastname, code: b.code }
+        bookingTemplateVars(b, hotel?.name || "")
       );
       await sendMessage({
         entityId: rule.entityId,

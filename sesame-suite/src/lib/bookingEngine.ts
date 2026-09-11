@@ -2,6 +2,7 @@ import type { Entity, Order } from "@prisma/client";
 import { prisma } from "../db";
 import { fireTrigger } from "./automation";
 import { computeTaxeSejourAmount } from "./payment";
+import { bookingTemplateVars } from "./templateVars";
 
 // Module "Réservation en ligne" (09/09/2026) — page publique
 // (public/booking.html) : un visiteur choisit ses dates, voit les chambres
@@ -210,7 +211,7 @@ async function createBookingDirect(entity: Entity, draft: BookingDraft, opts: { 
     targetType: "booking",
     targetId: booking.id,
     recipient: { email: booking.personEmail, phone: booking.personPhone },
-    variables: { prenom: booking.personFirstname, nom: booking.personLastname, code: booking.code },
+    variables: bookingTemplateVars(booking, entity.name),
   }).catch((e) => console.error("[automation] booking.created:", e));
 
   return booking;

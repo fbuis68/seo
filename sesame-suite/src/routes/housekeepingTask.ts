@@ -3,6 +3,8 @@ import { prisma } from "../db";
 import { resolveEntity } from "../lib/entity";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
+import { fireTrigger } from "../lib/automation";
+import { bookingTemplateVars } from "../lib/templateVars";
 
 export const housekeepingTaskRouter = Router();
 
@@ -239,6 +241,24 @@ housekeepingTaskRouter.post(
         notes: b.notes,
       },
     });
+
+    // Notifie le client que sa chambre est prête — seulement si la tâche est
+    // rattachée à une réservation (bookingCode) dont on peut retrouver les
+    // coordonnées, et seulement au moment où le statut PASSE à "done" (pas à
+    // chaque mise à jour ultérieure de la même tâche déjà terminée).
+    if (updated.status === "done" && task.status !== "done" && updated.bookingCode) {
+      const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code: updated.bookingCode } } });
+      if (booking) {
+        fireTrigger("housekeeping.completed", {
+          entityId: entity.id,
+          targetType: "housekeepingTask",
+          targetId: updated.id,
+          recipient: { email: booking.personEmail, phone: booking.personPhone },
+          variables: bookingTemplateVars(booking, entity.name),
+        }).catch((e) => console.error("[automation] housekeeping.completed:", e));
+      }
+    }
+
     res.json(shapeTask(updated));
   })
 );

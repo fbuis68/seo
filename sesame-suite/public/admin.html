@@ -8464,9 +8464,16 @@ var EML_TPL_VARS = [
   {key:'prenom', desc:'Prénom du client (réservation)'},
   {key:'nom', desc:'Nom du client, ou nom de l\'établissement/prospect selon le déclencheur'},
   {key:'code', desc:'Code de réservation'},
+  {key:'hotel', desc:'Nom de l\'établissement (déclencheurs réservation/commande/ménage)'},
+  {key:'chambre', desc:'Numéro ou nom de la chambre (déclencheurs réservation/commande/ménage)'},
+  {key:'dateArrivee', desc:'Date d\'arrivée du séjour (déclencheurs réservation)'},
+  {key:'dateDepart', desc:'Date de départ du séjour (déclencheurs réservation)'},
+  {key:'nuits', desc:'Nombre de nuits du séjour (déclencheurs réservation)'},
+  {key:'numeroCommande', desc:'Numéro de la commande (déclencheurs commande room service/boutique)'},
+  {key:'articles', desc:'Liste des articles commandés (déclencheurs commande room service/boutique)'},
+  {key:'total', desc:'Montant total de la commande (room service / boutique)'},
   {key:'secteur', desc:'Secteur d\'activité du prospect (déclencheurs CRM)'},
   {key:'ville', desc:'Ville du prospect, si renseignée'},
-  {key:'total', desc:'Montant total de la commande (room service / boutique)'},
 ];
 function emlInsertVar(key){
   htmlEdInsertText('eml-tpl-body', '{{'+key+'}}');
@@ -8637,6 +8644,7 @@ var TRIGGERS_HOTEL = [
   {key:'order.cancelled', label:'Commande annulée', timingModes:['immediate']},
   {key:'stay.start', label:'Début de séjour', timingModes:['offset']},
   {key:'stay.end', label:'Fin de séjour', timingModes:['offset']},
+  {key:'housekeeping.completed', label:'Ménage terminé', timingModes:['immediate']},
   {key:'questionnaire.completed', label:'Questionnaire complété', timingModes:['immediate']},
 ];
 var AUTO_RULES = [];

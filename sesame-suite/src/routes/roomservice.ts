@@ -4,6 +4,7 @@ import { resolveEntity } from "../lib/entity";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { fireTrigger } from "../lib/automation";
+import { orderTemplateVars } from "../lib/templateVars";
 import { reserveLockersForOrder, cancelLockerReservation, LockerReservationItem } from "../lib/lockerSource";
 import { recordVendorCommissions, resolveInternalVendorIds } from "../lib/vendor";
 
@@ -137,8 +138,8 @@ roomserviceRouter.get(
  * commande effectivement créée (paiement non requis) ou confirmée payée.
  */
 export async function finalizeOrder(
-  entity: { id: string },
-  order: { id: string; total: number },
+  entity: { id: string; name: string },
+  order: { id: string; total: number; bookingCode: string | null; roomCode: string | null; roomName: string | null },
   booking: { id: string; personEmail: string; personPhone: string | null; personFirstname: string; personLastname: string; lockerAccess: unknown } | null,
   items: CartItem[],
   note?: string
@@ -149,7 +150,12 @@ export async function finalizeOrder(
       targetType: "order",
       targetId: order.id,
       recipient: { email: booking.personEmail, phone: booking.personPhone },
-      variables: { prenom: booking.personFirstname, nom: booking.personLastname, total: String(order.total) },
+      variables: {
+        prenom: booking.personFirstname,
+        nom: booking.personLastname,
+        hotel: entity.name,
+        ...orderTemplateVars(order, items),
+      },
     }).catch((e) => console.error("[automation] order.created:", e));
   }
 
@@ -299,7 +305,12 @@ roomserviceRouter.post(
           targetType: "order",
           targetId: updated.id,
           recipient: { email: booking.personEmail, phone: booking.personPhone },
-          variables: { prenom: booking.personFirstname, nom: booking.personLastname, total: String(updated.total) },
+          variables: {
+            prenom: booking.personFirstname,
+            nom: booking.personLastname,
+            hotel: entity.name,
+            ...orderTemplateVars(updated, (updated.items as CartItem[]) || []),
+          },
         }).catch((e) => console.error("[automation] order.delivered:", e));
       }
     }
@@ -312,7 +323,12 @@ roomserviceRouter.post(
           targetType: "order",
           targetId: updated.id,
           recipient: { email: booking.personEmail, phone: booking.personPhone },
-          variables: { prenom: booking.personFirstname, nom: booking.personLastname, total: String(updated.total) },
+          variables: {
+            prenom: booking.personFirstname,
+            nom: booking.personLastname,
+            hotel: entity.name,
+            ...orderTemplateVars(updated, (updated.items as CartItem[]) || []),
+          },
         }).catch((e) => console.error("[automation] order.cancelled:", e));
       }
     }
