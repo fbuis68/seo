@@ -46,6 +46,7 @@ import { walletRouter } from "./routes/wallet";
 import { bookingEngineRouter } from "./routes/bookingEngine";
 import { geocodeRouter } from "./routes/geocode";
 import { unsubscribeRouter } from "./routes/unsubscribe";
+import { graphMailRouter } from "./routes/graphMail";
 import { housekeepingScope } from "./middleware/housekeepingScope";
 import { errorHandler } from "./middleware/errorHandler";
 import { VERSION } from "./lib/version";
@@ -105,6 +106,7 @@ export function createApp() {
   app.use("/wa", crmUserRouter);
   app.use("/wa", crmProductRouter);
   app.use("/wa", crmTicketRouter);
+  app.use("/wa", graphMailRouter);
   app.use("/wa", questionnaireRouter);
   app.use("/wa", crmScoringRouter);
   app.use("/wa", crmCashLineRouter);

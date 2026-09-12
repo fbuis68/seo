@@ -2,8 +2,8 @@ import { Router } from "express";
 import { prisma } from "../db";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin, requireSesame } from "../middleware/requireAdmin";
-import { fireTrigger } from "../lib/automation";
 import { getSmtpConfig, sendEmailRaw } from "../lib/email";
+import { createTicketFromInboundEmail, appendInboundReply } from "../lib/ticketInbound";
 
 /**
  * Module Tickets (support) — 19/08/2026. Portée CRM/Sesame uniquement
@@ -231,37 +231,7 @@ crmTicketRouter.post(
     if (!subject) throw new HttpError(400, "Sujet requis");
     if (!message) throw new HttpError(400, "Message requis");
 
-    let prospect = await prisma.crmProspect.findFirst({ where: { email } });
-    if (!prospect) {
-      prospect = await prisma.crmProspect.create({
-        data: { nom: name || email, email, type: "Client", danger: "Modéré", contrat: "non" },
-      });
-      fireTrigger("crm.prospect_created", {
-        entityId: null,
-        targetType: "crmProspect",
-        targetId: prospect.id,
-        recipient: { email: prospect.email, phone: prospect.tel },
-        variables: { nom: prospect.nom, secteur: prospect.secteur || "" },
-      }).catch((e) => console.error("[automation] crm.prospect_created:", e));
-    }
-
-    const ticket = await prisma.crmTicket.create({
-      data: {
-        prospectId: prospect.id,
-        subject,
-        contactEmail: email,
-        contactName: name || null,
-        messages: { create: { authorType: "client", authorName: name || email, kind: "reply", body: message, attachments: b.attachments || [] } },
-      },
-    });
-
-    fireTrigger("crm.ticket_created", {
-      entityId: null,
-      targetType: "crmTicket",
-      targetId: ticket.id,
-      recipient: { email: null, phone: null },
-      variables: { nom: prospect.nom, secteur: prospect.secteur || "" },
-    }).catch((e) => console.error("[automation] crm.ticket_created:", e));
+    const ticket = await createTicketFromInboundEmail({ email, name, subject, body: message, attachments: b.attachments });
 
     res.status(201).json({ publicToken: ticket.publicToken });
   })
@@ -301,26 +271,7 @@ crmTicketRouter.post(
     const t = await prisma.crmTicket.findUnique({ where: { publicToken: b.token || "" } });
     if (!t) throw new HttpError(404, "Lien invalide ou expiré");
 
-    await prisma.crmTicketMessage.create({
-      data: { ticketId: t.id, authorType: "client", authorName: t.contactName || t.contactEmail, kind: "reply", body: bodyText, attachments: b.attachments || [] },
-    });
-
-    const data: Record<string, unknown> = { updatedAt: new Date() };
-    if (t.status === "Fermé") {
-      data.status = "En attente";
-      data.closedAt = null;
-    } else if (t.status !== "En attente") {
-      data.status = "En attente";
-    }
-    await prisma.crmTicket.update({ where: { id: t.id }, data });
-
-    fireTrigger("crm.ticket_client_replied", {
-      entityId: null,
-      targetType: "crmTicket",
-      targetId: t.id + ":" + Date.now(), // pas de dédup — chaque relance client doit notifier
-      recipient: { email: null, phone: null },
-      variables: { nom: t.contactName || t.contactEmail, secteur: "" },
-    }).catch((e) => console.error("[automation] crm.ticket_client_replied:", e));
+    await appendInboundReply(t, { body: bodyText, attachments: b.attachments });
 
     res.status(201).json({ ok: true });
   })

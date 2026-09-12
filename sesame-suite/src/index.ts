@@ -4,6 +4,7 @@ import { startBookingSourceScheduler } from "./lib/bookingSourceScheduler";
 import { startLockerSourceScheduler } from "./lib/lockerSourceScheduler";
 import { startAutomationScheduler } from "./lib/automationScheduler";
 import { startCampaignScheduler } from "./lib/campaignScheduler";
+import { startGraphSubscriptionScheduler } from "./lib/graphSubscriptionScheduler";
 import { VERSION } from "./lib/version";
 
 const app = createApp();
@@ -15,4 +16,5 @@ app.listen(config.port, () => {
   startLockerSourceScheduler();
   startAutomationScheduler();
   startCampaignScheduler();
+  startGraphSubscriptionScheduler();
 });

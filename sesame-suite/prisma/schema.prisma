@@ -2159,7 +2159,47 @@ model CrmTicketMessage {
   body        String  @db.Text
   attachments Json    @default("[]") // string[] data URI — même convention que Room.photos
 
+  // Id du message Microsoft Graph d'origine, quand ce message a été importé
+  // automatiquement depuis la boîte support (cf. lib/graph.ts,
+  // routes/graphMail.ts) — sert uniquement de garde-fou anti-doublon : une
+  // notification Graph peut être livrée plusieurs fois pour le même email
+  // ("at least once"), on ignore silencieusement un id déjà vu plutôt que
+  // de recréer le message. Toujours null pour un message saisi autrement
+  // (widget, réponse d'agent, lien public).
+  graphMessageId String? @unique
+
   createdAt DateTime @default(now())
+}
+
+// Abonnement Microsoft Graph (changeType=created sur les messages de la
+// boîte support) qui remplace la règle Outlook + flux Power Automate
+// utilisée jusque-là pour du simple signal d'engagement (cf.
+// crmProspect.ts inboundSignal) : ici, chaque email entrant devient/complète
+// un vrai CrmTicket. Ligne singleton, portée CRM/Sesame uniquement (comme
+// SmtpConfig.entityId=null) — une seule boîte support surveillée à la fois.
+model GraphMailSubscription {
+  id String @id @default(cuid())
+
+  // Boîte surveillée (copie de SmtpConfig.supportFromEmail/fromEmail au
+  // moment de l'activation) — Microsoft Graph exige l'UPN, pas juste
+  // l'adresse SMTP, mais les deux coïncident pour une boîte Microsoft 365.
+  mailbox String
+
+  // Id de l'abonnement côté Graph (POST /subscriptions) — null tant que
+  // l'activation n'a pas réussi.
+  subscriptionId String?  @unique
+  expiresAt      DateTime?
+
+  // Secret renvoyé tel quel par Graph dans chaque notification
+  // (clientState) — vérifié à réception pour rejeter toute requête qui ne
+  // vient pas réellement de Graph (cf. notify()).
+  clientState String
+
+  status    String  @default("inactive") // inactive | active | error
+  lastError String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // ─────────────────────────────────────────────────────────────────────────
