@@ -45,6 +45,7 @@ import { vendorRouter } from "./routes/vendor";
 import { walletRouter } from "./routes/wallet";
 import { bookingEngineRouter } from "./routes/bookingEngine";
 import { geocodeRouter } from "./routes/geocode";
+import { unsubscribeRouter } from "./routes/unsubscribe";
 import { housekeepingScope } from "./middleware/housekeepingScope";
 import { errorHandler } from "./middleware/errorHandler";
 import { VERSION } from "./lib/version";
@@ -127,6 +128,10 @@ export function createApp() {
   // Formulaire de contact du site web public (hors /wa — pas d'authentification,
   // alimente le CRM commercial interne)
   app.use(contactRouter);
+
+  // Désabonnement newsletter/campagnes — lien public signé, cliqué depuis un
+  // client mail (pas de session possible), cf. lib/unsubscribeToken.ts.
+  app.use(unsubscribeRouter);
 
   app.get("/health", (_req, res) => res.json({ ok: true, ...VERSION }));
   // Numéro de version (commit + date du build) — permet de vérifier depuis

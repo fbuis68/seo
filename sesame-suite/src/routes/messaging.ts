@@ -3,7 +3,7 @@ import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { resolveScope } from "../lib/scope";
 import { getChannelConfig, upsertChannelConfig, sendTestMessage, SmsChannel } from "../lib/sms";
-import { listMessageTemplates, upsertMessageTemplate, deleteMessageTemplate, Channel } from "../lib/messageTemplate";
+import { listMessageTemplates, upsertMessageTemplate, deleteMessageTemplate, isChannel } from "../lib/messageTemplate";
 import { sendMessage } from "../lib/messaging";
 import { createMetaMessageTemplate, listMetaMessageTemplates } from "../lib/metaTemplates";
 
@@ -18,9 +18,6 @@ export const messagingRouter = Router();
 
 function isSmsChannel(v: unknown): v is SmsChannel {
   return v === "sms" || v === "whatsapp";
-}
-function isChannel(v: unknown): v is Channel {
-  return v === "email" || v === "sms" || v === "whatsapp";
 }
 
 function shapeChannelConfig(
@@ -260,6 +257,49 @@ messagingRouter.post(
       whatsappContentSid: b.channel === "whatsapp" ? (b.whatsappContentSid || "").trim() : "",
     });
     res.json(shapeTemplate(row));
+  })
+);
+
+/**
+ * Import en masse — colle un tableau JSON [{channel,key,name,subject,
+ * bodyHtml,whatsappContentSid?}, ...] (ex : le calendrier de newsletters
+ * hebdomadaires généré en amont) et upserte chaque entrée avec la même
+ * validation que la création unitaire. Ne s'arrête pas au premier échec —
+ * chaque élément est traité indépendamment, le résultat détaillé par clé
+ * permet de corriger uniquement les entrées en erreur.
+ */
+messagingRouter.post(
+  "/messageTemplate/bulkImport",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const templates = req.body.templates;
+    if (!Array.isArray(templates) || templates.length === 0) throw new HttpError(400, "Aucun modèle à importer");
+    if (templates.length > 200) throw new HttpError(400, "200 modèles maximum par import");
+
+    const results: { key: string; ok: boolean; error?: string }[] = [];
+    for (const raw of templates as TemplateBody[]) {
+      const key = ((raw && raw.key) || "").trim().toLowerCase();
+      try {
+        if (!isChannel(raw?.channel)) throw new HttpError(400, "channel doit être email, sms ou whatsapp");
+        if (!raw.name || !raw.name.trim()) throw new HttpError(400, "Nom du modèle requis");
+        if (raw.channel === "email" && (!raw.subject || !raw.subject.trim())) throw new HttpError(400, "Objet requis pour un modèle email");
+        if (!raw.bodyHtml || !raw.bodyHtml.trim()) throw new HttpError(400, "Corps du message requis");
+        if (raw.channel === "whatsapp" && (!raw.whatsappContentSid || !raw.whatsappContentSid.trim())) {
+          throw new HttpError(400, "Content SID Twilio requis pour un modèle WhatsApp");
+        }
+        await upsertMessageTemplate(entityId, raw.channel, key, {
+          name: raw.name.trim(),
+          subject: (raw.subject || "").trim(),
+          bodyHtml: raw.bodyHtml,
+          whatsappContentSid: raw.channel === "whatsapp" ? (raw.whatsappContentSid || "").trim() : "",
+        });
+        results.push({ key: key || "(sans clé)", ok: true });
+      } catch (e) {
+        results.push({ key: key || "(sans clé)", ok: false, error: e instanceof HttpError ? e.message : "Erreur inattendue" });
+      }
+    }
+    res.json({ results, successCount: results.filter((r) => r.ok).length, failureCount: results.filter((r) => !r.ok).length });
   })
 );
 

@@ -3,6 +3,10 @@ import { HttpError } from "./asyncHandler";
 
 export type Channel = "email" | "sms" | "whatsapp";
 
+export function isChannel(v: unknown): v is Channel {
+  return v === "email" || v === "sms" || v === "whatsapp";
+}
+
 export async function listMessageTemplates(entityId: string | null, channel?: Channel) {
   return prisma.messageTemplate.findMany({
     where: { entityId, ...(channel ? { channel } : {}) },

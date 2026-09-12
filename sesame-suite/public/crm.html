@@ -5283,20 +5283,32 @@ function showCanauxPanel(){
   loadCanauxPanelData();
 }
 
+let CAMPAIGNS = [];
+
 async function loadCanauxPanelData(){
   try{
-    const [smtpR, smsR, waR, tplR] = await Promise.all([
+    const [smtpR, smsR, waR, tplR, campR] = await Promise.all([
       apiFetch('/wa/smtpConfig/get?scope=crm'),
       apiFetch('/wa/channelConfig/get?scope=crm&channel=sms'),
       apiFetch('/wa/channelConfig/get?scope=crm&channel=whatsapp'),
       apiFetch('/wa/messageTemplate/list?scope=crm'),
+      apiFetch('/wa/campaign/list?scope=crm'),
     ]);
     SMTP_CFG = smtpR.ok ? await smtpR.json() : null;
     SMS_CFG = smsR.ok ? await smsR.json() : null;
     WA_CFG = waR.ok ? await waR.json() : null;
     MSG_TEMPLATES = tplR.ok ? await tplR.json() : [];
     MSG_TEMPLATES_LOADED = true;
+    CAMPAIGNS = campR.ok ? await campR.json() : [];
   }catch(e){ flash('Erreur de chargement'); }
+  renderCanauxPanel();
+}
+
+async function reloadCampaigns(){
+  try{
+    const r = await apiFetch('/wa/campaign/list?scope=crm');
+    CAMPAIGNS = r.ok ? await r.json() : [];
+  }catch(e){ /* silencieux — la liste reste celle déjà affichée */ }
   renderCanauxPanel();
 }
 
@@ -5381,7 +5393,10 @@ function renderCanauxPanel(){
     </div>
   </div>
   <div class="card">
-    <div class="card-head"><div class="ch-ico">✉</div><span class="ch-title">Modèles de message</span><button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="openTemplateModal(null)">+ Nouveau modèle</button></div>
+    <div class="card-head"><div class="ch-ico">✉</div><span class="ch-title">Modèles de message</span>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="openBulkImportModal()">Importer (JSON)</button>
+      <button class="btn btn-primary btn-sm" onclick="openTemplateModal(null)">+ Nouveau modèle</button>
+    </div>
     <div class="chan-tabs">${['email','sms','whatsapp'].map(c=>`<button class="chan-tab ${tplChannelTab===c?'active':''}" onclick="tplChannelTab='${c}';renderCanauxPanel()">${CHANNEL_LABEL[c]}</button>`).join('')}</div>
     ${tpls.length===0?'<div class="log-empty">Aucun modèle '+CHANNEL_LABEL[tplChannelTab]+', créez-en un pour pouvoir l\'utiliser dans une règle ou un envoi depuis une fiche.</div>':tpls.map(t=>`
       <div class="log-item">
@@ -5395,7 +5410,8 @@ function renderCanauxPanel(){
           </div>
         </div>
       </div>`).join('')}
-  </div>`;
+  </div>
+  ${renderCampaignsCard()}`;
 }
 
 async function saveSmtpConfig(){
@@ -5672,6 +5688,191 @@ async function deleteTemplate(id){
   }catch(e){ flash('Erreur de suppression'); return; }
   MSG_TEMPLATES=MSG_TEMPLATES.filter(t=>t.id!==id);
   flash('Modèle supprimé');renderCanauxPanel();
+}
+
+const CAMPAIGN_BOOL_FILTERS = [
+  ['moduleSesame','Module Sesame'],['moduleTtlock','Module Ttlock'],['moduleOneway','Module Oneway'],
+  ['onbChoixChambres','Onboarding : choix chambre'],['onbOccupant','Onboarding : occupants'],['onbIdentite','Onboarding : identité'],['onbMenage','Onboarding : ménage'],
+  ['espBoutique','Espace : boutique'],['espPoint','Espace : points fidélité'],['espEvenement','Espace : évènements'],
+  ['webApp','WebApp'],['mobileV2','Mobile V2'],['checkin','Check-in en ligne'],['livret','Livret digital'],['gestionDemande','Gestion des demandes'],['offline','Mode offline'],
+];
+const CAMPAIGN_STATUS_LABEL = {draft:'Brouillon',scheduled:'Programmée',sending:'Envoi en cours',sent:'Envoyée',failed:'Échec',cancelled:'Annulée'};
+const CAMPAIGN_STATUS_COLOR = {scheduled:'#1A6B47',sending:'#c1861d',sent:'#185fa5',failed:'#a32d2d',cancelled:'#888',draft:'#888'};
+
+function renderCampaignsCard(){
+  const emailTpls = MSG_TEMPLATES.filter(t=>t.channel==='email');
+  return `
+  <div class="card">
+    <div class="card-head"><div class="ch-ico">📣</div><span class="ch-title">Campagnes</span></div>
+    <div class="form-grid">
+      <div class="ff"><label>Modèle (email)</label><select id="camp-template">${emailTpls.length?emailTpls.map(t=>`<option value="${esc(t.key)}">${esc(t.name)}</option>`).join(''):'<option value="">Aucun modèle email — créez-en un ci-dessus</option>'}</select></div>
+      <div class="ff"><label>Nom de la campagne</label><input id="camp-name" placeholder="Newsletter - Semaine 1"></div>
+    </div>
+    <div style="margin-top:12px;font-size:13px;font-weight:600;color:#666">Audience — tous les filtres vides = toute la base</div>
+    <div class="form-grid" style="margin-top:6px">
+      <div class="ff"><label>Type</label><select id="camp-f-type" multiple style="height:70px">${TYPES.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></div>
+      <div class="ff"><label>Secteur</label><select id="camp-f-secteur" multiple style="height:70px">${SECTEURS.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('')}</select></div>
+      <div class="ff"><label>Origine</label><select id="camp-f-origine" multiple style="height:70px">${ORIGINES.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join('')}</select></div>
+      <div class="ff"><label>Contrat</label><select id="camp-f-contrat" multiple style="height:70px"><option value="oui">oui</option><option value="non">non</option><option value="en cours">en cours</option></select></div>
+      <div class="ff"><label>Risque</label><select id="camp-f-danger" multiple style="height:70px">${DANGERS.map(d=>`<option value="${esc(d)}">${esc(d)}</option>`).join('')}</select></div>
+      <div class="ff"><label>Commercial</label><select id="camp-f-commercial" multiple style="height:70px">${COMMERCIALS.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div>
+      <div class="ff"><label>Ville (séparées par virgule)</label><input id="camp-f-ville" placeholder="Paris, Lyon"></div>
+      <div class="ff"><label>Groupe/enseigne (séparés par virgule)</label><input id="camp-f-groupe" placeholder="Accor, Indépendant"></div>
+      <div class="ff"><label>Score minimum</label><input type="number" id="camp-f-scoremin" min="0" placeholder="0"></div>
+      <div class="ff"><label>Recherche libre</label><input id="camp-f-search" placeholder="nom, ville, référent…"></div>
+    </div>
+    <details style="margin-top:10px">
+      <summary style="cursor:pointer;font-size:13px;color:#666">Modules &amp; parcours activés</summary>
+      <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px 16px">
+        ${CAMPAIGN_BOOL_FILTERS.map(([key,label])=>`<label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:400"><input type="checkbox" id="camp-f-${key}"> ${label}</label>`).join('')}
+      </div>
+    </details>
+    <div class="modal-footer" style="border-top:none;padding-top:12px;flex-wrap:wrap;justify-content:flex-start;gap:12px">
+      <button class="btn btn-ghost btn-sm" onclick="previewCampaignAudience()">Aperçu de l'audience</button>
+      <span id="camp-audience-count" style="font-size:13px;color:#666"></span>
+    </div>
+    <div class="form-grid" style="margin-top:4px">
+      <div class="ff"><label>Date d'envoi</label><input type="date" id="camp-date"></div>
+      <div class="ff"><label>Heure</label><input type="time" id="camp-time" value="09:00"></div>
+    </div>
+    <div style="font-size:11px;color:#8a8a8a;margin-top:4px">Laissez la date vide pour un envoi immédiat.</div>
+    <div class="modal-footer" style="border-top:none;padding-top:8px">
+      <button class="btn btn-primary btn-sm" onclick="scheduleCampaign()">Programmer l'envoi</button>
+    </div>
+    <div style="margin-top:18px;font-size:13px;font-weight:600;color:#666">Historique</div>
+    ${CAMPAIGNS.length===0?'<div class="log-empty">Aucune campagne pour le moment.</div>':CAMPAIGNS.map(c=>`
+      <div class="log-item">
+        <div class="log-dot" style="background:${CAMPAIGN_STATUS_COLOR[c.status]||'#888'}"></div>
+        <div class="log-body">
+          <div class="log-text"><strong>${esc(c.name)}</strong> <span style="color:#aaa;font-size:11px">(${CHANNEL_LABEL[c.channel]||c.channel})</span></div>
+          <div class="log-meta">${CAMPAIGN_STATUS_LABEL[c.status]||c.status}${c.scheduledAt?' · programmée le '+new Date(c.scheduledAt).toLocaleString('fr-FR'):''}${c.sentAt?' · envoyée le '+new Date(c.sentAt).toLocaleString('fr-FR'):''} · ${c.audienceSize} destinataire(s)${c.status==='sent'?' · '+c.successCount+' envoyés, '+c.failureCount+' échecs':''}${c.lastError?' · <span style="color:#a32d2d">'+esc(c.lastError)+'</span>':''}</div>
+          <div class="log-acts">
+            ${c.status==='scheduled'?`<button class="btn btn-sm btn-ghost" style="color:#a32d2d" onclick="cancelCampaign('${c.id}')">Annuler</button>`:''}
+            <button class="btn btn-sm btn-ghost" style="color:#a32d2d" onclick="deleteCampaign('${c.id}')">Supprimer</button>
+          </div>
+        </div>
+      </div>`).join('')}
+  </div>`;
+}
+
+function readCampaignFilters(){
+  const multi = id => Array.from((document.getElementById(id)||{selectedOptions:[]}).selectedOptions).map(o=>o.value).filter(Boolean);
+  const csv = id => ((document.getElementById(id)||{value:''}).value||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const filter = {
+    type: multi('camp-f-type'),
+    secteur: multi('camp-f-secteur'),
+    origine: multi('camp-f-origine'),
+    contrat: multi('camp-f-contrat'),
+    danger: multi('camp-f-danger'),
+    commercialId: multi('camp-f-commercial'),
+    ville: csv('camp-f-ville'),
+    groupe: csv('camp-f-groupe'),
+  };
+  const search = ((document.getElementById('camp-f-search')||{value:''}).value||'').trim();
+  if(search) filter.search = search;
+  const scoreMinRaw = (document.getElementById('camp-f-scoremin')||{value:''}).value;
+  if(scoreMinRaw!=='') filter.scoreMin = +scoreMinRaw;
+  CAMPAIGN_BOOL_FILTERS.forEach(([key])=>{
+    const el = document.getElementById('camp-f-'+key);
+    if(el && el.checked) filter[key] = true;
+  });
+  Object.keys(filter).forEach(k=>{ if(Array.isArray(filter[k]) && filter[k].length===0) delete filter[k]; });
+  return filter;
+}
+
+async function previewCampaignAudience(){
+  const el = document.getElementById('camp-audience-count');
+  if(el) el.textContent = 'Calcul…';
+  try{
+    const r = await apiFetch('/wa/campaign/previewAudience?scope=crm', {method:'POST', body:JSON.stringify({filterJson:readCampaignFilters()})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    if(el) el.textContent = data.count+' destinataire(s) correspondant(s)';
+  }catch(e){ if(el) el.textContent=''; flash(e.message||"Erreur de calcul de l'audience"); }
+}
+
+async function scheduleCampaign(){
+  const g=i=>(document.getElementById(i)||{value:''}).value;
+  const templateKey = g('camp-template');
+  if(!templateKey){flash('Sélectionnez un modèle email');return;}
+  const date = g('camp-date'), time = g('camp-time')||'09:00';
+  const scheduledAt = date ? new Date(date+'T'+time+':00').toISOString() : undefined;
+  const body = {
+    channel: 'email',
+    templateKey,
+    name: g('camp-name').trim() || undefined,
+    filterJson: readCampaignFilters(),
+    scheduledAt,
+    scope: 'crm',
+  };
+  try{
+    const r = await apiFetch('/wa/campaign/create', {method:'POST', body:JSON.stringify(body)});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash(data.status==='scheduled' ? 'Campagne programmée' : 'Campagne envoyée');
+    reloadCampaigns();
+  }catch(e){ flash(e.message||'Erreur de programmation'); }
+}
+
+async function cancelCampaign(id){
+  if(!confirm('Annuler cette campagne programmée ?'))return;
+  try{
+    const r = await apiFetch('/wa/campaign/cancel', {method:'POST', body:JSON.stringify({id, scope:'crm'})});
+    if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash("Erreur d'annulation"); return; }
+  flash('Campagne annulée'); reloadCampaigns();
+}
+
+async function deleteCampaign(id){
+  if(!confirm('Supprimer cette campagne ?'))return;
+  try{
+    const r = await apiFetch('/wa/campaign/delete', {method:'POST', body:JSON.stringify({id, scope:'crm'})});
+    if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash('Erreur de suppression'); return; }
+  CAMPAIGNS = CAMPAIGNS.filter(c=>c.id!==id);
+  flash('Campagne supprimée'); renderCanauxPanel();
+}
+
+function openBulkImportModal(){
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Importer des modèles (JSON)</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div style="font-size:12px;color:#666;margin-bottom:8px">Un tableau JSON <code>[{channel,key,name,subject,bodyHtml,whatsappContentSid?}, ...]</code> — pratique pour importer d'un coup un calendrier de plusieurs newsletters.</div>
+      <div class="ff"><label>Fichier JSON</label><input type="file" id="bulk-import-file" accept="application/json,.json"></div>
+      <div id="bulk-import-status" style="font-size:12px;margin-top:8px;max-height:200px;overflow:auto"></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="runBulkImport()">Importer</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function runBulkImport(){
+  const input = document.getElementById('bulk-import-file');
+  const statusEl = document.getElementById('bulk-import-status');
+  const file = input && input.files && input.files[0];
+  if(!file){ flash('Choisissez un fichier JSON'); return; }
+  let templates;
+  try{
+    const text = await file.text();
+    templates = JSON.parse(text);
+    if(!Array.isArray(templates)) throw new Error('le fichier doit contenir un tableau JSON');
+  }catch(e){ flash('Fichier JSON invalide : '+e.message); return; }
+  if(statusEl) statusEl.textContent = 'Import en cours…';
+  try{
+    const r = await apiFetch('/wa/messageTemplate/bulkImport', {method:'POST', body:JSON.stringify({templates, scope:'crm'})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    if(statusEl){
+      statusEl.innerHTML = data.results.map(res=>`<div style="color:${res.ok?'#1A6B47':'#a32d2d'}">${res.ok?'✓':'✗'} ${esc(res.key)}${res.error?' — '+esc(res.error):''}</div>`).join('');
+    }
+    flash(data.successCount+' modèle(s) importé(s)'+(data.failureCount?', '+data.failureCount+' échec(s)':''));
+    const tplR = await apiFetch('/wa/messageTemplate/list?scope=crm');
+    MSG_TEMPLATES = tplR.ok ? await tplR.json() : MSG_TEMPLATES;
+    renderCanauxPanel();
+  }catch(e){ if(statusEl) statusEl.textContent=''; flash(e.message||"Échec de l'import"); }
 }
 
 async function ensureTemplatesLoaded(){

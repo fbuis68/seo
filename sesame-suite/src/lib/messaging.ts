@@ -55,6 +55,16 @@ export async function sendMessage(opts: {
    * jamais chargée, donc aucun score jamais enregistré à l'ouverture.
    */
   baseUrl?: string;
+  /**
+   * Email uniquement — HTML ajouté en fin de corps après le pixel de suivi
+   * éventuel (ex : pied de page de désabonnement injecté par
+   * lib/campaignScheduler.ts sur un envoi de campagne). Absent pour un envoi
+   * transactionnel normal (confirmation de réservation, etc.) — cette
+   * fonction reste le point de convergence unique, donc ce paramètre est ce
+   * qui distingue un envoi de masse d'un envoi individuel plutôt que d'en
+   * faire deux chemins de code séparés.
+   */
+  appendBodyHtml?: string;
 }) {
   const template = await prisma.messageTemplate.findFirst({
     where: { entityId: opts.entityId, channel: opts.channel, key: opts.templateKey },
@@ -73,6 +83,9 @@ export async function sendMessage(opts: {
     // sécurité (Proofpoint, Mimecast...) utilisent pour détecter et retirer
     // les pixels de suivi avant remise du mail.
     body += `<img src="${pixelUrl}" width="1" height="1" alt="">`;
+  }
+  if (opts.channel === "email" && opts.appendBodyHtml) {
+    body += opts.appendBodyHtml;
   }
 
   if (opts.channel === "email") {

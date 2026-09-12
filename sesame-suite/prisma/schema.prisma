@@ -26,33 +26,33 @@ model Entity {
   groupId String?
   group   Group?  @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
-  config            EntityModuleConfig?
-  rooms             Room[]
-  bookings          Booking[]
-  products          Product[]
-  orders            Order[]
-  taxeRecords       TaxeSejourRecord[]
-  clientPrefs       ClientPrefs[]
-  loyaltyAccounts   LoyaltyAccount[]
-  livretSections    LivretSection[]
-  housekeepingTasks HousekeepingTask[]
-  housekeepingStaff HousekeepingStaff[]
-  adminUsers        AdminUser[]
-  campaigns         Campaign[]
-  subscriptions     Subscription[]
-  bookingSource     BookingSourceConfig?
-  lockerSource      LockerSourceConfig?
-  paymentConfig     PaymentConfig?
-  crmProspects      CrmProspect[]
-  smtpConfig        SmtpConfig?
-  messageTemplates  MessageTemplate[]
-  channelConfigs    ChannelConfig[]
-  automationRules   AutomationRule[]
-  vendors           Vendor[]
-  vendorCommissions VendorCommission[]
-  walletConfig      WalletConfig?
-  questionnaires    Questionnaire[]
-  passes            Pass[]
+  config              EntityModuleConfig?
+  rooms               Room[]
+  bookings            Booking[]
+  products            Product[]
+  orders              Order[]
+  taxeRecords         TaxeSejourRecord[]
+  clientPrefs         ClientPrefs[]
+  loyaltyAccounts     LoyaltyAccount[]
+  livretSections      LivretSection[]
+  housekeepingTasks   HousekeepingTask[]
+  housekeepingStaff   HousekeepingStaff[]
+  adminUsers          AdminUser[]
+  campaigns           Campaign[]
+  subscriptions       Subscription[]
+  bookingSource       BookingSourceConfig?
+  lockerSource        LockerSourceConfig?
+  paymentConfig       PaymentConfig?
+  crmProspects        CrmProspect[]
+  smtpConfig          SmtpConfig?
+  messageTemplates    MessageTemplate[]
+  channelConfigs      ChannelConfig[]
+  automationRules     AutomationRule[]
+  vendors             Vendor[]
+  vendorCommissions   VendorCommission[]
+  walletConfig        WalletConfig?
+  questionnaires      Questionnaire[]
+  passes              Pass[]
   bookingEngineConfig BookingEngineConfig?
 }
 
@@ -236,7 +236,7 @@ model Room {
   // "D00005605") — importé automatiquement si mappé (cf.
   // FacilityMapping.deviceId dans bookingSource.ts), sinon saisissable à la
   // main. Porte le "deviceId" attendu par l'encodage NFC (cf. isNfcEncoder).
-  deviceId String?
+  deviceId     String?
   // Ce lecteur peut encoder des cartes/badges NFC — coché manuellement par
   // l'hôtel (jamais déduit automatiquement d'un champ côté source externe,
   // ex : Sesame Technology, où seul un libellé texte libre distingue un
@@ -287,10 +287,10 @@ model Booking {
   startDate        DateTime
   endDate          DateTime
   roomId           String?
-  room             Room?    @relation(fields: [roomId], references: [id])
+  room             Room?     @relation(fields: [roomId], references: [id])
   facilityCode     String? // dénormalisé — code chambre au moment de la réservation
   facilityName     String?
-  status           String   @default("confirmed") // confirmed | checkin_done | completed | cancelled
+  status           String    @default("confirmed") // confirmed | checkin_done | completed | cancelled
   // Champ à part entière issu de la source externe (ex : "typeCode/typeId/
   // type" de l'API Sesame Technology) — n'est PAS dérivé de Room.category :
   // Sesame distingue le type de réservation du type de chambre occupée.
@@ -299,7 +299,7 @@ model Booking {
   // BookingSourceConfig.updateBookingTypeParam (cf. pushBookingUpdate).
   bookingType      String?
   otaId            String?
-  checkinDone      Boolean  @default(false)
+  checkinDone      Boolean   @default(false)
   // Marque le début (pas la fin) du check-in en ligne côté client — posé une
   // seule fois, au moment où il sélectionne sa réservation dans l'appli
   // check-in (cf. POST /wa/booking/checkinStart, appelé par checkin.html
@@ -628,8 +628,8 @@ model BookingSourceConfig {
   // deux, absent des serrures TTLock. Filtre appliqué côté app (pas
   // forcément supporté par l'endpoint distant) avant d'afficher le sélecteur
   // de lecteur du bouton "Encoder NFC".
-  nfcDeviceFilterField String? // ex: "associable"
-  nfcDeviceFilterValue String? @default("true")
+  nfcDeviceFilterField          String? // ex: "associable"
+  nfcDeviceFilterValue          String? @default("true")
 
   // Récupération du QR code / code d'accès (onglet "Clé digitale" de
   // l'espace client, cf. checkin.html espRenderQr) — même principe que
@@ -834,9 +834,9 @@ model BookingSourceConfig {
   // L'appel ne fait que déclencher un import complet existant (runImport)
   // — Mews ne fournit pas le détail complet d'une réservation dans
   // l'événement lui-même, il faut donc de toute façon rappeler l'API.
-  webhookSecret          String?   @unique
-  lastWebhookAt          DateTime?
-  lastWebhookEventCount  Int?
+  webhookSecret         String?   @unique
+  lastWebhookAt         DateTime?
+  lastWebhookEventCount Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -982,7 +982,7 @@ model BookingEngineConfig {
   entityId String @unique
   entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  enabled Boolean @default(false)
+  enabled        Boolean @default(false)
   // Paiement en ligne obligatoire pour réserver (comportement historique,
   // conservé par défaut) — quand false, le client choisit sur la page entre
   // payer en ligne (si le module Paiement est configuré) ou payer sur place
@@ -1033,8 +1033,8 @@ model TaxeSejourRecord {
   // existe dès que les occupants sont déclarés, que le montant soit réglé
   // ou non). Marqué manuellement depuis le panneau Réservations (étape
   // "Taxe payée" de la frise du parcours client).
-  paid    Boolean   @default(false)
-  paidAt  DateTime?
+  paid   Boolean   @default(false)
+  paidAt DateTime?
 
   createdAt DateTime @default(now())
 }
@@ -1324,6 +1324,13 @@ model ClientPrefs {
   menageNote String?
   tags       Json?
 
+  // Désabonnement newsletter/campagnes marketing (distinct des emails
+  // transactionnels de séjour, qui continuent d'être envoyés normalement) —
+  // posé via le lien de désinscription signé inséré dans chaque envoi de
+  // campagne (cf. lib/unsubscribeToken.ts).
+  emailOptOut   Boolean   @default(false)
+  emailOptOutAt DateTime?
+
   updatedAt DateTime @updatedAt
 
   @@unique([entityId, email])
@@ -1438,23 +1445,43 @@ model HousekeepingTask {
   createdAt DateTime @default(now())
 }
 
-// Campagnes marketing (email/SMS) — segmentation calculée à l'envoi depuis
-// la base clients (réservations + fidélité), pas de table de destinataires
-// dédiée pour cette itération.
+// Campagnes marketing (email/SMS/WhatsApp) — envoi de masse programmé,
+// segmenté via `filterJson` et résolu à l'exécution (lib/campaignAudience.ts)
+// plutôt que via une table de destinataires figée. entityId nullable comme
+// MessageTemplate/AutomationRule : null = portée CRM (base prospects/clients
+// Sesame), renseigné = portée hôtel (base clients de l'établissement).
+// Historiquement "sent"-only et 100% simulé (aucun envoi réel) ; devenu un
+// vrai moteur de programmation/envoi le 12/09/2026 (cf. lib/campaignScheduler.ts).
 model Campaign {
-  id       String @id @default(cuid())
-  entityId String
-  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  id       String  @id @default(cuid())
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  channel      String // email | sms
+  name         String  @default("")
+  channel      String // email | sms | whatsapp
   templateKey  String?
   subject      String?
   content      String?
   audienceDesc String? // description lisible du segment ciblé
   audienceSize Int     @default(0)
-  status       String  @default("sent") // draft | sent
+
+  // Segment/filtre d'audience — forme dépend de la portée : côté CRM,
+  // dimensions type/secteur/origine/contrat/danger/ville/groupe/commercialId/
+  // modules/parcours ; côté hôtel, {segment: all|Standard|Gold|Premium|
+  // inactive|selection}. `manualSelectionIds` porte les ids figés d'une
+  // sélection manuelle (cases cochées), utilisée telle quelle quand présente.
+  filterJson         Json?
+  manualSelectionIds Json? // string[] — ids CrmProspect (CRM) ou emails (hôtel)
+
+  scheduledAt  DateTime? // null = envoi immédiat (comportement historique) ; sinon date/heure cible, traitée par le sweep
+  status       String    @default("draft") // draft | scheduled | sending | sent | failed | cancelled
+  sentAt       DateTime?
+  successCount Int       @default(0)
+  failureCount Int       @default(0)
+  lastError    String?
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Demande/contrat de souscription — panneau "Souscriptions" (back-office
@@ -1529,19 +1556,19 @@ model CrmProspect {
   subscriptionId String?       @unique
   subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
 
-  nom                 String
+  nom                    String
   // Prospect | Client | Suspect — "Suspect" (ajouté le 04/09/2026) désigne un
   // contact non qualifié (ex : badge scanné sur un salon), pour lequel
   // l'adresse postale n'est pas exigée à la création (cf. validation dans
   // crmProspect.ts) contrairement à Prospect/Client. Auto "Prospect" pour
   // les arrivées onboarding/formulaire de contact.
-  type                String  @default("Client")
+  type                   String    @default("Client")
   // D'où vient ce contact (ex : "FHT2026", "Site web", "Salon X") — libre,
   // éditable par fiche. Distinct de `groupe`/`affiliations` (identité de
   // l'établissement) : sert à tracer l'origine commerciale du contact,
   // utile pour trier/filtrer un import ponctuel (ex : badges d'un salon).
-  origine             String?
-  groupe              String?
+  origine                String?
+  groupe                 String?
   // Affiliations hôtelières — enseigne/marque commerciale (Accor, Hilton,
   // Best Western, The Originals...) et/ou collection/label auquel adhère
   // l'établissement (Relais & Châteaux, Small Luxury Hotels...). Liste à
@@ -1549,16 +1576,16 @@ model CrmProspect {
   // cumuler une marque ET un label (ex. Best Western + Relais & Châteaux).
   // Sans lien avec "groupe" ci-dessus, qui désigne l'exploitant/opérateur
   // (société propriétaire ou gestionnaire), une notion différente.
-  affiliations        String[] @default([])
-  secteur             String?
+  affiliations           String[]  @default([])
+  secteur                String?
   // Identité légale — "nom" reste le nom d'usage/commercial affiché partout
   // (listes, badges, graphiques) ; ces champs sont l'identité INSEE exacte,
   // remplissables à la main ou via la recherche d'entreprises (API publique
   // recherche-entreprises.api.gouv.fr, cf. crm.html) qui les renseigne tous
   // en un clic à partir d'une raison sociale ou d'un SIRET/SIREN saisi.
-  denominationSociale String?
-  siret               String? // 14 chiffres (SIREN + NIC de l'établissement)
-  siren               String? // 9 chiffres — 9 premiers du SIRET, gardé distinct : retourné tel quel par l'API
+  denominationSociale    String?
+  siret                  String? // 14 chiffres (SIREN + NIC de l'établissement)
+  siren                  String? // 9 chiffres — 9 premiers du SIRET, gardé distinct : retourné tel quel par l'API
   // Trois champs complémentaires renvoyés par la recherche d'entreprises
   // (recherche-entreprises.api.gouv.fr) sans équivalent avant leur ajout —
   // formeJuridique reste un libellé "best effort" (nomenclature INSEE des
@@ -1568,9 +1595,9 @@ model CrmProspect {
   formeJuridique         String?
   dateCreationEntreprise DateTime?
   effectifSalarie        String? // tranche officielle INSEE (ex: "20 à 49 salariés")
-  adresse             String? // adresse postale (numéro + voie) — ville reste un champ séparé
-  ville               String?
-  pays                String? @default("France") // la quasi-totalité du portefeuille est française (identité SIRET/SIREN) — reste éditable pour les rares clients étrangers
+  adresse                String? // adresse postale (numéro + voie) — ville reste un champ séparé
+  ville                  String?
+  pays                   String?   @default("France") // la quasi-totalité du portefeuille est française (identité SIRET/SIREN) — reste éditable pour les rares clients étrangers
   // Coordonnées géographiques (WGS84) pour la carte du CRM (public/crm.html,
   // vue "Carte" du panneau Client/Prospect) — géocodées à la volée via
   // l'API publique api-adresse.data.gouv.fr (déjà utilisée par
@@ -1578,13 +1605,13 @@ model CrmProspect {
   // puis mises en cache ici pour ne pas re-géocoder à chaque ouverture de
   // la carte. null tant qu'aucun géocodage n'a réussi (adresse manquante,
   // introuvable, ou pas encore tentée).
-  lat                 Float?
-  lng                 Float?
-  etoiles             String?
-  danger              String  @default("Modéré") // Bon client | Modéré | Élevé !!
-  potentiel           Int     @default(0) // 0-3
-  contrat             String  @default("non") // non | oui | en cours
-  modules             Int     @default(0)
+  lat                    Float?
+  lng                    Float?
+  etoiles                String?
+  danger                 String    @default("Modéré") // Bon client | Modéré | Élevé !!
+  potentiel              Int       @default(0) // 0-3
+  contrat                String    @default("non") // non | oui | en cours
+  modules                Int       @default(0)
   // Type de module d'accès installé — indépendants l'un de l'autre (un
   // client peut avoir plusieurs cases cochées, ex : en transition de l'un
   // vers l'autre). Backfillés le 24/08/2026 depuis la colonne "Type Module"
@@ -1592,38 +1619,46 @@ model CrmProspect {
   // n'avaient jamais été renseignés pour la quasi-totalité des fiches
   // importées (ajoutés après l'import initial, sans backfill), d'où un
   // décompte "Type de module installé" très en dessous de la réalité.
-  moduleSesame        Boolean @default(false)
-  moduleTtlock        Boolean @default(false)
-  moduleOneway        Boolean @default(false) // 3e type d'accès trouvé dans l'audit, absent du modèle jusqu'ici
-  nbAcces             Int     @default(0) // nombre de points d'accès (portes/serrures) installés chez le client
-  pms                 String?
-  priorite            Int     @default(0) // 0-3
-  appel               String? // date libre ("16/10/25") ou "Ne pas appeler"
-  referent            String?
-  email               String?
-  tel                 String?
-  site                String?
-  nfc                 Int     @default(0) // % d'usage — les 4 se totalisent à 100% par fiche
-  qr                  Int     @default(0)
-  mobile              Int     @default(0)
-  code                Int     @default(0)
-  webApp              Boolean @default(false)
-  mobileV2            Boolean @default(false)
-  checkin             Boolean @default(false)
-  livret              Boolean @default(false)
-  gestionDemande      Boolean @default(false)
-  offline             Boolean @default(false)
+  moduleSesame           Boolean   @default(false)
+  moduleTtlock           Boolean   @default(false)
+  moduleOneway           Boolean   @default(false) // 3e type d'accès trouvé dans l'audit, absent du modèle jusqu'ici
+  nbAcces                Int       @default(0) // nombre de points d'accès (portes/serrures) installés chez le client
+  pms                    String?
+  priorite               Int       @default(0) // 0-3
+  appel                  String? // date libre ("16/10/25") ou "Ne pas appeler"
+  referent               String?
+  email                  String?
+  tel                    String?
+  site                   String?
+  nfc                    Int       @default(0) // % d'usage — les 4 se totalisent à 100% par fiche
+  qr                     Int       @default(0)
+  mobile                 Int       @default(0)
+  code                   Int       @default(0)
+  webApp                 Boolean   @default(false)
+  mobileV2               Boolean   @default(false)
+  checkin                Boolean   @default(false)
+  livret                 Boolean   @default(false)
+  gestionDemande         Boolean   @default(false)
+  offline                Boolean   @default(false)
   // Parcours activés côté client final — par défaut selon le secteur
   // (cf. sectorGroupFor() côté seed/front), éditables ensuite par fiche.
-  onbChoixChambres    Boolean @default(false) // Onboarding : choix de la chambre
-  onbOccupant         Boolean @default(false) // Onboarding : déclaration des occupants
-  onbIdentite         Boolean @default(false) // Onboarding : vérification d'identité
-  onbMenage           Boolean @default(false) // Onboarding : préférences ménage
-  espBoutique         Boolean @default(false) // Espace client : boutique / room service
-  espPoint            Boolean @default(false) // Espace client : solde de points fidélité
-  espEvenement        Boolean @default(false) // Espace client : évènements/offres de l'établissement
-  messagerie          String  @default("Noreply") // Noreply | Client
-  note                String?
+  onbChoixChambres       Boolean   @default(false) // Onboarding : choix de la chambre
+  onbOccupant            Boolean   @default(false) // Onboarding : déclaration des occupants
+  onbIdentite            Boolean   @default(false) // Onboarding : vérification d'identité
+  onbMenage              Boolean   @default(false) // Onboarding : préférences ménage
+  espBoutique            Boolean   @default(false) // Espace client : boutique / room service
+  espPoint               Boolean   @default(false) // Espace client : solde de points fidélité
+  espEvenement           Boolean   @default(false) // Espace client : évènements/offres de l'établissement
+  messagerie             String    @default("Noreply") // Noreply | Client
+  note                   String?
+
+  // Désabonnement newsletter/campagnes CRM (distinct des échanges
+  // transactionnels/commerciaux ponctuels, qui restent possibles) — posé via
+  // le lien de désinscription signé inséré dans chaque envoi de campagne
+  // (cf. lib/unsubscribeToken.ts). Exclut automatiquement la fiche de toute
+  // audience de campagne future.
+  emailOptOut   Boolean   @default(false)
+  emailOptOutAt DateTime?
 
   // Portefeuille financier — MRR importé du fichier de trésorerie (montant
   // mensuel récurrent, quand la fiche a pu être rapprochée par nom) ; signé
@@ -1656,7 +1691,7 @@ model CrmProspect {
   // commerciale automatique n'est créée qu'UNE fois par fiche — ce champ
   // reste renseigné même si le score redescend ensuite, pour ne jamais la
   // recréer en double.
-  score                Int       @default(0)
+  score                Int             @default(0)
   hotLeadTaskCreatedAt DateTime?
   scoreEvents          CrmScoreEvent[]
 
@@ -1915,10 +1950,10 @@ model CrmScoreEvent {
   // de composer le texte de la tâche commerciale et de compter les modules
   // distincts pour le bonus "two_modules_viewed". Sans objet pour
   // email_opened/doc_request/demo_request.
-  module String?
+  module    String?
   // internal = généré par cette app (pixel d'ouverture, clic sur un lien de
   // question) ; webhook = signalé par le site externe via engagementSignal.
-  source String @default("internal")
+  source    String  @default("internal")
 
   createdAt DateTime @default(now())
 
@@ -1974,9 +2009,9 @@ model Questionnaire {
   description String?
   active      Boolean @default(true)
 
-  questions        QuestionnaireQuestion[]
-  sends            QuestionnaireSend[]
-  automationRules  AutomationRule[]
+  questions       QuestionnaireQuestion[]
+  sends           QuestionnaireSend[]
+  automationRules AutomationRule[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
