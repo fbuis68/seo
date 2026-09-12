@@ -39,10 +39,25 @@ votre service IT ou prestataire informatique.
    - **URI de redirection** : laissez vide (cette app n'authentifie aucun
      utilisateur, elle s'authentifie elle-même — cf. étape 3).
 5. Cliquez **"S'inscrire"** (Register).
-6. Sur la page qui s'ouvre, notez tout de suite (vous en aurez besoin à
-   l'étape 4) :
-   - **ID d'application (client)** (Application (client) ID)
-   - **ID d'annuaire (locataire)** (Directory (tenant) ID)
+6. Vous arrivez automatiquement sur la page **"Vue d'ensemble"** (Overview)
+   de l'app. Tout en haut, un bloc **"Essentials"** affiche plusieurs
+   champs sur deux colonnes, chacun avec une petite icône de copie 📋 à
+   droite de sa valeur (un identifiant long du type
+   `12345678-90ab-cdef-1234-567890abcdef`). Cliquez cette icône pour copier
+   — ne les retapez jamais à la main, une erreur de caractère est vite
+   arrivée sur un identifiant aussi long. Récupérez ici les deux valeurs
+   qui deviendront `GRAPH_CLIENT_ID` et `GRAPH_TENANT_ID` (étape 5) :
+   - **ID d'application (client)** (Application (client) ID) → `GRAPH_CLIENT_ID`
+   - **ID d'annuaire (locataire)** (Directory (tenant) ID) → `GRAPH_TENANT_ID`
+
+   ⚠️ Ne confondez pas avec le champ juste en dessous, **"ID d'objet"**
+   (Object ID) — ressemble au même format mais n'est utile pour aucune des
+   variables ci-dessus.
+
+   Si vous avez fermé cette page avant d'avoir tout noté, aucun problème :
+   ces deux valeurs restent visibles en permanence en revenant sur
+   **Identité → Applications → Inscriptions d'applications**, puis en
+   cliquant sur le nom de l'app (`Sesame Suite - Tickets support`).
 
 ---
 
@@ -74,10 +89,20 @@ inscrite mais ne peut rien lire — c'est l'erreur la plus fréquente.
 3. Description libre (ex : `sesame-suite-prod`), expiration **24 mois**
    (le maximum proposé — au-delà, le secret doit être régénéré et
    `GRAPH_CLIENT_SECRET` mis à jour, sans quoi l'import s'arrête).
-4. Cliquez **"Ajouter"** (Add).
-5. **Copiez immédiatement la colonne "Valeur" (Value)** — elle n'est
-   affichée qu'une seule fois, impossible de la revoir ensuite (il faudra
-   recréer un secret si elle est perdue).
+4. Cliquez **"Ajouter"** (Add) — vous revenez sur la liste des secrets, qui
+   affiche maintenant une nouvelle ligne avec 4 colonnes : Description,
+   Expire le, **Valeur** (Value), ID secret (Secret ID).
+5. **Copiez immédiatement la colonne "Valeur"** (icône 📋 à droite du
+   champ, format libre — pas un identifiant, une chaîne de caractères
+   aléatoire) → c'est `GRAPH_CLIENT_SECRET`. C'est le seul moment où cette
+   valeur est affichée en clair : dès que vous quittez la page ou
+   rafraîchissez, elle disparaît définitivement (remplacée par des points
+   `••••••••••`) et ne peut plus être récupérée — seule la colonne "ID
+   secret" reste visible, mais **ce n'est pas la même chose** : c'est un
+   identifiant de référence pour retrouver/supprimer ce secret, pas une
+   valeur utilisable comme mot de passe. Si vous l'avez perdue, il faut
+   recréer un nouveau secret (étapes 1 à 4 ci-dessus) et mettre à jour
+   `GRAPH_CLIENT_SECRET` avec la nouvelle valeur.
 
 ---
 
