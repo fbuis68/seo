@@ -1514,6 +1514,15 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         </div>
       </div>
     </div>
+    <div class="g2">
+      <div class="fi"><label class="lb">Points bonus pour l'inscription à la newsletter (0 = désactivé)</label>
+        <div class="slrow">
+          <input type="range" id="pts-newsletterBonus" min="0" max="200" step="5" oninput="syncPtsPreview()">
+          <span class="slv" id="pts-newsletterBonusV">—</span>
+        </div>
+        <div style="font-size:11px;color:var(--mu);margin-top:4px">Attribués une seule fois, quand le client coche "S'abonner à la newsletter" depuis son espace (onglet Fidélité). Mettre à 0 pour masquer cette option côté client.</div>
+      </div>
+    </div>
     <!-- Simulateur -->
     <div style="background:var(--bg);border-radius:var(--rs);padding:12px;margin-top:8px">
       <div class="ch" style="margin-bottom:8px"><i class="ti ti-calculator"></i>Simulateur — séjour de 3 nuits, ménage tous les 3 jours</div>
@@ -4323,7 +4332,7 @@ var DEFAULT = {
     {id:'rs_oreiller', cat:'Bien-être', ico:'ti-moon',            label:'Oreiller supplémentaire',desc:'Mémoire de forme ou plume',price:0.00,  active:true},
   ],
   gains:{
-    points:{active:true,name:'Green Points',perLiter:1.0,perMenage:0,perServ:0},
+    points:{active:true,name:'Green Points',perLiter:1.0,perMenage:0,perServ:0,newsletterBonus:0},
     reduction:{active:true,pct:5,cond:'any',cumul:true},
     produit:{active:false,list:['Petit-déjeuner offert','Late check-out','Cocktail','Accès spa 1h'],mode:'single'},
     financier:{active:false,euroPerMenage:2.50,deductible:true,toPoints:true}
@@ -4940,7 +4949,8 @@ function buildGainPanel(k){
     +'<div class="fi" style="max-width:100px"><label class="lb">Unité</label><input type="text" id="gp-pts-unit" value="pts"></div></div>'
     +'<div class="fi"><label class="lb">Points / litre eau économisée</label><div class="slrow"><input type="range" id="gp-pts-pl" min="0.1" max="5" step="0.1" value="'+g.perLiter+'" oninput="CFG.gains.points.perLiter=parseFloat(this.value);document.getElementById(\'gp-pts-plV\').textContent=parseFloat(this.value).toFixed(1)+\' pt/L\'"><span class="slv" id="gp-pts-plV">'+g.perLiter.toFixed(1)+' pt/L</span></div></div>'
     +'<div class="fi"><label class="lb">Points bonus / ménage évité (0=off)</label><div class="slrow"><input type="range" id="gp-pts-pm" min="0" max="20" step="1" value="'+g.perMenage+'" oninput="CFG.gains.points.perMenage=parseInt(this.value);document.getElementById(\'gp-pts-pmV\').textContent=this.value+\' pts\'"><span class="slv" id="gp-pts-pmV">'+g.perMenage+' pts</span></div></div>'
-    +'<div class="fi"><label class="lb">Points bonus / serviette évitée (0=off)</label><div class="slrow"><input type="range" id="gp-pts-ps" min="0" max="20" step="1" value="'+g.perServ+'" oninput="CFG.gains.points.perServ=parseInt(this.value);document.getElementById(\'gp-pts-psV\').textContent=this.value+\' pts\'"><span class="slv" id="gp-pts-psV">'+g.perServ+' pts</span></div></div></div>';
+    +'<div class="fi"><label class="lb">Points bonus / serviette évitée (0=off)</label><div class="slrow"><input type="range" id="gp-pts-ps" min="0" max="20" step="1" value="'+g.perServ+'" oninput="CFG.gains.points.perServ=parseInt(this.value);document.getElementById(\'gp-pts-psV\').textContent=this.value+\' pts\'"><span class="slv" id="gp-pts-psV">'+g.perServ+' pts</span></div></div>'
+    +'<div class="fi"><label class="lb">Points bonus / inscription newsletter (0=off)</label><div class="slrow"><input type="range" id="gp-pts-nl" min="0" max="200" step="5" value="'+(g.newsletterBonus||0)+'" oninput="CFG.gains.points.newsletterBonus=parseInt(this.value);document.getElementById(\'gp-pts-nlV\').textContent=this.value+\' pts\'"><span class="slv" id="gp-pts-nlV">'+(g.newsletterBonus||0)+' pts</span></div></div></div>';
   if(k==='reduction') return '<div class="ca"><div class="ch"><i class="ti ti-discount"></i>Réduction sur la note</div>'
     +'<div class="fi"><label class="lb">Pourcentage de réduction</label><div class="slrow"><input type="range" id="gp-red-pct" min="1" max="20" step="1" value="'+g.pct+'" oninput="CFG.gains.reduction.pct=parseInt(this.value);document.getElementById(\'gp-red-pctV\').textContent=this.value+\'%\'"><span class="slv" id="gp-red-pctV">'+g.pct+'%</span></div></div>'
     +'<div class="fi"><label class="lb">Conditions</label><select id="gp-red-cond"><option value="any"'+(g.cond==='any'?' selected':'')+'>Tout service économisé</option><option value="both"'+(g.cond==='both'?' selected':'')+'>Les deux services (ET)</option><option value="menage"'+(g.cond==='menage'?' selected':'')+'>Ménage uniquement</option></select></div>'
@@ -4972,6 +4982,7 @@ function collectGains(){
   var pl=parseFloat(getVal('gp-pts-pl'));if(!isNaN(pl))CFG.gains.points.perLiter=pl;
   var pm=parseInt(getVal('gp-pts-pm'));if(!isNaN(pm))CFG.gains.points.perMenage=pm;
   var ps=parseInt(getVal('gp-pts-ps'));if(!isNaN(ps))CFG.gains.points.perServ=ps;
+  var pnl=parseInt(getVal('gp-pts-nl'));if(!isNaN(pnl))CFG.gains.points.newsletterBonus=pnl;
   // reduction
   var rp=parseInt(getVal('gp-red-pct'));if(!isNaN(rp))CFG.gains.reduction.pct=rp;
   var rc=getVal('gp-red-cond');if(rc)CFG.gains.reduction.cond=rc;
@@ -4988,6 +4999,7 @@ function syncPtsPreview(){
   var pl=parseFloat(document.getElementById('pts-perLiter')?.value||CFG.gains.points.perLiter)||1;
   var pm=parseInt(document.getElementById('pts-perMenage')?.value||CFG.gains.points.perMenage)||0;
   var ps=parseInt(document.getElementById('pts-perServ')?.value||CFG.gains.points.perServ)||0;
+  var pnl=parseInt(document.getElementById('pts-newsletterBonus')?.value ?? CFG.gains.points.newsletterBonus)||0;
   // Simulator: 3 nights, ménage every 3 days = 1 service, 2 saved × eauMenage(15L)
   var eau=2*(CFG.eauMenage||15)+2*(CFG.eauServ||40);
   var pts=Math.round(eau*pl+2*pm+2*ps);
@@ -5001,9 +5013,11 @@ function syncPtsPreview(){
   CFG.gains.points.perLiter=pl;
   CFG.gains.points.perMenage=pm;
   CFG.gains.points.perServ=ps;
+  CFG.gains.points.newsletterBonus=pnl;
   document.getElementById('pts-perLiterV').textContent=pl.toFixed(1)+' pt/L';
   document.getElementById('pts-perMenageV').textContent=pm+' pts';
   document.getElementById('pts-perServV').textContent=ps+' pts';
+  document.getElementById('pts-newsletterBonusV').textContent=pnl>0?(pnl+' pts'):'Désactivé';
 }
 function populatePtsFields(){
   var g=CFG.gains.points;
@@ -5011,6 +5025,7 @@ function populatePtsFields(){
   setV('pts-perLiter',g.perLiter);
   setV('pts-perMenage',g.perMenage);
   setV('pts-perServ',g.perServ);
+  setV('pts-newsletterBonus',g.newsletterBonus||0);
   syncPtsPreview();
 }
 function setV(id,v){var el=document.getElementById(id);if(el)el.value=v;}

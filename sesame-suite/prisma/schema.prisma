@@ -1331,6 +1331,20 @@ model ClientPrefs {
   emailOptOut   Boolean   @default(false)
   emailOptOutAt DateTime?
 
+  // Inscription volontaire à la newsletter, cochée par le client depuis son
+  // espace (checkin.html, onglet Fidélité) — distincte d'emailOptOut=false
+  // (qui n'est qu'un état par défaut, jamais une action explicite du
+  // client) : sert de condition au bonus de points ci-dessous. La case à
+  // cocher pilote aussi emailOptOut (inscription = false, désinscription
+  // depuis l'app = true), donc les deux restent cohérents avec le lien de
+  // désabonnement des campagnes.
+  newsletterOptIn   Boolean   @default(false)
+  newsletterOptInAt DateTime?
+  // Empêche de re-créditer les points à chaque décoché/recoché — posé une
+  // seule fois, à la première inscription, jamais retiré (pas de reprise
+  // de points en cas de désinscription ultérieure).
+  newsletterPointsAwarded Boolean @default(false)
+
   updatedAt DateTime @updatedAt
 
   @@unique([entityId, email])

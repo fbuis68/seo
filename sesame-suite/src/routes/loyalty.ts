@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../db";
 import { resolveEntity } from "../lib/entity";
 import { resolveLoyaltyScope } from "../lib/loyaltyScope";
+import { creditLoyaltyPoints } from "../lib/loyaltyCredit";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
 
@@ -92,28 +93,8 @@ loyaltyRouter.post(
 
     const earned = b.earned || 0;
     const spent = b.spent || 0;
-    const scope = await resolveLoyaltyScope(entity);
-    const where = scope.groupId
-      ? { groupId_email: { groupId: scope.groupId, email } }
-      : { entityId_email: { entityId: scope.entityId as string, email } };
+    const total = await creditLoyaltyPoints(entity, email, earned, spent, b.bookingCode);
 
-    const account = await prisma.loyaltyAccount.upsert({
-      where,
-      update: { totalPoints: { increment: earned - spent } },
-      create: {
-        entityId: scope.entityId,
-        groupId: scope.groupId,
-        email,
-        totalPoints: Math.max(0, earned - spent),
-      },
-    });
-
-    if (earned || spent) {
-      await prisma.loyaltyTransaction.create({
-        data: { accountId: account.id, earned, spent, bookingCode: b.bookingCode || null },
-      });
-    }
-
-    res.json({ email, total: Math.max(0, account.totalPoints) });
+    res.json({ email, total });
   })
 );

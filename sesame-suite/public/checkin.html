@@ -1007,6 +1007,12 @@ input:focus,select:focus{border-color:var(--accent)}
       <!-- Carte statut -->
       <div class="card" id="espLoyaltyCard" style="text-align:center;padding:20px"></div>
 
+      <!-- Newsletter -->
+      <div class="card" id="espNewsletterCard" style="display:none">
+        <div class="ch"><i class="ti ti-mail"></i><span data-i18n="esp_newsletter_hdr">Newsletter</span></div>
+        <div id="espNewsletterBody"></div>
+      </div>
+
       <!-- Jauge progression -->
       <div class="card">
         <div class="ch"><i class="ti ti-trending-up"></i><span data-i18n="esp_loyalty_progress">Progression</span></div>
@@ -1683,7 +1689,14 @@ var I18N_FR = {
   esp_rs_note_placeholder:'Ex : sans glaçons, allergie aux fruits à coque…',
   esp_rs_place_order:'Passer la commande',esp_rs_continue_shopping:'Continuer mes achats',
   esp_loyalty_progress:'Progression',esp_loyalty_perks:'Mes avantages',
-  esp_loyalty_history:'Historique des points',esp_menage_hdr:'Préférences de ménage',
+  esp_loyalty_history:'Historique des points',
+  esp_newsletter_hdr:'Newsletter',esp_newsletter_checkbox_label:"Je m'abonne à la newsletter de l'hôtel",
+  esp_newsletter_bonus_tpl:'Gagnez {bonus} {ptsName} en vous abonnant !',
+  esp_newsletter_awarded_tpl:'+{bonus} {ptsName} gagnés ✓',
+  esp_newsletter_error:'Une erreur est survenue, réessayez.',
+  toast_newsletter_subscribed:'Inscription à la newsletter confirmée ✓',
+  toast_newsletter_unsubscribed:'Désinscription de la newsletter confirmée',
+  esp_menage_hdr:'Préférences de ménage',
   esp_menage_freq_label:'Fréquence de ménage souhaitée',
   esp_menage_freq_0:'Pas de ménage pendant mon séjour',esp_menage_freq_1:'Tous les jours',
   esp_menage_freq_2:'Tous les 2 jours',esp_menage_freq_3:'Tous les 3 jours',
@@ -1895,7 +1908,14 @@ var I18N_EN = {
   esp_rs_note_placeholder:'E.g.: no ice, nut allergy…',
   esp_rs_place_order:'Place order',esp_rs_continue_shopping:'Continue shopping',
   esp_loyalty_progress:'Progress',esp_loyalty_perks:'My perks',
-  esp_loyalty_history:'Points history',esp_menage_hdr:'Housekeeping preferences',
+  esp_loyalty_history:'Points history',
+  esp_newsletter_hdr:'Newsletter',esp_newsletter_checkbox_label:"Subscribe to the hotel's newsletter",
+  esp_newsletter_bonus_tpl:'Earn {bonus} {ptsName} by subscribing!',
+  esp_newsletter_awarded_tpl:'+{bonus} {ptsName} earned ✓',
+  esp_newsletter_error:'Something went wrong, please try again.',
+  toast_newsletter_subscribed:'Newsletter subscription confirmed ✓',
+  toast_newsletter_unsubscribed:'Newsletter unsubscribed',
+  esp_menage_hdr:'Housekeeping preferences',
   esp_menage_freq_label:'Preferred housekeeping frequency',
   esp_menage_freq_0:'No housekeeping during my stay',esp_menage_freq_1:'Every day',
   esp_menage_freq_2:'Every 2 days',esp_menage_freq_3:'Every 3 days',
@@ -2109,7 +2129,14 @@ var I18N_ES = {
   esp_rs_note_placeholder:'Ej.: sin hielo, alergia a los frutos secos…',
   esp_rs_place_order:'Realizar el pedido',esp_rs_continue_shopping:'Seguir comprando',
   esp_loyalty_progress:'Progreso',esp_loyalty_perks:'Mis ventajas',
-  esp_loyalty_history:'Historial de puntos',esp_menage_hdr:'Preferencias de limpieza',
+  esp_loyalty_history:'Historial de puntos',
+  esp_newsletter_hdr:'Newsletter',esp_newsletter_checkbox_label:'Suscribirme al boletín del hotel',
+  esp_newsletter_bonus_tpl:'¡Gana {bonus} {ptsName} al suscribirte!',
+  esp_newsletter_awarded_tpl:'+{bonus} {ptsName} ganados ✓',
+  esp_newsletter_error:'Ha ocurrido un error, inténtalo de nuevo.',
+  toast_newsletter_subscribed:'Suscripción al boletín confirmada ✓',
+  toast_newsletter_unsubscribed:'Baja del boletín confirmada',
+  esp_menage_hdr:'Preferencias de limpieza',
   esp_menage_freq_label:'Frecuencia de limpieza deseada',
   esp_menage_freq_0:'Sin limpieza durante mi estancia',esp_menage_freq_1:'Todos los días',
   esp_menage_freq_2:'Cada 2 días',esp_menage_freq_3:'Cada 3 días',
@@ -3762,6 +3789,60 @@ function espRenderLoyalty(){
           + (h.spent?' <span style="color:var(--re)">−'+h.spent+'</span>':'')+'</span></div>';
       }).join('')
     : '<div style="font-size:13px;color:var(--mu)">'+t('esp_loyalty_no_history')+'</div>';
+
+  espRenderNewsletter();
+}
+
+// ── NEWSLETTER — inscription volontaire + bonus de points (0 = désactivé
+// côté hôtel, cf. CFG.gains.points.newsletterBonus) — POST
+// /wa/clientPrefs/newsletterOptIn. Carte masquée si le bonus est à 0, pour
+// ne pas proposer une case à cocher qui ne rapporte rien.
+async function espRenderNewsletter(){
+  var card = document.getElementById('espNewsletterCard');
+  var body = document.getElementById('espNewsletterBody');
+  var bonus = (CFG.gains && CFG.gains.points && CFG.gains.points.newsletterBonus) || 0;
+  var email = S.booking ? S.booking.personEmail : null;
+  if(!bonus || !email){ card.style.display='none'; return; }
+  card.style.display='block';
+
+  var ptsName = (CFG.gains&&CFG.gains.points&&CFG.gains.points.name)||CFG.ptsLabel||'points';
+  var prefs = await fetchClientPrefs(email);
+  var optedIn = !!prefs.newsletterOptIn;
+  var awarded = !!prefs.newsletterPointsAwarded;
+
+  body.innerHTML = '<label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">'
+    + '<input type="checkbox" id="espNewsletterCheck" style="margin-top:3px;width:18px;height:18px;accent-color:var(--primary)"'+(optedIn?' checked':'')+' onchange="espToggleNewsletter(this.checked)">'
+    + '<span style="font-size:13px;line-height:1.5">'+t('esp_newsletter_checkbox_label')
+    + (awarded
+        ? ' <span style="color:var(--primary);font-weight:600">'+tf('esp_newsletter_awarded_tpl',{bonus:bonus,ptsName:esc(ptsName)})+'</span>'
+        : ' <span style="color:var(--mu)">'+tf('esp_newsletter_bonus_tpl',{bonus:bonus,ptsName:esc(ptsName)})+'</span>')
+    + '</span></label>';
+}
+
+async function espToggleNewsletter(checked){
+  var email = S.booking ? S.booking.personEmail : null;
+  if(!email) return;
+  try{
+    var r = await apiFetch(API_BASE+'/wa/clientPrefs/newsletterOptIn', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({email:email, optIn:checked})
+    });
+    var d = await r.json();
+    if(!r.ok) throw new Error(d.error||'http '+r.status);
+
+    if(d.pointsAwarded){
+      var ptsName = (CFG.gains&&CFG.gains.points&&CFG.gains.points.name)||CFG.ptsLabel||'points';
+      toast(tf('esp_newsletter_awarded_tpl',{bonus:d.pointsAwarded,ptsName:esc(ptsName)}));
+      await fetchLoyalty(email);
+    } else {
+      toast(t(checked?'toast_newsletter_subscribed':'toast_newsletter_unsubscribed'));
+    }
+    espRenderLoyalty();
+  }catch(e){
+    console.error('espToggleNewsletter error', e);
+    document.getElementById('espNewsletterCheck').checked = !checked;
+    toast(t('esp_newsletter_error'));
+  }
 }
 
 // ── PROFIL / PRÉFÉRENCES — cache local + GET/POST /wa/clientPrefs/* ──
