@@ -60,12 +60,26 @@
     });
   }
 
+  function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + " o";
+    if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + " Ko";
+    return (bytes / (1024 * 1024)).toFixed(1) + " Mo";
+  }
+
+  var MAX_FILES = 5;
+
   var ICON_CHAT =
     '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>';
   var ICON_CLOSE =
     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
   var ICON_CHECK =
     '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#1a6b47" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
+  var ICON_UPLOAD =
+    '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>';
+  var ICON_PAPERCLIP =
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05 12.25 20.24a5.5 5.5 0 0 1-7.78-7.78l9.19-9.19a3.67 3.67 0 0 1 5.19 5.19l-9.2 9.19a1.83 1.83 0 0 1-2.59-2.59l8.49-8.48"/></svg>';
+  var ICON_X_SMALL =
+    '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
 
   var host = document.createElement("div");
   host.id = "sesame-ticket-widget";
@@ -104,6 +118,30 @@
     cfg.color +
     "}" +
     ".stw-fi textarea{resize:vertical;min-height:80px}" +
+    ".stw-drop{border:1.5px dashed #d5d0c8;border-radius:10px;padding:16px 10px;text-align:center;cursor:pointer;color:#888;transition:border-color .15s ease,background .15s ease}" +
+    ".stw-drop svg{display:block;margin:0 auto 6px}" +
+    ".stw-drop span{display:block;font-size:12px;line-height:1.4}" +
+    ".stw-drop small{display:block;font-size:11px;color:#aaa;margin-top:2px}" +
+    ".stw-drop:hover,.stw-drop:focus-visible{border-color:" +
+    cfg.color +
+    ";outline:none}" +
+    ".stw-drop.stw-over{border-color:" +
+    cfg.color +
+    ";background:" +
+    cfg.color +
+    "0d}" +
+    ".stw-drop.stw-full{opacity:.5;cursor:not-allowed}" +
+    ".stw-filelist{margin-top:8px;display:flex;flex-direction:column;gap:6px}" +
+    ".stw-file{display:flex;align-items:center;gap:7px;background:#f7f6f3;border:1px solid #ece9e3;border-radius:8px;padding:6px 8px;font-size:12px;color:#444}" +
+    ".stw-file svg:first-child{flex-shrink:0;color:" +
+    cfg.color +
+    "}" +
+    ".stw-file-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}" +
+    ".stw-file-size{color:#aaa;flex-shrink:0}" +
+    ".stw-file-rm{background:none;border:none;color:#999;cursor:pointer;display:flex;padding:2px;flex-shrink:0;border-radius:4px}" +
+    ".stw-file-rm:hover{color:#b3261e;background:#b3261e14}" +
+    ".stw-file-hint{font-size:11px;color:#aaa;margin-top:4px;display:none}" +
+    ".stw-file-hint.stw-show{display:block}" +
     ".stw-fi input[type=file]{width:100%;font-size:12px}" +
     ".stw-err{color:#b3261e;font-size:12px;margin-top:2px;display:none}" +
     ".stw-submit{width:100%;background:" +
@@ -133,8 +171,107 @@
   var bubbleEl = root.querySelector(".stw-bubble");
   var panelEl = root.querySelector(".stw-panel");
   var isOpen = false;
+  var selectedFiles = [];
+
+  function dropzoneHtml() {
+    return (
+      '<div class="stw-fi"><label>Pièces jointes (optionnel)</label>' +
+      '<div class="stw-drop" data-drop tabindex="0" role="button" aria-label="Ajouter des fichiers">' +
+      ICON_UPLOAD +
+      "<span>Cliquez ou glissez-déposez des fichiers ici</span>" +
+      "<small>" +
+      MAX_FILES +
+      " fichiers maximum</small>" +
+      "</div>" +
+      '<input type="file" data-f="files" accept="image/*,.pdf" multiple hidden>' +
+      '<div class="stw-file-hint" data-file-hint></div>' +
+      '<div class="stw-filelist" data-filelist></div>' +
+      "</div>"
+    );
+  }
+
+  function renderFileList() {
+    var listEl = panelEl.querySelector("[data-filelist]");
+    var dropEl = panelEl.querySelector("[data-drop]");
+    if (!listEl || !dropEl) return;
+    listEl.innerHTML = selectedFiles
+      .map(function (f, i) {
+        return (
+          '<div class="stw-file">' +
+          ICON_PAPERCLIP +
+          '<span class="stw-file-name">' +
+          esc(f.name) +
+          "</span>" +
+          '<span class="stw-file-size">' +
+          formatFileSize(f.size) +
+          "</span>" +
+          '<button type="button" class="stw-file-rm" data-rm="' +
+          i +
+          '" aria-label="Retirer">' +
+          ICON_X_SMALL +
+          "</button>" +
+          "</div>"
+        );
+      })
+      .join("");
+    dropEl.classList.toggle("stw-full", selectedFiles.length >= MAX_FILES);
+    listEl.querySelectorAll("[data-rm]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        selectedFiles.splice(Number(btn.getAttribute("data-rm")), 1);
+        renderFileList();
+      });
+    });
+  }
+
+  function addFiles(newFiles) {
+    var hintEl = panelEl.querySelector("[data-file-hint]");
+    var room = MAX_FILES - selectedFiles.length;
+    var accepted = newFiles.slice(0, Math.max(room, 0));
+    selectedFiles = selectedFiles.concat(accepted);
+    if (hintEl) {
+      if (newFiles.length > accepted.length) {
+        hintEl.textContent = MAX_FILES + " fichiers maximum — les fichiers en trop n'ont pas été ajoutés.";
+        hintEl.classList.add("stw-show");
+      } else {
+        hintEl.classList.remove("stw-show");
+      }
+    }
+    renderFileList();
+  }
+
+  function wireDropzone() {
+    var dropEl = panelEl.querySelector("[data-drop]");
+    var inputEl = panelEl.querySelector('[data-f="files"]');
+    if (!dropEl || !inputEl) return;
+    dropEl.addEventListener("click", function () {
+      if (selectedFiles.length < MAX_FILES) inputEl.click();
+    });
+    dropEl.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        if (selectedFiles.length < MAX_FILES) inputEl.click();
+      }
+    });
+    inputEl.addEventListener("change", function () {
+      addFiles(Array.prototype.slice.call(inputEl.files || []));
+      inputEl.value = "";
+    });
+    dropEl.addEventListener("dragover", function (e) {
+      e.preventDefault();
+      dropEl.classList.add("stw-over");
+    });
+    dropEl.addEventListener("dragleave", function () {
+      dropEl.classList.remove("stw-over");
+    });
+    dropEl.addEventListener("drop", function (e) {
+      e.preventDefault();
+      dropEl.classList.remove("stw-over");
+      addFiles(Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []));
+    });
+  }
 
   function renderForm() {
+    selectedFiles = [];
     panelEl.innerHTML =
       '<div class="stw-head"><div><h2>' +
       esc(cfg.title) +
@@ -149,11 +286,12 @@
       esc(cfg.subject) +
       '" placeholder="Résumez votre demande"></div>' +
       '<div class="stw-fi"><label>Message</label><textarea data-f="message" placeholder="Décrivez votre problème ou votre question…"></textarea></div>' +
-      '<div class="stw-fi"><label>Pièce jointe (optionnel)</label><input type="file" data-f="files" accept="image/*,.pdf" multiple></div>' +
+      dropzoneHtml() +
       '<div class="stw-err" data-err></div>' +
       '<button class="stw-submit" type="button" data-submit>Envoyer</button>' +
       "</div>";
     wireCommon();
+    wireDropzone();
     var submitBtn = panelEl.querySelector("[data-submit]");
     submitBtn.addEventListener("click", onSubmit);
     var emailEl = panelEl.querySelector('[data-f="email"]');
@@ -211,8 +349,7 @@
     var btn = panelEl.querySelector("[data-submit]");
     btn.disabled = true;
     btn.textContent = "Envoi en cours…";
-    var filesInput = panelEl.querySelector('[data-f="files"]');
-    filesToDataUrls(filesInput ? filesInput.files : null, function (attachments) {
+    filesToDataUrls(selectedFiles, function (attachments) {
       fetch(cfg.apiBase + "/wa/ticket/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

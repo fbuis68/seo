@@ -20,7 +20,22 @@
   label{font-size:12px;color:var(--mu);display:block;margin-bottom:4px}
   input[type=text],input[type=email],textarea{width:100%;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--bdr);border-radius:8px;margin-bottom:12px}
   textarea{resize:vertical;min-height:100px}
-  input[type=file]{width:100%;margin-bottom:12px;font-size:12px}
+  .drop{border:1.5px dashed #d5d0c8;border-radius:10px;padding:18px 10px;text-align:center;cursor:pointer;color:#888;margin-bottom:8px;transition:border-color .15s ease,background .15s ease}
+  .drop svg{display:block;margin:0 auto 6px}
+  .drop span{display:block;font-size:12px;line-height:1.4}
+  .drop small{display:block;font-size:11px;color:#aaa;margin-top:2px}
+  .drop:hover,.drop:focus-visible{border-color:var(--a);outline:none}
+  .drop.over{border-color:var(--a);background:#8a2b2b0d}
+  .drop.full{opacity:.5;cursor:not-allowed}
+  .filelist{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+  .file{display:flex;align-items:center;gap:7px;background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:6px 8px;font-size:12px;color:#444}
+  .file svg:first-child{flex-shrink:0;color:var(--a)}
+  .file-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .file-size{color:#aaa;flex-shrink:0}
+  .file-rm{background:none;border:none;color:#999;cursor:pointer;display:flex;padding:2px;flex-shrink:0;border-radius:4px}
+  .file-rm:hover{color:#b3261e;background:#b3261e14}
+  .file-hint{font-size:11px;color:#aaa;margin:-6px 0 12px;display:none}
+  .file-hint.show{display:block}
   .btn{font-family:inherit;font-size:13px;padding:10px 18px;border-radius:8px;border:none;background:var(--a);color:#fff;cursor:pointer;width:100%;font-weight:500}
   .btn:disabled{opacity:.4;cursor:not-allowed}
   .btn-ghost{background:transparent;color:var(--mu);border:1px solid var(--bdr);width:auto}
@@ -78,6 +93,85 @@ function filesToDataUrls(fileList, cb){
   });
 }
 
+function formatFileSize(bytes){
+  if(bytes<1024) return bytes+' o';
+  if(bytes<1024*1024) return Math.round(bytes/1024)+' Ko';
+  return (bytes/(1024*1024)).toFixed(1)+' Mo';
+}
+
+const MAX_FILES = 5;
+const ICON_UPLOAD = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>';
+const ICON_PAPERCLIP = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05 12.25 20.24a5.5 5.5 0 0 1-7.78-7.78l9.19-9.19a3.67 3.67 0 0 1 5.19 5.19l-9.2 9.19a1.83 1.83 0 0 1-2.59-2.59l8.49-8.48"/></svg>';
+const ICON_X_SMALL = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+
+// État des pièces jointes par formulaire (préfixe d'id) — deux dropzones
+// coexistent potentiellement sur la page (création + suivi du ticket),
+// chacune avec sa propre sélection de fichiers en mémoire (un <input type=file>
+// natif ne permet pas d'accumuler des fichiers ajoutés en plusieurs fois).
+const filesState = {};
+
+function dropzoneHtml(prefix){
+  return `<div class="drop" id="${prefix}-drop" tabindex="0" role="button" aria-label="Ajouter des fichiers">
+      ${ICON_UPLOAD}
+      <span>Cliquez ou glissez-déposez des fichiers ici</span>
+      <small>${MAX_FILES} fichiers maximum</small>
+    </div>
+    <input type="file" id="${prefix}-input" accept="image/*,.pdf" multiple hidden>
+    <div class="file-hint" id="${prefix}-filehint"></div>
+    <div class="filelist" id="${prefix}-filelist"></div>`;
+}
+
+function renderFileList(prefix){
+  const listEl = document.getElementById(prefix+'-filelist');
+  const dropEl = document.getElementById(prefix+'-drop');
+  if(!listEl || !dropEl) return;
+  const files = filesState[prefix] || [];
+  listEl.innerHTML = files.map((f,i)=>`<div class="file">${ICON_PAPERCLIP}<span class="file-name">${esc(f.name)}</span><span class="file-size">${formatFileSize(f.size)}</span><button type="button" class="file-rm" data-rm="${i}" aria-label="Retirer">${ICON_X_SMALL}</button></div>`).join('');
+  dropEl.classList.toggle('full', files.length>=MAX_FILES);
+  listEl.querySelectorAll('[data-rm]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      files.splice(Number(btn.getAttribute('data-rm')), 1);
+      renderFileList(prefix);
+    });
+  });
+}
+
+function addFiles(prefix, newFiles){
+  const hintEl = document.getElementById(prefix+'-filehint');
+  const files = filesState[prefix] || (filesState[prefix]=[]);
+  const room = MAX_FILES - files.length;
+  const accepted = newFiles.slice(0, Math.max(room, 0));
+  filesState[prefix] = files.concat(accepted);
+  if(hintEl){
+    if(newFiles.length > accepted.length){
+      hintEl.textContent = MAX_FILES+" fichiers maximum — les fichiers en trop n'ont pas été ajoutés.";
+      hintEl.classList.add('show');
+    } else {
+      hintEl.classList.remove('show');
+    }
+  }
+  renderFileList(prefix);
+}
+
+function wireDropzone(prefix){
+  filesState[prefix] = [];
+  const dropEl = document.getElementById(prefix+'-drop');
+  const inputEl = document.getElementById(prefix+'-input');
+  if(!dropEl || !inputEl) return;
+  dropEl.addEventListener('click', ()=>{ if((filesState[prefix]||[]).length < MAX_FILES) inputEl.click(); });
+  dropEl.addEventListener('keydown', e=>{
+    if(e.key==='Enter' || e.key===' '){ e.preventDefault(); if((filesState[prefix]||[]).length < MAX_FILES) inputEl.click(); }
+  });
+  inputEl.addEventListener('change', ()=>{ addFiles(prefix, Array.from(inputEl.files||[])); inputEl.value=''; });
+  dropEl.addEventListener('dragover', e=>{ e.preventDefault(); dropEl.classList.add('over'); });
+  dropEl.addEventListener('dragleave', ()=>{ dropEl.classList.remove('over'); });
+  dropEl.addEventListener('drop', e=>{
+    e.preventDefault();
+    dropEl.classList.remove('over');
+    addFiles(prefix, Array.from((e.dataTransfer && e.dataTransfer.files) || []));
+  });
+}
+
 function renderCreateForm(){
   document.getElementById('app').innerHTML = `
     <div class="card">
@@ -91,11 +185,12 @@ function renderCreateForm(){
       <input type="text" id="f-subject" placeholder="Ex. Redémarrage platine incomplet">
       <label>Description</label>
       <textarea id="f-message" placeholder="Décrivez le problème rencontré…"></textarea>
-      <label>Pièce jointe (photo, optionnel)</label>
-      <input type="file" id="f-files" accept="image/*" multiple>
+      <label>Pièces jointes (optionnel)</label>
+      ${dropzoneHtml('f')}
       <button class="btn" id="f-submit" onclick="submitTicket()">Envoyer</button>
       <div class="err" id="f-err"></div>
     </div>`;
+  wireDropzone('f');
 }
 
 async function submitTicket(){
@@ -110,7 +205,7 @@ async function submitTicket(){
   if(!message){ errEl.textContent='Décrivez votre incident.'; errEl.style.display='block'; return; }
   const btn = document.getElementById('f-submit');
   btn.disabled = true; btn.textContent = 'Envoi en cours…';
-  filesToDataUrls(document.getElementById('f-files').files, async (attachments)=>{
+  filesToDataUrls(filesState.f, async (attachments)=>{
     try{
       const r = await fetch('/wa/ticket/create', {
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -153,11 +248,12 @@ function renderTicket(){
       <h1 style="font-size:15px">Compléter mon ticket</h1>
       <label>Message</label>
       <textarea id="r-body" placeholder="Ajoutez une précision…"></textarea>
-      <label>Pièce jointe (photo, optionnel)</label>
-      <input type="file" id="r-files" accept="image/*" multiple>
+      <label>Pièces jointes (optionnel)</label>
+      ${dropzoneHtml('r')}
       <button class="btn" id="r-submit" onclick="submitFollowup()">Envoyer</button>
       <div class="err" id="r-err"></div>
     </div>`;
+  wireDropzone('r');
 }
 
 async function submitFollowup(){
@@ -167,7 +263,7 @@ async function submitFollowup(){
   if(!body){ errEl.textContent='Message requis.'; errEl.style.display='block'; return; }
   const btn = document.getElementById('r-submit');
   btn.disabled = true; btn.textContent = 'Envoi en cours…';
-  filesToDataUrls(document.getElementById('r-files').files, async (attachments)=>{
+  filesToDataUrls(filesState.r, async (attachments)=>{
     try{
       const r = await fetch('/wa/ticket/publicReply', {
         method:'POST', headers:{'Content-Type':'application/json'},
