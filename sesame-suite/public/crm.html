@@ -2153,24 +2153,26 @@ function renderFiche(c){
  * client) et leur traitement (statut, priorité, agent assigné). Réutilise
  * le tableau global `tickets` déjà chargé au boot (cf. loadTickets()),
  * donc synchrone — pas d'appel réseau supplémentaire à l'ouverture d'une
- * fiche. Masquée entièrement si ce prospect n'a jamais ouvert de ticket. */
+ * fiche. Toujours affichée (même état vide, comme la carte "Affaires"
+ * juste au-dessus) — un ticket n'étant jamais créé manuellement depuis le
+ * CRM (toujours à l'initiative du client via le widget public/le lien de
+ * suivi/Microsoft Graph), pas de bouton "+ Nouveau" ici. */
 function ticketsCardHtml(c){
   const rows = tickets.filter(t=>t.prospectId===c.id);
-  if(!rows.length) return '';
   const sorted = rows.slice().sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
   return `<div class="card">
     <div class="card-head"><div class="ch-ico">☎</div><span class="ch-title">Tickets support</span>
-      <span style="font-size:12px;color:#aaa;margin-left:8px">${rows.length} ticket${rows.length>1?'s':''}</span>
+      ${rows.length?`<span style="font-size:12px;color:#aaa;margin-left:8px">${rows.length} ticket${rows.length>1?'s':''}</span>`:''}
       <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="showTickets('${c.id}')">Voir tout</button>
     </div>
-    ${sorted.map(t=>`
+    ${rows.length?sorted.map(t=>`
       <div class="log-item" style="cursor:pointer" onclick="ticketFilterProspectId='${c.id}';showTicketDetail('${t.id}')">
         <div class="log-dot ld-b"></div>
         <div class="log-body">
           <div class="log-text"><strong>${esc(t.subject)}</strong> <span class="tpill ${TICKET_STATUS_PILL[t.status]||'bn'}" style="margin-left:6px">${esc(t.status)}</span> <span class="tpill ${TICKET_PRIORITY_PILL[t.priority]||'bn'}">${esc(t.priority)}</span></div>
           <div class="log-meta">#${t.id.slice(-6)}${t.agentName?' · '+esc(t.agentName):' · Non assigné'} · ${new Date(t.updatedAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
         </div>
-      </div>`).join('')}
+      </div>`).join(''):'<div class="log-empty">Aucun ticket support pour ce client.</div>'}
   </div>`;
 }
 
