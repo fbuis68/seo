@@ -124,6 +124,18 @@ interface UpdateBody {
   tags?: string[];
 }
 
+/**
+ * Formate le nom d'un agent pour le journal de modifications — "Non
+ * assigné" pour null, l'id brut en repli si l'agent a depuis été
+ * supprimé (jamais bloquant : le journal reste lisible même sur un compte
+ * disparu).
+ */
+function formatAgentName(id: string | null, agents: { id: string; name: string | null; email: string }[]): string {
+  if (!id) return "Non assigné";
+  const a = agents.find((x) => x.id === id);
+  return a ? a.name || a.email : id;
+}
+
 crmTicketRouter.post(
   "/crmTicket/update",
   requireAdmin,
@@ -136,17 +148,56 @@ crmTicketRouter.post(
     if (b.priority && !PRIORITIES.includes(b.priority)) throw new HttpError(400, "Priorité invalide");
 
     const data: Record<string, unknown> = {};
-    if (b.status) {
+    // Journal des changements de champs (statut/priorité/type/affectation) —
+    // un message kind="system" dans le fil de discussion, au même titre
+    // qu'une réponse ou une note interne, pour que l'historique de
+    // traitement du ticket reste visible sans écran séparé. Une ligne par
+    // champ effectivement modifié (jamais si la valeur envoyée est
+    // identique à l'existante — le front réenvoie tous les champs à chaque
+    // changement d'un seul select).
+    const changeLines: string[] = [];
+
+    if (b.status && b.status !== existing.status) {
+      changeLines.push(`Statut : ${existing.status} → ${b.status}`);
       data.status = b.status;
       if (b.status === "Fermé" && existing.status !== "Fermé") data.closedAt = new Date();
       if (b.status !== "Fermé" && existing.status === "Fermé") data.closedAt = null;
     }
-    if (b.priority) data.priority = b.priority;
-    if (b.type !== undefined) data.type = b.type || null;
-    if (b.agentId !== undefined) data.agentId = b.agentId || null;
+    if (b.priority && b.priority !== existing.priority) {
+      changeLines.push(`Priorité : ${existing.priority} → ${b.priority}`);
+      data.priority = b.priority;
+    }
+    if (b.type !== undefined && (b.type || null) !== existing.type) {
+      changeLines.push(`Type : ${existing.type || "—"} → ${b.type || "—"}`);
+      data.type = b.type || null;
+    }
+    let agentNames: { id: string; name: string | null; email: string }[] = [];
+    if (b.agentId !== undefined && (b.agentId || null) !== existing.agentId) {
+      const ids = [existing.agentId, b.agentId].filter((v): v is string => !!v);
+      agentNames = ids.length ? await prisma.adminUser.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, email: true } }) : [];
+      changeLines.push(`Affectation : ${formatAgentName(existing.agentId, agentNames)} → ${formatAgentName(b.agentId || null, agentNames)}`);
+      data.agentId = b.agentId || null;
+    }
     if (b.tags !== undefined) data.tags = b.tags;
 
-    const updated = await prisma.crmTicket.update({ where: { id: b.id }, data, include: TICKET_INCLUDE });
+    await prisma.crmTicket.update({ where: { id: b.id }, data });
+
+    if (changeLines.length) {
+      const actor = req.admin ? await prisma.adminUser.findUnique({ where: { id: req.admin.adminId }, select: { name: true, email: true } }) : null;
+      await prisma.crmTicketMessage.create({
+        data: {
+          ticketId: b.id,
+          authorType: "agent",
+          authorName: actor ? actor.name || actor.email : "",
+          kind: "system",
+          body: changeLines.join("\n"),
+          attachments: [],
+        },
+      });
+    }
+
+    const updated = await prisma.crmTicket.findUnique({ where: { id: b.id }, include: TICKET_INCLUDE });
+    if (!updated) throw new HttpError(404, "Ticket introuvable");
 
     if (b.status && b.status !== existing.status) {
       fireTrigger("crm.ticket_status_changed", {
