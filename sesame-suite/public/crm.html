@@ -2104,6 +2104,8 @@ function renderFiche(c){
       </div>`).join('')}
   </div>
 
+  ${ticketsCardHtml(c)}
+
   <div class="two-col">
     <div class="card">
       <div class="card-head"><div class="ch-ico">◉</div><span class="ch-title">Usage des accès</span></div>
@@ -2141,6 +2143,34 @@ function renderFiche(c){
   </div>
 
   ${questionnaireSendsCardHtml(c)}`;
+}
+
+/** Carte "Tickets support" de la fiche (renderFiche ci-dessus) — tickets
+ * déjà rattachés à ce prospect (matching par email à la création, cf.
+ * findOrCreateProspectByEmail côté serveur — que le ticket vienne du widget
+ * public, d'un email entrant via Microsoft Graph, ou du lien de suivi
+ * client) et leur traitement (statut, priorité, agent assigné). Réutilise
+ * le tableau global `tickets` déjà chargé au boot (cf. loadTickets()),
+ * donc synchrone — pas d'appel réseau supplémentaire à l'ouverture d'une
+ * fiche. Masquée entièrement si ce prospect n'a jamais ouvert de ticket. */
+function ticketsCardHtml(c){
+  const rows = tickets.filter(t=>t.prospectId===c.id);
+  if(!rows.length) return '';
+  const sorted = rows.slice().sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
+  return `<div class="card">
+    <div class="card-head"><div class="ch-ico">☎</div><span class="ch-title">Tickets support</span>
+      <span style="font-size:12px;color:#aaa;margin-left:8px">${rows.length} ticket${rows.length>1?'s':''}</span>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="showTickets('${c.id}')">Voir tout</button>
+    </div>
+    ${sorted.map(t=>`
+      <div class="log-item" style="cursor:pointer" onclick="ticketFilterProspectId='${c.id}';showTicketDetail('${t.id}')">
+        <div class="log-dot ld-b"></div>
+        <div class="log-body">
+          <div class="log-text"><strong>${esc(t.subject)}</strong> <span class="tpill ${TICKET_STATUS_PILL[t.status]||'bn'}" style="margin-left:6px">${esc(t.status)}</span> <span class="tpill ${TICKET_PRIORITY_PILL[t.priority]||'bn'}">${esc(t.priority)}</span></div>
+          <div class="log-meta">#${t.id.slice(-6)}${t.agentName?' · '+esc(t.agentName):' · Non assigné'} · ${new Date(t.updatedAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
+        </div>
+      </div>`).join('')}
+  </div>`;
 }
 
 /** Carte "Questionnaires" de la fiche (renderFiche ci-dessus) — envois de
@@ -5126,10 +5156,11 @@ function renderTicketDetail(t){
       <div id="tkt-thread">${t.messages.map(ticketMessageHtml).join('')}</div>
     </div>
     <div class="card">
-      <div class="ff"><label>Réponse ${MSG_TEMPLATES.filter(m=>m.channel==='email').length?'— insérer un modèle':''}</label>
-        ${MSG_TEMPLATES.filter(m=>m.channel==='email').length?`<select id="tkt-tpl-pick" onchange="ticketInsertTemplate()" style="margin-bottom:6px"><option value="">— Choisir un modèle —</option>${MSG_TEMPLATES.filter(m=>m.channel==='email').map(m=>`<option value="${esc(m.key)}">${esc(m.name)}</option>`).join('')}</select>`:''}
+      ${(()=>{ const ticketTpls = MSG_TEMPLATES.filter(m=>m.channel==='email' && m.category!=='marketing'); return `
+      <div class="ff"><label>Réponse ${ticketTpls.length?'— insérer un modèle':''}</label>
+        ${ticketTpls.length?`<select id="tkt-tpl-pick" onchange="ticketInsertTemplate()" style="margin-bottom:6px"><option value="">— Choisir un modèle —</option>${ticketTpls.map(m=>`<option value="${esc(m.key)}">${esc(m.name)}</option>`).join('')}</select>`:''}
         <textarea id="tkt-reply-body" style="height:120px" placeholder="Votre réponse…"></textarea>
-      </div>
+      </div>`; })()}
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
         <input type="file" id="tkt-reply-files" accept="image/*" multiple style="max-width:220px">
         <button class="btn btn-primary btn-sm" onclick="ticketSendReply('${t.id}','reply')">Répondre</button>
@@ -5195,8 +5226,9 @@ function ticketSendReply(id, kind){
   filesToDataUrls(filesEl.files, async (attachments)=>{
     try{
       const r = await apiFetch('/wa/crmTicket/reply', {method:'POST', body:JSON.stringify({ id, body:text, attachments, kind })});
-      if(!r.ok) throw new Error('http '+r.status);
-    }catch(e){ flash('Erreur d\'enregistrement'); return; }
+      const data = await r.json();
+      if(!r.ok) throw new Error(data.error||'http '+r.status);
+    }catch(e){ flash(e.message||'Erreur de connexion au serveur'); return; }
     flash(kind==='reply'?'Réponse envoyée':'Note ajoutée');
     const r2 = await apiFetch('/wa/crmTicket/get?id='+encodeURIComponent(id));
     const t2 = await r2.json();
@@ -5272,6 +5304,8 @@ async function saveScoringConfig(){
 // l'identique côté back-office de chaque hôtel, voir admin.html)
 // ════════════════════════════════════════
 const CHANNEL_LABEL = {email:'Email', sms:'SMS', whatsapp:'WhatsApp'};
+const TPL_CATEGORY_LABEL = {marketing:'Marketing', support:'Support', commercial:'Commercial'};
+let tplCategoryFilter='';
 let SMTP_CFG=null, SMS_CFG=null, WA_CFG=null, GRAPH_MAIL=null;
 let MSG_TEMPLATES=[], MSG_TEMPLATES_LOADED=false;
 let tplChannelTab='email';
@@ -5375,7 +5409,7 @@ function renderCanauxPanel(){
   const s = SMTP_CFG || {host:'',port:587,secure:false,username:'',password:'',fromName:'',fromEmail:'',supportFromName:'',supportFromEmail:''};
   const sms = SMS_CFG || {provider:'twilio',accountSid:'',authToken:'',fromNumber:'',apiKey:'',baseUrl:''};
   const wa = WA_CFG || {provider:'twilio',accountSid:'',authToken:'',fromNumber:'',apiKey:'',baseUrl:''};
-  const tpls = MSG_TEMPLATES.filter(t=>t.channel===tplChannelTab);
+  const tpls = MSG_TEMPLATES.filter(t=>t.channel===tplChannelTab && (!tplCategoryFilter || (tplCategoryFilter==='none'?!t.category:t.category===tplCategoryFilter)));
   document.getElementById('main').innerHTML = `
   <div class="card">
     <div class="card-head"><div class="ch-ico">⚙</div><span class="ch-title">Serveur SMTP sortant (Email)</span></div>
@@ -5458,11 +5492,16 @@ function renderCanauxPanel(){
       <button class="btn btn-primary btn-sm" onclick="openTemplateModal(null)">+ Nouveau modèle</button>
     </div>
     <div class="chan-tabs">${['email','sms','whatsapp'].map(c=>`<button class="chan-tab ${tplChannelTab===c?'active':''}" onclick="tplChannelTab='${c}';renderCanauxPanel()">${CHANNEL_LABEL[c]}</button>`).join('')}</div>
-    ${tpls.length===0?'<div class="log-empty">Aucun modèle '+CHANNEL_LABEL[tplChannelTab]+', créez-en un pour pouvoir l\'utiliser dans une règle ou un envoi depuis une fiche.</div>':tpls.map(t=>`
+    <div style="margin-bottom:10px"><select id="tpl-category-filter" onchange="tplCategoryFilter=this.value;renderCanauxPanel()" style="max-width:220px">
+      <option value="">Toutes les catégories</option>
+      ${Object.keys(TPL_CATEGORY_LABEL).map(k=>`<option value="${k}" ${tplCategoryFilter===k?'selected':''}>${TPL_CATEGORY_LABEL[k]}</option>`).join('')}
+      <option value="none" ${tplCategoryFilter==='none'?'selected':''}>Non catégorisé</option>
+    </select></div>
+    ${tpls.length===0?'<div class="log-empty">Aucun modèle '+CHANNEL_LABEL[tplChannelTab]+(tplCategoryFilter?' dans cette catégorie':', créez-en un pour pouvoir l\'utiliser dans une règle ou un envoi depuis une fiche.')+'</div>':tpls.map(t=>`
       <div class="log-item">
         <div class="log-dot ld-b"></div>
         <div class="log-body">
-          <div class="log-text"><strong>${esc(t.name)}</strong> <span style="color:#aaa;font-size:11px">(${esc(t.key)})</span></div>
+          <div class="log-text"><strong>${esc(t.name)}</strong> <span style="color:#aaa;font-size:11px">(${esc(t.key)})</span>${t.category?` <span class="tag t-gray" style="font-size:10px">${TPL_CATEGORY_LABEL[t.category]||esc(t.category)}</span>`:''}</div>
           <div class="log-meta">${t.channel==='email'?'Objet : '+esc(t.subject):esc(t.bodyHtml).slice(0,80)}${t.channel==='whatsapp'?(t.whatsappContentSid?' · Content SID : '+esc(t.whatsappContentSid):' · <span style="color:#b23b2c">Content SID manquant — envoi impossible</span>'):''}</div>
           <div class="log-acts">
             <button class="btn btn-sm btn-ghost" onclick="openTemplateModal('${t.id}')">Modifier</button>
@@ -5643,6 +5682,12 @@ function openTemplateModal(id){
         <div class="ff"><label>Clé (identifiant technique)</label><input id="tpl-key" value="${esc(t.key)}" placeholder="ex. prospect-relance" ${t.id?'disabled':''}></div>
       </div>
       <div class="ff" style="margin-top:8px"><label>Nom affiché</label><input id="tpl-name" value="${esc(t.name)}" placeholder="Relance prospect"></div>
+      <div class="ff" style="margin-top:8px"><label>Catégorie</label><select id="tpl-category">
+        <option value="" ${!t.category?'selected':''}>— Non catégorisé —</option>
+        ${Object.keys(TPL_CATEGORY_LABEL).map(k=>`<option value="${k}" ${t.category===k?'selected':''}>${TPL_CATEGORY_LABEL[k]}</option>`).join('')}
+      </select>
+        <div style="font-size:11px;color:var(--mu);margin-top:4px">Sert à filtrer les modèles selon leur usage — un modèle "Marketing" n'apparaît pas dans le sélecteur de réponse d'un ticket support.</div>
+      </div>
       <div class="ff" id="tpl-subject-wrap" style="margin-top:8px"><label>Objet (email uniquement)</label><input id="tpl-subject" value="${esc(t.subject)}" placeholder="Sesame Technology — {{nom}}"></div>
       <div class="ff" style="margin-top:8px"><label>Corps (email : éditeur HTML ; SMS/WhatsApp : texte)</label>
         <div class="htmled" id="tpl-body-wrap">
@@ -5727,7 +5772,7 @@ async function createMetaTemplate(){
 
 async function saveTemplate(id){
   const g=i=>(document.getElementById(i)||{value:''}).value;
-  const body={channel:g('tpl-channel'),key:g('tpl-key').trim().toLowerCase(),name:g('tpl-name').trim(),subject:g('tpl-subject').trim(),bodyHtml:g('tpl-body'),whatsappContentSid:g('tpl-sid').trim(),scope:'crm'};
+  const body={channel:g('tpl-channel'),key:g('tpl-key').trim().toLowerCase(),name:g('tpl-name').trim(),subject:g('tpl-subject').trim(),bodyHtml:g('tpl-body'),whatsappContentSid:g('tpl-sid').trim(),category:g('tpl-category'),scope:'crm'};
   if(!body.key||!body.name||!body.bodyHtml||(body.channel==='email'&&!body.subject)||(body.channel==='whatsapp'&&!body.whatsappContentSid)){flash('Tous les champs sont requis');return;}
   try{
     var r = await apiFetch('/wa/messageTemplate/upsert', {method:'POST', body:JSON.stringify(body)});

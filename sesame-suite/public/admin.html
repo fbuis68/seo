@@ -2675,6 +2675,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     </div>
     <div id="eml-bulk-import-modal"></div>
     <div id="eml-tpl-tabs" style="display:flex;gap:6px;margin-bottom:12px"></div>
+    <div id="eml-tpl-category-filter" style="margin-bottom:12px"></div>
     <div id="eml-templates-list"></div>
   </div>
 
@@ -8243,6 +8244,8 @@ var EML_TEMPLATES = [];
 
 var EML_TPL_TAB = 'email';
 var CHAN_LABEL = {email:'Email', sms:'SMS', whatsapp:'WhatsApp'};
+var TPL_CATEGORY_LABEL = {marketing:'Marketing', support:'Support', commercial:'Commercial'};
+var EML_TPL_CATEGORY_FILTER = '';
 
 async function emlInit(){
   await emlLoadConfig();
@@ -8430,11 +8433,24 @@ function emlRenderTemplates(){
       return '<button class="btn btn-s'+(EML_TPL_TAB===c?' btn-p':'')+'" onclick="EML_TPL_TAB=\''+c+'\';emlRenderTemplates()">'+CHAN_LABEL[c]+'</button>';
     }).join('');
   }
+  var filterEl = document.getElementById('eml-tpl-category-filter');
+  if(filterEl){
+    filterEl.innerHTML = '<select onchange="EML_TPL_CATEGORY_FILTER=this.value;emlRenderTemplates()" style="max-width:220px">'
+      + '<option value="">Toutes les catégories</option>'
+      + Object.keys(TPL_CATEGORY_LABEL).map(function(k){return '<option value="'+k+'" '+(EML_TPL_CATEGORY_FILTER===k?'selected':'')+'>'+TPL_CATEGORY_LABEL[k]+'</option>';}).join('')
+      + '<option value="none" '+(EML_TPL_CATEGORY_FILTER==='none'?'selected':'')+'>Non catégorisé</option>'
+      + '</select>';
+  }
   var el = document.getElementById('eml-templates-list');
   if(!el) return;
-  var tpls = EML_TEMPLATES.filter(function(t){return t.channel===EML_TPL_TAB;});
+  var tpls = EML_TEMPLATES.filter(function(t){
+    if(t.channel!==EML_TPL_TAB) return false;
+    if(!EML_TPL_CATEGORY_FILTER) return true;
+    if(EML_TPL_CATEGORY_FILTER==='none') return !t.category;
+    return t.category===EML_TPL_CATEGORY_FILTER;
+  });
   if(!tpls.length){
-    el.innerHTML = '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Aucun modèle '+CHAN_LABEL[EML_TPL_TAB]+'. Créez-en un pour pouvoir l\'utiliser dans une règle ou un envoi.</span></div>';
+    el.innerHTML = '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Aucun modèle '+CHAN_LABEL[EML_TPL_TAB]+(EML_TPL_CATEGORY_FILTER?' dans cette catégorie.':'. Créez-en un pour pouvoir l\'utiliser dans une règle ou un envoi.')+'</span></div>';
     return;
   }
   el.innerHTML = tpls.map(function(t){
@@ -8442,6 +8458,7 @@ function emlRenderTemplates(){
     if(t.channel==='whatsapp') detail += t.whatsappContentSid ? ' · Content SID : '+esc(t.whatsappContentSid) : ' · <span style="color:var(--bad,#b23b2c)">Content SID manquant — envoi impossible</span>';
     return '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--bdr)">'
       + '<div style="flex:1"><strong style="font-size:13px">'+esc(t.name)+'</strong> <span style="color:var(--mu);font-size:11px">('+esc(t.key)+')</span>'
+      + (t.category?' <span class="bdg" style="background:var(--bdr);color:var(--mu)">'+(TPL_CATEGORY_LABEL[t.category]||esc(t.category))+'</span>':'')
       + '<div style="font-size:12px;color:var(--mu);margin-top:2px">'+detail+'</div></div>'
       + '<button class="btn btn-s" onclick="emlOpenTemplateModal(\''+t.id+'\')"><i class="ti ti-edit"></i></button>'
       + '<button class="btn btn-s btn-d" onclick="emlDeleteTemplate(\''+t.id+'\')"><i class="ti ti-trash"></i></button>'
@@ -8461,6 +8478,10 @@ function emlOpenTemplateModal(id){
     + '<div class="fi"><label class="lb">Clé (identifiant technique)</label><input type="text" id="eml-tpl-key" value="'+esc(t.key)+'" placeholder="ex. bienvenue-client" '+(t.id?'disabled':'')+'></div>'
     + '</div>'
     + '<div class="fi"><label class="lb">Nom affiché</label><input type="text" id="eml-tpl-name" value="'+esc(t.name)+'" placeholder="Email de bienvenue"></div>'
+    + '<div class="fi"><label class="lb">Catégorie</label><select id="eml-tpl-category">'
+    + '<option value="" '+(!t.category?'selected':'')+'>— Non catégorisé —</option>'
+    + Object.keys(TPL_CATEGORY_LABEL).map(function(k){return '<option value="'+k+'" '+(t.category===k?'selected':'')+'>'+TPL_CATEGORY_LABEL[k]+'</option>';}).join('')
+    + '</select><div style="font-size:11px;color:var(--mu);margin-top:4px">Sert à filtrer les modèles selon leur usage (marketing, support, commercial).</div></div>'
     + '<div class="fi" id="eml-tpl-subject-wrap"><label class="lb">Objet (email uniquement)</label><input type="text" id="eml-tpl-subject" value="'+esc(t.subject)+'" placeholder="Bienvenue {{nom}} !"></div>'
     + '<div class="fi"><label class="lb">Corps (email : éditeur HTML ; SMS/WhatsApp : texte)</label>'
     + '<div class="htmled" id="eml-tpl-body-wrap">'
@@ -8665,6 +8686,7 @@ async function emlSaveTemplate(id){
     subject: document.getElementById('eml-tpl-subject').value.trim(),
     bodyHtml: document.getElementById('eml-tpl-body').value,
     whatsappContentSid: document.getElementById('eml-tpl-sid').value.trim(),
+    category: document.getElementById('eml-tpl-category').value,
   };
   if(!body.key || !body.name || !body.bodyHtml || (body.channel==='email' && !body.subject) || (body.channel==='whatsapp' && !body.whatsappContentSid)){ toast('Tous les champs sont requis'); return; }
   try{

@@ -2261,6 +2261,13 @@ model MessageTemplate {
   // plutôt que par le corps texte brut — cf. src/lib/messaging.ts.
   whatsappContentSid String?
 
+  // Fonction du message — marketing | support | commercial | null (non
+  // catégorisé). Sert à filtrer la liste des modèles selon le contexte
+  // d'utilisation côté front (ex : le sélecteur de réponse d'un ticket
+  // support exclut les modèles "marketing" — cf. crm.html
+  // renderTicketDetail) plutôt que de tout mélanger dans un seul sélecteur.
+  category String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -3,7 +3,7 @@ import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { resolveScope } from "../lib/scope";
 import { getChannelConfig, upsertChannelConfig, sendTestMessage, SmsChannel } from "../lib/sms";
-import { listMessageTemplates, upsertMessageTemplate, deleteMessageTemplate, isChannel } from "../lib/messageTemplate";
+import { listMessageTemplates, upsertMessageTemplate, deleteMessageTemplate, isChannel, isTemplateCategory, TemplateCategory } from "../lib/messageTemplate";
 import { sendMessage } from "../lib/messaging";
 import { createMetaMessageTemplate, listMetaMessageTemplates } from "../lib/metaTemplates";
 
@@ -199,6 +199,7 @@ function shapeTemplate(t: {
   subject: string;
   bodyHtml: string;
   whatsappContentSid: string | null;
+  category: string | null;
   updatedAt: Date;
 }) {
   return {
@@ -209,8 +210,16 @@ function shapeTemplate(t: {
     subject: t.subject,
     bodyHtml: t.bodyHtml,
     whatsappContentSid: t.whatsappContentSid || "",
+    category: t.category || "",
     updatedAt: t.updatedAt,
   };
+}
+
+/** Normalise la catégorie envoyée par le front : "" ⇒ null (non catégorisé), sinon valide contre TEMPLATE_CATEGORIES. */
+function parseCategory(v: unknown): TemplateCategory | null {
+  if (v === undefined || v === null || v === "") return null;
+  if (!isTemplateCategory(v)) throw new HttpError(400, "Catégorie invalide (marketing, support ou commercial)");
+  return v;
 }
 
 messagingRouter.get(
@@ -231,6 +240,7 @@ interface TemplateBody {
   subject: string;
   bodyHtml: string;
   whatsappContentSid?: string;
+  category?: string;
 }
 
 messagingRouter.post(
@@ -255,6 +265,7 @@ messagingRouter.post(
       subject: (b.subject || "").trim(),
       bodyHtml: b.bodyHtml,
       whatsappContentSid: b.channel === "whatsapp" ? (b.whatsappContentSid || "").trim() : "",
+      category: parseCategory(b.category),
     });
     res.json(shapeTemplate(row));
   })
@@ -293,6 +304,7 @@ messagingRouter.post(
           subject: (raw.subject || "").trim(),
           bodyHtml: raw.bodyHtml,
           whatsappContentSid: raw.channel === "whatsapp" ? (raw.whatsappContentSid || "").trim() : "",
+          category: parseCategory(raw.category),
         });
         results.push({ key: key || "(sans clé)", ok: true });
       } catch (e) {
