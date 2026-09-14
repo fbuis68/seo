@@ -787,6 +787,10 @@ let clients=[], view='list', vmode='table', curId=null, sortC='nom', sortD=1;
 // qu'un flag par client : survit aux changements de filtre/tri sans que le
 // tableau `clients` porte un état de sélection qui n'a rien à y faire.
 let SELECTED_IDS = new Set();
+// Sélection multiple sur la grille Tickets (cf. SELECTED_IDS ci-dessus,
+// même principe) — sert à la suppression groupée et à la fusion de
+// tickets (cf. renderTicketsList, ticketBulkDelete, openTicketMergeModal).
+let TICKET_SELECTED_IDS = new Set();
 let srch='', fDanger='', fSecteur='', fOrigine='', fContrat='', fType='', editingId=null, toastT=null;
 let deals=[], COMMERCIALS=[], tickets=[], cashLines=[], SECTOR_OPTIONS=[], ORIGINE_OPTIONS=[];
 let cashSettings = {revenuMode:'detail',revenuMontant:0,revenuFrequence:'mensuel',revenuMois:null,depenseMode:'detail',depenseMontant:0,depenseFrequence:'mensuel',depenseMois:null};
@@ -5095,6 +5099,10 @@ function renderTicketsList(){
   TICKET_STATUSES.forEach(s=>counts[s]=tickets.filter(t=>ticketFilterProspectId?t.prospectId===ticketFilterProspectId:true).filter(t=>t.status===s).length);
   const statTiles = TICKET_STATUSES.map(s=>`<div class="stat-card" style="cursor:pointer;${ticketStatusFilter===s?'outline:2px solid var(--accent,#8a2b2b)':''}" onclick="ticketStatusFilter=ticketStatusFilter==='${s}'?'':'${s}';renderTicketsList()"><div class="stat-lbl">${s}</div><div class="stat-val">${counts[s]}</div></div>`).join('');
   const anyFilterActive = ticketStatusFilter||ticketPriorityFilter||ticketTypeFilter||ticketAgentFilter||ticketSearch;
+  // Une sélection hors des lignes affichées (filtre changé après coup) ne
+  // sert plus à rien ici — mais on la laisse survivre au filtre (comme
+  // SELECTED_IDS pour les fiches) plutôt que de la vider automatiquement :
+  // seul le compteur de la barre d'actions groupées porte sur son total réel.
   const toolbar = `<div class="list-toolbar">
     <div class="srch-wrap"><span class="srch-ico">⌕</span><input type="text" placeholder="Sujet, client, email…" value="${esc(ticketSearch)}" oninput="ticketSearch=this.value;renderTicketsList()"></div>
     <select class="lsel" onchange="ticketPriorityFilter=this.value;renderTicketsList()"><option value="">Toutes priorités</option>${TICKET_PRIORITIES.map(p=>`<option value="${p}" ${ticketPriorityFilter===p?'selected':''}>${p}</option>`).join('')}</select>
@@ -5103,22 +5111,113 @@ function renderTicketsList(){
     ${anyFilterActive?`<button class="btn btn-ghost btn-sm" onclick="ticketResetFilters()">Réinitialiser</button>`:''}
     <span class="count-lbl">${rows.length} résultat${rows.length>1?'s':''}</span>
   </div>`;
+  const selCount = TICKET_SELECTED_IDS.size;
+  const selBar = selCount ? `<div class="list-toolbar" style="margin-top:-6px;margin-bottom:10px;padding:8px 12px;background:var(--pl,#fdedf0);border-radius:8px">
+    <span style="font-size:13px;font-weight:600">${selCount} sélectionné${selCount>1?'s':''}</span>
+    <button class="btn btn-primary btn-sm" onclick="openTicketMergeModal()" ${selCount<2?'disabled title="Sélectionnez au moins 2 tickets"':''}>⇄ Fusionner</button>
+    <button class="btn btn-ghost btn-sm" style="color:#a33" onclick="ticketBulkDelete()">🗑 Supprimer</button>
+    <button class="btn btn-ghost btn-sm" onclick="ticketClearSelection()">Désélectionner</button>
+  </div>` : '';
   const tableRows = rows.map(t=>`
-    <tr style="cursor:pointer" onclick="showTicketDetail('${t.id}')">
-      <td><div class="nom-cell">${esc(t.subject)}</div><div class="sub-cell">#${t.id.slice(-6)} · ${esc(t.contactEmail)}</div></td>
-      <td>${esc(t.prospectNom)}</td>
-      <td><span class="tpill ${TICKET_PRIORITY_PILL[t.priority]||'bn'}">${esc(t.priority)}</span></td>
-      <td><span class="tpill ${TICKET_STATUS_PILL[t.status]||'bn'}">${esc(t.status)}</span></td>
-      <td>${esc(t.agentName)||'—'}</td>
-      <td class="sub-cell">${new Date(t.updatedAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</td>
+    <tr>
+      <td onclick="event.stopPropagation()"><input type="checkbox" class="crm-sel-cb" ${TICKET_SELECTED_IDS.has(t.id)?'checked':''} onchange="ticketToggleSelect('${t.id}',this.checked)"></td>
+      <td style="cursor:pointer" onclick="showTicketDetail('${t.id}')"><div class="nom-cell">${esc(t.subject)}</div><div class="sub-cell">#${t.id.slice(-6)} · ${esc(t.contactEmail)}</div></td>
+      <td style="cursor:pointer" onclick="showTicketDetail('${t.id}')">${esc(t.prospectNom)}</td>
+      <td style="cursor:pointer" onclick="showTicketDetail('${t.id}')"><span class="tpill ${TICKET_PRIORITY_PILL[t.priority]||'bn'}">${esc(t.priority)}</span></td>
+      <td style="cursor:pointer" onclick="showTicketDetail('${t.id}')"><span class="tpill ${TICKET_STATUS_PILL[t.status]||'bn'}">${esc(t.status)}</span></td>
+      <td style="cursor:pointer" onclick="showTicketDetail('${t.id}')">${esc(t.agentName)||'—'}</td>
+      <td class="sub-cell" style="cursor:pointer" onclick="showTicketDetail('${t.id}')">${new Date(t.updatedAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</td>
     </tr>`).join('');
+  const allSelected = rows.length>0 && rows.every(t=>TICKET_SELECTED_IDS.has(t.id));
   document.getElementById('main').innerHTML = `
     <div class="stats-row">${statTiles}</div>
     ${toolbar}
+    ${selBar}
     <div class="tbl-wrap"><table>
-      <thead><tr><th>Sujet</th><th>Client</th><th style="width:90px">Priorité</th><th style="width:110px">Statut</th><th style="width:120px">Agent</th><th style="width:120px">Dernière activité</th></tr></thead>
-      <tbody>${tableRows || '<tr><td colspan="6" class="log-empty">Aucun ticket'+(anyFilterActive?' pour ces critères':'')+'.</td></tr>'}</tbody>
+      <thead><tr>
+        <th style="width:26px"><input type="checkbox" class="crm-sel-cb" ${allSelected?'checked':''} onchange="ticketToggleSelectAllVisible(this.checked)" title="Tout sélectionner (résultats affichés)"></th>
+        <th>Sujet</th><th>Client</th><th style="width:90px">Priorité</th><th style="width:110px">Statut</th><th style="width:120px">Agent</th><th style="width:120px">Dernière activité</th>
+      </tr></thead>
+      <tbody>${tableRows || '<tr><td colspan="7" class="log-empty">Aucun ticket'+(anyFilterActive?' pour ces critères':'')+'.</td></tr>'}</tbody>
     </table></div>`;
+}
+
+// ── Sélection multiple (grille Tickets) — cf. TICKET_SELECTED_IDS ──
+function ticketToggleSelect(id, checked){
+  if(checked) TICKET_SELECTED_IDS.add(id); else TICKET_SELECTED_IDS.delete(id);
+  renderTicketsList();
+}
+function ticketToggleSelectAllVisible(checked){
+  let rows = ticketFilterProspectId ? tickets.filter(t=>t.prospectId===ticketFilterProspectId) : tickets.slice();
+  if(ticketStatusFilter) rows = rows.filter(t=>t.status===ticketStatusFilter);
+  if(ticketPriorityFilter) rows = rows.filter(t=>t.priority===ticketPriorityFilter);
+  if(ticketTypeFilter) rows = rows.filter(t=>ticketTypeFilter==='none'?!t.type:t.type===ticketTypeFilter);
+  if(ticketAgentFilter) rows = rows.filter(t=>ticketAgentFilter==='none'?!t.agentId:t.agentId===ticketAgentFilter);
+  if(ticketSearch){ const s=ticketSearch.toLowerCase(); rows = rows.filter(t=>[t.subject,t.prospectNom,t.contactEmail].some(x=>(x||'').toLowerCase().includes(s))); }
+  rows.forEach(t=>{ if(checked) TICKET_SELECTED_IDS.add(t.id); else TICKET_SELECTED_IDS.delete(t.id); });
+  renderTicketsList();
+}
+function ticketClearSelection(){ TICKET_SELECTED_IDS.clear(); renderTicketsList(); }
+
+/** POST /wa/crmTicket/bulkDelete — suppression groupée depuis la grille. */
+async function ticketBulkDelete(){
+  const ids = [...TICKET_SELECTED_IDS];
+  if(!ids.length) return;
+  if(!confirm(`Supprimer définitivement ${ids.length} ticket${ids.length>1?'s':''} et tous leurs messages ? Cette action est irréversible.`)) return;
+  try{
+    const r = await apiFetch('/wa/crmTicket/bulkDelete', {method:'POST', body:JSON.stringify({ids})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    tickets = await loadTickets();
+    ticketClearSelection();
+    flash(`${data.deleted} ticket${data.deleted>1?'s':''} supprimé${data.deleted>1?'s':''}`);
+  }catch(e){ flash('Erreur : '+e.message); }
+}
+
+/** Modale de fusion — choix du ticket cible parmi la sélection, les autres
+ * y sont rattachés puis supprimés (cf. POST /wa/crmTicket/merge). Ticket
+ * le plus récemment mis à jour pré-sélectionné par défaut. */
+function openTicketMergeModal(){
+  const selected = tickets.filter(t=>TICKET_SELECTED_IDS.has(t.id)).sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
+  if(selected.length<2){ flash('Sélectionnez au moins 2 tickets'); return; }
+  const defaultTarget = selected[0].id;
+  document.getElementById('modal-ct').innerHTML=`
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:480px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Fusionner ${selected.length} tickets</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div style="font-size:13px;color:var(--mu,#888);margin-bottom:10px">Choisissez le ticket qui conservera l'historique. Les autres y seront rattachés (messages fusionnés) puis supprimés.</div>
+      <div style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow:auto">
+        ${selected.map(t=>`<label style="display:flex;gap:8px;align-items:flex-start;padding:8px;border:1px solid var(--bdr,#e2dfd9);border-radius:8px;cursor:pointer">
+          <input type="radio" name="tkt-merge-target" value="${t.id}" ${t.id===defaultTarget?'checked':''} style="margin-top:3px">
+          <span>
+            <div style="font-size:13px;font-weight:600">${esc(t.subject)}</div>
+            <div class="sub-cell">#${t.id.slice(-6)} · ${esc(t.prospectNom)} · ${esc(t.status)} · maj ${new Date(t.updatedAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
+          </span>
+        </label>`).join('')}
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="ticketMergeConfirm()">Fusionner</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function ticketMergeConfirm(){
+  const picked = document.querySelector('input[name="tkt-merge-target"]:checked');
+  if(!picked){ flash('Choisissez un ticket cible'); return; }
+  const targetId = picked.value;
+  const sourceIds = [...TICKET_SELECTED_IDS].filter(id=>id!==targetId);
+  if(!sourceIds.length){ flash('Rien à fusionner'); return; }
+  try{
+    const r = await apiFetch('/wa/crmTicket/merge', {method:'POST', body:JSON.stringify({targetId, sourceIds})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    tickets = await loadTickets();
+    closeModal();
+    ticketClearSelection();
+    flash(`${sourceIds.length} ticket${sourceIds.length>1?'s':''} fusionné${sourceIds.length>1?'s':''}`);
+  }catch(e){ flash('Erreur : '+e.message); }
 }
 
 async function showTicketDetail(id){
