@@ -272,6 +272,89 @@ crmTicketRouter.post(
   })
 );
 
+interface BulkDeleteBody {
+  ids: string[];
+}
+
+/**
+ * POST /wa/crmTicket/bulkDelete — suppression groupée depuis la grille
+ * (sélection multiple, cf. public/crm.html). Les messages liés partent en
+ * cascade (onDelete: Cascade sur CrmTicketMessage.ticket).
+ */
+crmTicketRouter.post(
+  "/crmTicket/bulkDelete",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const raw = (req.body as BulkDeleteBody).ids;
+    const ids = Array.isArray(raw) ? [...new Set(raw.filter((id): id is string => typeof id === "string" && !!id))] : [];
+    if (!ids.length) throw new HttpError(400, "Aucun ticket sélectionné");
+    const { count } = await prisma.crmTicket.deleteMany({ where: { id: { in: ids } } });
+    res.json({ ok: true, deleted: count });
+  })
+);
+
+interface MergeBody {
+  targetId: string;
+  sourceIds: string[];
+}
+
+/**
+ * POST /wa/crmTicket/merge — fusionne un ou plusieurs tickets (sourceIds)
+ * dans un ticket cible (targetId) : les messages des tickets source sont
+ * rattachés au ticket cible (createdAt d'origine conservé, donc le fil
+ * reste chronologique), un message système trace la fusion, puis les
+ * tickets source (désormais vides) sont supprimés. Les tags des tickets
+ * source sont fusionnés (union) dans ceux du ticket cible.
+ */
+crmTicketRouter.post(
+  "/crmTicket/merge",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const b = req.body as MergeBody;
+    const targetId = (b.targetId || "").trim();
+    const sourceIds = Array.isArray(b.sourceIds)
+      ? [...new Set(b.sourceIds.filter((id): id is string => typeof id === "string" && !!id && id !== targetId))]
+      : [];
+    if (!targetId) throw new HttpError(400, "Ticket cible requis");
+    if (!sourceIds.length) throw new HttpError(400, "Sélectionnez au moins un ticket à fusionner");
+
+    const target = await prisma.crmTicket.findUnique({ where: { id: targetId } });
+    if (!target) throw new HttpError(404, "Ticket cible introuvable");
+    const sources = await prisma.crmTicket.findMany({ where: { id: { in: sourceIds } } });
+    if (!sources.length) throw new HttpError(404, "Tickets à fusionner introuvables");
+
+    const actor = req.admin ? await prisma.adminUser.findUnique({ where: { id: req.admin.adminId }, select: { name: true, email: true } }) : null;
+    const actorName = actor ? actor.name || actor.email : "";
+    const mergedTags = new Set([...((target.tags as string[]) || []), ...sources.flatMap((s) => (s.tags as string[]) || [])]);
+    const summary = sources.map((s) => `#${s.id.slice(-6)} (${s.subject})`).join(", ");
+    const sourceIdsFound = sources.map((s) => s.id);
+
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.crmTicketMessage.updateMany({ where: { ticketId: { in: sourceIdsFound } }, data: { ticketId: targetId } });
+      await tx.crmTicketMessage.create({
+        data: {
+          ticketId: targetId,
+          authorType: "agent",
+          authorName: actorName,
+          kind: "system",
+          body: `Fusion : ${summary} rattaché${sources.length > 1 ? "s" : ""} à ce ticket.`,
+          attachments: [],
+        },
+      });
+      await tx.crmTicket.deleteMany({ where: { id: { in: sourceIdsFound } } });
+      return tx.crmTicket.update({
+        where: { id: targetId },
+        data: { tags: [...mergedTags], updatedAt: new Date() },
+        include: TICKET_INCLUDE,
+      });
+    });
+
+    res.json(shapeTicket(updated));
+  })
+);
+
 // ═══════════════════════════ PUBLIC (widget client) ═══════════════════════
 
 interface CreateBody {
