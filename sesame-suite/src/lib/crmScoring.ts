@@ -19,7 +19,8 @@ export type ScoreEventType =
   | "roi_calculator"
   | "two_modules_viewed"
   | "doc_request"
-  | "demo_request";
+  | "demo_request"
+  | "inbound_email";
 
 const MODULE_EVENT_TYPES: ScoreEventType[] = ["module_click", "module_page_visit"];
 
@@ -47,6 +48,8 @@ function pointsFor(eventType: ScoreEventType, config: CrmScoringConfig): number 
       return config.pointsDocRequest;
     case "demo_request":
       return config.pointsDemoRequest;
+    case "inbound_email":
+      return config.pointsInboundEmail;
   }
 }
 

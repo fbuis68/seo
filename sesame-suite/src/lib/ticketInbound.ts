@@ -1,6 +1,7 @@
 import { CrmTicket } from "@prisma/client";
 import { prisma } from "../db";
 import { fireTrigger } from "./automation";
+import { recordScoreEvent } from "./crmScoring";
 
 /**
  * Logique de création/complétion de ticket à partir d'un email entrant —
@@ -24,6 +25,25 @@ export function extractTicketTag(subject: string): string | null {
 
 export async function findTicketByTag(tag: string) {
   return prisma.crmTicket.findFirst({ where: { id: { endsWith: tag } } });
+}
+
+/**
+ * Indicateur "nombre de mails entrants" sur la fiche prospect
+ * (CrmProspect.inboundReplyCount/lastInboundReplyAt, déjà affiché en badge
+ * ✉ N sur la fiche) + point de score correspondant (cf. lib/crmScoring.ts,
+ * config.pointsInboundEmail) — appelé à chaque email entrant traité ici,
+ * qu'il ouvre un ticket ou complète un ticket existant (import automatique
+ * Microsoft Graph ou lien public de suivi de ticket, mêmes deux appelants
+ * que createTicketFromInboundEmail/appendInboundReply).
+ */
+async function recordInboundEmail(prospectId: string, receivedAt: Date) {
+  await prisma.crmProspect.update({
+    where: { id: prospectId },
+    data: { inboundReplyCount: { increment: 1 }, lastInboundReplyAt: receivedAt },
+  });
+  await recordScoreEvent(prospectId, "inbound_email", null, "internal").catch((e) =>
+    console.error("[crmScoring] échec inbound_email:", e)
+  );
 }
 
 export async function findOrCreateProspectByEmail(email: string, name?: string) {
@@ -80,6 +100,8 @@ export async function createTicketFromInboundEmail(input: {
     variables: { nom: prospect.nom, secteur: prospect.secteur || "" },
   }).catch((e) => console.error("[automation] crm.ticket_created:", e));
 
+  await recordInboundEmail(prospect.id, ticket.createdAt);
+
   return ticket;
 }
 
@@ -121,4 +143,6 @@ export async function appendInboundReply(
     recipient: { email: null, phone: null },
     variables: { nom: ticket.contactName || ticket.contactEmail, secteur: "" },
   }).catch((e) => console.error("[automation] crm.ticket_client_replied:", e));
+
+  await recordInboundEmail(ticket.prospectId, new Date());
 }

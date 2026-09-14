@@ -22,6 +22,7 @@ function shapeConfig(c: {
   pointsTwoModulesViewed: number;
   pointsDocRequest: number;
   pointsDemoRequest: number;
+  pointsInboundEmail: number;
 }) {
   return {
     threshold: c.threshold,
@@ -32,6 +33,7 @@ function shapeConfig(c: {
     pointsTwoModulesViewed: c.pointsTwoModulesViewed,
     pointsDocRequest: c.pointsDocRequest,
     pointsDemoRequest: c.pointsDemoRequest,
+    pointsInboundEmail: c.pointsInboundEmail,
   };
 }
 
@@ -53,6 +55,7 @@ interface ConfigBody {
   pointsTwoModulesViewed?: number;
   pointsDocRequest?: number;
   pointsDemoRequest?: number;
+  pointsInboundEmail?: number;
 }
 
 crmScoringRouter.post(
@@ -70,6 +73,7 @@ crmScoringRouter.post(
       "pointsTwoModulesViewed",
       "pointsDocRequest",
       "pointsDemoRequest",
+      "pointsInboundEmail",
     ] as const;
     const data: Record<string, number> = {};
     for (const f of fields) {
