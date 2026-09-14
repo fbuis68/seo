@@ -1297,7 +1297,7 @@ function renderList(){
       return`<tr>
         <td><input type="checkbox" class="crm-sel-cb" ${SELECTED_IDS.has(c.id)?'checked':''} onchange="crmToggleSelect('${c.id}',this.checked)"></td>
         <td><div class="avatar" style="width:26px;height:26px;font-size:10px;cursor:pointer" onclick="showFiche('${c.id}')">${ini(c.nom)}</div></td>
-        <td><div class="nom-cell" onclick="showFiche('${c.id}')">${typeBadge(c.type)} ${c.nom} ${inboundBadge(c)} ${supportBadge(c)} ${c.commercialName?`<span class="commercial-chip" title="Commercial : ${esc(c.commercialName)}">${ini(c.commercialName)}</span>`:''}</div><div class="sub-cell">${c.groupe||'—'}</div></td>
+        <td><div class="nom-cell" onclick="showFiche('${c.id}')">${typeBadge(c.type)} ${c.nom} ${scoreBadge(c)} ${inboundBadge(c)} ${supportBadge(c)} ${c.commercialName?`<span class="commercial-chip" title="Commercial : ${esc(c.commercialName)}">${ini(c.commercialName)}</span>`:''}</div><div class="sub-cell">${c.groupe||'—'}</div></td>
         <td style="font-size:12px;color:#666">${c.secteur||'—'}</td>
         <td style="font-size:12px">${c.ville||'—'}</td>
         <td>${dBadge(c.danger)}</td>
@@ -2044,6 +2044,7 @@ function renderFiche(c){
           ${c.ville?`<span class="tag t-blue">◉ ${c.ville}</span>`:''}
           ${(c.affiliations||[]).map(a=>`<span class="tag t-purple">⛓ ${esc(a)}</span>`).join('')}
           ${c.danger==='Bon client'?'<span class="tag t-green">Bon client</span>':c.danger==='Élevé !!'?'<span class="tag t-red">Élevé !!</span>':'<span class="tag t-amber">Modéré</span>'}
+          ${scoreBadge(c)}
           ${inboundBadge(c)}
           ${supportBadge(c)}
         </div>
@@ -5066,7 +5067,7 @@ const TICKET_STATUSES = ['En attente','En cours','Attente client','Résolu','Fer
 const TICKET_PRIORITIES = ['Basse','Normale','Haute','Urgente'];
 const TICKET_STATUS_PILL = {'En attente':'bw','En cours':'bi','Attente client':'bn','Résolu':'bg','Fermé':'bn'};
 const TICKET_PRIORITY_PILL = {'Basse':'bn','Normale':'bi','Haute':'bw','Urgente':'bd'};
-let ticketFilterProspectId = null, ticketStatusFilter = '';
+let ticketFilterProspectId = null, ticketStatusFilter = '', ticketPriorityFilter = '', ticketTypeFilter = '', ticketAgentFilter = '', ticketSearch = '';
 
 function showTickets(prospectId){
   view='tickets';setNav('n-tickets');
@@ -5077,13 +5078,31 @@ function showTickets(prospectId){
   renderTicketsList();
 }
 
+function ticketResetFilters(){
+  ticketStatusFilter='';ticketPriorityFilter='';ticketTypeFilter='';ticketAgentFilter='';ticketSearch='';
+  renderTicketsList();
+}
+
 function renderTicketsList(){
   let rows = ticketFilterProspectId ? tickets.filter(t=>t.prospectId===ticketFilterProspectId) : tickets.slice();
   if(ticketStatusFilter) rows = rows.filter(t=>t.status===ticketStatusFilter);
+  if(ticketPriorityFilter) rows = rows.filter(t=>t.priority===ticketPriorityFilter);
+  if(ticketTypeFilter) rows = rows.filter(t=>ticketTypeFilter==='none'?!t.type:t.type===ticketTypeFilter);
+  if(ticketAgentFilter) rows = rows.filter(t=>ticketAgentFilter==='none'?!t.agentId:t.agentId===ticketAgentFilter);
+  if(ticketSearch){ const s=ticketSearch.toLowerCase(); rows = rows.filter(t=>[t.subject,t.prospectNom,t.contactEmail].some(x=>(x||'').toLowerCase().includes(s))); }
   rows.sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
   const counts = {};
   TICKET_STATUSES.forEach(s=>counts[s]=tickets.filter(t=>ticketFilterProspectId?t.prospectId===ticketFilterProspectId:true).filter(t=>t.status===s).length);
   const statTiles = TICKET_STATUSES.map(s=>`<div class="stat-card" style="cursor:pointer;${ticketStatusFilter===s?'outline:2px solid var(--accent,#8a2b2b)':''}" onclick="ticketStatusFilter=ticketStatusFilter==='${s}'?'':'${s}';renderTicketsList()"><div class="stat-lbl">${s}</div><div class="stat-val">${counts[s]}</div></div>`).join('');
+  const anyFilterActive = ticketStatusFilter||ticketPriorityFilter||ticketTypeFilter||ticketAgentFilter||ticketSearch;
+  const toolbar = `<div class="list-toolbar">
+    <div class="srch-wrap"><span class="srch-ico">⌕</span><input type="text" placeholder="Sujet, client, email…" value="${esc(ticketSearch)}" oninput="ticketSearch=this.value;renderTicketsList()"></div>
+    <select class="lsel" onchange="ticketPriorityFilter=this.value;renderTicketsList()"><option value="">Toutes priorités</option>${TICKET_PRIORITIES.map(p=>`<option value="${p}" ${ticketPriorityFilter===p?'selected':''}>${p}</option>`).join('')}</select>
+    <select class="lsel" onchange="ticketTypeFilter=this.value;renderTicketsList()"><option value="">Tous types</option>${TICKET_TYPES.map(ty=>`<option value="${ty}" ${ticketTypeFilter===ty?'selected':''}>${ty}</option>`).join('')}<option value="none" ${ticketTypeFilter==='none'?'selected':''}>Non défini</option></select>
+    <select class="lsel" onchange="ticketAgentFilter=this.value;renderTicketsList()"><option value="">Tous agents</option>${COMMERCIALS.map(c=>`<option value="${c.id}" ${ticketAgentFilter===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}<option value="none" ${ticketAgentFilter==='none'?'selected':''}>Non assigné</option></select>
+    ${anyFilterActive?`<button class="btn btn-ghost btn-sm" onclick="ticketResetFilters()">Réinitialiser</button>`:''}
+    <span class="count-lbl">${rows.length} résultat${rows.length>1?'s':''}</span>
+  </div>`;
   const tableRows = rows.map(t=>`
     <tr style="cursor:pointer" onclick="showTicketDetail('${t.id}')">
       <td><div class="nom-cell">${esc(t.subject)}</div><div class="sub-cell">#${t.id.slice(-6)} · ${esc(t.contactEmail)}</div></td>
@@ -5095,9 +5114,10 @@ function renderTicketsList(){
     </tr>`).join('');
   document.getElementById('main').innerHTML = `
     <div class="stats-row">${statTiles}</div>
+    ${toolbar}
     <div class="tbl-wrap"><table>
       <thead><tr><th>Sujet</th><th>Client</th><th style="width:90px">Priorité</th><th style="width:110px">Statut</th><th style="width:120px">Agent</th><th style="width:120px">Dernière activité</th></tr></thead>
-      <tbody>${tableRows || '<tr><td colspan="6" class="log-empty">Aucun ticket'+(ticketStatusFilter?' avec ce statut':'')+'.</td></tr>'}</tbody>
+      <tbody>${tableRows || '<tr><td colspan="6" class="log-empty">Aucun ticket'+(anyFilterActive?' pour ces critères':'')+'.</td></tr>'}</tbody>
     </table></div>`;
 }
 
