@@ -4,6 +4,7 @@ import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin, requireSesame } from "../middleware/requireAdmin";
 import { getSmtpConfig, sendEmailRaw } from "../lib/email";
 import { createTicketFromInboundEmail, appendInboundReply } from "../lib/ticketInbound";
+import { fireTrigger } from "../lib/automation";
 
 /**
  * Module Tickets (support) — 19/08/2026. Portée CRM/Sesame uniquement
@@ -146,6 +147,23 @@ crmTicketRouter.post(
     if (b.tags !== undefined) data.tags = b.tags;
 
     const updated = await prisma.crmTicket.update({ where: { id: b.id }, data, include: TICKET_INCLUDE });
+
+    if (b.status && b.status !== existing.status) {
+      fireTrigger("crm.ticket_status_changed", {
+        entityId: null,
+        targetType: "crmTicket",
+        targetId: updated.id + ":" + Date.now(), // pas de dédup — chaque transition doit pouvoir notifier
+        recipient: { email: updated.contactEmail, phone: null },
+        variables: {
+          nom: updated.contactName || updated.contactEmail,
+          secteur: "",
+          ancienStatut: existing.status,
+          nouveauStatut: updated.status,
+          sujet: updated.subject,
+        },
+      }).catch((e) => console.error("[automation] crm.ticket_status_changed:", e));
+    }
+
     res.json(shapeTicket(updated));
   })
 );

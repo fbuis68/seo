@@ -60,6 +60,13 @@ export const TRIGGERS: TriggerDef[] = [
   { key: "crm.newsletter", label: "Newsletter récurrente", scope: "crm", timingModes: ["recurring"] },
   { key: "crm.ticket_created", label: "Nouveau ticket support", scope: "crm", timingModes: ["immediate"] },
   { key: "crm.ticket_client_replied", label: "Client a répondu à un ticket", scope: "crm", timingModes: ["immediate"] },
+  // Se déclenche à chaque changement manuel de statut (POST /wa/crmTicket/update),
+  // quel que soit le couple ancien/nouveau statut — {{ancienStatut}}/{{nouveauStatut}}
+  // permettent au modèle de message d'afficher la transition. Contrairement aux
+  // deux déclencheurs ci-dessus (recipient event=null, pensés pour notifier l'équipe
+  // via recipientMode="custom"), celui-ci porte l'email du contact du ticket comme
+  // destinataire par défaut : le cas d'usage principal est d'informer le client.
+  { key: "crm.ticket_status_changed", label: "Changement de statut de ticket", scope: "crm", timingModes: ["immediate"] },
   { key: "questionnaire.completed", label: "Questionnaire complété", scope: "hotel", timingModes: ["immediate"] },
   { key: "crm.questionnaire_completed", label: "Questionnaire complété", scope: "crm", timingModes: ["immediate"] },
 ];
