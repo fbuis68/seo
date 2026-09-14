@@ -2176,7 +2176,7 @@ function ticketsCardHtml(c){
         <div class="log-dot ld-b"></div>
         <div class="log-body">
           <div class="log-text"><strong>${esc(t.subject)}</strong> <span class="tpill ${TICKET_STATUS_PILL[t.status]||'bn'}" style="margin-left:6px">${esc(t.status)}</span> <span class="tpill ${TICKET_PRIORITY_PILL[t.priority]||'bn'}">${esc(t.priority)}</span></div>
-          <div class="log-meta">#${t.id.slice(-6)}${t.agentName?' · '+esc(t.agentName):' · Non assigné'} · ${new Date(t.updatedAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
+          <div class="log-meta">${esc(t.number)}${t.agentName?' · '+esc(t.agentName):' · Non assigné'} · ${new Date(t.updatedAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
         </div>
       </div>`).join(''):'<div class="log-empty">Aucun ticket support pour ce client.</div>'}
   </div>`;
@@ -5141,7 +5141,7 @@ function renderTicketsList(){
   const tableRows = rows.map(t=>`
     <tr>
       <td onclick="event.stopPropagation()"><input type="checkbox" class="crm-sel-cb" ${TICKET_SELECTED_IDS.has(t.id)?'checked':''} onchange="ticketToggleSelect('${t.id}',this.checked)"></td>
-      <td style="cursor:pointer" onclick="showTicketDetail('${t.id}')"><div class="nom-cell">${esc(t.subject)}</div><div class="sub-cell">#${t.id.slice(-6)} · ${esc(t.contactEmail)}</div></td>
+      <td style="cursor:pointer" onclick="showTicketDetail('${t.id}')"><div class="nom-cell">${esc(t.subject)}</div><div class="sub-cell">${esc(t.number)} · ${esc(t.contactEmail)}</div></td>
       <td style="cursor:pointer" onclick="showTicketDetail('${t.id}')">${esc(t.prospectNom)}</td>
       <td style="cursor:pointer" onclick="showTicketDetail('${t.id}')"><span class="tpill ${TICKET_PRIORITY_PILL[t.priority]||'bn'}">${esc(t.priority)}</span></td>
       <td style="cursor:pointer" onclick="showTicketDetail('${t.id}')"><span class="tpill ${TICKET_STATUS_PILL[t.status]||'bn'}">${esc(t.status)}</span></td>
@@ -5211,7 +5211,7 @@ function openTicketMergeModal(){
           <input type="radio" name="tkt-merge-target" value="${t.id}" ${t.id===defaultTarget?'checked':''} style="margin-top:3px">
           <span>
             <div style="font-size:13px;font-weight:600">${esc(t.subject)}</div>
-            <div class="sub-cell">#${t.id.slice(-6)} · ${esc(t.prospectNom)} · ${esc(t.status)} · maj ${new Date(t.updatedAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
+            <div class="sub-cell">${esc(t.number)} · ${esc(t.prospectNom)} · ${esc(t.status)} · maj ${new Date(t.updatedAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
           </span>
         </label>`).join('')}
       </div>
@@ -5282,7 +5282,7 @@ function renderTicketDetail(t){
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
         <div>
           <div style="font-size:16px;font-weight:600">${esc(t.subject)}</div>
-          <div class="sub-cell">#${t.id.slice(-6)} · <span class="bc-link" onclick="showFiche('${t.prospectId}')">${esc(t.prospectNom)}</span> · ${esc(t.contactEmail)}</div>
+          <div class="sub-cell">${esc(t.number)} · <span class="bc-link" onclick="showFiche('${t.prospectId}')">${esc(t.prospectNom)}</span> · ${esc(t.contactEmail)}</div>
         </div>
         <div style="display:flex;gap:6px;align-items:center">
           <input readonly value="${esc(publicLink)}" style="font-size:11px;width:200px" onclick="this.select()">

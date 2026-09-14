@@ -41,6 +41,7 @@ function shapeMessage(m: {
 
 function shapeTicket(t: {
   id: string;
+  number: string;
   prospectId: string;
   agentId: string | null;
   subject: string;
@@ -60,6 +61,7 @@ function shapeTicket(t: {
 }) {
   return {
     id: t.id,
+    number: t.number,
     prospectId: t.prospectId,
     prospectNom: t.prospect ? t.prospect.nom : "",
     agentId: t.agentId,
@@ -252,7 +254,7 @@ crmTicketRouter.post(
       const smtp = await getSmtpConfig(null);
       const fromName = smtp?.supportFromName || smtp?.fromName || undefined;
       const fromEmail = smtp?.supportFromEmail || undefined;
-      const subject = `Re: ${ticket.subject} [#${ticket.id.slice(-6)}]`;
+      const subject = `Re: ${ticket.subject} [${ticket.number}]`;
       const html = bodyText.replace(/\n/g, "<br>");
       await sendEmailRaw(null, ticket.contactEmail, subject, html, fromName, {
         fromEmailOverride: fromEmail,
@@ -328,7 +330,7 @@ crmTicketRouter.post(
     const actor = req.admin ? await prisma.adminUser.findUnique({ where: { id: req.admin.adminId }, select: { name: true, email: true } }) : null;
     const actorName = actor ? actor.name || actor.email : "";
     const mergedTags = new Set([...((target.tags as string[]) || []), ...sources.flatMap((s) => (s.tags as string[]) || [])]);
-    const summary = sources.map((s) => `#${s.id.slice(-6)} (${s.subject})`).join(", ");
+    const summary = sources.map((s) => `${s.number} (${s.subject})`).join(", ");
     const sourceIdsFound = sources.map((s) => s.id);
 
     const updated = await prisma.$transaction(async (tx) => {
@@ -385,12 +387,15 @@ crmTicketRouter.post(
 
     const ticket = await createTicketFromInboundEmail({ email, name, subject, body: message, attachments: b.attachments });
 
-    res.status(201).json({ publicToken: ticket.publicToken });
+    res.status(201).json({ publicToken: ticket.publicToken, number: ticket.number });
   })
 );
 
 /** GET /wa/ticket/public?token=... — lecture seule côté client, ne renvoie
- * jamais les notes internes (kind="note", réservées à l'équipe support). */
+ * jamais les échanges internes : ni les notes (kind="note", réservées à
+ * l'équipe support), ni le journal des changements de champs (kind="system",
+ * qui expose des détails opérationnels internes — affectation, priorité...
+ * pas destinés au client). */
 crmTicketRouter.get(
   "/ticket/public",
   asyncHandler(async (req, res) => {
@@ -399,7 +404,7 @@ crmTicketRouter.get(
     const t = await prisma.crmTicket.findUnique({ where: { publicToken: token }, include: TICKET_INCLUDE });
     if (!t) throw new HttpError(404, "Lien invalide ou expiré");
     const shaped = shapeTicket(t);
-    shaped.messages = shaped.messages.filter((m) => m.kind !== "note");
+    shaped.messages = shaped.messages.filter((m) => m.kind !== "note" && m.kind !== "system");
     res.json(shaped);
   })
 );

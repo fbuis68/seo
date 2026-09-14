@@ -9,8 +9,8 @@ Microsoft 365 déjà en place).
 **Principe** : chaque nouvel email reçu dans la boîte support déclenche une
 notification vers Sesame Suite, qui va chercher le contenu du message via
 l'API Graph, puis crée un ticket (ou complète un ticket existant si le
-sujet contient la référence `[#xxxxxx]` insérée par Sesame Suite dans ses
-propres réponses).
+sujet contient la référence `[TKT-2026-0001]` — le numéro du ticket —
+insérée par Sesame Suite dans ses propres réponses).
 
 ---
 

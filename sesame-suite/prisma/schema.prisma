@@ -2137,6 +2137,13 @@ model CrmTicket {
   agentId String?
   agent   AdminUser? @relation("TicketAgent", fields: [agentId], references: [id], onDelete: SetNull)
 
+  // Identifiant lisible du ticket (ex : TKT-2026-0001), même convention que
+  // CrmQuote.number — cf. nextTicketNumber() dans lib/ticketInbound.ts.
+  // Réutilisé comme tag "[TKT-...]" dans le sujet des emails de réponse
+  // pour rattacher une réponse entrante au bon ticket (cf. extractTicketTag/
+  // findTicketByTag), à la place de l'ancien suffixe d'id peu lisible.
+  number String @unique
+
   subject      String
   status       String  @default("En attente") // En attente | En cours | Attente client | Résolu | Fermé
   priority     String  @default("Normale") // Basse | Normale | Haute | Urgente

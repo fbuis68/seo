@@ -298,7 +298,7 @@
     if (emailEl) emailEl.focus();
   }
 
-  function renderSuccess(publicToken) {
+  function renderSuccess(publicToken, number) {
     var link = cfg.apiBase + "/support?token=" + encodeURIComponent(publicToken);
     panelEl.innerHTML =
       '<div class="stw-head"><div><h2>' +
@@ -309,7 +309,9 @@
       "</button></div>" +
       '<div class="stw-body"><div class="stw-ok">' +
       ICON_CHECK +
-      "<p><strong>Ticket envoyé avec succès</strong></p>" +
+      "<p><strong>Ticket " +
+      esc(number) +
+      " envoyé avec succès</strong></p>" +
       "<p>Nous reviendrons vers vous par email dès que possible.</p>" +
       '<a class="stw-link" href="' +
       esc(link) +
@@ -368,7 +370,7 @@
             btn.textContent = "Envoyer";
             return;
           }
-          renderSuccess(res.data.publicToken);
+          renderSuccess(res.data.publicToken, res.data.number);
         })
         .catch(function () {
           errEl.textContent = "Erreur de connexion au serveur, réessayez.";
