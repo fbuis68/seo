@@ -6196,6 +6196,12 @@ async function sendClientEmail(id){
 // AUTOMATISATIONS — règles déclenchées par un événement métier ou une
 // récurrence programmée (portée CRM/Sesame, scope=crm)
 // ════════════════════════════════════════
+// "category" (facultatif) restreint le sélecteur de modèle du déclencheur
+// concerné à cette seule catégorie de MessageTemplate (cf. TPL_CATEGORY_LABEL,
+// renderRuleTplOptions ci-dessous) — même principe que l'exclusion des
+// modèles "Marketing" du sélecteur de réponse d'un ticket support, mais en
+// filtre positif ici. Pas de restriction (tous les modèles du canal
+// restent proposés) pour les déclencheurs sans "category".
 const TRIGGERS_CRM = [
   {key:'crm.prospect_created', label:'Nouveau prospect CRM', timingModes:['immediate']},
   {key:'crm.prospect_created_web', label:'Nouveau prospect du site web', timingModes:['immediate']},
@@ -6203,10 +6209,10 @@ const TRIGGERS_CRM = [
   {key:'crm.subscription_activated', label:'Souscription activée', timingModes:['immediate']},
   {key:'crm.subscription_cancelled', label:'Souscription annulée', timingModes:['immediate']},
   {key:'crm.subscription_trial_ending', label:"Fin d'essai souscription", timingModes:['offset']},
-  {key:'crm.newsletter', label:'Newsletter récurrente', timingModes:['recurring']},
-  {key:'crm.ticket_created', label:'Nouveau ticket support', timingModes:['immediate']},
-  {key:'crm.ticket_client_replied', label:'Client a répondu à un ticket', timingModes:['immediate']},
-  {key:'crm.ticket_status_changed', label:'Changement de statut de ticket', timingModes:['immediate']},
+  {key:'crm.newsletter', label:'Newsletter récurrente', timingModes:['recurring'], category:'marketing'},
+  {key:'crm.ticket_created', label:'Nouveau ticket support', timingModes:['immediate'], category:'support'},
+  {key:'crm.ticket_client_replied', label:'Client a répondu à un ticket', timingModes:['immediate'], category:'support'},
+  {key:'crm.ticket_status_changed', label:'Changement de statut de ticket', timingModes:['immediate'], category:'support'},
   {key:'crm.questionnaire_completed', label:'Questionnaire complété', timingModes:['immediate']},
 ];
 let AUTO_RULES=[];
@@ -6342,12 +6348,12 @@ async function openRuleModal(id){
       <div class="modal-head"><div style="font-size:16px;font-weight:500">${r.id?'Modifier la règle':'Nouvelle règle'}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
       <div class="ff"><label>Nom</label><input id="rule-name" value="${esc(r.name)}" placeholder="Ex. Newsletter mensuelle"></div>
       <div class="form-grid" style="margin-top:8px">
-        <div class="ff"><label>Déclencheur</label><select id="rule-trigger" onchange="renderRuleTimingFields()">${TRIGGERS_CRM.map(t=>`<option value="${t.key}" ${r.trigger===t.key?'selected':''}>${t.label}</option>`).join('')}</select></div>
+        <div class="ff"><label>Déclencheur</label><select id="rule-trigger" onchange="renderRuleTimingFields();renderRuleTplOptions()">${TRIGGERS_CRM.map(t=>`<option value="${t.key}" ${r.trigger===t.key?'selected':''}>${t.label}</option>`).join('')}</select></div>
         <div class="ff"><label>Canal</label><select id="rule-channel" onchange="renderRuleTplOptions();renderRuleRecipientFields();renderRuleSenderField()">${['email','sms','whatsapp'].map(c=>`<option value="${c}" ${r.channel===c?'selected':''}>${CHANNEL_LABEL[c]}</option>`).join('')}</select></div>
       </div>
       <div id="rule-timing-fields"></div>
       <div class="form-grid" style="margin-top:8px">
-        <div class="ff"><label>Modèle</label><select id="rule-template"></select></div>
+        <div class="ff"><label>Modèle</label><select id="rule-template"></select><div id="rule-template-hint" style="font-size:11px;color:#999;margin-top:3px"></div></div>
         <div class="ff"><label>Actif</label><select id="rule-enabled"><option value="1" ${r.enabled!==false?'selected':''}>Oui</option><option value="0" ${r.enabled===false?'selected':''}>Non</option></select></div>
       </div>
       <div class="modal-section">Destinataire</div>
@@ -6461,10 +6467,20 @@ function renderRuleAudienceFields(triggerKey){
 function renderRuleTplOptions(){
   const r = window._ruleEditing || {};
   const chan = (document.getElementById('rule-channel')||{value:r.channel}).value;
+  const triggerKey = (document.getElementById('rule-trigger')||{value:r.trigger}).value;
+  const trig = TRIGGERS_CRM.find(t=>t.key===triggerKey);
+  const cat = trig && trig.category;
   const sel = document.getElementById('rule-template');
   if(!sel)return;
-  const opts = MSG_TEMPLATES.filter(t=>t.channel===chan);
-  sel.innerHTML = opts.length ? opts.map(t=>`<option value="${esc(t.key)}" ${r.templateKey===t.key?'selected':''}>${esc(t.name)}</option>`).join('') : '<option value="">— aucun modèle pour ce canal —</option>';
+  let opts = MSG_TEMPLATES.filter(t=>t.channel===chan);
+  // Filtre positif par catégorie (cf. TRIGGERS_CRM ci-dessus) — le modèle
+  // déjà sélectionné sur la règle reste toujours proposé même s'il ne
+  // matche plus la catégorie, pour ne jamais le perdre silencieusement à
+  // l'ouverture d'une règle existante (ex. catégorie ajoutée après coup).
+  if(cat) opts = opts.filter(t=>t.category===cat || t.key===r.templateKey);
+  const hint = document.getElementById('rule-template-hint');
+  if(hint) hint.textContent = cat ? `Modèles "${TPL_CATEGORY_LABEL[cat]}" uniquement, pour ce déclencheur.` : '';
+  sel.innerHTML = opts.length ? opts.map(t=>`<option value="${esc(t.key)}" ${r.templateKey===t.key?'selected':''}>${esc(t.name)}</option>`).join('') : `<option value="">— aucun modèle ${cat?`"${TPL_CATEGORY_LABEL[cat]}" `:''}pour ce canal —</option>`;
 }
 
 async function saveRule(id){
