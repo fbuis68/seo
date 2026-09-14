@@ -2160,9 +2160,11 @@ function renderFiche(c){
  * fiche. Toujours affichée (même état vide, comme la carte "Affaires"
  * juste au-dessus) — un ticket n'étant jamais créé manuellement depuis le
  * CRM (toujours à l'initiative du client via le widget public/le lien de
- * suivi/Microsoft Graph), pas de bouton "+ Nouveau" ici. */
+ * suivi/Microsoft Graph), pas de bouton "+ Nouveau" ici. Rattachement par
+ * prospectId ET par email (cf. ticketsForProspect ci-dessous) : c'est bien
+ * l'email de la fiche qui fait foi pour retrouver ses tickets. */
 function ticketsCardHtml(c){
-  const rows = tickets.filter(t=>t.prospectId===c.id);
+  const rows = ticketsForProspect(c.id);
   const sorted = rows.slice().sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
   return `<div class="card">
     <div class="card-head"><div class="ch-ico">☎</div><span class="ch-title">Tickets support</span>
@@ -5075,6 +5077,21 @@ const TICKET_STATUS_PILL = {'En attente':'bw','En cours':'bi','Attente client':'
 const TICKET_PRIORITY_PILL = {'Basse':'bn','Normale':'bi','Haute':'bw','Urgente':'bd'};
 let ticketFilterProspectId = null, ticketStatusFilter = '', ticketPriorityFilter = '', ticketTypeFilter = '', ticketAgentFilter = '', ticketSearch = '';
 
+/** Tickets d'une fiche client — au-delà du lien direct prospectId (posé une
+ * fois pour toutes à la création du ticket, cf. findOrCreateProspectByEmail
+ * côté serveur), on rattrape aussi par email : si l'email de la fiche a
+ * changé depuis, ou si un ticket a été ouvert avec une adresse qui n'a créé
+ * qu'un doublon de prospect au lieu de retrouver celui-ci, le ticket reste
+ * visible ici tant que son contactEmail correspond à l'email actuel de la
+ * fiche (comparaison insensible à la casse/aux espaces). C'est bien l'email
+ * qui fait foi pour l'affichage, prospectId n'étant qu'une optimisation. */
+function ticketsForProspect(prospectId){
+  if(!prospectId) return tickets.slice();
+  const c = clients.find(x=>x.id===prospectId);
+  const email = c && c.email ? c.email.toLowerCase().trim() : '';
+  return tickets.filter(t=>t.prospectId===prospectId || (email && (t.contactEmail||'').toLowerCase().trim()===email));
+}
+
 function showTickets(prospectId){
   view='tickets';setNav('n-tickets');
   ticketFilterProspectId = prospectId || null;
@@ -5090,7 +5107,7 @@ function ticketResetFilters(){
 }
 
 function renderTicketsList(){
-  let rows = ticketFilterProspectId ? tickets.filter(t=>t.prospectId===ticketFilterProspectId) : tickets.slice();
+  let rows = ticketsForProspect(ticketFilterProspectId);
   if(ticketStatusFilter) rows = rows.filter(t=>t.status===ticketStatusFilter);
   if(ticketPriorityFilter) rows = rows.filter(t=>t.priority===ticketPriorityFilter);
   if(ticketTypeFilter) rows = rows.filter(t=>ticketTypeFilter==='none'?!t.type:t.type===ticketTypeFilter);
@@ -5098,7 +5115,8 @@ function renderTicketsList(){
   if(ticketSearch){ const s=ticketSearch.toLowerCase(); rows = rows.filter(t=>[t.subject,t.prospectNom,t.contactEmail].some(x=>(x||'').toLowerCase().includes(s))); }
   rows.sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
   const counts = {};
-  TICKET_STATUSES.forEach(s=>counts[s]=tickets.filter(t=>ticketFilterProspectId?t.prospectId===ticketFilterProspectId:true).filter(t=>t.status===s).length);
+  const scopedForCounts = ticketsForProspect(ticketFilterProspectId);
+  TICKET_STATUSES.forEach(s=>counts[s]=scopedForCounts.filter(t=>t.status===s).length);
   const statTiles = TICKET_STATUSES.map(s=>`<div class="stat-card" style="cursor:pointer;${ticketStatusFilter===s?'outline:2px solid var(--accent,#8a2b2b)':''}" onclick="ticketStatusFilter=ticketStatusFilter==='${s}'?'':'${s}';renderTicketsList()"><div class="stat-lbl">${s}</div><div class="stat-val">${counts[s]}</div></div>`).join('');
   const anyFilterActive = ticketStatusFilter||ticketPriorityFilter||ticketTypeFilter||ticketAgentFilter||ticketSearch;
   // Une sélection hors des lignes affichées (filtre changé après coup) ne
@@ -5150,7 +5168,7 @@ function ticketToggleSelect(id, checked){
   renderTicketsList();
 }
 function ticketToggleSelectAllVisible(checked){
-  let rows = ticketFilterProspectId ? tickets.filter(t=>t.prospectId===ticketFilterProspectId) : tickets.slice();
+  let rows = ticketsForProspect(ticketFilterProspectId);
   if(ticketStatusFilter) rows = rows.filter(t=>t.status===ticketStatusFilter);
   if(ticketPriorityFilter) rows = rows.filter(t=>t.priority===ticketPriorityFilter);
   if(ticketTypeFilter) rows = rows.filter(t=>ticketTypeFilter==='none'?!t.type:t.type===ticketTypeFilter);
