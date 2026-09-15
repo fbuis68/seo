@@ -4,6 +4,7 @@ import { Channel } from "./messageTemplate";
 import { todayInTz } from "./timezone";
 import { getOrCreateQuestionnaireSend, questionnaireLinkUrl, QuestionnaireTargetType } from "./questionnaire";
 import { bookingTemplateVars, hotelContactInfo } from "./templateVars";
+import { sweepTicketAutoResolve } from "./ticketInbound";
 
 /**
  * Catalogue fixe des déclencheurs métier — c'est la seule source de vérité
@@ -500,6 +501,8 @@ async function sweepRecurringRule(rule: {
 
 /** Appelé périodiquement par automationScheduler.ts. */
 export async function runAutomationSweep() {
+  await sweepTicketAutoResolve().catch((e) => console.error("[automation] sweepTicketAutoResolve échoué:", e));
+
   let rules;
   try {
     // "before"/"after" restent listés pour rester compatibles avec d'éventuelles

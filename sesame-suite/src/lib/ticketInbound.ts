@@ -65,6 +65,18 @@ async function findTicketByEmailAndSubject(email: string, subject: string) {
 }
 
 /**
+ * Nom affiché de l'agent assigné, pour la variable {{agent}} des modèles
+ * d'email déclenchés par un ticket (cf. TRIGGERS "crm.ticket_*" dans
+ * lib/automation.ts) — "Non assigné" plutôt qu'une chaîne vide, plus lisible
+ * dans un email envoyé au client.
+ */
+async function ticketAgentName(agentId: string | null): Promise<string> {
+  if (!agentId) return "Non assigné";
+  const agent = await prisma.adminUser.findUnique({ where: { id: agentId }, select: { name: true, email: true } });
+  return agent ? agent.name || agent.email : "Non assigné";
+}
+
+/**
  * Numéro de ticket lisible (ex : TKT-2026-0001), même convention que
  * nextQuoteNumber() dans crmQuote.ts — compté par année plutôt qu'un
  * compteur global, pour ne jamais dépendre d'une séquence SQL dédiée.
@@ -169,7 +181,16 @@ export async function createTicketFromInboundEmail(input: {
     targetType: "crmTicket",
     targetId: ticket.id,
     recipient: { email: null, phone: null },
-    variables: { nom: prospect.nom, secteur: prospect.secteur || "" },
+    variables: {
+      nom: prospect.nom,
+      secteur: prospect.secteur || "",
+      numero: ticket.number,
+      sujet: ticket.subject,
+      statut: ticket.status,
+      // Toujours "Non assigné" à la création (agentId n'est jamais renseigné
+      // à ce stade) — pas de requête supplémentaire nécessaire.
+      agent: "Non assigné",
+    },
   }).catch((e) => console.error("[automation] crm.ticket_created:", e));
 
   await recordInboundEmail(prospect.id, ticket.createdAt);
@@ -213,8 +234,68 @@ export async function appendInboundReply(
     targetType: "crmTicket",
     targetId: ticket.id + ":" + Date.now(), // pas de dédup — chaque relance client doit notifier
     recipient: { email: null, phone: null },
-    variables: { nom: ticket.contactName || ticket.contactEmail, secteur: "" },
+    variables: {
+      nom: ticket.contactName || ticket.contactEmail,
+      secteur: "",
+      numero: ticket.number,
+      sujet: ticket.subject,
+      statut: (data.status as string) || ticket.status,
+      agent: await ticketAgentName(ticket.agentId),
+    },
   }).catch((e) => console.error("[automation] crm.ticket_client_replied:", e));
 
   await recordInboundEmail(ticket.prospectId, new Date());
+}
+
+/**
+ * Fermeture automatique des tickets "Attente client" restés sans nouvelle
+ * activité (updatedAt) pendant TicketConfig.autoResolveAfterDays jours — cf.
+ * discussion du 15/09/2026. Volontairement limité à ce seul statut : "En
+ * attente"/"En cours" signifient qu'un agent doit encore agir, jamais
+ * fermés tout seuls. Appelé périodiquement par runAutomationSweep() (cf.
+ * automationScheduler, toutes les 15 min) — inerte tant que
+ * autoResolveAfterDays n'est pas configuré (null/0, réglage par défaut).
+ */
+export async function sweepTicketAutoResolve(): Promise<void> {
+  const config = await prisma.ticketConfig.findUnique({ where: { id: "singleton" } });
+  const days = config?.autoResolveAfterDays;
+  if (!days || days <= 0) return;
+
+  const cutoff = new Date(Date.now() - days * 24 * 60 * 60_000);
+  const stale = await prisma.crmTicket.findMany({ where: { status: "Attente client", updatedAt: { lte: cutoff } } });
+
+  for (const ticket of stale) {
+    try {
+      await prisma.crmTicketMessage.create({
+        data: {
+          ticketId: ticket.id,
+          authorType: "agent",
+          authorName: "",
+          kind: "system",
+          body: `Statut : Attente client → Résolu (fermeture automatique après ${days} jour${days > 1 ? "s" : ""} sans réponse du client)`,
+          attachments: [],
+        },
+      });
+      const updated = await prisma.crmTicket.update({ where: { id: ticket.id }, data: { status: "Résolu" } });
+
+      fireTrigger("crm.ticket_status_changed", {
+        entityId: null,
+        targetType: "crmTicket",
+        targetId: updated.id + ":" + Date.now(), // pas de dédup — chaque transition doit pouvoir notifier
+        recipient: { email: updated.contactEmail, phone: null },
+        variables: {
+          nom: updated.contactName || updated.contactEmail,
+          secteur: "",
+          ancienStatut: "Attente client",
+          nouveauStatut: "Résolu",
+          numero: updated.number,
+          sujet: updated.subject,
+          statut: "Résolu",
+          agent: await ticketAgentName(updated.agentId),
+        },
+      }).catch((e) => console.error("[automation] crm.ticket_status_changed (auto-résolution):", e));
+    } catch (e) {
+      console.error(`[ticketInbound] échec auto-résolution du ticket ${ticket.id}:`, e);
+    }
+  }
 }

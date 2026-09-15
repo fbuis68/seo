@@ -19,6 +19,43 @@ export const crmTicketRouter = Router();
 const STATUSES = ["En attente", "En cours", "Attente client", "Résolu", "Fermé"];
 const PRIORITIES = ["Basse", "Normale", "Haute", "Urgente"];
 
+/**
+ * GET/POST /wa/crmTicket/config — réglage du module (portée globale, pas par
+ * établissement, cf. TicketConfig). Pour l'instant uniquement la fermeture
+ * automatique après x jours en "Attente client" (cf. sweepTicketAutoResolve
+ * dans lib/ticketInbound.ts) — null/0 = désactivé.
+ */
+crmTicketRouter.get(
+  "/crmTicket/config",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const config = await prisma.ticketConfig.findUnique({ where: { id: "singleton" } });
+    res.json({ autoResolveAfterDays: config?.autoResolveAfterDays ?? null });
+  })
+);
+
+crmTicketRouter.post(
+  "/crmTicket/config",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const raw = req.body.autoResolveAfterDays;
+    let autoResolveAfterDays: number | null = null;
+    if (raw !== null && raw !== undefined && raw !== "") {
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n < 0) throw new HttpError(400, "Valeur invalide pour autoResolveAfterDays");
+      autoResolveAfterDays = Math.round(n) || null; // 0 traité comme désactivé
+    }
+    const config = await prisma.ticketConfig.upsert({
+      where: { id: "singleton" },
+      update: { autoResolveAfterDays },
+      create: { id: "singleton", autoResolveAfterDays },
+    });
+    res.json({ autoResolveAfterDays: config.autoResolveAfterDays ?? null });
+  })
+);
+
 function shapeMessage(m: {
   id: string;
   authorType: string;
@@ -212,7 +249,10 @@ crmTicketRouter.post(
           secteur: "",
           ancienStatut: existing.status,
           nouveauStatut: updated.status,
+          numero: updated.number,
           sujet: updated.subject,
+          statut: updated.status,
+          agent: updated.agent ? updated.agent.name || updated.agent.email : "Non assigné",
         },
       }).catch((e) => console.error("[automation] crm.ticket_status_changed:", e));
     }

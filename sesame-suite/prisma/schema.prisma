@@ -2470,3 +2470,22 @@ model NayaxAccessSession {
 
   @@index([roomId, status])
 }
+
+// Réglages du module Tickets (support), portée globale — même convention
+// singleton que CrmScoringConfig (id fixe "singleton", pas d'entityId : un
+// seul barème/réglage pour tout le CRM, pas par établissement). Cf.
+// discussion du 15/09/2026 : "passer en statut résolu seul au bout de x
+// jours" — un ticket resté en "Attente client" (l'agent a répondu, on
+// attend le client) sans nouvelle activité pendant autoResolveAfterDays
+// jours est considéré résolu automatiquement (cf. sweepTicketAutoResolve
+// dans lib/ticketInbound.ts, balayé par automationScheduler). Ne s'applique
+// jamais aux statuts "En attente"/"En cours" — un ticket encore à traiter
+// par l'agent ne doit jamais se fermer tout seul.
+model TicketConfig {
+  id String @id @default("singleton")
+
+  // null ou 0 = désactivé (comportement historique, aucune fermeture auto).
+  autoResolveAfterDays Int?
+
+  updatedAt DateTime @updatedAt
+}

@@ -5097,8 +5097,43 @@ function showTickets(prospectId){
   ticketFilterProspectId = prospectId || null;
   const prospect = ticketFilterProspectId ? clients.find(c=>c.id===ticketFilterProspectId) : null;
   bc(prospect ? [{label:'Support',fn:"showTickets()"},{label:prospect.nom}] : [{label:'Support'}]);
-  tba('');
+  tba(prospect ? '' : `<button class="btn btn-ghost" onclick="openTicketConfigModal()"><i class="ti ti-settings"></i> Paramètres</button>`);
   renderTicketsList();
+}
+
+/** Réglages du module Tickets (portée globale) — pour l'instant uniquement
+ * la fermeture automatique après x jours en "Attente client". */
+async function openTicketConfigModal(){
+  let cfg = {autoResolveAfterDays:null};
+  try{
+    const r = await apiFetch('/wa/crmTicket/config');
+    if(r.ok) cfg = await r.json();
+  }catch(e){}
+  document.getElementById('modal-ct').innerHTML=`
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:440px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Paramètres — Tickets</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div class="ff"><label>Résolution automatique après (jours)</label>
+        <input type="number" min="0" id="tkc-autoResolveAfterDays" value="${cfg.autoResolveAfterDays||''}" placeholder="Désactivé">
+      </div>
+      <div class="log-empty" style="margin-top:6px">Un ticket resté en statut "Attente client" (l'agent a répondu, en attente du client) sans nouvelle activité pendant ce nombre de jours bascule automatiquement en "Résolu". Laisser vide pour désactiver. N'affecte jamais les tickets "En attente" ou "En cours" — un ticket encore à traiter par un agent ne se ferme jamais tout seul.</div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="saveTicketConfig()">Enregistrer</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function saveTicketConfig(){
+  const raw = document.getElementById('tkc-autoResolveAfterDays').value;
+  const body = {autoResolveAfterDays: raw===''?null:+raw};
+  try{
+    const r = await apiFetch('/wa/crmTicket/config', {method:'POST', body:JSON.stringify(body)});
+    const data = await r.json();
+    if(!r.ok){ flash(data.error||'Erreur'); return; }
+    closeModal();
+    flash('Paramètres enregistrés');
+  }catch(e){ flash('Erreur : '+e.message); }
 }
 
 function ticketResetFilters(){
@@ -5855,7 +5890,7 @@ function openTemplateModal(id){
           <textarea class="htmled-src" id="tpl-body" style="display:none" oninput="htmlEdSyncFromSrc('tpl-body')">${esc(t.bodyHtml||'')}</textarea>
         </div>
       </div>
-      <div style="font-size:11px;color:var(--mu);margin-top:6px">Variables — envoi depuis une fiche prospect : {{nom}} {{secteur}} {{referent}} {{ville}} · envoi depuis "Utilisateurs CRM" (identifiants de connexion) : {{login}} {{password}} {{loginUrl}}</div>
+      <div style="font-size:11px;color:var(--mu);margin-top:6px">Variables — envoi depuis une fiche prospect : {{nom}} {{secteur}} {{referent}} {{ville}} · envoi depuis "Utilisateurs CRM" (identifiants de connexion) : {{login}} {{password}} {{loginUrl}} · déclencheurs ticket support (Nouveau ticket / Client a répondu / Changement de statut) : {{numero}} {{sujet}} {{statut}} {{agent}} {{ancienStatut}} {{nouveauStatut}}</div>
       <div class="ff" id="tpl-sid-wrap" style="margin-top:8px"><label>${(WA_CFG&&WA_CFG.provider==='infobip')?"Nom du modèle Infobip (WhatsApp)":(WA_CFG&&WA_CFG.provider==='meta')?"Nom du modèle Meta (WhatsApp)":'Content SID Twilio (WhatsApp)'}</label><input id="tpl-sid" value="${esc(t.whatsappContentSid||'')}" placeholder="${(WA_CFG&&WA_CFG.provider==='infobip')?'mon_modele_whatsapp':(WA_CFG&&WA_CFG.provider==='meta')?'mon_modele_whatsapp':'HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'}">
         <div style="font-size:11px;color:#888;margin-top:4px">${(WA_CFG&&WA_CFG.provider==='infobip')
           ? "WhatsApp Business interdit le texte libre hors session client — créez d'abord ce modèle dans le portail Infobip, faites-le approuver par Meta, puis collez ici son nom exact. Les variables {{var}} ci-dessus doivent apparaître dans le même ordre que les paramètres du modèle approuvé."
