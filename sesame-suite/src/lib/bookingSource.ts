@@ -1,6 +1,7 @@
 import { prisma } from "../db";
 import type { BookingSourceConfig, Booking, Entity } from "@prisma/client";
 import { fireTrigger } from "./automation";
+import { assertSafeUrl } from "./ssrfGuard";
 
 /** L'admin accepte de saisir "sesame.technology" sans schéma — `fetch()`
  * échoue alors avec "Failed to parse URL … Invalid URL", un message qui ne
@@ -16,7 +17,8 @@ const CONNECTOR_TIMEOUT_MS = 15000;
  * répond jamais laisse la requête bloquée indéfiniment, et avec elle le
  * bouton côté client qui l'a déclenchée (constaté en pratique : "Ouvrir la
  * porte" resté grisé sans aucun message, 25/08/2026). */
-function fetchWithTimeout(url: string, opts: RequestInit = {}): Promise<Response> {
+async function fetchWithTimeout(url: string, opts: RequestInit = {}): Promise<Response> {
+  await assertSafeUrl(url); // protection SSRF — cf. lib/ssrfGuard.ts
   return fetch(url, { ...opts, signal: AbortSignal.timeout(CONNECTOR_TIMEOUT_MS) });
 }
 

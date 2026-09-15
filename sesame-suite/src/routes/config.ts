@@ -162,6 +162,14 @@ configRouter.post(
   "/entityModuleConfig/update",
   requireAdmin,
   asyncHandler(async (req, res) => {
+    // Un compte "housekeeping" (tablette ménage/maintenance) n'a besoin que
+    // de LIRE cette config pour l'affichage (GET /entityModuleConfig/list,
+    // autorisé par housekeepingScope.ts) — jamais de l'écrire (tarifs,
+    // fidélité, modules de check-in, charte…). housekeepingScope.ts
+    // autorise le préfixe /entityModuleConfig en bloc (lecture ET écriture,
+    // même chemin de base) ; la distinction se fait donc ici plutôt que là
+    // — cf. audit sécurité du 15/09/2026.
+    if (req.admin?.role === "housekeeping") throw new HttpError(403, "Ce compte n'a accès qu'aux fonctions ménage/maintenance");
     const entity = await resolveEntity(req);
     const group = entity.groupId ? await prisma.group.findUnique({ where: { id: entity.groupId } }) : null;
 

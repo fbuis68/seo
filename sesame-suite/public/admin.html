@@ -4553,7 +4553,18 @@ async function sendForgotEmailAdmin(){
   okEl.style.display='block';
 }
 
+// Jeton de réinitialisation — jamais interpolé tel quel dans le HTML généré
+// ci-dessous (cf. renderResetBox) : conservé dans cette variable globale et
+// référencé par son NOM (littéral fixe, donc sûr) dans les gestionnaires
+// onclick/onkeydown, jamais par sa VALEUR (contrôlée par l'attaquant via
+// ?resetToken=... dans l'URL, avant toute authentification — cf. audit
+// sécurité du 15/09/2026 : une valeur interpolée directement permettait de
+// sortir du littéral JS `submitResetPasswordAdmin('...')` et d'exécuter du
+// JS arbitraire avant même la connexion).
+var RESET_TOKEN = null;
+
 function renderResetBox(token){
+  RESET_TOKEN = token;
   document.getElementById('login-box').innerHTML =
     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:24px">'
     + '<div class="tbmk">S</div>'
@@ -4561,8 +4572,8 @@ function renderResetBox(token){
     + '<div style="margin-left:4px"><div style="font-family:\'DM Serif Display\',serif;font-size:17px">Nouveau mot de passe</div>'
     + '<div style="font-size:11px;color:var(--mu)">Administration</div></div></div>'
     + '<div class="fi"><label class="lb">Nouveau mot de passe</label><div class="pwwrap"><input type="password" id="rp-password" placeholder="••••••••"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility(\'rp-password\',this)"><i class="ti ti-eye"></i></button></div></div>'
-    + '<div class="fi" style="margin-top:12px"><label class="lb">Confirmer</label><div class="pwwrap"><input type="password" id="rp-password2" placeholder="••••••••" onkeydown="if(event.key===\'Enter\')submitResetPasswordAdmin(\''+token+'\')"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility(\'rp-password2\',this)"><i class="ti ti-eye"></i></button></div></div>'
-    + '<button class="btn btn-p" style="width:100%;justify-content:center;margin-top:18px" onclick="submitResetPasswordAdmin(\''+token+'\')">Valider</button>'
+    + '<div class="fi" style="margin-top:12px"><label class="lb">Confirmer</label><div class="pwwrap"><input type="password" id="rp-password2" placeholder="••••••••" onkeydown="if(event.key===\'Enter\')submitResetPasswordAdmin(RESET_TOKEN)"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility(\'rp-password2\',this)"><i class="ti ti-eye"></i></button></div></div>'
+    + '<button class="btn btn-p" style="width:100%;justify-content:center;margin-top:18px" onclick="submitResetPasswordAdmin(RESET_TOKEN)">Valider</button>'
     + '<div id="login-err" style="display:none;color:var(--re);font-size:12px;margin-top:10px;text-align:center"></div>';
 }
 
@@ -9986,7 +9997,7 @@ function renderPlanGrid(){
           if(PLAN.filter==='checkin'&&!isCI)return;
           if(PLAN.filter==='checkout'&&!isCOday)return;
           h+='<div class="plan-resa" style="border-color:'+bColor+';background:'+bBg+'">';
-          h+='<div class="plan-resa-client" style="color:'+bColor+'">'+b.personFirstname+' '+b.personLastname+'</div>';
+          h+='<div class="plan-resa-client" style="color:'+bColor+'">'+esc(b.personFirstname)+' '+esc(b.personLastname)+'</div>';
           h+='<div class="plan-resa-dates">'+(isCI?'↳ Arrivée':isCOday?'↑ Départ':'Séjour')+'</div>';
           h+='<div style="font-size:10px;color:var(--mu);opacity:.7">'+b.code+'</div>';
           h+='</div>';
@@ -10114,7 +10125,7 @@ function refreshRoomResas(){
   var r=resas[0];
   var isCI=date===r.start,isCO=isoDate(addDays(new Date(r.end),-1))===date;
   ctx.innerHTML='<div class="alt alt-g" style="margin-bottom:0"><i class="ti ti-user-check"></i><div>'
-    +'<strong>'+r.personFirstname+' '+r.personLastname+'</strong> · '+r.code+'<br>'
+    +'<strong>'+esc(r.personFirstname)+' '+esc(r.personLastname)+'</strong> · '+esc(r.code)+'<br>'
     +'<span style="font-size:11px">'+r.adults+' pers. · '+fmtMonth(new Date(r.start))+' → '+fmtMonth(new Date(r.end))
     +(isCI?' · <strong>Arrivée</strong>':isCO?' · <strong>Départ</strong>':'')+'</span></div></div>';
 }
@@ -10426,11 +10437,11 @@ function renderPlanGridByStay(){
   });
   h+='</tr></thead><tbody>';
   stays.forEach(function(b){
-    var name=b.personFirstname+' '+b.personLastname;
+    var name=esc(b.personFirstname)+' '+esc(b.personLastname);
     h+='<tr>';
     h+='<td style="background:var(--card);border-right:2px solid var(--bdr);padding:10px 12px;position:sticky;left:0;z-index:3">';
     h+='<div style="font-size:13px;font-weight:600">'+name+'</div>';
-    h+='<div style="font-size:11px;color:var(--mu);margin-top:2px">'+b.code+' · '+b.room+'</div>';
+    h+='<div style="font-size:11px;color:var(--mu);margin-top:2px">'+esc(b.code)+' · '+esc(b.room)+'</div>';
     h+='<div style="font-size:11px;color:var(--mu)">'+fmtMonth(new Date(b.start))+' → '+fmtMonth(new Date(b.end))+'</div></td>';
     days.forEach(function(d){
       var iso=isoDate(d);var isT=iso===today;
@@ -10541,7 +10552,10 @@ function hmStatChip(val, lbl, ico){
     +'<div style="font-size:10px;color:var(--mu)">'+lbl+'</div>'
     +'</div>';
 }
-function esc(s){ return String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+// N'échappait auparavant que " et < — & et ' passaient tels quels (cf.
+// audit sécurité du 15/09/2026). Complété au même schéma complet utilisé
+// ailleurs dans l'app (booking.html, menage.html).
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
 // ── Create — provisionne un vrai établissement + son compte admin ──
 async function hmCreateHotel(){

@@ -1,4 +1,5 @@
 import type { WalletConfig, Booking } from "@prisma/client";
+import { assertSafeUrl } from "./ssrfGuard";
 
 // Connecteur EldoWallet (module "Wallet" du catalogue d'abonnement) — un
 // compte EldoWallet par établissement, appelé en REST brut (comme les
@@ -18,7 +19,8 @@ const ELDOWALLET_TIMEOUT_MS = 15000;
 
 export class WalletError extends Error {}
 
-function fetchWithTimeout(url: string, opts: RequestInit = {}): Promise<Response> {
+async function fetchWithTimeout(url: string, opts: RequestInit = {}): Promise<Response> {
+  await assertSafeUrl(url); // protection SSRF — cf. lib/ssrfGuard.ts
   return fetch(url, { ...opts, signal: AbortSignal.timeout(ELDOWALLET_TIMEOUT_MS) });
 }
 
@@ -67,8 +69,12 @@ async function eldoWalletRequest(
   // Log de diagnostic temporaire (09/09/2026) — demandé par le support
   // EldoWallet (capture Postman entête + corps) : reproduit ici la requête
   // RÉELLEMENT envoyée par l'app, à copier telle quelle plutôt que de la
-  // reconstituer à la main.
-  console.log("[diag eldoWallet] %s %s\nheaders=%s\nbody=%s", method, url, JSON.stringify(requestHeaders), body ? JSON.stringify(body) : "(aucun)");
+  // reconstituer à la main. Le jeton est redacté (cf. audit sécurité du
+  // 15/09/2026) — il ne doit jamais atterrir en clair dans des logs
+  // serveur, moins protégés que la base et souvent expédiés vers un
+  // agrégateur externe.
+  const redactedHeaders = { ...requestHeaders, Authorization: "Bearer ***redacted***", "x-access-token": "***redacted***" };
+  console.log("[diag eldoWallet] %s %s\nheaders=%s\nbody=%s", method, url, JSON.stringify(redactedHeaders), body ? JSON.stringify(body) : "(aucun)");
   let res: Response;
   try {
     res = await fetchWithTimeout(url, {

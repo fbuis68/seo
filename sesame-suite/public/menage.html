@@ -563,14 +563,21 @@ async function sendMgForgotEmail(){
   okEl.style.display='block';
 }
 
+// Jeton de réinitialisation — référencé par son NOM (littéral fixe, sûr)
+// dans les gestionnaires ci-dessous, jamais par sa VALEUR interpolée
+// (contrôlée par l'attaquant via ?resetToken=... dans l'URL, avant toute
+// authentification) — cf. audit sécurité du 15/09/2026.
+var RESET_TOKEN = null;
+
 function renderMgResetBox(token){
+  RESET_TOKEN = token;
   document.getElementById('mg-login-box').innerHTML =
     '<div class="login-mark">S</div>'
     + '<h1>Nouveau mot de passe</h1>'
     + '<div class="login-sub">Espace tablette du personnel — Sesame</div>'
     + '<div class="lf"><label for="mg-rp-password">Nouveau mot de passe</label><div class="pwwrap"><input type="password" id="mg-rp-password" placeholder="••••••••"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility(\'mg-rp-password\',this)"><i class="ti ti-eye"></i></button></div></div>'
-    + '<div class="lf"><label for="mg-rp-password2">Confirmer</label><div class="pwwrap"><input type="password" id="mg-rp-password2" placeholder="••••••••" onkeydown="if(event.key===\'Enter\')submitMgResetPassword(\''+token+'\')"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility(\'mg-rp-password2\',this)"><i class="ti ti-eye"></i></button></div></div>'
-    + '<button class="login-btn" onclick="submitMgResetPassword(\''+token+'\')"><i class="ti ti-check"></i> Valider</button>'
+    + '<div class="lf"><label for="mg-rp-password2">Confirmer</label><div class="pwwrap"><input type="password" id="mg-rp-password2" placeholder="••••••••" onkeydown="if(event.key===\'Enter\')submitMgResetPassword(RESET_TOKEN)"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility(\'mg-rp-password2\',this)"><i class="ti ti-eye"></i></button></div></div>'
+    + '<button class="login-btn" onclick="submitMgResetPassword(RESET_TOKEN)"><i class="ti ti-check"></i> Valider</button>'
     + '<div class="login-err" id="mg-login-err"></div>';
 }
 

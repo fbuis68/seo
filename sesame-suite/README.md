@@ -2484,10 +2484,19 @@ cd ~/seo && git fetch origin claude/typescript-nodejs-postgres-app-tgm9ol \
 cd sesame-suite && docker compose up -d
 ```
 
-Le port 5432 de PostgreSQL reste publié sur toutes les interfaces
-(`"5432:5432"`) avec des identifiants par défaut (`sesame`/`sesame`) — à
-restreindre également (`127.0.0.1:5432:5432`, ou changer les identifiants)
-si l'exposition n'est pas requise depuis l'extérieur.
+Le port 5432 de PostgreSQL est réservé à la machine hôte
+(`127.0.0.1:5432:5432`) depuis l'audit sécurité du 15/09/2026 — il n'était
+auparavant publié sur toutes les interfaces qu'avec des identifiants par
+défaut (`sesame`/`sesame`), ce qui l'exposait à Internet. Changez aussi le
+mot de passe (`POSTGRES_PASSWORD` dans un `.env` à côté de
+`docker-compose.yml`) si une exposition externe devient un jour nécessaire.
+
+**JWT_SECRET** : définissez impérativement une valeur forte et unique
+(`openssl rand -hex 32`) dans ce même `.env` avant toute exposition
+publique — `docker-compose.yml` retombe sinon sur une valeur par défaut
+PUBLIQUE (visible par quiconque lit ce dépôt), qui permettrait de forger un
+token admin pour n'importe quel établissement. Le serveur avertit
+bruyamment au démarrage tant que ce n'est pas fait (voir src/index.ts).
 
 ### Intégration réservations : webhook entrant (notifications temps réel, ex. Mews)
 

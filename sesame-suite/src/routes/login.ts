@@ -5,6 +5,7 @@ import { signAdminToken, AdminRole } from "../lib/adminAuth";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { createResetToken, consumeResetToken } from "../lib/passwordReset";
 import { sendEmailRaw } from "../lib/email";
+import { authRateLimit } from "../middleware/rateLimit";
 
 export const loginRouter = Router();
 
@@ -20,6 +21,7 @@ export const loginRouter = Router();
  */
 loginRouter.post(
   "/login/login",
+  authRateLimit,
   asyncHandler(async (req, res) => {
     const email = ((req.body.email as string) || "").trim().toLowerCase();
     const password = (req.body.password as string) || "";
@@ -95,6 +97,7 @@ async function sendResetEmail(admin: { entityId: string; role: string; email: st
  */
 loginRouter.post(
   "/login/forgotPassword",
+  authRateLimit,
   asyncHandler(async (req, res) => {
     const email = ((req.body.email as string) || "").trim().toLowerCase();
     if (!email) throw new HttpError(400, "Email requis");
@@ -121,6 +124,7 @@ loginRouter.post(
  */
 loginRouter.post(
   "/login/resetPassword",
+  authRateLimit,
   asyncHandler(async (req, res) => {
     const token = (req.body.token as string) || "";
     const password = (req.body.password as string) || "";

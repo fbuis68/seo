@@ -611,13 +611,20 @@ async function sendForgotEmail(){
   okEl.style.display='block';
 }
 
+// Jeton de réinitialisation — référencé par son NOM (littéral fixe, sûr)
+// dans les gestionnaires ci-dessous, jamais par sa VALEUR interpolée
+// (contrôlée par l'attaquant via ?resetToken=... dans l'URL, avant toute
+// authentification) — cf. audit sécurité du 15/09/2026.
+var RESET_TOKEN = null;
+
 function renderResetForm(token){
+  RESET_TOKEN = token;
   document.getElementById('lg-box').innerHTML = `
     <div class="lg-title">Nouveau mot de passe</div>
     <div class="lg-sub">Choisissez un nouveau mot de passe (8 caractères minimum).</div>
     <div class="ff"><label>Nouveau mot de passe</label><div class="pwwrap"><input type="password" id="rp-password" placeholder="••••••••"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility('rp-password',this)"><i class="ti ti-eye"></i></button></div></div>
-    <div class="ff"><label>Confirmer</label><div class="pwwrap"><input type="password" id="rp-password2" placeholder="••••••••" onkeydown="if(event.key==='Enter')submitResetPassword('${token}')"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility('rp-password2',this)"><i class="ti ti-eye"></i></button></div></div>
-    <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="submitResetPassword('${token}')">Valider</button>
+    <div class="ff"><label>Confirmer</label><div class="pwwrap"><input type="password" id="rp-password2" placeholder="••••••••" onkeydown="if(event.key==='Enter')submitResetPassword(RESET_TOKEN)"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility('rp-password2',this)"><i class="ti ti-eye"></i></button></div></div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="submitResetPassword(RESET_TOKEN)">Valider</button>
     <div class="lg-err" id="lg-err"></div>`;
 }
 
@@ -951,7 +958,12 @@ function scoreBadge(c){
   return `<span class="badge ${cls}" title="Score d'intérêt cumulé${c.hotLeadTaskCreatedAt?' — contact chaud, tâche commerciale créée':''}">⚡ ${c.score}</span>`;
 }
 function chk(v){return v?'<span class="tpill bg">oui</span>':'<span class="tpill" style="background:#f1efe8;color:#bbb">—</span>';}
-function esc(s){return String(s==null?'':s).replace(/"/g,'&quot;');}
+// N'échappait auparavant que les guillemets doubles — &, <, >, ' passaient
+// tels quels, ouvrant une injection de balise/attribut sur chaque appel de
+// esc() dans ce fichier (ex : sujet/corps d'un ticket support créé par un
+// visiteur anonyme via le widget public, affiché tel quel ici à l'ouverture
+// du panneau Support par un agent) — cf. audit sécurité du 15/09/2026.
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 // Échappement pour une chaîne interpolée dans un argument JS entre quotes
 // simples au sein d'un attribut onclick="..." — distinct de esc() qui
 // n'échappe que pour l'HTML. Nécessaire dès qu'un libellé/nom contient une
@@ -1266,7 +1278,7 @@ function renderList(){
       return`<div class="gc" onclick="showFiche('${c.id}')">
         <div class="gc-head">
           <div class="avatar" style="width:36px;height:36px;font-size:12px">${ini(c.nom)}</div>
-          <div class="gc-info"><div class="gc-name">${c.nom}</div><div class="gc-sub">${c.groupe||c.secteur||'—'}</div></div>
+          <div class="gc-info"><div class="gc-name">${esc(c.nom)}</div><div class="gc-sub">${esc(c.groupe||c.secteur||'—')}</div></div>
           ${c.commercialName?`<span class="commercial-chip" title="Commercial : ${esc(c.commercialName)}">${ini(c.commercialName)}</span>`:''}
           <button type="button" class="btn btn-ghost btn-icon" style="flex-shrink:0" title="Envoyer un message (email, SMS, WhatsApp)" onclick="event.stopPropagation();openSendEmailModal('${c.id}')"><i class="ti ti-send"></i></button>
         </div>
@@ -1287,7 +1299,7 @@ function renderList(){
       if(editingId===c.id)return`<tr class="erow">
         <td><input type="checkbox" class="crm-sel-cb" ${SELECTED_IDS.has(c.id)?'checked':''} onchange="crmToggleSelect('${c.id}',this.checked)"></td>
         <td><div class="avatar" style="width:26px;height:26px;font-size:10px">${ini(c.nom)}</div></td>
-        <td><div class="nom-cell">${c.nom}</div><div class="sub-cell">${c.groupe||'—'}</div></td>
+        <td><div class="nom-cell">${esc(c.nom)}</div><div class="sub-cell">${esc(c.groupe||'—')}</div></td>
         <td><select class="esel" onchange="ef('${c.id}','secteur',this.value)">${SECTEURS.map(s=>`<option value="${s}" ${c.secteur===s?'selected':''}>${s}</option>`).join('')}</select></td>
         <td><input class="ei" value="${esc(c.ville)}" onchange="ef('${c.id}','ville',this.value)"></td>
         <td><select class="esel" onchange="ef('${c.id}','danger',this.value)">${DANGERS.map(d=>`<option value="${d}" ${c.danger===d?'selected':''}>${d}</option>`).join('')}</select></td>
@@ -1301,7 +1313,7 @@ function renderList(){
       return`<tr>
         <td><input type="checkbox" class="crm-sel-cb" ${SELECTED_IDS.has(c.id)?'checked':''} onchange="crmToggleSelect('${c.id}',this.checked)"></td>
         <td><div class="avatar" style="width:26px;height:26px;font-size:10px;cursor:pointer" onclick="showFiche('${c.id}')">${ini(c.nom)}</div></td>
-        <td><div class="nom-cell" onclick="showFiche('${c.id}')">${typeBadge(c.type)} ${c.nom} ${scoreBadge(c)} ${inboundBadge(c)} ${supportBadge(c)} ${c.commercialName?`<span class="commercial-chip" title="Commercial : ${esc(c.commercialName)}">${ini(c.commercialName)}</span>`:''}</div><div class="sub-cell">${c.groupe||'—'}</div></td>
+        <td><div class="nom-cell" onclick="showFiche('${c.id}')">${typeBadge(c.type)} ${esc(c.nom)} ${scoreBadge(c)} ${inboundBadge(c)} ${supportBadge(c)} ${c.commercialName?`<span class="commercial-chip" title="Commercial : ${esc(c.commercialName)}">${ini(c.commercialName)}</span>`:''}</div><div class="sub-cell">${esc(c.groupe||'—')}</div></td>
         <td style="font-size:12px;color:#666">${c.secteur||'—'}</td>
         <td style="font-size:12px">${c.ville||'—'}</td>
         <td>${dBadge(c.danger)}</td>
@@ -2041,7 +2053,7 @@ function renderFiche(c){
     <div class="hero-row">
       <div class="avatar" style="width:48px;height:48px">${ini(c.nom)}</div>
       <div style="flex:1">
-        <div class="hero-name">${c.nom}</div>
+        <div class="hero-name">${esc(c.nom)}</div>
         <div class="tags-row">
           ${typeBadge(c.type)}
           <span class="tag t-gray">${c.secteur?sectorIcon(c.secteur):'◻'} ${c.secteur||'—'}${c.etoiles?' '+c.etoiles:''}</span>
@@ -2467,7 +2479,7 @@ function showContrats(){
       ${sans.map(c=>`<div class="log-item" style="cursor:pointer" onclick="showFiche('${c.id}')">
         <div class="log-dot ld-r"></div>
         <div class="log-body">
-          <div class="log-text">${c.nom} ${c.groupe?'<span style="color:#aaa;font-size:11px">'+c.groupe+'</span>':''}</div>
+          <div class="log-text">${esc(c.nom)} ${c.groupe?'<span style="color:#aaa;font-size:11px">'+esc(c.groupe)+'</span>':''}</div>
           <div class="log-meta">${c.secteur||'—'} · ${c.ville||'—'} · Risque : ${c.danger||'—'}</div>
         </div>
         <button class="btn btn-amber btn-sm" onclick="event.stopPropagation();setContrat('${c.id}','en cours')">Marquer en cours</button>
@@ -5314,7 +5326,7 @@ function ticketMessageHtml(m){
       <span style="font-size:11px;color:#999">${new Date(m.createdAt).toLocaleString('fr-FR')}</span>
     </div>
     <div style="font-size:13px;white-space:pre-wrap">${esc(m.body)}</div>
-    ${(m.attachments||[]).length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${m.attachments.map(a=>`<a href="${a}" target="_blank"><img src="${a}" style="width:70px;height:70px;object-fit:cover;border-radius:6px;border:1px solid var(--bdr,#e2dfd9)"></a>`).join('')}</div>`:''}
+    ${(m.attachments||[]).length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${m.attachments.map(a=>`<a href="${esc(a)}" target="_blank"><img src="${esc(a)}" style="width:70px;height:70px;object-fit:cover;border-radius:6px;border:1px solid var(--bdr,#e2dfd9)"></a>`).join('')}</div>`:''}
   </div>`;
 }
 

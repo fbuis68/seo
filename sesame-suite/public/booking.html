@@ -251,11 +251,11 @@ function renderRooms(){
   el.innerHTML = STATE.rooms.map(function(r, i){
     var photo = (r.photos && r.photos[0]) ? r.photos[0] : null;
     return '<div class="room-card">'
-      + (photo ? '<div class="room-photo" style="background-image:url(\''+photo+'\')"></div>' : '')
+      + (photo ? '<div class="room-photo" style="background-image:url(\''+esc(photo)+'\')"></div>' : '')
       + '<div class="room-body">'
-      + '<div class="room-name">'+r.name+'</div>'
-      + '<div class="room-meta">'+[r.category, r.capacity?('jusqu’à '+r.capacity+' pers.'):null].filter(Boolean).join(' · ')+'</div>'
-      + (r.description ? '<div class="room-desc">'+r.description+'</div>' : '')
+      + '<div class="room-name">'+esc(r.name)+'</div>'
+      + '<div class="room-meta">'+esc([r.category, r.capacity?('jusqu’à '+r.capacity+' pers.'):null].filter(Boolean).join(' · '))+'</div>'
+      + (r.description ? '<div class="room-desc">'+esc(r.description)+'</div>' : '')
       + '<div class="room-foot">'
       + '<div class="room-price">'+fmtEUR(r.roomTotal)+'<small>pour '+r.nights+' nuit'+(r.nights>1?'s':'')+'</small></div>'
       + '<button class="btn btn-p" style="width:auto" onclick="selectRoom('+i+')">Choisir</button>'

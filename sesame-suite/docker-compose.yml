@@ -4,10 +4,17 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: sesame
-      POSTGRES_PASSWORD: sesame
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sesame}
       POSTGRES_DB: sesame_suite
     ports:
-      - "5432:5432"
+      # Réservé à la machine hôte (cf. le même principe déjà appliqué au
+      # service "app" ci-dessous) — sans le préfixe 127.0.0.1, ce port était
+      # republié sur 0.0.0.0 et donc exposé à Internet, avec l'identifiant/
+      # mot de passe par défaut "sesame"/"sesame" (cf. audit sécurité du
+      # 15/09/2026). rien côté "app" n'en a besoin : la communication
+      # app <-> postgres passe par le réseau interne docker-compose
+      # ("postgres:5432"), jamais par ce port publié.
+      - "127.0.0.1:5432:5432"
     volumes:
       - sesame_pg_data:/var/lib/postgresql/data
     healthcheck:
@@ -36,9 +43,18 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://sesame:sesame@postgres:5432/sesame_suite?schema=public
+      DATABASE_URL: postgresql://sesame:${POSTGRES_PASSWORD:-sesame}@postgres:5432/sesame_suite?schema=public
       PORT: 3000
-      JWT_SECRET: change-me-in-production
+      # AVANT tout déploiement exposé publiquement (donc AVANT toute mise en
+      # production réelle), définissez un JWT_SECRET fort dans un fichier
+      # .env (jamais commité — voir .gitignore) à côté de ce fichier :
+      # JWT_SECRET=$(openssl rand -hex 32). Sans ça, cette variable retombe
+      # sur une valeur par défaut PUBLIQUE (visible par quiconque lit ce
+      # dépôt) qui permettrait de forger un token admin pour n'importe quel
+      # établissement — cf. audit sécurité du 15/09/2026, et le garde-fou
+      # src/index.ts (avertit au démarrage, refuse de démarrer si
+      # NODE_ENV=production et qu'aucun secret réel n'a été défini).
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       DEFAULT_ENTITY_CODE: E00000001
     ports:
       # Réservé à la machine hôte : nginx (déjà installé et configuré sur le

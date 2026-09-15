@@ -3,7 +3,7 @@ import { prisma } from "../db";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin, requireSesame } from "../middleware/requireAdmin";
 import { getSmtpConfig, sendEmailRaw } from "../lib/email";
-import { createTicketFromInboundEmail, appendInboundReply } from "../lib/ticketInbound";
+import { createTicketFromInboundEmail, appendInboundReply, sanitizeTicketAttachments } from "../lib/ticketInbound";
 import { fireTrigger } from "../lib/automation";
 
 /**
@@ -303,7 +303,7 @@ crmTicketRouter.post(
     }
 
     const message = await prisma.crmTicketMessage.create({
-      data: { ticketId: ticket.id, authorType: "agent", authorName, kind, body: bodyText, attachments: b.attachments || [] },
+      data: { ticketId: ticket.id, authorType: "agent", authorName, kind, body: bodyText, attachments: sanitizeTicketAttachments(b.attachments) },
     });
 
     const data: Record<string, unknown> = { updatedAt: new Date() };

@@ -29,6 +29,22 @@ export async function findTicketByTag(tag: string) {
 }
 
 /**
+ * Ne garde que les data URI image — convention établie de
+ * CrmTicketMessage.attachments (aucune autre forme n'est légitime : ni un
+ * https:// externe, ni du texte libre). Sans ce filtre, un attachement
+ * accepté tel quel (POST /wa/ticket/create + /publicReply sont PUBLICS,
+ * sans authentification) était injecté sans échappement dans
+ * `<a href="${a}"><img src="${a}">` côté crm.html, permettant une sortie
+ * d'attribut — cf. audit sécurité du 15/09/2026. Filtre silencieusement les
+ * entrées invalides plutôt que de faire échouer tout l'envoi.
+ */
+export function sanitizeTicketAttachments(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const DATA_URI_IMAGE = /^data:image\/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/]+=*$/;
+  return raw.filter((a): a is string => typeof a === "string" && DATA_URI_IMAGE.test(a));
+}
+
+/**
  * Retire les préfixes de réponse/transfert ("Re:", "Fwd:", "TR:"..., répétés
  * et mélangés — un client peut répondre à une réponse à une réponse) et le
  * tag `[TKT-...]` s'il en reste un, pour ne comparer que le sujet "de fond".
@@ -169,7 +185,7 @@ export async function createTicketFromInboundEmail(input: {
           authorName: input.name || input.email,
           kind: "reply",
           body: input.body,
-          attachments: input.attachments || [],
+          attachments: sanitizeTicketAttachments(input.attachments),
           graphMessageId: input.graphMessageId,
         },
       },
@@ -215,7 +231,7 @@ export async function appendInboundReply(
       authorName: input.authorName || ticket.contactName || ticket.contactEmail,
       kind: "reply",
       body: input.body,
-      attachments: input.attachments || [],
+      attachments: sanitizeTicketAttachments(input.attachments),
       graphMessageId: input.graphMessageId,
     },
   });

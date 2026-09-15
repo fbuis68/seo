@@ -4,6 +4,7 @@ import { prisma } from "../db";
 import { normaliseBooking } from "../lib/normalize";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { config } from "../config";
+import { authRateLimit } from "../middleware/rateLimit";
 
 export const authRouter = Router();
 
@@ -27,6 +28,7 @@ export const authRouter = Router();
  */
 authRouter.post(
   "/auth/guest-login",
+  authRateLimit,
   asyncHandler(async (req, res) => {
     const email = ((req.body.email as string) || "").trim().toLowerCase();
     const lastname = ((req.body.lastname as string) || "").trim();
@@ -81,6 +83,7 @@ authRouter.post(
  */
 authRouter.post(
   "/auth/autologin",
+  authRateLimit,
   asyncHandler(async (req, res) => {
     const raw = (req.body.token as string) || "";
     if (!raw) throw new HttpError(400, "Lien invalide");

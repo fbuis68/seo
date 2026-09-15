@@ -1,6 +1,7 @@
 import { prisma } from "../db";
 import type { LockerSourceConfig, Entity, Product } from "@prisma/client";
 import { getOrCreateLockerVendor } from "./vendor";
+import { assertSafeUrl } from "./ssrfGuard";
 
 // Connecteur Mon Casier Frais (docs.moncasierfrais.fr/api, version consultée
 // le 28/08/2026) — casiers réfrigérés vendant des produits locaux, associés
@@ -15,7 +16,8 @@ import { getOrCreateLockerVendor } from "./vendor";
 
 const CONNECTOR_TIMEOUT_MS = 15000;
 
-function fetchWithTimeout(url: string, opts: RequestInit = {}): Promise<Response> {
+async function fetchWithTimeout(url: string, opts: RequestInit = {}): Promise<Response> {
+  await assertSafeUrl(url); // protection SSRF — cf. lib/ssrfGuard.ts
   return fetch(url, { ...opts, signal: AbortSignal.timeout(CONNECTOR_TIMEOUT_MS) });
 }
 
