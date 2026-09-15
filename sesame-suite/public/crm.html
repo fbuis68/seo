@@ -5299,7 +5299,16 @@ function ticketMessageHtml(m){
   }
   const isNote = m.kind==='note';
   const isAgent = m.authorType==='agent';
-  return `<div style="padding:12px 14px;margin-bottom:10px;border-radius:10px;background:${isNote?'#fdf6e3':isAgent?'#eef3fb':'#f7f6f2'};border:1px solid ${isNote?'#eddca6':'var(--bdr,#e2dfd9)'}">
+  // Une réponse support (agent) est indentée et sur fond grisé — jamais le
+  // client — pour distinguer en un coup d'œil, dans un long fil, ce qui
+  // vient du correspondant (email, pleine largeur) de ce que l'équipe lui a
+  // répondu (cf. 15/09/2026). Une note interne reste identifiable par son
+  // fond jaune propre plutôt que le gris, mais garde la même indentation
+  // (elle aussi rédigée côté support, jamais visible du client).
+  const bg = isNote ? '#fdf6e3' : isAgent ? 'var(--div,#eeece8)' : 'var(--card,#fff)';
+  const bdr = isNote ? '#eddca6' : 'var(--bdr,#e2dfd9)';
+  const indent = isAgent ? 'margin-left:36px' : '';
+  return `<div style="padding:12px 14px;margin-bottom:10px;border-radius:10px;background:${bg};border:1px solid ${bdr};${indent}">
     <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
       <strong style="font-size:12px">${esc(m.authorName||(isAgent?'Équipe support':'Client'))}${isNote?' <span class="tpill bw" style="margin-left:4px">Note interne</span>':''}</strong>
       <span style="font-size:11px;color:#999">${new Date(m.createdAt).toLocaleString('fr-FR')}</span>
