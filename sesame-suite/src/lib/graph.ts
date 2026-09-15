@@ -75,12 +75,47 @@ export interface GraphMessage {
   attachments: GraphAttachment[];
 }
 
+// Entités HTML nommées courantes dans un email (accents français inclus) —
+// pas de table exhaustive, juste de quoi éviter des "&eacute;"/"&agrave;"
+// littéraux dans le corps affiché (cf. stripHtml ci-dessous).
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
+  eacute: "é", Eacute: "É", egrave: "è", Egrave: "È", ecirc: "ê", euml: "ë",
+  agrave: "à", Agrave: "À", acirc: "â", auml: "ä",
+  ocirc: "ô", ouml: "ö", ucirc: "û", ugrave: "ù", uuml: "ü",
+  ccedil: "ç", Ccedil: "Ç", iuml: "ï", icirc: "î",
+  oelig: "œ", OElig: "Œ", mdash: "—", ndash: "–", hellip: "…",
+  lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”",
+};
+
+function decodeHtmlEntities(str: string): string {
+  return str
+    .replace(/&#x([0-9a-f]+);/gi, (_m, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_m, dec) => String.fromCodePoint(parseInt(dec, 10)))
+    .replace(/&([a-zA-Z]+);/g, (m, name) => (name in NAMED_ENTITIES ? NAMED_ENTITIES[name] : m));
+}
+
+/**
+ * Convertit un corps HTML en texte lisible en conservant les retours à la
+ * ligne — l'ancienne version remplaçait CHAQUE balise (y compris <br>,
+ * </p>, </div>...) par un simple espace puis écrasait tout \s+ en un seul
+ * espace, ce qui aplatissait un email entier (paragraphes + citation
+ * "De/Objet/Envoyé" Outlook incluse) en un unique mur de texte illisible
+ * dans le fil de discussion d'un ticket (cf. 15/09/2026). Les balises de
+ * bloc/saut de ligne deviennent maintenant \n avant la suppression du
+ * reste des balises, et seul l'espace horizontal (pas les \n) est
+ * collapsé ensuite.
+ */
 function stripHtml(html: string): string {
-  return html
+  const withoutTags = html
     .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\s+/g, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|tr|li|h[1-6]|blockquote)>/gi, "\n")
+    .replace(/<[^>]+>/g, "");
+  return decodeHtmlEntities(withoutTags)
+    .replace(/[^\S\n]+/g, " ") // espace horizontal uniquement — jamais les \n
+    .replace(/[ \t]*\n[ \t]*/g, "\n") // pas d'espaces traînants en début/fin de ligne
+    .replace(/\n{3,}/g, "\n\n") // jamais plus d'une ligne vide consécutive
     .trim();
 }
 
