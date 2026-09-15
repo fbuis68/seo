@@ -3084,6 +3084,44 @@ function rsLoadOrders(){
 // établissements depuis une même URL, cette combinaison doit à elle seule
 // permettre de s'authentifier ET de déterminer l'établissement (recherche
 // globale côté serveur), sans dépendre d'un ?entityCode= dans le lien.
+/**
+ * Applique le résultat d'une connexion réussie (identique que le jeton
+ * vienne du formulaire manuel /api/auth/guest-login ou d'un lien
+ * d'autologin /api/auth/autologin, cf. espDoLogin/espTryAutologin) — un
+ * seul endroit pour injecter la session dans l'état S plutôt que dupliquer
+ * cette logique à chaque point d'entrée.
+ */
+async function espApplyLogin(data){
+  ESP_TOKEN = data.token; // en mémoire uniquement — perdu au rechargement, comme S.checkinDone à l'origine
+
+  // Établissement déterminé par le login lui-même (pas par l'URL) — s'il
+  // diffère de ce qui était déjà chargé (ou si rien n'était chargé, cas
+  // sans ?entityCode=), on recharge la config/le thème de CE hôtel avant
+  // d'afficher l'espace, pour que couleurs/logo et CFG.rooms (résolution
+  // des noms de chambre) correspondent au bon établissement.
+  if(data.entityCode && data.entityCode !== ENTITY_CODE){
+    ENTITY_CODE = data.entityCode;
+    await loadCfg();
+    applyBrand();
+    // S.posList/selectedPosId et S.paymentEnabled ont été chargés au
+    // démarrage de la page pour l'établissement par défaut (avant toute
+    // connexion, cf. DOMContentLoaded) — sans ce rafraîchissement, le
+    // point de vente sélectionné restait celui de l'AUTRE établissement,
+    // et bqGetCatalog()/posMatchesSelection() filtraient alors le vrai
+    // catalogue du client contre un ID de point de vente qui ne lui
+    // correspondait pas (boutique vide ou incohérente après connexion).
+    S.selectedPosId = undefined;
+    await Promise.all([fetchPosList(), fetchPaymentStatus()]);
+  }
+
+  // Injecter dans l'état S comme si le check-in était fait
+  S.booking      = data.booking;
+  S.checkinDone  = true;
+  S.selectedRoom = CFG.rooms ? CFG.rooms.find(function(r){return r.code===data.booking.facilityCode;}) : null;
+
+  await Promise.all([fetchLoyalty(data.booking.personEmail), fetchOrders(data.booking.code)]);
+}
+
 async function espDoLogin(){
   var identifier = (document.getElementById('espLoginEmail').value||'').trim();
   var code  = (document.getElementById('espLoginCode').value||'').trim().toUpperCase();
@@ -3104,34 +3142,7 @@ async function espDoLogin(){
       return;
     }
     var data = await r.json();
-    ESP_TOKEN = data.token; // en mémoire uniquement — perdu au rechargement, comme S.checkinDone à l'origine
-
-    // Établissement déterminé par le login lui-même (pas par l'URL) — s'il
-    // diffère de ce qui était déjà chargé (ou si rien n'était chargé, cas
-    // sans ?entityCode=), on recharge la config/le thème de CE hôtel avant
-    // d'afficher l'espace, pour que couleurs/logo et CFG.rooms (résolution
-    // des noms de chambre) correspondent au bon établissement.
-    if(data.entityCode && data.entityCode !== ENTITY_CODE){
-      ENTITY_CODE = data.entityCode;
-      await loadCfg();
-      applyBrand();
-      // S.posList/selectedPosId et S.paymentEnabled ont été chargés au
-      // démarrage de la page pour l'établissement par défaut (avant toute
-      // connexion, cf. DOMContentLoaded) — sans ce rafraîchissement, le
-      // point de vente sélectionné restait celui de l'AUTRE établissement,
-      // et bqGetCatalog()/posMatchesSelection() filtraient alors le vrai
-      // catalogue du client contre un ID de point de vente qui ne lui
-      // correspondait pas (boutique vide ou incohérente après connexion).
-      S.selectedPosId = undefined;
-      await Promise.all([fetchPosList(), fetchPaymentStatus()]);
-    }
-
-    // Injecter dans l'état S comme si le check-in était fait
-    S.booking      = data.booking;
-    S.checkinDone  = true;
-    S.selectedRoom = CFG.rooms ? CFG.rooms.find(function(r){return r.code===data.booking.facilityCode;}) : null;
-
-    await Promise.all([fetchLoyalty(data.booking.personEmail), fetchOrders(data.booking.code)]);
+    await espApplyLogin(data);
     renderEspace();
     toast(t('toast_welcome') + ' ' + data.booking.personFirstname + ' !');
   }catch(e){
@@ -3140,6 +3151,29 @@ async function espDoLogin(){
   }
 }
 var ESP_TOKEN = null;
+
+/**
+ * Lien d'autologin (cf. {{lienAutologin}}, lib/templateVars.ts) —
+ * ?autologinToken=... porté par un email/QR plutôt que saisi à la main.
+ * Échoue silencieusement (lien expiré/déjà utilisé après la fenêtre de
+ * validité) en laissant simplement le formulaire de connexion manuel
+ * affiché, jamais un écran d'erreur bloquant.
+ */
+var AUTOLOGIN_TOKEN = new URLSearchParams(window.location.search).get('autologinToken') || '';
+async function espTryAutologin(){
+  if(!AUTOLOGIN_TOKEN) return;
+  try{
+    var r = await apiFetch(API_BASE+'/api/auth/autologin', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({token: AUTOLOGIN_TOKEN})
+    });
+    if(!r.ok) return;
+    var data = await r.json();
+    await espApplyLogin(data);
+    gotoScr('infos');
+    toast(t('toast_welcome') + ' ' + data.booking.personFirstname + ' !');
+  }catch(e){ /* lien invalide/expiré — formulaire de connexion manuel reste disponible */ }
+}
 
 var ESP_ACTIVE_TAB = 'key';
 var ESP_PREFS_KEY_PREFIX = 'SESAME_CLIENT_PREFS_';
@@ -5471,6 +5505,7 @@ window.addEventListener('DOMContentLoaded',async function(){
   // Charger les réservations dès l'ouverture — ou sauter directement à la
   // démo si le lien porte ?demoCode=XXXX (cf. loadDemoBooking).
   if(DEMO_CODE) loadDemoBooking(DEMO_CODE); else fetchBookings();
+  espTryAutologin();
 });
 </script>
 </body>

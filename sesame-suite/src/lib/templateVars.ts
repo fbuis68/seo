@@ -1,4 +1,6 @@
+import jwt from "jsonwebtoken";
 import { prisma } from "../db";
+import { config } from "../config";
 
 /**
  * Variables {{var}} communes aux modèles de message de portée hôtel — un
@@ -16,21 +18,25 @@ export interface HotelInfo {
   name: string;
   addr?: string | null;
   phone?: string | null;
+  // Code de l'établissement (Entity.code) — nécessaire pour construire
+  // {{lienAutologin}} (cf. bookingTemplateVars ci-dessous), qui pointe vers
+  // l'app client sans session admin en cours pour en déduire l'hôtel.
+  entityCode: string;
 }
 
 /**
  * Coordonnées de l'établissement (nom + adresse + téléphone d'accueil) pour
- * un entityId donné — une seule requête combinée (Entity.name +
+ * un entityId donné — une seule requête combinée (Entity.name/code +
  * EntityModuleConfig.hotelAddr/hotelPhone), appelée une fois par déclenchement
  * (ou une fois par balayage pour les règles à date pivot qui traitent
  * plusieurs réservations d'un même établissement, cf. sweepDateRule).
  */
 export async function hotelContactInfo(entityId: string): Promise<HotelInfo> {
   const [entity, cfg] = await Promise.all([
-    prisma.entity.findUnique({ where: { id: entityId }, select: { name: true } }),
+    prisma.entity.findUnique({ where: { id: entityId }, select: { name: true, code: true } }),
     prisma.entityModuleConfig.findUnique({ where: { entityId }, select: { hotelAddr: true, hotelPhone: true } }),
   ]);
-  return { name: entity?.name || "", addr: cfg?.hotelAddr || "", phone: cfg?.hotelPhone || "" };
+  return { name: entity?.name || "", addr: cfg?.hotelAddr || "", phone: cfg?.hotelPhone || "", entityCode: entity?.code || "" };
 }
 
 function hotelVars(hotel: HotelInfo): Record<string, string> {
@@ -42,8 +48,11 @@ function hotelVars(hotel: HotelInfo): Record<string, string> {
 }
 
 interface BookingLike {
+  id: string;
+  entityId: string;
   personFirstname: string;
   personLastname: string;
+  personEmail?: string | null;
   code: string;
   startDate: Date;
   endDate: Date;
@@ -52,7 +61,34 @@ interface BookingLike {
   selectedRoomCode?: string | null;
 }
 
-/** prenom/nom/code déjà utilisés partout — hotel/adresseHotel/telephoneHotel/chambre/dateArrivee/dateDepart/nuits sont les nouvelles variables. */
+/**
+ * Jeton d'autologin de l'espace client (checkin.html "Mon espace client") —
+ * même mécanisme et même secret que POST /api/auth/guest-login (cf.
+ * routes/auth.ts), mais porté par un lien plutôt que saisi à la main
+ * (email/nom + code de réservation). Vérifié par POST /api/auth/autologin.
+ * Expire 2 jours après le départ plutôt qu'une durée fixe courte : un lien
+ * envoyé par email doit rester utilisable pendant tout le séjour, pas
+ * seulement dans les heures suivant l'envoi (cf. discussion du 15/09/2026).
+ */
+function autologinToken(b: { id: string; entityId: string; personEmail?: string | null; endDate: Date }): string {
+  const expiresInSeconds = Math.max(3600, Math.round((b.endDate.getTime() + 2 * 86400000 - Date.now()) / 1000));
+  return jwt.sign({ entityId: b.entityId, bookingId: b.id, email: b.personEmail || undefined }, config.jwtSecret, {
+    expiresIn: expiresInSeconds,
+  });
+}
+
+/**
+ * Exporté séparément de bookingTemplateVars ci-dessous pour être réutilisé
+ * par GET /wa/booking/autologinQr (panneau staff "Réservations", QR à
+ * imprimer/afficher — cf. routes/booking.ts), qui a besoin du lien seul
+ * sans construire tout l'objet de variables d'email.
+ */
+export function buildAutologinUrl(b: { id: string; entityId: string; personEmail?: string | null; endDate: Date }, entityCode: string): string {
+  if (!entityCode) return "";
+  return `${config.guestBaseUrl}/checkin.html?entityCode=${encodeURIComponent(entityCode)}&autologinToken=${autologinToken(b)}`;
+}
+
+/** prenom/nom/code déjà utilisés partout — hotel/adresseHotel/telephoneHotel/chambre/dateArrivee/dateDepart/nuits/lienAutologin sont les nouvelles variables. */
 export function bookingTemplateVars(b: BookingLike, hotel: HotelInfo): Record<string, string> {
   const nights = Math.max(1, Math.round((b.endDate.getTime() - b.startDate.getTime()) / 86400000));
   return {
@@ -68,6 +104,7 @@ export function bookingTemplateVars(b: BookingLike, hotel: HotelInfo): Record<st
     dateArrivee: formatDateFr(b.startDate),
     dateDepart: formatDateFr(b.endDate),
     nuits: String(nights),
+    lienAutologin: buildAutologinUrl(b, hotel.entityCode),
   };
 }
 

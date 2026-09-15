@@ -68,3 +68,39 @@ authRouter.post(
     res.json({ token, entityCode: booking.entity.code, booking: normaliseBooking(booking) });
   })
 );
+
+/**
+ * POST /api/auth/autologin
+ * body: { token } — jeton {{lienAutologin}} (cf. lib/templateVars.ts),
+ * valable jusqu'à 2 jours après le départ plutôt que 12h comme le token de
+ * session ci-dessus : un lien envoyé par email doit rester utilisable
+ * pendant tout le séjour, pas seulement dans les heures suivant l'envoi.
+ * Vérifié puis échangé contre un token de session classique (12h, même
+ * forme que guest-login) — checkin.html traite ensuite exactement comme
+ * une connexion manuelle réussie (cf. espApplyLogin).
+ */
+authRouter.post(
+  "/auth/autologin",
+  asyncHandler(async (req, res) => {
+    const raw = (req.body.token as string) || "";
+    if (!raw) throw new HttpError(400, "Lien invalide");
+
+    let payload: { entityId?: string; bookingId?: string; email?: string };
+    try {
+      payload = jwt.verify(raw, config.jwtSecret) as typeof payload;
+    } catch {
+      throw new HttpError(401, "Ce lien a expiré ou n'est plus valide.");
+    }
+    if (!payload.bookingId) throw new HttpError(401, "Lien invalide");
+
+    const booking = await prisma.booking.findUnique({ where: { id: payload.bookingId }, include: { entity: true } });
+    if (!booking) throw new HttpError(404, "Réservation introuvable");
+
+    const token = jwt.sign(
+      { entityId: booking.entityId, bookingId: booking.id, email: payload.email || undefined },
+      config.jwtSecret,
+      { expiresIn: "12h" }
+    );
+    res.json({ token, entityCode: booking.entity.code, booking: normaliseBooking(booking) });
+  })
+);

@@ -26,4 +26,11 @@ export const config = {
   // crmQualification/prepareLinks) continuent d'utiliser req directement,
   // plus fiable quand disponible (reflète le domaine réellement utilisé).
   publicBaseUrl: (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, ""),
+  // Base de l'app CLIENT (checkin.html, booking.html...) — distincte de
+  // publicBaseUrl ci-dessus (admin/CRM) : deux sous-domaines séparés en
+  // production (cf. README "Exposition publique admin.sesame.technology /
+  // guest.sesame.technology"). Sert à construire {{lienAutologin}} (cf.
+  // lib/templateVars.ts) depuis un contexte sans requête HTTP en cours
+  // (balayage périodique), même principe que publicBaseUrl.
+  guestBaseUrl: (process.env.GUEST_BASE_URL || "https://guest.sesame.technology").replace(/\/$/, ""),
 };

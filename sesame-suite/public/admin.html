@@ -14439,6 +14439,14 @@ async function resaOpenDetail(code){
     + '<div style="font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.03em;margin-bottom:10px">Clé numérique</div>'
     + '<div id="resa-detail-key-body"><div class="spin" style="margin:0 auto"></div></div>'
     + '</div>';
+  // Lien/QR de connexion automatique à "Mon espace client" (checkin.html)
+  // — SANS RAPPORT avec la clé numérique ci-dessus (qui ouvre la porte) :
+  // celui-ci connecte le client à son espace (infos séjour, room service,
+  // etc.) sans ressaisir email/code. Chargé à part, cf. resaLoadAutologinQr.
+  html += '<div id="resa-detail-autologin" style="margin-top:12px;border:1px solid var(--bdr);border-radius:var(--rs);padding:16px;background:var(--bg);text-align:center">'
+    + '<div style="font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.03em;margin-bottom:10px">Connexion automatique — Espace client</div>'
+    + '<div id="resa-detail-autologin-body"><div class="spin" style="margin:0 auto"></div></div>'
+    + '</div>';
   // Invités (Pass) — chargés à part, cf. resaLoadPasses appelé après avoir
   // posé ce placeholder dans le DOM (une réservation Sesame peut associer
   // PLUSIEURS Pass, un par personne invitée — "invitations").
@@ -14489,6 +14497,7 @@ async function resaOpenDetail(code){
   // avant, contrairement à avant où les deux partaient en parallèle.
   await resaLoadPasses(b.code);
   resaLoadKey(b.code, b.facilityCode);
+  resaLoadAutologinQr(b.code);
 }
 
 /** Liste des codes d'accès distincts rattachés à une réservation — union du
@@ -14582,6 +14591,30 @@ async function resaLoadKey(code, bookingFacilityCode){
     }
   }catch(e){
     body.innerHTML = '<div style="font-size:12px;color:var(--mu)">QR indisponible pour cette réservation</div>';
+  }
+}
+
+/**
+ * QR + lien de connexion automatique à "Mon espace client" — GET
+ * /wa/booking/autologinQr, un jeton généré à la volée (pas de réservation
+ * "adoptée" par un connecteur nécessaire, contrairement à la clé numérique
+ * ci-dessus). Le lien reste copiable (input readonly) pour un envoi manuel
+ * en plus du QR à imprimer/scanner.
+ */
+async function resaLoadAutologinQr(code){
+  var body = document.getElementById('resa-detail-autologin-body');
+  if(!body) return;
+  try{
+    var r = await adminFetch('/wa/booking/autologinQr?code='+encodeURIComponent(code));
+    var data = await r.json();
+    if(!r.ok){ body.innerHTML = '<div style="font-size:12px;color:#b45309">⚠ '+esc(data.error||'Lien indisponible')+'</div>'; return; }
+    body.innerHTML = '<img src="'+data.qrImage+'" alt="QR connexion automatique" style="width:160px;height:160px;border-radius:10px;border:1px solid var(--bdr);display:block;margin:0 auto">'
+      + '<div style="font-size:11px;color:var(--mu);margin-top:8px">Scanné ou cliqué, ce lien connecte directement le client à son espace, sans ressaisir email/code.</div>'
+      + '<div style="display:flex;gap:6px;align-items:center;margin-top:8px">'
+      + '<input type="text" value="'+esc(data.url)+'" readonly style="flex:1;font-family:monospace;font-size:11px" onclick="this.select()">'
+      + '</div>';
+  }catch(e){
+    body.innerHTML = '<div style="font-size:12px;color:var(--mu)">Lien indisponible</div>';
   }
 }
 /** facilityCode vide (chaîne '') si resaAccessCodesFor n'a trouvé aucun

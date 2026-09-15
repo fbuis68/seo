@@ -295,7 +295,7 @@ async function sweepDateRule(rule: {
     console.error(`[automation] lecture des réservations échouée pour la règle "${rule.name}":`, err);
     return;
   }
-  const hotel = rule.entityId ? await hotelContactInfo(rule.entityId) : { name: "" };
+  const hotel = rule.entityId ? await hotelContactInfo(rule.entityId) : { name: "", entityCode: "" };
 
   for (const b of bookings) {
     const to = resolveRecipient(rule, b.personEmail, b.personPhone);

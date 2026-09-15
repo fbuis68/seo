@@ -5,7 +5,7 @@ import { resolveEntity } from "../lib/entity";
 import { normaliseBooking } from "../lib/normalize";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { fireTrigger } from "../lib/automation";
-import { bookingTemplateVars, hotelContactInfo } from "../lib/templateVars";
+import { bookingTemplateVars, hotelContactInfo, buildAutologinUrl } from "../lib/templateVars";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { encodeNfc, listNfcDevices, fetchAccessQr, openDoor, pushBookingUpdate, adoptBookingIntoSource, BookingSourceError } from "../lib/bookingSource";
 import { sendEmailRaw } from "../lib/email";
@@ -532,6 +532,35 @@ bookingRouter.get(
       if (e instanceof BookingSourceError) throw new HttpError(502, e.message);
       throw e;
     }
+  })
+);
+
+/**
+ * GET /wa/booking/autologinQr?code=... — QR + lien de connexion automatique
+ * à "Mon espace client" (checkin.html), à imprimer/afficher ou coller dans
+ * un email (panneau staff "Réservations"). SANS RAPPORT avec
+ * GET /wa/booking/accessQr ci-dessus : celui-ci encode la vraie clé
+ * d'ouverture de porte (source externe ou démo) et ne doit surtout pas être
+ * remplacé par ce lien — les deux QR coexistent, à des fins différentes.
+ * Réservé au personnel (requireAdmin) : ce lien connecte directement à
+ * l'espace client sans mot de passe, jamais exposé sans authentification
+ * staff préalable (cf. buildAutologinUrl dans lib/templateVars.ts).
+ */
+bookingRouter.get(
+  "/booking/autologinQr",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const code = ((req.query.code as string) || "").trim();
+    if (!code) throw new HttpError(400, "code requis");
+
+    const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code } } });
+    if (!booking) throw new HttpError(404, "Réservation introuvable");
+
+    const url = buildAutologinUrl(booking, entity.code);
+    if (!url) throw new HttpError(500, "Impossible de générer le lien");
+    const qrImage = await QRCode.toDataURL(url, { margin: 1, width: 320 });
+    res.json({ url, qrImage });
   })
 );
 
