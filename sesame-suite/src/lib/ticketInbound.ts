@@ -29,6 +29,42 @@ export async function findTicketByTag(tag: string) {
 }
 
 /**
+ * Retire les préfixes de réponse/transfert ("Re:", "Fwd:", "TR:"..., répétés
+ * et mélangés — un client peut répondre à une réponse à une réponse) et le
+ * tag `[TKT-...]` s'il en reste un, pour ne comparer que le sujet "de fond".
+ */
+function normalizeSubject(subject: string): string {
+  return (subject || "")
+    .replace(/\[(TKT-\d{4}-\d+)\]/gi, "")
+    .replace(/^\s*(re|fwd?|tr|rép(?:onse)?|transf(?:ert)?)\s*:\s*/i, "")
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Filet de sécurité quand aucun tag `[TKT-...]` n'a matché (le client a
+ * démarré un nouvel email au lieu de répondre au fil existant, ou son
+ * client mail a perdu le tag) : un email de la même personne, sur le même
+ * sujet "de fond", récent, est très probablement la continuation d'un
+ * échange déjà ouvert plutôt qu'une nouvelle demande — cf. discussion du
+ * 15/09/2026 ("considérer un seul ticket si le fil est le même, notamment
+ * la description [le sujet] de l'email"). Fenêtre de 30 jours pour éviter
+ * de rattacher à tort un sujet générique ("Question") réutilisé des mois
+ * plus tard pour une demande sans rapport ; le plus récent des tickets
+ * correspondants est pris si plusieurs matchent.
+ */
+async function findTicketByEmailAndSubject(email: string, subject: string) {
+  const normalized = normalizeSubject(subject);
+  if (!normalized) return null;
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60_000);
+  const candidates = await prisma.crmTicket.findMany({
+    where: { contactEmail: { equals: email, mode: "insensitive" }, updatedAt: { gte: since } },
+    orderBy: { updatedAt: "desc" },
+  });
+  return candidates.find((t) => normalizeSubject(t.subject) === normalized) || null;
+}
+
+/**
  * Numéro de ticket lisible (ex : TKT-2026-0001), même convention que
  * nextQuoteNumber() dans crmQuote.ts — compté par année plutôt qu'un
  * compteur global, pour ne jamais dépendre d'une séquence SQL dédiée.
@@ -90,6 +126,21 @@ export async function createTicketFromInboundEmail(input: {
   attachments?: string[];
   graphMessageId?: string;
 }): Promise<CrmTicket> {
+  // Pas de tag [TKT-...] exploitable en amont (cf. appelants) : avant
+  // d'ouvrir un nouveau ticket, on vérifie qu'il n'y a pas déjà un échange
+  // ouvert avec cette personne sur le même sujet — sinon on y ajoute ce
+  // message plutôt que de fragmenter la conversation en plusieurs tickets.
+  const existing = await findTicketByEmailAndSubject(input.email, input.subject || "");
+  if (existing) {
+    await appendInboundReply(existing, {
+      authorName: input.name || input.email,
+      body: input.body,
+      attachments: input.attachments,
+      graphMessageId: input.graphMessageId,
+    });
+    return existing;
+  }
+
   const prospect = await findOrCreateProspectByEmail(input.email, input.name);
   const number = await nextTicketNumber();
 
