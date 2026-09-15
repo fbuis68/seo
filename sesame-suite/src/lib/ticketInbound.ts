@@ -2,6 +2,7 @@ import { CrmTicket } from "@prisma/client";
 import { prisma } from "../db";
 import { fireTrigger } from "./automation";
 import { recordScoreEvent } from "./crmScoring";
+import { nextSequenceValue } from "./sequence";
 
 /**
  * Logique de création/complétion de ticket à partir d'un email entrant —
@@ -93,21 +94,18 @@ async function ticketAgentName(agentId: string | null): Promise<string> {
 }
 
 /**
- * Numéro de ticket lisible (ex : TKT-2026-0001), même convention que
- * nextQuoteNumber() dans crmQuote.ts — compté par année plutôt qu'un
- * compteur global, pour ne jamais dépendre d'une séquence SQL dédiée.
+ * Numéro de ticket lisible (ex : TKT-2026-0001), compté par année. Repose
+ * sur nextSequenceValue (cf. lib/sequence.ts) — un compteur atomique
+ * Postgres — plutôt que "compter les lignes existantes puis deviner le
+ * prochain numéro libre" (schéma remplacé le 16/09/2026 après un test de
+ * charge : la version précédente produisait des centaines d'échecs "Unique
+ * constraint failed" par lot de requêtes concurrentes sur POST
+ * /wa/ticket/create, un endpoint public).
  */
 async function nextTicketNumber(): Promise<string> {
   const year = new Date().getFullYear();
-  const prefix = `TKT-${year}-`;
-  const count = await prisma.crmTicket.count({ where: { number: { startsWith: prefix } } });
-  for (let i = count + 1; i < count + 50; i++) {
-    const candidate = `${prefix}${String(i).padStart(4, "0")}`;
-    const exists = await prisma.crmTicket.findUnique({ where: { number: candidate } });
-    if (!exists) return candidate;
-  }
-  // Filet de sécurité improbable (>50 collisions) — timestamp garantit l'unicité.
-  return `${prefix}${Date.now()}`;
+  const n = await nextSequenceValue(`ticket-${year}`);
+  return `TKT-${year}-${String(n).padStart(4, "0")}`;
 }
 
 /**

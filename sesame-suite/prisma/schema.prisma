@@ -381,6 +381,10 @@ model Booking {
 
   @@unique([entityId, code])
   @@index([personEmail])
+  // Requête de disponibilité (isRoomAvailable / listAvailableRooms, cf.
+  // lib/bookingEngine.ts) — filtre par roomId à chaque appel, sans index
+  // jusqu'ici (table scan). Ajouté suite au test de charge du 16/09/2026.
+  @@index([roomId])
 }
 
 // Invité(e) d'une réservation, avec son propre badge/carte d'accès — un
@@ -2488,4 +2492,19 @@ model TicketConfig {
   autoResolveAfterDays Int?
 
   updatedAt DateTime @updatedAt
+}
+
+// Compteur atomique générique pour les numéros séquentiels par clé (ex :
+// "ticket-2026", "quote-2026") — remplace le schéma "compter les lignes
+// existantes puis deviner le prochain numéro libre" (nextTicketNumber/
+// nextQuoteNumber), intrinsèquement racy sous charge concurrente : deux
+// requêtes simultanées pouvaient voir le même numéro "libre" au même
+// instant, l'une des deux créations échouant alors sur la contrainte
+// @unique — confirmé par test de charge du 16/09/2026 (des centaines
+// d'échecs par lot de requêtes concurrentes sur POST /wa/ticket/create,
+// endpoint PUBLIC). Un seul INSERT ... ON CONFLICT ... RETURNING (cf.
+// lib/sequence.ts) est atomique côté Postgres — aucun retry nécessaire.
+model NumberSequence {
+  key   String @id
+  value Int    @default(0)
 }

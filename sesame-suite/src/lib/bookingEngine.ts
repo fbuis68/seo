@@ -72,6 +72,16 @@ export interface AvailableRoom {
 /** Chambres disponibles pour cet établissement sur la période demandée,
  * avec le prix total déjà calculé (Room.rate × nuits) — jamais 0 nuit ni
  * chambre sans tarif renseigné (rate null/0), sinon rien à facturer. */
+/**
+ * Avant le 16/09/2026 : une requête `isRoomAvailable` PAR chambre, attendue
+ * séquentiellement dans la boucle — un établissement à 80 chambres faisait
+ * donc 81 allers-retours DB l'un après l'autre pour une simple recherche de
+ * disponibilité (confirmé par test de charge : ~587ms médian / ~33 req/s à
+ * seulement 20 connexions concurrentes). Remplacé par UNE requête groupée
+ * (toutes les réservations chevauchant la période, pour toutes les
+ * chambres candidates à la fois) puis un filtrage en mémoire — 2 requêtes
+ * au total quel que soit le nombre de chambres.
+ */
 export async function listAvailableRooms(entityId: string, start: Date, end: Date): Promise<AvailableRoom[]> {
   const nights = nightsBetween(start, end);
   if (nights <= 0) return [];
@@ -80,26 +90,34 @@ export async function listAvailableRooms(entityId: string, start: Date, end: Dat
     where: { entityId, available: true, rate: { gt: 0 } },
     orderBy: { name: "asc" },
   });
+  if (!rooms.length) return [];
 
-  const results: AvailableRoom[] = [];
-  for (const room of rooms) {
-    if (await isRoomAvailable(room.id, start, end)) {
-      results.push({
-        id: room.id,
-        code: room.code,
-        name: room.name,
-        category: room.category,
-        type: room.type,
-        capacity: room.capacity,
-        description: room.description,
-        photos: (room.photos as string[]) || [],
-        rate: room.rate || 0,
-        nights,
-        roomTotal: Math.round((room.rate || 0) * nights * 100) / 100,
-      });
-    }
-  }
-  return results;
+  const overlapping = await prisma.booking.findMany({
+    where: {
+      roomId: { in: rooms.map((r) => r.id) },
+      status: { not: "cancelled" },
+      startDate: { lt: end },
+      endDate: { gt: start },
+    },
+    select: { roomId: true },
+  });
+  const unavailableRoomIds = new Set(overlapping.map((b) => b.roomId));
+
+  return rooms
+    .filter((room) => !unavailableRoomIds.has(room.id))
+    .map((room) => ({
+      id: room.id,
+      code: room.code,
+      name: room.name,
+      category: room.category,
+      type: room.type,
+      capacity: room.capacity,
+      description: room.description,
+      photos: (room.photos as string[]) || [],
+      rate: room.rate || 0,
+      nights,
+      roomTotal: Math.round((room.rate || 0) * nights * 100) / 100,
+    }));
 }
 
 export interface BookingQuote {
@@ -266,29 +284,42 @@ export interface StaffRoomOption extends AvailableRoom {
  * supplémentaire pour un accompagnant, clé staff) ou sans tarif configuré
  * (aucune facturation prévue pour ce type de clé).
  */
+/** Même correctif N+1 que listAvailableRooms ci-dessus (une seule requête
+ * groupée pour toutes les chambres plutôt qu'une par chambre) — cf. audit
+ * charge du 16/09/2026, ce même anti-motif retrouvé ici en creusant. */
 export async function listRoomsForStaff(entityId: string, start: Date, end: Date): Promise<StaffRoomOption[]> {
   const nights = Math.max(0, nightsBetween(start, end));
   const rooms = await prisma.room.findMany({ where: { entityId, available: true }, orderBy: { name: "asc" } });
+  if (!rooms.length) return [];
 
-  const results: StaffRoomOption[] = [];
-  for (const room of rooms) {
-    const occupied = nights > 0 ? !(await isRoomAvailable(room.id, start, end)) : false;
-    results.push({
-      id: room.id,
-      code: room.code,
-      name: room.name,
-      category: room.category,
-      type: room.type,
-      capacity: room.capacity,
-      description: room.description,
-      photos: (room.photos as string[]) || [],
-      rate: room.rate || 0,
-      nights,
-      roomTotal: Math.round((room.rate || 0) * nights * 100) / 100,
-      occupied,
+  const unavailableRoomIds = new Set<string>();
+  if (nights > 0) {
+    const overlapping = await prisma.booking.findMany({
+      where: {
+        roomId: { in: rooms.map((r) => r.id) },
+        status: { not: "cancelled" },
+        startDate: { lt: end },
+        endDate: { gt: start },
+      },
+      select: { roomId: true },
     });
+    overlapping.forEach((b) => b.roomId && unavailableRoomIds.add(b.roomId));
   }
-  return results;
+
+  return rooms.map((room) => ({
+    id: room.id,
+    code: room.code,
+    name: room.name,
+    category: room.category,
+    type: room.type,
+    capacity: room.capacity,
+    description: room.description,
+    photos: (room.photos as string[]) || [],
+    rate: room.rate || 0,
+    nights,
+    roomTotal: Math.round((room.rate || 0) * nights * 100) / 100,
+    occupied: unavailableRoomIds.has(room.id),
+  }));
 }
 
 /**

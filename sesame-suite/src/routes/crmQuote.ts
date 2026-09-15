@@ -4,6 +4,7 @@ import { prisma } from "../db";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin, requireSesame } from "../middleware/requireAdmin";
 import { ONBOARDING_MODULES } from "./onboarding";
+import { nextSequenceValue } from "../lib/sequence";
 
 /**
  * Devis (module "Gestion des affaires", 18/08/2026) — rattachés à une
@@ -66,17 +67,17 @@ crmQuoteRouter.get(
   })
 );
 
+/**
+ * Numéro de devis lisible (ex : DEV-2026-0001), compté par année — cf.
+ * nextSequenceValue (lib/sequence.ts), un compteur atomique Postgres.
+ * Remplace le 16/09/2026 le schéma "compter les lignes existantes puis
+ * deviner le prochain numéro libre" (racy sous charge concurrente, cf.
+ * nextTicketNumber dans lib/ticketInbound.ts pour le même correctif).
+ */
 async function nextQuoteNumber(): Promise<string> {
   const year = new Date().getFullYear();
-  const prefix = `DEV-${year}-`;
-  const count = await prisma.crmQuote.count({ where: { number: { startsWith: prefix } } });
-  for (let i = count + 1; i < count + 50; i++) {
-    const candidate = `${prefix}${String(i).padStart(4, "0")}`;
-    const exists = await prisma.crmQuote.findUnique({ where: { number: candidate } });
-    if (!exists) return candidate;
-  }
-  // Filet de sécurité improbable (>50 collisions) — timestamp garantit l'unicité.
-  return `${prefix}${Date.now()}`;
+  const n = await nextSequenceValue(`quote-${year}`);
+  return `DEV-${year}-${String(n).padStart(4, "0")}`;
 }
 
 crmQuoteRouter.get(
@@ -108,6 +109,7 @@ crmQuoteRouter.post(
     if (!b.dealId) throw new HttpError(400, "dealId requis");
     const deal = await prisma.crmDeal.findUnique({ where: { id: b.dealId } });
     if (!deal) throw new HttpError(404, "Affaire introuvable");
+
     const number = await nextQuoteNumber();
     const row = await prisma.crmQuote.create({
       data: {
