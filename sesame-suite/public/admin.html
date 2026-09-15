@@ -1752,6 +1752,57 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     </div>
   </div>
 
+  <!-- Connecteur Nayax -->
+  <details style="margin-bottom:16px" id="ny-details">
+    <summary style="cursor:pointer;font-weight:600;font-size:14px;padding:10px 0;display:flex;align-items:center;gap:8px">
+      <i class="ti ti-credit-card"></i> Connecteur Nayax (accès par carte bancaire)
+      <span id="ny-status-badge" style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:var(--bdr);color:var(--mu)">Non configuré</span>
+    </summary>
+    <div class="ca" style="margin-top:10px">
+      <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
+        <span>Un accès de type "Lecteur Nayax" (ci-dessus) devient déverrouillable par simple présentation de carte bancaire : le client scanne le QR Code affiché sur le lecteur, obtient une page de réservation valable le temps ci-dessous, puis présente sa carte — la clé Sesame s'active automatiquement dès l'autorisation, sans code ni application à installer.</span>
+      </div>
+      <div class="alt alt-w" style="margin-bottom:12px"><i class="ti ti-alert-triangle"></i>
+        <span>Non vérifié en conditions réelles — la forme exacte du webhook envoyé par Nayax (nom du champ identifiant le terminal) n'est pas encore confirmée. Laissez le connecteur désactivé tant que vous n'avez pas reçu la confirmation de Nayax et ajusté "Chemin de l'identifiant terminal" ci-dessous sur un premier événement réel (visible dans les logs serveur).</span>
+      </div>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px">
+        <input type="checkbox" id="ny-enabled" style="accent-color:var(--am)">
+        <span style="font-size:13px">Connecteur actif</span>
+      </label>
+      <div class="fi"><label class="lb">URL du webhook à communiquer à Nayax</label>
+        <input type="text" id="ny-webhookUrl" readonly onclick="this.select()">
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <button class="btn btn-s" type="button" onclick="nyRegenSecret()"><i class="ti ti-refresh"></i> Regénérer le secret</button>
+      </div>
+      <div class="g2">
+        <div class="fi"><label class="lb">Chemin de l'identifiant terminal dans le webhook</label>
+          <input type="text" id="ny-terminalIdPath" placeholder="terminalId">
+          <div style="font-size:11px;color:var(--mu);margin-top:3px">Notation pointée (ex : "device.id") vers le champ du JSON envoyé par Nayax identifiant le lecteur.</div>
+        </div>
+        <div class="fi"><label class="lb">Fenêtre pour présenter la carte (secondes)</label>
+          <input type="number" id="ny-sessionWindowSeconds" min="15" max="600" placeholder="90">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button class="btn btn-p" onclick="nySaveConfig()"><i class="ti ti-check"></i> Enregistrer</button>
+      </div>
+      <div id="ny-webhookStatus" style="margin-top:10px;font-size:12px;color:var(--mu)"></div>
+    </div>
+  </details>
+
+  <!-- Modal QR Code Nayax -->
+  <div id="nyQrModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center;padding:16px">
+    <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:360px;box-shadow:0 24px 60px rgba(0,0,0,.3);padding:20px;text-align:center">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <h2 style="font-size:16px">QR Code d'accès</h2>
+        <button onclick="document.getElementById('nyQrModal').style.display='none'" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
+      </div>
+      <img id="ny-qr-img" style="width:100%;max-width:280px;border:1px solid var(--bdr);border-radius:8px" alt="QR Code">
+      <div style="font-size:11px;color:var(--mu);margin-top:10px;word-break:break-all" id="ny-qr-url"></div>
+    </div>
+  </div>
+
   <!-- Planning affectation agents -->
   <div class="ca" style="margin-top:4px">
     <div class="ch"><i class="ti ti-users"></i>Équipe ménage
@@ -1816,6 +1867,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
               <option value="junior_suite">Junior Suite</option>
               <option value="penthouse">Penthouse</option>
               <option value="casier">Casier</option>
+              <option value="nayax">Lecteur Nayax</option>
             </select>
           </div>
           <div class="fi room-only-field">
@@ -1902,6 +1954,12 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         <div class="fi" id="rm-deviceId-wrap" style="margin-top:10px">
           <label class="lb">Identifiant du lecteur (device)</label>
           <input type="text" id="rm-deviceId" placeholder="Ex : D00005605 — importé automatiquement si mappé, sinon à saisir">
+        </div>
+
+        <div class="fi" id="rm-nayax-qr-btn" style="margin-top:10px;display:none">
+          <label class="lb">QR Code d'accès Nayax</label>
+          <button class="btn btn-s" type="button" onclick="nyShowQr()"><i class="ti ti-qrcode"></i> Générer / afficher le QR Code</button>
+          <div style="font-size:11px;color:var(--mu);margin-top:3px">À imprimer et afficher sur/près du lecteur — le client le scanne pour ouvrir sa page de réservation. L'identifiant du lecteur ci-dessus doit correspondre au terminalId envoyé par Nayax dans son webhook (cf. réglages du connecteur Nayax ci-dessous).</div>
         </div>
 
         <!-- Actions du modal -->
@@ -4682,7 +4740,7 @@ function showPan(id){
   if(id==='gains'){renderGains();}
   if(id==='eco'){renderEcoBanner();}
   if(id==='plan'){try{renderPlanCanvas();}catch(e){} try{renderAdminTags();}catch(e){}}
-  if(id==='rooms'){ renderRoomGrid(); fetchStaffList().then(renderRoomGrid); }
+  if(id==='rooms'){ renderRoomGrid(); fetchStaffList().then(renderRoomGrid); nyInit(); }
   if(id==='preview'){try{renderFullPreview();renderPrevSummary();}catch(e){}}
   if(id==='dash'){try{renderDash();}catch(e){}}
   if(id==='reservations'){ loadReservations(); }
@@ -5596,7 +5654,7 @@ var RM_TAGS    = [];     // tags de la chambre en cours
 var ROOM_TYPES = {
   '':'—', single:'Single', double:'Double', twin:'Twin', triple:'Triple',
   suite:'Suite', family:'Familiale', junior_suite:'Junior Suite', penthouse:'Penthouse',
-  casier:'Casier'
+  casier:'Casier', nayax:'Lecteur Nayax'
 };
 var FLOOR_LABELS = ['RDC','1er','2ème','3ème','4ème'];
 
@@ -5687,6 +5745,77 @@ async function rmOpenAccess(roomCode){
   }
 }
 
+// ─── Connecteur Nayax — GET/POST /wa/nayaxConfig, GET /wa/nayaxAccess/qr ───
+var NY_CONFIG = null;
+async function nyInit(){
+  try{
+    var r = await adminFetch('/wa/nayaxConfig');
+    if(!r.ok) return;
+    NY_CONFIG = await r.json();
+    document.getElementById('ny-enabled').checked = !!NY_CONFIG.enabled;
+    document.getElementById('ny-terminalIdPath').value = NY_CONFIG.terminalIdPath || 'terminalId';
+    document.getElementById('ny-sessionWindowSeconds').value = NY_CONFIG.sessionWindowSeconds || 90;
+    document.getElementById('ny-webhookUrl').value = location.origin + '/wa/nayax/webhook/' + (NY_CONFIG.webhookSecret || '');
+    nyRenderStatus();
+  }catch(e){ console.error('nyInit error', e); }
+}
+function nyRenderStatus(){
+  var badge = document.getElementById('ny-status-badge');
+  var statusEl = document.getElementById('ny-webhookStatus');
+  if(!NY_CONFIG || !badge) return;
+  if(!NY_CONFIG.enabled){
+    badge.textContent = 'Désactivé'; badge.style.background = 'var(--bdr)'; badge.style.color = 'var(--mu)';
+  } else if(NY_CONFIG.lastWebhookAt){
+    badge.textContent = 'Actif'; badge.style.background = 'rgba(26,107,71,.12)'; badge.style.color = '#1A6B47';
+  } else {
+    badge.textContent = 'Jamais reçu'; badge.style.background = 'rgba(230,162,60,.15)'; badge.style.color = '#E6A23C';
+  }
+  if(NY_CONFIG.lastWebhookAt){
+    var d = new Date(NY_CONFIG.lastWebhookAt).toLocaleString('fr-FR');
+    statusEl.textContent = 'Dernier webhook reçu : '+d+' ('+(NY_CONFIG.lastWebhookEventCount||0)+' au total).';
+  } else {
+    statusEl.textContent = 'Aucun webhook reçu pour l\'instant.';
+  }
+}
+async function nySaveConfig(){
+  var body = {
+    enabled: document.getElementById('ny-enabled').checked,
+    terminalIdPath: document.getElementById('ny-terminalIdPath').value.trim() || 'terminalId',
+    sessionWindowSeconds: parseInt(document.getElementById('ny-sessionWindowSeconds').value) || 90,
+  };
+  try{
+    var r = await adminFetch('/wa/nayaxConfig', {method:'POST', body: JSON.stringify(body)});
+    var data = await r.json();
+    if(!r.ok){ toast('⚠ '+(data.error||'Échec de l\'enregistrement')); return; }
+    NY_CONFIG = data;
+    nyRenderStatus();
+    toast('Connecteur Nayax enregistré ✓');
+  }catch(e){ toast('⚠ Erreur de connexion au serveur'); }
+}
+async function nyRegenSecret(){
+  if(!confirm('Regénérer le secret invalide l\'URL de webhook actuelle — il faudra la re-communiquer à Nayax. Continuer ?')) return;
+  try{
+    var r = await adminFetch('/wa/nayaxConfig/webhook/regenerate', {method:'POST'});
+    var data = await r.json();
+    if(!r.ok){ toast('⚠ '+(data.error||'Échec')); return; }
+    NY_CONFIG = data;
+    document.getElementById('ny-webhookUrl').value = location.origin + '/wa/nayax/webhook/' + (NY_CONFIG.webhookSecret || '');
+    toast('Nouveau secret généré ✓ — pensez à mettre à jour Nayax');
+  }catch(e){ toast('⚠ Erreur de connexion au serveur'); }
+}
+async function nyShowQr(){
+  var code = document.getElementById('rm-code').value.trim();
+  if(!code){ toast('Enregistrez d\'abord l\'accès avant de générer son QR Code'); return; }
+  try{
+    var r = await adminFetch('/wa/nayaxAccess/qr?room='+encodeURIComponent(code));
+    var data = await r.json();
+    if(!r.ok){ toast('⚠ '+(data.error||'Échec de la génération du QR Code')); return; }
+    document.getElementById('ny-qr-img').src = data.dataUrl;
+    document.getElementById('ny-qr-url').textContent = data.url;
+    document.getElementById('nyQrModal').style.display = 'flex';
+  }catch(e){ toast('⚠ Erreur de connexion au serveur'); }
+}
+
 // Alias pour compatibilité avec le plan
 function renderRoomList(){
   var el=document.getElementById('roomListAdmin');if(!el)return;
@@ -5712,8 +5841,11 @@ function renderRoomList(){
 // non-fumeur, communicante) quand le type d'accès est "casier" — un casier
 // n'a ni occupants ni ces caractéristiques, les afficher n'aurait aucun sens.
 function rmToggleCasierFields(){
-  var isCasier = document.getElementById('rm-type').value === 'casier';
-  document.querySelectorAll('.room-only-field').forEach(function(el){ el.style.display = isCasier ? 'none' : ''; });
+  var t = document.getElementById('rm-type').value;
+  var hideRoomFields = t === 'casier' || t === 'nayax';
+  document.querySelectorAll('.room-only-field').forEach(function(el){ el.style.display = hideRoomFields ? 'none' : ''; });
+  var qrBtn = document.getElementById('rm-nayax-qr-btn');
+  if(qrBtn) qrBtn.style.display = (t === 'nayax' && RM_EDITING) ? '' : 'none';
 }
 
 function rmOpenCreate(){

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Accès — Sesame Technology</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/favicon-192.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<style>
+  :root{--bg:#f5f4f0;--card:#fff;--bdr:#e2dfd9;--tx:#1a1a1a;--mu:#888;--a:#8a2b2b;--ok:#1a6b47;--er:#a32d2d}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--tx);font-size:14px}
+  .wrap{max-width:440px;margin:0 auto;padding:32px 20px 60px}
+  .logo{font-size:18px;font-weight:700;margin-bottom:4px;text-align:center}
+  .logo em{color:var(--a);font-style:normal}
+  .card{background:var(--card);border:0.5px solid var(--bdr);border-radius:12px;padding:26px 22px;margin-top:18px;text-align:center}
+  h1{font-size:17px;margin:0 0 6px}
+  .sub{color:var(--mu);font-size:12.5px;margin-bottom:2px}
+  .ring{width:96px;height:96px;margin:20px auto 6px;border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative}
+  .ring svg{position:absolute;top:0;left:0;transform:rotate(-90deg)}
+  .ring .n{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+  .icon{font-size:44px;margin:14px 0 4px}
+  .icon.ok{color:var(--ok)}
+  .icon.er{color:var(--er)}
+  .instr{font-size:14.5px;font-weight:500;margin:14px 0 4px;line-height:1.4}
+  .hint{font-size:12.5px;color:var(--mu);line-height:1.5;margin-top:6px}
+  .status-line{display:inline-block;font-size:11.5px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;padding:4px 10px;border-radius:20px;margin-top:14px}
+  .status-line.pending{background:#faf3e8;color:#9a6a1f}
+  .status-line.ok{background:#e9f5ef;color:var(--ok)}
+  .status-line.er{background:#faeaea;color:var(--er)}
+  .btn{font-family:inherit;font-size:13px;padding:10px 18px;border-radius:8px;border:1.5px solid var(--bdr);background:#fff;color:var(--tx);cursor:pointer;font-weight:500;margin-top:18px}
+  .btn:hover{border-color:var(--a);color:var(--a)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">SESAME <em>TECHNOLOGY</em></div>
+  <div id="app"><div class="card"><div class="sub">Chargement…</div></div></div>
+</div>
+
+<script>
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+const params = new URLSearchParams(location.search);
+const ROOM = params.get('room') || '';
+const ENTITY_CODE = params.get('entityCode') || '';
+let TOKEN = null, EXPIRES_AT = null, TOTAL_SECONDS = 1, ROOM_NAME = '', POLL_TIMER = null, TICK_TIMER = null;
+
+function qs(extra){
+  const p = new URLSearchParams(extra || {});
+  if (ENTITY_CODE) p.set('entityCode', ENTITY_CODE);
+  return p.toString();
+}
+
+async function start(){
+  if (!ROOM){ renderError("Lien invalide — aucun accès indiqué."); return; }
+  try{
+    const r = await fetch('/wa/nayaxAccess/start?' + qs({ room: ROOM }));
+    const data = await r.json();
+    if (!r.ok){ renderError(data.error || "Cet accès est introuvable."); return; }
+    TOKEN = data.token; EXPIRES_AT = new Date(data.expiresAt).getTime(); ROOM_NAME = data.roomName || ROOM;
+    TOTAL_SECONDS = Math.max(1, Math.round((EXPIRES_AT - Date.now()) / 1000));
+    renderPending();
+    POLL_TIMER = setInterval(poll, 1500);
+    TICK_TIMER = setInterval(renderPending, 1000);
+    poll();
+  }catch(e){ renderError("Erreur de connexion au serveur."); }
+}
+
+async function poll(){
+  if (!TOKEN) return;
+  try{
+    const r = await fetch('/wa/nayaxAccess/status?' + qs({ token: TOKEN }));
+    const data = await r.json();
+    if (!r.ok) return;
+    if (data.status === 'activated'){ stopTimers(); renderActivated(); }
+    else if (data.status === 'expired'){ stopTimers(); renderExpired(); }
+    else if (data.status === 'failed'){ stopTimers(); renderFailed(); }
+    else if (data.status === 'cancelled'){ stopTimers(); renderExpired("Une nouvelle session a été ouverte pour cet accès — rescannez le QR Code si besoin."); }
+  }catch(e){ /* réessaie au prochain tick */ }
+}
+
+function stopTimers(){
+  if (POLL_TIMER) clearInterval(POLL_TIMER);
+  if (TICK_TIMER) clearInterval(TICK_TIMER);
+  POLL_TIMER = null; TICK_TIMER = null;
+}
+
+function renderPending(){
+  const remaining = Math.max(0, Math.round((EXPIRES_AT - Date.now()) / 1000));
+  if (remaining <= 0){ stopTimers(); renderExpired(); return; }
+  const R = 42, C = 2 * Math.PI * R;
+  document.getElementById('app').innerHTML =
+    '<div class="card">'
+    + '<h1>' + esc(ROOM_NAME) + '</h1>'
+    + '<div class="sub">Réservation en cours</div>'
+    + '<div class="ring">'
+      + '<svg width="96" height="96"><circle cx="48" cy="48" r="' + R + '" stroke="#e2dfd9" stroke-width="6" fill="none"/>'
+      + '<circle cx="48" cy="48" r="' + R + '" stroke="#8a2b2b" stroke-width="6" fill="none" stroke-linecap="round" '
+      + 'stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (C * (1 - remaining / TOTAL_SECONDS)).toFixed(1) + '"/></svg>'
+      + '<span class="n">' + remaining + '</span>'
+    + '</div>'
+    + '<div class="instr">Présentez votre carte bancaire sur le lecteur</div>'
+    + '<div class="hint">Votre accès s\'active automatiquement dès que le paiement est autorisé sur le terminal, sans étape supplémentaire.</div>'
+    + '<div class="status-line pending">En attente de votre carte</div>'
+    + '</div>';
+}
+
+function renderActivated(){
+  document.getElementById('app').innerHTML =
+    '<div class="card">'
+    + '<h1>' + esc(ROOM_NAME) + '</h1>'
+    + '<div class="icon ok">&#10003;</div>'
+    + '<div class="instr">Accès activé</div>'
+    + '<div class="hint">Votre clé Sesame est prête — vous pouvez y accéder.</div>'
+    + '<div class="status-line ok">Confirmé</div>'
+    + '</div>';
+}
+
+function renderExpired(msg){
+  document.getElementById('app').innerHTML =
+    '<div class="card">'
+    + '<h1>' + esc(ROOM_NAME || 'Accès') + '</h1>'
+    + '<div class="icon er">&#8635;</div>'
+    + '<div class="instr">Session expirée</div>'
+    + '<div class="hint">' + esc(msg || "Le délai pour présenter votre carte est dépassé.") + '</div>'
+    + '<div class="status-line er">Expirée</div>'
+    + '<button class="btn" onclick="location.reload()">Rescanner / réessayer</button>'
+    + '</div>';
+}
+
+function renderFailed(){
+  document.getElementById('app').innerHTML =
+    '<div class="card">'
+    + '<h1>' + esc(ROOM_NAME || 'Accès') + '</h1>'
+    + '<div class="icon er">&#33;</div>'
+    + '<div class="instr">Une erreur est survenue</div>'
+    + '<div class="hint">Votre carte a bien été autorisée, mais l\'ouverture de l\'accès a échoué. Merci de contacter la réception.</div>'
+    + '<div class="status-line er">Erreur</div>'
+    + '</div>';
+}
+
+function renderError(msg){
+  document.getElementById('app').innerHTML = '<div class="card"><h1>Accès</h1><div class="sub">' + esc(msg) + '</div></div>';
+}
+
+start();
+</script>
+</body>
+</html>

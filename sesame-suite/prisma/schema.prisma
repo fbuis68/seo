@@ -54,6 +54,8 @@ model Entity {
   questionnaires      Questionnaire[]
   passes              Pass[]
   bookingEngineConfig BookingEngineConfig?
+  nayaxConfig         NayaxConfig?
+  nayaxAccessSessions NayaxAccessSession[]
 }
 
 // Groupe d'établissements (ex : chaîne hôtelière) — gestion réservée aux
@@ -270,6 +272,7 @@ model Room {
 
   bookings           Booking[]
   housekeepingStatus RoomHousekeepingStatus?
+  nayaxSessions      NayaxAccessSession[]
 
   @@unique([entityId, code])
 }
@@ -2387,4 +2390,83 @@ model AutomationRuleLog {
   sentAt     DateTime       @default(now())
 
   @@unique([ruleId, targetType, targetId])
+}
+
+// Réglages Nayax par établissement — lecteur de carte bleue considéré comme
+// un accès à part entière (cf. discussion du 15/09/2026) : le client scanne
+// un QR Code propre à un accès (Room.type="nayax"), ce qui ouvre une page
+// de réservation publique créant une NayaxAccessSession ; il a ensuite une
+// fenêtre de sessionWindowSeconds pour présenter sa carte sur le lecteur.
+// Le webhook Nayax entrant (POST /wa/nayax/webhook/:webhookSecret) ne sert
+// qu'à confirmer QUEL terminal a vu une carte, jamais QUELLE carte — la
+// corrélation client se fait par device/terminal + fenêtre de temps, pas
+// par identité de carte, ce qui évite de dépendre d'un identifiant de
+// carte (PAR) dont la disponibilité en temps réel côté Nayax Spark n'est
+// pas confirmée. Inerte tant que webhookSecret n'a pas été communiqué à
+// Nayax et terminalIdPath confirmé sur un payload réel — cf. le même
+// principe "inerte tant que non configuré" que facilityOpenEndpointPath
+// (BookingSourceConfig).
+model NayaxConfig {
+  id       String @id @default(cuid())
+  entityId String @unique
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  enabled Boolean @default(false)
+
+  // Secret dans l'URL du webhook (POST /wa/nayax/webhook/:webhookSecret),
+  // même convention que BookingSourceConfig.webhookSecret — régénéré via
+  // randomBytes(24).hex à la première activation ou sur demande.
+  webhookSecret String? @unique
+
+  // Chemin (notation pointée, cf. getPath dans lib/bookingSource.ts) vers
+  // l'identifiant de terminal/lecteur dans le corps JSON du webhook Nayax —
+  // forme exacte non confirmée (devzone.nayax.com inaccessible depuis cet
+  // environnement), donc configurable plutôt que codée en dur. Valeur par
+  // défaut plausible, à ajuster une fois un vrai payload observé.
+  terminalIdPath String? @default("terminalId")
+
+  // Durée (secondes) pendant laquelle une NayaxAccessSession reste "pending"
+  // après création — le client a cette fenêtre pour présenter sa carte sur
+  // le lecteur après avoir scanné le QR Code. Cf. "une trentaine de
+  // secondes (ou plus)" — marge par défaut au-delà du minimum annoncé au
+  // client pour absorber la latence réseau/webhook.
+  sessionWindowSeconds Int @default(90)
+
+  lastWebhookAt         DateTime?
+  lastWebhookEventCount Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Session temporaire créée quand un client scanne le QR Code affiché sur/
+// près d'un lecteur Nayax (page publique nayax-access.html?room=CODE) —
+// représente la fenêtre "réservation" décrite le 15/09/2026 : le client a
+// jusqu'à expiresAt pour présenter sa carte ; si le webhook Nayax matche le
+// deviceId du Room à temps, la clé Sesame (openFacilityDirect) s'active et
+// le statut passe à "activated".
+model NayaxAccessSession {
+  id       String @id @default(cuid())
+  entityId String
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  roomId   String
+  room     Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  // Jeton public (URL de la page de statut) — distinct de l'id interne pour
+  // ne jamais exposer d'id de séquence/cuid prévisible côté client.
+  token String @unique
+
+  // pending | activated | expired | cancelled | failed (ouverture Sesame en erreur)
+  status String @default("pending")
+
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime
+  activatedAt DateTime?
+
+  // Dernier événement webhook brut ayant matché cette session (tronqué) —
+  // utile en debug tant que le format exact des payloads Nayax n'est pas
+  // stabilisé, sans conserver l'historique complet.
+  lastEventRaw String?
+
+  @@index([roomId, status])
 }

@@ -47,6 +47,7 @@ import { bookingEngineRouter } from "./routes/bookingEngine";
 import { geocodeRouter } from "./routes/geocode";
 import { unsubscribeRouter } from "./routes/unsubscribe";
 import { graphMailRouter } from "./routes/graphMail";
+import { nayaxRouter } from "./routes/nayax";
 import { housekeepingScope } from "./middleware/housekeepingScope";
 import { errorHandler } from "./middleware/errorHandler";
 import { VERSION } from "./lib/version";
@@ -119,6 +120,7 @@ export function createApp() {
   app.use("/wa", vendorRouter);
   app.use("/wa", walletRouter);
   app.use("/wa", bookingEngineRouter);
+  app.use("/wa", nayaxRouter);
 
   // Authentification espace client (hors convention /wa — pas de DAO CRUD dédié)
   app.use("/api", authRouter);
