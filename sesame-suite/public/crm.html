@@ -511,6 +511,7 @@ svg.tr-chart{display:block;width:100%;height:auto;min-width:640px}
     <div class="nav-item" id="n-affaires" onclick="showAffaires()"><div class="nav-ico">◆</div> Affaires</div>
     <div class="nav-item" id="n-portefeuille" onclick="showPortefeuille()"><div class="nav-ico">€</div> Portefeuille</div>
     <div class="nav-item" id="n-treso" onclick="showTresorerie()"><div class="nav-ico">Σ</div> Trésorerie</div>
+    <div class="nav-item" id="n-compta" onclick="showComptabilite()"><div class="nav-ico">▦</div> Comptabilité <span class="nb nb-a" id="b-compta-check" style="display:none">0</span></div>
     <div class="nav-item" id="n-tickets" onclick="showTickets()"><div class="nav-ico">☎</div> Support <span class="nb nb-r" id="b-tickets-open" style="display:none">0</span></div>
     <div class="nav-item" id="n-activite" onclick="showActivites()"><div class="nav-ico">◈</div> Activités</div>
     <div class="nav-item" id="n-contrats" onclick="showContrats()"><div class="nav-ico">◻</div> Contrats</div>
@@ -875,7 +876,7 @@ function ini(n){return(n||'?').split(' ').slice(0,2).map(w=>w[0]||'').join('').t
 function today(){const d=new Date();return d.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});}
 
 // ── NAV ──
-function setNav(id){['n-home','n-list','n-affaires','n-portefeuille','n-treso','n-tickets','n-produits','n-activite','n-contrats','n-canaux','n-auto','n-crmusers','n-questionnaires'].forEach(n=>document.getElementById(n).classList.remove('active'));var el=document.getElementById(id);if(el)el.classList.add('active');}
+function setNav(id){['n-home','n-list','n-affaires','n-portefeuille','n-treso','n-compta','n-tickets','n-produits','n-activite','n-contrats','n-canaux','n-auto','n-crmusers','n-questionnaires'].forEach(n=>document.getElementById(n).classList.remove('active'));var el=document.getElementById(id);if(el)el.classList.add('active');}
 function setVMode(m){vmode=m;document.getElementById('vt-tbl').classList.toggle('active',m==='table');document.getElementById('vt-grd').classList.toggle('active',m==='grid');document.getElementById('vt-map').classList.toggle('active',m==='map');if(view==='list')renderList();}
 function bc(parts){document.getElementById('bc').innerHTML=parts.map((p,i)=>i<parts.length-1?`<span class="bc-link" onclick="${p.fn}">${p.label}</span><span class="bc-sep"> / </span>`:`<span class="bc-cur">${p.label}</span>`).join('');}
 function tba(html){document.getElementById('tb-actions').innerHTML=html;}
@@ -6614,6 +6615,654 @@ async function testRule(id){
     flash('Test envoyé à '+to);
   }catch(e){ flash('Échec du test : '+(e.message||'erreur')); }
   await loadAutomationPanelData();
+}
+
+// ════════════════════════════════════════
+// COMPTABILITÉ — factures achat/vente, OCR/extraction, rapprochement,
+// pré-comptabilisation (module interne Sesame, portée ?scope=crm — cf.
+// src/routes/accounting.ts et lib/acc*.ts). Phase 1 : chaîne achat
+// complète ; le rapprochement/la génération côté vente restent
+// schéma-prêts côté backend mais ne sont pas exposés ici.
+// ════════════════════════════════════════
+let ACC_INVOICES=[], ACC_SUPPLIERS=[], ACC_ACCOUNTS=[], ACC_JOURNALS=[], ACC_ENTRIES=[], ACC_RULES=[], ACC_DASH=null;
+let ACC_TAB='inbox';
+const ACC_LOADED={};
+const ACC_STATUS_LABEL={RECEIVED:'Reçue',PROCESSING:'En traitement',OCR_COMPLETED:'OCR effectué',EXTRACTED:'Extraite',CHECK_REQUIRED:'À vérifier',VALIDATED:'Validée',ACCOUNTED:'Comptabilisée',PARTIALLY_PAID:'Partiellement payée',PAID:'Payée',REJECTED:'Rejetée'};
+const ACC_STATUS_TAG={RECEIVED:'t-gray',PROCESSING:'t-gray',OCR_COMPLETED:'t-gray',EXTRACTED:'t-blue',CHECK_REQUIRED:'t-amber',VALIDATED:'t-purple',ACCOUNTED:'t-green',PARTIALLY_PAID:'t-blue',PAID:'t-green',REJECTED:'t-red'};
+const ACC_CHECK_TAG={OK:'t-green',WARNING:'t-amber',ERROR:'t-red',BLOCKING:'t-red'};
+const ACC_DOCTYPE_LABEL={invoice:'Facture',credit_note:'Avoir',deposit_invoice:'Facture d\'acompte',receipt:'Reçu',statement:'Relevé de compte',non_accounting:'Non comptable'};
+
+function fmtEUR2(n){ return (n==null?0:+n).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'; }
+function accStatusBadge(s){ return `<span class="tag ${ACC_STATUS_TAG[s]||'t-gray'}" style="font-size:10px;padding:1px 7px">${ACC_STATUS_LABEL[s]||s}</span>`; }
+function accWorstCheckLevel(checks){
+  const order=['OK','WARNING','ERROR','BLOCKING'];
+  return (checks||[]).reduce((w,c)=>order.indexOf(c.level)>order.indexOf(w)?c.level:w,'OK');
+}
+function accConfidencePct(c){ return c==null?'—':Math.round(c*100)+'%'; }
+function toDateInputValue(d){ if(!d) return ''; const dt=new Date(d); return isNaN(dt)?'':dt.toISOString().slice(0,10); }
+
+function showComptabilite(){
+  view='compta';curId=null;setNav('n-compta');bc([{label:'Comptabilité'}]);
+  tba(`<button class="btn btn-primary btn-sm" onclick="openAccUploadModal(\'purchase\')">+ Facture d'achat</button>
+       <button class="btn btn-ghost btn-sm" onclick="openAccUploadModal(\'sale\')">+ Facture de vente</button>`);
+  document.getElementById('main').innerHTML='<div class="card">Chargement…</div>';
+  loadAccDashboard();
+  renderComptaPanel();
+}
+
+async function loadAccDashboard(){
+  try{
+    const r = await apiFetch('/wa/acc/dashboard?scope=crm');
+    ACC_DASH = r.ok ? await r.json() : null;
+  }catch(e){ ACC_DASH=null; }
+  const badge = document.getElementById('b-compta-check');
+  if(badge && ACC_DASH){
+    const n = ACC_DASH.byStatus && ACC_DASH.byStatus.CHECK_REQUIRED || 0;
+    badge.textContent = n; badge.style.display = n>0 ? '' : 'none';
+  }
+  renderAccDashboardTiles();
+}
+
+function renderAccDashboardTiles(){
+  const el = document.getElementById('acc-dash-tiles');
+  if(!el) return;
+  const d = ACC_DASH || {byStatus:{},pendingCount:0,pendingHt:0,pendingTtc:0,blockingCount:0};
+  el.innerHTML = `
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-lbl">À traiter</div><div class="stat-val">${d.pendingCount}</div></div>
+      <div class="stat-card"><div class="stat-lbl">Montant TTC en attente</div><div class="stat-val">${fmtEUR(d.pendingTtc)}</div></div>
+      <div class="stat-card"><div class="stat-lbl">Alertes bloquantes</div><div class="stat-val" style="${d.blockingCount?'color:#a32d2d':''}">${d.blockingCount}</div></div>
+      <div class="stat-card"><div class="stat-lbl">Comptabilisées</div><div class="stat-val">${d.byStatus.ACCOUNTED||0}</div></div>
+    </div>`;
+}
+
+const ACC_TABS=[{k:'inbox',label:'Factures'},{k:'suppliers',label:'Fournisseurs'},{k:'accounts',label:'Plan comptable'},{k:'entries',label:'Écritures'},{k:'rules',label:'Règles'}];
+
+function renderComptaPanel(){
+  document.getElementById('main').innerHTML = `
+    <div id="acc-dash-tiles"></div>
+    <div class="card">
+      <div class="card-head"><div class="ch-ico">▦</div><span class="ch-title">Comptabilité</span>
+        <div class="autoviewtoggle" style="margin-left:auto">
+          ${ACC_TABS.map(t=>`<button type="button" class="${ACC_TAB===t.k?'on':''}" onclick="accSetTab('${t.k}')">${t.label}</button>`).join('')}
+        </div>
+      </div>
+      <div id="acc-tab-body"><div class="log-empty">Chargement…</div></div>
+    </div>`;
+  renderAccDashboardTiles();
+  accSetTab(ACC_TAB);
+}
+
+function accSetTab(tab){
+  ACC_TAB = tab;
+  if(view==='compta') renderComptaPanel();
+  const loaders={inbox:loadAccInboxTab, suppliers:loadAccSuppliersTab, accounts:loadAccAccountsTab, entries:loadAccEntriesTab, rules:loadAccRulesTab};
+  loaders[tab] && loaders[tab]();
+}
+
+// ───────── Onglet Factures (inbox de validation, §37) ─────────
+
+let ACC_INBOX_FILTER={status:'',direction:''};
+
+async function loadAccInboxTab(){
+  const el = document.getElementById('acc-tab-body');
+  if(el) el.innerHTML = '<div class="log-empty">Chargement…</div>';
+  await Promise.all([ensureAccSuppliersLoaded(), ensureAccAccountsLoaded()]);
+  await accReloadInvoices();
+}
+
+async function accReloadInvoices(){
+  const params = new URLSearchParams({scope:'crm', limit:'100'});
+  if(ACC_INBOX_FILTER.status) params.set('status', ACC_INBOX_FILTER.status);
+  if(ACC_INBOX_FILTER.direction) params.set('direction', ACC_INBOX_FILTER.direction);
+  try{
+    const r = await apiFetch('/wa/acc/invoices?'+params.toString());
+    const data = r.ok ? await r.json() : {rows:[]};
+    ACC_INVOICES = data.rows||[];
+  }catch(e){ ACC_INVOICES=[]; }
+  renderAccInbox();
+}
+
+function accSetInboxFilter(field, val){ ACC_INBOX_FILTER[field]=val; accReloadInvoices(); }
+
+function renderAccInbox(){
+  const el = document.getElementById('acc-tab-body');
+  if(!el) return;
+  const statusOpts = ['', ...Object.keys(ACC_STATUS_LABEL)];
+  const rows = ACC_INVOICES.map(inv=>{
+    const level = accWorstCheckLevel(inv.checks);
+    return `<tr>
+      <td>${inv.invoiceDate?new Date(inv.invoiceDate).toLocaleDateString('fr-FR'):'—'}</td>
+      <td>${ACC_DOCTYPE_LABEL[inv.documentType]||inv.documentType||'—'}</td>
+      <td><div class="nom-cell" onclick="openAccInvoiceModal('${inv.id}')">${esc(inv.supplier?inv.supplier.name:(inv.issuerName||'—'))}</div></td>
+      <td>${esc(inv.invoiceNumber||'—')}</td>
+      <td style="text-align:right">${inv.amountHt!=null?fmtEUR2(inv.amountHt):'—'}</td>
+      <td style="text-align:right">${inv.amountVat!=null?fmtEUR2(inv.amountVat):'—'}</td>
+      <td style="text-align:right">${inv.amountTtc!=null?fmtEUR2(inv.amountTtc):'—'}</td>
+      <td>${inv.proposedAccountId?'<span class="tpill bi">'+accConfidencePct(inv.proposedAccountConfidence)+'</span>':'<span class="tpill bn">Aucun</span>'}</td>
+      <td>${level!=='OK'?'<span class="tag '+ACC_CHECK_TAG[level]+'" style="font-size:10px;padding:1px 7px">'+level+'</span>':'<span class="tpill bg">OK</span>'}</td>
+      <td>${accStatusBadge(inv.status)}</td>
+      <td style="white-space:nowrap"><button class="ta-btn" onclick="openAccInvoiceModal('${inv.id}')" title="Ouvrir">👁</button></td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `
+    <div class="list-toolbar">
+      <select class="lsel" onchange="accSetInboxFilter('status', this.value)">
+        ${statusOpts.map(s=>`<option value="${s}" ${ACC_INBOX_FILTER.status===s?'selected':''}>${s?ACC_STATUS_LABEL[s]:'Tous les statuts'}</option>`).join('')}
+      </select>
+      <select class="lsel" onchange="accSetInboxFilter('direction', this.value)">
+        <option value="" ${!ACC_INBOX_FILTER.direction?'selected':''}>Achat + Vente</option>
+        <option value="purchase" ${ACC_INBOX_FILTER.direction==='purchase'?'selected':''}>Achats</option>
+        <option value="sale" ${ACC_INBOX_FILTER.direction==='sale'?'selected':''}>Ventes</option>
+      </select>
+      <span class="count-lbl">${ACC_INVOICES.length} facture(s)</span>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Date</th><th>Type</th><th>Fournisseur</th><th>N° facture</th><th style="text-align:right">HT</th><th style="text-align:right">TVA</th><th style="text-align:right">TTC</th><th>Compte</th><th>Contrôles</th><th>État</th><th style="width:44px"></th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="11" class="log-empty">Aucune facture — déposez-en une avec le bouton en haut à droite.</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+// ── Upload ──
+
+function accReadFileAsBase64(file, cb){
+  const r = new FileReader();
+  r.onload = e=>{ const s=String(e.target.result); cb(s.slice(s.indexOf(',')+1)); };
+  r.readAsDataURL(file);
+}
+
+function openAccUploadModal(direction){
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:480px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">${direction==='sale'?'Déposer une facture de vente':'Déposer une facture d\'achat'}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div class="ff"><label>Fichier (PDF, JPEG, PNG, TIFF, XML — 15 Mo max)</label><input type="file" id="acc-upload-file" accept=".pdf,.jpg,.jpeg,.png,.tiff,.xml,application/pdf,image/jpeg,image/png,image/tiff,application/xml,text/xml"></div>
+      <div id="acc-upload-status" style="font-size:12px;color:var(--mu);margin-top:6px"></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="acc-upload-btn" onclick="accSubmitUpload('${direction}')">Déposer et analyser</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function accSubmitUpload(direction){
+  const fileEl = document.getElementById('acc-upload-file');
+  const file = fileEl && fileEl.files[0];
+  if(!file){ flash('Choisissez un fichier'); return; }
+  const statusEl = document.getElementById('acc-upload-status');
+  const btn = document.getElementById('acc-upload-btn');
+  btn.disabled = true;
+  statusEl.textContent = 'Analyse en cours (extraction du texte, rapprochement fournisseur, proposition de compte)…';
+  accReadFileAsBase64(file, async (base64)=>{
+    try{
+      const r = await apiFetch('/wa/acc/documents/upload?scope=crm', {method:'POST', body:JSON.stringify({filename:file.name, mimeType:file.type||'application/octet-stream', base64, direction, source:'upload'})});
+      const data = await r.json();
+      if(!r.ok) throw new Error(data.error||'http '+r.status);
+      closeModal();
+      flash(data.isDuplicateDocument?'Document déjà déposé — facture existante rouverte':'Facture déposée et analysée');
+      loadAccDashboard();
+      if(ACC_TAB==='inbox') await accReloadInvoices();
+      openAccInvoiceModal(data.invoice.id);
+    }catch(e){
+      btn.disabled = false;
+      statusEl.textContent = 'Erreur : '+(e.message||'échec du dépôt');
+    }
+  });
+}
+
+// ── Modal de validation (§38 : aperçu document + champs extraits éditables) ──
+
+async function openAccInvoiceModal(id){
+  let inv;
+  try{
+    const r = await apiFetch('/wa/acc/invoices/'+id+'?scope=crm');
+    if(!r.ok) throw new Error('http '+r.status);
+    inv = await r.json();
+  }catch(e){ flash('Erreur de chargement de la facture'); return; }
+  await Promise.all([ensureAccSuppliersLoaded(), ensureAccAccountsLoaded()]);
+  window._accInvoiceEditing = inv;
+  renderAccInvoiceModal(inv);
+}
+
+function renderAccInvoiceModal(inv){
+  const doc = inv.document || {};
+  let preview = '<div class="log-empty">Aperçu non disponible pour ce type de fichier.</div>';
+  if(doc.contentBase64 && doc.mimeType==='application/pdf'){
+    preview = `<embed src="data:application/pdf;base64,${doc.contentBase64}" type="application/pdf" style="width:100%;height:70vh;border:0.5px solid var(--bdr);border-radius:8px">`;
+  } else if(doc.contentBase64 && /^image\//.test(doc.mimeType||'')){
+    preview = `<img src="data:${doc.mimeType};base64,${doc.contentBase64}" style="max-width:100%;border:0.5px solid var(--bdr);border-radius:8px">`;
+  }
+
+  const checks = inv.checks||[];
+  const checksHtml = checks.map(c=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:12px"><span class="tag ${ACC_CHECK_TAG[c.level]||'t-gray'}" style="font-size:10px;padding:1px 7px;flex-shrink:0">${c.level}</span><span>${esc(c.message)}</span></div>`).join('');
+
+  const supplierOpts = `<option value="">— Aucun —</option>` + ACC_SUPPLIERS.map(s=>`<option value="${s.id}" ${inv.supplierId===s.id?'selected':''}>${esc(s.name)}</option>`).join('');
+  const accountType = inv.direction==='sale' ? 'produit' : 'charge';
+  const accountOpts = `<option value="">— Aucun —</option>` + ACC_ACCOUNTS.filter(a=>a.type===accountType).map(a=>`<option value="${a.id}" ${inv.proposedAccountId===a.id?'selected':''}>${esc(a.number)} — ${esc(a.label)}</option>`).join('');
+  const locked = inv.status==='VALIDATED' || inv.status==='ACCOUNTED';
+
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:1040px">
+      <div class="modal-head">
+        <div style="font-size:16px;font-weight:500">${inv.direction==='sale'?'Facture de vente':'Facture d\'achat'} — ${esc(doc.originalFilename||'')}</div>
+        ${accStatusBadge(inv.status)}
+        <button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button>
+      </div>
+      <div style="display:flex;gap:20px;align-items:flex-start">
+        <div style="flex:0 0 42%;min-width:0">${preview}</div>
+        <div style="flex:1;min-width:0;max-height:70vh;overflow-y:auto;padding-right:4px">
+          ${locked?'<div class="tpill bi" style="margin-bottom:10px">Facture validée — corrections via une extourne d\'écriture</div>':''}
+          <div class="modal-section">Identification</div>
+          <div class="form-grid">
+            <div class="ff"><label>N° facture</label><input id="ai-invoiceNumber" value="${esc(inv.invoiceNumber||'')}" ${locked?'disabled':''}></div>
+            <div class="ff"><label>Devise</label><input id="ai-currency" value="${esc(inv.currency||'EUR')}" ${locked?'disabled':''}></div>
+            <div class="ff"><label>Date facture</label><input type="date" id="ai-invoiceDate" value="${toDateInputValue(inv.invoiceDate)}" ${locked?'disabled':''}></div>
+            <div class="ff"><label>Date échéance</label><input type="date" id="ai-dueDate" value="${toDateInputValue(inv.dueDate)}" ${locked?'disabled':''}></div>
+          </div>
+          <div class="modal-section">Fournisseur</div>
+          <div class="form-grid">
+            <div class="ff"><label>Fournisseur rapproché${inv.supplierMatchConfidence!=null?' ('+accConfidencePct(inv.supplierMatchConfidence)+')':''}</label><select id="ai-supplierId" ${locked?'disabled':''}>${supplierOpts}</select></div>
+            <div class="ff"><label>Raison sociale extraite</label><input id="ai-issuerName" value="${esc(inv.issuerName||'')}" ${locked?'disabled':''}></div>
+            <div class="ff"><label>SIRET</label><input id="ai-issuerSiret" value="${esc(inv.issuerSiret||'')}" ${locked?'disabled':''}></div>
+            <div class="ff"><label>SIREN</label><input id="ai-issuerSiren" value="${esc(inv.issuerSiren||'')}" ${locked?'disabled':''}></div>
+            <div class="ff"><label>N° TVA</label><input id="ai-issuerVat" value="${esc(inv.issuerVat||'')}" ${locked?'disabled':''}></div>
+            <div class="ff"><label>IBAN</label><input id="ai-issuerIban" value="${esc(inv.issuerIban||'')}" ${locked?'disabled':''}></div>
+          </div>
+          <div class="modal-section">Montants</div>
+          <div class="form-grid">
+            <div class="ff"><label>Total HT</label><input type="number" step="0.01" id="ai-amountHt" value="${inv.amountHt!=null?inv.amountHt:''}" ${locked?'disabled':''}></div>
+            <div class="ff"><label>TVA</label><input type="number" step="0.01" id="ai-amountVat" value="${inv.amountVat!=null?inv.amountVat:''}" ${locked?'disabled':''}></div>
+            <div class="ff"><label>Total TTC</label><input type="number" step="0.01" id="ai-amountTtc" value="${inv.amountTtc!=null?inv.amountTtc:''}" ${locked?'disabled':''}></div>
+          </div>
+          <div class="modal-section">Compte comptable proposé</div>
+          <div class="form-grid">
+            <div class="ff"><label>Compte (${accountType})${inv.proposedAccountConfidence!=null?' — confiance '+accConfidencePct(inv.proposedAccountConfidence):''}</label><select id="ai-proposedAccountId" ${locked?'disabled':''}>${accountOpts}</select></div>
+          </div>
+          <div class="modal-section">Contrôles de cohérence</div>
+          ${checksHtml||'<div class="log-empty">Aucun contrôle.</div>'}
+          ${inv.entry?`<div class="modal-section">Écriture</div><div style="font-size:12px;color:var(--mu)">${inv.entry.number?esc(inv.entry.number):'Brouillon (non validée)'} — ${esc(inv.entry.label)}</div>`:''}
+        </div>
+      </div>
+      <div class="modal-footer">
+        ${!locked?`<button class="btn btn-primary" onclick="accSaveInvoiceFields('${inv.id}')">Enregistrer</button>
+        <button class="btn btn-primary" style="background:#1f7a3f" onclick="accApplyAccount('${inv.id}')">Appliquer le compte (mémoriser la règle)</button>
+        <button class="btn btn-primary" style="background:#2f6f2f" onclick="accValidateInvoice('${inv.id}')">Valider</button>
+        <button class="btn btn-ghost" style="color:#a32d2d" onclick="accRejectInvoice('${inv.id}')">Rejeter</button>`:''}
+        <button class="btn btn-ghost" onclick="closeModal()">Fermer</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function accInvoiceFieldsFromForm(){
+  const g = id=>{ const el=document.getElementById(id); return el?el.value:''; };
+  return {
+    invoiceNumber: g('ai-invoiceNumber')||null,
+    currency: g('ai-currency')||null,
+    invoiceDate: g('ai-invoiceDate')||null,
+    dueDate: g('ai-dueDate')||null,
+    supplierId: g('ai-supplierId')||null,
+    issuerName: g('ai-issuerName')||null,
+    issuerSiret: g('ai-issuerSiret')||null,
+    issuerSiren: g('ai-issuerSiren')||null,
+    issuerVat: g('ai-issuerVat')||null,
+    issuerIban: g('ai-issuerIban')||null,
+    amountHt: g('ai-amountHt')===''?null:+g('ai-amountHt'),
+    amountVat: g('ai-amountVat')===''?null:+g('ai-amountVat'),
+    amountTtc: g('ai-amountTtc')===''?null:+g('ai-amountTtc'),
+  };
+}
+
+async function accSaveInvoiceFields(id){
+  try{
+    const r = await apiFetch('/wa/acc/invoices/'+id+'?scope=crm', {method:'PUT', body:JSON.stringify(accInvoiceFieldsFromForm())});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash('Facture mise à jour');
+    loadAccDashboard();
+    if(ACC_TAB==='inbox') accReloadInvoices();
+    openAccInvoiceModal(id);
+  }catch(e){ flash('Erreur : '+(e.message||'échec de l\'enregistrement')); }
+}
+
+async function accApplyAccount(id){
+  const accountId = (document.getElementById('ai-proposedAccountId')||{value:''}).value;
+  if(!accountId){ flash('Choisissez un compte'); return; }
+  try{
+    const r = await apiFetch('/wa/acc/invoices/'+id+'/account?scope=crm', {method:'PATCH', body:JSON.stringify({accountId})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash('Compte appliqué — règle mémorisée pour ce fournisseur');
+    if(ACC_TAB==='inbox') accReloadInvoices();
+    openAccInvoiceModal(id);
+  }catch(e){ flash('Erreur : '+(e.message||'échec')); }
+}
+
+async function accValidateInvoice(id){
+  try{
+    await accSaveInvoiceFields(id).catch(()=>{});
+    const r = await apiFetch('/wa/acc/invoices/'+id+'/validate?scope=crm', {method:'POST'});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash('Facture validée — écriture brouillon générée');
+    loadAccDashboard();
+    if(ACC_TAB==='inbox') accReloadInvoices();
+    if(ACC_TAB==='entries') loadAccEntriesTab();
+    closeModal();
+  }catch(e){ flash('Erreur : '+(e.message||'échec de la validation')); }
+}
+
+async function accRejectInvoice(id){
+  if(!confirm('Rejeter cette facture ?')) return;
+  try{
+    const r = await apiFetch('/wa/acc/invoices/'+id+'/reject?scope=crm', {method:'POST'});
+    if(!r.ok) throw new Error('http '+r.status);
+    flash('Facture rejetée');
+    loadAccDashboard();
+    if(ACC_TAB==='inbox') accReloadInvoices();
+    closeModal();
+  }catch(e){ flash('Erreur lors du rejet'); }
+}
+
+// ───────── Onglet Fournisseurs ─────────
+
+async function ensureAccSuppliersLoaded(){
+  if(ACC_LOADED.suppliers) return;
+  try{
+    const r = await apiFetch('/wa/acc/suppliers?scope=crm');
+    ACC_SUPPLIERS = r.ok ? await r.json() : [];
+    ACC_LOADED.suppliers = true;
+  }catch(e){ ACC_SUPPLIERS=[]; }
+}
+
+async function loadAccSuppliersTab(){
+  ACC_LOADED.suppliers = false;
+  await ensureAccSuppliersLoaded();
+  renderAccSuppliers();
+}
+
+function renderAccSuppliers(){
+  const el = document.getElementById('acc-tab-body');
+  if(!el) return;
+  const rows = ACC_SUPPLIERS.map(s=>`
+    <tr>
+      <td><div class="nom-cell" onclick="openAccSupplierModal('${s.id}')">${esc(s.name)}</div></td>
+      <td style="font-size:11px;color:#888">${esc(s.siret||'—')}</td>
+      <td style="font-size:11px;color:#888">${esc(s.iban||'—')}</td>
+      <td>${esc(s.email||'—')}</td>
+      <td style="white-space:nowrap"><button class="ta-btn" onclick="openAccSupplierModal('${s.id}')" title="Modifier">✎</button></td>
+    </tr>`).join('');
+  el.innerHTML = `
+    <div class="list-toolbar"><button class="btn btn-primary btn-sm" onclick="openAccSupplierModal(null)">+ Fournisseur</button><span class="count-lbl">${ACC_SUPPLIERS.length} fournisseur(s)</span></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Nom</th><th style="width:140px">SIRET</th><th style="width:200px">IBAN</th><th>Email</th><th style="width:50px"></th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="5" class="log-empty">Aucun fournisseur — créé automatiquement au premier dépôt de facture avec un SIRET/SIREN/TVA reconnu.</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+function openAccSupplierModal(id){
+  const s = id ? ACC_SUPPLIERS.find(x=>x.id===id) : {id:null,name:'',siren:'',siret:'',vatNumber:'',email:'',phone:'',addressLine:'',postalCode:'',city:'',country:'FR',iban:'',bic:''};
+  if(!s) return;
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:560px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">${id?'Modifier le fournisseur':'Nouveau fournisseur'}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div class="ff"><label>Nom</label><input id="sup-name" value="${esc(s.name)}"></div>
+      <div class="form-grid" style="margin-top:8px">
+        <div class="ff"><label>SIREN</label><input id="sup-siren" value="${esc(s.siren)}"></div>
+        <div class="ff"><label>SIRET</label><input id="sup-siret" value="${esc(s.siret)}"></div>
+        <div class="ff"><label>N° TVA</label><input id="sup-vatNumber" value="${esc(s.vatNumber)}"></div>
+        <div class="ff"><label>Email</label><input id="sup-email" value="${esc(s.email)}"></div>
+        <div class="ff"><label>Téléphone</label><input id="sup-phone" value="${esc(s.phone)}"></div>
+        <div class="ff"><label>Pays</label><input id="sup-country" value="${esc(s.country||'FR')}"></div>
+        <div class="ff"><label>IBAN</label><input id="sup-iban" value="${esc(s.iban)}"></div>
+        <div class="ff"><label>BIC</label><input id="sup-bic" value="${esc(s.bic)}"></div>
+      </div>
+      <div class="ff" style="margin-top:8px"><label>Adresse</label><input id="sup-addressLine" value="${esc(s.addressLine)}"></div>
+      <div class="form-grid" style="margin-top:8px">
+        <div class="ff"><label>Code postal</label><input id="sup-postalCode" value="${esc(s.postalCode)}"></div>
+        <div class="ff"><label>Ville</label><input id="sup-city" value="${esc(s.city)}"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="saveAccSupplier(${id?`'${id}'`:'null'})">Enregistrer</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function saveAccSupplier(id){
+  const g=i=>(document.getElementById(i)||{value:''}).value.trim();
+  const body = {name:g('sup-name'),siren:g('sup-siren'),siret:g('sup-siret'),vatNumber:g('sup-vatNumber'),email:g('sup-email'),phone:g('sup-phone'),country:g('sup-country'),iban:g('sup-iban'),bic:g('sup-bic'),addressLine:g('sup-addressLine'),postalCode:g('sup-postalCode'),city:g('sup-city')};
+  if(!body.name){ flash('Le nom est requis'); return; }
+  try{
+    const r = await apiFetch(id?('/wa/acc/suppliers/'+id+'?scope=crm'):'/wa/acc/suppliers?scope=crm', {method:id?'PUT':'POST', body:JSON.stringify(body)});
+    if(!r.ok) throw new Error('http '+r.status);
+    closeModal();
+    flash('Fournisseur enregistré');
+    ACC_LOADED.suppliers = false;
+    loadAccSuppliersTab();
+  }catch(e){ flash('Erreur d\'enregistrement'); }
+}
+
+// ───────── Onglet Plan comptable ─────────
+
+async function ensureAccAccountsLoaded(){
+  if(ACC_LOADED.accounts) return;
+  try{
+    const r = await apiFetch('/wa/acc/accounts?scope=crm');
+    ACC_ACCOUNTS = r.ok ? await r.json() : [];
+    ACC_LOADED.accounts = true;
+  }catch(e){ ACC_ACCOUNTS=[]; }
+}
+
+async function loadAccAccountsTab(){
+  ACC_LOADED.accounts = false;
+  await ensureAccAccountsLoaded();
+  await ensureAccJournalsLoaded();
+  renderAccAccounts();
+}
+
+async function ensureAccJournalsLoaded(){
+  try{ const r = await apiFetch('/wa/acc/journals?scope=crm'); ACC_JOURNALS = r.ok?await r.json():[]; }catch(e){ ACC_JOURNALS=[]; }
+}
+
+const ACC_TYPE_LABEL={charge:'Charge',produit:'Produit',tiers:'Tiers',tva:'TVA',banque:'Banque',immobilisation:'Immobilisation',capitaux:'Capitaux',autre:'Autre'};
+
+function renderAccAccounts(){
+  const el = document.getElementById('acc-tab-body');
+  if(!el) return;
+  const rows = ACC_ACCOUNTS.map(a=>`
+    <tr>
+      <td style="font-family:monospace">${esc(a.number)}</td>
+      <td>${esc(a.label)}</td>
+      <td>${ACC_TYPE_LABEL[a.type]||a.type}</td>
+      <td>${a.active?'<span class="tpill bg">Actif</span>':'<span class="tpill bn">Inactif</span>'}</td>
+    </tr>`).join('');
+  el.innerHTML = `
+    <div class="list-toolbar">
+      <button class="btn btn-primary btn-sm" onclick="openAccAccountModal()">+ Compte</button>
+      <button class="btn btn-ghost btn-sm" onclick="accRunSeed()">Initialiser le plan comptable standard</button>
+      <span class="count-lbl">${ACC_ACCOUNTS.length} compte(s) — ${ACC_JOURNALS.length} journal(aux) : ${ACC_JOURNALS.map(j=>esc(j.code)).join(', ')||'aucun'}</span>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th style="width:100px">Numéro</th><th>Libellé</th><th style="width:140px">Type</th><th style="width:90px">Statut</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="4" class="log-empty">Aucun compte — cliquez sur "Initialiser le plan comptable standard".</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+async function accRunSeed(){
+  try{
+    const r = await apiFetch('/wa/acc/seed?scope=crm', {method:'POST'});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash(data.accountsCreated+' compte(s) et '+data.journalsCreated+' journal(aux) créé(s)');
+    ACC_LOADED.accounts = false;
+    loadAccAccountsTab();
+  }catch(e){ flash('Erreur lors de l\'initialisation'); }
+}
+
+function openAccAccountModal(){
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:440px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Nouveau compte</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div class="form-grid">
+        <div class="ff"><label>Numéro (ex. 606400)</label><input id="acct-number"></div>
+        <div class="ff"><label>Type</label><select id="acct-type">${Object.entries(ACC_TYPE_LABEL).map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select></div>
+      </div>
+      <div class="ff" style="margin-top:8px"><label>Libellé</label><input id="acct-label"></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="saveAccAccount()">Enregistrer</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function saveAccAccount(){
+  const g=i=>(document.getElementById(i)||{value:''}).value.trim();
+  const body = {number:g('acct-number'), type:g('acct-type'), label:g('acct-label')};
+  if(!body.number || !body.label){ flash('Numéro et libellé requis'); return; }
+  try{
+    const r = await apiFetch('/wa/acc/accounts?scope=crm', {method:'POST', body:JSON.stringify(body)});
+    if(!r.ok) throw new Error('http '+r.status);
+    closeModal();
+    flash('Compte créé');
+    ACC_LOADED.accounts = false;
+    loadAccAccountsTab();
+  }catch(e){ flash('Erreur de création'); }
+}
+
+// ───────── Onglet Écritures ─────────
+
+async function loadAccEntriesTab(){
+  try{
+    const r = await apiFetch('/wa/acc/entries?scope=crm&limit=100');
+    ACC_ENTRIES = r.ok ? await r.json() : [];
+  }catch(e){ ACC_ENTRIES=[]; }
+  renderAccEntries();
+}
+
+function renderAccEntries(){
+  const el = document.getElementById('acc-tab-body');
+  if(!el) return;
+  const rows = ACC_ENTRIES.map(e=>{
+    const debit = (e.lines||[]).reduce((s,l)=>s+l.debit,0);
+    return `<tr>
+      <td>${new Date(e.date).toLocaleDateString('fr-FR')}</td>
+      <td>${esc(e.journal?e.journal.code:'')}</td>
+      <td>${esc(e.number||'Brouillon')}</td>
+      <td>${esc(e.label)}</td>
+      <td style="text-align:right">${fmtEUR2(debit)}</td>
+      <td>${e.status==='VALIDATED'?'<span class="tpill bg">Validée</span>':'<span class="tpill bi">Brouillon</span>'}</td>
+      <td style="white-space:nowrap">
+        ${e.status==='DRAFT'?`<button class="ta-btn" onclick="accValidateEntry('${e.id}')" title="Valider">✓</button>`:`<button class="ta-btn" onclick="accReverseEntry('${e.id}')" title="Extourner">↺</button>`}
+      </td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `
+    <div class="list-toolbar"><span class="count-lbl">${ACC_ENTRIES.length} écriture(s)</span></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th style="width:90px">Date</th><th style="width:70px">Journal</th><th style="width:140px">N°</th><th>Libellé</th><th style="text-align:right;width:110px">Montant</th><th style="width:90px">Statut</th><th style="width:50px"></th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="7" class="log-empty">Aucune écriture — générée automatiquement à la validation d\'une facture.</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+async function accValidateEntry(id){
+  try{
+    const r = await apiFetch('/wa/acc/entries/'+id+'/validate?scope=crm', {method:'POST'});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash('Écriture validée — n° '+data.number);
+    loadAccEntriesTab();
+    loadAccDashboard();
+  }catch(e){ flash('Erreur : '+(e.message||'échec de la validation')); }
+}
+
+async function accReverseEntry(id){
+  const reason = prompt('Motif de l\'extourne (optionnel) :', '');
+  if(reason===null) return;
+  try{
+    const r = await apiFetch('/wa/acc/entries/'+id+'/reverse?scope=crm', {method:'POST', body:JSON.stringify({reason})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash('Écriture extournée');
+    loadAccEntriesTab();
+  }catch(e){ flash('Erreur : '+(e.message||'échec de l\'extourne')); }
+}
+
+// ───────── Onglet Règles ─────────
+
+async function loadAccRulesTab(){
+  await Promise.all([ensureAccSuppliersLoaded(), ensureAccAccountsLoaded()]);
+  try{
+    const r = await apiFetch('/wa/acc/rules?scope=crm');
+    ACC_RULES = r.ok ? await r.json() : [];
+  }catch(e){ ACC_RULES=[]; }
+  renderAccRules();
+}
+
+function renderAccRules(){
+  const el = document.getElementById('acc-tab-body');
+  if(!el) return;
+  const rows = ACC_RULES.map(r=>`
+    <tr>
+      <td>${r.supplier?esc(r.supplier.name):(r.keyword?'Mot-clé : "'+esc(r.keyword)+'"':'—')}</td>
+      <td>${r.account?esc(r.account.number)+' — '+esc(r.account.label):'—'}</td>
+      <td>${r.source==='learned'?'<span class="tpill bi">Apprise</span>':'<span class="tpill bn">Manuelle</span>'}</td>
+      <td>${r.usageCount||0}</td>
+      <td>${r.active?'<span class="tpill bg">Active</span>':'<span class="tpill bn">Inactive</span>'}</td>
+      <td style="white-space:nowrap"><button class="ta-btn" style="color:#a32d2d" onclick="deleteAccRule('${r.id}')" title="Supprimer">🗑</button></td>
+    </tr>`).join('');
+  el.innerHTML = `
+    <div class="list-toolbar"><button class="btn btn-primary btn-sm" onclick="openAccRuleModal()">+ Règle</button><span class="count-lbl">${ACC_RULES.length} règle(s)</span></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Cible</th><th>Compte</th><th style="width:90px">Origine</th><th style="width:70px">Usages</th><th style="width:90px">Statut</th><th style="width:50px"></th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="6" class="log-empty">Aucune règle — créée automatiquement à chaque correction de compte sur une facture (§18).</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+function openAccRuleModal(){
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:480px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Nouvelle règle</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div class="ff"><label>Fournisseur (optionnel si mot-clé renseigné)</label><select id="rule-supplierId"><option value="">— Aucun —</option>${ACC_SUPPLIERS.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select></div>
+      <div class="ff" style="margin-top:8px"><label>Mot-clé (repli quand aucun fournisseur rapproché)</label><input id="rule-keyword" placeholder="ex. hébergement, assurance..."></div>
+      <div class="ff" style="margin-top:8px"><label>Compte à proposer</label><select id="rule-accountId">${ACC_ACCOUNTS.filter(a=>a.type==='charge'||a.type==='produit').map(a=>`<option value="${a.id}">${esc(a.number)} — ${esc(a.label)}</option>`).join('')}</select></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="saveAccRule()">Enregistrer</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function saveAccRule(){
+  const g=i=>(document.getElementById(i)||{value:''}).value;
+  const body = {supplierId:g('rule-supplierId')||undefined, keyword:g('rule-keyword').trim()||undefined, accountId:g('rule-accountId')};
+  if(!body.accountId){ flash('Choisissez un compte'); return; }
+  if(!body.supplierId && !body.keyword){ flash('Fournisseur ou mot-clé requis'); return; }
+  try{
+    const r = await apiFetch('/wa/acc/rules?scope=crm', {method:'POST', body:JSON.stringify(body)});
+    if(!r.ok) throw new Error('http '+r.status);
+    closeModal();
+    flash('Règle créée');
+    loadAccRulesTab();
+  }catch(e){ flash('Erreur de création'); }
+}
+
+async function deleteAccRule(id){
+  if(!confirm('Supprimer cette règle ?')) return;
+  try{
+    const r = await apiFetch('/wa/acc/rules/'+id+'?scope=crm', {method:'DELETE'});
+    if(!r.ok) throw new Error('http '+r.status);
+    flash('Règle supprimée');
+    loadAccRulesTab();
+  }catch(e){ flash('Erreur de suppression'); }
 }
 
 // ════════════════════════════════════════

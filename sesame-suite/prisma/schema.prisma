@@ -56,6 +56,17 @@ model Entity {
   bookingEngineConfig BookingEngineConfig?
   nayaxConfig         NayaxConfig?
   nayaxAccessSessions NayaxAccessSession[]
+
+  accSuppliers           AccSupplier[]
+  accCustomers           AccCustomer[]
+  accDocuments           AccDocument[]
+  accInvoices            AccInvoice[]
+  accAccounts            AccAccount[]
+  accJournals            AccJournal[]
+  accEntries             AccEntry[]
+  accRules               AccRule[]
+  accDuplicateCandidates AccDuplicateCandidate[]
+  accAuditLogs           AccAuditLog[]
 }
 
 // Groupe d'établissements (ex : chaîne hôtelière) — gestion réservée aux
@@ -2507,4 +2518,399 @@ model TicketConfig {
 model NumberSequence {
   key   String @id
   value Int    @default(0)
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// Module Comptabilité (16/09/2026) — récupération, OCR, extraction,
+// rapprochement bancaire et pré-comptabilisation des factures d'achat et de
+// vente. Portée CRM/Sesame par défaut (entityId=null), même convention
+// double-portée qu'AutomationRule/Questionnaire (entityId=null → géré depuis
+// le module CRM/crm.html, entityId=<hôtel> → réservé à un usage futur côté
+// back-office hôtel, non câblé dans cette première phase).
+//
+// Phase 1 (16/09/2026) : import manuel + API, lecture de la couche texte
+// native d'un PDF (pas d'OCR image — cf. lib/accOcr.ts, interface prête,
+// implémentation image non branchée), extraction structurée déterministe,
+// contrôles de cohérence, rapprochement tiers, moteur de règles comptables,
+// écritures DRAFT, validation. La collecte email, le rapprochement bancaire,
+// le lettrage et la génération du côté vente sont des phases ultérieures —
+// le modèle de données ci-dessous les anticipe (ex: direction="sale" sur
+// AccInvoice) sans que la logique correspondante soit encore câblée.
+// ═════════════════════════════════════════════════════════════════════════
+
+model AccSupplier {
+  id       String  @id @default(cuid())
+  entityId String? // null = portée CRM/Sesame
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  name        String
+  siren       String?
+  siret       String?
+  vatNumber   String? // TVA intracommunautaire
+  addressLine String?
+  postalCode  String?
+  city        String?
+  country     String? @default("FR")
+  email       String?
+  phone       String?
+  iban        String?
+  bic         String?
+
+  // Compte comptable fournisseur par défaut (ex: sous-compte auxiliaire
+  // 401xxx) — assigné à la première facture rapprochée si absent, cf.
+  // lib/accRulesEngine.ts.
+  defaultAccountId String?
+  defaultAccount   AccAccount? @relation("SupplierDefaultAccount", fields: [defaultAccountId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invoices AccInvoice[]
+  rules    AccRule[]
+
+  @@index([entityId, siret])
+  @@index([entityId, vatNumber])
+  @@index([entityId, iban])
+}
+
+model AccCustomer {
+  id       String  @id @default(cuid())
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  name        String
+  siren       String?
+  siret       String?
+  vatNumber   String?
+  addressLine String?
+  postalCode  String?
+  city        String?
+  country     String? @default("FR")
+  email       String?
+  phone       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invoices AccInvoice[]
+
+  @@index([entityId, siret])
+  @@index([entityId, vatNumber])
+}
+
+// Fichier original tel que reçu — jamais modifié après coup (cf. §7 du
+// cahier des charges). sha256 sert à la fois d'empreinte anti-doublon (§6)
+// et de preuve d'intégrité (§67).
+model AccDocument {
+  id       String  @id @default(cuid())
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  sha256           String
+  originalFilename String
+  mimeType         String
+  sizeBytes        Int
+  // Contenu encodé en base64 — même convention que Room.photos/
+  // CrmTicketMessage.attachments dans le reste de l'app (pas de stockage
+  // objet disponible dans cet environnement). storagePath réservé à une
+  // future migration S3 (§67) sans changer le contrat de l'API.
+  contentBase64 String  @db.Text
+  storagePath   String?
+
+  source String // upload | api | email | drive | sftp
+
+  // Texte/structure extraits — cf. lib/accOcr.ts (couche texte native PDF
+  // en phase 1 ; OCR image et XML structuré Factur-X/UBL/CII préparés mais
+  // non branchés).
+  extractedText        String? @db.Text
+  extractionMethod     String? // native_text | ocr | structured_xml
+  extractionConfidence Float?
+
+  createdAt DateTime @default(now())
+
+  invoices AccInvoice[]
+
+  @@index([entityId, sha256])
+}
+
+model AccInvoice {
+  id       String  @id @default(cuid())
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  documentId String
+  document   AccDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  direction String // purchase | sale
+
+  // supplier_invoice | customer_invoice | supplier_credit_note |
+  // customer_credit_note | deposit_invoice | final_invoice | receipt |
+  // statement | proof | non_accounting — cf. lib/accClassification.ts
+  documentType           String?
+  documentTypeConfidence Float?
+
+  // RECEIVED | PROCESSING | OCR_COMPLETED | EXTRACTED | CHECK_REQUIRED |
+  // VALIDATED | ACCOUNTED | PARTIALLY_PAID | PAID | REJECTED
+  status String @default("RECEIVED")
+
+  invoiceNumber String?
+  invoiceDate   DateTime?
+  dueDate       DateTime?
+  serviceDate   DateTime?
+  periodStart   DateTime?
+  periodEnd     DateTime?
+  currency      String?   @default("EUR")
+  language      String?
+  orderNumber   String?
+  contractRef   String?
+  customerRef   String?
+  supplierRef   String?
+  paymentMethod String?
+
+  // Champs bruts extraits AVANT rapprochement tiers (cf. supplierId ci-
+  // dessous, qui porte le tiers réellement rapproché) — conservés même une
+  // fois le rapprochement fait, pour diagnostiquer un rapprochement erroné.
+  issuerName    String?
+  issuerSiren   String?
+  issuerSiret   String?
+  issuerVat     String?
+  issuerIban    String?
+  issuerBic     String?
+  recipientName String?
+
+  supplierId              String?
+  supplier                AccSupplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  supplierMatchConfidence Float?
+
+  customerId String?
+  customer   AccCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  amountHt       Float?
+  amountDiscount Float?
+  amountFees     Float?
+  amountShipping Float?
+  amountVat      Float?
+  amountTtc      Float?
+  amountDeposit  Float?
+  amountDue      Float?
+
+  proposedAccountId        String?
+  proposedAccount          AccAccount? @relation("InvoiceProposedAccount", fields: [proposedAccountId], references: [id], onDelete: SetNull)
+  proposedAccountConfidence Float?
+
+  entryId String?   @unique
+  entry   AccEntry? @relation(fields: [entryId], references: [id], onDelete: SetNull)
+
+  // Scores par champ (§35) — {invoiceNumber, supplier, total, vat,
+  // account...} -> 0..1.
+  fieldConfidence  Json?
+  globalConfidence Float?
+
+  // Alertes de contrôle (§14) — [{code, level, message}], level parmi
+  // OK|WARNING|ERROR|BLOCKING — cf. lib/accChecks.ts.
+  checks Json @default("[]")
+
+  validatedAt DateTime?
+  validatedBy String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines    AccInvoiceLine[]
+  vatLines AccInvoiceVatLine[]
+
+  @@index([entityId, status])
+  @@index([entityId, supplierId])
+  @@index([entityId, invoiceNumber])
+}
+
+model AccInvoiceLine {
+  id        String     @id @default(cuid())
+  invoiceId String
+  invoice   AccInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  position    Int
+  reference   String?
+  description String?
+  quantity    Float?
+  unit        String?
+  unitPrice   Float?
+  discount    Float?
+  amountHt    Float?
+  vatRate     Float?
+  vatAmount   Float?
+  amountTtc   Float?
+}
+
+// Ventilation multi-taux (§12) — une ligne par taux de TVA distinct présent
+// sur la facture.
+model AccInvoiceVatLine {
+  id        String     @id @default(cuid())
+  invoiceId String
+  invoice   AccInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  rate       Float
+  baseAmount Float
+  vatAmount  Float
+}
+
+// Plan comptable (§16) — par société (entityId), jamais codé en dur dans le
+// moteur de règles : seed initial au Plan Comptable Général français (sous-
+// ensemble courant, cf. lib/accSeed.ts), import/CRUD possibles ensuite.
+model AccAccount {
+  id       String  @id @default(cuid())
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  number String
+  label  String
+  type   String // charge | produit | tiers | tva | banque | immobilisation | capitaux | autre
+  class  Int? // classe PCG 1-7
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entryLines       AccEntryLine[]
+  invoicesProposed AccInvoice[]   @relation("InvoiceProposedAccount")
+  suppliersDefault AccSupplier[]  @relation("SupplierDefaultAccount")
+  rules            AccRule[]
+
+  @@index([entityId, number])
+}
+
+model AccJournal {
+  id       String  @id @default(cuid())
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  code  String // ACH | VEN | BQ | OD...
+  label String
+  type  String // achats | ventes | banque | od
+
+  createdAt DateTime @default(now())
+
+  entries AccEntry[]
+
+  @@index([entityId, code])
+}
+
+// Écriture comptable (§19,20,33,34,44,45) — toujours créée en statut DRAFT
+// par le moteur, un numéro définitif n'est attribué qu'à la validation
+// humaine (§44) et n'est jamais réutilisé. Une écriture VALIDATED ne peut
+// plus être modifiée ni supprimée silencieusement : toute correction passe
+// par une écriture d'extourne (reversalOfEntryId).
+model AccEntry {
+  id       String  @id @default(cuid())
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  journalId String
+  journal   AccJournal @relation(fields: [journalId], references: [id])
+
+  number String? // attribué à la validation uniquement
+
+  date      DateTime
+  reference String?
+  label     String
+
+  status String @default("DRAFT") // DRAFT | VALIDATED
+
+  reversalOfEntryId String?
+  reversalOfEntry   AccEntry?  @relation("EntryReversal", fields: [reversalOfEntryId], references: [id], onDelete: SetNull)
+  reversedBy        AccEntry[] @relation("EntryReversal")
+
+  createdAt   DateTime  @default(now())
+  validatedAt DateTime?
+  validatedBy String?
+
+  lines   AccEntryLine[]
+  invoice AccInvoice?
+
+  @@index([entityId, journalId, status])
+}
+
+model AccEntryLine {
+  id      String   @id @default(cuid())
+  entryId String
+  entry   AccEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  accountId String
+  account   AccAccount @relation(fields: [accountId], references: [id])
+
+  label  String
+  debit  Float @default(0)
+  credit Float @default(0)
+
+  // Référence tiers auxiliaire (fournisseur/client) — prépare un lettrage
+  // futur (§31), non exploité en phase 1.
+  auxiliaryRef String?
+}
+
+// Règle d'affectation comptable (§17,18,40) — cible un fournisseur précis
+// ou un mot-clé (repli quand aucun tiers n'est encore rapproché). source
+// distingue une règle créée à la main d'une règle déduite automatiquement
+// de l'historique (§18 : "si les 20 dernières factures OVH ont été
+// comptabilisées en 626000, proposer 626000").
+model AccRule {
+  id       String  @id @default(cuid())
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  supplierId String?
+  supplier   AccSupplier? @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  keyword    String?
+
+  accountId String
+  account   AccAccount @relation(fields: [accountId], references: [id])
+
+  source     String  @default("manual") // manual | learned
+  priority   Int     @default(0)
+  usageCount Int     @default(0)
+  active     Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([entityId, supplierId])
+}
+
+// Doublon potentiel détecté (§6) — hash identique, ou numéro+fournisseur+
+// montant+date cohérents entre deux documents distincts.
+model AccDuplicateCandidate {
+  id       String  @id @default(cuid())
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  documentId        String
+  matchedDocumentId String
+  reason            String // hash | invoice_number | amount_date_supplier
+  resolved          Boolean @default(false)
+  resolvedAs        String? // duplicate | not_duplicate
+
+  createdAt DateTime @default(now())
+
+  @@index([entityId, resolved])
+}
+
+// Journal d'audit du module (§46) — chaque action sensible (validation,
+// comptabilisation, modification manuelle d'un champ extrait...) y est
+// tracée, jamais éditable après coup.
+model AccAuditLog {
+  id       String  @id @default(cuid())
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  userId     String?
+  action     String
+  targetType String
+  targetId   String
+  oldValue   Json?
+  newValue   Json?
+  ip         String?
+  source     String? // api | interface
+
+  createdAt DateTime @default(now())
+
+  @@index([entityId, targetType, targetId])
 }
