@@ -7175,6 +7175,66 @@ async function openAccInvoiceModal(id){
   renderAccInvoiceModal(inv);
 }
 
+// Recherche d'entreprises directement depuis la fiche facture (16/09/2026) —
+// même API/mapping que supEntrepriseAutocomplete (onglet Fournisseurs) et
+// que la fiche client, mais crée le fournisseur ET le rapproche à la
+// facture en un clic, pour ne pas avoir à quitter cet écran quand
+// l'extraction n'a pas su rapprocher/créer automatiquement (ex : raison
+// sociale mal extraite alors que le SIRET, lui, est correct).
+let AI_ENTREPRISE_DEBOUNCE=null, AI_ENTREPRISE_RESULTS=[];
+function aiEntrepriseAutocomplete(){
+  clearTimeout(AI_ENTREPRISE_DEBOUNCE);
+  const inp = document.getElementById('ai-entreprise-search');
+  const box = document.getElementById('ai-entreprise-suggestions');
+  if(!inp||!box) return;
+  const q = inp.value.trim();
+  if(q.length<3){ box.style.display='none'; box.innerHTML=''; return; }
+  AI_ENTREPRISE_DEBOUNCE = setTimeout(async ()=>{
+    try{
+      const r = await fetch('https://recherche-entreprises.api.gouv.fr/search?q='+encodeURIComponent(q)+'&limit=5');
+      if(!r.ok){ box.style.display='none'; return; }
+      const data = await r.json();
+      AI_ENTREPRISE_RESULTS = data.results||[];
+      if(!AI_ENTREPRISE_RESULTS.length){ box.style.display='none'; box.innerHTML=''; return; }
+      box.innerHTML = AI_ENTREPRISE_RESULTS.map((e,i)=>{
+        const nom = e.nom_complet || e.nom_raison_sociale || '';
+        const siret = (e.siege&&e.siege.siret) || '';
+        const adresse = (e.siege&&e.siege.adresse) || (e.siege&&[e.siege.numero_voie,e.siege.type_voie,e.siege.libelle_voie].filter(Boolean).join(' ')) || '';
+        return '<div style="padding:7px 10px;cursor:pointer;font-size:12px;border-bottom:0.5px solid var(--bdr)" onmousedown="pickAiEntreprise('+i+')">'
+          +'<div style="font-weight:600">'+esc(nom)+'</div>'
+          +'<div style="color:var(--mu);font-size:11px">SIRET '+esc(siret)+(adresse?' · '+esc(adresse):'')+'</div>'
+          +'</div>';
+      }).join('');
+      box.style.display='block';
+    }catch(e){ box.style.display='none'; }
+  }, 300);
+}
+
+async function pickAiEntreprise(i){
+  const e = AI_ENTREPRISE_RESULTS[i]; if(!e) return;
+  const siege = e.siege || {};
+  const box = document.getElementById('ai-entreprise-suggestions');
+  if(box){ box.style.display='none'; box.innerHTML=''; }
+  const invId = window._accInvoiceEditing && window._accInvoiceEditing.id;
+  if(!invId) return;
+  const street = [siege.numero_voie, siege.type_voie, siege.libelle_voie].filter(Boolean).join(' ');
+  try{
+    const cr = await apiFetch('/wa/acc/suppliers?scope=crm', {method:'POST', body:JSON.stringify({
+      name: e.nom_complet || e.nom_raison_sociale || '',
+      siret: siege.siret || '', siren: e.siren || '',
+      addressLine: street, postalCode: siege.code_postal || '', city: siege.libelle_commune || '', country: 'FR',
+    })});
+    const supplier = await cr.json();
+    if(!cr.ok) throw new Error(supplier.error||'http '+cr.status);
+    const ur = await apiFetch('/wa/acc/invoices/'+invId+'?scope=crm', {method:'PUT', body:JSON.stringify({supplierId: supplier.id})});
+    if(!ur.ok) throw new Error('http '+ur.status);
+    flash('Fournisseur créé et rapproché à la facture');
+    ACC_LOADED.suppliers = false;
+    if(ACC_TAB==='inbox') await accReloadInvoices();
+    openAccInvoiceModal(invId);
+  }catch(err){ flash('Erreur : '+(err.message||'échec de la création du fournisseur')); }
+}
+
 function renderAccInvoiceModal(inv){
   const doc = inv.document || {};
   let preview = '<div class="log-empty">Aperçu non disponible pour ce type de fichier.</div>';
@@ -7215,6 +7275,12 @@ function renderAccInvoiceModal(inv){
           </div>
           ${!locked?'<div style="font-size:11px;color:var(--mu);margin-top:4px">Changer le sens réinitialise le fournisseur/client et le compte proposé (rapprochement et type de compte différents) — enregistrez avant de les re-choisir.</div>':''}
           <div class="modal-section">Fournisseur</div>
+          ${!locked?`<div class="ff" style="position:relative;margin-bottom:8px">
+            <label>Rechercher/créer via l'annuaire public des entreprises</label>
+            <input id="ai-entreprise-search" placeholder="Nom ou SIRET..." value="${esc(inv.issuerSiret||inv.issuerName||'')}" oninput="aiEntrepriseAutocomplete()" autocomplete="off">
+            <div id="ai-entreprise-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--card);border:0.5px solid var(--bdr);border-radius:8px;margin-top:2px;max-height:220px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.12)"></div>
+            <div style="font-size:11px;color:var(--mu);margin-top:4px">Choisir un résultat crée la fiche fournisseur (nom + adresse officiels) et la rapproche immédiatement à cette facture.</div>
+          </div>`:''}
           <div class="form-grid">
             <div class="ff"><label>Fournisseur rapproché${inv.supplierMatchConfidence!=null?' ('+accConfidencePct(inv.supplierMatchConfidence)+')':''}</label><select id="ai-supplierId" ${locked?'disabled':''}>${supplierOpts}</select></div>
             <div class="ff"><label>Raison sociale extraite</label><input id="ai-issuerName" value="${esc(inv.issuerName||'')}" ${locked?'disabled':''}></div>
