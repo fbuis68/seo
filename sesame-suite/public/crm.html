@@ -6676,7 +6676,7 @@ function renderAccDashboardTiles(){
     </div>`;
 }
 
-const ACC_TABS=[{k:'inbox',label:'Factures'},{k:'suppliers',label:'Fournisseurs'},{k:'accounts',label:'Plan comptable'},{k:'entries',label:'Écritures'},{k:'rules',label:'Règles'}];
+const ACC_TABS=[{k:'inbox',label:'Factures'},{k:'suppliers',label:'Fournisseurs'},{k:'accounts',label:'Plan comptable'},{k:'entries',label:'Écritures'},{k:'rules',label:'Règles'},{k:'email',label:'Import email'}];
 
 function renderComptaPanel(){
   document.getElementById('main').innerHTML = `
@@ -6696,8 +6696,68 @@ function renderComptaPanel(){
 function accSetTab(tab){
   ACC_TAB = tab;
   if(view==='compta') renderComptaPanel();
-  const loaders={inbox:loadAccInboxTab, suppliers:loadAccSuppliersTab, accounts:loadAccAccountsTab, entries:loadAccEntriesTab, rules:loadAccRulesTab};
+  const loaders={inbox:loadAccInboxTab, suppliers:loadAccSuppliersTab, accounts:loadAccAccountsTab, entries:loadAccEntriesTab, rules:loadAccRulesTab, email:loadAccEmailTab};
   loaders[tab] && loaders[tab]();
+}
+
+// ───────── Onglet Import email (boîte comptabilité, Microsoft Graph) ─────────
+
+let ACC_GRAPH_MAIL=null;
+
+async function loadAccEmailTab(){
+  try{
+    const r = await apiFetch('/wa/graphMail/status?purpose=accounting');
+    ACC_GRAPH_MAIL = r.ok ? await r.json() : null;
+  }catch(e){ ACC_GRAPH_MAIL=null; }
+  renderAccEmail();
+}
+
+function renderAccEmail(){
+  const el = document.getElementById('acc-tab-body');
+  if(!el) return;
+  const g = ACC_GRAPH_MAIL || {configured:false,status:'inactive',mailbox:'',expiresAt:null,lastError:''};
+  if(!g.configured){
+    el.innerHTML = `<div class="log-empty">App Azure AD non configurée côté serveur (GRAPH_TENANT_ID / GRAPH_CLIENT_ID / GRAPH_CLIENT_SECRET). Voir <code>docs/microsoft-graph-inbound-tickets.md</code> pour la procédure de création, puis renseignez les variables d'environnement et redémarrez le serveur.</div>`;
+    return;
+  }
+  const expLabel = g.expiresAt ? new Date(g.expiresAt).toLocaleString('fr-FR') : '—';
+  el.innerHTML = `
+    <div style="max-width:520px">
+      <p style="font-size:12px;color:var(--mu);margin:0 0 12px">Chaque email reçu sur la boîte ci-dessous avec une pièce jointe facture (PDF/JPEG/PNG/TIFF/XML) est déposé automatiquement dans les factures d'achat, comme un dépôt manuel (<code>source: "email"</code>). Même app Azure AD que l'import de tickets support — l'accès à cette boîte doit être ajouté à sa stratégie d'accès applicative Exchange si elle en a une (cf. <code>docs/microsoft-graph-inbound-tickets.md</code>).</p>
+      <div class="ff"><label>Boîte surveillée</label><input id="acc-email-mailbox" value="${esc(g.mailbox)}" placeholder="administration@sesame-technology.com" ${g.status==='active'?'disabled':''}></div>
+      <div class="log-item" style="border:none;padding:10px 0 12px">
+        <div class="log-dot ${GRAPH_STATUS_DOT[g.status]||'ld-b'}"></div>
+        <div class="log-body">
+          <div><strong>${GRAPH_STATUS_LABEL[g.status]||g.status}</strong></div>
+          <div style="font-size:12px;color:#8a8a8a">${g.status==='active'?'Abonnement valide jusqu\'au '+expLabel+' (renouvelé automatiquement)':'Inactif — renseignez la boîte ci-dessus puis activez.'}</div>
+          ${g.lastError?'<div style="font-size:12px;color:#c0392b;margin-top:4px">'+esc(g.lastError)+'</div>':''}
+        </div>
+      </div>
+      <div class="modal-footer" style="border-top:none;padding-top:0;justify-content:flex-start">
+        ${g.status==='active'
+          ? '<button class="btn btn-ghost btn-sm" onclick="accGraphMailDeactivate()">Désactiver</button>'
+          : '<button class="btn btn-primary btn-sm" onclick="accGraphMailActivate()">Activer</button>'}
+      </div>
+    </div>`;
+}
+
+async function accGraphMailActivate(){
+  const mailbox = (document.getElementById('acc-email-mailbox')||{value:''}).value.trim();
+  if(!mailbox){ flash('Adresse email requise'); return; }
+  try{
+    const r = await apiFetch('/wa/graphMail/activate', {method:'POST', body:JSON.stringify({purpose:'accounting', mailbox})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'Erreur');
+    flash('Import automatique des factures par email activé ✓');
+  }catch(e){ flash(e.message||'Activation échouée'); }
+  await loadAccEmailTab();
+}
+
+async function accGraphMailDeactivate(){
+  if(!confirm('Désactiver l\'import automatique des factures par email ?')) return;
+  try{ await apiFetch('/wa/graphMail/deactivate', {method:'POST', body:JSON.stringify({purpose:'accounting'})}); flash('Import automatique désactivé'); }
+  catch(e){ flash('Erreur'); }
+  await loadAccEmailTab();
 }
 
 // ───────── Onglet Factures (inbox de validation, §37) ─────────

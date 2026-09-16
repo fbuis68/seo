@@ -11,7 +11,7 @@ import { AccDocument } from "@prisma/client";
  * dépendance dédiée plutôt que de prétendre le supporter sans pouvoir le
  * lire.
  */
-const ACCEPTED_MIME_TYPES = new Set([
+export const ACCEPTED_MIME_TYPES = new Set([
   "application/pdf",
   "image/jpeg",
   "image/png",

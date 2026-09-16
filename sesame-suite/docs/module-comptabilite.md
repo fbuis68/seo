@@ -39,6 +39,11 @@ définitive.
 - Journal d'audit sur chaque action sensible.
 - Panneau CRM (tuiles de synthèse, inbox de validation, fiches
   fournisseurs/plan comptable/écritures/règles).
+- Import automatique par email (16/09/2026) : une boîte dédiée (ex.
+  `administration@sesame-technology.com`), surveillée via le même mécanisme
+  webhook Microsoft Graph que l'import de tickets support — chaque pièce
+  jointe facture (PDF/JPEG/PNG/TIFF/XML) reçue devient une facture d'achat
+  automatiquement (`source: "email"`), même pipeline que le dépôt manuel.
 
 **Non implémenté dans cette phase** (schéma prêt mais pas de logique, ou
 volontairement hors périmètre) :
@@ -47,8 +52,8 @@ volontairement hors périmètre) :
   existe, aucune logique de rapprochement/proposition n'est branchée).
 - Rapprochement bancaire (relevés, lettrage).
 - Verrouillage de période comptable (clôture mensuelle/annuelle).
-- Export FEC, connecteurs Sage/Cegid/QuickBooks, réception email/Drive/SFTP
-  automatique (seuls `source: "upload"`/`"api"` sont exercés aujourd'hui).
+- Export FEC, connecteurs Sage/Cegid/QuickBooks, réception Drive/SFTP
+  automatique (email est en revanche implémenté, cf. ci-dessus).
 - Antivirus sur les documents déposés (aucun moteur AV disponible).
 
 ## Fichiers
@@ -108,6 +113,33 @@ volontairement hors périmètre) :
 ### Tableau de bord
 
 - `GET /acc/dashboard` — `{byStatus, pendingCount, pendingHt, pendingTtc, blockingCount}`.
+
+### Import par email (`/wa/graphMail/...`, onglet "Import email" du panneau)
+
+Réutilise le même abonnement webhook Microsoft Graph que l'import de
+tickets support (`src/lib/graph.ts`, `src/routes/graphMail.ts`) —
+`GraphMailSubscription.purpose` distingue désormais plusieurs boîtes
+surveillées en parallèle (`"tickets"` | `"accounting"`), chacune avec au
+plus un abonnement actif. Pour la boîte comptabilité, chaque pièce jointe
+d'un email reçu dont le type MIME est accepté (PDF/JPEG/PNG/TIFF/XML)
+devient une facture d'achat via `processUploadedDocument(null, {..., source:
+"email"})` — la déduplication par hash SHA-256 protège déjà contre la
+livraison "at least once" de Graph, sans bookkeeping supplémentaire. La
+direction est toujours `"purchase"` (périmètre phase 1) : une boîte
+recevant des copies de factures de vente ne serait pas traitée
+différemment.
+
+- `GET /graphMail/status?purpose=accounting`
+- `POST /graphMail/activate` — `{purpose:"accounting", mailbox}` (mailbox obligatoire, pas de valeur par défaut contrairement au purpose "tickets" qui reprend `SmtpConfig.supportFromEmail`).
+- `POST /graphMail/deactivate` — `{purpose:"accounting"}`
+
+**Mise en service côté Azure AD** : même app que pour les tickets support
+(cf. `docs/microsoft-graph-inbound-tickets.md`) — si l'app a une
+`ApplicationAccessPolicy` Exchange restreignant les boîtes accessibles
+(`-PolicyScopeGroupId`), étendre son groupe de sécurité pour inclure la
+nouvelle boîte (ex. `administration@sesame-technology.com`), sans quoi
+Graph refusera les appels sur cette boîte malgré la permission `Mail.Read`
+au niveau de l'app.
 
 ## Cycle de vie d'une facture
 

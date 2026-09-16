@@ -2205,14 +2205,23 @@ model CrmTicketMessage {
 // boîte support) qui remplace la règle Outlook + flux Power Automate
 // utilisée jusque-là pour du simple signal d'engagement (cf.
 // crmProspect.ts inboundSignal) : ici, chaque email entrant devient/complète
-// un vrai CrmTicket. Ligne singleton, portée CRM/Sesame uniquement (comme
-// SmtpConfig.entityId=null) — une seule boîte support surveillée à la fois.
+// un vrai CrmTicket. Portée CRM/Sesame uniquement (comme SmtpConfig.entityId=null).
+// `purpose` distingue plusieurs boîtes surveillées en parallèle, chacune avec
+// son propre traitement (16/09/2026, cf. routes/graphMail.ts) :
+// "tickets" (comportement d'origine, ci-dessus) et "accounting" (chaque
+// pièce jointe facture devient un AccInvoice via lib/accPipeline.ts,
+// cf. module Comptabilité). Au plus une ligne active par purpose, mais plus
+// une ligne unique au sens strict.
 model GraphMailSubscription {
   id String @id @default(cuid())
 
-  // Boîte surveillée (copie de SmtpConfig.supportFromEmail/fromEmail au
-  // moment de l'activation) — Microsoft Graph exige l'UPN, pas juste
-  // l'adresse SMTP, mais les deux coïncident pour une boîte Microsoft 365.
+  purpose String @default("tickets") // tickets | accounting
+
+  // Boîte surveillée — pour purpose="tickets", copie de
+  // SmtpConfig.supportFromEmail/fromEmail au moment de l'activation ; pour
+  // purpose="accounting", saisie explicitement (pas de champ SmtpConfig
+  // équivalent). Microsoft Graph exige l'UPN, pas juste l'adresse SMTP, mais
+  // les deux coïncident pour une boîte Microsoft 365.
   mailbox String
 
   // Id de l'abonnement côté Graph (POST /subscriptions) — null tant que
@@ -2230,6 +2239,8 @@ model GraphMailSubscription {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([purpose])
 }
 
 // ─────────────────────────────────────────────────────────────────────────
