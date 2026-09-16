@@ -187,7 +187,10 @@ async function processNotifications(items: GraphNotificationItem[]) {
     const subscriptionId = item.subscriptionId;
     if (!subscriptionId) continue;
     const sub = await prisma.graphMailSubscription.findFirst({ where: { subscriptionId, status: "active" } });
-    if (!sub) continue;
+    if (!sub) {
+      console.warn(`[graphMail] notification reçue pour un subscriptionId inconnu/inactif (${subscriptionId}) — ignorée`);
+      continue;
+    }
     if (item.clientState !== sub.clientState) {
       console.warn("[graphMail] notification rejetée (clientState invalide)");
       continue;
@@ -242,10 +245,19 @@ async function processTicketMessage(mailbox: string, messageId: string) {
  */
 async function processAccountingMessage(mailbox: string, messageId: string) {
   const msg = await getGraphMessage(mailbox, messageId);
-  if (!msg.from || msg.from.toLowerCase() === mailbox.toLowerCase()) return; // évite toute boucle sur la boîte elle-même
+  console.log(`[graphMail] message comptabilité reçu de ${msg.from || "(expéditeur inconnu)"} — "${msg.subject}" — ${msg.attachments.length} pièce(s) jointe(s) : ${msg.attachments.map((a) => `${a.name} (${a.contentType})`).join(", ") || "aucune"}`);
+  if (!msg.from || msg.from.toLowerCase() === mailbox.toLowerCase()) {
+    console.log(`[graphMail] message ${messageId} ignoré (provient de la boîte elle-même, anti-boucle)`);
+    return;
+  }
 
-  for (const att of msg.attachments) {
-    if (!ACCEPTED_MIME_TYPES.has(att.contentType)) continue;
+  const eligible = msg.attachments.filter((a) => ACCEPTED_MIME_TYPES.has(a.contentType));
+  if (!eligible.length) {
+    console.log(`[graphMail] message ${messageId} ignoré : aucune pièce jointe d'un type accepté (PDF/JPEG/PNG/TIFF/XML)`);
+    return;
+  }
+
+  for (const att of eligible) {
     try {
       const result = await processUploadedDocument(null, {
         filename: att.name,
