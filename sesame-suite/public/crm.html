@@ -6678,6 +6678,15 @@ function renderAccDashboardTiles(){
 
 const ACC_TABS=[{k:'inbox',label:'Factures'},{k:'suppliers',label:'Fournisseurs'},{k:'accounts',label:'Plan comptable'},{k:'entries',label:'Écritures'},{k:'rules',label:'Règles'},{k:'email',label:'Import email'}];
 
+/**
+ * Rendu du "cadre" du panneau (tuiles + carte + barre d'onglets) — appelé à
+ * l'entrée du panneau (showComptabilite) ET à chaque changement d'onglet
+ * (accSetTab), pour que le bouton actif se mette à jour. N'appelle PLUS
+ * accSetTab() (contrairement à une version précédente qui provoquait une
+ * récursion infinie renderComptaPanel → accSetTab → renderComptaPanel →
+ * ... jusqu'à RangeError, laissant "Chargement…" bloqué en permanence sur
+ * tous les onglets) : appelle directement le loader de l'onglet courant.
+ */
 function renderComptaPanel(){
   document.getElementById('main').innerHTML = `
     <div id="acc-dash-tiles"></div>
@@ -6690,14 +6699,13 @@ function renderComptaPanel(){
       <div id="acc-tab-body"><div class="log-empty">Chargement…</div></div>
     </div>`;
   renderAccDashboardTiles();
-  accSetTab(ACC_TAB);
+  const loaders={inbox:loadAccInboxTab, suppliers:loadAccSuppliersTab, accounts:loadAccAccountsTab, entries:loadAccEntriesTab, rules:loadAccRulesTab, email:loadAccEmailTab};
+  loaders[ACC_TAB] && loaders[ACC_TAB]();
 }
 
 function accSetTab(tab){
   ACC_TAB = tab;
-  if(view==='compta') renderComptaPanel();
-  const loaders={inbox:loadAccInboxTab, suppliers:loadAccSuppliersTab, accounts:loadAccAccountsTab, entries:loadAccEntriesTab, rules:loadAccRulesTab, email:loadAccEmailTab};
-  loaders[tab] && loaders[tab]();
+  renderComptaPanel();
 }
 
 // ───────── Onglet Import email (boîte comptabilité, Microsoft Graph) ─────────
