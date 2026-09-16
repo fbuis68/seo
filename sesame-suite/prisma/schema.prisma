@@ -1732,6 +1732,30 @@ model CrmProspect {
 
   activities CrmActivity[]
   tickets    CrmTicket[]
+  contacts   CrmContact[]
+}
+
+// Contacts multiples d'une fiche client/prospect (16/09/2026) — jusqu'ici
+// une seule personne par fiche (CrmProspect.referent/email/tel). Une
+// entreprise a souvent plusieurs interlocuteurs à des fonctions différentes
+// (direction, réception, comptabilité...) qui doivent tous pouvoir recevoir
+// les campagnes email envoyées depuis la liste filtrée des fiches
+// (cf. crmSelectedRecipients() dans crm.html) sans être limités au seul
+// email principal de la fiche.
+model CrmContact {
+  id         String      @id @default(cuid())
+  prospectId String
+  prospect   CrmProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  name     String
+  fonction String? // ex : "Directeur", "Responsable réception", "Comptabilité"
+  email    String?
+  phone    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([prospectId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────

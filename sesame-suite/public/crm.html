@@ -1367,25 +1367,54 @@ function crmSelectedWithEmail(){
   return [...SELECTED_IDS].map(id=>clients.find(c=>c.id===id)).filter(c=>c && c.email && c.email.trim());
 }
 
+/**
+ * Destinataires réels d'un envoi groupé : le référent principal de chaque
+ * fiche sélectionnée (c.email, comme avant) PLUS chacun de ses contacts
+ * additionnels (cf. crmContact — 16/09/2026), un appel groupé plutôt qu'un
+ * par fiche pour éviter le N+1 sur une sélection large. Chaque destinataire
+ * garde son propre nom (pour {{nom}} dans le modèle) et le prospectId de la
+ * fiche (pour le suivi de score et le journal d'activité, communs à tous
+ * les contacts d'une même entreprise).
+ */
+async function crmSelectedRecipients(){
+  const ids = [...SELECTED_IDS];
+  const selectedClients = ids.map(id=>clients.find(c=>c.id===id)).filter(Boolean);
+  const recipients = selectedClients.filter(c=>c.email&&c.email.trim()).map(c=>({email:c.email, name:c.nom, prospectId:c.id, fonction:'', client:c}));
+
+  let contacts = [];
+  try{
+    const r = await apiFetch('/wa/crmContact/listByProspects?ids='+ids.map(encodeURIComponent).join(','));
+    contacts = r.ok ? await r.json() : [];
+  }catch(e){ contacts = []; }
+  for(const ct of contacts){
+    if(!ct.email||!ct.email.trim()) continue;
+    const client = clients.find(c=>c.id===ct.prospectId);
+    recipients.push({email:ct.email, name:ct.name, prospectId:ct.prospectId, fonction:ct.fonction||'', client});
+  }
+  return recipients;
+}
+
 async function openBulkEmailModal(){
   const total = SELECTED_IDS.size;
   if(!total){ flash('Aucune fiche sélectionnée'); return; }
   await ensureTemplatesLoaded();
-  const withEmail = crmSelectedWithEmail();
-  const skipped = total - withEmail.length;
+  document.getElementById('modal-ct').innerHTML = `<div class="modal-bg"><div class="modal-box" style="max-width:480px"><div class="log-empty">Chargement des destinataires…</div></div></div>`;
+  const recipients = await crmSelectedRecipients();
+  const skipped = total - recipients.filter(r=>!r.fonction).length; // fiches sans référent email (les contacts ne comptent pas comme "fiche" ici)
   const tpls = MSG_TEMPLATES.filter(t=>t.channel==='email');
   if(!tpls.length){ flash('Aucun modèle email — créez-en un depuis "Canaux"'); return; }
+  window._bulkRecipients = recipients;
   document.getElementById('modal-ct').innerHTML=`
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box" style="max-width:480px">
       <div class="modal-head"><div style="font-size:16px;font-weight:500">Envoyer un email groupé</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
       <div style="font-size:13px;color:var(--mu,#888);margin-bottom:10px">
-        ${withEmail.length} destinataire${withEmail.length>1?'s':''} avec email valide sur ${total} fiche${total>1?'s':''} sélectionnée${total>1?'s':''}${skipped?` — <b style="color:#854f0b">${skipped} ignorée${skipped>1?'s':''} (pas d'email)</b>`:''}.
+        ${recipients.length} destinataire${recipients.length>1?'s':''} (référents + contacts additionnels) sur ${total} fiche${total>1?'s':''} sélectionnée${total>1?'s':''}${skipped?` — <b style="color:#854f0b">${skipped} fiche${skipped>1?'s':''} sans email principal</b>`:''}.
       </div>
       <div class="ff"><label>Modèle</label><select id="bulk-send-tpl">${tpls.map(t=>`<option value="${esc(t.key)}">${esc(t.name)}</option>`).join('')}</select></div>
       <div id="bulk-send-progress" style="display:none;font-size:13px;color:var(--mu,#888);margin-top:10px">Envoi en cours…</div>
       <div class="modal-footer">
-        <button class="btn btn-primary" id="bulk-send-btn" onclick="sendBulkEmail()" ${withEmail.length?'':'disabled'}>Envoyer à ${withEmail.length}</button>
+        <button class="btn btn-primary" id="bulk-send-btn" onclick="sendBulkEmail()" ${recipients.length?'':'disabled'}>Envoyer à ${recipients.length}</button>
         <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
       </div>
     </div>
@@ -1395,7 +1424,7 @@ async function openBulkEmailModal(){
 async function sendBulkEmail(){
   const key=(document.getElementById('bulk-send-tpl')||{value:''}).value;
   if(!key){ flash('Sélectionnez un modèle'); return; }
-  const recipients = crmSelectedWithEmail();
+  const recipients = window._bulkRecipients||[];
   if(!recipients.length) return;
   const btn=document.getElementById('bulk-send-btn'); if(btn){ btn.disabled=true; btn.textContent='Envoi…'; }
   const progress=document.getElementById('bulk-send-progress'); if(progress) progress.style.display='block';
@@ -1403,17 +1432,19 @@ async function sendBulkEmail(){
   // Envois en parallèle, chacun indépendant (Promise.allSettled) — un échec
   // isolé (email invalide côté serveur, timeout...) ne doit pas bloquer les
   // autres destinataires ni empêcher le résumé final de s'afficher.
-  const results = await Promise.allSettled(recipients.map(async c=>{
+  const results = await Promise.allSettled(recipients.map(async rc=>{
+    const c = rc.client || {};
     const r = await apiFetch('/wa/message/send', {method:'POST', body:JSON.stringify({
-      scope:'crm', channel:'email', templateKey:key, to:c.email, prospectId:c.id,
-      variables:{nom:c.nom, secteur:c.secteur||'', referent:c.referent||'', ville:c.ville||''}
+      scope:'crm', channel:'email', templateKey:key, to:rc.email, prospectId:rc.prospectId,
+      variables:{nom:rc.name, secteur:c.secteur||'', referent:c.referent||'', ville:c.ville||''}
     })});
     const data = await r.json();
     if(!r.ok) throw new Error(data.error||'http '+r.status);
+    const label = rc.fonction ? rc.name+' ('+rc.fonction+')' : rc.name;
     const ar = await apiFetch('/wa/crmProspect/activity/create', {method:'POST', body:JSON.stringify({
-      prospectId:c.id, type:'Email', text:'Email envoyé (groupé) : "'+(data.subject||'')+'"', authorName:'CRM'
+      prospectId:rc.prospectId, type:'Email', text:'Email envoyé (groupé) à '+label+' : "'+(data.subject||'')+'"', authorName:'CRM'
     })});
-    if(ar.ok){ const entry=await ar.json(); if(!c.journal)c.journal=[]; c.journal.push(entry); }
+    if(ar.ok){ const entry=await ar.json(); if(c && !c.journal)c.journal=[]; if(c) c.journal.push(entry); }
   }));
 
   const ok = results.filter(r=>r.status==='fulfilled').length;
@@ -2009,6 +2040,7 @@ function showFiche(id){
   loadAdminAccessCard(c);
   loadQuestionnaireSendsCard(c);
   loadScoringCard(c);
+  loadContactsCard(c);
 }
 
 function riskScore(c){let s=0;if(c.danger==='Élevé !!')s+=5;else if(c.danger==='Modéré')s+=3;if(c.contrat==='non')s+=2;if(!c.webApp&&!c.mobileV2)s+=1;if(!c.nfc&&!c.qr&&!c.mobile&&!c.code)s+=1;return Math.min(s,10);}
@@ -2102,6 +2134,11 @@ function renderFiche(c){
       ${c.contrat==='non'?'<span class="apill">◻ Contrat non localisé</span>':''}
       <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="openModal('${c.id}')">✎ Modifier la fiche</button>
     </div>
+  </div>
+
+  <div class="card" id="contacts-card">
+    <div class="card-head"><div class="ch-ico">☺</div><span class="ch-title">Contacts</span></div>
+    <div class="log-empty">Chargement…</div>
   </div>
 
   <div class="card" id="scoring-card">
@@ -2233,6 +2270,90 @@ async function loadQuestionnaireSendsCard(c){
       ${rowsHtml || '<div class="log-empty">En attente de réponse.</div>'}
     </div>`;
   }).join('');
+}
+
+// ── Contacts multiples de la fiche (16/09/2026) — chacun avec une fonction,
+// tous inclus dans les campagnes email envoyées depuis la liste filtrée
+// (cf. crmSelectedRecipients()), en plus du contact principal de la fiche
+// (c.referent/c.email, inchangé). ──
+let CRM_CONTACTS = [];
+
+async function loadContactsCard(c){
+  const el = document.getElementById('contacts-card');
+  if(!el) return;
+  try{
+    const r = await apiFetch('/wa/crmContact/list?prospectId='+encodeURIComponent(c.id));
+    CRM_CONTACTS = r.ok ? await r.json() : [];
+  }catch(e){ CRM_CONTACTS = []; }
+  renderContactsCard(c.id);
+}
+
+function renderContactsCard(prospectId){
+  const el = document.getElementById('contacts-card');
+  if(!el) return;
+  const rows = CRM_CONTACTS.map(ct=>`
+    <div class="log-item" style="border:none;padding:6px 0">
+      <div class="log-dot ld-b"></div>
+      <div class="log-body">
+        <div class="log-text"><strong>${esc(ct.name)}</strong>${ct.fonction?' <span class="tag t-gray" style="font-size:10px;padding:1px 7px">'+esc(ct.fonction)+'</span>':''}</div>
+        <div class="log-meta">${ct.email?esc(ct.email):'<span style="color:#c99">pas d\'email</span>'}${ct.phone?' — '+esc(ct.phone):''}</div>
+        <div class="log-acts">
+          <button class="btn btn-sm btn-ghost" onclick="openContactModal('${prospectId}','${ct.id}')">Modifier</button>
+          <button class="btn btn-sm btn-ghost" style="color:#a32d2d" onclick="deleteContact('${prospectId}','${ct.id}')">Supprimer</button>
+        </div>
+      </div>
+    </div>`).join('');
+  el.innerHTML = `
+    <div class="card-head"><div class="ch-ico">☺</div><span class="ch-title">Contacts</span><button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="openContactModal('${prospectId}',null)">+ Contact</button></div>
+    ${rows || '<div class="log-empty">Aucun contact additionnel — seul le référent de la fiche est enregistré.</div>'}`;
+}
+
+function openContactModal(prospectId, id){
+  const ct = id ? CRM_CONTACTS.find(c=>c.id===id) : {id:null, name:'', fonction:'', email:'', phone:''};
+  if(!ct) return;
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:440px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">${id?'Modifier le contact':'Nouveau contact'}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div class="ff"><label>Nom</label><input id="ct-name" value="${esc(ct.name)}" placeholder="Ex. Marie Dupont"></div>
+      <div class="form-grid" style="margin-top:8px">
+        <div class="ff"><label>Fonction</label><input id="ct-fonction" value="${esc(ct.fonction)}" placeholder="Ex. Directrice, Comptabilité..."></div>
+        <div class="ff"><label>Téléphone</label><input id="ct-phone" value="${esc(ct.phone)}"></div>
+      </div>
+      <div class="ff" style="margin-top:8px"><label>Email</label><input type="email" id="ct-email" value="${esc(ct.email)}"></div>
+      <div style="font-size:11px;color:var(--mu);margin-top:6px">Ce contact recevra les campagnes email groupées envoyées depuis la liste des fiches, en plus du référent principal.</div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="saveContact('${prospectId}', ${id?`'${id}'`:'null'})">Enregistrer</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function saveContact(prospectId, id){
+  const g=i=>(document.getElementById(i)||{value:''}).value.trim();
+  const body = {prospectId, name:g('ct-name'), fonction:g('ct-fonction'), email:g('ct-email'), phone:g('ct-phone')};
+  if(!body.name){ flash('Le nom est requis'); return; }
+  try{
+    const r = await apiFetch(id?'/wa/crmContact/update':'/wa/crmContact/create', {method:'POST', body:JSON.stringify(id?{id,...body}:body)});
+    if(!r.ok) throw new Error('http '+r.status);
+    closeModal();
+    flash('Contact enregistré');
+    const r2 = await apiFetch('/wa/crmContact/list?prospectId='+encodeURIComponent(prospectId));
+    CRM_CONTACTS = r2.ok ? await r2.json() : CRM_CONTACTS;
+    renderContactsCard(prospectId);
+  }catch(e){ flash('Erreur d\'enregistrement'); }
+}
+
+async function deleteContact(prospectId, id){
+  if(!confirm('Supprimer ce contact ?')) return;
+  try{
+    const r = await apiFetch('/wa/crmContact/delete', {method:'POST', body:JSON.stringify({id})});
+    if(!r.ok) throw new Error('http '+r.status);
+    CRM_CONTACTS = CRM_CONTACTS.filter(c=>c.id!==id);
+    renderContactsCard(prospectId);
+    flash('Contact supprimé');
+  }catch(e){ flash('Erreur de suppression'); }
 }
 
 // ════════════════════════════════════════
