@@ -270,6 +270,30 @@ accountingRouter.post(
   })
 );
 
+/**
+ * PATCH /wa/acc/invoices/:id/payment — indicateur "réglée" manuel (§21/§34,
+ * simple bascule, pas un vrai rapprochement bancaire — hors périmètre de
+ * cette phase). Réservé aux factures déjà comptabilisées : marquer une
+ * facture payée avant même sa comptabilisation n'aurait pas de sens.
+ */
+accountingRouter.patch(
+  "/acc/invoices/:id/payment",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const invoice = await prisma.accInvoice.findFirst({ where: { id: req.params.id, entityId } });
+    if (!invoice) throw new HttpError(404, "Facture introuvable");
+    if (!["ACCOUNTED", "PARTIALLY_PAID", "PAID"].includes(invoice.status)) {
+      throw new HttpError(400, "Seule une facture comptabilisée peut être marquée payée");
+    }
+    const paid = !!req.body?.paid;
+    const status = paid ? "PAID" : "ACCOUNTED";
+    const updated = await prisma.accInvoice.update({ where: { id: invoice.id }, data: { status } });
+    await recordAuditLog({ entityId, userId: actorId(req), action: paid ? "invoice_marked_paid" : "invoice_marked_unpaid", targetType: "AccInvoice", targetId: invoice.id, oldValue: { status: invoice.status }, newValue: { status }, ip: req.ip });
+    res.json(updated);
+  })
+);
+
 // ───────────────────────── Fournisseurs ─────────────────────────
 
 accountingRouter.get(
