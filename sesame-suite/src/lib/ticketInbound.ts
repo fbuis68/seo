@@ -1,7 +1,6 @@
 import { CrmTicket } from "@prisma/client";
 import { prisma } from "../db";
 import { fireTrigger } from "./automation";
-import { recordScoreEvent } from "./crmScoring";
 import { nextSequenceValue } from "./sequence";
 
 /**
@@ -111,20 +110,25 @@ async function nextTicketNumber(): Promise<string> {
 /**
  * Indicateur "nombre de mails entrants" sur la fiche prospect
  * (CrmProspect.inboundReplyCount/lastInboundReplyAt, déjà affiché en badge
- * ✉ N sur la fiche) + point de score correspondant (cf. lib/crmScoring.ts,
- * config.pointsInboundEmail) — appelé à chaque email entrant traité ici,
- * qu'il ouvre un ticket ou complète un ticket existant (import automatique
- * Microsoft Graph ou lien public de suivi de ticket, mêmes deux appelants
- * que createTicketFromInboundEmail/appendInboundReply).
+ * ✉ N sur la fiche) — appelé à chaque email entrant traité ici, qu'il ouvre
+ * un ticket ou complète un ticket existant (import automatique Microsoft
+ * Graph ou lien public de suivi de ticket, mêmes deux appelants que
+ * createTicketFromInboundEmail/appendInboundReply).
+ *
+ * PAS de point de score ici (16/09/2026, retiré) : un email envoyé au
+ * support est un signal de demande d'assistance, pas d'intérêt commercial
+ * — le compter dans le score d'intérêt (cf. lib/crmScoring.ts,
+ * config.pointsInboundEmail) faussait le score à la hausse pour des
+ * clients qui contactent simplement le support, sans rapport avec un achat.
+ * config.pointsInboundEmail reste dans le paramétrage du scoring pour une
+ * future source d'email entrant hors ticket (ex : réponse directe à une
+ * campagne), si un tel signal est ajouté un jour.
  */
 async function recordInboundEmail(prospectId: string, receivedAt: Date) {
   await prisma.crmProspect.update({
     where: { id: prospectId },
     data: { inboundReplyCount: { increment: 1 }, lastInboundReplyAt: receivedAt },
   });
-  await recordScoreEvent(prospectId, "inbound_email", null, "internal").catch((e) =>
-    console.error("[crmScoring] échec inbound_email:", e)
-  );
 }
 
 export async function findOrCreateProspectByEmail(email: string, name?: string) {
