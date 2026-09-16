@@ -100,8 +100,13 @@ function findAfterKeyword(text: string, keywordPattern: RegExp, valuePattern: Re
   return null;
 }
 
-const SIRET_RE = /^(\d{3}\s?\d{3}\s?\d{3}\s?\d{5})/;
-const SIREN_RE = /^(\d{3}\s?\d{3}\s?\d{3})\b(?!\s?\d{5})/;
+// Fenêtre large plutôt qu'un groupement figé "3-3-3-5" — les factures
+// réelles espacent un SIRET/SIREN de façons très variées (parfois pas du
+// tout). Le nombre de chiffres est validé strictement après coup (14 pour
+// un SIRET, 9 pour un SIREN) dans extractInvoiceData : un résultat qui n'a
+// pas exactement le bon compte est rejeté plutôt que tronqué/deviné.
+const SIRET_RE = /^([\d \t]{14,20})/;
+const SIREN_RE = /^([\d \t]{9,15})/;
 const VAT_FR_RE = /\b(FR[0-9A-Z]{2}\d{9})\b/;
 const IBAN_RE = /^([A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){2,7}\s?[A-Z0-9]{1,4})/;
 const BIC_RE = /^([A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?)\b/;
@@ -179,15 +184,17 @@ export function extractInvoiceData(text: string): ExtractedInvoiceData {
   // l'intérieur d'un IBAN ou d'un numéro de téléphone (cf. 16/09/2026, faux
   // positifs constatés en production).
   const siret = findAfterKeyword(text, SIRET_KEYWORD, SIRET_RE);
-  if (siret) {
-    result.issuerSiret = siret.value.replace(/\s/g, "");
-    result.issuerSiren = result.issuerSiret.slice(0, 9);
+  const siretDigits = siret ? siret.value.replace(/[ \t]/g, "") : null;
+  if (siretDigits && siretDigits.length === 14) {
+    result.issuerSiret = siretDigits;
+    result.issuerSiren = siretDigits.slice(0, 9);
     confidence.issuerSiret = 0.9;
     confidence.issuerSiren = 0.9;
   } else {
     const siren = findAfterKeyword(text, SIREN_KEYWORD, SIREN_RE);
-    if (siren) {
-      result.issuerSiren = siren.value.replace(/\s/g, "");
+    const sirenDigits = siren ? siren.value.replace(/[ \t]/g, "") : null;
+    if (sirenDigits && sirenDigits.length === 9) {
+      result.issuerSiren = sirenDigits;
       confidence.issuerSiren = 0.85;
     }
   }

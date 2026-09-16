@@ -7383,6 +7383,55 @@ function renderAccSuppliers(){
     </table></div>`;
 }
 
+// Recherche d'entreprises (même API publique que la fiche client, cf.
+// entrepriseAutocomplete/pickEntreprise) — réutilisée ici pour fiabiliser
+// nom + adresse d'un fournisseur au lieu de tout ressaisir à la main.
+let SUP_ENTREPRISE_DEBOUNCE=null, SUP_ENTREPRISE_RESULTS=[];
+function supEntrepriseAutocomplete(){
+  clearTimeout(SUP_ENTREPRISE_DEBOUNCE);
+  const inp = document.getElementById('sup-entreprise-search');
+  const box = document.getElementById('sup-entreprise-suggestions');
+  if(!inp||!box) return;
+  const q = inp.value.trim();
+  if(q.length<3){ box.style.display='none'; box.innerHTML=''; return; }
+  SUP_ENTREPRISE_DEBOUNCE = setTimeout(async ()=>{
+    try{
+      const r = await fetch('https://recherche-entreprises.api.gouv.fr/search?q='+encodeURIComponent(q)+'&limit=5');
+      if(!r.ok){ box.style.display='none'; return; }
+      const data = await r.json();
+      SUP_ENTREPRISE_RESULTS = data.results||[];
+      if(!SUP_ENTREPRISE_RESULTS.length){ box.style.display='none'; box.innerHTML=''; return; }
+      box.innerHTML = SUP_ENTREPRISE_RESULTS.map((e,i)=>{
+        const nom = e.nom_complet || e.nom_raison_sociale || '';
+        const siret = (e.siege&&e.siege.siret) || '';
+        const adresse = (e.siege&&e.siege.adresse) || (e.siege&&[e.siege.numero_voie,e.siege.type_voie,e.siege.libelle_voie].filter(Boolean).join(' ')) || '';
+        return '<div style="padding:7px 10px;cursor:pointer;font-size:12px;border-bottom:0.5px solid var(--bdr)" onmousedown="pickSupEntreprise('+i+')">'
+          +'<div style="font-weight:600">'+esc(nom)+'</div>'
+          +'<div style="color:var(--mu);font-size:11px">SIRET '+esc(siret)+(adresse?' · '+esc(adresse):'')+'</div>'
+          +'</div>';
+      }).join('');
+      box.style.display='block';
+    }catch(e){ box.style.display='none'; }
+  }, 300);
+}
+function pickSupEntreprise(i){
+  const e = SUP_ENTREPRISE_RESULTS[i]; if(!e) return;
+  const siege = e.siege || {};
+  const g=id=>document.getElementById(id);
+  if(g('sup-name')) g('sup-name').value = e.nom_complet || e.nom_raison_sociale || '';
+  if(g('sup-siret')) g('sup-siret').value = siege.siret || '';
+  if(g('sup-siren')) g('sup-siren').value = e.siren || '';
+  const street = [siege.numero_voie, siege.type_voie, siege.libelle_voie].filter(Boolean).join(' ');
+  if(g('sup-addressLine') && street) g('sup-addressLine').value = street;
+  if(g('sup-postalCode') && siege.code_postal) g('sup-postalCode').value = siege.code_postal;
+  if(g('sup-city') && siege.libelle_commune) g('sup-city').value = siege.libelle_commune;
+  if(g('sup-country')) g('sup-country').value = 'FR';
+  const box = document.getElementById('sup-entreprise-suggestions');
+  if(box){ box.style.display='none'; box.innerHTML=''; }
+  const search = document.getElementById('sup-entreprise-search');
+  if(search) search.value = '';
+}
+
 function openAccSupplierModal(id){
   const s = id ? ACC_SUPPLIERS.find(x=>x.id===id) : {id:null,name:'',siren:'',siret:'',vatNumber:'',email:'',phone:'',addressLine:'',postalCode:'',city:'',country:'FR',iban:'',bic:''};
   if(!s) return;
@@ -7390,7 +7439,13 @@ function openAccSupplierModal(id){
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box" style="max-width:560px">
       <div class="modal-head"><div style="font-size:16px;font-weight:500">${id?'Modifier le fournisseur':'Nouveau fournisseur'}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
-      <div class="ff"><label>Nom</label><input id="sup-name" value="${esc(s.name)}"></div>
+      <div class="ff" style="position:relative">
+        <label>Rechercher par nom ou SIRET (annuaire public des entreprises)</label>
+        <input id="sup-entreprise-search" placeholder="Ex. OVH, ou 42476141900045..." oninput="supEntrepriseAutocomplete()" autocomplete="off">
+        <div id="sup-entreprise-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--card);border:0.5px solid var(--bdr);border-radius:8px;margin-top:2px;max-height:220px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.12)"></div>
+        <div style="font-size:11px;color:var(--mu);margin-top:4px">Remplit automatiquement le nom et l'adresse ci-dessous — vous pouvez toujours les corriger à la main ensuite.</div>
+      </div>
+      <div class="ff" style="margin-top:8px"><label>Nom</label><input id="sup-name" value="${esc(s.name)}"></div>
       <div class="form-grid" style="margin-top:8px">
         <div class="ff"><label>SIREN</label><input id="sup-siren" value="${esc(s.siren)}"></div>
         <div class="ff"><label>SIRET</label><input id="sup-siret" value="${esc(s.siret)}"></div>

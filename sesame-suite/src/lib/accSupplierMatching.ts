@@ -1,5 +1,6 @@
 import { prisma } from "../db";
 import { AccSupplier } from "@prisma/client";
+import { lookupEntrepriseBySiret } from "./entrepriseApi";
 
 /**
  * Rapprochement fournisseur (§15) — ordre de priorité fixé par le cahier
@@ -72,17 +73,33 @@ export function canAutoCreateSupplier(extracted: { issuerSiret?: string | null; 
   return !!(extracted.issuerName && (extracted.issuerSiret || extracted.issuerSiren || extracted.issuerVat));
 }
 
+/**
+ * Si un SIRET est disponible, interroge l'annuaire public des entreprises
+ * (recherche-entreprises.api.gouv.fr, cf. lib/entrepriseApi.ts) pour la
+ * raison sociale officielle et l'adresse du siège — bien plus fiable que
+ * l'heuristique d'extraction du nom (première ligne du texte, confiance
+ * 0.3, cf. lib/accExtraction.ts), qui peut attraper un titre de document au
+ * lieu du nom de l'entreprise. Le SIRET, lui, n'est pas une heuristique :
+ * ancré à son mot-clé et validé sur son nombre exact de chiffres. Si
+ * l'annuaire ne répond rien (API indisponible, SIRET non trouvé), repli sur
+ * le nom extrait — jamais bloquant.
+ */
 export async function createSupplierFromExtraction(
   entityId: string | null,
   extracted: { issuerName?: string | null; issuerSiren?: string | null; issuerSiret?: string | null; issuerVat?: string | null; issuerIban?: string | null; issuerBic?: string | null }
 ): Promise<AccSupplier> {
+  const lookup = extracted.issuerSiret ? await lookupEntrepriseBySiret(extracted.issuerSiret) : null;
   return prisma.accSupplier.create({
     data: {
       entityId,
-      name: extracted.issuerName || "Fournisseur sans nom",
-      siren: extracted.issuerSiren || undefined,
-      siret: extracted.issuerSiret || undefined,
+      name: (lookup?.name || extracted.issuerName || "Fournisseur sans nom").trim(),
+      siren: extracted.issuerSiren || lookup?.siren || undefined,
+      siret: extracted.issuerSiret || lookup?.siret || undefined,
       vatNumber: extracted.issuerVat || undefined,
+      addressLine: lookup?.addressLine || undefined,
+      postalCode: lookup?.postalCode || undefined,
+      city: lookup?.city || undefined,
+      country: lookup?.country || undefined,
       iban: extracted.issuerIban || undefined,
       bic: extracted.issuerBic || undefined,
     },
