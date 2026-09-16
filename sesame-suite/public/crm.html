@@ -6907,7 +6907,7 @@ function renderAccInvoiceModal(inv){
 
   const supplierOpts = `<option value="">— Aucun —</option>` + ACC_SUPPLIERS.map(s=>`<option value="${s.id}" ${inv.supplierId===s.id?'selected':''}>${esc(s.name)}</option>`).join('');
   const accountType = inv.direction==='sale' ? 'produit' : 'charge';
-  const accountOpts = `<option value="">— Aucun —</option>` + ACC_ACCOUNTS.filter(a=>a.type===accountType).map(a=>`<option value="${a.id}" ${inv.proposedAccountId===a.id?'selected':''}>${esc(a.number)} — ${esc(a.label)}</option>`).join('');
+  const accountOpts = `<option value="">— Aucun —</option>` + ACC_ACCOUNTS.filter(a=>a.type===accountType && (a.active || a.id===inv.proposedAccountId)).map(a=>`<option value="${a.id}" ${inv.proposedAccountId===a.id?'selected':''}>${esc(a.number)} — ${esc(a.label)}${!a.active?' (inactif)':''}</option>`).join('');
   const locked = inv.status==='VALIDATED' || inv.status==='ACCOUNTED';
 
   document.getElementById('modal-ct').innerHTML = `
@@ -7156,17 +7156,29 @@ function renderAccAccounts(){
       <td>${esc(a.label)}</td>
       <td>${ACC_TYPE_LABEL[a.type]||a.type}</td>
       <td>${a.active?'<span class="tpill bg">Actif</span>':'<span class="tpill bn">Inactif</span>'}</td>
+      <td><button class="ta-btn" onclick="accToggleAccountActive('${a.id}', ${!a.active})" title="${a.active?'Désactiver':'Activer'}">${a.active?'⏸':'▶'}</button></td>
     </tr>`).join('');
   el.innerHTML = `
     <div class="list-toolbar">
       <button class="btn btn-primary btn-sm" onclick="openAccAccountModal()">+ Compte</button>
       <button class="btn btn-ghost btn-sm" onclick="accRunSeed()">Initialiser le plan comptable standard</button>
-      <span class="count-lbl">${ACC_ACCOUNTS.length} compte(s) — ${ACC_JOURNALS.length} journal(aux) : ${ACC_JOURNALS.map(j=>esc(j.code)).join(', ')||'aucun'}</span>
+      <span class="count-lbl">${ACC_ACCOUNTS.length} compte(s) (${ACC_ACCOUNTS.filter(a=>a.active).length} actif(s)) — ${ACC_JOURNALS.length} journal(aux) : ${ACC_JOURNALS.map(j=>esc(j.code)).join(', ')||'aucun'}</span>
     </div>
+    <div style="font-size:11px;color:var(--mu);margin-bottom:8px">Un compte désactivé disparaît des listes de choix (facture, règles) mais reste visible ici et dans l'historique — rien n'est supprimé.</div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th style="width:100px">Numéro</th><th>Libellé</th><th style="width:140px">Type</th><th style="width:90px">Statut</th></tr></thead>
-      <tbody>${rows||'<tr><td colspan="4" class="log-empty">Aucun compte — cliquez sur "Initialiser le plan comptable standard".</td></tr>'}</tbody>
+      <thead><tr><th style="width:100px">Numéro</th><th>Libellé</th><th style="width:140px">Type</th><th style="width:90px">Statut</th><th style="width:50px"></th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="5" class="log-empty">Aucun compte — cliquez sur "Initialiser le plan comptable standard".</td></tr>'}</tbody>
     </table></div>`;
+}
+
+async function accToggleAccountActive(id, active){
+  try{
+    const r = await apiFetch('/wa/acc/accounts/'+id+'?scope=crm', {method:'PUT', body:JSON.stringify({active})});
+    if(!r.ok) throw new Error('http '+r.status);
+    flash(active?'Compte activé':'Compte désactivé');
+    ACC_LOADED.accounts = false;
+    loadAccAccountsTab();
+  }catch(e){ flash('Erreur'); }
 }
 
 async function accRunSeed(){
@@ -7308,7 +7320,7 @@ function openAccRuleModal(){
       <div class="modal-head"><div style="font-size:16px;font-weight:500">Nouvelle règle</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
       <div class="ff"><label>Fournisseur (optionnel si mot-clé renseigné)</label><select id="rule-supplierId"><option value="">— Aucun —</option>${ACC_SUPPLIERS.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select></div>
       <div class="ff" style="margin-top:8px"><label>Mot-clé (repli quand aucun fournisseur rapproché)</label><input id="rule-keyword" placeholder="ex. hébergement, assurance..."></div>
-      <div class="ff" style="margin-top:8px"><label>Compte à proposer</label><select id="rule-accountId">${ACC_ACCOUNTS.filter(a=>a.type==='charge'||a.type==='produit').map(a=>`<option value="${a.id}">${esc(a.number)} — ${esc(a.label)}</option>`).join('')}</select></div>
+      <div class="ff" style="margin-top:8px"><label>Compte à proposer</label><select id="rule-accountId">${ACC_ACCOUNTS.filter(a=>(a.type==='charge'||a.type==='produit')&&a.active).map(a=>`<option value="${a.id}">${esc(a.number)} — ${esc(a.label)}</option>`).join('')}</select></div>
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="saveAccRule()">Enregistrer</button>
         <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
