@@ -32,7 +32,7 @@ export const ONBOARDING_MODULES = [
   { k: "bookingEngine", ico: "ti-calendar-plus", label: "Réservation en ligne", desc: "Page publique de réservation : chambres disponibles, coordonnées client et paiement en ligne (chambre + taxe de séjour)", required: false, price: 20 },
 ] as const;
 
-const MODULE_KEYS = new Set(ONBOARDING_MODULES.map((m) => m.k));
+export const MODULE_KEYS = new Set(ONBOARDING_MODULES.map((m) => m.k));
 
 // Barème indicatif du taux horaire chargé d'une femme/valet de chambre par
 // pays, en devise locale — sert de valeur de départ à

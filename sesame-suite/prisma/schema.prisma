@@ -130,9 +130,11 @@ model AdminUser {
 
   // "Commercial" assigné — uniquement pertinent pour les comptes role="sesame"
   // (l'équipe interne), cf. GET /wa/commercial/list.
-  crmProspectsAsCommercial CrmProspect[] @relation("ProspectCommercial")
-  crmDealsAsCommercial     CrmDeal[]     @relation("DealCommercial")
-  crmTicketsAsAgent        CrmTicket[]   @relation("TicketAgent")
+  crmProspectsAsCommercial CrmProspect[]  @relation("ProspectCommercial")
+  crmDealsAsCommercial     CrmDeal[]      @relation("DealCommercial")
+  crmTicketsAsAgent        CrmTicket[]    @relation("TicketAgent")
+  aiSuggestionsCreated     AiSuggestion[] @relation("AiSuggestionCreatedBy")
+  faqEntriesCreated        Faq[]          @relation("FaqCreatedBy")
 
   createdAt DateTime @default(now())
 }
@@ -1356,12 +1358,12 @@ model ClientPrefs {
   // cocher pilote aussi emailOptOut (inscription = false, désinscription
   // depuis l'app = true), donc les deux restent cohérents avec le lien de
   // désabonnement des campagnes.
-  newsletterOptIn   Boolean   @default(false)
-  newsletterOptInAt DateTime?
+  newsletterOptIn         Boolean   @default(false)
+  newsletterOptInAt       DateTime?
   // Empêche de re-créditer les points à chaque décoché/recoché — posé une
   // seule fois, à la première inscription, jamais retiré (pas de reprise
   // de points en cas de désinscription ultérieure).
-  newsletterPointsAwarded Boolean @default(false)
+  newsletterPointsAwarded Boolean   @default(false)
 
   updatedAt DateTime @updatedAt
 
@@ -2035,7 +2037,7 @@ model CrmScoringConfig {
   // connecteur Microsoft Graph ou le lien public de suivi de ticket) — cf.
   // CrmProspect.inboundReplyCount, déjà affiché en badge sur la fiche
   // (✉ N), désormais alimenté par lib/ticketInbound.ts.
-  pointsInboundEmail Int @default(3)
+  pointsInboundEmail     Int @default(3)
 
   updatedAt DateTime @updatedAt
 }
@@ -2189,13 +2191,32 @@ model CrmTicket {
   subject      String
   status       String  @default("En attente") // En attente | En cours | Attente client | Résolu | Fermé
   priority     String  @default("Normale") // Basse | Normale | Haute | Urgente
-  type         String? // Incident technique | Question | Demande | Facturation | Autre
+  type         String? // Incident technique | Question | Demande | Facturation | Autre — sert aussi de "catégorie" pour l'assistant IA
+  // Clé ONBOARDING_MODULES (room, taxe, kyc, crm, ... cf. routes/onboarding.ts)
+  // du module Sesame concerné — "produit" et "module" du cahier des charges
+  // assistant IA se confondent ici (un seul produit, ses modules).
+  module       String?
   tags         Json    @default("[]") // string[]
   contactEmail String // qui a ouvert le ticket (peut différer du référent de la fiche)
   contactName  String?
   publicToken  String  @unique @default(cuid())
 
-  messages CrmTicketMessage[]
+  // Résumé de la résolution (rempli à la clôture, manuel ou déduit du
+  // dernier message agent) — texte réellement vectorisé pour la recherche
+  // de "cas similaires", plutôt que l'intégralité du fil (bruyant, et
+  // risque de faire fuiter des échanges non génériques dans l'embedding).
+  resolutionSummary  String?   @db.Text
+  // Vecteur d'embedding (OpenAI text-embedding-3-small, 1536 dims) du texte
+  // "sujet + 1er message client + resolutionSummary" — cf. lib/aiEmbeddings.ts.
+  // Pas de pgvector : comparaison par cosinus faite en mémoire côté Node,
+  // volumétrie d'un support mono-produit largement compatible (§ lot 1,
+  // "ne pas surdimensionner l'architecture").
+  embedding          Float[]   @default([])
+  embeddingUpdatedAt DateTime?
+
+  messages      CrmTicketMessage[]
+  aiSuggestions AiSuggestion[]
+  faqEntries    Faq[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -2225,6 +2246,83 @@ model CrmTicketMessage {
   createdAt DateTime @default(now())
 }
 
+// Assistant support IA (§ LOT 1, 16/09/2026) — trace chaque proposition de
+// réponse générée pour un ticket : texte proposé par l'IA, texte modifié
+// par l'opérateur (si édité avant envoi), texte réellement envoyé — sert de
+// base à une amélioration future des suggestions (cf. cahier des charges,
+// "conserver réponse proposée / modifiée / envoyée"). Une ligne par
+// génération (initiale ou transformation régénérer/raccourcir/pédagogique/
+// technique), jamais mise à jour en place, pour garder l'historique complet.
+model AiSuggestion {
+  id       String    @id @default(cuid())
+  ticketId String
+  ticket   CrmTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  suggestedText String  @db.Text
+  editedText    String? @db.Text
+  sentText      String? @db.Text
+
+  // 0-1, auto-évalué par le modèle en fonction de la proximité des cas
+  // similaires utilisés — jamais un simple 100% par défaut (cf. §
+  // "indicateur de confiance").
+  confidence Float?
+  // [{type:"ticket"|"faq", id, label, score}] — sources utilisées pour
+  // construire la réponse, affichées à l'opérateur (§ "sources utilisées").
+  sources    Json   @default("[]")
+
+  // proposed (générée, pas encore d'action) | used (envoyée telle quelle) |
+  // edited (modifiée puis envoyée) | discarded (régénérée/abandonnée sans
+  // envoi) — jamais "sent" automatique : la validation humaine est
+  // obligatoire, cf. § "aucune réponse IA ne doit être envoyée automatiquement".
+  status String  @default("proposed")
+  model  String? // ex "claude-sonnet-5" — modèle réellement utilisé, pour diagnostiquer un changement de qualité après une future migration de modèle.
+
+  createdById String?
+  createdBy   AdminUser? @relation("AiSuggestionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([ticketId])
+}
+
+// FAQ capitalisée à partir d'un ticket résolu (§ LOT 1, étape 3) — jamais
+// publiée automatiquement (status="draft" par défaut), l'opérateur doit
+// relire/compléter/valider avant "publish". Alimente elle aussi la
+// recherche sémantique (embedding) une fois publiée, au même titre qu'un
+// ticket résolu — cf. lib/aiEmbeddings.ts.
+model Faq {
+  id String @id @default(cuid())
+
+  title          String
+  question       String
+  variants       String[] @default([])
+  shortAnswer    String   @db.Text
+  detailedAnswer String   @db.Text
+  procedure      String[] @default([]) // étapes, dans l'ordre
+  module         String? // clé ONBOARDING_MODULES, comme CrmTicket.module
+  category       String? // comme CrmTicket.type
+  keywords       String[] @default([])
+  tags           String[] @default([])
+
+  status      String    @default("draft") // draft | published
+  publishedAt DateTime?
+
+  embedding          Float[]   @default([])
+  embeddingUpdatedAt DateTime?
+
+  sourceTicketId String?
+  sourceTicket   CrmTicket? @relation(fields: [sourceTicketId], references: [id], onDelete: SetNull)
+
+  createdById String?
+  createdBy   AdminUser? @relation("FaqCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([sourceTicketId])
+}
+
 // Abonnement Microsoft Graph (changeType=created sur les messages de la
 // boîte support) qui remplace la règle Outlook + flux Power Automate
 // utilisée jusque-là pour du simple signal d'engagement (cf.
@@ -2250,7 +2348,7 @@ model GraphMailSubscription {
 
   // Id de l'abonnement côté Graph (POST /subscriptions) — null tant que
   // l'activation n'a pas réussi.
-  subscriptionId String?  @unique
+  subscriptionId String?   @unique
   expiresAt      DateTime?
 
   // Secret renvoyé tel quel par Graph dans chaque notification
@@ -2649,8 +2747,8 @@ model AccDocument {
   // CrmTicketMessage.attachments dans le reste de l'app (pas de stockage
   // objet disponible dans cet environnement). storagePath réservé à une
   // future migration S3 (§67) sans changer le contrat de l'API.
-  contentBase64 String  @db.Text
-  storagePath   String?
+  contentBase64    String  @db.Text
+  storagePath      String?
 
   source String // upload | api | email | drive | sftp
 
@@ -2729,8 +2827,8 @@ model AccInvoice {
   amountDeposit  Float?
   amountDue      Float?
 
-  proposedAccountId        String?
-  proposedAccount          AccAccount? @relation("InvoiceProposedAccount", fields: [proposedAccountId], references: [id], onDelete: SetNull)
+  proposedAccountId         String?
+  proposedAccount           AccAccount? @relation("InvoiceProposedAccount", fields: [proposedAccountId], references: [id], onDelete: SetNull)
   proposedAccountConfidence Float?
 
   entryId String?   @unique
@@ -2874,8 +2972,8 @@ model AccEntryLine {
   account   AccAccount @relation(fields: [accountId], references: [id])
 
   label  String
-  debit  Float @default(0)
-  credit Float @default(0)
+  debit  Float  @default(0)
+  credit Float  @default(0)
 
   // Référence tiers auxiliaire (fournisseur/client) — prépare un lettrage
   // futur (§31), non exploité en phase 1.

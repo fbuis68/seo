@@ -513,6 +513,7 @@ svg.tr-chart{display:block;width:100%;height:auto;min-width:640px}
     <div class="nav-item" id="n-treso" onclick="showTresorerie()"><div class="nav-ico">Σ</div> Trésorerie</div>
     <div class="nav-item" id="n-compta" onclick="showComptabilite()"><div class="nav-ico">▦</div> Comptabilité <span class="nb nb-a" id="b-compta-check" style="display:none">0</span></div>
     <div class="nav-item" id="n-tickets" onclick="showTickets()"><div class="nav-ico">☎</div> Support <span class="nb nb-r" id="b-tickets-open" style="display:none">0</span></div>
+    <div class="nav-item" id="n-faq" onclick="showFaqList()"><div class="nav-ico">✦</div> FAQ</div>
     <div class="nav-item" id="n-activite" onclick="showActivites()"><div class="nav-ico">◈</div> Activités</div>
     <div class="nav-item" id="n-contrats" onclick="showContrats()"><div class="nav-ico">◻</div> Contrats</div>
     <hr class="s-hr">
@@ -876,7 +877,7 @@ function ini(n){return(n||'?').split(' ').slice(0,2).map(w=>w[0]||'').join('').t
 function today(){const d=new Date();return d.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});}
 
 // ── NAV ──
-function setNav(id){['n-home','n-list','n-affaires','n-portefeuille','n-treso','n-compta','n-tickets','n-produits','n-activite','n-contrats','n-canaux','n-auto','n-crmusers','n-questionnaires'].forEach(n=>document.getElementById(n).classList.remove('active'));var el=document.getElementById(id);if(el)el.classList.add('active');}
+function setNav(id){['n-home','n-list','n-affaires','n-portefeuille','n-treso','n-compta','n-tickets','n-faq','n-produits','n-activite','n-contrats','n-canaux','n-auto','n-crmusers','n-questionnaires'].forEach(n=>document.getElementById(n).classList.remove('active'));var el=document.getElementById(id);if(el)el.classList.add('active');}
 function setVMode(m){vmode=m;document.getElementById('vt-tbl').classList.toggle('active',m==='table');document.getElementById('vt-grd').classList.toggle('active',m==='grid');document.getElementById('vt-map').classList.toggle('active',m==='map');if(view==='list')renderList();}
 function bc(parts){document.getElementById('bc').innerHTML=parts.map((p,i)=>i<parts.length-1?`<span class="bc-link" onclick="${p.fn}">${p.label}</span><span class="bc-sep"> / </span>`:`<span class="bc-cur">${p.label}</span>`).join('');}
 function tba(html){document.getElementById('tb-actions').innerHTML=html;}
@@ -5515,6 +5516,16 @@ function renderTicketDetail(t){
         <div class="ff"><label>Agent</label><select id="tkt-agent" onchange="ticketQualify('${t.id}')"><option value="">Non assigné</option>${COMMERCIALS.map(c=>`<option value="${c.id}" ${t.agentId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
       </div>
     </div>
+    <div class="card" id="tkt-ai-panel">
+      <div class="card-head"><div class="ch-ico">✦</div><span class="ch-title">Assistant support (IA)</span></div>
+      <div id="tkt-ai-cases"><div class="log-empty">Recherche de cas similaires…</div></div>
+      <div id="tkt-ai-suggestion-label" style="font-size:12px;font-weight:600;color:var(--mu);margin:14px 0 8px;text-transform:uppercase;letter-spacing:.3px">Réponse suggérée</div>
+      <div id="tkt-ai-suggestion"></div>
+      ${(t.status==='Résolu'||t.status==='Fermé')?`
+      <div style="font-size:12px;font-weight:600;color:var(--mu);margin:14px 0 8px;text-transform:uppercase;letter-spacing:.3px">Capitalisation</div>
+      <div id="tkt-ai-faq"><button class="btn btn-ghost btn-sm" onclick="aiCreateFaqFromTicket('${t.id}')">Créer une FAQ à partir de ce ticket</button></div>
+      `:''}
+    </div>
     ${ticketOptionsActivesHtml(t.prospectId)}
     <div class="card">
       <div class="card-head"><div class="ch-ico">✉</div><span class="ch-title">Fil de discussion</span></div>
@@ -5532,6 +5543,169 @@ function renderTicketDetail(t){
         <button class="btn btn-ghost btn-sm" onclick="ticketSendReply('${t.id}','note')">Note interne</button>
       </div>
     </div>`;
+  loadTicketAiPanel(t.id);
+}
+
+// ════════════════════════════════════════
+// ASSISTANT SUPPORT IA (§ LOT 1) — recherche de cas similaires par sens
+// (embeddings), pas seulement mots-clés. Panneau chargé après le rendu du
+// ticket (appel séparé, asynchrone) pour ne jamais retarder l'affichage du
+// fil de discussion en attendant une réponse OpenAI/Claude.
+// ════════════════════════════════════════
+
+let AI_SUGGESTION = null; // suggestion IA courante {id, text, confidence, sources, status}
+
+async function loadTicketAiPanel(ticketId){
+  AI_SUGGESTION = null;
+  window._activeAiSuggestionId = null;
+  const casesBox = document.getElementById('tkt-ai-cases');
+  const sugBox = document.getElementById('tkt-ai-suggestion');
+  if(!casesBox) return; // l'agent a déjà changé de ticket entre-temps
+  try{
+    const r = await apiFetch('/wa/crmTicket/similar?id='+encodeURIComponent(ticketId));
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    // Ticket a pu changer pendant l'attente réseau (agent a cliqué ailleurs) — n'écrase pas un autre panneau.
+    if(!CURRENT_TICKET || CURRENT_TICKET.id!==ticketId) return;
+    const label = document.getElementById('tkt-ai-suggestion-label');
+    if(!data.configured){
+      casesBox.innerHTML = '<div class="log-empty">Assistant IA non configuré.</div>';
+      if(sugBox) sugBox.innerHTML = '';
+      if(label) label.style.display = 'none';
+      return;
+    }
+    if(label) label.style.display = '';
+    renderTicketAiSimilarCases(data.results||[]);
+    renderAiSuggestionBox(); // état initial : bouton "Générer une réponse"
+  }catch(e){
+    if(casesBox) casesBox.innerHTML = '<div class="log-empty">Recherche de cas similaires indisponible.</div>';
+  }
+}
+
+function renderTicketAiSimilarCases(results){
+  const box = document.getElementById('tkt-ai-cases');
+  if(!box) return;
+  const casesHtml = !results.length
+    ? '<div class="log-empty">Aucun cas similaire trouvé dans l\'historique des tickets résolus.</div>'
+    : results.map(r=>{
+        const pct = Math.round(r.similarity*100);
+        const meta = [r.module, r.category, r.agentName, r.closedAt?new Date(r.closedAt).toLocaleDateString('fr-FR'):''].filter(Boolean).join(' · ');
+        return `<div style="padding:10px 12px;margin-bottom:8px;border-radius:8px;background:var(--div,#eeece8);border:1px solid var(--bdr,#e2dfd9)">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px">
+            <strong style="font-size:13px">${pct}% similaire — ${esc(r.number)}</strong>
+            <button class="btn btn-ghost btn-sm" onclick="showTicketDetail('${r.ticketId}')">Voir le ticket complet</button>
+          </div>
+          <div style="font-size:12px;margin-bottom:4px"><strong>Sujet :</strong> ${esc(r.subject)}</div>
+          ${r.question?`<div style="font-size:12px;margin-bottom:4px;white-space:pre-wrap"><strong>Problème :</strong> ${esc(r.question.slice(0,240))}${r.question.length>240?'…':''}</div>`:''}
+          ${r.resolutionSummary?`<div style="font-size:12px;white-space:pre-wrap"><strong>Résolution :</strong> ${esc(r.resolutionSummary.slice(0,400))}${r.resolutionSummary.length>400?'…':''}</div>`:''}
+          ${meta?`<div style="font-size:11px;color:var(--mu);margin-top:6px">${esc(meta)}</div>`:''}
+        </div>`;
+      }).join('');
+  box.innerHTML = `<div style="font-size:12px;font-weight:600;color:var(--mu);margin-bottom:8px;text-transform:uppercase;letter-spacing:.3px">Cas similaires</div>${casesHtml}`;
+}
+
+// ── Réponse suggérée (§ LOT 1 étape 2) ──────────────────────────────────
+
+function renderAiSuggestionBox(){
+  const box = document.getElementById('tkt-ai-suggestion');
+  if(!box) return;
+  if(!AI_SUGGESTION){
+    box.innerHTML = `<button class="btn btn-primary btn-sm" onclick="aiGenerateSuggestion()">Générer une réponse</button>`;
+    return;
+  }
+  const s = AI_SUGGESTION;
+  const pct = Math.round(s.confidence*100);
+  const confColor = pct>=75 ? '#2f6f2f' : pct>=45 ? '#a3791f' : '#a32d2d';
+  const sourcesHtml = s.sources.length
+    ? `<div style="font-size:11px;color:var(--mu);margin-bottom:8px">Sources : ${s.sources.map(x=>esc(x.label)).join(' · ')}</div>`
+    : `<div style="font-size:11px;color:var(--mu);margin-bottom:8px">Aucun cas similaire ni FAQ utilisé pour cette proposition.</div>`;
+  box.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+      <span class="tpill" style="background:${confColor};color:#fff">Confiance : ${pct}%</span>
+    </div>
+    ${sourcesHtml}
+    <textarea id="tkt-ai-suggestion-text" style="height:120px;margin-bottom:8px">${esc(s.text)}</textarea>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" onclick="aiUseSuggestion()">Utiliser</button>
+      <button class="btn btn-primary btn-sm" style="background:#2f6f2f" onclick="aiSendSuggestion('${CURRENT_TICKET.id}')">Envoyer</button>
+      <button class="btn btn-ghost btn-sm" onclick="aiGenerateSuggestion()">Régénérer</button>
+      <button class="btn btn-ghost btn-sm" onclick="aiTransformSuggestion('shorten')">Raccourcir</button>
+      <button class="btn btn-ghost btn-sm" onclick="aiTransformSuggestion('pedagogical')">Plus pédagogique</button>
+      <button class="btn btn-ghost btn-sm" onclick="aiTransformSuggestion('technical')">Plus technique</button>
+      <button class="btn btn-ghost btn-sm" onclick="aiCopySuggestion()">Copier</button>
+    </div>`;
+}
+
+async function aiGenerateSuggestion(){
+  const ticketId = CURRENT_TICKET.id;
+  const box = document.getElementById('tkt-ai-suggestion');
+  if(box) box.innerHTML = '<div class="log-empty">Génération de la réponse…</div>';
+  try{
+    const r = await apiFetch('/wa/crmTicket/aiSuggest', {method:'POST', body:JSON.stringify({id:ticketId})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    if(!CURRENT_TICKET || CURRENT_TICKET.id!==ticketId) return;
+    AI_SUGGESTION = data;
+    renderAiSuggestionBox();
+  }catch(e){
+    if(box) box.innerHTML = '<div class="log-empty">Génération indisponible.</div>';
+  }
+}
+
+async function aiTransformSuggestion(mode){
+  if(!AI_SUGGESTION) return;
+  const ticketId = CURRENT_TICKET.id;
+  const box = document.getElementById('tkt-ai-suggestion');
+  const currentText = (document.getElementById('tkt-ai-suggestion-text')||{value:AI_SUGGESTION.text}).value;
+  if(box) box.innerHTML = '<div class="log-empty">Reformulation…</div>';
+  try{
+    // On reformule le texte affiché (potentiellement déjà édité par l'opérateur), pas nécessairement AI_SUGGESTION.text d'origine.
+    const r = await apiFetch('/wa/crmTicket/aiSuggestTransform', {method:'POST', body:JSON.stringify({suggestionId:AI_SUGGESTION.id, mode})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    if(!CURRENT_TICKET || CURRENT_TICKET.id!==ticketId) return;
+    AI_SUGGESTION = data;
+    renderAiSuggestionBox();
+  }catch(e){
+    flash('Reformulation indisponible');
+    renderAiSuggestionBox();
+  }
+}
+
+function aiUseSuggestion(){
+  if(!AI_SUGGESTION) return;
+  const text = (document.getElementById('tkt-ai-suggestion-text')||{value:AI_SUGGESTION.text}).value;
+  document.getElementById('tkt-reply-body').value = text;
+  window._activeAiSuggestionId = AI_SUGGESTION.id;
+  flash('Réponse insérée — vous pouvez la modifier avant envoi');
+}
+
+function aiSendSuggestion(ticketId){
+  aiUseSuggestion();
+  ticketSendReply(ticketId, 'reply');
+}
+
+function aiCopySuggestion(){
+  if(!AI_SUGGESTION) return;
+  const text = (document.getElementById('tkt-ai-suggestion-text')||{value:AI_SUGGESTION.text}).value;
+  navigator.clipboard.writeText(text);
+  flash('Copié');
+}
+
+// ── Capitalisation : générer une FAQ à partir du ticket (§ étape 3) ─────
+
+async function aiCreateFaqFromTicket(ticketId){
+  const box = document.getElementById('tkt-ai-faq');
+  if(box) box.innerHTML = '<div class="log-empty">Analyse du ticket et génération de la FAQ…</div>';
+  try{
+    const r = await apiFetch('/wa/faq/generateFromTicket', {method:'POST', body:JSON.stringify({ticketId})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash('Brouillon de FAQ créé');
+    showFaqEditor(data.id);
+  }catch(e){
+    if(box) box.innerHTML = '<div class="log-empty">Génération de FAQ indisponible. <button class="btn btn-ghost btn-sm" onclick="aiCreateFaqFromTicket(\''+ticketId+'\')">Réessayer</button></div>';
+  }
 }
 
 // Options actives du client rattaché au ticket — utile à l'agent support
@@ -5617,10 +5791,11 @@ function ticketSendReply(id, kind){
   const filesEl = document.getElementById('tkt-reply-files');
   filesToDataUrls(filesEl.files, async (attachments)=>{
     try{
-      const r = await apiFetch('/wa/crmTicket/reply', {method:'POST', body:JSON.stringify({ id, body:text, attachments, kind })});
+      const r = await apiFetch('/wa/crmTicket/reply', {method:'POST', body:JSON.stringify({ id, body:text, attachments, kind, aiSuggestionId: kind==='reply'?(window._activeAiSuggestionId||undefined):undefined })});
       const data = await r.json();
       if(!r.ok) throw new Error(data.error||'http '+r.status);
     }catch(e){ flash(e.message||'Erreur de connexion au serveur'); return; }
+    window._activeAiSuggestionId = null;
     flash(kind==='reply'?'Réponse envoyée':'Note ajoutée');
     const r2 = await apiFetch('/wa/crmTicket/get?id='+encodeURIComponent(id));
     const t2 = await r2.json();
@@ -5628,6 +5803,152 @@ function ticketSendReply(id, kind){
     updateBadges();
     renderTicketDetail(t2);
   });
+}
+
+// ════════════════════════════════════════
+// FAQ (§ LOT 1, étape 3 "capitalisation") — panneau global, Sesame
+// uniquement, comme le module Support (cf. lib/faq.ts côté serveur). Une
+// FAQ naît en brouillon (générée depuis un ticket, cf. aiCreateFaqFromTicket
+// ci-dessus, ou créée à la main) et n'est visible de l'assistant IA qu'une
+// fois publiée — jamais automatique.
+// ════════════════════════════════════════
+let FAQS = [];
+let FAQ_STATUS_FILTER = '';
+
+async function showFaqList(){
+  view='faq';setNav('n-faq');bc([{label:'FAQ'}]);
+  tba('');
+  document.getElementById('main').innerHTML='<div class="card">Chargement…</div>';
+  try{
+    const r = await apiFetch('/wa/faq/list'+(FAQ_STATUS_FILTER?('?status='+FAQ_STATUS_FILTER):''));
+    FAQS = r.ok ? await r.json() : [];
+  }catch(e){ FAQS=[]; }
+  renderFaqList();
+}
+
+function renderFaqList(){
+  const rows = FAQS.map(f=>`
+    <tr style="cursor:pointer" onclick="showFaqEditor('${f.id}')">
+      <td><div class="nom-cell">${esc(f.title)}</div><div class="sub-cell">${esc(f.question)}</div></td>
+      <td>${f.status==='published'?'<span class="tpill bg">Publiée</span>':'<span class="tpill bw">Brouillon</span>'}</td>
+      <td style="font-size:12px">${esc(f.module)||'—'}</td>
+      <td style="font-size:12px">${esc(f.category)||'—'}</td>
+      <td style="font-size:11px;color:#888">${f.sourceTicketNumber?esc(f.sourceTicketNumber):'—'}</td>
+      <td style="font-size:11px;color:#888">${new Date(f.updatedAt).toLocaleDateString('fr-FR')}</td>
+    </tr>`).join('');
+  document.getElementById('main').innerHTML = `
+    <div class="list-toolbar" style="margin-bottom:10px">
+      <select class="lsel" onchange="FAQ_STATUS_FILTER=this.value;showFaqList()">
+        <option value="">Tous statuts</option>
+        <option value="draft" ${FAQ_STATUS_FILTER==='draft'?'selected':''}>Brouillons</option>
+        <option value="published" ${FAQ_STATUS_FILTER==='published'?'selected':''}>Publiées</option>
+      </select>
+    </div>
+    <div class="tbl-wrap"><table>
+    <thead><tr><th>FAQ</th><th style="width:100px">Statut</th><th style="width:120px">Module</th><th style="width:120px">Catégorie</th><th style="width:100px">Ticket source</th><th style="width:100px">Mise à jour</th></tr></thead>
+    <tbody>${rows.length?rows:'<tr><td colspan="6" class="log-empty">Aucune FAQ — générez-en une depuis un ticket résolu (bouton "Créer une FAQ à partir de ce ticket").</td></tr>'}</tbody>
+  </table></div>`;
+}
+
+async function showFaqEditor(id){
+  view='faq';setNav('n-faq');
+  bc([{label:'FAQ',fn:'showFaqList()'},{label:'Modifier'}]);
+  tba('');
+  document.getElementById('main').innerHTML='<div class="card">Chargement…</div>';
+  try{
+    const r = await apiFetch('/wa/faq/get?id='+encodeURIComponent(id));
+    if(!r.ok) throw new Error('http '+r.status);
+    renderFaqEditor(await r.json());
+  }catch(e){ document.getElementById('main').innerHTML='<div class="card">FAQ introuvable.</div>'; }
+}
+
+function renderFaqEditor(f){
+  document.getElementById('main').innerHTML = `
+    <div class="card">
+      ${f.sourceTicketNumber?`<div class="tpill bi" style="margin-bottom:10px">Générée depuis le ticket ${esc(f.sourceTicketNumber)} — ${esc(f.sourceTicketSubject)}</div>`:''}
+      <div class="form-grid">
+        <div class="ff"><label>Titre</label><input id="faq-title" value="${esc(f.title)}"></div>
+        <div class="ff"><label>Statut</label><div style="padding-top:6px">${f.status==='published'?'<span class="tpill bg">Publiée</span>':'<span class="tpill bw">Brouillon</span>'}</div></div>
+      </div>
+      <div class="ff"><label>Question principale</label><input id="faq-question" value="${esc(f.question)}"></div>
+      <div class="ff"><label>Variantes de la question (une par ligne)</label><textarea id="faq-variants" style="height:70px">${esc((f.variants||[]).join('\n'))}</textarea></div>
+      <div class="ff"><label>Réponse courte</label><textarea id="faq-short" style="height:60px">${esc(f.shortAnswer)}</textarea></div>
+      <div class="ff"><label>Réponse détaillée</label><textarea id="faq-detailed" style="height:120px">${esc(f.detailedAnswer)}</textarea></div>
+      <div class="ff"><label>Procédure étape par étape (une étape par ligne)</label><textarea id="faq-procedure" style="height:90px">${esc((f.procedure||[]).join('\n'))}</textarea></div>
+      <div class="form-grid">
+        <div class="ff"><label>Module</label><input id="faq-module" value="${esc(f.module)}" placeholder="ex : compta, crm…"></div>
+        <div class="ff"><label>Catégorie</label><input id="faq-category" value="${esc(f.category)}" placeholder="ex : Incident technique"></div>
+      </div>
+      <div class="form-grid">
+        <div class="ff"><label>Mots-clés (séparés par des virgules)</label><input id="faq-keywords" value="${esc((f.keywords||[]).join(', '))}"></div>
+        <div class="ff"><label>Tags (séparés par des virgules)</label><input id="faq-tags" value="${esc((f.tags||[]).join(', '))}"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button class="btn btn-primary btn-sm" onclick="saveFaq('${f.id}')">Enregistrer</button>
+        ${f.status!=='published'?`<button class="btn btn-primary btn-sm" style="background:#2f6f2f" onclick="publishFaq('${f.id}')">Publier</button>`:''}
+        ${f.status==='published'?`<button class="btn btn-ghost btn-sm" onclick="unpublishFaq('${f.id}')">Dépublier</button>`:''}
+        <button class="btn btn-ghost btn-sm" style="color:#a32d2d" onclick="deleteFaq('${f.id}')">Supprimer</button>
+        <button class="btn btn-ghost btn-sm" onclick="showFaqList()">Retour à la liste</button>
+      </div>
+    </div>`;
+}
+
+function faqFieldsFromForm(){
+  const g=id=>(document.getElementById(id)||{value:''}).value;
+  const lines=v=>v.split('\n').map(s=>s.trim()).filter(Boolean);
+  const csv=v=>v.split(',').map(s=>s.trim()).filter(Boolean);
+  return {
+    title: g('faq-title'), question: g('faq-question'),
+    variants: lines(g('faq-variants')),
+    shortAnswer: g('faq-short'), detailedAnswer: g('faq-detailed'),
+    procedure: lines(g('faq-procedure')),
+    module: g('faq-module'), category: g('faq-category'),
+    keywords: csv(g('faq-keywords')), tags: csv(g('faq-tags')),
+  };
+}
+
+async function saveFaq(id){
+  const body = faqFieldsFromForm();
+  if(!body.question.trim()||!body.shortAnswer.trim()){ flash('Question et réponse courte requises'); return; }
+  try{
+    const r = await apiFetch('/wa/faq/update', {method:'POST', body:JSON.stringify({id, ...body})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash('FAQ enregistrée');
+    showFaqEditor(id);
+  }catch(e){ flash(e.message||'Erreur d\'enregistrement'); }
+}
+
+async function publishFaq(id){
+  const body = faqFieldsFromForm();
+  try{
+    const ru = await apiFetch('/wa/faq/update', {method:'POST', body:JSON.stringify({id, ...body})});
+    if(!ru.ok) throw new Error('http '+ru.status);
+    const r = await apiFetch('/wa/faq/publish', {method:'POST', body:JSON.stringify({id})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash('FAQ publiée');
+    showFaqEditor(id);
+  }catch(e){ flash(e.message||'Erreur de publication'); }
+}
+
+async function unpublishFaq(id){
+  try{
+    const r = await apiFetch('/wa/faq/unpublish', {method:'POST', body:JSON.stringify({id})});
+    if(!r.ok) throw new Error('http '+r.status);
+    flash('FAQ repassée en brouillon');
+    showFaqEditor(id);
+  }catch(e){ flash('Erreur'); }
+}
+
+async function deleteFaq(id){
+  if(!confirm('Supprimer définitivement cette FAQ ?')) return;
+  try{
+    const r = await apiFetch('/wa/faq/delete', {method:'POST', body:JSON.stringify({id})});
+    if(!r.ok) throw new Error('http '+r.status);
+    flash('FAQ supprimée');
+    showFaqList();
+  }catch(e){ flash('Erreur de suppression'); }
 }
 
 // ════════════════════════════════════════

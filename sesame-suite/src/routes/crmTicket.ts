@@ -5,6 +5,12 @@ import { requireAdmin, requireSesame } from "../middleware/requireAdmin";
 import { getSmtpConfig, sendEmailRaw } from "../lib/email";
 import { createTicketFromInboundEmail, appendInboundReply, sanitizeTicketAttachments } from "../lib/ticketInbound";
 import { fireTrigger } from "../lib/automation";
+import { reindexTicketEmbedding } from "../lib/aiIndexing";
+import { MODULE_KEYS } from "./onboarding";
+import { aiEmbeddingsConfigured } from "../lib/aiEmbeddings";
+import { computeTicketQueryEmbedding, findRelevantFaqs, findSimilarTickets, firstClientMessage } from "../lib/aiSimilarTickets";
+import { generateSuggestedReply, transformSuggestionText, ReplySourceInput } from "../lib/aiClaude";
+import { config } from "../config";
 
 /**
  * Module Tickets (support) — 19/08/2026. Portée CRM/Sesame uniquement
@@ -85,6 +91,8 @@ function shapeTicket(t: {
   status: string;
   priority: string;
   type: string | null;
+  module: string | null;
+  resolutionSummary: string | null;
   tags: unknown;
   contactEmail: string;
   contactName: string | null;
@@ -107,6 +115,8 @@ function shapeTicket(t: {
     status: t.status,
     priority: t.priority,
     type: t.type || "",
+    module: t.module || "",
+    resolutionSummary: t.resolutionSummary || "",
     tags: (t.tags as string[]) || [],
     contactEmail: t.contactEmail,
     contactName: t.contactName || "",
@@ -115,6 +125,20 @@ function shapeTicket(t: {
     updatedAt: t.updatedAt,
     closedAt: t.closedAt,
     messages: (t.messages || []).map(shapeMessage),
+  };
+}
+
+function shapeAiSuggestion(s: { id: string; ticketId: string; suggestedText: string; editedText: string | null; sentText: string | null; confidence: number | null; sources: unknown; status: string; createdAt: Date }) {
+  return {
+    id: s.id,
+    ticketId: s.ticketId,
+    text: s.suggestedText,
+    editedText: s.editedText,
+    sentText: s.sentText,
+    confidence: s.confidence ?? 0,
+    sources: (s.sources as { id: string; type: string; label: string }[]) || [],
+    status: s.status,
+    createdAt: s.createdAt,
   };
 }
 
@@ -154,11 +178,122 @@ crmTicketRouter.get(
   })
 );
 
+/**
+ * GET /wa/crmTicket/similar?id=... — assistant support IA, § LOT 1 étape 1.
+ * Recherche sémantique (pas seulement mots-clés) des tickets déjà résolus
+ * les plus proches du ticket demandé. `configured:false` (200, pas d'erreur)
+ * quand OPENAI_API_KEY n'est pas défini — le panneau front reste discret
+ * plutôt que d'afficher une erreur pour une fonctionnalité optionnelle.
+ */
+crmTicketRouter.get(
+  "/crmTicket/similar",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    if (!aiEmbeddingsConfigured()) {
+      res.json({ configured: false, results: [] });
+      return;
+    }
+    const id = (req.query.id as string) || "";
+    const t = await prisma.crmTicket.findUnique({ where: { id }, include: { messages: { orderBy: { createdAt: "asc" } } } });
+    if (!t) throw new HttpError(404, "Ticket introuvable");
+    const queryEmbedding = await computeTicketQueryEmbedding(t);
+    const results = queryEmbedding ? await findSimilarTickets(queryEmbedding, t.id) : [];
+    res.json({ configured: true, results });
+  })
+);
+
+/**
+ * POST /wa/crmTicket/aiSuggest { id } — assistant support IA, § LOT 1
+ * étape 2 : génère une proposition de réponse à partir des cas similaires
+ * et FAQ pertinentes. Crée une nouvelle ligne AiSuggestion à chaque appel
+ * (aussi utilisé pour "Régénérer") et marque discarded toute suggestion
+ * "proposed" précédente du même ticket — jamais mise à jour en place, pour
+ * garder l'historique complet des propositions (cf. cahier des charges,
+ * "conserver réponse proposée / modifiée / envoyée").
+ */
+crmTicketRouter.post(
+  "/crmTicket/aiSuggest",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const id = (req.body.id as string) || "";
+    const t = await prisma.crmTicket.findUnique({ where: { id }, include: { messages: { orderBy: { createdAt: "asc" } } } });
+    if (!t) throw new HttpError(404, "Ticket introuvable");
+
+    const queryEmbedding = await computeTicketQueryEmbedding(t);
+    const [similarTickets, faqs] = queryEmbedding
+      ? await Promise.all([findSimilarTickets(queryEmbedding, t.id), findRelevantFaqs(queryEmbedding)])
+      : [[], []];
+
+    const sources: ReplySourceInput[] = [
+      ...similarTickets.filter((s) => s.resolutionSummary).map((s) => ({ id: `ticket:${s.ticketId}`, type: "ticket" as const, label: `${s.number} — ${s.subject}`, text: s.resolutionSummary })),
+      ...faqs.map((f) => ({ id: `faq:${f.faqId}`, type: "faq" as const, label: f.title, text: f.shortAnswer })),
+    ];
+
+    const suggestion = await generateSuggestedReply({ subject: t.subject, question: firstClientMessage(t.messages), sources });
+
+    await prisma.aiSuggestion.updateMany({ where: { ticketId: t.id, status: "proposed" }, data: { status: "discarded" } });
+    const row = await prisma.aiSuggestion.create({
+      data: {
+        ticketId: t.id,
+        suggestedText: suggestion.text,
+        confidence: suggestion.confidence,
+        sources: suggestion.sourcesUsed,
+        model: config.anthropicModel,
+        createdById: req.admin?.adminId || null,
+      },
+    });
+    res.status(201).json(shapeAiSuggestion(row));
+  })
+);
+
+interface TransformBody {
+  suggestionId: string;
+  mode: "shorten" | "pedagogical" | "technical";
+}
+
+/**
+ * POST /wa/crmTicket/aiSuggestTransform — reformule une suggestion déjà
+ * générée (raccourcir / plus pédagogique / plus technique) sans refaire la
+ * recherche de sources : la confiance et les sources sont reprises
+ * telles quelles, seul le texte change. Nouvelle ligne AiSuggestion (même
+ * logique d'historique que /aiSuggest).
+ */
+crmTicketRouter.post(
+  "/crmTicket/aiSuggestTransform",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const b = req.body as TransformBody;
+    if (!["shorten", "pedagogical", "technical"].includes(b.mode)) throw new HttpError(400, "Mode invalide");
+    const existing = await prisma.aiSuggestion.findUnique({ where: { id: b.suggestionId } });
+    if (!existing) throw new HttpError(404, "Suggestion introuvable");
+
+    const text = await transformSuggestionText(existing.suggestedText, b.mode);
+
+    await prisma.aiSuggestion.update({ where: { id: existing.id }, data: { status: "discarded" } });
+    const row = await prisma.aiSuggestion.create({
+      data: {
+        ticketId: existing.ticketId,
+        suggestedText: text,
+        confidence: existing.confidence,
+        sources: existing.sources as object,
+        model: config.anthropicModel,
+        createdById: req.admin?.adminId || null,
+      },
+    });
+    res.status(201).json(shapeAiSuggestion(row));
+  })
+);
+
 interface UpdateBody {
   id: string;
   status?: string;
   priority?: string;
   type?: string;
+  module?: string;
+  resolutionSummary?: string;
   agentId?: string | null;
   tags?: string[];
 }
@@ -210,6 +345,16 @@ crmTicketRouter.post(
       changeLines.push(`Type : ${existing.type || "—"} → ${b.type || "—"}`);
       data.type = b.type || null;
     }
+    if (b.module !== undefined) {
+      const module = b.module && MODULE_KEYS.has(b.module as never) ? b.module : null;
+      if (module !== existing.module) {
+        changeLines.push(`Module : ${existing.module || "—"} → ${module || "—"}`);
+        data.module = module;
+      }
+    }
+    if (b.resolutionSummary !== undefined && (b.resolutionSummary || null) !== existing.resolutionSummary) {
+      data.resolutionSummary = b.resolutionSummary || null;
+    }
     let agentNames: { id: string; name: string | null; email: string }[] = [];
     if (b.agentId !== undefined && (b.agentId || null) !== existing.agentId) {
       const ids = [existing.agentId, b.agentId].filter((v): v is string => !!v);
@@ -257,6 +402,13 @@ crmTicketRouter.post(
       }).catch((e) => console.error("[automation] crm.ticket_status_changed:", e));
     }
 
+    // Indexation sémantique (§ assistant IA, cas similaires) à la clôture —
+    // asynchrone, ne bloque jamais la réponse (cf. reindexTicketEmbedding,
+    // qui avale déjà ses propres erreurs).
+    if (b.status && b.status !== existing.status && (b.status === "Résolu" || b.status === "Fermé")) {
+      reindexTicketEmbedding(b.id);
+    }
+
     res.json(shapeTicket(updated));
   })
 );
@@ -266,6 +418,7 @@ interface ReplyBody {
   body: string;
   attachments?: string[];
   kind: "reply" | "note";
+  aiSuggestionId?: string;
 }
 
 /**
@@ -309,6 +462,20 @@ crmTicketRouter.post(
     const data: Record<string, unknown> = { updatedAt: new Date() };
     if (kind === "reply" && ticket.status !== "Fermé") data.status = "Attente client";
     await prisma.crmTicket.update({ where: { id: ticket.id }, data });
+
+    // Trace la réponse réellement envoyée sur la suggestion IA d'origine
+    // (§ "conserver réponse proposée / modifiée / envoyée") — status "used"
+    // si l'opérateur a envoyé le texte tel quel, "edited" s'il l'a modifié.
+    if (kind === "reply" && b.aiSuggestionId) {
+      const suggestion = await prisma.aiSuggestion.findUnique({ where: { id: b.aiSuggestionId } });
+      if (suggestion && suggestion.ticketId === ticket.id) {
+        const wasEdited = bodyText !== suggestion.suggestedText;
+        await prisma.aiSuggestion.update({
+          where: { id: suggestion.id },
+          data: { sentText: bodyText, editedText: wasEdited ? bodyText : null, status: wasEdited ? "edited" : "used" },
+        });
+      }
+    }
 
     res.status(201).json(shapeMessage(message));
   })

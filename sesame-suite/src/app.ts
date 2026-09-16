@@ -50,6 +50,7 @@ import { unsubscribeRouter } from "./routes/unsubscribe";
 import { graphMailRouter } from "./routes/graphMail";
 import { nayaxRouter } from "./routes/nayax";
 import { accountingRouter } from "./routes/accounting";
+import { faqRouter } from "./routes/faq";
 import { housekeepingScope } from "./middleware/housekeepingScope";
 import { errorHandler } from "./middleware/errorHandler";
 import { VERSION } from "./lib/version";
@@ -125,6 +126,7 @@ export function createApp() {
   app.use("/wa", bookingEngineRouter);
   app.use("/wa", nayaxRouter);
   app.use("/wa", accountingRouter);
+  app.use("/wa", faqRouter);
 
   // Authentification espace client (hors convention /wa — pas de DAO CRUD dédié)
   app.use("/api", authRouter);

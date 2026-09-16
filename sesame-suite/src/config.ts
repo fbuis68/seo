@@ -33,4 +33,15 @@ export const config = {
   // lib/templateVars.ts) depuis un contexte sans requête HTTP en cours
   // (balayage périodique), même principe que publicBaseUrl.
   guestBaseUrl: (process.env.GUEST_BASE_URL || "https://guest.sesame.technology").replace(/\/$/, ""),
+  // Assistant support IA (§ LOT 1 — recherche de cas similaires, réponse
+  // suggérée, génération de FAQ, cf. lib/aiEmbeddings.ts et lib/aiClaude.ts).
+  // Deux fournisseurs distincts : Claude n'a pas d'API d'embeddings, donc
+  // OpenAI text-embedding-3-small reste utilisé uniquement pour vectoriser
+  // (recherche sémantique) pendant que Claude génère tout le texte (réponse
+  // suggérée, FAQ). Absents ⇒ les routes IA répondent 503 plutôt que
+  // d'échouer silencieusement (mêmes conventions que graphTenantId etc.).
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
+  anthropicModel: process.env.ANTHROPIC_MODEL || "claude-sonnet-5",
+  openaiApiKey: process.env.OPENAI_API_KEY || "",
+  openaiEmbeddingModel: process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small",
 };
