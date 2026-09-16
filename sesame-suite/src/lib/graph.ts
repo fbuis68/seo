@@ -137,8 +137,16 @@ export async function getGraphMessage(mailbox: string, messageId: string): Promi
 
   let attachments: GraphAttachment[] = [];
   if (msg.hasAttachments) {
+    // Pas de $select ici : "contentBytes" n'existe que sur le sous-type
+    // fileAttachment, pas sur le type de base "attachment" que Graph utilise
+    // pour cette collection polymorphe (itemAttachment/referenceAttachment
+    // n'en ont pas) — un $select le citant est rejeté en 400 BadRequest
+    // ("Could not find a property named 'contentBytes' on type
+    // 'microsoft.graph.attachment'"), quel que soit le message. La liste
+    // complète (sans $select) inclut contentBytes par défaut pour les
+    // pièces jointes de taille raisonnable.
     const att = (await graphFetch(
-      `/users/${encodeURIComponent(mailbox)}/messages/${encodeURIComponent(messageId)}/attachments?$select=name,contentType,contentBytes,isInline`
+      `/users/${encodeURIComponent(mailbox)}/messages/${encodeURIComponent(messageId)}/attachments`
     )) as { value?: (GraphAttachment & { isInline?: boolean })[] };
     // Les images intégrées à la signature (logo, etc.) ne sont pas des
     // pièces jointes utiles à un ticket support.
