@@ -7182,20 +7182,26 @@ async function openAccInvoiceModal(id){
 // l'extraction n'a pas su rapprocher/créer automatiquement (ex : raison
 // sociale mal extraite alors que le SIRET, lui, est correct).
 let AI_ENTREPRISE_DEBOUNCE=null, AI_ENTREPRISE_RESULTS=[];
-function aiEntrepriseAutocomplete(){
+// force=true (clic sur la loupe, ou recherche automatique au chargement du
+// modal avec un SIRET/nom déjà extrait) : lance la requête immédiatement,
+// sans attendre la frappe suivante — sinon une valeur pré-remplie par
+// l'extraction ne déclenche jamais d'oninput et la liste reste vide.
+function aiEntrepriseAutocomplete(force){
   clearTimeout(AI_ENTREPRISE_DEBOUNCE);
   const inp = document.getElementById('ai-entreprise-search');
   const box = document.getElementById('ai-entreprise-suggestions');
   if(!inp||!box) return;
   const q = inp.value.trim();
   if(q.length<3){ box.style.display='none'; box.innerHTML=''; return; }
-  AI_ENTREPRISE_DEBOUNCE = setTimeout(async ()=>{
+  const run = async ()=>{
+    box.style.display='block';
+    box.innerHTML = '<div style="padding:7px 10px;font-size:12px;color:var(--mu)">Recherche…</div>';
     try{
       const r = await fetch('https://recherche-entreprises.api.gouv.fr/search?q='+encodeURIComponent(q)+'&limit=5');
-      if(!r.ok){ box.style.display='none'; return; }
+      if(!r.ok){ box.innerHTML = '<div style="padding:7px 10px;font-size:12px;color:var(--mu)">Recherche indisponible</div>'; return; }
       const data = await r.json();
       AI_ENTREPRISE_RESULTS = data.results||[];
-      if(!AI_ENTREPRISE_RESULTS.length){ box.style.display='none'; box.innerHTML=''; return; }
+      if(!AI_ENTREPRISE_RESULTS.length){ box.innerHTML = '<div style="padding:7px 10px;font-size:12px;color:var(--mu)">Aucun résultat pour « '+esc(q)+' »</div>'; return; }
       box.innerHTML = AI_ENTREPRISE_RESULTS.map((e,i)=>{
         const nom = e.nom_complet || e.nom_raison_sociale || '';
         const siret = (e.siege&&e.siege.siret) || '';
@@ -7205,9 +7211,9 @@ function aiEntrepriseAutocomplete(){
           +'<div style="color:var(--mu);font-size:11px">SIRET '+esc(siret)+(adresse?' · '+esc(adresse):'')+'</div>'
           +'</div>';
       }).join('');
-      box.style.display='block';
-    }catch(e){ box.style.display='none'; }
-  }, 300);
+    }catch(e){ box.innerHTML = '<div style="padding:7px 10px;font-size:12px;color:var(--mu)">Recherche indisponible</div>'; }
+  };
+  if(force) run(); else AI_ENTREPRISE_DEBOUNCE = setTimeout(run, 300);
 }
 
 async function pickAiEntreprise(i){
@@ -7277,7 +7283,10 @@ function renderAccInvoiceModal(inv){
           <div class="modal-section">Fournisseur</div>
           ${!locked?`<div class="ff" style="position:relative;margin-bottom:8px">
             <label>Rechercher/créer via l'annuaire public des entreprises</label>
-            <input id="ai-entreprise-search" placeholder="Nom ou SIRET..." value="${esc(inv.issuerSiret||inv.issuerName||'')}" oninput="aiEntrepriseAutocomplete()" autocomplete="off">
+            <div style="display:flex;gap:6px">
+              <input id="ai-entreprise-search" placeholder="Nom ou SIRET..." value="${esc(inv.issuerSiret||inv.issuerName||'')}" oninput="aiEntrepriseAutocomplete()" onkeydown="if(event.key==='Enter'){event.preventDefault();aiEntrepriseAutocomplete(true)}" autocomplete="off" style="flex:1">
+              <button type="button" class="btn btn-ghost btn-icon" title="Rechercher" onclick="aiEntrepriseAutocomplete(true)">🔍</button>
+            </div>
             <div id="ai-entreprise-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--card);border:0.5px solid var(--bdr);border-radius:8px;margin-top:2px;max-height:220px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.12)"></div>
             <div style="font-size:11px;color:var(--mu);margin-top:4px">Choisir un résultat crée la fiche fournisseur (nom + adresse officiels) et la rapproche immédiatement à cette facture.</div>
           </div>`:''}
@@ -7319,6 +7328,12 @@ function renderAccInvoiceModal(inv){
       </div>
     </div>
   </div>`;
+
+  // Recherche automatique dès l'ouverture si un fournisseur n'est pas déjà
+  // rapproché et qu'un SIRET/nom a été extrait — sinon le champ pré-rempli
+  // reste vide de résultats tant que l'utilisateur n'a pas retapé un
+  // caractère (oninput ne se déclenche pas sur un value= posé au rendu).
+  if(!locked && !inv.supplierId && (inv.issuerSiret||inv.issuerName)) aiEntrepriseAutocomplete(true);
 }
 
 /** Table Débit/Crédit d'une écriture — vraie partie double, ligne par ligne, avec totaux. Partagée entre la fiche facture et l'onglet Écritures. */
