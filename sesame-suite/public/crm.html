@@ -799,7 +799,7 @@ let SELECTED_IDS = new Set();
 // même principe) — sert à la suppression groupée et à la fusion de
 // tickets (cf. renderTicketsList, ticketBulkDelete, openTicketMergeModal).
 let TICKET_SELECTED_IDS = new Set();
-let srch='', fDanger='', fSecteur='', fOrigine='', fContrat='', fType='', editingId=null, toastT=null;
+let srch='', fDanger='', fSecteur='', fOrigine='', fContrat='', fType='', fNoEmail=false, fNoPhone=false, editingId=null, toastT=null;
 let deals=[], COMMERCIALS=[], tickets=[], cashLines=[], SECTOR_OPTIONS=[], ORIGINE_OPTIONS=[];
 let cashSettings = {revenuMode:'detail',revenuMontant:0,revenuFrequence:'mensuel',revenuMois:null,depenseMode:'detail',depenseMontant:0,depenseFrequence:'mensuel',depenseMois:null};
 let cashYear = new Date().getFullYear();
@@ -882,7 +882,7 @@ function bc(parts){document.getElementById('bc').innerHTML=parts.map((p,i)=>i<pa
 function tba(html){document.getElementById('tb-actions').innerHTML=html;}
 
 // ── QUICK FILTER ──
-function qf(f,v){srch='';fDanger='';fSecteur='';fOrigine='';fContrat='';fType='';if(f==='danger')fDanger=v;else if(f==='contrat')fContrat=v;showList();}
+function qf(f,v){srch='';fDanger='';fSecteur='';fOrigine='';fContrat='';fType='';fNoEmail=false;fNoPhone=false;if(f==='danger')fDanger=v;else if(f==='contrat')fContrat=v;showList();}
 
 // ════════════════════════════════════════
 // HOME — vue d'ensemble (indicateurs seuls, sans la liste des fiches)
@@ -932,6 +932,8 @@ function filtered(){
     if(fOrigine&&c.origine!==fOrigine)return false;
     if(fContrat&&c.contrat!==fContrat)return false;
     if(fType&&c.type!==fType)return false;
+    if(fNoEmail&&c.email&&c.email.trim())return false;
+    if(fNoPhone&&c.tel&&c.tel.trim())return false;
     return true;
   }).sort((a,b)=>{let av=a[sortC]||'',bv=b[sortC]||'';if(typeof av==='string')av=av.toLowerCase();if(typeof bv==='string')bv=bv.toLowerCase();return av<bv?-sortD:av>bv?sortD:0;});
 }
@@ -1254,6 +1256,8 @@ function renderList(){
     <select class="lsel" onchange="fOrigine=this.value;renderList()"><option value="">Toutes origines</option>${origAll.map(o=>`<option value="${o}" ${fOrigine===o?'selected':''}>${o}</option>`).join('')}</select>
     <select class="lsel" onchange="fContrat=this.value;renderList()"><option value="">Tous contrats</option><option value="oui" ${fContrat==='oui'?'selected':''}>oui</option><option value="non" ${fContrat==='non'?'selected':''}>non</option><option value="en cours" ${fContrat==='en cours'?'selected':''}>en cours</option></select>
     <select class="lsel" onchange="fType=this.value;renderList()"><option value="">Tous types</option>${TYPES.map(t=>`<option value="${t}" ${fType===t?'selected':''}>${t}</option>`).join('')}</select>
+    <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--mu);white-space:nowrap"><input type="checkbox" ${fNoEmail?'checked':''} onchange="fNoEmail=this.checked;renderList()"> Sans email</label>
+    <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--mu);white-space:nowrap"><input type="checkbox" ${fNoPhone?'checked':''} onchange="fNoPhone=this.checked;renderList()"> Sans téléphone</label>
     <span class="count-lbl">${data.length} résultat${data.length>1?'s':''}</span>
   </div>`;
   // Barre d'actions groupées — n'apparaît que si au moins une ligne est
@@ -4857,12 +4861,49 @@ let crmProducts = [];
 
 async function showCrmProducts(){
   view='produits';setNav('n-produits');bc([{label:'Produits'}]);
-  tba('<button class="btn btn-primary btn-sm" onclick="openProductModal(null)">+ Nouveau produit</button>');
+  tba('<button class="btn btn-ghost btn-sm" onclick="importSesameCatalog()">Importer le catalogue Sesame</button><button class="btn btn-primary btn-sm" onclick="openProductModal(null)">+ Nouveau produit</button>');
   document.getElementById('main').innerHTML='<div class="card">Chargement…</div>';
   try{
     var r = await apiFetch('/wa/crmProduct/list');
     crmProducts = r.ok ? await r.json() : [];
   }catch(e){ crmProducts=[]; }
+  renderCrmProducts();
+}
+
+/**
+ * Reprend le catalogue des modules Sesame (options d'abonnement, cf.
+ * ONBOARDING_MODULES côté serveur — même source que le wizard d'inscription
+ * et le catalogue de pré-remplissage des devis) comme fiches Produit,
+ * toutes actives — pour n'avoir qu'un seul catalogue à jour plutôt que deux
+ * qui peuvent diverger. Idempotent : n'importe que les modules absents
+ * (comparaison par SKU = clé du module), un module déjà importé n'est ni
+ * dupliqué ni écrasé (un prix modifié à la main sur la fiche Produit reste
+ * la source de vérité pour les devis, pas la grille tarifaire globale).
+ */
+async function importSesameCatalog(){
+  let catalog;
+  try{
+    const r = await apiFetch('/wa/crmQuote/catalog');
+    if(!r.ok) throw new Error('http '+r.status);
+    catalog = await r.json();
+  }catch(e){ flash('Erreur de chargement du catalogue Sesame'); return; }
+
+  const existingSkus = new Set(crmProducts.map(p=>p.sku));
+  const toImport = (catalog.modules||[]).filter(m=>!existingSkus.has(m.k));
+  if(!toImport.length){ flash('Catalogue déjà à jour — rien à importer'); return; }
+
+  let created = 0;
+  for(const m of toImport){
+    try{
+      const r = await apiFetch('/wa/crmProduct/create', {method:'POST', body:JSON.stringify({
+        sku: m.k, label: m.label, description: m.desc||'', unitPrice: m.price||0, recurring: true, stockable: false,
+      })});
+      if(r.ok) created++;
+    }catch(e){ /* on continue avec les suivants */ }
+  }
+  flash(created+' produit(s) importé(s) du catalogue Sesame');
+  const r2 = await apiFetch('/wa/crmProduct/list');
+  crmProducts = r2.ok ? await r2.json() : crmProducts;
   renderCrmProducts();
 }
 

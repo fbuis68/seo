@@ -62,7 +62,7 @@ crmQuoteRouter.get(
     const overrides = (cfg.modulePrices as Record<string, number>) || {};
     res.json({
       basePrice: cfg.basePrice,
-      modules: ONBOARDING_MODULES.map((m) => ({ k: m.k, label: m.label, price: overrides[m.k] ?? m.price })),
+      modules: ONBOARDING_MODULES.map((m) => ({ k: m.k, label: m.label, desc: m.desc, price: overrides[m.k] ?? m.price })),
     });
   })
 );
