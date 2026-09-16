@@ -56,6 +56,16 @@ services:
       # NODE_ENV=production et qu'aucun secret réel n'a été défini).
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       DEFAULT_ENTITY_CODE: E00000001
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+      GUEST_BASE_URL: ${GUEST_BASE_URL:-}
+      # App Azure AD (client credentials) — boîte support par Microsoft
+      # Graph, cf. docs/microsoft-graph-inbound-tickets.md. Comme
+      # JWT_SECRET/POSTGRES_PASSWORD ci-dessus : valeurs réelles dans un
+      # .env local (jamais commité), jamais en dur dans ce fichier qui, lui,
+      # est versionné dans un dépôt PUBLIC.
+      GRAPH_TENANT_ID: ${GRAPH_TENANT_ID:-}
+      GRAPH_CLIENT_ID: ${GRAPH_CLIENT_ID:-}
+      GRAPH_CLIENT_SECRET: ${GRAPH_CLIENT_SECRET:-}
     ports:
       # Réservé à la machine hôte : nginx (déjà installé et configuré sur le
       # serveur, certificats Let's Encrypt via Certbot — cf. README) fait
