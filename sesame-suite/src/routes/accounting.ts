@@ -124,6 +124,7 @@ accountingRouter.get(
 );
 
 const EDITABLE_INVOICE_FIELDS = [
+  "direction",
   "invoiceNumber",
   "invoiceDate",
   "dueDate",
@@ -165,11 +166,22 @@ accountingRouter.put(
     for (const field of EDITABLE_INVOICE_FIELDS) {
       if (!(field in body)) continue;
       let value = body[field];
+      if (field === "direction" && value !== "purchase" && value !== "sale") throw new HttpError(400, "direction doit être 'purchase' ou 'sale'");
       if ((field === "invoiceDate" || field === "dueDate" || field === "serviceDate") && value) value = new Date(value as string);
       data[field] = value;
       oldValue[field] = (existing as unknown as Record<string, unknown>)[field];
     }
     if (!Object.keys(data).length) throw new HttpError(400, "Aucun champ à modifier");
+    if ("direction" in data && data.direction !== existing.direction) {
+      // Achat et vente ne partagent ni le rapprochement tiers (fournisseur
+      // vs client) ni le type de compte proposé (charge vs produit) — un
+      // ancien rapprochement/compte resterait incohérent avec la nouvelle
+      // direction plutôt que simplement "à revalider".
+      data.supplierId = null;
+      data.customerId = null;
+      data.proposedAccountId = null;
+      data.proposedAccountConfidence = 0;
+    }
 
     const updated = await prisma.accInvoice.update({ where: { id: existing.id }, data });
     await recordAuditLog({ entityId, userId: actorId(req), action: "invoice_fields_corrected", targetType: "AccInvoice", targetId: existing.id, oldValue, newValue: data, ip: req.ip });

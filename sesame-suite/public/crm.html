@@ -6924,11 +6924,13 @@ function renderAccInvoiceModal(inv){
           ${locked?'<div class="tpill bi" style="margin-bottom:10px">Facture validée — corrections via une extourne d\'écriture</div>':''}
           <div class="modal-section">Identification</div>
           <div class="form-grid">
+            <div class="ff"><label>Sens</label><select id="ai-direction" ${locked?'disabled':''}><option value="purchase" ${inv.direction!=='sale'?'selected':''}>Achat (fournisseur)</option><option value="sale" ${inv.direction==='sale'?'selected':''}>Vente (client)</option></select></div>
             <div class="ff"><label>N° facture</label><input id="ai-invoiceNumber" value="${esc(inv.invoiceNumber||'')}" ${locked?'disabled':''}></div>
             <div class="ff"><label>Devise</label><input id="ai-currency" value="${esc(inv.currency||'EUR')}" ${locked?'disabled':''}></div>
             <div class="ff"><label>Date facture</label><input type="date" id="ai-invoiceDate" value="${toDateInputValue(inv.invoiceDate)}" ${locked?'disabled':''}></div>
             <div class="ff"><label>Date échéance</label><input type="date" id="ai-dueDate" value="${toDateInputValue(inv.dueDate)}" ${locked?'disabled':''}></div>
           </div>
+          ${!locked?'<div style="font-size:11px;color:var(--mu);margin-top:4px">Changer le sens réinitialise le fournisseur/client et le compte proposé (rapprochement et type de compte différents) — enregistrez avant de les re-choisir.</div>':''}
           <div class="modal-section">Fournisseur</div>
           <div class="form-grid">
             <div class="ff"><label>Fournisseur rapproché${inv.supplierMatchConfidence!=null?' ('+accConfidencePct(inv.supplierMatchConfidence)+')':''}</label><select id="ai-supplierId" ${locked?'disabled':''}>${supplierOpts}</select></div>
@@ -6951,6 +6953,11 @@ function renderAccInvoiceModal(inv){
           <div class="modal-section">Contrôles de cohérence</div>
           ${checksHtml||'<div class="log-empty">Aucun contrôle.</div>'}
           ${inv.entry?`<div class="modal-section">Écriture</div><div style="font-size:12px;color:var(--mu)">${inv.entry.number?esc(inv.entry.number):'Brouillon (non validée)'} — ${esc(inv.entry.label)}</div>`:''}
+          <div class="modal-section">Texte extrait du document</div>
+          <details>
+            <summary style="font-size:12px;color:var(--mu);cursor:pointer">Afficher (pour comprendre un champ non reconnu)</summary>
+            <pre style="white-space:pre-wrap;font-size:11px;font-family:monospace;background:var(--hover);border:0.5px solid var(--bdr);border-radius:8px;padding:10px;max-height:220px;overflow-y:auto;margin-top:6px">${esc(doc.extractedText||'(aucun texte extrait)')}</pre>
+          </details>
         </div>
       </div>
       <div class="modal-footer">
@@ -6967,6 +6974,7 @@ function renderAccInvoiceModal(inv){
 function accInvoiceFieldsFromForm(){
   const g = id=>{ const el=document.getElementById(id); return el?el.value:''; };
   return {
+    direction: g('ai-direction')||'purchase',
     invoiceNumber: g('ai-invoiceNumber')||null,
     currency: g('ai-currency')||null,
     invoiceDate: g('ai-invoiceDate')||null,

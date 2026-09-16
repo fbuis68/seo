@@ -100,8 +100,8 @@ function findAfterKeyword(text: string, keywordPattern: RegExp, valuePattern: Re
   return null;
 }
 
-const SIRET_RE = /(\d{3}\s?\d{3}\s?\d{3}\s?\d{5})/;
-const SIREN_RE = /(\d{3}\s?\d{3}\s?\d{3})\b(?!\s?\d{5})/;
+const SIRET_RE = /^(\d{3}\s?\d{3}\s?\d{3}\s?\d{5})/;
+const SIREN_RE = /^(\d{3}\s?\d{3}\s?\d{3})\b(?!\s?\d{5})/;
 const VAT_FR_RE = /\b(FR[0-9A-Z]{2}\d{9})\b/;
 const IBAN_RE = /^([A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){2,7}\s?[A-Z0-9]{1,4})/;
 const BIC_RE = /^([A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?)\b/;
@@ -117,6 +117,10 @@ const INVOICE_NUMBER_RE = /^([A-Z0-9][A-Z0-9\-\/_.]{2,29})/;
 const INVOICE_NUMBER_KEYWORD = /(?:n[°o][ \t]*(?:de[ \t]*)?facture|num[ée]ro[ \t]*(?:de[ \t]*)?facture|facture[ \t]*n[°o]|invoice[ \t]*(?:number|#|no)\.?)/i;
 const INVOICE_DATE_KEYWORD = /date[ \t]*(?:de[ \t]*)?facture|date[ \t]*d.[ée]mission|invoice[ \t]*date/i;
 const DUE_DATE_KEYWORD = /date[ \t]*d.[ée]ch[ée]ance|[ée]ch[ée]ance[ \t]*(?:le|au)?|due[ \t]*date/i;
+const SIRET_KEYWORD = /\bsiret\b[ \t]*:?[ \t]*n?[°o]?/i;
+const SIREN_KEYWORD = /\bsiren\b[ \t]*:?[ \t]*n?[°o]?/i;
+const VAT_KEYWORD = /tva[ \t]*intracommunautaire|n[°o][ \t]*tva|vat[ \t]*(?:number|id)/i;
+const VAT_VALUE_RE = /^(FR[0-9A-Z]{2}\d{9})/;
 const IBAN_KEYWORD = /\bIBAN\b/i;
 const BIC_KEYWORD = /\bBIC\b|\bSWIFT\b/i;
 const TTC_KEYWORD = /total[ \t]*ttc|montant[ \t]*ttc|net[ \t]*[àa][ \t]*payer|total[ \t]*due|amount[ \t]*due/i;
@@ -169,23 +173,40 @@ export function extractInvoiceData(text: string): ExtractedInvoiceData {
     }
   }
 
-  const siretMatch = SIRET_RE.exec(text);
-  if (siretMatch) {
-    result.issuerSiret = siretMatch[1].replace(/\s/g, "");
+  // Ancré au mot-clé "SIRET"/"SIREN" (comme tous les autres champs, via
+  // findAfterKeyword) — une recherche sans ancrage dans tout le document
+  // matchait la première suite de 14 (ou 9) chiffres venue, y compris à
+  // l'intérieur d'un IBAN ou d'un numéro de téléphone (cf. 16/09/2026, faux
+  // positifs constatés en production).
+  const siret = findAfterKeyword(text, SIRET_KEYWORD, SIRET_RE);
+  if (siret) {
+    result.issuerSiret = siret.value.replace(/\s/g, "");
     result.issuerSiren = result.issuerSiret.slice(0, 9);
     confidence.issuerSiret = 0.9;
     confidence.issuerSiren = 0.9;
   } else {
-    const sirenMatch = SIREN_RE.exec(text);
-    if (sirenMatch) {
-      result.issuerSiren = sirenMatch[1].replace(/\s/g, "");
-      confidence.issuerSiren = 0.6;
+    const siren = findAfterKeyword(text, SIREN_KEYWORD, SIREN_RE);
+    if (siren) {
+      result.issuerSiren = siren.value.replace(/\s/g, "");
+      confidence.issuerSiren = 0.85;
     }
   }
-  const vatMatch = VAT_FR_RE.exec(text);
-  if (vatMatch) {
-    result.issuerVat = vatMatch[1];
+  // Ancré en priorité au mot-clé "TVA intracommunautaire"/"n° TVA" — même
+  // raison que SIRET/SIREN ci-dessus (un IBAN "FR76..." contient de quoi
+  // matcher le format FR+2+9 chiffres par coïncidence). Repli sur une
+  // recherche non ancrée à confiance réduite plutôt que de ne rien
+  // extraire, le format restant assez spécifique pour rester utile même
+  // sans mot-clé trouvé.
+  const vat = findAfterKeyword(text, VAT_KEYWORD, VAT_VALUE_RE);
+  if (vat) {
+    result.issuerVat = vat.value;
     confidence.issuerVat = 0.9;
+  } else {
+    const vatMatch = VAT_FR_RE.exec(text);
+    if (vatMatch) {
+      result.issuerVat = vatMatch[1];
+      confidence.issuerVat = 0.5;
+    }
   }
   const iban = findAfterKeyword(text, IBAN_KEYWORD, IBAN_RE, 40); // IBAN peut dépasser 27 caractères espacés — au-delà du maxGap par défaut
   if (iban) {
