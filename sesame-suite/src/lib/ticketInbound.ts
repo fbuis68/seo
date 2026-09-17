@@ -101,7 +101,7 @@ async function ticketAgentName(agentId: string | null): Promise<string> {
  * constraint failed" par lot de requêtes concurrentes sur POST
  * /wa/ticket/create, un endpoint public).
  */
-async function nextTicketNumber(): Promise<string> {
+export async function nextTicketNumber(): Promise<string> {
   const year = new Date().getFullYear();
   const n = await nextSequenceValue(`ticket-${year}`);
   return `TKT-${year}-${String(n).padStart(4, "0")}`;

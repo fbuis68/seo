@@ -114,6 +114,44 @@ configuré) pour indexer l'historique existant. Les tickets résolus après
 coup sont indexés automatiquement, pas besoin de relancer ce script
 régulièrement.
 
+## Import de l'historique Freshdesk
+
+Pour amorcer la recherche de cas similaires avec l'historique existant
+(migration depuis Freshdesk), `scripts/import-freshdesk-tickets.ts` lit
+l'export complet Freshdesk (Admin > Compte > Exportations de compte >
+Tickets, format XML — pas le CSV simplifié, qui n'a pas les
+conversations) et crée les tickets/prospects/messages correspondants,
+sans appeler l'IA.
+
+```bash
+# 1. Décompresser l'export Freshdesk (Tickets*.xml, ArchivedTickets*.xml)
+#    dans un dossier sur le serveur, ex. ~/freshdesk-export/ — jamais commité.
+# 2. Dans le conteneur :
+docker exec -it <conteneur> npx tsx scripts/import-freshdesk-tickets.ts /chemin/vers/freshdesk-export
+
+# 3. Puis indexer les tickets importés (Résolu/Fermé) pour la recherche sémantique :
+docker exec -it <conteneur> npx tsx scripts/backfill-ticket-embeddings.ts
+```
+
+- Idempotent : chaque ticket importé est tagué `fd:<id Freshdesk>` —
+  relancer le script sur un export mis à jour n'importe que les nouveaux
+  tickets.
+- Le message client vient de la description du ticket, la réponse de
+  résolution du dernier message agent public (`resolutionSummary`,
+  utilisé par la recherche sémantique). Les notes internes Freshdesk
+  (`private=true`) sont importées comme notes internes (jamais envoyées),
+  et les notes techniques auto-générées par le portail
+  (`user_agent: ...`) sont filtrées.
+- Statuts Freshdesk mappés : Resolved→Résolu, Closed→Fermé, Open→En
+  attente, Pending→En cours. Seuls Résolu/Fermé sont indexés (même règle
+  que pour les tickets internes).
+- Le prospect est retrouvé/créé par email, comme pour un ticket créé
+  normalement — un même client Freshdesk/CRM ne sera pas dupliqué.
+- Limite connue : un ticket sans réponse agent exploitable (résolu sans
+  note publique, ex. juste une note interne) reste importé mais n'est
+  pas indexé — l'assistant ne peut rien apprendre d'un cas sans
+  résolution écrite.
+
 ## Ce qui n'est PAS dans ce lot 1
 
 Chatbot, réponse automatique envoyée sans validation, détection
