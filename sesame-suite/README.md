@@ -2498,6 +2498,28 @@ PUBLIQUE (visible par quiconque lit ce dépôt), qui permettrait de forger un
 token admin pour n'importe quel établissement. Le serveur avertit
 bruyamment au démarrage tant que ce n'est pas fait (voir src/index.ts).
 
+### Limite de taille de requête nginx (client_max_body_size, 17/09/2026)
+
+Symptôme : l'import d'une facture comptable (ou tout autre envoi de fichier
+en base64 — pièces jointes ticket, etc.) échouait avec une erreur front
+`Unexpected token '<', "<html> <h"... is not valid JSON`. Cause : nginx
+(pas l'app) rejette par défaut toute requête au-delà de **1 Mo**, bien en
+dessous de la limite applicative (`express.json({limit:"15mb"})`, cf.
+`src/app.ts`) — une facture scannée ou un `.zip` de plusieurs factures
+dépasse largement 1 Mo une fois encodé en base64. nginx renvoie alors sa
+propre page d'erreur HTML (413) avant même que la requête n'atteigne
+l'application, et le front tente de la lire comme du JSON.
+
+Corrigé dans `deploy/nginx/admin.sesame.technology.conf`
+(`client_max_body_size 20m;`, même fichier que la correction nginx du
+01/09/2026 ci-dessus) — même procédure de déploiement :
+
+```bash
+cp /etc/nginx/sites-enabled/admin.sesame.technology /etc/nginx/sites-enabled/admin.sesame.technology.bak
+cp sesame-suite/deploy/nginx/admin.sesame.technology.conf /etc/nginx/sites-enabled/admin.sesame.technology
+nginx -t && systemctl reload nginx
+```
+
 ### Intégration réservations : webhook entrant (notifications temps réel, ex. Mews)
 
 Jusqu'ici le connecteur ne fonctionnait qu'en mode "tirage" (polling
