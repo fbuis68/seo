@@ -19,6 +19,9 @@
  *   data-position   "bottom-right" (défaut) ou "bottom-left".
  *   data-subject    Pré-remplit le champ Sujet (utile sur une page dédiée,
  *                   ex. data-subject="Question facturation").
+ *   data-hours      Horaires d'ouverture affichés sous le titre (défaut
+ *                   "Lundi au vendredi de 9h00 à 17h30"). Chaîne vide
+ *                   ("") pour les masquer.
  */
 (function () {
   var scriptEl = document.currentScript;
@@ -31,6 +34,10 @@
     color: scriptEl.getAttribute("data-color") || "#8a2b2b",
     position: scriptEl.getAttribute("data-position") === "bottom-left" ? "left" : "right",
     subject: scriptEl.getAttribute("data-subject") || "",
+    // hasAttribute (pas juste || sur getAttribute) pour distinguer "attribut
+    // absent" (valeur par défaut ci-dessous) de "attribut présent mais vide"
+    // (masque volontairement les horaires, data-hours="").
+    hours: scriptEl.hasAttribute("data-hours") ? scriptEl.getAttribute("data-hours") : "Lundi au vendredi de 9h00 à 17h30",
   };
 
   function esc(s) {
@@ -78,6 +85,8 @@
     '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>';
   var ICON_PAPERCLIP =
     '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05 12.25 20.24a5.5 5.5 0 0 1-7.78-7.78l9.19-9.19a3.67 3.67 0 0 1 5.19 5.19l-9.2 9.19a1.83 1.83 0 0 1-2.59-2.59l8.49-8.48"/></svg>';
+  var ICON_CLOCK =
+    '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
   var ICON_X_SMALL =
     '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
 
@@ -106,6 +115,7 @@
     ";color:#fff;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}" +
     ".stw-head h2{margin:0;font-size:16px;font-weight:700}" +
     ".stw-head p{margin:2px 0 0;font-size:12px;opacity:.85}" +
+    ".stw-head p.stw-hours{margin-top:6px;opacity:.75;display:flex;align-items:center;gap:5px}" +
     ".stw-x{background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:8px;padding:6px;cursor:pointer;display:flex;line-height:0}" +
     ".stw-x:hover{background:rgba(255,255,255,.28)}" +
     ".stw-body{padding:16px 18px;overflow-y:auto;flex:1}" +
@@ -275,7 +285,9 @@
     panelEl.innerHTML =
       '<div class="stw-head"><div><h2>' +
       esc(cfg.title) +
-      "</h2><p>Nous répondons par email dès que possible.</p></div>" +
+      "</h2><p>Nous répondons par email dès que possible.</p>" +
+      (cfg.hours ? '<p class="stw-hours">' + ICON_CLOCK + " " + esc(cfg.hours) + "</p>" : "") +
+      "</div>" +
       '<button class="stw-x" type="button" data-close aria-label="Fermer">' +
       ICON_CLOSE +
       "</button></div>" +

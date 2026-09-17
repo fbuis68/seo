@@ -56,6 +56,7 @@ Tous les réglages se font via des attributs `data-*` sur la même balise :
 | `data-color`     | Couleur d'accent (bouton, en-tête, liens)                            | `#8a2b2b`              |
 | `data-position`  | `bottom-right` ou `bottom-left`                                     | `bottom-right`         |
 | `data-subject`   | Pré-remplit le champ Sujet — utile sur une page dédiée à un thème   | (vide)                 |
+| `data-hours`     | Horaires d'ouverture affichés sous le titre — `data-hours=""` les masque | `Lundi au vendredi de 9h00 à 17h30` |
 | `data-api-base`  | URL de l'API si différente de l'origine du script (cas avancé)      | déduite du `src`       |
 
 ## Où voir le résultat
