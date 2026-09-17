@@ -158,6 +158,10 @@ export function createApp() {
   app.get("/onboarding", (_req, res) => res.sendFile(path.join(publicDir, "onboarding.html")));
   app.get("/crm", (_req, res) => res.sendFile(path.join(publicDir, "crm.html")));
   app.get("/support", (_req, res) => res.sendFile(path.join(publicDir, "support.html")));
+  // Outil interne mobile — consulter/répondre aux tickets depuis un
+  // téléphone, sans le reste du CRM (sidebar, tableaux larges...) qui ne
+  // tient pas sur un petit écran. Mêmes routes API que crm.html.
+  app.get("/tickets-mobile", (_req, res) => res.sendFile(path.join(publicDir, "tickets-mobile.html")));
   app.get("/menage", (_req, res) => res.sendFile(path.join(publicDir, "menage.html")));
   app.get("/vendor-portal", (_req, res) => res.sendFile(path.join(publicDir, "vendor-portal.html")));
 
