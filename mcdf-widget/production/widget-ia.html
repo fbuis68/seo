@@ -1,0 +1,2569 @@
+<meta charset="utf-8">
+<title>Widget IA MCDF</title>
+<!--
+  Widget IA MCDF — restitutions en direct (lecture seule).
+
+  IMPORTANT (déploiement sur un vrai serveur) : le <meta charset="utf-8">
+  ci-dessus doit rester la toute première ligne du fichier. Sans lui, si
+  le serveur (Tomcat) ne déclare pas explicitement charset=utf-8 dans
+  l'en-tête HTTP Content-Type — ce qui est le comportement par défaut de
+  beaucoup de configurations Tomcat — le navigateur devine l'encodage et
+  affiche les accents cassés ("DonnÃ©es" au lieu de "Données").
+
+  CE FICHIER EST FAIT POUR ÊTRE DÉPOSÉ TEL QUEL DANS WebContent/ ET OUVERT
+  DEPUIS L'APPLICATION MCDF (même origine) — voir INTEGRATION.md dans ce
+  même dossier pour les instructions d'intégration côté développeur.
+
+  Structure en 4 sous-rubriques (repris des rapports Power BI existants —
+  Suivi Commercial, Suivi Formateurs, Rapports Listings — reconstruits ici
+  avec les données MCDF en direct) : Commercial, Planning, Formateurs,
+  Listing.
+
+  Fonctionnement :
+  - Aucune dépendance externe, aucun build. Un seul fichier HTML/CSS/JS.
+  - S'appuie sur le cookie de session déjà actif dans l'onglet MCDF (même
+    mécanisme que l'appli elle-même) : aucune authentification séparée.
+  - Filtre les données sur une entité précise via le paramètre d'URL
+    ?entityId=E00000361 (à passer par l'appli hôte, cf. INTEGRATION.md).
+    Sans ce paramètre, affiche toutes les entités accessibles au compte
+    connecté (utile pour tester, à éviter en production).
+  - Lecture seule : aucun appel d'écriture (create/update).
+  - Utilise fullConventionQualiopi (superset confirmé de convention, avec
+    accountManagerName/customerName déjà résolus) plutôt que convention
+    seul, pour éviter des jointures supplémentaires.
+-->
+<style>
+  :root {
+    color-scheme: light;
+    --page:        #f9f9f7;
+    --surface:     #fcfcfb;
+    --surface-2:   #f2f1ec;
+    --ink:         #0b0b0b;
+    --ink-2:       #52514e;
+    --ink-muted:   #898781;
+    --grid:        #e1e0d9;
+    --border:      rgba(11,11,11,0.10);
+    --border-2:    rgba(11,11,11,0.16);
+    --accent:      #256abf;
+    --accent-tint: #dbe8f8;
+    --accent-300:  #6da7ec;
+    --good:        #0ca30c;
+    --good-text:   #006300;
+    --warning:     #b8860b;
+    --critical:    #b23327;
+    --critical-tint: #f6e2df;
+    --font-display: Charter, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322;
+      --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #8f8d86;
+      --grid: #2c2c2a; --border: rgba(255,255,255,0.10); --border-2: rgba(255,255,255,0.18);
+      --accent: #5b9bea; --accent-tint: #1c2e44; --accent-300: #3987e5;
+      --good: #3fc23f; --good-text: #4fd44f; --warning: #e0b03a;
+      --critical: #e2685c; --critical-tint: #3a201d;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322;
+    --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #8f8d86;
+    --grid: #2c2c2a; --border: rgba(255,255,255,0.10); --border-2: rgba(255,255,255,0.18);
+    --accent: #5b9bea; --accent-tint: #1c2e44; --accent-300: #3987e5;
+    --good: #3fc23f; --good-text: #4fd44f; --warning: #e0b03a;
+    --critical: #e2685c; --critical-tint: #3a201d;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink); font-family: var(--font-body); -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 32px 28px 80px; }
+
+  .eyebrow { text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px; font-weight: 600; color: var(--accent); margin: 0 0 10px; }
+  h1 { font-family: var(--font-display); font-size: clamp(24px, 3vw, 32px); font-weight: 500; letter-spacing: -0.01em; margin: 0 0 8px; text-wrap: balance; }
+  .lede { max-width: 62ch; color: var(--ink-2); font-size: 14px; line-height: 1.6; margin: 0; }
+  header.top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 20px; padding-bottom: 22px; margin-bottom: 24px; border-bottom: 1px solid var(--border); }
+  .status-tag { flex: none; display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--ink-muted); border: 1px solid var(--border-2); border-radius: 100px; padding: 6px 12px; white-space: nowrap; }
+  .status-tag .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .status-tag.warn .dot { background: var(--warning); }
+  .status-tag.warn { color: var(--warning); border-color: var(--warning); }
+
+  #banner { display: none; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 8px; font-size: 13.5px; margin-bottom: 24px; }
+  #banner.loading { display: flex; background: var(--surface-2); color: var(--ink-2); }
+  #banner.error { display: flex; background: var(--critical-tint); color: var(--critical); }
+  #banner.warn { display: flex; background: var(--surface-2); color: var(--warning); border: 1px solid var(--warning); }
+  .spinner { flex: none; width: 15px; height: 15px; border: 2px solid var(--border-2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.2s; } }
+  #app { display: none; }
+
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 36px; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
+  .kpi-label { font-size: 12px; color: var(--ink-muted); margin: 0 0 10px; }
+  .kpi-value { font-family: var(--font-display); font-size: 28px; font-weight: 500; line-height: 1; margin: 0 0 8px; font-variant-numeric: tabular-nums; }
+  .kpi-sub { font-size: 12.5px; color: var(--ink-2); display: flex; align-items: center; gap: 6px; }
+  .kpi-sub.up { color: var(--good-text); }
+  .kpi-sub.down { color: var(--critical); }
+
+  .tabs { display: flex; gap: 6px; margin-bottom: 26px; border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    font: inherit; font-size: 13.5px; font-weight: 600; color: var(--ink-muted);
+    background: none; border: none; border-bottom: 2px solid transparent;
+    padding: 10px 6px; margin-bottom: -1px; cursor: pointer;
+  }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  section { margin-bottom: 34px; }
+  .section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+  .section-head h2 { font-family: var(--font-display); font-size: 18px; font-weight: 500; margin: 0; }
+  .section-head .hint { font-size: 12px; color: var(--ink-muted); }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .two-col { display: grid; grid-template-columns: 0.8fr 1.2fr; gap: 16px; align-items: start; }
+  .three-col { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); font-weight: 600; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); white-space: nowrap; }
+  tbody td { padding: 9px 16px; border-bottom: 1px solid var(--border); color: var(--ink-2); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--surface-2); }
+  td.strong { color: var(--ink); font-weight: 500; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tight-table { table-layout: fixed; }
+  .tight-table th, .tight-table td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-left: 12px; padding-right: 8px; }
+  .tight-table td.bar-td, .tight-table td.badge-td { overflow: visible; }
+  .table-scroll { max-height: 420px; overflow-y: auto; overflow-x: auto; }
+  .tight-table { min-width: 420px; }
+
+  .bar-cell { display: flex; align-items: center; gap: 10px; }
+  .bar-track { flex: 1; height: 7px; background: var(--surface-2); border-radius: 4px; overflow: hidden; min-width: 60px; }
+  .bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
+  .bar-pct { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); width: 40px; text-align: right; flex: none; }
+
+  .compare-rows { display: flex; flex-direction: column; gap: 5px; padding: 4px 0; }
+  .compare-row { display: flex; align-items: center; gap: 8px; }
+  .compare-year { width: 34px; flex: none; font-size: 11px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+  .compare-track { flex: 1; height: 7px; min-width: 40px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .compare-fill { height: 100%; border-radius: 4px; background: var(--accent); }
+  .compare-fill.prev { background: var(--ink-muted); opacity: 0.55; }
+  .compare-val { width: 76px; flex: none; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+  .compare-delta { display: flex; align-items: center; gap: 4px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .compare-delta.up { color: var(--good-text); }
+  .compare-delta.down { color: var(--critical); }
+
+  .year-picker { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .year-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--ink-2); background: var(--surface); border: 1px solid var(--border-2); border-radius: 100px; padding: 5px 12px 5px 10px; cursor: pointer; user-select: none; }
+  .year-chip input { margin: 0; accent-color: var(--accent); }
+  .year-chip.checked { background: var(--accent-tint); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+  .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 100px; white-space: nowrap; }
+  .badge .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .badge.age-ok { background: var(--surface-2); color: var(--ink-2); }
+  .badge.age-ok .dot { background: var(--ink-muted); }
+  .badge.age-warn { background: #f5ecd6; color: var(--warning); }
+  .badge.age-warn .dot { background: var(--warning); }
+  .badge.age-crit { background: var(--critical-tint); color: var(--critical); }
+  .badge.age-crit .dot { background: var(--critical); }
+
+  .chart-pad { padding: 18px 18px 6px; }
+  .mini-chart { display: flex; align-items: flex-end; gap: 6px; height: 120px; border-bottom: 1px solid var(--grid); padding-bottom: 2px; }
+  .mini-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 6px; position: relative; }
+  .mini-bar { width: 100%; max-width: 26px; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; }
+  .mini-labels { display: flex; gap: 6px; margin-top: 8px; padding: 0 2px; }
+  .mini-labels span { flex: 1; text-align: center; font-size: 10px; color: var(--ink-muted); }
+  .mini-tip { position: absolute; bottom: 100%; margin-bottom: 6px; background: var(--ink); color: var(--page); font-size: 11px; font-weight: 600; padding: 3px 7px; border-radius: 5px; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.12s ease; font-variant-numeric: tabular-nums; }
+  .mini-col:hover .mini-tip { opacity: 1; }
+  .mini-col:hover .mini-bar { background: var(--accent-300); }
+
+  .rank-list { padding: 4px 18px 18px; }
+  .rank-row { display: grid; grid-template-columns: 22px 1.4fr 1fr 90px; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--border); }
+  .rank-row:last-child { border-bottom: none; }
+  .rank-num { font-family: var(--font-display); color: var(--ink-muted); font-size: 13px; }
+  .rank-name { font-weight: 500; color: var(--ink); font-size: 13px; }
+  .rank-meta { font-size: 12px; color: var(--ink-muted); }
+  .rank-bar-track { grid-column: 2 / span 2; height: 6px; background: var(--surface-2); border-radius: 4px; overflow: hidden; margin-top: 2px; }
+  .rank-bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
+  .rank-value { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; font-size: 13px; }
+
+  .note { padding: 12px 16px; border-radius: 8px; font-size: 12.5px; margin-bottom: 16px; background: var(--surface-2); color: var(--ink-2); line-height: 1.55; }
+
+  footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 12px; color: var(--ink-muted); line-height: 1.7; max-width: 74ch; }
+  footer code { background: var(--surface-2); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+  .version-tag { font-size: 11px; color: var(--ink-muted); font-family: var(--font-mono); margin: 6px 0 0; }
+  .suggest-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .suggest-btn { font: inherit; font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-tint); border: none; border-radius: 100px; padding: 6px 13px; cursor: pointer; }
+  .suggest-btn:hover { filter: brightness(0.96); }
+
+  .btn { font: inherit; font-size: 13px; font-weight: 600; border-radius: 8px; padding: 8px 14px; cursor: pointer; border: 1px solid var(--border-2); background: var(--surface); color: var(--ink); }
+  .btn.primary { background: var(--accent); color: #ffffff; border-color: var(--accent); }
+  .btn.small { padding: 5px 11px; font-size: 11.5px; }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+
+  .import-box { border: 1px dashed var(--border-2); border-radius: 10px; padding: 18px 20px; margin-bottom: 20px; display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+  .import-box input[type="file"] { font: inherit; font-size: 12.5px; color: var(--ink-2); }
+  .import-meta { font-size: 12px; color: var(--ink-muted); flex: 1; min-width: 200px; }
+  .import-meta strong { color: var(--ink-2); }
+  .filter-input, .filter-select { font: inherit; font-size: 12.5px; color: var(--ink); background: var(--surface); border: 1px solid var(--border-2); border-radius: 8px; padding: 6px 10px; }
+  .bar-fill.ok { background: var(--good); }
+  .bar-fill.warn { background: var(--warning); }
+  .bar-fill.crit { background: var(--critical); }
+  .cell-sub { font-size: 11px; color: var(--ink-muted); }
+  .field-label { display: block; font-size: 11.5px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+  .field-block { margin-bottom: 14px; }
+  .rome-card { border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; background: var(--surface); }
+  .rome-card-head { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; }
+  .rome-card-head input[type="checkbox"] { margin-top: 3px; flex: none; }
+  .rome-detail-list { margin: 8px 0 0 26px; padding-left: 16px; font-size: 12px; color: var(--ink-2); }
+  .rome-detail-list li { padding: 2px 0; }
+  .rome-detail-link { font-size: 11.5px; color: var(--accent); cursor: pointer; text-decoration: underline; margin-left: 26px; }
+
+  @media (max-width: 880px) {
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .two-col, .three-col { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <p class="eyebrow">Widget IA · MCDF</p>
+      <h1>Génération de rapports</h1>
+      <p class="lede">Données en direct, lecture seule — aucune action d'écriture n'est effectuée par ce widget.</p>
+      <p class="version-tag">Version du fichier : 2026-09-03 (CPF Sous-traitance : filtre année, limité à l'année en cours par défaut)</p>
+      <div class="suggest-row">
+        <button type="button" class="suggest-btn" id="suggest-report-btn">💡 Suggérer un nouveau rapport</button>
+        <button type="button" class="suggest-btn" id="suggest-filter-btn">🔎 Suggérer un nouveau filtre</button>
+      </div>
+    </div>
+    <span class="status-tag" id="status-tag"><span class="dot"></span> Connexion…</span>
+  </header>
+
+  <div id="banner"></div>
+
+  <div id="app">
+
+    <div class="kpis" id="kpis"></div>
+
+    <div class="tabs">
+      <button class="tab-btn active" type="button" data-tab="commercial">Commercial</button>
+      <button class="tab-btn" type="button" data-tab="planning">Planning</button>
+      <button class="tab-btn" type="button" data-tab="formateurs">Formateurs</button>
+      <button class="tab-btn" type="button" data-tab="listing">Listing</button>
+      <button class="tab-btn" type="button" data-tab="cpf">CPF Sous-traitance</button>
+      <button class="tab-btn" type="button" data-tab="facturation">Facturation</button>
+      <button class="tab-btn" type="button" data-tab="observatoire">Observatoire marché</button>
+      <button class="tab-btn" type="button" data-tab="rome">Formation → compétences</button>
+    </div>
+
+    <!-- ============================= COMMERCIAL ============================= -->
+    <div class="tab-panel active" id="tab-commercial">
+
+      <section>
+        <div class="section-head" style="flex-wrap:wrap; row-gap:10px;">
+          <h2 id="compare-title">Comparaison annuelle</h2>
+          <label class="hint" style="display:flex; align-items:center; gap:6px;">
+            Jusqu'à
+            <select id="compare-cutoff" style="font:inherit; font-size:12px; color:var(--ink); background:var(--surface); border:1px solid var(--border-2); border-radius:6px; padding:3px 6px;"></select>
+          </label>
+        </div>
+        <div id="compare-years" class="year-picker"></div>
+        <div class="panel">
+          <div class="table-scroll" style="max-height:260px">
+            <table class="tight-table">
+              <colgroup><col style="width:26%"><col style="width:40%"><col style="width:17%"><col style="width:17%"></colgroup>
+              <thead><tr><th>Indicateur</th><th>Comparaison</th><th class="num">Écart</th><th class="num">Variation</th></tr></thead>
+              <tbody id="tbl-comparaison"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="two-col">
+          <div>
+            <div class="section-head"><h2>Nouveaux clients par mois</h2><span class="hint" id="nouveaux-hint">clients créés dans le mois</span></div>
+            <div class="panel">
+              <div class="table-scroll">
+                <table class="tight-table">
+                  <colgroup><col style="width:30%"><col style="width:70%"></colgroup>
+                  <thead><tr><th>Mois</th><th>Nouveaux clients</th></tr></thead>
+                  <tbody id="tbl-nouveaux"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="section-head"><h2>CA facturé</h2><span class="hint" id="ca-mensuel-hint">12 mois</span></div>
+            <div class="panel chart-pad">
+              <div class="mini-chart" id="chart-ca"></div>
+              <div class="mini-labels" id="labels-ca"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="two-col">
+          <div>
+            <div class="section-head"><h2>Top 5 conseillers</h2><span class="hint" id="top-conseillers-hint">par CA facturé</span></div>
+            <div class="panel"><div class="rank-list" id="rank-conseillers"></div></div>
+          </div>
+          <div>
+            <div class="section-head"><h2>Top 5 clients</h2><span class="hint" id="top-clients-hint">par CA facturé</span></div>
+            <div class="panel"><div class="rank-list" id="rank-clients"></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-head"><h2>CA par client</h2><span class="hint" id="ca-client-hint"></span></div>
+        <div class="panel">
+          <div class="table-scroll">
+            <table class="tight-table">
+              <colgroup><col style="width:30%"><col style="width:70%"></colgroup>
+              <thead><tr><th>Client</th><th>CA facturé</th></tr></thead>
+              <tbody id="tbl-ca-client"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-head"><h2>Devis à relancer</h2><span class="hint">&gt; 10 jours sans réponse</span></div>
+        <div class="panel">
+          <div class="table-scroll" style="max-height:220px"><table><tbody id="tbl-devis"></tbody></table></div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- ============================== PLANNING =============================== -->
+    <div class="tab-panel" id="tab-planning">
+
+      <section>
+        <div class="two-col">
+          <div>
+            <div class="section-head"><h2>Sessions programmées</h2><span class="hint">avec capacité déclarée, 6 mois</span></div>
+            <div class="panel chart-pad">
+              <div class="mini-chart" id="chart-sessions"></div>
+              <div class="mini-labels" id="labels-sessions"></div>
+            </div>
+          </div>
+          <div>
+            <div class="section-head"><h2>Volume d'heures programmées</h2><span class="hint">12 mois, toutes sessions</span></div>
+            <div class="panel chart-pad">
+              <div class="mini-chart" id="chart-heures"></div>
+              <div class="mini-labels" id="labels-heures"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-head"><h2>Sessions à venir</h2><span class="hint" id="sessions-list-hint"></span></div>
+        <div class="panel">
+          <div class="table-scroll">
+            <table class="tight-table">
+              <colgroup><col style="width:26%"><col style="width:20%"><col style="width:14%"><col style="width:14%"><col style="width:16%"><col style="width:10%"></colgroup>
+              <thead><tr><th>Session</th><th>Formation</th><th>Début</th><th>Fin</th><th>Formateur</th><th class="num">Places</th></tr></thead>
+              <tbody id="tbl-sessions-planning"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- ============================= FORMATEURS ============================== -->
+    <div class="tab-panel" id="tab-formateurs">
+
+      <section>
+        <div class="section-head"><h2>Top formateurs</h2><span class="hint">par CA estimé (tarif jour × durée des sessions)</span></div>
+        <div class="panel"><div class="rank-list" id="rank-formateurs"></div></div>
+      </section>
+
+      <section>
+        <div class="section-head"><h2>Heures par formateur</h2><span class="hint">12 mois</span></div>
+        <div id="formateurs-heures-note"></div>
+        <div class="panel" id="formateurs-heures-panel" style="display:none">
+          <div class="table-scroll">
+            <table class="tight-table">
+              <colgroup><col style="width:30%"><col style="width:17.5%"><col style="width:17.5%"><col style="width:17.5%"><col style="width:17.5%"></colgroup>
+              <thead><tr><th>Formateur</th><th class="num">Prévues</th><th class="num">Réalisées</th><th class="num">Planifiées</th><th class="num">Sessions</th></tr></thead>
+              <tbody id="tbl-heures-formateur"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- =============================== LISTING ================================ -->
+    <div class="tab-panel" id="tab-listing">
+
+      <section>
+        <div class="section-head"><h2>30 derniers stagiaires inscrits</h2><span class="hint" id="stagiaires-count"></span></div>
+        <div class="panel">
+          <div class="table-scroll">
+            <table class="tight-table">
+              <colgroup><col style="width:28%"><col style="width:50%"><col style="width:22%"></colgroup>
+              <thead><tr><th>Stagiaire</th><th>Convention</th><th>Inscrit le</th></tr></thead>
+              <tbody id="tbl-stagiaires"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-head"><h2>Crédit d'heures restant</h2><span class="hint">par convention, avec participants</span></div>
+        <div class="panel">
+          <div class="table-scroll">
+            <table class="tight-table">
+              <colgroup><col style="width:32%"><col style="width:44%"><col style="width:24%"></colgroup>
+              <thead><tr><th>Convention</th><th>Participants</th><th class="num">Crédit restant</th></tr></thead>
+              <tbody id="tbl-credit"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-head"><h2>Sessions</h2><span class="hint">formation, session, durée</span></div>
+        <div class="panel">
+          <div class="table-scroll">
+            <table class="tight-table">
+              <colgroup><col style="width:36%"><col style="width:36%"><col style="width:14%"><col style="width:14%"></colgroup>
+              <thead><tr><th>Formation</th><th>Session</th><th class="num">Heures</th><th>Début</th></tr></thead>
+              <tbody id="tbl-sessions-listing"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-head"><h2>Montant vendu / facturé</h2><span class="hint">par dossier</span></div>
+        <div class="panel">
+          <div class="table-scroll">
+            <table class="tight-table">
+              <colgroup><col style="width:12%"><col style="width:14%"><col style="width:22%"><col style="width:20%"><col style="width:16%"><col style="width:16%"></colgroup>
+              <thead><tr><th>Dossier</th><th>Statut</th><th>Client</th><th>Conseiller</th><th class="num">Vendu</th><th class="num">Facturé</th></tr></thead>
+              <tbody id="tbl-montant"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- ============================= CPF SOUS-TRAITANCE (API MCDF en direct) ============================= -->
+    <div class="tab-panel" id="tab-cpf">
+      <div class="note">
+        Aucun champ « CPF » n'existe dans l'API MCDF : un dossier est considéré CPF ici si le payeur d'au moins une de ses factures (<code>invoice.payerId</code>/<code>payerName</code>) est « Caisse des Dépôts et Consignations » (gestionnaire de Mon Compte Formation) — confirmé manuellement le 02/09/2026. Le détail (heures, sous-traitance) est ensuite récupéré dossier par dossier via <code>conventionTraining/listWithTimetable</code> (même appel que l'interface MCDF sur une fiche dossier), la sous-traitance venant du champ <code>timetable.subcontracted</code>. Données en direct, aucun import.
+      </div>
+
+      <div class="field-block" style="margin-bottom:14px;">
+        <label class="field-label" for="cpf-year-filter">Année (d'après la date de facturation)</label>
+        <select class="filter-select" id="cpf-year-filter"></select>
+      </div>
+
+      <p class="hint" id="cpf-loading-hint" style="display:none"><span class="spinner" style="display:inline-block; vertical-align:middle; margin-right:6px;"></span>Chargement des dossiers CPF (peut prendre du temps sur un historique important)…</p>
+      <p class="hint" id="cpf-error-hint" style="display:none; color:var(--critical)"></p>
+      <p class="hint" id="cpf-empty-hint" style="display:none">Aucun dossier CPF détecté (payeur « Caisse des Dépôts et Consignations » introuvable dans les données de cette entité).</p>
+
+      <div id="cpf-content">
+        <div class="kpis" style="grid-template-columns: repeat(3, 1fr);" id="cpf-kpis"></div>
+
+        <section>
+          <div class="section-head" style="flex-wrap:wrap; row-gap:10px;">
+            <h2>Dossiers CPF</h2>
+            <input type="search" class="filter-input" id="cpf-search" placeholder="Rechercher un dossier, une session ou un intitulé…" style="min-width:220px">
+          </div>
+          <div class="panel">
+            <div class="table-scroll" style="max-height:480px">
+              <table class="tight-table" id="cpf-table">
+                <colgroup>
+                  <col style="width:10%"><col style="width:19%"><col style="width:17%"><col style="width:11%">
+                  <col style="width:9%"><col style="width:8%"><col style="width:8%">
+                  <col style="width:11%"><col style="width:7%">
+                </colgroup>
+                <thead><tr>
+                  <th>N° Dossier</th><th>Intitulé</th><th>Session(s)</th><th>Période</th>
+                  <th class="num">Facturé HT</th><th class="num">Heures décl.</th><th class="num">Heures s.t.</th>
+                  <th>% Sous-traitance</th><th class="num">CA s.t.</th>
+                </tr></thead>
+                <tbody id="tbl-cpf"></tbody>
+              </table>
+            </div>
+          </div>
+          <p class="hint" id="cpf-count-hint" style="margin-top:8px; font-size:12px; color:var(--ink-muted);"></p>
+        </section>
+      </div>
+    </div>
+
+    <!-- ============================= FACTURATION (import Excel) ============================= -->
+    <div class="tab-panel" id="tab-facturation">
+      <div class="note">
+        Cet état n'est pas connecté à l'API MCDF : importez ci-dessous votre export de facturation (ex. <code>MCDF_FACTU_2025.xls</code>). Les données restent dans ce navigateur uniquement (<code>localStorage</code>), rien n'est envoyé à un serveur.
+      </div>
+      <div class="import-box">
+        <input type="file" id="factu-file-input" accept=".xlsx,.xls,.csv">
+        <p class="import-meta" id="factu-import-meta">Aucun fichier importé.</p>
+        <button type="button" class="btn small" id="factu-clear-btn" style="display:none">Effacer les données importées</button>
+      </div>
+
+      <div id="factu-content" style="display:none">
+        <div class="kpis" id="factu-kpis"></div>
+
+        <section>
+          <div class="two-col">
+            <div>
+              <div class="section-head"><h2>Facturé HT par mois</h2><span class="hint" id="factu-chart-hint"></span></div>
+              <div class="panel chart-pad">
+                <div class="mini-chart" id="chart-factu"></div>
+                <div class="mini-labels" id="labels-factu"></div>
+              </div>
+            </div>
+            <div>
+              <div class="section-head"><h2>Top 5 payeurs / OPCO</h2><span class="hint">par montant HT net</span></div>
+              <div class="panel"><div class="rank-list" id="rank-payeurs"></div></div>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <div class="section-head" style="flex-wrap:wrap; row-gap:10px;">
+            <h2>Factures</h2>
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              <select class="filter-select" id="factu-month-filter"><option value="">Tous les mois</option></select>
+              <input type="search" class="filter-input" id="factu-search" placeholder="Client, payeur, n° facture…" style="min-width:220px">
+            </div>
+          </div>
+          <div class="panel">
+            <div class="table-scroll" style="max-height:480px">
+              <table class="tight-table" id="factu-table">
+                <colgroup>
+                  <col style="width:9%"><col style="width:9%"><col style="width:9%">
+                  <col style="width:23%"><col style="width:23%">
+                  <col style="width:9%"><col style="width:9%"><col style="width:9%">
+                </colgroup>
+                <thead><tr>
+                  <th>Date</th><th>N° facture</th><th>N° dossier</th><th>Client</th><th>Payeur</th>
+                  <th class="num">Montant HT</th><th class="num">Montant TTC</th><th class="num">Reste à payer</th>
+                </tr></thead>
+                <tbody id="tbl-factu"></tbody>
+              </table>
+            </div>
+          </div>
+          <p class="hint" id="factu-count-hint" style="margin-top:8px; font-size:12px; color:var(--ink-muted);"></p>
+        </section>
+      </div>
+    </div>
+
+    <!-- ============================= OBSERVATOIRE MARCHÉ (open data CPF, en direct) ============================= -->
+    <div class="tab-panel" id="tab-observatoire">
+      <div class="note">
+        Cet état interroge en direct l'open data publique de Mon Compte Formation (Caisse des Dépôts / data.gouv.fr, licence ouverte Etalab) — ce n'est pas l'API MCDF. La recherche est toujours limitée à une région à la fois pour éviter de charger le catalogue national (plus de 200 000 offres). Catalogue mis à jour chaque semaine par la Caisse des Dépôts ; les entrées en formation (12 mois) sont nationales, ce jeu de données ne porte pas de champ région.
+      </div>
+
+      <div class="import-box" style="flex-direction:column; align-items:stretch;">
+        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:end;">
+          <div class="field-block" style="margin-bottom:0;">
+            <label class="field-label" for="obs-region">Région du centre</label>
+            <select class="filter-select" id="obs-region"></select>
+          </div>
+          <div class="field-block" style="margin-bottom:0;">
+            <label class="field-label" for="obs-type">Répertoire</label>
+            <select class="filter-select" id="obs-type">
+              <option value="rncp">RNCP</option>
+              <option value="rs">RS (spécifique)</option>
+            </select>
+          </div>
+          <div class="field-block" style="margin-bottom:0;">
+            <label class="field-label" for="obs-code">Code certification</label>
+            <input type="text" class="filter-input" id="obs-code" placeholder="ex. 38489" style="width:140px">
+          </div>
+          <button type="button" class="btn primary" id="obs-search-btn">Analyser le marché</button>
+        </div>
+        <p class="import-meta" id="obs-status" style="margin-top:10px;">Renseignez la région, le type de répertoire et le code de la certification à analyser.</p>
+      </div>
+
+      <div id="obs-content" style="display:none">
+        <h2 id="obs-title" style="font-family:var(--font-display); font-weight:500; font-size:18px; margin:0 0 4px;"></h2>
+        <p class="hint" id="obs-subtitle" style="margin:0 0 20px; font-size:12px; color:var(--ink-muted);"></p>
+
+        <div class="kpis" id="obs-kpis"></div>
+
+        <section>
+          <div class="two-col">
+            <div class="panel" style="padding:18px 20px;">
+              <div class="section-head" style="margin-bottom:10px;"><h2 style="font-size:15px;">Votre positionnement</h2></div>
+              <div class="field-block">
+                <label class="field-label" for="obs-your-price">Votre prix (€ TTC)</label>
+                <input type="text" class="filter-input" id="obs-your-price" placeholder="ex. 1890" style="max-width:160px">
+              </div>
+              <div id="obs-comparison"></div>
+            </div>
+            <div class="panel">
+              <div class="section-head" style="padding:16px 18px 0;"><h2 style="font-size:15px;">Entrées en formation (national, 12 derniers mois)</h2></div>
+              <div class="chart-pad">
+                <div class="mini-chart" id="chart-obs"></div>
+                <div class="mini-labels" id="labels-obs"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <div class="section-head"><h2>Offres concurrentes dans la région</h2><span class="hint" id="obs-count-hint"></span></div>
+          <div class="panel">
+            <div class="table-scroll" style="max-height:400px">
+              <table class="tight-table" id="obs-table">
+                <colgroup><col style="width:30%"><col style="width:20%"><col style="width:16%"><col style="width:17%"><col style="width:17%"></colgroup>
+                <thead><tr><th>Organisme</th><th>Lieu</th><th class="num">Durée</th><th>Modalité</th><th class="num">Prix moyen</th></tr></thead>
+                <tbody id="tbl-obs"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- ============================= FORMATION -> COMPETENCES ROME (import Excel, prompt IA) ============================= -->
+    <div class="tab-panel" id="tab-rome">
+      <div class="note">
+        Cet état n'est pas connecté à l'API MCDF : importez ci-dessous l'export ROME « Arborescence des compétences » (France Travail / data.gouv.fr, fichier <code>.xlsx</code>, onglets « Données brutes Macro-comp. » et « Données brutes Comp. »). Les 507 macro-compétences restent dans ce navigateur (<code>localStorage</code>) ; le détail des 19 462 compétences est trop volumineux pour être conservé automatiquement — réimportez le fichier à chaque ouverture du widget si vous voulez voir ce niveau de détail (la recherche par macro-compétence, elle, reste disponible sans réimport). Ce n'est pas un annuaire métier↔compétences officiel : c'est une recherche par mot-clé dans le référentiel de compétences ROME.
+      </div>
+
+      <div class="import-box">
+        <input type="file" id="rome-file-input" accept=".xlsx,.xls">
+        <p class="import-meta" id="rome-import-meta">Aucun fichier importé.</p>
+        <button type="button" class="btn small" id="rome-clear-btn" style="display:none">Effacer les données importées</button>
+      </div>
+
+      <div id="rome-content" style="display:none">
+        <div class="field-block">
+          <label class="field-label" for="rome-formation-title">Formation à concevoir (optionnel, repris dans le prompt généré)</label>
+          <input type="text" class="filter-input" id="rome-formation-title" placeholder="ex. Manager une équipe" style="max-width:360px">
+        </div>
+
+        <div class="field-block">
+          <label class="field-label" for="rome-search">Rechercher des compétences ROME (mot-clé, métier ou intitulé de formation)</label>
+          <input type="search" class="filter-input" id="rome-search" placeholder="ex. équipe, management, vente…" style="max-width:360px">
+          <p class="hint" id="rome-results-hint" style="margin-top:6px; font-size:12px; color:var(--ink-muted);"></p>
+        </div>
+
+        <div id="rome-results" style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;"></div>
+
+        <div class="panel" style="padding:16px 18px;">
+          <p class="hint" id="rome-selection-hint" style="margin:0 0 10px; font-size:12.5px; color:var(--ink-muted);">Cochez une ou plusieurs compétences ci-dessus pour générer un prompt pédagogique.</p>
+          <button type="button" class="btn primary" id="rome-generate-btn" disabled>Générer le prompt pédagogique</button>
+          <button type="button" class="btn small" id="rome-copy-btn" style="display:none; margin-left:8px;">Copier</button>
+          <textarea id="rome-prompt-box" readonly style="display:none; width:100%; min-height:220px; margin-top:14px; font-family:var(--font-mono); font-size:12px; padding:10px 12px; border-radius:8px; border:1px solid var(--border-2); background:var(--surface-2); color:var(--ink); box-sizing:border-box;"></textarea>
+          <p class="hint" style="margin:10px 0 0; font-size:11.5px; color:var(--ink-muted);">Ce prompt n'appelle aucune IA depuis ce widget : copiez-le et collez-le dans l'assistant IA de votre choix (Claude, ChatGPT…).</p>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      Widget IA MCDF — module « génération de rapports » (lecture seule),
+      structuré à partir des rapports Power BI existants (Suivi Commercial,
+      Suivi Formateurs, Rapports Listings). Les données viennent de l'API
+      MCDF en direct (<code>/wa/{entité}/list</code>), pas d'un jeu de
+      démonstration. Le CA par formateur est estimé (tarif jour × durée),
+      pas facturé réellement. Le détail « Prévues/Planifiées » par
+      formateur dépend d'une jointure entre <code>sessionQualiopi</code>
+      et <code>session</code> qui n'est fiable que si les deux entités
+      partagent le même identifiant — un bandeau l'indique si ce n'est
+      pas le cas sur ce compte. La répartition Training/Coaching (page
+      d'accueil Power BI d'origine) n'a pas de champ MCDF confirmé, elle
+      n'a donc pas été reconstruite ici. L'onglet « CPF Sous-traitance » lit
+      l'API MCDF en direct (<code>conventionTraining</code>/<code>timetable</code>) mais
+      approxime deux notions qui n'ont pas de champ dédié : un dossier est
+      retenu comme « CPF » si son payeur est la Caisse des Dépôts et
+      Consignations, et la sous-traitance vient du champ
+      <code>timetable.subcontracted</code> — voir la note en haut de
+      l'onglet. L'onglet « Facturation » reste différent : il n'y a pas
+      d'entité facturation confirmée dans l'API, il affiche un export Excel
+      (<code>.xlsx</code>/<code>.xls</code>/<code>.csv</code>) importé
+      manuellement et gardé uniquement dans ce navigateur. L'onglet
+      « Observatoire marché » interroge en direct, depuis votre navigateur,
+      l'open data publique de Mon Compte Formation
+      (<code>opendata.caissedesdepots.fr</code>, licence ouverte Etalab) —
+      ni MCDF ni ce widget n'hébergent ces données, elles ne transitent par
+      aucun serveur à nous. L'onglet « Formation → compétences » fonctionne
+      sur le même principe d'import manuel que « Facturation », à partir du
+      référentiel ROME (France Travail) ; le prompt qu'il génère est à
+      copier dans l'assistant IA de votre choix — ce widget n'appelle
+      aucune IA lui-même.
+    </footer>
+
+  </div>
+</div>
+
+<!--
+  SheetJS (lecture .xlsx/.xls dans le navigateur) -- charge uniquement pour
+  les onglets "Facturation" et "Formation -> competences" (import manuel,
+  voir plus haut). Si ce script ne charge pas (reseau/proxy/CSP), l'import
+  CSV reste utilisable sans lui -- voir importSheetFile() plus bas.
+-->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+function fmtDate(iso) {
+  const [y, m, d] = iso.slice(0, 10).split('-');
+  return `${d}/${m}/${y.slice(2)}`;
+}
+function fmtMonth(ym) {
+  const [y, m] = ym.split('-');
+  const noms = ['janv.','fév.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+  return `${noms[parseInt(m, 10) - 1]} ${y.slice(2)}`;
+}
+function fmtEUR(n) {
+  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+}
+function fmtH(n) { return Number.isFinite(n) ? `${Math.round(n).toLocaleString('fr-FR')} h` : '—'; }
+function el(tag, cls, html) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html !== undefined) e.innerHTML = html;
+  return e;
+}
+function monthKey(iso) { return iso ? iso.slice(0, 7) : null; }
+function daysAgo(iso) { return iso ? Math.floor((Date.now() - new Date(iso)) / 86400000) : null; }
+function lastNMonths(n) {
+  const out = [];
+  const d = new Date();
+  for (let i = 0; i < n; i++) {
+    out.unshift(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    d.setMonth(d.getMonth() - 1);
+  }
+  return out;
+}
+function setBanner(kind, html) {
+  const b = document.getElementById('banner');
+  b.className = kind;
+  b.innerHTML = kind === 'loading' ? `<span class="spinner"></span><span>${html}</span>` : html;
+}
+function setStatus(kind, html) {
+  const s = document.getElementById('status-tag');
+  s.className = `status-tag ${kind}`.trim();
+  s.innerHTML = html;
+}
+
+// ------------------------------------------------------------------
+// Onglets
+// ------------------------------------------------------------------
+document.querySelectorAll('.tab-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+  });
+});
+
+// ------------------------------------------------------------------
+// Récupération des données en direct (même pattern que browser/live-reports.js)
+// ------------------------------------------------------------------
+async function fetchAll(entity, entityId) {
+  const res = await fetch(`/wa/${entity}/list?nopaging=1&_dc=${Date.now()}`, { credentials: 'same-origin' });
+  if (res.status === 401 || res.status === 403) throw new Error('AUTH');
+  let data;
+  try {
+    data = await res.json();
+  } catch (e) {
+    throw new Error('AUTH'); // la réponse n'est pas du JSON : probablement la page de login
+  }
+  if (!data.success) throw new Error(`Appel /wa/${entity}/list refusé : ${JSON.stringify(data).slice(0, 200)}`);
+  return entityId ? data.root.filter((r) => r.entityId === entityId) : data.root;
+}
+
+async function buildData(entityId) {
+  const [customers, conventions, invoices, attendees, sessions, sessionQualiopi] = await Promise.all([
+    fetchAll('customer', entityId),
+    fetchAll('fullConventionQualiopi', entityId),
+    fetchAll('invoice', entityId),
+    fetchAll('conventionAttendee', entityId),
+    fetchAll('session', entityId),
+    fetchAll('sessionQualiopi', entityId).catch(() => []),
+  ]);
+
+  const convById = new Map(conventions.map((c) => [c.id, c]));
+
+  const latestByAttendee = new Map();
+  attendees.filter((a) => a.attendee).forEach((a) => {
+    const prev = latestByAttendee.get(a.attendeeId);
+    if (!prev || a.created > prev.created) latestByAttendee.set(a.attendeeId, a);
+  });
+  const derniers_stagiaires = [...latestByAttendee.values()]
+    .sort((a, b) => b.created.localeCompare(a.created))
+    .slice(0, 30)
+    .map((a) => ({
+      nom: a.fullname,
+      convention: (convById.get(a.conventionId) || {}).name || '—',
+      inscrit_le: a.created,
+    }));
+
+  const devis_a_relancer = conventions
+    .filter((c) => c.isProposal && !c.signingDate)
+    .map((c) => ({ ...c, age: daysAgo(c.provisionalDate || c.created) }))
+    .filter((c) => c.age !== null && c.age > 10)
+    .sort((a, b) => b.age - a.age)
+    .map((c) => ({ id: c.id, name: c.name, proposal_code: c.proposalCode, proposal_status: c.proposalStatus, age_jours: c.age }));
+
+  const months12 = lastNMonths(12);
+  const months6 = lastNMonths(6);
+  const sesMap = {};
+  sessions.filter((s) => s.numberMaxi).forEach((s) => {
+    const m = monthKey(s.startDate);
+    if (!m) return;
+    if (!sesMap[m]) sesMap[m] = { nb_sessions: 0, capacite_totale: 0 };
+    sesMap[m].nb_sessions += 1;
+    sesMap[m].capacite_totale += s.numberMaxi;
+  });
+  const sessions_programmees = months6.map((m) => ({
+    mois: m,
+    nb_sessions: (sesMap[m] || {}).nb_sessions || 0,
+    capacite_totale: (sesMap[m] || {}).capacite_totale || 0,
+  }));
+
+  const heuresMap = {};
+  sessions.forEach((s) => {
+    const m = monthKey(s.startDate);
+    if (!m || !s.hours) return;
+    heuresMap[m] = (heuresMap[m] || 0) + s.hours;
+  });
+  const heures_par_mois = months12.map((m) => ({ mois: m, heures: heuresMap[m] || 0 }));
+
+  const parFormateur = {};
+  sessions.filter((s) => s.trainerId).forEach((s) => {
+    const key = s.trainerId;
+    if (!parFormateur[key]) parFormateur[key] = { nom: s.trainerName || key, nb_sessions: 0, ca_estime: 0 };
+    parFormateur[key].nb_sessions += 1;
+    parFormateur[key].ca_estime += (s.dailyRate || 0) * (s.days || 0);
+  });
+  const top_formateurs = Object.values(parFormateur).sort((a, b) => b.ca_estime - a.ca_estime).slice(0, 5);
+
+  // Sessions à venir (Planning)
+  const today = new Date().toISOString().slice(0, 10);
+  const sessions_a_venir = sessions
+    .filter((s) => s.startDate && s.startDate >= today)
+    .sort((a, b) => a.startDate.localeCompare(b.startDate))
+    .slice(0, 30);
+  const sessions_recentes_fallback = sessions_a_venir.length
+    ? sessions_a_venir
+    : sessions.filter((s) => s.startDate).sort((a, b) => b.startDate.localeCompare(a.startDate)).slice(0, 30);
+
+  // Toutes les sessions (Listing)
+  const sessions_listing = [...sessions]
+    .filter((s) => s.startDate)
+    .sort((a, b) => b.startDate.localeCompare(a.startDate))
+    .slice(0, 50);
+
+  // Crédit d'heures restant par convention, avec participants (Listing)
+  const attendeesByConv = new Map();
+  attendees.filter((a) => a.attendee).forEach((a) => {
+    if (!attendeesByConv.has(a.conventionId)) attendeesByConv.set(a.conventionId, []);
+    attendeesByConv.get(a.conventionId).push(a.fullname);
+  });
+  const credit_restant = conventions
+    .filter((c) => c.isConvention && c.creditLeftHours > 0)
+    .map((c) => ({
+      nom: c.name || c.code || c.id,
+      participants: (attendeesByConv.get(c.id) || []).join(', ') || '—',
+      credit: c.creditLeftHours,
+    }))
+    .sort((a, b) => b.credit - a.credit)
+    .slice(0, 30);
+
+  // Montant vendu / facturé par dossier (Listing)
+  const invoicedByConv = new Map();
+  invoices.forEach((i) => {
+    if (!i.conventionId) return;
+    invoicedByConv.set(i.conventionId, (invoicedByConv.get(i.conventionId) || 0) + (i.amount || 0));
+  });
+  const montant_vendu_facture = conventions
+    .filter((c) => c.isConvention)
+    .map((c) => ({
+      code: c.code || c.conventionCode || c.id,
+      statut: c.conventionStatus || '—',
+      client: c.customerName || '—',
+      conseiller: c.accountManagerName || '—',
+      vendu: c.turnover || 0,
+      facture: invoicedByConv.get(c.id) || 0,
+    }))
+    .filter((r) => r.vendu || r.facture)
+    .sort((a, b) => b.facture - a.facture)
+    .slice(0, 30);
+
+  // Heures par formateur (Formateurs) -- tentative de jointure
+  // sessionQualiopi.id -> session.id pour récupérer trainerId, qui
+  // n'existe pas directement sur sessionQualiopi. Dégradation propre si
+  // la jointure ne matche pas assez de lignes.
+  const sessionIds = new Set(sessions.map((s) => String(s.id)));
+  const matched = sessionQualiopi.filter((sq) => sessionIds.has(String(sq.id)));
+  const joinRatio = sessionQualiopi.length ? matched.length / sessionQualiopi.length : 0;
+  const sessionById = new Map(sessions.map((s) => [String(s.id), s]));
+  let heures_formateur = null;
+  if (joinRatio > 0.3) {
+    const byTrainer = {};
+    matched.forEach((sq) => {
+      const s = sessionById.get(String(sq.id));
+      if (!s || !s.trainerId) return;
+      const key = s.trainerId;
+      if (!byTrainer[key]) byTrainer[key] = { nom: s.trainerName || key, prevues: 0, realisees: 0, planifiees: 0, sessions: 0 };
+      byTrainer[key].prevues += sq.assigningHours || 0;
+      byTrainer[key].realisees += sq.fulfilledHours || 0;
+      byTrainer[key].planifiees += sq.schedulingHours || 0;
+      byTrainer[key].sessions += 1;
+    });
+    heures_formateur = Object.values(byTrainer).sort((a, b) => b.realisees - a.realisees);
+  }
+
+  const now = new Date();
+  const defaultYears = [now.getFullYear() - 1, now.getFullYear()];
+  const defaultCutoffMonth = now.getMonth(), defaultCutoffDay = now.getDate();
+  const raw = { customers, conventions, invoices, attendees };
+  const commercial = computeCommercialFiltered(raw, convById, defaultYears, defaultCutoffMonth, defaultCutoffDay);
+
+  return {
+    generated_at: new Date().toISOString().slice(0, 10),
+    counts: { customers: customers.length, conventions: conventions.length, invoices: invoices.length, attendees: attendees.length, sessions: sessions.length },
+    derniers_stagiaires, devis_a_relancer, sessions_programmees,
+    heures_par_mois, top_formateurs,
+    sessions_a_venir: sessions_recentes_fallback, sessions_a_venir_is_future: sessions_a_venir.length > 0,
+    sessions_listing, credit_restant, montant_vendu_facture, heures_formateur, join_ratio: joinRatio,
+    ...commercial,
+    raw: { ...raw, convById },
+  };
+}
+
+// ------------------------------------------------------------------
+// CPF Sous-traitance -- aucun champ "CPF" n'existe dans l'API MCDF ; un
+// dossier est retenu ici si le payeur (invoice.payerId/payerName) d'au
+// moins une de ses factures est la Caisse des Dépôts et Consignations
+// (gestionnaire de Mon Compte Formation), confirmé manuellement le
+// 02/09/2026 sur cette entité. `invoice` est déjà chargé pour les
+// autres onglets et répond vite (contrairement à conventionTraining/
+// timetable en masse, qui timeout au-delà d'un certain historique --
+// voir loadCpfLive). Le détail par dossier (heures, sous-traitance) est
+// donc récupéré dossier par dossier via listWithTimetable, uniquement
+// pour les dossiers déjà identifiés comme CPF -- c'est l'appel que
+// l'interface MCDF elle-même utilise pour afficher une fiche dossier,
+// confirmé rapide sur un seul conventionId.
+// ------------------------------------------------------------------
+const CDC_NAME_RE = /caisse des d[ée]p[oô]ts/i;
+
+function findCpfConventionIds(customers, invoices, year) {
+  const cdcIds = new Set(customers.filter((c) => CDC_NAME_RE.test(c.name || '')).map((c) => c.id));
+  const ids = new Set();
+  invoices.forEach((i) => {
+    if (!i.conventionId) return;
+    if (year !== 'all' && (!i.billingDate || new Date(i.billingDate).getFullYear() !== year)) return;
+    if (cdcIds.has(i.payerId) || CDC_NAME_RE.test(i.payerName || '')) ids.add(i.conventionId);
+  });
+  return [...ids];
+}
+
+async function fetchConventionTimetable(conventionId) {
+  const res = await fetch(
+    `/wa/conventionTraining/listWithTimetable?type=convention&conventionId=${encodeURIComponent(conventionId)}&nopaging=1&_dc=${Date.now()}`,
+    { credentials: 'same-origin' }
+  );
+  if (res.status === 401 || res.status === 403) throw new Error('AUTH');
+  let data;
+  try {
+    data = await res.json();
+  } catch (e) {
+    throw new Error('AUTH');
+  }
+  if (!data.success) throw new Error(`Appel listWithTimetable refusé (dossier ${conventionId})`);
+  return data.root || [];
+}
+
+function aggregateCpfDossier(conventionId, rows, convById) {
+  const cts = rows.filter((r) => r.object === 'conventiontraining');
+  const tts = rows.filter((r) => r.object === 'timetable');
+
+  const subcontractedCtIds = new Set(
+    tts.filter((t) => t.subcontracted === '1' && t.conventionTrainingId).map((t) => t.conventionTrainingId)
+  );
+
+  let facture = 0, caST = 0, heuresDecl = 0, heuresST = 0;
+  const sessions = new Set();
+  let debut = null, fin = null;
+
+  tts.forEach((t) => {
+    facture += t.discountedAmount || 0;
+    if (subcontractedCtIds.has(t.conventionTrainingId)) caST += t.discountedAmount || 0;
+  });
+  cts.forEach((ct) => {
+    heuresDecl += ct.soldHours || 0;
+    if (subcontractedCtIds.has(ct.id)) heuresST += ct.soldHours || 0;
+    const sessionLabel = ct.sessionName || ct.sessionCode;
+    if (sessionLabel) sessions.add(sessionLabel);
+    if (ct.sessionStartDate) {
+      const dt = new Date(ct.sessionStartDate);
+      if (!debut || dt < debut) debut = dt;
+    }
+    if (ct.sessionEndDate) {
+      const dt = new Date(ct.sessionEndDate);
+      if (!fin || dt > fin) fin = dt;
+    }
+  });
+
+  const conv = convById.get(conventionId) || {};
+  return {
+    dossier: conventionId,
+    intitule: conv.name || conv.code || '(sans intitulé)',
+    sessions: [...sessions].join(', ') || '—',
+    debut, fin, facture, heuresDecl, heuresST, caST,
+    pctST: facture > 0 ? caST / facture : 0,
+  };
+}
+
+// ------------------------------------------------------------------
+// Comparaison entre les annees choisies (pas forcement consecutives,
+// ex. 2026 vs 2023), jusqu'a un mois donne (par defaut : aujourd'hui
+// pour l'annee en cours). cutoffMonth est un index 0-11, cutoffDay le
+// jour du mois -- pour un mois deja termine on passe son dernier jour,
+// ce qui donne une comparaison "mois plein" plutot qu'un YTD partiel.
+// `years` : tableau d'annees (nombres), au moins 1, ordre quelconque en
+// entree -- trie ici par ordre croissant pour un rendu stable.
+// ------------------------------------------------------------------
+function daysInMonth(year, monthIdx) { return new Date(year, monthIdx + 1, 0).getDate(); }
+
+function computeComparaison(raw, years, cutoffMonth, cutoffDay) {
+  const { customers, conventions, invoices, attendees } = raw;
+  const sortedYears = [...years].sort((a, b) => a - b);
+  const inYtd = (dateStr, year) => {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    if (d.getFullYear() !== year) return false;
+    return d.getMonth() < cutoffMonth || (d.getMonth() === cutoffMonth && d.getDate() <= cutoffDay);
+  };
+  const pctDelta = (cur, prev) => (prev ? Math.round(((cur - prev) / prev) * 1000) / 10 : null);
+
+  const perYear = (calc) => sortedYears.map((year) => ({ year, val: calc(year) }));
+
+  const caPerYear = perYear((year) => Math.round(invoices.filter((i) => inYtd(i.billingDate, year)).reduce((s, i) => s + (i.amount || 0), 0) * 100) / 100);
+  const clientsPerYear = perYear((year) => customers.filter((c) => inYtd(c.created, year)).length);
+  const stagPerYear = perYear((year) => new Set(attendees.filter((a) => a.attendee && inYtd(a.created, year)).map((a) => a.attendeeId)).size);
+  const devisPerYear = perYear((year) => conventions.filter((c) => c.isProposal && inYtd(c.signingDate, year)).length);
+
+  const withDelta = (indicateur, values) => {
+    const first = values[0].val, last = values[values.length - 1].val;
+    return { indicateur, values, delta: last - first, delta_pct: pctDelta(last, first) };
+  };
+
+  return [
+    withDelta('CA facturé (HT)', caPerYear),
+    withDelta('Nouveaux clients', clientsPerYear),
+    withDelta('Stagiaires inscrits', stagPerYear),
+    withDelta('Devis signés', devisPerYear),
+  ];
+}
+
+// ------------------------------------------------------------------
+// Filtre global du sous-onglet Commercial -- les annees cochees et le
+// mois de coupure (compare-years / compare-cutoff) s'appliquent a tout
+// : comparaison annuelle, top conseillers/clients, CA par client, et
+// les 2 series mensuelles (nouveaux clients, CA facture). Une meme
+// fonction inSelectedPeriod() sert de base a tout ce filtrage.
+// ------------------------------------------------------------------
+function inSelectedPeriod(dateStr, years, cutoffMonth, cutoffDay) {
+  if (!dateStr) return false;
+  const d = new Date(dateStr);
+  if (!years.includes(d.getFullYear())) return false;
+  return d.getMonth() < cutoffMonth || (d.getMonth() === cutoffMonth && d.getDate() <= cutoffDay);
+}
+
+function monthsForYears(years, cutoffMonth) {
+  const out = [];
+  [...years].sort((a, b) => a - b).forEach((year) => {
+    for (let m = 0; m <= cutoffMonth; m++) out.push(`${year}-${String(m + 1).padStart(2, '0')}`);
+  });
+  return out;
+}
+
+function computeTopBy(invoices, convById, field, years, cutoffMonth, cutoffDay) {
+  const map = {};
+  invoices.forEach((i) => {
+    if (!inSelectedPeriod(i.billingDate, years, cutoffMonth, cutoffDay)) return;
+    const conv = convById.get(i.conventionId);
+    const key = conv ? conv[field] : null;
+    if (!key) return;
+    map[key] = (map[key] || 0) + (i.amount || 0);
+  });
+  return Object.entries(map).map(([nom, ca]) => ({ nom, ca })).sort((a, b) => b.ca - a.ca).slice(0, 5);
+}
+
+function computeCAParClient(invoices, convById, years, cutoffMonth, cutoffDay) {
+  const map = {};
+  invoices.forEach((i) => {
+    if (!inSelectedPeriod(i.billingDate, years, cutoffMonth, cutoffDay)) return;
+    const conv = convById.get(i.conventionId);
+    const client = conv ? conv.customerName : null;
+    if (!client) return;
+    map[client] = (map[client] || 0) + (i.amount || 0);
+  });
+  return Object.entries(map).map(([client, ca]) => ({ client, ca })).sort((a, b) => b.ca - a.ca).slice(0, 25);
+}
+
+function computeCommercialFiltered(raw, convById, years, cutoffMonth, cutoffDay) {
+  const { customers, invoices } = raw;
+  const months = monthsForYears(years, cutoffMonth);
+
+  const ncMap = {};
+  customers.forEach((c) => {
+    if (!inSelectedPeriod(c.created, years, cutoffMonth, cutoffDay)) return;
+    const m = monthKey(c.created);
+    ncMap[m] = (ncMap[m] || 0) + 1;
+  });
+  const nouveaux_clients_par_mois = months.map((m) => ({ mois: m, nouveaux_clients: ncMap[m] || 0 }));
+
+  const caMap = {};
+  invoices.forEach((i) => {
+    if (!inSelectedPeriod(i.billingDate, years, cutoffMonth, cutoffDay)) return;
+    const m = monthKey(i.billingDate);
+    caMap[m] = (caMap[m] || 0) + (i.amount || 0);
+  });
+  const ca_mensuel = months.map((m) => ({ mois: m, ca: Math.round((caMap[m] || 0) * 100) / 100 }));
+
+  return {
+    comparaison_annuelle: computeComparaison(raw, years, cutoffMonth, cutoffDay),
+    top_conseillers: computeTopBy(invoices, convById, 'accountManagerName', years, cutoffMonth, cutoffDay),
+    top_clients: computeTopBy(invoices, convById, 'customerName', years, cutoffMonth, cutoffDay),
+    ca_par_client: computeCAParClient(invoices, convById, years, cutoffMonth, cutoffDay),
+    nouveaux_clients_par_mois, ca_mensuel,
+  };
+}
+
+// ------------------------------------------------------------------
+// Rendu
+// ------------------------------------------------------------------
+function renderKpis(DATA) {
+  const nc = DATA.nouveaux_clients_par_mois;
+  const cur = nc[nc.length - 1], prev = nc[nc.length - 2];
+  const delta = cur.nouveaux_clients - prev.nouveaux_clients;
+
+  const ca = DATA.ca_mensuel;
+  const caCur = ca[ca.length - 1].ca, caPrev = ca[ca.length - 2].ca;
+  const caDelta = caPrev ? ((caCur - caPrev) / caPrev * 100) : 0;
+
+  const sessions = DATA.sessions_programmees;
+  const sessionsCeMois = sessions[sessions.length - 1] ? sessions[sessions.length - 1].nb_sessions : 0;
+
+  const devis = DATA.devis_a_relancer;
+  const devisCritiques = devis.filter((d) => d.age_jours > 90).length;
+
+  const kpis = [
+    { label: `Nouveaux clients — ${fmtMonth(cur.mois)}`, value: String(cur.nouveaux_clients), sub: `${delta >= 0 ? '+' : ''}${delta} vs mois précédent`, delta },
+    { label: `CA facturé — ${fmtMonth(ca[ca.length - 1].mois)}`, value: fmtEUR(caCur), sub: `${caDelta >= 0 ? '+' : ''}${caDelta.toFixed(0)}% vs mois précédent`, delta: caDelta },
+    { label: 'Sessions programmées — ce mois', value: String(sessionsCeMois), sub: 'avec capacité déclarée', delta: null },
+    { label: 'Devis à relancer', value: String(devis.length), sub: devisCritiques > 0 ? `dont ${devisCritiques} en attente depuis +90j` : 'aucun de plus de 90 jours', delta: null, warnCount: devisCritiques },
+  ];
+
+  const wrap = document.getElementById('kpis');
+  kpis.forEach((k) => {
+    const card = el('div', 'kpi');
+    card.appendChild(el('p', 'kpi-label', k.label));
+    card.appendChild(el('p', 'kpi-value', k.value));
+    let subCls = 'kpi-sub';
+    if (k.delta !== null && k.delta !== undefined) subCls += k.delta >= 0 ? ' up' : ' down';
+    if (k.warnCount > 0) subCls += ' down';
+    card.appendChild(el('p', subCls, k.sub));
+    wrap.appendChild(card);
+  });
+}
+
+function renderNouveaux(DATA) {
+  const tbody = document.getElementById('tbl-nouveaux');
+  const max = Math.max(...DATA.nouveaux_clients_par_mois.map((r) => r.nouveaux_clients), 1);
+  DATA.nouveaux_clients_par_mois.forEach((r) => {
+    const tr = el('tr');
+    tr.appendChild(el('td', 'strong', fmtMonth(r.mois)));
+    const barTd = el('td', 'bar-td');
+    const cell = el('div', 'bar-cell');
+    const track = el('div', 'bar-track');
+    const fill = el('div', 'bar-fill');
+    fill.style.width = `${(r.nouveaux_clients / max * 100).toFixed(1)}%`;
+    track.appendChild(fill);
+    cell.appendChild(track);
+    cell.appendChild(el('span', 'bar-pct', String(r.nouveaux_clients)));
+    barTd.appendChild(cell);
+    tr.appendChild(barTd);
+    tbody.appendChild(tr);
+  });
+}
+
+function renderStagiaires(DATA) {
+  const tbody = document.getElementById('tbl-stagiaires');
+  const rows = DATA.derniers_stagiaires;
+  document.getElementById('stagiaires-count').textContent = `${rows.length} inscriptions`;
+  rows.forEach((r) => {
+    const tr = el('tr');
+    const nameTd = el('td', 'strong', r.nom); nameTd.title = r.nom;
+    tr.appendChild(nameTd);
+    const convTd = el('td', '', r.convention); convTd.title = r.convention;
+    tr.appendChild(convTd);
+    tr.appendChild(el('td', '', fmtDate(r.inscrit_le)));
+    tbody.appendChild(tr);
+  });
+}
+
+function renderMiniChart(chartId, labelsId, rows, valueKey, labelKey, fmt) {
+  const chart = document.getElementById(chartId);
+  const labels = document.getElementById(labelsId);
+  const max = Math.max(...rows.map((r) => r[valueKey]), 1);
+  rows.forEach((r) => {
+    const col = el('div', 'mini-col');
+    const tip = el('div', 'mini-tip', fmt(r[valueKey]));
+    const bar = el('div', 'mini-bar');
+    bar.style.height = `${Math.max((r[valueKey] / max * 100), 2)}%`;
+    col.appendChild(tip);
+    col.appendChild(bar);
+    chart.appendChild(col);
+    labels.appendChild(el('span', '', fmtMonth(r[labelKey]).replace(' ', '<br>')));
+  });
+}
+
+function renderDevis(DATA) {
+  const tbody = document.getElementById('tbl-devis');
+  DATA.devis_a_relancer.slice(0, 20).forEach((d) => {
+    const tr = el('tr');
+    const left = el('td');
+    left.appendChild(el('div', 'strong', d.name));
+    const meta = el('div', '', `${d.proposal_code || ''} · statut : ${d.proposal_status || 'inconnu'}`);
+    meta.style.fontSize = '12px';
+    meta.style.color = 'var(--ink-muted)';
+    left.appendChild(meta);
+    tr.appendChild(left);
+    const right = el('td', 'num');
+    let cls = 'age-ok';
+    if (d.age_jours > 90) cls = 'age-crit';
+    else if (d.age_jours > 30) cls = 'age-warn';
+    right.innerHTML = `<span class="badge ${cls}"><span class="dot"></span>${d.age_jours} j</span>`;
+    tr.appendChild(right);
+    tbody.appendChild(tr);
+  });
+}
+
+function renderRankList(wrapId, rows, nameKey, valueKey, metaFn, fmt) {
+  const wrap = document.getElementById(wrapId);
+  const max = Math.max(...rows.map((r) => r[valueKey]), 1);
+  rows.forEach((r, i) => {
+    const row = el('div', 'rank-row');
+    row.appendChild(el('div', 'rank-num', String(i + 1).padStart(2, '0')));
+    row.appendChild(el('div', 'rank-name', r[nameKey]));
+    row.appendChild(el('div', 'rank-meta', metaFn ? metaFn(r) : ''));
+    const track = el('div', 'rank-bar-track');
+    const fill = el('div', 'rank-bar-fill');
+    fill.style.width = `${(r[valueKey] / max * 100).toFixed(1)}%`;
+    track.appendChild(fill);
+    row.appendChild(track);
+    row.appendChild(el('div', 'rank-value', fmt(r[valueKey])));
+    wrap.appendChild(row);
+  });
+}
+
+function renderCAParClient(DATA) {
+  const tbody = document.getElementById('tbl-ca-client');
+  tbody.innerHTML = '';
+  const rows = DATA.ca_par_client;
+  const max = Math.max(...rows.map((r) => r.ca), 1);
+  rows.forEach((r) => {
+    const tr = el('tr');
+    const nameTd = el('td', 'strong', r.client); nameTd.title = r.client;
+    tr.appendChild(nameTd);
+    const barTd = el('td', 'bar-td');
+    const cell = el('div', 'bar-cell');
+    const track = el('div', 'bar-track');
+    const fill = el('div', 'bar-fill');
+    fill.style.width = `${(r.ca / max * 100).toFixed(1)}%`;
+    track.appendChild(fill);
+    cell.appendChild(track);
+    cell.appendChild(el('span', 'bar-pct', fmtEUR(r.ca)));
+    barTd.appendChild(cell);
+    tr.appendChild(barTd);
+    tbody.appendChild(tr);
+  });
+}
+
+function renderSessionsTable(tbodyId, rows, cols) {
+  const tbody = document.getElementById(tbodyId);
+  rows.forEach((r) => {
+    const tr = el('tr');
+    cols.forEach(([key, cls, fmt]) => {
+      const v = fmt ? fmt(r[key]) : (r[key] ?? '—');
+      const td = el('td', cls || '', String(v));
+      if (typeof v === 'string') td.title = v;
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+function renderCredit(DATA) {
+  const tbody = document.getElementById('tbl-credit');
+  DATA.credit_restant.forEach((r) => {
+    const tr = el('tr');
+    const nameTd = el('td', 'strong', r.nom); nameTd.title = r.nom;
+    tr.appendChild(nameTd);
+    const partTd = el('td', '', r.participants); partTd.title = r.participants;
+    tr.appendChild(partTd);
+    tr.appendChild(el('td', 'num', fmtH(r.credit)));
+    tbody.appendChild(tr);
+  });
+}
+
+function renderMontant(DATA) {
+  const tbody = document.getElementById('tbl-montant');
+  DATA.montant_vendu_facture.forEach((r) => {
+    const tr = el('tr');
+    tr.appendChild(el('td', 'strong', String(r.code)));
+    tr.appendChild(el('td', '', r.statut));
+    const clientTd = el('td', '', r.client); clientTd.title = r.client;
+    tr.appendChild(clientTd);
+    const conseillerTd = el('td', '', r.conseiller); conseillerTd.title = r.conseiller;
+    tr.appendChild(conseillerTd);
+    tr.appendChild(el('td', 'num', fmtEUR(r.vendu)));
+    tr.appendChild(el('td', 'num', fmtEUR(r.facture)));
+    tbody.appendChild(tr);
+  });
+}
+
+function renderHeuresFormateur(DATA) {
+  const note = document.getElementById('formateurs-heures-note');
+  const panel = document.getElementById('formateurs-heures-panel');
+  if (!DATA.heures_formateur) {
+    note.innerHTML = `<div class="note">Détail Prévues/Réalisées/Planifiées non disponible pour ce compte : les identifiants de <code>sessionQualiopi</code> ne correspondent pas (ou trop peu) à ceux de <code>session</code> (${Math.round(DATA.join_ratio * 100)}% de correspondance). Le classement « Top formateurs » ci-dessus reste basé sur <code>session</code> directement.</div>`;
+    return;
+  }
+  panel.style.display = 'block';
+  const tbody = document.getElementById('tbl-heures-formateur');
+  DATA.heures_formateur.forEach((r) => {
+    const tr = el('tr');
+    tr.appendChild(el('td', 'strong', r.nom));
+    tr.appendChild(el('td', 'num', fmtH(r.prevues)));
+    tr.appendChild(el('td', 'num', fmtH(r.realisees)));
+    tr.appendChild(el('td', 'num', fmtH(r.planifiees)));
+    tr.appendChild(el('td', 'num', String(r.sessions)));
+    tbody.appendChild(tr);
+  });
+}
+
+function renderComparaison(rows, years) {
+  const tbody = document.getElementById('tbl-comparaison');
+  tbody.innerHTML = '';
+  const sortedYears = [...years].sort((a, b) => a - b);
+  document.getElementById('compare-title').textContent = sortedYears.length > 1
+    ? `Comparaison ${sortedYears.join(' vs ')}`
+    : `Année ${sortedYears[0] || ''}`;
+  const isEUR = (nom) => /CA facturé/i.test(nom);
+
+  rows.forEach((r) => {
+    const tr = el('tr');
+    tr.appendChild(el('td', 'strong', r.indicateur));
+
+    const max = Math.max(...r.values.map((v) => v.val), 1);
+    const fmt = (v) => (isEUR(r.indicateur) ? fmtEUR(v) : String(v));
+    const compareTd = el('td');
+    const rowsWrap = el('div', 'compare-rows');
+    r.values.forEach((v, i) => {
+      const row = el('div', 'compare-row');
+      row.appendChild(el('span', 'compare-year', String(v.year)));
+      const track = el('div', 'compare-track');
+      const fill = el('div', `compare-fill ${i < r.values.length - 1 ? 'prev' : ''}`.trim());
+      fill.style.width = `${Math.max((v.val / max * 100), 2).toFixed(1)}%`;
+      track.appendChild(fill);
+      row.appendChild(track);
+      row.appendChild(el('span', 'compare-val', fmt(v.val)));
+      rowsWrap.appendChild(row);
+    });
+    compareTd.appendChild(rowsWrap);
+    tr.appendChild(compareTd);
+
+    tr.appendChild(el('td', 'num', isEUR(r.indicateur) ? fmtEUR(r.delta) : String(r.delta)));
+
+    const deltaTd = el('td', 'num');
+    if (r.delta_pct === null || r.delta_pct === undefined || r.values.length < 2) {
+      deltaTd.innerHTML = '<span class="compare-delta">—</span>';
+    } else {
+      const up = r.delta_pct >= 0;
+      deltaTd.innerHTML = `<span class="compare-delta ${up ? 'up' : 'down'}">${up ? '▲' : '▼'} ${Math.abs(r.delta_pct).toFixed(1)}%</span>`;
+    }
+    tr.appendChild(deltaTd);
+    tbody.appendChild(tr);
+  });
+}
+
+// ------------------------------------------------------------------
+// Selecteur "annees a comparer" (cases a cocher, pas forcement
+// consecutives -- ex. 2026 + 2023) + selecteur de mois de coupure.
+// ------------------------------------------------------------------
+function getSelectedYears() {
+  return [...document.querySelectorAll('#compare-years input:checked')].map((cb) => parseInt(cb.value, 10));
+}
+
+function refreshCommercial(DATA) {
+  const sel = document.getElementById('compare-cutoff');
+  const now = new Date();
+  const m = parseInt(sel.value, 10);
+  const day = m === now.getMonth() ? now.getDate() : daysInMonth(now.getFullYear(), m);
+  let years = getSelectedYears();
+  if (years.length === 0) {
+    // au moins une annee doit rester selectionnee -- on force celle qu'on vient de decocher
+    years = [now.getFullYear()];
+  }
+  const convById = new Map(DATA.raw.conventions.map((c) => [c.id, c]));
+  const commercial = computeCommercialFiltered(DATA.raw, convById, years, m, day);
+  Object.assign(DATA, commercial);
+
+  renderComparaison(commercial.comparaison_annuelle, years);
+
+  document.getElementById('rank-conseillers').innerHTML = '';
+  document.getElementById('rank-clients').innerHTML = '';
+  renderRankList('rank-conseillers', commercial.top_conseillers, 'nom', 'ca', () => '', fmtEUR);
+  renderRankList('rank-clients', commercial.top_clients, 'nom', 'ca', () => '', fmtEUR);
+
+  renderCAParClient(DATA);
+
+  document.getElementById('tbl-nouveaux').innerHTML = '';
+  renderNouveaux(DATA);
+
+  document.getElementById('chart-ca').innerHTML = '';
+  document.getElementById('labels-ca').innerHTML = '';
+  renderMiniChart('chart-ca', 'labels-ca', commercial.ca_mensuel, 'ca', 'mois', (v) => fmtEUR(v));
+
+  const periodLabel = years.length > 1
+    ? [...years].sort((a, b) => a - b).join(' + ')
+    : String(years[0]);
+  ['ca-client-hint', 'top-conseillers-hint', 'top-clients-hint', 'nouveaux-hint', 'ca-mensuel-hint'].forEach((id) => {
+    const hint = document.getElementById(id);
+    if (hint) hint.textContent = `par CA facturé · ${periodLabel}`;
+  });
+  document.getElementById('nouveaux-hint').textContent = `clients créés · ${periodLabel}`;
+  document.getElementById('ca-mensuel-hint').textContent = periodLabel;
+}
+
+function populateYearPicker(DATA) {
+  const wrap = document.getElementById('compare-years');
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  const yearsInData = new Set();
+  [...DATA.raw.invoices.map((i) => i.billingDate), ...DATA.raw.customers.map((c) => c.created), ...DATA.raw.conventions.map((c) => c.signingDate)]
+    .filter(Boolean)
+    .forEach((d) => yearsInData.add(new Date(d).getFullYear()));
+  yearsInData.add(currentYear);
+  const minYear = Math.min(...yearsInData, currentYear - 5);
+
+  const years = [];
+  for (let y = currentYear; y >= minYear; y--) years.push(y);
+
+  years.forEach((y) => {
+    const chip = el('label', 'year-chip');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = String(y);
+    cb.checked = y === currentYear || y === currentYear - 1;
+    if (cb.checked) chip.classList.add('checked');
+    cb.addEventListener('change', () => {
+      chip.classList.toggle('checked', cb.checked);
+      refreshCommercial(DATA);
+    });
+    chip.appendChild(cb);
+    chip.appendChild(document.createTextNode(String(y)));
+    wrap.appendChild(chip);
+  });
+}
+
+function populateCutoffSelect(DATA) {
+  const sel = document.getElementById('compare-cutoff');
+  const now = new Date();
+  const noms = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','déc.'];
+  for (let m = 0; m <= now.getMonth(); m++) {
+    const opt = document.createElement('option');
+    opt.value = String(m);
+    opt.textContent = m === now.getMonth() ? "aujourd'hui" : `fin ${noms[m]}`;
+    sel.appendChild(opt);
+  }
+  sel.value = String(now.getMonth());
+  sel.addEventListener('change', () => refreshCommercial(DATA));
+}
+
+function renderAll(DATA) {
+  renderKpis(DATA);
+
+  // Commercial
+  populateYearPicker(DATA);
+  populateCutoffSelect(DATA);
+  refreshCommercial(DATA);
+  renderDevis(DATA);
+
+  // Planning
+  renderMiniChart('chart-sessions', 'labels-sessions', DATA.sessions_programmees, 'nb_sessions', 'mois', (v) => `${v} session(s)`);
+  renderMiniChart('chart-heures', 'labels-heures', DATA.heures_par_mois, 'heures', 'mois', (v) => fmtH(v));
+  document.getElementById('sessions-list-hint').textContent = DATA.sessions_a_venir_is_future
+    ? `${DATA.sessions_a_venir.length} session(s) à venir`
+    : `${DATA.sessions_a_venir.length} session(s) les plus récentes (aucune à venir)`;
+  renderSessionsTable('tbl-sessions-planning', DATA.sessions_a_venir, [
+    ['name', 'strong'], ['trainingName'], ['startDate', '', fmtDate], ['endDate', '', fmtDate], ['trainerName'], ['numberMaxi', 'num'],
+  ]);
+
+  // Formateurs
+  renderRankList('rank-formateurs', DATA.top_formateurs, 'nom', 'ca_estime', (r) => `${r.nb_sessions} sessions`, fmtEUR);
+  renderHeuresFormateur(DATA);
+
+  // Listing
+  renderStagiaires(DATA);
+  renderCredit(DATA);
+  renderSessionsTable('tbl-sessions-listing', DATA.sessions_listing, [
+    ['trainingName', 'strong'], ['name'], ['hours', 'num', fmtH], ['startDate', '', fmtDate],
+  ]);
+  renderMontant(DATA);
+}
+
+// ------------------------------------------------------------------
+// Bootstrap
+// ------------------------------------------------------------------
+let CPF_ENTITY_ID = null;
+
+(async () => {
+  const entityId = new URLSearchParams(location.search).get('entityId');
+  CPF_ENTITY_ID = entityId;
+
+  setBanner('loading', 'Chargement des données MCDF en direct…');
+  setStatus('', '<span class="dot"></span> Connexion…');
+
+  try {
+    const DATA = await buildData(entityId);
+
+    if (entityId) {
+      setStatus('', `<span class="dot"></span> Entité ${entityId} · lecture seule`);
+    } else {
+      setStatus('warn', '<span class="dot"></span> Toutes entités accessibles · pensez à passer ?entityId=…');
+    }
+
+    document.getElementById('banner').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    renderAll(DATA);
+
+    // CPF Sous-traitance : chargé uniquement à l'ouverture de l'onglet
+    // (voir loadCpfLive) pour ne jamais retarder le reste du widget.
+    initCpfYearFilter(DATA.raw.customers, DATA.raw.convById, DATA.raw.invoices);
+    document.querySelector('.tab-btn[data-tab="cpf"]').addEventListener('click', () => {
+      const year = document.getElementById('cpf-year-filter').value;
+      loadCpfLive(DATA.raw.customers, DATA.raw.convById, DATA.raw.invoices, year === 'all' ? 'all' : Number(year));
+    });
+  } catch (err) {
+    setStatus('warn', '<span class="dot"></span> Non connecté');
+    if (err && err.message === 'AUTH') {
+      setBanner('error',
+        'Session MCDF non détectée. Ce widget doit être ouvert depuis un onglet ' +
+        'déjà connecté à MCDF (même origine) — rechargez cette page après vous ' +
+        'être connecté à <code>portal.moncentredeformation.fr</code>.');
+    } else {
+      setBanner('error', `Erreur de chargement : ${(err && err.message) || err}`);
+      console.error(err);
+    }
+  }
+})();
+
+// ------------------------------------------------------------------
+// Boutons "Suggerer..." -- ouvrent widget-suggestions.html avec un
+// prompt deja documente (module, fichier, entites API confirmees ici)
+// pour que la demande d'evolution soit exploitable sans aller-retour.
+// ------------------------------------------------------------------
+const SUGGEST_MODULE = 'Génération de rapports';
+function buildSuggestContext() {
+  return [
+    'Contexte technique (pré-rempli automatiquement) :',
+    '- Widget : Génération de rapports (widget-ia.html)',
+    '- Entités API MCDF déjà utilisées ici : customer, fullConventionQualiopi, invoice, conventionAttendee, session, sessionQualiopi, conventionTraining, timetable (via /wa/{entity}/list?nopaging=1)',
+    '- Onglets existants : Commercial, Planning, Formateurs, Listing, CPF Sous-traitance (API en direct, dossier retenu si payeur = Caisse des Dépôts et Consignations, sous-traitance = timetable.subcontracted), Facturation (import Excel manuel), Observatoire marché (open data Mon Compte Formation en direct), Formation → compétences (import Excel du référentiel ROME + génération de prompt pédagogique à copier)',
+    '',
+  ].join('\n');
+}
+function openSuggest(kind) {
+  const context = buildSuggestContext();
+  let titre, desc;
+  if (kind === 'report') {
+    titre = 'Nouveau rapport : ';
+    desc = context + [
+      'Décrivez le nouveau rapport ou indicateur souhaité :',
+      '- Objectif du rapport : ',
+      '- Données/champs nécessaires (si connus) : ',
+      '- Filtre ou période à appliquer : ',
+      '- Exemple concret attendu : ',
+    ].join('\n');
+  } else {
+    titre = 'Nouveau filtre : ';
+    desc = context + [
+      'Décrivez le nouveau filtre souhaité :',
+      '- Sur quel tableau/section doit-il s\'appliquer : ',
+      '- Valeurs ou critère du filtre : ',
+      '- Doit-il se cumuler avec les filtres existants ou les remplacer : ',
+    ].join('\n');
+  }
+  const url = `widget-suggestions.html?module=${encodeURIComponent(SUGGEST_MODULE)}&titre=${encodeURIComponent(titre)}&desc=${encodeURIComponent(desc)}`;
+  window.open(url, '_blank');
+}
+document.getElementById('suggest-report-btn').addEventListener('click', () => openSuggest('report'));
+document.getElementById('suggest-filter-btn').addEventListener('click', () => openSuggest('filter'));
+
+// ------------------------------------------------------------------
+// Onglet "Facturation" -- pas d'entite facturation confirmee dans
+// l'API MCDF, import manuel d'un export Excel/CSV existant (voir la
+// note dans l'onglet). Fonctionne independamment du chargement des
+// donnees live plus haut : purement client, localStorage uniquement.
+// (CPF Sous-traitance est en direct depuis l'API -- voir buildCpfDossiers.)
+// ------------------------------------------------------------------
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function fmtEUR2(n) {
+  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+}
+function fmtDateShort(d) {
+  return d ? d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
+}
+function monthKeyFromDate(d) {
+  return d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : null;
+}
+function parseNumber(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  let s = String(v).trim().replace(/[€ \s]/g, '');
+  if (!s) return null;
+  const lastComma = s.lastIndexOf(',');
+  const lastDot = s.lastIndexOf('.');
+  if (lastComma > -1 && lastDot > -1) {
+    if (lastComma > lastDot) s = s.replace(/\./g, '').replace(',', '.');
+    else s = s.replace(/,/g, '');
+  } else if (lastComma > -1) {
+    s = s.replace(',', '.');
+  }
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : null;
+}
+function parseDateCell(v) {
+  if (!v) return null;
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v;
+  const s = String(v).trim();
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+function slugHeader(s) {
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9%]+/g, ' ')
+    .trim();
+}
+function buildHeaderIndex(headerRow) {
+  const idx = {};
+  (headerRow || []).forEach((h, i) => {
+    const slug = slugHeader(h);
+    if (slug && !(slug in idx)) idx[slug] = i;
+  });
+  return idx;
+}
+function pickCol(idx, candidates) {
+  for (const c of candidates) if (c in idx) return idx[c];
+  return -1;
+}
+// Parseur CSV minimal (virgule ou point-virgule auto-detecte, champs entre
+// guillemets geres) -- utilise en secours si SheetJS ne charge pas
+// (.xlsx/.xls necessitent SheetJS, .csv fonctionne sans).
+function parseCsv(text) {
+  const firstLine = text.split(/\r?\n/, 1)[0] || '';
+  const delim = (firstLine.match(/;/g) || []).length > (firstLine.match(/,/g) || []).length ? ';' : ',';
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else { inQuotes = false; } }
+      else field += c;
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === delim) {
+      row.push(field); field = '';
+    } else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(field); field = ''; rows.push(row); row = [];
+    } else {
+      field += c;
+    }
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows.filter((r) => r.some((c) => String(c).trim() !== ''));
+}
+function readWorkbookFile(file, sheetHint) {
+  return new Promise((resolve, reject) => {
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    if (ext === 'csv') {
+      const reader = new FileReader();
+      reader.onload = () => resolve(parseCsv(reader.result));
+      reader.onerror = () => reject(new Error('Lecture du fichier impossible.'));
+      reader.readAsText(file, 'utf-8');
+      return;
+    }
+    if (typeof XLSX === 'undefined') {
+      reject(new Error('La bibliothèque de lecture Excel (SheetJS, cdnjs.cloudflare.com) n\'a pas pu se charger — vérifiez la connexion internet, ou exportez le fichier en .csv et réessayez.'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const wb = XLSX.read(reader.result, { type: 'array', cellDates: true });
+        const sheetName = (sheetHint && wb.SheetNames.find((n) => sheetHint.test(n))) || wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null, blankrows: false });
+        resolve(rows);
+      } catch (e) {
+        reject(new Error(`Fichier illisible : ${e.message}`));
+      }
+    };
+    reader.onerror = () => reject(new Error('Lecture du fichier impossible.'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// ---- CPF Sous-traitance (API MCDF en direct, voir plus haut) ----
+// Chargement différé, déclenché au premier clic sur l'onglet : la
+// liste des dossiers CPF vient de `invoice` (déjà chargé, rapide), puis
+// le détail (heures, sous-traitance) est allé chercher dossier par
+// dossier via listWithTimetable, en petits lots -- pas d'appel en masse
+// sur conventionTraining/timetable, qui timeout au-delà d'un certain
+// historique (déjà observé : 504 Gateway Timeout côté MCDF).
+const CPF_CONCURRENCY = 6;
+let CPF_ROWS = [];
+let CPF_LOAD_STATE = 'idle'; // idle | loading | error | ready
+let CPF_LOADED_YEAR = null; // année (nombre) ou 'all' déjà chargée, pour éviter un rechargement inutile
+
+async function loadCpfLive(customers, convById, invoices, year) {
+  if (CPF_LOAD_STATE === 'loading') return;
+  if (CPF_LOAD_STATE === 'ready' && CPF_LOADED_YEAR === year) return;
+  CPF_LOAD_STATE = 'loading';
+  CPF_LOADED_YEAR = year;
+  setCpfHint('loading');
+  try {
+    const cpfConvIds = findCpfConventionIds(customers, invoices, year);
+    const rows = [];
+    for (let i = 0; i < cpfConvIds.length; i += CPF_CONCURRENCY) {
+      const batch = cpfConvIds.slice(i, i + CPF_CONCURRENCY);
+      const batchResults = await Promise.all(
+        batch.map((convId) => fetchConventionTimetable(convId).then((r) => aggregateCpfDossier(convId, r, convById)))
+      );
+      rows.push(...batchResults);
+      setCpfHint('loading', null, Math.min(i + CPF_CONCURRENCY, cpfConvIds.length), cpfConvIds.length);
+    }
+    CPF_ROWS = rows;
+    CPF_LOAD_STATE = 'ready';
+    renderCpfLive();
+  } catch (err) {
+    CPF_LOAD_STATE = 'error';
+    const msg = err && err.message === 'AUTH'
+      ? 'Le serveur MCDF n\'a pas répondu correctement au chargement d\'un dossier (délai dépassé). Réessayez, ou contactez votre administrateur si ça persiste.'
+      : `Erreur au chargement : ${(err && err.message) || err}`;
+    setCpfHint('error', msg);
+    console.error('CPF Sous-traitance :', err);
+  }
+}
+function setCpfHint(state, errorMsg, done, total) {
+  const loadingHint = document.getElementById('cpf-loading-hint');
+  loadingHint.style.display = state === 'loading' ? 'block' : 'none';
+  if (state === 'loading') {
+    loadingHint.innerHTML = total
+      ? `<span class="spinner" style="display:inline-block; vertical-align:middle; margin-right:6px;"></span>Chargement des dossiers CPF… (${done}/${total})`
+      : `<span class="spinner" style="display:inline-block; vertical-align:middle; margin-right:6px;"></span>Recherche des dossiers CPF…`;
+  }
+  document.getElementById('cpf-error-hint').style.display = state === 'error' ? 'block' : 'none';
+  if (state === 'error') document.getElementById('cpf-error-hint').textContent = errorMsg;
+  if (state !== 'ready') document.getElementById('cpf-content').style.display = 'none';
+  if (state !== 'error') document.getElementById('cpf-empty-hint').style.display = 'none';
+}
+// Filtre année : limité à l'année en cours par défaut (moins de dossiers
+// à interroger un par un -- voir CPF_CONCURRENCY -- et rapport plus
+// pertinent), avec la possibilité de choisir une autre année ou "Toutes".
+function initCpfYearFilter(customers, convById, invoices) {
+  const sel = document.getElementById('cpf-year-filter');
+  const currentYear = new Date().getFullYear();
+  const yearsInInvoices = new Set(
+    invoices.map((i) => i.billingDate && new Date(i.billingDate).getFullYear()).filter(Boolean)
+  );
+  yearsInInvoices.add(currentYear);
+  const years = [...yearsInInvoices].sort((a, b) => b - a);
+
+  sel.innerHTML = '';
+  years.forEach((y) => {
+    const opt = document.createElement('option');
+    opt.value = String(y);
+    opt.textContent = String(y);
+    sel.appendChild(opt);
+  });
+  const optAll = document.createElement('option');
+  optAll.value = 'all';
+  optAll.textContent = 'Toutes années (peut être lent)';
+  sel.appendChild(optAll);
+  sel.value = String(currentYear);
+
+  sel.addEventListener('change', () => {
+    CPF_LOAD_STATE = 'idle';
+    loadCpfLive(customers, convById, invoices, sel.value === 'all' ? 'all' : Number(sel.value));
+  });
+}
+
+function pctClass(pct) {
+  if (pct >= 70) return 'crit';
+  if (pct >= 30) return 'warn';
+  return 'ok';
+}
+function renderCpfTable(rows) {
+  const tbody = document.getElementById('tbl-cpf');
+  tbody.innerHTML = '';
+  const sorted = rows.slice().sort((a, b) => b.pctST - a.pctST);
+  sorted.forEach((r) => {
+    const tr = el('tr');
+    tr.appendChild(el('td', 'strong', escapeHtml(r.dossier)));
+    tr.appendChild(el('td', '', escapeHtml(r.intitule)));
+    tr.appendChild(el('td', '', escapeHtml(r.sessions)));
+    tr.appendChild(el('td', '', `${fmtDateShort(r.debut)} → ${fmtDateShort(r.fin)}`));
+    tr.appendChild(el('td', 'num', fmtEUR(r.facture)));
+    tr.appendChild(el('td', 'num', fmtH(r.heuresDecl)));
+    tr.appendChild(el('td', 'num', fmtH(r.heuresST)));
+    const pctDisplay = Math.round(r.pctST * 100);
+    const barTd = el('td', 'badge-td', `<div class="bar-cell"><div class="bar-track"><div class="bar-fill ${pctClass(pctDisplay)}" style="width:${Math.min(Math.max(pctDisplay, 0), 100)}%"></div></div><div class="bar-pct">${pctDisplay}%</div></div>`);
+    tr.appendChild(barTd);
+    tr.appendChild(el('td', 'num', fmtEUR(r.caST)));
+    tbody.appendChild(tr);
+  });
+  document.getElementById('cpf-count-hint').textContent = `${sorted.length} dossier(s) affiché(s).`;
+}
+function renderCpfLive() {
+  setCpfHint('ready');
+  document.getElementById('cpf-content').style.display = CPF_ROWS.length ? 'block' : 'none';
+  document.getElementById('cpf-empty-hint').style.display = CPF_ROWS.length ? 'none' : 'block';
+  if (!CPF_ROWS.length) return;
+
+  const totalFacture = CPF_ROWS.reduce((s, r) => s + r.facture, 0);
+  const totalCAST = CPF_ROWS.reduce((s, r) => s + r.caST, 0);
+  const pctGlobal = totalFacture > 0 ? (totalCAST / totalFacture) * 100 : 0;
+  const dates = CPF_ROWS.flatMap((r) => [r.debut, r.fin]).filter(Boolean);
+  const periodeLabel = dates.length ? `${fmtDateShort(new Date(Math.min(...dates)))} → ${fmtDateShort(new Date(Math.max(...dates)))}` : '—';
+
+  const kpis = document.getElementById('cpf-kpis');
+  kpis.innerHTML = '';
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Total CA CPF</p><p class="kpi-value">${fmtEUR(totalFacture)}</p><p class="kpi-sub">${escapeHtml(periodeLabel)}</p>`));
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Total CA sous-traité</p><p class="kpi-value">${fmtEUR(totalCAST)}</p><p class="kpi-sub">${CPF_ROWS.length} dossier(s)</p>`));
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">% Sous-traitance globale</p><p class="kpi-value">${pctGlobal.toFixed(1)}%</p>`));
+
+  renderCpfTable(CPF_ROWS);
+}
+function initCpfSearch() {
+  document.getElementById('cpf-search').addEventListener('input', (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    const filtered = !q ? CPF_ROWS : CPF_ROWS.filter((r) =>
+      r.dossier.toLowerCase().includes(q) || r.intitule.toLowerCase().includes(q) || r.sessions.toLowerCase().includes(q));
+    renderCpfTable(filtered);
+  });
+}
+
+// ---- Facturation ----
+const FACTU_STORAGE_KEY = 'mcdf-report-facturation-v1';
+let FACTU_ROWS = [];
+
+function parseFactuRows(aoa) {
+  if (!aoa || !aoa.length) throw new Error('Fichier vide.');
+  const idx = buildHeaderIndex(aoa[0]);
+  const iDate = pickCol(idx, ['date facture']);
+  const iNumFacture = pickCol(idx, ['n facture']);
+  const iDossier = pickCol(idx, ['n dossier']);
+  const iHT = pickCol(idx, ['montant ht']);
+  const iTVA = pickCol(idx, ['montant tva']);
+  const iTTC = pickCol(idx, ['montant ttc']);
+  const iReste = pickCol(idx, ['reste a payer ttc', 'reste a payer']);
+  const iClient = pickCol(idx, ['client']);
+  const iPayeur = pickCol(idx, ['payeur']);
+  if (iDate === -1 || iHT === -1) {
+    throw new Error('Colonnes non reconnues — vérifiez qu\'il s\'agit bien d\'un export de facturation (Date facture, Montant HT…).');
+  }
+  const rows = [];
+  for (let r = 1; r < aoa.length; r++) {
+    const row = aoa[r];
+    if (!row || !row.length) continue;
+    const date = parseDateCell(row[iDate]);
+    if (!date) continue;
+    const numFacture = iNumFacture > -1 ? String(row[iNumFacture] || '') : '';
+    rows.push({
+      date, numFacture,
+      dossier: iDossier > -1 ? String(row[iDossier] || '') : '',
+      montantHT: parseNumber(row[iHT]) || 0,
+      montantTVA: iTVA > -1 ? (parseNumber(row[iTVA]) || 0) : 0,
+      montantTTC: iTTC > -1 ? (parseNumber(row[iTTC]) || 0) : 0,
+      resteAPayer: iReste > -1 ? (parseNumber(row[iReste]) || 0) : 0,
+      client: iClient > -1 ? String(row[iClient] || '') : '',
+      payeur: iPayeur > -1 ? String(row[iPayeur] || '') : '',
+      avoir: /^a/i.test(numFacture),
+    });
+  }
+  if (!rows.length) throw new Error('Aucune ligne de facture trouvée dans ce fichier.');
+  return rows;
+}
+function saveFactuData(rows, filename) {
+  localStorage.setItem(FACTU_STORAGE_KEY, JSON.stringify({
+    rows: rows.map((r) => ({ ...r, date: r.date.toISOString() })),
+    filename, importedAt: new Date().toISOString(),
+  }));
+}
+function loadFactuData() {
+  try {
+    const raw = localStorage.getItem(FACTU_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    parsed.rows = parsed.rows.map((r) => ({ ...r, date: new Date(r.date) }));
+    return parsed;
+  } catch (e) { return null; }
+}
+function renderFactuChart(rows) {
+  const byMonth = {};
+  rows.forEach((r) => {
+    const k = monthKeyFromDate(r.date);
+    byMonth[k] = (byMonth[k] || 0) + r.montantHT;
+  });
+  const chartRows = Object.keys(byMonth).sort().map((mois) => ({ mois, montant: byMonth[mois] }));
+  document.getElementById('chart-factu').innerHTML = '';
+  document.getElementById('labels-factu').innerHTML = '';
+  if (chartRows.length) renderMiniChart('chart-factu', 'labels-factu', chartRows, 'montant', 'mois', (v) => fmtEUR(v));
+}
+function renderFactuTopPayeurs(rows) {
+  const byPayeur = {};
+  rows.forEach((r) => {
+    const name = r.payeur || r.client || '(non renseigné)';
+    if (!byPayeur[name]) byPayeur[name] = { payeur: escapeHtml(name), montant: 0, count: 0 };
+    byPayeur[name].montant += r.montantHT;
+    byPayeur[name].count += 1;
+  });
+  const top = Object.values(byPayeur).sort((a, b) => b.montant - a.montant).slice(0, 5);
+  const wrap = document.getElementById('rank-payeurs');
+  wrap.innerHTML = '';
+  if (top.length) renderRankList('rank-payeurs', top, 'payeur', 'montant', (r) => `${r.count} facture(s)`, (v) => fmtEUR(v));
+}
+function populateFactuMonthFilter(rows) {
+  const select = document.getElementById('factu-month-filter');
+  const current = select.value;
+  const months = Array.from(new Set(rows.map((r) => monthKeyFromDate(r.date)))).sort();
+  select.innerHTML = '<option value="">Tous les mois</option>' + months.map((m) => `<option value="${m}">${escapeHtml(fmtMonth(m))}</option>`).join('');
+  if (months.includes(current)) select.value = current;
+}
+function applyFactuFilters(rows) {
+  const month = document.getElementById('factu-month-filter').value;
+  const q = document.getElementById('factu-search').value.trim().toLowerCase();
+  return rows.filter((r) => {
+    if (month && monthKeyFromDate(r.date) !== month) return false;
+    if (q && !`${r.client} ${r.payeur} ${r.numFacture}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+function renderFactuTable(rows) {
+  const filtered = applyFactuFilters(rows).slice().sort((a, b) => a.date - b.date);
+  const tbody = document.getElementById('tbl-factu');
+  tbody.innerHTML = '';
+  filtered.forEach((r) => {
+    const tr = el('tr');
+    tr.appendChild(el('td', '', fmtDateShort(r.date)));
+    const numTd = el('td', 'strong', escapeHtml(r.numFacture) + (r.avoir ? ' <span class="badge age-warn"><span class="dot"></span>Avoir</span>' : ''));
+    tr.appendChild(numTd);
+    tr.appendChild(el('td', '', escapeHtml(r.dossier)));
+    tr.appendChild(el('td', '', escapeHtml(r.client)));
+    tr.appendChild(el('td', '', escapeHtml(r.payeur)));
+    tr.appendChild(el('td', 'num', fmtEUR2(r.montantHT)));
+    tr.appendChild(el('td', 'num', fmtEUR2(r.montantTTC)));
+    const resteTd = el('td', 'num', fmtEUR2(r.resteAPayer));
+    if (r.resteAPayer > 0.01) resteTd.style.color = 'var(--warning)';
+    tr.appendChild(resteTd);
+    tbody.appendChild(tr);
+  });
+  document.getElementById('factu-count-hint').textContent = `${filtered.length} facture(s) affichée(s) sur ${rows.length}.`;
+}
+function renderFacturationContent(stored) {
+  FACTU_ROWS = stored.rows;
+  document.getElementById('factu-import-meta').innerHTML = `Importé : <strong>${escapeHtml(stored.filename)}</strong> le ${escapeHtml(new Date(stored.importedAt).toLocaleString('fr-FR'))} — ${FACTU_ROWS.length} ligne(s).`;
+  document.getElementById('factu-clear-btn').style.display = 'inline-block';
+  document.getElementById('factu-content').style.display = 'block';
+
+  const totalHT = FACTU_ROWS.reduce((s, r) => s + r.montantHT, 0);
+  const totalTTC = FACTU_ROWS.reduce((s, r) => s + r.montantTTC, 0);
+  const totalReste = FACTU_ROWS.reduce((s, r) => s + r.resteAPayer, 0);
+  const nbAvoirs = FACTU_ROWS.filter((r) => r.avoir).length;
+  const dates = FACTU_ROWS.map((r) => r.date);
+  const periodeLabel = dates.length ? `${fmtDateShort(new Date(Math.min(...dates)))} → ${fmtDateShort(new Date(Math.max(...dates)))}` : '—';
+
+  const kpis = document.getElementById('factu-kpis');
+  kpis.innerHTML = '';
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Total facturé HT</p><p class="kpi-value">${fmtEUR(totalHT)}</p><p class="kpi-sub">${escapeHtml(periodeLabel)}</p>`));
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Total facturé TTC</p><p class="kpi-value">${fmtEUR(totalTTC)}</p>`));
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Reste à payer TTC</p><p class="kpi-value">${fmtEUR(totalReste)}</p><p class="kpi-sub ${totalReste > 0 ? 'down' : ''}">${totalReste > 0 ? 'impayé restant' : 'tout encaissé'}</p>`));
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Factures</p><p class="kpi-value">${FACTU_ROWS.length}</p><p class="kpi-sub">dont ${nbAvoirs} avoir(s)</p>`));
+
+  document.getElementById('factu-chart-hint').textContent = periodeLabel;
+  renderFactuChart(FACTU_ROWS);
+  renderFactuTopPayeurs(FACTU_ROWS);
+  populateFactuMonthFilter(FACTU_ROWS);
+  renderFactuTable(FACTU_ROWS);
+}
+function initFacturationTab() {
+  const stored = loadFactuData();
+  if (stored && stored.rows && stored.rows.length) renderFacturationContent(stored);
+
+  document.getElementById('factu-file-input').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const meta = document.getElementById('factu-import-meta');
+    meta.textContent = 'Lecture du fichier…';
+    try {
+      const aoa = await readWorkbookFile(file, /report|factu/i);
+      const rows = parseFactuRows(aoa);
+      saveFactuData(rows, file.name);
+      renderFacturationContent(loadFactuData());
+    } catch (err) {
+      meta.innerHTML = `<span style="color:var(--critical)">Échec de l'import : ${escapeHtml(err.message)}</span>`;
+    }
+    e.target.value = '';
+  });
+  document.getElementById('factu-clear-btn').addEventListener('click', () => {
+    localStorage.removeItem(FACTU_STORAGE_KEY);
+    FACTU_ROWS = [];
+    document.getElementById('factu-content').style.display = 'none';
+    document.getElementById('factu-import-meta').textContent = 'Aucun fichier importé.';
+    document.getElementById('factu-clear-btn').style.display = 'none';
+    document.getElementById('factu-file-input').value = '';
+  });
+  document.getElementById('factu-month-filter').addEventListener('change', () => renderFactuTable(FACTU_ROWS));
+  document.getElementById('factu-search').addEventListener('input', () => renderFactuTable(FACTU_ROWS));
+}
+
+initCpfSearch();
+initFacturationTab();
+
+// ------------------------------------------------------------------
+// Onglet "Observatoire marché" -- interroge en direct, depuis le
+// navigateur, l'open data publique Mon Compte Formation (Caisse des
+// Depots, licence ouverte Etalab v2.0, aucune authentification requise) :
+//   - moncompteformation_catalogueformation ("l'offre de formation") :
+//     confirme via une capture reelle du schema le 02/09/2026 -- champs
+//     utilises : nom_region, code_rncp, code_inventaire (RS), siret,
+//     nom_of, nom_departement, intitule_formation, intitule_certification,
+//     nombre_heures_total_mean, frais_ttc_tot_mean, nb_session_a_distance.
+//   - entree_sortie_formation ("entrees et sorties de formation") :
+//     confirme le meme jour -- champs utilises : code_rncp, code_rs
+//     (absent de ce jeu, on y utilise en fait code_inventaire cote
+//     catalogue mais code_rncp/-1 cote entrees -- voir plus bas),
+//     annee_mois, entrees_formation. Ce jeu ne porte PAS de champ region :
+//     les KPI "Entrees 12 mois"/"Evolution 12 mois" sont donc nationaux,
+//     pas filtres sur la region choisie -- indique clairement a l'ecran.
+// Requete GET simple (pas de credentials, pas de body) vers l'API
+// Explore v2.1 d'Opendatasoft -- si le CORS ou le reseau bloque l'appel,
+// le message d'erreur affiche l'URL testee pour diagnostiquer.
+// ------------------------------------------------------------------
+const OBS_API_BASE = 'https://opendata.caissedesdepots.fr/api/explore/v2.1/catalog/datasets';
+const OBS_REGIONS = [
+  'Auvergne-Rhône-Alpes', 'Bourgogne-Franche-Comté', 'Bretagne', 'Centre-Val de Loire',
+  'Corse', 'Grand Est', 'Hauts-de-France', 'Île-de-France', 'Normandie',
+  'Nouvelle-Aquitaine', 'Occitanie', 'Pays de la Loire', "Provence-Alpes-Côte d'Azur",
+  'Guadeloupe', 'Martinique', 'Guyane', 'La Réunion', 'Mayotte',
+];
+const OBS_SETTINGS_KEY = 'mcdf-observatoire-settings-v1';
+const OBS_PRICES_KEY = 'mcdf-observatoire-prices-v1';
+let OBS_LAST_PRIX_MOYEN = null;
+
+function odsQuote(v) {
+  return `'${String(v).replace(/'/g, "\\'")}'`;
+}
+async function fetchOdsRecords(dataset, whereClauses, select, limit) {
+  const params = new URLSearchParams();
+  if (whereClauses && whereClauses.length) params.set('where', whereClauses.join(' and '));
+  if (select) params.set('select', select);
+  params.set('limit', String(limit || 100));
+  const url = `${OBS_API_BASE}/${dataset}/records?${params.toString()}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status} sur ${dataset} (${url})`);
+  const data = await res.json();
+  return { results: data.results || [], total: data.total_count || 0, url };
+}
+function median(arr) {
+  const sorted = arr.slice().sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+function loadObsPrices() {
+  try { return JSON.parse(localStorage.getItem(OBS_PRICES_KEY) || '{}'); } catch (e) { return {}; }
+}
+function saveObsPriceForCode() {
+  const code = document.getElementById('obs-code').value.trim();
+  if (!code) return;
+  const prices = loadObsPrices();
+  prices[code] = document.getElementById('obs-your-price').value;
+  localStorage.setItem(OBS_PRICES_KEY, JSON.stringify(prices));
+}
+function populateObsRegions() {
+  const select = document.getElementById('obs-region');
+  select.innerHTML = OBS_REGIONS.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
+  try {
+    const saved = JSON.parse(localStorage.getItem(OBS_SETTINGS_KEY) || 'null');
+    if (saved) {
+      if (saved.region) select.value = saved.region;
+      if (saved.type) document.getElementById('obs-type').value = saved.type;
+      if (saved.code) document.getElementById('obs-code').value = saved.code;
+    }
+  } catch (e) { /* reglages par defaut si localStorage illisible */ }
+}
+function saveObsSettings() {
+  localStorage.setItem(OBS_SETTINGS_KEY, JSON.stringify({
+    region: document.getElementById('obs-region').value,
+    type: document.getElementById('obs-type').value,
+    code: document.getElementById('obs-code').value,
+  }));
+}
+function computeObsEntreesStats(rows) {
+  const byMonth = {};
+  rows.forEach((r) => { byMonth[r.annee_mois] = (byMonth[r.annee_mois] || 0) + (r.entrees_formation || 0); });
+  const months24 = lastNMonths(24);
+  const prevMonths = months24.slice(0, 12);
+  const curMonths = months24.slice(12);
+  const totalCur = curMonths.reduce((s, m) => s + (byMonth[m] || 0), 0);
+  const totalPrev = prevMonths.reduce((s, m) => s + (byMonth[m] || 0), 0);
+  const evoPct = totalPrev > 0 ? ((totalCur - totalPrev) / totalPrev) * 100 : null;
+  const chartRows = curMonths.map((m) => ({ mois: m, entrees: byMonth[m] || 0 }));
+  return { totalCur, totalPrev, evoPct, chartRows };
+}
+function renderObsComparison(prixMoyen) {
+  const wrap = document.getElementById('obs-comparison');
+  const yourPrice = parseNumber(document.getElementById('obs-your-price').value);
+  wrap.innerHTML = '';
+  if (yourPrice === null || prixMoyen === null) {
+    wrap.appendChild(el('p', '', 'Renseignez votre prix pour voir la comparaison avec le marché.'));
+    wrap.lastChild.style.cssText = 'font-size:12.5px; color:var(--ink-muted); margin:0;';
+    return;
+  }
+  const row = el('div', '', `
+    <div style="display:flex; justify-content:space-between; font-size:13px; padding:4px 0;"><span style="color:var(--ink-muted)">Votre prix</span><strong>${fmtEUR(yourPrice)}</strong></div>
+    <div style="display:flex; justify-content:space-between; font-size:13px; padding:4px 0;"><span style="color:var(--ink-muted)">Moyenne marché</span><span>${fmtEUR(prixMoyen)}</span></div>
+  `);
+  wrap.appendChild(row);
+  const deltaPct = ((yourPrice - prixMoyen) / prixMoyen) * 100;
+  const positive = deltaPct < 0;
+  const msg = positive
+    ? `💡 Votre tarif se situe ${Math.abs(deltaPct).toFixed(1)} % sous la moyenne du marché — un argument commercial à valoriser.`
+    : `💡 Votre tarif se situe +${deltaPct.toFixed(1)} % au-dessus de la moyenne du marché.`;
+  const note = el('p', 'note', msg);
+  note.style.cssText = `margin:10px 0 0; background:${positive ? 'var(--good-tint)' : 'var(--warning-tint)'}; color:${positive ? 'var(--good-text)' : 'var(--warning)'};`;
+  wrap.appendChild(note);
+}
+function renderObsResults({ catalogue, entrees, region, type, code }) {
+  const rows = catalogue.results;
+  const title = rows[0].intitule_certification || '(intitulé inconnu)';
+  document.getElementById('obs-title').textContent = `${type === 'rs' ? 'RS' : 'RNCP'} ${code} — ${title}`;
+  document.getElementById('obs-subtitle').textContent = `Région : ${region} · ${rows.length} offre(s) trouvée(s) (max. 100 chargées) · catalogue mis à jour chaque semaine`;
+
+  const organismes = new Set(rows.map((r) => r.siret));
+  const prix = rows.map((r) => r.frais_ttc_tot_mean).filter((v) => typeof v === 'number');
+  const durees = rows.map((r) => r.nombre_heures_total_mean).filter((v) => typeof v === 'number');
+  const nbDistance = rows.filter((r) => (r.nb_session_a_distance || 0) > 0).length;
+  const prixMoyen = prix.length ? prix.reduce((s, v) => s + v, 0) / prix.length : null;
+  const prixMedian = prix.length ? median(prix) : null;
+  const dureeMoyenne = durees.length ? durees.reduce((s, v) => s + v, 0) / durees.length : null;
+  const entreesStats = computeObsEntreesStats(entrees.results);
+
+  const kpis = document.getElementById('obs-kpis');
+  kpis.innerHTML = '';
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Organismes concurrents</p><p class="kpi-value">${organismes.size}</p><p class="kpi-sub">dans ${escapeHtml(region)}</p>`));
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Prix moyen marché</p><p class="kpi-value">${prixMoyen !== null ? fmtEUR(prixMoyen) : '—'}</p><p class="kpi-sub">TTC</p>`));
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Prix médian marché</p><p class="kpi-value">${prixMedian !== null ? fmtEUR(prixMedian) : '—'}</p>`));
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Durée moyenne</p><p class="kpi-value">${dureeMoyenne !== null ? fmtH(dureeMoyenne) : '—'}</p>`));
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Formations à distance</p><p class="kpi-value">${nbDistance}</p><p class="kpi-sub">sur ${rows.length} offre(s)</p>`));
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Entrées 12 mois</p><p class="kpi-value">${entreesStats.totalCur}</p><p class="kpi-sub">national, hors filtre région</p>`));
+  const evoCls = entreesStats.evoPct > 0 ? 'up' : entreesStats.evoPct < 0 ? 'down' : '';
+  const evoVal = entreesStats.evoPct === null ? '—' : `${entreesStats.evoPct >= 0 ? '+' : ''}${entreesStats.evoPct.toFixed(0)}%`;
+  const evoSub = entreesStats.evoPct === null ? 'pas de donnée N-1' : 'vs 12 mois précédents (national)';
+  kpis.appendChild(el('div', 'kpi', `<p class="kpi-label">Évolution 12 mois</p><p class="kpi-value">${evoVal}</p><p class="kpi-sub ${evoCls}">${escapeHtml(evoSub)}</p>`));
+
+  renderObsComparison(prixMoyen);
+  OBS_LAST_PRIX_MOYEN = prixMoyen;
+
+  document.getElementById('chart-obs').innerHTML = '';
+  document.getElementById('labels-obs').innerHTML = '';
+  if (entreesStats.chartRows.some((r) => r.entrees > 0)) {
+    renderMiniChart('chart-obs', 'labels-obs', entreesStats.chartRows, 'entrees', 'mois', (v) => `${v} entrée(s)`);
+  } else {
+    document.getElementById('chart-obs').parentElement.appendChild(el('p', 'hint', 'Aucune entrée en formation trouvée pour cette certification sur 24 mois.'));
+  }
+
+  const tbody = document.getElementById('tbl-obs');
+  tbody.innerHTML = '';
+  rows.slice().sort((a, b) => (a.frais_ttc_tot_mean ?? Infinity) - (b.frais_ttc_tot_mean ?? Infinity)).forEach((r) => {
+    const tr = el('tr');
+    tr.appendChild(el('td', 'strong', escapeHtml(r.nom_of || '(organisme non renseigné)')));
+    tr.appendChild(el('td', '', escapeHtml(r.nom_departement || '—')));
+    tr.appendChild(el('td', 'num', typeof r.nombre_heures_total_mean === 'number' ? fmtH(r.nombre_heures_total_mean) : '—'));
+    tr.appendChild(el('td', '', (r.nb_session_a_distance || 0) > 0 ? 'Distanciel possible' : 'Présentiel'));
+    tr.appendChild(el('td', 'num', typeof r.frais_ttc_tot_mean === 'number' ? fmtEUR(r.frais_ttc_tot_mean) : '—'));
+    tbody.appendChild(tr);
+  });
+  document.getElementById('obs-count-hint').textContent = `${rows.length} offre(s), triées par prix croissant.`;
+
+  document.getElementById('obs-content').style.display = 'block';
+}
+async function runObsSearch() {
+  const region = document.getElementById('obs-region').value;
+  const type = document.getElementById('obs-type').value;
+  const code = document.getElementById('obs-code').value.trim();
+  const status = document.getElementById('obs-status');
+  const btn = document.getElementById('obs-search-btn');
+  if (!code) {
+    status.innerHTML = '<span style="color:var(--critical)">Renseignez un code RNCP ou RS.</span>';
+    return;
+  }
+  saveObsSettings();
+  const storedPrices = loadObsPrices();
+  if (storedPrices[code] !== undefined) document.getElementById('obs-your-price').value = storedPrices[code];
+
+  btn.disabled = true;
+  status.innerHTML = '<span class="spinner" style="display:inline-block; vertical-align:middle; margin-right:6px;"></span>Recherche en cours…';
+  document.getElementById('obs-content').style.display = 'none';
+
+  try {
+    // Attention : les 2 jeux de donnees ne partagent PAS le meme nom de
+    // champ pour le code RS -- confirme en direct le 02/09/2026 en
+    // observant que le champ "code_inventaire" du catalogue est bien
+    // rempli, mais que la requete "entrees" restait vide a chaque fois
+    // pour un code RS tant qu'elle interrogeait ce meme nom de champ,
+    // qui n'existe pas cote entree_sortie_formation (qui utilise "code_rs").
+    const catalogueCodeField = type === 'rs' ? 'code_inventaire' : 'code_rncp';
+    const entreesCodeField = type === 'rs' ? 'code_rs' : 'code_rncp';
+    const catalogue = await fetchOdsRecords(
+      'moncompteformation_catalogueformation',
+      [`${catalogueCodeField}=${odsQuote(code)}`, `nom_region=${odsQuote(region)}`],
+      'nom_of,siret,intitule_formation,nom_departement,intitule_certification,nombre_heures_total_mean,frais_ttc_tot_mean,nb_session_active,nb_session_a_distance',
+      100
+    );
+    if (!catalogue.results.length) {
+      status.innerHTML = `<span style="color:var(--warning)">Aucune offre trouvée pour ce code dans cette région. Vérifiez le code, ou essayez l'autre répertoire (RNCP/RS). <a href="${escapeHtml(catalogue.url)}" target="_blank" rel="noopener" style="color:inherit">Tester la requête</a>.</span>`;
+      btn.disabled = false;
+      return;
+    }
+
+    let entrees = { results: [], url: '' };
+    try {
+      entrees = await fetchOdsRecords('entree_sortie_formation', [`${entreesCodeField}=${odsQuote(code)}`], 'annee_mois,entrees_formation', 200);
+    } catch (e) {
+      console.error('Échec entree_sortie_formation (non bloquant) :', e);
+    }
+
+    renderObsResults({ catalogue, entrees, region, type, code });
+    status.textContent = `Recherche effectuée le ${new Date().toLocaleString('fr-FR')}.`;
+  } catch (err) {
+    status.innerHTML = `<span style="color:var(--critical)">Échec de la recherche : ${escapeHtml(err.message)}. Vérifiez votre connexion, ou qu'un pare-feu/proxy ne bloque pas opendata.caissedesdepots.fr.</span>`;
+  }
+  btn.disabled = false;
+}
+function initObservatoireTab() {
+  populateObsRegions();
+  document.getElementById('obs-search-btn').addEventListener('click', runObsSearch);
+  document.getElementById('obs-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') runObsSearch(); });
+  document.getElementById('obs-your-price').addEventListener('input', () => {
+    renderObsComparison(OBS_LAST_PRIX_MOYEN);
+    saveObsPriceForCode();
+  });
+}
+initObservatoireTab();
+
+// ------------------------------------------------------------------
+// Onglet "Formation -> competences" -- import du referentiel ROME
+// (arborescence des competences, France Travail / data.gouv.fr,
+// fichier .xlsx confirme par capture reelle le 02/09/2026 : onglets
+// "Donnees brutes Macro-comp." (507 lignes : Domaine > Enjeu > Objectif
+// > Macro-competence) et "Donnees brutes Comp." (19 462 lignes :
+// Macro-competence -> Competence). Pas de lien direct metier(ROME)<->
+// formation/certification dans ce fichier -- l'onglet fait une
+// recherche par mot-cle dans les libelles, pas un annuaire officiel
+// metier -> competences.
+//
+// Le tableau macro-competences (petit, ~200 Ko) est persiste en
+// localStorage. Le detail competences (~7 Mo en JSON) ne l'est PAS --
+// trop volumineux a cote des autres donnees deja stockees (Qualiopi,
+// Suggestions, Observatoire...), garde en memoire pour la session
+// uniquement.
+//
+// Le bouton "Generer le prompt pedagogique" n'appelle aucune IA depuis
+// ce widget (pas de cle API, pas de backend) : il assemble un prompt
+// documente (competences ROME choisies + les 5 demandes -- objectifs
+// pedagogiques, programme, criteres d'evaluation, questionnaire,
+// rattachement aux competences ROME) que l'utilisateur copie dans
+// l'assistant IA de son choix, sur le meme principe que les boutons
+// "Suggerer..." plus haut.
+// ------------------------------------------------------------------
+const ROME_MACRO_KEY = 'mcdf-rome-macro-v1';
+let ROME_MACRO_ROWS = [];
+let ROME_DETAIL = [];
+const ROME_SELECTED = new Map();
+
+function findSheetByName(sheetNames, wanted) {
+  const wantedSlug = slugHeader(wanted);
+  return sheetNames.find((n) => slugHeader(n) === wantedSlug) || sheetNames.find((n) => slugHeader(n).includes(wantedSlug));
+}
+function readWorkbookSheetsFile(file, wantedSheets) {
+  return new Promise((resolve, reject) => {
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    if (ext === 'csv') {
+      reject(new Error('Ce fichier nécessite les 2 feuilles Excel du référentiel ROME (Macro-compétences + Compétences) — le .csv à feuille unique n\'est pas pris en charge ici, importez le fichier .xlsx original.'));
+      return;
+    }
+    if (typeof XLSX === 'undefined') {
+      reject(new Error('La bibliothèque de lecture Excel (SheetJS, cdnjs.cloudflare.com) n\'a pas pu se charger — vérifiez la connexion internet.'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const wb = XLSX.read(reader.result, { type: 'array', cellDates: true });
+        const out = {};
+        wantedSheets.forEach((wanted) => {
+          const name = findSheetByName(wb.SheetNames, wanted);
+          out[wanted] = name ? XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: null, blankrows: false }) : null;
+        });
+        resolve(out);
+      } catch (e) {
+        reject(new Error(`Fichier illisible : ${e.message}`));
+      }
+    };
+    reader.onerror = () => reject(new Error('Lecture du fichier impossible.'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+function parseRomeMacroRows(aoa) {
+  if (!aoa || !aoa.length) throw new Error('Feuille "Données brutes Macro-comp." vide ou introuvable.');
+  const idx = buildHeaderIndex(aoa[0]);
+  const iDomaine = pickCol(idx, ['1 domaine competence']);
+  const iEnjeu = pickCol(idx, ['2 enjeu']);
+  const iObjectif = pickCol(idx, ['3 objectif']);
+  const iMacro = pickCol(idx, ['4 macro competence']);
+  if (iMacro === -1) throw new Error('Colonnes non reconnues — vérifiez qu\'il s\'agit bien du fichier ROME "Arborescence des compétences" (onglet "Données brutes Macro-comp.").');
+  const rows = [];
+  for (let r = 1; r < aoa.length; r++) {
+    const row = aoa[r];
+    if (!row || !row.length) continue;
+    const macro = row[iMacro];
+    if (!macro) continue;
+    rows.push({
+      domaine: String(row[iDomaine] || ''),
+      enjeu: String(row[iEnjeu] || ''),
+      objectif: String(row[iObjectif] || ''),
+      macroCompetence: String(macro),
+    });
+  }
+  if (!rows.length) throw new Error('Aucune macro-compétence trouvée dans ce fichier.');
+  return rows;
+}
+function parseRomeDetailRows(aoa) {
+  if (!aoa || !aoa.length) return [];
+  const idx = buildHeaderIndex(aoa[0]);
+  const iMacro = pickCol(idx, ['4 macro competence']);
+  const iComp = pickCol(idx, ['5 competence']);
+  if (iMacro === -1 || iComp === -1) return [];
+  const rows = [];
+  for (let r = 1; r < aoa.length; r++) {
+    const row = aoa[r];
+    if (!row || !row.length) continue;
+    const comp = row[iComp];
+    if (!comp) continue;
+    rows.push({ macroCompetence: String(row[iMacro] || ''), competence: String(comp) });
+  }
+  return rows;
+}
+function loadRomeMacro() {
+  try {
+    const raw = localStorage.getItem(ROME_MACRO_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+function searchRomeMacro(query) {
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!terms.length) return [];
+  return ROME_MACRO_ROWS
+    .map((r) => {
+      const haystack = `${r.macroCompetence} ${r.objectif} ${r.enjeu} ${r.domaine}`.toLowerCase();
+      const score = terms.reduce((s, t) => s + (haystack.includes(t) ? 1 : 0), 0);
+      return { r, score };
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score || a.r.macroCompetence.localeCompare(b.r.macroCompetence))
+    .slice(0, 40)
+    .map((x) => x.r);
+}
+function updateRomeSelectionHint() {
+  document.getElementById('rome-selection-hint').textContent = ROME_SELECTED.size
+    ? `${ROME_SELECTED.size} compétence(s) sélectionnée(s) pour le prompt.`
+    : 'Cochez une ou plusieurs compétences ci-dessus pour générer un prompt pédagogique.';
+  document.getElementById('rome-generate-btn').disabled = ROME_SELECTED.size === 0;
+}
+function renderRomeResults(query) {
+  const wrap = document.getElementById('rome-results');
+  wrap.innerHTML = '';
+  const hint = document.getElementById('rome-results-hint');
+  if (!query.trim()) { hint.textContent = ''; return; }
+  const matches = searchRomeMacro(query);
+  hint.textContent = matches.length
+    ? `${matches.length} macro-compétence(s) trouvée(s)${matches.length === 40 ? ' (limité aux 40 meilleures)' : ''}.`
+    : '';
+  if (!matches.length) {
+    wrap.appendChild(el('p', 'hint', 'Aucune compétence ROME ne correspond à ce mot-clé. Essayez un terme plus général (ex. "équipe", "management", "vente").'));
+    return;
+  }
+  matches.forEach((r, i) => {
+    const card = el('div', 'rome-card');
+    const head = el('div', 'rome-card-head');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.id = `rome-cb-${i}`;
+    cb.checked = ROME_SELECTED.has(r.macroCompetence);
+    cb.addEventListener('change', () => {
+      if (cb.checked) ROME_SELECTED.set(r.macroCompetence, r);
+      else ROME_SELECTED.delete(r.macroCompetence);
+      updateRomeSelectionHint();
+    });
+    head.appendChild(cb);
+    const label = document.createElement('label');
+    label.htmlFor = cb.id;
+    label.innerHTML = `<strong>${escapeHtml(r.macroCompetence)}</strong><br><span class="cell-sub">${escapeHtml(r.domaine)} › ${escapeHtml(r.enjeu)} › ${escapeHtml(r.objectif)}</span>`;
+    head.appendChild(label);
+    card.appendChild(head);
+
+    const detailLink = el('a', 'rome-detail-link', 'Voir le détail');
+    const detailList = el('ul', 'rome-detail-list');
+    detailList.style.display = 'none';
+    detailLink.addEventListener('click', () => {
+      const isOpen = detailList.style.display !== 'none';
+      if (isOpen) { detailList.style.display = 'none'; detailLink.textContent = 'Voir le détail'; return; }
+      if (!detailList.childElementCount) {
+        const items = ROME_DETAIL.filter((d) => d.macroCompetence === r.macroCompetence);
+        if (!items.length) {
+          detailList.appendChild(el('li', '', 'Détail indisponible dans cette session — réimportez le fichier ROME pour afficher les compétences précises.'));
+        } else {
+          items.forEach((it) => detailList.appendChild(el('li', '', escapeHtml(it.competence))));
+        }
+      }
+      detailList.style.display = 'block';
+      detailLink.textContent = 'Masquer le détail';
+    });
+    card.appendChild(detailLink);
+    card.appendChild(detailList);
+    wrap.appendChild(card);
+  });
+}
+function buildRomePrompt(formationTitle) {
+  const grouped = {};
+  ROME_SELECTED.forEach((r) => {
+    if (!grouped[r.domaine]) grouped[r.domaine] = [];
+    grouped[r.domaine].push(r);
+  });
+  const lines = [
+    `Tu es ingénieur pédagogique. Conçois le contenu d'une formation intitulée « ${formationTitle || '(titre à préciser)'} », en t'appuyant strictement sur les compétences ROME suivantes (référentiel France Travail, arborescence des compétences, mise à jour juin 2026) :`,
+    '',
+  ];
+  Object.entries(grouped).forEach(([domaine, items]) => {
+    lines.push(`Domaine : ${domaine}`);
+    items.forEach((r) => {
+      lines.push(`- ${r.macroCompetence} (${r.enjeu} > ${r.objectif})`);
+      ROME_DETAIL.filter((d) => d.macroCompetence === r.macroCompetence).slice(0, 8).forEach((d) => lines.push(`  · ${d.competence}`));
+    });
+    lines.push('');
+  });
+  lines.push(
+    'À partir de ces compétences, génère :',
+    '1. Les objectifs pédagogiques de la formation (verbes d\'action, mesurables), alignés explicitement sur les compétences ROME ci-dessus.',
+    '2. Un programme de formation détaillé (séquencement des modules, durée indicative de chacun).',
+    '3. Des critères d\'évaluation pour chaque objectif pédagogique.',
+    '4. Un questionnaire d\'évaluation des acquis (QCM ou mise en situation), avec son barème.',
+    '5. Pour chaque objectif généré, indique explicitement à quelle(s) compétence(s) ROME listée(s) ci-dessus il se rattache.',
+  );
+  return lines.join('\n');
+}
+function renderRomeContent(stored) {
+  ROME_MACRO_ROWS = stored.rows;
+  document.getElementById('rome-import-meta').innerHTML = `Importé : <strong>${escapeHtml(stored.filename)}</strong> le ${escapeHtml(new Date(stored.importedAt).toLocaleString('fr-FR'))} — ${ROME_MACRO_ROWS.length} macro-compétence(s)${ROME_DETAIL.length ? `, ${ROME_DETAIL.length} compétence(s) détaillées (session en cours)` : ' (détail non chargé — réimportez pour l\'obtenir)'}.`;
+  document.getElementById('rome-clear-btn').style.display = 'inline-block';
+  document.getElementById('rome-content').style.display = 'block';
+  renderRomeResults(document.getElementById('rome-search').value);
+}
+function initRomeTab() {
+  const stored = loadRomeMacro();
+  if (stored && stored.rows && stored.rows.length) renderRomeContent(stored);
+
+  document.getElementById('rome-file-input').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const meta = document.getElementById('rome-import-meta');
+    meta.textContent = 'Lecture du fichier…';
+    try {
+      const sheets = await readWorkbookSheetsFile(file, ['Données brutes Macro-comp.', 'Données brutes Comp.']);
+      if (!sheets['Données brutes Macro-comp.']) throw new Error('Feuille "Données brutes Macro-comp." introuvable dans ce fichier.');
+      const macroRows = parseRomeMacroRows(sheets['Données brutes Macro-comp.']);
+      ROME_DETAIL = sheets['Données brutes Comp.'] ? parseRomeDetailRows(sheets['Données brutes Comp.']) : [];
+      const stored = { rows: macroRows, filename: file.name, importedAt: new Date().toISOString() };
+      localStorage.setItem(ROME_MACRO_KEY, JSON.stringify(stored));
+      renderRomeContent(stored);
+    } catch (err) {
+      meta.innerHTML = `<span style="color:var(--critical)">Échec de l'import : ${escapeHtml(err.message)}</span>`;
+    }
+    e.target.value = '';
+  });
+  document.getElementById('rome-clear-btn').addEventListener('click', () => {
+    localStorage.removeItem(ROME_MACRO_KEY);
+    ROME_MACRO_ROWS = [];
+    ROME_DETAIL = [];
+    ROME_SELECTED.clear();
+    document.getElementById('rome-content').style.display = 'none';
+    document.getElementById('rome-import-meta').textContent = 'Aucun fichier importé.';
+    document.getElementById('rome-clear-btn').style.display = 'none';
+    document.getElementById('rome-file-input').value = '';
+    document.getElementById('rome-prompt-box').style.display = 'none';
+    document.getElementById('rome-copy-btn').style.display = 'none';
+    updateRomeSelectionHint();
+  });
+  document.getElementById('rome-search').addEventListener('input', (e) => renderRomeResults(e.target.value));
+  document.getElementById('rome-generate-btn').addEventListener('click', () => {
+    const title = document.getElementById('rome-formation-title').value.trim();
+    const box = document.getElementById('rome-prompt-box');
+    box.value = buildRomePrompt(title);
+    box.style.display = 'block';
+    document.getElementById('rome-copy-btn').style.display = 'inline-block';
+  });
+  document.getElementById('rome-copy-btn').addEventListener('click', async () => {
+    const box = document.getElementById('rome-prompt-box');
+    const btn = document.getElementById('rome-copy-btn');
+    try {
+      await navigator.clipboard.writeText(box.value);
+    } catch (e) {
+      box.removeAttribute('readonly');
+      box.select();
+      document.execCommand('copy');
+      box.setAttribute('readonly', '');
+    }
+    const original = btn.textContent;
+    btn.textContent = 'Copié ✓';
+    setTimeout(() => { btn.textContent = original; }, 1800);
+  });
+  updateRomeSelectionHint();
+}
+initRomeTab();
+</script>

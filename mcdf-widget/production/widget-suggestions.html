@@ -1,0 +1,421 @@
+<meta charset="utf-8">
+<title>Suggestions d'évolution</title>
+<!--
+  Suggestions d'evolution du widget IA -- v1.
+
+  Contrairement aux autres modules, celui-ci ne parle PAS a l'API MCDF :
+  c'est un outil interne au widget lui-meme, pour remonter des demandes
+  d'evolution et les faire valider par un "super administrateur".
+
+  Pas de backend a nous : la demande est enregistree localement
+  (localStorage, pas partage entre postes) ET envoyee par mailto: vers
+  une adresse configurable -- mailto ne depend d'aucun serveur, aucune
+  question de CORS, ca ouvre juste le client mail de la personne qui
+  soumet, avec le texte deja redige.
+
+  "Mode super-administrateur" est un simple bouton d'affichage, PAS une
+  authentification reelle : n'importe qui ayant acces a cette page peut
+  l'activer. A ne pas presenter comme un controle d'acces securise.
+-->
+<style>
+  :root {
+    color-scheme: light;
+    --page:        #f9f9f7;
+    --surface:     #fcfcfb;
+    --surface-2:   #f2f1ec;
+    --ink:         #0b0b0b;
+    --ink-2:       #52514e;
+    --ink-muted:   #898781;
+    --border:      rgba(11,11,11,0.10);
+    --border-2:    rgba(11,11,11,0.16);
+    --accent:      #256abf;
+    --accent-tint: #dbe8f8;
+    --good:        #0ca30c;
+    --good-tint:   #e3f3e3;
+    --good-text:   #006300;
+    --warning:     #b8860b;
+    --warning-tint:#f5ecd6;
+    --critical:    #b23327;
+    --critical-tint: #f6e2df;
+    --font-display: Charter, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322;
+      --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #8f8d86;
+      --border: rgba(255,255,255,0.10); --border-2: rgba(255,255,255,0.18);
+      --accent: #5b9bea; --accent-tint: #1c2e44;
+      --good: #3fc23f; --good-tint: #16301a; --good-text: #4fd44f;
+      --warning: #e0b03a; --warning-tint: #3a3018;
+      --critical: #e2685c; --critical-tint: #3a201d;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322;
+    --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #8f8d86;
+    --border: rgba(255,255,255,0.10); --border-2: rgba(255,255,255,0.18);
+    --accent: #5b9bea; --accent-tint: #1c2e44;
+    --good: #3fc23f; --good-tint: #16301a; --good-text: #4fd44f;
+    --warning: #e0b03a; --warning-tint: #3a3018;
+    --critical: #e2685c; --critical-tint: #3a201d;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink); font-family: var(--font-body); -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 32px 28px 70px; }
+  .eyebrow { text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px; font-weight: 600; color: var(--accent); margin: 0 0 10px; }
+  h1 { font-family: var(--font-display); font-size: clamp(22px, 3vw, 30px); font-weight: 500; margin: 0 0 8px; }
+  .lede { color: var(--ink-2); font-size: 13.5px; line-height: 1.6; margin: 0 0 8px; }
+  header.top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding-bottom: 22px; margin-bottom: 24px; border-bottom: 1px solid var(--border); }
+
+  .note { padding: 10px 14px; border-radius: 8px; font-size: 12.5px; margin: 10px 0; background: var(--surface-2); color: var(--ink-2); line-height: 1.55; }
+  .note.warn { background: var(--warning-tint); color: var(--warning); }
+
+  .field-block { margin-bottom: 18px; }
+  .field-label { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink); margin-bottom: 6px; }
+  .field-hint { font-size: 11.5px; color: var(--ink-muted); margin: 4px 0 0; }
+  input[type="text"], input[type="email"], select, textarea {
+    width: 100%; font: inherit; font-size: 13.5px; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--border-2); border-radius: 8px;
+    padding: 9px 12px;
+  }
+  textarea { min-height: 100px; resize: vertical; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+  .btn { font: inherit; font-size: 13px; font-weight: 600; border-radius: 8px; padding: 9px 16px; cursor: pointer; border: 1px solid var(--border-2); background: var(--surface); color: var(--ink); white-space: nowrap; }
+  .btn.primary { background: var(--accent); color: #ffffff; border-color: var(--accent); }
+  .btn.small { padding: 5px 11px; font-size: 11.5px; }
+
+  .admin-toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-muted); flex: none; }
+  .admin-toggle input { margin: 0; }
+
+  .config-box { display: flex; gap: 8px; align-items: center; margin-bottom: 22px; }
+  .config-box input { flex: 1; }
+
+  section { margin-bottom: 30px; }
+  .section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+  .section-head h2 { font-family: var(--font-display); font-size: 17px; font-weight: 500; margin: 0; }
+  .section-head .hint { font-size: 12px; color: var(--ink-muted); }
+
+  .req-list { display: flex; flex-direction: column; gap: 10px; }
+  .req-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .req-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 6px; }
+  .req-title { font-weight: 600; font-size: 13.5px; color: var(--ink); }
+  .req-meta { font-size: 11.5px; color: var(--ink-muted); margin-top: 2px; }
+  .req-desc { font-size: 13px; color: var(--ink-2); line-height: 1.5; margin: 8px 0 0; white-space: pre-wrap; }
+  .req-badges { display: flex; gap: 6px; flex: none; align-items: center; }
+
+  .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; padding: 3px 9px; border-radius: 100px; white-space: nowrap; }
+  .badge.prio-faible { background: var(--surface-2); color: var(--ink-muted); }
+  .badge.prio-moyenne { background: var(--warning-tint); color: var(--warning); }
+  .badge.prio-haute { background: var(--critical-tint); color: var(--critical); }
+  .badge.statut-en_attente { background: var(--surface-2); color: var(--ink-muted); }
+  .badge.statut-validee { background: var(--good-tint); color: var(--good-text); }
+  .badge.statut-rejetee { background: var(--critical-tint); color: var(--critical); }
+  .badge.statut-en_cours { background: var(--accent-tint); color: var(--accent); }
+
+  .status-select { font-size: 11.5px; padding: 3px 6px; border-radius: 6px; }
+
+  .json-box { width: 100%; min-height: 110px; margin-top: 10px; font-family: var(--font-mono); font-size: 11.5px; background: var(--surface); border: 1px solid var(--border-2); border-radius: 8px; padding: 10px; color: var(--ink); display: none; }
+  .json-box.open { display: block; }
+
+  footer { margin-top: 36px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 11.5px; color: var(--ink-muted); line-height: 1.7; }
+  footer code { background: var(--surface-2); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+  .version-tag { font-size: 11px; color: var(--ink-muted); font-family: var(--font-mono); margin: 6px 0 0; }
+
+  @media (max-width: 600px) { .row2 { grid-template-columns: 1fr; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow">Widget IA · MCDF</p>
+      <h1>Suggestions d'évolution</h1>
+      <p class="lede">Proposer une évolution du widget, à valider par un super administrateur.</p>
+      <p class="version-tag">Version du fichier : 2026-08-27</p>
+    </div>
+    <label class="admin-toggle">
+      <input type="checkbox" id="admin-toggle">
+      Mode super-administrateur
+    </label>
+  </header>
+
+  <div class="note warn" id="admin-warning" style="display:none">
+    Ce mode n'est qu'un affichage différent, pas une authentification réelle — n'importe qui avec accès à cette page peut l'activer. Ne pas le présenter comme un contrôle d'accès sécurisé.
+  </div>
+
+  <section id="config-section">
+    <div class="section-head"><h2>Configuration</h2><span class="hint">une seule fois par poste</span></div>
+    <div class="config-box">
+      <input type="email" id="admin-email" placeholder="email du super administrateur (ex. fbuis@sesame-technology.com)">
+      <button type="button" class="btn" id="save-admin-email">Enregistrer</button>
+    </div>
+    <p class="field-hint">Utilisé pour ouvrir un email pré-rempli à chaque nouvelle demande — enregistré uniquement dans ce navigateur.</p>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Nouvelle demande</h2></div>
+
+    <div class="field-block">
+      <label class="field-label" for="req-title">Titre</label>
+      <input type="text" id="req-title" placeholder="Ex. Ajouter un export PDF du tableau de comparaison">
+    </div>
+
+    <div class="row2">
+      <div class="field-block">
+        <label class="field-label" for="req-module">Module concerné</label>
+        <select id="req-module">
+          <option>Génération de rapports</option>
+          <option>Assistant Qualiopi</option>
+          <option>IA Conversationnelle</option>
+          <option>Envoi de documents</option>
+          <option>Recherche intelligente</option>
+          <option>Autre / transverse</option>
+        </select>
+      </div>
+      <div class="field-block">
+        <label class="field-label" for="req-priorite">Priorité perçue</label>
+        <select id="req-priorite">
+          <option value="faible">Faible</option>
+          <option value="moyenne" selected>Moyenne</option>
+          <option value="haute">Haute</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field-block">
+      <label class="field-label" for="req-desc">Description</label>
+      <textarea id="req-desc" placeholder="Décrivez le besoin et, si possible, un exemple concret."></textarea>
+    </div>
+
+    <div class="field-block">
+      <label class="field-label" for="req-auteur">Votre nom (optionnel)</label>
+      <input type="text" id="req-auteur" placeholder="Pour que l'administrateur sache qui a proposé">
+    </div>
+
+    <div class="field-block">
+      <button type="button" class="btn primary" id="submit-btn">Soumettre la demande</button>
+    </div>
+    <div id="submit-result"></div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Demandes (ce poste)</h2>
+      <span class="hint" id="req-count-hint"></span>
+    </div>
+    <div class="req-list" id="req-list"></div>
+    <div style="margin-top:12px; display:flex; gap:8px;">
+      <button type="button" class="btn small" id="json-toggle">Copier / importer en JSON</button>
+    </div>
+    <textarea class="json-box" id="json-box" spellcheck="false"></textarea>
+  </section>
+
+  <footer>
+    Aucun backend partagé pour ce widget : chaque demande est enregistrée dans ce navigateur (<code>localStorage</code>) et envoyée par <code>mailto:</code> à l'adresse configurée — un vrai email part, indépendamment de tout serveur. Pour centraliser les demandes de plusieurs postes dans une même vue, utilisez « Copier / importer en JSON » (même mécanisme que la saisie manuelle du widget Qualiopi).
+  </footer>
+</div>
+
+<script>
+function el(tag, cls, html) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html !== undefined) e.innerHTML = html;
+  return e;
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function uid() { return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`; }
+
+const STORAGE_KEY = 'mcdf-suggestions-v1';
+const ADMIN_EMAIL_KEY = 'mcdf-suggestions-admin-email';
+const ADMIN_MODE_KEY = 'mcdf-suggestions-admin-mode';
+
+const STATUT_LABELS = { en_attente: 'En attente', validee: 'Validée', rejetee: 'Rejetée', en_cours: 'En cours' };
+const PRIORITE_LABELS = { faible: 'Faible', moyenne: 'Moyenne', haute: 'Haute' };
+
+function loadRequests() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+function saveRequests(list) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+}
+
+function renderList() {
+  const list = loadRequests().sort((a, b) => b.date.localeCompare(a.date));
+  const wrap = document.getElementById('req-list');
+  wrap.innerHTML = '';
+  document.getElementById('req-count-hint').textContent = `${list.length} demande(s)`;
+  const isAdmin = document.getElementById('admin-toggle').checked;
+
+  if (!list.length) {
+    wrap.appendChild(el('div', 'note', 'Aucune demande pour le moment.'));
+    return;
+  }
+
+  list.forEach((r) => {
+    const card = el('div', 'req-card');
+    const top = el('div', 'req-top');
+    const left = el('div');
+    left.appendChild(el('div', 'req-title', escapeHtml(r.titre)));
+    left.appendChild(el('div', 'req-meta', `${escapeHtml(r.module)} · ${new Date(r.date).toLocaleDateString('fr-FR')}${r.auteur ? ' · ' + escapeHtml(r.auteur) : ''}`));
+    top.appendChild(left);
+
+    const badges = el('div', 'req-badges');
+    badges.appendChild(el('span', `badge prio-${r.priorite}`, PRIORITE_LABELS[r.priorite] || r.priorite));
+
+    if (isAdmin) {
+      const sel = document.createElement('select');
+      sel.className = 'status-select';
+      Object.entries(STATUT_LABELS).forEach(([key, label]) => {
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = label;
+        if (key === r.statut) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      sel.addEventListener('change', () => {
+        const all = loadRequests();
+        const found = all.find((x) => x.id === r.id);
+        if (found) { found.statut = sel.value; saveRequests(all); renderList(); }
+      });
+      badges.appendChild(sel);
+    } else {
+      badges.appendChild(el('span', `badge statut-${r.statut}`, STATUT_LABELS[r.statut] || r.statut));
+    }
+    top.appendChild(badges);
+    card.appendChild(top);
+    card.appendChild(el('div', 'req-desc', escapeHtml(r.description)));
+    wrap.appendChild(card);
+  });
+}
+
+function buildMailto(req, adminEmail) {
+  const subject = `[Widget IA MCDF] Suggestion : ${req.titre}`;
+  const body = [
+    `Nouvelle suggestion d'évolution du widget IA MCDF`,
+    ``,
+    `Module concerné : ${req.module}`,
+    `Priorité perçue : ${PRIORITE_LABELS[req.priorite]}`,
+    `Proposé par : ${req.auteur || '(non renseigné)'}`,
+    ``,
+    `Description :`,
+    req.description,
+    ``,
+    `--- Pour import dans le widget (Copier / importer en JSON) ---`,
+    JSON.stringify([req]),
+  ].join('\n');
+  return `mailto:${encodeURIComponent(adminEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+// Pre-remplissage depuis un lien "Suggerer..." envoye par un autre widget
+// (widget-ia.html, widget-qualiopi.html, etc.) : ?module=...&titre=...&desc=...
+// -- permet a ces widgets de generer un prompt deja documente (module, fichier,
+// entites API utilisees) sans dupliquer ce formulaire ailleurs.
+function applyPrefillFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const qModule = params.get('module');
+  const qTitre = params.get('titre');
+  const qDesc = params.get('desc');
+  if (qModule) {
+    const sel = document.getElementById('req-module');
+    if ([...sel.options].some((o) => o.value === qModule)) sel.value = qModule;
+  }
+  if (qTitre) document.getElementById('req-title').value = qTitre;
+  if (qDesc) document.getElementById('req-desc').value = qDesc;
+  if (qTitre || qDesc) {
+    const titleInput = document.getElementById('req-title');
+    titleInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    titleInput.focus();
+    titleInput.setSelectionRange(titleInput.value.length, titleInput.value.length);
+  }
+}
+
+function init() {
+  const adminEmail = localStorage.getItem(ADMIN_EMAIL_KEY) || '';
+  document.getElementById('admin-email').value = adminEmail;
+
+  document.getElementById('save-admin-email').addEventListener('click', () => {
+    const v = document.getElementById('admin-email').value.trim();
+    localStorage.setItem(ADMIN_EMAIL_KEY, v);
+    document.getElementById('submit-result').innerHTML = '';
+  });
+
+  const adminToggle = document.getElementById('admin-toggle');
+  adminToggle.checked = localStorage.getItem(ADMIN_MODE_KEY) === '1';
+  document.getElementById('admin-warning').style.display = adminToggle.checked ? 'block' : 'none';
+  adminToggle.addEventListener('change', () => {
+    localStorage.setItem(ADMIN_MODE_KEY, adminToggle.checked ? '1' : '0');
+    document.getElementById('admin-warning').style.display = adminToggle.checked ? 'block' : 'none';
+    renderList();
+  });
+
+  document.getElementById('submit-btn').addEventListener('click', () => {
+    const titre = document.getElementById('req-title').value.trim();
+    const description = document.getElementById('req-desc').value.trim();
+    const resultEl = document.getElementById('submit-result');
+    if (!titre || !description) {
+      resultEl.innerHTML = '';
+      resultEl.appendChild(el('div', 'note warn', 'Renseignez au moins un titre et une description.'));
+      return;
+    }
+    const req = {
+      id: uid(),
+      date: new Date().toISOString(),
+      titre, description,
+      module: document.getElementById('req-module').value,
+      priorite: document.getElementById('req-priorite').value,
+      auteur: document.getElementById('req-auteur').value.trim(),
+      statut: 'en_attente',
+    };
+    const all = loadRequests();
+    all.push(req);
+    saveRequests(all);
+
+    const email = localStorage.getItem(ADMIN_EMAIL_KEY) || '';
+    resultEl.innerHTML = '';
+    if (email) {
+      window.location.href = buildMailto(req, email);
+      resultEl.appendChild(el('div', 'note', 'Demande enregistrée et email pré-rempli ouvert dans votre client mail — il ne reste qu\'à l\'envoyer.'));
+    } else {
+      resultEl.appendChild(el('div', 'note warn', 'Demande enregistrée localement, mais aucun email d\'administrateur configuré ci-dessus — rien n\'a été envoyé. Configurez-le puis renvoyez, ou utilisez « Copier en JSON » pour la transmettre autrement.'));
+    }
+
+    document.getElementById('req-title').value = '';
+    document.getElementById('req-desc').value = '';
+    document.getElementById('req-auteur').value = '';
+    renderList();
+  });
+
+  const jsonBox = document.getElementById('json-box');
+  document.getElementById('json-toggle').addEventListener('click', () => {
+    const open = jsonBox.classList.toggle('open');
+    if (open) jsonBox.value = JSON.stringify(loadRequests(), null, 2);
+  });
+  jsonBox.addEventListener('change', () => {
+    try {
+      const parsed = JSON.parse(jsonBox.value);
+      if (!Array.isArray(parsed)) throw new Error('format inattendu');
+      const existingIds = new Set(loadRequests().map((r) => r.id));
+      const merged = loadRequests().concat(parsed.filter((r) => r && r.id && !existingIds.has(r.id)));
+      saveRequests(merged);
+      renderList();
+    } catch (e) {
+      alert('JSON invalide, rien n\'a été importé.');
+    }
+  });
+
+  renderList();
+  applyPrefillFromUrl();
+}
+init();
+</script>
