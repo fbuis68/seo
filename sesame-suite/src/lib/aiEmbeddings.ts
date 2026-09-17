@@ -19,27 +19,62 @@ export function aiEmbeddingsConfigured(): boolean {
   return !!config.openaiApiKey;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Extrait le délai suggéré par OpenAI dans le corps de l'erreur 429
+ * ("Please try again in 217ms" / "in 1.2s") — bien plus précis qu'un
+ * backoff fixe pour repartir dès que la fenêtre de débit se libère,
+ * important sur un compte à faible limite (ex. 100 req/min, 40k tokens/min
+ * en sortie de crédit tout juste ajouté). */
+function parseRetryAfterMs(body: string): number | null {
+  const m = /try again in ([\d.]+)(ms|s)/i.exec(body);
+  if (!m) return null;
+  const value = parseFloat(m[1]);
+  return m[2] === "s" ? value * 1000 : value;
+}
+
+const MAX_RETRIES = 6;
+
+/**
+ * Nouvelle tentative automatique sur 429 (limite de débit OpenAI) — jamais
+ * sur une autre erreur (401/402/insufficient_quota... : retenter n'y change
+ * rien). Un compte qui vient d'être crédité démarre souvent sur un palier
+ * de débit bas (ex. 100 req/min) : un import en masse (§ scripts/
+ * backfill-ticket-embeddings.ts, scripts/import-freshdesk-tickets.ts) le
+ * dépasse presque à coup sûr sans ce mécanisme.
+ */
 export async function generateEmbedding(text: string): Promise<number[]> {
   if (!config.openaiApiKey) throw new HttpError(503, "Assistant IA non configuré (OPENAI_API_KEY manquant)");
   const input = text.trim().slice(0, 8000); // marge large sous la limite de tokens du modèle
   if (!input) throw new HttpError(400, "Texte vide, impossible de générer un embedding");
 
-  const r = await fetch("https://api.openai.com/v1/embeddings", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.openaiApiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ model: config.openaiEmbeddingModel, input }),
-  });
-  if (!r.ok) {
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const r = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.openaiApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ model: config.openaiEmbeddingModel, input }),
+    });
+    if (r.ok) {
+      const data = (await r.json()) as { data?: { embedding?: number[] }[] };
+      const embedding = data.data?.[0]?.embedding;
+      if (!embedding || !embedding.length) throw new HttpError(502, "Réponse OpenAI inattendue (pas d'embedding)");
+      return embedding;
+    }
+
     const body = await r.text().catch(() => "");
+    if (r.status === 429 && attempt < MAX_RETRIES) {
+      const delay = parseRetryAfterMs(body) ?? 1000 * 2 ** attempt; // repli exponentiel si le message n'indique pas de délai
+      await sleep(Math.min(delay, 15000) + 50); // petite marge au-delà du délai annoncé
+      continue;
+    }
     throw new HttpError(502, `Échec de la génération d'embedding (OpenAI ${r.status}) : ${body.slice(0, 300)}`);
   }
-  const data = (await r.json()) as { data?: { embedding?: number[] }[] };
-  const embedding = data.data?.[0]?.embedding;
-  if (!embedding || !embedding.length) throw new HttpError(502, "Réponse OpenAI inattendue (pas d'embedding)");
-  return embedding;
+  throw new HttpError(502, "Échec de la génération d'embedding (limite de débit OpenAI persistante)");
 }
 
 export function cosineSimilarity(a: number[], b: number[]): number {

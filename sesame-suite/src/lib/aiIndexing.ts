@@ -10,15 +10,17 @@ import { aiEmbeddingsConfigured, buildTicketEmbeddingText, generateEmbedding } f
  * Ne lève jamais : un échec (clé API absente, appel OpenAI en erreur) ne
  * doit jamais bloquer la fermeture d'un ticket — juste ne pas l'indexer,
  * il restera exclu des "cas similaires" jusqu'à un prochain passage.
+ * Retourne true si le ticket a bien été indexé (utilisé par le script de
+ * rattrapage pour distinguer un vrai succès d'un ticket ignoré/en échec).
  */
-export async function reindexTicketEmbedding(ticketId: string): Promise<void> {
-  if (!aiEmbeddingsConfigured()) return;
+export async function reindexTicketEmbedding(ticketId: string): Promise<boolean> {
+  if (!aiEmbeddingsConfigured()) return false;
   try {
     const ticket = await prisma.crmTicket.findUnique({
       where: { id: ticketId },
       include: { messages: { orderBy: { createdAt: "asc" } } },
     });
-    if (!ticket) return;
+    if (!ticket) return false;
 
     const firstClientMessage = ticket.messages.find((m) => m.authorType === "client" && m.kind !== "system")?.body || "";
 
@@ -27,7 +29,7 @@ export async function reindexTicketEmbedding(ticketId: string): Promise<void> {
       const lastAgentReply = [...ticket.messages].reverse().find((m) => m.authorType === "agent" && m.kind === "reply");
       resolutionSummary = (lastAgentReply?.body || "").trim().slice(0, 2000);
     }
-    if (!resolutionSummary) return; // rien à vectoriser (ticket sans réponse agent) — pas d'erreur, juste rien à faire
+    if (!resolutionSummary) return false; // rien à vectoriser (ticket sans réponse agent) — pas d'erreur, juste rien à faire
 
     const text = buildTicketEmbeddingText({ subject: ticket.subject, firstClientMessage, resolutionSummary });
     const embedding = await generateEmbedding(text);
@@ -40,8 +42,10 @@ export async function reindexTicketEmbedding(ticketId: string): Promise<void> {
         ...(ticket.resolutionSummary ? {} : { resolutionSummary }),
       },
     });
+    return true;
   } catch (e) {
     console.error(`[aiIndexing] échec de l'indexation du ticket ${ticketId}:`, e);
+    return false;
   }
 }
 
