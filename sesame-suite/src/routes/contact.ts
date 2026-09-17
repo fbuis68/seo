@@ -34,6 +34,7 @@ contactRouter.post(
     if (!message) throw new HttpError(400, "Message requis");
 
     let prospect = await prisma.crmProspect.findFirst({ where: { email } });
+    const isNewProspect = !prospect;
     if (!prospect) {
       prospect = await prisma.crmProspect.create({
         data: { nom, email, type: "Prospect", secteur: secteur || undefined, danger: "Modéré", contrat: "non" },
@@ -57,6 +58,19 @@ contactRouter.post(
       }).catch((e) => console.error("[automation] crm.prospect_created_web:", e));
     } else if (secteur && !prospect.secteur) {
       prospect = await prisma.crmProspect.update({ where: { id: prospect.id }, data: { secteur } });
+    }
+
+    // Une opportunité par prospect, pas une par soumission — une même
+    // personne qui renvoie le formulaire (relance, complément d'info) ne
+    // doit pas dupliquer le pipeline commercial, l'activité ci-dessous
+    // suffit à tracer chaque nouveau message.
+    if (isNewProspect) {
+      await prisma.crmDeal.create({
+        data: {
+          prospectId: prospect.id,
+          title: secteur ? `Demande site web (${secteur})` : "Demande site web",
+        },
+      });
     }
 
     await prisma.crmActivity.create({
