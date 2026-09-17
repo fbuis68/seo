@@ -1,4 +1,5 @@
 import { Router } from "express";
+import AdmZip from "adm-zip";
 import { prisma } from "../db";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
@@ -70,6 +71,100 @@ accountingRouter.post(
     });
 
     res.json({ invoice: result.invoice, isDuplicateDocument: result.isDuplicateDocument });
+  })
+);
+
+const ZIP_ENTRY_MIME: Record<string, string> = {
+  pdf: "application/pdf",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  tif: "image/tiff",
+  tiff: "image/tiff",
+  xml: "application/xml",
+};
+
+interface UploadZipBody {
+  filename: string;
+  base64: string;
+  direction: "purchase" | "sale";
+  source?: string;
+}
+
+interface ZipEntryResult {
+  filename: string;
+  ok: boolean;
+  invoiceId?: string;
+  isDuplicateDocument?: boolean;
+  error?: string;
+}
+
+/**
+ * POST /wa/acc/documents/uploadZip — import en masse d'une archive .zip de
+ * factures (ex : export groupé Dext/Receipt Bank, ou tout autre outil qui
+ * ne propose qu'un .zip en sortie) — évite à l'utilisateur de devoir
+ * décompresser sur son poste avant de glisser les fichiers un par un. Traite
+ * chaque fichier de l'archive exactement comme un upload individuel
+ * (/acc/documents/upload, même pipeline OCR/extraction/rapprochement) —
+ * l'échec d'un fichier n'interrompt jamais le traitement des autres.
+ */
+accountingRouter.post(
+  "/acc/documents/uploadZip",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const b = req.body as UploadZipBody;
+    if (!b.filename || !b.base64) throw new HttpError(400, "filename et base64 requis");
+    if (b.direction !== "purchase" && b.direction !== "sale") throw new HttpError(400, "direction doit être 'purchase' ou 'sale'");
+
+    let zip: AdmZip;
+    try {
+      zip = new AdmZip(Buffer.from(b.base64, "base64"));
+    } catch {
+      throw new HttpError(400, "Archive .zip invalide ou corrompue");
+    }
+
+    // Ignore dossiers, fichiers cachés/système (__MACOSX/, .DS_Store...) et
+    // toute extension non reconnue par le pipeline — mêmes types acceptés
+    // que le dépôt de fichier individuel (cf. accept= de la dropzone).
+    const entries = zip.getEntries().filter((e) => {
+      if (e.isDirectory) return false;
+      const name = e.entryName.split("/").pop() || "";
+      if (!name || name.startsWith(".")) return false;
+      const ext = name.split(".").pop()?.toLowerCase() || "";
+      return ext in ZIP_ENTRY_MIME;
+    });
+    if (!entries.length) throw new HttpError(400, "Aucun fichier exploitable dans cette archive (PDF/JPG/PNG/TIFF/XML attendus)");
+
+    const results: ZipEntryResult[] = [];
+    for (const entry of entries) {
+      const filename = entry.entryName.split("/").pop() || entry.entryName;
+      const ext = filename.split(".").pop()!.toLowerCase();
+      try {
+        const result = await processUploadedDocument(entityId, {
+          filename,
+          mimeType: ZIP_ENTRY_MIME[ext],
+          base64: entry.getData().toString("base64"),
+          direction: b.direction,
+          source: b.source || "upload_zip",
+        });
+        await recordAuditLog({
+          entityId,
+          userId: actorId(req),
+          action: result.isDuplicateDocument ? "document_upload_duplicate" : "document_uploaded",
+          targetType: "AccInvoice",
+          targetId: result.invoice.id,
+          newValue: { status: result.invoice.status, direction: result.invoice.direction, viaZip: b.filename },
+          ip: req.ip,
+        });
+        results.push({ filename, ok: true, invoiceId: result.invoice.id, isDuplicateDocument: result.isDuplicateDocument });
+      } catch (err) {
+        const message = err instanceof DocumentIngestionError || err instanceof PipelineError ? err.message : err instanceof Error ? err.message : "Erreur inattendue";
+        results.push({ filename, ok: false, error: message });
+      }
+    }
+
+    res.json({ imported: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length, results });
   })
 );
 

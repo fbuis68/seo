@@ -7429,7 +7429,8 @@ function openAccUploadModal(direction){
       <div id="acc-dropzone" style="border:2px dashed var(--bdr2);border-radius:10px;padding:24px 12px;text-align:center;cursor:pointer;transition:background .1s,border-color .1s" onclick="document.getElementById('acc-upload-file').click()">
         <div style="font-size:13px;color:var(--tx)">Glissez-déposez un ou plusieurs fichiers ici</div>
         <div style="font-size:11px;color:var(--mu);margin-top:4px">ou cliquez pour parcourir — PDF, JPEG, PNG, TIFF, XML, 15 Mo max chacun</div>
-        <input type="file" id="acc-upload-file" multiple accept=".pdf,.jpg,.jpeg,.png,.tiff,.xml,application/pdf,image/jpeg,image/png,image/tiff,application/xml,text/xml" style="display:none">
+        <div style="font-size:11px;color:var(--mu);margin-top:2px">Un fichier .zip (export groupé Dext, Receipt Bank…) est automatiquement décompressé et chaque facture analysée individuellement.</div>
+        <input type="file" id="acc-upload-file" multiple accept=".pdf,.jpg,.jpeg,.png,.tiff,.xml,.zip,application/pdf,image/jpeg,image/png,image/tiff,application/xml,text/xml,application/zip" style="display:none">
       </div>
       <div id="acc-upload-filelist" style="margin-top:8px"></div>
       <div id="acc-upload-status" style="font-size:12px;color:var(--mu);margin-top:6px"></div>
@@ -7477,25 +7478,52 @@ function renderAccUploadFileList(){
 
 function accSubmitUpload(direction){
   if(!ACC_UPLOAD_FILES.length){ flash('Choisissez ou glissez au moins un fichier'); return; }
-  const statusEl = document.getElementById('acc-upload-status');
   const btn = document.getElementById('acc-upload-btn');
   btn.disabled = true;
-  accUploadNext(direction, 0, ACC_UPLOAD_FILES.slice(), []);
+  const zipFiles = ACC_UPLOAD_FILES.filter(f=>/\.zip$/i.test(f.name));
+  const normalFiles = ACC_UPLOAD_FILES.filter(f=>!/\.zip$/i.test(f.name));
+  accUploadZips(direction, zipFiles, 0, [], normalFiles);
+}
+
+/** Traite d'abord les .zip (export groupé Dext/Receipt Bank…) — chacun en
+ * un seul appel serveur qui décompresse et analyse chaque facture contenue
+ * (cf. POST /acc/documents/uploadZip) — puis enchaîne sur les fichiers
+ * individuels via accUploadNext, en cumulant tout dans le même tableau de
+ * résultats pour un seul résumé final. */
+async function accUploadZips(direction, zipFiles, i, results, normalFiles){
+  const statusEl = document.getElementById('acc-upload-status');
+  if(i>=zipFiles.length){
+    accUploadNext(direction, 0, normalFiles, results);
+    return;
+  }
+  const file = zipFiles[i];
+  if(statusEl) statusEl.textContent = `Décompression et analyse de ${file.name}…`;
+  accReadFileAsBase64(file, async (base64)=>{
+    try{
+      const r = await apiFetch('/wa/acc/documents/uploadZip?scope=crm', {method:'POST', body:JSON.stringify({filename:file.name, base64, direction, source:'upload_zip'})});
+      const data = await r.json();
+      if(!r.ok) throw new Error(data.error||'http '+r.status);
+      (data.results||[]).forEach(rr=>results.push(rr));
+    }catch(e){
+      results.push({ok:false, filename:file.name, error:e.message||"échec de l'import de l'archive"});
+    }
+    accUploadZips(direction, zipFiles, i+1, results, normalFiles);
+  });
 }
 
 async function accUploadNext(direction, i, files, results){
   const statusEl = document.getElementById('acc-upload-status');
-  const btn = document.getElementById('acc-upload-btn');
   if(i>=files.length){
     closeModal();
+    const total = results.length;
     const okCount = results.filter(r=>r.ok).length;
     const dupCount = results.filter(r=>r.ok && r.isDuplicateDocument).length;
-    flash(files.length===1
+    flash(total===1
       ? (results[0].ok ? (results[0].isDuplicateDocument?'Document déjà déposé — facture existante rouverte':'Facture déposée et analysée') : 'Erreur : '+results[0].error)
-      : `${okCount}/${files.length} facture(s) déposée(s)${dupCount?' ('+dupCount+' déjà connue(s))':''}`);
+      : `${okCount}/${total} facture(s) déposée(s)${dupCount?' ('+dupCount+' déjà connue(s))':''}`);
     loadAccDashboard();
     if(ACC_TAB==='inbox') await accReloadInvoices();
-    if(files.length===1 && results[0].ok) openAccInvoiceModal(results[0].invoiceId);
+    if(total===1 && results[0].ok) openAccInvoiceModal(results[0].invoiceId);
     return;
   }
   const file = files[i];

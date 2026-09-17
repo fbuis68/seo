@@ -80,6 +80,7 @@ volontairement hors périmètre) :
 ### Documents
 
 - `POST /acc/documents/upload` — `{filename, mimeType, base64, direction: "purchase"|"sale", source?}` → `{invoice, isDuplicateDocument}`. Lance tout le pipeline (extraction → classification → rapprochement → proposition de compte → contrôles).
+- `POST /acc/documents/uploadZip` — `{filename, base64 (l'archive .zip), direction, source?}` → `{imported, failed, results: [{filename, ok, invoiceId?, isDuplicateDocument?, error?}]}`. Import groupé — utile pour un export en masse d'un outil tiers (ex. Dext/Receipt Bank) qui ne propose qu'un .zip en sortie. Décompresse côté serveur et traite chaque fichier PDF/JPG/PNG/TIFF/XML exactement comme un upload individuel ; les entrées système (`__MACOSX/`, fichiers cachés) et les extensions non reconnues sont ignorées silencieusement. L'échec d'un fichier n'interrompt jamais le traitement des autres. Côté UI, glisser un .zip dans la dropzone habituelle (`+ Facture d'achat`/`+ Facture de vente`) suffit — détecté automatiquement.
 
 ### Factures
 
