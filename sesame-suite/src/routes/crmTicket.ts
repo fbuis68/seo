@@ -413,6 +413,80 @@ crmTicketRouter.post(
   })
 );
 
+interface BulkStatusBody {
+  ids: string[];
+  status: string;
+}
+
+/**
+ * POST /wa/crmTicket/bulkUpdateStatus — modification groupée du statut
+ * depuis la grille (sélection multiple, cf. public/crm.html). Même
+ * logique que le changement de statut individuel (journal, notification,
+ * indexation IA à la clôture) mais appliquée à chaque ticket sélectionné
+ * dont le statut change réellement — les autres sont ignorés silencieusement
+ * (aucune raison de refuser tout le lot pour un ticket déjà au bon statut).
+ */
+crmTicketRouter.post(
+  "/crmTicket/bulkUpdateStatus",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const b = req.body as BulkStatusBody;
+    if (!STATUSES.includes(b.status)) throw new HttpError(400, "Statut invalide");
+    const ids = Array.isArray(b.ids) ? [...new Set(b.ids.filter((id): id is string => typeof id === "string" && !!id))] : [];
+    if (!ids.length) throw new HttpError(400, "Aucun ticket sélectionné");
+
+    const existingTickets = await prisma.crmTicket.findMany({ where: { id: { in: ids } } });
+    const toChange = existingTickets.filter((t) => t.status !== b.status);
+    if (!toChange.length) {
+      res.json({ ok: true, changed: 0 });
+      return;
+    }
+
+    const actor = req.admin ? await prisma.adminUser.findUnique({ where: { id: req.admin.adminId }, select: { name: true, email: true } }) : null;
+    const actorName = actor ? actor.name || actor.email : "";
+    const closedAt = b.status === "Fermé" ? new Date() : null;
+
+    await prisma.crmTicket.updateMany({ where: { id: { in: toChange.map((t) => t.id) } }, data: { status: b.status, closedAt, updatedAt: new Date() } });
+
+    await prisma.crmTicketMessage.createMany({
+      data: toChange.map((t) => ({
+        ticketId: t.id,
+        authorType: "agent",
+        authorName: actorName,
+        kind: "system",
+        body: `Statut : ${t.status} → ${b.status}`,
+        attachments: [],
+      })),
+    });
+
+    const agentIds = [...new Set(toChange.map((t) => t.agentId).filter((v): v is string => !!v))];
+    const agents = agentIds.length ? await prisma.adminUser.findMany({ where: { id: { in: agentIds } }, select: { id: true, name: true, email: true } }) : [];
+
+    for (const t of toChange) {
+      fireTrigger("crm.ticket_status_changed", {
+        entityId: null,
+        targetType: "crmTicket",
+        targetId: t.id + ":" + Date.now(),
+        recipient: { email: t.contactEmail, phone: null },
+        variables: {
+          nom: t.contactName || t.contactEmail,
+          secteur: "",
+          ancienStatut: t.status,
+          nouveauStatut: b.status,
+          numero: t.number,
+          sujet: t.subject,
+          statut: b.status,
+          agent: formatAgentName(t.agentId, agents),
+        },
+      }).catch((e) => console.error("[automation] crm.ticket_status_changed:", e));
+      if (b.status === "Résolu" || b.status === "Fermé") reindexTicketEmbedding(t.id);
+    }
+
+    res.json({ ok: true, changed: toChange.length });
+  })
+);
+
 interface ReplyBody {
   id: string;
   body: string;

@@ -5251,7 +5251,17 @@ const TICKET_STATUSES = ['En attente','En cours','Attente client','Résolu','Fer
 const TICKET_PRIORITIES = ['Basse','Normale','Haute','Urgente'];
 const TICKET_STATUS_PILL = {'En attente':'bw','En cours':'bi','Attente client':'bn','Résolu':'bg','Fermé':'bn'};
 const TICKET_PRIORITY_PILL = {'Basse':'bn','Normale':'bi','Haute':'bw','Urgente':'bd'};
-let ticketFilterProspectId = null, ticketStatusFilter = '', ticketPriorityFilter = '', ticketTypeFilter = '', ticketAgentFilter = '', ticketSearch = '';
+let ticketFilterProspectId = null, ticketPriorityFilter = '', ticketTypeFilter = '', ticketAgentFilter = '', ticketSearch = '';
+// Filtre de statut multi-sélection (clic sur une pastille = bascule) — par
+// défaut, seuls les tickets encore à traiter sont affichés ("En attente" +
+// "En cours"), pas les tickets déjà répondus/résolus/fermés qui noyaient la
+// vue par défaut. Ensemble vide = tous statuts affichés (cf. le lien
+// "Tous statuts" du bandeau).
+const TICKET_STATUS_FILTER_DEFAULT = ['En attente','En cours'];
+let TICKET_STATUS_FILTER = new Set(TICKET_STATUS_FILTER_DEFAULT);
+function ticketStatusFilterIsDefault(){
+  return TICKET_STATUS_FILTER.size===TICKET_STATUS_FILTER_DEFAULT.length && TICKET_STATUS_FILTER_DEFAULT.every(s=>TICKET_STATUS_FILTER.has(s));
+}
 
 /** Tickets d'une fiche client — au-delà du lien direct prospectId (posé une
  * fois pour toutes à la création du ticket, cf. findOrCreateProspectByEmail
@@ -5313,23 +5323,32 @@ async function saveTicketConfig(){
 }
 
 function ticketResetFilters(){
-  ticketStatusFilter='';ticketPriorityFilter='';ticketTypeFilter='';ticketAgentFilter='';ticketSearch='';
+  TICKET_STATUS_FILTER=new Set(TICKET_STATUS_FILTER_DEFAULT);ticketPriorityFilter='';ticketTypeFilter='';ticketAgentFilter='';ticketSearch='';
   renderTicketsList();
 }
-
-function renderTicketsList(){
-  let rows = ticketsForProspect(ticketFilterProspectId);
-  if(ticketStatusFilter) rows = rows.filter(t=>t.status===ticketStatusFilter);
+function ticketToggleStatusFilter(s){
+  if(TICKET_STATUS_FILTER.has(s)) TICKET_STATUS_FILTER.delete(s); else TICKET_STATUS_FILTER.add(s);
+  renderTicketsList();
+}
+function ticketShowAllStatuses(){ TICKET_STATUS_FILTER=new Set(); renderTicketsList(); }
+function ticketFilterRows(rows){
+  if(TICKET_STATUS_FILTER.size) rows = rows.filter(t=>TICKET_STATUS_FILTER.has(t.status));
   if(ticketPriorityFilter) rows = rows.filter(t=>t.priority===ticketPriorityFilter);
   if(ticketTypeFilter) rows = rows.filter(t=>ticketTypeFilter==='none'?!t.type:t.type===ticketTypeFilter);
   if(ticketAgentFilter) rows = rows.filter(t=>ticketAgentFilter==='none'?!t.agentId:t.agentId===ticketAgentFilter);
   if(ticketSearch){ const s=ticketSearch.toLowerCase(); rows = rows.filter(t=>[t.subject,t.prospectNom,t.contactEmail].some(x=>(x||'').toLowerCase().includes(s))); }
+  return rows;
+}
+
+function renderTicketsList(){
+  let rows = ticketFilterRows(ticketsForProspect(ticketFilterProspectId));
   rows.sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
   const counts = {};
   const scopedForCounts = ticketsForProspect(ticketFilterProspectId);
   TICKET_STATUSES.forEach(s=>counts[s]=scopedForCounts.filter(t=>t.status===s).length);
-  const statTiles = TICKET_STATUSES.map(s=>`<div class="stat-card" style="cursor:pointer;${ticketStatusFilter===s?'outline:2px solid var(--accent,#8a2b2b)':''}" onclick="ticketStatusFilter=ticketStatusFilter==='${s}'?'':'${s}';renderTicketsList()"><div class="stat-lbl">${s}</div><div class="stat-val">${counts[s]}</div></div>`).join('');
-  const anyFilterActive = ticketStatusFilter||ticketPriorityFilter||ticketTypeFilter||ticketAgentFilter||ticketSearch;
+  const statTiles = TICKET_STATUSES.map(s=>`<div class="stat-card" style="cursor:pointer;${TICKET_STATUS_FILTER.has(s)?'outline:2px solid var(--accent,#8a2b2b)':''}" onclick="ticketToggleStatusFilter('${s}')"><div class="stat-lbl">${s}</div><div class="stat-val">${counts[s]}</div></div>`).join('')
+    + `<div class="stat-card" style="cursor:pointer;${TICKET_STATUS_FILTER.size===0?'outline:2px solid var(--accent,#8a2b2b)':''}" onclick="ticketShowAllStatuses()"><div class="stat-lbl">Tous statuts</div><div class="stat-val">${scopedForCounts.length}</div></div>`;
+  const anyFilterActive = !ticketStatusFilterIsDefault()||ticketPriorityFilter||ticketTypeFilter||ticketAgentFilter||ticketSearch;
   // Une sélection hors des lignes affichées (filtre changé après coup) ne
   // sert plus à rien ici — mais on la laisse survivre au filtre (comme
   // SELECTED_IDS pour les fiches) plutôt que de la vider automatiquement :
@@ -5345,6 +5364,7 @@ function renderTicketsList(){
   const selCount = TICKET_SELECTED_IDS.size;
   const selBar = selCount ? `<div class="list-toolbar" style="margin-top:-6px;margin-bottom:10px;padding:8px 12px;background:var(--pl,#fdedf0);border-radius:8px">
     <span style="font-size:13px;font-weight:600">${selCount} sélectionné${selCount>1?'s':''}</span>
+    <select class="lsel" onchange="ticketBulkChangeStatus(this.value);this.value=''"><option value="">Changer le statut…</option>${TICKET_STATUSES.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>
     <button class="btn btn-primary btn-sm" onclick="openTicketMergeModal()" ${selCount<2?'disabled title="Sélectionnez au moins 2 tickets"':''}>⇄ Fusionner</button>
     <button class="btn btn-ghost btn-sm" style="color:#a33" onclick="ticketBulkDelete()">🗑 Supprimer</button>
     <button class="btn btn-ghost btn-sm" onclick="ticketClearSelection()">Désélectionner</button>
@@ -5379,16 +5399,27 @@ function ticketToggleSelect(id, checked){
   renderTicketsList();
 }
 function ticketToggleSelectAllVisible(checked){
-  let rows = ticketsForProspect(ticketFilterProspectId);
-  if(ticketStatusFilter) rows = rows.filter(t=>t.status===ticketStatusFilter);
-  if(ticketPriorityFilter) rows = rows.filter(t=>t.priority===ticketPriorityFilter);
-  if(ticketTypeFilter) rows = rows.filter(t=>ticketTypeFilter==='none'?!t.type:t.type===ticketTypeFilter);
-  if(ticketAgentFilter) rows = rows.filter(t=>ticketAgentFilter==='none'?!t.agentId:t.agentId===ticketAgentFilter);
-  if(ticketSearch){ const s=ticketSearch.toLowerCase(); rows = rows.filter(t=>[t.subject,t.prospectNom,t.contactEmail].some(x=>(x||'').toLowerCase().includes(s))); }
+  const rows = ticketFilterRows(ticketsForProspect(ticketFilterProspectId));
   rows.forEach(t=>{ if(checked) TICKET_SELECTED_IDS.add(t.id); else TICKET_SELECTED_IDS.delete(t.id); });
   renderTicketsList();
 }
 function ticketClearSelection(){ TICKET_SELECTED_IDS.clear(); renderTicketsList(); }
+
+/** POST /wa/crmTicket/bulkUpdateStatus — changement de statut groupé. */
+async function ticketBulkChangeStatus(status){
+  if(!status) return;
+  const ids = [...TICKET_SELECTED_IDS];
+  if(!ids.length) return;
+  if(!confirm(`Passer ${ids.length} ticket${ids.length>1?'s':''} au statut "${status}" ?`)) return;
+  try{
+    const r = await apiFetch('/wa/crmTicket/bulkUpdateStatus', {method:'POST', body:JSON.stringify({ids, status})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash(`${data.changed||0} ticket${(data.changed||0)>1?'s':''} mis à jour`);
+    await loadTickets();
+    ticketClearSelection();
+  }catch(e){ flash(e.message||'Erreur de mise à jour'); }
+}
 
 /** POST /wa/crmTicket/bulkDelete — suppression groupée depuis la grille. */
 async function ticketBulkDelete(){
