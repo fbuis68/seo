@@ -17,7 +17,15 @@ import { recordScoreEvent } from "../lib/crmScoring";
  */
 export const questionnaireRouter = Router();
 
-const QUESTION_TYPES = new Set(["single", "multi", "boolean", "text", "rating"]);
+const QUESTION_TYPES = new Set(["single", "multi", "boolean", "text", "shorttext", "number", "checkbox", "select", "rating", "file"]);
+
+// Base64 brut, sans le préfixe "data:mime;base64," (~33% plus long que les
+// octets décodés) — 10 000 000 caractères ≈ 7,3 Mo de fichier réel, marge
+// suffisante sous express.json({limit:"15mb"}) (src/app.ts) une fois le
+// reste du JSON de soumission ajouté. Endpoint /submit public (pas
+// d'authentification) : cap nécessaire pour éviter un abus par payload
+// démesuré plutôt qu'une simple question de fichier trop lourd.
+const MAX_FILE_DATA_URL_LENGTH = 10_000_000;
 
 function targetTypeForScope(entityId: string | null): "crmProspect" | "booking" {
   return entityId === null ? "crmProspect" : "booking";
@@ -503,11 +511,14 @@ interface SubmitBody {
 }
 
 function isNonEmptyAnswer(type: string, value: Record<string, unknown>): boolean {
-  if (type === "single") return typeof value.choice === "string" && value.choice.length > 0;
+  if (type === "single" || type === "select") return typeof value.choice === "string" && value.choice.length > 0;
   if (type === "multi") return Array.isArray(value.choices) && value.choices.length > 0;
   if (type === "boolean") return typeof value.value === "boolean";
-  if (type === "text") return typeof value.text === "string" && value.text.trim().length > 0;
+  if (type === "checkbox") return typeof value.checked === "boolean";
+  if (type === "text" || type === "shorttext") return typeof value.text === "string" && value.text.trim().length > 0;
+  if (type === "number") return typeof value.number === "number" && Number.isFinite(value.number);
   if (type === "rating") return typeof value.rating === "number";
+  if (type === "file") return typeof value.dataUrl === "string" && value.dataUrl.length > 0;
   return false;
 }
 
@@ -517,7 +528,7 @@ function cleanAnswerValue(question: { type: string; options: unknown }, raw: unk
   const optionKeys = Array.isArray(question.options) ? (question.options as { key: string }[]).map((o) => o.key) : null;
   const note = typeof v.note === "string" && v.note.trim() ? v.note.trim() : undefined;
 
-  if (question.type === "single") {
+  if (question.type === "single" || question.type === "select") {
     const choice = typeof v.choice === "string" ? v.choice : undefined;
     if (choice && optionKeys && !optionKeys.includes(choice)) throw new HttpError(400, "Réponse invalide (choix hors liste)");
     return choice ? { choice, ...(note ? { note } : {}) } : {};
@@ -530,9 +541,24 @@ function cleanAnswerValue(question: { type: string; options: unknown }, raw: unk
   if (question.type === "boolean") {
     return typeof v.value === "boolean" ? { value: v.value } : {};
   }
+  if (question.type === "checkbox") {
+    return typeof v.checked === "boolean" ? { checked: v.checked } : {};
+  }
   if (question.type === "text") {
     const text = typeof v.text === "string" ? v.text.trim().slice(0, 5000) : "";
     return text ? { text } : {};
+  }
+  if (question.type === "shorttext") {
+    const text = typeof v.text === "string" ? v.text.trim().slice(0, 300) : "";
+    return text ? { text } : {};
+  }
+  if (question.type === "number") {
+    const num = typeof v.number === "number" ? v.number : typeof v.number === "string" ? parseFloat(v.number) : NaN;
+    if (Number.isNaN(num)) return {};
+    const opts = (question.options || {}) as { min?: number; max?: number };
+    if (opts.min != null && num < opts.min) throw new HttpError(400, `Valeur hors plage (min ${opts.min})`);
+    if (opts.max != null && num > opts.max) throw new HttpError(400, `Valeur hors plage (max ${opts.max})`);
+    return { number: num };
   }
   if (question.type === "rating") {
     const opts = (question.options || {}) as { min?: number; max?: number };
@@ -542,6 +568,15 @@ function cleanAnswerValue(question: { type: string; options: unknown }, raw: unk
     if (Number.isNaN(rating)) return {};
     if (rating < min || rating > max) throw new HttpError(400, `Note hors plage (${min}-${max})`);
     return { rating };
+  }
+  if (question.type === "file") {
+    const dataUrl = typeof v.dataUrl === "string" ? v.dataUrl : "";
+    if (!dataUrl) return {};
+    if (!/^data:[^;]+;base64,/.test(dataUrl)) throw new HttpError(400, "Fichier invalide");
+    if (dataUrl.length > MAX_FILE_DATA_URL_LENGTH) throw new HttpError(400, "Fichier trop volumineux (7 Mo max)");
+    const fileName = typeof v.fileName === "string" ? v.fileName.slice(0, 200) : "fichier";
+    const fileType = typeof v.fileType === "string" ? v.fileType.slice(0, 100) : "";
+    return { fileName, fileType, dataUrl };
   }
   return {};
 }

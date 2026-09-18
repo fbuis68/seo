@@ -1549,7 +1549,7 @@ async function sendQuestionnaireBulk(){
 // hôtel), cf. src/routes/questionnaire.ts.
 // ════════════════════════════════════════
 let QNP_LIST=[], QNP_CURRENT=null;
-const QN_TYPE_LABEL = { single:'Choix unique', multi:'Choix multiple', boolean:'Oui / Non', text:'Texte libre', rating:'Note / échelle' };
+const QN_TYPE_LABEL = { single:'Choix unique', multi:'Choix multiple', select:'Liste déroulante', boolean:'Oui / Non', checkbox:'Case à cocher', shorttext:'Texte court', text:'Texte long', number:'Nombre', rating:'Note / échelle', file:'Fichier à charger' };
 let QN_OPT_ROWS={}, QN_RATING={};
 let QN_EDITING_ID = null; // id de la question en cours d'édition (une seule à la fois)
 
@@ -1627,8 +1627,7 @@ function renderQnDetail(){
         <div style="font-size:13px;font-weight:600;margin-bottom:8px">Ajouter une question</div>
         <div class="form-grid">
           <div class="ff"><label>Type</label><select id="qn-new-type" onchange="qnRenderNewOptions()">
-            <option value="single">Choix unique</option><option value="multi">Choix multiple</option>
-            <option value="boolean">Oui / Non</option><option value="text">Texte libre</option><option value="rating">Note / échelle</option>
+            ${Object.keys(QN_TYPE_LABEL).map(t=>`<option value="${t}">${QN_TYPE_LABEL[t]}</option>`).join('')}
           </select></div>
           <div class="ff"><label>Obligatoire</label><select id="qn-new-required"><option value="0">Non</option><option value="1">Oui</option></select></div>
         </div>
@@ -1699,8 +1698,9 @@ function qnRenderQuestions(){
   wrap.innerHTML = qs.map((q,idx)=>{
     if(q.id === QN_EDITING_ID) return qnEditRowHtml(q);
     let optsSummary='';
-    if(q.type==='single'||q.type==='multi') optsSummary = (q.options||[]).map(o=>esc(o.label)).join(' · ');
+    if(q.type==='single'||q.type==='multi'||q.type==='select') optsSummary = (q.options||[]).map(o=>esc(o.label)).join(' · ');
     else if(q.type==='rating'){ const o=q.options||{}; optsSummary = 'Échelle '+(o.min!=null?o.min:1)+' à '+(o.max!=null?o.max:5); }
+    else if(q.type==='number'){ const o=q.options||{}; optsSummary = (o.min!=null||o.max!=null) ? ('Plage '+(o.min!=null?o.min:'—')+' à '+(o.max!=null?o.max:'—')) : ''; }
     return `<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;background:var(--bg2,#f5f3ee);border-radius:8px">
       <div style="flex:1">
         <div style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#aaa;font-weight:700">${QN_TYPE_LABEL[q.type]}${q.required?' · Obligatoire':''}</div>
@@ -1744,12 +1744,15 @@ function qnEditRowHtml(q){
 function qnEditQuestion(id){
   const q = (QNP_CURRENT.questions||[]).find(x=>x.id===id);
   if(!q) return;
-  if(q.type==='single' || q.type==='multi'){
+  if(q.type==='single' || q.type==='multi' || q.type==='select'){
     QN_OPT_ROWS[id] = (q.options||[]).map((o,i)=>({key:o.key||('o'+i), label:o.label||''}));
     while(QN_OPT_ROWS[id].length<2) QN_OPT_ROWS[id].push({key:'o'+QN_OPT_ROWS[id].length, label:''});
   } else if(q.type==='rating'){
     const o = q.options||{};
     QN_RATING[id] = {min:o.min!=null?o.min:1, max:o.max!=null?o.max:5, minLabel:o.minLabel||'', maxLabel:o.maxLabel||''};
+  } else if(q.type==='number'){
+    const o = q.options||{};
+    QN_RATING[id] = {min:o.min!=null?o.min:'', max:o.max!=null?o.max:'', minLabel:'', maxLabel:''};
   }
   QN_EDITING_ID = id;
   qnRenderQuestions();
@@ -1773,7 +1776,7 @@ async function qnSaveQuestion(id){
   const required = document.getElementById('qn-edit-required-'+id).value==='1';
   if(!label){ flash('Intitulé requis'); return; }
   const options = qnBuildOptions(id, type);
-  if((type==='single'||type==='multi') && (!options || options.length<2)){ flash('Ajoutez au moins deux options'); return; }
+  if((type==='single'||type==='multi'||type==='select') && (!options || options.length<2)){ flash('Ajoutez au moins deux options'); return; }
   const linkUrl = document.getElementById('qn-edit-linkUrl-'+id).value.trim();
   const linkLabel = document.getElementById('qn-edit-linkLabel-'+id).value.trim();
   if(linkUrl && !/^https?:\/\//i.test(linkUrl)){ flash('Le lien doit commencer par http:// ou https://'); return; }
@@ -1791,7 +1794,7 @@ async function qnSaveQuestion(id){
 }
 
 function qnBuildOptions(ctx, type){
-  if(type==='single'||type==='multi'){
+  if(type==='single'||type==='multi'||type==='select'){
     const rows=(QN_OPT_ROWS[ctx]||[]).filter(o=>o.label&&o.label.trim());
     return rows.map((o,i)=>({key:o.key||('o'+i), label:o.label.trim()}));
   }
@@ -1802,11 +1805,18 @@ function qnBuildOptions(ctx, type){
     if(r.maxLabel) out.maxLabel=r.maxLabel;
     return out;
   }
+  if(type==='number'){
+    const r=QN_RATING[ctx]||{};
+    const out={};
+    if(r.min!=null&&r.min!=='') out.min=+r.min;
+    if(r.max!=null&&r.max!=='') out.max=+r.max;
+    return out;
+  }
   return null;
 }
 
 function qnOptionsEditorHtml(ctx, type){
-  if(type==='single'||type==='multi'){
+  if(type==='single'||type==='multi'||type==='select'){
     const rows = QN_OPT_ROWS[ctx] || (QN_OPT_ROWS[ctx]=[{key:'o0',label:''},{key:'o1',label:''}]);
     return `<div class="ff"><label>Options de réponse</label>`
       + rows.map((o,i)=>`<div style="display:flex;gap:6px;margin-bottom:6px">
@@ -1822,6 +1832,13 @@ function qnOptionsEditorHtml(ctx, type){
       <div class="ff"><label>Max</label><input type="number" value="${r.max}" oninput="QN_RATING['${ctx}'].max=this.value"></div>
       <div class="ff"><label>Légende min (optionnel)</label><input value="${esc(r.minLabel||'')}" oninput="QN_RATING['${ctx}'].minLabel=this.value"></div>
       <div class="ff"><label>Légende max (optionnel)</label><input value="${esc(r.maxLabel||'')}" oninput="QN_RATING['${ctx}'].maxLabel=this.value"></div>
+    </div>`;
+  }
+  if(type==='number'){
+    const r = QN_RATING[ctx] || (QN_RATING[ctx]={min:'',max:'',minLabel:'',maxLabel:''});
+    return `<div class="form-grid">
+      <div class="ff"><label>Min (optionnel)</label><input type="number" value="${r.min}" oninput="QN_RATING['${ctx}'].min=this.value"></div>
+      <div class="ff"><label>Max (optionnel)</label><input type="number" value="${r.max}" oninput="QN_RATING['${ctx}'].max=this.value"></div>
     </div>`;
   }
   return '';
@@ -1848,7 +1865,7 @@ async function qnAddQuestion(){
   const required = document.getElementById('qn-new-required').value==='1';
   if(!label){ flash('Intitulé requis'); return; }
   const options = qnBuildOptions('new', type);
-  if((type==='single'||type==='multi') && (!options || options.length<2)){ flash('Ajoutez au moins deux options'); return; }
+  if((type==='single'||type==='multi'||type==='select') && (!options || options.length<2)){ flash('Ajoutez au moins deux options'); return; }
   const linkUrl = document.getElementById('qn-new-linkUrl').value.trim();
   const linkLabel = document.getElementById('qn-new-linkLabel').value.trim();
   if(linkUrl && !/^https?:\/\//i.test(linkUrl)){ flash('Le lien doit commencer par http:// ou https://'); return; }
@@ -1909,7 +1926,8 @@ async function qnFetchResults(){
       const q = qs.find(q=>q.id===a.questionId);
       const label = q ? q.label : a.questionId;
       const v = a.value||{};
-      const txt = v.choice || (v.choices||[]).join(', ') || v.text || (v.rating!=null?String(v.rating):'') || (v.value!=null?(v.value?'Oui':'Non'):'');
+      if(v.fileName) return `<div><b>${esc(label)} :</b> <a href="${esc(v.dataUrl||'')}" download="${esc(v.fileName)}">📎 ${esc(v.fileName)}</a></div>`;
+      const txt = v.choice || (v.choices||[]).join(', ') || v.text || (v.number!=null?String(v.number):'') || (v.rating!=null?String(v.rating):'') || (v.checked!=null?(v.checked?'Oui':'Non'):'') || (v.value!=null?(v.value?'Oui':'Non'):'');
       return `<div><b>${esc(label)} :</b> ${esc(txt)}${v.note?' — '+esc(v.note):''}</div>`;
     }).join('') || '<span style="color:#aaa">—</span>';
     return `<tr><td>${esc(s.targetName)}</td><td style="font-size:12px">${s.sentAt?new Date(s.sentAt).toLocaleDateString('fr-FR'):'—'}</td><td style="font-size:12px">${s.completedAt?new Date(s.completedAt).toLocaleDateString('fr-FR'):'<span style="color:#aaa">En attente</span>'}</td><td style="font-size:12px">${answersSummary}</td></tr>`;
@@ -2261,7 +2279,7 @@ async function loadQuestionnaireSendsCard(c){
     const sentStr = s.sentAt ? new Date(s.sentAt).toLocaleDateString('fr-FR') : '';
     const rowsHtml = s.answers.map(a=>{
       const v = a.value||{};
-      let txt = v.choice ? (interestLabel[v.choice]||v.choice) : (v.choices||[]).map(k=>interestLabel[k]||k).join(', ') || v.text || (v.rating!=null?String(v.rating):'') || (v.value!=null?(v.value?'Oui':'Non'):'');
+      let txt = v.fileName ? ('📎 '+v.fileName) : v.choice ? (interestLabel[v.choice]||v.choice) : (v.choices||[]).map(k=>interestLabel[k]||k).join(', ') || v.text || (v.number!=null?String(v.number):'') || (v.rating!=null?String(v.rating):'') || (v.checked!=null?(v.checked?'Oui':'Non'):'') || (v.value!=null?(v.value?'Oui':'Non'):'');
       const cls = v.choice ? (interestClass[v.choice]||'') : '';
       return `<div class="gc-row"><span class="gc-rl">${esc(a.questionLabel)}</span><span class="gc-rv"><span class="tag ${cls}" style="font-size:11px">${esc(txt)}</span>${v.note?` <span style="color:#aaa;font-size:11px">— ${esc(v.note)}</span>`:''}</span></div>`;
     }).join('');

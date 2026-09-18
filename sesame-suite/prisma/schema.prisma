@@ -2088,12 +2088,14 @@ model QuestionnaireQuestion {
   questionnaire   Questionnaire @relation(fields: [questionnaireId], references: [id], onDelete: Cascade)
 
   order    Int
-  type     String // single | multi | boolean | text | rating
+  type     String // single | multi | boolean | text | shorttext | number | checkbox | select | rating | file
   label    String
   required Boolean @default(false)
 
-  // single/multi : [{key,label}, …] — boolean/text : ignoré — rating :
-  // {min,max,minLabel?,maxLabel?} (défaut 1-5 si absent).
+  // single/multi/select : [{key,label}, …] (select = comme single, liste
+  // déroulante plutôt que boutons) — boolean/text/shorttext/checkbox/file :
+  // ignoré — rating/number : {min,max,minLabel?,maxLabel?} (rating défaut
+  // 1-5 si absent, number sans borne si absent).
   options Json?
 
   // Lien cliquable optionnel affiché sous la question (08/09/2026) — ex :
@@ -2144,9 +2146,13 @@ model QuestionnaireSend {
 // dont la forme dépend du type de question :
 //   single  → {choice:"key", note?:"…"}
 //   multi   → {choices:["key1","key2"], note?:"…"}
-//   boolean → {value:true|false}
-//   text    → {text:"…"}
-//   rating  → {rating:4}
+//   boolean   → {value:true|false}
+//   text/shorttext → {text:"…"}
+//   number    → {number:4.2}
+//   checkbox  → {checked:true|false}
+//   select    → {choice:"key", note?:"…"} (comme single)
+//   file      → {fileName:"…", fileType:"…", dataUrl:"data:…;base64,…"}
+//   rating    → {rating:4}
 model QuestionnaireAnswer {
   id         String                @id @default(cuid())
   sendId     String

@@ -103,6 +103,25 @@ function questionHtml(q){
       + '</div>';
   } else if(q.type === 'text'){
     body = '<textarea class="q-text" rows="3" placeholder="Votre réponse…" oninput="setText(\''+q.id+'\',this.value)">'+esc(ans(q.id).text||'')+'</textarea>';
+  } else if(q.type === 'shorttext'){
+    body = '<input class="q-text" type="text" maxlength="300" placeholder="Votre réponse…" oninput="setText(\''+q.id+'\',this.value)" value="'+esc(ans(q.id).text||'')+'">';
+  } else if(q.type === 'number'){
+    const opts = q.options || {};
+    body = '<input class="q-text" type="number"'+(opts.min!=null?' min="'+opts.min+'"':'')+(opts.max!=null?' max="'+opts.max+'"':'')+' placeholder="Votre réponse…" oninput="setNumber(\''+q.id+'\',this.value)" value="'+(ans(q.id).number!=null?ans(q.id).number:'')+'">';
+  } else if(q.type === 'checkbox'){
+    const checked = ans(q.id).checked===true;
+    body = '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px"><input type="checkbox" style="width:17px;height:17px" '+(checked?'checked':'')+' onchange="setChecked(\''+q.id+'\',this.checked)"> Cocher pour confirmer</label>';
+  } else if(q.type === 'select'){
+    const opts = q.options || [];
+    const cur = ans(q.id).choice || '';
+    body = '<select class="q-text" onchange="pickSingle(\''+q.id+'\',this.value)"><option value=""'+(cur===''?' selected':'')+'>— Choisir —</option>'
+      + opts.map(function(o){ return '<option value="'+esc(o.key)+'"'+(cur===o.key?' selected':'')+'>'+esc(o.label)+'</option>'; }).join('')
+      + '</select>';
+  } else if(q.type === 'file'){
+    const cur = ans(q.id);
+    body = '<input type="file" onchange="handleFile(event,\''+q.id+'\')">'
+      + (cur.fileName ? '<div style="font-size:12px;color:var(--mu);margin-top:6px">📎 '+esc(cur.fileName)+'</div>' : '')
+      + '<div id="file-err-'+q.id+'" style="color:#a32d2d;font-size:12px;margin-top:4px;display:none"></div>';
   } else if(q.type === 'rating'){
     const opts = q.options || {};
     const min = opts.min!=null ? opts.min : 1;
@@ -142,8 +161,37 @@ function toggleMulti(id, key){
 }
 function setBool(id, v){ ans(id).value = v; render(); }
 function setText(id, v){ ans(id).text = v; }
+function setNumber(id, v){ ans(id).number = v===''?undefined:parseFloat(v); }
+function setChecked(id, v){ ans(id).checked = v; }
 function setRating(id, v){ ans(id).rating = v; render(); }
 function setNote(id, v){ ans(id).note = v; }
+
+// 7 Mo, cohérent avec le plafond serveur (MAX_FILE_DATA_URL_LENGTH,
+// routes/questionnaire.ts) — vérifié ici aussi pour ne pas faire attendre
+// un FileReader + une requête pour un fichier de toute façon rejeté.
+const FILE_MAX_BYTES = 7 * 1024 * 1024;
+function handleFile(evt, id){
+  const errEl = document.getElementById('file-err-'+id);
+  const file = evt.target.files && evt.target.files[0];
+  if(errEl) errEl.style.display='none';
+  if(!file) return;
+  if(file.size > FILE_MAX_BYTES){
+    if(errEl){ errEl.textContent = 'Fichier trop volumineux (7 Mo max)'; errEl.style.display='block'; }
+    evt.target.value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(){
+    ans(id).dataUrl = reader.result;
+    ans(id).fileName = file.name;
+    ans(id).fileType = file.type;
+    render();
+  };
+  reader.onerror = function(){
+    if(errEl){ errEl.textContent = 'Lecture du fichier impossible'; errEl.style.display='block'; }
+  };
+  reader.readAsDataURL(file);
+}
 
 async function submitAnswers(){
   const errEl = document.getElementById('err');
