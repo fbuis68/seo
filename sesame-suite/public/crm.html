@@ -1847,8 +1847,13 @@ function qnOptionsEditorHtml(ctx, type){
 function qnAddOption(ctx, type){ const rows=QN_OPT_ROWS[ctx]||(QN_OPT_ROWS[ctx]=[]); rows.push({key:'o'+rows.length,label:''}); qnRerenderOptionsEditor(ctx, type); }
 function qnRemoveOption(ctx, idx, type){ QN_OPT_ROWS[ctx].splice(idx,1); qnRerenderOptionsEditor(ctx, type); }
 function qnRerenderOptionsEditor(ctx, type){
-  if(ctx==='new'){ qnRenderNewOptions(); return; }
-  const el = document.getElementById('qn-edit-options-'+ctx);
+  // ctx='new' passait par qnRenderNewOptions(), qui commence par
+  // "delete QN_OPT_ROWS['new']" — appelé ici (ajout/suppression d'une
+  // option), ça effaçait les intitulés déjà saisis à chaque clic sur
+  // "+ Ajouter une option" au lieu de simplement réafficher l'état
+  // courant. Ce reset complet reste voulu, mais uniquement quand le TYPE
+  // change (cf. <select onchange="qnRenderNewOptions()">), pas ici.
+  const el = document.getElementById(ctx==='new' ? 'qn-new-options' : 'qn-edit-options-'+ctx);
   if(el) el.innerHTML = qnOptionsEditorHtml(ctx, type);
 }
 
