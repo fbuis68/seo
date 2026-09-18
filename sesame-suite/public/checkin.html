@@ -3160,6 +3160,11 @@ var ESP_TOKEN = null;
  * affiché, jamais un écran d'erreur bloquant.
  */
 var AUTOLOGIN_TOKEN = new URLSearchParams(window.location.search).get('autologinToken') || '';
+// dest=checkin (cf. buildAutologinCheckinUrl, lib/templateVars.ts) : amène
+// sur le processus de check-in ("Séjour", écran déjà affiché par défaut)
+// plutôt que sur "Mon espace client" — utile pour une invitation à
+// check-in avant l'arrivée, quand "Mon espace" n'a pas encore de sens.
+var AUTOLOGIN_DEST = new URLSearchParams(window.location.search).get('dest') || '';
 async function espTryAutologin(){
   if(!AUTOLOGIN_TOKEN) return;
   try{
@@ -3170,7 +3175,7 @@ async function espTryAutologin(){
     if(!r.ok) return;
     var data = await r.json();
     await espApplyLogin(data);
-    gotoScr('infos');
+    gotoScr(AUTOLOGIN_DEST==='checkin' ? 'sejour' : 'infos');
     toast(t('toast_welcome') + ' ' + data.booking.personFirstname + ' !');
   }catch(e){ /* lien invalide/expiré — formulaire de connexion manuel reste disponible */ }
 }

@@ -88,7 +88,20 @@ export function buildAutologinUrl(b: { id: string; entityId: string; personEmail
   return `${config.guestBaseUrl}/checkin.html?entityCode=${encodeURIComponent(entityCode)}&autologinToken=${autologinToken(b)}`;
 }
 
-/** prenom/nom/code déjà utilisés partout — hotel/adresseHotel/telephoneHotel/chambre/dateArrivee/dateDepart/nuits/lienAutologin sont les nouvelles variables. */
+/**
+ * Même lien que buildAutologinUrl, mais qui amène directement sur l'écran
+ * "Séjour" (le processus de check-in — étapes room/taxe/kyc/eco/boutique/
+ * rewards) plutôt que sur "Mon espace client" (verrouillé tant que le
+ * check-in n'est pas terminé, cf. renderEspace/S.checkinDone dans
+ * checkin.html) — utile pour une invitation à check-in avant l'arrivée,
+ * quand "Mon espace" n'a justement pas encore de sens pour ce client.
+ */
+export function buildAutologinCheckinUrl(b: { id: string; entityId: string; personEmail?: string | null; endDate: Date }, entityCode: string): string {
+  const url = buildAutologinUrl(b, entityCode);
+  return url ? `${url}&dest=checkin` : "";
+}
+
+/** prenom/nom/code déjà utilisés partout — hotel/adresseHotel/telephoneHotel/chambre/dateArrivee/dateDepart/nuits/lienAutologin/lienAutologinCheckin sont les nouvelles variables. */
 export function bookingTemplateVars(b: BookingLike, hotel: HotelInfo): Record<string, string> {
   const nights = Math.max(1, Math.round((b.endDate.getTime() - b.startDate.getTime()) / 86400000));
   return {
@@ -105,6 +118,7 @@ export function bookingTemplateVars(b: BookingLike, hotel: HotelInfo): Record<st
     dateDepart: formatDateFr(b.endDate),
     nuits: String(nights),
     lienAutologin: buildAutologinUrl(b, hotel.entityCode),
+    lienAutologinCheckin: buildAutologinCheckinUrl(b, hotel.entityCode),
   };
 }
 

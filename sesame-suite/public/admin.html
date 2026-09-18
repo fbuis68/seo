@@ -8687,6 +8687,7 @@ var EML_TPL_VARS = [
   {key:'dateDepart', desc:'Date de départ du séjour (déclencheurs réservation)'},
   {key:'nuits', desc:'Nombre de nuits du séjour (déclencheurs réservation)'},
   {key:'lienAutologin', desc:'Lien de connexion directe à l\'espace client (déclencheurs réservation)'},
+  {key:'lienAutologinCheckin', desc:'Lien de connexion directe qui amène sur le processus de check-in, plutôt que sur l\'espace client (déclencheurs réservation)'},
   {key:'numeroCommande', desc:'Numéro de la commande (déclencheurs commande room service/boutique)'},
   {key:'articles', desc:'Liste des articles commandés (déclencheurs commande room service/boutique)'},
   {key:'total', desc:'Montant total de la commande (room service / boutique)'},
@@ -14483,6 +14484,14 @@ async function resaOpenDetail(code){
     + '<div style="font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.03em;margin-bottom:10px">Connexion automatique — Espace client</div>'
     + '<div id="resa-detail-autologin-body"><div class="spin" style="margin:0 auto"></div></div>'
     + '</div>';
+  // Variante du lien ci-dessus qui amène directement sur le processus de
+  // check-in ("Séjour") plutôt que sur "Mon espace" — utile pour une
+  // invitation à check-in avant l'arrivée. Chargé à part, cf.
+  // resaLoadAutologinCheckinQr.
+  html += '<div id="resa-detail-autologin-checkin" style="margin-top:12px;border:1px solid var(--bdr);border-radius:var(--rs);padding:16px;background:var(--bg);text-align:center">'
+    + '<div style="font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.03em;margin-bottom:10px">Connexion automatique — Processus de check-in</div>'
+    + '<div id="resa-detail-autologin-checkin-body"><div class="spin" style="margin:0 auto"></div></div>'
+    + '</div>';
   // Invités (Pass) — chargés à part, cf. resaLoadPasses appelé après avoir
   // posé ce placeholder dans le DOM (une réservation Sesame peut associer
   // PLUSIEURS Pass, un par personne invitée — "invitations").
@@ -14534,6 +14543,7 @@ async function resaOpenDetail(code){
   await resaLoadPasses(b.code);
   resaLoadKey(b.code, b.facilityCode);
   resaLoadAutologinQr(b.code);
+  resaLoadAutologinCheckinQr(b.code);
 }
 
 /** Liste des codes d'accès distincts rattachés à une réservation — union du
@@ -14646,6 +14656,27 @@ async function resaLoadAutologinQr(code){
     if(!r.ok){ body.innerHTML = '<div style="font-size:12px;color:#b45309">⚠ '+esc(data.error||'Lien indisponible')+'</div>'; return; }
     body.innerHTML = '<img src="'+data.qrImage+'" alt="QR connexion automatique" style="width:160px;height:160px;border-radius:10px;border:1px solid var(--bdr);display:block;margin:0 auto">'
       + '<div style="font-size:11px;color:var(--mu);margin-top:8px">Scanné ou cliqué, ce lien connecte directement le client à son espace, sans ressaisir email/code.</div>'
+      + '<div style="display:flex;gap:6px;align-items:center;margin-top:8px">'
+      + '<input type="text" value="'+esc(data.url)+'" readonly style="flex:1;font-family:monospace;font-size:11px" onclick="this.select()">'
+      + '</div>';
+  }catch(e){
+    body.innerHTML = '<div style="font-size:12px;color:var(--mu)">Lien indisponible</div>';
+  }
+}
+/**
+ * Variante de resaLoadAutologinQr ci-dessus — GET /wa/booking/autologinCheckinQr,
+ * lien qui amène directement sur le processus de check-in ("Séjour") plutôt
+ * que sur "Mon espace client".
+ */
+async function resaLoadAutologinCheckinQr(code){
+  var body = document.getElementById('resa-detail-autologin-checkin-body');
+  if(!body) return;
+  try{
+    var r = await adminFetch('/wa/booking/autologinCheckinQr?code='+encodeURIComponent(code));
+    var data = await r.json();
+    if(!r.ok){ body.innerHTML = '<div style="font-size:12px;color:#b45309">⚠ '+esc(data.error||'Lien indisponible')+'</div>'; return; }
+    body.innerHTML = '<img src="'+data.qrImage+'" alt="QR connexion automatique — check-in" style="width:160px;height:160px;border-radius:10px;border:1px solid var(--bdr);display:block;margin:0 auto">'
+      + '<div style="font-size:11px;color:var(--mu);margin-top:8px">Scanné ou cliqué, ce lien connecte directement le client et l\'amène sur le processus de check-in, sans ressaisir email/code.</div>'
       + '<div style="display:flex;gap:6px;align-items:center;margin-top:8px">'
       + '<input type="text" value="'+esc(data.url)+'" readonly style="flex:1;font-family:monospace;font-size:11px" onclick="this.select()">'
       + '</div>';

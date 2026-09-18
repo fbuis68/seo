@@ -5,7 +5,7 @@ import { resolveEntity } from "../lib/entity";
 import { normaliseBooking } from "../lib/normalize";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { fireTrigger } from "../lib/automation";
-import { bookingTemplateVars, hotelContactInfo, buildAutologinUrl } from "../lib/templateVars";
+import { bookingTemplateVars, hotelContactInfo, buildAutologinUrl, buildAutologinCheckinUrl } from "../lib/templateVars";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { encodeNfc, listNfcDevices, fetchAccessQr, openDoor, pushBookingUpdate, adoptBookingIntoSource, BookingSourceError } from "../lib/bookingSource";
 import { sendEmailRaw } from "../lib/email";
@@ -558,6 +558,30 @@ bookingRouter.get(
     if (!booking) throw new HttpError(404, "Réservation introuvable");
 
     const url = buildAutologinUrl(booking, entity.code);
+    if (!url) throw new HttpError(500, "Impossible de générer le lien");
+    const qrImage = await QRCode.toDataURL(url, { margin: 1, width: 320 });
+    res.json({ url, qrImage });
+  })
+);
+
+/**
+ * GET /wa/booking/autologinCheckinQr?code=... — même principe que
+ * GET /wa/booking/autologinQr ci-dessus, mais le lien amène directement sur
+ * le processus de check-in ("Séjour") plutôt que sur "Mon espace client" —
+ * utile pour une invitation à check-in avant l'arrivée (cf. buildAutologinCheckinUrl).
+ */
+bookingRouter.get(
+  "/booking/autologinCheckinQr",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const code = ((req.query.code as string) || "").trim();
+    if (!code) throw new HttpError(400, "code requis");
+
+    const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code } } });
+    if (!booking) throw new HttpError(404, "Réservation introuvable");
+
+    const url = buildAutologinCheckinUrl(booking, entity.code);
     if (!url) throw new HttpError(500, "Impossible de générer le lien");
     const qrImage = await QRCode.toDataURL(url, { margin: 1, width: 320 });
     res.json({ url, qrImage });
