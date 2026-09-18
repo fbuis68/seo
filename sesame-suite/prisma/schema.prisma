@@ -2713,6 +2713,14 @@ model AccSupplier {
   iban        String?
   bic         String?
 
+  // Mode de règlement habituel de ce fournisseur — virement | prelevement |
+  // cheque | carte | especes | autre. "prelevement" (prélèvement bancaire
+  // automatique) fait passer ses factures directement en PAID dès la
+  // comptabilisation (cf. validateEntry, lib/accEntryService.ts) : le
+  // règlement se fait tout seul, inutile de le pointer manuellement comme
+  // pour un virement à faire.
+  paymentMethod String?
+
   // Compte comptable fournisseur par défaut (ex: sous-compte auxiliaire
   // 401xxx) — assigné à la première facture rapprochée si absent, cf.
   // lib/accRulesEngine.ts.

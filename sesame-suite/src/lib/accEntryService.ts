@@ -123,7 +123,16 @@ export async function validateEntry(entryId: string, userId: string | null): Pro
   });
 
   if (entry.invoice) {
-    await prisma.accInvoice.update({ where: { id: entry.invoice.id }, data: { status: "ACCOUNTED" } });
+    // Fournisseur réglé par prélèvement automatique (AccSupplier.paymentMethod)
+    // : le règlement se fait tout seul dès la comptabilisation, inutile de
+    // repasser par la bascule manuelle "Marquer payée" comme pour un
+    // virement à faire — la facture part directement en PAID.
+    let status: "ACCOUNTED" | "PAID" = "ACCOUNTED";
+    if (entry.invoice.supplierId) {
+      const supplier = await prisma.accSupplier.findUnique({ where: { id: entry.invoice.supplierId } });
+      if (supplier?.paymentMethod === "prelevement") status = "PAID";
+    }
+    await prisma.accInvoice.update({ where: { id: entry.invoice.id }, data: { status } });
   }
   return updated;
 }

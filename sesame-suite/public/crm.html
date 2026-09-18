@@ -7303,6 +7303,7 @@ function renderAccDashboardTiles(){
 }
 
 const ACC_TABS=[{k:'inbox',label:'Factures'},{k:'suppliers',label:'Fournisseurs'},{k:'accounts',label:'Plan comptable'},{k:'entries',label:'Écritures'},{k:'rules',label:'Règles'},{k:'email',label:'Import email'},{k:'settings',label:'Réglages'}];
+const PAYMENT_METHOD_LABEL = {'':'—', virement:'Virement', prelevement:'Prélèvement', cheque:'Chèque', carte:'Carte bancaire', especes:'Espèces', autre:'Autre'};
 
 /**
  * Rendu du "cadre" du panneau (tuiles + carte + barre d'onglets) — appelé à
@@ -7965,13 +7966,14 @@ function renderAccSuppliers(){
       <td style="font-size:11px;color:#888">${esc(s.siret||'—')}</td>
       <td style="font-size:11px;color:#888">${esc(s.iban||'—')}</td>
       <td>${esc(s.email||'—')}</td>
+      <td style="font-size:12px">${s.paymentMethod?PAYMENT_METHOD_LABEL[s.paymentMethod]:'—'}</td>
       <td style="white-space:nowrap"><button class="ta-btn" onclick="openAccSupplierModal('${s.id}')" title="Modifier">✎</button></td>
     </tr>`).join('');
   el.innerHTML = `
     <div class="list-toolbar"><button class="btn btn-primary btn-sm" onclick="openAccSupplierModal(null)">+ Fournisseur</button><span class="count-lbl">${ACC_SUPPLIERS.length} fournisseur(s)</span></div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th>Nom</th><th style="width:140px">SIRET</th><th style="width:200px">IBAN</th><th>Email</th><th style="width:50px"></th></tr></thead>
-      <tbody>${rows||'<tr><td colspan="5" class="log-empty">Aucun fournisseur — créé automatiquement au premier dépôt de facture avec un SIRET/SIREN/TVA reconnu.</td></tr>'}</tbody>
+      <thead><tr><th>Nom</th><th style="width:140px">SIRET</th><th style="width:200px">IBAN</th><th>Email</th><th style="width:110px">Règlement</th><th style="width:50px"></th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="6" class="log-empty">Aucun fournisseur — créé automatiquement au premier dépôt de facture avec un SIRET/SIREN/TVA reconnu.</td></tr>'}</tbody>
     </table></div>`;
 }
 
@@ -8025,7 +8027,7 @@ function pickSupEntreprise(i){
 }
 
 function openAccSupplierModal(id){
-  const s = id ? ACC_SUPPLIERS.find(x=>x.id===id) : {id:null,name:'',siren:'',siret:'',vatNumber:'',email:'',phone:'',addressLine:'',postalCode:'',city:'',country:'FR',iban:'',bic:'',paymentTermDays:null,paymentTermMode:null};
+  const s = id ? ACC_SUPPLIERS.find(x=>x.id===id) : {id:null,name:'',siren:'',siret:'',vatNumber:'',email:'',phone:'',addressLine:'',postalCode:'',city:'',country:'FR',iban:'',bic:'',paymentTermDays:null,paymentTermMode:null,paymentMethod:null};
   if(!s) return;
   document.getElementById('modal-ct').innerHTML = `
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
@@ -8053,6 +8055,11 @@ function openAccSupplierModal(id){
         <div class="ff"><label>Code postal</label><input id="sup-postalCode" value="${esc(s.postalCode)}"></div>
         <div class="ff"><label>Ville</label><input id="sup-city" value="${esc(s.city)}"></div>
       </div>
+      <div class="modal-section">Mode de règlement</div>
+      <div class="ff"><select id="sup-paymentMethod">
+        ${Object.keys(PAYMENT_METHOD_LABEL).map(k=>`<option value="${k}" ${(s.paymentMethod||'')===k?'selected':''}>${PAYMENT_METHOD_LABEL[k]}</option>`).join('')}
+      </select></div>
+      <div style="font-size:11px;color:var(--mu);margin-top:2px">"Prélèvement" fait passer automatiquement les factures de ce fournisseur en "Payée" dès leur comptabilisation — le règlement se fait tout seul, pas besoin de le pointer à la main.</div>
       <div class="modal-section">Délai de paiement (calcul de l'échéance)</div>
       <div class="form-grid">
         <div class="ff"><label>Nombre de jours</label><input type="number" id="sup-paymentTermDays" value="${s.paymentTermDays!=null?s.paymentTermDays:''}" placeholder="vide = réglage général"></div>
@@ -8073,7 +8080,7 @@ function openAccSupplierModal(id){
 
 async function saveAccSupplier(id){
   const g=i=>(document.getElementById(i)||{value:''}).value.trim();
-  const body = {name:g('sup-name'),siren:g('sup-siren'),siret:g('sup-siret'),vatNumber:g('sup-vatNumber'),email:g('sup-email'),phone:g('sup-phone'),country:g('sup-country'),iban:g('sup-iban'),bic:g('sup-bic'),addressLine:g('sup-addressLine'),postalCode:g('sup-postalCode'),city:g('sup-city'),paymentTermDays:g('sup-paymentTermDays')===''?null:+g('sup-paymentTermDays'),paymentTermMode:g('sup-paymentTermMode')||null};
+  const body = {name:g('sup-name'),siren:g('sup-siren'),siret:g('sup-siret'),vatNumber:g('sup-vatNumber'),email:g('sup-email'),phone:g('sup-phone'),country:g('sup-country'),iban:g('sup-iban'),bic:g('sup-bic'),addressLine:g('sup-addressLine'),postalCode:g('sup-postalCode'),city:g('sup-city'),paymentTermDays:g('sup-paymentTermDays')===''?null:+g('sup-paymentTermDays'),paymentTermMode:g('sup-paymentTermMode')||null,paymentMethod:g('sup-paymentMethod')||null};
   if(!body.name){ flash('Le nom est requis'); return; }
   try{
     const r = await apiFetch(id?('/wa/acc/suppliers/'+id+'?scope=crm'):'/wa/acc/suppliers?scope=crm', {method:id?'PUT':'POST', body:JSON.stringify(body)});

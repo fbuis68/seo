@@ -458,14 +458,17 @@ accountingRouter.get(
   })
 );
 
+const PAYMENT_METHODS = new Set(["virement", "prelevement", "cheque", "carte", "especes", "autre"]);
+
 accountingRouter.post(
   "/acc/suppliers",
   requireAdmin,
   asyncHandler(async (req, res) => {
     const entityId = await resolveScope(req);
-    const b = req.body as { name?: string; paymentTermMode?: string };
+    const b = req.body as { name?: string; paymentTermMode?: string; paymentMethod?: string };
     if (!b.name) throw new HttpError(400, "name requis");
     if (b.paymentTermMode && b.paymentTermMode !== "net" && b.paymentTermMode !== "eom") throw new HttpError(400, "Mode de calcul invalide");
+    if (b.paymentMethod && !PAYMENT_METHODS.has(b.paymentMethod)) throw new HttpError(400, "Mode de règlement invalide");
     const created = await prisma.accSupplier.create({
       data: {
         entityId,
@@ -484,6 +487,7 @@ accountingRouter.post(
         defaultAccountId: (req.body.defaultAccountId as string) || undefined,
         paymentTermDays: req.body.paymentTermDays != null && req.body.paymentTermDays !== "" ? Number(req.body.paymentTermDays) : undefined,
         paymentTermMode: b.paymentTermMode || undefined,
+        paymentMethod: b.paymentMethod || undefined,
       },
     });
     await recordAuditLog({ entityId, userId: actorId(req), action: "supplier_created", targetType: "AccSupplier", targetId: created.id, newValue: { name: created.name }, ip: req.ip });
@@ -511,6 +515,11 @@ accountingRouter.put(
       const v = req.body.paymentTermMode as string | null;
       if (v && v !== "net" && v !== "eom") throw new HttpError(400, "Mode de calcul invalide");
       data.paymentTermMode = v || null;
+    }
+    if ("paymentMethod" in req.body) {
+      const v = req.body.paymentMethod as string | null;
+      if (v && !PAYMENT_METHODS.has(v)) throw new HttpError(400, "Mode de règlement invalide");
+      data.paymentMethod = v || null;
     }
     const updated = await prisma.accSupplier.update({ where: { id: existing.id }, data });
     await recordAuditLog({ entityId, userId: actorId(req), action: "supplier_updated", targetType: "AccSupplier", targetId: existing.id, oldValue: existing, newValue: data, ip: req.ip });
