@@ -6734,18 +6734,48 @@ async function ensureTemplatesLoaded(){
   MSG_TEMPLATES_LOADED=true;
 }
 
+// Contacts additionnels de la fiche en cours d'envoi (cf. crmContact —
+// "plusieurs contacts par fiche") — sans ça, le champ Destinataire ne
+// proposait que CrmProspect.email/tel, resté vide sur une fiche dont
+// l'email n'est renseigné QUE sur un contact secondaire (ex. DG, compta…).
+var SEND_MODAL_CONTACTS = [];
+function sendModalDefaultTo(c, chan){
+  if(chan==='email'){
+    if(c.email) return c.email;
+    var withEmail = SEND_MODAL_CONTACTS.find(function(ct){return ct.email;});
+    return withEmail ? withEmail.email : '';
+  }
+  if(c.tel) return c.tel;
+  var withPhone = SEND_MODAL_CONTACTS.find(function(ct){return ct.phone;});
+  return withPhone ? withPhone.phone : '';
+}
+function sendModalDatalistOptions(c){
+  var opts=[];
+  if(c.email) opts.push({value:c.email, label:'Référent — '+c.nom});
+  if(c.tel) opts.push({value:c.tel, label:'Référent — '+c.nom});
+  SEND_MODAL_CONTACTS.forEach(function(ct){
+    if(ct.email) opts.push({value:ct.email, label:ct.name+(ct.fonction?' ('+ct.fonction+')':'')});
+    if(ct.phone) opts.push({value:ct.phone, label:ct.name+(ct.fonction?' ('+ct.fonction+')':'')});
+  });
+  return opts.map(function(o){return '<option value="'+esc(o.value)+'">'+esc(o.label)+'</option>';}).join('');
+}
+
 async function openSendEmailModal(id){
   const c=clients.find(c=>c.id===id);if(!c)return;
   await ensureTemplatesLoaded();
   const available=['email','sms','whatsapp'].filter(ch=>MSG_TEMPLATES.some(t=>t.channel===ch));
   if(!available.length){flash('Aucun modèle disponible — créez-en un depuis "Canaux"');return;}
   const chan=available.includes('email')?'email':available[0];
+  try{
+    const cr = await apiFetch('/wa/crmContact/list?prospectId='+encodeURIComponent(id));
+    SEND_MODAL_CONTACTS = cr.ok ? await cr.json() : [];
+  }catch(e){ SEND_MODAL_CONTACTS = []; }
   document.getElementById('modal-ct').innerHTML=`
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box" style="max-width:480px">
       <div class="modal-head"><div style="font-size:16px;font-weight:500">Envoyer un message à ${esc(c.nom)}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
       <div class="ff"><label>Canal</label><select id="send-channel" onchange="renderSendTplOptions('${id}')">${available.map(ch=>`<option value="${ch}" ${ch===chan?'selected':''}>${CHANNEL_LABEL[ch]}</option>`).join('')}</select></div>
-      <div class="ff" style="margin-top:8px"><label>Destinataire</label><input id="send-to" value="${esc(chan==='email'?(c.email||''):(c.tel||''))}"></div>
+      <div class="ff" style="margin-top:8px"><label>Destinataire</label><input id="send-to" list="send-to-datalist" value="${esc(sendModalDefaultTo(c,chan))}"><datalist id="send-to-datalist">${sendModalDatalistOptions(c)}</datalist></div>
       <div class="ff" style="margin-top:8px"><label>Modèle</label><select id="send-tpl"></select></div>
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="sendClientEmail('${id}')">Envoyer</button>
@@ -6760,7 +6790,7 @@ function renderSendTplOptions(id){
   const c=clients.find(c=>c.id===id);
   const chan=(document.getElementById('send-channel')||{value:'email'}).value;
   const toInp=document.getElementById('send-to');
-  if(toInp&&c) toInp.value = chan==='email' ? (c.email||'') : (c.tel||'');
+  if(toInp&&c) toInp.value = sendModalDefaultTo(c, chan);
   const sel=document.getElementById('send-tpl');
   if(!sel)return;
   const opts=MSG_TEMPLATES.filter(t=>t.channel===chan);
