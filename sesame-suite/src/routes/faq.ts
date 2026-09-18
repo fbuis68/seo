@@ -84,6 +84,39 @@ faqRouter.get(
   })
 );
 
+interface CreateBody {
+  title?: string;
+  question?: string;
+  shortAnswer?: string;
+}
+
+/**
+ * POST /wa/faq/create — création manuelle, sans passer par un ticket (cf.
+ * generateFromTicket ci-dessous pour la génération IA). Brouillon minimal :
+ * l'opérateur complète le reste (variantes, réponse détaillée, procédure…)
+ * dans l'éditeur juste après, comme le scaffold vide d'un questionnaire/
+ * d'une affaire.
+ */
+faqRouter.post(
+  "/faq/create",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const b = req.body as CreateBody;
+    const faq = await prisma.faq.create({
+      data: {
+        title: (b.title || "").trim() || "Nouvelle FAQ",
+        question: (b.question || "").trim(),
+        shortAnswer: (b.shortAnswer || "").trim(),
+        detailedAnswer: "",
+        status: "draft",
+        createdById: req.admin?.adminId || null,
+      },
+    });
+    res.status(201).json(shapeFaq({ ...faq, sourceTicket: null }));
+  })
+);
+
 /**
  * POST /wa/faq/generateFromTicket { ticketId } — analyse le fil complet
  * d'un ticket résolu et crée un brouillon de FAQ. Fonctionne quel que soit
@@ -198,6 +231,24 @@ faqRouter.post(
     if (!existing) throw new HttpError(404, "FAQ introuvable");
     const updated = await prisma.faq.update({ where: { id }, data: { status: "draft" } });
     res.json(shapeFaq({ ...updated, sourceTicket: null }));
+  })
+);
+
+/**
+ * GET /wa/faq/public — sans authentification, pour la page embarquable
+ * (public/faq-embed.html) intégrée en <iframe> sur un site externe. Ne
+ * renvoie QUE les FAQ publiées, et seulement les champs destinés au public
+ * — jamais keywords/tags/createdBy/sourceTicket (informations internes).
+ */
+faqRouter.get(
+  "/faq/public",
+  asyncHandler(async (_req, res) => {
+    const rows = await prisma.faq.findMany({
+      where: { status: "published" },
+      orderBy: { publishedAt: "desc" },
+      select: { id: true, title: true, question: true, shortAnswer: true, detailedAnswer: true, procedure: true, category: true },
+    });
+    res.json(rows);
   })
 );
 

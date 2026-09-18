@@ -5892,11 +5892,43 @@ function renderFaqList(){
         <option value="draft" ${FAQ_STATUS_FILTER==='draft'?'selected':''}>Brouillons</option>
         <option value="published" ${FAQ_STATUS_FILTER==='published'?'selected':''}>Publiées</option>
       </select>
+      <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="createFaqManual()">+ Nouvelle FAQ</button>
+      <button class="btn btn-ghost btn-sm" onclick="openFaqEmbedModal()"><i class="ti ti-code"></i> Lien à intégrer</button>
     </div>
     <div class="tbl-wrap"><table>
     <thead><tr><th>FAQ</th><th style="width:100px">Statut</th><th style="width:120px">Module</th><th style="width:120px">Catégorie</th><th style="width:100px">Ticket source</th><th style="width:100px">Mise à jour</th></tr></thead>
     <tbody>${rows.length?rows:'<tr><td colspan="6" class="log-empty">Aucune FAQ — générez-en une depuis un ticket résolu (bouton "Créer une FAQ à partir de ce ticket").</td></tr>'}</tbody>
   </table></div>`;
+}
+
+/** Scaffold vide (question/réponse courte vides), redirige aussitôt vers
+ * l'éditeur pour être complété — même principe qu'un questionnaire/une
+ * affaire créé(e) puis édité(e), plutôt qu'un formulaire de création à part. */
+async function createFaqManual(){
+  try{
+    const r = await apiFetch('/wa/faq/create', {method:'POST', body:JSON.stringify({})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    FAQS.unshift(data);
+    showFaqEditor(data.id);
+  }catch(e){ flash(e.message||'Erreur de création'); }
+}
+
+function openFaqEmbedModal(){
+  const url = location.origin + '/faq-embed.html';
+  const iframeSnippet = '<iframe src="'+url+'" style="width:100%;max-width:720px;height:600px;border:0" title="FAQ Sesame Technology"></iframe>';
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:520px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Lien à intégrer</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div style="font-size:12px;color:var(--mu);margin-bottom:10px">N'affiche que les FAQ <b>publiées</b> — utilisable sur n'importe quel site externe (iframe).</div>
+      <div class="ff"><label>Lien direct</label><input type="text" value="${esc(url)}" readonly onclick="this.select()"></div>
+      <div class="ff" style="margin-top:8px"><label>Code à coller (iframe)</label><textarea readonly style="height:70px;font-family:monospace;font-size:12px" onclick="this.select()">${esc(iframeSnippet)}</textarea></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal()">Fermer</button>
+      </div>
+    </div>
+  </div>`;
 }
 
 async function showFaqEditor(id){
