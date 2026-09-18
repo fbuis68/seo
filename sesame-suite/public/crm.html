@@ -7864,6 +7864,17 @@ async function accApplyAccount(id){
 
 async function accValidateInvoice(id){
   try{
+    // Le compte sélectionné dans le formulaire n'est persisté par aucun
+    // autre champ (accInvoiceFieldsFromForm ne le lit pas) — sans ça,
+    // choisir un compte puis cliquer directement "Valider" (sans passer par
+    // le bouton séparé "Appliquer le compte") perdait la sélection en
+    // silence, provoquant "Aucun compte de charge proposé pour cette
+    // facture" alors qu'un compte venait d'être choisi à l'écran.
+    const accountId = (document.getElementById('ai-proposedAccountId')||{value:''}).value;
+    if(accountId){
+      const ra = await apiFetch('/wa/acc/invoices/'+id+'/account?scope=crm', {method:'PATCH', body:JSON.stringify({accountId})});
+      if(!ra.ok){ const da=await ra.json().catch(()=>({})); throw new Error(da.error||'Compte invalide'); }
+    }
     await accSaveInvoiceFields(id).catch(()=>{});
     const r = await apiFetch('/wa/acc/invoices/'+id+'/validate?scope=crm', {method:'POST'});
     const data = await r.json();
