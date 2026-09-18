@@ -57,6 +57,7 @@ model Entity {
   nayaxConfig         NayaxConfig?
   nayaxAccessSessions NayaxAccessSession[]
 
+  accSettings            AccSettings?
   accSuppliers           AccSupplier[]
   accCustomers           AccCustomer[]
   accDocuments           AccDocument[]
@@ -2677,6 +2678,23 @@ model NumberSequence {
 // AccInvoice) sans que la logique correspondante soit encore câblée.
 // ═════════════════════════════════════════════════════════════════════════
 
+// Réglages généraux du module comptable — un seul jeu par portée (une ligne
+// par entityId, entityId=null = portée CRM/Sesame). Sert de valeur par
+// défaut au calcul de dueDate (cf. AccSupplier.paymentTermDays ci-dessous
+// pour le cas particulier par fournisseur, et computeDueDate dans
+// lib/accExtraction.ts).
+model AccSettings {
+  id       String  @id @default(cuid())
+  entityId String? @unique
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  defaultPaymentTermDays Int    @default(30)
+  defaultPaymentTermMode String @default("net") // net | eom ("fin de mois")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model AccSupplier {
   id       String  @id @default(cuid())
   entityId String? // null = portée CRM/Sesame
@@ -2700,6 +2718,13 @@ model AccSupplier {
   // lib/accRulesEngine.ts.
   defaultAccountId String?
   defaultAccount   AccAccount? @relation("SupplierDefaultAccount", fields: [defaultAccountId], references: [id], onDelete: SetNull)
+
+  // Délai de paiement propre à ce fournisseur — remplace le réglage général
+  // (AccSettings) quand renseigné. null = utiliser le réglage général.
+  // Utilisé pour calculer dueDate quand la facture ne l'indique pas
+  // explicitement (cf. computeDueDate, lib/accExtraction.ts).
+  paymentTermDays Int?
+  paymentTermMode String? // net | eom ("fin de mois") — ignoré si paymentTermDays est null
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

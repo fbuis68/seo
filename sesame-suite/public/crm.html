@@ -7297,7 +7297,7 @@ function renderAccDashboardTiles(){
     </div>`;
 }
 
-const ACC_TABS=[{k:'inbox',label:'Factures'},{k:'suppliers',label:'Fournisseurs'},{k:'accounts',label:'Plan comptable'},{k:'entries',label:'Écritures'},{k:'rules',label:'Règles'},{k:'email',label:'Import email'}];
+const ACC_TABS=[{k:'inbox',label:'Factures'},{k:'suppliers',label:'Fournisseurs'},{k:'accounts',label:'Plan comptable'},{k:'entries',label:'Écritures'},{k:'rules',label:'Règles'},{k:'email',label:'Import email'},{k:'settings',label:'Réglages'}];
 
 /**
  * Rendu du "cadre" du panneau (tuiles + carte + barre d'onglets) — appelé à
@@ -7320,13 +7320,48 @@ function renderComptaPanel(){
       <div id="acc-tab-body"><div class="log-empty">Chargement…</div></div>
     </div>`;
   renderAccDashboardTiles();
-  const loaders={inbox:loadAccInboxTab, suppliers:loadAccSuppliersTab, accounts:loadAccAccountsTab, entries:loadAccEntriesTab, rules:loadAccRulesTab, email:loadAccEmailTab};
+  const loaders={inbox:loadAccInboxTab, suppliers:loadAccSuppliersTab, accounts:loadAccAccountsTab, entries:loadAccEntriesTab, rules:loadAccRulesTab, email:loadAccEmailTab, settings:loadAccSettingsTab};
   loaders[ACC_TAB] && loaders[ACC_TAB]();
 }
 
 function accSetTab(tab){
   ACC_TAB = tab;
   renderComptaPanel();
+}
+
+// ───────── Onglet Réglages (délai de paiement par défaut) ─────────
+
+async function loadAccSettingsTab(){
+  const el = document.getElementById('acc-tab-body');
+  if(!el) return;
+  el.innerHTML = '<div class="log-empty">Chargement…</div>';
+  let settings = {defaultPaymentTermDays:30, defaultPaymentTermMode:'net'};
+  try{
+    const r = await apiFetch('/wa/acc/settings?scope=crm');
+    if(r.ok) settings = await r.json();
+  }catch(e){}
+  el.innerHTML = `
+    <div class="modal-section" style="margin-top:0">Délai de paiement par défaut</div>
+    <div style="font-size:12px;color:var(--mu);margin-bottom:10px">Utilisé pour calculer la date d'échéance d'une facture qui ne l'indique pas elle-même, sauf si un délai particulier est réglé sur la fiche du fournisseur.</div>
+    <div class="form-grid" style="max-width:420px">
+      <div class="ff"><label>Nombre de jours</label><input type="number" id="acc-set-days" value="${settings.defaultPaymentTermDays}"></div>
+      <div class="ff"><label>Mode</label><select id="acc-set-mode">
+        <option value="net" ${settings.defaultPaymentTermMode==='net'?'selected':''}>Net (JJ facture + N jours)</option>
+        <option value="eom" ${settings.defaultPaymentTermMode==='eom'?'selected':''}>Fin de mois</option>
+      </select></div>
+    </div>
+    <button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="saveAccSettings()">Enregistrer</button>`;
+}
+
+async function saveAccSettings(){
+  const days = +((document.getElementById('acc-set-days')||{value:'30'}).value);
+  const mode = (document.getElementById('acc-set-mode')||{value:'net'}).value;
+  if(!Number.isInteger(days) || days<0){ flash('Nombre de jours invalide'); return; }
+  try{
+    const r = await apiFetch('/wa/acc/settings?scope=crm', {method:'PUT', body:JSON.stringify({defaultPaymentTermDays:days, defaultPaymentTermMode:mode})});
+    if(!r.ok) throw new Error('http '+r.status);
+    flash('Réglages enregistrés');
+  }catch(e){ flash('Erreur d\'enregistrement'); }
 }
 
 // ───────── Onglet Import email (boîte comptabilité, Microsoft Graph) ─────────
@@ -7985,7 +8020,7 @@ function pickSupEntreprise(i){
 }
 
 function openAccSupplierModal(id){
-  const s = id ? ACC_SUPPLIERS.find(x=>x.id===id) : {id:null,name:'',siren:'',siret:'',vatNumber:'',email:'',phone:'',addressLine:'',postalCode:'',city:'',country:'FR',iban:'',bic:''};
+  const s = id ? ACC_SUPPLIERS.find(x=>x.id===id) : {id:null,name:'',siren:'',siret:'',vatNumber:'',email:'',phone:'',addressLine:'',postalCode:'',city:'',country:'FR',iban:'',bic:'',paymentTermDays:null,paymentTermMode:null};
   if(!s) return;
   document.getElementById('modal-ct').innerHTML = `
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
@@ -8013,6 +8048,16 @@ function openAccSupplierModal(id){
         <div class="ff"><label>Code postal</label><input id="sup-postalCode" value="${esc(s.postalCode)}"></div>
         <div class="ff"><label>Ville</label><input id="sup-city" value="${esc(s.city)}"></div>
       </div>
+      <div class="modal-section">Délai de paiement (calcul de l'échéance)</div>
+      <div class="form-grid">
+        <div class="ff"><label>Nombre de jours</label><input type="number" id="sup-paymentTermDays" value="${s.paymentTermDays!=null?s.paymentTermDays:''}" placeholder="vide = réglage général"></div>
+        <div class="ff"><label>Mode</label><select id="sup-paymentTermMode">
+          <option value="">—</option>
+          <option value="net" ${s.paymentTermMode==='net'?'selected':''}>Net (JJ facture + N jours)</option>
+          <option value="eom" ${s.paymentTermMode==='eom'?'selected':''}>Fin de mois</option>
+        </select></div>
+      </div>
+      <div style="font-size:11px;color:var(--mu);margin-top:2px">Laisser vide pour utiliser le réglage général (Comptabilité → Réglages). Ne s'applique que si la facture n'indique pas elle-même sa date d'échéance.</div>
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="saveAccSupplier(${id?`'${id}'`:'null'})">Enregistrer</button>
         <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
@@ -8023,7 +8068,7 @@ function openAccSupplierModal(id){
 
 async function saveAccSupplier(id){
   const g=i=>(document.getElementById(i)||{value:''}).value.trim();
-  const body = {name:g('sup-name'),siren:g('sup-siren'),siret:g('sup-siret'),vatNumber:g('sup-vatNumber'),email:g('sup-email'),phone:g('sup-phone'),country:g('sup-country'),iban:g('sup-iban'),bic:g('sup-bic'),addressLine:g('sup-addressLine'),postalCode:g('sup-postalCode'),city:g('sup-city')};
+  const body = {name:g('sup-name'),siren:g('sup-siren'),siret:g('sup-siret'),vatNumber:g('sup-vatNumber'),email:g('sup-email'),phone:g('sup-phone'),country:g('sup-country'),iban:g('sup-iban'),bic:g('sup-bic'),addressLine:g('sup-addressLine'),postalCode:g('sup-postalCode'),city:g('sup-city'),paymentTermDays:g('sup-paymentTermDays')===''?null:+g('sup-paymentTermDays'),paymentTermMode:g('sup-paymentTermMode')||null};
   if(!body.name){ flash('Le nom est requis'); return; }
   try{
     const r = await apiFetch(id?('/wa/acc/suppliers/'+id+'?scope=crm'):'/wa/acc/suppliers?scope=crm', {method:id?'PUT':'POST', body:JSON.stringify(body)});

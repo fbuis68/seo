@@ -3,7 +3,7 @@ import { AccInvoice } from "@prisma/client";
 import { ingestDocument } from "./accDocument";
 import { extractDocumentText } from "./accOcr";
 import { classifyDocument } from "./accClassification";
-import { extractInvoiceData, ExtractedInvoiceData } from "./accExtraction";
+import { extractInvoiceData, ExtractedInvoiceData, computeDueDate } from "./accExtraction";
 import { matchSupplier, canAutoCreateSupplier, createSupplierFromExtraction } from "./accSupplierMatching";
 import { proposeAccount } from "./accRulesEngine";
 import { runInvoiceChecks, worstLevel, CheckResult } from "./accChecks";
@@ -94,6 +94,26 @@ export async function processUploadedDocument(
     issuerName: extracted?.issuerName || null,
   });
 
+  // Échéance non indiquée sur la facture (courant) : calculée depuis le
+  // délai de paiement propre au fournisseur si renseigné, sinon le réglage
+  // général de la portée (AccSettings) — jamais devinée si invoiceDate
+  // lui-même est absent (rien à calculer depuis).
+  let computedDueDate: Date | null = null;
+  if (extracted && !extracted.dueDate && extracted.invoiceDate) {
+    const supplier = supplierId ? await prisma.accSupplier.findUnique({ where: { id: supplierId } }) : null;
+    let termDays = supplier?.paymentTermDays ?? null;
+    let termMode = supplier?.paymentTermMode ?? null;
+    if (termDays == null) {
+      // findFirst plutôt que findUnique : le type généré pour un champ
+      // unique nullable (entityId) n'accepte pas null en where, alors que
+      // c'est justement la valeur recherchée pour la portée CRM/Sesame.
+      const settings = await prisma.accSettings.findFirst({ where: { entityId } });
+      termDays = settings?.defaultPaymentTermDays ?? 30;
+      termMode = settings?.defaultPaymentTermMode ?? "net";
+    }
+    computedDueDate = computeDueDate(extracted.invoiceDate, termDays, termMode || "net");
+  }
+
   let priorSupplierIbans: string[] = [];
   if (supplierId) {
     const priorInvoices = await prisma.accInvoice.findMany({
@@ -146,7 +166,7 @@ export async function processUploadedDocument(
       status,
       invoiceNumber: extracted?.invoiceNumber || undefined,
       invoiceDate: extracted?.invoiceDate || undefined,
-      dueDate: extracted?.dueDate || undefined,
+      dueDate: extracted?.dueDate || computedDueDate || undefined,
       currency: extracted?.currency || undefined,
       issuerName: extracted?.issuerName || undefined,
       issuerSiren: extracted?.issuerSiren || undefined,

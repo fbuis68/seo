@@ -389,6 +389,60 @@ accountingRouter.patch(
   })
 );
 
+// ───────────────────────── Réglages généraux ─────────────────────────
+
+/**
+ * GET/PUT /wa/acc/settings — délai de paiement par défaut de la portée,
+ * utilisé pour calculer dueDate quand une facture ne l'indique pas et
+ * qu'aucun réglage particulier n'existe sur le fournisseur rapproché
+ * (cf. AccSupplier.paymentTermDays, lib/accPipeline.ts). Une portée sans
+ * ligne AccSettings se comporte comme si 30 jours net (valeurs par défaut
+ * du schéma) — GET renvoie ces valeurs par défaut sans créer de ligne,
+ * seul PUT en crée une.
+ */
+accountingRouter.get(
+  "/acc/settings",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const settings = await prisma.accSettings.findFirst({ where: { entityId } });
+    res.json({
+      defaultPaymentTermDays: settings?.defaultPaymentTermDays ?? 30,
+      defaultPaymentTermMode: settings?.defaultPaymentTermMode ?? "net",
+    });
+  })
+);
+
+interface SettingsBody {
+  defaultPaymentTermDays?: number;
+  defaultPaymentTermMode?: string;
+}
+
+accountingRouter.put(
+  "/acc/settings",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const b = req.body as SettingsBody;
+    if (b.defaultPaymentTermDays != null && (!Number.isInteger(b.defaultPaymentTermDays) || b.defaultPaymentTermDays < 0)) {
+      throw new HttpError(400, "Délai de paiement invalide (entier positif)");
+    }
+    if (b.defaultPaymentTermMode && b.defaultPaymentTermMode !== "net" && b.defaultPaymentTermMode !== "eom") {
+      throw new HttpError(400, "Mode de calcul invalide");
+    }
+    const existing = await prisma.accSettings.findFirst({ where: { entityId } });
+    const data = {
+      defaultPaymentTermDays: b.defaultPaymentTermDays ?? existing?.defaultPaymentTermDays ?? 30,
+      defaultPaymentTermMode: b.defaultPaymentTermMode ?? existing?.defaultPaymentTermMode ?? "net",
+    };
+    const updated = existing
+      ? await prisma.accSettings.update({ where: { id: existing.id }, data })
+      : await prisma.accSettings.create({ data: { entityId, ...data } });
+    await recordAuditLog({ entityId, userId: actorId(req), action: "acc_settings_updated", targetType: "AccSettings", targetId: updated.id, oldValue: existing, newValue: data, ip: req.ip });
+    res.json({ defaultPaymentTermDays: updated.defaultPaymentTermDays, defaultPaymentTermMode: updated.defaultPaymentTermMode });
+  })
+);
+
 // ───────────────────────── Fournisseurs ─────────────────────────
 
 accountingRouter.get(
@@ -409,8 +463,9 @@ accountingRouter.post(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const entityId = await resolveScope(req);
-    const b = req.body as { name?: string };
+    const b = req.body as { name?: string; paymentTermMode?: string };
     if (!b.name) throw new HttpError(400, "name requis");
+    if (b.paymentTermMode && b.paymentTermMode !== "net" && b.paymentTermMode !== "eom") throw new HttpError(400, "Mode de calcul invalide");
     const created = await prisma.accSupplier.create({
       data: {
         entityId,
@@ -427,6 +482,8 @@ accountingRouter.post(
         iban: (req.body.iban as string) || undefined,
         bic: (req.body.bic as string) || undefined,
         defaultAccountId: (req.body.defaultAccountId as string) || undefined,
+        paymentTermDays: req.body.paymentTermDays != null && req.body.paymentTermDays !== "" ? Number(req.body.paymentTermDays) : undefined,
+        paymentTermMode: b.paymentTermMode || undefined,
       },
     });
     await recordAuditLog({ entityId, userId: actorId(req), action: "supplier_created", targetType: "AccSupplier", targetId: created.id, newValue: { name: created.name }, ip: req.ip });
@@ -444,6 +501,17 @@ accountingRouter.put(
     const fields = ["name", "siren", "siret", "vatNumber", "addressLine", "postalCode", "city", "country", "email", "phone", "iban", "bic", "defaultAccountId"] as const;
     const data: Record<string, unknown> = {};
     for (const f of fields) if (f in req.body) data[f] = req.body[f];
+    // Champ vidé côté formulaire = "utiliser le réglage général" (null),
+    // pas juste "ne pas modifier" (contrairement aux champs ci-dessus).
+    if ("paymentTermDays" in req.body) {
+      const v = req.body.paymentTermDays;
+      data.paymentTermDays = v === null || v === "" ? null : Number(v);
+    }
+    if ("paymentTermMode" in req.body) {
+      const v = req.body.paymentTermMode as string | null;
+      if (v && v !== "net" && v !== "eom") throw new HttpError(400, "Mode de calcul invalide");
+      data.paymentTermMode = v || null;
+    }
     const updated = await prisma.accSupplier.update({ where: { id: existing.id }, data });
     await recordAuditLog({ entityId, userId: actorId(req), action: "supplier_updated", targetType: "AccSupplier", targetId: existing.id, oldValue: existing, newValue: data, ip: req.ip });
     res.json(updated);

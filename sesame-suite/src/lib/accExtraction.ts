@@ -94,6 +94,23 @@ function parseWrittenFrenchDate(raw: string): Date | null {
 }
 
 /**
+ * Calcule une date d'échéance quand la facture ne l'indique pas
+ * explicitement (§ paramétrage délai de paiement, 18/09/2026) — appelée
+ * depuis accPipeline.ts avec le délai résolu (fournisseur si renseigné,
+ * sinon AccSettings général de la portée). "net" = ajoute simplement les
+ * jours ; "eom" ("fin de mois") = ajoute les jours puis avance jusqu'au
+ * dernier jour du mois résultant (convention comptable française
+ * courante, ex : "30 jours fin de mois").
+ */
+export function computeDueDate(invoiceDate: Date, termDays: number, termMode: string): Date {
+  const withDays = new Date(invoiceDate.getTime());
+  withDays.setUTCDate(withDays.getUTCDate() + termDays);
+  if (termMode !== "eom") return withDays;
+  // Dernier jour du mois de withDays : jour 0 du mois suivant.
+  return new Date(Date.UTC(withDays.getUTCFullYear(), withDays.getUTCMonth() + 1, 0));
+}
+
+/**
  * Cherche une VALEUR immédiatement après un mot-clé — "immédiatement"
  * signifie : au plus quelques caractères de ponctuation/espace entre le
  * mot-clé et la valeur (jamais une valeur trouvée plus loin dans le texte,
