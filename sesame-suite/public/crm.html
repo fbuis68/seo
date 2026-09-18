@@ -6825,6 +6825,11 @@ async function openSendEmailModal(id){
     const cr = await apiFetch('/wa/crmContact/list?prospectId='+encodeURIComponent(id));
     SEND_MODAL_CONTACTS = cr.ok ? await cr.json() : [];
   }catch(e){ SEND_MODAL_CONTACTS = []; }
+  let questionnaires=[];
+  try{
+    const qr = await apiFetch('/wa/questionnaire/list?scope=crm');
+    questionnaires = qr.ok ? (await qr.json()).filter(q=>q.active) : [];
+  }catch(e){}
   document.getElementById('modal-ct').innerHTML=`
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box" style="max-width:480px">
@@ -6832,6 +6837,11 @@ async function openSendEmailModal(id){
       <div class="ff"><label>Canal</label><select id="send-channel" onchange="renderSendTplOptions('${id}')">${available.map(ch=>`<option value="${ch}" ${ch===chan?'selected':''}>${CHANNEL_LABEL[ch]}</option>`).join('')}</select></div>
       <div class="ff" style="margin-top:8px"><label>Destinataire</label><input id="send-to" list="send-to-datalist" value="${esc(sendModalDefaultTo(c,chan))}"><datalist id="send-to-datalist">${sendModalDatalistOptions(c)}</datalist></div>
       <div class="ff" style="margin-top:8px"><label>Modèle</label><select id="send-tpl"></select></div>
+      <div class="ff" style="margin-top:8px"><label>Questionnaire à joindre (optionnel)</label><select id="send-questionnaireId">
+        <option value="">— Aucun —</option>
+        ${questionnaires.map(q=>`<option value="${q.id}">${esc(q.name)}</option>`).join('')}
+      </select></div>
+      <div style="font-size:11px;color:var(--mu);margin-top:2px">Le modèle choisi doit contenir la variable {{lienQuestionnaire}} pour que le lien apparaisse dans l'envoi.</div>
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="sendClientEmail('${id}')">Envoyer</button>
         <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
@@ -6860,8 +6870,9 @@ async function sendClientEmail(id){
   if(!to){flash('Destinataire requis');return;}
   if(!key){flash('Sélectionnez un modèle');return;}
   try{
+    var questionnaireId = (document.getElementById('send-questionnaireId')||{value:''}).value;
     var r = await apiFetch('/wa/message/send', {method:'POST', body:JSON.stringify({
-      scope:'crm', channel:channel, templateKey:key, to:to, prospectId:id,
+      scope:'crm', channel:channel, templateKey:key, to:to, prospectId:id, questionnaireId:questionnaireId||undefined,
       variables:{nom:c.nom, secteur:c.secteur||'', referent:c.referent||'', ville:c.ville||''}
     })});
     var data = await r.json();

@@ -115,7 +115,7 @@ const QUESTIONNAIRE_TARGET_TYPES = new Set(["crmProspect", "booking"]);
  * → lève, pour que l'appelant l'enregistre via recordRuleError plutôt que
  * d'envoyer silencieusement un message sans lien.
  */
-async function attachQuestionnaireLink(
+export async function attachQuestionnaireLink(
   questionnaireId: string | null | undefined,
   targetType: string,
   targetId: string,

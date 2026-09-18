@@ -6,6 +6,7 @@ import { getChannelConfig, upsertChannelConfig, sendTestMessage, SmsChannel } fr
 import { listMessageTemplates, upsertMessageTemplate, deleteMessageTemplate, isChannel, isTemplateCategory, TemplateCategory } from "../lib/messageTemplate";
 import { sendMessage } from "../lib/messaging";
 import { createMetaMessageTemplate, listMetaMessageTemplates } from "../lib/metaTemplates";
+import { attachQuestionnaireLink } from "../lib/automation";
 
 /**
  * Config des canaux SMS/WhatsApp (Twilio), modèles de message multi-canal,
@@ -333,6 +334,15 @@ interface SendBody {
   variables?: Record<string, string>;
   /** Portée CRM uniquement — cf. sendMessage() trackOpenProspectId (score d'intérêt, +1 à l'ouverture). */
   prospectId?: string;
+  /**
+   * Questionnaire choisi manuellement pour cet envoi (portée CRM
+   * uniquement, cf. prospectId ci-dessus) — même mécanisme que
+   * AutomationRule.questionnaireId (cf. attachQuestionnaireLink,
+   * lib/automation.ts), mais pour un envoi ponctuel depuis la fiche
+   * prospect plutôt qu'une règle programmée. Le modèle choisi doit
+   * contenir {{lienQuestionnaire}} pour que le lien apparaisse réellement.
+   */
+  questionnaireId?: string;
 }
 
 messagingRouter.post(
@@ -344,12 +354,20 @@ messagingRouter.post(
     if (!isChannel(b.channel)) throw new HttpError(400, "channel doit être email, sms ou whatsapp");
     if (!b.to) throw new HttpError(400, "Destinataire requis");
     if (!b.templateKey) throw new HttpError(400, "Modèle requis");
+    let variables = b.variables || {};
+    if (b.questionnaireId && entityId === null && b.prospectId) {
+      try {
+        variables = await attachQuestionnaireLink(b.questionnaireId, "crmProspect", b.prospectId, variables);
+      } catch (e) {
+        throw new HttpError(400, e instanceof Error ? e.message : "Questionnaire non applicable à cet envoi");
+      }
+    }
     const sent = await sendMessage({
       entityId,
       channel: b.channel,
       templateKey: b.templateKey,
       to: b.to,
-      variables: b.variables,
+      variables,
       trackOpenProspectId: entityId === null ? b.prospectId : undefined,
       baseUrl: `${req.protocol}://${req.get("host")}`,
     });
