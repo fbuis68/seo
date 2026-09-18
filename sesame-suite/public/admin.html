@@ -8686,6 +8686,7 @@ var EML_TPL_VARS = [
   {key:'dateArrivee', desc:'Date d\'arrivée du séjour (déclencheurs réservation)'},
   {key:'dateDepart', desc:'Date de départ du séjour (déclencheurs réservation)'},
   {key:'nuits', desc:'Nombre de nuits du séjour (déclencheurs réservation)'},
+  {key:'lienAutologin', desc:'Lien de connexion directe à l\'espace client (déclencheurs réservation)'},
   {key:'numeroCommande', desc:'Numéro de la commande (déclencheurs commande room service/boutique)'},
   {key:'articles', desc:'Liste des articles commandés (déclencheurs commande room service/boutique)'},
   {key:'total', desc:'Montant total de la commande (room service / boutique)'},
@@ -8734,6 +8735,25 @@ function emlRenderTplSubjectVisibility(){
 // vérité lue par emlSaveTemplate(), synchronisée à chaque frappe (oninput)
 // des deux côtés. ──
 var HTMLED_STATE = {};
+// Position du curseur dans le contenteditable, perdue dès qu'on clique un
+// bouton hors de lui (barre d'outils, "insérer variable"...) — sans ça,
+// ce.focus() replace toujours le curseur en tout début de texte.
+var HTMLED_RANGE = {};
+function htmlEdSaveRange(id){
+  var ce = document.getElementById(id+'-ce');
+  var sel = window.getSelection();
+  if(ce && sel && sel.rangeCount > 0){
+    var range = sel.getRangeAt(0);
+    if(ce.contains(range.commonAncestorContainer)) HTMLED_RANGE[id] = range.cloneRange();
+  }
+}
+function htmlEdRestoreRange(id){
+  var range = HTMLED_RANGE[id];
+  if(!range) return;
+  var sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
 function htmlEdInit(id, initialHtml){
   var ce = document.getElementById(id+'-ce'), src = document.getElementById(id);
   if(!ce || !src) return;
@@ -8741,6 +8761,7 @@ function htmlEdInit(id, initialHtml){
   ce.innerHTML = initialHtml || '';
   ce.style.display = ''; src.style.display = 'none';
   HTMLED_STATE[id] = 'wysiwyg';
+  ce.addEventListener('blur', function(){ htmlEdSaveRange(id); });
   var btn = document.getElementById(id+'-togglebtn'); if(btn) btn.classList.remove('on');
 }
 function htmlEdCmd(id, cmd, arg){
@@ -8807,6 +8828,7 @@ function htmlEdInsertText(id, text){
   if(!src) return;
   if(HTMLED_STATE[id] === 'wysiwyg' && ce && ce.style.display !== 'none'){
     ce.focus();
+    htmlEdRestoreRange(id);
     document.execCommand('insertText', false, text);
     htmlEdSync(id);
   } else {
