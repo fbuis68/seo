@@ -40,6 +40,18 @@ function decodeDataUriAttachment(dataUri: string, index: number): { filename: st
 }
 
 /**
+ * Pièce jointe avec son propre nom de fichier et n'importe quel type MIME
+ * (pas seulement une image, contrairement à decodeDataUriAttachment
+ * ci-dessus) — pièces jointes par défaut d'un modèle de message
+ * (MessageTemplate.defaultAttachments, ex : plaquette PDF, CGV).
+ */
+function decodeNamedDataUriAttachment(a: { fileName: string; dataUrl: string }): { filename: string; content: Buffer } | null {
+  const m = /^data:[^;]+;base64,(.+)$/.exec(a.dataUrl);
+  if (!m) return null;
+  return { filename: a.fileName || "piece-jointe", content: Buffer.from(m[1], "base64") };
+}
+
+/**
  * nodemailer rejette avec une Error brute (ETIMEDOUT, ECONNREFUSED, EAUTH,
  * certificat invalide…) qui, non interceptée, remonte telle quelle jusqu'à
  * errorHandler : comme ce n'est pas une HttpError, elle est aplatie en 500
@@ -122,13 +134,14 @@ export async function sendEmailRaw(
   subject: string,
   html: string,
   fromNameOverride?: string,
-  opts?: { fromEmailOverride?: string; attachments?: string[] }
+  opts?: { fromEmailOverride?: string; attachments?: string[]; namedAttachments?: { fileName: string; dataUrl: string }[] }
 ) {
   const smtp = await getSmtpConfig(entityId);
   if (!smtp) throw new HttpError(400, "Aucun serveur SMTP configuré pour cette portée");
   const transporter = buildTransporter(smtp);
   const attachments = (opts?.attachments || [])
     .map((a, i) => decodeDataUriAttachment(a, i))
+    .concat((opts?.namedAttachments || []).map((a) => decodeNamedDataUriAttachment(a)))
     .filter((a): a is { filename: string; content: Buffer } => a !== null);
   try {
     await transporter.sendMail({

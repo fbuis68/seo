@@ -2073,9 +2073,10 @@ model Questionnaire {
   description String?
   active      Boolean @default(true)
 
-  questions       QuestionnaireQuestion[]
-  sends           QuestionnaireSend[]
-  automationRules AutomationRule[]
+  questions        QuestionnaireQuestion[]
+  sends            QuestionnaireSend[]
+  automationRules  AutomationRule[]
+  messageTemplates MessageTemplate[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2437,6 +2438,24 @@ model MessageTemplate {
   // support exclut les modèles "marketing" — cf. crm.html
   // renderTicketDetail) plutôt que de tout mélanger dans un seul sélecteur.
   category String?
+
+  // Questionnaire dont le lien ({{lienQuestionnaire}}) est automatiquement
+  // injecté dans les variables à chaque envoi de ce modèle (18/09/2026) —
+  // réglé une fois sur le modèle plutôt que choisi à chaque envoi manuel,
+  // cf. sendMessage() dans lib/messaging.ts. Même mécanisme que
+  // AutomationRule.questionnaireId pour un envoi programmé ; celui-ci
+  // couvre en plus l'envoi manuel ponctuel (bouton "Envoyer un message"
+  // depuis une fiche prospect), qui n'a pas de règle associée.
+  questionnaireId String?
+  questionnaire   Questionnaire? @relation(fields: [questionnaireId], references: [id], onDelete: SetNull)
+
+  // Pièces jointes par défaut (email uniquement, 18/09/2026) — jointes à
+  // CHAQUE envoi de ce modèle sans que l'expéditeur ait à les rattacher à
+  // la main (ex : plaquette tarifaire, CGV). [{fileName, mimeType, dataUrl}],
+  // même convention que la réponse de type "file" d'un questionnaire (cf.
+  // schema Faq plus bas) — dataUrl en base64, jamais de stockage objet
+  // disponible dans cet environnement.
+  defaultAttachments Json @default("[]")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

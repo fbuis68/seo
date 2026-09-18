@@ -6470,9 +6470,13 @@ function htmlEdSetEmailMode(id, isEmail){
   }
 }
 
-function openTemplateModal(id){
-  const t = id ? MSG_TEMPLATES.find(t=>t.id===id) : {id:null,channel:tplChannelTab,key:'',name:'',subject:'',bodyHtml:''};
+async function openTemplateModal(id){
+  const t = id ? MSG_TEMPLATES.find(t=>t.id===id) : {id:null,channel:tplChannelTab,key:'',name:'',subject:'',bodyHtml:'',questionnaireId:null,defaultAttachments:[]};
   if(!t)return;
+  if(!QN_CRM_LIST_CACHE){
+    try{ const qr = await apiFetch('/wa/questionnaire/list?scope=crm'); QN_CRM_LIST_CACHE = qr.ok ? await qr.json() : []; }catch(e){ QN_CRM_LIST_CACHE = []; }
+  }
+  TPL_ATTACHMENTS = Array.isArray(t.defaultAttachments) ? t.defaultAttachments.slice() : [];
   document.getElementById('modal-ct').innerHTML=`
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box">
@@ -6528,6 +6532,17 @@ function openTemplateModal(id){
           <div id="tpl-meta-status" style="font-size:11px;color:#888;margin-top:6px"></div>
         </div>` : ''}
       </div>
+      <div class="ff" style="margin-top:8px"><label>Questionnaire à joindre (optionnel)</label><select id="tpl-questionnaire">
+        <option value="">Aucun</option>
+        ${QN_CRM_LIST_CACHE.map(q=>`<option value="${esc(q.id)}" ${t.questionnaireId===q.id?'selected':''}>${esc(q.name)}</option>`).join('')}
+      </select>
+      <div style="font-size:11px;color:var(--mu,#888);margin-top:4px">Génère un lien vers ce questionnaire à chaque envoi (manuel ou automatique) utilisant ce modèle et l'insère via la variable <code>{{lienQuestionnaire}}</code>.</div></div>
+      <div class="ff" id="tpl-attachments-wrap" style="margin-top:8px"><label>Pièces jointes par défaut (email uniquement)</label>
+        <div id="tpl-attachments-list"></div>
+        <input type="file" id="tpl-attachment-file" multiple onchange="handleTplAttachmentFiles(event)">
+        <div id="tpl-attachment-err" style="font-size:11px;color:#a32d2d;margin-top:4px;display:none"></div>
+        <div style="font-size:11px;color:var(--mu,#888);margin-top:4px">Jointes automatiquement à chaque email envoyé avec ce modèle (ex. plaquette PDF, CGV) — 5 fichiers max, 7 Mo max chacun.</div>
+      </div>
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="saveTemplate(${t.id?`'${t.id}'`:'null'})">Enregistrer</button>
         <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
@@ -6536,15 +6551,69 @@ function openTemplateModal(id){
   </div>`;
   htmlEdInit('tpl-body', t.bodyHtml||'');
   renderTplSubjectVisibility();
+  renderTplAttachmentsList();
 }
 
 function renderTplSubjectVisibility(){
   const sel=document.getElementById('tpl-channel');
   const wrap=document.getElementById('tpl-subject-wrap');
   const sidWrap=document.getElementById('tpl-sid-wrap');
+  const attWrap=document.getElementById('tpl-attachments-wrap');
   if(sel&&wrap) wrap.style.display = sel.value==='email' ? '' : 'none';
   if(sel&&sidWrap) sidWrap.style.display = sel.value==='whatsapp' ? '' : 'none';
+  if(sel&&attWrap) attWrap.style.display = sel.value==='email' ? '' : 'none';
   if(sel) htmlEdSetEmailMode('tpl-body', sel.value==='email');
+}
+
+// Pièces jointes par défaut d'un modèle — même convention data-URI que
+// questionnaire.html (handleFile) : FileReader → base64, plafond 7 Mo par
+// fichier cohérent avec MAX_ATTACHMENT_DATA_URL_LENGTH côté serveur
+// (routes/messaging.ts), 5 fichiers max (MAX_ATTACHMENTS).
+let TPL_ATTACHMENTS = [];
+const TPL_ATTACHMENT_MAX_BYTES = 7 * 1024 * 1024;
+const TPL_ATTACHMENT_MAX_COUNT = 5;
+
+function renderTplAttachmentsList(){
+  const el = document.getElementById('tpl-attachments-list');
+  if(!el) return;
+  el.innerHTML = TPL_ATTACHMENTS.length ? TPL_ATTACHMENTS.map((a,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:4px 0">
+      <i class="ti ti-paperclip"></i><span style="flex:1;font-size:13px">${esc(a.fileName)}</span>
+      <button type="button" class="btn btn-ghost btn-icon btn-sm" onclick="removeTplAttachment(${i})" title="Retirer">✕</button>
+    </div>`).join('') : '<div style="font-size:12px;color:var(--mu,#888)">Aucune pièce jointe</div>';
+}
+
+function removeTplAttachment(i){
+  TPL_ATTACHMENTS.splice(i,1);
+  renderTplAttachmentsList();
+}
+
+function handleTplAttachmentFiles(evt){
+  const errEl = document.getElementById('tpl-attachment-err');
+  if(errEl){ errEl.style.display='none'; }
+  const files = Array.from(evt.target.files||[]);
+  evt.target.value='';
+  if(!files.length) return;
+  if(TPL_ATTACHMENTS.length + files.length > TPL_ATTACHMENT_MAX_COUNT){
+    if(errEl){ errEl.textContent = 'Maximum '+TPL_ATTACHMENT_MAX_COUNT+' pièces jointes'; errEl.style.display='block'; }
+    return;
+  }
+  const oversized = files.find(f=>f.size > TPL_ATTACHMENT_MAX_BYTES);
+  if(oversized){
+    if(errEl){ errEl.textContent = '"'+oversized.name+'" dépasse 7 Mo'; errEl.style.display='block'; }
+    return;
+  }
+  files.forEach(file=>{
+    const reader = new FileReader();
+    reader.onload = function(){
+      TPL_ATTACHMENTS.push({fileName:file.name, mimeType:file.type||'application/octet-stream', dataUrl:reader.result});
+      renderTplAttachmentsList();
+    };
+    reader.onerror = function(){
+      if(errEl){ errEl.textContent = 'Lecture de "'+file.name+'" impossible'; errEl.style.display='block'; }
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 async function createMetaTemplate(){
@@ -6572,7 +6641,7 @@ async function createMetaTemplate(){
 
 async function saveTemplate(id){
   const g=i=>(document.getElementById(i)||{value:''}).value;
-  const body={channel:g('tpl-channel'),key:g('tpl-key').trim().toLowerCase(),name:g('tpl-name').trim(),subject:g('tpl-subject').trim(),bodyHtml:g('tpl-body'),whatsappContentSid:g('tpl-sid').trim(),category:g('tpl-category'),scope:'crm'};
+  const body={channel:g('tpl-channel'),key:g('tpl-key').trim().toLowerCase(),name:g('tpl-name').trim(),subject:g('tpl-subject').trim(),bodyHtml:g('tpl-body'),whatsappContentSid:g('tpl-sid').trim(),category:g('tpl-category'),questionnaireId:g('tpl-questionnaire')||null,defaultAttachments:TPL_ATTACHMENTS,scope:'crm'};
   if(!body.key||!body.name||!body.bodyHtml||(body.channel==='email'&&!body.subject)||(body.channel==='whatsapp'&&!body.whatsappContentSid)){flash('Tous les champs sont requis');return;}
   try{
     var r = await apiFetch('/wa/messageTemplate/upsert', {method:'POST', body:JSON.stringify(body)});
@@ -6825,11 +6894,6 @@ async function openSendEmailModal(id){
     const cr = await apiFetch('/wa/crmContact/list?prospectId='+encodeURIComponent(id));
     SEND_MODAL_CONTACTS = cr.ok ? await cr.json() : [];
   }catch(e){ SEND_MODAL_CONTACTS = []; }
-  let questionnaires=[];
-  try{
-    const qr = await apiFetch('/wa/questionnaire/list?scope=crm');
-    questionnaires = qr.ok ? (await qr.json()).filter(q=>q.active) : [];
-  }catch(e){}
   document.getElementById('modal-ct').innerHTML=`
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box" style="max-width:480px">
@@ -6837,11 +6901,6 @@ async function openSendEmailModal(id){
       <div class="ff"><label>Canal</label><select id="send-channel" onchange="renderSendTplOptions('${id}')">${available.map(ch=>`<option value="${ch}" ${ch===chan?'selected':''}>${CHANNEL_LABEL[ch]}</option>`).join('')}</select></div>
       <div class="ff" style="margin-top:8px"><label>Destinataire</label><input id="send-to" list="send-to-datalist" value="${esc(sendModalDefaultTo(c,chan))}"><datalist id="send-to-datalist">${sendModalDatalistOptions(c)}</datalist></div>
       <div class="ff" style="margin-top:8px"><label>Modèle</label><select id="send-tpl"></select></div>
-      <div class="ff" style="margin-top:8px"><label>Questionnaire à joindre (optionnel)</label><select id="send-questionnaireId">
-        <option value="">— Aucun —</option>
-        ${questionnaires.map(q=>`<option value="${q.id}">${esc(q.name)}</option>`).join('')}
-      </select></div>
-      <div style="font-size:11px;color:var(--mu);margin-top:2px">Le modèle choisi doit contenir la variable {{lienQuestionnaire}} pour que le lien apparaisse dans l'envoi.</div>
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="sendClientEmail('${id}')">Envoyer</button>
         <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
@@ -6870,9 +6929,8 @@ async function sendClientEmail(id){
   if(!to){flash('Destinataire requis');return;}
   if(!key){flash('Sélectionnez un modèle');return;}
   try{
-    var questionnaireId = (document.getElementById('send-questionnaireId')||{value:''}).value;
     var r = await apiFetch('/wa/message/send', {method:'POST', body:JSON.stringify({
-      scope:'crm', channel:channel, templateKey:key, to:to, prospectId:id, questionnaireId:questionnaireId||undefined,
+      scope:'crm', channel:channel, templateKey:key, to:to, prospectId:id,
       variables:{nom:c.nom, secteur:c.secteur||'', referent:c.referent||'', ville:c.ville||''}
     })});
     var data = await r.json();

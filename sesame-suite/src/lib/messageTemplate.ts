@@ -33,7 +33,15 @@ export async function upsertMessageTemplate(
   entityId: string | null,
   channel: Channel,
   key: string,
-  data: { name: string; subject: string; bodyHtml: string; whatsappContentSid?: string; category?: TemplateCategory | null }
+  data: {
+    name: string;
+    subject: string;
+    bodyHtml: string;
+    whatsappContentSid?: string;
+    category?: TemplateCategory | null;
+    questionnaireId?: string | null;
+    defaultAttachments?: { fileName: string; mimeType: string; dataUrl: string }[];
+  }
 ) {
   if (!key || !/^[a-z0-9-]+$/.test(key)) throw new HttpError(400, "Clé de modèle invalide (minuscules, chiffres, tirets)");
   const existingRows = await prisma.messageTemplate.findMany({ where: { entityId, channel, key }, orderBy: { updatedAt: "desc" } });

@@ -51,3 +51,34 @@ export function questionnaireLinkUrl(token: string, baseUrl?: string): string {
   const base = baseUrl || config.publicBaseUrl;
   return `${base}/questionnaire.html?token=${token}`;
 }
+
+const QUESTIONNAIRE_TARGET_TYPES = new Set(["crmProspect", "booking"]);
+
+/**
+ * Génère/réutilise le lien d'un questionnaire pour une cible et l'injecte
+ * comme variable {{lienQuestionnaire}} — utilisé par fireTrigger()
+ * (AutomationRule.questionnaireId, lib/automation.ts) pour un envoi
+ * programmé, et par sendMessage() (MessageTemplate.questionnaireId,
+ * lib/messaging.ts) pour tout envoi (manuel ou automatique) utilisant ce
+ * modèle. Le modèle de message (subject/bodyHtml) doit alors contenir
+ * cette variable pour que le lien apparaisse réellement dans l'envoi.
+ * Cible non compatible → lève, pour que l'appelant décide (recordRuleError
+ * côté automatisation, HttpError côté envoi manuel) plutôt que d'envoyer
+ * silencieusement un message sans lien.
+ */
+export async function attachQuestionnaireLink(
+  questionnaireId: string | null | undefined,
+  targetType: string,
+  targetId: string,
+  variables: Record<string, string>
+): Promise<Record<string, string>> {
+  if (!questionnaireId) return variables;
+  if (!QUESTIONNAIRE_TARGET_TYPES.has(targetType)) {
+    throw new Error(`Questionnaire non applicable à ce déclencheur (cible "${targetType}" non prise en charge)`);
+  }
+  const send = await getOrCreateQuestionnaireSend(questionnaireId, targetType as QuestionnaireTargetType, targetId);
+  if (!send.sentAt) {
+    await prisma.questionnaireSend.update({ where: { id: send.id }, data: { sentAt: new Date() } });
+  }
+  return { ...variables, lienQuestionnaire: questionnaireLinkUrl(send.token) };
+}

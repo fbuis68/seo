@@ -2,7 +2,7 @@ import { prisma } from "../db";
 import { sendMessage } from "./messaging";
 import { Channel } from "./messageTemplate";
 import { todayInTz } from "./timezone";
-import { getOrCreateQuestionnaireSend, questionnaireLinkUrl, QuestionnaireTargetType } from "./questionnaire";
+import { attachQuestionnaireLink } from "./questionnaire";
 import { bookingTemplateVars, hotelContactInfo } from "./templateVars";
 import { sweepTicketAutoResolve } from "./ticketInbound";
 
@@ -101,35 +101,6 @@ function resolveRecipient(
 
 function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
-}
-
-const QUESTIONNAIRE_TARGET_TYPES = new Set(["crmProspect", "booking"]);
-
-/**
- * Quand la règle référence un questionnaire (AutomationRule.questionnaireId),
- * génère/réutilise son lien pour la cible de l'événement et l'injecte comme
- * variable {{lienQuestionnaire}} — le modèle de message (subject/bodyHtml)
- * doit alors contenir cette variable pour que le lien apparaisse réellement
- * dans l'envoi. Cible non compatible (ex: questionnaire attaché à une règle
- * "order.created", dont la cible est une commande, pas un booking/prospect)
- * → lève, pour que l'appelant l'enregistre via recordRuleError plutôt que
- * d'envoyer silencieusement un message sans lien.
- */
-export async function attachQuestionnaireLink(
-  questionnaireId: string | null | undefined,
-  targetType: string,
-  targetId: string,
-  variables: Record<string, string>
-): Promise<Record<string, string>> {
-  if (!questionnaireId) return variables;
-  if (!QUESTIONNAIRE_TARGET_TYPES.has(targetType)) {
-    throw new Error(`Questionnaire non applicable à ce déclencheur (cible "${targetType}" non prise en charge)`);
-  }
-  const send = await getOrCreateQuestionnaireSend(questionnaireId, targetType as QuestionnaireTargetType, targetId);
-  if (!send.sentAt) {
-    await prisma.questionnaireSend.update({ where: { id: send.id }, data: { sentAt: new Date() } });
-  }
-  return { ...variables, lienQuestionnaire: questionnaireLinkUrl(send.token) };
 }
 
 /**

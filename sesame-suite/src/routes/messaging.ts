@@ -6,7 +6,6 @@ import { getChannelConfig, upsertChannelConfig, sendTestMessage, SmsChannel } fr
 import { listMessageTemplates, upsertMessageTemplate, deleteMessageTemplate, isChannel, isTemplateCategory, TemplateCategory } from "../lib/messageTemplate";
 import { sendMessage } from "../lib/messaging";
 import { createMetaMessageTemplate, listMetaMessageTemplates } from "../lib/metaTemplates";
-import { attachQuestionnaireLink } from "../lib/automation";
 
 /**
  * Config des canaux SMS/WhatsApp (Twilio), modèles de message multi-canal,
@@ -201,6 +200,8 @@ function shapeTemplate(t: {
   bodyHtml: string;
   whatsappContentSid: string | null;
   category: string | null;
+  questionnaireId: string | null;
+  defaultAttachments: unknown;
   updatedAt: Date;
 }) {
   return {
@@ -212,6 +213,8 @@ function shapeTemplate(t: {
     bodyHtml: t.bodyHtml,
     whatsappContentSid: t.whatsappContentSid || "",
     category: t.category || "",
+    questionnaireId: t.questionnaireId || "",
+    defaultAttachments: Array.isArray(t.defaultAttachments) ? t.defaultAttachments : [],
     updatedAt: t.updatedAt,
   };
 }
@@ -234,6 +237,12 @@ messagingRouter.get(
   })
 );
 
+interface TemplateAttachment {
+  fileName: string;
+  mimeType: string;
+  dataUrl: string;
+}
+
 interface TemplateBody {
   channel: string;
   key: string;
@@ -242,6 +251,32 @@ interface TemplateBody {
   bodyHtml: string;
   whatsappContentSid?: string;
   category?: string;
+  questionnaireId?: string;
+  defaultAttachments?: TemplateAttachment[];
+}
+
+// Base64 brut (~33% plus long que les octets décodés) — 10 000 000
+// caractères ≈ 7,3 Mo par pièce jointe, même plafond que le type "file"
+// d'un questionnaire (cf. MAX_FILE_DATA_URL_LENGTH, routes/questionnaire.ts).
+// Max 5 pièces jointes : au-delà, le modèle grossit démesurément (stocké
+// en JSON sur CHAQUE lecture du modèle) pour un cas d'usage qui reste
+// "quelques documents fixes" (plaquette, CGV...), pas une médiathèque.
+const MAX_ATTACHMENT_DATA_URL_LENGTH = 10_000_000;
+const MAX_ATTACHMENTS = 5;
+
+function parseAttachments(raw: unknown): TemplateAttachment[] {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) throw new HttpError(400, "Pièces jointes invalides");
+  if (raw.length > MAX_ATTACHMENTS) throw new HttpError(400, `${MAX_ATTACHMENTS} pièces jointes maximum par modèle`);
+  return raw.map((a) => {
+    const fileName = typeof a?.fileName === "string" ? a.fileName.slice(0, 200) : "";
+    const mimeType = typeof a?.mimeType === "string" ? a.mimeType.slice(0, 100) : "";
+    const dataUrl = typeof a?.dataUrl === "string" ? a.dataUrl : "";
+    if (!fileName || !dataUrl) throw new HttpError(400, "Pièce jointe incomplète");
+    if (!/^data:[^;]+;base64,/.test(dataUrl)) throw new HttpError(400, `Pièce jointe invalide : ${fileName}`);
+    if (dataUrl.length > MAX_ATTACHMENT_DATA_URL_LENGTH) throw new HttpError(400, `Pièce jointe trop volumineuse (7 Mo max) : ${fileName}`);
+    return { fileName, mimeType, dataUrl };
+  });
 }
 
 messagingRouter.post(
@@ -267,6 +302,8 @@ messagingRouter.post(
       bodyHtml: b.bodyHtml,
       whatsappContentSid: b.channel === "whatsapp" ? (b.whatsappContentSid || "").trim() : "",
       category: parseCategory(b.category),
+      questionnaireId: b.questionnaireId || null,
+      defaultAttachments: b.channel === "email" ? parseAttachments(b.defaultAttachments) : [],
     });
     res.json(shapeTemplate(row));
   })
@@ -332,17 +369,8 @@ interface SendBody {
   templateKey: string;
   to: string;
   variables?: Record<string, string>;
-  /** Portée CRM uniquement — cf. sendMessage() trackOpenProspectId (score d'intérêt, +1 à l'ouverture). */
+  /** Portée CRM uniquement — cf. sendMessage() trackOpenProspectId (score d'intérêt, +1 à l'ouverture) ET questionnaire du modèle (MessageTemplate.questionnaireId), attaché automatiquement si réglé. */
   prospectId?: string;
-  /**
-   * Questionnaire choisi manuellement pour cet envoi (portée CRM
-   * uniquement, cf. prospectId ci-dessus) — même mécanisme que
-   * AutomationRule.questionnaireId (cf. attachQuestionnaireLink,
-   * lib/automation.ts), mais pour un envoi ponctuel depuis la fiche
-   * prospect plutôt qu'une règle programmée. Le modèle choisi doit
-   * contenir {{lienQuestionnaire}} pour que le lien apparaisse réellement.
-   */
-  questionnaireId?: string;
 }
 
 messagingRouter.post(
@@ -354,20 +382,12 @@ messagingRouter.post(
     if (!isChannel(b.channel)) throw new HttpError(400, "channel doit être email, sms ou whatsapp");
     if (!b.to) throw new HttpError(400, "Destinataire requis");
     if (!b.templateKey) throw new HttpError(400, "Modèle requis");
-    let variables = b.variables || {};
-    if (b.questionnaireId && entityId === null && b.prospectId) {
-      try {
-        variables = await attachQuestionnaireLink(b.questionnaireId, "crmProspect", b.prospectId, variables);
-      } catch (e) {
-        throw new HttpError(400, e instanceof Error ? e.message : "Questionnaire non applicable à cet envoi");
-      }
-    }
     const sent = await sendMessage({
       entityId,
       channel: b.channel,
       templateKey: b.templateKey,
       to: b.to,
-      variables,
+      variables: b.variables,
       trackOpenProspectId: entityId === null ? b.prospectId : undefined,
       baseUrl: `${req.protocol}://${req.get("host")}`,
     });

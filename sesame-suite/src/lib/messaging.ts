@@ -4,6 +4,7 @@ import { sendEmailRaw } from "./email";
 import { sendChannelRaw, sendWhatsAppTemplate } from "./sms";
 import { Channel } from "./messageTemplate";
 import { config } from "../config";
+import { attachQuestionnaireLink } from "./questionnaire";
 
 /**
  * Point de convergence unique : quel que soit le canal (email/sms/whatsapp),
@@ -71,7 +72,17 @@ export async function sendMessage(opts: {
   });
   if (!template) throw new HttpError(404, "Modèle introuvable pour ce canal");
 
-  const vars = opts.variables || {};
+  let vars = opts.variables || {};
+  // Questionnaire réglé sur le modèle (MessageTemplate.questionnaireId) —
+  // couvre aussi bien un envoi manuel (bouton "Envoyer un message" depuis
+  // une fiche prospect, qui n'a pas de règle d'automatisation à interroger)
+  // qu'un envoi automatique dont la règle n'a pas elle-même de questionnaire
+  // réglé. N'écrase jamais {{lienQuestionnaire}} si déjà fourni par
+  // l'appelant (cf. fireTrigger, qui l'attache lui-même depuis
+  // AutomationRule.questionnaireId AVANT d'appeler sendMessage).
+  if (template.questionnaireId && opts.entityId === null && opts.trackOpenProspectId && !vars.lienQuestionnaire) {
+    vars = await attachQuestionnaireLink(template.questionnaireId, "crmProspect", opts.trackOpenProspectId, vars);
+  }
   const subject = renderTemplate(template.subject, vars);
   let body = renderTemplate(template.bodyHtml, vars);
 
@@ -89,7 +100,10 @@ export async function sendMessage(opts: {
   }
 
   if (opts.channel === "email") {
-    await sendEmailRaw(opts.entityId, opts.to, subject, body, opts.fromNameOverride);
+    const namedAttachments = Array.isArray(template.defaultAttachments)
+      ? (template.defaultAttachments as unknown as { fileName: string; dataUrl: string }[])
+      : [];
+    await sendEmailRaw(opts.entityId, opts.to, subject, body, opts.fromNameOverride, { namedAttachments });
   } else if (opts.channel === "whatsapp") {
     // WhatsApp Business interdit le texte libre business-initié en dehors
     // d'une fenêtre de session client de 24h (règle Meta, pas une limite
