@@ -72,6 +72,27 @@ function parseFrenchDate(raw: string): Date | null {
   return d;
 }
 
+// Nombreuses factures françaises (ex : Boxtal) écrivent la date en toutes
+// lettres — "15 juillet 2026" — plutôt qu'au format JJ/MM/AAAA (constaté en
+// production, 18/09/2026 : 0 date reconnue sur une vingtaine de factures
+// réelles, toutes dans ce format).
+const MONTHS_FR: Record<string, number> = {
+  janvier: 1, "février": 2, fevrier: 2, mars: 3, avril: 4, mai: 5, juin: 6,
+  juillet: 7, "août": 8, aout: 8, septembre: 9, octobre: 10, novembre: 11,
+  "décembre": 12, decembre: 12,
+};
+function parseWrittenFrenchDate(raw: string): Date | null {
+  const m = /^(\d{1,2})[ \t]+([a-zéû]+)[ \t]+(\d{4})$/i.exec(raw.trim());
+  if (!m) return null;
+  const day = Number(m[1]);
+  const month = MONTHS_FR[m[2].toLowerCase()];
+  const year = Number(m[3]);
+  if (!month || day < 1 || day > 31) return null;
+  const d = new Date(Date.UTC(year, month - 1, day));
+  if (d.getUTCDate() !== day || d.getUTCMonth() !== month - 1) return null;
+  return d;
+}
+
 /**
  * Cherche une VALEUR immédiatement après un mot-clé — "immédiatement"
  * signifie : au plus quelques caractères de ponctuation/espace entre le
@@ -111,6 +132,7 @@ const VAT_FR_RE = /\b(FR[0-9A-Z]{2}\d{9})\b/;
 const IBAN_RE = /^([A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){2,7}\s?[A-Z0-9]{1,4})/;
 const BIC_RE = /^([A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?)\b/;
 const DATE_RE = /^(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{4})/;
+const WRITTEN_DATE_RE = /^(\d{1,2}[ \t]+[a-zéû]+[ \t]+\d{4})/i;
 const AMOUNT_RE = /^(\d{1,3}(?:[\s.]\d{3})*(?:[,.]\d{2})?)/;
 const INVOICE_NUMBER_RE = /^([A-Z0-9][A-Z0-9\-\/_.]{2,29})/;
 
@@ -121,6 +143,10 @@ const INVOICE_NUMBER_RE = /^([A-Z0-9][A-Z0-9\-\/_.]{2,29})/;
 // recherche de valeur sur le mauvais passage du texte.
 const INVOICE_NUMBER_KEYWORD = /(?:n[°o][ \t]*(?:de[ \t]*)?facture|num[ée]ro[ \t]*(?:de[ \t]*)?facture|facture[ \t]*n[°o]|invoice[ \t]*(?:number|#|no)\.?)/i;
 const INVOICE_DATE_KEYWORD = /date[ \t]*(?:de[ \t]*)?facture|date[ \t]*d.[ée]mission|invoice[ \t]*date/i;
+// Repli quand aucun libellé "date de facture"/"date d'émission" n'existe —
+// beaucoup de factures (ex : Boxtal) donnent la date directement dans la
+// ligne d'en-tête : "Facture n° 2600440948 du 15 juillet 2026".
+const INVOICE_NUMBER_DATE_KEYWORD = /facture[ \t]*n[°o][ \t]*[A-Z0-9][A-Z0-9\-\/_.]{2,29}[ \t]*du\b/i;
 const DUE_DATE_KEYWORD = /date[ \t]*d.[ée]ch[ée]ance|[ée]ch[ée]ance[ \t]*(?:le|au)?|due[ \t]*date/i;
 const SIRET_KEYWORD = /\bsiret\b[ \t]*:?[ \t]*n?[°o]?/i;
 const SIREN_KEYWORD = /\bsiren\b[ \t]*:?[ \t]*n?[°o]?/i;
@@ -161,9 +187,13 @@ export function extractInvoiceData(text: string): ExtractedInvoiceData {
     confidence.invoiceNumber = num.confidence;
   }
 
-  const invDate = findAfterKeyword(text, INVOICE_DATE_KEYWORD, DATE_RE);
+  const invDate =
+    findAfterKeyword(text, INVOICE_DATE_KEYWORD, DATE_RE) ||
+    findAfterKeyword(text, INVOICE_DATE_KEYWORD, WRITTEN_DATE_RE) ||
+    findAfterKeyword(text, INVOICE_NUMBER_DATE_KEYWORD, WRITTEN_DATE_RE) ||
+    findAfterKeyword(text, INVOICE_NUMBER_DATE_KEYWORD, DATE_RE);
   if (invDate) {
-    const d = parseFrenchDate(invDate.value);
+    const d = parseFrenchDate(invDate.value) || parseWrittenFrenchDate(invDate.value);
     if (d) {
       result.invoiceDate = d;
       confidence.invoiceDate = 0.9;
