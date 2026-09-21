@@ -54,9 +54,20 @@ export async function processDueCampaign(campaignId: string): Promise<void> {
 
   try {
     const manualIds = (campaign.manualSelectionIds as string[] | null) || null;
-    const recipients: CampaignRecipient[] = campaign.entityId
+    const rawRecipients: CampaignRecipient[] = campaign.entityId
       ? await resolveHotelAudience(campaign.entityId, (campaign.filterJson as HotelAudienceFilter | null) || null, manualIds)
       : await resolveCrmAudience((campaign.filterJson as CrmAudienceFilter | null) || null, manualIds);
+
+    // Un même email peut apparaître deux fois dans l'audience résolue (ex :
+    // deux fiches CrmProspect distinctes partageant le même email) — on ne
+    // veut jamais envoyer le même mail deux fois au même destinataire.
+    const seenEmails = new Set<string>();
+    const recipients = rawRecipients.filter((r) => {
+      const key = r.toEmail.trim().toLowerCase();
+      if (seenEmails.has(key)) return false;
+      seenEmails.add(key);
+      return true;
+    });
 
     let success = 0;
     let failure = 0;
