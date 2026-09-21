@@ -113,6 +113,7 @@ function shapeProspect(p: {
   entity?: { code: string; config: { lang: string; currency: string; timezone: string } | null } | null;
   commercial?: { id: string; name: string | null; email: string } | null;
   activities?: Parameters<typeof shapeActivity>[0][];
+  contacts?: { email: string | null; phone: string | null }[];
 }) {
   return {
     id: p.id,
@@ -191,6 +192,13 @@ function shapeProspect(p: {
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
     journal: (p.activities || []).map(shapeActivity),
+    // Un contact additionnel (CrmContact) peut porter l'email/téléphone que
+    // le référent principal n'a pas — les filtres "Sans email"/"Sans
+    // téléphone" (cf. crm.html filtered()) doivent en tenir compte plutôt
+    // que de ne regarder que p.email/p.tel, sous peine de classer comme
+    // "sans email" une fiche parfaitement joignable via un CrmContact.
+    hasContactEmail: (p.contacts || []).some((c) => !!c.email?.trim()),
+    hasContactPhone: (p.contacts || []).some((c) => !!c.phone?.trim()),
   };
 }
 
@@ -198,6 +206,7 @@ const PROSPECT_INCLUDE = {
   entity: { select: { code: true, config: { select: { lang: true, currency: true, timezone: true } } } },
   activities: { orderBy: { createdAt: "asc" as const } },
   commercial: { select: { id: true, name: true, email: true } },
+  contacts: { select: { email: true, phone: true } },
 };
 
 crmProspectRouter.get(

@@ -933,8 +933,8 @@ function filtered(){
     if(fOrigine&&c.origine!==fOrigine)return false;
     if(fContrat&&c.contrat!==fContrat)return false;
     if(fType&&c.type!==fType)return false;
-    if(fNoEmail&&c.email&&c.email.trim())return false;
-    if(fNoPhone&&c.tel&&c.tel.trim())return false;
+    if(fNoEmail&&((c.email&&c.email.trim())||c.hasContactEmail))return false;
+    if(fNoPhone&&((c.tel&&c.tel.trim())||c.hasContactPhone))return false;
     return true;
   }).sort((a,b)=>{let av=a[sortC]||'',bv=b[sortC]||'';if(typeof av==='string')av=av.toLowerCase();if(typeof bv==='string')bv=bv.toLowerCase();return av<bv?-sortD:av>bv?sortD:0;});
 }
