@@ -42,7 +42,13 @@ bookingEngineRouter.get(
       update: {},
       create: { entityId: entity.id },
     });
-    res.json({ enabled: config.enabled, requirePayment: config.requirePayment, durationOptions: config.durationOptions });
+    res.json({
+      enabled: config.enabled,
+      requirePayment: config.requirePayment,
+      durationOptions: config.durationOptions,
+      hideRoomSelection: config.hideRoomSelection,
+      hideOccupants: config.hideOccupants,
+    });
   })
 );
 
@@ -55,17 +61,27 @@ bookingEngineRouter.post(
     const enabled = !!req.body.enabled;
     const requirePayment = req.body.requirePayment !== undefined ? !!req.body.requirePayment : undefined;
     const durationOptions = req.body.durationOptions !== undefined ? parseDurationOptions(req.body.durationOptions) : undefined;
+    const hideRoomSelection = req.body.hideRoomSelection !== undefined ? !!req.body.hideRoomSelection : undefined;
+    const hideOccupants = req.body.hideOccupants !== undefined ? !!req.body.hideOccupants : undefined;
     const data = {
       enabled,
       ...(requirePayment !== undefined ? { requirePayment } : {}),
       ...(durationOptions !== undefined ? { durationOptions } : {}),
+      ...(hideRoomSelection !== undefined ? { hideRoomSelection } : {}),
+      ...(hideOccupants !== undefined ? { hideOccupants } : {}),
     };
     const config = await prisma.bookingEngineConfig.upsert({
       where: { entityId: entity.id },
       update: data,
       create: { entityId: entity.id, ...data },
     });
-    res.json({ enabled: config.enabled, requirePayment: config.requirePayment, durationOptions: config.durationOptions });
+    res.json({
+      enabled: config.enabled,
+      requirePayment: config.requirePayment,
+      durationOptions: config.durationOptions,
+      hideRoomSelection: config.hideRoomSelection,
+      hideOccupants: config.hideOccupants,
+    });
   })
 );
 
@@ -91,7 +107,14 @@ bookingEngineRouter.get(
     // comme avant.
     const enabled = !!engineConfig?.enabled && (!requirePayment || paymentAvailable);
     const durationOptions = Array.isArray(engineConfig?.durationOptions) ? engineConfig.durationOptions : [];
-    res.json({ enabled, requirePayment, paymentAvailable, durationOptions });
+    res.json({
+      enabled,
+      requirePayment,
+      paymentAvailable,
+      durationOptions,
+      hideRoomSelection: !!engineConfig?.hideRoomSelection,
+      hideOccupants: !!engineConfig?.hideOccupants,
+    });
   })
 );
 

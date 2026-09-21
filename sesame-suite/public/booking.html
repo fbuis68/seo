@@ -105,7 +105,7 @@ h1{font-family:var(--font-title);font-size:26px;font-weight:500;margin-bottom:6p
 
   <!-- ═══════ ÉCRAN 3 : coordonnées + récapitulatif ═══════ -->
   <div class="scr" id="scr-form">
-    <button class="btn btn-ghost" onclick="gotoScr('rooms')">← Choisir une autre chambre</button>
+    <button class="btn btn-ghost" id="form-back-btn" onclick="formBack()">← Choisir une autre chambre</button>
     <h1 style="margin-top:10px">Vos coordonnées</h1>
     <div class="card">
       <div class="grid2">
@@ -295,6 +295,14 @@ async function searchRooms(){
     errEl.textContent = 'Impossible de charger les chambres disponibles.'; errEl.style.display='block';
     return;
   }
+  // Ressource unique (BookingEngineConfig.hideRoomSelection) : une seule
+  // chambre disponible -> on la retient directement sans écran de choix.
+  // Ambigu (0 ou plusieurs) -> on retombe sur la liste, plus sûr que de
+  // deviner laquelle prendre.
+  if(BOOK_STATUS.hideRoomSelection && STATE.rooms.length===1){
+    selectRoom(0);
+    return;
+  }
   renderRooms();
   gotoScr('rooms');
 }
@@ -326,7 +334,16 @@ function renderRooms(){
 function selectRoom(i){
   STATE.selectedRoom = STATE.rooms[i];
   renderRecap();
+  var backBtn = document.getElementById('form-back-btn');
+  // Ressource unique : pas d'écran "chambres" à revenir voir, le retour
+  // ramène directement à la recherche (dates/durée).
+  if(BOOK_STATUS.hideRoomSelection){ backBtn.textContent='← Modifier les dates'; }
+  else { backBtn.textContent='← Choisir une autre chambre'; }
   gotoScr('form');
+}
+
+function formBack(){
+  gotoScr(BOOK_STATUS.hideRoomSelection ? 'search' : 'rooms');
 }
 
 function renderRecap(){
@@ -448,7 +465,7 @@ function handleBookingReturn(){
 }
 
 // ═══════════════════ BOOT ═══════════════════
-var BOOK_STATUS = { enabled:false, requirePayment:true, paymentAvailable:false, durationOptions:[] };
+var BOOK_STATUS = { enabled:false, requirePayment:true, paymentAvailable:false, durationOptions:[], hideRoomSelection:false, hideOccupants:false };
 window.addEventListener('DOMContentLoaded', async function(){
   var today = new Date();
   var tomorrow = new Date(today.getTime()+86400000);
@@ -456,7 +473,6 @@ window.addEventListener('DOMContentLoaded', async function(){
   document.getElementById('in-start').value = today.toISOString().slice(0,10);
   document.getElementById('in-end').min = tomorrow.toISOString().slice(0,10);
   document.getElementById('in-end').value = tomorrow.toISOString().slice(0,10);
-  renderOccupantSteppers();
 
   try{
     var r = await apiFetch('/wa/entityModuleConfig/list');
@@ -473,6 +489,17 @@ window.addEventListener('DOMContentLoaded', async function(){
     BOOK_STATUS = sd;
   }catch(e){ gotoScr('unavailable'); return; }
   renderDurationPresets();
+
+  // Occupants fixés à 1 adulte, sans sélecteur affiché (BookingEngineConfig.
+  // hideOccupants) — un seul adulte, comme sur une réservation d'accès à un
+  // magasin. La taxe de séjour reste calculée normalement côté serveur pour
+  // ce seul occupant.
+  if(BOOK_STATUS.hideOccupants){
+    OCC = {adulte:1, ado:0, enfant:0, bebe:0};
+    document.getElementById('occupant-steppers').style.display='none';
+  } else {
+    renderOccupantSteppers();
+  }
 
   gotoScr('search');
 });

@@ -1020,6 +1020,18 @@ model BookingEngineConfig {
   // uniquement) inchangé.
   durationOptions Json @default("[]")
 
+  // Établissement à ressource unique (ex: magasin avec un seul contrôle
+  // d'accès plutôt qu'un choix de chambres) — masque l'écran de sélection
+  // de chambre sur booking.html : si une seule chambre est disponible sur
+  // la période, elle est retenue automatiquement sans que le client ait à
+  // cliquer "Choisir" (s'il y en a plusieurs, la liste reste affichée par
+  // sécurité plutôt que de deviner laquelle prendre).
+  hideRoomSelection Boolean @default(false)
+  // Masque le sélecteur "Adultes/Ados/Enfants/Bébés" — occupants fixés à un
+  // seul adulte, envoyés tels quels au serveur (taxe de séjour toujours
+  // calculée normalement pour 1 adulte).
+  hideOccupants     Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

@@ -4114,6 +4114,20 @@ Accès au salon Premium</textarea>
         <span style="font-size:13px">Décochez pour laisser le client choisir "Payer en ligne" ou "Payer sur place"</span>
       </label>
     </div>
+    <div class="fi">
+      <label class="lb">Masquer la sélection de chambre</label>
+      <label style="display:flex;align-items:center;gap:8px;height:38px;cursor:pointer">
+        <input type="checkbox" id="bke-hide-room" style="accent-color:var(--am)">
+        <span style="font-size:13px">Ressource unique (ex. magasin à contrôle d'accès unique) — la chambre disponible est retenue automatiquement, sans écran de choix</span>
+      </label>
+    </div>
+    <div class="fi">
+      <label class="lb">Masquer la sélection du nombre d'occupants</label>
+      <label style="display:flex;align-items:center;gap:8px;height:38px;cursor:pointer">
+        <input type="checkbox" id="bke-hide-occupants" style="accent-color:var(--am)">
+        <span style="font-size:13px">Occupants fixés à un seul adulte, sans sélecteur affiché au client</span>
+      </label>
+    </div>
     <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
       <button class="btn btn-p" onclick="bkeSave()"><i class="ti ti-device-floppy"></i> Enregistrer</button>
     </div>
@@ -8188,6 +8202,8 @@ async function bkeInit(){
     document.getElementById('bke-enabled').checked = !!(cfg && cfg.enabled);
     requirePayment = cfg ? cfg.requirePayment !== false : true;
     document.getElementById('bke-require-payment').checked = requirePayment;
+    document.getElementById('bke-hide-room').checked = !!(cfg && cfg.hideRoomSelection);
+    document.getElementById('bke-hide-occupants').checked = !!(cfg && cfg.hideOccupants);
     BKE_DURATION_OPTIONS = (cfg && Array.isArray(cfg.durationOptions)) ? cfg.durationOptions.slice() : [];
     bkeRenderDurationList();
   }catch(e){}
@@ -8209,7 +8225,13 @@ async function bkeInit(){
 }
 
 async function bkeSave(){
-  var body = { enabled: document.getElementById('bke-enabled').checked, requirePayment: document.getElementById('bke-require-payment').checked, durationOptions: BKE_DURATION_OPTIONS };
+  var body = {
+    enabled: document.getElementById('bke-enabled').checked,
+    requirePayment: document.getElementById('bke-require-payment').checked,
+    durationOptions: BKE_DURATION_OPTIONS,
+    hideRoomSelection: document.getElementById('bke-hide-room').checked,
+    hideOccupants: document.getElementById('bke-hide-occupants').checked
+  };
   try{
     var r = await adminFetch('/wa/bookingEngine/config/update', {method:'POST', body:JSON.stringify(body)});
     if(!r.ok){ toast('Erreur lors de l\'enregistrement'); return; }
