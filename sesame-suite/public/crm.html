@@ -7320,6 +7320,7 @@ async function testRule(id){
 // schéma-prêts côté backend mais ne sont pas exposés ici.
 // ════════════════════════════════════════
 let ACC_INVOICES=[], ACC_SUPPLIERS=[], ACC_ACCOUNTS=[], ACC_JOURNALS=[], ACC_ENTRIES=[], ACC_RULES=[], ACC_DASH=null;
+let ACC_BANK_ACCOUNTS=[], ACC_BANK_TX=[], ACC_BANK_SELECTED=null;
 let ACC_TAB='inbox';
 const ACC_LOADED={};
 const ACC_STATUS_LABEL={RECEIVED:'Reçue',PROCESSING:'En traitement',OCR_COMPLETED:'OCR effectué',EXTRACTED:'Extraite',CHECK_REQUIRED:'À vérifier',VALIDATED:'Validée',ACCOUNTED:'Comptabilisée',PARTIALLY_PAID:'Partiellement payée',PAID:'Payée',REJECTED:'Rejetée'};
@@ -7371,7 +7372,7 @@ function renderAccDashboardTiles(){
     </div>`;
 }
 
-const ACC_TABS=[{k:'inbox',label:'Factures'},{k:'suppliers',label:'Fournisseurs'},{k:'accounts',label:'Plan comptable'},{k:'entries',label:'Écritures'},{k:'rules',label:'Règles'},{k:'email',label:'Import email'},{k:'settings',label:'Réglages'}];
+const ACC_TABS=[{k:'inbox',label:'Factures'},{k:'suppliers',label:'Fournisseurs'},{k:'accounts',label:'Plan comptable'},{k:'bank',label:'Banque'},{k:'entries',label:'Écritures'},{k:'rules',label:'Règles'},{k:'email',label:'Import email'},{k:'settings',label:'Réglages'}];
 const PAYMENT_METHOD_LABEL = {'':'—', virement:'Virement', prelevement:'Prélèvement', cheque:'Chèque', carte:'Carte bancaire', especes:'Espèces', autre:'Autre'};
 
 /**
@@ -7395,7 +7396,7 @@ function renderComptaPanel(){
       <div id="acc-tab-body"><div class="log-empty">Chargement…</div></div>
     </div>`;
   renderAccDashboardTiles();
-  const loaders={inbox:loadAccInboxTab, suppliers:loadAccSuppliersTab, accounts:loadAccAccountsTab, entries:loadAccEntriesTab, rules:loadAccRulesTab, email:loadAccEmailTab, settings:loadAccSettingsTab};
+  const loaders={inbox:loadAccInboxTab, suppliers:loadAccSuppliersTab, accounts:loadAccAccountsTab, bank:loadAccBankTab, entries:loadAccEntriesTab, rules:loadAccRulesTab, email:loadAccEmailTab, settings:loadAccSettingsTab};
   loaders[ACC_TAB] && loaders[ACC_TAB]();
 }
 
@@ -8260,6 +8261,179 @@ async function saveAccAccount(){
     ACC_LOADED.accounts = false;
     loadAccAccountsTab();
   }catch(e){ flash('Erreur de création'); }
+}
+
+// ───────── Onglet Banque (Phase 1 : comptes + import de relevé) ─────────
+
+const ACC_BANK_SOURCE_LABEL={csv:'CSV',camt053:'CAMT.053 (XML)',mt940:'MT940 (SWIFT)',cfonb:'CFONB'};
+const ACC_BANK_DIRECTION_LABEL={CREDIT:'Crédit',DEBIT:'Débit'};
+
+async function loadAccBankTab(){
+  await ensureAccAccountsLoaded();
+  try{
+    const r = await apiFetch('/wa/acc/bank/accounts?scope=crm');
+    ACC_BANK_ACCOUNTS = r.ok ? await r.json() : [];
+  }catch(e){ ACC_BANK_ACCOUNTS=[]; }
+  if(ACC_BANK_SELECTED && !ACC_BANK_ACCOUNTS.some(a=>a.id===ACC_BANK_SELECTED)) ACC_BANK_SELECTED=null;
+  if(!ACC_BANK_SELECTED && ACC_BANK_ACCOUNTS.length) ACC_BANK_SELECTED = ACC_BANK_ACCOUNTS[0].id;
+  await loadAccBankTransactions();
+  renderAccBank();
+}
+
+async function loadAccBankTransactions(){
+  if(!ACC_BANK_SELECTED){ ACC_BANK_TX=[]; return; }
+  try{
+    const r = await apiFetch('/wa/acc/bank/transactions?scope=crm&bankAccountId='+ACC_BANK_SELECTED+'&take=200');
+    ACC_BANK_TX = r.ok ? await r.json() : [];
+  }catch(e){ ACC_BANK_TX=[]; }
+}
+
+function renderAccBank(){
+  const el = document.getElementById('acc-tab-body');
+  if(!el) return;
+  const accRows = ACC_BANK_ACCOUNTS.map(a=>`
+    <tr style="cursor:pointer;${a.id===ACC_BANK_SELECTED?'background:var(--hover)':''}" onclick="accSelectBankAccount('${a.id}')">
+      <td>${esc(a.name)}</td>
+      <td>${esc(a.bank)}</td>
+      <td style="font-family:monospace;font-size:11px">${esc(a.iban||'—')}</td>
+      <td>${esc(a.currency)}</td>
+      <td>${a.lastSyncAt?new Date(a.lastSyncAt).toLocaleString('fr-FR'):'jamais'}</td>
+      <td onclick="event.stopPropagation()">
+        <button class="ta-btn" onclick="openAccBankImportModal('${a.id}')" title="Importer un relevé">⇧</button>
+        <button class="ta-btn" onclick="accDeleteBankAccount('${a.id}')" title="Supprimer">🗑</button>
+      </td>
+    </tr>`).join('');
+
+  const selected = ACC_BANK_ACCOUNTS.find(a=>a.id===ACC_BANK_SELECTED);
+  const txRows = ACC_BANK_TX.map(t=>`
+    <tr>
+      <td>${new Date(t.operationDate).toLocaleDateString('fr-FR')}</td>
+      <td>${esc(t.rawLabel)}</td>
+      <td>${esc(t.counterpartyName||'—')}</td>
+      <td style="text-align:right;font-family:monospace;color:${t.amount<0?'#a32d2d':'#1f7a3f'}">${fmtEUR2(t.amount)}</td>
+      <td>${ACC_BANK_SOURCE_LABEL[t.source]||t.source}</td>
+    </tr>`).join('');
+
+  el.innerHTML = `
+    <div class="list-toolbar">
+      <button class="btn btn-primary btn-sm" onclick="openAccBankAccountModal()">+ Compte bancaire</button>
+      <span class="count-lbl">${ACC_BANK_ACCOUNTS.length} compte(s) bancaire(s)</span>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Nom</th><th>Banque</th><th>IBAN</th><th style="width:70px">Devise</th><th style="width:140px">Dernier import</th><th style="width:70px"></th></tr></thead>
+      <tbody>${accRows||'<tr><td colspan="6" class="log-empty">Aucun compte bancaire — cliquez sur "+ Compte bancaire".</td></tr>'}</tbody>
+    </table></div>
+    <div class="modal-section">Transactions${selected?' — '+esc(selected.name):''}</div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th style="width:100px">Date</th><th>Libellé</th><th>Contrepartie</th><th style="width:120px;text-align:right">Montant</th><th style="width:110px">Source</th></tr></thead>
+      <tbody>${txRows||'<tr><td colspan="5" class="log-empty">'+(selected?'Aucune transaction importée pour ce compte.':'Sélectionnez un compte bancaire ci-dessus.')+'</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+function accSelectBankAccount(id){
+  ACC_BANK_SELECTED = id;
+  loadAccBankTransactions().then(renderAccBank);
+}
+
+function openAccBankAccountModal(){
+  const bankAccounts = ACC_ACCOUNTS.filter(a=>a.type==='banque' && a.active);
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:460px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Nouveau compte bancaire</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div class="form-grid">
+        <div class="ff"><label>Banque</label><input id="ba-bank" placeholder="Ex. Qonto"></div>
+        <div class="ff"><label>Nom du compte</label><input id="ba-name" placeholder="Ex. Compte courant"></div>
+      </div>
+      <div class="form-grid" style="margin-top:8px">
+        <div class="ff"><label>IBAN</label><input id="ba-iban"></div>
+        <div class="ff"><label>BIC</label><input id="ba-bic"></div>
+      </div>
+      <div class="form-grid" style="margin-top:8px">
+        <div class="ff"><label>Devise</label><input id="ba-currency" value="EUR"></div>
+        <div class="ff"><label>Compte comptable (512...)</label><select id="ba-accountId">
+          ${bankAccounts.length?bankAccounts.map(a=>`<option value="${a.id}">${esc(a.number)} — ${esc(a.label)}</option>`).join(''):'<option value="">Aucun — créez d\'abord un compte de type "Banque" dans Plan comptable</option>'}
+        </select></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="saveAccBankAccount()">Enregistrer</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function saveAccBankAccount(){
+  const g=i=>(document.getElementById(i)||{value:''}).value.trim();
+  const body = {bank:g('ba-bank'), name:g('ba-name'), iban:g('ba-iban')||undefined, bic:g('ba-bic')||undefined, currency:g('ba-currency')||'EUR', accountId:g('ba-accountId')};
+  if(!body.bank || !body.name || !body.accountId){ flash('Banque, nom et compte comptable requis'); return; }
+  try{
+    const r = await apiFetch('/wa/acc/bank/accounts?scope=crm', {method:'POST', body:JSON.stringify(body)});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    closeModal();
+    flash('Compte bancaire créé');
+    ACC_BANK_SELECTED = data.id;
+    loadAccBankTab();
+  }catch(e){ flash(e.message||'Erreur de création'); }
+}
+
+async function accDeleteBankAccount(id){
+  if(!confirm('Supprimer ce compte bancaire ?')) return;
+  try{
+    const r = await apiFetch('/wa/acc/bank/accounts/'+id+'?scope=crm', {method:'DELETE'});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash('Compte bancaire supprimé');
+    loadAccBankTab();
+  }catch(e){ flash(e.message||'Erreur de suppression'); }
+}
+
+function openAccBankImportModal(bankAccountId){
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:560px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Importer un relevé</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div class="ff"><label>Format</label><select id="bi-source">
+        <option value="csv">CSV</option>
+        <option value="camt053">CAMT.053 (XML)</option>
+        <option value="mt940">MT940 (SWIFT)</option>
+        <option value="cfonb">CFONB</option>
+      </select></div>
+      <div class="ff" style="margin-top:8px"><label>Fichier</label><input type="file" id="bi-file" accept=".csv,.xml,.txt,.sta" onchange="accBankImportFileChange(event)"></div>
+      <div class="ff" style="margin-top:8px"><label>Ou contenu collé</label><textarea id="bi-content" rows="8" style="width:100%;font-family:monospace;font-size:12px" placeholder="Collez le contenu du relevé ici si vous n'utilisez pas de fichier"></textarea></div>
+      <div id="bi-status" style="font-size:12px;color:var(--mu);margin-top:6px"></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="accSubmitBankImport('${bankAccountId}')">Importer</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function accBankImportFileChange(ev){
+  const file = ev.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{ document.getElementById('bi-content').value = reader.result; };
+  reader.readAsText(file);
+}
+
+async function accSubmitBankImport(bankAccountId){
+  const source = document.getElementById('bi-source').value;
+  const content = document.getElementById('bi-content').value;
+  if(!content.trim()){ flash('Fichier ou contenu requis'); return; }
+  const statusEl = document.getElementById('bi-status');
+  statusEl.textContent = 'Import en cours…';
+  try{
+    const r = await apiFetch('/wa/acc/bank/import?scope=crm', {method:'POST', body:JSON.stringify({bankAccountId, source, content})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    closeModal();
+    flash(data.created+' transaction(s) importée(s)'+(data.skipped?', '+data.skipped+' déjà connue(s)':''));
+    ACC_BANK_SELECTED = bankAccountId;
+    loadAccBankTab();
+  }catch(e){ statusEl.textContent = e.message||'Erreur d\'import'; statusEl.style.color='#a32d2d'; }
 }
 
 // ───────── Onglet Écritures ─────────
