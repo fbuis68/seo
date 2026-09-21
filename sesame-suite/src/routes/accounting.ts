@@ -13,6 +13,7 @@ import { worstLevel, CheckResult } from "../lib/accChecks";
 import { recordAuditLog } from "../lib/accAudit";
 import { parseBankFile, importBankTransactions, BankImportError, BankImportSource } from "../lib/accBanking";
 import { fetchQontoOrganization, syncQontoBankAccount, QontoError, QontoCredentials } from "../lib/qonto";
+import { findCandidates, confirmMatch, unmatch, autoReconcileMany, ReconciliationError } from "../lib/accReconciliation";
 
 /**
  * Module comptabilité (§1-72 du cahier des charges) — routes REST. Toutes
@@ -368,10 +369,15 @@ accountingRouter.post(
 );
 
 /**
- * PATCH /wa/acc/invoices/:id/payment — indicateur "réglée" manuel (§21/§34,
- * simple bascule, pas un vrai rapprochement bancaire — hors périmètre de
- * cette phase). Réservé aux factures déjà comptabilisées : marquer une
- * facture payée avant même sa comptabilisation n'aurait pas de sens.
+ * PATCH /wa/acc/invoices/:id/payment — indicateur "réglée" manuel (§21/§34),
+ * pour un règlement hors rapprochement bancaire (espèces, chèque encaissé
+ * sans passer par un relevé...). Réservé aux factures déjà comptabilisées.
+ * Coexiste avec le rapprochement bancaire (phase 3, AccBankMatch) via
+ * amountPaid : paid=true complète le solde dû restant (ne réduit jamais un
+ * montant déjà rapproché par ailleurs) ; paid=false est refusé tant qu'un
+ * rapprochement bancaire couvre une partie de la facture — il faut d'abord
+ * le retirer (DELETE /acc/bank/matches/:id) pour éviter un état incohérent
+ * (statut "non réglée" alors qu'un virement réel y est rapproché).
  */
 accountingRouter.patch(
   "/acc/invoices/:id/payment",
@@ -384,8 +390,15 @@ accountingRouter.patch(
       throw new HttpError(400, "Seule une facture comptabilisée peut être marquée payée");
     }
     const paid = !!req.body?.paid;
+    if (!paid) {
+      const bankMatchCount = await prisma.accBankMatch.count({ where: { invoiceId: invoice.id } });
+      if (bankMatchCount > 0) {
+        throw new HttpError(400, "Cette facture a un rapprochement bancaire — retirez-le (onglet Banque) avant de la marquer non réglée");
+      }
+    }
+    const amountPaid = paid ? invoice.amountTtc || 0 : 0;
     const status = paid ? "PAID" : "ACCOUNTED";
-    const updated = await prisma.accInvoice.update({ where: { id: invoice.id }, data: { status } });
+    const updated = await prisma.accInvoice.update({ where: { id: invoice.id }, data: { status, amountPaid } });
     await recordAuditLog({ entityId, userId: actorId(req), action: paid ? "invoice_marked_paid" : "invoice_marked_unpaid", targetType: "AccInvoice", targetId: invoice.id, oldValue: { status: invoice.status }, newValue: { status }, ip: req.ip });
     res.json(updated);
   })
@@ -848,17 +861,18 @@ accountingRouter.post(
 
     const result = await importBankTransactions(entityId, bankAccount.id, b.source as BankImportSource, parsed);
     await prisma.accBankAccount.update({ where: { id: bankAccount.id }, data: { lastSyncAt: new Date() } });
+    const { matchedCount } = await autoReconcileMany(result.createdIds);
     await recordAuditLog({
       entityId,
       userId: actorId(req),
       action: "bank_transactions_imported",
       targetType: "AccBankAccount",
       targetId: bankAccount.id,
-      newValue: { source: b.source, parsedCount: parsed.length, ...result },
+      newValue: { source: b.source, parsedCount: parsed.length, ...result, matchedCount },
       ip: req.ip,
     });
 
-    res.json({ parsedCount: parsed.length, ...result });
+    res.json({ parsedCount: parsed.length, created: result.created, skipped: result.skipped, matchedCount });
   })
 );
 
@@ -990,7 +1004,83 @@ accountingRouter.get(
       orderBy: { operationDate: "desc" },
       take,
       skip: Number(req.query.skip) || 0,
+      include: { matches: { select: { allocatedAmount: true } } },
     });
-    res.json(rows);
+    res.json(rows.map((r) => {
+      const { matches, ...rest } = r;
+      return { ...rest, matchedAmount: matches.reduce((s, m) => s + m.allocatedAmount, 0) };
+    }));
+  })
+);
+
+// ───────── Rapprochement bancaire (Phase 3) ─────────
+
+accountingRouter.get(
+  "/acc/bank/transactions/:id/matches",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const tx = await prisma.accBankTransaction.findFirst({ where: { id: req.params.id, entityId } });
+    if (!tx) throw new HttpError(404, "Transaction introuvable");
+    const [matches, candidates] = await Promise.all([
+      prisma.accBankMatch.findMany({ where: { bankTransactionId: tx.id }, include: { invoice: true }, orderBy: { createdAt: "asc" } }),
+      findCandidates(tx.id),
+    ]);
+    const matchedInvoiceIds = new Set(matches.map((m) => m.invoiceId));
+    res.json({
+      matches,
+      candidates: candidates.filter((c) => !matchedInvoiceIds.has(c.invoice.id)),
+    });
+  })
+);
+
+interface ConfirmMatchBody {
+  invoiceId?: string;
+  allocatedAmount?: number;
+}
+
+accountingRouter.post(
+  "/acc/bank/transactions/:id/match",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const tx = await prisma.accBankTransaction.findFirst({ where: { id: req.params.id, entityId } });
+    if (!tx) throw new HttpError(404, "Transaction introuvable");
+    const b = req.body as ConfirmMatchBody;
+    if (!b.invoiceId || !b.allocatedAmount) throw new HttpError(400, "invoiceId et allocatedAmount requis");
+    const invoice = await prisma.accInvoice.findFirst({ where: { id: b.invoiceId, entityId } });
+    if (!invoice) throw new HttpError(404, "Facture introuvable");
+    try {
+      const result = await confirmMatch(tx.id, invoice.id, b.allocatedAmount, "manual", actorId(req), null);
+      await recordAuditLog({
+        entityId, userId: actorId(req), action: "bank_match_confirmed", targetType: "AccBankMatch", targetId: result.match.id,
+        newValue: { bankTransactionId: tx.id, invoiceId: invoice.id, allocatedAmount: b.allocatedAmount }, ip: req.ip,
+      });
+      res.json(result);
+    } catch (e) {
+      if (e instanceof ReconciliationError) throw new HttpError(400, e.message);
+      throw e;
+    }
+  })
+);
+
+accountingRouter.delete(
+  "/acc/bank/matches/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const match = await prisma.accBankMatch.findFirst({ where: { id: req.params.id, entityId } });
+    if (!match) throw new HttpError(404, "Rapprochement introuvable");
+    try {
+      await unmatch(match.id);
+      await recordAuditLog({
+        entityId, userId: actorId(req), action: "bank_match_removed", targetType: "AccBankMatch", targetId: match.id,
+        oldValue: { bankTransactionId: match.bankTransactionId, invoiceId: match.invoiceId, allocatedAmount: match.allocatedAmount }, ip: req.ip,
+      });
+      res.json({ ok: true });
+    } catch (e) {
+      if (e instanceof ReconciliationError) throw new HttpError(400, e.message);
+      throw e;
+    }
   })
 );

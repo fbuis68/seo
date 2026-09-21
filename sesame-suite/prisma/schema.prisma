@@ -70,6 +70,7 @@ model Entity {
   accAuditLogs           AccAuditLog[]
   accBankAccounts        AccBankAccount[]
   accBankTransactions    AccBankTransaction[]
+  accBankMatches         AccBankMatch[]
   qontoConfig            QontoConfig?
 }
 
@@ -2941,6 +2942,16 @@ model AccInvoice {
   amountDeposit  Float?
   amountDue      Float?
 
+  // Cumul des montants rapprochés via AccBankMatch (phase 3, lib/
+  // accReconciliation.ts) — pilote status PARTIALLY_PAID/PAID en
+  // complément du bouton manuel "réglée" (PATCH .../payment, qui reste
+  // pour les règlements hors banque : espèces, chèque non encore
+  // encaissé...). Recalculé à chaque création/suppression de match, jamais
+  // édité directement ailleurs.
+  amountPaid Float @default(0)
+
+  bankMatches AccBankMatch[]
+
   proposedAccountId         String?
   proposedAccount           AccAccount? @relation("InvoiceProposedAccount", fields: [proposedAccountId], references: [id], onDelete: SetNull)
   proposedAccountConfidence Float?
@@ -3282,9 +3293,46 @@ model AccBankTransaction {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  matches AccBankMatch[]
+
   @@unique([bankAccountId, externalId])
   @@index([entityId, status])
   @@index([entityId, bankAccountId, operationDate])
+}
+
+// Rapprochement transaction bancaire <-> facture (phase 3, lib/
+// accReconciliation.ts) — une ligne par paire, plusieurs lignes possibles
+// pour une même transaction (paiement groupé : un virement règle
+// plusieurs factures) ou pour une même facture (paiement fractionné :
+// plusieurs virements règlent une seule facture). allocatedAmount est la
+// part du montant de la transaction affectée à CETTE facture (jamais le
+// montant total de la transaction ni celui de la facture).
+model AccBankMatch {
+  id       String  @id @default(cuid())
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  bankTransactionId String
+  bankTransaction   AccBankTransaction @relation(fields: [bankTransactionId], references: [id], onDelete: Cascade)
+
+  invoiceId String
+  invoice   AccInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  allocatedAmount Float
+  // Score 0-100 au moment du rapprochement (cf. scoreCandidate,
+  // lib/accReconciliation.ts) — conservé même pour un match manuel (score
+  // du meilleur candidat automatique à ce moment, ou null si l'utilisateur
+  // a choisi une facture qui n'était pas proposée).
+  score Float?
+  // auto (créé automatiquement, score >= seuil) | manual (confirmé par un
+  // utilisateur, y compris un score proposé mais sous le seuil auto).
+  type String
+
+  createdAt DateTime @default(now())
+  createdBy String? // adminId, null si auto
+
+  @@index([entityId, bankTransactionId])
+  @@index([entityId, invoiceId])
 }
 
 // Identifiants d'accès à l'API Qonto (Business API, cf. lib/qonto.ts) — un

@@ -308,6 +308,11 @@ export function parseBankFile(source: BankImportSource, content: string): Parsed
 export interface ImportBankTransactionsResult {
   created: number;
   skipped: number;
+  // Ids des transactions effectivement créées par cet appel (pas les
+  // ignorées) — permet à l'appelant de lancer le rapprochement automatique
+  // (phase 3, lib/accReconciliation.ts) uniquement sur les nouvelles lignes
+  // plutôt que de rebalayer tout l'historique à chaque import.
+  createdIds: string[];
 }
 
 /**
@@ -323,11 +328,12 @@ export async function importBankTransactions(
 ): Promise<ImportBankTransactionsResult> {
   let created = 0;
   let skipped = 0;
+  const createdIds: string[] = [];
 
   for (const tx of parsed) {
     const externalId = tx.externalId?.trim() || fallbackExternalId(tx);
     try {
-      await prisma.accBankTransaction.create({
+      const row = await prisma.accBankTransaction.create({
         data: {
           entityId,
           bankAccountId,
@@ -352,6 +358,7 @@ export async function importBankTransactions(
         },
       });
       created++;
+      createdIds.push(row.id);
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
         skipped++;
@@ -361,5 +368,5 @@ export async function importBankTransactions(
     }
   }
 
-  return { created, skipped };
+  return { created, skipped, createdIds };
 }

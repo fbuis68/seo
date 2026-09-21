@@ -7561,7 +7561,7 @@ function renderAccInbox(){
     </div>
     <div id="acc-inbox-dropzone" style="border:2px dashed transparent;border-radius:12px;transition:border-color .1s,background .1s">
       <div class="tbl-wrap"><table>
-        <thead><tr><th>Date</th><th>Type</th><th>Fournisseur</th><th>N° facture</th><th style="text-align:right">HT</th><th style="text-align:right">TVA</th><th style="text-align:right">TTC</th><th>Compte</th><th>Contrôles</th><th>État</th><th style="width:80px">Réglée</th><th style="width:44px"></th></tr></thead>
+        <thead><tr><th>Date</th><th>Type</th><th>Tiers</th><th>N° facture</th><th style="text-align:right">HT</th><th style="text-align:right">TVA</th><th style="text-align:right">TTC</th><th>Compte</th><th>Contrôles</th><th>État</th><th style="width:80px">Réglée</th><th style="width:44px"></th></tr></thead>
         <tbody>${rows||'<tr><td colspan="12" class="log-empty">Aucune facture — déposez-en une avec le bouton en haut à droite, ou glissez un fichier ici.</td></tr>'}</tbody>
       </table></div>
     </div>`;
@@ -7795,6 +7795,7 @@ async function pickAiEntreprise(i){
   if(box){ box.style.display='none'; box.innerHTML=''; }
   const invId = window._accInvoiceEditing && window._accInvoiceEditing.id;
   if(!invId) return;
+  const tiersLabel = window._accInvoiceEditing.direction==='sale' ? 'Client' : 'Fournisseur';
   const street = [siege.numero_voie, siege.type_voie, siege.libelle_voie].filter(Boolean).join(' ');
   try{
     const cr = await apiFetch('/wa/acc/suppliers?scope=crm', {method:'POST', body:JSON.stringify({
@@ -7806,11 +7807,11 @@ async function pickAiEntreprise(i){
     if(!cr.ok) throw new Error(supplier.error||'http '+cr.status);
     const ur = await apiFetch('/wa/acc/invoices/'+invId+'?scope=crm', {method:'PUT', body:JSON.stringify({supplierId: supplier.id})});
     if(!ur.ok) throw new Error('http '+ur.status);
-    flash('Fournisseur créé et rapproché à la facture');
+    flash(tiersLabel+' créé et rapproché à la facture');
     ACC_LOADED.suppliers = false;
     if(ACC_TAB==='inbox') await accReloadInvoices();
     openAccInvoiceModal(invId);
-  }catch(err){ flash('Erreur : '+(err.message||'échec de la création du fournisseur')); }
+  }catch(err){ flash('Erreur : '+(err.message||'échec de la création du '+tiersLabel.toLowerCase())); }
 }
 
 function renderAccInvoiceModal(inv){
@@ -7826,6 +7827,7 @@ function renderAccInvoiceModal(inv){
   const checksHtml = checks.map(c=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:12px"><span class="tag ${ACC_CHECK_TAG[c.level]||'t-gray'}" style="font-size:10px;padding:1px 7px;flex-shrink:0">${c.level}</span><span>${esc(c.message)}</span></div>`).join('');
 
   const supplierOpts = `<option value="">— Aucun —</option>` + ACC_SUPPLIERS.map(s=>`<option value="${s.id}" ${inv.supplierId===s.id?'selected':''}>${esc(s.name)}</option>`).join('');
+  const tiersLabel = inv.direction==='sale' ? 'Client' : 'Fournisseur';
   const accountType = inv.direction==='sale' ? 'produit' : 'charge';
   const accountOpts = `<option value="">— Aucun —</option>` + ACC_ACCOUNTS.filter(a=>a.type===accountType && (a.active || a.id===inv.proposedAccountId)).map(a=>`<option value="${a.id}" ${inv.proposedAccountId===a.id?'selected':''}>${esc(a.number)} — ${esc(a.label)}${!a.active?' (inactif)':''}</option>`).join('');
   const locked = ['VALIDATED','ACCOUNTED','PARTIALLY_PAID','PAID'].includes(inv.status);
@@ -7851,8 +7853,8 @@ function renderAccInvoiceModal(inv){
             <div class="ff"><label>Date facture</label><input type="date" id="ai-invoiceDate" value="${toDateInputValue(inv.invoiceDate)}" ${locked?'disabled':''}></div>
             <div class="ff"><label>Date échéance</label><input type="date" id="ai-dueDate" value="${toDateInputValue(inv.dueDate)}" ${locked?'disabled':''}></div>
           </div>
-          ${!locked?'<div style="font-size:11px;color:var(--mu);margin-top:4px">Changer le sens réinitialise le fournisseur/client et le compte proposé (rapprochement et type de compte différents) — enregistrez avant de les re-choisir.</div>':''}
-          <div class="modal-section">Fournisseur</div>
+          ${!locked?`<div style="font-size:11px;color:var(--mu);margin-top:4px">Changer le sens réinitialise le ${inv.direction==='sale'?'client':'fournisseur'} et le compte proposé (rapprochement et type de compte différents) — enregistrez avant de les re-choisir.</div>`:''}
+          <div class="modal-section">${tiersLabel}</div>
           ${!locked?`<div class="ff" style="position:relative;margin-bottom:8px">
             <label>Rechercher/créer via l'annuaire public des entreprises</label>
             <div style="display:flex;gap:6px">
@@ -7860,10 +7862,10 @@ function renderAccInvoiceModal(inv){
               <button type="button" class="btn btn-ghost btn-icon" title="Rechercher" onclick="aiEntrepriseAutocomplete(true)">🔍</button>
             </div>
             <div id="ai-entreprise-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--card);border:0.5px solid var(--bdr);border-radius:8px;margin-top:2px;max-height:220px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.12)"></div>
-            <div style="font-size:11px;color:var(--mu);margin-top:4px">Choisir un résultat crée la fiche fournisseur (nom + adresse officiels) et la rapproche immédiatement à cette facture.</div>
+            <div style="font-size:11px;color:var(--mu);margin-top:4px">Choisir un résultat crée la fiche ${inv.direction==='sale'?'client':'fournisseur'} (nom + adresse officiels) et la rapproche immédiatement à cette facture.</div>
           </div>`:''}
           <div class="form-grid">
-            <div class="ff"><label>Fournisseur rapproché${inv.supplierMatchConfidence!=null?' ('+accConfidencePct(inv.supplierMatchConfidence)+')':''}</label><select id="ai-supplierId" ${locked?'disabled':''}>${supplierOpts}</select></div>
+            <div class="ff"><label>${tiersLabel} rapproché${inv.supplierMatchConfidence!=null?' ('+accConfidencePct(inv.supplierMatchConfidence)+')':''}</label><select id="ai-supplierId" ${locked?'disabled':''}>${supplierOpts}</select></div>
             <div class="ff"><label>Raison sociale extraite</label><input id="ai-issuerName" value="${esc(inv.issuerName||'')}" ${locked?'disabled':''}></div>
             <div class="ff"><label>SIRET</label><input id="ai-issuerSiret" value="${esc(inv.issuerSiret||'')}" ${locked?'disabled':''}></div>
             <div class="ff"><label>SIREN</label><input id="ai-issuerSiren" value="${esc(inv.issuerSiren||'')}" ${locked?'disabled':''}></div>
@@ -8320,14 +8322,24 @@ function renderAccBank(){
   }).join('');
 
   const selected = ACC_BANK_ACCOUNTS.find(a=>a.id===ACC_BANK_SELECTED);
-  const txRows = ACC_BANK_TX.map(t=>`
-    <tr>
+  const txRows = ACC_BANK_TX.map(t=>{
+    const matched = Math.abs(t.matchedAmount||0);
+    const total = Math.abs(t.amount);
+    let recoBadge;
+    if(t.status==='IGNORED'||t.status==='INTERNAL_TRANSFER') recoBadge = `<span class="tpill">${t.status==='IGNORED'?'Écartée':'Virement interne'}</span>`;
+    else if(matched<=0.009) recoBadge = `<span class="tag t-gray" style="font-size:10px;padding:1px 7px">Non rapprochée</span>`;
+    else if(matched<total-0.009) recoBadge = `<span class="tag t-amber" style="font-size:10px;padding:1px 7px">Partielle (${fmtEUR2(matched)}/${fmtEUR2(total)})</span>`;
+    else recoBadge = `<span class="tag t-green" style="font-size:10px;padding:1px 7px">Rapprochée</span>`;
+    return `
+    <tr style="cursor:pointer" onclick="openAccBankMatchModal('${t.id}')">
       <td>${new Date(t.operationDate).toLocaleDateString('fr-FR')}</td>
       <td>${esc(t.rawLabel)}</td>
       <td>${esc(t.counterpartyName||'—')}</td>
       <td style="text-align:right;font-family:monospace;color:${t.amount<0?'#a32d2d':'#1f7a3f'}">${fmtEUR2(t.amount)}</td>
       <td>${ACC_BANK_SOURCE_LABEL[t.source]||t.source}</td>
-    </tr>`).join('');
+      <td>${recoBadge}</td>
+    </tr>`;
+  }).join('');
 
   const qontoCfg = ACC_QONTO_CONFIG || {login:'',secretKeySet:false,secretKeyLast4:'',sandbox:false};
   el.innerHTML = `
@@ -8346,8 +8358,8 @@ function renderAccBank(){
     </table></div>
     <div class="modal-section">Transactions${selected?' — '+esc(selected.name):''}</div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th style="width:100px">Date</th><th>Libellé</th><th>Contrepartie</th><th style="width:120px;text-align:right">Montant</th><th style="width:110px">Source</th></tr></thead>
-      <tbody>${txRows||'<tr><td colspan="5" class="log-empty">'+(selected?'Aucune transaction importée pour ce compte.':'Sélectionnez un compte bancaire ci-dessus.')+'</td></tr>'}</tbody>
+      <thead><tr><th style="width:100px">Date</th><th>Libellé</th><th>Contrepartie</th><th style="width:120px;text-align:right">Montant</th><th style="width:90px">Source</th><th style="width:160px">Rapprochement</th></tr></thead>
+      <tbody>${txRows||'<tr><td colspan="6" class="log-empty">'+(selected?'Aucune transaction importée pour ce compte.':'Sélectionnez un compte bancaire ci-dessus.')+'</td></tr>'}</tbody>
     </table></div>`;
 }
 
@@ -8530,6 +8542,101 @@ async function accDisconnectQonto(id){
   }catch(e){ flash(e.message||'Erreur'); }
 }
 
+async function openAccBankMatchModal(txId){
+  const tx = ACC_BANK_TX.find(t=>t.id===txId);
+  if(!tx) return;
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:640px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Rapprochement — ${esc(tx.rawLabel)}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div style="font-size:12px;color:var(--mu);margin-bottom:10px">${new Date(tx.operationDate).toLocaleDateString('fr-FR')} · <strong style="color:${tx.amount<0?'#a32d2d':'#1f7a3f'}">${fmtEUR2(tx.amount)}</strong></div>
+      <div id="abm-body"><div class="log-empty">Chargement…</div></div>
+    </div>
+  </div>`;
+  await loadAccBankMatchModal(txId);
+}
+
+async function loadAccBankMatchModal(txId){
+  const body = document.getElementById('abm-body');
+  if(!body) return;
+  let data;
+  try{
+    const r = await apiFetch('/wa/acc/bank/transactions/'+txId+'/matches?scope=crm');
+    if(!r.ok) throw new Error('http '+r.status);
+    data = await r.json();
+  }catch(e){ body.innerHTML = '<div class="log-empty">Erreur de chargement</div>'; return; }
+
+  const matchRows = data.matches.map(m=>`
+    <tr>
+      <td>${esc(m.invoice.invoiceNumber||'(sans n°)')}</td>
+      <td>${fmtEUR2(m.allocatedAmount)}</td>
+      <td>${m.type==='auto'?'Automatique':'Manuel'}${m.score!=null?' ('+Math.round(m.score)+')':''}</td>
+      <td><button class="ta-btn" onclick="accUnmatch('${m.id}','${txId}')" title="Retirer">🗑</button></td>
+    </tr>`).join('');
+
+  const candidateRows = data.candidates.map(c=>`
+    <tr>
+      <td>${esc(c.invoice.invoiceNumber||'(sans n°)')}</td>
+      <td>${fmtEUR2(c.remainingDue)}</td>
+      <td><span class="tag ${c.score>=95?'t-green':c.score>=80?'t-amber':'t-gray'}" style="font-size:10px;padding:1px 7px">${Math.round(c.score)}</span></td>
+      <td style="font-size:11px;color:var(--mu)">${esc((c.reasons||[]).join(', '))}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="accOpenConfirmMatch('${txId}','${c.invoice.id}',${c.remainingDue})">Rapprocher</button></td>
+    </tr>`).join('');
+
+  body.innerHTML = `
+    ${matchRows?`<div class="modal-section" style="margin-top:0">Rapprochements confirmés</div>
+    <div class="tbl-wrap"><table><thead><tr><th>Facture</th><th>Montant alloué</th><th>Type</th><th></th></tr></thead><tbody>${matchRows}</tbody></table></div>`:''}
+    <div class="modal-section" style="${matchRows?'':'margin-top:0'}">Candidats</div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Facture</th><th>Reste dû</th><th style="width:60px">Score</th><th>Éléments</th><th style="width:100px"></th></tr></thead>
+      <tbody>${candidateRows||'<tr><td colspan="5" class="log-empty">Aucun candidat trouvé.</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+function accOpenConfirmMatch(txId, invoiceId, suggestedAmount){
+  const tx = ACC_BANK_TX.find(t=>t.id===txId);
+  const remainingTxCapacity = tx ? Math.abs(tx.amount) - (tx.matchedAmount||0) : suggestedAmount;
+  const amount = Math.min(suggestedAmount, remainingTxCapacity);
+  document.getElementById('modal-ct').insertAdjacentHTML('beforeend', `
+  <div class="modal-bg" id="abm-confirm-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)this.remove()">
+    <div class="modal-box" style="max-width:360px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Confirmer le rapprochement</div></div>
+      <div class="ff"><label>Montant alloué à cette facture</label><input type="number" step="0.01" id="abm-amount" value="${amount.toFixed(2)}"></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="accConfirmMatch('${txId}','${invoiceId}')">Confirmer</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('abm-confirm-bg').remove()">Annuler</button>
+      </div>
+    </div>
+  </div>`);
+}
+
+async function accConfirmMatch(txId, invoiceId){
+  const amount = +((document.getElementById('abm-amount')||{value:'0'}).value);
+  if(!(amount>0)){ flash('Montant invalide'); return; }
+  try{
+    const r = await apiFetch('/wa/acc/bank/transactions/'+txId+'/match?scope=crm', {method:'POST', body:JSON.stringify({invoiceId, allocatedAmount:amount})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    document.getElementById('abm-confirm-bg')?.remove();
+    flash('Rapprochement confirmé');
+    await loadAccBankTransactions();
+    await loadAccBankMatchModal(txId);
+    renderAccBank();
+  }catch(e){ flash(e.message||'Erreur de rapprochement'); }
+}
+
+async function accUnmatch(matchId, txId){
+  try{
+    const r = await apiFetch('/wa/acc/bank/matches/'+matchId+'?scope=crm', {method:'DELETE'});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash('Rapprochement retiré');
+    await loadAccBankTransactions();
+    await loadAccBankMatchModal(txId);
+    renderAccBank();
+  }catch(e){ flash(e.message||'Erreur'); }
+}
+
 function openAccBankImportModal(bankAccountId){
   document.getElementById('modal-ct').innerHTML = `
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
@@ -8571,7 +8678,7 @@ async function accSubmitBankImport(bankAccountId){
     const data = await r.json();
     if(!r.ok) throw new Error(data.error||'http '+r.status);
     closeModal();
-    flash(data.created+' transaction(s) importée(s)'+(data.skipped?', '+data.skipped+' déjà connue(s)':''));
+    flash(data.created+' transaction(s) importée(s)'+(data.skipped?', '+data.skipped+' déjà connue(s)':'')+(data.matchedCount?', '+data.matchedCount+' rapprochée(s) automatiquement':''));
     ACC_BANK_SELECTED = bankAccountId;
     loadAccBankTab();
   }catch(e){ statusEl.textContent = e.message||'Erreur d\'import'; statusEl.style.color='#a32d2d'; }

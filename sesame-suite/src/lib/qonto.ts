@@ -1,5 +1,6 @@
 import { prisma } from "../db";
 import { ParsedBankTransaction, importBankTransactions, ImportBankTransactionsResult } from "./accBanking";
+import { autoReconcileMany } from "./accReconciliation";
 
 /**
  * Connecteur Qonto (Business API, lecture seule) — récupère automatiquement
@@ -188,6 +189,7 @@ export async function syncQontoBankAccount(bankAccountId: string): Promise<Qonto
   }
 
   const result = await importBankTransactions(bankAccount.entityId, bankAccount.id, "qonto_api", parsed);
+  await autoReconcileMany(result.createdIds);
   const liveAccount = orgInfo.bankAccounts.find((a) => a.iban === bankAccount.providerAccountId);
 
   await prisma.accBankAccount.update({
