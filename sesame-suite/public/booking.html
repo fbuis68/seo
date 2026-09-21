@@ -59,6 +59,10 @@ h1{font-family:var(--font-title);font-size:26px;font-weight:500;margin-bottom:6p
 .toast.on{opacity:1}
 .scr{display:none}
 .scr.on{display:block}
+.cof-modal-bg{position:fixed;inset:0;background:rgba(20,18,30,.7);display:flex;align-items:center;justify-content:center;z-index:200;padding:16px}
+.cof-modal-box{background:var(--card);border-radius:var(--r);padding:16px;max-width:420px;width:100%}
+.cof-modal-box video,.cof-modal-box canvas{width:100%;border-radius:var(--rb);background:#000}
+.cof-hint{font-size:11px;color:#8a8580;margin-top:6px;line-height:1.4}
 </style>
 </head>
 <body>
@@ -107,7 +111,7 @@ h1{font-family:var(--font-title);font-size:26px;font-weight:500;margin-bottom:6p
   <div class="scr" id="scr-form">
     <button class="btn btn-ghost" id="form-back-btn" onclick="formBack()">← Choisir une autre chambre</button>
     <h1 style="margin-top:10px">Vos coordonnées</h1>
-    <div class="card">
+    <div class="card" id="classic-guest-form">
       <div class="grid2">
         <div class="ff"><label>Prénom</label><input type="text" id="f-firstname"></div>
         <div class="ff"><label>Nom</label><input type="text" id="f-lastname"></div>
@@ -116,6 +120,21 @@ h1{font-family:var(--font-title);font-size:26px;font-weight:500;margin-bottom:6p
         <div class="ff"><label>Email</label><input type="email" id="f-email"></div>
         <div class="ff"><label>Téléphone (optionnel)</label><input type="tel" id="f-phone"></div>
       </div>
+    </div>
+    <!-- Empreinte bancaire (BookingEngineConfig.cardOnFileMode) : formulaire
+         minimal — contact seul, carte via Stripe Elements, jamais de numéro
+         de carte manipulé par ce code (conformité PCI). -->
+    <div class="card" id="cof-form" style="display:none">
+      <div class="ff"><label>Téléphone ou email</label><input type="text" id="cof-contact" placeholder="06 12 34 56 78 ou vous@exemple.fr"></div>
+      <div class="ff">
+        <label>Nom sur la carte (optionnel)</label>
+        <input type="text" id="cof-name" placeholder="Rempli automatiquement par Apple Pay/Google Pay, ou saisissez-le">
+        <button type="button" class="btn btn-ghost" style="padding:6px 0;font-size:12.5px" onclick="cofOpenScanModal()">📷 Scanner ma carte</button>
+      </div>
+      <div id="cof-card-element" style="margin:10px 0"></div>
+      <button class="btn btn-p" id="cof-continue-btn" onclick="cofContinue(this)">Continuer vers le paiement</button>
+      <button class="btn btn-p" id="cof-submit-btn" style="display:none" onclick="cofSubmit(this)">Valider</button>
+      <div class="cof-hint">Carte enregistrée sans être débitée — accès immédiat, aucun montant prélevé maintenant.</div>
     </div>
     <div class="card" id="recap-card"></div>
     <div id="pay-actions" style="display:flex;flex-direction:column;gap:10px"></div>
@@ -295,11 +314,12 @@ async function searchRooms(){
     errEl.textContent = 'Impossible de charger les chambres disponibles.'; errEl.style.display='block';
     return;
   }
-  // Ressource unique (BookingEngineConfig.hideRoomSelection) : une seule
-  // chambre disponible -> on la retient directement sans écran de choix.
-  // Ambigu (0 ou plusieurs) -> on retombe sur la liste, plus sûr que de
-  // deviner laquelle prendre.
-  if(BOOK_STATUS.hideRoomSelection && STATE.rooms.length===1){
+  // Ressource unique (BookingEngineConfig.hideRoomSelection) : accès par
+  // défaut, jamais d'écran de choix — la 1re chambre disponible est
+  // retenue automatiquement quel que soit leur nombre. Seul le cas "aucune
+  // chambre disponible" retombe sur l'écran liste, pour afficher son
+  // message plutôt que de bloquer silencieusement.
+  if(BOOK_STATUS.hideRoomSelection && STATE.rooms.length>=1){
     selectRoom(0);
     return;
   }
@@ -348,6 +368,17 @@ function formBack(){
 
 function renderRecap(){
   var r = STATE.selectedRoom;
+  document.getElementById('classic-guest-form').style.display = BOOK_STATUS.cardOnFileMode ? 'none' : '';
+  document.getElementById('cof-form').style.display = BOOK_STATUS.cardOnFileMode ? '' : 'none';
+  if(BOOK_STATUS.cardOnFileMode){
+    // Empreinte bancaire : aucun montant n'est jamais facturé à la
+    // réservation — pas de récapitulatif de prix ni de boutons de
+    // paiement classiques (le formulaire #cof-form a les siens).
+    document.getElementById('recap-card').innerHTML = '';
+    document.getElementById('pay-actions').innerHTML = '';
+    cofReset();
+    return;
+  }
   var taxe = estimateTaxeSejour(STATE.nights);
   var total = r.roomTotal + taxe;
   var totalOcc = OCC_LABELS.reduce(function(s,o){ return s+OCC[o.k]; }, 0);
@@ -374,6 +405,180 @@ function renderPayActions(){
   if(BOOK_STATUS.paymentAvailable) html += '<button class="btn btn-p" onclick="goToCheckout(this)" id="pay-btn">Payer en ligne maintenant</button>';
   html += '<button class="btn btn-s" onclick="bookDirect(this)" id="book-direct-btn">Réserver — payer sur place</button>';
   el.innerHTML = html;
+}
+
+// ═══════════════════ EMPREINTE BANCAIRE (BookingEngineConfig.cardOnFileMode)
+// ═══════════════════ Carte enregistrée via Stripe SetupIntent, JAMAIS
+// débitée à la réservation — cf. routes/bookingEngine.ts /cardSetupIntent
+// (crée le SetupIntent) et /cardOnFileConfirm (revérifie son statut côté
+// serveur avant de créer la réservation). Le numéro de carte ne transite
+// jamais par ce code : toujours saisi dans Stripe Elements (iframe Stripe),
+// conformité PCI.
+var COF = { stripe:null, elements:null, clientSecret:null };
+
+function loadScriptOnce(url){
+  window._loadedScripts = window._loadedScripts || {};
+  if(!window._loadedScripts[url]){
+    window._loadedScripts[url] = new Promise(function(resolve, reject){
+      var s = document.createElement('script');
+      s.src = url; s.onload = resolve; s.onerror = function(){ reject(new Error('Impossible de charger '+url)); };
+      document.head.appendChild(s);
+    });
+  }
+  return window._loadedScripts[url];
+}
+
+function cofReset(){
+  COF = { stripe:null, elements:null, clientSecret:null };
+  var contactEl = document.getElementById('cof-contact'); if(contactEl) contactEl.value = '';
+  var nameEl = document.getElementById('cof-name'); if(nameEl) nameEl.value = '';
+  var cardEl = document.getElementById('cof-card-element'); if(cardEl) cardEl.innerHTML = '';
+  var contBtn = document.getElementById('cof-continue-btn');
+  if(contBtn){ contBtn.style.display=''; contBtn.disabled=false; contBtn.textContent='Continuer vers le paiement'; }
+  var subBtn = document.getElementById('cof-submit-btn');
+  if(subBtn) subBtn.style.display='none';
+}
+
+async function cofContinue(btn){
+  var errEl = document.getElementById('form-err');
+  errEl.style.display='none';
+  var contact = document.getElementById('cof-contact').value.trim();
+  if(!contact){ errEl.textContent='Merci de renseigner un téléphone ou un email.'; errEl.style.display='block'; return; }
+  var cardholderName = document.getElementById('cof-name').value.trim();
+
+  var origLabel = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Chargement…';
+  try{
+    var r = await apiFetch('/wa/bookingEngine/cardSetupIntent', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({contact:contact, cardholderName:cardholderName||undefined})
+    });
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error||'Erreur');
+    COF.clientSecret = data.clientSecret;
+
+    await loadScriptOnce('https://js.stripe.com/v3/');
+    COF.stripe = Stripe(data.publishableKey);
+    COF.elements = COF.stripe.elements({clientSecret: data.clientSecret});
+    COF.elements.create('payment').mount('#cof-card-element');
+
+    btn.style.display = 'none';
+    document.getElementById('cof-submit-btn').style.display = '';
+  }catch(e){
+    errEl.textContent = e.message || 'Erreur lors du chargement du paiement.'; errEl.style.display='block';
+    btn.disabled = false; btn.textContent = origLabel;
+  }
+}
+
+async function cofSubmit(btn){
+  var errEl = document.getElementById('form-err');
+  errEl.style.display='none';
+  var contact = document.getElementById('cof-contact').value.trim();
+  var cardholderName = document.getElementById('cof-name').value.trim();
+
+  var origLabel = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Validation…';
+  try{
+    var result = await COF.stripe.confirmSetup({elements: COF.elements, redirect: 'if_required'});
+    if(result.error) throw new Error(result.error.message || "Échec de l'enregistrement de la carte.");
+    var setupIntentId = result.setupIntent.id;
+
+    var r = await apiFetch('/wa/bookingEngine/cardOnFileConfirm', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        setupIntentId: setupIntentId,
+        roomId: STATE.selectedRoom.id, startDate: STATE.start, endDate: STATE.end,
+        contact: contact, cardholderName: cardholderName||undefined, occupants: OCC
+      })
+    });
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error||'Erreur');
+    showDirectBookingSuccess(data.code);
+  }catch(e){
+    errEl.textContent = e.message || 'Erreur lors de la validation.'; errEl.style.display='block';
+    btn.disabled = false; btn.textContent = origLabel;
+  }
+}
+
+// ─── Scan carte (optionnel, meilleur effort) — sert UNIQUEMENT à
+// préremplir le champ "Nom sur la carte" ci-dessus, jamais le numéro. La
+// photo est traitée entièrement dans le navigateur (Tesseract.js) : elle
+// n'est ni envoyée ni stockée nulle part. Résultat non garanti (angle,
+// lumière, relief des caractères embossés) — toujours modifiable avant
+// validation.
+var COF_SCAN_STREAM = null;
+
+function cofOpenScanModal(){
+  var bg = document.createElement('div');
+  bg.className = 'cof-modal-bg'; bg.id = 'cof-scan-modal';
+  bg.innerHTML = '<div class="cof-modal-box">'
+    + '<video id="cof-scan-video" autoplay playsinline muted></video>'
+    + '<div class="cof-hint">Cadrez le nom imprimé sur la carte, en pleine lumière — résultat à vérifier, jamais garanti.</div>'
+    + '<div id="cof-scan-status" style="font-size:12.5px;color:#8a8580;margin-top:6px"></div>'
+    + '<div style="display:flex;gap:8px;margin-top:10px">'
+    + '<button class="btn btn-p" style="width:auto;flex:1" onclick="cofCapture()">Capturer</button>'
+    + '<button class="btn btn-ghost" onclick="cofCloseScanModal()">Annuler</button>'
+    + '</div></div>';
+  document.body.appendChild(bg);
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}})
+    .then(function(stream){
+      COF_SCAN_STREAM = stream;
+      var v = document.getElementById('cof-scan-video');
+      if(v) v.srcObject = stream;
+    })
+    .catch(function(){
+      var s = document.getElementById('cof-scan-status');
+      if(s) s.textContent = 'Caméra inaccessible — saisissez le nom manuellement.';
+    });
+}
+
+function cofCloseScanModal(){
+  if(COF_SCAN_STREAM){ COF_SCAN_STREAM.getTracks().forEach(function(t){ t.stop(); }); COF_SCAN_STREAM = null; }
+  var el = document.getElementById('cof-scan-modal');
+  if(el) el.remove();
+}
+
+async function cofCapture(){
+  var video = document.getElementById('cof-scan-video');
+  var statusEl = document.getElementById('cof-scan-status');
+  if(!video || !video.videoWidth){ statusEl.textContent = 'Caméra pas prête, réessayez.'; return; }
+  var canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  var dataUrl = canvas.toDataURL('image/png');
+
+  statusEl.textContent = 'Lecture en cours…';
+  try{
+    var name = await recognizeCardholderName(dataUrl);
+    if(name){
+      document.getElementById('cof-name').value = name;
+      cofCloseScanModal();
+    } else {
+      statusEl.textContent = 'Aucun nom détecté — réessayez ou saisissez-le manuellement.';
+    }
+  }catch(e){
+    statusEl.textContent = 'Lecture impossible — saisissez le nom manuellement.';
+  }
+}
+
+/** Extrait un nom plausible d'un texte OCR brut — heuristique simple (ligne
+ * courte tout en majuscules, sans chiffre, hors mots-clés bancaires
+ * usuels), la plus longue retenue. Aucune garantie de justesse. */
+function extractCardholderName(rawText){
+  var lines = (rawText||'').split('\n').map(function(l){ return l.trim(); }).filter(Boolean);
+  var STOPWORDS = /VALID|THRU|DEBIT|CREDIT|VISA|MASTERCARD|EXPRESS|MEMBER|SINCE|GOOD|FROM/i;
+  var candidates = lines.filter(function(l){
+    return /^[A-Z][A-Z '.-]{3,30}$/.test(l) && !STOPWORDS.test(l) && !/\d/.test(l);
+  });
+  if(!candidates.length) return null;
+  candidates.sort(function(a,b){ return b.length - a.length; });
+  return candidates[0];
+}
+
+async function recognizeCardholderName(dataUrl){
+  await loadScriptOnce('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
+  var result = await Tesseract.recognize(dataUrl, 'eng');
+  return extractCardholderName(result.data.text);
 }
 
 function readGuestForm(errEl){
@@ -465,7 +670,7 @@ function handleBookingReturn(){
 }
 
 // ═══════════════════ BOOT ═══════════════════
-var BOOK_STATUS = { enabled:false, requirePayment:true, paymentAvailable:false, durationOptions:[], hideRoomSelection:false, hideOccupants:false };
+var BOOK_STATUS = { enabled:false, requirePayment:true, paymentAvailable:false, durationOptions:[], hideRoomSelection:false, hideOccupants:false, cardOnFileMode:false, stripePublishableKey:'' };
 window.addEventListener('DOMContentLoaded', async function(){
   var today = new Date();
   var tomorrow = new Date(today.getTime()+86400000);

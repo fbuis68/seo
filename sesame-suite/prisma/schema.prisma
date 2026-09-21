@@ -326,6 +326,13 @@ model Booking {
   checkinStartedAt DateTime?
   selectedRoomCode String? // chambre choisie à l'étape 2 (peut différer de facilityCode)
   importedFrom     String? // nom de la source si créée par le connecteur externe (cf. BookingSourceConfig), sinon null
+  // Empreinte bancaire (BookingEngineConfig.cardOnFileMode) — référence
+  // Stripe de la carte enregistrée SANS être débitée à la réservation, pour
+  // un débit manuel ultérieur si besoin (ex: dégât, non-restitution) depuis
+  // le dashboard Stripe directement. Jamais débitée automatiquement par
+  // Sesame Suite. Absents pour toute réservation classique.
+  stripeCustomerId      String?
+  stripePaymentMethodId String?
   // Casiers Mon Casier Frais actuellement associés à cette réservation,
   // accumulés au fil des commandes contenant un article "casier" —
   // [{numberOnModule, pickupCode, orderId}]. Ajouté à la réservation dès
@@ -931,6 +938,13 @@ model PaymentConfig {
   // Clé secrète Stripe (sk_live_... ou sk_test_...) — jamais renvoyée au
   // client, utilisée uniquement côté serveur pour appeler l'API Stripe.
   secretKey         String?
+  // Clé publiable Stripe (pk_live_... ou pk_test_...) — PAS un secret,
+  // renvoyée telle quelle au client public (booking.html) pour initialiser
+  // Stripe.js côté navigateur. Nécessaire uniquement pour un paiement
+  // embarqué (Stripe Elements/SetupIntent, cf. BookingEngineConfig.
+  // cardOnFileMode) — Stripe Checkout (redirection hébergée, flux existant)
+  // n'en a pas besoin, le client ne fait jamais tourner Stripe.js lui-même.
+  publishableKey    String?
   // Secret de signature du endpoint webhook (whsec_...), fourni par Stripe
   // à la création du endpoint dans leur dashboard — vérifie qu'un événement
   // reçu sur /wa/payment/webhook vient bien de Stripe et n'a pas été rejoué
@@ -1020,12 +1034,12 @@ model BookingEngineConfig {
   // uniquement) inchangé.
   durationOptions Json @default("[]")
 
-  // Établissement à ressource unique (ex: magasin avec un seul contrôle
-  // d'accès plutôt qu'un choix de chambres) — masque l'écran de sélection
-  // de chambre sur booking.html : si une seule chambre est disponible sur
-  // la période, elle est retenue automatiquement sans que le client ait à
-  // cliquer "Choisir" (s'il y en a plusieurs, la liste reste affichée par
-  // sécurité plutôt que de deviner laquelle prendre).
+  // Établissement à ressource unique (ex: magasin avec un accès par défaut
+  // plutôt qu'un choix de chambres) — masque l'écran de sélection de
+  // chambre sur booking.html : la 1re chambre disponible sur la période est
+  // toujours retenue automatiquement, quel que soit leur nombre, sans écran
+  // de choix. Seul le cas "aucune chambre disponible" retombe sur l'écran
+  // liste (pour afficher son message plutôt que de bloquer silencieusement).
   hideRoomSelection Boolean @default(false)
   // Masque le sélecteur "Adultes/Ados/Enfants/Bébés" — occupants fixés à un
   // seul adulte, envoyés tels quels au serveur (taxe de séjour toujours
@@ -1039,6 +1053,17 @@ model BookingEngineConfig {
   // d'occupation exclusive (ex: accès magasin, pas une chambre physique
   // qu'un seul client occupe à la fois).
   skipAvailabilityCheck Boolean @default(false)
+
+  // Paiement embarqué par empreinte bancaire (Stripe SetupIntent + Elements,
+  // carte enregistrée SANS être débitée) plutôt que Stripe Checkout
+  // (redirection, paiement immédiat) — remplace l'écran coordonnées
+  // classique (nom/prénom/email/téléphone) par un contact minimal
+  // (téléphone OU email) + un champ carte Stripe embarqué. Le client garde
+  // accès immédiatement, la carte reste en fichier chez Stripe pour un
+  // débit manuel ultérieur si besoin (ex: dégât, non-restitution) — jamais
+  // débitée automatiquement par Sesame Suite. Exclusif avec requirePayment/
+  // Stripe Checkout : quand actif, c'est le seul mode de paiement proposé.
+  cardOnFileMode    Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

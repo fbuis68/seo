@@ -3956,6 +3956,11 @@ Accès au salon Premium</textarea>
         <div style="font-size:11px;color:var(--mu);margin-top:4px" id="pay-webhookSecret-hint">Généré par Stripe à la création du endpoint webhook ci-dessous.</div>
       </div>
     </div>
+    <div class="fi">
+      <label class="lb">Clé publiable Stripe</label>
+      <input type="text" id="pay-publishableKey" placeholder="pk_live_… ou pk_test_…" autocomplete="off">
+      <div style="font-size:11px;color:var(--mu);margin-top:4px">Pas un secret (visible du navigateur) — requise uniquement pour l'empreinte bancaire embarquée (réservation en ligne, mode "carte enregistrée"). Depuis votre tableau de bord Stripe → Développeurs → Clés API.</div>
+    </div>
     <div class="g2">
       <div class="fi">
         <label class="lb">Devise</label>
@@ -4133,6 +4138,13 @@ Accès au salon Premium</textarea>
       <label style="display:flex;align-items:center;gap:8px;height:38px;cursor:pointer">
         <input type="checkbox" id="bke-skip-availability" style="accent-color:var(--am)">
         <span style="font-size:13px">La chambre reste toujours proposée et la réservation n'est jamais bloquée par une autre réservation sur les mêmes dates — pour une ressource sans occupation exclusive (ex. accès magasin)</span>
+      </label>
+    </div>
+    <div class="fi">
+      <label class="lb">Paiement par empreinte bancaire</label>
+      <label style="display:flex;align-items:center;gap:8px;height:38px;cursor:pointer">
+        <input type="checkbox" id="bke-card-on-file" style="accent-color:var(--am)">
+        <span style="font-size:13px">Remplace le paiement Stripe classique par une carte enregistrée SANS être débitée (SetupIntent) — accès immédiat, débit manuel ultérieur possible depuis le dashboard Stripe si besoin. Coordonnées réduites à téléphone ou email. Nécessite la clé publiable Stripe (panneau "Paiement").</span>
       </label>
     </div>
     <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
@@ -7907,6 +7919,7 @@ async function payInit(){
   document.getElementById('pay-currency').value = PAY_CONFIG.currency || 'eur';
   document.getElementById('pay-includeTaxeSejour').checked = !!PAY_CONFIG.includeTaxeSejour;
   document.getElementById('pay-allowInstallments').checked = !!PAY_CONFIG.allowInstallments;
+  document.getElementById('pay-publishableKey').value = PAY_CONFIG.publishableKey || '';
   document.getElementById('pay-secretKey').value = '';
   document.getElementById('pay-secretKey').placeholder = PAY_CONFIG.secretKeySet ? ('Déjà enregistrée (…'+esc(PAY_CONFIG.secretKeyLast4)+') — laisser vide pour ne pas la changer') : 'sk_live_… ou sk_test_…';
   document.getElementById('pay-webhookSecret').value = '';
@@ -7920,6 +7933,7 @@ async function paySave(){
     currency: document.getElementById('pay-currency').value,
     includeTaxeSejour: document.getElementById('pay-includeTaxeSejour').checked,
     allowInstallments: document.getElementById('pay-allowInstallments').checked,
+    publishableKey: document.getElementById('pay-publishableKey').value.trim(),
   };
   var secretKey = document.getElementById('pay-secretKey').value.trim();
   var webhookSecret = document.getElementById('pay-webhookSecret').value.trim();
@@ -7929,6 +7943,7 @@ async function paySave(){
     var r = await adminFetch('/wa/payment/config/update', {method:'POST', body:JSON.stringify(body)});
     if(!r.ok){ toast('Erreur lors de l\'enregistrement'); return; }
     PAY_CONFIG = await r.json();
+    document.getElementById('pay-publishableKey').value = PAY_CONFIG.publishableKey || '';
     document.getElementById('pay-secretKey').value = '';
     document.getElementById('pay-secretKey').placeholder = PAY_CONFIG.secretKeySet ? ('Déjà enregistrée (…'+esc(PAY_CONFIG.secretKeyLast4)+') — laisser vide pour ne pas la changer') : 'sk_live_… ou sk_test_…';
     document.getElementById('pay-webhookSecret').value = '';
@@ -8212,6 +8227,7 @@ async function bkeInit(){
     document.getElementById('bke-hide-room').checked = !!(cfg && cfg.hideRoomSelection);
     document.getElementById('bke-hide-occupants').checked = !!(cfg && cfg.hideOccupants);
     document.getElementById('bke-skip-availability').checked = !!(cfg && cfg.skipAvailabilityCheck);
+    document.getElementById('bke-card-on-file').checked = !!(cfg && cfg.cardOnFileMode);
     BKE_DURATION_OPTIONS = (cfg && Array.isArray(cfg.durationOptions)) ? cfg.durationOptions.slice() : [];
     bkeRenderDurationList();
   }catch(e){}
@@ -8239,7 +8255,8 @@ async function bkeSave(){
     durationOptions: BKE_DURATION_OPTIONS,
     hideRoomSelection: document.getElementById('bke-hide-room').checked,
     hideOccupants: document.getElementById('bke-hide-occupants').checked,
-    skipAvailabilityCheck: document.getElementById('bke-skip-availability').checked
+    skipAvailabilityCheck: document.getElementById('bke-skip-availability').checked,
+    cardOnFileMode: document.getElementById('bke-card-on-file').checked
   };
   try{
     var r = await adminFetch('/wa/bookingEngine/config/update', {method:'POST', body:JSON.stringify(body)});

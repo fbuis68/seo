@@ -14,6 +14,7 @@ type CartItem = { id: string; label: string; price: number; qty: number; posName
 function shapeConfig(c: {
   enabled: boolean;
   secretKey: string | null;
+  publishableKey: string | null;
   webhookSecret: string | null;
   currency: string;
   allowInstallments: boolean;
@@ -29,6 +30,10 @@ function shapeConfig(c: {
     // valeur déjà en base (cf. POST /config/update).
     secretKeySet: !!c.secretKey,
     secretKeyLast4: c.secretKey ? c.secretKey.slice(-4) : "",
+    // publishableKey n'est PAS un secret (renvoyée telle quelle au client
+    // public sur booking.html pour initialiser Stripe.js) — affichée en
+    // clair ici, contrairement à secretKey/webhookSecret ci-dessus.
+    publishableKey: c.publishableKey || "",
     webhookSecretSet: !!c.webhookSecret,
     currency: c.currency,
     allowInstallments: c.allowInstallments,
@@ -54,6 +59,7 @@ paymentRouter.get(
 interface ConfigBody {
   enabled?: boolean;
   secretKey?: string;
+  publishableKey?: string;
   webhookSecret?: string;
   currency?: string;
   allowInstallments?: boolean;
@@ -70,6 +76,10 @@ paymentRouter.post(
     const data = {
       enabled: b.enabled,
       ...(b.secretKey ? { secretKey: b.secretKey } : {}),
+      // Pas un secret (contrairement à secretKey/webhookSecret ci-dessus) —
+      // toujours écrasée à l'enregistrement, y compris par une chaîne vide
+      // pour pouvoir l'effacer.
+      publishableKey: b.publishableKey ?? "",
       ...(b.webhookSecret ? { webhookSecret: b.webhookSecret } : {}),
       currency: b.currency,
       allowInstallments: b.allowInstallments,

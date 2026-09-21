@@ -136,6 +136,60 @@ export async function createCheckoutSession(
 }
 
 /**
+ * Empreinte bancaire (BookingEngineConfig.cardOnFileMode) — crée un Customer
+ * Stripe puis un SetupIntent pour ce client, afin d'enregistrer une carte
+ * SANS la débiter (cf. lib/bookingEngine.ts, routes/bookingEngine.ts
+ * /cardSetupIntent). usage:"off_session" autorise un débit manuel ultérieur
+ * depuis le dashboard Stripe (ex: dégât, non-restitution) sans que le
+ * client soit présent — jamais déclenché automatiquement par Sesame Suite.
+ * automatic_payment_methods laisse Stripe proposer Apple Pay/Google Pay
+ * côté client si le compte/domaine les a activés, sans les coder en dur ici.
+ */
+export async function createSetupIntentCustomer(
+  config: { secretKey: string | null },
+  opts: { email?: string; phone?: string; name?: string }
+): Promise<{ customerId: string }> {
+  const json = await stripeRequest(config, "POST", "/customers", {
+    ...(opts.email ? { email: opts.email } : {}),
+    ...(opts.phone ? { phone: opts.phone } : {}),
+    ...(opts.name ? { name: opts.name } : {}),
+  });
+  return { customerId: json.id };
+}
+
+export async function createSetupIntent(
+  config: { secretKey: string | null },
+  opts: { customerId: string }
+): Promise<{ id: string; clientSecret: string }> {
+  const json = await stripeRequest(config, "POST", "/setup_intents", {
+    customer: opts.customerId,
+    usage: "off_session",
+    "automatic_payment_methods[enabled]": "true",
+  });
+  return { id: json.id, clientSecret: json.client_secret };
+}
+
+/**
+ * Relit un SetupIntent après confirmation côté client (stripe.confirmSetup)
+ * pour vérifier SERVEUR que la carte a bien été enregistrée avant de créer
+ * la réservation — jamais fait confiance à un statut "succeeded" déclaré par
+ * le client sans le revérifier auprès de Stripe (même principe que
+ * quoteBooking, qui ne fait jamais confiance à un montant transmis par le
+ * client).
+ */
+export async function retrieveSetupIntent(
+  config: { secretKey: string | null },
+  setupIntentId: string
+): Promise<{ status: string; customerId: string | null; paymentMethodId: string | null }> {
+  const json = await stripeRequest(config, "GET", `/setup_intents/${encodeURIComponent(setupIntentId)}`);
+  return {
+    status: json.status,
+    customerId: typeof json.customer === "string" ? json.customer : json.customer?.id || null,
+    paymentMethodId: typeof json.payment_method === "string" ? json.payment_method : json.payment_method?.id || null,
+  };
+}
+
+/**
  * Vérifie la signature d'un événement webhook Stripe (en-tête
  * "Stripe-Signature": "t=<timestamp>,v1=<hmac>") — le corps DOIT être le
  * texte brut reçu (avant tout parsing JSON), la signature portant sur

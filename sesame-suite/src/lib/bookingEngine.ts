@@ -31,6 +31,11 @@ export interface BookingDraft {
   // d'accès plutôt qu'à un seul (cf. lib/bookingSource.ts pushBookingUpsert) —
   // transmis dès la création si renseigné, plutôt que seulement à l'édition.
   bookingType?: string;
+  // Empreinte bancaire (BookingEngineConfig.cardOnFileMode) — référence
+  // Stripe de la carte enregistrée sans être débitée, cf. Booking.
+  // stripeCustomerId/stripePaymentMethodId (schema.prisma).
+  stripeCustomerId?: string;
+  stripePaymentMethodId?: string;
 }
 
 function nightsBetween(start: Date, end: Date): number {
@@ -234,6 +239,8 @@ async function createBookingDirect(entity: Entity, draft: BookingDraft, opts: { 
       facilityCode: room.code,
       facilityName: room.name,
       bookingType: draft.bookingType || null,
+      stripeCustomerId: draft.stripeCustomerId || null,
+      stripePaymentMethodId: draft.stripePaymentMethodId || null,
       status: "confirmed",
       occupants: {
         create: Object.entries(draft.occupants || {})
