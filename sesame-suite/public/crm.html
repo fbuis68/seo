@@ -7443,29 +7443,34 @@ async function saveAccSettings(){
 
 // ───────── Onglet Import email (boîte comptabilité, Microsoft Graph) ─────────
 
-let ACC_GRAPH_MAIL=null;
+let ACC_GRAPH_MAIL={accounting:null, accounting_sale:null};
 
 async function loadAccEmailTab(){
   try{
-    const r = await apiFetch('/wa/graphMail/status?purpose=accounting');
-    ACC_GRAPH_MAIL = r.ok ? await r.json() : null;
-  }catch(e){ ACC_GRAPH_MAIL=null; }
+    const [rp, rs] = await Promise.all([
+      apiFetch('/wa/graphMail/status?purpose=accounting'),
+      apiFetch('/wa/graphMail/status?purpose=accounting_sale'),
+    ]);
+    ACC_GRAPH_MAIL = {
+      accounting: rp.ok ? await rp.json() : null,
+      accounting_sale: rs.ok ? await rs.json() : null,
+    };
+  }catch(e){ ACC_GRAPH_MAIL={accounting:null, accounting_sale:null}; }
   renderAccEmail();
 }
 
-function renderAccEmail(){
-  const el = document.getElementById('acc-tab-body');
-  if(!el) return;
-  const g = ACC_GRAPH_MAIL || {configured:false,status:'inactive',mailbox:'',expiresAt:null,lastError:''};
+function renderAccEmailBox(purpose, title, description){
+  const g = ACC_GRAPH_MAIL[purpose] || {configured:false,status:'inactive',mailbox:'',expiresAt:null,lastError:''};
   if(!g.configured){
-    el.innerHTML = `<div class="log-empty">App Azure AD non configurée côté serveur (GRAPH_TENANT_ID / GRAPH_CLIENT_ID / GRAPH_CLIENT_SECRET). Voir <code>docs/microsoft-graph-inbound-tickets.md</code> pour la procédure de création, puis renseignez les variables d'environnement et redémarrez le serveur.</div>`;
-    return;
+    return `<div class="modal-section" style="margin-top:${purpose==='accounting'?'0':'18px'}">${title}</div><div class="log-empty">App Azure AD non configurée côté serveur (GRAPH_TENANT_ID / GRAPH_CLIENT_ID / GRAPH_CLIENT_SECRET). Voir <code>docs/microsoft-graph-inbound-tickets.md</code> pour la procédure de création, puis renseignez les variables d'environnement et redémarrez le serveur.</div>`;
   }
   const expLabel = g.expiresAt ? new Date(g.expiresAt).toLocaleString('fr-FR') : '—';
-  el.innerHTML = `
+  const mailboxId = 'acc-email-mailbox-'+purpose;
+  return `
+    <div class="modal-section" style="margin-top:${purpose==='accounting'?'0':'18px'}">${title}</div>
     <div style="max-width:520px">
-      <p style="font-size:12px;color:var(--mu);margin:0 0 12px">Chaque email reçu sur la boîte ci-dessous avec une pièce jointe facture (PDF/JPEG/PNG/TIFF/XML) est déposé automatiquement dans les factures d'achat, comme un dépôt manuel (<code>source: "email"</code>). Même app Azure AD que l'import de tickets support — l'accès à cette boîte doit être ajouté à sa stratégie d'accès applicative Exchange si elle en a une (cf. <code>docs/microsoft-graph-inbound-tickets.md</code>).</p>
-      <div class="ff"><label>Boîte surveillée</label><input id="acc-email-mailbox" value="${esc(g.mailbox)}" placeholder="administration@sesame-technology.com" ${g.status==='active'?'disabled':''}></div>
+      <p style="font-size:12px;color:var(--mu);margin:0 0 12px">${description}</p>
+      <div class="ff"><label>Boîte surveillée</label><input id="${mailboxId}" value="${esc(g.mailbox)}" placeholder="administration@sesame-technology.com" ${g.status==='active'?'disabled':''}></div>
       <div class="log-item" style="border:none;padding:10px 0 12px">
         <div class="log-dot ${GRAPH_STATUS_DOT[g.status]||'ld-b'}"></div>
         <div class="log-body">
@@ -7476,17 +7481,25 @@ function renderAccEmail(){
       </div>
       <div class="modal-footer" style="border-top:none;padding-top:0;justify-content:flex-start">
         ${g.status==='active'
-          ? '<button class="btn btn-ghost btn-sm" onclick="accGraphMailDeactivate()">Désactiver</button>'
-          : '<button class="btn btn-primary btn-sm" onclick="accGraphMailActivate()">Activer</button>'}
+          ? `<button class="btn btn-ghost btn-sm" onclick="accGraphMailDeactivate('${purpose}')">Désactiver</button>`
+          : `<button class="btn btn-primary btn-sm" onclick="accGraphMailActivate('${purpose}')">Activer</button>`}
       </div>
     </div>`;
 }
 
-async function accGraphMailActivate(){
-  const mailbox = (document.getElementById('acc-email-mailbox')||{value:''}).value.trim();
+function renderAccEmail(){
+  const el = document.getElementById('acc-tab-body');
+  if(!el) return;
+  el.innerHTML =
+    renderAccEmailBox('accounting', 'Factures d\'achat (fournisseurs)', 'Chaque email reçu sur la boîte ci-dessous avec une pièce jointe facture (PDF/JPEG/PNG/TIFF/XML) est déposé automatiquement dans les factures d\'achat, comme un dépôt manuel (<code>source: "email"</code>). Même app Azure AD que l\'import de tickets support — l\'accès à cette boîte doit être ajouté à sa stratégie d\'accès applicative Exchange si elle en a une (cf. <code>docs/microsoft-graph-inbound-tickets.md</code>).')
+    + renderAccEmailBox('accounting_sale', 'Factures de vente (clients)', 'Même mécanique sur une boîte séparée — chaque pièce jointe reçue devient une facture de vente. Boîte distincte volontairement : une boîte de réception fournisseurs ne doit jamais aussi recevoir vos propres factures de vente.');
+}
+
+async function accGraphMailActivate(purpose){
+  const mailbox = (document.getElementById('acc-email-mailbox-'+purpose)||{value:''}).value.trim();
   if(!mailbox){ flash('Adresse email requise'); return; }
   try{
-    const r = await apiFetch('/wa/graphMail/activate', {method:'POST', body:JSON.stringify({purpose:'accounting', mailbox})});
+    const r = await apiFetch('/wa/graphMail/activate', {method:'POST', body:JSON.stringify({purpose, mailbox})});
     const data = await r.json();
     if(!r.ok) throw new Error(data.error||'Erreur');
     flash('Import automatique des factures par email activé ✓');
@@ -7494,9 +7507,9 @@ async function accGraphMailActivate(){
   await loadAccEmailTab();
 }
 
-async function accGraphMailDeactivate(){
+async function accGraphMailDeactivate(purpose){
   if(!confirm('Désactiver l\'import automatique des factures par email ?')) return;
-  try{ await apiFetch('/wa/graphMail/deactivate', {method:'POST', body:JSON.stringify({purpose:'accounting'})}); flash('Import automatique désactivé'); }
+  try{ await apiFetch('/wa/graphMail/deactivate', {method:'POST', body:JSON.stringify({purpose})}); flash('Import automatique désactivé'); }
   catch(e){ flash('Erreur'); }
   await loadAccEmailTab();
 }

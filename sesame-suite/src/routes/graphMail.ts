@@ -18,26 +18,33 @@ import { recordAuditLog } from "../lib/accAudit";
  * d'engagement (cf. crmProspect.ts inboundSignal). Portée CRM/Sesame
  * uniquement.
  *
- * Deux "purpose" distincts partagent cette même plomberie (16/09/2026) :
+ * Trois "purpose" distincts partagent cette même plomberie (16/09/2026,
+ * étendu le 21/09/2026 pour la vente) :
  * - "tickets" (comportement d'origine) : chaque email devient/complète un
  *   CrmTicket.
  * - "accounting" : chaque pièce jointe facture (PDF/image/XML) d'un email
- *   reçu sur la boîte configurée devient une AccInvoice via
- *   lib/accPipeline.ts — cf. module Comptabilité.
+ *   reçu sur la boîte configurée devient une AccInvoice direction="purchase"
+ *   via lib/accPipeline.ts — cf. module Comptabilité.
+ * - "accounting_sale" : même mécanique, boîte séparée, direction="sale" —
+ *   une boîte de réception des factures fournisseur ne doit jamais recevoir
+ *   aussi les propres factures de vente de l'établissement (expéditeurs,
+ *   volumétrie et suivi totalement différents), d'où deux boîtes distinctes
+ *   plutôt qu'un simple bouton "sens par défaut" sur une boîte unique.
  * Au plus une boîte active par purpose (pas une ligne unique globale comme
  * avant) — la notification webhook retrouve la bonne ligne par
  * subscriptionId plutôt que de supposer une boîte unique.
  *
  * Procédure de mise en service côté Azure AD : docs/microsoft-graph-inbound-tickets.md
  * (même app, éventuellement étendre l'ApplicationAccessPolicy Exchange pour
- * couvrir la boîte comptabilité en plus de la boîte support).
+ * couvrir la ou les boîtes comptabilité en plus de la boîte support).
  */
 export const graphMailRouter = Router();
 
-type GraphMailPurpose = "tickets" | "accounting";
+type GraphMailPurpose = "tickets" | "accounting" | "accounting_sale";
 
 function parsePurpose(v: unknown): GraphMailPurpose {
-  return v === "accounting" ? "accounting" : "tickets";
+  if (v === "accounting" || v === "accounting_sale") return v;
+  return "tickets";
 }
 
 async function getByPurpose(purpose: GraphMailPurpose) {
@@ -82,7 +89,7 @@ graphMailRouter.post(
 
     const purpose = parsePurpose(req.body?.purpose);
     let mailbox: string | undefined;
-    if (purpose === "accounting") {
+    if (purpose === "accounting" || purpose === "accounting_sale") {
       mailbox = (req.body?.mailbox as string || "").trim();
       if (!mailbox || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mailbox)) throw new HttpError(400, "Adresse email de la boîte comptabilité invalide ou manquante");
     } else {
@@ -199,8 +206,11 @@ async function processNotifications(items: GraphNotificationItem[]) {
     if (!messageId) continue;
 
     try {
-      if (sub.purpose === "accounting") await processAccountingMessage(sub.mailbox, messageId);
-      else await processTicketMessage(sub.mailbox, messageId);
+      if (sub.purpose === "accounting" || sub.purpose === "accounting_sale") {
+        await processAccountingMessage(sub.mailbox, messageId, sub.purpose === "accounting_sale" ? "sale" : "purchase");
+      } else {
+        await processTicketMessage(sub.mailbox, messageId);
+      }
     } catch (e) {
       console.error(`[graphMail] échec sur le message ${messageId} (${sub.purpose}):`, e);
     }
@@ -235,15 +245,16 @@ async function processTicketMessage(mailbox: string, messageId: string) {
 /**
  * Chaque pièce jointe d'un email reçu sur la boîte comptabilité, dont le
  * type MIME est accepté par le pipeline (PDF/JPEG/PNG/TIFF/XML), devient
- * une facture d'achat (source="email") — même chaîne que le dépôt manuel
- * (cf. lib/accPipeline.ts). La déduplication par hash SHA-256
+ * une facture (source="email", direction selon la boîte — purchase pour
+ * "accounting", sale pour "accounting_sale") — même chaîne que le dépôt
+ * manuel (cf. lib/accPipeline.ts). La déduplication par hash SHA-256
  * (lib/accDocument.ts) protège déjà contre la livraison "at least once" de
  * Graph : un même email retraité produit les mêmes pièces jointes, donc le
  * même hash, donc aucune facture en double — pas de bookkeeping
  * supplémentaire nécessaire ici. Une pièce jointe en échec n'interrompt pas
  * le traitement des autres.
  */
-async function processAccountingMessage(mailbox: string, messageId: string) {
+async function processAccountingMessage(mailbox: string, messageId: string, direction: "purchase" | "sale") {
   const msg = await getGraphMessage(mailbox, messageId);
   console.log(`[graphMail] message comptabilité reçu de ${msg.from || "(expéditeur inconnu)"} — "${msg.subject}" — ${msg.attachments.length} pièce(s) jointe(s) : ${msg.attachments.map((a) => `${a.name} (${a.contentType})`).join(", ") || "aucune"}`);
   if (!msg.from || msg.from.toLowerCase() === mailbox.toLowerCase()) {
@@ -263,7 +274,7 @@ async function processAccountingMessage(mailbox: string, messageId: string) {
         filename: att.name,
         mimeType: att.contentType,
         base64: att.contentBytes,
-        direction: "purchase",
+        direction,
         source: "email",
       });
       await recordAuditLog({
