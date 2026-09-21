@@ -1032,6 +1032,14 @@ model BookingEngineConfig {
   // calculée normalement pour 1 adulte).
   hideOccupants     Boolean @default(false)
 
+  // Ignore le planning des réservations existantes (Booking.startDate/
+  // endDate qui se chevauchent) pour cet établissement — une chambre
+  // apparaît toujours disponible et sa création n'est jamais bloquée par une
+  // autre réservation sur la même période. Pour une ressource sans notion
+  // d'occupation exclusive (ex: accès magasin, pas une chambre physique
+  // qu'un seul client occupe à la fois).
+  skipAvailabilityCheck Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

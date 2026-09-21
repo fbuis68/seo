@@ -48,6 +48,7 @@ bookingEngineRouter.get(
       durationOptions: config.durationOptions,
       hideRoomSelection: config.hideRoomSelection,
       hideOccupants: config.hideOccupants,
+      skipAvailabilityCheck: config.skipAvailabilityCheck,
     });
   })
 );
@@ -63,12 +64,14 @@ bookingEngineRouter.post(
     const durationOptions = req.body.durationOptions !== undefined ? parseDurationOptions(req.body.durationOptions) : undefined;
     const hideRoomSelection = req.body.hideRoomSelection !== undefined ? !!req.body.hideRoomSelection : undefined;
     const hideOccupants = req.body.hideOccupants !== undefined ? !!req.body.hideOccupants : undefined;
+    const skipAvailabilityCheck = req.body.skipAvailabilityCheck !== undefined ? !!req.body.skipAvailabilityCheck : undefined;
     const data = {
       enabled,
       ...(requirePayment !== undefined ? { requirePayment } : {}),
       ...(durationOptions !== undefined ? { durationOptions } : {}),
       ...(hideRoomSelection !== undefined ? { hideRoomSelection } : {}),
       ...(hideOccupants !== undefined ? { hideOccupants } : {}),
+      ...(skipAvailabilityCheck !== undefined ? { skipAvailabilityCheck } : {}),
     };
     const config = await prisma.bookingEngineConfig.upsert({
       where: { entityId: entity.id },
@@ -81,6 +84,7 @@ bookingEngineRouter.post(
       durationOptions: config.durationOptions,
       hideRoomSelection: config.hideRoomSelection,
       hideOccupants: config.hideOccupants,
+      skipAvailabilityCheck: config.skipAvailabilityCheck,
     });
   })
 );
