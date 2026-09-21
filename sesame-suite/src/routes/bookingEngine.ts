@@ -8,6 +8,29 @@ import { listAvailableRooms, quoteBooking, createBookingDirectUnpaid, BookingDra
 
 export const bookingEngineRouter = Router();
 
+const DURATION_UNITS = new Set(["jour", "mois", "an"]);
+const MAX_DURATION_OPTIONS = 8;
+
+/**
+ * Valide BookingEngineConfig.durationOptions — chaque entrée est {amount,unit}
+ * (ex: {amount:3,unit:"jour"}), affichée en bouton sur booking.html pour que
+ * le client calcule le départ depuis sa date d'arrivée sans devoir la saisir
+ * lui-même. Rejette plutôt que de silencieusement tronquer une entrée
+ * invalide — même logique que parseAttachments (routes/messaging.ts).
+ */
+function parseDurationOptions(raw: unknown): { amount: number; unit: string }[] {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) throw new HttpError(400, "durationOptions doit être un tableau");
+  if (raw.length > MAX_DURATION_OPTIONS) throw new HttpError(400, `Maximum ${MAX_DURATION_OPTIONS} durées`);
+  return raw.map((o) => {
+    const amount = Number((o as { amount?: unknown })?.amount);
+    const unit = (o as { unit?: unknown })?.unit;
+    if (!Number.isInteger(amount) || amount < 1 || amount > 999) throw new HttpError(400, "Durée invalide (nombre entier entre 1 et 999)");
+    if (typeof unit !== "string" || !DURATION_UNITS.has(unit)) throw new HttpError(400, "Unité de durée invalide (jour, mois ou an)");
+    return { amount, unit };
+  });
+}
+
 /** GET /wa/bookingEngine/config — réglages du module pour cet établissement (créés vides au besoin). */
 bookingEngineRouter.get(
   "/bookingEngine/config",
@@ -19,7 +42,7 @@ bookingEngineRouter.get(
       update: {},
       create: { entityId: entity.id },
     });
-    res.json({ enabled: config.enabled, requirePayment: config.requirePayment });
+    res.json({ enabled: config.enabled, requirePayment: config.requirePayment, durationOptions: config.durationOptions });
   })
 );
 
@@ -31,13 +54,18 @@ bookingEngineRouter.post(
     const entity = await resolveEntity(req);
     const enabled = !!req.body.enabled;
     const requirePayment = req.body.requirePayment !== undefined ? !!req.body.requirePayment : undefined;
-    const data = { enabled, ...(requirePayment !== undefined ? { requirePayment } : {}) };
+    const durationOptions = req.body.durationOptions !== undefined ? parseDurationOptions(req.body.durationOptions) : undefined;
+    const data = {
+      enabled,
+      ...(requirePayment !== undefined ? { requirePayment } : {}),
+      ...(durationOptions !== undefined ? { durationOptions } : {}),
+    };
     const config = await prisma.bookingEngineConfig.upsert({
       where: { entityId: entity.id },
       update: data,
       create: { entityId: entity.id, ...data },
     });
-    res.json({ enabled: config.enabled, requirePayment: config.requirePayment });
+    res.json({ enabled: config.enabled, requirePayment: config.requirePayment, durationOptions: config.durationOptions });
   })
 );
 
@@ -62,7 +90,8 @@ bookingEngineRouter.get(
     // requirePayment=true mais sans Stripe configuré reste indisponible,
     // comme avant.
     const enabled = !!engineConfig?.enabled && (!requirePayment || paymentAvailable);
-    res.json({ enabled, requirePayment, paymentAvailable });
+    const durationOptions = Array.isArray(engineConfig?.durationOptions) ? engineConfig.durationOptions : [];
+    res.json({ enabled, requirePayment, paymentAvailable, durationOptions });
   })
 );
 

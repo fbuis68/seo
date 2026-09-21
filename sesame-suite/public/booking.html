@@ -37,6 +37,8 @@ h1{font-family:var(--font-title);font-size:26px;font-weight:500;margin-bottom:6p
 .btn-p{background:var(--primary);color:#fff;width:100%}
 .btn-s{background:var(--pl);color:var(--primary);width:100%}
 .btn-ghost{background:transparent;color:var(--primary);padding:8px 4px}
+.dur-btn{border:1px solid var(--bdr);background:#fff;color:var(--tx);border-radius:999px;padding:6px 14px;font-size:12.5px;font-family:var(--font-body);cursor:pointer}
+.dur-btn.active{background:var(--primary);border-color:var(--primary);color:#fff}
 .room-card{border:1px solid var(--bdr);border-radius:var(--r);overflow:hidden;margin-bottom:14px;background:#fff;display:flex;flex-direction:column}
 .room-photo{height:150px;background:var(--bdr) center/cover no-repeat}
 .room-body{padding:16px}
@@ -83,9 +85,10 @@ h1{font-family:var(--font-title);font-size:26px;font-weight:500;margin-bottom:6p
     <p class="sub">Choisissez vos dates et le nombre d'occupants pour voir les chambres disponibles.</p>
     <div class="card">
       <div class="grid2">
-        <div class="ff"><label>Arrivée</label><input type="date" id="in-start"></div>
-        <div class="ff"><label>Départ</label><input type="date" id="in-end"></div>
+        <div class="ff"><label>Arrivée</label><input type="date" id="in-start" onchange="onDurationDateChange()"></div>
+        <div class="ff"><label>Départ</label><input type="date" id="in-end" onchange="clearDurationPreset()"></div>
       </div>
+      <div id="duration-presets" style="display:none;flex-wrap:wrap;gap:8px;margin:10px 0 4px"></div>
       <div id="occupant-steppers" style="display:flex;flex-direction:column;gap:10px;margin:14px 0"></div>
       <button class="btn btn-p" onclick="searchRooms()">Voir les chambres disponibles</button>
       <div class="err" id="search-err" style="display:none"></div>
@@ -212,6 +215,63 @@ function estimateTaxeSejour(nights){
     total += rate * nights * cnt;
   });
   return Math.round(total*100)/100;
+}
+
+// ═══════════════════ DURÉES PRÉDÉFINIES (BookingEngineConfig.durationOptions)
+// ═══════════════════ Bouton "3 jours"/"3 mois"/"3 ans" : le départ est
+// calculé depuis l'arrivée (jour J) par addition calendaire (setMonth/
+// setFullYear plutôt qu'un compte de jours approximatif, un mois n'ayant
+// pas une longueur fixe) plutôt que de forcer la saisie manuelle du départ.
+var DUR_UNIT_LABEL = {jour:{s:'jour',p:'jours'}, mois:{s:'mois',p:'mois'}, an:{s:'an',p:'ans'}};
+var ACTIVE_DURATION = null;
+
+function addDuration(dateStr, amount, unit){
+  var d = new Date(dateStr+'T00:00:00');
+  if(unit==='jour'){ d.setDate(d.getDate()+amount); return d.toISOString().slice(0,10); }
+  // mois/an : setMonth/setFullYear débordent sur le mois suivant quand le
+  // mois cible est plus court (ex. 30 nov + 3 mois -> JS donne le 2 mars,
+  // pas le 28 février) — on calcule l'année/mois cible séparément puis on
+  // borne le jour au dernier jour de ce mois plutôt que de laisser déborder.
+  var day = d.getDate();
+  var y = d.getFullYear(), m = d.getMonth();
+  if(unit==='mois') m += amount;
+  else if(unit==='an') y += amount;
+  var lastDayOfTargetMonth = new Date(y, m+1, 0).getDate();
+  d = new Date(y, m, Math.min(day, lastDayOfTargetMonth));
+  return d.toISOString().slice(0,10);
+}
+
+function durationLabel(o){
+  var lbl = DUR_UNIT_LABEL[o.unit] || DUR_UNIT_LABEL.jour;
+  return o.amount+' '+(o.amount>1?lbl.p:lbl.s);
+}
+
+function renderDurationPresets(){
+  var el = document.getElementById('duration-presets');
+  var opts = (BOOK_STATUS.durationOptions||[]);
+  if(!opts.length){ el.style.display='none'; return; }
+  el.style.display='flex';
+  el.innerHTML = opts.map(function(o,i){
+    return '<button type="button" class="dur-btn'+(ACTIVE_DURATION===i?' active':'')+'" onclick="applyDurationPreset('+i+')">'+esc(durationLabel(o))+'</button>';
+  }).join('');
+}
+
+function applyDurationPreset(i){
+  var opts = (BOOK_STATUS.durationOptions||[]);
+  var o = opts[i]; if(!o) return;
+  ACTIVE_DURATION = i;
+  var start = document.getElementById('in-start').value;
+  document.getElementById('in-end').value = addDuration(start, o.amount, o.unit);
+  renderDurationPresets();
+}
+
+function onDurationDateChange(){
+  if(ACTIVE_DURATION!=null) applyDurationPreset(ACTIVE_DURATION);
+}
+
+function clearDurationPreset(){
+  ACTIVE_DURATION = null;
+  renderDurationPresets();
 }
 
 // ═══════════════════ RECHERCHE / DISPONIBILITÉ ═══════════════════
@@ -388,7 +448,7 @@ function handleBookingReturn(){
 }
 
 // ═══════════════════ BOOT ═══════════════════
-var BOOK_STATUS = { enabled:false, requirePayment:true, paymentAvailable:false };
+var BOOK_STATUS = { enabled:false, requirePayment:true, paymentAvailable:false, durationOptions:[] };
 window.addEventListener('DOMContentLoaded', async function(){
   var today = new Date();
   var tomorrow = new Date(today.getTime()+86400000);
@@ -412,6 +472,7 @@ window.addEventListener('DOMContentLoaded', async function(){
     if(!sr.ok || !sd.enabled){ gotoScr('unavailable'); return; }
     BOOK_STATUS = sd;
   }catch(e){ gotoScr('unavailable'); return; }
+  renderDurationPresets();
 
   gotoScr('search');
 });

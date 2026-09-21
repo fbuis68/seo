@@ -4120,6 +4120,16 @@ Accès au salon Premium</textarea>
   </div>
 
   <div class="ca">
+    <div class="ch"><i class="ti ti-calendar-time"></i>Durées prédéfinies</div>
+    <p style="font-size:12px;color:var(--mu);margin-bottom:10px">Propose des boutons de durée sur la page de réservation (ex. "3 jours", "3 mois") — le client choisit sa date d'arrivée puis clique une durée, le départ est calculé automatiquement depuis ce jour. Laissez vide pour ne proposer que la saisie libre des dates.</p>
+    <div id="bke-duration-list"></div>
+    <button class="btn btn-ghost btn-sm" type="button" onclick="bkeAddDuration()"><i class="ti ti-plus"></i> Ajouter une durée</button>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn btn-p" onclick="bkeSave()"><i class="ti ti-device-floppy"></i> Enregistrer</button>
+    </div>
+  </div>
+
+  <div class="ca">
     <div class="ch"><i class="ti ti-link"></i>Lien de la page</div>
     <div style="display:flex;gap:8px;align-items:center">
       <input type="text" id="bke-url" readonly style="flex:1;font-family:monospace;font-size:12px">
@@ -8135,6 +8145,37 @@ function bkeUrl(){
   return checkinCode ? (window.location.origin+'/booking.html?entityCode='+checkinCode) : '';
 }
 
+var BKE_DURATION_UNIT_LABEL = {jour:'Jour(s)', mois:'Mois', an:'An(s)'};
+var BKE_DURATION_OPTIONS = [];
+
+function bkeRenderDurationList(){
+  var el = document.getElementById('bke-duration-list');
+  el.innerHTML = BKE_DURATION_OPTIONS.length ? BKE_DURATION_OPTIONS.map(function(o,i){
+    return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">'
+      + '<input type="number" min="1" max="999" value="'+esc(o.amount)+'" style="width:80px" onchange="bkeUpdateDuration('+i+',\'amount\',this.value)">'
+      + '<select onchange="bkeUpdateDuration('+i+',\'unit\',this.value)">'
+      + Object.keys(BKE_DURATION_UNIT_LABEL).map(function(u){ return '<option value="'+u+'" '+(o.unit===u?'selected':'')+'>'+BKE_DURATION_UNIT_LABEL[u]+'</option>'; }).join('')
+      + '</select>'
+      + '<button class="btn btn-ghost btn-icon btn-sm" type="button" onclick="bkeRemoveDuration('+i+')" title="Retirer">✕</button>'
+      + '</div>';
+  }).join('') : '<div style="font-size:12px;color:var(--mu)">Aucune durée prédéfinie</div>';
+}
+
+function bkeAddDuration(){
+  if(BKE_DURATION_OPTIONS.length>=8){ toast('Maximum 8 durées'); return; }
+  BKE_DURATION_OPTIONS.push({amount:3, unit:'jour'});
+  bkeRenderDurationList();
+}
+
+function bkeUpdateDuration(i, field, value){
+  BKE_DURATION_OPTIONS[i][field] = field==='amount' ? (parseInt(value,10)||1) : value;
+}
+
+function bkeRemoveDuration(i){
+  BKE_DURATION_OPTIONS.splice(i,1);
+  bkeRenderDurationList();
+}
+
 async function bkeInit(){
   var url = bkeUrl();
   document.getElementById('bke-url').value = url;
@@ -8147,6 +8188,8 @@ async function bkeInit(){
     document.getElementById('bke-enabled').checked = !!(cfg && cfg.enabled);
     requirePayment = cfg ? cfg.requirePayment !== false : true;
     document.getElementById('bke-require-payment').checked = requirePayment;
+    BKE_DURATION_OPTIONS = (cfg && Array.isArray(cfg.durationOptions)) ? cfg.durationOptions.slice() : [];
+    bkeRenderDurationList();
   }catch(e){}
 
   var el = document.getElementById('bke-status-banner');
@@ -8166,7 +8209,7 @@ async function bkeInit(){
 }
 
 async function bkeSave(){
-  var body = { enabled: document.getElementById('bke-enabled').checked, requirePayment: document.getElementById('bke-require-payment').checked };
+  var body = { enabled: document.getElementById('bke-enabled').checked, requirePayment: document.getElementById('bke-require-payment').checked, durationOptions: BKE_DURATION_OPTIONS };
   try{
     var r = await adminFetch('/wa/bookingEngine/config/update', {method:'POST', body:JSON.stringify(body)});
     if(!r.ok){ toast('Erreur lors de l\'enregistrement'); return; }

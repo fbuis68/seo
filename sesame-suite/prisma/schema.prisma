@@ -1012,6 +1012,14 @@ model BookingEngineConfig {
   // bookingEngine.ts POST /bookingEngine/bookDirect).
   requirePayment Boolean @default(true)
 
+  // Durées prédéfinies proposables sur booking.html en plus des dates
+  // libres (ex: [{"amount":3,"unit":"jour"},{"amount":3,"unit":"mois"}]) —
+  // le client choisit une date d'arrivée puis clique une durée, le départ
+  // est calculé côté client (addDuration) à partir du jour J. Tableau vide
+  // = pas de bouton durée affiché, comportement historique (dates libres
+  // uniquement) inchangé.
+  durationOptions Json @default("[]")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
