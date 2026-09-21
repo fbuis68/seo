@@ -68,6 +68,8 @@ model Entity {
   accRules               AccRule[]
   accDuplicateCandidates AccDuplicateCandidate[]
   accAuditLogs           AccAuditLog[]
+  accBankAccounts        AccBankAccount[]
+  accBankTransactions    AccBankTransaction[]
 }
 
 // Groupe d'établissements (ex : chaîne hôtelière) — gestion réservée aux
@@ -3019,6 +3021,7 @@ model AccAccount {
   invoicesProposed AccInvoice[]   @relation("InvoiceProposedAccount")
   suppliersDefault AccSupplier[]  @relation("SupplierDefaultAccount")
   rules            AccRule[]
+  bankAccounts     AccBankAccount[]
 
   @@index([entityId, number])
 }
@@ -3157,4 +3160,128 @@ model AccAuditLog {
   createdAt DateTime @default(now())
 
   @@index([entityId, targetType, targetId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Module Banque et TVA — Phase 1 (connexion/import bancaire). Architecture
+// générique "BankingProvider" (cf. lib/accBanking.ts) : une même société
+// peut connecter plusieurs comptes, chacun avec sa propre source
+// (import fichier pour l'instant — CSV/CAMT.053/MT940/CFONB ; API directe/
+// Open Banking/agrégateur préparés au niveau du champ `provider` mais pas
+// encore branchés, cf. phase ultérieure "connecteurs live").
+model AccBankAccount {
+  id       String  @id @default(cuid())
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  bank    String // nom de la banque (ex: "Qonto", "BNP Paribas")
+  name    String // nom du compte tel que choisi par l'utilisateur
+  iban    String?
+  bic     String?
+  currency String @default("EUR")
+  type    String? // courant | épargne | professionnel | autre — libre
+
+  // Compte du plan comptable obligatoirement rattaché (ex: 512000) — un
+  // compte bancaire ne peut pas exister sans lien comptable (cahier des
+  // charges §2).
+  accountId String
+  account   AccAccount @relation(fields: [accountId], references: [id])
+
+  // Source des mouvements de ce compte — manual (import fichier) | csv |
+  // camt053 | mt940 | cfonb | qonto | openbanking | aggregator. Distinct du
+  // provider technique éventuel (ex: nom de l'agrégateur) pour rester
+  // générique. "manual"/"csv"/"camt053"/"mt940"/"cfonb" n'ont pas de sync
+  // automatique — les autres sont préparés pour une phase ultérieure.
+  provider          String @default("csv")
+  providerAccountId String? // identifiant côté fournisseur (API), null pour un compte alimenté par import fichier
+
+  lastSyncAt        DateTime?
+  availableBalance  Float? // solde bancaire disponible si fourni par la source
+  // Solde comptable — recalculé à la demande depuis AccEntryLine (jamais la
+  // source de vérité), mis en cache ici uniquement pour affichage rapide de
+  // la liste des comptes sans resommer les écritures à chaque chargement.
+  accountingBalance Float?
+
+  connectionStatus String @default("manual") // manual | connected | disconnected | error
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions AccBankTransaction[]
+
+  @@index([entityId])
+}
+
+// Mouvement bancaire — une ligne par transaction récupérée/importée.
+// externalId + bankAccountId forment la clé d'idempotence (§3 : une
+// transaction récupérée plusieurs fois ne doit créer qu'un seul mouvement)
+// — pour un import fichier sans identifiant natif stable (certains CSV),
+// externalId est un hash déterministe (bankAccountId+date+montant+libellé
+// brut), même principe que AccDocument.sha256 pour les factures.
+model AccBankTransaction {
+  id       String  @id @default(cuid())
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  bankAccountId String
+  bankAccount   AccBankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+
+  externalId String // identifiant bancaire unique, ou hash de repli — cf. commentaire modèle
+
+  operationDate DateTime
+  valueDate     DateTime?
+
+  // Montant signé (positif = crédit, négatif = débit) — `direction` reste
+  // stocké séparément pour des filtres/affichages directs sans recalculer
+  // le signe à chaque fois.
+  amount    Float
+  direction String // debit | credit
+  currency  String @default("EUR")
+
+  rawLabel        String  @db.Text
+  // Rempli en phase 2 (moteur de normalisation, lib/accBanking.ts) — null
+  // tant qu'un mouvement importé n'a pas encore été traité.
+  normalizedLabel String? @db.Text
+
+  counterpartyName String?
+  counterpartyIban String?
+  counterpartyBic  String?
+
+  transactionRef  String? // référence transaction fournie par la banque
+  endToEndId      String? // EndToEndId SEPA
+  sepaMandateRef  String? // mandat SEPA
+  creditorRef     String? // référence créancier SEPA
+  paymentType     String? // ex: VIR, PRLV, CB, CHQ — tel que fourni par la source
+  bankCategory    String? // catégorie éventuelle fournie par la banque elle-même (distincte de la classification maison, phase 2)
+
+  // Classification maison (phase 2) — reglement_client | reglement_
+  // fournisseur | prelevement_fournisseur | salaire | charge_sociale |
+  // impot | tva | frais_bancaire | remboursement | virement_interne |
+  // apport | dividende | emprunt | echeance_emprunt | commission | inconnu.
+  // null tant que non classé.
+  classification           String?
+  classificationConfidence Float?
+
+  // Statut de traitement — IMPORTED (brut) | CLASSIFIED (phase 2) |
+  // MATCHED (phase 3, rapproché) | ENTRY_CREATED (écriture générée) |
+  // IGNORED (écartée volontairement) | INTERNAL_TRANSFER (virement interne
+  // identifié, jamais rapproché à une facture).
+  status String @default("IMPORTED")
+
+  // Source technique de cette ligne — csv | camt053 | mt940 | cfonb |
+  // qonto_api | manual.
+  source String
+
+  // Corps brut d'origine (ligne CSV, nœud XML CAMT.053, bloc MT940...) —
+  // jamais modifié après import, pour pouvoir justifier tout traitement
+  // automatique ultérieur (cahier des charges §4).
+  rawData Json
+
+  importedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([bankAccountId, externalId])
+  @@index([entityId, status])
+  @@index([entityId, bankAccountId, operationDate])
 }

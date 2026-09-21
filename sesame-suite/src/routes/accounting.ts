@@ -11,6 +11,7 @@ import { generateDraftEntry, validateEntry, reverseEntry, EntryGenerationError }
 import { learnRuleFromCorrection } from "../lib/accRulesEngine";
 import { worstLevel, CheckResult } from "../lib/accChecks";
 import { recordAuditLog } from "../lib/accAudit";
+import { parseBankFile, importBankTransactions, BankImportError, BankImportSource } from "../lib/accBanking";
 
 /**
  * Module comptabilité (§1-72 du cahier des charges) — routes REST. Toutes
@@ -731,5 +732,150 @@ accountingRouter.get(
     }
 
     res.json({ byStatus, pendingCount: pendingInvoices.length, pendingHt, pendingTtc, blockingCount });
+  })
+);
+
+// ───────────────────────── Banque (Phase 1 : comptes + import) ─────────────────────────
+
+const BANK_IMPORT_SOURCES = new Set(["csv", "camt053", "mt940", "cfonb"]);
+
+accountingRouter.get(
+  "/acc/bank/accounts",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const rows = await prisma.accBankAccount.findMany({ where: { entityId }, orderBy: { name: "asc" } });
+    res.json(rows);
+  })
+);
+
+interface BankAccountBody {
+  bank?: string;
+  name?: string;
+  iban?: string;
+  bic?: string;
+  currency?: string;
+  type?: string;
+  accountId?: string;
+}
+
+accountingRouter.post(
+  "/acc/bank/accounts",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const b = req.body as BankAccountBody;
+    if (!b.bank || !b.name || !b.accountId) throw new HttpError(400, "bank, name et accountId requis");
+    const account = await prisma.accAccount.findFirst({ where: { id: b.accountId, entityId } });
+    if (!account) throw new HttpError(400, "Compte comptable (accountId) introuvable pour cet établissement");
+    const created = await prisma.accBankAccount.create({
+      data: {
+        entityId,
+        bank: b.bank,
+        name: b.name,
+        iban: b.iban || null,
+        bic: b.bic || null,
+        currency: b.currency || "EUR",
+        type: b.type || null,
+        accountId: b.accountId,
+      },
+    });
+    await recordAuditLog({ entityId, userId: actorId(req), action: "bank_account_created", targetType: "AccBankAccount", targetId: created.id, newValue: { bank: created.bank, name: created.name }, ip: req.ip });
+    res.json(created);
+  })
+);
+
+accountingRouter.put(
+  "/acc/bank/accounts/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const existing = await prisma.accBankAccount.findFirst({ where: { id: req.params.id, entityId } });
+    if (!existing) throw new HttpError(404, "Compte bancaire introuvable");
+    const data: Record<string, unknown> = {};
+    for (const f of ["bank", "name", "iban", "bic", "currency", "type"] as const) if (f in req.body) data[f] = req.body[f];
+    const updated = await prisma.accBankAccount.update({ where: { id: existing.id }, data });
+    res.json(updated);
+  })
+);
+
+accountingRouter.delete(
+  "/acc/bank/accounts/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const existing = await prisma.accBankAccount.findFirst({ where: { id: req.params.id, entityId } });
+    if (!existing) throw new HttpError(404, "Compte bancaire introuvable");
+    const txCount = await prisma.accBankTransaction.count({ where: { bankAccountId: existing.id } });
+    if (txCount > 0) throw new HttpError(400, "Impossible de supprimer un compte bancaire ayant des transactions importées");
+    await prisma.accBankAccount.delete({ where: { id: existing.id } });
+    await recordAuditLog({ entityId, userId: actorId(req), action: "bank_account_deleted", targetType: "AccBankAccount", targetId: existing.id, oldValue: { bank: existing.bank, name: existing.name }, ip: req.ip });
+    res.json({ ok: true });
+  })
+);
+
+interface BankImportBody {
+  bankAccountId?: string;
+  source?: string;
+  content?: string;
+}
+
+/**
+ * POST /wa/acc/bank/import — import d'un relevé (CSV/CAMT.053/MT940 ; CFONB
+ * pas encore supporté, cf. accBanking.ts). Idempotent : les transactions déjà
+ * importées (même bankAccountId+externalId) sont simplement comptées en
+ * "skipped", ce qui permet de réimporter un relevé qui chevauche le précédent.
+ */
+accountingRouter.post(
+  "/acc/bank/import",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const b = req.body as BankImportBody;
+    if (!b.bankAccountId || !b.source || !b.content) throw new HttpError(400, "bankAccountId, source et content requis");
+    if (!BANK_IMPORT_SOURCES.has(b.source)) throw new HttpError(400, `source doit être l'un de: ${[...BANK_IMPORT_SOURCES].join(", ")}`);
+    const bankAccount = await prisma.accBankAccount.findFirst({ where: { id: b.bankAccountId, entityId } });
+    if (!bankAccount) throw new HttpError(404, "Compte bancaire introuvable");
+
+    let parsed;
+    try {
+      parsed = parseBankFile(b.source as BankImportSource, b.content);
+    } catch (err) {
+      if (err instanceof BankImportError) throw new HttpError(400, err.message);
+      throw err;
+    }
+
+    const result = await importBankTransactions(entityId, bankAccount.id, b.source as BankImportSource, parsed);
+    await prisma.accBankAccount.update({ where: { id: bankAccount.id }, data: { lastSyncAt: new Date() } });
+    await recordAuditLog({
+      entityId,
+      userId: actorId(req),
+      action: "bank_transactions_imported",
+      targetType: "AccBankAccount",
+      targetId: bankAccount.id,
+      newValue: { source: b.source, parsedCount: parsed.length, ...result },
+      ip: req.ip,
+    });
+
+    res.json({ parsedCount: parsed.length, ...result });
+  })
+);
+
+accountingRouter.get(
+  "/acc/bank/transactions",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const where: Record<string, unknown> = { entityId };
+    if (req.query.bankAccountId) where.bankAccountId = req.query.bankAccountId;
+    if (req.query.status) where.status = req.query.status;
+    const take = Math.min(Number(req.query.take) || 100, 500);
+    const rows = await prisma.accBankTransaction.findMany({
+      where,
+      orderBy: { operationDate: "desc" },
+      take,
+      skip: Number(req.query.skip) || 0,
+    });
+    res.json(rows);
   })
 );
