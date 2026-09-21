@@ -94,7 +94,7 @@ h1{font-family:var(--font-title);font-size:26px;font-weight:500;margin-bottom:6p
       </div>
       <div id="duration-presets" style="display:none;flex-wrap:wrap;gap:8px;margin:10px 0 4px"></div>
       <div id="occupant-steppers" style="display:flex;flex-direction:column;gap:10px;margin:14px 0"></div>
-      <button class="btn btn-p" onclick="searchRooms()">Voir les chambres disponibles</button>
+      <button class="btn btn-p" id="search-btn" onclick="searchRooms()">Voir les chambres disponibles</button>
       <div class="err" id="search-err" style="display:none"></div>
     </div>
   </div>
@@ -282,15 +282,21 @@ function applyDurationPreset(i){
   var start = document.getElementById('in-start').value;
   document.getElementById('in-end').value = addDuration(start, o.amount, o.unit);
   renderDurationPresets();
+  // Ressource unique (hideRoomSelection) : pas de bouton "Voir les chambres
+  // disponibles" à cliquer ensuite — la durée choisie déclenche directement
+  // la recherche.
+  if(BOOK_STATUS.hideRoomSelection) searchRooms();
 }
 
 function onDurationDateChange(){
   if(ACTIVE_DURATION!=null) applyDurationPreset(ACTIVE_DURATION);
+  else if(BOOK_STATUS.hideRoomSelection) searchRooms();
 }
 
 function clearDurationPreset(){
   ACTIVE_DURATION = null;
   renderDurationPresets();
+  if(BOOK_STATUS.hideRoomSelection) searchRooms();
 }
 
 // ═══════════════════ RECHERCHE / DISPONIBILITÉ ═══════════════════
@@ -705,6 +711,14 @@ window.addEventListener('DOMContentLoaded', async function(){
     document.getElementById('search-sub').textContent = 'Choisissez vos dates pour voir la disponibilité.';
   } else {
     renderOccupantSteppers();
+  }
+  // Ressource unique (hideRoomSelection) : pas de bouton "Voir les chambres
+  // disponibles" puisqu'il n'y a justement pas de choix de chambre à
+  // afficher — la recherche se déclenche automatiquement dès que le client
+  // touche une date (cf. onDurationDateChange/clearDurationPreset/
+  // applyDurationPreset ci-dessous), sans étape intermédiaire.
+  if(BOOK_STATUS.hideRoomSelection){
+    document.getElementById('search-btn').style.display = 'none';
   }
 
   gotoScr('search');
