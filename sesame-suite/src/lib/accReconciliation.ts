@@ -1,5 +1,6 @@
 import { prisma } from "../db";
 import { AccBankTransaction, AccInvoice, AccSupplier, AccCustomer } from "@prisma/client";
+import { validateEntry } from "./accEntryService";
 
 /**
  * Moteur de rapprochement bancaire (phase 3 du cahier des charges Banque et
@@ -146,9 +147,14 @@ function scoreCandidate(tx: AccBankTransaction, invoice: AccInvoice, party: Part
 
 /**
  * Candidats de rapprochement pour une transaction, triés par score
- * décroissant — factures ouvertes (ACCOUNTED/PARTIALLY_PAID) du même sens
- * (achat pour un débit, vente pour un crédit), même devise si les deux sont
- * renseignées, avec un solde dû restant.
+ * décroissant — factures ouvertes (VALIDATED/ACCOUNTED/PARTIALLY_PAID) du
+ * même sens (achat pour un débit, vente pour un crédit), même devise si les
+ * deux sont renseignées, avec un solde dû restant. VALIDATED (écriture
+ * DRAFT générée mais pas encore numérotée — cf. §44/validateEntry) est
+ * inclus délibérément : le paiement bancaire réel est le déclencheur le
+ * plus fiable pour finaliser une écriture, pas une raison de la rendre
+ * invisible au rapprochement en attendant une seconde validation manuelle
+ * séparée (confirmMatch valide l'écriture automatiquement le cas échéant).
  */
 export async function findCandidates(bankTransactionId: string, limit = 15): Promise<ScoredCandidate[]> {
   const tx = await prisma.accBankTransaction.findUnique({ where: { id: bankTransactionId } });
@@ -159,7 +165,7 @@ export async function findCandidates(bankTransactionId: string, limit = 15): Pro
     where: {
       entityId: tx.entityId,
       direction,
-      status: { in: ["ACCOUNTED", "PARTIALLY_PAID"] },
+      status: { in: ["VALIDATED", "ACCOUNTED", "PARTIALLY_PAID"] },
       ...(tx.currency ? { OR: [{ currency: tx.currency }, { currency: null }] } : {}),
     },
   });
@@ -210,8 +216,21 @@ export async function confirmMatch(
 
   const tx = await prisma.accBankTransaction.findUnique({ where: { id: bankTransactionId }, include: { matches: true } });
   if (!tx) throw new ReconciliationError("Transaction bancaire introuvable");
-  const invoice = await prisma.accInvoice.findUnique({ where: { id: invoiceId } });
+  let invoice = await prisma.accInvoice.findUnique({ where: { id: invoiceId } });
   if (!invoice) throw new ReconciliationError("Facture introuvable");
+
+  // Facture encore VALIDATED (écriture DRAFT générée, pas encore numérotée)
+  // — le paiement bancaire confirmé est le déclencheur le plus fiable pour
+  // finaliser cette écriture plutôt que d'exiger une validation manuelle
+  // séparée dans l'onglet Écritures avant de pouvoir rapprocher (cf.
+  // findCandidates). Bascule automatiquement en ACCOUNTED (ou PAID si
+  // règlement par prélèvement — cf. validateEntry) juste avant l'allocation.
+  if (invoice.status === "VALIDATED" && invoice.entryId) {
+    await validateEntry(invoice.entryId, createdBy);
+    invoice = await prisma.accInvoice.findUnique({ where: { id: invoiceId } });
+    if (!invoice) throw new ReconciliationError("Facture introuvable");
+  }
+
   if (!["ACCOUNTED", "PARTIALLY_PAID"].includes(invoice.status)) {
     throw new ReconciliationError("Seule une facture comptabilisée et non soldée peut être rapprochée");
   }
