@@ -42,16 +42,23 @@ function nightsBetween(start: Date, end: Date): number {
   return Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
 }
 
-/** BookingEngineConfig.skipAvailabilityCheck — ressource sans notion
- * d'occupation exclusive (ex: accès magasin) : le planning des Booking
- * existantes n'est jamais consulté, ni pour filtrer la liste ni pour
- * bloquer une création. Requête dédiée (plutôt que de faire porter le flag
- * par tous les appelants) car les 3 points de contrôle ci-dessous
- * (listAvailableRooms, quoteBooking, createBookingDirect) n'ont pas tous le
- * même objet en main — seul entityId leur est commun. */
-async function shouldSkipAvailabilityCheck(entityId: string): Promise<boolean> {
-  const cfg = await prisma.bookingEngineConfig.findUnique({ where: { entityId }, select: { skipAvailabilityCheck: true } });
-  return !!cfg?.skipAvailabilityCheck;
+/**
+ * BookingEngineConfig.skipAvailabilityCheck/cardOnFileMode — requête dédiée
+ * (plutôt que de faire porter les flags par tous les appelants) car les
+ * points de contrôle ci-dessous (listAvailableRooms, quoteBooking,
+ * createBookingDirect) n'ont pas tous le même objet en main, seul entityId
+ * leur est commun.
+ * - skipAvailabilityCheck : ressource sans notion d'occupation exclusive
+ *   (ex: accès magasin) — le planning des Booking existantes n'est jamais
+ *   consulté, ni pour filtrer la liste ni pour bloquer une création.
+ * - cardOnFileMode : empreinte bancaire, jamais de montant facturé — une
+ *   Room sans Room.rate renseigné reste éligible (listAvailableRooms exige
+ *   normalement rate>0, nécessaire seulement pour calculer un prix Stripe
+ *   Checkout à encaisser, hors de propos ici).
+ */
+async function getBookingEngineFlags(entityId: string): Promise<{ skipAvailabilityCheck: boolean; cardOnFileMode: boolean }> {
+  const cfg = await prisma.bookingEngineConfig.findUnique({ where: { entityId }, select: { skipAvailabilityCheck: true, cardOnFileMode: true } });
+  return { skipAvailabilityCheck: !!cfg?.skipAvailabilityCheck, cardOnFileMode: !!cfg?.cardOnFileMode };
 }
 
 /** Une chambre est indisponible sur la période si une réservation ACTIVE
@@ -103,13 +110,14 @@ export async function listAvailableRooms(entityId: string, start: Date, end: Dat
   const nights = nightsBetween(start, end);
   if (nights <= 0) return [];
 
+  const { skipAvailabilityCheck, cardOnFileMode } = await getBookingEngineFlags(entityId);
   const rooms = await prisma.room.findMany({
-    where: { entityId, available: true, rate: { gt: 0 } },
+    where: { entityId, available: true, ...(cardOnFileMode ? {} : { rate: { gt: 0 } }) },
     orderBy: { name: "asc" },
   });
   if (!rooms.length) return [];
 
-  const unavailableRoomIds = (await shouldSkipAvailabilityCheck(entityId))
+  const unavailableRoomIds = skipAvailabilityCheck
     ? new Set<string>()
     : new Set(
         (
@@ -160,7 +168,8 @@ export async function quoteBooking(entityId: string, draft: BookingDraft): Promi
 
   const room = await prisma.room.findFirst({ where: { id: draft.roomId, entityId, available: true } });
   if (!room || !room.rate) throw new Error("Chambre introuvable ou indisponible");
-  if (!(await shouldSkipAvailabilityCheck(entityId)) && !(await isRoomAvailable(room.id, start, end))) {
+  const { skipAvailabilityCheck } = await getBookingEngineFlags(entityId);
+  if (!skipAvailabilityCheck && !(await isRoomAvailable(room.id, start, end))) {
     throw new Error("Cette chambre n'est plus disponible sur ces dates");
   }
 
@@ -219,7 +228,8 @@ async function createBookingDirect(entity: Entity, draft: BookingDraft, opts: { 
   const room = await prisma.room.findFirst({ where: { id: draft.roomId, entityId: entity.id } });
   if (!room) throw new Error(`Chambre ${draft.roomId} introuvable`);
 
-  if (!(await shouldSkipAvailabilityCheck(entity.id)) && !(await isRoomAvailable(room.id, start, end))) {
+  const { skipAvailabilityCheck } = await getBookingEngineFlags(entity.id);
+  if (!skipAvailabilityCheck && !(await isRoomAvailable(room.id, start, end))) {
     if (opts.onRaceLost === "reject") throw new Error("Cette chambre n'est plus disponible sur ces dates");
     console.error(`[bookingEngine] chambre ${room.code} déjà prise sur la période (${opts.source}) — réservation créée quand même, à vérifier manuellement`);
   }
