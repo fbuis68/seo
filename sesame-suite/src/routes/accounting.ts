@@ -14,6 +14,7 @@ import { recordAuditLog } from "../lib/accAudit";
 import { parseBankFile, importBankTransactions, BankImportError, BankImportSource } from "../lib/accBanking";
 import { fetchQontoOrganization, syncQontoBankAccount, QontoError, QontoCredentials } from "../lib/qonto";
 import { findCandidates, confirmMatch, unmatch, autoReconcileMany, ReconciliationError } from "../lib/accReconciliation";
+import { sendMessage } from "../lib/messaging";
 
 /**
  * Module comptabilité (§1-72 du cahier des charges) — routes REST. Toutes
@@ -178,7 +179,7 @@ accountingRouter.get(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const entityId = await resolveScope(req);
-    const { status, direction, supplierId, q } = req.query as Record<string, string | undefined>;
+    const { status, direction, supplierId, q, unpaid, dueDateFrom, dueDateTo } = req.query as Record<string, string | undefined>;
     const limit = Math.min(200, Number(req.query.limit) || 50);
     const offset = Number(req.query.offset) || 0;
 
@@ -192,6 +193,18 @@ accountingRouter.get(
         { issuerName: { contains: q, mode: "insensitive" } },
         { recipientName: { contains: q, mode: "insensitive" } },
       ];
+    }
+    // Non payée = comptabilisée (ou validée) mais pas encore soldée. Le
+    // statut à lui seul suffit : PAID n'est atteint qu'en passant par
+    // invoiceStatusForAmountPaid (lib/accReconciliation.ts) ou la bascule
+    // manuelle "réglée", jamais autrement — pas de comparaison montant/
+    // montant à refaire ici.
+    if (unpaid === "true") where.status = { in: ["VALIDATED", "ACCOUNTED", "PARTIALLY_PAID"] };
+    if (dueDateFrom || dueDateTo) {
+      where.dueDate = {
+        ...(dueDateFrom ? { gte: new Date(dueDateFrom) } : {}),
+        ...(dueDateTo ? { lte: new Date(dueDateTo) } : {}),
+      };
     }
 
     const [rows, total] = await Promise.all([
@@ -407,6 +420,93 @@ accountingRouter.patch(
     const updated = await prisma.accInvoice.update({ where: { id: invoice.id }, data: { status, amountPaid } });
     await recordAuditLog({ entityId, userId: actorId(req), action: paid ? "invoice_marked_paid" : "invoice_marked_unpaid", targetType: "AccInvoice", targetId: invoice.id, oldValue: { status: invoice.status }, newValue: { status }, ip: req.ip });
     res.json(updated);
+  })
+);
+
+interface RelanceBody {
+  invoiceIds?: string[];
+  templateKey?: string;
+  attachInvoice?: boolean;
+}
+
+interface RelanceResult {
+  invoiceId: string;
+  ok: boolean;
+  error?: string;
+}
+
+/**
+ * POST /wa/acc/invoices/relance — envoie un email de relance (modèle email
+ * au choix) pour chaque facture sélectionnée, non payée, achat OU vente —
+ * destinataire résolu sur le tiers rapproché (fournisseur en achat, client
+ * en vente). Une facture sans email de tiers ou déjà soldée échoue
+ * individuellement, jamais bloquant pour les autres (§ même logique que
+ * l'import ZIP de factures). attachInvoice=true (par défaut) joint le
+ * document original de CHAQUE facture (AccDocument.contentBase64) à SON
+ * propre email — jamais celui d'une autre facture du lot, contrairement à
+ * MessageTemplate.defaultAttachments qui est fixe pour tout le modèle (cf.
+ * lib/messaging.ts, extraAttachments). Aucune trace de relance persistée en
+ * base pour cette première passe — l'historique complet du modèle envoyé se
+ * retrouve dans les logs SMTP habituels, au même titre que tout autre email
+ * manuel de ce module.
+ */
+accountingRouter.post(
+  "/acc/invoices/relance",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const b = req.body as RelanceBody;
+    if (!b.invoiceIds?.length) throw new HttpError(400, "invoiceIds requis");
+    if (!b.templateKey) throw new HttpError(400, "templateKey requis");
+    const attachInvoice = b.attachInvoice !== false;
+
+    const invoices = await prisma.accInvoice.findMany({
+      where: { id: { in: b.invoiceIds }, entityId },
+      include: { supplier: true, customer: true, document: { select: { contentBase64: true, mimeType: true, originalFilename: true } } },
+    });
+
+    const results: RelanceResult[] = [];
+    for (const inv of invoices) {
+      const remainingDue = (inv.amountTtc || 0) - inv.amountPaid;
+      if (!["VALIDATED", "ACCOUNTED", "PARTIALLY_PAID"].includes(inv.status) || remainingDue <= 0.01) {
+        results.push({ invoiceId: inv.id, ok: false, error: "Facture déjà soldée ou pas encore comptabilisée" });
+        continue;
+      }
+      const tiersName = inv.direction === "sale" ? inv.customer?.name || inv.recipientName : inv.supplier?.name || inv.issuerName;
+      const tiersEmail = inv.direction === "sale" ? inv.customer?.email : inv.supplier?.email;
+      if (!tiersEmail) {
+        results.push({ invoiceId: inv.id, ok: false, error: `Aucun email pour ${inv.direction === "sale" ? "le client" : "le fournisseur"} rapproché` });
+        continue;
+      }
+      try {
+        await sendMessage({
+          entityId,
+          channel: "email",
+          templateKey: b.templateKey,
+          to: tiersEmail,
+          variables: {
+            numero: inv.invoiceNumber || "",
+            tiers: tiersName || "",
+            montant: remainingDue.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €",
+            echeance: inv.dueDate ? new Date(inv.dueDate).toLocaleDateString("fr-FR") : "",
+          },
+          extraAttachments:
+            attachInvoice && inv.document
+              ? [{ fileName: inv.document.originalFilename, dataUrl: `data:${inv.document.mimeType};base64,${inv.document.contentBase64}` }]
+              : undefined,
+        });
+        results.push({ invoiceId: inv.id, ok: true });
+      } catch (e) {
+        results.push({ invoiceId: inv.id, ok: false, error: e instanceof Error ? e.message : "Erreur d'envoi" });
+      }
+    }
+
+    const successCount = results.filter((r) => r.ok).length;
+    await recordAuditLog({
+      entityId, userId: actorId(req), action: "invoices_relance_sent", targetType: "AccInvoice", targetId: b.invoiceIds.join(","),
+      newValue: { templateKey: b.templateKey, successCount, failureCount: results.length - successCount }, ip: req.ip,
+    });
+    res.json({ results, successCount, failureCount: results.length - successCount });
   })
 );
 

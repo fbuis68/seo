@@ -6104,7 +6104,7 @@ async function saveScoringConfig(){
 // l'identique côté back-office de chaque hôtel, voir admin.html)
 // ════════════════════════════════════════
 const CHANNEL_LABEL = {email:'Email', sms:'SMS', whatsapp:'WhatsApp'};
-const TPL_CATEGORY_LABEL = {marketing:'Marketing', support:'Support', commercial:'Commercial'};
+const TPL_CATEGORY_LABEL = {marketing:'Marketing', support:'Support', commercial:'Commercial', relance:'Relance'};
 let tplCategoryFilter='';
 let SMTP_CFG=null, SMS_CFG=null, WA_CFG=null, GRAPH_MAIL=null;
 let MSG_TEMPLATES=[], MSG_TEMPLATES_LOADED=false;
@@ -7516,7 +7516,8 @@ async function accGraphMailDeactivate(purpose){
 
 // ───────── Onglet Factures (inbox de validation, §37) ─────────
 
-let ACC_INBOX_FILTER={status:'',direction:''};
+let ACC_INBOX_FILTER={status:'',direction:'',unpaid:false,dueDateFrom:'',dueDateTo:''};
+let ACC_INBOX_SELECTED=new Set();
 
 async function loadAccInboxTab(){
   const el = document.getElementById('acc-tab-body');
@@ -7529,23 +7530,46 @@ async function accReloadInvoices(){
   const params = new URLSearchParams({scope:'crm', limit:'100'});
   if(ACC_INBOX_FILTER.status) params.set('status', ACC_INBOX_FILTER.status);
   if(ACC_INBOX_FILTER.direction) params.set('direction', ACC_INBOX_FILTER.direction);
+  if(ACC_INBOX_FILTER.unpaid) params.set('unpaid', 'true');
+  if(ACC_INBOX_FILTER.dueDateFrom) params.set('dueDateFrom', ACC_INBOX_FILTER.dueDateFrom);
+  if(ACC_INBOX_FILTER.dueDateTo) params.set('dueDateTo', ACC_INBOX_FILTER.dueDateTo);
   try{
     const r = await apiFetch('/wa/acc/invoices?'+params.toString());
     const data = r.ok ? await r.json() : {rows:[]};
     ACC_INVOICES = data.rows||[];
   }catch(e){ ACC_INVOICES=[]; }
+  ACC_INBOX_SELECTED = new Set([...ACC_INBOX_SELECTED].filter(id=>ACC_INVOICES.some(i=>i.id===id)));
   renderAccInbox();
 }
 
 function accSetInboxFilter(field, val){ ACC_INBOX_FILTER[field]=val; accReloadInvoices(); }
+function accToggleUnpaidFilter(checked){ ACC_INBOX_FILTER.unpaid=checked; accReloadInvoices(); }
+
+function accToggleInboxSelect(id, checked){
+  if(checked) ACC_INBOX_SELECTED.add(id); else ACC_INBOX_SELECTED.delete(id);
+  renderAccInbox();
+}
+function accToggleInboxSelectAll(checked){
+  ACC_INBOX_SELECTED = new Set(checked ? ACC_INVOICES.map(i=>i.id) : []);
+  renderAccInbox();
+}
+
+function accDueDateCell(inv){
+  if(!inv.dueDate) return '<span style="color:var(--mu)">—</span>';
+  const due = new Date(inv.dueDate);
+  const overdue = due.getTime() < Date.now() && !['PAID','REJECTED'].includes(inv.status);
+  return `<span style="${overdue?'color:#a32d2d;font-weight:600':''}">${due.toLocaleDateString('fr-FR')}</span>`;
+}
 
 function renderAccInbox(){
   const el = document.getElementById('acc-tab-body');
   if(!el) return;
   const statusOpts = ['', ...Object.keys(ACC_STATUS_LABEL)];
+  const allSelected = ACC_INVOICES.length>0 && ACC_INVOICES.every(i=>ACC_INBOX_SELECTED.has(i.id));
   const rows = ACC_INVOICES.map(inv=>{
     const level = accWorstCheckLevel(inv.checks);
     return `<tr>
+      <td onclick="event.stopPropagation()"><input type="checkbox" ${ACC_INBOX_SELECTED.has(inv.id)?'checked':''} onchange="accToggleInboxSelect('${inv.id}', this.checked)"></td>
       <td>${inv.invoiceDate?new Date(inv.invoiceDate).toLocaleDateString('fr-FR'):'—'}</td>
       <td>${ACC_DOCTYPE_LABEL[inv.documentType]||inv.documentType||'—'}</td>
       <td><div class="nom-cell" onclick="openAccInvoiceModal('${inv.id}')">${esc(inv.direction==='sale'?(inv.customer?inv.customer.name:(inv.recipientName||'—')):(inv.supplier?inv.supplier.name:(inv.issuerName||'—')))}</div></td>
@@ -7553,6 +7577,7 @@ function renderAccInbox(){
       <td style="text-align:right">${inv.amountHt!=null?fmtEUR2(inv.amountHt):'—'}</td>
       <td style="text-align:right">${inv.amountVat!=null?fmtEUR2(inv.amountVat):'—'}</td>
       <td style="text-align:right">${inv.amountTtc!=null?fmtEUR2(inv.amountTtc):'—'}</td>
+      <td>${accDueDateCell(inv)}</td>
       <td>${inv.proposedAccountId?'<span class="tpill bi">'+accConfidencePct(inv.proposedAccountConfidence)+'</span>':'<span class="tpill bn">Aucun</span>'}</td>
       <td>${level!=='OK'?'<span class="tag '+ACC_CHECK_TAG[level]+'" style="font-size:10px;padding:1px 7px">'+level+'</span>':'<span class="tpill bg">OK</span>'}</td>
       <td>${accStatusBadge(inv.status)}</td>
@@ -7561,7 +7586,7 @@ function renderAccInbox(){
     </tr>`;
   }).join('');
   el.innerHTML = `
-    <div class="list-toolbar">
+    <div class="list-toolbar" style="flex-wrap:wrap">
       <select class="lsel" onchange="accSetInboxFilter('status', this.value)">
         ${statusOpts.map(s=>`<option value="${s}" ${ACC_INBOX_FILTER.status===s?'selected':''}>${s?ACC_STATUS_LABEL[s]:'Tous les statuts'}</option>`).join('')}
       </select>
@@ -7570,12 +7595,16 @@ function renderAccInbox(){
         <option value="purchase" ${ACC_INBOX_FILTER.direction==='purchase'?'selected':''}>Achats</option>
         <option value="sale" ${ACC_INBOX_FILTER.direction==='sale'?'selected':''}>Ventes</option>
       </select>
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap"><input type="checkbox" ${ACC_INBOX_FILTER.unpaid?'checked':''} onchange="accToggleUnpaidFilter(this.checked)">Non payées uniquement</label>
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap">Échéance du <input type="date" class="lsel" style="width:140px" value="${ACC_INBOX_FILTER.dueDateFrom}" onchange="accSetInboxFilter('dueDateFrom', this.value)"></label>
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap">au <input type="date" class="lsel" style="width:140px" value="${ACC_INBOX_FILTER.dueDateTo}" onchange="accSetInboxFilter('dueDateTo', this.value)"></label>
       <span class="count-lbl">${ACC_INVOICES.length} facture(s)</span>
+      ${ACC_INBOX_SELECTED.size>0?`<button class="btn btn-primary btn-sm" onclick="openAccRelanceModal()">Envoyer une relance (${ACC_INBOX_SELECTED.size})</button>`:''}
     </div>
     <div id="acc-inbox-dropzone" style="border:2px dashed transparent;border-radius:12px;transition:border-color .1s,background .1s">
       <div class="tbl-wrap"><table>
-        <thead><tr><th>Date</th><th>Type</th><th>Tiers</th><th>N° facture</th><th style="text-align:right">HT</th><th style="text-align:right">TVA</th><th style="text-align:right">TTC</th><th>Compte</th><th>Contrôles</th><th>État</th><th style="width:80px">Réglée</th><th style="width:44px"></th></tr></thead>
-        <tbody>${rows||'<tr><td colspan="12" class="log-empty">Aucune facture — déposez-en une avec le bouton en haut à droite, ou glissez un fichier ici.</td></tr>'}</tbody>
+        <thead><tr><th style="width:32px"><input type="checkbox" ${allSelected?'checked':''} onchange="accToggleInboxSelectAll(this.checked)"></th><th>Date</th><th>Type</th><th>Tiers</th><th>N° facture</th><th style="text-align:right">HT</th><th style="text-align:right">TVA</th><th style="text-align:right">TTC</th><th>Échéance</th><th>Compte</th><th>Contrôles</th><th>État</th><th style="width:80px">Réglée</th><th style="width:44px"></th></tr></thead>
+        <tbody>${rows||'<tr><td colspan="14" class="log-empty">Aucune facture — déposez-en une avec le bouton en haut à droite, ou glissez un fichier ici.</td></tr>'}</tbody>
       </table></div>
     </div>`;
 
@@ -7613,6 +7642,49 @@ async function accTogglePaid(id, paid){
     if(ACC_TAB==='inbox') accReloadInvoices();
     if(window._accInvoiceEditing && window._accInvoiceEditing.id===id) openAccInvoiceModal(id);
   }catch(e){ flash('Erreur'); }
+}
+
+async function openAccRelanceModal(){
+  await ensureTemplatesLoaded();
+  const emailTpls = MSG_TEMPLATES.filter(t=>t.channel==='email');
+  const selectedInvoices = ACC_INVOICES.filter(i=>ACC_INBOX_SELECTED.has(i.id));
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:480px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Envoyer une relance</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div style="font-size:12px;color:var(--mu);margin-bottom:10px">${selectedInvoices.length} facture(s) sélectionnée(s). Variables disponibles dans le modèle : <code>{{numero}}</code>, <code>{{tiers}}</code>, <code>{{montant}}</code> (reste dû), <code>{{echeance}}</code>.</div>
+      ${emailTpls.length?`
+      <div class="ff"><label>Modèle email</label><select id="relance-templateKey">
+        ${emailTpls.map(t=>`<option value="${esc(t.key)}">${esc(t.name)}${t.category?' — '+(TPL_CATEGORY_LABEL[t.category]||t.category):''}</option>`).join('')}
+      </select></div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:10px"><input type="checkbox" id="relance-attach" checked>Joindre le document de chaque facture en pièce jointe</label>
+      <div id="relance-status" style="font-size:12px;margin-top:8px"></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="accSubmitRelance()">Envoyer</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>`:`
+      <div class="log-empty">Aucun modèle email — créez-en un dans Canaux → Modèles (catégorie "Relance" recommandée).</div>
+      <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Fermer</button></div>`}
+    </div>
+  </div>`;
+}
+
+async function accSubmitRelance(){
+  const templateKey = document.getElementById('relance-templateKey').value;
+  const attachInvoice = document.getElementById('relance-attach').checked;
+  const statusEl = document.getElementById('relance-status');
+  statusEl.textContent = 'Envoi en cours…'; statusEl.style.color = 'var(--mu)';
+  try{
+    const r = await apiFetch('/wa/acc/invoices/relance?scope=crm', {method:'POST', body:JSON.stringify({invoiceIds:[...ACC_INBOX_SELECTED], templateKey, attachInvoice})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    closeModal();
+    const failures = data.results.filter(r=>!r.ok);
+    flash(data.successCount+' relance(s) envoyée(s)'+(data.failureCount?', '+data.failureCount+' échec(s)':''));
+    if(failures.length) console.warn('Échecs de relance:', failures);
+    ACC_INBOX_SELECTED = new Set();
+    accReloadInvoices();
+  }catch(e){ statusEl.textContent = e.message||'Erreur d\'envoi'; statusEl.style.color='#a32d2d'; }
 }
 
 // ── Upload ──

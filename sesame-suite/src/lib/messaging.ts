@@ -66,6 +66,14 @@ export async function sendMessage(opts: {
    * faire deux chemins de code séparés.
    */
   appendBodyHtml?: string;
+  /**
+   * Email uniquement — pièces jointes propres à CET envoi, en plus des
+   * pièces jointes fixes du modèle (MessageTemplate.defaultAttachments) —
+   * ex : la facture PDF concernée sur une relance de paiement
+   * (routes/accounting.ts), différente à chaque appel donc jamais
+   * modélisable comme pièce jointe fixe du modèle lui-même.
+   */
+  extraAttachments?: { fileName: string; dataUrl: string }[];
 }) {
   const template = await prisma.messageTemplate.findFirst({
     where: { entityId: opts.entityId, channel: opts.channel, key: opts.templateKey },
@@ -100,9 +108,10 @@ export async function sendMessage(opts: {
   }
 
   if (opts.channel === "email") {
-    const namedAttachments = Array.isArray(template.defaultAttachments)
+    const namedAttachments = (Array.isArray(template.defaultAttachments)
       ? (template.defaultAttachments as unknown as { fileName: string; dataUrl: string }[])
-      : [];
+      : []
+    ).concat(opts.extraAttachments || []);
     await sendEmailRaw(opts.entityId, opts.to, subject, body, opts.fromNameOverride, { namedAttachments });
   } else if (opts.channel === "whatsapp") {
     // WhatsApp Business interdit le texte libre business-initié en dehors
