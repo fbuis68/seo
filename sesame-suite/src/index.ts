@@ -5,6 +5,7 @@ import { startLockerSourceScheduler } from "./lib/lockerSourceScheduler";
 import { startAutomationScheduler } from "./lib/automationScheduler";
 import { startCampaignScheduler } from "./lib/campaignScheduler";
 import { startGraphSubscriptionScheduler } from "./lib/graphSubscriptionScheduler";
+import { startQontoScheduler } from "./lib/qontoScheduler";
 import { VERSION } from "./lib/version";
 
 const INSECURE_DEFAULTS: Record<string, string> = {
@@ -47,4 +48,5 @@ app.listen(config.port, () => {
   startAutomationScheduler();
   startCampaignScheduler();
   startGraphSubscriptionScheduler();
+  startQontoScheduler();
 });

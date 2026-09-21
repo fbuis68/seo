@@ -7321,6 +7321,7 @@ async function testRule(id){
 // ════════════════════════════════════════
 let ACC_INVOICES=[], ACC_SUPPLIERS=[], ACC_ACCOUNTS=[], ACC_JOURNALS=[], ACC_ENTRIES=[], ACC_RULES=[], ACC_DASH=null;
 let ACC_BANK_ACCOUNTS=[], ACC_BANK_TX=[], ACC_BANK_SELECTED=null;
+let ACC_QONTO_CONFIG=null, ACC_QONTO_TEST_ACCOUNTS=null;
 let ACC_TAB='inbox';
 const ACC_LOADED={};
 const ACC_STATUS_LABEL={RECEIVED:'Reçue',PROCESSING:'En traitement',OCR_COMPLETED:'OCR effectué',EXTRACTED:'Extraite',CHECK_REQUIRED:'À vérifier',VALIDATED:'Validée',ACCOUNTED:'Comptabilisée',PARTIALLY_PAID:'Partiellement payée',PAID:'Payée',REJECTED:'Rejetée'};
@@ -8274,6 +8275,10 @@ async function loadAccBankTab(){
     const r = await apiFetch('/wa/acc/bank/accounts?scope=crm');
     ACC_BANK_ACCOUNTS = r.ok ? await r.json() : [];
   }catch(e){ ACC_BANK_ACCOUNTS=[]; }
+  try{
+    const r = await apiFetch('/wa/acc/bank/qonto/config?scope=crm');
+    ACC_QONTO_CONFIG = r.ok ? await r.json() : null;
+  }catch(e){ ACC_QONTO_CONFIG=null; }
   if(ACC_BANK_SELECTED && !ACC_BANK_ACCOUNTS.some(a=>a.id===ACC_BANK_SELECTED)) ACC_BANK_SELECTED=null;
   if(!ACC_BANK_SELECTED && ACC_BANK_ACCOUNTS.length) ACC_BANK_SELECTED = ACC_BANK_ACCOUNTS[0].id;
   await loadAccBankTransactions();
@@ -8288,21 +8293,31 @@ async function loadAccBankTransactions(){
   }catch(e){ ACC_BANK_TX=[]; }
 }
 
+const ACC_QONTO_STATUS_LABEL={manual:'Manuel',connected:'Connecté',error:'Erreur de connexion'};
+const ACC_QONTO_STATUS_TAG={manual:'t-gray',connected:'t-green',error:'t-red'};
+
 function renderAccBank(){
   const el = document.getElementById('acc-tab-body');
   if(!el) return;
-  const accRows = ACC_BANK_ACCOUNTS.map(a=>`
+  const accRows = ACC_BANK_ACCOUNTS.map(a=>{
+    const isQonto = a.provider==='qonto';
+    const statusBadge = `<span class="tag ${ACC_QONTO_STATUS_TAG[a.connectionStatus]||'t-gray'}" style="font-size:10px;padding:1px 7px">${ACC_QONTO_STATUS_LABEL[a.connectionStatus]||a.connectionStatus}</span>`;
+    const actions = isQonto
+      ? `<button class="ta-btn" onclick="accSyncQontoAccount('${a.id}')" title="Synchroniser maintenant">↻</button>
+         <button class="ta-btn" onclick="accDisconnectQonto('${a.id}')" title="Déconnecter de Qonto">⛓</button>`
+      : `<button class="ta-btn" onclick="openAccBankImportModal('${a.id}')" title="Importer un relevé">⇧</button>
+         ${ACC_QONTO_CONFIG&&ACC_QONTO_CONFIG.secretKeySet?`<button class="ta-btn" onclick="openAccQontoConnectModal('${a.id}')" title="Connecter à Qonto">🔗</button>`:''}
+         <button class="ta-btn" onclick="accDeleteBankAccount('${a.id}')" title="Supprimer">🗑</button>`;
+    return `
     <tr style="cursor:pointer;${a.id===ACC_BANK_SELECTED?'background:var(--hover)':''}" onclick="accSelectBankAccount('${a.id}')">
       <td>${esc(a.name)}</td>
       <td>${esc(a.bank)}</td>
-      <td style="font-family:monospace;font-size:11px">${esc(a.iban||'—')}</td>
-      <td>${esc(a.currency)}</td>
+      <td style="font-family:monospace;font-size:11px">${esc(a.iban||a.providerAccountId||'—')}</td>
+      <td>${isQonto?statusBadge:'<span class="tpill">Manuel</span>'}</td>
       <td>${a.lastSyncAt?new Date(a.lastSyncAt).toLocaleString('fr-FR'):'jamais'}</td>
-      <td onclick="event.stopPropagation()">
-        <button class="ta-btn" onclick="openAccBankImportModal('${a.id}')" title="Importer un relevé">⇧</button>
-        <button class="ta-btn" onclick="accDeleteBankAccount('${a.id}')" title="Supprimer">🗑</button>
-      </td>
-    </tr>`).join('');
+      <td onclick="event.stopPropagation()">${actions}</td>
+    </tr>`;
+  }).join('');
 
   const selected = ACC_BANK_ACCOUNTS.find(a=>a.id===ACC_BANK_SELECTED);
   const txRows = ACC_BANK_TX.map(t=>`
@@ -8314,13 +8329,19 @@ function renderAccBank(){
       <td>${ACC_BANK_SOURCE_LABEL[t.source]||t.source}</td>
     </tr>`).join('');
 
+  const qontoCfg = ACC_QONTO_CONFIG || {login:'',secretKeySet:false,secretKeyLast4:'',sandbox:false};
   el.innerHTML = `
+    <div class="modal-section" style="margin-top:0">Connecteur Qonto</div>
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px">
+      <span style="font-size:12px;color:var(--mu)">${qontoCfg.secretKeySet?`Connecté à l'organisation <strong>${esc(qontoCfg.login)}</strong>${qontoCfg.sandbox?' (sandbox)':''}, clé finissant par ${esc(qontoCfg.secretKeyLast4)}.`:"Non configuré — permet la synchronisation automatique des transactions sans import manuel."}</span>
+      <button class="btn btn-ghost btn-sm" onclick="openAccQontoConfigModal()">${qontoCfg.secretKeySet?'Modifier':'Configurer Qonto'}</button>
+    </div>
     <div class="list-toolbar">
       <button class="btn btn-primary btn-sm" onclick="openAccBankAccountModal()">+ Compte bancaire</button>
       <span class="count-lbl">${ACC_BANK_ACCOUNTS.length} compte(s) bancaire(s)</span>
     </div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th>Nom</th><th>Banque</th><th>IBAN</th><th style="width:70px">Devise</th><th style="width:140px">Dernier import</th><th style="width:70px"></th></tr></thead>
+      <thead><tr><th>Nom</th><th>Banque</th><th>IBAN</th><th style="width:120px">Connexion</th><th style="width:140px">Dernier import</th><th style="width:90px"></th></tr></thead>
       <tbody>${accRows||'<tr><td colspan="6" class="log-empty">Aucun compte bancaire — cliquez sur "+ Compte bancaire".</td></tr>'}</tbody>
     </table></div>
     <div class="modal-section">Transactions${selected?' — '+esc(selected.name):''}</div>
@@ -8387,6 +8408,126 @@ async function accDeleteBankAccount(id){
     flash('Compte bancaire supprimé');
     loadAccBankTab();
   }catch(e){ flash(e.message||'Erreur de suppression'); }
+}
+
+function openAccQontoConfigModal(){
+  const c = ACC_QONTO_CONFIG || {login:'',secretKeySet:false,secretKeyLast4:'',sandbox:false};
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:460px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Connecteur Qonto</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div style="font-size:12px;color:var(--mu);margin-bottom:10px">Identifiants disponibles dans le dashboard Qonto (Intégrations &gt; API).</div>
+      <div class="ff"><label>Login (identifiant organisation)</label><input id="qc-login" value="${esc(c.login)}" placeholder="Ex. mon-organisation-1234"></div>
+      <div class="ff" style="margin-top:8px"><label>Clé secrète${c.secretKeySet?' (laisser vide pour conserver celle enregistrée, finit par '+esc(c.secretKeyLast4)+')':''}</label><input id="qc-secretKey" type="password"></div>
+      <div class="ff" style="margin-top:8px"><label><input type="checkbox" id="qc-sandbox" ${c.sandbox?'checked':''} style="width:auto;margin-right:6px">Environnement sandbox (test)</label></div>
+      <div id="qc-status" style="font-size:12px;margin-top:8px"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost btn-sm" onclick="accTestQontoConfig()">Tester la connexion</button>
+        <button class="btn btn-primary" onclick="saveAccQontoConfig()">Enregistrer</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function saveAccQontoConfig(){
+  const g=i=>(document.getElementById(i)||{value:''}).value.trim();
+  const body = {login:g('qc-login'), sandbox:document.getElementById('qc-sandbox').checked};
+  const secretKey = g('qc-secretKey');
+  if(secretKey) body.secretKey = secretKey;
+  if(!body.login){ flash('Login requis'); return; }
+  try{
+    const r = await apiFetch('/wa/acc/bank/qonto/config?scope=crm', {method:'PUT', body:JSON.stringify(body)});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    ACC_QONTO_CONFIG = data;
+    closeModal();
+    flash('Configuration Qonto enregistrée');
+    renderAccBank();
+  }catch(e){ flash(e.message||'Erreur d\'enregistrement'); }
+}
+
+async function accTestQontoConfig(){
+  const statusEl = document.getElementById('qc-status');
+  statusEl.textContent = 'Test en cours…'; statusEl.style.color = 'var(--mu)';
+  // Un test porte sur la config déjà enregistrée en base — on enregistre d'abord la saisie courante.
+  await saveAccQontoConfigSilent();
+  try{
+    const r = await apiFetch('/wa/acc/bank/qonto/test?scope=crm', {method:'POST'});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    ACC_QONTO_TEST_ACCOUNTS = data.bankAccounts;
+    statusEl.style.color = '#1f7a3f';
+    statusEl.textContent = 'Connexion réussie — '+data.bankAccounts.length+' compte(s) trouvé(s) chez Qonto ('+data.bankAccounts.map(a=>a.iban).join(', ')+').';
+  }catch(e){ statusEl.style.color = '#a32d2d'; statusEl.textContent = e.message||'Échec de la connexion'; }
+}
+
+async function saveAccQontoConfigSilent(){
+  const g=i=>(document.getElementById(i)||{value:''}).value.trim();
+  const body = {login:g('qc-login'), sandbox:document.getElementById('qc-sandbox').checked};
+  const secretKey = g('qc-secretKey');
+  if(secretKey) body.secretKey = secretKey;
+  if(!body.login) return;
+  try{
+    const r = await apiFetch('/wa/acc/bank/qonto/config?scope=crm', {method:'PUT', body:JSON.stringify(body)});
+    if(r.ok) ACC_QONTO_CONFIG = await r.json();
+  }catch(e){}
+}
+
+function openAccQontoConnectModal(bankAccountId){
+  const accounts = ACC_QONTO_TEST_ACCOUNTS;
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:460px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Connecter à Qonto</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      ${accounts?`
+        <div class="ff"><label>Compte Qonto (IBAN)</label><select id="qco-iban">
+          ${accounts.map(a=>`<option value="${esc(a.iban)}">${esc(a.name)} — ${esc(a.iban)} (${fmtEUR2(a.balance)})</option>`).join('')}
+        </select></div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" onclick="accConnectQonto('${bankAccountId}')">Connecter</button>
+          <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+        </div>`
+      :`<div style="font-size:12px;color:var(--mu)">Testez d'abord la connexion Qonto (bouton "Modifier" du connecteur) pour lister les comptes disponibles.</div>
+        <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Fermer</button></div>`}
+    </div>
+  </div>`;
+}
+
+async function accConnectQonto(bankAccountId){
+  const iban = document.getElementById('qco-iban').value;
+  try{
+    const r = await apiFetch('/wa/acc/bank/accounts/'+bankAccountId+'/qonto/connect?scope=crm', {method:'POST', body:JSON.stringify({iban})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    closeModal();
+    flash('Compte connecté à Qonto — synchronisation en cours');
+    loadAccBankTab();
+    accSyncQontoAccount(bankAccountId);
+  }catch(e){ flash(e.message||'Erreur de connexion'); }
+}
+
+async function accSyncQontoAccount(id){
+  flash('Synchronisation en cours…');
+  try{
+    const r = await apiFetch('/wa/acc/bank/accounts/'+id+'/qonto/sync?scope=crm', {method:'POST'});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash(data.created+' nouvelle(s) transaction(s)'+(data.skipped?', '+data.skipped+' déjà connue(s)':''));
+    ACC_BANK_SELECTED = id;
+    loadAccBankTab();
+  }catch(e){ flash(e.message||'Erreur de synchronisation'); }
+}
+
+async function accDisconnectQonto(id){
+  if(!confirm('Déconnecter ce compte de Qonto ? Les transactions déjà importées restent en place, la synchronisation automatique s\'arrête.')) return;
+  try{
+    const r = await apiFetch('/wa/acc/bank/accounts/'+id+'/qonto/disconnect?scope=crm', {method:'POST'});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash('Compte déconnecté');
+    loadAccBankTab();
+  }catch(e){ flash(e.message||'Erreur'); }
 }
 
 function openAccBankImportModal(bankAccountId){

@@ -70,6 +70,7 @@ model Entity {
   accAuditLogs           AccAuditLog[]
   accBankAccounts        AccBankAccount[]
   accBankTransactions    AccBankTransaction[]
+  qontoConfig            QontoConfig?
 }
 
 // Groupe d'établissements (ex : chaîne hôtelière) — gestion réservée aux
@@ -3284,4 +3285,29 @@ model AccBankTransaction {
   @@unique([bankAccountId, externalId])
   @@index([entityId, status])
   @@index([entityId, bankAccountId, operationDate])
+}
+
+// Identifiants d'accès à l'API Qonto (Business API, cf. lib/qonto.ts) — un
+// jeu de clés par organisation Qonto, qui peut couvrir plusieurs comptes
+// bancaires (IBAN) rattachés à des AccBankAccount.provider="qonto" via
+// AccBankAccount.providerAccountId (l'IBAN Qonto). Même portée nullable que
+// AccSettings (entityId=null → réglage global Sesame, sinon par
+// établissement).
+model QontoConfig {
+  id       String  @id @default(cuid())
+  entityId String? @unique
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  // Identifiant "login" Qonto (ex : "mon-organisation-1234"), fourni avec la
+  // clé secrète dans le dashboard Qonto (Intégrations > API).
+  login String
+  // Clé secrète Qonto — jamais renvoyée au client (cf. shapeQontoConfig côté
+  // route, même convention que PaymentConfig.secretKey).
+  secretKey String
+  // true = environnement sandbox Qonto (thirdparty-sandbox.qonto.com),
+  // false = production (thirdparty.qonto.com).
+  sandbox Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

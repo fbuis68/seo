@@ -12,6 +12,7 @@ import { learnRuleFromCorrection } from "../lib/accRulesEngine";
 import { worstLevel, CheckResult } from "../lib/accChecks";
 import { recordAuditLog } from "../lib/accAudit";
 import { parseBankFile, importBankTransactions, BankImportError, BankImportSource } from "../lib/accBanking";
+import { fetchQontoOrganization, syncQontoBankAccount, QontoError, QontoCredentials } from "../lib/qonto";
 
 /**
  * Module comptabilité (§1-72 du cahier des charges) — routes REST. Toutes
@@ -858,6 +859,120 @@ accountingRouter.post(
     });
 
     res.json({ parsedCount: parsed.length, ...result });
+  })
+);
+
+// ───────── Connecteur Qonto (Phase 2 : synchronisation automatique) ─────────
+
+function shapeQontoConfig(c: { login: string; secretKey: string; sandbox: boolean } | null) {
+  if (!c) return { login: "", secretKeySet: false, secretKeyLast4: "", sandbox: false };
+  return { login: c.login, secretKeySet: true, secretKeyLast4: c.secretKey.slice(-4), sandbox: c.sandbox };
+}
+
+accountingRouter.get(
+  "/acc/bank/qonto/config",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const config = await prisma.qontoConfig.findFirst({ where: { entityId } });
+    res.json(shapeQontoConfig(config));
+  })
+);
+
+interface QontoConfigBody {
+  login?: string;
+  secretKey?: string;
+  sandbox?: boolean;
+}
+
+/** PUT /wa/acc/bank/qonto/config — un secretKey vide conserve la valeur déjà enregistrée (même convention que /wa/payment/config/update). */
+accountingRouter.put(
+  "/acc/bank/qonto/config",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const b = req.body as QontoConfigBody;
+    if (!b.login) throw new HttpError(400, "login requis");
+    const existing = await prisma.qontoConfig.findFirst({ where: { entityId } });
+    if (!b.secretKey && !existing) throw new HttpError(400, "secretKey requis à la première configuration");
+    const data = { login: b.login, ...(b.secretKey ? { secretKey: b.secretKey } : {}), sandbox: !!b.sandbox };
+    const config = existing
+      ? await prisma.qontoConfig.update({ where: { id: existing.id }, data })
+      : await prisma.qontoConfig.create({ data: { entityId, login: b.login, secretKey: b.secretKey!, sandbox: !!b.sandbox } });
+    await recordAuditLog({ entityId, userId: actorId(req), action: "qonto_config_updated", targetType: "QontoConfig", targetId: config.id, ip: req.ip });
+    res.json(shapeQontoConfig(config));
+  })
+);
+
+/** POST /wa/acc/bank/qonto/test — valide les identifiants enregistrés en listant les comptes bancaires de l'organisation, aucun effet de bord. */
+accountingRouter.post(
+  "/acc/bank/qonto/test",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const config = await prisma.qontoConfig.findFirst({ where: { entityId } });
+    if (!config) throw new HttpError(400, "Identifiants Qonto non configurés");
+    const creds: QontoCredentials = { login: config.login, secretKey: config.secretKey, sandbox: config.sandbox };
+    try {
+      const org = await fetchQontoOrganization(creds);
+      res.json({ ok: true, slug: org.slug, bankAccounts: org.bankAccounts });
+    } catch (e) {
+      if (e instanceof QontoError) throw new HttpError(400, e.message);
+      throw e;
+    }
+  })
+);
+
+/** POST /wa/acc/bank/accounts/:id/qonto/connect — lie un AccBankAccount existant à un IBAN Qonto ; la première synchronisation se fait ensuite via "Synchroniser maintenant" ou le prochain passage du planificateur. */
+accountingRouter.post(
+  "/acc/bank/accounts/:id/qonto/connect",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const existing = await prisma.accBankAccount.findFirst({ where: { id: req.params.id, entityId } });
+    if (!existing) throw new HttpError(404, "Compte bancaire introuvable");
+    const iban = (req.body as { iban?: string }).iban;
+    if (!iban) throw new HttpError(400, "iban requis");
+    const updated = await prisma.accBankAccount.update({
+      where: { id: existing.id },
+      data: { provider: "qonto", providerAccountId: iban, connectionStatus: "connected", lastSyncAt: null },
+    });
+    await recordAuditLog({ entityId, userId: actorId(req), action: "qonto_account_connected", targetType: "AccBankAccount", targetId: updated.id, newValue: { iban }, ip: req.ip });
+    res.json(updated);
+  })
+);
+
+accountingRouter.post(
+  "/acc/bank/accounts/:id/qonto/disconnect",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const existing = await prisma.accBankAccount.findFirst({ where: { id: req.params.id, entityId } });
+    if (!existing) throw new HttpError(404, "Compte bancaire introuvable");
+    const updated = await prisma.accBankAccount.update({
+      where: { id: existing.id },
+      data: { provider: "csv", providerAccountId: null, connectionStatus: "manual" },
+    });
+    res.json(updated);
+  })
+);
+
+/** POST /wa/acc/bank/accounts/:id/qonto/sync — synchronisation manuelle immédiate (même logique que le planificateur de fond). */
+accountingRouter.post(
+  "/acc/bank/accounts/:id/qonto/sync",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const existing = await prisma.accBankAccount.findFirst({ where: { id: req.params.id, entityId } });
+    if (!existing) throw new HttpError(404, "Compte bancaire introuvable");
+    try {
+      const result = await syncQontoBankAccount(existing.id);
+      await recordAuditLog({ entityId, userId: actorId(req), action: "qonto_synced", targetType: "AccBankAccount", targetId: existing.id, newValue: result, ip: req.ip });
+      res.json(result);
+    } catch (e) {
+      if (e instanceof QontoError) throw new HttpError(400, e.message);
+      throw e;
+    }
   })
 );
 

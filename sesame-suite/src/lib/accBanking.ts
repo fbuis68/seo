@@ -318,7 +318,7 @@ export interface ImportBankTransactionsResult {
 export async function importBankTransactions(
   entityId: string | null,
   bankAccountId: string,
-  source: BankImportSource,
+  source: BankImportSource | "qonto_api",
   parsed: ParsedBankTransaction[],
 ): Promise<ImportBankTransactionsResult> {
   let created = 0;
