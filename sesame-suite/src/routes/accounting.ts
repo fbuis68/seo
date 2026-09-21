@@ -190,13 +190,14 @@ accountingRouter.get(
       where.OR = [
         { invoiceNumber: { contains: q, mode: "insensitive" } },
         { issuerName: { contains: q, mode: "insensitive" } },
+        { recipientName: { contains: q, mode: "insensitive" } },
       ];
     }
 
     const [rows, total] = await Promise.all([
       prisma.accInvoice.findMany({
         where,
-        include: { supplier: { select: { id: true, name: true } }, document: { select: { originalFilename: true, mimeType: true } } },
+        include: { supplier: { select: { id: true, name: true } }, customer: { select: { id: true, name: true } }, document: { select: { originalFilename: true, mimeType: true } } },
         orderBy: { createdAt: "desc" },
         take: limit,
         skip: offset,
@@ -237,7 +238,12 @@ const EDITABLE_INVOICE_FIELDS = [
   "issuerVat",
   "issuerIban",
   "issuerBic",
+  "recipientName",
+  "recipientSiren",
+  "recipientSiret",
+  "recipientVat",
   "supplierId",
+  "customerId",
   "amountHt",
   "amountVat",
   "amountTtc",
@@ -539,6 +545,48 @@ accountingRouter.put(
     const updated = await prisma.accSupplier.update({ where: { id: existing.id }, data });
     await recordAuditLog({ entityId, userId: actorId(req), action: "supplier_updated", targetType: "AccSupplier", targetId: existing.id, oldValue: existing, newValue: data, ip: req.ip });
     res.json(updated);
+  })
+);
+
+// ───────────────────────── Clients (facture de vente) ─────────────────────────
+
+accountingRouter.get(
+  "/acc/customers",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const q = req.query.q as string | undefined;
+    const where: Record<string, unknown> = { entityId };
+    if (q) where.name = { contains: q, mode: "insensitive" };
+    const rows = await prisma.accCustomer.findMany({ where, orderBy: { name: "asc" } });
+    res.json(rows);
+  })
+);
+
+accountingRouter.post(
+  "/acc/customers",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const b = req.body as { name?: string };
+    if (!b.name) throw new HttpError(400, "name requis");
+    const created = await prisma.accCustomer.create({
+      data: {
+        entityId,
+        name: b.name,
+        siren: (req.body.siren as string) || undefined,
+        siret: (req.body.siret as string) || undefined,
+        vatNumber: (req.body.vatNumber as string) || undefined,
+        addressLine: (req.body.addressLine as string) || undefined,
+        postalCode: (req.body.postalCode as string) || undefined,
+        city: (req.body.city as string) || undefined,
+        country: (req.body.country as string) || undefined,
+        email: (req.body.email as string) || undefined,
+        phone: (req.body.phone as string) || undefined,
+      },
+    });
+    await recordAuditLog({ entityId, userId: actorId(req), action: "customer_created", targetType: "AccCustomer", targetId: created.id, newValue: { name: created.name }, ip: req.ip });
+    res.json(created);
   })
 );
 

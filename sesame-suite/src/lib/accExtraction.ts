@@ -22,12 +22,24 @@ export interface ExtractedInvoiceData {
   invoiceDate: Date | null;
   dueDate: Date | null;
   currency: string | null;
+  // Émetteur du document — le fournisseur sur une facture d'achat REÇUE.
+  // Sur une facture de vente ÉMISE par nous, ces champs décrivent NOTRE
+  // PROPRE société (nous sommes l'émetteur du document), jamais le client
+  // — cf. recipient* ci-dessous pour le tiers pertinent côté vente.
   issuerName: string | null;
   issuerSiren: string | null;
   issuerSiret: string | null;
   issuerVat: string | null;
   issuerIban: string | null;
   issuerBic: string | null;
+  // Destinataire du document — le client sur une facture de vente, extrait
+  // depuis un bloc "Facturé à"/"Adressé à"/"Destinataire"/"Bill to"
+  // distinct du bloc émetteur. Non pertinent sur une facture d'achat (le
+  // destinataire y est nous-mêmes).
+  recipientName: string | null;
+  recipientSiren: string | null;
+  recipientSiret: string | null;
+  recipientVat: string | null;
   amountHt: number | null;
   amountVat: number | null;
   amountTtc: number | null;
@@ -167,7 +179,15 @@ const INVOICE_NUMBER_DATE_KEYWORD = /facture[ \t]*n[°o][ \t]*[A-Z0-9][A-Z0-9\-\
 const DUE_DATE_KEYWORD = /date[ \t]*d.[ée]ch[ée]ance|[ée]ch[ée]ance[ \t]*(?:le|au)?|due[ \t]*date/i;
 const SIRET_KEYWORD = /\bsiret\b[ \t]*:?[ \t]*n?[°o]?/i;
 const SIREN_KEYWORD = /\bsiren\b[ \t]*:?[ \t]*n?[°o]?/i;
-const VAT_KEYWORD = /tva[ \t]*intracommunautaire|n[°o][ \t]*tva|vat[ \t]*(?:number|id)/i;
+// La forme longue ("intracommunautaire") est essayée EN PREMIER et englobe
+// le préfixe "N°" optionnel — sinon l'alternative courte "N°TVA" gagnerait
+// dès la position de "N°" (JS essaie les alternatives dans l'ordre à
+// chaque position) et laisserait "intracommunautaire" non consommé juste
+// avant la vraie valeur, où findAfterKeyword ne sait pas le sauter (il
+// n'accepte qu'un espacement/ponctuation entre le mot-clé et la valeur,
+// jamais un mot entier) — constaté en test le 21/09/2026 sur "N° TVA
+// intracommunautaire : FR...", qui ne donnait alors aucune valeur.
+const VAT_KEYWORD = /(?:n[°o][ \t]*)?tva[ \t]*intracommunautaire|n[°o][ \t]*tva\b|vat[ \t]*(?:number|id)/i;
 const VAT_VALUE_RE = /^(FR[0-9A-Z]{2}\d{9})/;
 const IBAN_KEYWORD = /\bIBAN\b/i;
 const BIC_KEYWORD = /\bBIC\b|\bSWIFT\b/i;
@@ -177,6 +197,28 @@ const HT_KEYWORD = /total[ \t]*ht|montant[ \t]*ht|sous-total|subtotal/i;
 // ventilation (cf. VAT_LINE_RE plus bas), pas le montant total de TVA.
 const VAT_AMOUNT_KEYWORD = /(?:montant[ \t]*)?tva(?:[ \t]*totale)?(?![ \t]*\d{1,2}[ \t]*%)/i;
 const VAT_LINE_RE = /tva[ \t]*(?:\(|à[ \t]*)?(\d{1,2}(?:[,.]\d)?)[ \t]*%\)?[^\d\n]{0,20}?(\d{1,3}(?:[\s.]\d{3})*(?:[,.]\d{2})?)/gi;
+
+// Bloc destinataire ("Facturé à", "Adressé à", "Destinataire", "Bill to",
+// "Client :") — distinct du bloc émetteur (raison sociale/SIRET/TVA en
+// tête de document, cf. issuer* ci-dessus). Sans ce bloc, un SIRET/TVA
+// trouvé n'importe où dans le texte pourrait appartenir à N'IMPORTE
+// LAQUELLE des deux parties présentes sur une facture de vente (nous ET le
+// client) — la fenêtre limitée après ce mot-clé sert justement à ne
+// prendre que ce qui suit immédiatement l'en-tête "destinataire", jamais un
+// identifiant trouvé ailleurs sur le document.
+// \b ne fonctionne pas de façon fiable juste après un caractère accentué
+// (à/é ne sont pas des "word characters" en JS regex sans /u + propriétés
+// Unicode) — utilise une lookahead sur espace/deux-points/fin de ligne à la
+// place, sinon "Facturé à :" ne matche jamais (constaté en test, 21/09/2026).
+const RECIPIENT_BLOCK_KEYWORD = /factur[ée][ \t]*[àa](?=[ \t:]|$)|adress[ée][ \t]*[àa](?=[ \t:]|$)|destinataire[ \t]*:?|bill[ \t]*to\b|\bclient[ \t]*:/im;
+const RECIPIENT_WINDOW_CHARS = 300;
+
+function extractRecipientBlock(text: string): string | null {
+  const m = RECIPIENT_BLOCK_KEYWORD.exec(text);
+  if (!m) return null;
+  const start = m.index + m[0].length;
+  return text.slice(start, start + RECIPIENT_WINDOW_CHARS);
+}
 
 export function extractInvoiceData(text: string): ExtractedInvoiceData {
   const confidence: Record<string, number> = {};
@@ -191,6 +233,10 @@ export function extractInvoiceData(text: string): ExtractedInvoiceData {
     issuerVat: null,
     issuerIban: null,
     issuerBic: null,
+    recipientName: null,
+    recipientSiren: null,
+    recipientSiret: null,
+    recipientVat: null,
     amountHt: null,
     amountVat: null,
     amountTtc: null,
@@ -251,7 +297,14 @@ export function extractInvoiceData(text: string): ExtractedInvoiceData {
   // recherche non ancrée à confiance réduite plutôt que de ne rien
   // extraire, le format restant assez spécifique pour rester utile même
   // sans mot-clé trouvé.
-  const vat = findAfterKeyword(text, VAT_KEYWORD, VAT_VALUE_RE);
+  // maxGap élargi (40, comme IBAN ci-dessous) : quand le mot-clé matché
+  // n'est que "N°TVA" (l'alternative la plus courte de VAT_KEYWORD), le
+  // mot "intracommunautaire" qui suit souvent avant la vraie valeur (19
+  // caractères + ponctuation) dépasserait le maxGap par défaut de 20 —
+  // repli silencieux sur la recherche non ancrée ci-dessous sinon,
+  // constaté en test le 21/09/2026 (confiance 0.5 au lieu de 0.9 alors que
+  // le mot-clé était bien présent).
+  const vat = findAfterKeyword(text, VAT_KEYWORD, VAT_VALUE_RE, 40);
   if (vat) {
     result.issuerVat = vat.value;
     confidence.issuerVat = 0.9;
@@ -284,6 +337,41 @@ export function extractInvoiceData(text: string): ExtractedInvoiceData {
   if (firstLine) {
     result.issuerName = firstLine;
     confidence.issuerName = 0.3;
+  }
+
+  // Bloc destinataire — cf. RECIPIENT_BLOCK_KEYWORD. Confiance du nom
+  // légèrement supérieure à celle de l'émetteur (0.4 vs 0.3) : ancrée à un
+  // mot-clé explicite plutôt qu'à une simple heuristique de première ligne.
+  const recipientBlock = extractRecipientBlock(text);
+  if (recipientBlock) {
+    const recipientNameLine = recipientBlock
+      .split("\n")
+      .map((l) => l.trim())
+      .find((l) => l.length > 2 && l.length < 80 && !/^\d/.test(l));
+    if (recipientNameLine) {
+      result.recipientName = recipientNameLine;
+      confidence.recipientName = 0.4;
+    }
+    const rSiret = findAfterKeyword(recipientBlock, SIRET_KEYWORD, SIRET_RE);
+    const rSiretDigits = rSiret ? rSiret.value.replace(/[ \t]/g, "") : null;
+    if (rSiretDigits && rSiretDigits.length === 14) {
+      result.recipientSiret = rSiretDigits;
+      result.recipientSiren = rSiretDigits.slice(0, 9);
+      confidence.recipientSiret = 0.9;
+      confidence.recipientSiren = 0.9;
+    } else {
+      const rSiren = findAfterKeyword(recipientBlock, SIREN_KEYWORD, SIREN_RE);
+      const rSirenDigits = rSiren ? rSiren.value.replace(/[ \t]/g, "") : null;
+      if (rSirenDigits && rSirenDigits.length === 9) {
+        result.recipientSiren = rSirenDigits;
+        confidence.recipientSiren = 0.85;
+      }
+    }
+    const rVat = findAfterKeyword(recipientBlock, VAT_KEYWORD, VAT_VALUE_RE, 40);
+    if (rVat) {
+      result.recipientVat = rVat.value;
+      confidence.recipientVat = 0.9;
+    }
   }
 
   const ttc = findAfterKeyword(text, TTC_KEYWORD, AMOUNT_RE);
@@ -322,6 +410,18 @@ export function extractInvoiceData(text: string): ExtractedInvoiceData {
     if (Number.isFinite(rate) && amount !== null && rate > 0 && rate <= 25) {
       result.vatLines.push({ rate, baseAmount: 0, vatAmount: amount });
     }
+  }
+
+  // Repli quand aucun montant TVA total distinct n'a été trouvé mais qu'une
+  // seule ligne de ventilation existe : "TVA 20% : 50,00" EST le montant
+  // total de TVA sur une facture à taux unique, juste écrit sur la même
+  // ligne que le taux (VAT_AMOUNT_KEYWORD l'exclut exprès pour ne pas
+  // confondre une ligne de ventilation avec un total, cf. ci-dessus) — donc
+  // pas de calcul ici (pas de taux × base), seulement la valeur déjà
+  // extraite littéralement par VAT_LINE_RE.
+  if (result.amountVat === null && result.vatLines.length === 1) {
+    result.amountVat = result.vatLines[0].vatAmount;
+    confidence.amountVat = 0.7;
   }
 
   return result;

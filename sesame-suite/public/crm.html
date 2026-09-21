@@ -7319,7 +7319,7 @@ async function testRule(id){
 // complète ; le rapprochement/la génération côté vente restent
 // schéma-prêts côté backend mais ne sont pas exposés ici.
 // ════════════════════════════════════════
-let ACC_INVOICES=[], ACC_SUPPLIERS=[], ACC_ACCOUNTS=[], ACC_JOURNALS=[], ACC_ENTRIES=[], ACC_RULES=[], ACC_DASH=null;
+let ACC_INVOICES=[], ACC_SUPPLIERS=[], ACC_CUSTOMERS=[], ACC_ACCOUNTS=[], ACC_JOURNALS=[], ACC_ENTRIES=[], ACC_RULES=[], ACC_DASH=null;
 let ACC_BANK_ACCOUNTS=[], ACC_BANK_TX=[], ACC_BANK_SELECTED=null;
 let ACC_QONTO_CONFIG=null, ACC_QONTO_TEST_ACCOUNTS=null;
 let ACC_TAB='inbox';
@@ -7508,7 +7508,7 @@ let ACC_INBOX_FILTER={status:'',direction:''};
 async function loadAccInboxTab(){
   const el = document.getElementById('acc-tab-body');
   if(el) el.innerHTML = '<div class="log-empty">Chargement…</div>';
-  await Promise.all([ensureAccSuppliersLoaded(), ensureAccAccountsLoaded()]);
+  await Promise.all([ensureAccSuppliersLoaded(), ensureAccCustomersLoaded(), ensureAccAccountsLoaded()]);
   await accReloadInvoices();
 }
 
@@ -7535,7 +7535,7 @@ function renderAccInbox(){
     return `<tr>
       <td>${inv.invoiceDate?new Date(inv.invoiceDate).toLocaleDateString('fr-FR'):'—'}</td>
       <td>${ACC_DOCTYPE_LABEL[inv.documentType]||inv.documentType||'—'}</td>
-      <td><div class="nom-cell" onclick="openAccInvoiceModal('${inv.id}')">${esc(inv.supplier?inv.supplier.name:(inv.issuerName||'—'))}</div></td>
+      <td><div class="nom-cell" onclick="openAccInvoiceModal('${inv.id}')">${esc(inv.direction==='sale'?(inv.customer?inv.customer.name:(inv.recipientName||'—')):(inv.supplier?inv.supplier.name:(inv.issuerName||'—')))}</div></td>
       <td>${esc(inv.invoiceNumber||'—')}</td>
       <td style="text-align:right">${inv.amountHt!=null?fmtEUR2(inv.amountHt):'—'}</td>
       <td style="text-align:right">${inv.amountVat!=null?fmtEUR2(inv.amountVat):'—'}</td>
@@ -7742,7 +7742,7 @@ async function openAccInvoiceModal(id){
     if(!r.ok) throw new Error('http '+r.status);
     inv = await r.json();
   }catch(e){ flash('Erreur de chargement de la facture'); return; }
-  await Promise.all([ensureAccSuppliersLoaded(), ensureAccAccountsLoaded()]);
+  await Promise.all([ensureAccSuppliersLoaded(), ensureAccCustomersLoaded(), ensureAccAccountsLoaded()]);
   window._accInvoiceEditing = inv;
   renderAccInvoiceModal(inv);
 }
@@ -7795,20 +7795,22 @@ async function pickAiEntreprise(i){
   if(box){ box.style.display='none'; box.innerHTML=''; }
   const invId = window._accInvoiceEditing && window._accInvoiceEditing.id;
   if(!invId) return;
-  const tiersLabel = window._accInvoiceEditing.direction==='sale' ? 'Client' : 'Fournisseur';
+  const isSale = window._accInvoiceEditing.direction==='sale';
+  const tiersLabel = isSale ? 'Client' : 'Fournisseur';
   const street = [siege.numero_voie, siege.type_voie, siege.libelle_voie].filter(Boolean).join(' ');
   try{
-    const cr = await apiFetch('/wa/acc/suppliers?scope=crm', {method:'POST', body:JSON.stringify({
+    const cr = await apiFetch((isSale?'/wa/acc/customers':'/wa/acc/suppliers')+'?scope=crm', {method:'POST', body:JSON.stringify({
       name: e.nom_complet || e.nom_raison_sociale || '',
       siret: siege.siret || '', siren: e.siren || '',
       addressLine: street, postalCode: siege.code_postal || '', city: siege.libelle_commune || '', country: 'FR',
     })});
-    const supplier = await cr.json();
-    if(!cr.ok) throw new Error(supplier.error||'http '+cr.status);
-    const ur = await apiFetch('/wa/acc/invoices/'+invId+'?scope=crm', {method:'PUT', body:JSON.stringify({supplierId: supplier.id})});
+    const tiers = await cr.json();
+    if(!cr.ok) throw new Error(tiers.error||'http '+cr.status);
+    const ur = await apiFetch('/wa/acc/invoices/'+invId+'?scope=crm', {method:'PUT', body:JSON.stringify(isSale?{customerId: tiers.id}:{supplierId: tiers.id})});
     if(!ur.ok) throw new Error('http '+ur.status);
     flash(tiersLabel+' créé et rapproché à la facture');
     ACC_LOADED.suppliers = false;
+    ACC_LOADED.customers = false;
     if(ACC_TAB==='inbox') await accReloadInvoices();
     openAccInvoiceModal(invId);
   }catch(err){ flash('Erreur : '+(err.message||'échec de la création du '+tiersLabel.toLowerCase())); }
@@ -7827,6 +7829,7 @@ function renderAccInvoiceModal(inv){
   const checksHtml = checks.map(c=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:12px"><span class="tag ${ACC_CHECK_TAG[c.level]||'t-gray'}" style="font-size:10px;padding:1px 7px;flex-shrink:0">${c.level}</span><span>${esc(c.message)}</span></div>`).join('');
 
   const supplierOpts = `<option value="">— Aucun —</option>` + ACC_SUPPLIERS.map(s=>`<option value="${s.id}" ${inv.supplierId===s.id?'selected':''}>${esc(s.name)}</option>`).join('');
+  const customerOpts = `<option value="">— Aucun —</option>` + ACC_CUSTOMERS.map(c=>`<option value="${c.id}" ${inv.customerId===c.id?'selected':''}>${esc(c.name)}</option>`).join('');
   const tiersLabel = inv.direction==='sale' ? 'Client' : 'Fournisseur';
   const accountType = inv.direction==='sale' ? 'produit' : 'charge';
   const accountOpts = `<option value="">— Aucun —</option>` + ACC_ACCOUNTS.filter(a=>a.type===accountType && (a.active || a.id===inv.proposedAccountId)).map(a=>`<option value="${a.id}" ${inv.proposedAccountId===a.id?'selected':''}>${esc(a.number)} — ${esc(a.label)}${!a.active?' (inactif)':''}</option>`).join('');
@@ -7858,12 +7861,20 @@ function renderAccInvoiceModal(inv){
           ${!locked?`<div class="ff" style="position:relative;margin-bottom:8px">
             <label>Rechercher/créer via l'annuaire public des entreprises</label>
             <div style="display:flex;gap:6px">
-              <input id="ai-entreprise-search" placeholder="Nom ou SIRET..." value="${esc(inv.issuerSiret||inv.issuerName||'')}" oninput="aiEntrepriseAutocomplete()" onkeydown="if(event.key==='Enter'){event.preventDefault();aiEntrepriseAutocomplete(true)}" autocomplete="off" style="flex:1">
+              <input id="ai-entreprise-search" placeholder="Nom ou SIRET..." value="${esc(inv.direction==='sale'?(inv.recipientSiret||inv.recipientName||''):(inv.issuerSiret||inv.issuerName||''))}" oninput="aiEntrepriseAutocomplete()" onkeydown="if(event.key==='Enter'){event.preventDefault();aiEntrepriseAutocomplete(true)}" autocomplete="off" style="flex:1">
               <button type="button" class="btn btn-ghost btn-icon" title="Rechercher" onclick="aiEntrepriseAutocomplete(true)">🔍</button>
             </div>
             <div id="ai-entreprise-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--card);border:0.5px solid var(--bdr);border-radius:8px;margin-top:2px;max-height:220px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.12)"></div>
             <div style="font-size:11px;color:var(--mu);margin-top:4px">Choisir un résultat crée la fiche ${inv.direction==='sale'?'client':'fournisseur'} (nom + adresse officiels) et la rapproche immédiatement à cette facture.</div>
           </div>`:''}
+          ${inv.direction==='sale'?`
+          <div class="form-grid">
+            <div class="ff"><label>${tiersLabel} rapproché${inv.customerMatchConfidence!=null?' ('+accConfidencePct(inv.customerMatchConfidence)+')':''}</label><select id="ai-customerId" ${locked?'disabled':''}>${customerOpts}</select></div>
+            <div class="ff"><label>Raison sociale extraite</label><input id="ai-recipientName" value="${esc(inv.recipientName||'')}" ${locked?'disabled':''}></div>
+            <div class="ff"><label>SIRET</label><input id="ai-recipientSiret" value="${esc(inv.recipientSiret||'')}" ${locked?'disabled':''}></div>
+            <div class="ff"><label>SIREN</label><input id="ai-recipientSiren" value="${esc(inv.recipientSiren||'')}" ${locked?'disabled':''}></div>
+            <div class="ff"><label>N° TVA</label><input id="ai-recipientVat" value="${esc(inv.recipientVat||'')}" ${locked?'disabled':''}></div>
+          </div>`:`
           <div class="form-grid">
             <div class="ff"><label>${tiersLabel} rapproché${inv.supplierMatchConfidence!=null?' ('+accConfidencePct(inv.supplierMatchConfidence)+')':''}</label><select id="ai-supplierId" ${locked?'disabled':''}>${supplierOpts}</select></div>
             <div class="ff"><label>Raison sociale extraite</label><input id="ai-issuerName" value="${esc(inv.issuerName||'')}" ${locked?'disabled':''}></div>
@@ -7871,7 +7882,7 @@ function renderAccInvoiceModal(inv){
             <div class="ff"><label>SIREN</label><input id="ai-issuerSiren" value="${esc(inv.issuerSiren||'')}" ${locked?'disabled':''}></div>
             <div class="ff"><label>N° TVA</label><input id="ai-issuerVat" value="${esc(inv.issuerVat||'')}" ${locked?'disabled':''}></div>
             <div class="ff"><label>IBAN</label><input id="ai-issuerIban" value="${esc(inv.issuerIban||'')}" ${locked?'disabled':''}></div>
-          </div>
+          </div>`}
           <div class="modal-section">Montants</div>
           <div class="form-grid">
             <div class="ff"><label>Total HT</label><input type="number" step="0.01" id="ai-amountHt" value="${inv.amountHt!=null?inv.amountHt:''}" ${locked?'disabled':''}></div>
@@ -7933,22 +7944,36 @@ function renderEntryLinesTable(entry){
 
 function accInvoiceFieldsFromForm(){
   const g = id=>{ const el=document.getElementById(id); return el?el.value:''; };
-  return {
+  const fields = {
     direction: g('ai-direction')||'purchase',
     invoiceNumber: g('ai-invoiceNumber')||null,
     currency: g('ai-currency')||null,
     invoiceDate: g('ai-invoiceDate')||null,
     dueDate: g('ai-dueDate')||null,
-    supplierId: g('ai-supplierId')||null,
-    issuerName: g('ai-issuerName')||null,
-    issuerSiret: g('ai-issuerSiret')||null,
-    issuerSiren: g('ai-issuerSiren')||null,
-    issuerVat: g('ai-issuerVat')||null,
-    issuerIban: g('ai-issuerIban')||null,
     amountHt: g('ai-amountHt')===''?null:+g('ai-amountHt'),
     amountVat: g('ai-amountVat')===''?null:+g('ai-amountVat'),
     amountTtc: g('ai-amountTtc')===''?null:+g('ai-amountTtc'),
   };
+  // Un seul des deux blocs (fournisseur/client) est rendu à la fois — cf.
+  // renderAccInvoiceModal, direction-aware. Ne renvoyer que les champs du
+  // bloc effectivement affiché : envoyer l'autre bloc à null écraserait
+  // silencieusement des données valides côté serveur (EDITABLE_INVOICE_
+  // FIELDS accepte les deux ensembles sans distinction).
+  if(document.getElementById('ai-customerId')){
+    fields.customerId = g('ai-customerId')||null;
+    fields.recipientName = g('ai-recipientName')||null;
+    fields.recipientSiret = g('ai-recipientSiret')||null;
+    fields.recipientSiren = g('ai-recipientSiren')||null;
+    fields.recipientVat = g('ai-recipientVat')||null;
+  } else {
+    fields.supplierId = g('ai-supplierId')||null;
+    fields.issuerName = g('ai-issuerName')||null;
+    fields.issuerSiret = g('ai-issuerSiret')||null;
+    fields.issuerSiren = g('ai-issuerSiren')||null;
+    fields.issuerVat = g('ai-issuerVat')||null;
+    fields.issuerIban = g('ai-issuerIban')||null;
+  }
+  return fields;
 }
 
 async function accSaveInvoiceFields(id){
@@ -8022,6 +8047,15 @@ async function ensureAccSuppliersLoaded(){
     ACC_SUPPLIERS = r.ok ? await r.json() : [];
     ACC_LOADED.suppliers = true;
   }catch(e){ ACC_SUPPLIERS=[]; }
+}
+
+async function ensureAccCustomersLoaded(){
+  if(ACC_LOADED.customers) return;
+  try{
+    const r = await apiFetch('/wa/acc/customers?scope=crm');
+    ACC_CUSTOMERS = r.ok ? await r.json() : [];
+    ACC_LOADED.customers = true;
+  }catch(e){ ACC_CUSTOMERS=[]; }
 }
 
 async function loadAccSuppliersTab(){
@@ -8763,7 +8797,7 @@ async function accReverseEntry(id){
 // ───────── Onglet Règles ─────────
 
 async function loadAccRulesTab(){
-  await Promise.all([ensureAccSuppliersLoaded(), ensureAccAccountsLoaded()]);
+  await Promise.all([ensureAccSuppliersLoaded(), ensureAccCustomersLoaded(), ensureAccAccountsLoaded()]);
   try{
     const r = await apiFetch('/wa/acc/rules?scope=crm');
     ACC_RULES = r.ok ? await r.json() : [];

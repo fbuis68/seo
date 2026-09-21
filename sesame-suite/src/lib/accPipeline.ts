@@ -5,6 +5,7 @@ import { extractDocumentText } from "./accOcr";
 import { classifyDocument } from "./accClassification";
 import { extractInvoiceData, ExtractedInvoiceData, computeDueDate } from "./accExtraction";
 import { matchSupplier, canAutoCreateSupplier, createSupplierFromExtraction } from "./accSupplierMatching";
+import { matchCustomer, canAutoCreateCustomer, createCustomerFromExtraction } from "./accCustomerMatching";
 import { proposeAccount } from "./accRulesEngine";
 import { runInvoiceChecks, worstLevel, CheckResult } from "./accChecks";
 
@@ -69,10 +70,8 @@ export async function processUploadedDocument(
 
   let supplierId: string | null = null;
   let supplierMatchConfidence: number | null = null;
-  // Rapprochement/création côté client (vente) non implémenté en phase 1
-  // (schéma AccCustomer prêt, logique de rapprochement pas encore écrite —
-  // le périmètre validé pour cette phase est la chaîne achat complète).
-  const customerId: string | null = null;
+  let customerId: string | null = null;
+  let customerMatchConfidence: number | null = null;
 
   if (input.direction === "purchase" && extracted) {
     const match = await matchSupplier(entityId, extracted);
@@ -86,12 +85,31 @@ export async function processUploadedDocument(
       // rapprochement trivial, pas une simple estimation.
       supplierMatchConfidence = 1.0;
     }
+  } else if (input.direction === "sale" && extracted) {
+    // Rapprochement côté client — mêmes champs recipient* (bloc
+    // "Facturé à"/"Destinataire" de la facture émise par nous), jamais les
+    // champs issuer* (qui décrivent notre propre société sur ce type de
+    // document, cf. lib/accExtraction.ts).
+    const match = await matchCustomer(entityId, extracted);
+    if (match.customer) {
+      customerId = match.customer.id;
+      customerMatchConfidence = match.confidence;
+    } else if (canAutoCreateCustomer(extracted)) {
+      const created = await createCustomerFromExtraction(entityId, extracted);
+      customerId = created.id;
+      customerMatchConfidence = 1.0;
+    }
   }
 
+  // Nom du tiers utilisé pour le rapprochement par mot-clé (proposeAccount)
+  // — celui du fournisseur à l'achat, celui du client à la vente. Utiliser
+  // issuerName pour une facture de vente ferait matcher sur NOTRE PROPRE
+  // société (nous sommes l'émetteur de ce type de document), jamais utile.
+  const tiersNameForRules = input.direction === "sale" ? extracted?.recipientName : extracted?.issuerName;
   const accountProposal = await proposeAccount(entityId, {
     supplierId,
     description: classification.documentType,
-    issuerName: extracted?.issuerName || null,
+    issuerName: tiersNameForRules || null,
   });
 
   // Échéance non indiquée sur la facture (courant) : calculée depuis le
@@ -174,9 +192,14 @@ export async function processUploadedDocument(
       issuerVat: extracted?.issuerVat || undefined,
       issuerIban: extracted?.issuerIban || undefined,
       issuerBic: extracted?.issuerBic || undefined,
+      recipientName: extracted?.recipientName || undefined,
+      recipientSiren: extracted?.recipientSiren || undefined,
+      recipientSiret: extracted?.recipientSiret || undefined,
+      recipientVat: extracted?.recipientVat || undefined,
       supplierId: supplierId || undefined,
       supplierMatchConfidence: supplierMatchConfidence ?? undefined,
       customerId: customerId || undefined,
+      customerMatchConfidence: customerMatchConfidence ?? undefined,
       amountHt: extracted?.amountHt ?? undefined,
       amountVat: extracted?.amountVat ?? undefined,
       amountTtc: extracted?.amountTtc ?? undefined,

@@ -2915,23 +2915,31 @@ model AccInvoice {
   supplierRef   String?
   paymentMethod String?
 
-  // Champs bruts extraits AVANT rapprochement tiers (cf. supplierId ci-
-  // dessous, qui porte le tiers réellement rapproché) — conservés même une
-  // fois le rapprochement fait, pour diagnostiquer un rapprochement erroné.
+  // Champs bruts extraits AVANT rapprochement tiers (cf. supplierId/
+  // customerId ci-dessous, qui portent le tiers réellement rapproché) —
+  // conservés même une fois le rapprochement fait, pour diagnostiquer un
+  // rapprochement erroné. issuer* = émetteur du document (le fournisseur
+  // sur une facture d'achat REÇUE) ; recipient* = destinataire (le client
+  // sur une facture de vente ÉMISE par nous) — deux blocs distincts d'un
+  // même document, jamais interchangeables (cf. lib/accExtraction.ts).
   issuerName    String?
   issuerSiren   String?
   issuerSiret   String?
   issuerVat     String?
   issuerIban    String?
   issuerBic     String?
-  recipientName String?
+  recipientName  String?
+  recipientSiren String?
+  recipientSiret String?
+  recipientVat   String?
 
   supplierId              String?
   supplier                AccSupplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   supplierMatchConfidence Float?
 
-  customerId String?
-  customer   AccCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerId              String?
+  customer                AccCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerMatchConfidence Float?
 
   amountHt       Float?
   amountDiscount Float?
