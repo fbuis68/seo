@@ -7408,14 +7408,17 @@ function accSetTab(tab){
 
 // ───────── Onglet Réglages (délai de paiement par défaut) ─────────
 
+let ACC_RELANCE_RULES=[];
+
 async function loadAccSettingsTab(){
   const el = document.getElementById('acc-tab-body');
   if(!el) return;
   el.innerHTML = '<div class="log-empty">Chargement…</div>';
   let settings = {defaultPaymentTermDays:30, defaultPaymentTermMode:'net'};
   try{
-    const r = await apiFetch('/wa/acc/settings?scope=crm');
-    if(r.ok) settings = await r.json();
+    const [sr, rr] = await Promise.all([apiFetch('/wa/acc/settings?scope=crm'), apiFetch('/wa/acc/relanceRules?scope=crm'), ensureTemplatesLoaded()]);
+    if(sr.ok) settings = await sr.json();
+    ACC_RELANCE_RULES = rr.ok ? await rr.json() : [];
   }catch(e){}
   el.innerHTML = `
     <div class="modal-section" style="margin-top:0">Délai de paiement par défaut</div>
@@ -7427,7 +7430,124 @@ async function loadAccSettingsTab(){
         <option value="eom" ${settings.defaultPaymentTermMode==='eom'?'selected':''}>Fin de mois</option>
       </select></div>
     </div>
-    <button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="saveAccSettings()">Enregistrer</button>`;
+    <button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="saveAccSettings()">Enregistrer</button>
+    <div class="modal-section">Règles de relance automatique</div>
+    <div style="font-size:12px;color:var(--mu);margin-bottom:10px">Envoie automatiquement l'email de relance choisi pour toute facture non payée (achat ou vente) dont la date de référence + le décalage tombe le jour même ou avant — balayage quotidien.</div>
+    <div id="acc-relance-rules-list"></div>`;
+  renderAccRelanceRulesList();
+}
+
+const RELANCE_BASIS_LABEL = {invoiceDate:'Date facture', dueDate:'Date échéance'};
+const RELANCE_DIRECTION_LABEL = {'':'Achat + Vente', purchase:'Achats', sale:'Ventes'};
+
+function renderAccRelanceRulesList(){
+  const el = document.getElementById('acc-relance-rules-list');
+  if(!el) return;
+  const rows = ACC_RELANCE_RULES.map(r=>`
+    <tr>
+      <td>${esc(r.name)}</td>
+      <td>${RELANCE_BASIS_LABEL[r.basis]||r.basis}</td>
+      <td>J${r.offsetDays>=0?'+':''}${r.offsetDays}</td>
+      <td>${RELANCE_DIRECTION_LABEL[r.direction||'']||r.direction}</td>
+      <td>${esc((MSG_TEMPLATES.find(t=>t.key===r.templateKey)||{}).name||r.templateKey)}</td>
+      <td>${r.active?'<span class="tpill bg">Active</span>':'<span class="tpill bn">Inactive</span>'}</td>
+      <td style="white-space:nowrap">
+        <button class="ta-btn" onclick="accRunRelanceRuleNow('${r.id}')" title="Lancer maintenant">▶</button>
+        <button class="ta-btn" onclick="openAccRelanceRuleModal('${r.id}')" title="Modifier">✏️</button>
+        <button class="ta-btn" onclick="accDeleteRelanceRule('${r.id}')" title="Supprimer">🗑</button>
+      </td>
+    </tr>`).join('');
+  el.innerHTML = `
+    <div class="list-toolbar">
+      <button class="btn btn-primary btn-sm" onclick="openAccRelanceRuleModal()">+ Règle</button>
+      <span class="count-lbl">${ACC_RELANCE_RULES.length} règle(s)</span>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Nom</th><th>Base</th><th>Décalage</th><th>Sens</th><th>Modèle</th><th>Statut</th><th style="width:110px"></th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="7" class="log-empty">Aucune règle — cliquez sur "+ Règle".</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+async function openAccRelanceRuleModal(id){
+  await ensureTemplatesLoaded();
+  const emailTpls = MSG_TEMPLATES.filter(t=>t.channel==='email');
+  const r = id ? ACC_RELANCE_RULES.find(x=>x.id===id) : {name:'',basis:'dueDate',offsetDays:3,direction:'',templateKey:emailTpls[0]?.key||'',attachInvoice:true,active:true};
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:480px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">${id?'Modifier la règle':'Nouvelle règle de relance'}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <input type="hidden" id="rr-id" value="${id||''}">
+      <div class="ff"><label>Nom</label><input id="rr-name" value="${esc(r.name)}" placeholder="Ex. Relance J+3 après échéance"></div>
+      <div class="form-grid" style="margin-top:8px">
+        <div class="ff"><label>Date de référence</label><select id="rr-basis">
+          <option value="dueDate" ${r.basis==='dueDate'?'selected':''}>Date d'échéance</option>
+          <option value="invoiceDate" ${r.basis==='invoiceDate'?'selected':''}>Date de facture</option>
+        </select></div>
+        <div class="ff"><label>Décalage en jours (J+N, négatif = avant)</label><input type="number" id="rr-offsetDays" value="${r.offsetDays}"></div>
+      </div>
+      <div class="form-grid" style="margin-top:8px">
+        <div class="ff"><label>Sens</label><select id="rr-direction">
+          <option value="" ${!r.direction?'selected':''}>Achat + Vente</option>
+          <option value="purchase" ${r.direction==='purchase'?'selected':''}>Achats</option>
+          <option value="sale" ${r.direction==='sale'?'selected':''}>Ventes</option>
+        </select></div>
+        <div class="ff"><label>Modèle email</label><select id="rr-templateKey">
+          ${emailTpls.length?emailTpls.map(t=>`<option value="${esc(t.key)}" ${r.templateKey===t.key?'selected':''}>${esc(t.name)}</option>`).join(''):'<option value="">— aucun modèle email —</option>'}
+        </select></div>
+      </div>
+      <div style="display:flex;gap:16px;margin-top:10px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="rr-attachInvoice" ${r.attachInvoice!==false?'checked':''}>Joindre le document de la facture</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="rr-active" ${r.active!==false?'checked':''}>Active</label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="accSaveRelanceRule()">Enregistrer</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function accSaveRelanceRule(){
+  const g=i=>(document.getElementById(i)||{value:''}).value;
+  const id = g('rr-id');
+  const body = {
+    name: g('rr-name').trim(),
+    basis: g('rr-basis'),
+    offsetDays: +g('rr-offsetDays'),
+    direction: g('rr-direction')||null,
+    templateKey: g('rr-templateKey'),
+    attachInvoice: document.getElementById('rr-attachInvoice').checked,
+    active: document.getElementById('rr-active').checked,
+  };
+  if(!body.name || !body.templateKey){ flash('Nom et modèle requis'); return; }
+  try{
+    const r = await apiFetch(id?'/wa/acc/relanceRules/'+id+'?scope=crm':'/wa/acc/relanceRules?scope=crm', {method:id?'PUT':'POST', body:JSON.stringify(body)});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    closeModal();
+    flash('Règle enregistrée');
+    loadAccSettingsTab();
+  }catch(e){ flash(e.message||'Erreur d\'enregistrement'); }
+}
+
+async function accDeleteRelanceRule(id){
+  if(!confirm('Supprimer cette règle de relance ?')) return;
+  try{
+    const r = await apiFetch('/wa/acc/relanceRules/'+id+'?scope=crm', {method:'DELETE'});
+    if(!r.ok) throw new Error('http '+r.status);
+    flash('Règle supprimée');
+    loadAccSettingsTab();
+  }catch(e){ flash('Erreur'); }
+}
+
+async function accRunRelanceRuleNow(id){
+  flash('Balayage en cours…');
+  try{
+    const r = await apiFetch('/wa/acc/relanceRules/'+id+'/run?scope=crm', {method:'POST'});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash(data.successCount+' relance(s) envoyée(s)'+(data.failureCount?', '+data.failureCount+' échec(s)':''));
+  }catch(e){ flash(e.message||'Erreur'); }
 }
 
 async function saveAccSettings(){

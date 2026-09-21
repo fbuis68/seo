@@ -14,7 +14,7 @@ import { recordAuditLog } from "../lib/accAudit";
 import { parseBankFile, importBankTransactions, BankImportError, BankImportSource } from "../lib/accBanking";
 import { fetchQontoOrganization, syncQontoBankAccount, QontoError, QontoCredentials } from "../lib/qonto";
 import { findCandidates, confirmMatch, unmatch, autoReconcileMany, ReconciliationError } from "../lib/accReconciliation";
-import { sendMessage } from "../lib/messaging";
+import { sendRelanceBatch, runRelanceRule } from "../lib/accRelance";
 
 /**
  * Module comptabilité (§1-72 du cahier des charges) — routes REST. Toutes
@@ -429,26 +429,11 @@ interface RelanceBody {
   attachInvoice?: boolean;
 }
 
-interface RelanceResult {
-  invoiceId: string;
-  ok: boolean;
-  error?: string;
-}
-
 /**
- * POST /wa/acc/invoices/relance — envoie un email de relance (modèle email
- * au choix) pour chaque facture sélectionnée, non payée, achat OU vente —
- * destinataire résolu sur le tiers rapproché (fournisseur en achat, client
- * en vente). Une facture sans email de tiers ou déjà soldée échoue
- * individuellement, jamais bloquant pour les autres (§ même logique que
- * l'import ZIP de factures). attachInvoice=true (par défaut) joint le
- * document original de CHAQUE facture (AccDocument.contentBase64) à SON
- * propre email — jamais celui d'une autre facture du lot, contrairement à
- * MessageTemplate.defaultAttachments qui est fixe pour tout le modèle (cf.
- * lib/messaging.ts, extraAttachments). Aucune trace de relance persistée en
- * base pour cette première passe — l'historique complet du modèle envoyé se
- * retrouve dans les logs SMTP habituels, au même titre que tout autre email
- * manuel de ce module.
+ * POST /wa/acc/invoices/relance — envoie un email de relance manuel (modèle
+ * email au choix) pour chaque facture sélectionnée — même logique d'envoi
+ * que le balayage automatique des règles (cf. lib/accRelance.ts), partagée
+ * pour ne jamais diverger sur ce qui constitue une facture "relançable".
  */
 accountingRouter.post(
   "/acc/invoices/relance",
@@ -458,55 +443,125 @@ accountingRouter.post(
     const b = req.body as RelanceBody;
     if (!b.invoiceIds?.length) throw new HttpError(400, "invoiceIds requis");
     if (!b.templateKey) throw new HttpError(400, "templateKey requis");
-    const attachInvoice = b.attachInvoice !== false;
 
-    const invoices = await prisma.accInvoice.findMany({
-      where: { id: { in: b.invoiceIds }, entityId },
-      include: { supplier: true, customer: true, document: { select: { contentBase64: true, mimeType: true, originalFilename: true } } },
-    });
-
-    const results: RelanceResult[] = [];
-    for (const inv of invoices) {
-      const remainingDue = (inv.amountTtc || 0) - inv.amountPaid;
-      if (!["VALIDATED", "ACCOUNTED", "PARTIALLY_PAID"].includes(inv.status) || remainingDue <= 0.01) {
-        results.push({ invoiceId: inv.id, ok: false, error: "Facture déjà soldée ou pas encore comptabilisée" });
-        continue;
-      }
-      const tiersName = inv.direction === "sale" ? inv.customer?.name || inv.recipientName : inv.supplier?.name || inv.issuerName;
-      const tiersEmail = inv.direction === "sale" ? inv.customer?.email : inv.supplier?.email;
-      if (!tiersEmail) {
-        results.push({ invoiceId: inv.id, ok: false, error: `Aucun email pour ${inv.direction === "sale" ? "le client" : "le fournisseur"} rapproché` });
-        continue;
-      }
-      try {
-        await sendMessage({
-          entityId,
-          channel: "email",
-          templateKey: b.templateKey,
-          to: tiersEmail,
-          variables: {
-            numero: inv.invoiceNumber || "",
-            tiers: tiersName || "",
-            montant: remainingDue.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €",
-            echeance: inv.dueDate ? new Date(inv.dueDate).toLocaleDateString("fr-FR") : "",
-          },
-          extraAttachments:
-            attachInvoice && inv.document
-              ? [{ fileName: inv.document.originalFilename, dataUrl: `data:${inv.document.mimeType};base64,${inv.document.contentBase64}` }]
-              : undefined,
-        });
-        results.push({ invoiceId: inv.id, ok: true });
-      } catch (e) {
-        results.push({ invoiceId: inv.id, ok: false, error: e instanceof Error ? e.message : "Erreur d'envoi" });
-      }
-    }
-
-    const successCount = results.filter((r) => r.ok).length;
+    const summary = await sendRelanceBatch(entityId, b.invoiceIds, b.templateKey, b.attachInvoice !== false);
     await recordAuditLog({
       entityId, userId: actorId(req), action: "invoices_relance_sent", targetType: "AccInvoice", targetId: b.invoiceIds.join(","),
-      newValue: { templateKey: b.templateKey, successCount, failureCount: results.length - successCount }, ip: req.ip,
+      newValue: { templateKey: b.templateKey, successCount: summary.successCount, failureCount: summary.failureCount }, ip: req.ip,
     });
-    res.json({ results, successCount, failureCount: results.length - successCount });
+    res.json(summary);
+  })
+);
+
+// ───────────────────────── Règles de relance automatique ─────────────────────────
+
+const RELANCE_BASIS = new Set(["invoiceDate", "dueDate"]);
+
+accountingRouter.get(
+  "/acc/relanceRules",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const rows = await prisma.accRelanceRule.findMany({ where: { entityId }, orderBy: { createdAt: "asc" } });
+    res.json(rows);
+  })
+);
+
+interface RelanceRuleBody {
+  name?: string;
+  basis?: string;
+  offsetDays?: number;
+  direction?: string | null;
+  templateKey?: string;
+  attachInvoice?: boolean;
+  active?: boolean;
+}
+
+function validateRelanceRuleBody(b: RelanceRuleBody) {
+  if (!b.name) throw new HttpError(400, "name requis");
+  if (!b.basis || !RELANCE_BASIS.has(b.basis)) throw new HttpError(400, "basis doit être 'invoiceDate' ou 'dueDate'");
+  if (!Number.isInteger(b.offsetDays)) throw new HttpError(400, "offsetDays doit être un entier");
+  if (b.direction && b.direction !== "purchase" && b.direction !== "sale") throw new HttpError(400, "direction doit être 'purchase', 'sale' ou vide");
+  if (!b.templateKey) throw new HttpError(400, "templateKey requis");
+}
+
+accountingRouter.post(
+  "/acc/relanceRules",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const b = req.body as RelanceRuleBody;
+    validateRelanceRuleBody(b);
+    const created = await prisma.accRelanceRule.create({
+      data: {
+        entityId,
+        name: b.name!,
+        basis: b.basis!,
+        offsetDays: b.offsetDays!,
+        direction: b.direction || null,
+        templateKey: b.templateKey!,
+        attachInvoice: b.attachInvoice !== false,
+        active: b.active !== false,
+      },
+    });
+    await recordAuditLog({ entityId, userId: actorId(req), action: "relance_rule_created", targetType: "AccRelanceRule", targetId: created.id, newValue: { name: created.name }, ip: req.ip });
+    res.json(created);
+  })
+);
+
+accountingRouter.put(
+  "/acc/relanceRules/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const existing = await prisma.accRelanceRule.findFirst({ where: { id: req.params.id, entityId } });
+    if (!existing) throw new HttpError(404, "Règle introuvable");
+    const b = req.body as RelanceRuleBody;
+    const merged = { ...existing, ...b } as RelanceRuleBody;
+    validateRelanceRuleBody(merged);
+    const updated = await prisma.accRelanceRule.update({
+      where: { id: existing.id },
+      data: {
+        name: merged.name!,
+        basis: merged.basis!,
+        offsetDays: merged.offsetDays!,
+        direction: merged.direction || null,
+        templateKey: merged.templateKey!,
+        attachInvoice: merged.attachInvoice !== false,
+        active: merged.active !== false,
+      },
+    });
+    res.json(updated);
+  })
+);
+
+accountingRouter.delete(
+  "/acc/relanceRules/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const existing = await prisma.accRelanceRule.findFirst({ where: { id: req.params.id, entityId } });
+    if (!existing) throw new HttpError(404, "Règle introuvable");
+    await prisma.accRelanceRule.delete({ where: { id: existing.id } });
+    await recordAuditLog({ entityId, userId: actorId(req), action: "relance_rule_deleted", targetType: "AccRelanceRule", targetId: existing.id, oldValue: { name: existing.name }, ip: req.ip });
+    res.json({ ok: true });
+  })
+);
+
+/** POST /wa/acc/relanceRules/:id/run — déclenche le balayage de cette règle immédiatement, sans attendre le prochain passage quotidien (mêmes garde-fous anti-doublon). */
+accountingRouter.post(
+  "/acc/relanceRules/:id/run",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const existing = await prisma.accRelanceRule.findFirst({ where: { id: req.params.id, entityId } });
+    if (!existing) throw new HttpError(404, "Règle introuvable");
+    const summary = await runRelanceRule(existing.id);
+    await recordAuditLog({
+      entityId, userId: actorId(req), action: "relance_rule_run", targetType: "AccRelanceRule", targetId: existing.id,
+      newValue: { successCount: summary.successCount, failureCount: summary.failureCount }, ip: req.ip,
+    });
+    res.json(summary);
   })
 );
 

@@ -71,6 +71,7 @@ model Entity {
   accBankAccounts        AccBankAccount[]
   accBankTransactions    AccBankTransaction[]
   accBankMatches         AccBankMatch[]
+  accRelanceRules        AccRelanceRule[]
   qontoConfig            QontoConfig?
 }
 
@@ -2959,6 +2960,7 @@ model AccInvoice {
   amountPaid Float @default(0)
 
   bankMatches AccBankMatch[]
+  relanceSentLogs AccRelanceSent[]
 
   proposedAccountId         String?
   proposedAccount           AccAccount? @relation("InvoiceProposedAccount", fields: [proposedAccountId], references: [id], onDelete: SetNull)
@@ -3341,6 +3343,60 @@ model AccBankMatch {
 
   @@index([entityId, bankTransactionId])
   @@index([entityId, invoiceId])
+}
+
+// Règle de relance automatique de facture impayée (§ "relance à J+ de date
+// facture ou échéance") — un balayage quotidien (lib/accRelanceScheduler.ts)
+// envoie le modèle email configuré pour toute facture non payée dont
+// (basisDate + offsetDays) tombe le jour même, une seule fois par règle et
+// par facture (cf. AccRelanceSent). Plusieurs règles peuvent coexister
+// (ex : une relance douce à J+3 après échéance, une relance ferme à J+15).
+model AccRelanceRule {
+  id       String  @id @default(cuid())
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  name String
+
+  // invoiceDate | dueDate — date de référence à partir de laquelle
+  // offsetDays est compté.
+  basis String
+  // Décalage en jours par rapport à basis — positif = après (relance de
+  // retard), négatif = avant (rappel préventif avant échéance). 0 = le jour
+  // même de basis.
+  offsetDays Int
+
+  // purchase | sale | null (les deux sens) — une règle "achat" ne relance
+  // jamais un client par erreur, et inversement.
+  direction String?
+
+  templateKey   String
+  attachInvoice Boolean @default(true)
+  active        Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sentLogs AccRelanceSent[]
+
+  @@index([entityId, active])
+}
+
+// Trace d'envoi — empêche un balayage quotidien de renvoyer indéfiniment la
+// même relance pour la même facture tant qu'elle reste impayée (basisDate +
+// offsetDays reste égal au jour du passage seulement le jour J, mais un
+// balayage manqué/retardé ne doit pas non plus la resauter ni la doubler).
+model AccRelanceSent {
+  id     String         @id @default(cuid())
+  ruleId String
+  rule   AccRelanceRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  invoiceId String
+  invoice   AccInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  sentAt DateTime @default(now())
+
+  @@unique([ruleId, invoiceId])
 }
 
 // Identifiants d'accès à l'API Qonto (Business API, cf. lib/qonto.ts) — un
