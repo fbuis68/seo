@@ -1386,6 +1386,33 @@ accountingRouter.post(
   })
 );
 
+/**
+ * GET /wa/acc/gocardless/payouts/:id — détail d'un virement groupé GoCardless
+ * (§ "un virement de 1000€ = 4 prélèvements de 250€ de 4 clients") : la
+ * liste des prélèvements individuels qui le composent, avec le client
+ * résolu — affiché dans la modale de rapprochement bancaire à côté des
+ * candidats facture, pour voir d'un coup d'œil QUI compose le montant
+ * plutôt que d'ouvrir chaque fiche client une par une.
+ */
+accountingRouter.get(
+  "/acc/gocardless/payouts/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const payout = await prisma.accGoCardlessPayout.findFirst({
+      where: { id: req.params.id, entityId },
+      include: {
+        payments: {
+          include: { customer: { select: { id: true, name: true, crmProspectId: true } } },
+          orderBy: { chargeDate: "desc" },
+        },
+      },
+    });
+    if (!payout) throw new HttpError(404, "Virement GoCardless introuvable");
+    res.json(payout);
+  })
+);
+
 accountingRouter.get(
   "/acc/bank/transactions",
   requireAdmin,
