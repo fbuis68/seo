@@ -211,12 +211,26 @@ export async function syncGoCardless(entityId: string | null): Promise<GoCardles
       // cf. commentaire modèle AccGoCardlessPayout) — un item de type autre
       // que "payment_paid_out" (frais GoCardless, remboursement...) n'a pas
       // de payment applicable et est simplement ignoré.
-      for await (const item of client.payoutItems.all({ payout: payout.id })) {
-        if (item.type !== "payment_paid_out" || !item.links?.payment) continue;
-        await prisma.accGoCardlessPayment.updateMany({
-          where: { gocardlessId: item.links.payment },
-          data: { payoutId: upserted.id },
-        });
+      //
+      // GoCardless archive les payoutItems des payouts vieux de plus de 6
+      // mois (ApiError "Payout items for payouts created more than 6 months
+      // ago are archived") — constaté en production, 22/09/2026, sur un
+      // compte avec de l'historique : sans ce try/catch, un SEUL vieux
+      // payout faisait échouer TOUTE la synchro (clients/payments/payouts
+      // suivants jamais traités). Le rapprochement bancaire (montant+date,
+      // cf. matchPayoutToBank) reste possible même sans le détail par
+      // client sur ces vieux payouts — seul le regroupement fin par
+      // paiement individuel est perdu.
+      try {
+        for await (const item of client.payoutItems.all({ payout: payout.id })) {
+          if (item.type !== "payment_paid_out" || !item.links?.payment) continue;
+          await prisma.accGoCardlessPayment.updateMany({
+            where: { gocardlessId: item.links.payment },
+            data: { payoutId: upserted.id },
+          });
+        }
+      } catch (e) {
+        console.warn(`[gocardless] payoutItems indisponibles pour le payout ${payout.id} (probablement archivé, >6 mois) : ${describeError(e)}`);
       }
 
       if (await matchPayoutToBank(entityId, upserted)) payoutsMatched += 1;
