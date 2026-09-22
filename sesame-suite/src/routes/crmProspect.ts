@@ -536,6 +536,69 @@ crmProspectRouter.post(
   })
 );
 
+/**
+ * POST /wa/crmProspect/requalifyAsContact — corrige une fiche créée par
+ * erreur en tant que fiche "Client" complète alors qu'il s'agit en réalité
+ * d'un simple interlocuteur d'un client déjà existant (ex : recherche par
+ * nom de personne, qui crée une fiche société au lieu d'ajouter un contact
+ * sur la bonne fiche). Convertit (nom/email/tel → CrmContact rattaché au
+ * client cible) puis supprime la fiche d'origine.
+ *
+ * Refuse si la fiche d'origine porte déjà des données propres (tickets,
+ * activités, affaires, contacts, abonnement) — la supprimer perdrait cet
+ * historique sans recours, alors qu'une fiche tout juste créée par erreur
+ * n'en a par construction aucun. Dans ce cas, l'utilisateur doit d'abord
+ * déplacer/traiter ces éléments à la main.
+ */
+crmProspectRouter.post(
+  "/crmProspect/requalifyAsContact",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const b = req.body as { id?: string; targetProspectId?: string; fonction?: string };
+    const id = (b.id || "").trim();
+    const targetProspectId = (b.targetProspectId || "").trim();
+    if (!id || !targetProspectId) throw new HttpError(400, "id et targetProspectId requis");
+    if (id === targetProspectId) throw new HttpError(400, "Impossible de requalifier une fiche vers elle-même");
+
+    const source = await prisma.crmProspect.findUnique({
+      where: { id },
+      include: {
+        _count: { select: { activities: true, tickets: true, deals: true, contacts: true } },
+      },
+    });
+    if (!source) throw new HttpError(404, "Fiche à requalifier introuvable");
+    const target = await prisma.crmProspect.findUnique({ where: { id: targetProspectId } });
+    if (!target) throw new HttpError(404, "Client cible introuvable");
+
+    const blockers: string[] = [];
+    if (source._count.activities > 0) blockers.push(`${source._count.activities} activité(s)`);
+    if (source._count.tickets > 0) blockers.push(`${source._count.tickets} ticket(s)`);
+    if (source._count.deals > 0) blockers.push(`${source._count.deals} affaire(s)`);
+    if (source._count.contacts > 0) blockers.push(`${source._count.contacts} contact(s) additionnel(s)`);
+    if (source.subscriptionId) blockers.push("un abonnement lié");
+    if (blockers.length) {
+      throw new HttpError(400, `Cette fiche porte déjà ${blockers.join(", ")} — traitez-les d'abord (déplacez ou supprimez), sinon la requalification les perdrait définitivement.`);
+    }
+
+    const contact = await prisma.$transaction(async (tx) => {
+      const created = await tx.crmContact.create({
+        data: {
+          prospectId: targetProspectId,
+          name: source.nom,
+          fonction: (b.fonction || "").trim() || null,
+          email: source.email || null,
+          phone: source.tel || null,
+        },
+      });
+      await tx.crmProspect.delete({ where: { id } });
+      return created;
+    });
+
+    res.json({ ok: true, contact, targetProspectId });
+  })
+);
+
 // ── Journal d'activité ──
 
 crmProspectRouter.post(

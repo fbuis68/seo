@@ -2059,7 +2059,7 @@ function showFiche(id){
   const c=clients.find(c=>c.id===id);if(!c)return;
   curId=id;view='fiche';setNav('n-fiche');
   bc([{label:'Clients',fn:'showList()'},{label:c.nom}]);
-  tba(`<button class="btn btn-ghost" onclick="openModal('${id}')">✎ Modifier</button><button class="btn btn-ghost" onclick="openSendEmailModal('${id}')">✉ Message</button><button class="btn btn-primary" onclick="addActForm('${id}')">+ Activité</button><button class="btn btn-ghost" style="color:#a32d2d" onclick="deleteClient('${id}')">🗑 Supprimer</button>`);
+  tba(`<button class="btn btn-ghost" onclick="openModal('${id}')">✎ Modifier</button><button class="btn btn-ghost" onclick="openSendEmailModal('${id}')">✉ Message</button><button class="btn btn-primary" onclick="addActForm('${id}')">+ Activité</button><button class="btn btn-ghost" onclick="openRequalifyModal('${id}')">⇄ Requalifier en contact</button><button class="btn btn-ghost" style="color:#a32d2d" onclick="deleteClient('${id}')">🗑 Supprimer</button>`);
   renderFiche(c);
   loadAdminAccessCard(c);
   loadQuestionnaireSendsCard(c);
@@ -3437,6 +3437,72 @@ async function deleteClient(id){
   }catch(e){ flash('Erreur de suppression'); return; }
   clients=clients.filter(c=>c.id!==id);
   updateBadges();flash('Fiche supprimée');showList();
+}
+
+// ── Requalification "Client" → contact d'un autre client (22/09/2026) ──
+// Corrige une fiche créée par erreur en tant que fiche société complète
+// alors qu'il s'agit d'un simple interlocuteur d'un client déjà existant :
+// convertit nom/email/tel en CrmContact rattaché à la bonne fiche, puis
+// supprime celle-ci. Refusé côté serveur si la fiche porte déjà des
+// données propres (activités/tickets/affaires/contacts/abonnement).
+let RQ_TARGET_ID = null;
+
+function openRequalifyModal(id){
+  const c=clients.find(c=>c.id===id);if(!c)return;
+  RQ_TARGET_ID = null;
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:460px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Requalifier en contact</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div style="font-size:12px;color:var(--mu);margin-bottom:10px">Convertit la fiche <strong>${esc(c.nom)}</strong> en simple contact (nom${c.email?', email':''}${c.tel?', téléphone':''}) rattaché au client choisi ci-dessous, puis supprime cette fiche. Uniquement possible si elle ne porte encore aucune activité/ticket/affaire/contact.</div>
+      <div class="ff" style="position:relative">
+        <label>Client destinataire</label>
+        <input id="rq-search" placeholder="Rechercher par nom..." autocomplete="off" oninput="rqSearchInput()">
+        <div id="rq-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--card);border:0.5px solid var(--bdr);border-radius:8px;margin-top:2px;max-height:220px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.12)"></div>
+      </div>
+      <div class="ff" style="margin-top:8px"><label>Fonction (optionnel)</label><input id="rq-fonction" placeholder="Ex. Directeur, Comptabilité..."></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="submitRequalify('${id}')">Requalifier</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function rqSearchInput(){
+  const inp = document.getElementById('rq-search');
+  const box = document.getElementById('rq-suggestions');
+  if(!inp||!box) return;
+  RQ_TARGET_ID = null;
+  const q = inp.value.trim().toLowerCase();
+  if(q.length<2){ box.style.display='none'; box.innerHTML=''; return; }
+  const results = clients.filter(c=>c.id!==curId && c.type==='Client' && c.nom.toLowerCase().includes(q)).slice(0,8);
+  if(!results.length){ box.innerHTML='<div style="padding:7px 10px;font-size:12px;color:var(--mu)">Aucun client trouvé</div>'; box.style.display='block'; return; }
+  box.innerHTML = results.map(c=>`<div style="padding:7px 10px;cursor:pointer;font-size:12px;border-bottom:0.5px solid var(--bdr)" onmousedown="rqPickTarget('${c.id}','${esc(c.nom).replace(/'/g,"\\'")}')"><strong>${esc(c.nom)}</strong>${c.ville?' <span style="color:var(--mu)">— '+esc(c.ville)+'</span>':''}</div>`).join('');
+  box.style.display='block';
+}
+
+function rqPickTarget(id, nom){
+  RQ_TARGET_ID = id;
+  const inp = document.getElementById('rq-search');
+  if(inp) inp.value = nom;
+  const box = document.getElementById('rq-suggestions');
+  if(box){ box.style.display='none'; box.innerHTML=''; }
+}
+
+async function submitRequalify(id){
+  if(!RQ_TARGET_ID){ flash('Choisissez un client dans la liste'); return; }
+  const fonction = (document.getElementById('rq-fonction')||{value:''}).value.trim();
+  try{
+    const r = await apiFetch('/wa/crmProspect/requalifyAsContact', {method:'POST', body:JSON.stringify({id, targetProspectId:RQ_TARGET_ID, fonction})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    clients = clients.filter(c=>c.id!==id);
+    closeModal();
+    flash('Fiche requalifiée en contact');
+    updateBadges();
+    showFiche(RQ_TARGET_ID);
+  }catch(e){ flash(e.message||'Erreur de requalification'); }
 }
 
 // ════════════════════════════════════════
