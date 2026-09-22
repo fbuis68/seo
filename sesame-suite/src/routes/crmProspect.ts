@@ -700,3 +700,72 @@ crmProspectRouter.post(
     res.json({ ok: true, matched: true, prospectId: updated.id, inboundReplyCount: updated.inboundReplyCount });
   })
 );
+
+/**
+ * GET /wa/crmProspect/:id/accounting — détail comptable (factures,
+ * règlements, prélèvements GoCardless) affiché sur la fiche client CRM.
+ * AccCustomer (module compta) et CrmProspect (module CRM) sont deux
+ * modèles historiquement indépendants sans lien entre eux — sans cette
+ * route, la fiche client n'avait AUCUN moyen d'afficher ces données même
+ * quand elles existent côté compta (constaté 22/09/2026). Rapproche
+ * AccCustomer.crmProspectId au premier accès (par email, insensible à la
+ * casse) et le fige ensuite — même convention que gocardlessCustomerId
+ * (cf. lib/gocardless.ts matchOrCreateCustomer). Ne crée jamais de fiche
+ * AccCustomer : sans correspondance, retourne simplement linked:false
+ * plutôt que de polluer le module compta avec une fiche vide.
+ */
+crmProspectRouter.get(
+  "/crmProspect/:id/accounting",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const prospect = await prisma.crmProspect.findUnique({ where: { id: req.params.id } });
+    if (!prospect) throw new HttpError(404, "Fiche introuvable");
+
+    let customer = await prisma.accCustomer.findUnique({ where: { crmProspectId: prospect.id } });
+    if (!customer && prospect.email) {
+      const candidate = await prisma.accCustomer.findFirst({
+        where: { entityId: prospect.entityId, crmProspectId: null, email: { equals: prospect.email, mode: "insensitive" } },
+      });
+      if (candidate) {
+        customer = await prisma.accCustomer.update({ where: { id: candidate.id }, data: { crmProspectId: prospect.id } });
+      }
+    }
+    if (!customer) {
+      res.json({ linked: false });
+      return;
+    }
+
+    const invoices = await prisma.accInvoice.findMany({
+      where: { customerId: customer.id },
+      orderBy: { invoiceDate: "desc" },
+      select: { id: true, invoiceNumber: true, invoiceDate: true, dueDate: true, status: true, amountHt: true, amountVat: true, amountTtc: true, amountPaid: true, currency: true },
+    });
+    const payments = await prisma.accBankMatch.findMany({
+      where: { invoice: { customerId: customer.id } },
+      include: { bankTransaction: { select: { operationDate: true, rawLabel: true } }, invoice: { select: { invoiceNumber: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+    const gocardlessPayments = await prisma.accGoCardlessPayment.findMany({
+      where: { customerId: customer.id },
+      include: { payout: { select: { id: true, status: true, arrivalDate: true, bankTransactionId: true } } },
+      orderBy: { chargeDate: "desc" },
+    });
+
+    let totalHt = 0, totalTtc = 0, totalPaid = 0;
+    for (const inv of invoices) {
+      totalHt += inv.amountHt || 0;
+      totalTtc += inv.amountTtc || 0;
+      totalPaid += inv.amountPaid || 0;
+    }
+
+    res.json({
+      linked: true,
+      customerId: customer.id,
+      position: { totalHt, totalTtc, totalPaid, balanceDue: Math.max(0, totalTtc - totalPaid) },
+      invoices,
+      payments,
+      gocardlessPayments,
+    });
+  })
+);

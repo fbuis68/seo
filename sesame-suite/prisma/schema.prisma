@@ -1797,6 +1797,7 @@ model CrmProspect {
   activities CrmActivity[]
   tickets    CrmTicket[]
   contacts   CrmContact[]
+  accCustomer AccCustomer?
 }
 
 // Contacts multiples d'une fiche client/prospect (16/09/2026) — jusqu'ici
@@ -2854,6 +2855,17 @@ model AccCustomer {
   // une première fois (par email, cf. lib/gocardless.ts matchOrCreateCustomer),
   // pour ne plus jamais avoir à re-matcher ce client à chaque synchronisation.
   gocardlessCustomerId String? @unique
+
+  // Lien vers la fiche CRM (CrmProspect) correspondante — AccCustomer et
+  // CrmProspect sont deux modèles historiquement indépendants (le premier
+  // pour la compta/facturation, le second pour le CRM) : sans ce lien, la
+  // fiche client CRM n'a AUCUN moyen d'afficher factures/règlements/
+  // prélèvements (constaté 22/09/2026 : "toujours pas de detail comptable
+  // dans la fiche client" malgré la présence des données côté AccCustomer).
+  // Rapproché automatiquement par email au premier accès (cf.
+  // GET /wa/crmProspect/:id/accounting, crmProspect.ts), jamais bloquant.
+  crmProspectId String?     @unique
+  crmProspect   CrmProspect? @relation(fields: [crmProspectId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
