@@ -321,6 +321,19 @@ export interface ImportBankTransactionsResult {
  * Insertion idempotente : une transaction déjà importée (même
  * bankAccountId + externalId) est simplement ignorée, ce qui permet de
  * réimporter un relevé qui chevauche le précédent sans créer de doublons.
+ *
+ * Exception pour Qonto (source="qonto_api") : un UPSERT plutôt qu'un simple
+ * skip, sur les champs purement informatifs que Qonto peut faire évoluer
+ * APRÈS l'import initial d'une transaction déjà connue — notamment les
+ * labels analytiques (l'utilisateur les ajoute souvent depuis l'interface
+ * Qonto une fois la transaction déjà passée), mais aussi catégorie/
+ * contrepartie. Un import fichier (CSV/CAMT/MT940/CFONB) reste un simple
+ * skip : un relevé déjà importé ne "change" pas, le réimporter ne fait que
+ * chevaucher le précédent (cf. §51, jamais réécrire une donnée déjà
+ * comptabilisée sans raison). Ne touche jamais direction/montant/dates
+ * (identité de la transaction) ni status/classification (état de
+ * rapprochement déjà éventuellement en cours) — uniquement les champs
+ * descriptifs.
  */
 export async function importBankTransactions(
   entityId: string | null,
@@ -334,34 +347,57 @@ export async function importBankTransactions(
 
   for (const tx of parsed) {
     const externalId = tx.externalId?.trim() || fallbackExternalId(tx);
+    const createData = {
+      entityId,
+      bankAccountId,
+      externalId,
+      operationDate: tx.operationDate,
+      valueDate: tx.valueDate,
+      amount: tx.amount,
+      direction: tx.amount >= 0 ? "CREDIT" : "DEBIT",
+      currency: tx.currency,
+      rawLabel: tx.rawLabel,
+      counterpartyName: tx.counterpartyName,
+      counterpartyIban: tx.counterpartyIban,
+      counterpartyBic: tx.counterpartyBic,
+      transactionRef: tx.transactionRef,
+      endToEndId: tx.endToEndId,
+      sepaMandateRef: tx.sepaMandateRef,
+      creditorRef: tx.creditorRef,
+      paymentType: tx.paymentType,
+      bankCategory: tx.bankCategory,
+      qontoLabels: tx.labels || [],
+      source,
+      rawData: tx.rawData as Prisma.InputJsonValue,
+    };
     try {
-      const row = await prisma.accBankTransaction.create({
-        data: {
-          entityId,
-          bankAccountId,
-          externalId,
-          operationDate: tx.operationDate,
-          valueDate: tx.valueDate,
-          amount: tx.amount,
-          direction: tx.amount >= 0 ? "CREDIT" : "DEBIT",
-          currency: tx.currency,
-          rawLabel: tx.rawLabel,
-          counterpartyName: tx.counterpartyName,
-          counterpartyIban: tx.counterpartyIban,
-          counterpartyBic: tx.counterpartyBic,
-          transactionRef: tx.transactionRef,
-          endToEndId: tx.endToEndId,
-          sepaMandateRef: tx.sepaMandateRef,
-          creditorRef: tx.creditorRef,
-          paymentType: tx.paymentType,
-          bankCategory: tx.bankCategory,
-          qontoLabels: tx.labels || [],
-          source,
-          rawData: tx.rawData as Prisma.InputJsonValue,
-        },
-      });
-      created++;
-      createdIds.push(row.id);
+      if (source === "qonto_api") {
+        const existing = await prisma.accBankTransaction.findUnique({
+          where: { bankAccountId_externalId: { bankAccountId, externalId } },
+          select: { id: true },
+        });
+        if (existing) {
+          await prisma.accBankTransaction.update({
+            where: { id: existing.id },
+            data: {
+              counterpartyName: tx.counterpartyName,
+              counterpartyIban: tx.counterpartyIban,
+              counterpartyBic: tx.counterpartyBic,
+              bankCategory: tx.bankCategory,
+              qontoLabels: tx.labels || [],
+            },
+          });
+          skipped++; // déjà connue — pas nouvelle, pas de rapprochement automatique à relancer dessus
+        } else {
+          const row = await prisma.accBankTransaction.create({ data: createData });
+          created++;
+          createdIds.push(row.id);
+        }
+      } else {
+        const row = await prisma.accBankTransaction.create({ data: createData });
+        created++;
+        createdIds.push(row.id);
+      }
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
         skipped++;

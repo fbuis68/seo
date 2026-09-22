@@ -7338,7 +7338,7 @@ async function testRule(id){
 // ════════════════════════════════════════
 let ACC_INVOICES=[], ACC_SUPPLIERS=[], ACC_CUSTOMERS=[], ACC_ACCOUNTS=[], ACC_JOURNALS=[], ACC_ENTRIES=[], ACC_RULES=[], ACC_DASH=null;
 let ACC_BANK_ACCOUNTS=[], ACC_BANK_TX=[], ACC_BANK_SELECTED=null;
-let ACC_BANK_FILTER={type:'all', label:''};
+let ACC_BANK_FILTER={type:'all', label:'', excludePrelevements:false};
 let ACC_QONTO_CONFIG=null, ACC_QONTO_TEST_ACCOUNTS=null;
 let ACC_TAB='inbox';
 const ACC_LOADED={};
@@ -8849,6 +8849,10 @@ function renderAccBank(){
         <option value="debit" ${ACC_BANK_FILTER.type==='debit'?'selected':''}>Décaissements</option>
         <option value="prelevement" ${ACC_BANK_FILTER.type==='prelevement'?'selected':''}>Prélèvements</option>
       </select>
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:400;${ACC_BANK_FILTER.type==='prelevement'?'opacity:.4':''}">
+        <input type="checkbox" id="abf-exclude-prlv" ${ACC_BANK_FILTER.excludePrelevements?'checked':''} ${ACC_BANK_FILTER.type==='prelevement'?'disabled':''} onchange="accBankFilterChange()">
+        Exclure les prélèvements
+      </label>
       ${allLabels.length?`<select id="abf-label" onchange="accBankFilterChange()">
         <option value="">Tous labels</option>
         ${allLabels.map(l=>`<option value="${esc(l)}" ${ACC_BANK_FILTER.label===l?'selected':''}>${esc(l)}</option>`).join('')}
@@ -8874,6 +8878,7 @@ function accBankFilteredTx(){
     if(ACC_BANK_FILTER.type==='credit' && t.amount<0) return false;
     if(ACC_BANK_FILTER.type==='debit' && t.amount>=0) return false;
     if(ACC_BANK_FILTER.type==='prelevement' && !accIsPrelevement(t)) return false;
+    if(ACC_BANK_FILTER.excludePrelevements && accIsPrelevement(t)) return false;
     if(ACC_BANK_FILTER.label && !(t.qontoLabels||[]).includes(ACC_BANK_FILTER.label)) return false;
     return true;
   });
@@ -8881,7 +8886,17 @@ function accBankFilteredTx(){
 function accBankFilterChange(){
   const typeEl = document.getElementById('abf-type');
   const labelEl = document.getElementById('abf-label');
-  ACC_BANK_FILTER = { type: typeEl?typeEl.value:'all', label: labelEl?labelEl.value:'' };
+  const excludeEl = document.getElementById('abf-exclude-prlv');
+  const type = typeEl?typeEl.value:'all';
+  ACC_BANK_FILTER = {
+    type,
+    label: labelEl?labelEl.value:'',
+    // "Exclure les prélèvements" n'a pas de sens combiné à "Prélèvements"
+    // (résultat systématiquement vide) — la case est désactivée dans ce cas
+    // et son état ignoré plutôt que de piéger l'utilisateur sur une liste
+    // vide sans explication.
+    excludePrelevements: type!=='prelevement' && !!(excludeEl && excludeEl.checked),
+  };
   renderAccBank();
 }
 
