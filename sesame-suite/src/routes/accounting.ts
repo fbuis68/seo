@@ -786,6 +786,64 @@ accountingRouter.post(
   })
 );
 
+accountingRouter.put(
+  "/acc/customers/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const existing = await prisma.accCustomer.findFirst({ where: { id: req.params.id, entityId } });
+    if (!existing) throw new HttpError(404, "Client introuvable");
+    const fields = ["name", "siren", "siret", "vatNumber", "addressLine", "postalCode", "city", "country", "email", "phone"] as const;
+    const data: Record<string, unknown> = {};
+    for (const f of fields) if (f in req.body) data[f] = req.body[f];
+    const updated = await prisma.accCustomer.update({ where: { id: existing.id }, data });
+    await recordAuditLog({ entityId, userId: actorId(req), action: "customer_updated", targetType: "AccCustomer", targetId: existing.id, oldValue: existing, newValue: data, ip: req.ip });
+    res.json(updated);
+  })
+);
+
+/**
+ * GET /wa/acc/customers/:id — fiche "compte client" : position du compte
+ * (facturé/réglé/solde dû) + liste des factures + liste des règlements
+ * bancaires affectés, pour un relevé de compte auxiliaire (411) complet
+ * sans avoir à recouper manuellement l'onglet Factures et l'onglet Banque.
+ */
+accountingRouter.get(
+  "/acc/customers/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const customer = await prisma.accCustomer.findFirst({ where: { id: req.params.id, entityId } });
+    if (!customer) throw new HttpError(404, "Client introuvable");
+
+    const invoices = await prisma.accInvoice.findMany({
+      where: { customerId: customer.id },
+      orderBy: { invoiceDate: "desc" },
+      select: { id: true, invoiceNumber: true, invoiceDate: true, dueDate: true, status: true, amountHt: true, amountVat: true, amountTtc: true, amountPaid: true, currency: true },
+    });
+
+    const payments = await prisma.accBankMatch.findMany({
+      where: { invoice: { customerId: customer.id } },
+      include: { bankTransaction: { select: { operationDate: true, rawLabel: true } }, invoice: { select: { invoiceNumber: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+
+    let totalHt = 0, totalTtc = 0, totalPaid = 0;
+    for (const inv of invoices) {
+      totalHt += inv.amountHt || 0;
+      totalTtc += inv.amountTtc || 0;
+      totalPaid += inv.amountPaid || 0;
+    }
+
+    res.json({
+      customer,
+      position: { totalHt, totalTtc, totalPaid, balanceDue: Math.max(0, totalTtc - totalPaid) },
+      invoices,
+      payments,
+    });
+  })
+);
+
 // ───────────────────────── Plan comptable / journaux ─────────────────────────
 
 accountingRouter.get(

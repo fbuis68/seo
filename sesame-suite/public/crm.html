@@ -7373,7 +7373,7 @@ function renderAccDashboardTiles(){
     </div>`;
 }
 
-const ACC_TABS=[{k:'inbox',label:'Factures'},{k:'suppliers',label:'Fournisseurs'},{k:'accounts',label:'Plan comptable'},{k:'bank',label:'Banque'},{k:'entries',label:'Écritures'},{k:'rules',label:'Règles'},{k:'email',label:'Import email'},{k:'settings',label:'Réglages'}];
+const ACC_TABS=[{k:'inbox',label:'Factures'},{k:'suppliers',label:'Fournisseurs'},{k:'customers',label:'Clients'},{k:'accounts',label:'Plan comptable'},{k:'bank',label:'Banque'},{k:'entries',label:'Écritures'},{k:'rules',label:'Règles'},{k:'email',label:'Import email'},{k:'settings',label:'Réglages'}];
 const PAYMENT_METHOD_LABEL = {'':'—', virement:'Virement', prelevement:'Prélèvement', cheque:'Chèque', carte:'Carte bancaire', especes:'Espèces', autre:'Autre'};
 
 /**
@@ -7397,7 +7397,7 @@ function renderComptaPanel(){
       <div id="acc-tab-body"><div class="log-empty">Chargement…</div></div>
     </div>`;
   renderAccDashboardTiles();
-  const loaders={inbox:loadAccInboxTab, suppliers:loadAccSuppliersTab, accounts:loadAccAccountsTab, bank:loadAccBankTab, entries:loadAccEntriesTab, rules:loadAccRulesTab, email:loadAccEmailTab, settings:loadAccSettingsTab};
+  const loaders={inbox:loadAccInboxTab, suppliers:loadAccSuppliersTab, customers:loadAccCustomersTab, accounts:loadAccAccountsTab, bank:loadAccBankTab, entries:loadAccEntriesTab, rules:loadAccRulesTab, email:loadAccEmailTab, settings:loadAccSettingsTab};
   loaders[ACC_TAB] && loaders[ACC_TAB]();
 }
 
@@ -8503,6 +8503,129 @@ async function saveAccSupplier(id){
     flash('Fournisseur enregistré');
     ACC_LOADED.suppliers = false;
     loadAccSuppliersTab();
+  }catch(e){ flash('Erreur d\'enregistrement'); }
+}
+
+// ───────── Onglet Clients ─────────
+
+async function loadAccCustomersTab(){
+  ACC_LOADED.customers = false;
+  await ensureAccCustomersLoaded();
+  renderAccCustomers();
+}
+
+function renderAccCustomers(){
+  const el = document.getElementById('acc-tab-body');
+  if(!el) return;
+  const rows = ACC_CUSTOMERS.map(c=>`
+    <tr>
+      <td><div class="nom-cell" onclick="openAccCustomerModal('${c.id}')">${esc(c.name)}</div></td>
+      <td style="font-size:11px;color:#888">${esc(c.siret||'—')}</td>
+      <td>${esc(c.email||'—')}</td>
+      <td>${esc(c.city||'—')}</td>
+      <td style="white-space:nowrap"><button class="ta-btn" onclick="openAccCustomerModal('${c.id}')" title="Ouvrir">✎</button></td>
+    </tr>`).join('');
+  el.innerHTML = `
+    <div class="list-toolbar"><button class="btn btn-primary btn-sm" onclick="openAccCustomerModal(null)">+ Client</button><span class="count-lbl">${ACC_CUSTOMERS.length} client(s)</span></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Nom</th><th style="width:140px">SIRET</th><th>Email</th><th style="width:160px">Ville</th><th style="width:50px"></th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="5" class="log-empty">Aucun client — créé automatiquement au premier dépôt de facture de vente avec un SIRET/SIREN/TVA reconnu.</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+/**
+ * Fiche "compte client" — édition des coordonnées ET, pour un client déjà
+ * existant, position du compte (facturé/réglé/solde dû) + liste des
+ * factures + liste des règlements affectés, en un seul écran plutôt que
+ * de recouper manuellement l'onglet Factures et l'onglet Banque.
+ */
+async function openAccCustomerModal(id){
+  let detail = null;
+  if(id){
+    try{
+      const r = await apiFetch('/wa/acc/customers/'+id+'?scope=crm');
+      if(r.ok) detail = await r.json();
+    }catch(e){}
+  }
+  const c = detail ? detail.customer : {id:null,name:'',siren:'',siret:'',vatNumber:'',email:'',phone:'',addressLine:'',postalCode:'',city:'',country:'FR'};
+  renderAccCustomerModal(c, detail);
+}
+
+function renderAccCustomerModal(c, detail){
+  const pos = detail ? detail.position : null;
+  const invoiceRows = detail ? detail.invoices.map(i=>`
+    <tr>
+      <td>${i.invoiceDate?new Date(i.invoiceDate).toLocaleDateString('fr-FR'):'—'}</td>
+      <td>${esc(i.invoiceNumber||'(sans n°)')}</td>
+      <td style="text-align:right">${i.amountTtc!=null?fmtEUR2(i.amountTtc):'—'}</td>
+      <td style="text-align:right">${fmtEUR2(Math.max(0,(i.amountTtc||0)-(i.amountPaid||0)))}</td>
+      <td>${accStatusBadge(i.status)}</td>
+    </tr>`).join('') : '';
+  const paymentRows = detail ? detail.payments.map(p=>`
+    <tr>
+      <td>${new Date(p.bankTransaction.operationDate).toLocaleDateString('fr-FR')}</td>
+      <td>${esc(p.bankTransaction.rawLabel)}</td>
+      <td>${esc(p.invoice.invoiceNumber||'(sans n°)')}</td>
+      <td style="text-align:right">${fmtEUR2(p.allocatedAmount)}</td>
+    </tr>`).join('') : '';
+
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:760px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">${c.id?'Compte client — '+esc(c.name):'Nouveau client'}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div style="max-height:74vh;overflow-y:auto;padding-right:4px">
+      <div class="ff"><label>Nom</label><input id="cus-name" value="${esc(c.name)}"></div>
+      <div class="form-grid" style="margin-top:8px">
+        <div class="ff"><label>SIREN</label><input id="cus-siren" value="${esc(c.siren)}"></div>
+        <div class="ff"><label>SIRET</label><input id="cus-siret" value="${esc(c.siret)}"></div>
+        <div class="ff"><label>N° TVA</label><input id="cus-vatNumber" value="${esc(c.vatNumber)}"></div>
+        <div class="ff"><label>Email</label><input id="cus-email" value="${esc(c.email)}"></div>
+        <div class="ff"><label>Téléphone</label><input id="cus-phone" value="${esc(c.phone)}"></div>
+        <div class="ff"><label>Pays</label><input id="cus-country" value="${esc(c.country||'FR')}"></div>
+      </div>
+      <div class="ff" style="margin-top:8px"><label>Adresse</label><input id="cus-addressLine" value="${esc(c.addressLine)}"></div>
+      <div class="form-grid" style="margin-top:8px">
+        <div class="ff"><label>Code postal</label><input id="cus-postalCode" value="${esc(c.postalCode)}"></div>
+        <div class="ff"><label>Ville</label><input id="cus-city" value="${esc(c.city)}"></div>
+      </div>
+      ${pos?`
+      <div class="modal-section">Position du compte</div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap;font-size:12px;margin-bottom:6px">
+        <div>Total facturé (HT) <strong style="font-family:monospace">${fmtEUR2(pos.totalHt)}</strong></div>
+        <div>Total facturé (TTC) <strong style="font-family:monospace">${fmtEUR2(pos.totalTtc)}</strong></div>
+        <div>Total réglé <strong style="font-family:monospace">${fmtEUR2(pos.totalPaid)}</strong></div>
+        <div>Solde dû <strong style="font-family:monospace;color:${pos.balanceDue>0.01?'#a32d2d':'#1f7a3f'}">${fmtEUR2(pos.balanceDue)}</strong></div>
+      </div>
+      <div class="modal-section">Factures</div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th style="width:100px">Date</th><th>N°</th><th style="width:100px;text-align:right">TTC</th><th style="width:100px;text-align:right">Reste dû</th><th style="width:120px">Statut</th></tr></thead>
+        <tbody>${invoiceRows||'<tr><td colspan="5" class="log-empty">Aucune facture.</td></tr>'}</tbody>
+      </table></div>
+      <div class="modal-section">Règlements</div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th style="width:100px">Date</th><th>Libellé banque</th><th>Facture</th><th style="width:100px;text-align:right">Montant</th></tr></thead>
+        <tbody>${paymentRows||'<tr><td colspan="4" class="log-empty">Aucun règlement.</td></tr>'}</tbody>
+      </table></div>`:''}
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="saveAccCustomer(${c.id?`'${c.id}'`:'null'})">Enregistrer</button>
+        <button class="btn btn-ghost" onclick="closeModal()">${c.id?'Fermer':'Annuler'}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function saveAccCustomer(id){
+  const g=i=>(document.getElementById(i)||{value:''}).value.trim();
+  const body = {name:g('cus-name'),siren:g('cus-siren'),siret:g('cus-siret'),vatNumber:g('cus-vatNumber'),email:g('cus-email'),phone:g('cus-phone'),country:g('cus-country'),addressLine:g('cus-addressLine'),postalCode:g('cus-postalCode'),city:g('cus-city')};
+  if(!body.name){ flash('Le nom est requis'); return; }
+  try{
+    const r = await apiFetch(id?('/wa/acc/customers/'+id+'?scope=crm'):'/wa/acc/customers?scope=crm', {method:id?'PUT':'POST', body:JSON.stringify(body)});
+    if(!r.ok) throw new Error('http '+r.status);
+    closeModal();
+    flash('Client enregistré');
+    ACC_LOADED.customers = false;
+    loadAccCustomersTab();
   }catch(e){ flash('Erreur d\'enregistrement'); }
 }
 
