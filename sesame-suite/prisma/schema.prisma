@@ -3275,6 +3275,10 @@ model AccBankTransaction {
   creditorRef     String? // référence créancier SEPA
   paymentType     String? // ex: VIR, PRLV, CB, CHQ — tel que fourni par la source
   bankCategory    String? // catégorie éventuelle fournie par la banque elle-même (distincte de la classification maison, phase 2)
+  // Labels analytiques Qonto (noms résolus, cf. lib/qonto.ts fetchQontoLabels)
+  // — vide pour tout import hors Qonto (CSV/CAMT.053/MT940/CFONB n'ont pas
+  // cette notion). Sert au filtre "label analytique" de l'onglet Banque.
+  qontoLabels     String[] @default([])
 
   // Classification maison (phase 2) — reglement_client | reglement_
   // fournisseur | prelevement_fournisseur | salaire | charge_sociale |

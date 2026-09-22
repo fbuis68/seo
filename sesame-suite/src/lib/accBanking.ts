@@ -24,6 +24,8 @@ export interface ParsedBankTransaction {
   creditorRef?: string;
   paymentType?: string;
   bankCategory?: string;
+  /** Labels analytiques Qonto (noms résolus) — vide pour tout import hors Qonto. */
+  labels?: string[];
   rawData: unknown;
 }
 
@@ -353,6 +355,7 @@ export async function importBankTransactions(
           creditorRef: tx.creditorRef,
           paymentType: tx.paymentType,
           bankCategory: tx.bankCategory,
+          qontoLabels: tx.labels || [],
           source,
           rawData: tx.rawData as Prisma.InputJsonValue,
         },

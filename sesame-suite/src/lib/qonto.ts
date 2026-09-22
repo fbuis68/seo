@@ -101,17 +101,36 @@ export async function fetchQontoOrganization(creds: QontoCredentials): Promise<{
 }
 
 /**
+ * Labels analytiques Qonto (fonctionnalité "comptabilité analytique" de
+ * Qonto — l'utilisateur y crée ses propres étiquettes, ex. "Établissement >
+ * Vichy", regroupées en listes) — résolus une seule fois par synchronisation
+ * plutôt qu'un appel par transaction (§ perf, cf. syncQontoBankAccount).
+ * Chaque transaction ne référence que des `label_ids` ; un id absent de la
+ * réponse (label supprimé depuis) est simplement ignoré plutôt que de faire
+ * échouer tout le mapping.
+ */
+async function fetchQontoLabels(creds: QontoCredentials): Promise<Map<string, string>> {
+  const json = await qontoRequest(creds, "/labels");
+  const map = new Map<string, string>();
+  for (const l of json.labels || []) {
+    if (l?.id && l?.name) map.set(String(l.id), String(l.name));
+  }
+  return map;
+}
+
+/**
  * Mappe une transaction Qonto (v2) vers ParsedBankTransaction — seules les
  * transactions "completed" sont retenues (une "pending" peut encore changer
  * de montant/être annulée, cf. §51 sur les statuts intermédiaires). L'id
  * Qonto est stable et sert directement d'externalId, pas besoin du repli
  * par hash utilisé pour les imports fichier.
  */
-function mapQontoTransaction(t: any): ParsedBankTransaction | null {
+function mapQontoTransaction(t: any, labelsById: Map<string, string>): ParsedBankTransaction | null {
   if (t.status !== "completed") return null;
   const amount = Math.abs(Number(t.amount) || 0);
   const signed = t.side === "credit" ? amount : -amount;
   const counterparty = t.counterparty?.name || t.counterparty_name || undefined;
+  const labels = ((t.label_ids || []) as string[]).map((id) => labelsById.get(String(id))).filter((n): n is string => !!n);
   return {
     externalId: String(t.id),
     operationDate: new Date(t.settled_at || t.emitted_at),
@@ -123,6 +142,7 @@ function mapQontoTransaction(t: any): ParsedBankTransaction | null {
     transactionRef: t.reference || undefined,
     paymentType: t.operation_type || undefined,
     bankCategory: t.category || undefined,
+    labels,
     rawData: t,
   };
 }
@@ -130,7 +150,7 @@ function mapQontoTransaction(t: any): ParsedBankTransaction | null {
 const QONTO_PAGE_SIZE = 100;
 
 /** Récupère toutes les transactions "completed" d'un IBAN depuis `since` (paginé), tri chronologique croissant. */
-async function fetchQontoTransactions(creds: QontoCredentials, iban: string, since: Date | null): Promise<ParsedBankTransaction[]> {
+async function fetchQontoTransactions(creds: QontoCredentials, iban: string, since: Date | null, labelsById: Map<string, string>): Promise<ParsedBankTransaction[]> {
   const out: ParsedBankTransaction[] = [];
   let page = 1;
   for (;;) {
@@ -145,7 +165,7 @@ async function fetchQontoTransactions(creds: QontoCredentials, iban: string, sin
     const json = await qontoRequest(creds, `/transactions?${params.toString()}`);
     const rows: any[] = json.transactions || [];
     for (const t of rows) {
-      const mapped = mapQontoTransaction(t);
+      const mapped = mapQontoTransaction(t, labelsById);
       if (mapped) out.push(mapped);
     }
     const totalPages = json.meta?.total_pages || 1;
@@ -179,10 +199,12 @@ export async function syncQontoBankAccount(bankAccountId: string): Promise<Qonto
   let parsed: ParsedBankTransaction[];
   let orgInfo: { slug: string; bankAccounts: QontoBankAccountInfo[] };
   try {
-    [parsed, orgInfo] = await Promise.all([
-      fetchQontoTransactions(creds, bankAccount.providerAccountId, bankAccount.lastSyncAt),
+    const [labelsById, orgInfoResult] = await Promise.all([
+      fetchQontoLabels(creds).catch(() => new Map<string, string>()), // labels analytiques : jamais bloquant, une organisation sans label configuré ou un endpoint indisponible ne doit pas casser la synchronisation
       fetchQontoOrganization(creds),
     ]);
+    orgInfo = orgInfoResult;
+    parsed = await fetchQontoTransactions(creds, bankAccount.providerAccountId, bankAccount.lastSyncAt, labelsById);
   } catch (e) {
     await prisma.accBankAccount.update({ where: { id: bankAccount.id }, data: { connectionStatus: "error" } });
     throw e;
