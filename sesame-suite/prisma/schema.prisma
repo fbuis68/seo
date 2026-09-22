@@ -73,6 +73,9 @@ model Entity {
   accBankMatches         AccBankMatch[]
   accRelanceRules        AccRelanceRule[]
   qontoConfig            QontoConfig?
+  gocardlessConfig       GoCardlessConfig?
+  accGoCardlessPayouts   AccGoCardlessPayout[]
+  accGoCardlessPayments  AccGoCardlessPayment[]
 }
 
 // Groupe d'établissements (ex : chaîne hôtelière) — gestion réservée aux
@@ -2847,10 +2850,16 @@ model AccCustomer {
   email       String?
   phone       String?
 
+  // Identifiant client GoCardless ("CU...") — lien stable une fois rapproché
+  // une première fois (par email, cf. lib/gocardless.ts matchOrCreateCustomer),
+  // pour ne plus jamais avoir à re-matcher ce client à chaque synchronisation.
+  gocardlessCustomerId String? @unique
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  invoices AccInvoice[]
+  invoices          AccInvoice[]
+  gocardlessPayments AccGoCardlessPayment[]
 
   @@index([entityId, siret])
   @@index([entityId, vatNumber])
@@ -3317,6 +3326,7 @@ model AccBankTransaction {
   updatedAt  DateTime @updatedAt
 
   matches AccBankMatch[]
+  gocardlessPayout AccGoCardlessPayout?
 
   @@unique([bankAccountId, externalId])
   @@index([entityId, status])
@@ -3356,6 +3366,83 @@ model AccBankMatch {
 
   @@index([entityId, bankTransactionId])
   @@index([entityId, invoiceId])
+}
+
+// Identifiants API GoCardless (encaissement de prélèvements clients) —
+// même portée/convention que QontoConfig (entityId=null : CRM/Sesame ;
+// entityId=<hôtel> : back-office). Un seul environnement par organisation
+// à la fois (sandbox OU live), jamais mélangés.
+model GoCardlessConfig {
+  id       String  @id @default(cuid())
+  entityId String? @unique
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  accessToken String
+  sandbox     Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Un "payout" GoCardless regroupe PLUSIEURS prélèvements clients en un seul
+// virement vers le compte bancaire (§ rapprochement demandé) — c'est donc
+// ce virement groupé, pas chaque prélèvement individuellement, qui doit
+// matcher une AccBankTransaction. bankTransactionId reste null tant
+// qu'aucune transaction bancaire correspondante (même montant, date
+// proche) n'a été identifiée — cf. lib/gocardless.ts matchPayoutToBank.
+model AccGoCardlessPayout {
+  id       String  @id @default(cuid())
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  gocardlessId String @unique // "PO..."
+  amount       Float
+  currency     String
+  arrivalDate  DateTime?
+  status       String // pending | paid | bounced
+  reference    String?
+
+  bankTransactionId String?             @unique
+  bankTransaction   AccBankTransaction? @relation(fields: [bankTransactionId], references: [id], onDelete: SetNull)
+
+  payments AccGoCardlessPayment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([entityId, status])
+}
+
+// Un prélèvement individuel côté client — cf. AccGoCardlessPayout pour le
+// virement groupé qui l'inclut une fois payé. customerId reste null tant
+// que le client GoCardless n'a pas pu être rapproché à une fiche AccCustomer
+// (cf. matchOrCreateCustomer, lib/gocardless.ts) — jamais bloquant, la
+// synchronisation continue même sans rapprochement pour ce prélèvement.
+model AccGoCardlessPayment {
+  id       String  @id @default(cuid())
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  gocardlessId String  @unique // "PM..."
+  customerId   String?
+  customer     AccCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  mandateId    String? // "MD..." — référence brute, pas de table Mandate dédiée (non nécessaire au-delà de la résolution du client)
+
+  amount      Float
+  currency    String
+  status      String // pending_customer_approval | pending_submission | submitted | confirmed | paid_out | cancelled | customer_approval_denied | failed | charged_back
+  chargeDate  DateTime?
+  description String?
+  reference   String?
+
+  payoutId String?
+  payout   AccGoCardlessPayout? @relation(fields: [payoutId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([entityId, customerId])
+  @@index([entityId, status])
 }
 
 // Règle de relance automatique de facture impayée (§ "relance à J+ de date

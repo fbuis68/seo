@@ -13,6 +13,7 @@ import { worstLevel, CheckResult } from "../lib/accChecks";
 import { recordAuditLog } from "../lib/accAudit";
 import { parseBankFile, importBankTransactions, BankImportError, BankImportSource } from "../lib/accBanking";
 import { fetchQontoOrganization, syncQontoBankAccount, QontoError, QontoCredentials } from "../lib/qonto";
+import { testGoCardlessConnection, syncGoCardless, GoCardlessError, GoCardlessCredentials } from "../lib/gocardless";
 import { findCandidates, confirmMatch, unmatch, autoReconcileMany, ReconciliationError } from "../lib/accReconciliation";
 import { sendRelanceBatch, runRelanceRule } from "../lib/accRelance";
 
@@ -828,6 +829,15 @@ accountingRouter.get(
       orderBy: { createdAt: "desc" },
     });
 
+    // Prélèvements GoCardless de ce client (§ rapprochement demandé) — vide
+    // pour tout client non rapproché à un customer GoCardless (customer.
+    // gocardlessCustomerId null), jamais bloquant pour le reste de la fiche.
+    const gocardlessPayments = await prisma.accGoCardlessPayment.findMany({
+      where: { customerId: customer.id },
+      include: { payout: { select: { id: true, status: true, arrivalDate: true, bankTransactionId: true } } },
+      orderBy: { chargeDate: "desc" },
+    });
+
     let totalHt = 0, totalTtc = 0, totalPaid = 0;
     for (const inv of invoices) {
       totalHt += inv.amountHt || 0;
@@ -840,6 +850,7 @@ accountingRouter.get(
       position: { totalHt, totalTtc, totalPaid, balanceDue: Math.max(0, totalTtc - totalPaid) },
       invoices,
       payments,
+      gocardlessPayments,
     });
   })
 );
@@ -1299,6 +1310,82 @@ accountingRouter.post(
   })
 );
 
+// ───────── Connecteur GoCardless (prélèvements clients + rapprochement) ─────────
+
+function shapeGoCardlessConfig(c: { accessToken: string; sandbox: boolean } | null) {
+  if (!c) return { accessTokenSet: false, accessTokenLast4: "", sandbox: false };
+  return { accessTokenSet: true, accessTokenLast4: c.accessToken.slice(-4), sandbox: c.sandbox };
+}
+
+accountingRouter.get(
+  "/acc/gocardless/config",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const config = await prisma.goCardlessConfig.findFirst({ where: { entityId } });
+    res.json(shapeGoCardlessConfig(config));
+  })
+);
+
+interface GoCardlessConfigBody {
+  accessToken?: string;
+  sandbox?: boolean;
+}
+
+/** PUT /wa/acc/gocardless/config — un accessToken vide conserve la valeur déjà enregistrée (même convention que /wa/acc/bank/qonto/config). */
+accountingRouter.put(
+  "/acc/gocardless/config",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const b = req.body as GoCardlessConfigBody;
+    const existing = await prisma.goCardlessConfig.findFirst({ where: { entityId } });
+    if (!b.accessToken && !existing) throw new HttpError(400, "accessToken requis à la première configuration");
+    const data = { ...(b.accessToken ? { accessToken: b.accessToken } : {}), sandbox: !!b.sandbox };
+    const config = existing
+      ? await prisma.goCardlessConfig.update({ where: { id: existing.id }, data })
+      : await prisma.goCardlessConfig.create({ data: { entityId, accessToken: b.accessToken!, sandbox: !!b.sandbox } });
+    await recordAuditLog({ entityId, userId: actorId(req), action: "gocardless_config_updated", targetType: "GoCardlessConfig", targetId: config.id, ip: req.ip });
+    res.json(shapeGoCardlessConfig(config));
+  })
+);
+
+/** POST /wa/acc/gocardless/test — valide les identifiants enregistrés, aucun effet de bord. */
+accountingRouter.post(
+  "/acc/gocardless/test",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const config = await prisma.goCardlessConfig.findFirst({ where: { entityId } });
+    if (!config) throw new HttpError(400, "Identifiants GoCardless non configurés");
+    const creds: GoCardlessCredentials = { accessToken: config.accessToken, sandbox: config.sandbox };
+    try {
+      await testGoCardlessConnection(creds);
+      res.json({ ok: true });
+    } catch (e) {
+      if (e instanceof GoCardlessError) throw new HttpError(400, e.message);
+      throw e;
+    }
+  })
+);
+
+/** POST /wa/acc/gocardless/sync — synchronise clients/mandats/prélèvements/virements et tente le rapprochement bancaire des virements (cf. lib/gocardless.ts syncGoCardless). */
+accountingRouter.post(
+  "/acc/gocardless/sync",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    try {
+      const result = await syncGoCardless(entityId);
+      await recordAuditLog({ entityId, userId: actorId(req), action: "gocardless_synced", targetType: "GoCardlessConfig", targetId: entityId || "crm", newValue: result, ip: req.ip });
+      res.json(result);
+    } catch (e) {
+      if (e instanceof GoCardlessError) throw new HttpError(400, e.message);
+      throw e;
+    }
+  })
+);
+
 accountingRouter.get(
   "/acc/bank/transactions",
   requireAdmin,
@@ -1313,7 +1400,7 @@ accountingRouter.get(
       orderBy: { operationDate: "desc" },
       take,
       skip: Number(req.query.skip) || 0,
-      include: { matches: { select: { allocatedAmount: true } } },
+      include: { matches: { select: { allocatedAmount: true } }, gocardlessPayout: { select: { id: true, gocardlessId: true } } },
     });
     res.json(rows.map((r) => {
       const { matches, ...rest } = r;

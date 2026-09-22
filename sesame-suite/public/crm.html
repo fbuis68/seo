@@ -7428,6 +7428,7 @@ let ACC_INVOICES=[], ACC_SUPPLIERS=[], ACC_CUSTOMERS=[], ACC_ACCOUNTS=[], ACC_JO
 let ACC_BANK_ACCOUNTS=[], ACC_BANK_TX=[], ACC_BANK_SELECTED=null;
 let ACC_BANK_FILTER={type:'all', label:'', excludePrelevements:false, hideMatched:false};
 let ACC_QONTO_CONFIG=null, ACC_QONTO_TEST_ACCOUNTS=null;
+let ACC_GOCARDLESS_CONFIG=null;
 let ACC_TAB='inbox';
 const ACC_LOADED={};
 const ACC_STATUS_LABEL={RECEIVED:'Reçue',PROCESSING:'En traitement',OCR_COMPLETED:'OCR effectué',EXTRACTED:'Extraite',CHECK_REQUIRED:'À vérifier',VALIDATED:'Validée',ACCOUNTED:'Comptabilisée',PARTIALLY_PAID:'Partiellement payée',PAID:'Payée',REJECTED:'Rejetée'};
@@ -8674,6 +8675,15 @@ function renderAccCustomerModal(c, detail){
       <td>${esc(p.invoice.invoiceNumber||'(sans n°)')}</td>
       <td style="text-align:right">${fmtEUR2(p.allocatedAmount)}</td>
     </tr>`).join('') : '';
+  const gcStatusTag = {pending_customer_approval:'t-gray',pending_submission:'t-gray',submitted:'t-gray',confirmed:'t-amber',paid_out:'t-green',cancelled:'t-red',customer_approval_denied:'t-red',failed:'t-red',charged_back:'t-red'};
+  const gcRows = detail && detail.gocardlessPayments ? detail.gocardlessPayments.map(p=>`
+    <tr>
+      <td>${p.chargeDate?new Date(p.chargeDate).toLocaleDateString('fr-FR'):'—'}</td>
+      <td>${esc(p.description||p.reference||'(sans libellé)')}</td>
+      <td style="text-align:right;font-family:monospace">${fmtEUR2(p.amount)}</td>
+      <td><span class="tag ${gcStatusTag[p.status]||'t-gray'}" style="font-size:10px;padding:1px 7px">${esc(p.status)}</span></td>
+      <td>${p.payout?(p.payout.bankTransactionId?'<span class="tag t-green" style="font-size:10px;padding:1px 7px">Rapproché</span>':'<span class="tag t-gray" style="font-size:10px;padding:1px 7px">Virement non rapproché</span>'):'—'}</td>
+    </tr>`).join('') : '';
 
   document.getElementById('modal-ct').innerHTML = `
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
@@ -8711,6 +8721,11 @@ function renderAccCustomerModal(c, detail){
       <div class="tbl-wrap"><table>
         <thead><tr><th style="width:100px">Date</th><th>Libellé banque</th><th>Facture</th><th style="width:100px;text-align:right">Montant</th></tr></thead>
         <tbody>${paymentRows||'<tr><td colspan="4" class="log-empty">Aucun règlement.</td></tr>'}</tbody>
+      </table></div>
+      <div class="modal-section">Prélèvements GoCardless</div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th style="width:100px">Date</th><th>Libellé</th><th style="width:100px;text-align:right">Montant</th><th style="width:140px">Statut</th><th style="width:170px">Virement</th></tr></thead>
+        <tbody>${gcRows||'<tr><td colspan="5" class="log-empty">Aucun prélèvement GoCardless pour ce client.</td></tr>'}</tbody>
       </table></div>`:''}
       </div>
       <div class="modal-footer">
@@ -8851,6 +8866,10 @@ async function loadAccBankTab(){
     const r = await apiFetch('/wa/acc/bank/qonto/config?scope=crm');
     ACC_QONTO_CONFIG = r.ok ? await r.json() : null;
   }catch(e){ ACC_QONTO_CONFIG=null; }
+  try{
+    const r = await apiFetch('/wa/acc/gocardless/config?scope=crm');
+    ACC_GOCARDLESS_CONFIG = r.ok ? await r.json() : null;
+  }catch(e){ ACC_GOCARDLESS_CONFIG=null; }
   if(ACC_BANK_SELECTED && !ACC_BANK_ACCOUNTS.some(a=>a.id===ACC_BANK_SELECTED)) ACC_BANK_SELECTED=null;
   if(!ACC_BANK_SELECTED && ACC_BANK_ACCOUNTS.length) ACC_BANK_SELECTED = ACC_BANK_ACCOUNTS[0].id;
   await loadAccBankTransactions();
@@ -8904,10 +8923,11 @@ function renderAccBank(){
     else if(matched<total-0.009) recoBadge = `<span class="tag t-amber" style="font-size:10px;padding:1px 7px">Partielle (${fmtEUR2(matched)}/${fmtEUR2(total)})</span>`;
     else recoBadge = `<span class="tag t-green" style="font-size:10px;padding:1px 7px">Rapprochée</span>`;
     const labelBadges = (t.qontoLabels||[]).length?`<div style="margin-top:3px;display:flex;gap:4px;flex-wrap:wrap">${t.qontoLabels.map(l=>`<span class="tag t-gray" style="font-size:9px;padding:1px 6px">${esc(l)}</span>`).join('')}</div>`:'';
+    const gcBadge = t.gocardlessPayout?`<div style="margin-top:3px"><span class="tag t-blue" style="font-size:9px;padding:1px 6px" title="Virement groupé de prélèvements GoCardless">⇄ GoCardless</span></div>`:'';
     return `
     <tr style="cursor:pointer" onclick="openAccBankMatchModal('${t.id}')">
       <td>${new Date(t.operationDate).toLocaleDateString('fr-FR')}</td>
-      <td>${esc(t.rawLabel)}${labelBadges}</td>
+      <td>${esc(t.rawLabel)}${labelBadges}${gcBadge}</td>
       <td>${esc(t.counterpartyName||'—')}</td>
       <td style="text-align:right;font-family:monospace;color:${t.amount<0?'#a32d2d':'#1f7a3f'}">${fmtEUR2(t.amount)}</td>
       <td>${ACC_BANK_SOURCE_LABEL[t.source]||t.source}</td>
@@ -8916,11 +8936,18 @@ function renderAccBank(){
   }).join('');
 
   const qontoCfg = ACC_QONTO_CONFIG || {login:'',secretKeySet:false,secretKeyLast4:'',sandbox:false};
+  const gcCfg = ACC_GOCARDLESS_CONFIG || {accessTokenSet:false,accessTokenLast4:'',sandbox:false};
   el.innerHTML = `
     <div class="modal-section" style="margin-top:0">Connecteur Qonto</div>
     <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px">
       <span style="font-size:12px;color:var(--mu)">${qontoCfg.secretKeySet?`Connecté à l'organisation <strong>${esc(qontoCfg.login)}</strong>${qontoCfg.sandbox?' (sandbox)':''}, clé finissant par ${esc(qontoCfg.secretKeyLast4)}.`:"Non configuré — permet la synchronisation automatique des transactions sans import manuel."}</span>
       <button class="btn btn-ghost btn-sm" onclick="openAccQontoConfigModal()">${qontoCfg.secretKeySet?'Modifier':'Configurer Qonto'}</button>
+    </div>
+    <div class="modal-section">Connecteur GoCardless (prélèvements clients)</div>
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px">
+      <span style="font-size:12px;color:var(--mu)">${gcCfg.accessTokenSet?`Connecté${gcCfg.sandbox?' (sandbox)':''}, jeton finissant par ${esc(gcCfg.accessTokenLast4)}.`:"Non configuré — récupère les prélèvements par client et les rapproche des virements bancaires."}</span>
+      <button class="btn btn-ghost btn-sm" onclick="openAccGoCardlessConfigModal()">${gcCfg.accessTokenSet?'Modifier':'Configurer GoCardless'}</button>
+      ${gcCfg.accessTokenSet?`<button class="btn btn-ghost btn-sm" onclick="accSyncGoCardless()">Synchroniser maintenant</button>`:''}
     </div>
     <div class="list-toolbar">
       <button class="btn btn-primary btn-sm" onclick="openAccBankAccountModal()">+ Compte bancaire</button>
@@ -9183,6 +9210,76 @@ async function accDisconnectQonto(id){
     flash('Compte déconnecté');
     loadAccBankTab();
   }catch(e){ flash(e.message||'Erreur'); }
+}
+
+function openAccGoCardlessConfigModal(){
+  const c = ACC_GOCARDLESS_CONFIG || {accessTokenSet:false,accessTokenLast4:'',sandbox:false};
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:460px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Connecteur GoCardless</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div style="font-size:12px;color:var(--mu);margin-bottom:10px">Jeton d'accès disponible dans le dashboard GoCardless (Développeurs &gt; Créer un jeton d'accès).</div>
+      <div class="ff"><label>Jeton d'accès${c.accessTokenSet?' (laisser vide pour conserver celui enregistré, finit par '+esc(c.accessTokenLast4)+')':''}</label><input id="gc-accessToken" type="password"></div>
+      <div class="ff" style="margin-top:8px"><label><input type="checkbox" id="gc-sandbox" ${c.sandbox?'checked':''} style="width:auto;margin-right:6px">Environnement sandbox (test)</label></div>
+      <div id="gc-status" style="font-size:12px;margin-top:8px"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost btn-sm" onclick="accTestGoCardlessConfig()">Tester la connexion</button>
+        <button class="btn btn-primary" onclick="saveAccGoCardlessConfig()">Enregistrer</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function saveAccGoCardlessConfig(){
+  const g=i=>(document.getElementById(i)||{value:''}).value.trim();
+  const body = {sandbox:document.getElementById('gc-sandbox').checked};
+  const accessToken = g('gc-accessToken');
+  if(accessToken) body.accessToken = accessToken;
+  if(!body.accessToken && !(ACC_GOCARDLESS_CONFIG&&ACC_GOCARDLESS_CONFIG.accessTokenSet)){ flash('Jeton d\'accès requis'); return; }
+  try{
+    const r = await apiFetch('/wa/acc/gocardless/config?scope=crm', {method:'PUT', body:JSON.stringify(body)});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    ACC_GOCARDLESS_CONFIG = data;
+    closeModal();
+    flash('Configuration GoCardless enregistrée');
+    renderAccBank();
+  }catch(e){ flash(e.message||'Erreur d\'enregistrement'); }
+}
+
+async function accTestGoCardlessConfig(){
+  const statusEl = document.getElementById('gc-status');
+  statusEl.textContent = 'Test en cours…'; statusEl.style.color = 'var(--mu)';
+  // Un test porte sur la config déjà enregistrée en base — on enregistre d'abord la saisie courante.
+  const g=i=>(document.getElementById(i)||{value:''}).value.trim();
+  const body = {sandbox:document.getElementById('gc-sandbox').checked};
+  const accessToken = g('gc-accessToken');
+  if(accessToken) body.accessToken = accessToken;
+  if(body.accessToken){
+    try{
+      const r = await apiFetch('/wa/acc/gocardless/config?scope=crm', {method:'PUT', body:JSON.stringify(body)});
+      if(r.ok) ACC_GOCARDLESS_CONFIG = await r.json();
+    }catch(e){}
+  }
+  try{
+    const r = await apiFetch('/wa/acc/gocardless/test?scope=crm', {method:'POST'});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    statusEl.style.color = '#1f7a3f';
+    statusEl.textContent = 'Connexion réussie.';
+  }catch(e){ statusEl.style.color = '#a32d2d'; statusEl.textContent = e.message||'Échec de la connexion'; }
+}
+
+async function accSyncGoCardless(){
+  flash('Synchronisation GoCardless en cours…');
+  try{
+    const r = await apiFetch('/wa/acc/gocardless/sync?scope=crm', {method:'POST'});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash(data.paymentsSynced+' prélèvement(s), '+data.payoutsSynced+' virement(s) ('+data.payoutsMatched+' rapproché(s) à la banque)');
+    loadAccBankTab();
+  }catch(e){ flash(e.message||'Erreur de synchronisation'); }
 }
 
 let ABM_SHOW_ALL = false;
