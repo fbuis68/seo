@@ -116,7 +116,7 @@ async function matchPayoutToBank(entityId: string | null, payout: AccGoCardlessP
   const candidates = await prisma.accBankTransaction.findMany({
     where: {
       entityId,
-      direction: "credit",
+      direction: "CREDIT", // AccBankTransaction.direction est stocké en MAJUSCULES (cf. accBanking.ts) — "credit" ne matchait JAMAIS, bug trouvé le 22/09/2026 (0 rapproché en toute circonstance)
       operationDate: { gte: from, lte: to },
       gocardlessPayout: { is: null },
     },
