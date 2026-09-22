@@ -7360,7 +7360,7 @@ async function testRule(id){
 // ════════════════════════════════════════
 let ACC_INVOICES=[], ACC_SUPPLIERS=[], ACC_CUSTOMERS=[], ACC_ACCOUNTS=[], ACC_JOURNALS=[], ACC_ENTRIES=[], ACC_RULES=[], ACC_DASH=null;
 let ACC_BANK_ACCOUNTS=[], ACC_BANK_TX=[], ACC_BANK_SELECTED=null;
-let ACC_BANK_FILTER={type:'all', label:'', excludePrelevements:false};
+let ACC_BANK_FILTER={type:'all', label:'', excludePrelevements:false, hideMatched:false};
 let ACC_QONTO_CONFIG=null, ACC_QONTO_TEST_ACCOUNTS=null;
 let ACC_TAB='inbox';
 const ACC_LOADED={};
@@ -8875,10 +8875,14 @@ function renderAccBank(){
         <input type="checkbox" id="abf-exclude-prlv" ${ACC_BANK_FILTER.excludePrelevements?'checked':''} ${ACC_BANK_FILTER.type==='prelevement'?'disabled':''} onchange="accBankFilterChange()">
         Exclure les prélèvements
       </label>
-      ${allLabels.length?`<select id="abf-label" onchange="accBankFilterChange()">
-        <option value="">Tous labels</option>
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:400">
+        <input type="checkbox" id="abf-hide-matched" ${ACC_BANK_FILTER.hideMatched?'checked':''} onchange="accBankFilterChange()">
+        Masquer les transactions déjà rapprochées
+      </label>
+      <select id="abf-label" onchange="accBankFilterChange()" ${allLabels.length?'':'disabled'} title="${allLabels.length?'':'Aucun label analytique Qonto sur ce compte — étiquetez des transactions dans Qonto puis resynchronisez'}">
+        <option value="">${allLabels.length?'Tous labels':'Aucun label Qonto sur ce compte'}</option>
         ${allLabels.map(l=>`<option value="${esc(l)}" ${ACC_BANK_FILTER.label===l?'selected':''}>${esc(l)}</option>`).join('')}
-      </select>`:''}
+      </select>
     </div>
     <div class="tbl-wrap"><table>
       <thead><tr><th style="width:100px">Date</th><th>Libellé</th><th>Contrepartie</th><th style="width:120px;text-align:right">Montant</th><th style="width:90px">Source</th><th style="width:160px">Rapprochement</th></tr></thead>
@@ -8895,12 +8899,21 @@ function accIsPrelevement(t){
   if(!t.paymentType) return false;
   return PRELEVEMENT_PAYMENT_TYPES.has(String(t.paymentType).toLowerCase().replace(/[^a-z]/g,''));
 }
+// Même seuil que le badge "Rapprochée" affiché sur chaque ligne (montant
+// alloué >= montant total, à 1 centime près) — une transaction "Partielle"
+// reste donc visible : encore un reste à affecter, pas encore terminée.
+function accIsFullyMatched(t){
+  const matched = Math.abs(t.matchedAmount||0);
+  const total = Math.abs(t.amount);
+  return t.status!=='IGNORED' && t.status!=='INTERNAL_TRANSFER' && matched>=total-0.009 && total>0;
+}
 function accBankFilteredTx(){
   return ACC_BANK_TX.filter(t=>{
     if(ACC_BANK_FILTER.type==='credit' && t.amount<0) return false;
     if(ACC_BANK_FILTER.type==='debit' && t.amount>=0) return false;
     if(ACC_BANK_FILTER.type==='prelevement' && !accIsPrelevement(t)) return false;
     if(ACC_BANK_FILTER.excludePrelevements && accIsPrelevement(t)) return false;
+    if(ACC_BANK_FILTER.hideMatched && accIsFullyMatched(t)) return false;
     if(ACC_BANK_FILTER.label && !(t.qontoLabels||[]).includes(ACC_BANK_FILTER.label)) return false;
     return true;
   });
@@ -8909,6 +8922,7 @@ function accBankFilterChange(){
   const typeEl = document.getElementById('abf-type');
   const labelEl = document.getElementById('abf-label');
   const excludeEl = document.getElementById('abf-exclude-prlv');
+  const hideMatchedEl = document.getElementById('abf-hide-matched');
   const type = typeEl?typeEl.value:'all';
   ACC_BANK_FILTER = {
     type,
@@ -8918,6 +8932,7 @@ function accBankFilterChange(){
     // et son état ignoré plutôt que de piéger l'utilisateur sur une liste
     // vide sans explication.
     excludePrelevements: type!=='prelevement' && !!(excludeEl && excludeEl.checked),
+    hideMatched: !!(hideMatchedEl && hideMatchedEl.checked),
   };
   renderAccBank();
 }
@@ -9129,9 +9144,20 @@ async function loadAccBankMatchModal(txId){
     data = await r.json();
   }catch(e){ body.innerHTML = '<div class="log-empty">Erreur de chargement</div>'; return; }
 
+  // Nom du tiers TEL QU'IL FIGURE SUR LA FACTURE — le client (recipientName)
+  // à la vente, le fournisseur (issuerName) à l'achat — prioritairement le
+  // tiers rapproché (nom officiel) quand il existe, sinon la valeur brute
+  // extraite du document. Sans ça, deux factures au même montant ne se
+  // distinguent visuellement que par leur numéro dans cette liste.
+  function accTiersNameOnInvoice(inv){
+    if(inv.direction==='sale') return (inv.customer&&inv.customer.name) || inv.recipientName || '—';
+    return (inv.supplier&&inv.supplier.name) || inv.issuerName || '—';
+  }
+
   const matchRows = data.matches.map(m=>`
     <tr>
       <td>${esc(m.invoice.invoiceNumber||'(sans n°)')}</td>
+      <td>${esc(accTiersNameOnInvoice(m.invoice))}</td>
       <td>${fmtEUR2(m.allocatedAmount)}</td>
       <td>${m.type==='auto'?'Automatique':'Manuel'}${m.score!=null?' ('+Math.round(m.score)+')':''}</td>
       <td><button class="ta-btn" onclick="accUnmatch('${m.id}','${txId}')" title="Retirer">🗑</button></td>
@@ -9140,6 +9166,7 @@ async function loadAccBankMatchModal(txId){
   const candidateRows = data.candidates.map(c=>`
     <tr>
       <td>${esc(c.invoice.invoiceNumber||'(sans n°)')}</td>
+      <td>${esc(accTiersNameOnInvoice(c.invoice))}</td>
       <td>${fmtEUR2(c.remainingDue)}</td>
       <td><span class="tag ${c.score>=95?'t-green':c.score>=80?'t-amber':'t-gray'}" style="font-size:10px;padding:1px 7px">${Math.round(c.score)}</span></td>
       <td style="font-size:11px;color:var(--mu)">${esc((c.reasons||[]).join(', '))}</td>
@@ -9148,14 +9175,14 @@ async function loadAccBankMatchModal(txId){
 
   body.innerHTML = `
     ${matchRows?`<div class="modal-section" style="margin-top:0">Rapprochements confirmés</div>
-    <div class="tbl-wrap"><table><thead><tr><th>Facture</th><th>Montant alloué</th><th>Type</th><th></th></tr></thead><tbody>${matchRows}</tbody></table></div>`:''}
+    <div class="tbl-wrap"><table><thead><tr><th>Facture</th><th>Tiers</th><th>Montant alloué</th><th>Type</th><th></th></tr></thead><tbody>${matchRows}</tbody></table></div>`:''}
     <div class="modal-section" style="${matchRows?'':'margin-top:0'};display:flex;align-items:center;gap:10px">
       <span>${ABM_SHOW_ALL?'Toutes les factures ouvertes non affectées':'Candidats suggérés'}</span>
       <button class="btn btn-ghost btn-sm" onclick="accToggleAbmShowAll('${txId}')" style="font-size:11px">${ABM_SHOW_ALL?'← Revenir aux suggestions':'Voir toutes les factures non affectées'}</button>
     </div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th>Facture</th><th>Reste dû</th><th style="width:60px">Score</th><th>Éléments</th><th style="width:100px"></th></tr></thead>
-      <tbody>${candidateRows||'<tr><td colspan="5" class="log-empty">Aucune facture trouvée.</td></tr>'}</tbody>
+      <thead><tr><th>Facture</th><th>Tiers</th><th>Reste dû</th><th style="width:60px">Score</th><th>Éléments</th><th style="width:100px"></th></tr></thead>
+      <tbody>${candidateRows||'<tr><td colspan="6" class="log-empty">Aucune facture trouvée.</td></tr>'}</tbody>
     </table></div>`;
 }
 

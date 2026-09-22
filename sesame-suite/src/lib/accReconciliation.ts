@@ -65,7 +65,7 @@ async function partyForInvoice(inv: AccInvoice): Promise<PartyInfo | null> {
 }
 
 export interface ScoredCandidate {
-  invoice: AccInvoice;
+  invoice: AccInvoice & { supplier: AccSupplier | null; customer: AccCustomer | null };
   score: number;
   remainingDue: number;
   reasons: string[];
@@ -176,6 +176,7 @@ export async function findCandidates(bankTransactionId: string, limit = 15, incl
       status: { in: ["VALIDATED", "ACCOUNTED", "PARTIALLY_PAID"] },
       ...(tx.currency ? { OR: [{ currency: tx.currency }, { currency: null }] } : {}),
     },
+    include: { supplier: true, customer: true },
   });
 
   const candidates: ScoredCandidate[] = [];

@@ -200,7 +200,16 @@ export async function syncQontoBankAccount(bankAccountId: string): Promise<Qonto
   let orgInfo: { slug: string; bankAccounts: QontoBankAccountInfo[] };
   try {
     const [labelsById, orgInfoResult] = await Promise.all([
-      fetchQontoLabels(creds).catch(() => new Map<string, string>()), // labels analytiques : jamais bloquant, une organisation sans label configuré ou un endpoint indisponible ne doit pas casser la synchronisation
+      // Labels analytiques : jamais bloquant, une organisation sans label
+      // configuré ou un endpoint indisponible ne doit pas casser la
+      // synchronisation — mais logué (pas juste avalé en silence) pour
+      // pouvoir diagnostiquer un vrai problème d'API (ex : forme de réponse
+      // Qonto différente de celle attendue) sans que "aucun label" et "échec
+      // d'appel" soient indiscernables depuis l'interface.
+      fetchQontoLabels(creds).catch((e) => {
+        console.warn(`[qonto] fetchQontoLabels a échoué (labels analytiques non résolus pour ce sync) : ${e instanceof Error ? e.message : e}`);
+        return new Map<string, string>();
+      }),
       fetchQontoOrganization(creds),
     ]);
     orgInfo = orgInfoResult;

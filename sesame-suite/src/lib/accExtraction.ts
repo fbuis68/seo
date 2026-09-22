@@ -374,10 +374,21 @@ export function extractInvoiceData(text: string): ExtractedInvoiceData {
   // constaté en production, 22/09/2026, sur une facture dont l'en-tête ne
   // contient QUE adresse + téléphone avant le vrai nom.
   const NAME_LINE_EXCLUDE_RE = /^(t[ée]l[ée]?(?:phone)?|fax|mobile|email|e-?mail|contact)[ \t]*:/i;
+  // Mentions légales de bas de page (RCS, SIRET, forme sociale + capital,
+  // Code APE, IBAN/BIC, tribunal compétent, conditions de vente...) — même
+  // texte que le NÔTRE (l'émetteur) apparaît souvent en double sur le
+  // document (répété en pied de chaque page), et l'ordre d'extraction d'un
+  // PDF ne suit pas forcément l'ordre visuel : sans cette exclusion, le
+  // repli positionnel (extractRecipientBlockFallback) pouvait retomber sur
+  // CE bloc légal plutôt que sur le vrai nom du client, constaté en
+  // production, 22/09/2026 ("le champ client contient toujours le bas de
+  // page avec notre RCS").
+  const LEGAL_BOILERPLATE_RE = /\bRCS\b|\bSIRET\b|\bSIREN\b|code\s*APE|au\s*capital|N°\s*TVA|\bIBAN\b|\bBIC\b|tribunal\s*de\s*commerce|conditions?\s*(de|g[ée]n[ée]rales)/i;
+  const isExcludedNameLine = (l: string) => NAME_LINE_EXCLUDE_RE.test(l) || LEGAL_BOILERPLATE_RE.test(l);
   const firstLine = text
     .split("\n")
     .map((l) => l.trim())
-    .find((l) => l.length > 2 && l.length < 80 && !/^\d/.test(l) && !NAME_LINE_EXCLUDE_RE.test(l));
+    .find((l) => l.length > 2 && l.length < 80 && !/^\d/.test(l) && !isExcludedNameLine(l));
   if (firstLine) {
     result.issuerName = firstLine;
     confidence.issuerName = 0.3;
@@ -392,7 +403,7 @@ export function extractInvoiceData(text: string): ExtractedInvoiceData {
     const recipientNameLine = recipientBlock
       .split("\n")
       .map((l) => l.trim())
-      .find((l) => l.length > 2 && l.length < 80 && !/^\d/.test(l) && !NAME_LINE_EXCLUDE_RE.test(l));
+      .find((l) => l.length > 2 && l.length < 80 && !/^\d/.test(l) && !isExcludedNameLine(l));
     if (recipientNameLine) {
       result.recipientName = recipientNameLine;
       // Repli positionnel (pas de mot-clé "Facturé à"/"Destinataire" trouvé)

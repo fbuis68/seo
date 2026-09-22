@@ -1330,7 +1330,7 @@ accountingRouter.get(
     // l'utilisateur sait, lui, quelle facture affecter.
     const all = req.query.all === "1";
     const [matches, candidates] = await Promise.all([
-      prisma.accBankMatch.findMany({ where: { bankTransactionId: tx.id }, include: { invoice: true }, orderBy: { createdAt: "asc" } }),
+      prisma.accBankMatch.findMany({ where: { bankTransactionId: tx.id }, include: { invoice: { include: { supplier: true, customer: true } } }, orderBy: { createdAt: "asc" } }),
       findCandidates(tx.id, all ? 500 : 15, all),
     ]);
     const matchedInvoiceIds = new Set(matches.map((m) => m.invoiceId));
