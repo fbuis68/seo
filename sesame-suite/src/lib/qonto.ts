@@ -207,8 +207,22 @@ export interface QontoSyncResult extends ImportBankTransactionsResult {
  * providerAccountId=IBAN) — récupère les transactions nouvelles depuis le
  * dernier sync (lastSyncAt), les importe (idempotent, cf. accBanking.ts) et
  * met à jour le solde + connectionStatus.
+ *
+ * `full=true` ignore lastSyncAt et refait passer TOUT l'historique — jamais
+ * utilisé par le planificateur (delta uniquement, cf. qontoScheduler.ts),
+ * seulement à la demande (bouton dédié). Nécessaire pour rattraper des
+ * champs ajoutés APRÈS l'import initial d'une transaction (ex : labels
+ * analytiques assignés dans Qonto après coup, ou la résolution de labels
+ * elle-même ajoutée le 22/09/2026) : le sync normal ne revisite jamais une
+ * transaction déjà connue et antérieure à lastSyncAt, donc ne peut pas la
+ * backfiller — constaté en production, 22/09/2026 (labels bien présents et
+ * assignés côté Qonto, mais jamais remontés malgré plusieurs
+ * resynchronisations "normales" sur un compte déjà connecté de longue
+ * date). importBankTransactions gère déjà la mise à jour d'une transaction
+ * déjà connue (upsert sur bankAccountId+externalId) — refaire passer tout
+ * l'historique ne crée donc aucun doublon, seulement des mises à jour.
  */
-export async function syncQontoBankAccount(bankAccountId: string): Promise<QontoSyncResult> {
+export async function syncQontoBankAccount(bankAccountId: string, options?: { full?: boolean }): Promise<QontoSyncResult> {
   const bankAccount = await prisma.accBankAccount.findUnique({ where: { id: bankAccountId } });
   if (!bankAccount) throw new QontoError("Compte bancaire introuvable");
   if (bankAccount.provider !== "qonto" || !bankAccount.providerAccountId) {
@@ -236,7 +250,8 @@ export async function syncQontoBankAccount(bankAccountId: string): Promise<Qonto
       fetchQontoOrganization(creds),
     ]);
     orgInfo = orgInfoResult;
-    parsed = await fetchQontoTransactions(creds, bankAccount.providerAccountId, bankAccount.lastSyncAt, labelsById);
+    const since = options?.full ? null : bankAccount.lastSyncAt;
+    parsed = await fetchQontoTransactions(creds, bankAccount.providerAccountId, since, labelsById);
   } catch (e) {
     await prisma.accBankAccount.update({ where: { id: bankAccount.id }, data: { connectionStatus: "error" } });
     throw e;

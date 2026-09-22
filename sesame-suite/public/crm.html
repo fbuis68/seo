@@ -8876,6 +8876,7 @@ function renderAccBank(){
     const statusBadge = `<span class="tag ${ACC_QONTO_STATUS_TAG[a.connectionStatus]||'t-gray'}" style="font-size:10px;padding:1px 7px">${ACC_QONTO_STATUS_LABEL[a.connectionStatus]||a.connectionStatus}</span>`;
     const actions = isQonto
       ? `<button class="ta-btn" onclick="accSyncQontoAccount('${a.id}')" title="Synchroniser maintenant">↻</button>
+         <button class="ta-btn" onclick="accSyncQontoAccount('${a.id}',true)" title="Resynchroniser tout l'historique (rattrape les labels/champs ajoutés après coup sur des transactions déjà importées)">↻⟲</button>
          <button class="ta-btn" onclick="accDisconnectQonto('${a.id}')" title="Déconnecter de Qonto">⛓</button>`
       : `<button class="ta-btn" onclick="openAccBankImportModal('${a.id}')" title="Importer un relevé">⇧</button>
          ${ACC_QONTO_CONFIG&&ACC_QONTO_CONFIG.secretKeySet?`<button class="ta-btn" onclick="openAccQontoConnectModal('${a.id}')" title="Connecter à Qonto">🔗</button>`:''}
@@ -9160,10 +9161,11 @@ async function accConnectQonto(bankAccountId){
   }catch(e){ flash(e.message||'Erreur de connexion'); }
 }
 
-async function accSyncQontoAccount(id){
-  flash('Synchronisation en cours…');
+async function accSyncQontoAccount(id, full){
+  if(full && !confirm("Resynchroniser tout l'historique ? Peut prendre plus de temps qu'une synchronisation normale sur un compte ancien.")) return;
+  flash(full?'Resynchronisation complète en cours…':'Synchronisation en cours…');
   try{
-    const r = await apiFetch('/wa/acc/bank/accounts/'+id+'/qonto/sync?scope=crm', {method:'POST'});
+    const r = await apiFetch('/wa/acc/bank/accounts/'+id+'/qonto/sync?scope=crm'+(full?'&full=1':''), {method:'POST'});
     const data = await r.json();
     if(!r.ok) throw new Error(data.error||'http '+r.status);
     flash(data.created+' nouvelle(s) transaction(s)'+(data.skipped?', '+data.skipped+' déjà connue(s)':''));

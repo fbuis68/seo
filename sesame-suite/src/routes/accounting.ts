@@ -1273,7 +1273,13 @@ accountingRouter.post(
   })
 );
 
-/** POST /wa/acc/bank/accounts/:id/qonto/sync — synchronisation manuelle immédiate (même logique que le planificateur de fond). */
+/**
+ * POST /wa/acc/bank/accounts/:id/qonto/sync — synchronisation manuelle
+ * immédiate (même logique que le planificateur de fond, delta depuis
+ * lastSyncAt). ?full=1 refait passer tout l'historique (ignore lastSyncAt)
+ * — pour backfiller un champ ajouté après coup (ex : labels analytiques)
+ * sur des transactions déjà importées, jamais revisitées par un sync normal.
+ */
 accountingRouter.post(
   "/acc/bank/accounts/:id/qonto/sync",
   requireAdmin,
@@ -1281,9 +1287,10 @@ accountingRouter.post(
     const entityId = await resolveScope(req);
     const existing = await prisma.accBankAccount.findFirst({ where: { id: req.params.id, entityId } });
     if (!existing) throw new HttpError(404, "Compte bancaire introuvable");
+    const full = req.query.full === "1";
     try {
-      const result = await syncQontoBankAccount(existing.id);
-      await recordAuditLog({ entityId, userId: actorId(req), action: "qonto_synced", targetType: "AccBankAccount", targetId: existing.id, newValue: result, ip: req.ip });
+      const result = await syncQontoBankAccount(existing.id, { full });
+      await recordAuditLog({ entityId, userId: actorId(req), action: full ? "qonto_full_resynced" : "qonto_synced", targetType: "AccBankAccount", targetId: existing.id, newValue: result, ip: req.ip });
       res.json(result);
     } catch (e) {
       if (e instanceof QontoError) throw new HttpError(400, e.message);
