@@ -536,6 +536,11 @@ crmProspectRouter.post(
   })
 );
 
+// Statuts considérés "terminés" pour un ticket — ceux qui n'ont plus besoin
+// d'aucun suivi actif. Distinct de TICKET_STATUSES (crm.html) mais reflète
+// les mêmes libellés.
+const RESOLVED_TICKET_STATUSES = ["Résolu", "Fermé"];
+
 /**
  * POST /wa/crmProspect/requalifyAsContact — corrige une fiche créée par
  * erreur en tant que fiche "Client" complète alors qu'il s'agit en réalité
@@ -544,11 +549,15 @@ crmProspectRouter.post(
  * sur la bonne fiche). Convertit (nom/email/tel → CrmContact rattaché au
  * client cible) puis supprime la fiche d'origine.
  *
- * Refuse si la fiche d'origine porte déjà des données propres (tickets,
- * activités, affaires, contacts, abonnement) — la supprimer perdrait cet
- * historique sans recours, alors qu'une fiche tout juste créée par erreur
- * n'en a par construction aucun. Dans ce cas, l'utilisateur doit d'abord
- * déplacer/traiter ces éléments à la main.
+ * Refuse si la fiche d'origine porte déjà des données propres (activités,
+ * affaires, contacts additionnels, abonnement, ou tickets encore OUVERTS)
+ * — la supprimer perdrait cet historique sans recours, alors qu'une fiche
+ * tout juste créée par erreur n'en a par construction aucun. Les tickets
+ * déjà résolus/fermés ne bloquent PAS la requalification (22/09/2026) :
+ * plus rien à suivre dessus, mais leur historique reste utile — ils sont
+ * donc réaffectés à la fiche cible plutôt que perdus (jamais supprimés en
+ * silence, contrairement au reste qui bloque tant qu'il n'a pas été traité
+ * à la main).
  */
 crmProspectRouter.post(
   "/crmProspect/requalifyAsContact",
@@ -564,16 +573,20 @@ crmProspectRouter.post(
     const source = await prisma.crmProspect.findUnique({
       where: { id },
       include: {
-        _count: { select: { activities: true, tickets: true, deals: true, contacts: true } },
+        _count: { select: { activities: true, deals: true, contacts: true } },
+        tickets: { select: { id: true, status: true } },
       },
     });
     if (!source) throw new HttpError(404, "Fiche à requalifier introuvable");
     const target = await prisma.crmProspect.findUnique({ where: { id: targetProspectId } });
     if (!target) throw new HttpError(404, "Client cible introuvable");
 
+    const openTickets = source.tickets.filter((t) => !RESOLVED_TICKET_STATUSES.includes(t.status));
+    const resolvedTickets = source.tickets.filter((t) => RESOLVED_TICKET_STATUSES.includes(t.status));
+
     const blockers: string[] = [];
     if (source._count.activities > 0) blockers.push(`${source._count.activities} activité(s)`);
-    if (source._count.tickets > 0) blockers.push(`${source._count.tickets} ticket(s)`);
+    if (openTickets.length > 0) blockers.push(`${openTickets.length} ticket(s) encore ouvert(s)`);
     if (source._count.deals > 0) blockers.push(`${source._count.deals} affaire(s)`);
     if (source._count.contacts > 0) blockers.push(`${source._count.contacts} contact(s) additionnel(s)`);
     if (source.subscriptionId) blockers.push("un abonnement lié");
@@ -582,6 +595,12 @@ crmProspectRouter.post(
     }
 
     const contact = await prisma.$transaction(async (tx) => {
+      if (resolvedTickets.length) {
+        await tx.crmTicket.updateMany({
+          where: { id: { in: resolvedTickets.map((t) => t.id) } },
+          data: { prospectId: targetProspectId },
+        });
+      }
       const created = await tx.crmContact.create({
         data: {
           prospectId: targetProspectId,
@@ -595,7 +614,7 @@ crmProspectRouter.post(
       return created;
     });
 
-    res.json({ ok: true, contact, targetProspectId });
+    res.json({ ok: true, contact, targetProspectId, reassignedTickets: resolvedTickets.length });
   })
 );
 
