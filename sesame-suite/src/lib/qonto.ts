@@ -110,10 +110,16 @@ export async function fetchQontoOrganization(creds: QontoCredentials): Promise<{
  * échouer tout le mapping.
  */
 async function fetchQontoLabels(creds: QontoCredentials): Promise<Map<string, string>> {
-  const json = await qontoRequest(creds, "/labels");
   const map = new Map<string, string>();
-  for (const l of json.labels || []) {
-    if (l?.id && l?.name) map.set(String(l.id), String(l.name));
+  let page = 1;
+  for (;;) {
+    const json = await qontoRequest(creds, `/labels?current_page=${page}&per_page=100`);
+    for (const l of json.labels || []) {
+      if (l?.id && l?.name) map.set(String(l.id), String(l.name));
+    }
+    const totalPages = json.meta?.total_pages || 1;
+    if (page >= totalPages || !(json.labels || []).length) break;
+    page += 1;
   }
   return map;
 }
@@ -130,7 +136,18 @@ function mapQontoTransaction(t: any, labelsById: Map<string, string>): ParsedBan
   const amount = Math.abs(Number(t.amount) || 0);
   const signed = t.side === "credit" ? amount : -amount;
   const counterparty = t.counterparty?.name || t.counterparty_name || undefined;
-  const labels = ((t.label_ids || []) as string[]).map((id) => labelsById.get(String(id))).filter((n): n is string => !!n);
+  // Deux formes possibles selon la version de l'API/le paramètre includes[]
+  // utilisé : `label_ids` (juste les ids, à résoudre via labelsById) ou des
+  // objets déjà enrichis sous `labels` (ex : includes[]=labels peut aussi
+  // embarquer l'objet complet plutôt qu'une simple liste d'ids selon les
+  // endpoints Qonto) — les deux sont acceptées plutôt que de parier sur une
+  // seule forme, non vérifiable dans cet environnement (pas d'accès à un
+  // vrai compte Qonto).
+  const labelsFromIds = ((t.label_ids || []) as unknown[]).map((id) => labelsById.get(String(id))).filter((n): n is string => !!n);
+  const labelsFromEmbedded = Array.isArray(t.labels)
+    ? (t.labels as any[]).map((l) => (typeof l === "string" ? l : l?.name)).filter((n): n is string => !!n)
+    : [];
+  const labels = [...new Set([...labelsFromIds, ...labelsFromEmbedded])];
   return {
     externalId: String(t.id),
     operationDate: new Date(t.settled_at || t.emitted_at),
@@ -160,6 +177,12 @@ async function fetchQontoTransactions(creds: QontoCredentials, iban: string, sin
       sort_by: "settled_at:asc",
       current_page: String(page),
       per_page: String(QONTO_PAGE_SIZE),
+      // Sans ce paramètre, Qonto ne renvoie PAS label_ids sur les
+      // transactions — labels analytiques toujours absents en pratique quel
+      // que soit le contenu de fetchQontoLabels (constaté en production,
+      // 22/09/2026 : le mapping id→nom était correct mais rien à mapper,
+      // l'API ne renvoyant jamais label_ids sans includes[]=labels).
+      "includes[]": "labels",
     });
     if (since) params.set("settled_at_from", since.toISOString());
     const json = await qontoRequest(creds, `/transactions?${params.toString()}`);
