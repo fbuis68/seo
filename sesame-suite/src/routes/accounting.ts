@@ -228,10 +228,51 @@ accountingRouter.get(
     const entityId = await resolveScope(req);
     const invoice = await prisma.accInvoice.findFirst({
       where: { id: req.params.id, entityId },
-      include: { supplier: true, customer: true, document: true, lines: true, vatLines: true, proposedAccount: true, entry: { include: { lines: { include: { account: true } } } } },
+      include: {
+        supplier: true, customer: true, document: true, lines: true, vatLines: true, proposedAccount: true,
+        entry: { include: { lines: { include: { account: true } } } },
+        bankMatches: { include: { bankTransaction: true }, orderBy: { createdAt: "asc" } },
+      },
     });
     if (!invoice) throw new HttpError(404, "Facture introuvable");
     res.json(invoice);
+  })
+);
+
+/**
+ * GET /wa/acc/invoices/:id/unmatchedTransactions — pour l'affectation
+ * manuelle d'un règlement CÔTÉ FACTURE (symétrique de
+ * /acc/bank/transactions/:id/matches côté banque) : liste les transactions
+ * bancaires encore disponibles (non MATCHED/IGNORED/INTERNAL_TRANSFER, avec
+ * une capacité d'allocation restante) du sens et de la devise compatibles
+ * avec cette facture.
+ */
+accountingRouter.get(
+  "/acc/invoices/:id/unmatchedTransactions",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const invoice = await prisma.accInvoice.findFirst({ where: { id: req.params.id, entityId } });
+    if (!invoice) throw new HttpError(404, "Facture introuvable");
+    const rows = await prisma.accBankTransaction.findMany({
+      where: {
+        entityId,
+        status: { notIn: ["MATCHED", "IGNORED", "INTERNAL_TRANSFER"] },
+        direction: invoice.direction === "sale" ? "credit" : "debit",
+        ...(invoice.currency ? { currency: invoice.currency } : {}),
+      },
+      orderBy: { operationDate: "desc" },
+      take: 200,
+      include: { matches: { select: { allocatedAmount: true } }, bankAccount: { select: { name: true } } },
+    });
+    const result = rows
+      .map((r) => {
+        const { matches, ...rest } = r;
+        const matchedAmount = matches.reduce((s, m) => s + m.allocatedAmount, 0);
+        return { ...rest, matchedAmount, remainingCapacity: Math.abs(r.amount) - matchedAmount };
+      })
+      .filter((r) => r.remainingCapacity > 0.01);
+    res.json(result);
   })
 );
 
@@ -1225,9 +1266,14 @@ accountingRouter.get(
     const entityId = await resolveScope(req);
     const tx = await prisma.accBankTransaction.findFirst({ where: { id: req.params.id, entityId } });
     if (!tx) throw new HttpError(404, "Transaction introuvable");
+    // ?all=1 : toutes les factures ouvertes du même sens/devise, pas
+    // seulement les 15 mieux scorées — pour le cas où aucun élément
+    // (montant/référence/tiers) ne matche automatiquement mais que
+    // l'utilisateur sait, lui, quelle facture affecter.
+    const all = req.query.all === "1";
     const [matches, candidates] = await Promise.all([
       prisma.accBankMatch.findMany({ where: { bankTransactionId: tx.id }, include: { invoice: true }, orderBy: { createdAt: "asc" } }),
-      findCandidates(tx.id),
+      findCandidates(tx.id, all ? 500 : 15, all),
     ]);
     const matchedInvoiceIds = new Set(matches.map((m) => m.invoiceId));
     res.json({

@@ -156,7 +156,15 @@ function scoreCandidate(tx: AccBankTransaction, invoice: AccInvoice, party: Part
  * invisible au rapprochement en attendant une seconde validation manuelle
  * séparée (confirmMatch valide l'écriture automatiquement le cas échéant).
  */
-export async function findCandidates(bankTransactionId: string, limit = 15): Promise<ScoredCandidate[]> {
+/**
+ * includeZeroScore=true sert au repli "lister TOUTES les factures ouvertes"
+ * (routes.ts, ?all=1) — le score à 0 ne signifie pas "aucun rapport", juste
+ * qu'aucun des éléments pondérés n'a matché ; l'utilisateur doit pouvoir
+ * quand même la choisir à la main (référence absente du libellé bancaire,
+ * tiers pas encore rapproché...), pas seulement les candidats déjà
+ * ressemblants.
+ */
+export async function findCandidates(bankTransactionId: string, limit = 15, includeZeroScore = false): Promise<ScoredCandidate[]> {
   const tx = await prisma.accBankTransaction.findUnique({ where: { id: bankTransactionId } });
   if (!tx) throw new ReconciliationError("Transaction bancaire introuvable");
 
@@ -176,7 +184,7 @@ export async function findCandidates(bankTransactionId: string, limit = 15): Pro
     if (remainingDue <= AMOUNT_EPSILON) continue;
     const party = await partyForInvoice(inv);
     const { score, reasons } = scoreCandidate(tx, inv, party, remainingDue);
-    if (score <= 0) continue;
+    if (score <= 0 && !includeZeroScore) continue;
     candidates.push({ invoice: inv, score, remainingDue, reasons });
   }
 

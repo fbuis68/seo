@@ -8040,6 +8040,17 @@ function renderAccInvoiceModal(inv){
   const accountOpts = `<option value="">— Aucun —</option>` + ACC_ACCOUNTS.filter(a=>a.type===accountType && (a.active || a.id===inv.proposedAccountId)).map(a=>`<option value="${a.id}" ${inv.proposedAccountId===a.id?'selected':''}>${esc(a.number)} — ${esc(a.label)}${!a.active?' (inactif)':''}</option>`).join('');
   const locked = ['VALIDATED','ACCOUNTED','PARTIALLY_PAID','PAID'].includes(inv.status);
   const canTogglePaid = ['ACCOUNTED','PARTIALLY_PAID','PAID'].includes(inv.status);
+  const canManageSettlement = ['VALIDATED','ACCOUNTED','PARTIALLY_PAID','PAID'].includes(inv.status);
+  const remainingDue = Math.max(0, (inv.amountTtc||0) - (inv.amountPaid||0));
+  const bankMatches = inv.bankMatches||[];
+  const settlementRows = bankMatches.map(m=>`
+    <tr>
+      <td>${new Date(m.bankTransaction.operationDate).toLocaleDateString('fr-FR')}</td>
+      <td>${esc(m.bankTransaction.rawLabel)}</td>
+      <td>${fmtEUR2(m.allocatedAmount)}</td>
+      <td>${m.type==='auto'?'Automatique':'Manuel'}</td>
+      <td><button class="ta-btn" onclick="accUnmatchFromInvoice('${m.id}','${inv.id}')" title="Retirer">🗑</button></td>
+    </tr>`).join('');
 
   document.getElementById('modal-ct').innerHTML = `
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
@@ -8100,6 +8111,16 @@ function renderAccInvoiceModal(inv){
           </div>
           <div class="modal-section">Contrôles de cohérence</div>
           ${checksHtml||'<div class="log-empty">Aucun contrôle.</div>'}
+          ${canManageSettlement?`
+          <div class="modal-section" style="display:flex;align-items:center;gap:10px">
+            <span>Règlement</span>
+            <span style="font-size:12px;color:var(--mu);font-weight:400">Reste dû : ${fmtEUR2(remainingDue)}</span>
+            ${remainingDue>0.01?`<button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="accOpenSettlementPicker('${inv.id}')">+ Affecter un règlement</button>`:''}
+          </div>
+          <div class="tbl-wrap"><table>
+            <thead><tr><th style="width:100px">Date</th><th>Libellé banque</th><th style="width:100px">Montant</th><th style="width:90px">Type</th><th style="width:60px"></th></tr></thead>
+            <tbody>${settlementRows||'<tr><td colspan="5" class="log-empty">Aucun règlement affecté.</td></tr>'}</tbody>
+          </table></div>`:''}
           ${inv.entry?`<div class="modal-section">Écriture en partie double</div>${renderEntryLinesTable(inv.entry)}`:''}
           <div class="modal-section">Texte extrait du document</div>
           <details>
@@ -8124,6 +8145,87 @@ function renderAccInvoiceModal(inv){
   // reste vide de résultats tant que l'utilisateur n'a pas retapé un
   // caractère (oninput ne se déclenche pas sur un value= posé au rendu).
   if(!locked && !inv.supplierId && (inv.issuerSiret||inv.issuerName)) aiEntrepriseAutocomplete(true);
+}
+
+/**
+ * Affectation manuelle d'un règlement CÔTÉ FACTURE — symétrique du
+ * rapprochement côté banque (openAccBankMatchModal) : liste ici les
+ * transactions bancaires encore non affectées plutôt que les factures, pour
+ * pouvoir choisir directement depuis la fiche facture sans repasser par
+ * l'onglet Banque.
+ */
+async function accOpenSettlementPicker(invoiceId){
+  document.getElementById('modal-ct').insertAdjacentHTML('beforeend', `
+  <div class="modal-bg" id="asp-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)this.remove()">
+    <div class="modal-box" style="max-width:600px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Affecter un règlement</div><button class="btn btn-ghost btn-icon" onclick="document.getElementById('asp-bg').remove()" style="margin-left:auto">✕</button></div>
+      <div id="asp-body"><div class="log-empty">Chargement…</div></div>
+    </div>
+  </div>`);
+  const body = document.getElementById('asp-body');
+  let rows;
+  try{
+    const r = await apiFetch('/wa/acc/invoices/'+invoiceId+'/unmatchedTransactions?scope=crm');
+    if(!r.ok) throw new Error('http '+r.status);
+    rows = await r.json();
+  }catch(e){ body.innerHTML = '<div class="log-empty">Erreur de chargement</div>'; return; }
+
+  const txRows = rows.map(t=>`
+    <tr>
+      <td>${new Date(t.operationDate).toLocaleDateString('fr-FR')}</td>
+      <td>${esc(t.rawLabel)}</td>
+      <td>${esc(t.counterpartyName||'—')}</td>
+      <td style="text-align:right;font-family:monospace">${fmtEUR2(t.remainingCapacity)}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="accOpenAssignAmount('${t.id}','${invoiceId}',${t.remainingCapacity})">Affecter</button></td>
+    </tr>`).join('');
+  body.innerHTML = `
+    <div class="tbl-wrap"><table>
+      <thead><tr><th style="width:100px">Date</th><th>Libellé</th><th>Contrepartie</th><th style="width:100px;text-align:right">Disponible</th><th style="width:90px"></th></tr></thead>
+      <tbody>${txRows||'<tr><td colspan="5" class="log-empty">Aucun règlement bancaire non affecté trouvé.</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+function accOpenAssignAmount(txId, invoiceId, txRemainingCapacity){
+  const inv = window._accInvoiceEditing;
+  const remainingDue = inv ? Math.max(0, (inv.amountTtc||0) - (inv.amountPaid||0)) : txRemainingCapacity;
+  const amount = Math.min(remainingDue, txRemainingCapacity);
+  document.getElementById('modal-ct').insertAdjacentHTML('beforeend', `
+  <div class="modal-bg" id="asp-confirm-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)this.remove()">
+    <div class="modal-box" style="max-width:360px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Confirmer l'affectation</div></div>
+      <div class="ff"><label>Montant alloué à cette facture</label><input type="number" step="0.01" id="asp-amount" value="${amount.toFixed(2)}"></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="accAssignSettlement('${txId}','${invoiceId}')">Confirmer</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('asp-confirm-bg').remove()">Annuler</button>
+      </div>
+    </div>
+  </div>`);
+}
+
+async function accAssignSettlement(txId, invoiceId){
+  const amount = +((document.getElementById('asp-amount')||{value:'0'}).value);
+  if(!(amount>0)){ flash('Montant invalide'); return; }
+  try{
+    const r = await apiFetch('/wa/acc/bank/transactions/'+txId+'/match?scope=crm', {method:'POST', body:JSON.stringify({invoiceId, allocatedAmount:amount})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash('Règlement affecté');
+    document.getElementById('asp-confirm-bg')?.remove();
+    document.getElementById('asp-bg')?.remove();
+    if(ACC_TAB==='inbox') await accReloadInvoices();
+    openAccInvoiceModal(invoiceId);
+  }catch(e){ flash(e.message||"Erreur d'affectation"); }
+}
+
+async function accUnmatchFromInvoice(matchId, invoiceId){
+  try{
+    const r = await apiFetch('/wa/acc/bank/matches/'+matchId+'?scope=crm', {method:'DELETE'});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash('Règlement retiré');
+    if(ACC_TAB==='inbox') await accReloadInvoices();
+    openAccInvoiceModal(invoiceId);
+  }catch(e){ flash(e.message||'Erreur de suppression'); }
 }
 
 /** Table Débit/Crédit d'une écriture — vraie partie double, ligne par ligne, avec totaux. Partagée entre la fiche facture et l'onglet Écritures. */
@@ -8781,9 +8883,12 @@ async function accDisconnectQonto(id){
   }catch(e){ flash(e.message||'Erreur'); }
 }
 
+let ABM_SHOW_ALL = false;
+
 async function openAccBankMatchModal(txId){
   const tx = ACC_BANK_TX.find(t=>t.id===txId);
   if(!tx) return;
+  ABM_SHOW_ALL = false;
   document.getElementById('modal-ct').innerHTML = `
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box" style="max-width:640px">
@@ -8800,7 +8905,7 @@ async function loadAccBankMatchModal(txId){
   if(!body) return;
   let data;
   try{
-    const r = await apiFetch('/wa/acc/bank/transactions/'+txId+'/matches?scope=crm');
+    const r = await apiFetch('/wa/acc/bank/transactions/'+txId+'/matches?scope=crm'+(ABM_SHOW_ALL?'&all=1':''));
     if(!r.ok) throw new Error('http '+r.status);
     data = await r.json();
   }catch(e){ body.innerHTML = '<div class="log-empty">Erreur de chargement</div>'; return; }
@@ -8825,11 +8930,19 @@ async function loadAccBankMatchModal(txId){
   body.innerHTML = `
     ${matchRows?`<div class="modal-section" style="margin-top:0">Rapprochements confirmés</div>
     <div class="tbl-wrap"><table><thead><tr><th>Facture</th><th>Montant alloué</th><th>Type</th><th></th></tr></thead><tbody>${matchRows}</tbody></table></div>`:''}
-    <div class="modal-section" style="${matchRows?'':'margin-top:0'}">Candidats</div>
+    <div class="modal-section" style="${matchRows?'':'margin-top:0'};display:flex;align-items:center;gap:10px">
+      <span>${ABM_SHOW_ALL?'Toutes les factures ouvertes non affectées':'Candidats suggérés'}</span>
+      <button class="btn btn-ghost btn-sm" onclick="accToggleAbmShowAll('${txId}')" style="font-size:11px">${ABM_SHOW_ALL?'← Revenir aux suggestions':'Voir toutes les factures non affectées'}</button>
+    </div>
     <div class="tbl-wrap"><table>
       <thead><tr><th>Facture</th><th>Reste dû</th><th style="width:60px">Score</th><th>Éléments</th><th style="width:100px"></th></tr></thead>
-      <tbody>${candidateRows||'<tr><td colspan="5" class="log-empty">Aucun candidat trouvé.</td></tr>'}</tbody>
+      <tbody>${candidateRows||'<tr><td colspan="5" class="log-empty">Aucune facture trouvée.</td></tr>'}</tbody>
     </table></div>`;
+}
+
+function accToggleAbmShowAll(txId){
+  ABM_SHOW_ALL = !ABM_SHOW_ALL;
+  loadAccBankMatchModal(txId);
 }
 
 function accOpenConfirmMatch(txId, invoiceId, suggestedAmount){
