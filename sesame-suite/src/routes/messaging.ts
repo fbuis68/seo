@@ -202,6 +202,7 @@ function shapeTemplate(t: {
   category: string | null;
   questionnaireId: string | null;
   defaultAttachments: unknown;
+  isDefaultForTicketReply: boolean;
   updatedAt: Date;
 }) {
   return {
@@ -215,6 +216,7 @@ function shapeTemplate(t: {
     category: t.category || "",
     questionnaireId: t.questionnaireId || "",
     defaultAttachments: Array.isArray(t.defaultAttachments) ? t.defaultAttachments : [],
+    isDefaultForTicketReply: t.isDefaultForTicketReply,
     updatedAt: t.updatedAt,
   };
 }
@@ -253,6 +255,7 @@ interface TemplateBody {
   category?: string;
   questionnaireId?: string;
   defaultAttachments?: TemplateAttachment[];
+  isDefaultForTicketReply?: boolean;
 }
 
 // Base64 brut (~33% plus long que les octets décodés) — 10 000 000
@@ -304,6 +307,7 @@ messagingRouter.post(
       category: parseCategory(b.category),
       questionnaireId: b.questionnaireId || null,
       defaultAttachments: b.channel === "email" ? parseAttachments(b.defaultAttachments) : [],
+      isDefaultForTicketReply: !!b.isDefaultForTicketReply,
     });
     res.json(shapeTemplate(row));
   })

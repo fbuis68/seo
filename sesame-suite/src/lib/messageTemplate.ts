@@ -41,10 +41,20 @@ export async function upsertMessageTemplate(
     category?: TemplateCategory | null;
     questionnaireId?: string | null;
     defaultAttachments?: { fileName: string; mimeType: string; dataUrl: string }[];
+    isDefaultForTicketReply?: boolean;
   }
 ) {
   if (!key || !/^[a-z0-9-]+$/.test(key)) throw new HttpError(400, "Clé de modèle invalide (minuscules, chiffres, tirets)");
   const existingRows = await prisma.messageTemplate.findMany({ where: { entityId, channel, key }, orderBy: { updatedAt: "desc" } });
+
+  // Au plus un modèle par défaut par (entityId, channel) — un booléen "au
+  // plus un vrai" ne s'exprime pas en contrainte SQL, donc désactivé ici
+  // explicitement avant d'activer le nouveau plutôt que de laisser
+  // plusieurs modèles se disputer le chargement automatique.
+  if (data.isDefaultForTicketReply) {
+    await prisma.messageTemplate.updateMany({ where: { entityId, channel, isDefaultForTicketReply: true }, data: { isDefaultForTicketReply: false } });
+  }
+
   if (existingRows.length > 0) {
     const [primary, ...duplicates] = existingRows;
     if (duplicates.length) {

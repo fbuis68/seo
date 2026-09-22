@@ -5603,10 +5603,13 @@ function renderTicketDetail(t){
       <div id="tkt-thread">${t.messages.map(ticketMessageHtml).join('')}</div>
     </div>
     <div class="card">
-      ${(()=>{ const ticketTpls = MSG_TEMPLATES.filter(m=>m.channel==='email' && m.category!=='marketing'); return `
+      ${(()=>{
+        const ticketTpls = MSG_TEMPLATES.filter(m=>m.channel==='email' && m.category!=='marketing');
+        const defaultTpl = ticketTpls.find(m=>m.isDefaultForTicketReply);
+        return `
       <div class="ff"><label>Réponse ${ticketTpls.length?'— insérer un modèle':''}</label>
-        ${ticketTpls.length?`<select id="tkt-tpl-pick" onchange="ticketInsertTemplate()" style="margin-bottom:6px"><option value="">— Choisir un modèle —</option>${ticketTpls.map(m=>`<option value="${esc(m.key)}">${esc(m.name)}</option>`).join('')}</select>`:''}
-        <textarea id="tkt-reply-body" style="height:120px" placeholder="Votre réponse…"></textarea>
+        ${ticketTpls.length?`<select id="tkt-tpl-pick" onchange="ticketInsertTemplate()" style="margin-bottom:6px"><option value="">— Choisir un modèle —</option>${ticketTpls.map(m=>`<option value="${esc(m.key)}" ${defaultTpl&&m.id===defaultTpl.id?'selected':''}>${esc(m.name)}</option>`).join('')}</select>`:''}
+        <textarea id="tkt-reply-body" style="height:120px" placeholder="Votre réponse…">${defaultTpl?esc(ticketTemplateBodyText(defaultTpl)):''}</textarea>
       </div>`; })()}
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
         <input type="file" id="tkt-reply-files" accept="image/*" multiple style="max-width:220px">
@@ -5834,14 +5837,17 @@ function htmlToPlainText(html){
     .trim();
 }
 
+function ticketTemplateBodyText(tpl){
+  const vars = { nom: CURRENT_TICKET.prospectNom, secteur:'' };
+  const filledHtml = tpl.bodyHtml.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m,k)=>vars[k]||'');
+  return htmlToPlainText(filledHtml);
+}
 function ticketInsertTemplate(){
   const key = (document.getElementById('tkt-tpl-pick')||{value:''}).value;
   if(!key) return;
   const tpl = MSG_TEMPLATES.find(m=>m.key===key && m.channel==='email');
   if(!tpl) return;
-  const vars = { nom: CURRENT_TICKET.prospectNom, secteur:'' };
-  const filledHtml = tpl.bodyHtml.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m,k)=>vars[k]||'');
-  document.getElementById('tkt-reply-body').value = htmlToPlainText(filledHtml);
+  document.getElementById('tkt-reply-body').value = ticketTemplateBodyText(tpl);
 }
 
 function filesToDataUrls(fileList, cb){
@@ -6318,7 +6324,7 @@ function renderCanauxPanel(){
       <div class="log-item">
         <div class="log-dot ld-b"></div>
         <div class="log-body">
-          <div class="log-text"><strong>${esc(t.name)}</strong> <span style="color:#aaa;font-size:11px">(${esc(t.key)})</span>${t.category?` <span class="tag t-gray" style="font-size:10px">${TPL_CATEGORY_LABEL[t.category]||esc(t.category)}</span>`:''}</div>
+          <div class="log-text"><strong>${esc(t.name)}</strong> <span style="color:#aaa;font-size:11px">(${esc(t.key)})</span>${t.category?` <span class="tag t-gray" style="font-size:10px">${TPL_CATEGORY_LABEL[t.category]||esc(t.category)}</span>`:''}${t.isDefaultForTicketReply?` <span class="tag t-green" style="font-size:10px">Par défaut — réponses tickets</span>`:''}</div>
           <div class="log-meta">${t.channel==='email'?'Objet : '+esc(t.subject):esc(t.bodyHtml).slice(0,80)}${t.channel==='whatsapp'?(t.whatsappContentSid?' · Content SID : '+esc(t.whatsappContentSid):' · <span style="color:#b23b2c">Content SID manquant — envoi impossible</span>'):''}</div>
           <div class="log-acts">
             <button class="btn btn-sm btn-ghost" onclick="openTemplateModal('${t.id}')">Modifier</button>
@@ -6488,7 +6494,7 @@ function htmlEdSetEmailMode(id, isEmail){
 }
 
 async function openTemplateModal(id){
-  const t = id ? MSG_TEMPLATES.find(t=>t.id===id) : {id:null,channel:tplChannelTab,key:'',name:'',subject:'',bodyHtml:'',questionnaireId:null,defaultAttachments:[]};
+  const t = id ? MSG_TEMPLATES.find(t=>t.id===id) : {id:null,channel:tplChannelTab,key:'',name:'',subject:'',bodyHtml:'',questionnaireId:null,defaultAttachments:[],isDefaultForTicketReply:false};
   if(!t)return;
   if(!QN_CRM_LIST_CACHE){
     try{ const qr = await apiFetch('/wa/questionnaire/list?scope=crm'); QN_CRM_LIST_CACHE = qr.ok ? await qr.json() : []; }catch(e){ QN_CRM_LIST_CACHE = []; }
@@ -6508,6 +6514,13 @@ async function openTemplateModal(id){
         ${Object.keys(TPL_CATEGORY_LABEL).map(k=>`<option value="${k}" ${t.category===k?'selected':''}>${TPL_CATEGORY_LABEL[k]}</option>`).join('')}
       </select>
         <div style="font-size:11px;color:var(--mu);margin-top:4px">Sert à filtrer les modèles selon leur usage — un modèle "Marketing" n'apparaît pas dans le sélecteur de réponse d'un ticket support.</div>
+      </div>
+      <div class="ff" id="tpl-default-wrap" style="margin-top:8px">
+        <label style="display:flex;align-items:center;gap:6px;font-weight:400">
+          <input type="checkbox" id="tpl-default-ticket-reply" ${t.isDefaultForTicketReply?'checked':''}>
+          Modèle par défaut des réponses aux tickets
+        </label>
+        <div style="font-size:11px;color:var(--mu);margin-top:4px">Chargé automatiquement dans la réponse à l'ouverture d'un ticket, sans avoir à le choisir dans le sélecteur — un seul modèle par défaut à la fois, cocher celui-ci décoche l'ancien.</div>
       </div>
       <div class="ff" id="tpl-subject-wrap" style="margin-top:8px"><label>Objet (email uniquement)</label><input id="tpl-subject" value="${esc(t.subject)}" placeholder="Sesame Technology — {{nom}}"></div>
       <div class="ff" style="margin-top:8px"><label>Corps (email : éditeur HTML ; SMS/WhatsApp : texte)</label>
@@ -6576,9 +6589,11 @@ function renderTplSubjectVisibility(){
   const wrap=document.getElementById('tpl-subject-wrap');
   const sidWrap=document.getElementById('tpl-sid-wrap');
   const attWrap=document.getElementById('tpl-attachments-wrap');
+  const defWrap=document.getElementById('tpl-default-wrap');
   if(sel&&wrap) wrap.style.display = sel.value==='email' ? '' : 'none';
   if(sel&&sidWrap) sidWrap.style.display = sel.value==='whatsapp' ? '' : 'none';
   if(sel&&attWrap) attWrap.style.display = sel.value==='email' ? '' : 'none';
+  if(sel&&defWrap) defWrap.style.display = sel.value==='email' ? '' : 'none'; // sélecteur "insérer un modèle" du ticket ne liste que les modèles email
   if(sel) htmlEdSetEmailMode('tpl-body', sel.value==='email');
 }
 
@@ -6658,12 +6673,19 @@ async function createMetaTemplate(){
 
 async function saveTemplate(id){
   const g=i=>(document.getElementById(i)||{value:''}).value;
-  const body={channel:g('tpl-channel'),key:g('tpl-key').trim().toLowerCase(),name:g('tpl-name').trim(),subject:g('tpl-subject').trim(),bodyHtml:g('tpl-body'),whatsappContentSid:g('tpl-sid').trim(),category:g('tpl-category'),questionnaireId:g('tpl-questionnaire')||null,defaultAttachments:TPL_ATTACHMENTS,scope:'crm'};
+  const isDefaultTicketReply = !!document.getElementById('tpl-default-ticket-reply')?.checked;
+  const body={channel:g('tpl-channel'),key:g('tpl-key').trim().toLowerCase(),name:g('tpl-name').trim(),subject:g('tpl-subject').trim(),bodyHtml:g('tpl-body'),whatsappContentSid:g('tpl-sid').trim(),category:g('tpl-category'),questionnaireId:g('tpl-questionnaire')||null,defaultAttachments:TPL_ATTACHMENTS,isDefaultForTicketReply:isDefaultTicketReply,scope:'crm'};
   if(!body.key||!body.name||!body.bodyHtml||(body.channel==='email'&&!body.subject)||(body.channel==='whatsapp'&&!body.whatsappContentSid)){flash('Tous les champs sont requis');return;}
   try{
     var r = await apiFetch('/wa/messageTemplate/upsert', {method:'POST', body:JSON.stringify(body)});
     var data = await r.json();
     if(!r.ok) throw new Error(data.error||'http '+r.status);
+    // Un seul modèle par défaut à la fois (même règle appliquée côté
+    // serveur) — reflète localement la désactivation des autres pour que
+    // leur badge disparaisse sans recharger toute la liste.
+    if(data.isDefaultForTicketReply){
+      MSG_TEMPLATES.forEach(t=>{ if(t.id!==data.id && t.channel===data.channel) t.isDefaultForTicketReply=false; });
+    }
     const i=MSG_TEMPLATES.findIndex(t=>t.id===data.id);
     if(i>-1) MSG_TEMPLATES[i]=data; else MSG_TEMPLATES.push(data);
     tplChannelTab=data.channel;

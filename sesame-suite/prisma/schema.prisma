@@ -2515,6 +2515,15 @@ model MessageTemplate {
   // disponible dans cet environnement.
   defaultAttachments Json @default("[]")
 
+  // Modèle chargé automatiquement dans le corps de la réponse à l'ouverture
+  // d'un ticket (crm.html renderTicketDetail), sans que l'agent ait à le
+  // choisir dans le sélecteur "insérer un modèle" (22/09/2026) — au plus un
+  // par (entityId, channel), imposé côté route (PUT /wa/messageTemplate/
+  // upsert désactive l'ancien par défaut avant d'activer le nouveau) plutôt
+  // qu'en contrainte SQL (un booléen "au plus un vrai" n'est pas exprimable
+  // par un simple @@unique).
+  isDefaultForTicketReply Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
