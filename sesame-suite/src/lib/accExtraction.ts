@@ -220,6 +220,46 @@ function extractRecipientBlock(text: string): string | null {
   return text.slice(start, start + RECIPIENT_WINDOW_CHARS);
 }
 
+// Repli sans mot-clé explicite ("Facturé à"/"Destinataire"/...) — constaté en
+// production, 22/09/2026 : beaucoup de générateurs de factures simples
+// placent le nom/l'adresse du destinataire directement au-dessus du titre
+// "FACTURE N°", sans aucun libellé. Ancré sur INVOICE_NUMBER_KEYWORD (déjà
+// utilisé pour le numéro de facture lui-même) plutôt qu'une position fixe,
+// pour rester valide même si l'en-tête émetteur fait plus ou moins de lignes.
+function extractRecipientBlockFallback(text: string): string | null {
+  const m = INVOICE_NUMBER_KEYWORD.exec(text);
+  if (!m) return null;
+  const before = text.slice(0, m.index);
+  const lines = before.split("\n").map((l) => l.trim()).filter(Boolean);
+  if (lines.length === 0) return null;
+  return lines.slice(-4).join("\n");
+}
+
+// Repli quand les libellés "Total HT"/"Total TVA"/"Total TTC" apparaissent
+// groupés (bloc d'étiquettes) suivis d'un bloc de montants dans le MÊME
+// ordre, plutôt que chaque libellé suivi immédiatement de sa propre valeur
+// sur la même ligne — constaté en production, 22/09/2026, sur des factures
+// où l'extraction du texte du PDF sépare la colonne "libellés" de la colonne
+// "montants" du cadre récapitulatif. findAfterKeyword (fenêtre sans saut de
+// ligne) ne peut pas trouver ces valeurs, d'où ce repli positionnel dédié.
+const TOTALS_LABEL_BLOCK_RE = /total[ \t]*ht[ \t:]*\n[ \t]*total[ \t]*tva[ \t:]*\n[ \t]*total[ \t]*ttc[ \t:]*/i;
+const TOTALS_BLOCK_WINDOW_CHARS = 150;
+
+function extractGroupedTotals(text: string): { ht: number; vat: number; ttc: number } | null {
+  const m = TOTALS_LABEL_BLOCK_RE.exec(text);
+  if (!m) return null;
+  const window = text.slice(m.index + m[0].length, m.index + m[0].length + TOTALS_BLOCK_WINDOW_CHARS);
+  const amounts: number[] = [];
+  const amtRe = /(\d{1,3}(?:[\s.]\d{3})*(?:[,.]\d{2})?)/g;
+  let am: RegExpExecArray | null;
+  while ((am = amtRe.exec(window)) && amounts.length < 3) {
+    const n = parseFrenchNumber(am[1]);
+    if (n !== null) amounts.push(n);
+  }
+  if (amounts.length !== 3) return null;
+  return { ht: amounts[0], vat: amounts[1], ttc: amounts[2] };
+}
+
 export function extractInvoiceData(text: string): ExtractedInvoiceData {
   const confidence: Record<string, number> = {};
   const result: ExtractedInvoiceData = {
@@ -329,11 +369,15 @@ export function extractInvoiceData(text: string): ExtractedInvoiceData {
   // Raison sociale émetteur — heuristique faible (première ligne non vide
   // qui n'est ni une date ni un montant) : volontairement une confiance
   // basse, à corriger prioritairement par le rapprochement fournisseur
-  // (lib/accSupplierMatching.ts) plutôt qu'à ce stade.
+  // (lib/accSupplierMatching.ts) plutôt qu'à ce stade. Exclut aussi les
+  // lignes de type "Tel : ..."/"Fax : ..." — jamais une raison sociale,
+  // constaté en production, 22/09/2026, sur une facture dont l'en-tête ne
+  // contient QUE adresse + téléphone avant le vrai nom.
+  const NAME_LINE_EXCLUDE_RE = /^(t[ée]l[ée]?(?:phone)?|fax|mobile|email|e-?mail|contact)[ \t]*:/i;
   const firstLine = text
     .split("\n")
     .map((l) => l.trim())
-    .find((l) => l.length > 2 && l.length < 80 && !/^\d/.test(l));
+    .find((l) => l.length > 2 && l.length < 80 && !/^\d/.test(l) && !NAME_LINE_EXCLUDE_RE.test(l));
   if (firstLine) {
     result.issuerName = firstLine;
     confidence.issuerName = 0.3;
@@ -342,15 +386,19 @@ export function extractInvoiceData(text: string): ExtractedInvoiceData {
   // Bloc destinataire — cf. RECIPIENT_BLOCK_KEYWORD. Confiance du nom
   // légèrement supérieure à celle de l'émetteur (0.4 vs 0.3) : ancrée à un
   // mot-clé explicite plutôt qu'à une simple heuristique de première ligne.
-  const recipientBlock = extractRecipientBlock(text);
+  const recipientBlockKeyword = extractRecipientBlock(text);
+  const recipientBlock = recipientBlockKeyword || extractRecipientBlockFallback(text);
   if (recipientBlock) {
     const recipientNameLine = recipientBlock
       .split("\n")
       .map((l) => l.trim())
-      .find((l) => l.length > 2 && l.length < 80 && !/^\d/.test(l));
+      .find((l) => l.length > 2 && l.length < 80 && !/^\d/.test(l) && !NAME_LINE_EXCLUDE_RE.test(l));
     if (recipientNameLine) {
       result.recipientName = recipientNameLine;
-      confidence.recipientName = 0.4;
+      // Repli positionnel (pas de mot-clé "Facturé à"/"Destinataire" trouvé)
+      // : confiance plus basse que l'ancrage par mot-clé explicite, au même
+      // niveau que l'heuristique "première ligne" de issuerName.
+      confidence.recipientName = recipientBlockKeyword ? 0.4 : 0.3;
     }
     const rSiret = findAfterKeyword(recipientBlock, SIRET_KEYWORD, SIRET_RE);
     const rSiretDigits = rSiret ? rSiret.value.replace(/[ \t]/g, "") : null;
@@ -396,6 +444,28 @@ export function extractInvoiceData(text: string): ExtractedInvoiceData {
     if (n !== null) {
       result.amountVat = n;
       confidence.amountVat = 0.75;
+    }
+  }
+
+  // Repli positionnel (cf. extractGroupedTotals) quand un ou plusieurs des
+  // trois montants n'ont pas été trouvés par recherche "valeur immédiatement
+  // après le libellé, même ligne" — ne remplit que les champs encore null,
+  // ne remplace jamais une valeur déjà trouvée avec plus de confiance.
+  if (result.amountHt === null || result.amountVat === null || result.amountTtc === null) {
+    const grouped = extractGroupedTotals(text);
+    if (grouped) {
+      if (result.amountHt === null) {
+        result.amountHt = grouped.ht;
+        confidence.amountHt = 0.75;
+      }
+      if (result.amountVat === null) {
+        result.amountVat = grouped.vat;
+        confidence.amountVat = 0.7;
+      }
+      if (result.amountTtc === null) {
+        result.amountTtc = grouped.ttc;
+        confidence.amountTtc = 0.75;
+      }
     }
   }
 
