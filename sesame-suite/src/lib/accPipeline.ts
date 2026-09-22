@@ -8,6 +8,7 @@ import { matchSupplier, canAutoCreateSupplier, createSupplierFromExtraction } fr
 import { matchCustomer, canAutoCreateCustomer, createCustomerFromExtraction } from "./accCustomerMatching";
 import { proposeAccount } from "./accRulesEngine";
 import { runInvoiceChecks, worstLevel, CheckResult } from "./accChecks";
+import { findDuplicateInvoices, duplicateMatchesToChecks, recordDuplicateCandidates } from "./accDuplicates";
 
 export class PipelineError extends Error {}
 
@@ -164,6 +165,20 @@ export async function processUploadedDocument(
   } else {
     checks = [{ code: "NO_TEXT_EXTRACTED", level: needsImageOcr ? "BLOCKING" : "ERROR", message: needsImageOcr ? "Aucune couche texte exploitable — OCR image requis (non disponible dans cette phase)" : "Aucun texte extrait" }];
   }
+
+  // ── Doublon fonctionnel (§67, cf. lib/accDuplicates.ts) — distinct du
+  // doublon de fichier déjà géré plus haut (même hash). Toujours WARNING,
+  // jamais bloquant : signale sans jamais empêcher la validation humaine.
+  const duplicateMatches = await findDuplicateInvoices(entityId, {
+    direction: input.direction,
+    supplierId,
+    customerId,
+    invoiceNumber: extracted?.invoiceNumber || null,
+    amountTtc: extracted?.amountTtc ?? null,
+    invoiceDate: extracted?.invoiceDate || null,
+  });
+  checks = checks.concat(duplicateMatchesToChecks(duplicateMatches));
+  if (duplicateMatches.length) await recordDuplicateCandidates(entityId, document.id, duplicateMatches);
 
   let status: string;
   if (needsImageOcr) status = "CHECK_REQUIRED";
