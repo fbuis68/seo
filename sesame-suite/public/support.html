@@ -50,6 +50,7 @@
   .msg-body{font-size:13px;white-space:pre-wrap}
   .msg-atts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
   .msg-atts img{width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--bdr)}
+  .att-file{display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:6px;border:1px solid var(--bdr);font-size:12px;text-decoration:none;color:inherit}
 </style>
 </head>
 <body>
@@ -228,11 +229,23 @@ async function submitTicket(){
   });
 }
 
+// Data URI "data:<mimeType>;base64,..." sans nom de fichier — seul le type
+// MIME permet de savoir comment l'afficher. Un PDF rendu en <img> casse
+// silencieusement (icône brisée) : même correctif que côté crm.html
+// (22/09/2026).
+function renderAttachment(dataUrl){
+  const m = /^data:([^;]+);/.exec(dataUrl||'');
+  const mimeType = m ? m[1] : '';
+  if(/^image\//.test(mimeType)) return `<a href="${esc(dataUrl)}" target="_blank"><img src="${esc(dataUrl)}"></a>`;
+  const label = mimeType==='application/pdf' ? 'PDF' : (mimeType.split('/')[1]||'fichier').toUpperCase();
+  return `<a href="${esc(dataUrl)}" target="_blank" class="att-file">${ICON_PAPERCLIP} ${esc(label)}</a>`;
+}
+
 function msgHtml(m){
   return `<div class="msg ${m.authorType==='agent'?'agent':''}">
     <div class="msg-head"><strong>${esc(m.authorName||(m.authorType==='agent'?'Équipe support':'Vous'))}</strong><span>${new Date(m.createdAt).toLocaleString('fr-FR')}</span></div>
     <div class="msg-body">${esc(m.body)}</div>
-    ${(m.attachments||[]).length?`<div class="msg-atts">${m.attachments.map(a=>`<a href="${a}" target="_blank"><img src="${a}"></a>`).join('')}</div>`:''}
+    ${(m.attachments||[]).length?`<div class="msg-atts">${m.attachments.map(a=>renderAttachment(a)).join('')}</div>`:''}
   </div>`;
 }
 

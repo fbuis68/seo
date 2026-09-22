@@ -29,7 +29,7 @@ export async function findTicketByTag(tag: string) {
 }
 
 /**
- * Ne garde que les data URI image — convention établie de
+ * Ne garde que les data URI image/PDF — convention établie de
  * CrmTicketMessage.attachments (aucune autre forme n'est légitime : ni un
  * https:// externe, ni du texte libre). Sans ce filtre, un attachement
  * accepté tel quel (POST /wa/ticket/create + /publicReply sont PUBLICS,
@@ -37,11 +37,20 @@ export async function findTicketByTag(tag: string) {
  * `<a href="${a}"><img src="${a}">` côté crm.html, permettant une sortie
  * d'attribut — cf. audit sécurité du 15/09/2026. Filtre silencieusement les
  * entrées invalides plutôt que de faire échouer tout l'envoi.
+ *
+ * PDF ajouté le 22/09/2026 : le formulaire client (support.html) accepte
+ * déjà `image/*,.pdf` en sélection de fichier, mais ce filtre ne laissait
+ * passer QUE les images — toute pièce jointe PDF envoyée par un client
+ * était donc silencieusement perdue avant même d'atteindre la base
+ * (jamais un problème de rendu, cf. crm.html/support.html qui l'auraient
+ * de toute façon mal affichée en <img>, corrigé dans le même correctif).
+ * Reste une simple data URI base64 stricte, pas du texte libre — la
+ * protection XSS n'est pas affaiblie par cet ajout.
  */
 export function sanitizeTicketAttachments(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
-  const DATA_URI_IMAGE = /^data:image\/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/]+=*$/;
-  return raw.filter((a): a is string => typeof a === "string" && DATA_URI_IMAGE.test(a));
+  const DATA_URI_ATTACHMENT = /^data:(image\/(png|jpe?g|gif|webp)|application\/pdf);base64,[A-Za-z0-9+/]+=*$/;
+  return raw.filter((a): a is string => typeof a === "string" && DATA_URI_ATTACHMENT.test(a));
 }
 
 /**

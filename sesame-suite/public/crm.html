@@ -5544,8 +5544,25 @@ function ticketMessageHtml(m){
       <span style="font-size:11px;color:#999">${new Date(m.createdAt).toLocaleString('fr-FR')}</span>
     </div>
     <div style="font-size:13px;white-space:pre-wrap">${esc(m.body)}</div>
-    ${(m.attachments||[]).length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${m.attachments.map(a=>`<a href="${esc(a)}" target="_blank"><img src="${esc(a)}" style="width:70px;height:70px;object-fit:cover;border-radius:6px;border:1px solid var(--bdr,#e2dfd9)"></a>`).join('')}</div>`:''}
+    ${(m.attachments||[]).length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${m.attachments.map(a=>renderTicketAttachment(a)).join('')}</div>`:''}
   </div>`;
+}
+
+// Une pièce jointe est un data URI "data:<mimeType>;base64,..." sans nom de
+// fichier (cf. schema.prisma, CrmTicketMessage.attachments) — seul le type
+// MIME permet de savoir comment l'afficher. Jusqu'ici TOUTE pièce jointe
+// était rendue en <img>, y compris un PDF envoyé par le client : l'image
+// cassait silencieusement (icône brisée, rien de cliquable d'utile), ce qui
+// revenait à perdre la pièce jointe côté agent même si elle était bien
+// enregistrée en base (cf. 22/09/2026).
+function renderTicketAttachment(dataUrl){
+  const m = /^data:([^;]+);/.exec(dataUrl||'');
+  const mimeType = m ? m[1] : '';
+  if(/^image\//.test(mimeType)){
+    return `<a href="${esc(dataUrl)}" target="_blank"><img src="${esc(dataUrl)}" style="width:70px;height:70px;object-fit:cover;border-radius:6px;border:1px solid var(--bdr,#e2dfd9)"></a>`;
+  }
+  const label = mimeType==='application/pdf' ? 'PDF' : (mimeType.split('/')[1]||'fichier').toUpperCase();
+  return `<a href="${esc(dataUrl)}" target="_blank" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:6px;border:1px solid var(--bdr,#e2dfd9);font-size:12px;text-decoration:none;color:inherit">📎 ${esc(label)}</a>`;
 }
 
 function renderTicketDetail(t){
