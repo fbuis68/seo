@@ -1413,6 +1413,19 @@ accountingRouter.get(
   })
 );
 
+/** Fin de journée inclusive côté "to" — une simple Date(req.query.to) tombe à 00:00:00 et exclurait toute transaction du jour lui-même. */
+function endOfDay(dateStr: string): Date {
+  const d = new Date(dateStr);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+/** Part de TVA d'un rapprochement — prorata de l'allocation sur le total TTC de la facture (une transaction peut ne régler qu'UNE partie d'une facture, cf. AccBankMatch.allocatedAmount). */
+function vatShare(allocatedAmount: number, invoice: { amountVat: number | null; amountTtc: number | null }): number {
+  if (!invoice.amountTtc) return 0;
+  return allocatedAmount * ((invoice.amountVat || 0) / invoice.amountTtc);
+}
+
 accountingRouter.get(
   "/acc/bank/transactions",
   requireAdmin,
@@ -1421,18 +1434,64 @@ accountingRouter.get(
     const where: Record<string, unknown> = { entityId };
     if (req.query.bankAccountId) where.bankAccountId = req.query.bankAccountId;
     if (req.query.status) where.status = req.query.status;
+    if (req.query.from || req.query.to) {
+      where.operationDate = {
+        ...(req.query.from ? { gte: new Date(req.query.from as string) } : {}),
+        ...(req.query.to ? { lte: endOfDay(req.query.to as string) } : {}),
+      };
+    }
     const take = Math.min(Number(req.query.take) || 100, 500);
     const rows = await prisma.accBankTransaction.findMany({
       where,
       orderBy: { operationDate: "desc" },
       take,
       skip: Number(req.query.skip) || 0,
-      include: { matches: { select: { allocatedAmount: true } }, gocardlessPayout: { select: { id: true, gocardlessId: true } } },
+      include: {
+        matches: { select: { allocatedAmount: true, invoice: { select: { amountVat: true, amountTtc: true } } } },
+        gocardlessPayout: { select: { id: true, gocardlessId: true } },
+      },
     });
     res.json(rows.map((r) => {
       const { matches, ...rest } = r;
-      return { ...rest, matchedAmount: matches.reduce((s, m) => s + m.allocatedAmount, 0) };
+      const matchedAmount = matches.reduce((s, m) => s + m.allocatedAmount, 0);
+      const vatAmount = matches.reduce((s, m) => s + vatShare(m.allocatedAmount, m.invoice), 0);
+      return { ...rest, matchedAmount, vatAmount };
     }));
+  })
+);
+
+/**
+ * GET /wa/acc/bank/vat-summary — TVA collectée (ventes)/déductible (achats)
+ * sur la période, calculée sur les factures RAPPROCHÉES en banque dont la
+ * transaction tombe dans [from, to] (§ "calculer la TVA du mois" — logique
+ * TVA sur les encaissements : la date qui compte est celle du règlement en
+ * banque, pas la date de facture). Porte sur TOUS les comptes bancaires de
+ * l'entité, pas seulement celui affiché dans la grille (une déclaration TVA
+ * ne se limite pas à un seul compte).
+ */
+accountingRouter.get(
+  "/acc/bank/vat-summary",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    if (!req.query.from || !req.query.to) throw new HttpError(400, "from et to requis");
+    const matches = await prisma.accBankMatch.findMany({
+      where: {
+        entityId,
+        bankTransaction: { operationDate: { gte: new Date(req.query.from as string), lte: endOfDay(req.query.to as string) } },
+      },
+      select: {
+        allocatedAmount: true,
+        invoice: { select: { direction: true, amountVat: true, amountTtc: true } },
+      },
+    });
+    let collectee = 0, deductible = 0;
+    for (const m of matches) {
+      const share = vatShare(m.allocatedAmount, m.invoice);
+      if (m.invoice.direction === "sale") collectee += share;
+      else deductible += share;
+    }
+    res.json({ from: req.query.from, to: req.query.to, collectee, deductible, net: collectee - deductible, matchCount: matches.length });
   })
 );
 

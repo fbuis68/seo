@@ -7502,7 +7502,14 @@ async function testRule(id){
 // ════════════════════════════════════════
 let ACC_INVOICES=[], ACC_SUPPLIERS=[], ACC_CUSTOMERS=[], ACC_ACCOUNTS=[], ACC_JOURNALS=[], ACC_ENTRIES=[], ACC_RULES=[], ACC_DASH=null;
 let ACC_BANK_ACCOUNTS=[], ACC_BANK_TX=[], ACC_BANK_SELECTED=null;
-let ACC_BANK_FILTER={type:'all', label:'', excludePrelevements:false, hideMatched:false};
+// excludeKinds : ensemble de 'prelevement'|'cb'|'matched'|'labeled' — cases
+// à cocher du menu "Exclure" (remplace les anciennes cases isolées, § "un
+// prélèvement de 1000€ OpenAI/SNCF en CB n'était pas exclu par 'exclure les
+// prélèvements'" : c'est un moyen de paiement DIFFÉRENT, cf. accIsCB). dateFrom/
+// dateTo vides par défaut (aucune restriction) — seul le calcul "TVA du
+// mois" applique un défaut (mois courant), indépendamment de ce filtre.
+let ACC_BANK_FILTER={type:'all', label:'', excludeKinds:new Set(), dateFrom:'', dateTo:''};
+let ACC_VAT_SUMMARY=null;
 let ACC_QONTO_CONFIG=null, ACC_QONTO_TEST_ACCOUNTS=null;
 let ACC_GOCARDLESS_CONFIG=null;
 let ACC_TAB='inbox';
@@ -8948,16 +8955,46 @@ async function loadAccBankTab(){
   }catch(e){ ACC_GOCARDLESS_CONFIG=null; }
   if(ACC_BANK_SELECTED && !ACC_BANK_ACCOUNTS.some(a=>a.id===ACC_BANK_SELECTED)) ACC_BANK_SELECTED=null;
   if(!ACC_BANK_SELECTED && ACC_BANK_ACCOUNTS.length) ACC_BANK_SELECTED = ACC_BANK_ACCOUNTS[0].id;
-  await loadAccBankTransactions();
+  // "TVA du mois" par défaut au premier chargement de l'onglet — ne réinitialise
+  // pas une plage déjà choisie par l'utilisateur lors d'un simple rafraîchissement.
+  if(!ACC_BANK_FILTER.dateFrom && !ACC_BANK_FILTER.dateTo) Object.assign(ACC_BANK_FILTER, accBankMonthBounds());
+  await Promise.all([loadAccBankTransactions(), loadAccVatSummary()]);
   renderAccBank();
+}
+
+function accBankDateRangeParams(){
+  let qs = '';
+  if(ACC_BANK_FILTER.dateFrom) qs += '&from='+encodeURIComponent(ACC_BANK_FILTER.dateFrom);
+  if(ACC_BANK_FILTER.dateTo) qs += '&to='+encodeURIComponent(ACC_BANK_FILTER.dateTo);
+  return qs;
 }
 
 async function loadAccBankTransactions(){
   if(!ACC_BANK_SELECTED){ ACC_BANK_TX=[]; return; }
   try{
-    const r = await apiFetch('/wa/acc/bank/transactions?scope=crm&bankAccountId='+ACC_BANK_SELECTED+'&take=200');
+    const r = await apiFetch('/wa/acc/bank/transactions?scope=crm&bankAccountId='+ACC_BANK_SELECTED+'&take=200'+accBankDateRangeParams());
     ACC_BANK_TX = r.ok ? await r.json() : [];
   }catch(e){ ACC_BANK_TX=[]; }
+}
+
+// TVA collectée/déductible sur la période — TOUS les comptes bancaires de
+// l'entité (§ une déclaration TVA ne se limite pas au compte affiché),
+// distinct du fetch des transactions ci-dessus qui ne porte que sur
+// ACC_BANK_SELECTED. Mois courant par défaut (cf. accBankMonthBounds).
+async function loadAccVatSummary(){
+  if(!ACC_BANK_FILTER.dateFrom || !ACC_BANK_FILTER.dateTo){ ACC_VAT_SUMMARY=null; return; }
+  try{
+    const r = await apiFetch('/wa/acc/bank/vat-summary?scope=crm'+accBankDateRangeParams());
+    ACC_VAT_SUMMARY = r.ok ? await r.json() : null;
+  }catch(e){ ACC_VAT_SUMMARY=null; }
+}
+
+function accBankMonthBounds(){
+  const now = new Date();
+  const from = new Date(now.getFullYear(), now.getMonth(), 1);
+  const to = new Date(now.getFullYear(), now.getMonth()+1, 0);
+  const fmt = d => d.toISOString().slice(0,10);
+  return { from: fmt(from), to: fmt(to) };
 }
 
 const ACC_QONTO_STATUS_LABEL={manual:'Manuel',connected:'Connecté',error:'Erreur de connexion'};
@@ -9006,6 +9043,7 @@ function renderAccBank(){
       <td>${esc(t.rawLabel)}${labelBadges}${gcBadge}</td>
       <td>${esc(t.counterpartyName||'—')}</td>
       <td style="text-align:right;font-family:monospace;color:${t.amount<0?'#a32d2d':'#1f7a3f'}">${fmtEUR2(t.amount)}</td>
+      <td style="text-align:right;font-family:monospace;color:var(--mu)">${t.vatAmount>0.009?fmtEUR2(t.vatAmount):'—'}</td>
       <td>${ACC_BANK_SOURCE_LABEL[t.source]||t.source}</td>
       <td>${recoBadge}</td>
     </tr>`;
@@ -9035,28 +9073,41 @@ function renderAccBank(){
     </table></div>
     <div class="modal-section" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <span>Transactions${selected?' — '+esc(selected.name):''}</span>
-      <select id="abf-type" onchange="accBankFilterChange()" style="margin-left:auto">
+      <input type="date" id="abf-date-from" value="${esc(ACC_BANK_FILTER.dateFrom)}" onchange="accBankDateFilterChange()" style="margin-left:auto" title="Depuis le">
+      <span style="font-size:12px;color:var(--mu)">→</span>
+      <input type="date" id="abf-date-to" value="${esc(ACC_BANK_FILTER.dateTo)}" onchange="accBankDateFilterChange()" title="Jusqu'au">
+      <select id="abf-type" onchange="accBankFilterChange()">
         <option value="all" ${ACC_BANK_FILTER.type==='all'?'selected':''}>Tous mouvements</option>
         <option value="credit" ${ACC_BANK_FILTER.type==='credit'?'selected':''}>Encaissements</option>
         <option value="debit" ${ACC_BANK_FILTER.type==='debit'?'selected':''}>Décaissements</option>
         <option value="prelevement" ${ACC_BANK_FILTER.type==='prelevement'?'selected':''}>Prélèvements</option>
       </select>
-      <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:400;${ACC_BANK_FILTER.type==='prelevement'?'opacity:.4':''}">
-        <input type="checkbox" id="abf-exclude-prlv" ${ACC_BANK_FILTER.excludePrelevements?'checked':''} ${ACC_BANK_FILTER.type==='prelevement'?'disabled':''} onchange="accBankFilterChange()">
-        Exclure les prélèvements
-      </label>
-      <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:400">
-        <input type="checkbox" id="abf-hide-matched" ${ACC_BANK_FILTER.hideMatched?'checked':''} onchange="accBankFilterChange()">
-        Masquer les transactions déjà rapprochées
-      </label>
+      <div style="position:relative">
+        <button class="btn btn-ghost btn-sm" onclick="accBankToggleExcludeMenu(event)">Exclure${ACC_BANK_FILTER.excludeKinds.size?' ('+ACC_BANK_FILTER.excludeKinds.size+')':''} ▾</button>
+        <div id="abf-exclude-menu" style="display:none;position:absolute;top:100%;left:0;margin-top:4px;background:var(--card-bg,#fff);border:1px solid var(--bd,#ddd);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);padding:8px 12px;z-index:20;min-width:220px" onclick="event.stopPropagation()">
+          ${[['prelevement','Prélèvements (SEPA)'],['cb','Carte bancaire (CB)'],['matched','Déjà rapprochées'],['labeled','Avec un label']].map(([k,lbl])=>`
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:400;padding:4px 0;white-space:nowrap">
+            <input type="checkbox" ${ACC_BANK_FILTER.excludeKinds.has(k)?'checked':''} onchange="accBankToggleExcludeKind('${k}')">
+            ${lbl}
+          </label>`).join('')}
+        </div>
+      </div>
       <select id="abf-label" onchange="accBankFilterChange()" ${allLabels.length?'':'disabled'} title="${allLabels.length?'':'Aucun label analytique Qonto sur ce compte — étiquetez des transactions dans Qonto puis resynchronisez'}">
         <option value="">${allLabels.length?'Tous labels':'Aucun label Qonto sur ce compte'}</option>
         ${allLabels.map(l=>`<option value="${esc(l)}" ${ACC_BANK_FILTER.label===l?'selected':''}>${esc(l)}</option>`).join('')}
       </select>
     </div>
+    ${ACC_VAT_SUMMARY?`
+    <div style="display:flex;gap:24px;flex-wrap:wrap;font-size:12px;margin:0 0 10px;padding:8px 12px;background:var(--hover);border-radius:8px">
+      <div>TVA ${esc(ACC_VAT_SUMMARY.from)} → ${esc(ACC_VAT_SUMMARY.to)}</div>
+      <div>Collectée <strong style="font-family:monospace">${fmtEUR2(ACC_VAT_SUMMARY.collectee)}</strong></div>
+      <div>Déductible <strong style="font-family:monospace">${fmtEUR2(ACC_VAT_SUMMARY.deductible)}</strong></div>
+      <div>Nette <strong style="font-family:monospace;color:${ACC_VAT_SUMMARY.net>0.009?'#a32d2d':'#1f7a3f'}">${fmtEUR2(ACC_VAT_SUMMARY.net)}</strong></div>
+      <div style="color:var(--mu)">${ACC_VAT_SUMMARY.matchCount} rapprochement(s) sur la période, tous comptes bancaires</div>
+    </div>`:''}
     <div class="tbl-wrap"><table>
-      <thead><tr><th style="width:100px">Date</th><th>Libellé</th><th>Contrepartie</th><th style="width:120px;text-align:right">Montant</th><th style="width:90px">Source</th><th style="width:160px">Rapprochement</th></tr></thead>
-      <tbody>${txRows||'<tr><td colspan="6" class="log-empty">'+(selected?(ACC_BANK_TX.length?'Aucune transaction pour ce filtre.':'Aucune transaction importée pour ce compte.'):'Sélectionnez un compte bancaire ci-dessus.')+'</td></tr>'}</tbody>
+      <thead><tr><th style="width:100px">Date</th><th>Libellé</th><th>Contrepartie</th><th style="width:110px;text-align:right">Montant</th><th style="width:90px;text-align:right">TVA</th><th style="width:90px">Source</th><th style="width:160px">Rapprochement</th></tr></thead>
+      <tbody>${txRows||'<tr><td colspan="7" class="log-empty">'+(selected?(ACC_BANK_TX.length?'Aucune transaction pour ce filtre.':'Aucune transaction importée pour ce compte.'):'Sélectionnez un compte bancaire ci-dessus.')+'</td></tr>'}</tbody>
     </table></div>`;
 }
 
@@ -9069,6 +9120,16 @@ function accIsPrelevement(t){
   if(!t.paymentType) return false;
   return PRELEVEMENT_PAYMENT_TYPES.has(String(t.paymentType).toLowerCase().replace(/[^a-z]/g,''));
 }
+// Carte bancaire (paiements type OpenAI, SNCF...) — un moyen de paiement
+// DIFFÉRENT du prélèvement SEPA (PRLV) : "Exclure les prélèvements" ne les
+// masquait donc jamais, constaté le 23/09/2026 (transactions CB visibles
+// malgré la case cochée, à tort perçu comme un bug du filtre prélèvements
+// alors que c'est un filtre distinct qui manquait).
+const CB_PAYMENT_TYPES = new Set(['card','cb','carte','cartebancaire']);
+function accIsCB(t){
+  if(!t.paymentType) return false;
+  return CB_PAYMENT_TYPES.has(String(t.paymentType).toLowerCase().replace(/[^a-z]/g,''));
+}
 // Même seuil que le badge "Rapprochée" affiché sur chaque ligne (montant
 // alloué >= montant total, à 1 centime près) — une transaction "Partielle"
 // reste donc visible : encore un reste à affecter, pas encore terminée.
@@ -9078,12 +9139,15 @@ function accIsFullyMatched(t){
   return t.status!=='IGNORED' && t.status!=='INTERNAL_TRANSFER' && matched>=total-0.009 && total>0;
 }
 function accBankFilteredTx(){
+  const ex = ACC_BANK_FILTER.excludeKinds;
   return ACC_BANK_TX.filter(t=>{
     if(ACC_BANK_FILTER.type==='credit' && t.amount<0) return false;
     if(ACC_BANK_FILTER.type==='debit' && t.amount>=0) return false;
     if(ACC_BANK_FILTER.type==='prelevement' && !accIsPrelevement(t)) return false;
-    if(ACC_BANK_FILTER.excludePrelevements && accIsPrelevement(t)) return false;
-    if(ACC_BANK_FILTER.hideMatched && accIsFullyMatched(t)) return false;
+    if(ex.has('prelevement') && accIsPrelevement(t)) return false;
+    if(ex.has('cb') && accIsCB(t)) return false;
+    if(ex.has('matched') && accIsFullyMatched(t)) return false;
+    if(ex.has('labeled') && (t.qontoLabels||[]).length) return false;
     if(ACC_BANK_FILTER.label && !(t.qontoLabels||[]).includes(ACC_BANK_FILTER.label)) return false;
     return true;
   });
@@ -9091,20 +9155,41 @@ function accBankFilteredTx(){
 function accBankFilterChange(){
   const typeEl = document.getElementById('abf-type');
   const labelEl = document.getElementById('abf-label');
-  const excludeEl = document.getElementById('abf-exclude-prlv');
-  const hideMatchedEl = document.getElementById('abf-hide-matched');
-  const type = typeEl?typeEl.value:'all';
-  ACC_BANK_FILTER = {
-    type,
-    label: labelEl?labelEl.value:'',
-    // "Exclure les prélèvements" n'a pas de sens combiné à "Prélèvements"
-    // (résultat systématiquement vide) — la case est désactivée dans ce cas
-    // et son état ignoré plutôt que de piéger l'utilisateur sur une liste
-    // vide sans explication.
-    excludePrelevements: type!=='prelevement' && !!(excludeEl && excludeEl.checked),
-    hideMatched: !!(hideMatchedEl && hideMatchedEl.checked),
-  };
+  ACC_BANK_FILTER.type = typeEl?typeEl.value:'all';
+  ACC_BANK_FILTER.label = labelEl?labelEl.value:'';
   renderAccBank();
+}
+
+// Menu "Exclure" (case à cocher multiple) — toggle un type d'exclusion et
+// ré-affiche, sans fermer le popover (l'utilisateur coche souvent plusieurs
+// cases d'affilée, cf. demande "prélevé, CB, déjà rapproché ET labels").
+function accBankToggleExcludeKind(kind){
+  if(ACC_BANK_FILTER.excludeKinds.has(kind)) ACC_BANK_FILTER.excludeKinds.delete(kind);
+  else ACC_BANK_FILTER.excludeKinds.add(kind);
+  renderAccBank();
+}
+function accBankToggleExcludeMenu(ev){
+  ev.stopPropagation();
+  const menu = document.getElementById('abf-exclude-menu');
+  if(!menu) return;
+  const opening = menu.style.display==='none';
+  menu.style.display = opening?'block':'none';
+  if(opening){
+    // Ferme au clic extérieur — une seule fois, retiré après usage plutôt
+    // que d'empiler un listener par ouverture.
+    const closeOnOutside = (e)=>{ if(!menu.contains(e.target)){ menu.style.display='none'; document.removeEventListener('click', closeOnOutside); } };
+    setTimeout(()=>document.addEventListener('click', closeOnOutside), 0);
+  }
+}
+
+// Plage de dates — déclenche un rechargement serveur (transactions ET TVA
+// du mois dépendent toutes deux de [dateFrom, dateTo], cf. loadAccBankTab).
+function accBankDateFilterChange(){
+  const fromEl = document.getElementById('abf-date-from');
+  const toEl = document.getElementById('abf-date-to');
+  ACC_BANK_FILTER.dateFrom = fromEl?fromEl.value:'';
+  ACC_BANK_FILTER.dateTo = toEl?toEl.value:'';
+  Promise.all([loadAccBankTransactions(), loadAccVatSummary()]).then(renderAccBank);
 }
 
 function accSelectBankAccount(id){
