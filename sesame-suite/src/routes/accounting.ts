@@ -259,7 +259,7 @@ accountingRouter.get(
       where: {
         entityId,
         status: { notIn: ["MATCHED", "IGNORED", "INTERNAL_TRANSFER"] },
-        direction: invoice.direction === "sale" ? "credit" : "debit",
+        direction: invoice.direction === "sale" ? "CREDIT" : "DEBIT", // AccBankTransaction.direction stocké en MAJUSCULES (cf. accBanking.ts) — "credit"/"debit" ne matchait JAMAIS, bug trouvé le 23/09/2026 ("Aucun règlement bancaire non affecté trouvé" systématique)
         ...(invoice.currency ? { currency: invoice.currency } : {}),
       },
       orderBy: { operationDate: "desc" },
