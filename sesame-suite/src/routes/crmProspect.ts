@@ -537,6 +537,19 @@ crmProspectRouter.post(
   })
 );
 
+/** POST /wa/crmProspect/bulkDelete — suppression multiple depuis la liste (cases à cocher, cf. public/crm.html crmToggleSelect). Chaque id inexistant est simplement ignoré plutôt que de faire échouer tout le lot. */
+crmProspectRouter.post(
+  "/crmProspect/bulkDelete",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const ids = (req.body.ids as string[]) || [];
+    if (!Array.isArray(ids) || !ids.length) throw new HttpError(400, "ids requis");
+    const result = await prisma.crmProspect.deleteMany({ where: { id: { in: ids } } });
+    res.json({ ok: true, deleted: result.count });
+  })
+);
+
 // Statuts considérés "terminés" pour un ticket — ceux qui n'ont plus besoin
 // d'aucun suivi actif. Distinct de TICKET_STATUSES (crm.html) mais reflète
 // les mêmes libellés.

@@ -111,3 +111,16 @@ crmContactRouter.post(
     res.json({ ok: true });
   })
 );
+
+/** POST /wa/crmContact/bulkDelete — suppression multiple depuis la carte Contacts d'une fiche. */
+crmContactRouter.post(
+  "/crmContact/bulkDelete",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const ids = (req.body as { ids?: string[] }).ids || [];
+    if (!Array.isArray(ids) || !ids.length) throw new HttpError(400, "ids requis");
+    const result = await prisma.crmContact.deleteMany({ where: { id: { in: ids } } });
+    res.json({ ok: true, deleted: result.count });
+  })
+);

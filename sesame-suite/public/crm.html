@@ -1269,6 +1269,7 @@ function renderList(){
     <span style="font-size:13px;font-weight:600">${SELECTED_IDS.size} sélectionné${SELECTED_IDS.size>1?'s':''}</span>
     <button class="btn btn-primary btn-sm" onclick="openBulkEmailModal()">✉ Envoyer un email groupé</button>
     <button class="btn btn-primary btn-sm" onclick="openQuestionnaireSendModal()">📋 Envoyer un questionnaire</button>
+    <button class="btn btn-ghost btn-sm" style="color:#a32d2d" onclick="crmBulkDelete()">🗑 Supprimer la sélection</button>
     <button class="btn btn-ghost btn-sm" onclick="crmClearSelection()">Désélectionner</button>
   </div>` : '';
 
@@ -1362,6 +1363,23 @@ function crmToggleSelectAllVisible(checked){
   renderList();
 }
 function crmClearSelection(){ SELECTED_IDS.clear(); renderList(); }
+
+async function crmBulkDelete(){
+  const ids = [...SELECTED_IDS];
+  if(!ids.length) return;
+  const names = ids.map(id=>{ const c=clients.find(c=>c.id===id); return c?c.nom:id; });
+  if(!confirm('Supprimer définitivement '+ids.length+' fiche(s) ?\n\n'+names.slice(0,10).join(', ')+(names.length>10?', …':'')+'\n\nCette action est irréversible.')) return;
+  try{
+    const r = await apiFetch('/wa/crmProspect/bulkDelete', {method:'POST', body:JSON.stringify({ids})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    clients = clients.filter(c=>!ids.includes(c.id));
+    SELECTED_IDS.clear();
+    updateBadges();
+    flash(data.deleted+' fiche(s) supprimée(s)');
+    showList();
+  }catch(e){ flash(e.message||'Erreur de suppression'); }
+}
 
 /** Fiches sélectionnées ayant un email valide — les autres sont exclues de l'envoi mais comptées pour prévenir l'utilisateur. */
 function crmSelectedWithEmail(){
@@ -2311,6 +2329,7 @@ let CRM_CONTACTS = [];
 async function loadContactsCard(c){
   const el = document.getElementById('contacts-card');
   if(!el) return;
+  CRM_CONTACT_SELECTED_IDS.clear();
   try{
     const r = await apiFetch('/wa/crmContact/list?prospectId='+encodeURIComponent(c.id));
     CRM_CONTACTS = r.ok ? await r.json() : [];
@@ -2318,11 +2337,14 @@ async function loadContactsCard(c){
   renderContactsCard(c.id);
 }
 
+let CRM_CONTACT_SELECTED_IDS = new Set();
+
 function renderContactsCard(prospectId){
   const el = document.getElementById('contacts-card');
   if(!el) return;
   const rows = CRM_CONTACTS.map(ct=>`
     <div class="log-item" style="border:none;padding:6px 0">
+      <input type="checkbox" style="margin-top:4px" ${CRM_CONTACT_SELECTED_IDS.has(ct.id)?'checked':''} onchange="crmContactToggleSelect('${prospectId}','${ct.id}',this.checked)">
       <div class="log-dot ld-b"></div>
       <div class="log-body">
         <div class="log-text"><strong>${esc(ct.name)}</strong>${ct.fonction?' <span class="tag t-gray" style="font-size:10px;padding:1px 7px">'+esc(ct.fonction)+'</span>':''}</div>
@@ -2333,9 +2355,37 @@ function renderContactsCard(prospectId){
         </div>
       </div>
     </div>`).join('');
+  const selBar = CRM_CONTACT_SELECTED_IDS.size ? `
+    <div style="display:flex;align-items:center;gap:10px;padding:6px 0;font-size:12px">
+      <span style="font-weight:600">${CRM_CONTACT_SELECTED_IDS.size} sélectionné(s)</span>
+      <button class="btn btn-sm btn-ghost" style="color:#a32d2d" onclick="crmContactBulkDelete('${prospectId}')">🗑 Supprimer la sélection</button>
+      <button class="btn btn-sm btn-ghost" onclick="crmContactClearSelection('${prospectId}')">Désélectionner</button>
+    </div>` : '';
   el.innerHTML = `
     <div class="card-head"><div class="ch-ico">☺</div><span class="ch-title">Contacts</span><button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="openContactModal('${prospectId}',null)">+ Contact</button></div>
+    ${selBar}
     ${rows || '<div class="log-empty">Aucun contact additionnel — seul le référent de la fiche est enregistré.</div>'}`;
+}
+
+function crmContactToggleSelect(prospectId, id, checked){
+  if(checked) CRM_CONTACT_SELECTED_IDS.add(id); else CRM_CONTACT_SELECTED_IDS.delete(id);
+  renderContactsCard(prospectId);
+}
+function crmContactClearSelection(prospectId){ CRM_CONTACT_SELECTED_IDS.clear(); renderContactsCard(prospectId); }
+
+async function crmContactBulkDelete(prospectId){
+  const ids = [...CRM_CONTACT_SELECTED_IDS];
+  if(!ids.length) return;
+  if(!confirm('Supprimer définitivement '+ids.length+' contact(s) ?')) return;
+  try{
+    const r = await apiFetch('/wa/crmContact/bulkDelete', {method:'POST', body:JSON.stringify({ids})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    CRM_CONTACTS = CRM_CONTACTS.filter(ct=>!ids.includes(ct.id));
+    CRM_CONTACT_SELECTED_IDS.clear();
+    flash(data.deleted+' contact(s) supprimé(s)');
+    renderContactsCard(prospectId);
+  }catch(e){ flash(e.message||'Erreur de suppression'); }
 }
 
 const CRM_GC_STATUS_TAG={pending_customer_approval:'t-gray',pending_submission:'t-gray',submitted:'t-gray',confirmed:'t-amber',paid_out:'t-green',cancelled:'t-red',customer_approval_denied:'t-red',failed:'t-red',charged_back:'t-red'};
