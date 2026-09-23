@@ -4,6 +4,7 @@ import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin, requireSesame } from "../middleware/requireAdmin";
 import { fireTrigger } from "../lib/automation";
 import { config } from "../config";
+import { invoiceTotal } from "../lib/accReconciliation";
 
 /**
  * CRM commercial interne de Sesame — pipeline prospects/clients (à ne pas
@@ -755,7 +756,7 @@ crmProspectRouter.get(
     let totalHt = 0, totalTtc = 0, totalPaid = 0;
     for (const inv of invoices) {
       totalHt += inv.amountHt || 0;
-      totalTtc += inv.amountTtc || 0;
+      totalTtc += invoiceTotal(inv);
       totalPaid += inv.amountPaid || 0;
     }
 

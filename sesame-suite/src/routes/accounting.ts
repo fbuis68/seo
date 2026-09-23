@@ -14,7 +14,7 @@ import { recordAuditLog } from "../lib/accAudit";
 import { parseBankFile, importBankTransactions, BankImportError, BankImportSource } from "../lib/accBanking";
 import { fetchQontoOrganization, syncQontoBankAccount, QontoError, QontoCredentials } from "../lib/qonto";
 import { testGoCardlessConnection, syncGoCardless, GoCardlessError, GoCardlessCredentials } from "../lib/gocardless";
-import { findCandidates, confirmMatch, unmatch, autoReconcileMany, ReconciliationError } from "../lib/accReconciliation";
+import { findCandidates, confirmMatch, unmatch, autoReconcileMany, ReconciliationError, invoiceTotal } from "../lib/accReconciliation";
 import { sendRelanceBatch, runRelanceRule } from "../lib/accRelance";
 
 /**
@@ -457,7 +457,7 @@ accountingRouter.patch(
         throw new HttpError(400, "Cette facture a un rapprochement bancaire — retirez-le (onglet Banque) avant de la marquer non réglée");
       }
     }
-    const amountPaid = paid ? invoice.amountTtc || 0 : 0;
+    const amountPaid = paid ? invoiceTotal(invoice) : 0;
     const status = paid ? "PAID" : "ACCOUNTED";
     const updated = await prisma.accInvoice.update({ where: { id: invoice.id }, data: { status, amountPaid } });
     await recordAuditLog({ entityId, userId: actorId(req), action: paid ? "invoice_marked_paid" : "invoice_marked_unpaid", targetType: "AccInvoice", targetId: invoice.id, oldValue: { status: invoice.status }, newValue: { status }, ip: req.ip });
@@ -841,7 +841,7 @@ accountingRouter.get(
     let totalHt = 0, totalTtc = 0, totalPaid = 0;
     for (const inv of invoices) {
       totalHt += inv.amountHt || 0;
-      totalTtc += inv.amountTtc || 0;
+      totalTtc += invoiceTotal(inv);
       totalPaid += inv.amountPaid || 0;
     }
 
@@ -1053,7 +1053,7 @@ accountingRouter.get(
     let blockingCount = 0;
     for (const inv of pendingInvoices) {
       pendingHt += inv.amountHt || 0;
-      pendingTtc += inv.amountTtc || 0;
+      pendingTtc += invoiceTotal(inv);
       const checks = (inv.checks as unknown as CheckResult[]) || [];
       if (worstLevel(checks) === "BLOCKING") blockingCount++;
     }

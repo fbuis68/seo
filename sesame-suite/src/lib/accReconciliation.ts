@@ -15,6 +15,21 @@ import { validateEntry } from "./accEntryService";
 
 export class ReconciliationError extends Error {}
 
+/**
+ * Montant total dû d'une facture — replié sur amountHt quand amountTtc est
+ * absent (facture exonérée de TVA, ex. auto-entrepreneur "TVA non
+ * applicable, art. 293B du CGI" : le document n'a souvent qu'un seul
+ * total, jamais mappé sur amountTtc par l'extraction). `amountTtc || 0`
+ * traitait alors la facture comme si son solde dû était nul — un
+ * rapprochement proposait 0,00€ d'office et échouait toujours, constaté le
+ * 23/09/2026. Utilisé PARTOUT où "le montant de la facture" est nécessaire
+ * (candidats, confirmation, statut payé/partiel, relance, tableaux de
+ * bord) pour ne pas réintroduire le bug à un seul endroit oublié.
+ */
+export function invoiceTotal(invoice: { amountTtc: number | null; amountHt: number | null }): number {
+  return invoice.amountTtc ?? invoice.amountHt ?? 0;
+}
+
 // Score >= AUTO_THRESHOLD ET aucun autre candidat à moins de
 // AUTO_AMBIGUITY_MARGIN points du premier : confirmation automatique.
 // En dessous, la transaction reste IMPORTED avec des candidats proposés
@@ -181,7 +196,7 @@ export async function findCandidates(bankTransactionId: string, limit = 15, incl
 
   const candidates: ScoredCandidate[] = [];
   for (const inv of invoices) {
-    const remainingDue = (inv.amountTtc || 0) - inv.amountPaid;
+    const remainingDue = invoiceTotal(inv) - inv.amountPaid;
     if (remainingDue <= AMOUNT_EPSILON) continue;
     const party = await partyForInvoice(inv);
     const { score, reasons } = scoreCandidate(tx, inv, party, remainingDue);
@@ -253,7 +268,7 @@ export async function confirmMatch(
   if (allocatedAmount > txCapacity + AMOUNT_EPSILON) {
     throw new ReconciliationError(`Montant alloué (${allocatedAmount.toFixed(2)}€) supérieur au reste disponible sur la transaction (${txCapacity.toFixed(2)}€)`);
   }
-  const remainingDue = (invoice.amountTtc || 0) - invoice.amountPaid;
+  const remainingDue = invoiceTotal(invoice) - invoice.amountPaid;
   if (allocatedAmount > remainingDue + AMOUNT_EPSILON) {
     throw new ReconciliationError(`Montant alloué (${allocatedAmount.toFixed(2)}€) supérieur au solde dû de la facture (${remainingDue.toFixed(2)}€)`);
   }
@@ -265,7 +280,7 @@ export async function confirmMatch(
     const newAmountPaid = invoice.amountPaid + allocatedAmount;
     await px.accInvoice.update({
       where: { id: invoiceId },
-      data: { amountPaid: newAmountPaid, status: invoiceStatusForAmountPaid(invoice.amountTtc || 0, newAmountPaid) },
+      data: { amountPaid: newAmountPaid, status: invoiceStatusForAmountPaid(invoiceTotal(invoice), newAmountPaid) },
     });
     const newTxAllocated = alreadyAllocatedOnTx + allocatedAmount;
     const fullyMatched = newTxAllocated >= Math.abs(tx.amount) - AMOUNT_EPSILON;
@@ -297,7 +312,7 @@ export async function unmatch(matchId: string): Promise<void> {
     // Ne redescend jamais en dessous d'ACCOUNTED : un désrapprochement ne
     // doit pas faire perdre le statut "comptabilisée" lui-même, seul
     // l'indicateur de règlement change.
-    const status = invoiceStatusForAmountPaid(invoice.amountTtc || 0, newAmountPaid);
+    const status = invoiceStatusForAmountPaid(invoiceTotal(invoice), newAmountPaid);
     await px.accInvoice.update({ where: { id: invoice.id }, data: { amountPaid: newAmountPaid, status } });
     await px.accBankTransaction.update({ where: { id: match.bankTransactionId }, data: { status: "IMPORTED" } });
   });

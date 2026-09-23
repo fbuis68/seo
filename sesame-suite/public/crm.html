@@ -2366,7 +2366,7 @@ function renderComptaCard(detail){
       <td>${i.invoiceDate?new Date(i.invoiceDate).toLocaleDateString('fr-FR'):'—'}</td>
       <td>${esc(i.invoiceNumber||'(sans n°)')}</td>
       <td style="text-align:right">${i.amountTtc!=null?fmtEUR2(i.amountTtc):'—'}</td>
-      <td style="text-align:right">${fmtEUR2(Math.max(0,(i.amountTtc||0)-(i.amountPaid||0)))}</td>
+      <td style="text-align:right">${fmtEUR2(Math.max(0,accInvoiceTotal(i)-(i.amountPaid||0)))}</td>
       <td>${accStatusBadge(i.status)}</td>
     </tr>`).join('');
   const paymentRows = detail.payments.map(p=>`
@@ -7520,6 +7520,12 @@ const ACC_CHECK_TAG={OK:'t-green',WARNING:'t-amber',ERROR:'t-red',BLOCKING:'t-re
 const ACC_DOCTYPE_LABEL={invoice:'Facture',credit_note:'Avoir',deposit_invoice:'Facture d\'acompte',receipt:'Reçu',statement:'Relevé de compte',non_accounting:'Non comptable'};
 
 function fmtEUR2(n){ return (n==null?0:+n).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'; }
+// Montant total d'une facture — replié sur amountHt quand amountTtc est
+// absent (facture exonérée de TVA, ex. auto-entrepreneur) — même
+// convention que invoiceTotal() côté serveur (lib/accReconciliation.ts) :
+// sans ce repli, "Reste dû" affichait 0 et un rapprochement se proposait
+// systématiquement à 0,00€ pour ces factures (bug trouvé le 23/09/2026).
+function accInvoiceTotal(i){ return i.amountTtc!=null?+i.amountTtc:(i.amountHt!=null?+i.amountHt:0); }
 function accStatusBadge(s){ return `<span class="tag ${ACC_STATUS_TAG[s]||'t-gray'}" style="font-size:10px;padding:1px 7px">${ACC_STATUS_LABEL[s]||s}</span>`; }
 function accWorstCheckLevel(checks){
   const order=['OK','WARNING','ERROR','BLOCKING'];
@@ -8231,7 +8237,7 @@ function renderAccInvoiceModal(inv){
   const locked = ['VALIDATED','ACCOUNTED','PARTIALLY_PAID','PAID'].includes(inv.status);
   const canTogglePaid = ['ACCOUNTED','PARTIALLY_PAID','PAID'].includes(inv.status);
   const canManageSettlement = ['VALIDATED','ACCOUNTED','PARTIALLY_PAID','PAID'].includes(inv.status);
-  const remainingDue = Math.max(0, (inv.amountTtc||0) - (inv.amountPaid||0));
+  const remainingDue = Math.max(0, accInvoiceTotal(inv) - (inv.amountPaid||0));
   const bankMatches = inv.bankMatches||[];
   const settlementRows = bankMatches.map(m=>`
     <tr>
@@ -8377,7 +8383,7 @@ async function accOpenSettlementPicker(invoiceId){
 
 function accOpenAssignAmount(txId, invoiceId, txRemainingCapacity){
   const inv = window._accInvoiceEditing;
-  const remainingDue = inv ? Math.max(0, (inv.amountTtc||0) - (inv.amountPaid||0)) : txRemainingCapacity;
+  const remainingDue = inv ? Math.max(0, accInvoiceTotal(inv) - (inv.amountPaid||0)) : txRemainingCapacity;
   const amount = Math.min(remainingDue, txRemainingCapacity);
   document.getElementById('modal-ct').insertAdjacentHTML('beforeend', `
   <div class="modal-bg" id="asp-confirm-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)this.remove()">
@@ -8748,7 +8754,7 @@ function renderAccCustomerModal(c, detail){
       <td>${i.invoiceDate?new Date(i.invoiceDate).toLocaleDateString('fr-FR'):'—'}</td>
       <td>${esc(i.invoiceNumber||'(sans n°)')}</td>
       <td style="text-align:right">${i.amountTtc!=null?fmtEUR2(i.amountTtc):'—'}</td>
-      <td style="text-align:right">${fmtEUR2(Math.max(0,(i.amountTtc||0)-(i.amountPaid||0)))}</td>
+      <td style="text-align:right">${fmtEUR2(Math.max(0,accInvoiceTotal(i)-(i.amountPaid||0)))}</td>
       <td>${accStatusBadge(i.status)}</td>
     </tr>`).join('') : '';
   const paymentRows = detail ? detail.payments.map(p=>`

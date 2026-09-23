@@ -1,6 +1,7 @@
 import { prisma } from "../db";
 import { sendMessage } from "./messaging";
 import { AccInvoice, AccSupplier, AccCustomer, AccDocument } from "@prisma/client";
+import { invoiceTotal } from "./accReconciliation";
 
 /**
  * Relance de facture impayée — envoi manuel (routes/accounting.ts,
@@ -23,12 +24,12 @@ export interface RelanceResult {
 }
 
 /** Solde restant dû — jamais négatif (un trop-perçu ne redevient pas une dette). */
-export function remainingDue(invoice: Pick<AccInvoice, "amountTtc" | "amountPaid">): number {
-  return Math.max(0, (invoice.amountTtc || 0) - invoice.amountPaid);
+export function remainingDue(invoice: Pick<AccInvoice, "amountTtc" | "amountHt" | "amountPaid">): number {
+  return Math.max(0, invoiceTotal(invoice) - invoice.amountPaid);
 }
 
 /** Facture éligible à une relance — comptabilisée (ou validée) et pas encore soldée. */
-export function isRelancable(invoice: Pick<AccInvoice, "status" | "amountTtc" | "amountPaid">): boolean {
+export function isRelancable(invoice: Pick<AccInvoice, "status" | "amountTtc" | "amountHt" | "amountPaid">): boolean {
   return ["VALIDATED", "ACCOUNTED", "PARTIALLY_PAID"].includes(invoice.status) && remainingDue(invoice) > 0.01;
 }
 
