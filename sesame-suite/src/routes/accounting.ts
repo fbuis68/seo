@@ -14,6 +14,7 @@ import { recordAuditLog } from "../lib/accAudit";
 import { parseBankFile, importBankTransactions, BankImportError, BankImportSource } from "../lib/accBanking";
 import { fetchQontoOrganization, syncQontoBankAccount, QontoError, QontoCredentials } from "../lib/qonto";
 import { testGoCardlessConnection, syncGoCardless, GoCardlessError, GoCardlessCredentials } from "../lib/gocardless";
+import { testScalewayConnection, syncScaleway, ScalewayError, ScalewayCredentials } from "../lib/scaleway";
 import { findCandidates, confirmMatch, unmatch, autoReconcileMany, ReconciliationError, invoiceTotal } from "../lib/accReconciliation";
 import { sendRelanceBatch, runRelanceRule } from "../lib/accRelance";
 
@@ -1381,6 +1382,84 @@ accountingRouter.post(
       res.json(result);
     } catch (e) {
       if (e instanceof GoCardlessError) throw new HttpError(400, e.message);
+      throw e;
+    }
+  })
+);
+
+// ───────── Connecteur Scaleway (factures d'hébergement) ─────────
+
+function shapeScalewayConfig(c: { accessKey: string; secretKey: string; organizationId: string | null } | null) {
+  if (!c) return { accessKeySet: false, accessKey: "", secretKeySet: false, secretKeyLast4: "", organizationId: "" };
+  return { accessKeySet: true, accessKey: c.accessKey, secretKeySet: true, secretKeyLast4: c.secretKey.slice(-4), organizationId: c.organizationId || "" };
+}
+
+accountingRouter.get(
+  "/acc/scaleway/config",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const config = await prisma.scalewayConfig.findFirst({ where: { entityId } });
+    res.json(shapeScalewayConfig(config));
+  })
+);
+
+interface ScalewayConfigBody {
+  accessKey?: string;
+  secretKey?: string;
+  organizationId?: string;
+}
+
+/** PUT /wa/acc/scaleway/config — un secretKey vide conserve la valeur déjà enregistrée (même convention que /wa/acc/bank/qonto/config). */
+accountingRouter.put(
+  "/acc/scaleway/config",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const b = req.body as ScalewayConfigBody;
+    if (!b.accessKey) throw new HttpError(400, "accessKey requis");
+    const existing = await prisma.scalewayConfig.findFirst({ where: { entityId } });
+    if (!b.secretKey && !existing) throw new HttpError(400, "secretKey requis à la première configuration");
+    const data = { accessKey: b.accessKey, ...(b.secretKey ? { secretKey: b.secretKey } : {}), organizationId: b.organizationId || null };
+    const config = existing
+      ? await prisma.scalewayConfig.update({ where: { id: existing.id }, data })
+      : await prisma.scalewayConfig.create({ data: { entityId, accessKey: b.accessKey, secretKey: b.secretKey!, organizationId: b.organizationId || null } });
+    await recordAuditLog({ entityId, userId: actorId(req), action: "scaleway_config_updated", targetType: "ScalewayConfig", targetId: config.id, ip: req.ip });
+    res.json(shapeScalewayConfig(config));
+  })
+);
+
+/** POST /wa/acc/scaleway/test — valide les identifiants enregistrés, aucun effet de bord. */
+accountingRouter.post(
+  "/acc/scaleway/test",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const config = await prisma.scalewayConfig.findFirst({ where: { entityId } });
+    if (!config) throw new HttpError(400, "Identifiants Scaleway non configurés");
+    const creds: ScalewayCredentials = { accessKey: config.accessKey, secretKey: config.secretKey, organizationId: config.organizationId };
+    try {
+      await testScalewayConnection(creds);
+      res.json({ ok: true });
+    } catch (e) {
+      if (e instanceof ScalewayError) throw new HttpError(400, e.message);
+      throw e;
+    }
+  })
+);
+
+/** POST /wa/acc/scaleway/sync — récupère les factures Scaleway et les fait passer par le pipeline d'ingestion normal (cf. lib/scaleway.ts syncScaleway). */
+accountingRouter.post(
+  "/acc/scaleway/sync",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    try {
+      const result = await syncScaleway(entityId);
+      await recordAuditLog({ entityId, userId: actorId(req), action: "scaleway_synced", targetType: "ScalewayConfig", targetId: entityId || "crm", newValue: result, ip: req.ip });
+      res.json(result);
+    } catch (e) {
+      if (e instanceof ScalewayError) throw new HttpError(400, e.message);
       throw e;
     }
   })

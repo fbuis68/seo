@@ -7,6 +7,7 @@ import { startCampaignScheduler } from "./lib/campaignScheduler";
 import { startGraphSubscriptionScheduler } from "./lib/graphSubscriptionScheduler";
 import { startQontoScheduler } from "./lib/qontoScheduler";
 import { startGoCardlessScheduler } from "./lib/gocardlessScheduler";
+import { startScalewayScheduler } from "./lib/scalewayScheduler";
 import { startAccRelanceScheduler } from "./lib/accRelanceScheduler";
 import { VERSION } from "./lib/version";
 
@@ -52,5 +53,6 @@ app.listen(config.port, () => {
   startGraphSubscriptionScheduler();
   startQontoScheduler();
   startGoCardlessScheduler();
+  startScalewayScheduler();
   startAccRelanceScheduler();
 });

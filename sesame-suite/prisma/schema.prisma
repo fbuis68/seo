@@ -74,6 +74,7 @@ model Entity {
   accRelanceRules        AccRelanceRule[]
   qontoConfig            QontoConfig?
   gocardlessConfig       GoCardlessConfig?
+  scalewayConfig         ScalewayConfig?
   accGoCardlessPayouts   AccGoCardlessPayout[]
   accGoCardlessPayments  AccGoCardlessPayment[]
 }
@@ -3391,6 +3392,24 @@ model GoCardlessConfig {
 
   accessToken String
   sandbox     Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Identifiants API Scaleway (récupération automatique des factures
+// d'hébergement, § "connecteur Scaleway") — mêmes conventions que
+// GoCardlessConfig/QontoConfig. organizationId optionnel : l'API Billing
+// se limite d'elle-même à l'organisation propriétaire de la clé quand il
+// est absent (cf. lib/scaleway.ts).
+model ScalewayConfig {
+  id       String  @id @default(cuid())
+  entityId String? @unique
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  accessKey      String
+  secretKey      String
+  organizationId String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

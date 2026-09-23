@@ -1,6 +1,7 @@
 import { prisma } from "../db";
 import { ParsedBankTransaction, importBankTransactions, ImportBankTransactionsResult } from "./accBanking";
 import { autoReconcileMany } from "./accReconciliation";
+import { processUploadedDocument } from "./accPipeline";
 
 /**
  * Connecteur Qonto (Business API, lecture seule) — récupère automatiquement
@@ -131,6 +132,21 @@ async function fetchQontoLabels(creds: QontoCredentials): Promise<Map<string, st
  * Qonto est stable et sert directement d'externalId, pas besoin du repli
  * par hash utilisé pour les imports fichier.
  */
+export interface QontoAttachmentInfo {
+  id: string;
+  fileName: string;
+  contentType: string;
+  url: string;
+}
+
+/** Pièces jointes embarquées sur une transaction (cf. includes[]=attachments) — presentes uniquement quand Qonto (ou l'utilisateur) en a attaché une, ex. le justificatif auto-joint sur ses propres frais/abonnement. */
+function extractQontoAttachments(t: any): QontoAttachmentInfo[] {
+  if (!Array.isArray(t.attachments)) return [];
+  return t.attachments
+    .filter((a: any) => a?.id && a?.url)
+    .map((a: any) => ({ id: String(a.id), fileName: a.file_name || `attachment-${a.id}`, contentType: a.file_content_type || "application/octet-stream", url: a.url }));
+}
+
 function mapQontoTransaction(t: any, labelsById: Map<string, string>): ParsedBankTransaction | null {
   if (t.status !== "completed") return null;
   const amount = Math.abs(Number(t.amount) || 0);
@@ -166,9 +182,16 @@ function mapQontoTransaction(t: any, labelsById: Map<string, string>): ParsedBan
 
 const QONTO_PAGE_SIZE = 100;
 
-/** Récupère toutes les transactions "completed" d'un IBAN depuis `since` (paginé), tri chronologique croissant. */
-async function fetchQontoTransactions(creds: QontoCredentials, iban: string, since: Date | null, labelsById: Map<string, string>): Promise<ParsedBankTransaction[]> {
+/**
+ * Récupère toutes les transactions "completed" d'un IBAN depuis `since`
+ * (paginé), tri chronologique croissant, avec en parallèle les pièces
+ * jointes embarquées de chacune (§ "récupérer leurs factures et frais" —
+ * includes[]=attachments embarque le justificatif que Qonto attache
+ * lui-même aux débits de frais/abonnement, cf. ingestQontoFeeInvoices).
+ */
+async function fetchQontoTransactions(creds: QontoCredentials, iban: string, since: Date | null, labelsById: Map<string, string>): Promise<{ transactions: ParsedBankTransaction[]; attachmentsByExternalId: Map<string, QontoAttachmentInfo[]> }> {
   const out: ParsedBankTransaction[] = [];
+  const attachmentsByExternalId = new Map<string, QontoAttachmentInfo[]>();
   let page = 1;
   for (;;) {
     const params = new URLSearchParams({
@@ -177,29 +200,87 @@ async function fetchQontoTransactions(creds: QontoCredentials, iban: string, sin
       sort_by: "settled_at:asc",
       current_page: String(page),
       per_page: String(QONTO_PAGE_SIZE),
-      // Sans ce paramètre, Qonto ne renvoie PAS label_ids sur les
-      // transactions — labels analytiques toujours absents en pratique quel
-      // que soit le contenu de fetchQontoLabels (constaté en production,
-      // 22/09/2026 : le mapping id→nom était correct mais rien à mapper,
-      // l'API ne renvoyant jamais label_ids sans includes[]=labels).
-      "includes[]": "labels",
     });
     if (since) params.set("settled_at_from", since.toISOString());
+    // Deux "includes[]" distincts nécessaires (labels + attachments) — un
+    // objet passé à URLSearchParams ne garde qu'une valeur par clé, d'où
+    // ce append() séparé plutôt qu'une entrée de plus dans l'objet
+    // ci-dessus. Sans "includes[]=labels", Qonto ne renvoie PAS label_ids
+    // sur les transactions (constaté en production, 22/09/2026).
+    params.append("includes[]", "labels");
+    params.append("includes[]", "attachments");
     const json = await qontoRequest(creds, `/transactions?${params.toString()}`);
     const rows: any[] = json.transactions || [];
     for (const t of rows) {
       const mapped = mapQontoTransaction(t, labelsById);
-      if (mapped) out.push(mapped);
+      if (mapped) {
+        out.push(mapped);
+        const attachments = extractQontoAttachments(t);
+        if (attachments.length && mapped.externalId) attachmentsByExternalId.set(mapped.externalId, attachments);
+      }
     }
     const totalPages = json.meta?.total_pages || 1;
     if (page >= totalPages || rows.length === 0) break;
     page += 1;
   }
-  return out;
+  return { transactions: out, attachmentsByExternalId };
+}
+
+/**
+ * Ingère les justificatifs des débits QONTO ELLE-MÊME (abonnement, frais
+ * de carte, virements internationaux...) comme factures d'achat — §
+ * "récupérer leurs factures et frais". Repéré par nom de contrepartie
+ * ("QONTO", insensible à la casse) plutôt que par catégorie de transaction
+ * (l'énumération exacte des valeurs de `category` n'a pas pu être vérifiée
+ * de façon fiable, cf. lib/scaleway.ts pour la même prudence sur des
+ * enums non confirmés) — un débit dont Qonto est la contrepartie est sans
+ * ambiguïté un frais Qonto, quelle que soit sa catégorie. Ne touche
+ * jamais aux pièces jointes d'AUTRES contreparties (justificatifs
+ * uploadés par l'utilisateur pour ses propres fournisseurs), qui
+ * n'ont rien à faire dans ce pipeline d'ingestion automatique.
+ */
+async function ingestQontoFeeInvoices(
+  entityId: string | null,
+  transactions: ParsedBankTransaction[],
+  attachmentsByExternalId: Map<string, QontoAttachmentInfo[]>
+): Promise<{ invoicesIngested: number; invoicesDuplicate: number; invoicesFailed: number }> {
+  let invoicesIngested = 0;
+  let invoicesDuplicate = 0;
+  let invoicesFailed = 0;
+
+  for (const tx of transactions) {
+    if (!tx.externalId || !tx.counterpartyName || !/qonto/i.test(tx.counterpartyName)) continue;
+    const attachments = attachmentsByExternalId.get(tx.externalId);
+    if (!attachments?.length) continue;
+    for (const attachment of attachments) {
+      try {
+        const res = await fetchWithTimeout(attachment.url);
+        if (!res.ok) throw new Error(`téléchargement échoué (HTTP ${res.status})`);
+        const buffer = Buffer.from(await res.arrayBuffer());
+        const result = await processUploadedDocument(entityId, {
+          filename: attachment.fileName,
+          mimeType: attachment.contentType,
+          base64: buffer.toString("base64"),
+          source: "api",
+          direction: "purchase",
+        });
+        if (result.isDuplicateDocument) invoicesDuplicate += 1;
+        else invoicesIngested += 1;
+      } catch (e) {
+        invoicesFailed += 1;
+        console.warn(`[qonto] échec d'ingestion pour la pièce jointe ${attachment.id} (transaction ${tx.externalId}) : ${e instanceof Error ? e.message : e}`);
+      }
+    }
+  }
+
+  return { invoicesIngested, invoicesDuplicate, invoicesFailed };
 }
 
 export interface QontoSyncResult extends ImportBankTransactionsResult {
   parsedCount: number;
+  invoicesIngested: number;
+  invoicesDuplicate: number;
+  invoicesFailed: number;
 }
 
 /**
@@ -234,6 +315,7 @@ export async function syncQontoBankAccount(bankAccountId: string, options?: { fu
   const creds: QontoCredentials = { login: config.login, secretKey: config.secretKey, sandbox: config.sandbox };
 
   let parsed: ParsedBankTransaction[];
+  let attachmentsByExternalId: Map<string, QontoAttachmentInfo[]>;
   let orgInfo: { slug: string; bankAccounts: QontoBankAccountInfo[] };
   try {
     const [labelsById, orgInfoResult] = await Promise.all([
@@ -251,7 +333,9 @@ export async function syncQontoBankAccount(bankAccountId: string, options?: { fu
     ]);
     orgInfo = orgInfoResult;
     const since = options?.full ? null : bankAccount.lastSyncAt;
-    parsed = await fetchQontoTransactions(creds, bankAccount.providerAccountId, since, labelsById);
+    const fetched = await fetchQontoTransactions(creds, bankAccount.providerAccountId, since, labelsById);
+    parsed = fetched.transactions;
+    attachmentsByExternalId = fetched.attachmentsByExternalId;
   } catch (e) {
     await prisma.accBankAccount.update({ where: { id: bankAccount.id }, data: { connectionStatus: "error" } });
     throw e;
@@ -259,6 +343,15 @@ export async function syncQontoBankAccount(bankAccountId: string, options?: { fu
 
   const result = await importBankTransactions(bankAccount.entityId, bankAccount.id, "qonto_api", parsed);
   await autoReconcileMany(result.createdIds);
+
+  // Jamais bloquant — un échec de téléchargement/ingestion d'un
+  // justificatif Qonto ne doit pas remettre en cause l'import des
+  // transactions elles-mêmes (déjà terminé à ce stade).
+  const feeInvoices = await ingestQontoFeeInvoices(bankAccount.entityId, parsed, attachmentsByExternalId).catch((e) => {
+    console.warn(`[qonto] ingestQontoFeeInvoices a échoué : ${e instanceof Error ? e.message : e}`);
+    return { invoicesIngested: 0, invoicesDuplicate: 0, invoicesFailed: 0 };
+  });
+
   const liveAccount = orgInfo.bankAccounts.find((a) => a.iban === bankAccount.providerAccountId);
 
   await prisma.accBankAccount.update({
@@ -270,5 +363,5 @@ export async function syncQontoBankAccount(bankAccountId: string, options?: { fu
     },
   });
 
-  return { ...result, parsedCount: parsed.length };
+  return { ...result, parsedCount: parsed.length, ...feeInvoices };
 }

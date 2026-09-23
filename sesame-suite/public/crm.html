@@ -7512,6 +7512,7 @@ let ACC_BANK_FILTER={type:'all', label:'', excludeKinds:new Set(), dateFrom:'', 
 let ACC_VAT_SUMMARY=null;
 let ACC_QONTO_CONFIG=null, ACC_QONTO_TEST_ACCOUNTS=null;
 let ACC_GOCARDLESS_CONFIG=null;
+let ACC_SCALEWAY_CONFIG=null;
 let ACC_TAB='inbox';
 const ACC_LOADED={};
 const ACC_STATUS_LABEL={RECEIVED:'Reçue',PROCESSING:'En traitement',OCR_COMPLETED:'OCR effectué',EXTRACTED:'Extraite',CHECK_REQUIRED:'À vérifier',VALIDATED:'Validée',ACCOUNTED:'Comptabilisée',PARTIALLY_PAID:'Partiellement payée',PAID:'Payée',REJECTED:'Rejetée'};
@@ -7569,7 +7570,7 @@ function renderAccDashboardTiles(){
     </div>`;
 }
 
-const ACC_TABS=[{k:'inbox',label:'Factures'},{k:'suppliers',label:'Fournisseurs'},{k:'customers',label:'Clients'},{k:'accounts',label:'Plan comptable'},{k:'bank',label:'Banque'},{k:'connectors',label:'Connecteurs'},{k:'entries',label:'Écritures'},{k:'rules',label:'Règles'},{k:'email',label:'Import email'},{k:'settings',label:'Réglages'}];
+const ACC_TABS=[{k:'inbox',label:'Factures'},{k:'suppliers',label:'Fournisseurs'},{k:'customers',label:'Clients'},{k:'accounts',label:'Plan comptable'},{k:'bank',label:'Banque'},{k:'entries',label:'Écritures'},{k:'rules',label:'Règles'},{k:'email',label:'Import email'},{k:'connectors',label:'Connecteurs'},{k:'settings',label:'Réglages'}];
 const PAYMENT_METHOD_LABEL = {'':'—', virement:'Virement', prelevement:'Prélèvement', cheque:'Chèque', carte:'Carte bancaire', especes:'Espèces', autre:'Autre'};
 
 /**
@@ -9119,6 +9120,10 @@ async function loadAccConnectorsTab(){
     const r = await apiFetch('/wa/acc/gocardless/config?scope=crm');
     ACC_GOCARDLESS_CONFIG = r.ok ? await r.json() : null;
   }catch(e){ ACC_GOCARDLESS_CONFIG=null; }
+  try{
+    const r = await apiFetch('/wa/acc/scaleway/config?scope=crm');
+    ACC_SCALEWAY_CONFIG = r.ok ? await r.json() : null;
+  }catch(e){ ACC_SCALEWAY_CONFIG=null; }
   renderAccConnectors();
 }
 
@@ -9127,10 +9132,11 @@ function renderAccConnectors(){
   if(!el) return;
   const qontoCfg = ACC_QONTO_CONFIG || {login:'',secretKeySet:false,secretKeyLast4:'',sandbox:false};
   const gcCfg = ACC_GOCARDLESS_CONFIG || {accessTokenSet:false,accessTokenLast4:'',sandbox:false};
+  const swCfg = ACC_SCALEWAY_CONFIG || {accessKeySet:false,accessKey:'',secretKeySet:false,secretKeyLast4:'',organizationId:''};
   el.innerHTML = `
     <div class="modal-section" style="margin-top:0">Qonto (banque)</div>
     <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px">
-      <span style="font-size:12px;color:var(--mu)">${qontoCfg.secretKeySet?`Connecté à l'organisation <strong>${esc(qontoCfg.login)}</strong>${qontoCfg.sandbox?' (sandbox)':''}, clé finissant par ${esc(qontoCfg.secretKeyLast4)}.`:"Non configuré — permet la synchronisation automatique des transactions sans import manuel."}</span>
+      <span style="font-size:12px;color:var(--mu)">${qontoCfg.secretKeySet?`Connecté à l'organisation <strong>${esc(qontoCfg.login)}</strong>${qontoCfg.sandbox?' (sandbox)':''}, clé finissant par ${esc(qontoCfg.secretKeyLast4)}. Récupère aussi automatiquement les factures/frais Qonto elle-même à chaque synchronisation.`:"Non configuré — permet la synchronisation automatique des transactions sans import manuel."}</span>
       <button class="btn btn-ghost btn-sm" onclick="openAccQontoConfigModal()">${qontoCfg.secretKeySet?'Modifier':'Configurer Qonto'}</button>
     </div>
     <div class="modal-section">GoCardless (prélèvements clients)</div>
@@ -9138,7 +9144,84 @@ function renderAccConnectors(){
       <span style="font-size:12px;color:var(--mu)">${gcCfg.accessTokenSet?`Connecté${gcCfg.sandbox?' (sandbox)':''}, jeton finissant par ${esc(gcCfg.accessTokenLast4)}.`:"Non configuré — récupère les prélèvements par client et les rapproche des virements bancaires."}</span>
       <button class="btn btn-ghost btn-sm" onclick="openAccGoCardlessConfigModal()">${gcCfg.accessTokenSet?'Modifier':'Configurer GoCardless'}</button>
       ${gcCfg.accessTokenSet?`<button class="btn btn-ghost btn-sm" onclick="accSyncGoCardless()">Synchroniser maintenant</button>`:''}
+    </div>
+    <div class="modal-section">Scaleway (factures d'hébergement)</div>
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px">
+      <span style="font-size:12px;color:var(--mu)">${swCfg.secretKeySet?`Connecté avec la clé d'accès <strong>${esc(swCfg.accessKey)}</strong>, clé secrète finissant par ${esc(swCfg.secretKeyLast4)}.`:"Non configuré — récupère automatiquement les factures Scaleway et les dépose dans les Factures à valider."}</span>
+      <button class="btn btn-ghost btn-sm" onclick="openAccScalewayConfigModal()">${swCfg.secretKeySet?'Modifier':'Configurer Scaleway'}</button>
+      ${swCfg.secretKeySet?`<button class="btn btn-ghost btn-sm" onclick="accSyncScaleway()">Synchroniser maintenant</button>`:''}
     </div>`;
+}
+
+function openAccScalewayConfigModal(){
+  const c = ACC_SCALEWAY_CONFIG || {accessKeySet:false,accessKey:'',secretKeySet:false,secretKeyLast4:'',organizationId:''};
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:460px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Connecteur Scaleway</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div style="font-size:12px;color:var(--mu);margin-bottom:10px">Clé d'accès et clé secrète disponibles sur la console Scaleway (Identifiants IAM).</div>
+      <div class="ff"><label>Clé d'accès</label><input id="sw-accessKey" value="${esc(c.accessKey)}" placeholder="Ex. SCWXXXXXXXXXXXXXXXXX"></div>
+      <div class="ff" style="margin-top:8px"><label>Clé secrète${c.secretKeySet?' (laisser vide pour conserver celle enregistrée, finit par '+esc(c.secretKeyLast4)+')':''}</label><input id="sw-secretKey" type="password"></div>
+      <div class="ff" style="margin-top:8px"><label>ID d'organisation (optionnel)</label><input id="sw-organizationId" value="${esc(c.organizationId)}" placeholder="Laisser vide pour l'organisation de la clé"></div>
+      <div id="sw-status" style="font-size:12px;margin-top:8px"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost btn-sm" onclick="accTestScalewayConfig()">Tester la connexion</button>
+        <button class="btn btn-primary" onclick="saveAccScalewayConfig()">Enregistrer</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function accScalewayConfigBody(){
+  const g=i=>(document.getElementById(i)||{value:''}).value.trim();
+  const body = {accessKey:g('sw-accessKey'), organizationId:g('sw-organizationId')};
+  const secretKey = g('sw-secretKey');
+  if(secretKey) body.secretKey = secretKey;
+  return body;
+}
+
+async function saveAccScalewayConfig(){
+  const body = accScalewayConfigBody();
+  if(!body.accessKey){ flash('Clé d\'accès requise'); return; }
+  try{
+    const r = await apiFetch('/wa/acc/scaleway/config?scope=crm', {method:'PUT', body:JSON.stringify(body)});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    ACC_SCALEWAY_CONFIG = data;
+    closeModal();
+    flash('Configuration Scaleway enregistrée');
+    renderAccConnectors();
+  }catch(e){ flash(e.message||'Erreur d\'enregistrement'); }
+}
+
+async function accTestScalewayConfig(){
+  const statusEl = document.getElementById('sw-status');
+  statusEl.textContent = 'Test en cours…'; statusEl.style.color = 'var(--mu)';
+  const body = accScalewayConfigBody();
+  if(body.accessKey){
+    try{
+      const r = await apiFetch('/wa/acc/scaleway/config?scope=crm', {method:'PUT', body:JSON.stringify(body)});
+      if(r.ok) ACC_SCALEWAY_CONFIG = await r.json();
+    }catch(e){}
+  }
+  try{
+    const r = await apiFetch('/wa/acc/scaleway/test?scope=crm', {method:'POST'});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    statusEl.style.color = '#1f7a3f';
+    statusEl.textContent = 'Connexion réussie.';
+  }catch(e){ statusEl.style.color = '#a32d2d'; statusEl.textContent = e.message||'Échec de la connexion'; }
+}
+
+async function accSyncScaleway(){
+  flash('Synchronisation Scaleway en cours…');
+  try{
+    const r = await apiFetch('/wa/acc/scaleway/sync?scope=crm', {method:'POST'});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash(data.invoicesIngested+' facture(s) ingérée(s)'+(data.invoicesDuplicate?', '+data.invoicesDuplicate+' déjà connue(s)':'')+(data.invoicesFailed?', '+data.invoicesFailed+' échec(s)':''));
+  }catch(e){ flash(e.message||'Erreur de synchronisation'); }
 }
 
 // "prélèvement" côté fichier bancaire (paymentType : PRLV/DirectDebit/...)
@@ -9386,7 +9469,7 @@ async function accSyncQontoAccount(id, full){
     const r = await apiFetch('/wa/acc/bank/accounts/'+id+'/qonto/sync?scope=crm'+(full?'&full=1':''), {method:'POST'});
     const data = await r.json();
     if(!r.ok) throw new Error(data.error||'http '+r.status);
-    flash(data.created+' nouvelle(s) transaction(s)'+(data.skipped?', '+data.skipped+' déjà connue(s)':''));
+    flash(data.created+' nouvelle(s) transaction(s)'+(data.skipped?', '+data.skipped+' déjà connue(s)':'')+(data.invoicesIngested?', '+data.invoicesIngested+' facture(s)/frais Qonto ingéré(s)':''));
     ACC_BANK_SELECTED = id;
     loadAccBankTab();
   }catch(e){ flash(e.message||'Erreur de synchronisation'); }
