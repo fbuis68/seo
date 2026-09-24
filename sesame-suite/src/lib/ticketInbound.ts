@@ -249,10 +249,10 @@ export async function appendInboundReply(
 
   const data: Record<string, unknown> = { updatedAt: new Date() };
   if (ticket.status === "Fermé") {
-    data.status = "En attente";
+    data.status = "En cours";
     data.closedAt = null;
-  } else if (ticket.status !== "En attente") {
-    data.status = "En attente";
+  } else if (ticket.status !== "En cours") {
+    data.status = "En cours";
   }
   await prisma.crmTicket.update({ where: { id: ticket.id }, data });
 

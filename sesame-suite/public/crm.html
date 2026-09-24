@@ -5582,7 +5582,7 @@ function renderTicketsList(){
   // SELECTED_IDS pour les fiches) plutôt que de la vider automatiquement :
   // seul le compteur de la barre d'actions groupées porte sur son total réel.
   const toolbar = `<div class="list-toolbar">
-    <div class="srch-wrap"><span class="srch-ico">⌕</span><input type="text" placeholder="Sujet, client, email…" value="${esc(ticketSearch)}" oninput="ticketSearch=this.value;renderTicketsList()"></div>
+    <div class="srch-wrap"><span class="srch-ico">⌕</span><input type="text" placeholder="Sujet, client, email…" value="${esc(ticketSearch)}" oninput="ticketSearch=this.value;withFocusKept('.srch-wrap input', renderTicketsList)"></div>
     <select class="lsel" onchange="ticketPriorityFilter=this.value;renderTicketsList()"><option value="">Toutes priorités</option>${TICKET_PRIORITIES.map(p=>`<option value="${p}" ${ticketPriorityFilter===p?'selected':''}>${p}</option>`).join('')}</select>
     <select class="lsel" onchange="ticketTypeFilter=this.value;renderTicketsList()"><option value="">Tous types</option>${TICKET_TYPES.map(ty=>`<option value="${ty}" ${ticketTypeFilter===ty?'selected':''}>${ty}</option>`).join('')}<option value="none" ${ticketTypeFilter==='none'?'selected':''}>Non défini</option></select>
     <select class="lsel" onchange="ticketAgentFilter=this.value;renderTicketsList()"><option value="">Tous agents</option>${COMMERCIALS.map(c=>`<option value="${c.id}" ${ticketAgentFilter===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}<option value="none" ${ticketAgentFilter==='none'?'selected':''}>Non assigné</option></select>
