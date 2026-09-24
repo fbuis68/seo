@@ -65,6 +65,7 @@ interface CreateBody {
   email: string;
   name?: string;
   role?: string;
+  password?: string;
 }
 
 /** POST /wa/adminUser/create — provisionne un compte admin sur l'établissement
@@ -90,7 +91,8 @@ adminUserRouter.post(
     const existing = await prisma.adminUser.findUnique({ where: { email } });
     if (existing) throw new HttpError(409, `Un compte admin existe déjà avec l'email ${email}`);
 
-    const password = randomPassword();
+    if (b.password && b.password.length < 8) throw new HttpError(400, "Le mot de passe doit contenir au moins 8 caractères");
+    const password = b.password || randomPassword();
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await prisma.adminUser.create({
       data: { entityId: b.entityId, email, name: b.name?.trim() || null, passwordHash, role },

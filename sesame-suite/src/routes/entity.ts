@@ -44,6 +44,7 @@ entityRouter.get(
 interface CreateBody {
   name: string;
   stars?: number;
+  secteur?: string;
   adminEmail?: string;
   adminPassword?: string;
 }
@@ -60,6 +61,7 @@ entityRouter.post(
       const { entity, adminEmail, adminPassword } = await provisionEntity({
         name: b.name,
         stars: b.stars,
+        secteur: b.secteur,
         adminEmail: b.adminEmail,
         adminPassword: b.adminPassword,
       });

@@ -21,9 +21,12 @@ async function nextEntityCode(): Promise<string> {
  * (panneau Hôtels) et par l'activation d'une souscription. Retourne les
  * identifiants du compte admin en clair (uniquement disponibles à cet
  * instant — le mot de passe n'est jamais stocké autrement que hashé). */
-export async function provisionEntity(opts: { name: string; stars?: number; adminEmail?: string; adminPassword?: string }) {
+export async function provisionEntity(opts: { name: string; stars?: number; secteur?: string; adminEmail?: string; adminPassword?: string }) {
   const code = await nextEntityCode();
   const adminEmail = (opts.adminEmail || `admin@${slugify(opts.name) || "hotel"}.sesame-app.fr`).toLowerCase();
+  if (opts.adminPassword && opts.adminPassword.length < 8) {
+    throw new Error("Le mot de passe doit contenir au moins 8 caractères");
+  }
   const adminPassword = opts.adminPassword || randomPassword();
 
   const existingEmail = await prisma.adminUser.findUnique({ where: { email: adminEmail } });
@@ -36,6 +39,7 @@ export async function provisionEntity(opts: { name: string; stars?: number; admi
       entityId: entity.id,
       hotelName: opts.name,
       stars: opts.stars || 3,
+      secteur: opts.secteur || "hotellerie",
       colors: {
         primary: "#8B1A2E",
         primaryLight: "#FDEDF0",
