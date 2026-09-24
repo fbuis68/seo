@@ -466,6 +466,40 @@ accountingRouter.patch(
   })
 );
 
+/**
+ * DELETE /wa/acc/invoices/:id — suppression définitive d'une facture (24/09/2026,
+ * demande client : pouvoir supprimer un doublon mal détecté, cf. lib/accDuplicates.ts
+ * durci dans le même correctif). Refusée si la facture porte une écriture comptable
+ * (entryId) ou un rapprochement bancaire (AccBankMatch) — il faut d'abord annuler la
+ * validation/le rapprochement pour ne jamais laisser une écriture ou un virement
+ * pointer sur une facture qui n'existe plus. Le document source (AccDocument, PDF)
+ * n'est PAS supprimé : une autre AccInvoice peut encore le référencer (relecture),
+ * et il reste la preuve d'audit du fichier reçu.
+ */
+accountingRouter.delete(
+  "/acc/invoices/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const invoice = await prisma.accInvoice.findFirst({ where: { id: req.params.id, entityId } });
+    if (!invoice) throw new HttpError(404, "Facture introuvable");
+    if (invoice.entryId) {
+      throw new HttpError(400, "Cette facture a une écriture comptable — dévalidez-la d'abord");
+    }
+    const bankMatchCount = await prisma.accBankMatch.count({ where: { invoiceId: invoice.id } });
+    if (bankMatchCount > 0) {
+      throw new HttpError(400, "Cette facture a un rapprochement bancaire — retirez-le (onglet Banque) avant de la supprimer");
+    }
+    await prisma.accInvoice.delete({ where: { id: invoice.id } });
+    await recordAuditLog({
+      entityId, userId: actorId(req), action: "invoice_deleted", targetType: "AccInvoice", targetId: invoice.id,
+      oldValue: { invoiceNumber: invoice.invoiceNumber, issuerName: invoice.issuerName, recipientName: invoice.recipientName, amountTtc: invoice.amountTtc, status: invoice.status },
+      ip: req.ip,
+    });
+    res.json({ ok: true });
+  })
+);
+
 interface RelanceBody {
   invoiceIds?: string[];
   templateKey?: string;

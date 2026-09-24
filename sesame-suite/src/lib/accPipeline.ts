@@ -173,6 +173,7 @@ export async function processUploadedDocument(
     direction: input.direction,
     supplierId,
     customerId,
+    tiersName: (input.direction === "purchase" ? extracted?.issuerName : extracted?.recipientName) || null,
     invoiceNumber: extracted?.invoiceNumber || null,
     amountTtc: extracted?.amountTtc ?? null,
     invoiceDate: extracted?.invoiceDate || null,

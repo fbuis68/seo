@@ -7949,7 +7949,7 @@ function renderAccInbox(){
       <td>${level!=='OK'?'<span class="tag '+ACC_CHECK_TAG[level]+'" style="font-size:10px;padding:1px 7px">'+level+'</span>':'<span class="tpill bg">OK</span>'}</td>
       <td>${accStatusBadge(inv.status)}</td>
       <td>${accPaidIndicator(inv)}</td>
-      <td style="white-space:nowrap"><button class="ta-btn" onclick="openAccInvoiceModal('${inv.id}')" title="Ouvrir">👁</button></td>
+      <td style="white-space:nowrap"><button class="ta-btn" onclick="openAccInvoiceModal('${inv.id}')" title="Ouvrir">👁</button><button class="ta-btn" onclick="event.stopPropagation();accDeleteInvoice('${inv.id}')" title="Supprimer">🗑</button></td>
     </tr>`;
   }).join('');
   el.innerHTML = `
@@ -8382,6 +8382,7 @@ function renderAccInvoiceModal(inv){
         <button class="btn btn-primary" style="background:#2f6f2f" onclick="accValidateInvoice('${inv.id}')">Valider</button>
         <button class="btn btn-ghost" style="color:#a32d2d" onclick="accRejectInvoice('${inv.id}')">Rejeter</button>`:''}
         ${canTogglePaid?`<button class="btn ${inv.status==='PAID'?'btn-ghost':'btn-primary'}" onclick="accTogglePaid('${inv.id}', ${inv.status!=='PAID'})">${inv.status==='PAID'?'Marquer non payée':'Marquer payée'}</button>`:''}
+        ${!inv.entryId && !bankMatches.length?`<button class="btn btn-ghost" style="color:#a32d2d" onclick="accDeleteInvoice('${inv.id}')">🗑 Supprimer</button>`:`<button class="btn btn-ghost" disabled title="Écriture comptable et/ou rapprochement bancaire existants — annulez-les d'abord">🗑 Supprimer</button>`}
         <button class="btn btn-ghost" onclick="closeModal()">Fermer</button>
       </div>
     </div>
@@ -8590,6 +8591,22 @@ async function accRejectInvoice(id){
     if(ACC_TAB==='inbox') accReloadInvoices();
     closeModal();
   }catch(e){ flash('Erreur lors du rejet'); }
+}
+
+/** Suppression définitive — refusée côté serveur si écriture comptable ou rapprochement bancaire existants (cf. routes/accounting.ts). */
+async function accDeleteInvoice(id){
+  const inv = ACC_INVOICES.find(i=>i.id===id);
+  const label = inv ? (inv.direction==='sale'?(inv.customer?inv.customer.name:inv.recipientName):(inv.supplier?inv.supplier.name:inv.issuerName))||'cette facture' : 'cette facture';
+  if(!confirm('Supprimer définitivement '+label+(inv&&inv.invoiceNumber?' (n° '+inv.invoiceNumber+')':'')+' ?\n\nCette action est irréversible.')) return;
+  try{
+    const r = await apiFetch('/wa/acc/invoices/'+id+'?scope=crm', {method:'DELETE'});
+    const data = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash('Facture supprimée');
+    loadAccDashboard();
+    if(ACC_TAB==='inbox') accReloadInvoices();
+    closeModal();
+  }catch(e){ flash('Erreur : '+(e.message||'échec de la suppression')); }
 }
 
 // ───────── Onglet Fournisseurs ─────────

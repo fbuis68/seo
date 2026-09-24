@@ -14,7 +14,7 @@ export interface SupplierMatchResult {
   matchedBy: string | null;
 }
 
-function normalizeCompanyName(name: string): string {
+export function normalizeCompanyName(name: string): string {
   return name
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "") // accents
