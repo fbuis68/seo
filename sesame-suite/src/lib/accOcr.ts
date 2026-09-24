@@ -50,6 +50,21 @@ function stripPageMarkers(text: string): string {
 }
 
 /**
+ * Certains PDF (police embarquée mal encodée, export logiciel tiers)
+ * produisent un octet NUL (0x00) dans le texte extrait — une chaîne JS
+ * valide, mais que Postgres refuse categoriquement dans une colonne texte
+ * ("invalid byte sequence for encoding UTF8: 0x00", indépendant de la
+ * validité UTF-8 : limitation de stockage interne, pas un problème
+ * d'encodage) — cf. AccDocument.extractedText (accPipeline.ts), faisait
+ * planter tout l'upload en erreur 500 (bug du 24/09/2026). Retiré ici, à la
+ * source, pour que classification/extraction/stockage reçoivent tous un
+ * texte déjà propre plutôt que de patcher chaque appelant.
+ */
+function stripNulBytes(text: string): string {
+  return text.replace(/\u0000/g, "");
+}
+
+/**
  * Couche texte native d'un PDF (§9/§10 : à tenter EN PREMIER, avant tout
  * recours à l'OCR — un PDF "natif" généré par un logiciel de facturation
  * contient déjà son texte, le lire est fiable et gratuit contrairement à
@@ -68,7 +83,7 @@ export class NativeTextProvider implements OcrProvider {
     const parser = new PDFParse({ data: buffer });
     try {
       const [textResult, infoResult] = await Promise.all([parser.getText(), parser.getInfo().catch(() => null)]);
-      const text = stripPageMarkers(textResult.text || "");
+      const text = stripNulBytes(stripPageMarkers(textResult.text || ""));
       return {
         text,
         blocks: [{ text, page: 1 }],
