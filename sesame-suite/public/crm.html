@@ -4675,9 +4675,11 @@ function renderAffairesMonthlyKanban(filtered){
     const live = items.filter(d=>d.stage!=='Perdu');
     // Pondéré = montant ponctuel × probabilité (cf. commentaire au-dessus
     // de renderAffairesMonthly — même convention partout dans ce module).
+    const total = live.reduce((s,d)=>s+(+d.montantPonctuel||0),0);
     const totalPondere = live.reduce((s,d)=>s+(d.montantPonctuel||0)*(d.probability||0)/100,0);
     return `<div class="kanban-col">
-      <div class="kanban-col-head"><span>${label}</span><span class="kanban-col-total">${items.length} · ${fmtEUR(totalPondere)} pond.</span></div>
+      <div class="kanban-col-head"><span>${label}</span><span class="kanban-col-total">${items.length} affaire${items.length>1?'s':''}</span></div>
+      <div class="kanban-col-totals"><div>Non pondéré <b>${fmtEUR(total)}</b></div><div>Pondéré <b>${fmtEUR(totalPondere)}</b></div></div>
       <div class="kanban-cards">
         ${items.length===0?'<div class="kanban-empty">—</div>':items.slice().sort((a,b)=>(b.amount||0)-(a.amount||0)).map(d=>`
           <div class="kanban-card" onclick="openDealModal('${d.id}')">
