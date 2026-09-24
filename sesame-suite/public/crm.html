@@ -361,8 +361,10 @@ input[type=checkbox]{accent-color:var(--a);cursor:pointer;width:14px;height:14px
 /* ── AFFAIRES (pipeline Kanban) ── */
 .kanban-wrap{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;align-items:flex-start}
 .kanban-col{background:var(--bg);border:0.5px solid var(--bdr);border-radius:12px;padding:10px;width:230px;flex-shrink:0}
-.kanban-col-head{display:flex;align-items:center;justify-content:space-between;padding:2px 4px 10px;font-size:12px;font-weight:500;color:var(--tx)}
+.kanban-col-head{display:flex;align-items:center;justify-content:space-between;padding:2px 4px 4px;font-size:12px;font-weight:500;color:var(--tx)}
 .kanban-col-total{font-size:10px;color:var(--mu);font-weight:400}
+.kanban-col-totals{padding:0 4px 10px;border-bottom:0.5px solid var(--bdr);margin-bottom:8px;font-size:11px;color:var(--mu);display:flex;flex-direction:column;gap:2px}
+.kanban-col-totals b{color:var(--tx);font-weight:600}
 .kanban-cards{display:flex;flex-direction:column;gap:8px;min-height:40px}
 .kanban-card{background:var(--card);border:0.5px solid var(--bdr);border-radius:10px;padding:10px;cursor:pointer;transition:box-shadow .15s,border-color .15s}
 .kanban-card:hover{box-shadow:0 4px 14px rgba(0,0,0,.08);border-color:var(--bdr2)}
@@ -4566,9 +4568,14 @@ function renderAffaires(){
 
   const cols = DEAL_STAGES.map(stage=>{
     const items = filtered.filter(d=>d.stage===stage);
-    const total = items.reduce((s,d)=>s+(d.amount||0),0);
+    // Total = somme des montants ponctuels (même convention que le pipeline
+    // Trésorerie/dealCardAmounts, pas le MRR "amount") ; pondéré = total ×
+    // probabilité de chaque affaire, cf. commentaire dealCardAmounts.
+    const total = items.reduce((s,d)=>s+(+d.montantPonctuel||0),0);
+    const totalPondere = items.reduce((s,d)=>s+(+d.montantPonctuel||0)*(+d.probability||0)/100,0);
     return `<div class="kanban-col">
-      <div class="kanban-col-head"><span class="tag ${STAGE_TAG[stage]}" style="font-size:10px">${stage}</span><span class="kanban-col-total">${items.length} · ${fmtEUR(total)}</span></div>
+      <div class="kanban-col-head"><span class="tag ${STAGE_TAG[stage]}" style="font-size:10px">${stage}</span><span class="kanban-col-total">${items.length} affaire${items.length>1?'s':''}</span></div>
+      <div class="kanban-col-totals"><div>Total <b>${fmtEUR(total)}</b></div><div>Pondéré <b>${fmtEUR(totalPondere)}</b></div></div>
       <div class="kanban-cards">
         ${items.length===0?'<div class="kanban-empty">—</div>':items.map(d=>`
           <div class="kanban-card" onclick="openDealModal('${d.id}')">
