@@ -52,6 +52,7 @@ import { nayaxRouter } from "./routes/nayax";
 import { accountingRouter } from "./routes/accounting";
 import { faqRouter } from "./routes/faq";
 import { housekeepingScope } from "./middleware/housekeepingScope";
+import { attachAdmin } from "./middleware/attachAdmin";
 import { errorHandler } from "./middleware/errorHandler";
 import { VERSION } from "./lib/version";
 import { CHANGELOG } from "./lib/changelog";
@@ -79,6 +80,7 @@ export function createApp() {
   // allow-list de routes — cf. middleware/housekeepingScope.ts. Monté avant
   // tous les routeurs /wa pour rester la seule frontière de sécurité à
   // tenir à jour, plutôt qu'une garde par route sensible.
+  app.use("/wa", attachAdmin);
   app.use("/wa", housekeepingScope);
 
   app.use("/wa", configRouter);
