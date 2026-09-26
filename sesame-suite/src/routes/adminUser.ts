@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../db";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin, requireSesame } from "../middleware/requireAdmin";
-import { randomPassword } from "../lib/password";
+import { randomPassword, validatePasswordPolicy } from "../lib/password";
 
 /**
  * Gestion des accès admin rattachés à un contact CRM — la fiche CrmProspect
@@ -91,7 +91,10 @@ adminUserRouter.post(
     const existing = await prisma.adminUser.findUnique({ where: { email } });
     if (existing) throw new HttpError(409, `Un compte admin existe déjà avec l'email ${email}`);
 
-    if (b.password && b.password.length < 8) throw new HttpError(400, "Le mot de passe doit contenir au moins 8 caractères");
+    if (b.password) {
+      const policyError = validatePasswordPolicy(b.password);
+      if (policyError) throw new HttpError(400, policyError);
+    }
     const password = b.password || randomPassword();
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await prisma.adminUser.create({

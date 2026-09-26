@@ -625,7 +625,7 @@ function renderResetForm(token){
   RESET_TOKEN = token;
   document.getElementById('lg-box').innerHTML = `
     <div class="lg-title">Nouveau mot de passe</div>
-    <div class="lg-sub">Choisissez un nouveau mot de passe (8 caractères minimum).</div>
+    <div class="lg-sub">Choisissez un nouveau mot de passe (10 caractères minimum, avec au moins un chiffre et un caractère spécial).</div>
     <div class="ff"><label>Nouveau mot de passe</label><div class="pwwrap"><input type="password" id="rp-password" placeholder="••••••••"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility('rp-password',this)"><i class="ti ti-eye"></i></button></div></div>
     <div class="ff"><label>Confirmer</label><div class="pwwrap"><input type="password" id="rp-password2" placeholder="••••••••" onkeydown="if(event.key==='Enter')submitResetPassword(RESET_TOKEN)"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility('rp-password2',this)"><i class="ti ti-eye"></i></button></div></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="submitResetPassword(RESET_TOKEN)">Valider</button>
@@ -637,7 +637,8 @@ async function submitResetPassword(token){
   var p2 = document.getElementById('rp-password2').value||'';
   var errEl = document.getElementById('lg-err');
   errEl.style.display='none';
-  if(p1.length<8){ errEl.textContent='8 caractères minimum'; errEl.style.display='block'; return; }
+  var perr = crmPasswordPolicyError(p1);
+  if(perr){ errEl.textContent=perr; errEl.style.display='block'; return; }
   if(p1!==p2){ errEl.textContent='Les deux mots de passe ne correspondent pas'; errEl.style.display='block'; return; }
   try{
     var r = await fetch(API_BASE+'/wa/login/resetPassword', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({token:token,password:p1})});
@@ -2600,17 +2601,35 @@ function renderAdminAccessCard(c, users){
       <div class="ff"><label>Nom</label><input type="text" id="admin-access-name" value="${esc(c.nom||'')}" placeholder="Nom de la personne"></div>
       <div class="ff"><label>Email</label><input type="email" id="admin-access-email" value="${esc(c.email||'')}" placeholder="email@hotel.fr"></div>
       <div class="ff"><label>Rôle</label><select id="admin-access-role"><option value="hotel" selected>Établissement</option><option value="housekeeping">Ménage / Maintenance (app tablette)</option><option value="sesame">Sesame (accès complet)</option></select></div>
-      <div class="ff"><label>Mot de passe (optionnel — sinon généré)</label><div style="display:flex;gap:6px"><input type="text" id="admin-access-password" placeholder="8 caractères min." style="flex:1"><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('admin-access-password').value=crmGenPassword()">Générer</button></div></div>
+      <div class="ff"><label>Mot de passe (optionnel — sinon généré)</label><div style="display:flex;gap:6px"><input type="text" id="admin-access-password" placeholder="10 car. min., 1 chiffre, 1 caractère spécial" style="flex:1"><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('admin-access-password').value=crmGenPassword()">Générer</button></div></div>
     </div>
     <div class="log-acts" style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="createAdminAccess('${c.id}')">+ Créer un accès</button></div>`;
 }
 
-/** Généré côté client pour pré-remplir le champ — reste modifiable avant envoi, uniquement pour éviter un champ vide au clic "Générer". */
+/**
+ * Politique de mot de passe (10 caractères min., 1 chiffre, 1 caractère
+ * spécial) — même règle que validatePasswordPolicy côté serveur
+ * (lib/password.ts), rejouée ici uniquement pour un retour immédiat ; le
+ * serveur reste seul juge (jamais fait confiance à ce contrôle seul).
+ * Retourne un message d'erreur, ou null si conforme.
+ */
+function crmPasswordPolicyError(p){
+  if(!p || p.length<10) return 'Le mot de passe doit contenir au moins 10 caractères';
+  if(!/\d/.test(p)) return 'Le mot de passe doit contenir au moins un chiffre';
+  if(!/[!@#$%&*\-_+=.,;:?/()[\]{}~^|\\'"<>`]/.test(p)) return 'Le mot de passe doit contenir au moins un caractère spécial';
+  return null;
+}
+/** Généré côté client pour pré-remplir le champ — reste modifiable avant envoi. Conforme par construction (1 chiffre + 1 spécial placés explicitement, cf. lib/password.ts randomPassword côté serveur, même logique). */
 function crmGenPassword(){
-  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-  let out = '';
-  for(let i=0;i<12;i++) out += chars[Math.floor(Math.random()*chars.length)];
-  return out;
+  const letters = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz';
+  const digits = '23456789';
+  const specials = '!@#$%&*-_+=';
+  const all = letters+digits+specials;
+  const pick = s=>s[Math.floor(Math.random()*s.length)];
+  const out = [pick(digits), pick(specials)];
+  for(let i=out.length;i<12;i++) out.push(pick(all));
+  for(let i=out.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [out[i],out[j]]=[out[j],out[i]]; }
+  return out.join('');
 }
 
 async function createAdminAccess(id){
@@ -2620,7 +2639,7 @@ async function createAdminAccess(id){
   const role=(document.getElementById('admin-access-role')||{value:'hotel'}).value;
   const password=(document.getElementById('admin-access-password')||{value:''}).value;
   if(!email){ flash('Email requis'); return; }
-  if(password && password.length<8){ flash('Le mot de passe doit contenir au moins 8 caractères'); return; }
+  if(password){ const perr=crmPasswordPolicyError(password); if(perr){ flash(perr); return; } }
   try{
     const body={entityId:c.entityId, email:email, name:name, role:role};
     if(password) body.password=password;
@@ -5385,6 +5404,7 @@ function openCrmUserModal(id){
         <div class="ff"><label>Nom</label><input id="u-name" value="${esc(u.name)}" placeholder="Prénom Nom"></div>
         <div class="ff"><label>Rôle</label><select id="u-role"><option value="commercial" ${u.crmRole==='commercial'?'selected':''}>Commercial</option><option value="admin" ${u.crmRole==='admin'?'selected':''}>Admin CRM</option></select></div>
         ${id?`<div class="ff"><label>Statut</label><select id="u-active"><option value="1" ${u.active?'selected':''}>Actif</option><option value="0" ${!u.active?'selected':''}>Désactivé</option></select></div>`:''}
+        ${!id?`<div class="ff"><label>Mot de passe (optionnel — sinon généré)</label><div style="display:flex;gap:6px"><input type="text" id="u-password" placeholder="10 car. min., 1 chiffre, 1 caractère spécial" style="flex:1"><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('u-password').value=crmGenPassword()">Générer</button></div></div>`:''}
       </div>
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="saveCrmUser(${id?`'${id}'`:'null'})">Enregistrer</button>
@@ -5412,7 +5432,11 @@ async function saveCrmUser(id){
     } else {
       const email = g('u-email').trim();
       if(!email){ flash('Email requis'); return; }
-      r = await apiFetch('/wa/crmUser/create', {method:'POST', body:JSON.stringify({email:email, name:g('u-name').trim(), crmRole:g('u-role')})});
+      const upw = g('u-password');
+      if(upw){ const perr=crmPasswordPolicyError(upw); if(perr){ flash(perr); return; } }
+      const cbody = {email:email, name:g('u-name').trim(), crmRole:g('u-role')};
+      if(upw) cbody.password = upw;
+      r = await apiFetch('/wa/crmUser/create', {method:'POST', body:JSON.stringify(cbody)});
       data = await r.json();
       if(!r.ok){ flash(data.error||'Erreur de création'); return; }
       crmUsersList.push(data);

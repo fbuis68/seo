@@ -6,6 +6,7 @@ import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { createResetToken, consumeResetToken } from "../lib/passwordReset";
 import { sendEmailRaw } from "../lib/email";
 import { authRateLimit } from "../middleware/rateLimit";
+import { validatePasswordPolicy } from "../lib/password";
 
 export const loginRouter = Router();
 
@@ -129,7 +130,8 @@ loginRouter.post(
     const token = (req.body.token as string) || "";
     const password = (req.body.password as string) || "";
     if (!token) throw new HttpError(400, "Lien de réinitialisation invalide");
-    if (password.length < 8) throw new HttpError(400, "Le mot de passe doit contenir au moins 8 caractères");
+    const policyError = validatePasswordPolicy(password);
+    if (policyError) throw new HttpError(400, policyError);
 
     const adminUserId = await consumeResetToken(token);
     if (!adminUserId) throw new HttpError(400, "Ce lien de réinitialisation est invalide ou a expiré");

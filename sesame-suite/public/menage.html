@@ -575,18 +575,27 @@ function renderMgResetBox(token){
     '<div class="login-mark">S</div>'
     + '<h1>Nouveau mot de passe</h1>'
     + '<div class="login-sub">Espace tablette du personnel — Sesame</div>'
+    + '<div style="font-size:11px;color:var(--mu,#8a8a8a);margin:8px 0 4px">10 caractères minimum, avec au moins un chiffre et un caractère spécial.</div>'
     + '<div class="lf"><label for="mg-rp-password">Nouveau mot de passe</label><div class="pwwrap"><input type="password" id="mg-rp-password" placeholder="••••••••"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility(\'mg-rp-password\',this)"><i class="ti ti-eye"></i></button></div></div>'
     + '<div class="lf"><label for="mg-rp-password2">Confirmer</label><div class="pwwrap"><input type="password" id="mg-rp-password2" placeholder="••••••••" onkeydown="if(event.key===\'Enter\')submitMgResetPassword(RESET_TOKEN)"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility(\'mg-rp-password2\',this)"><i class="ti ti-eye"></i></button></div></div>'
     + '<button class="login-btn" onclick="submitMgResetPassword(RESET_TOKEN)"><i class="ti ti-check"></i> Valider</button>'
     + '<div class="login-err" id="mg-login-err"></div>';
 }
 
+/** Même règle que validatePasswordPolicy côté serveur (lib/password.ts) — retour immédiat, le serveur reste seul juge. */
+function mgPasswordPolicyError(p){
+  if(!p || p.length<10) return 'Le mot de passe doit contenir au moins 10 caractères';
+  if(!/\d/.test(p)) return 'Le mot de passe doit contenir au moins un chiffre';
+  if(!/[!@#$%&*\-_+=.,;:?/()[\]{}~^|\\'"<>`]/.test(p)) return 'Le mot de passe doit contenir au moins un caractère spécial';
+  return null;
+}
 async function submitMgResetPassword(token){
   var p1 = document.getElementById('mg-rp-password').value||'';
   var p2 = document.getElementById('mg-rp-password2').value||'';
   var errEl = document.getElementById('mg-login-err');
   errEl.style.display='none';
-  if(p1.length<8){ errEl.textContent='Le mot de passe doit contenir au moins 8 caractères'; errEl.style.display='block'; return; }
+  var perr = mgPasswordPolicyError(p1);
+  if(perr){ errEl.textContent=perr; errEl.style.display='block'; return; }
   if(p1!==p2){ errEl.textContent='Les mots de passe ne correspondent pas'; errEl.style.display='block'; return; }
   try{
     var r = await fetch(API_BASE+'/wa/login/resetPassword', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({token:token, password:p1})});

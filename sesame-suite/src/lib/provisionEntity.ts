@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "../db";
-import { randomPassword } from "./password";
+import { randomPassword, validatePasswordPolicy } from "./password";
 
 function slugify(s: string): string {
   return s
@@ -24,8 +24,9 @@ async function nextEntityCode(): Promise<string> {
 export async function provisionEntity(opts: { name: string; stars?: number; secteur?: string; adminEmail?: string; adminPassword?: string }) {
   const code = await nextEntityCode();
   const adminEmail = (opts.adminEmail || `admin@${slugify(opts.name) || "hotel"}.sesame-app.fr`).toLowerCase();
-  if (opts.adminPassword && opts.adminPassword.length < 8) {
-    throw new Error("Le mot de passe doit contenir au moins 8 caractères");
+  if (opts.adminPassword) {
+    const policyError = validatePasswordPolicy(opts.adminPassword);
+    if (policyError) throw new Error(policyError);
   }
   const adminPassword = opts.adminPassword || randomPassword();
 

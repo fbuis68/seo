@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../db";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin, requireSesame, requireCrmAdmin } from "../middleware/requireAdmin";
-import { randomPassword } from "../lib/password";
+import { randomPassword, validatePasswordPolicy } from "../lib/password";
 
 /**
  * Gestion des utilisateurs CRM (18/08/2026) — les comptes de l'équipe
@@ -35,6 +35,7 @@ interface CreateBody {
   email: string;
   name?: string;
   crmRole?: string;
+  password?: string;
 }
 
 crmUserRouter.post(
@@ -51,7 +52,11 @@ crmUserRouter.post(
     if (existing) throw new HttpError(409, "Un compte existe déjà avec cet email");
     const sesameHq = await prisma.entity.findUnique({ where: { code: "SESAME-HQ" } });
     if (!sesameHq) throw new HttpError(500, "Entité Sesame HQ introuvable");
-    const password = randomPassword();
+    if (b.password) {
+      const policyError = validatePasswordPolicy(b.password);
+      if (policyError) throw new HttpError(400, policyError);
+    }
+    const password = b.password || randomPassword();
     const passwordHash = await bcrypt.hash(password, 10);
     const row = await prisma.adminUser.create({
       data: { entityId: sesameHq.id, email, name: b.name?.trim() || null, role: "sesame", crmRole, passwordHash },
@@ -101,9 +106,14 @@ crmUserRouter.post(
   requireCrmAdmin,
   asyncHandler(async (req, res) => {
     const id = (req.body.id as string) || "";
+    const bodyPassword = (req.body.password as string) || "";
     const existing = await prisma.adminUser.findUnique({ where: { id } });
     if (!existing || existing.role !== "sesame") throw new HttpError(404, "Utilisateur CRM introuvable");
-    const password = randomPassword();
+    if (bodyPassword) {
+      const policyError = validatePasswordPolicy(bodyPassword);
+      if (policyError) throw new HttpError(400, policyError);
+    }
+    const password = bodyPassword || randomPassword();
     const passwordHash = await bcrypt.hash(password, 10);
     await prisma.adminUser.update({ where: { id }, data: { passwordHash } });
     res.json({ ok: true, password });

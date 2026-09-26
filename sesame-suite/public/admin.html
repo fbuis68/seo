@@ -4614,6 +4614,7 @@ function renderResetBox(token){
     + '<div class="sesame-wordmark-card"><span class="sw-main">Sesame</span><span class="sw-sub">TECHNOLOGY</span></div>'
     + '<div style="margin-left:4px"><div style="font-family:\'DM Serif Display\',serif;font-size:17px">Nouveau mot de passe</div>'
     + '<div style="font-size:11px;color:var(--mu)">Administration</div></div></div>'
+    + '<div style="font-size:11px;color:var(--mu);margin-bottom:10px">10 caractères minimum, avec au moins un chiffre et un caractère spécial.</div>'
     + '<div class="fi"><label class="lb">Nouveau mot de passe</label><div class="pwwrap"><input type="password" id="rp-password" placeholder="••••••••"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility(\'rp-password\',this)"><i class="ti ti-eye"></i></button></div></div>'
     + '<div class="fi" style="margin-top:12px"><label class="lb">Confirmer</label><div class="pwwrap"><input type="password" id="rp-password2" placeholder="••••••••" onkeydown="if(event.key===\'Enter\')submitResetPasswordAdmin(RESET_TOKEN)"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility(\'rp-password2\',this)"><i class="ti ti-eye"></i></button></div></div>'
     + '<button class="btn btn-p" style="width:100%;justify-content:center;margin-top:18px" onclick="submitResetPasswordAdmin(RESET_TOKEN)">Valider</button>'
@@ -4625,7 +4626,8 @@ async function submitResetPasswordAdmin(token){
   var p2 = document.getElementById('rp-password2').value||'';
   var errEl = document.getElementById('login-err');
   errEl.style.display='none';
-  if(p1.length<8){ errEl.textContent='8 caractères minimum'; errEl.style.display='block'; return; }
+  var perr = hmPasswordPolicyError(p1);
+  if(perr){ errEl.textContent=perr; errEl.style.display='block'; return; }
   if(p1!==p2){ errEl.textContent='Les deux mots de passe ne correspondent pas'; errEl.style.display='block'; return; }
   try{
     var r = await fetch(API_BASE+'/wa/login/resetPassword', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({token:token,password:p1})});
@@ -10691,7 +10693,7 @@ function hmOpenCreate(){
   h += hmFi('Nom', '<input type="text" id="hmc-name" placeholder="Ex. Hôtel de la Paix">');
   h += hmFi('Secteur', secteurSelectHtml('hmc-secteur','hotellerie'));
   h += hmFi('Email admin (optionnel — sinon généré automatiquement)', '<input type="email" id="hmc-email" placeholder="admin@exemple.fr">');
-  h += hmFi('Mot de passe admin', '<div style="display:flex;gap:6px"><input type="text" id="hmc-password" placeholder="8 caractères min. — laisser vide pour générer" style="flex:1"><button type="button" class="btn btn-s" onclick="document.getElementById(\'hmc-password\').value=hmGenPassword()">Générer</button></div>');
+  h += hmFi('Mot de passe admin', '<div style="display:flex;gap:6px"><input type="text" id="hmc-password" placeholder="10 car. min., 1 chiffre, 1 spécial — vide = généré" style="flex:1"><button type="button" class="btn btn-s" onclick="document.getElementById(\'hmc-password\').value=hmGenPassword()">Générer</button></div>');
   h += '<div class="brow" style="margin-top:16px">'
     +'<button class="btn btn-p" onclick="hmSubmitCreate()"><i class="ti ti-check"></i> Créer</button>'
     +'<button class="btn btn-s" onclick="hmCloseEdit()"><i class="ti ti-x"></i></button>'
@@ -10699,11 +10701,27 @@ function hmOpenCreate(){
   document.getElementById('hm-edit-body').innerHTML = h;
   document.getElementById('hm-edit-modal').style.display = 'flex';
 }
-/** Généré côté client pour pré-remplir le champ — reste modifiable avant envoi, uniquement pour éviter une page blanche au clic "Générer". */
+/**
+ * Politique de mot de passe (10 caractères min., 1 chiffre, 1 caractère
+ * spécial) — même règle que validatePasswordPolicy côté serveur
+ * (lib/password.ts), rejouée ici uniquement pour un retour immédiat ; le
+ * serveur reste seul juge. Retourne un message d'erreur, ou null si conforme.
+ */
+function hmPasswordPolicyError(p){
+  if(!p || p.length<10) return 'Le mot de passe doit contenir au moins 10 caractères';
+  if(!/\d/.test(p)) return 'Le mot de passe doit contenir au moins un chiffre';
+  if(!/[!@#$%&*\-_+=.,;:?/()[\]{}~^|\\'"<>`]/.test(p)) return 'Le mot de passe doit contenir au moins un caractère spécial';
+  return null;
+}
+/** Généré côté client pour pré-remplir le champ — reste modifiable avant envoi. Conforme par construction (1 chiffre + 1 spécial placés explicitement, même logique que lib/password.ts randomPassword côté serveur). */
 function hmGenPassword(){
-  var chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789', out = '';
-  for(var i=0;i<12;i++) out += chars[Math.floor(Math.random()*chars.length)];
-  return out;
+  var letters = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz', digits = '23456789', specials = '!@#$%&*-_+=';
+  var all = letters+digits+specials;
+  var pick = function(s){ return s[Math.floor(Math.random()*s.length)]; };
+  var out = [pick(digits), pick(specials)];
+  for(var i=out.length;i<12;i++) out.push(pick(all));
+  for(var i=out.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=out[i]; out[i]=out[j]; out[j]=t; }
+  return out.join('');
 }
 async function hmSubmitCreate(){
   var name = (document.getElementById('hmc-name')||{value:''}).value.trim();
@@ -10711,7 +10729,7 @@ async function hmSubmitCreate(){
   var secteur = (document.getElementById('hmc-secteur')||{value:'hotellerie'}).value;
   var email = (document.getElementById('hmc-email')||{value:''}).value.trim();
   var password = (document.getElementById('hmc-password')||{value:''}).value;
-  if(password && password.length<8){ toast('Le mot de passe doit contenir au moins 8 caractères'); return; }
+  if(password){ var perr=hmPasswordPolicyError(password); if(perr){ toast(perr); return; } }
   try{
     var body = {name:name, secteur:secteur};
     if(email) body.adminEmail = email;
