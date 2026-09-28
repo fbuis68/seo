@@ -4555,6 +4555,11 @@ function togglePwVisibility(id, btn){
   var icon = btn.querySelector('i');
   if(icon) icon.className = showing ? 'ti ti-eye' : 'ti ti-eye-off';
 }
+// Formulaire de connexion enveloppé dans un vrai <form> avec un événement
+// submit — sans ça, Chrome/Edge n'offrent jamais "Enregistrer le mot de
+// passe ?" après connexion (un simple onclick sur un bouton, même s'il
+// envoie les identifiants, n'est pas reconnu comme une soumission de
+// formulaire par le gestionnaire de mots de passe du navigateur).
 function renderLoginBox(okMsg){
   document.getElementById('login-box').innerHTML =
     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:24px">'
@@ -4562,9 +4567,11 @@ function renderLoginBox(okMsg){
     + '<div class="sesame-wordmark-card"><span class="sw-main">Sesame</span><span class="sw-sub">TECHNOLOGY</span></div>'
     + '<div style="margin-left:4px"><div style="font-family:\'DM Serif Display\',serif;font-size:17px">Sesame Éco</div>'
     + '<div style="font-size:11px;color:var(--mu)">Administration</div></div></div>'
-    + '<div class="fi"><label class="lb">Email</label><input type="email" id="login-email" placeholder="admin@hotel-churchill.fr" onkeydown="if(event.key===\'Enter\')adminLogin()"></div>'
-    + '<div class="fi" style="margin-top:12px"><label class="lb">Mot de passe</label><div class="pwwrap"><input type="password" id="login-password" placeholder="••••••••" onkeydown="if(event.key===\'Enter\')adminLogin()"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility(\'login-password\',this)"><i class="ti ti-eye"></i></button></div></div>'
-    + '<button class="btn btn-p" style="width:100%;justify-content:center;margin-top:18px" onclick="adminLogin()"><i class="ti ti-login"></i> Se connecter</button>'
+    + '<form id="login-form" onsubmit="event.preventDefault();adminLogin();return false;">'
+    + '<div class="fi"><label class="lb">Email</label><input type="email" id="login-email" name="email" autocomplete="username" placeholder="admin@hotel-churchill.fr"></div>'
+    + '<div class="fi" style="margin-top:12px"><label class="lb">Mot de passe</label><div class="pwwrap"><input type="password" id="login-password" name="password" autocomplete="current-password" placeholder="••••••••"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility(\'login-password\',this)"><i class="ti ti-eye"></i></button></div></div>'
+    + '<button type="submit" class="btn btn-p" style="width:100%;justify-content:center;margin-top:18px"><i class="ti ti-login"></i> Se connecter</button>'
+    + '</form>'
     + '<div style="text-align:center;margin-top:10px"><a href="#" onclick="renderForgotBox();return false;" style="font-size:12px;color:var(--a)">Mot de passe oublié ?</a></div>'
     + '<div id="login-err" style="display:none;color:var(--re);font-size:12px;margin-top:10px;text-align:center"></div>'
     + (okMsg ? '<div style="color:#1A6B47;font-size:12px;margin-top:10px;text-align:center">'+okMsg+'</div>' : '');

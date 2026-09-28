@@ -579,13 +579,20 @@ function togglePwVisibility(id, btn){
   var icon = btn.querySelector('i');
   if(icon) icon.className = showing ? 'ti ti-eye' : 'ti ti-eye-off';
 }
+// Formulaire de connexion enveloppé dans un vrai <form> avec un événement
+// submit — sans ça, Chrome/Edge n'offrent jamais "Enregistrer le mot de
+// passe ?" après connexion (un simple onclick sur un bouton, même s'il
+// envoie les identifiants, n'est pas reconnu comme une soumission de
+// formulaire par le gestionnaire de mots de passe du navigateur).
 function renderLoginForm(okMsg){
   document.getElementById('lg-box').innerHTML = `
     <div class="lg-title">Sesame <em style="color:#8a2b2b;font-style:normal">CRM</em></div>
     <div class="lg-sub">Réservé aux comptes Sesame Technology.</div>
-    <div class="ff"><label>Email</label><input type="email" id="lg-email" placeholder="vous@sesame.technology"></div>
-    <div class="ff"><label>Mot de passe</label><div class="pwwrap"><input type="password" id="lg-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')crmLogin()"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility('lg-password',this)"><i class="ti ti-eye"></i></button></div></div>
-    <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="crmLogin()">Se connecter</button>
+    <form id="lg-form" onsubmit="event.preventDefault();crmLogin();return false;">
+      <div class="ff"><label>Email</label><input type="email" id="lg-email" name="email" autocomplete="username" placeholder="vous@sesame.technology"></div>
+      <div class="ff"><label>Mot de passe</label><div class="pwwrap"><input type="password" id="lg-password" name="password" autocomplete="current-password" placeholder="••••••••"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility('lg-password',this)"><i class="ti ti-eye"></i></button></div></div>
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center">Se connecter</button>
+    </form>
     <div style="text-align:center;margin-top:10px"><a href="#" onclick="renderForgotForm();return false;" style="font-size:12px;color:#8a2b2b">Mot de passe oublié ?</a></div>
     <div class="lg-err" id="lg-err"></div>
     ${okMsg?`<div style="color:#1a6b47;font-size:12px;margin-top:8px;text-align:center">${okMsg}</div>`:''}`;
