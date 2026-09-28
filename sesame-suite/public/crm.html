@@ -3030,7 +3030,7 @@ function renderListManager(kind){
   el.innerHTML = m.getOptions().map(o=>`
     <div style="display:flex;align-items:center;gap:8px;padding:6px 20px">
       <input type="text" value="${esc(o.label)}" style="flex:1" onchange="lmRename('${kind}','${o.id}',this.value)">
-      <button type="button" class="btn btn-ghost btn-icon" title="Supprimer" onclick="lmDelete('${kind}','${o.id}','${esc(o.label).replace(/'/g,"\\'")}')"><i class="ti ti-trash"></i></button>
+      <button type="button" class="btn btn-ghost btn-icon" title="Supprimer" onclick="lmDelete('${kind}','${o.id}','${jsStr(o.label)}')"><i class="ti ti-trash"></i></button>
     </div>`).join('') || '<div class="log-empty" style="padding:12px 20px">Aucune valeur.</div>';
 }
 /** Crée une valeur si elle n'existe pas déjà (insensible à la casse) — utilisé
@@ -3638,7 +3638,7 @@ function rqSearchInput(){
   if(q.length<2){ box.style.display='none'; box.innerHTML=''; return; }
   const results = clients.filter(c=>c.id!==curId && c.type==='Client' && c.nom.toLowerCase().includes(q)).slice(0,8);
   if(!results.length){ box.innerHTML='<div style="padding:7px 10px;font-size:12px;color:var(--mu)">Aucun client trouvé</div>'; box.style.display='block'; return; }
-  box.innerHTML = results.map(c=>`<div style="padding:7px 10px;cursor:pointer;font-size:12px;border-bottom:0.5px solid var(--bdr)" onmousedown="rqPickTarget('${c.id}','${esc(c.nom).replace(/'/g,"\\'")}')"><strong>${esc(c.nom)}</strong>${c.ville?' <span style="color:var(--mu)">— '+esc(c.ville)+'</span>':''}</div>`).join('');
+  box.innerHTML = results.map(c=>`<div style="padding:7px 10px;cursor:pointer;font-size:12px;border-bottom:0.5px solid var(--bdr)" onmousedown="rqPickTarget('${c.id}','${jsStr(c.nom)}')"><strong>${esc(c.nom)}</strong>${c.ville?' <span style="color:var(--mu)">— '+esc(c.ville)+'</span>':''}</div>`).join('');
   box.style.display='block';
 }
 
