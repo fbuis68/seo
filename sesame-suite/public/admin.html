@@ -1414,8 +1414,8 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 
   <!-- ── MODULES DU PARCOURS CLIENT ── -->
   <div class="ca" style="margin-top:16px">
-    <div class="ch"><i class="ti ti-layout-list"></i>Parcours web check-in — modules actifs
-      <span class="nibadge" id="modules-count-badge" style="background:var(--am)">0/6</span>
+    <div class="ch"><i class="ti ti-layout-list"></i>Enregistrement
+      <span class="nibadge" id="modules-count-badge" style="background:var(--am)">0/7</span>
     </div>
     <div class="alt alt-b" style="margin-bottom:14px"><i class="ti ti-info-circle"></i>
       <span>Activez uniquement les étapes dont vous avez besoin. L'ordre est fixe mais les étapes désactivées sont sautées automatiquement.</span>
@@ -4799,7 +4799,7 @@ function showPan(id){
   closeSidebar();
   // Panel-specific init
   if(id==='charte'){renderColorList();}
-  if(id==='hotel'){try{renderModuleCards();}catch(e){}}
+  if(id==='hotel'){try{renderModuleCards();ensureQuestionnairesLoaded();}catch(e){}}
   if(id==='gains'){renderGains();}
   if(id==='eco'){renderEcoBanner();}
   if(id==='plan'){try{renderPlanCanvas();}catch(e){} try{renderAdminTags();}catch(e){}}
@@ -5297,6 +5297,12 @@ function setStaffMinutes(k, val){
   CFG.checkinModules[k].staffMinutesSaved = parseFloat(val)||0;
 }
 
+// "questionnaire" (24/09/2026) : réglage préparé côté configuration
+// (choix du questionnaire à proposer, cf. bloc dédié dans renderModuleCards)
+// — le rendu de cette étape côté client (checkin.html, chaque étape y est
+// codée en dur individuellement, pas de moteur d'étapes générique) n'est
+// PAS encore branché. Le toggle est donc sans effet visible pour le client
+// tant que ce second chantier n'est pas fait.
 var MODULE_DEFS = [
   {k:'room',    ico:'ti-door',         label:'Choix de chambre',       desc:'Sélection sur le plan ou en liste',  required:true},
   {k:'taxe',    ico:'ti-receipt',      label:'Taxe de séjour',         desc:'Calcul occupants + paiement + export CSV de la taxe à payer',        required:false},
@@ -5305,6 +5311,7 @@ var MODULE_DEFS = [
   {k:'rewards', ico:'ti-star',         label:'Récompenses & points',   desc:'Échange de points, catalogue',       required:false},
   {k:'payment', ico:'ti-credit-card',  label:'Paiement en ligne',      desc:'Carte bancaire, fractionnement',     required:false},
   {k:'roomservice', ico:'ti-bell',     label:'Boutique',               desc:'Commande de produits depuis la chambre', required:false},
+  {k:'questionnaire', ico:'ti-list-check', label:'Questionnaire',      desc:'Questionnaire personnalisé à compléter pendant le check-in', required:false},
 ];
 
 function renderModuleCards(){
@@ -5359,6 +5366,19 @@ function renderModuleCards(){
         +'<label class="tg" style="flex-shrink:0"><input type="checkbox" '+(CFG.checkinModules.kyc.selfieRequired!==false?'checked ':'')+'onchange="toggleKycSelfie(this.checked)"><span class="tgl"></span></label>'
         +'</div>'
       ) : '')
+      // ── Choix du questionnaire (étape Questionnaire uniquement) — le rendu
+      // côté client (checkin.html) n'est pas encore branché, cf. commentaire
+      // au-dessus de MODULE_DEFS : réglage préparé, pas encore effectif.
+      +(on && m.k==='questionnaire' ? (
+        '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bdr)">'
+        +'<div style="font-size:12px;margin-bottom:6px"><strong>Questionnaire à proposer</strong></div>'
+        +'<select onchange="setModuleQuestionnaire(this.value)" style="width:100%">'
+        +'<option value="">— Choisir un questionnaire —</option>'
+        + QN_LIST.map(function(q){return '<option value="'+q.id+'" '+(mod.questionnaireId===q.id?'selected':'')+'>'+esc(q.name)+'</option>';}).join('')
+        +'</select>'
+        +(!QN_LIST.length?'<div style="font-size:10px;color:var(--mu);margin-top:4px">Aucun questionnaire créé — panneau Questionnaires.</div>':'')
+        +'</div>'
+      ) : '')
       // ── Temps gagné par le personnel (room, taxe, kyc) ──
       +(on && ['room','taxe','kyc'].includes(m.k) ? (
         '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bdr)">'
@@ -5386,6 +5406,23 @@ function toggleKycSelfie(required){
   if(!CFG.checkinModules.kyc) CFG.checkinModules.kyc={};
   CFG.checkinModules.kyc.selfieRequired = required;
   renderModuleCards();
+}
+function setModuleQuestionnaire(id){
+  if(!CFG.checkinModules.questionnaire) CFG.checkinModules.questionnaire={};
+  CFG.checkinModules.questionnaire.questionnaireId = id||null;
+  renderModuleCards();
+}
+// QN_LIST (déclaré plus bas, panneau Automatisations) est chargé paresseusement
+// ici aussi — le panneau Entité & Catégorie (module Questionnaire) peut être
+// ouvert avant celui des Automatisations, qui le chargeait jusqu'ici seul.
+var QN_LOADING = false;
+async function ensureQuestionnairesLoaded(){
+  if(typeof QN_LIST!=='undefined' && QN_LIST.length) return;
+  if(QN_LOADING) return;
+  QN_LOADING = true;
+  try{ var r = await adminFetch('/wa/questionnaire/list'); QN_LIST = r.ok ? await r.json() : []; }catch(e){ QN_LIST = []; }
+  QN_LOADING = false;
+  if(document.getElementById('moduleCards')) renderModuleCards();
 }
 
 function toggleModule(k, active){
@@ -5424,7 +5461,7 @@ function updateModulesBadge(){
 // Also init on populateAll
 document.addEventListener('DOMContentLoaded', function(){
   setTimeout(function(){
-    if(document.getElementById('moduleCards')) renderModuleCards();
+    if(document.getElementById('moduleCards')){ renderModuleCards(); ensureQuestionnairesLoaded(); }
   }, 200);
 });
 
