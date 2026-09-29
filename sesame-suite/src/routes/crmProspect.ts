@@ -550,6 +550,202 @@ crmProspectRouter.post(
   })
 );
 
+/** Insensible aux accents/casse/espaces multiples — "Frédéric Buis" et
+ * "Frederic Buis" doivent matcher comme même nom pour la détection de
+ * doublons ci-dessous (cas réel constaté le 29/09/2026). */
+function normalizeForDupMatch(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+/**
+ * GET /wa/crmProspect/duplicates — groupes de fiches probablement
+ * doublons : même email (exact, insensible à la casse) OU même nom
+ * (insensible aux accents/casse/espaces). Union transitive : si A partage
+ * son email avec B et B son nom avec C, les trois forment un seul groupe.
+ * Détection large par nom demandée explicitement (29/09/2026) — attrape le
+ * cas "Frédéric Buis" / "Frederic Buis" (emails différents) qu'un
+ * rapprochement par email seul aurait raté, au prix de faux positifs
+ * possibles (page de revue manuelle côté client, jamais de fusion
+ * automatique sans confirmation).
+ */
+crmProspectRouter.get(
+  "/crmProspect/duplicates",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (_req, res) => {
+    const rows = await prisma.crmProspect.findMany({
+      select: {
+        id: true,
+        nom: true,
+        email: true,
+        tel: true,
+        ville: true,
+        createdAt: true,
+        subscriptionId: true,
+        _count: { select: { activities: true, deals: true, contacts: true, tickets: true, scoreEvents: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    // Union-Find sur l'index dans `rows`.
+    const parent = rows.map((_, i) => i);
+    function find(i: number): number {
+      while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; }
+      return i;
+    }
+    function union(a: number, b: number) {
+      const ra = find(a), rb = find(b);
+      if (ra !== rb) parent[ra] = rb;
+    }
+
+    const byEmail = new Map<string, number>();
+    const byName = new Map<string, number>();
+    rows.forEach((r, i) => {
+      const emailKey = (r.email || "").trim().toLowerCase();
+      if (emailKey) {
+        const prev = byEmail.get(emailKey);
+        if (prev !== undefined) union(prev, i); else byEmail.set(emailKey, i);
+      }
+      const nameKey = normalizeForDupMatch(r.nom);
+      if (nameKey) {
+        const prev = byName.get(nameKey);
+        if (prev !== undefined) union(prev, i); else byName.set(nameKey, i);
+      }
+    });
+
+    const groupsByRoot = new Map<number, number[]>();
+    rows.forEach((_, i) => {
+      const root = find(i);
+      const arr = groupsByRoot.get(root) || [];
+      arr.push(i);
+      groupsByRoot.set(root, arr);
+    });
+
+    const groups = Array.from(groupsByRoot.values())
+      .filter((idxs) => idxs.length > 1)
+      .map((idxs) =>
+        idxs
+          .map((i) => {
+            const r = rows[i];
+            return {
+              id: r.id,
+              nom: r.nom,
+              email: r.email,
+              tel: r.tel,
+              ville: r.ville,
+              createdAt: r.createdAt,
+              hasSubscription: !!r.subscriptionId,
+              counts: {
+                activities: r._count.activities,
+                deals: r._count.deals,
+                contacts: r._count.contacts,
+                tickets: r._count.tickets,
+                scoreEvents: r._count.scoreEvents,
+              },
+            };
+          })
+          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      );
+
+    res.json({ groups });
+  })
+);
+
+/**
+ * POST /wa/crmProspect/merge — fusionne mergeIds dans keepId : réattache
+ * tout ce qui pointe vers les fiches fusionnées (contacts, affaires
+ * [entraîne leurs devis], activités, événements de score, tickets [entraîne
+ * leurs messages]) puis les supprime. Cas particuliers gérés sans jamais
+ * perdre de données silencieusement :
+ *   - AccCustomer (compta) : réattaché seulement si keepId n'en a pas déjà
+ *     un (crmProspectId est unique) — sinon laissé tel quel, à traiter à la
+ *     main (rare : suppose deux comptes clients comptables distincts).
+ *   - QuestionnaireSend : réattaché sauf si keepId a déjà répondu au MÊME
+ *     questionnaire (contrainte unique questionnaireId+targetType+targetId)
+ *     — dans ce cas l'envoi du doublon (et ses réponses) est supprimé
+ *     plutôt que de faire échouer toute la fusion.
+ *   - Abonnement (subscriptionId, 1:1) : repris par keepId seulement s'il
+ *     n'en a pas déjà un.
+ */
+crmProspectRouter.post(
+  "/crmProspect/merge",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const b = req.body as { keepId?: string; mergeIds?: string[] };
+    const keepId = (b.keepId || "").trim();
+    const mergeIds = Array.isArray(b.mergeIds) ? b.mergeIds.filter((id) => id && id !== keepId) : [];
+    if (!keepId) throw new HttpError(400, "keepId requis");
+    if (!mergeIds.length) throw new HttpError(400, "mergeIds requis (au moins une fiche à fusionner)");
+
+    const keep = await prisma.crmProspect.findUnique({ where: { id: keepId } });
+    if (!keep) throw new HttpError(404, "Fiche à conserver introuvable");
+    const toMerge = await prisma.crmProspect.findMany({ where: { id: { in: mergeIds } } });
+    if (toMerge.length !== mergeIds.length) throw new HttpError(404, "Une ou plusieurs fiches à fusionner sont introuvables");
+
+    const summary = { contacts: 0, deals: 0, activities: 0, scoreEvents: 0, tickets: 0, accCustomers: 0, questionnaireSends: 0, subscription: false };
+
+    await prisma.$transaction(async (tx) => {
+      let keepSubscriptionId = keep.subscriptionId;
+
+      for (const dup of toMerge) {
+        const [contacts, deals, activities, scoreEvents, tickets] = await Promise.all([
+          tx.crmContact.updateMany({ where: { prospectId: dup.id }, data: { prospectId: keepId } }),
+          tx.crmDeal.updateMany({ where: { prospectId: dup.id }, data: { prospectId: keepId } }),
+          tx.crmActivity.updateMany({ where: { prospectId: dup.id }, data: { prospectId: keepId } }),
+          tx.crmScoreEvent.updateMany({ where: { prospectId: dup.id }, data: { prospectId: keepId } }),
+          tx.crmTicket.updateMany({ where: { prospectId: dup.id }, data: { prospectId: keepId } }),
+        ]);
+        summary.contacts += contacts.count;
+        summary.deals += deals.count;
+        summary.activities += activities.count;
+        summary.scoreEvents += scoreEvents.count;
+        summary.tickets += tickets.count;
+
+        const dupAccCustomer = await tx.accCustomer.findUnique({ where: { crmProspectId: dup.id } });
+        if (dupAccCustomer) {
+          const keepAlreadyHas = await tx.accCustomer.findUnique({ where: { crmProspectId: keepId } });
+          if (!keepAlreadyHas) {
+            await tx.accCustomer.update({ where: { id: dupAccCustomer.id }, data: { crmProspectId: keepId } });
+            summary.accCustomers += 1;
+          }
+        }
+
+        const dupSends = await tx.questionnaireSend.findMany({ where: { targetType: "crmProspect", targetId: dup.id } });
+        for (const send of dupSends) {
+          const keepAlreadyHas = await tx.questionnaireSend.findUnique({
+            where: { questionnaireId_targetType_targetId: { questionnaireId: send.questionnaireId, targetType: "crmProspect", targetId: keepId } },
+          });
+          if (keepAlreadyHas) {
+            await tx.questionnaireSend.delete({ where: { id: send.id } });
+          } else {
+            await tx.questionnaireSend.update({ where: { id: send.id }, data: { targetId: keepId } });
+            summary.questionnaireSends += 1;
+          }
+        }
+
+        if (dup.subscriptionId && !keepSubscriptionId) {
+          keepSubscriptionId = dup.subscriptionId;
+          summary.subscription = true;
+        }
+      }
+
+      if (keepSubscriptionId !== keep.subscriptionId) {
+        await tx.crmProspect.update({ where: { id: keepId }, data: { subscriptionId: keepSubscriptionId } });
+      }
+
+      await tx.crmProspect.deleteMany({ where: { id: { in: mergeIds } } });
+    });
+
+    res.json({ ok: true, keepId, mergedIds: mergeIds, summary });
+  })
+);
+
 // Statuts considérés "terminés" pour un ticket — ceux qui n'ont plus besoin
 // d'aucun suivi actif. Distinct de TICKET_STATUSES (crm.html) mais reflète
 // les mêmes libellés.

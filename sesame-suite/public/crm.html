@@ -933,7 +933,85 @@ function renderPipelineKpis(){
 // ════════════════════════════════════════
 // LIST VIEW
 // ════════════════════════════════════════
-function showList(){view='list';editingId=null;setNav('n-list');bc([{label:'Clients'}]);tba(`<button class="btn btn-green" onclick="exportCSV()">↓ CSV</button><button class="btn btn-s" onclick="openImportModal()"><i class="ti ti-upload"></i> Importer des suspects</button><button class="btn btn-primary" onclick="openNewModal()">+ Nouveau client</button>`);renderList();}
+function showList(){view='list';editingId=null;setNav('n-list');bc([{label:'Clients'}]);tba(`<button class="btn btn-green" onclick="exportCSV()">↓ CSV</button><button class="btn btn-s" onclick="openImportModal()"><i class="ti ti-upload"></i> Importer des suspects</button><button class="btn btn-s" onclick="openDuplicatesModal()"><i class="ti ti-copy"></i> Doublons</button><button class="btn btn-primary" onclick="openNewModal()">+ Nouveau client</button>`);renderList();}
+
+// ── Doublons (29/09/2026) — détection par email exact OU nom proche
+// (insensible accents/casse), revue manuelle obligatoire avant toute
+// fusion : jamais de fusion automatique silencieuse. ──
+async function openDuplicatesModal(){
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:640px;max-height:82vh;overflow-y:auto">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Doublons détectés</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div id="dup-body"><div class="log-empty">Recherche…</div></div>
+    </div>
+  </div>`;
+  try{
+    const r = await apiFetch('/wa/crmProspect/duplicates');
+    const data = r.ok ? await r.json() : {groups:[]};
+    renderDuplicatesList(data.groups||[]);
+  }catch(e){
+    const body = document.getElementById('dup-body');
+    if(body) body.innerHTML = '<div class="log-empty">Erreur de connexion au serveur.</div>';
+  }
+}
+
+function renderDuplicatesList(groups){
+  const body = document.getElementById('dup-body');
+  if(!body) return;
+  window._dupGroups = groups;
+  if(!groups.length){ body.innerHTML = '<div class="log-empty">Aucun doublon détecté.</div>'; return; }
+  body.innerHTML = `<div style="font-size:12px;color:var(--mu,#888);margin-bottom:10px">${groups.length} groupe(s) — même email ou nom proche. Choisissez la fiche à conserver dans chaque groupe, les autres seront fusionnées dedans (activités, tickets, affaires, contacts, compta, questionnaires réaffectés).</div>` +
+    groups.map((g,gi)=>{
+      const rows = g.map((p,pi)=>{
+        const c = p.counts;
+        const parts = [];
+        if(c.activities) parts.push(c.activities+' activité(s)');
+        if(c.deals) parts.push(c.deals+' affaire(s)');
+        if(c.contacts) parts.push(c.contacts+' contact(s)');
+        if(c.tickets) parts.push(c.tickets+' ticket(s)');
+        if(c.scoreEvents) parts.push(c.scoreEvents+' événement(s) de score');
+        if(p.hasSubscription) parts.push('abonnement lié');
+        const countsTxt = parts.length ? parts.join(', ') : 'aucune donnée liée';
+        return `<label style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--bdr,#e2dfd9)">
+          <input type="radio" name="dup-keep-${gi}" value="${esc(p.id)}" ${pi===0?'checked':''} style="margin-top:3px">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:13px">${esc(p.nom)}</div>
+            <div style="font-size:12px;color:var(--mu,#888)">${esc(p.email||'—')} · ${esc(p.tel||'—')} · créé le ${new Date(p.createdAt).toLocaleDateString('fr-FR')}</div>
+            <div style="font-size:11px;color:var(--mu,#888)">${esc(countsTxt)}</div>
+          </div>
+        </label>`;
+      }).join('');
+      return `<div class="card" style="margin-bottom:14px">
+        <div style="font-size:12px;font-weight:600;color:var(--mu,#888);margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px">Groupe ${gi+1}</div>
+        ${rows}
+        <button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="mergeDuplicateGroup(${gi})">Fusionner ce groupe</button>
+      </div>`;
+    }).join('');
+}
+
+async function mergeDuplicateGroup(gi){
+  const group = (window._dupGroups||[])[gi];
+  if(!group) return;
+  const checked = document.querySelector(`input[name="dup-keep-${gi}"]:checked`);
+  const keepId = checked ? checked.value : '';
+  if(!keepId) return;
+  const mergeIds = group.map(p=>p.id).filter(id=>id!==keepId);
+  if(!mergeIds.length) return;
+  const keepName = (group.find(p=>p.id===keepId)||{}).nom || '';
+  if(!confirm(`Fusionner ${mergeIds.length} fiche(s) dans "${keepName}" ? Action irréversible — les autres fiches seront supprimées après réaffectation de leurs données.`)) return;
+  try{
+    const r = await apiFetch('/wa/crmProspect/merge', {method:'POST', body:JSON.stringify({keepId, mergeIds})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash('Fusion effectuée');
+    clients = await loadData();
+    if(view==='list') renderList();
+    const r2 = await apiFetch('/wa/crmProspect/duplicates');
+    const data2 = r2.ok ? await r2.json() : {groups:[]};
+    renderDuplicatesList(data2.groups||[]);
+  }catch(e){ flash(e.message||'Erreur lors de la fusion'); }
+}
 
 function filtered(){
   return clients.filter(c=>{
