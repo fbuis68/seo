@@ -43,18 +43,34 @@ crmRouter.get(
       ? new Map((await prisma.entity.findMany({ where: { id: { in: entityIds } }, select: { id: true, name: true } })).map((e) => [e.id, e.name]))
       : new Map([[entity.id, entity.name]]);
 
-    const [bookings, loyaltyAccounts, prefs, cfg] = await Promise.all([
+    const [bookings, loyaltyAccounts, prefs, cfg, sharingProfiles] = await Promise.all([
       prisma.booking.findMany({ where: { entityId: { in: entityIds } }, orderBy: { startDate: "desc" } }),
       groupAggregated
         ? prisma.loyaltyAccount.findMany({ where: { groupId: group!.id } })
         : prisma.loyaltyAccount.findMany({ where: { entityId: entity.id } }),
       prisma.clientPrefs.findMany({ where: { entityId: { in: entityIds } } }),
       prisma.entityModuleConfig.findUnique({ where: { entityId: entity.id } }),
+      prisma.guestSharingProfile.findMany({
+        where: { optIn: true, booking: { entityId: { in: entityIds } } },
+        include: { booking: { select: { personEmail: true } } },
+      }),
     ]);
 
     const pointsByEmail = new Map(loyaltyAccounts.map((a) => [a.email, a.totalPoints]));
     const prefsByEmail = new Map(prefs.map((p) => [p.email, p]));
     const tiers = (cfg?.loyaltyTiers as unknown as LoyaltyTiers | null) || null;
+
+    // Centres d'intérêt déclarés lors du check-in (module "Partage entre
+    // clients") — union sur TOUTES les réservations opt-in de ce client
+    // (même hors groupe : GuestSharingProfile est scopé sur les mêmes
+    // entityIds que le reste de la fiche), pour la fiche "Base clients".
+    const interestsByEmail = new Map<string, Set<string>>();
+    for (const p of sharingProfiles) {
+      const key = p.booking.personEmail.toLowerCase();
+      const set = interestsByEmail.get(key) || new Set<string>();
+      for (const v of (p.interests as string[]) || []) set.add(v);
+      interestsByEmail.set(key, set);
+    }
 
     const byEmail = new Map<
       string,
@@ -94,6 +110,7 @@ crmRouter.get(
         points,
         tier: computeTier(points, tiers),
         tags: (pref?.tags as string[]) || [],
+        interests: Array.from(interestsByEmail.get(c.email.toLowerCase()) || []),
         hotels: groupAggregated ? Array.from(c.hotels) : undefined,
       };
     });

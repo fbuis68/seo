@@ -11830,7 +11830,7 @@ async function fetchCrmClients(){
         return {
           key: c.email, email: c.email, nom: c.lastname, prenom: c.firstname, phone: c.phone,
           points: c.points, sejours: c.stays, lastStayDate: c.lastStay, tier: c.tier, tags: c.tags||[],
-          hotels: c.hotels||null
+          interests: c.interests||[], hotels: c.hotels||null
         };
       });
     }
@@ -11979,6 +11979,13 @@ async function crmOpenClient(key){
   h += '<div class="stat"><div class="sv" style="color:var(--bu)">'+(c.lastStayDate?new Date(c.lastStayDate).toLocaleDateString('fr-FR'):'—')+'</div><div class="sl">Dernier séjour</div></div>';
   h += '<div class="stat"><div class="sv" style="color:'+crmTierColor(c.tier)+'">'+c.tier+'</div><div class="sl">Statut</div></div>';
   h += '</div>';
+
+  if(c.interests && c.interests.length){
+    h += '<div class="ch" style="margin-bottom:8px"><i class="ti ti-heart"></i>Centres d\'intérêt</div>';
+    h += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">';
+    h += c.interests.map(function(v){ return '<span style="background:var(--bg);border:1px solid var(--bdr);border-radius:20px;padding:3px 10px;font-size:12px;color:var(--mu)">'+esc(v)+'</span>'; }).join('');
+    h += '</div>';
+  }
 
   if(c.history && c.history.length){
     h += '<div class="ch" style="margin-bottom:8px"><i class="ti ti-history"></i>Historique des points</div>';
