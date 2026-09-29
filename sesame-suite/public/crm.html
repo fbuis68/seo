@@ -2312,13 +2312,19 @@ async function loadQuestionnaireSendsCard(c){
   }catch(e){ sends = []; }
   if(!sends.length){ el.style.display='none'; return; }
   el.style.display='';
-  const interestLabel = {oui:'Oui', 'peut-etre':'Peut-être', non:'Non'};
+  // interestClass : coloration spécifique au questionnaire "intérêt" oui/
+  // peut-être/non (clés d'options historiques de ce questionnaire précis) —
+  // le libellé lui-même vient désormais de a.valueText, déjà résolu côté
+  // serveur contre les options RÉELLES de chaque questionnaire (cf.
+  // formatAnswerValue, routes/questionnaire.ts) : l'ancienne table
+  // interestLabel figée sur oui/peut-etre/non affichait la clé brute
+  // ("o0"...) pour tout autre questionnaire.
   const interestClass = {oui:'t-green', 'peut-etre':'t-purple', non:'t-red'};
   el.innerHTML = `<div class="card-head"><div class="ch-ico">📋</div><span class="ch-title">Questionnaires</span></div>` + sends.map(s=>{
     const sentStr = s.sentAt ? new Date(s.sentAt).toLocaleDateString('fr-FR') : '';
     const rowsHtml = s.answers.map(a=>{
       const v = a.value||{};
-      let txt = v.fileName ? ('📎 '+v.fileName) : v.choice ? (interestLabel[v.choice]||v.choice) : (v.choices||[]).map(k=>interestLabel[k]||k).join(', ') || v.text || (v.number!=null?String(v.number):'') || (v.rating!=null?String(v.rating):'') || (v.checked!=null?(v.checked?'Oui':'Non'):'') || (v.value!=null?(v.value?'Oui':'Non'):'');
+      const txt = v.fileName ? ('📎 '+v.fileName) : (a.valueText || '—');
       const cls = v.choice ? (interestClass[v.choice]||'') : '';
       return `<div class="gc-row"><span class="gc-rl">${esc(a.questionLabel)}</span><span class="gc-rv"><span class="tag ${cls}" style="font-size:11px">${esc(txt)}</span>${v.note?` <span style="color:#aaa;font-size:11px">— ${esc(v.note)}</span>`:''}</span></div>`;
     }).join('');
