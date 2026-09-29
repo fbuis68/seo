@@ -100,6 +100,33 @@ guestSharingRouter.get(
 );
 
 /**
+ * GET /wa/guestSharing/mine?bookingCode=... — profil de partage (opt-in,
+ * photo, centres d'intérêt) d'UNE réservation, pour le client lui-même
+ * (checkin.html : hydrate SHR à la connexion/sélection de réservation, sinon
+ * un client déjà opt-in lors d'une session précédente repart de zéro — SHR
+ * n'est sinon jamais rechargé depuis le serveur). Même convention d'accès
+ * que /guestSharing/optIn : pas d'auth admin, bookingCode fait office de
+ * secret porteur.
+ */
+guestSharingRouter.get(
+  "/guestSharing/mine",
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const bookingCode = (req.query.bookingCode as string) || "";
+    if (!bookingCode) throw new HttpError(400, "bookingCode requis");
+    const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code: bookingCode } } });
+    if (!booking) throw new HttpError(404, "Réservation introuvable");
+
+    const profile = await prisma.guestSharingProfile.findUnique({ where: { bookingId: booking.id } });
+    res.json({
+      optIn: !!profile?.optIn,
+      photo: profile?.photo || "",
+      interests: (profile?.interests as string[]) || [],
+    });
+  })
+);
+
+/**
  * GET /wa/guestSharing/forBooking?code=... — profil de partage (opt-in,
  * centres d'intérêt, photo) d'UNE réservation, pour la fiche client côté
  * admin (panneau Réservations) : les centres d'intérêt saisis pendant le

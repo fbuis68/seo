@@ -2577,6 +2577,7 @@ function selectBooking(id) {
   toast(t('toast_booking_selected')+' · '+S.booking.personFirstname+' '+S.booking.personLastname);
   fetchLoyalty(S.booking.personEmail); // préchargement en tâche de fond pour l'étape 7
   fetchOrders(S.booking.code);
+  fetchGuestSharingProfile();
   // Étape "Connecté" de la frise du parcours client (panneau Réservations,
   // admin) — signal best-effort, ne doit jamais bloquer le check-in.
   apiFetch(API_BASE+'/wa/booking/checkinStart', {method:'POST', body: JSON.stringify({code: S.booking.code})}).catch(function(){});
@@ -3279,7 +3280,25 @@ async function espApplyLogin(data){
   S.checkinDone  = true;
   S.selectedRoom = CFG.rooms ? CFG.rooms.find(function(r){return r.code===data.booking.facilityCode;}) : null;
 
-  await Promise.all([fetchLoyalty(data.booking.personEmail), fetchOrders(data.booking.code)]);
+  await Promise.all([fetchLoyalty(data.booking.personEmail), fetchOrders(data.booking.code), fetchGuestSharingProfile()]);
+}
+
+// ── Recharge le profil de partage déjà enregistré (opt-in/photo/centres
+// d'intérêt) depuis le serveur — sans cela SHR repart toujours de son état
+// par défaut {optIn:false} à chaque nouvelle session, et un client déjà
+// opt-in ne revoit plus jamais les autres clients ni son propre choix
+// (cf. GET /wa/guestSharing/mine). Appelée à la connexion (espApplyLogin)
+// et à la sélection d'une réservation (selectBooking). ──
+async function fetchGuestSharingProfile(){
+  if(!S.booking) return;
+  try{
+    var r = await apiFetch(API_BASE+'/wa/guestSharing/mine?bookingCode='+encodeURIComponent(S.booking.code));
+    if(!r.ok) return;
+    var d = await r.json();
+    SHR.optIn = !!d.optIn;
+    SHR.photo = d.photo || null;
+    SHR.interests = d.interests || [];
+  }catch(e){}
 }
 
 async function espDoLogin(){
@@ -4727,6 +4746,14 @@ async function pushKycRecord(){
 var SHR = { optIn:false, photo:null, interests:[] };
 
 function initSharingStep(){
+  // Pré-remplit la photo de profil avec le selfie KYC déjà pris (étape 4,
+  // si activée) — évite de reprendre une photo pour cette étape distincte.
+  // Ne touche jamais une photo déjà choisie pour ce profil (upload manuel
+  // ou selfie déjà repris depuis Mon espace).
+  if(!SHR.photo && KYC.selfieImg){
+    SHR.photo = KYC.selfieImg;
+    pushGuestSharingProfile();
+  }
   shrSyncUi();
 }
 function shrSyncUi(){

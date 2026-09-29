@@ -416,6 +416,35 @@ questionnaireRouter.get(
 );
 
 /**
+ * Résout une réponse en texte lisible pour l'affichage (fiche client) — les
+ * types single/multi/select stockent la CLÉ de l'option choisie (ex: "o0"),
+ * jamais son libellé, donc jamais affichable telle quelle sans revenir aux
+ * options de la question (cf. cleanAnswerValue pour la validation côté
+ * soumission, même logique de types ici mais pour la lecture).
+ */
+function formatAnswerValue(question: { type: string; options: unknown }, raw: unknown): string {
+  const v = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const optionLabel = (key: string): string => {
+    const opts = Array.isArray(question.options) ? (question.options as { key: string; label: string }[]) : [];
+    return opts.find((o) => o.key === key)?.label || key;
+  };
+  if (question.type === "single" || question.type === "select") {
+    return typeof v.choice === "string" ? optionLabel(v.choice) : "—";
+  }
+  if (question.type === "multi") {
+    const choices = Array.isArray(v.choices) ? (v.choices as string[]) : [];
+    return choices.length ? choices.map(optionLabel).join(", ") : "—";
+  }
+  if (question.type === "boolean") return typeof v.value === "boolean" ? (v.value ? "Oui" : "Non") : "—";
+  if (question.type === "checkbox") return typeof v.checked === "boolean" ? (v.checked ? "Oui" : "Non") : "—";
+  if (question.type === "rating") return typeof v.rating === "number" ? String(v.rating) : "—";
+  if (question.type === "number") return typeof v.number === "number" ? String(v.number) : "—";
+  if (question.type === "text" || question.type === "shorttext") return typeof v.text === "string" && v.text ? v.text : "—";
+  if (question.type === "file") return typeof v.fileName === "string" && v.fileName ? v.fileName : "—";
+  return "—";
+}
+
+/**
  * GET /wa/questionnaire/sendsForTarget?targetId=... — tous les envois (tous
  * questionnaires confondus, de cette portée) reçus par une cible donnée —
  * utilisé par la carte "Questionnaires" de la fiche client CRM / réservation.
@@ -435,13 +464,21 @@ questionnaireRouter.get(
     });
     res.json(
       sends.map((s) => {
-        const labelById = new Map(s.questionnaire.questions.map((q) => [q.id, q.label]));
+        const questionById = new Map(s.questionnaire.questions.map((q) => [q.id, q]));
         return {
           id: s.id,
           questionnaireName: s.questionnaire.name,
           sentAt: s.sentAt,
           completedAt: s.completedAt,
-          answers: s.answers.map((a) => ({ questionId: a.questionId, questionLabel: labelById.get(a.questionId) || "", value: a.value })),
+          answers: s.answers.map((a) => {
+            const q = questionById.get(a.questionId);
+            return {
+              questionId: a.questionId,
+              questionLabel: q?.label || "",
+              value: a.value,
+              valueText: q ? formatAnswerValue(q, a.value) : "",
+            };
+          }),
         };
       })
     );

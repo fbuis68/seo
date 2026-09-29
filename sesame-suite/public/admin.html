@@ -14626,6 +14626,7 @@ function renderReservations(){
     var ordersTotal = r.orders.reduce(function(s,o){ return s+(o.total||0); }, 0);
     var boutiqueVal = r.orders.length ? r.orders.length+' commande(s) — '+ordersTotal.toFixed(2)+' '+sym : 'Aucune';
     var taxeVal = r.taxe ? r.taxe.montantNet.toFixed(2)+' '+(r.taxe.devise||'EUR')+' ('+r.taxe.occupantsTotal+' pers.)' : 'Non calculée';
+    var kycVal = !r.kyc ? 'Non renseignée' : (r.kyc.skipped ? 'Passée par le client' : (r.kyc.idVerified ? 'Vérifiée' : 'Saisie, non vérifiée')+(r.kyc.selfieVerified?' · selfie OK':''));
 
     var nfcBadge = '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:'+(b.nfcCount>0?'rgba(26,107,71,.1);color:#1A6B47':'var(--bdr);color:var(--mu)')+'"><i class="ti ti-nfc" style="font-size:11px"></i> NFC ('+(b.nfcCount||0)+')</span>';
 
@@ -14646,6 +14647,8 @@ function renderReservations(){
       + '<div class="resa-opt" style="cursor:pointer" onclick="event.stopPropagation();resaOpenSubDetail(\''+esc(b.code)+'\',\'menage\')"><div class="ro-lbl"><i class="ti ti-spray"></i> Ménage</div><div class="ro-val">'+esc(menageVal)+'</div></div>'
       + '<div class="resa-opt" style="cursor:pointer" onclick="event.stopPropagation();resaOpenSubDetail(\''+esc(b.code)+'\',\'boutique\')"><div class="ro-lbl"><i class="ti ti-shopping-bag"></i> Boutique / Room service</div><div class="ro-val">'+esc(boutiqueVal)+'</div></div>'
       + '<div class="resa-opt" style="cursor:pointer" onclick="event.stopPropagation();resaOpenSubDetail(\''+esc(b.code)+'\',\'taxe\')"><div class="ro-lbl"><i class="ti ti-receipt"></i> Taxe de séjour</div><div class="ro-val">'+esc(taxeVal)+'</div></div>'
+      + '<div class="resa-opt" style="cursor:pointer" onclick="event.stopPropagation();resaOpenSubDetail(\''+esc(b.code)+'\',\'kyc\')"><div class="ro-lbl"><i class="ti ti-id-badge"></i> Pièce d\'identité</div><div class="ro-val">'+esc(kycVal)+'</div></div>'
+      + '<div class="resa-opt" style="cursor:pointer" onclick="event.stopPropagation();resaOpenSubDetail(\''+esc(b.code)+'\',\'questionnaire\')"><div class="ro-lbl"><i class="ti ti-list-check"></i> Questionnaire</div><div class="ro-val">Voir le détail</div></div>'
       + '</div>'
       + '</div>';
   }).join('');
@@ -15282,11 +15285,67 @@ function resaOpenSubDetail(code, kind){
             + '</div>'
             + (!t2.paid ? '<button class="btn btn-p" style="margin-top:14px;width:100%" onclick="resaMarkTaxePaid(\''+esc(t2.id)+'\');resaCloseSubDetail()"><i class="ti ti-receipt"></i> Marquer la taxe payée</button>' : '');
         })();
+  } else if(kind === 'kyc'){
+    title = 'Pièce d\'identité — '+esc(r.booking.personFirstname)+' '+esc(r.booking.personLastname);
+    var k = r.kyc;
+    html = !k
+      ? '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Aucune saisie d\'identité pour cette réservation.</span></div>'
+      : (function(){
+          var krows = [
+            ['Type de document', k.docType ? esc(k.docType) : '—'],
+            ['Statut', k.skipped ? 'Étape passée par le client' : (k.idVerified ? '<span style="color:#1A6B47;font-weight:700"><i class="ti ti-check"></i> Vérifiée</span>' : 'Saisie, non vérifiée')],
+            ['Selfie', k.selfieVerified ? '<span style="color:#1A6B47;font-weight:700"><i class="ti ti-check"></i> Correspond'+(k.matchScore?' ('+k.matchScore+'%)':'')+'</span>' : 'Non vérifié'],
+            ['Saisi le', k.createdAt ? new Date(k.createdAt).toLocaleString('fr-FR') : '—'],
+          ];
+          return '<div style="border:1px solid var(--bdr);border-radius:var(--rs);overflow:hidden">'
+            + krows.map(function(row,i){
+                return '<div style="display:flex;justify-content:space-between;gap:12px;padding:9px 12px;font-size:13px'+(i<krows.length-1?';border-bottom:1px solid var(--bdr)':'')+'">'
+                  + '<span style="color:var(--mu)">'+row[0]+'</span><span style="text-align:right">'+row[1]+'</span></div>';
+              }).join('')
+            + '</div>';
+        })();
+  } else if(kind === 'questionnaire'){
+    title = 'Questionnaire — '+esc(r.booking.personFirstname)+' '+esc(r.booking.personLastname);
+    html = '<div class="spin" style="margin:20px auto"></div>';
   }
 
   document.getElementById('resa-subdetail-title').textContent = title;
   document.getElementById('resa-subdetail-body').innerHTML = html;
   document.getElementById('resaSubDetailModal').style.display = 'flex';
+
+  if(kind === 'questionnaire') resaLoadQuestionnaireSubDetail(r.booking.id);
+}
+
+/** Réponses aux questionnaires reçus par cette réservation — GET
+ * /wa/questionnaire/sendsForTarget (déjà utilisé par la fiche prospect
+ * CRM), targetId = Booking.id. Chargé à part (async), cf. resaOpenSubDetail. */
+async function resaLoadQuestionnaireSubDetail(bookingId){
+  var body = document.getElementById('resa-subdetail-body');
+  if(!body) return;
+  try{
+    var r = await adminFetch('/wa/questionnaire/sendsForTarget?targetId='+encodeURIComponent(bookingId));
+    var sends = r.ok ? await r.json() : [];
+    if(!sends.length){
+      body.innerHTML = '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Aucun questionnaire envoyé à cette réservation.</span></div>';
+      return;
+    }
+    body.innerHTML = sends.map(function(s){
+      return '<div style="border:1px solid var(--bdr);border-radius:var(--rs);padding:10px 12px;margin-bottom:10px">'
+        + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center">'
+        + '<span style="font-weight:700;font-size:13px">'+esc(s.questionnaireName)+'</span>'
+        + '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;'+(s.completedAt?'background:rgba(26,107,71,.1);color:#1A6B47':'background:var(--gol);color:var(--go)')+'">'+(s.completedAt?'Complété':'En attente')+'</span>'
+        + '</div>'
+        + (s.answers && s.answers.length
+            ? '<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">' + s.answers.map(function(a){
+                var text = a.valueText || '—';
+                return '<div style="font-size:12px"><span style="color:var(--mu)">'+esc(a.questionLabel)+' : </span><span style="font-weight:600">'+esc(String(text))+'</span></div>';
+              }).join('') + '</div>'
+            : '<div style="font-size:12px;color:var(--mu);margin-top:6px">Pas encore de réponses.</div>')
+        + '</div>';
+    }).join('');
+  }catch(e){
+    body.innerHTML = '<div style="font-size:12px;color:var(--mu)">Indisponible</div>';
+  }
 }
 function resaCloseSubDetail(){
   document.getElementById('resaSubDetailModal').style.display = 'none';
