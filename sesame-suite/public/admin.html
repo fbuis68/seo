@@ -14471,6 +14471,15 @@ function renderRealKpis(){
 // applique ensuite le filtre "aujourd'hui seulement" vs "toutes, y compris
 // expirées" selon la case à cocher, sans recharger depuis le serveur.
 var RESA_CACHE = [];
+// Code de la fiche réservation actuellement ouverte — les chargements
+// async de la fiche (clé, QR autologin, partage…) écrivent tous dans des
+// id DOM statiques (#resa-detail-key-body, etc.), partagés entre TOUTES
+// les fiches. Sans ce garde, ouvrir une fiche B avant que la réponse d'une
+// fiche A précédemment ouverte ne soit revenue peut faire apparaître les
+// données de A (QR, lien d'autologin…) sous le nom du client B une fois
+// cette réponse tardive arrivée — chaque loader doit donc vérifier que sa
+// réponse concerne toujours la fiche actuellement affichée avant d'écrire.
+var RESA_DETAIL_CODE = null;
 
 async function loadReservations(){
   var listEl = document.getElementById('resa-list');
@@ -14734,6 +14743,7 @@ function resaStatusLabel(b){
 async function resaOpenDetail(code){
   var r = RESA_CACHE.find(function(x){ return x.booking.code === code; });
   if(!r) return;
+  RESA_DETAIL_CODE = code;
   var b = r.booking;
   var room = b.facilityName || b.selectedRoomCode || b.facilityCode || '—';
   var updated = b.updatedAt ? new Date(b.updatedAt).toLocaleString('fr-FR') : '—';
@@ -14913,6 +14923,7 @@ async function resaLoadKey(code, bookingFacilityCode){
   try{
     var r = await adminFetch('/wa/booking/accessQr?code='+encodeURIComponent(code));
     var data = await r.json();
+    if(RESA_DETAIL_CODE !== code) return;
     if(!r.ok){
       // Un vrai appel à la source a été tenté (le connecteur est configuré
       // et la réservation lui est reconnue) mais a échoué — afficher le
@@ -14974,6 +14985,7 @@ async function resaLoadSharing(code){
   try{
     var r = await adminFetch('/wa/guestSharing/forBooking?code='+encodeURIComponent(code));
     var data = await r.json();
+    if(RESA_DETAIL_CODE !== code) return;
     if(!r.ok || !data.optIn){
       body.innerHTML = '<div style="font-size:12px;color:var(--mu)">Le client n\'a pas activé le partage de profil.</div>';
       return;
@@ -15002,6 +15014,7 @@ async function resaLoadAutologinQr(code){
   try{
     var r = await adminFetch('/wa/booking/autologinQr?code='+encodeURIComponent(code));
     var data = await r.json();
+    if(RESA_DETAIL_CODE !== code) return;
     if(!r.ok){ body.innerHTML = '<div style="font-size:12px;color:#b45309">⚠ '+esc(data.error||'Lien indisponible')+'</div>'; return; }
     body.innerHTML = '<img src="'+data.qrImage+'" alt="QR connexion automatique" style="width:160px;height:160px;border-radius:10px;border:1px solid var(--bdr);display:block;margin:0 auto">'
       + '<div style="font-size:11px;color:var(--mu);margin-top:8px">Scanné ou cliqué, ce lien connecte directement le client à son espace, sans ressaisir email/code.</div>'
@@ -15023,6 +15036,7 @@ async function resaLoadAutologinCheckinQr(code){
   try{
     var r = await adminFetch('/wa/booking/autologinCheckinQr?code='+encodeURIComponent(code));
     var data = await r.json();
+    if(RESA_DETAIL_CODE !== code) return;
     if(!r.ok){ body.innerHTML = '<div style="font-size:12px;color:#b45309">⚠ '+esc(data.error||'Lien indisponible')+'</div>'; return; }
     body.innerHTML = '<img src="'+data.qrImage+'" alt="QR connexion automatique — check-in" style="width:160px;height:160px;border-radius:10px;border:1px solid var(--bdr);display:block;margin:0 auto">'
       + '<div style="font-size:11px;color:var(--mu);margin-top:8px">Scanné ou cliqué, ce lien connecte directement le client et l\'amène sur le processus de check-in, sans ressaisir email/code.</div>'
@@ -15066,8 +15080,10 @@ async function resaKeyOpenDoorFor(code, facilityCode, btn){
 async function resaLoadPasses(code){
   try{
     var r = await adminFetch('/wa/booking/passes?code='+encodeURIComponent(code));
-    RESA_PASSES_CACHE = r.ok ? await r.json() : [];
-  }catch(e){ RESA_PASSES_CACHE = []; }
+    var data = r.ok ? await r.json() : [];
+    if(RESA_DETAIL_CODE !== code) return;
+    RESA_PASSES_CACHE = data;
+  }catch(e){ if(RESA_DETAIL_CODE !== code) return; RESA_PASSES_CACHE = []; }
   resaRenderPassesSection(code);
 }
 function resaRenderPassesSection(code){
@@ -15326,8 +15342,16 @@ function resaOpenSubDetail(code, kind){
   document.getElementById('resa-subdetail-body').innerHTML = html;
   document.getElementById('resaSubDetailModal').style.display = 'flex';
 
-  if(kind === 'questionnaire') resaLoadQuestionnaireSubDetail(r.booking.id);
+  if(kind === 'questionnaire'){
+    RESA_SUBDETAIL_BOOKING_ID = r.booking.id;
+    resaLoadQuestionnaireSubDetail(r.booking.id);
+  }
 }
+// Même garde anti-course que RESA_DETAIL_CODE (cf. plus haut) mais pour
+// #resa-subdetail-body — ouvrir le questionnaire d'une réservation B avant
+// que la réponse pour une réservation A précédemment ouverte ne soit
+// revenue pouvait afficher les réponses de A sous le nom de B.
+var RESA_SUBDETAIL_BOOKING_ID = null;
 
 /** Réponses aux questionnaires reçus par cette réservation — GET
  * /wa/questionnaire/sendsForTarget (déjà utilisé par la fiche prospect
@@ -15338,6 +15362,7 @@ async function resaLoadQuestionnaireSubDetail(bookingId){
   try{
     var r = await adminFetch('/wa/questionnaire/sendsForTarget?targetId='+encodeURIComponent(bookingId));
     var sends = r.ok ? await r.json() : [];
+    if(RESA_SUBDETAIL_BOOKING_ID !== bookingId) return;
     if(!sends.length){
       body.innerHTML = '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Aucun questionnaire envoyé à cette réservation.</span></div>';
       return;
@@ -15362,10 +15387,12 @@ async function resaLoadQuestionnaireSubDetail(bookingId){
 }
 function resaCloseSubDetail(){
   document.getElementById('resaSubDetailModal').style.display = 'none';
+  RESA_SUBDETAIL_BOOKING_ID = null;
 }
 
 function resaCloseDetail(){
   document.getElementById('resaDetailModal').style.display = 'none';
+  RESA_DETAIL_CODE = null;
 }
 
 /**
