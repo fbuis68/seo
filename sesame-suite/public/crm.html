@@ -6375,6 +6375,7 @@ const CHANNEL_LABEL = {email:'Email', sms:'SMS', whatsapp:'WhatsApp'};
 const TPL_CATEGORY_LABEL = {marketing:'Marketing', support:'Support', commercial:'Commercial', relance:'Relance'};
 let tplCategoryFilter='';
 let SMTP_CFG=null, SMS_CFG=null, WA_CFG=null, GRAPH_MAIL=null;
+let SENDER_IDENTITIES = [];
 let MSG_TEMPLATES=[], MSG_TEMPLATES_LOADED=false;
 let tplChannelTab='email';
 
@@ -6389,13 +6390,14 @@ let CAMPAIGNS = [];
 
 async function loadCanauxPanelData(){
   try{
-    const [smtpR, smsR, waR, tplR, campR, graphR] = await Promise.all([
+    const [smtpR, smsR, waR, tplR, campR, graphR, sndR] = await Promise.all([
       apiFetch('/wa/smtpConfig/get?scope=crm'),
       apiFetch('/wa/channelConfig/get?scope=crm&channel=sms'),
       apiFetch('/wa/channelConfig/get?scope=crm&channel=whatsapp'),
       apiFetch('/wa/messageTemplate/list?scope=crm'),
       apiFetch('/wa/campaign/list?scope=crm'),
       apiFetch('/wa/graphMail/status'),
+      apiFetch('/wa/emailSenderIdentity/list?scope=crm'),
     ]);
     SMTP_CFG = smtpR.ok ? await smtpR.json() : null;
     SMS_CFG = smsR.ok ? await smsR.json() : null;
@@ -6404,6 +6406,7 @@ async function loadCanauxPanelData(){
     MSG_TEMPLATES_LOADED = true;
     CAMPAIGNS = campR.ok ? await campR.json() : [];
     GRAPH_MAIL = graphR.ok ? await graphR.json() : null;
+    SENDER_IDENTITIES = sndR.ok ? await sndR.json() : [];
   }catch(e){ flash('Erreur de chargement'); }
   renderCanauxPanel();
 }
@@ -6496,6 +6499,18 @@ function renderCanauxPanel(){
       <button class="btn btn-primary" onclick="saveSmtpConfig()">Enregistrer</button>
       <input type="email" id="smtp-test-to" placeholder="destinataire@test.com" class="test-inp">
       <button class="btn btn-ghost" onclick="testSmtpConfig()">Envoyer un test</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><div class="ch-ico">✉</div><span class="ch-title">Adresses d'expédition</span></div>
+    <div style="font-size:12px;color:var(--mu,#888);margin-bottom:10px">Plusieurs identités "From" possibles (nom + email), envoyées via le même serveur SMTP ci-dessus — à choisir sur chaque modèle de message.</div>
+    <div id="sender-identities-list">${renderSenderIdentitiesList()}</div>
+    <div class="form-grid" style="margin-top:10px">
+      <div class="ff"><label>Nom affiché</label><input id="sid-new-name" placeholder="Réservations Hôtel Churchill"></div>
+      <div class="ff"><label>Adresse email</label><input id="sid-new-email" placeholder="reservations@hotel-churchill.fr"></div>
+    </div>
+    <div class="modal-footer" style="border-top:none;padding-top:8px">
+      <button class="btn btn-primary btn-sm" onclick="createSenderIdentity()">Ajouter</button>
     </div>
   </div>
   ${renderGraphMailCard()}
@@ -6601,6 +6616,46 @@ async function testSmtpConfig(){
     if(!r.ok) throw new Error(data.error||'http '+r.status);
     flash('Email de test envoyé à '+to);
   }catch(e){ flash(e.message||'Échec de l\'envoi — vérifiez la configuration'); }
+}
+
+function renderSenderIdentitiesList(){
+  if(!SENDER_IDENTITIES.length) return '<div class="log-empty">Aucune adresse — les envois utilisent celle du serveur SMTP ci-dessus.</div>';
+  return SENDER_IDENTITIES.map(i=>`
+    <div class="log-item">
+      <div class="log-dot ld-b"></div>
+      <div class="log-body">
+        <div class="log-text"><strong>${esc(i.name)}</strong> <span style="color:#aaa;font-size:11px">${esc(i.email)}</span></div>
+        <div class="log-acts">
+          <button class="btn btn-sm btn-ghost" style="color:#a32d2d" onclick="deleteSenderIdentity('${i.id}')">Supprimer</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+async function createSenderIdentity(){
+  const name=(document.getElementById('sid-new-name')||{value:''}).value.trim();
+  const email=(document.getElementById('sid-new-email')||{value:''}).value.trim();
+  if(!name||!email){flash('Nom et email requis');return;}
+  try{
+    var r = await apiFetch('/wa/emailSenderIdentity/create', {method:'POST', body:JSON.stringify({name:name, email:email, scope:'crm'})});
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    SENDER_IDENTITIES.push(data);
+    renderCanauxPanel();
+    flash('Adresse ajoutée');
+  }catch(e){ flash(e.message||'Erreur d\'enregistrement'); }
+}
+
+async function deleteSenderIdentity(id){
+  if(!confirm('Supprimer cette adresse ? Les modèles qui l\'utilisaient repasseront sur l\'adresse générale.')) return;
+  try{
+    var r = await apiFetch('/wa/emailSenderIdentity/delete', {method:'POST', body:JSON.stringify({id:id, scope:'crm'})});
+    if(!r.ok){ const data=await r.json().catch(()=>({})); throw new Error(data.error||'http '+r.status); }
+    SENDER_IDENTITIES = SENDER_IDENTITIES.filter(i=>i.id!==id);
+    MSG_TEMPLATES.forEach(t=>{ if(t.senderIdentityId===id) t.senderIdentityId=''; });
+    renderCanauxPanel();
+    flash('Adresse supprimée');
+  }catch(e){ flash(e.message||'Erreur de suppression'); }
 }
 
 // Providers alternatifs à Twilio — DocPartner (SMSPartner.fr, SMS
@@ -6739,7 +6794,7 @@ function htmlEdSetEmailMode(id, isEmail){
 }
 
 async function openTemplateModal(id){
-  const t = id ? MSG_TEMPLATES.find(t=>t.id===id) : {id:null,channel:tplChannelTab,key:'',name:'',subject:'',bodyHtml:'',questionnaireId:null,defaultAttachments:[],isDefaultForTicketReply:false};
+  const t = id ? MSG_TEMPLATES.find(t=>t.id===id) : {id:null,channel:tplChannelTab,key:'',name:'',subject:'',bodyHtml:'',questionnaireId:null,senderIdentityId:null,defaultAttachments:[],isDefaultForTicketReply:false};
   if(!t)return;
   if(!QN_CRM_LIST_CACHE){
     try{ const qr = await apiFetch('/wa/questionnaire/list?scope=crm'); QN_CRM_LIST_CACHE = qr.ok ? await qr.json() : []; }catch(e){ QN_CRM_LIST_CACHE = []; }
@@ -6768,6 +6823,11 @@ async function openTemplateModal(id){
         <div style="font-size:11px;color:var(--mu);margin-top:4px">Chargé automatiquement dans la réponse à l'ouverture d'un ticket, sans avoir à le choisir dans le sélecteur — un seul modèle par défaut à la fois, cocher celui-ci décoche l'ancien.</div>
       </div>
       <div class="ff" id="tpl-subject-wrap" style="margin-top:8px"><label>Objet (email uniquement)</label><input id="tpl-subject" value="${esc(t.subject)}" placeholder="Sesame Technology — {{nom}}"></div>
+      <div class="ff" id="tpl-sender-wrap" style="margin-top:8px"><label>Adresse d'expédition (email uniquement)</label><select id="tpl-sender">
+        <option value="">Adresse générale (config SMTP)</option>
+        ${SENDER_IDENTITIES.map(i=>`<option value="${esc(i.id)}" ${t.senderIdentityId===i.id?'selected':''}>${esc(i.name)} — ${esc(i.email)}</option>`).join('')}
+      </select>
+      <div style="font-size:11px;color:var(--mu,#888);margin-top:4px">Gérées dans la carte "Adresses d'expédition" ci-dessus.</div></div>
       <div class="ff" style="margin-top:8px"><label>Corps (email : éditeur HTML ; SMS/WhatsApp : texte)</label>
         <div class="htmled" id="tpl-body-wrap">
           <div class="htmled-tb" id="tpl-body-tb">
@@ -6835,7 +6895,9 @@ function renderTplSubjectVisibility(){
   const sidWrap=document.getElementById('tpl-sid-wrap');
   const attWrap=document.getElementById('tpl-attachments-wrap');
   const defWrap=document.getElementById('tpl-default-wrap');
+  const senderWrap=document.getElementById('tpl-sender-wrap');
   if(sel&&wrap) wrap.style.display = sel.value==='email' ? '' : 'none';
+  if(sel&&senderWrap) senderWrap.style.display = sel.value==='email' ? '' : 'none';
   if(sel&&sidWrap) sidWrap.style.display = sel.value==='whatsapp' ? '' : 'none';
   if(sel&&attWrap) attWrap.style.display = sel.value==='email' ? '' : 'none';
   if(sel&&defWrap) defWrap.style.display = sel.value==='email' ? '' : 'none'; // sélecteur "insérer un modèle" du ticket ne liste que les modèles email
@@ -6919,7 +6981,7 @@ async function createMetaTemplate(){
 async function saveTemplate(id){
   const g=i=>(document.getElementById(i)||{value:''}).value;
   const isDefaultTicketReply = !!document.getElementById('tpl-default-ticket-reply')?.checked;
-  const body={channel:g('tpl-channel'),key:g('tpl-key').trim().toLowerCase(),name:g('tpl-name').trim(),subject:g('tpl-subject').trim(),bodyHtml:g('tpl-body'),whatsappContentSid:g('tpl-sid').trim(),category:g('tpl-category'),questionnaireId:g('tpl-questionnaire')||null,defaultAttachments:TPL_ATTACHMENTS,isDefaultForTicketReply:isDefaultTicketReply,scope:'crm'};
+  const body={channel:g('tpl-channel'),key:g('tpl-key').trim().toLowerCase(),name:g('tpl-name').trim(),subject:g('tpl-subject').trim(),bodyHtml:g('tpl-body'),whatsappContentSid:g('tpl-sid').trim(),category:g('tpl-category'),questionnaireId:g('tpl-questionnaire')||null,senderIdentityId:g('tpl-sender')||null,defaultAttachments:TPL_ATTACHMENTS,isDefaultForTicketReply:isDefaultTicketReply,scope:'crm'};
   if(!body.key||!body.name||!body.bodyHtml||(body.channel==='email'&&!body.subject)||(body.channel==='whatsapp'&&!body.whatsappContentSid)){flash('Tous les champs sont requis');return;}
   try{
     var r = await apiFetch('/wa/messageTemplate/upsert', {method:'POST', body:JSON.stringify(body)});

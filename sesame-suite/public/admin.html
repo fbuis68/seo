@@ -2666,6 +2666,17 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     </div>
   </div>
 
+  <div class="ca">
+    <div class="ch"><i class="ti ti-mail-forward"></i>Adresses d'expédition</div>
+    <div style="font-size:12px;color:var(--mu);margin-bottom:10px">Plusieurs identités "From" possibles (nom + email), envoyées via le serveur SMTP ci-dessus — à choisir sur chaque modèle de message.</div>
+    <div id="sid-list"></div>
+    <div class="g2" style="margin-top:10px">
+      <div class="fi"><label class="lb">Nom affiché</label><input type="text" id="sid-new-name" placeholder="Réservations"></div>
+      <div class="fi"><label class="lb">Adresse email</label><input type="email" id="sid-new-email" placeholder="reservations@monhotel.fr"></div>
+    </div>
+    <div class="brow"><button class="btn btn-s" onclick="sidCreate()"><i class="ti ti-plus"></i> Ajouter</button></div>
+  </div>
+
   <div class="g2">
     <div class="ca" id="chan-sms-card" style="position:relative">
       <div class="ch"><i class="ti ti-message"></i>SMS</div>
@@ -8534,6 +8545,7 @@ async function vndSettle(){
 // Même mécanisme générique que le module CRM (public/crm.html, ?scope=crm) :
 // ici sans paramètre "scope", adminFetch cible l'entité courante de l'hôtel.
 var EML_TEMPLATES = [];
+var SENDER_IDENTITIES = [];
 
 var EML_TPL_TAB = 'email';
 var CHAN_LABEL = {email:'Email', sms:'SMS', whatsapp:'WhatsApp'};
@@ -8545,7 +8557,52 @@ async function emlInit(){
   await chanLoadConfig('sms');
   await chanLoadConfig('whatsapp');
   await emlLoadTemplates();
+  await sidLoad();
   applyChannelModuleLock();
+}
+
+// ── Adresses d'expédition (EmailSenderIdentity, 29/09/2026) — plusieurs
+// identités "From" possibles pour cet établissement, envoyées via le même
+// serveur SMTP ci-dessus, à choisir sur chaque modèle de message (cf.
+// emlOpenTemplateModal). ──
+async function sidLoad(){
+  try{ var r = await adminFetch('/wa/emailSenderIdentity/list'); SENDER_IDENTITIES = r.ok ? await r.json() : []; }catch(e){ SENDER_IDENTITIES = []; }
+  sidRenderList();
+}
+function sidRenderList(){
+  var el = document.getElementById('sid-list');
+  if(!el) return;
+  if(!SENDER_IDENTITIES.length){ el.innerHTML = '<div style="font-size:12px;color:var(--mu)">Aucune adresse — les envois utilisent celle du serveur SMTP ci-dessus.</div>'; return; }
+  el.innerHTML = SENDER_IDENTITIES.map(function(i){
+    return '<div class="trow"><div style="flex:1"><div class="trowt">'+esc(i.name)+'</div><div class="trows">'+esc(i.email)+'</div></div>'
+      + '<button class="btn btn-s" style="color:var(--re)" onclick="sidDelete(\''+i.id+'\')"><i class="ti ti-trash"></i></button></div>';
+  }).join('');
+}
+async function sidCreate(){
+  var name = document.getElementById('sid-new-name').value.trim();
+  var email = document.getElementById('sid-new-email').value.trim();
+  if(!name||!email){ toast('Nom et email requis'); return; }
+  try{
+    var r = await adminFetch('/wa/emailSenderIdentity/create', {method:'POST', body:JSON.stringify({name:name, email:email})});
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Erreur'); return; }
+    SENDER_IDENTITIES.push(data);
+    document.getElementById('sid-new-name').value='';
+    document.getElementById('sid-new-email').value='';
+    sidRenderList();
+    toast('Adresse ajoutée ✓');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+async function sidDelete(id){
+  if(!confirm("Supprimer cette adresse ? Les modèles qui l'utilisaient repasseront sur l'adresse générale.")) return;
+  try{
+    var r = await adminFetch('/wa/emailSenderIdentity/delete', {method:'POST', body:JSON.stringify({id:id})});
+    if(!r.ok){ var data=await r.json().catch(function(){return {};}); toast(data.error||'Erreur'); return; }
+    SENDER_IDENTITIES = SENDER_IDENTITIES.filter(function(i){return i.id!==id;});
+    EML_TEMPLATES.forEach(function(t){ if(t.senderIdentityId===id) t.senderIdentityId=''; });
+    sidRenderList();
+    toast('Adresse supprimée');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
 }
 
 /**
@@ -8776,6 +8833,10 @@ function emlOpenTemplateModal(id){
     + Object.keys(TPL_CATEGORY_LABEL).map(function(k){return '<option value="'+k+'" '+(t.category===k?'selected':'')+'>'+TPL_CATEGORY_LABEL[k]+'</option>';}).join('')
     + '</select><div style="font-size:11px;color:var(--mu);margin-top:4px">Sert à filtrer les modèles selon leur usage (marketing, support, commercial).</div></div>'
     + '<div class="fi" id="eml-tpl-subject-wrap"><label class="lb">Objet (email uniquement)</label><input type="text" id="eml-tpl-subject" value="'+esc(t.subject)+'" placeholder="Bienvenue {{nom}} !"></div>'
+    + '<div class="fi" id="eml-tpl-sender-wrap"><label class="lb">Adresse d\'expédition (email uniquement)</label><select id="eml-tpl-sender">'
+    + '<option value="">Adresse générale (config SMTP)</option>'
+    + SENDER_IDENTITIES.map(function(i){return '<option value="'+i.id+'" '+(t.senderIdentityId===i.id?'selected':'')+'>'+esc(i.name)+' — '+esc(i.email)+'</option>';}).join('')
+    + '</select><div style="font-size:11px;color:var(--mu);margin-top:4px">Gérées dans la carte "Adresses d\'expédition" ci-dessus.</div></div>'
     + '<div class="fi"><label class="lb">Corps (email : éditeur HTML ; SMS/WhatsApp : texte)</label>'
     + '<div class="htmled" id="eml-tpl-body-wrap">'
     + '<div class="htmled-tb" id="eml-tpl-body-tb">'
@@ -8875,7 +8936,9 @@ function emlRenderTplSubjectVisibility(){
   var sel = document.getElementById('eml-tpl-channel');
   var wrap = document.getElementById('eml-tpl-subject-wrap');
   var sidWrap = document.getElementById('eml-tpl-sid-wrap');
+  var senderWrap = document.getElementById('eml-tpl-sender-wrap');
   if(sel && wrap) wrap.style.display = sel.value==='email' ? '' : 'none';
+  if(sel && senderWrap) senderWrap.style.display = sel.value==='email' ? '' : 'none';
   if(sel && sidWrap) sidWrap.style.display = sel.value==='whatsapp' ? '' : 'none';
   if(sel) htmlEdSetEmailMode('eml-tpl-body', sel.value==='email');
 }
@@ -9003,6 +9066,7 @@ async function emlSaveTemplate(id){
     bodyHtml: document.getElementById('eml-tpl-body').value,
     whatsappContentSid: document.getElementById('eml-tpl-sid').value.trim(),
     category: document.getElementById('eml-tpl-category').value,
+    senderIdentityId: document.getElementById('eml-tpl-sender') ? (document.getElementById('eml-tpl-sender').value || null) : null,
   };
   if(!body.key || !body.name || !body.bodyHtml || (body.channel==='email' && !body.subject) || (body.channel==='whatsapp' && !body.whatsappContentSid)){ toast('Tous les champs sont requis'); return; }
   try{
@@ -14738,6 +14802,7 @@ async function resaOpenDetail(code){
         ? '<button class="btn btn-s" onclick="resaMarkTaxePaid(\''+esc(r.taxe.id)+'\')"><i class="ti ti-receipt"></i> Marquer la taxe payée</button>'
         : '')
     + '<button class="btn btn-s" onclick="resaToggleEmailCompose(\''+esc(b.code)+'\')" id="resa-detail-email-btn"'+(b.personEmail?'':' disabled title="Aucune adresse email sur cette réservation"')+'><i class="ti ti-mail"></i> Envoyer un email</button>'
+    + '<button class="btn btn-s" onclick="resaToggleMsgCompose(\''+esc(b.code)+'\')" id="resa-detail-msg-btn"><i class="ti ti-message-2"></i> Envoyer un message (modèle)</button>'
     + '<button class="btn btn-s" onclick="event.stopPropagation();resaCloseDetail();resaOpenEdit(\''+esc(b.code)+'\')"><i class="ti ti-edit"></i> Modifier</button>'
     + '</div>';
   if(b.walletShortLink){
@@ -14756,6 +14821,16 @@ async function resaOpenDetail(code){
     + '<div id="resa-email-error" class="alt alt-w" style="display:none;margin-bottom:10px"><i class="ti ti-alert-triangle"></i><span id="resa-email-error-msg"></span></div>'
     + '<div style="display:flex;gap:8px"><button class="btn btn-p" onclick="resaSendEmail(\''+esc(b.code)+'\')" id="resa-email-send-btn"><i class="ti ti-send"></i> Envoyer</button>'
     + '<button class="btn btn-s" onclick="resaToggleEmailCompose(\''+esc(b.code)+'\')">Annuler</button></div>'
+    + '</div>';
+  html += '<div id="resa-detail-msg-compose" style="display:none;margin-top:12px;border:1px solid var(--bdr);border-radius:var(--rs);padding:14px;background:var(--bg)">'
+    + '<div class="g2">'
+    + '<div class="fi"><label class="lb">Canal</label><select id="resa-msg-channel" onchange="resaRenderMsgTplOptions(\''+esc(b.code)+'\')"></select></div>'
+    + '<div class="fi"><label class="lb">Destinataire</label><input type="text" id="resa-msg-to"></div>'
+    + '</div>'
+    + '<div class="fi"><label class="lb">Modèle</label><select id="resa-msg-tpl"></select></div>'
+    + '<div id="resa-msg-error" class="alt alt-w" style="display:none;margin-bottom:10px"><i class="ti ti-alert-triangle"></i><span id="resa-msg-error-msg"></span></div>'
+    + '<div style="display:flex;gap:8px"><button class="btn btn-p" onclick="resaSendMsg(\''+esc(b.code)+'\')" id="resa-msg-send-btn"><i class="ti ti-send"></i> Envoyer</button>'
+    + '<button class="btn btn-s" onclick="resaToggleMsgCompose(\''+esc(b.code)+'\')">Annuler</button></div>'
     + '</div>';
 
   document.getElementById('resa-detail-body').innerHTML = html;
@@ -15005,6 +15080,89 @@ async function resaSendEmail(code){
     resaToggleEmailCompose(code);
     document.getElementById('resa-email-subject').value = '';
     document.getElementById('resa-email-message').value = '';
+  }catch(e){
+    errMsg.textContent = 'Erreur de connexion au serveur.';
+    errEl.style.display = 'flex';
+  }finally{
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+}
+
+/**
+ * "Envoyer un message (modèle)" — fiche réservation (panneau Réservations,
+ * 29/09/2026) : contrairement à "Envoyer un email" ci-dessus (texte libre),
+ * passe par un modèle de message existant (MessageTemplate) et le point de
+ * convergence générique /wa/message/send — seul moyen de contacter le
+ * client en WhatsApp depuis cette fiche, puisqu'un envoi WhatsApp business-
+ * initié hors session client doit obligatoirement passer par un Content
+ * Template Twilio/Meta approuvé (cf. lib/messaging.ts), jamais du texte
+ * libre comme "Envoyer un email".
+ */
+async function resaEnsureTemplatesLoaded(){
+  if(EML_TEMPLATES.length) return;
+  try{ var r = await adminFetch('/wa/messageTemplate/list'); EML_TEMPLATES = r.ok ? await r.json() : []; }catch(e){}
+}
+
+async function resaToggleMsgCompose(code){
+  var box = document.getElementById('resa-detail-msg-compose');
+  if(!box) return;
+  var showing = box.style.display !== 'none';
+  box.style.display = showing ? 'none' : 'block';
+  if(!showing){
+    document.getElementById('resa-msg-error').style.display = 'none';
+    await resaEnsureTemplatesLoaded();
+    var channels = ['email','sms','whatsapp'].filter(function(c){ return EML_TEMPLATES.some(function(t){return t.channel===c;}); });
+    var sel = document.getElementById('resa-msg-channel');
+    sel.innerHTML = channels.length
+      ? channels.map(function(c){ return '<option value="'+c+'">'+CHAN_LABEL[c]+'</option>'; }).join('')
+      : '<option value="">Aucun modèle disponible</option>';
+    resaRenderMsgTplOptions(code);
+  }
+}
+
+function resaRenderMsgTplOptions(code){
+  var r = RESA_CACHE.find(function(x){ return x.booking.code === code; });
+  var b = r ? r.booking : {};
+  var chan = document.getElementById('resa-msg-channel').value;
+  var toInp = document.getElementById('resa-msg-to');
+  if(toInp) toInp.value = chan==='email' ? (b.personEmail||'') : (b.personPhone||'');
+  var tplSel = document.getElementById('resa-msg-tpl');
+  var opts = EML_TEMPLATES.filter(function(t){ return t.channel===chan; });
+  tplSel.innerHTML = opts.length ? opts.map(function(t){ return '<option value="'+esc(t.key)+'">'+esc(t.name)+'</option>'; }).join('') : '<option value="">— aucun modèle —</option>';
+}
+
+async function resaSendMsg(code){
+  var r = RESA_CACHE.find(function(x){ return x.booking.code === code; });
+  var b = r ? r.booking : {};
+  var channel = document.getElementById('resa-msg-channel').value;
+  var to = document.getElementById('resa-msg-to').value.trim();
+  var key = document.getElementById('resa-msg-tpl').value;
+  var errEl = document.getElementById('resa-msg-error');
+  var errMsg = document.getElementById('resa-msg-error-msg');
+  errEl.style.display = 'none';
+  if(!channel || !to || !key){
+    errMsg.textContent = 'Canal, destinataire et modèle sont requis.';
+    errEl.style.display = 'flex';
+    return;
+  }
+  var btn = document.getElementById('resa-msg-send-btn');
+  var orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spin"></div> Envoi…';
+  try{
+    var res = await adminFetch('/wa/message/send', {method:'POST', body:JSON.stringify({
+      channel:channel, templateKey:key, to:to,
+      variables:{prenom:b.personFirstname||'', nom:b.personLastname||'', code:b.code||''}
+    })});
+    var data = await res.json();
+    if(!res.ok){
+      errMsg.textContent = data.error || 'Erreur lors de l\'envoi.';
+      errEl.style.display = 'flex';
+      return;
+    }
+    toast(CHAN_LABEL[channel]+' envoyé ✓');
+    resaToggleMsgCompose(code);
   }catch(e){
     errMsg.textContent = 'Erreur de connexion au serveur.';
     errEl.style.display = 'flex';

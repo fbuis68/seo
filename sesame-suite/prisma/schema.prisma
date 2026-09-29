@@ -46,6 +46,7 @@ model Entity {
   crmProspects        CrmProspect[]
   smtpConfig          SmtpConfig?
   messageTemplates    MessageTemplate[]
+  emailSenderIdentities EmailSenderIdentity[]
   channelConfigs      ChannelConfig[]
   automationRules     AutomationRule[]
   vendors             Vendor[]
@@ -2570,10 +2571,43 @@ model MessageTemplate {
   // par un simple @@unique).
   isDefaultForTicketReply Boolean @default(false)
 
+  // Identité d'expédition (nom + email) à utiliser pour ce modèle (email
+  // uniquement, 29/09/2026) — sendMessage() (lib/messaging.ts) l'utilise à
+  // la place de SmtpConfig.fromName/fromEmail par défaut, aussi bien pour
+  // un envoi individuel que pour une campagne utilisant ce modèle. Même
+  // relais SMTP (un seul host/port/identifiants par portée, cf.
+  // SmtpConfig) — seule l'identité "From" change, pas le transport.
+  // Retombe sur SmtpConfig.fromName/fromEmail si non réglée (rétro-
+  // compatible avec les modèles existants).
+  senderIdentityId String?
+  senderIdentity   EmailSenderIdentity? @relation(fields: [senderIdentityId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([entityId, channel, key])
+}
+
+// Adresse d'expédition email nommée (29/09/2026) — plusieurs identités
+// possibles par portée (CRM entityId=null, ou par établissement), toutes
+// envoyées via le même relais SMTP de cette portée (SmtpConfig) : seul le
+// header "From" change selon l'identité choisie sur le MessageTemplate.
+// Résout la demande "plusieurs adresses email sortantes utilisables aux
+// différents points d'envoi" sans multiplier les configurations SMTP.
+model EmailSenderIdentity {
+  id       String  @id @default(cuid())
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  name  String // affiché dans le sélecteur de modèle ET dans le header "From" (ex: "Réservations Hôtel Churchill")
+  email String
+
+  templates MessageTemplate[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([entityId, email])
 }
 
 // Identifiants Twilio pour SMS et WhatsApp — même principe de portée que

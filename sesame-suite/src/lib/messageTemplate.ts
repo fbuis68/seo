@@ -40,6 +40,7 @@ export async function upsertMessageTemplate(
     whatsappContentSid?: string;
     category?: TemplateCategory | null;
     questionnaireId?: string | null;
+    senderIdentityId?: string | null;
     defaultAttachments?: { fileName: string; mimeType: string; dataUrl: string }[];
     isDefaultForTicketReply?: boolean;
   }

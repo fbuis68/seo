@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { prisma } from "../db";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { resolveScope } from "../lib/scope";
@@ -201,6 +202,7 @@ function shapeTemplate(t: {
   whatsappContentSid: string | null;
   category: string | null;
   questionnaireId: string | null;
+  senderIdentityId: string | null;
   defaultAttachments: unknown;
   isDefaultForTicketReply: boolean;
   updatedAt: Date;
@@ -215,6 +217,7 @@ function shapeTemplate(t: {
     whatsappContentSid: t.whatsappContentSid || "",
     category: t.category || "",
     questionnaireId: t.questionnaireId || "",
+    senderIdentityId: t.senderIdentityId || "",
     defaultAttachments: Array.isArray(t.defaultAttachments) ? t.defaultAttachments : [],
     isDefaultForTicketReply: t.isDefaultForTicketReply,
     updatedAt: t.updatedAt,
@@ -254,6 +257,7 @@ interface TemplateBody {
   whatsappContentSid?: string;
   category?: string;
   questionnaireId?: string;
+  senderIdentityId?: string;
   defaultAttachments?: TemplateAttachment[];
   isDefaultForTicketReply?: boolean;
 }
@@ -299,6 +303,12 @@ messagingRouter.post(
     if (b.channel === "whatsapp" && (!b.whatsappContentSid || !b.whatsappContentSid.trim())) {
       throw new HttpError(400, "Content SID Twilio requis pour un modèle WhatsApp (créez-le d'abord dans Twilio Content Template Builder, faites-le approuver, puis collez son SID ici)");
     }
+    let senderIdentityId: string | null = null;
+    if (b.channel === "email" && b.senderIdentityId) {
+      const identity = await prisma.emailSenderIdentity.findFirst({ where: { id: b.senderIdentityId, entityId } });
+      if (!identity) throw new HttpError(404, "Adresse d'expédition introuvable");
+      senderIdentityId = identity.id;
+    }
     const row = await upsertMessageTemplate(entityId, b.channel, (b.key || "").trim().toLowerCase(), {
       name: b.name.trim(),
       subject: (b.subject || "").trim(),
@@ -306,6 +316,7 @@ messagingRouter.post(
       whatsappContentSid: b.channel === "whatsapp" ? (b.whatsappContentSid || "").trim() : "",
       category: parseCategory(b.category),
       questionnaireId: b.questionnaireId || null,
+      senderIdentityId,
       defaultAttachments: b.channel === "email" ? parseAttachments(b.defaultAttachments) : [],
       isDefaultForTicketReply: !!b.isDefaultForTicketReply,
     });

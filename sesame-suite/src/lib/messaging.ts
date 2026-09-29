@@ -77,6 +77,7 @@ export async function sendMessage(opts: {
 }) {
   const template = await prisma.messageTemplate.findFirst({
     where: { entityId: opts.entityId, channel: opts.channel, key: opts.templateKey },
+    include: { senderIdentity: true },
   });
   if (!template) throw new HttpError(404, "Modèle introuvable pour ce canal");
 
@@ -112,7 +113,13 @@ export async function sendMessage(opts: {
       ? (template.defaultAttachments as unknown as { fileName: string; dataUrl: string }[])
       : []
     ).concat(opts.extraAttachments || []);
-    await sendEmailRaw(opts.entityId, opts.to, subject, body, opts.fromNameOverride, { namedAttachments });
+    // Identité d'expédition réglée sur le modèle (EmailSenderIdentity,
+    // 29/09/2026) — un opts.fromNameOverride explicite (ex: réponse à un
+    // ticket, cf. crmTicket.ts) reste toujours prioritaire sur celle du
+    // modèle, même logique de priorité que fromHeader() dans lib/email.ts.
+    const fromNameOverride = opts.fromNameOverride || template.senderIdentity?.name || undefined;
+    const fromEmailOverride = template.senderIdentity?.email || undefined;
+    await sendEmailRaw(opts.entityId, opts.to, subject, body, fromNameOverride, { namedAttachments, fromEmailOverride });
   } else if (opts.channel === "whatsapp") {
     // WhatsApp Business interdit le texte libre business-initié en dehors
     // d'une fenêtre de session client de 24h (règle Meta, pas une limite
