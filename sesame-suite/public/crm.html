@@ -5839,14 +5839,19 @@ function renderTicketDetail(t){
       </div>
     </div>
     <div class="card" id="tkt-ai-panel">
-      <div class="card-head"><div class="ch-ico">✦</div><span class="ch-title">Assistant support (IA)</span></div>
-      <div id="tkt-ai-cases"><div class="log-empty">Recherche de cas similaires…</div></div>
-      <div id="tkt-ai-suggestion-label" style="font-size:12px;font-weight:600;color:var(--mu);margin:14px 0 8px;text-transform:uppercase;letter-spacing:.3px">Réponse suggérée</div>
-      <div id="tkt-ai-suggestion"></div>
-      ${(t.status==='Résolu'||t.status==='Fermé')?`
-      <div style="font-size:12px;font-weight:600;color:var(--mu);margin:14px 0 8px;text-transform:uppercase;letter-spacing:.3px">Capitalisation</div>
-      <div id="tkt-ai-faq"><button class="btn btn-ghost btn-sm" onclick="aiCreateFaqFromTicket('${t.id}')">Créer une FAQ à partir de ce ticket</button></div>
-      `:''}
+      <div class="card-head" style="cursor:pointer" onclick="tktAiPanelToggle('${t.id}')">
+        <div class="ch-ico">✦</div><span class="ch-title">Assistant support (IA)</span>
+        <i class="ti ti-chevron-down" id="tkt-ai-chevron" style="margin-left:auto;transition:transform .15s"></i>
+      </div>
+      <div id="tkt-ai-body" style="display:none">
+        <div id="tkt-ai-cases"><div class="log-empty">Recherche de cas similaires…</div></div>
+        <div id="tkt-ai-suggestion-label" style="font-size:12px;font-weight:600;color:var(--mu);margin:14px 0 8px;text-transform:uppercase;letter-spacing:.3px">Réponse suggérée</div>
+        <div id="tkt-ai-suggestion"></div>
+        ${(t.status==='Résolu'||t.status==='Fermé')?`
+        <div style="font-size:12px;font-weight:600;color:var(--mu);margin:14px 0 8px;text-transform:uppercase;letter-spacing:.3px">Capitalisation</div>
+        <div id="tkt-ai-faq"><button class="btn btn-ghost btn-sm" onclick="aiCreateFaqFromTicket('${t.id}')">Créer une FAQ à partir de ce ticket</button></div>
+        `:''}
+      </div>
     </div>
     ${ticketOptionsActivesHtml(t.prospectId)}
     <div class="card">
@@ -5868,7 +5873,24 @@ function renderTicketDetail(t){
         <button class="btn btn-ghost btn-sm" onclick="ticketSendReply('${t.id}','note')">Note interne</button>
       </div>
     </div>`;
-  loadTicketAiPanel(t.id);
+  TKT_AI_PANEL_LOADED = false;
+}
+
+// Panneau replié par défaut (recherche de cas similaires = appel OpenAI
+// facturé) — ne charge qu'au premier dépli, pas à chaque ouverture de
+// ticket, la plupart n'ayant pas besoin de l'assistant.
+let TKT_AI_PANEL_LOADED = false;
+function tktAiPanelToggle(ticketId){
+  const body = document.getElementById('tkt-ai-body');
+  const chevron = document.getElementById('tkt-ai-chevron');
+  if(!body) return;
+  const opening = body.style.display === 'none';
+  body.style.display = opening ? '' : 'none';
+  if(chevron) chevron.style.transform = opening ? 'rotate(180deg)' : '';
+  if(opening && !TKT_AI_PANEL_LOADED){
+    TKT_AI_PANEL_LOADED = true;
+    loadTicketAiPanel(ticketId);
+  }
 }
 
 // ════════════════════════════════════════
