@@ -14765,6 +14765,12 @@ async function resaOpenDetail(code){
     + '<div style="font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.03em;margin-bottom:10px">Clé numérique</div>'
     + '<div id="resa-detail-key-body"><div class="spin" style="margin:0 auto"></div></div>'
     + '</div>';
+  // Centres d'intérêt saisis à l'étape "Partage entre clients" du check-in
+  // (GuestSharingProfile.interests) — chargé à part, cf. resaLoadSharing.
+  html += '<div id="resa-detail-sharing" style="margin-top:12px;border:1px solid var(--bdr);border-radius:var(--rs);padding:16px;background:var(--bg)">'
+    + '<div style="font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.03em;margin-bottom:10px"><i class="ti ti-users"></i> Partage entre clients</div>'
+    + '<div id="resa-detail-sharing-body"><div class="spin" style="margin:0 auto"></div></div>'
+    + '</div>';
   // Lien/QR de connexion automatique à "Mon espace client" (checkin.html)
   // — SANS RAPPORT avec la clé numérique ci-dessus (qui ouvre la porte) :
   // celui-ci connecte le client à son espace (infos séjour, room service,
@@ -14844,6 +14850,7 @@ async function resaOpenDetail(code){
   resaLoadKey(b.code, b.facilityCode);
   resaLoadAutologinQr(b.code);
   resaLoadAutologinCheckinQr(b.code);
+  resaLoadSharing(b.code);
 }
 
 /** Liste des codes d'accès distincts rattachés à une réservation — union du
@@ -14937,6 +14944,32 @@ async function resaLoadKey(code, bookingFacilityCode){
     }
   }catch(e){
     body.innerHTML = '<div style="font-size:12px;color:var(--mu)">QR indisponible pour cette réservation</div>';
+  }
+}
+
+/**
+ * Centres d'intérêt saisis à l'étape "Partage entre clients" du check-in
+ * (GuestSharingProfile.interests, cf. checkin.html initSharingStep) — GET
+ * /wa/guestSharing/forBooking, admin uniquement. Sans effet si le client
+ * n'a pas coché l'étape (optIn=false) ou ne l'a pas encore atteinte.
+ */
+async function resaLoadSharing(code){
+  var body = document.getElementById('resa-detail-sharing-body');
+  if(!body) return;
+  try{
+    var r = await adminFetch('/wa/guestSharing/forBooking?code='+encodeURIComponent(code));
+    var data = await r.json();
+    if(!r.ok || !data.optIn){
+      body.innerHTML = '<div style="font-size:12px;color:var(--mu)">Le client n\'a pas activé le partage de profil.</div>';
+      return;
+    }
+    var interests = data.interests || [];
+    body.innerHTML = '<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--a);font-weight:600;margin-bottom:8px"><i class="ti ti-check"></i> Partage activé'+(data.optInAt?' — '+new Date(data.optInAt).toLocaleDateString('fr-FR'):'')+'</div>'
+      + (interests.length
+          ? '<div style="display:flex;flex-wrap:wrap;gap:6px">'+interests.map(function(v){ return '<span style="background:var(--al);color:var(--a);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600">'+esc(v)+'</span>'; }).join('')+'</div>'
+          : '<div style="font-size:12px;color:var(--mu)">Aucun centre d\'intérêt saisi.</div>');
+  }catch(e){
+    body.innerHTML = '<div style="font-size:12px;color:var(--mu)">Indisponible</div>';
   }
 }
 

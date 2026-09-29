@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../db";
 import { resolveEntity } from "../lib/entity";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
+import { requireAdmin } from "../middleware/requireAdmin";
 
 export const guestSharingRouter = Router();
 
@@ -95,5 +96,32 @@ guestSharingRouter.get(
       }));
 
     res.json({ optedIn: true, guests });
+  })
+);
+
+/**
+ * GET /wa/guestSharing/forBooking?code=... — profil de partage (opt-in,
+ * centres d'intérêt, photo) d'UNE réservation, pour la fiche client côté
+ * admin (panneau Réservations) : les centres d'intérêt saisis pendant le
+ * check-in (étape "Partage entre clients") deviennent ainsi visibles côté
+ * back-office, pas seulement affichés au client lui-même.
+ */
+guestSharingRouter.get(
+  "/guestSharing/forBooking",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const code = (req.query.code as string) || "";
+    if (!code) throw new HttpError(400, "code requis");
+    const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code } } });
+    if (!booking) throw new HttpError(404, "Réservation introuvable");
+
+    const profile = await prisma.guestSharingProfile.findUnique({ where: { bookingId: booking.id } });
+    res.json({
+      optIn: !!profile?.optIn,
+      optInAt: profile?.optInAt || null,
+      interests: (profile?.interests as string[]) || [],
+      photo: profile?.photo || "",
+    });
   })
 );
