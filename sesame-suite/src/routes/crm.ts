@@ -132,3 +132,82 @@ crmRouter.get(
     });
   })
 );
+
+/**
+ * GET /wa/crm/clientDetail?email=... — dossier détaillé d'un client de la
+ * fiche "Base clients" : préférences éco (ClientPrefs), et pour chacune de
+ * ses réservations, commandes (Order) et pièce d'identité (KycRecord).
+ * Jusqu'ici la fiche ne montrait que points/statut/centres d'intérêt —
+ * aucun moyen de voir ces éléments sans rouvrir chaque fiche réservation
+ * une par une (panneau Réservations). Même périmètre groupe que
+ * GET /wa/crm/clients ci-dessus.
+ */
+crmRouter.get(
+  "/crm/clientDetail",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const email = ((req.query.email as string) || "").trim().toLowerCase();
+    if (!email) {
+      res.json({ prefs: null, bookings: [] });
+      return;
+    }
+    const group = entity.groupId ? await prisma.group.findUnique({ where: { id: entity.groupId } }) : null;
+    const groupAggregated = group?.loyaltyMode === "centralized";
+    const entityIds = groupAggregated
+      ? (await prisma.entity.findMany({ where: { groupId: group!.id }, select: { id: true } })).map((e) => e.id)
+      : [entity.id];
+
+    const bookings = await prisma.booking.findMany({
+      where: { entityId: { in: entityIds }, personEmail: { equals: email, mode: "insensitive" } },
+      orderBy: { startDate: "desc" },
+    });
+    const bookingIds = bookings.map((b) => b.id);
+    const bookingCodes = bookings.map((b) => b.code);
+
+    const [prefs, orders, kycRecords] = await Promise.all([
+      prisma.clientPrefs.findFirst({ where: { entityId: { in: entityIds }, email: { equals: email, mode: "insensitive" } } }),
+      prisma.order.findMany({ where: { entityId: { in: entityIds }, bookingCode: { in: bookingCodes } }, orderBy: { createdAt: "desc" } }),
+      prisma.kycRecord.findMany({ where: { bookingId: { in: bookingIds } }, orderBy: { createdAt: "desc" } }),
+    ]);
+
+    const ordersByCode = new Map<string, typeof orders>();
+    for (const o of orders) {
+      if (!o.bookingCode) continue;
+      const arr = ordersByCode.get(o.bookingCode) || [];
+      arr.push(o);
+      ordersByCode.set(o.bookingCode, arr);
+    }
+    const kycByBookingId = new Map(kycRecords.map((k) => [k.bookingId, k]));
+
+    res.json({
+      prefs: prefs
+        ? { menageFreq: prefs.menageFreq, servFreq: prefs.servFreq, menageNote: prefs.menageNote }
+        : null,
+      bookings: bookings.map((b) => ({
+        code: b.code,
+        startDate: b.startDate.toISOString().slice(0, 10),
+        endDate: b.endDate.toISOString().slice(0, 10),
+        facilityName: b.facilityName || b.selectedRoomCode || b.facilityCode || "",
+        orders: (ordersByCode.get(b.code) || []).map((o) => ({
+          createdAt: o.createdAt.toISOString(),
+          status: o.status,
+          total: o.total,
+          items: o.items,
+        })),
+        kyc: (() => {
+          const k = kycByBookingId.get(b.id);
+          if (!k) return null;
+          return {
+            docType: k.docType || "",
+            idVerified: k.idVerified,
+            selfieVerified: k.selfieVerified,
+            matchScore: k.matchScore,
+            skipped: k.skipped,
+            createdAt: k.createdAt.toISOString(),
+          };
+        })(),
+      })),
+    });
+  })
+);

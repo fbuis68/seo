@@ -11958,6 +11958,11 @@ async function crmOpenClient(key){
     var r = await adminFetch('/wa/loyalty/list?email='+encodeURIComponent(c.email));
     if(r.ok){ var d = await r.json(); c.history = d.history || []; }
   }catch(e){}
+  var detail = {prefs:null, bookings:[]};
+  try{
+    var rd = await adminFetch('/wa/crm/clientDetail?email='+encodeURIComponent(c.email));
+    if(rd.ok) detail = await rd.json();
+  }catch(e){}
   var name = (c.prenom||c.nom) ? ((c.prenom||'')+' '+(c.nom||'')).trim() : 'Client anonyme';
   document.getElementById('crm-modal-title').textContent = name;
 
@@ -11990,6 +11995,44 @@ async function crmOpenClient(key){
     } else {
       h += '<div style="margin-bottom:14px"></div>';
     }
+  }
+
+  if(detail.prefs && (detail.prefs.menageFreq!=null || detail.prefs.servFreq!=null || detail.prefs.menageNote)){
+    var mLbl = detail.prefs.menageFreq==null ? 'Non renseigné' : detail.prefs.menageFreq===0 ? 'Aucun ménage' : detail.prefs.menageFreq===1 ? 'Quotidien' : 'Tous les '+detail.prefs.menageFreq+' jours';
+    var sLbl = detail.prefs.servFreq==null ? 'Non renseigné' : detail.prefs.servFreq===0 ? 'Jamais' : detail.prefs.servFreq===1 ? 'Quotidien' : 'Tous les '+detail.prefs.servFreq+' jours';
+    h += '<div class="ch" style="margin-bottom:8px"><i class="ti ti-leaf"></i>Préférences éco</div>';
+    h += '<div class="g2" style="margin-bottom:14px">';
+    h += '<div class="fi"><label class="lb">Ménage</label><input type="text" value="'+esc(mLbl)+'" readonly></div>';
+    h += '<div class="fi"><label class="lb">Serviettes / linge</label><input type="text" value="'+esc(sLbl)+'" readonly></div>';
+    h += '</div>';
+    if(detail.prefs.menageNote) h += '<div style="font-size:12px;color:var(--mu);margin-bottom:14px">'+esc(detail.prefs.menageNote)+'</div>';
+  }
+
+  var kycBookings = (detail.bookings||[]).filter(function(b){ return b.kyc; });
+  if(kycBookings.length){
+    h += '<div class="ch" style="margin-bottom:8px"><i class="ti ti-id-badge"></i>Pièce d\'identité</div>';
+    h += '<table class="tbl" style="margin-bottom:14px"><tr><th>Réservation</th><th>Type</th><th>Statut</th></tr>';
+    kycBookings.forEach(function(b){
+      var k = b.kyc;
+      var st = k.skipped ? 'Passée par le client' : (k.idVerified ? 'Vérifiée'+(k.selfieVerified?' · selfie OK':'') : 'Saisie, non vérifiée');
+      h += '<tr><td style="font-size:12px;font-family:monospace">'+esc(b.code)+'</td><td style="font-size:12px">'+esc(k.docType||'—')+'</td><td style="font-size:12px">'+esc(st)+'</td></tr>';
+    });
+    h += '</table>';
+  }
+
+  var allOrders = [];
+  (detail.bookings||[]).forEach(function(b){ (b.orders||[]).forEach(function(o){ allOrders.push({booking:b.code, order:o}); }); });
+  if(allOrders.length){
+    h += '<div class="ch" style="margin-bottom:8px"><i class="ti ti-shopping-bag"></i>Commandes</div>';
+    h += '<table class="tbl" style="margin-bottom:14px"><tr><th>Date</th><th>Réservation</th><th>Statut</th><th style="text-align:right">Total</th></tr>';
+    allOrders.forEach(function(x){
+      var o = x.order;
+      h += '<tr><td style="font-size:12px">'+(o.createdAt?new Date(o.createdAt).toLocaleDateString('fr-FR'):'—')+'</td>'
+        +'<td style="font-size:12px;font-family:monospace">'+esc(x.booking)+'</td>'
+        +'<td style="font-size:12px">'+esc(RESA_ORDER_STATUS_LABEL[o.status]||o.status)+'</td>'
+        +'<td style="font-size:12px;text-align:right">'+(o.total||0).toFixed(2)+' '+getCurrSym()+'</td></tr>';
+    });
+    h += '</table>';
   }
 
   if(c.history && c.history.length){
