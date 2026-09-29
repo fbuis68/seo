@@ -3,6 +3,7 @@ import { prisma } from "../db";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { resolveScope } from "../lib/scope";
+import { resolveEntity } from "../lib/entity";
 import { fireTrigger } from "../lib/automation";
 import { getOrCreateQuestionnaireSend, questionnaireLinkUrl } from "../lib/questionnaire";
 import { recordScoreEvent } from "../lib/crmScoring";
@@ -467,6 +468,62 @@ questionnaireRouter.get(
       description: send.questionnaire.description || "",
       questions: send.questionnaire.questions.map(shapeQuestion),
       answers: send.answers.map((a) => ({ questionId: a.questionId, value: a.value })),
+      completed: !!send.completedAt,
+    });
+  })
+);
+
+/**
+ * GET /wa/questionnaire/forCheckin?bookingCode=... — étape "Questionnaire"
+ * du parcours d'enregistrement (checkin.html) : questionnaire configuré
+ * pour l'établissement (EntityModuleConfig.checkinModules.questionnaire.
+ * questionnaireId, cf. panneau Entité & Catégorie), pour LA réservation en
+ * cours de check-in. Crée/réutilise le même QuestionnaireSend que l'envoi
+ * manuel (getOrCreateQuestionnaireSend) — même questionnaire completé une
+ * fois n'est pas re-proposé (completed:true, le client voit ses réponses).
+ * Même convention d'accès que les autres routes guest (kycRecord,
+ * guestSharing) : pas d'auth admin, bookingCode fait office de secret
+ * porteur.
+ */
+questionnaireRouter.get(
+  "/questionnaire/forCheckin",
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const bookingCode = (req.query.bookingCode as string) || "";
+    if (!bookingCode) throw new HttpError(400, "bookingCode requis");
+    const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code: bookingCode } } });
+    if (!booking) throw new HttpError(404, "Réservation introuvable");
+
+    const cfg = await prisma.entityModuleConfig.findUnique({ where: { entityId: entity.id } });
+    const modules = (cfg?.checkinModules as Record<string, { questionnaireId?: string }> | null) || {};
+    const questionnaireId = modules.questionnaire?.questionnaireId || null;
+    if (!questionnaireId) {
+      res.json({ configured: false });
+      return;
+    }
+
+    const questionnaire = await prisma.questionnaire.findFirst({
+      where: { id: questionnaireId, entityId: entity.id, active: true },
+      include: { questions: { orderBy: { order: "asc" } } },
+    });
+    if (!questionnaire) {
+      res.json({ configured: false });
+      return;
+    }
+
+    const send = await getOrCreateQuestionnaireSend(questionnaire.id, "booking", booking.id);
+    if (!send.sentAt) {
+      await prisma.questionnaireSend.update({ where: { id: send.id }, data: { sentAt: new Date() } });
+    }
+    const answers = await prisma.questionnaireAnswer.findMany({ where: { sendId: send.id } });
+
+    res.json({
+      configured: true,
+      token: send.token,
+      name: questionnaire.name,
+      description: questionnaire.description || "",
+      questions: questionnaire.questions.map(shapeQuestion),
+      answers: answers.map((a) => ({ questionId: a.questionId, value: a.value })),
       completed: !!send.completedAt,
     });
   })

@@ -5308,12 +5308,10 @@ function setStaffMinutes(k, val){
   CFG.checkinModules[k].staffMinutesSaved = parseFloat(val)||0;
 }
 
-// "questionnaire" (24/09/2026) : réglage préparé côté configuration
-// (choix du questionnaire à proposer, cf. bloc dédié dans renderModuleCards)
-// — le rendu de cette étape côté client (checkin.html, chaque étape y est
-// codée en dur individuellement, pas de moteur d'étapes générique) n'est
-// PAS encore branché. Le toggle est donc sans effet visible pour le client
-// tant que ce second chantier n'est pas fait.
+// "questionnaire" (24/09/2026, rendu client branché le 29/09/2026) :
+// étape 8 du parcours checkin.html (initQuestionnaireStep) — inactive tant
+// qu'aucun questionnaire n'est choisi ci-dessous (cf. isModuleActive côté
+// client), même si le toggle est activé.
 var MODULE_DEFS = [
   {k:'room',    ico:'ti-door',         label:'Choix de chambre',       desc:'Sélection sur le plan ou en liste',  required:true},
   {k:'taxe',    ico:'ti-receipt',      label:'Taxe de séjour',         desc:'Calcul occupants + paiement + export CSV de la taxe à payer',        required:false},

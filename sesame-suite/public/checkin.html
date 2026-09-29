@@ -306,7 +306,7 @@ input:focus,select:focus{border-color:var(--accent)}
 <div class="scroll" id="scrollArea">
 <div id="scr-sejour" class="scr on">
 
-  <!-- STEP DOTS — 8 étapes -->
+  <!-- STEP DOTS — 9 étapes -->
   <div class="sdots" id="stepDots">
     <div class="sd on" id="sd1" onclick="gotoStepFromDot(1)">1</div><div class="sline" id="sl1"></div>
     <div class="sd" id="sd2" onclick="gotoStepFromDot(2)">2</div><div class="sline" id="sl2"></div>
@@ -317,7 +317,8 @@ input:focus,select:focus{border-color:var(--accent)}
     <div class="sd" id="sd5" onclick="gotoStepFromDot(5)">5</div><div class="sline" id="sl5"></div>
     <div class="sd" id="sd6" data-i18n-title="step_dot_boutique_title" title="Boutique" onclick="gotoStepFromDot(6)"><i class="ti ti-shopping-bag" style="font-size:11px"></i></div><div class="sline" id="sl6"></div>
     <div class="sd" id="sd7" data-i18n-title="step_dot_sharing_title" title="Partage entre clients" onclick="gotoStepFromDot(7)"><i class="ti ti-users" style="font-size:11px"></i></div><div class="sline" id="sl7"></div>
-    <div class="sd" id="sd8" onclick="gotoStepFromDot(8)">8</div>
+    <div class="sd" id="sd8" data-i18n-title="step_dot_questionnaire_title" title="Questionnaire" onclick="gotoStepFromDot(8)"><i class="ti ti-list-check" style="font-size:11px"></i></div><div class="sline" id="sl8"></div>
+    <div class="sd" id="sd9" onclick="gotoStepFromDot(9)">9</div>
   </div>
 
   <!-- ── STEP 1: BOOKING ── -->
@@ -737,10 +738,28 @@ input:focus,select:focus{border-color:var(--accent)}
     </div>
   </div>
 
-  <!-- ── STEP 8: REWARDS ── -->
+  <!-- ── STEP 8: QUESTIONNAIRE ── -->
   <div id="step8" class="step-panel">
-    <div class="slbl" data-i18n="step7_title">Vos récompenses</div>
+    <div class="slbl" id="qstTitle" data-i18n="qst_title">Questionnaire</div>
     <div id="skipTop8" class="skip-top" style="display:none" onclick="skipStep(8)"><i class="ti ti-player-skip-forward"></i> <span data-i18n="kyc_skip">Passer cette étape</span></div>
+
+    <div id="qstDesc" class="alt alt-b" style="display:none"><i class="ti ti-info-circle"></i><span id="qstDescText"></span></div>
+    <div id="qstQuestions"></div>
+    <div id="qstCompletedMsg" class="alt alt-g" style="display:none"><i class="ti ti-check-circle"></i><span data-i18n="qst_completed">Merci, vos réponses ont bien été enregistrées.</span></div>
+
+    <div class="brow">
+      <button class="btn btn-out" onclick="gotoStep(prevActiveStep(8))"><i class="ti ti-arrow-left"></i></button>
+      <button class="btn btn-p" id="qstSubmitBtn" onclick="qstSubmit()" style="flex:1;justify-content:center"><span data-i18n="qst_submit">Envoyer mes réponses</span> <i class="ti ti-arrow-right"></i></button>
+    </div>
+    <div id="skipStep8" style="display:none;margin-top:8px">
+      <button class="btn btn-out" onclick="skipStep(8)" style="width:100%"><i class="ti ti-arrow-right"></i> <span data-i18n="kyc_skip">Passer cette étape</span></button>
+    </div>
+  </div>
+
+  <!-- ── STEP 9: REWARDS ── -->
+  <div id="step9" class="step-panel">
+    <div class="slbl" data-i18n="step7_title">Vos récompenses</div>
+    <div id="skipTop9" class="skip-top" style="display:none" onclick="skipStep(9)"><i class="ti ti-player-skip-forward"></i> <span data-i18n="kyc_skip">Passer cette étape</span></div>
 
     <!-- Points gagnés ce séjour -->
     <div id="rewardPointsHero" style="margin-bottom:12px"></div>
@@ -765,10 +784,6 @@ input:focus,select:focus{border-color:var(--accent)}
     <div class="card" id="rewardSumCard" style="display:none">
       <div class="ch"><i class="ti ti-sparkles"></i><span data-i18n="step7_sum_hdr">Récapitulatif de vos gains</span></div>
       <div id="rewardSumLines"></div>
-    </div>
-
-    <div id="skipStep7" style="display:none;margin-top:8px;margin-bottom:8px">
-      <button class="btn btn-out" onclick="skipStep(7)" style="width:100%"><i class="ti ti-arrow-right"></i> <span data-i18n="kyc_skip">Passer cette étape</span></button>
     </div>
 
     <!-- ── Récapitulatif & Paiement (fusionné dans cette même étape) ── -->
@@ -1593,6 +1608,12 @@ var I18N_FR = {
   shr_nearby_hdr:'Clients présents ayant activé le partage',
   shr_nearby_empty:"Aucun autre client n'a activé le partage pour le moment.",
   esp_tab_sharing:'Partage',
+  step_dot_questionnaire_title:'Questionnaire',
+  qst_title:'Questionnaire',qst_yes:'Oui',qst_no:'Non',
+  qst_text_placeholder:'Votre réponse…',
+  qst_submit:'Envoyer mes réponses',qst_completed:'Merci, vos réponses ont bien été enregistrées.',
+  qst_missing_required:'Merci de répondre à toutes les questions obligatoires',
+  qst_submit_error:"Erreur lors de l'envoi des réponses",
   // Étape 1 — réservation
   step1_title:'Votre réservation',step1_fetch_hdr:'Récupérer depuis Sesame',
   step1_search_label:'Email ou code de réservation',
@@ -1833,6 +1854,12 @@ var I18N_EN = {
   shr_nearby_hdr:'Guests currently sharing their profile',
   shr_nearby_empty:'No other guest has enabled sharing yet.',
   esp_tab_sharing:'Sharing',
+  step_dot_questionnaire_title:'Questionnaire',
+  qst_title:'Questionnaire',qst_yes:'Yes',qst_no:'No',
+  qst_text_placeholder:'Your answer…',
+  qst_submit:'Send my answers',qst_completed:'Thank you, your answers have been saved.',
+  qst_missing_required:'Please answer all required questions',
+  qst_submit_error:'Error sending your answers',
   step1_title:'Your booking',step1_fetch_hdr:'Retrieve from Sesame',
   step1_search_label:'Email or booking code',
   step1_search_placeholder:'Email, booking code or name…',
@@ -2062,6 +2089,12 @@ var I18N_ES = {
   shr_nearby_hdr:'Clientes presentes que han activado el uso compartido',
   shr_nearby_empty:'Ningún otro cliente ha activado el uso compartido todavía.',
   esp_tab_sharing:'Compartir',
+  step_dot_questionnaire_title:'Cuestionario',
+  qst_title:'Cuestionario',qst_yes:'Sí',qst_no:'No',
+  qst_text_placeholder:'Su respuesta…',
+  qst_submit:'Enviar mis respuestas',qst_completed:'Gracias, sus respuestas se han guardado.',
+  qst_missing_required:'Por favor responda a todas las preguntas obligatorias',
+  qst_submit_error:'Error al enviar sus respuestas',
   step1_title:'Su reserva',step1_fetch_hdr:'Recuperar desde Sesame',
   step1_search_label:'Email o código de reserva',
   step1_search_placeholder:'Email, código de reserva o nombre…',
@@ -2356,18 +2389,21 @@ var STEP_MODULES = {
   5: 'eco',
   6: 'boutique', // boutique hôtelière — commande pendant le check-in
   7: 'sharing',  // partage de profil avec les autres clients présents (opt-in)
-  8: 'rewards'   // récompenses + récapitulatif & paiement (toujours actif)
+  8: 'questionnaire', // questionnaire personnalisé configuré par l'hôtel
+  9: 'rewards'   // récompenses + récapitulatif & paiement (toujours actif)
 };
 function isModuleActive(key){
   if(!key) return true;
-  // "sharing" est un module opt-in hôtel introduit après tous les autres :
-  // pas de comportement historique "actif par défaut" à préserver pour un
-  // établissement qui n'a jamais ouvert le panneau Entité & Catégorie —
-  // il resterait sinon forcé, sans action de l'hôtel, à demander aux
-  // clients de partager leurs données avec les autres clients présents.
-  if(!CFG.checkinModules) return key!=='sharing';
-  var m = CFG.checkinModules[key];
-  if(!m) return key!=='sharing';
+  var m = CFG.checkinModules ? CFG.checkinModules[key] : null;
+  // "sharing" et "questionnaire" sont des modules introduits après tous les
+  // autres : pas de comportement historique "actif par défaut" à préserver
+  // pour un établissement qui n'a jamais ouvert/enregistré le panneau
+  // Entité & Catégorie — sinon l'étape s'afficherait sans qu'aucun admin ne
+  // l'ait choisie et, pour "questionnaire", même sans questionnaire
+  // réellement sélectionné (questionnaireId).
+  if(key==='sharing') return !!m && m.active !== false;
+  if(key==='questionnaire') return !!m && m.active !== false && !!m.questionnaireId;
+  if(!m) return true;
   return m.active !== false;
 }
 function isModuleMandatory(key){
@@ -2377,11 +2413,11 @@ function isModuleMandatory(key){
   return !m || m.mandatory !== false;
 }
 function nextActiveStep(from){
-  for(var i=from+1;i<=8;i++){
+  for(var i=from+1;i<=9;i++){
     var mk=STEP_MODULES[i];
     if(isModuleActive(mk)) return i;
   }
-  return 8;
+  return 9;
 }
 function prevActiveStep(from){
   for(var i=from-1;i>=1;i--){
@@ -2412,11 +2448,12 @@ function gotoStep(n){
   if(n===4){initKycStep();}
   if(n===5)renderEcoStep();
   if(n===7)initSharingStep();
-  if(n===8){renderRewardStep();renderSummary();}
+  if(n===8)initQuestionnaireStep();
+  if(n===9){renderRewardStep();renderSummary();}
   updateSkipButtons();
 }
 function updateSkipButtons(){
-  [3,5,6,7,8].forEach(function(n){
+  [3,5,6,7,8,9].forEach(function(n){
     var mk = STEP_MODULES[n];
     var show = !isModuleMandatory(mk);
     var el = document.getElementById('skipStep'+n);
@@ -2440,7 +2477,7 @@ function gotoStepFromDot(n){
   gotoStep(n);
 }
 function updateDots(){
-  for(var i=1;i<=8;i++){
+  for(var i=1;i<=9;i++){
     var d=document.getElementById('sd'+i),l=document.getElementById('sl'+i);
     if(!d) continue;
     var mk=STEP_MODULES[i];
@@ -4799,6 +4836,138 @@ async function espRenderSharingNearby(){
     }).join('');
   }catch(e){
     wrap.innerHTML = '';
+  }
+}
+
+// ═══════════════════ MODULE QUESTIONNAIRE (étape 8, configuré par l'hôtel)
+// GET /wa/questionnaire/forCheckin crée/réutilise le même QuestionnaireSend
+// que l'envoi manuel (routes/questionnaire.ts) — les réponses sont donc
+// aussi visibles côté admin (panneau Questionnaires, onglet Résultats).
+var QST = { loaded:false, configured:false, token:null, questions:[], answers:{}, completed:false };
+
+async function initQuestionnaireStep(){
+  var wrap = document.getElementById('qstQuestions');
+  var descEl = document.getElementById('qstDesc');
+  var completedEl = document.getElementById('qstCompletedMsg');
+  var btn = document.getElementById('qstSubmitBtn');
+  if(!wrap || !S.booking) return;
+  if(QST.loaded){ qstRenderQuestions(); return; }
+  wrap.innerHTML = '<div class="loading"><div class="spin"></div></div>';
+  try{
+    var r = await apiFetch(API_BASE+'/wa/questionnaire/forCheckin?bookingCode='+encodeURIComponent(S.booking.code));
+    var d = r.ok ? await r.json() : { configured:false };
+    if(!d.configured){
+      wrap.innerHTML = '';
+      QST.loaded = true; QST.configured = false;
+      return;
+    }
+    QST.loaded = true; QST.configured = true;
+    QST.token = d.token;
+    QST.questions = d.questions || [];
+    QST.completed = !!d.completed;
+    // Pré-remplit QST.answers depuis les réponses déjà enregistrées
+    // (questionnaire déjà rempli lors d'une précédente visite de l'étape).
+    (d.answers||[]).forEach(function(a){ QST.answers[a.questionId] = a.value; });
+
+    document.getElementById('qstTitle').textContent = d.name || t('qst_title');
+    if(d.description){ descEl.style.display = 'flex'; document.getElementById('qstDescText').textContent = d.description; }
+    else { descEl.style.display = 'none'; }
+    completedEl.style.display = QST.completed ? 'flex' : 'none';
+    if(btn) btn.style.display = QST.completed ? 'none' : 'flex';
+    qstRenderQuestions();
+  }catch(e){
+    wrap.innerHTML = '';
+  }
+}
+
+function qstSetAnswer(questionId, value){
+  QST.answers[questionId] = value;
+  qstRenderQuestions();
+}
+function qstToggleMultiChoice(questionId, key){
+  var cur = QST.answers[questionId] && Array.isArray(QST.answers[questionId].choices) ? QST.answers[questionId].choices.slice() : [];
+  var i = cur.indexOf(key);
+  if(i===-1) cur.push(key); else cur.splice(i,1);
+  QST.answers[questionId] = { choices: cur };
+  qstRenderQuestions();
+}
+
+function qstRenderQuestions(){
+  var wrap = document.getElementById('qstQuestions');
+  if(!wrap) return;
+  var readOnly = QST.completed;
+  wrap.innerHTML = QST.questions.map(function(q){
+    var a = QST.answers[q.id] || {};
+    var body = '';
+    if(q.type==='single' || q.type==='select'){
+      body = '<div style="display:flex;flex-wrap:wrap;gap:8px">' + (q.options||[]).map(function(o){
+        var on = a.choice===o.key;
+        return '<div class="pill'+(on?' on':'')+'"'+(readOnly?'':' onclick="qstSetAnswer(\''+q.id+'\',{choice:\''+o.key+'\'})"')+'>'+esc(o.label)+'</div>';
+      }).join('') + '</div>';
+    } else if(q.type==='multi'){
+      var choices = Array.isArray(a.choices) ? a.choices : [];
+      body = '<div style="display:flex;flex-wrap:wrap;gap:8px">' + (q.options||[]).map(function(o){
+        var on = choices.indexOf(o.key)!==-1;
+        return '<div class="pill'+(on?' on':'')+'"'+(readOnly?'':' onclick="qstToggleMultiChoice(\''+q.id+'\',\''+o.key+'\')"')+'>'+(on?'<i class="ti ti-check" style="font-size:11px"></i> ':'')+esc(o.label)+'</div>';
+      }).join('') + '</div>';
+    } else if(q.type==='boolean'){
+      body = '<div style="display:flex;gap:8px">'
+        + '<div class="pill'+(a.value===true?' on':'')+'"'+(readOnly?'':' onclick="qstSetAnswer(\''+q.id+'\',{value:true})"')+'>'+t('qst_yes')+'</div>'
+        + '<div class="pill'+(a.value===false?' on':'')+'"'+(readOnly?'':' onclick="qstSetAnswer(\''+q.id+'\',{value:false})"')+'>'+t('qst_no')+'</div>'
+        + '</div>';
+    } else if(q.type==='rating'){
+      var opts = q.options||{}; var min=opts.min!=null?opts.min:1; var max=opts.max!=null?opts.max:5;
+      var stars = [];
+      for(var i=min;i<=max;i++){ stars.push(i); }
+      body = '<div style="display:flex;flex-wrap:wrap;gap:8px">' + stars.map(function(n){
+        var on = a.rating===n;
+        return '<div class="pill'+(on?' on':'')+'" style="min-width:38px;text-align:center"'+(readOnly?'':' onclick="qstSetAnswer(\''+q.id+'\',{rating:'+n+'})"')+'>'+n+'</div>';
+      }).join('') + '</div>'
+        + (opts.minLabel||opts.maxLabel ? '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--mu);margin-top:4px"><span>'+esc(opts.minLabel||'')+'</span><span>'+esc(opts.maxLabel||'')+'</span></div>' : '');
+    } else {
+      // text / shorttext (et types non exposés par le constructeur admin)
+      body = readOnly
+        ? '<div style="font-size:13px">'+esc(a.text||'—')+'</div>'
+        : '<textarea rows="3" oninput="qstSetAnswer(\''+q.id+'\',{text:this.value})" placeholder="'+t('qst_text_placeholder')+'">'+esc(a.text||'')+'</textarea>';
+    }
+    return '<div class="card">'
+      + '<div style="font-size:13px;font-weight:600;margin-bottom:8px">'+esc(q.label)+(q.required?' <span style="color:var(--primary)">*</span>':'')+'</div>'
+      + body
+      + (q.linkUrl ? '<div style="font-size:12px;margin-top:8px"><a href="'+esc(q.linkUrl)+'" target="_blank" rel="noopener" style="color:var(--primary)"><i class="ti ti-link"></i> '+esc(q.linkLabel||q.linkUrl)+'</a></div>' : '')
+      + '</div>';
+  }).join('');
+}
+
+async function qstSubmit(){
+  if(!QST.token) return;
+  var missing = QST.questions.some(function(q){
+    if(!q.required) return false;
+    var a = QST.answers[q.id];
+    if(!a) return true;
+    if(q.type==='single'||q.type==='select') return !a.choice;
+    if(q.type==='multi') return !a.choices || !a.choices.length;
+    if(q.type==='boolean') return typeof a.value!=='boolean';
+    if(q.type==='rating') return typeof a.rating!=='number';
+    return !a.text || !a.text.trim();
+  });
+  if(missing){ toast(t('qst_missing_required')); return; }
+  var btn = document.getElementById('qstSubmitBtn');
+  if(btn){ btn.disabled=true; }
+  try{
+    var payload = Object.keys(QST.answers).map(function(qid){ return { questionId: qid, value: QST.answers[qid] }; });
+    var r = await apiFetch(API_BASE+'/wa/questionnaire/submit', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ token: QST.token, answers: payload })
+    });
+    if(!r.ok){ var err = await r.json().catch(function(){return {};}); toast(err.error||t('qst_submit_error')); if(btn)btn.disabled=false; return; }
+    QST.completed = true;
+    document.getElementById('qstCompletedMsg').style.display = 'flex';
+    if(btn) btn.style.display = 'none';
+    qstRenderQuestions();
+    toast(t('qst_completed'));
+  }catch(e){
+    toast(t('qst_submit_error'));
+    if(btn) btn.disabled=false;
   }
 }
 
