@@ -938,6 +938,7 @@ input:focus,select:focus{border-color:var(--accent)}
         <div class="pill"    data-tab="boutique" onclick="espSetTab('boutique')"><i class="ti ti-shopping-bag"></i> <span data-i18n="esp_tab_boutique">Boutique</span></div>
         <div class="pill"    data-tab="rs"       onclick="espSetTab('rs')"><i class="ti ti-bell"></i> <span data-i18n="esp_tab_rs">Room Service</span></div>
         <div class="pill"    data-tab="sharing"  onclick="espSetTab('sharing')"><i class="ti ti-users"></i> <span data-i18n="esp_tab_sharing">Partage</span></div>
+        <div class="pill"    data-tab="occupants" onclick="espSetTab('occupants')"><i class="ti ti-friends"></i> <span data-i18n="esp_tab_occupants">Occupants</span></div>
       </div>
       <button type="button" class="cat-tabs-arrow cat-tabs-arrow-l" id="espTabsArrowL" onclick="scrollCatTabs('espTabs',-1)"><i class="ti ti-chevron-left"></i></button>
       <button type="button" class="cat-tabs-arrow cat-tabs-arrow-r" id="espTabsArrowR" onclick="scrollCatTabs('espTabs',1)"><i class="ti ti-chevron-right"></i></button>
@@ -1204,12 +1205,14 @@ input:focus,select:focus{border-color:var(--accent)}
           <div style="font-size:11px;color:var(--mu);margin-top:4px" data-i18n="shr_interests_hint">Appuyez sur Entrée pour ajouter un tag</div>
           <div class="shrInterestsList" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
         </div>
-
-        <div style="margin-top:14px">
-          <div style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px" data-i18n="shr_nearby_hdr">Clients présents ayant activé le partage</div>
-          <div id="shrNearbyWrap"></div>
-        </div>
       </div>
+    </div>
+
+    <!-- ═══ TAB: OCCUPANTS (clients présents ayant partagé leur profil) ═══ -->
+    <div id="espTabOccupants" class="esp-tab" style="display:none">
+      <div class="alt alt-b"><i class="ti ti-info-circle"></i><span data-i18n="shr_nearby_intro">Les clients de l'établissement présents pendant votre séjour et ayant activé le partage de profil.</span></div>
+      <div style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px" data-i18n="shr_nearby_hdr">Clients présents ayant activé le partage</div>
+      <div id="shrNearbyWrap"></div>
     </div>
 
   </div>
@@ -1606,8 +1609,10 @@ var I18N_FR = {
   shr_interests_label:"Centres d'intérêt",shr_interests_placeholder:'ex : randonnée, vin, cuisine…',
   shr_interests_hint:'Appuyez sur Entrée pour ajouter un tag',
   shr_nearby_hdr:'Clients présents ayant activé le partage',
+  shr_nearby_intro:'Les clients de l\'établissement présents pendant votre séjour et ayant activé le partage de profil.',
   shr_nearby_empty:"Aucun autre client n'a activé le partage pour le moment.",
   esp_tab_sharing:'Partage',
+  esp_tab_occupants:'Occupants',
   step_dot_questionnaire_title:'Questionnaire',
   qst_title:'Questionnaire',qst_yes:'Oui',qst_no:'Non',
   qst_text_placeholder:'Votre réponse…',
@@ -1852,8 +1857,10 @@ var I18N_EN = {
   shr_interests_label:'Interests',shr_interests_placeholder:'e.g. hiking, wine, cooking…',
   shr_interests_hint:'Press Enter to add a tag',
   shr_nearby_hdr:'Guests currently sharing their profile',
+  shr_nearby_intro:'Guests staying at the property during your visit who have enabled profile sharing.',
   shr_nearby_empty:'No other guest has enabled sharing yet.',
   esp_tab_sharing:'Sharing',
+  esp_tab_occupants:'Guests',
   step_dot_questionnaire_title:'Questionnaire',
   qst_title:'Questionnaire',qst_yes:'Yes',qst_no:'No',
   qst_text_placeholder:'Your answer…',
@@ -2087,8 +2094,10 @@ var I18N_ES = {
   shr_interests_label:'Intereses',shr_interests_placeholder:'ej: senderismo, vino, cocina…',
   shr_interests_hint:'Pulse Intro para añadir una etiqueta',
   shr_nearby_hdr:'Clientes presentes que han activado el uso compartido',
+  shr_nearby_intro:'Los clientes del establecimiento presentes durante su estancia que han activado el uso compartido de su perfil.',
   shr_nearby_empty:'Ningún otro cliente ha activado el uso compartido todavía.',
   esp_tab_sharing:'Compartir',
+  esp_tab_occupants:'Ocupantes',
   step_dot_questionnaire_title:'Cuestionario',
   qst_title:'Cuestionario',qst_yes:'Sí',qst_no:'No',
   qst_text_placeholder:'Su respuesta…',
@@ -3383,7 +3392,9 @@ function renderEspace(){
 
   var sharingPill = document.querySelector('#espTabs .pill[data-tab="sharing"]');
   if(sharingPill) sharingPill.style.display = isModuleActive('sharing') ? '' : 'none';
-  if(!isModuleActive('sharing') && ESP_ACTIVE_TAB==='sharing') ESP_ACTIVE_TAB='key';
+  var occupantsPill = document.querySelector('#espTabs .pill[data-tab="occupants"]');
+  if(occupantsPill) occupantsPill.style.display = isModuleActive('sharing') ? '' : 'none';
+  if(!isModuleActive('sharing') && (ESP_ACTIVE_TAB==='sharing' || ESP_ACTIVE_TAB==='occupants')) ESP_ACTIVE_TAB='key';
 
   espSetTab(ESP_ACTIVE_TAB);
   updateCatTabsArrows('espTabs');
@@ -3394,7 +3405,7 @@ function espSetTab(tab){
   document.querySelectorAll('#espTabs .pill').forEach(function(p){
     p.classList.toggle('on', p.getAttribute('data-tab')===tab);
   });
-  var ALL_TABS = ['key','loyalty','menage','histo','livret','boutique','rs','profile','sharing'];
+  var ALL_TABS = ['key','loyalty','menage','histo','livret','boutique','rs','profile','sharing','occupants'];
   ALL_TABS.forEach(function(t){
     var id = 'espTab' + t.charAt(0).toUpperCase() + t.slice(1);
     var el = document.getElementById(id);
@@ -3408,6 +3419,7 @@ function espSetTab(tab){
   if(tab==='livret')   espRenderLivret();
   if(tab==='boutique') espRenderBoutiqueTab();
   if(tab==='sharing')  espRenderSharing();
+  if(tab==='occupants') espRenderSharingNearby();
 }
 
 // ── CLÉ DIGITALE / ACCÈS NUMÉRIQUES ──
@@ -4826,7 +4838,6 @@ async function pushGuestSharingProfile(){
 // chaque ouverture de l'onglet et après (dés)activation du partage.
 async function espRenderSharing(){
   shrSyncUi();
-  await espRenderSharingNearby();
 }
 async function espRenderSharingNearby(){
   var wrap = document.getElementById('shrNearbyWrap');

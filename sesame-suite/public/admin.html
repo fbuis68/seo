@@ -11830,7 +11830,7 @@ async function fetchCrmClients(){
         return {
           key: c.email, email: c.email, nom: c.lastname, prenom: c.firstname, phone: c.phone,
           points: c.points, sejours: c.stays, lastStayDate: c.lastStay, tier: c.tier, tags: c.tags||[],
-          interests: c.interests||[], hotels: c.hotels||null
+          interests: c.interests||[], sharingPhoto: c.sharingPhoto||'', hotels: c.hotels||null
         };
       });
     }
@@ -11980,11 +11980,16 @@ async function crmOpenClient(key){
   h += '<div class="stat"><div class="sv" style="color:'+crmTierColor(c.tier)+'">'+c.tier+'</div><div class="sl">Statut</div></div>';
   h += '</div>';
 
-  if(c.interests && c.interests.length){
+  if(c.sharingPhoto || (c.interests && c.interests.length)){
     h += '<div class="ch" style="margin-bottom:8px"><i class="ti ti-heart"></i>Centres d\'intérêt</div>';
-    h += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">';
-    h += c.interests.map(function(v){ return '<span style="background:var(--bg);border:1px solid var(--bdr);border-radius:20px;padding:3px 10px;font-size:12px;color:var(--mu)">'+esc(v)+'</span>'; }).join('');
-    h += '</div>';
+    if(c.sharingPhoto) h += '<img src="'+esc(c.sharingPhoto)+'" style="width:56px;height:56px;border-radius:50%;object-fit:cover;margin-bottom:8px;display:block">';
+    if(c.interests && c.interests.length){
+      h += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">';
+      h += c.interests.map(function(v){ return '<span style="background:var(--bg);border:1px solid var(--bdr);border-radius:20px;padding:3px 10px;font-size:12px;color:var(--mu)">'+esc(v)+'</span>'; }).join('');
+      h += '</div>';
+    } else {
+      h += '<div style="margin-bottom:14px"></div>';
+    }
   }
 
   if(c.history && c.history.length){
@@ -14974,7 +14979,8 @@ async function resaLoadSharing(code){
       return;
     }
     var interests = data.interests || [];
-    body.innerHTML = '<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--a);font-weight:600;margin-bottom:8px"><i class="ti ti-check"></i> Partage activé'+(data.optInAt?' — '+new Date(data.optInAt).toLocaleDateString('fr-FR'):'')+'</div>'
+    body.innerHTML = '<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--a);font-weight:600;margin-bottom:10px"><i class="ti ti-check"></i> Partage activé'+(data.optInAt?' — '+new Date(data.optInAt).toLocaleDateString('fr-FR'):'')+'</div>'
+      + (data.photo ? '<img src="'+esc(data.photo)+'" style="width:64px;height:64px;border-radius:50%;object-fit:cover;margin-bottom:10px;display:block">' : '')
       + (interests.length
           ? '<div style="display:flex;flex-wrap:wrap;gap:6px">'+interests.map(function(v){ return '<span style="background:var(--al);color:var(--a);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600">'+esc(v)+'</span>'; }).join('')+'</div>'
           : '<div style="font-size:12px;color:var(--mu)">Aucun centre d\'intérêt saisi.</div>');

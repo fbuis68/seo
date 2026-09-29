@@ -60,16 +60,24 @@ crmRouter.get(
     const prefsByEmail = new Map(prefs.map((p) => [p.email, p]));
     const tiers = (cfg?.loyaltyTiers as unknown as LoyaltyTiers | null) || null;
 
-    // Centres d'intérêt déclarés lors du check-in (module "Partage entre
-    // clients") — union sur TOUTES les réservations opt-in de ce client
-    // (même hors groupe : GuestSharingProfile est scopé sur les mêmes
-    // entityIds que le reste de la fiche), pour la fiche "Base clients".
+    // Centres d'intérêt + photo déclarés lors du check-in (module "Partage
+    // entre clients") — union des centres d'intérêt sur TOUTES les
+    // réservations opt-in de ce client (même hors groupe : GuestSharingProfile
+    // est scopé sur les mêmes entityIds que le reste de la fiche), photo de
+    // l'opt-in le plus récent, pour la fiche "Base clients".
     const interestsByEmail = new Map<string, Set<string>>();
+    const photoByEmail = new Map<string, { photo: string; optInAt: Date | null }>();
     for (const p of sharingProfiles) {
       const key = p.booking.personEmail.toLowerCase();
       const set = interestsByEmail.get(key) || new Set<string>();
       for (const v of (p.interests as string[]) || []) set.add(v);
       interestsByEmail.set(key, set);
+      if (p.photo) {
+        const existingPhoto = photoByEmail.get(key);
+        if (!existingPhoto || (p.optInAt && (!existingPhoto.optInAt || p.optInAt > existingPhoto.optInAt))) {
+          photoByEmail.set(key, { photo: p.photo, optInAt: p.optInAt });
+        }
+      }
     }
 
     const byEmail = new Map<
@@ -111,6 +119,7 @@ crmRouter.get(
         tier: computeTier(points, tiers),
         tags: (pref?.tags as string[]) || [],
         interests: Array.from(interestsByEmail.get(c.email.toLowerCase()) || []),
+        sharingPhoto: photoByEmail.get(c.email.toLowerCase())?.photo || "",
         hotels: groupAggregated ? Array.from(c.hotels) : undefined,
       };
     });
