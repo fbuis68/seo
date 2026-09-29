@@ -25,9 +25,11 @@ export async function getOrCreateQuestionnaireSend(
   targetType: QuestionnaireTargetType,
   targetId: string
 ) {
+  console.log("[DEBUG getOrCreateQuestionnaireSend] called with", JSON.stringify({ questionnaireId, targetType, targetId }));
   const existing = await prisma.questionnaireSend.findUnique({
     where: { questionnaireId_targetType_targetId: { questionnaireId, targetType, targetId } },
   });
+  console.log("[DEBUG getOrCreateQuestionnaireSend] existing row:", existing ? JSON.stringify({ id: existing.id, targetId: existing.targetId, token: existing.token }) : "none");
   if (existing) return existing;
   const token = crypto.randomBytes(24).toString("hex");
   try {

@@ -89,8 +89,10 @@ export async function sendMessage(opts: {
   // réglé. N'écrase jamais {{lienQuestionnaire}} si déjà fourni par
   // l'appelant (cf. fireTrigger, qui l'attache lui-même depuis
   // AutomationRule.questionnaireId AVANT d'appeler sendMessage).
+  console.log("[DEBUG sendMessage]", JSON.stringify({ templateKey: opts.templateKey, templateQuestionnaireId: template.questionnaireId, trackOpenProspectId: opts.trackOpenProspectId, entityId: opts.entityId, hasLienAlready: !!vars.lienQuestionnaire }));
   if (template.questionnaireId && opts.entityId === null && opts.trackOpenProspectId && !vars.lienQuestionnaire) {
     vars = await attachQuestionnaireLink(template.questionnaireId, "crmProspect", opts.trackOpenProspectId, vars);
+    console.log("[DEBUG sendMessage] after attach, lienQuestionnaire=", vars.lienQuestionnaire);
   }
   const subject = renderTemplate(template.subject, vars);
   let body = renderTemplate(template.bodyHtml, vars);
