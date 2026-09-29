@@ -306,7 +306,7 @@ input:focus,select:focus{border-color:var(--accent)}
 <div class="scroll" id="scrollArea">
 <div id="scr-sejour" class="scr on">
 
-  <!-- STEP DOTS — 7 étapes -->
+  <!-- STEP DOTS — 8 étapes -->
   <div class="sdots" id="stepDots">
     <div class="sd on" id="sd1" onclick="gotoStepFromDot(1)">1</div><div class="sline" id="sl1"></div>
     <div class="sd" id="sd2" onclick="gotoStepFromDot(2)">2</div><div class="sline" id="sl2"></div>
@@ -316,7 +316,8 @@ input:focus,select:focus{border-color:var(--accent)}
     </div><div class="sline" id="sl4"></div>
     <div class="sd" id="sd5" onclick="gotoStepFromDot(5)">5</div><div class="sline" id="sl5"></div>
     <div class="sd" id="sd6" data-i18n-title="step_dot_boutique_title" title="Boutique" onclick="gotoStepFromDot(6)"><i class="ti ti-shopping-bag" style="font-size:11px"></i></div><div class="sline" id="sl6"></div>
-    <div class="sd" id="sd7" onclick="gotoStepFromDot(7)">7</div>
+    <div class="sd" id="sd7" data-i18n-title="step_dot_sharing_title" title="Partage entre clients" onclick="gotoStepFromDot(7)"><i class="ti ti-users" style="font-size:11px"></i></div><div class="sline" id="sl7"></div>
+    <div class="sd" id="sd8" onclick="gotoStepFromDot(8)">8</div>
   </div>
 
   <!-- ── STEP 1: BOOKING ── -->
@@ -691,10 +692,55 @@ input:focus,select:focus{border-color:var(--accent)}
     </div>
   </div>
 
-  <!-- ── STEP 7: REWARDS ── -->
+  <!-- ── STEP 7: PARTAGE ENTRE CLIENTS ── -->
   <div id="step7" class="step-panel">
-    <div class="slbl" data-i18n="step7_title">Vos récompenses</div>
+    <div class="slbl" data-i18n="shr_title">Partage de profil</div>
     <div id="skipTop7" class="skip-top" style="display:none" onclick="skipStep(7)"><i class="ti ti-player-skip-forward"></i> <span data-i18n="kyc_skip">Passer cette étape</span></div>
+
+    <div class="alt alt-b"><i class="ti ti-info-circle"></i><span data-i18n="shr_intro">Partagez votre nom, vos coordonnées, votre photo et vos centres d'intérêt avec les autres clients présents dans l'établissement pendant votre séjour. Visible uniquement le temps de votre réservation — désactivable à tout moment depuis votre espace.</span></div>
+
+    <div class="card">
+      <div class="ch"><i class="ti ti-users"></i><span data-i18n="shr_toggle_hdr">Partager mon profil</span></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <div style="font-size:12px;color:var(--mu)" data-i18n="shr_toggle_desc">Les autres clients de l'établissement pourront voir vos informations le temps de votre séjour.</div>
+        <input type="checkbox" class="shrOptInChk" style="flex-shrink:0;width:20px;height:20px;accent-color:var(--primary)" onchange="shrToggle(this.checked)">
+      </div>
+    </div>
+
+    <div class="shrDetailBlock" style="display:none">
+      <!-- Photo -->
+      <div class="fi">
+        <label class="lb" data-i18n="shr_photo_label">Photo (facultatif)</label>
+        <div class="id-drop shrDropPhoto">
+          <input type="file" accept="image/*" onchange="shrCapturePhoto(this)">
+          <i class="ti ti-camera" style="font-size:28px;color:var(--mu);display:block;margin-bottom:6px"></i>
+          <div style="font-size:13px;font-weight:500;color:var(--tx)" data-i18n="shr_photo_cta">Ajouter une photo</div>
+          <img class="id-preview shrPrevPhoto">
+        </div>
+      </div>
+
+      <!-- Centres d'intérêt -->
+      <div class="fi">
+        <label class="lb" data-i18n="shr_interests_label">Centres d'intérêt</label>
+        <input type="text" data-i18n-placeholder="shr_interests_placeholder" placeholder="ex : randonnée, vin, cuisine…" onkeydown="if(event.key==='Enter'){event.preventDefault();shrAddInterest(this);}">
+        <div style="font-size:11px;color:var(--mu);margin-top:4px" data-i18n="shr_interests_hint">Appuyez sur Entrée pour ajouter un tag</div>
+        <div class="shrInterestsList" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
+      </div>
+    </div>
+
+    <div class="brow">
+      <button class="btn btn-out" onclick="gotoStep(prevActiveStep(7))"><i class="ti ti-arrow-left"></i></button>
+      <button class="btn btn-p" onclick="gotoStep(nextActiveStep(7))" style="flex:1;justify-content:center"><span data-i18n="btn_continue">Continuer</span> <i class="ti ti-arrow-right"></i></button>
+    </div>
+    <div id="skipStep7" style="display:none;margin-top:8px">
+      <button class="btn btn-out" onclick="skipStep(7)" style="width:100%"><i class="ti ti-arrow-right"></i> <span data-i18n="kyc_skip">Passer cette étape</span></button>
+    </div>
+  </div>
+
+  <!-- ── STEP 8: REWARDS ── -->
+  <div id="step8" class="step-panel">
+    <div class="slbl" data-i18n="step7_title">Vos récompenses</div>
+    <div id="skipTop8" class="skip-top" style="display:none" onclick="skipStep(8)"><i class="ti ti-player-skip-forward"></i> <span data-i18n="kyc_skip">Passer cette étape</span></div>
 
     <!-- Points gagnés ce séjour -->
     <div id="rewardPointsHero" style="margin-bottom:12px"></div>
@@ -876,6 +922,7 @@ input:focus,select:focus{border-color:var(--accent)}
         <div class="pill"    data-tab="livret"   onclick="espSetTab('livret')"><i class="ti ti-book"></i> <span data-i18n="esp_tab_livret">Livret</span></div>
         <div class="pill"    data-tab="boutique" onclick="espSetTab('boutique')"><i class="ti ti-shopping-bag"></i> <span data-i18n="esp_tab_boutique">Boutique</span></div>
         <div class="pill"    data-tab="rs"       onclick="espSetTab('rs')"><i class="ti ti-bell"></i> <span data-i18n="esp_tab_rs">Room Service</span></div>
+        <div class="pill"    data-tab="sharing"  onclick="espSetTab('sharing')"><i class="ti ti-users"></i> <span data-i18n="esp_tab_sharing">Partage</span></div>
       </div>
       <button type="button" class="cat-tabs-arrow cat-tabs-arrow-l" id="espTabsArrowL" onclick="scrollCatTabs('espTabs',-1)"><i class="ti ti-chevron-left"></i></button>
       <button type="button" class="cat-tabs-arrow cat-tabs-arrow-r" id="espTabsArrowR" onclick="scrollCatTabs('espTabs',1)"><i class="ti ti-chevron-right"></i></button>
@@ -1110,6 +1157,43 @@ input:focus,select:focus{border-color:var(--accent)}
       <div style="margin-top:12px">
         <div style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px" data-i18n="esp_boutique_orders_hdr">Mes commandes en cours</div>
         <div id="espBoutiqueOrders"></div>
+      </div>
+    </div>
+
+    <!-- ═══ TAB: PARTAGE ENTRE CLIENTS ═══ -->
+    <div id="espTabSharing" class="esp-tab" style="display:none">
+      <div class="alt alt-b"><i class="ti ti-info-circle"></i><span data-i18n="shr_intro">Partagez votre nom, vos coordonnées, votre photo et vos centres d'intérêt avec les autres clients présents dans l'établissement pendant votre séjour. Visible uniquement le temps de votre réservation — désactivable à tout moment.</span></div>
+
+      <div class="card">
+        <div class="ch"><i class="ti ti-users"></i><span data-i18n="shr_toggle_hdr">Partager mon profil</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <div style="font-size:12px;color:var(--mu)" data-i18n="shr_toggle_desc">Les autres clients de l'établissement pourront voir vos informations le temps de votre séjour.</div>
+          <input type="checkbox" class="shrOptInChk" style="flex-shrink:0;width:20px;height:20px;accent-color:var(--primary)" onchange="shrToggle(this.checked)">
+        </div>
+      </div>
+
+      <div class="shrDetailBlock" style="display:none">
+        <div class="fi">
+          <label class="lb" data-i18n="shr_photo_label">Photo (facultatif)</label>
+          <div class="id-drop shrDropPhoto">
+            <input type="file" accept="image/*" onchange="shrCapturePhoto(this)">
+            <i class="ti ti-camera" style="font-size:28px;color:var(--mu);display:block;margin-bottom:6px"></i>
+            <div style="font-size:13px;font-weight:500;color:var(--tx)" data-i18n="shr_photo_cta">Ajouter une photo</div>
+            <img class="id-preview shrPrevPhoto">
+          </div>
+        </div>
+
+        <div class="fi">
+          <label class="lb" data-i18n="shr_interests_label">Centres d'intérêt</label>
+          <input type="text" data-i18n-placeholder="shr_interests_placeholder" placeholder="ex : randonnée, vin, cuisine…" onkeydown="if(event.key==='Enter'){event.preventDefault();shrAddInterest(this);}">
+          <div style="font-size:11px;color:var(--mu);margin-top:4px" data-i18n="shr_interests_hint">Appuyez sur Entrée pour ajouter un tag</div>
+          <div class="shrInterestsList" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
+        </div>
+
+        <div style="margin-top:14px">
+          <div style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px" data-i18n="shr_nearby_hdr">Clients présents ayant activé le partage</div>
+          <div id="shrNearbyWrap"></div>
+        </div>
       </div>
     </div>
 
@@ -1497,7 +1581,18 @@ var I18N_FR = {
   err_order_send:"Erreur lors de l'envoi de la commande",toast_order_sent_thanks:'Commande envoyée ✓ — merci !',
   field_email:'Email',
   // Points d'étape
-  step_dot_kyc_title:'Vérification identité',step_dot_boutique_title:'Boutique',
+  step_dot_kyc_title:'Vérification identité',step_dot_boutique_title:'Boutique',step_dot_sharing_title:'Partage entre clients',
+  // Étape 7 — partage de profil entre clients
+  shr_title:'Partage de profil',
+  shr_intro:"Partagez votre nom, vos coordonnées, votre photo et vos centres d'intérêt avec les autres clients présents dans l'établissement pendant votre séjour. Visible uniquement le temps de votre réservation — désactivable à tout moment depuis votre espace.",
+  shr_toggle_hdr:'Partager mon profil',
+  shr_toggle_desc:'Les autres clients de l\'établissement pourront voir vos informations le temps de votre séjour.',
+  shr_photo_label:'Photo (facultatif)',shr_photo_cta:'Ajouter une photo',
+  shr_interests_label:"Centres d'intérêt",shr_interests_placeholder:'ex : randonnée, vin, cuisine…',
+  shr_interests_hint:'Appuyez sur Entrée pour ajouter un tag',
+  shr_nearby_hdr:'Clients présents ayant activé le partage',
+  shr_nearby_empty:"Aucun autre client n'a activé le partage pour le moment.",
+  esp_tab_sharing:'Partage',
   // Étape 1 — réservation
   step1_title:'Votre réservation',step1_fetch_hdr:'Récupérer depuis Sesame',
   step1_search_label:'Email ou code de réservation',
@@ -1727,7 +1822,17 @@ var I18N_EN = {
   rs_no_products_category:'No products in this category.',rs_my_orders_hdr:'My orders',
   err_order_send:'Error sending your order',toast_order_sent_thanks:'Order sent ✓ — thank you!',
   field_email:'Email',
-  step_dot_kyc_title:'Identity verification',step_dot_boutique_title:'Shop',
+  step_dot_kyc_title:'Identity verification',step_dot_boutique_title:'Shop',step_dot_sharing_title:'Sharing with other guests',
+  shr_title:'Profile sharing',
+  shr_intro:'Share your name, contact details, photo and interests with other guests staying at the property at the same time. Only visible for the duration of your reservation — can be turned off anytime from your space.',
+  shr_toggle_hdr:'Share my profile',
+  shr_toggle_desc:'Other guests at the property will be able to see your information for the duration of your stay.',
+  shr_photo_label:'Photo (optional)',shr_photo_cta:'Add a photo',
+  shr_interests_label:'Interests',shr_interests_placeholder:'e.g. hiking, wine, cooking…',
+  shr_interests_hint:'Press Enter to add a tag',
+  shr_nearby_hdr:'Guests currently sharing their profile',
+  shr_nearby_empty:'No other guest has enabled sharing yet.',
+  esp_tab_sharing:'Sharing',
   step1_title:'Your booking',step1_fetch_hdr:'Retrieve from Sesame',
   step1_search_label:'Email or booking code',
   step1_search_placeholder:'Email, booking code or name…',
@@ -1946,7 +2051,17 @@ var I18N_ES = {
   rs_no_products_category:'No hay productos en esta categoría.',rs_my_orders_hdr:'Mis pedidos',
   err_order_send:'Error al enviar el pedido',toast_order_sent_thanks:'Pedido enviado ✓ — ¡gracias!',
   field_email:'Email',
-  step_dot_kyc_title:'Verificación de identidad',step_dot_boutique_title:'Tienda',
+  step_dot_kyc_title:'Verificación de identidad',step_dot_boutique_title:'Tienda',step_dot_sharing_title:'Compartir con otros clientes',
+  shr_title:'Compartir perfil',
+  shr_intro:'Comparta su nombre, sus datos de contacto, su foto y sus intereses con los demás clientes presentes en el establecimiento durante su estancia. Visible solo durante la validez de su reserva — se puede desactivar en cualquier momento desde su espacio.',
+  shr_toggle_hdr:'Compartir mi perfil',
+  shr_toggle_desc:'Los demás clientes del establecimiento podrán ver su información durante su estancia.',
+  shr_photo_label:'Foto (opcional)',shr_photo_cta:'Añadir una foto',
+  shr_interests_label:'Intereses',shr_interests_placeholder:'ej: senderismo, vino, cocina…',
+  shr_interests_hint:'Pulse Intro para añadir una etiqueta',
+  shr_nearby_hdr:'Clientes presentes que han activado el uso compartido',
+  shr_nearby_empty:'Ningún otro cliente ha activado el uso compartido todavía.',
+  esp_tab_sharing:'Compartir',
   step1_title:'Su reserva',step1_fetch_hdr:'Recuperar desde Sesame',
   step1_search_label:'Email o código de reserva',
   step1_search_placeholder:'Email, código de reserva o nombre…',
@@ -2240,13 +2355,20 @@ var STEP_MODULES = {
   4: 'kyc',
   5: 'eco',
   6: 'boutique', // boutique hôtelière — commande pendant le check-in
-  7: 'rewards'   // récompenses + récapitulatif & paiement (toujours actif)
+  7: 'sharing',  // partage de profil avec les autres clients présents (opt-in)
+  8: 'rewards'   // récompenses + récapitulatif & paiement (toujours actif)
 };
 function isModuleActive(key){
   if(!key) return true;
-  if(!CFG.checkinModules) return true;
+  // "sharing" est un module opt-in hôtel introduit après tous les autres :
+  // pas de comportement historique "actif par défaut" à préserver pour un
+  // établissement qui n'a jamais ouvert le panneau Entité & Catégorie —
+  // il resterait sinon forcé, sans action de l'hôtel, à demander aux
+  // clients de partager leurs données avec les autres clients présents.
+  if(!CFG.checkinModules) return key!=='sharing';
   var m = CFG.checkinModules[key];
-  return !m || m.active !== false;
+  if(!m) return key!=='sharing';
+  return m.active !== false;
 }
 function isModuleMandatory(key){
   if(!key) return true;
@@ -2255,11 +2377,11 @@ function isModuleMandatory(key){
   return !m || m.mandatory !== false;
 }
 function nextActiveStep(from){
-  for(var i=from+1;i<=7;i++){
+  for(var i=from+1;i<=8;i++){
     var mk=STEP_MODULES[i];
     if(isModuleActive(mk)) return i;
   }
-  return 7;
+  return 8;
 }
 function prevActiveStep(from){
   for(var i=from-1;i>=1;i--){
@@ -2289,11 +2411,12 @@ function gotoStep(n){
   if(n===3){if(!S.occupants.length)S.occupants=[{age:'adulte'},{age:'adulte'}];renderOcc();}
   if(n===4){initKycStep();}
   if(n===5)renderEcoStep();
-  if(n===7){renderRewardStep();renderSummary();}
+  if(n===7)initSharingStep();
+  if(n===8){renderRewardStep();renderSummary();}
   updateSkipButtons();
 }
 function updateSkipButtons(){
-  [3,5,6,7].forEach(function(n){
+  [3,5,6,7,8].forEach(function(n){
     var mk = STEP_MODULES[n];
     var show = !isModuleMandatory(mk);
     var el = document.getElementById('skipStep'+n);
@@ -2317,7 +2440,7 @@ function gotoStepFromDot(n){
   gotoStep(n);
 }
 function updateDots(){
-  for(var i=1;i<=7;i++){
+  for(var i=1;i<=8;i++){
     var d=document.getElementById('sd'+i),l=document.getElementById('sl'+i);
     if(!d) continue;
     var mk=STEP_MODULES[i];
@@ -3202,6 +3325,10 @@ function renderEspace(){
       tf('esp_title_with_name',{name:S.booking.personFirstname||'Client'}));
   }
 
+  var sharingPill = document.querySelector('#espTabs .pill[data-tab="sharing"]');
+  if(sharingPill) sharingPill.style.display = isModuleActive('sharing') ? '' : 'none';
+  if(!isModuleActive('sharing') && ESP_ACTIVE_TAB==='sharing') ESP_ACTIVE_TAB='key';
+
   espSetTab(ESP_ACTIVE_TAB);
   updateCatTabsArrows('espTabs');
 }
@@ -3211,7 +3338,7 @@ function espSetTab(tab){
   document.querySelectorAll('#espTabs .pill').forEach(function(p){
     p.classList.toggle('on', p.getAttribute('data-tab')===tab);
   });
-  var ALL_TABS = ['key','loyalty','menage','histo','livret','boutique','rs','profile'];
+  var ALL_TABS = ['key','loyalty','menage','histo','livret','boutique','rs','profile','sharing'];
   ALL_TABS.forEach(function(t){
     var id = 'espTab' + t.charAt(0).toUpperCase() + t.slice(1);
     var el = document.getElementById(id);
@@ -3224,6 +3351,7 @@ function espSetTab(tab){
   if(tab==='histo')    espRenderHisto();
   if(tab==='livret')   espRenderLivret();
   if(tab==='boutique') espRenderBoutiqueTab();
+  if(tab==='sharing')  espRenderSharing();
 }
 
 // ── CLÉ DIGITALE / ACCÈS NUMÉRIQUES ──
@@ -4548,6 +4676,127 @@ async function pushKycRecord(){
       })
     });
   }catch(e){}
+}
+
+// ═══════════════════ MODULE PARTAGE ENTRE CLIENTS (étape 7 + onglet Mon espace)
+// État partagé entre les deux points d'entrée (étape 7 du check-in ET
+// onglet "Partage" de Mon espace, cf. espRenderSharing) — les éléments DOM
+// des deux écrans portent les mêmes CLASSES (pas les mêmes id, un id ne
+// peut apparaître qu'une fois) pour rester synchronisés. Sauvegarde
+// immédiate à chaque changement (même convention que espToggleNewsletter/
+// les préférences ménage), pas de bouton "Enregistrer" — fonctionne aussi
+// bien pendant le check-in (réservation déjà chargée dans S.booking, pas
+// encore "checkedin") qu'après, depuis Mon espace.
+var SHR = { optIn:false, photo:null, interests:[] };
+
+function initSharingStep(){
+  shrSyncUi();
+}
+function shrSyncUi(){
+  document.querySelectorAll('.shrOptInChk').forEach(function(chk){ chk.checked = SHR.optIn; });
+  document.querySelectorAll('.shrDetailBlock').forEach(function(b){ b.style.display = SHR.optIn ? 'block' : 'none'; });
+  if(SHR.photo){
+    document.querySelectorAll('.shrPrevPhoto').forEach(function(img){ img.src = SHR.photo; img.style.display = 'block'; });
+    document.querySelectorAll('.shrDropPhoto').forEach(function(d){ d.classList.add('has-file'); });
+  }
+  shrRenderInterests();
+}
+function shrToggle(on){
+  SHR.optIn = on;
+  shrSyncUi();
+  pushGuestSharingProfile();
+  if(on) espRenderSharingNearby();
+}
+function shrCapturePhoto(inp){
+  var f = inp.files[0]; if(!f) return;
+  var rd = new FileReader();
+  rd.onload = function(e){
+    SHR.photo = e.target.result;
+    shrSyncUi();
+    pushGuestSharingProfile();
+  };
+  rd.readAsDataURL(f);
+}
+function shrAddInterest(inp){
+  var v = (inp.value||'').trim();
+  if(!v) return;
+  if(SHR.interests.indexOf(v)===-1) SHR.interests.push(v);
+  inp.value = '';
+  shrRenderInterests();
+  pushGuestSharingProfile();
+}
+function shrRemoveInterest(idx){
+  SHR.interests.splice(idx, 1);
+  shrRenderInterests();
+  pushGuestSharingProfile();
+}
+function shrRenderInterests(){
+  var html = SHR.interests.map(function(v, i){
+    return '<span style="display:inline-flex;align-items:center;gap:5px;background:var(--pl);color:var(--primary);border-radius:20px;padding:4px 10px;font-size:12px;font-weight:600">'
+      + esc(v) + '<i class="ti ti-x" style="cursor:pointer;font-size:12px" onclick="shrRemoveInterest('+i+')"></i></span>';
+  }).join('');
+  document.querySelectorAll('.shrInterestsList').forEach(function(el){ el.innerHTML = html; });
+}
+
+// ── Enregistre le choix de partage — POST /wa/guestSharing/optIn ──
+// Sauvegarde immédiate (cf. commentaire au-dessus de SHR) : appelée à
+// chaque changement, depuis l'étape 7 comme depuis Mon espace.
+async function pushGuestSharingProfile(){
+  if(!S.booking) return;
+  try{
+    await apiFetch(API_BASE+'/wa/guestSharing/optIn', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        bookingCode: S.booking.code,
+        optIn: !!SHR.optIn,
+        photo: SHR.photo || null,
+        interests: SHR.interests || []
+      })
+    });
+  }catch(e){}
+}
+
+// ── Onglet "Partage" de Mon espace — découverte des autres clients ──
+// GET /wa/guestSharing/nearby : liste réciproque (il faut soi-même être
+// opt-in pour voir les autres, cf. routes/guestSharing.ts), rafraîchie à
+// chaque ouverture de l'onglet et après (dés)activation du partage.
+async function espRenderSharing(){
+  shrSyncUi();
+  await espRenderSharingNearby();
+}
+async function espRenderSharingNearby(){
+  var wrap = document.getElementById('shrNearbyWrap');
+  if(!wrap) return;
+  if(!SHR.optIn){ wrap.innerHTML = ''; return; }
+  if(!S.booking){ wrap.innerHTML = ''; return; }
+  wrap.innerHTML = '<div class="loading"><div class="spin"></div></div>';
+  try{
+    var r = await apiFetch(API_BASE+'/wa/guestSharing/nearby?bookingCode='+encodeURIComponent(S.booking.code));
+    var d = r.ok ? await r.json() : { optedIn:false, guests:[] };
+    if(!d.guests || !d.guests.length){
+      wrap.innerHTML = '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>'+t('shr_nearby_empty')+'</span></div>';
+      return;
+    }
+    wrap.innerHTML = d.guests.map(function(g){
+      var initials = ((g.firstname||'').charAt(0)+(g.lastname||'').charAt(0)).toUpperCase();
+      return '<div class="card" style="display:flex;gap:12px;align-items:center">'
+        + (g.photo
+            ? '<img src="'+g.photo+'" style="width:48px;height:48px;border-radius:50%;object-fit:cover;flex-shrink:0">'
+            : '<div style="width:48px;height:48px;border-radius:50%;background:var(--pl);color:var(--primary);display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">'+esc(initials)+'</div>')
+        + '<div style="flex:1;min-width:0">'
+        + '<div style="font-weight:600;font-size:14px">'+esc(g.firstname)+' '+esc(g.lastname)+'</div>'
+        + (g.email ? '<div style="font-size:12px;color:var(--mu)"><i class="ti ti-mail" style="font-size:11px"></i> '+esc(g.email)+'</div>' : '')
+        + (g.phone ? '<div style="font-size:12px;color:var(--mu)"><i class="ti ti-phone" style="font-size:11px"></i> '+esc(g.phone)+'</div>' : '')
+        + (g.interests && g.interests.length
+            ? '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">'+g.interests.map(function(v){
+                return '<span style="background:var(--bg);border:1px solid var(--bdr);border-radius:20px;padding:2px 8px;font-size:11px;color:var(--mu)">'+esc(v)+'</span>';
+              }).join('')+'</div>'
+            : '')
+        + '</div></div>';
+    }).join('');
+  }catch(e){
+    wrap.innerHTML = '';
+  }
 }
 
 // ── Enregistre les données de taxe de séjour — POST /wa/taxeSejourRecord/create ──

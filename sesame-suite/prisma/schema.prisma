@@ -414,6 +414,7 @@ model Booking {
   kycRecords  KycRecord[]
   orders      Order[]
   passes      Pass[]
+  guestSharingProfile GuestSharingProfile?
 
   @@unique([entityId, code])
   @@index([personEmail])
@@ -1143,6 +1144,40 @@ model KycRecord {
   skipped        Boolean @default(false)
 
   createdAt DateTime @default(now())
+}
+
+// Partage de profil entre clients présents en même temps (24/09/2026,
+// module "Partage entre clients" du parcours d'enregistrement, cf.
+// checkinModules.sharing) — un client peut choisir de rendre visible son
+// nom/contact/photo/centres d'intérêt à TOUS les autres clients de
+// l'établissement dont le séjour chevauche le sien, pas seulement ceux de
+// sa propre réservation (demande explicite, périmètre large assumé).
+// Opt-in explicite (optIn/optInAt), jamais actif par défaut. Rattaché au
+// Booking (comme KycRecord/TaxeSejourRecord) plutôt qu'à un profil client
+// permanent : la visibilité doit correspondre exactement "au temps de la
+// validité de la réservation" — bornée par Booking.startDate/endDate ET
+// Booking.checkinDone, revérifiés à chaque requête GET /wa/guestSharing/
+// nearby (lib/guestSharing.ts), jamais un flag persistant au-delà du séjour.
+// Consultation réciproque : un client doit lui-même être opt-in pour voir
+// les autres (cf. lib/guestSharing.ts) — choix de conception, pas une
+// contrainte de ce modèle.
+model GuestSharingProfile {
+  id        String  @id @default(cuid())
+  bookingId String  @unique
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  optIn   Boolean   @default(false)
+  optInAt DateTime?
+
+  // Base64, même convention que Product.photo — pas de stockage objet
+  // disponible dans cet environnement (cf. AccDocument.contentBase64).
+  photo String? @db.Text
+
+  // Tags libres saisis par le client (string[]) — ex : ["randonnée","vin"].
+  interests Json @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Catalogue boutique / room service — unifié (CFG.roomServiceCatalog)
