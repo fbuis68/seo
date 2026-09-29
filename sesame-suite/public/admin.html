@@ -4501,6 +4501,7 @@ function hotelNow(){
 // Remplace la persistance localStorage('SESAME_CFG') par l'API TypeScript.
 // Session admin en mémoire (sessionStorage) — POST /wa/login/login.
 var API_BASE = '';
+var KPI_CONFIGURED = false; // cf. populateAll() — false tant que CFG.kpi n'a jamais été enregistré côté serveur pour cet établissement
 var ADMIN_TOKEN = sessionStorage.getItem('SESAME_ADMIN_TOKEN') || null;
 var ADMIN_ROLE  = sessionStorage.getItem('SESAME_ADMIN_ROLE') || null;   // 'sesame' | 'hotel'
 var HOME_ENTITY_CODE = sessionStorage.getItem('SESAME_HOME_ENTITY') || null;
@@ -4871,6 +4872,16 @@ function populateAll(){
   // leur range HTML (ex: 2550 séjours/an) au lieu des mêmes valeurs par
   // défaut sensées que le reste de l'app (cf. renderKpiPreview()).
   (function(){
+    // Distingue "jamais enregistré côté serveur" de "en cours d'ajustement"
+    // — capturé AVANT syncKpiPreview() ci-dessous, qui remplit CFG.kpi en
+    // mémoire dès l'affichage (cf. commentaire plus haut) et le rendrait
+    // sinon toujours "truthy" ici. Sert à ne pas présenter les valeurs
+    // d'exemple (45 min/10 min/22€/500 séjours, identiques pour TOUT
+    // établissement jamais configuré) comme des statistiques réelles de
+    // cet établissement — signalé comme un établissement "héritant des
+    // statistiques d'un autre" alors qu'il s'agit du même exemple générique
+    // affiché partout tant que personne n'a réglé/enregistré ces curseurs.
+    KPI_CONFIGURED = !!CFG.kpi;
     var k=CFG.kpi||{};
     setVal('kpi-minPerClean',k.minPerClean||45);
     setVal('kpi-minPerTowel',k.minPerTowel||10);
@@ -6536,11 +6547,14 @@ function syncKpiPreview(){
 
   var sym=currencySymbol(CFG.currency||'EUR');
 
-  // Update badges
+  // Update badges — tant que jamais enregistré, ce sont des valeurs
+  // d'exemple identiques pour tout établissement (cf. KPI_CONFIGURED),
+  // pas encore une projection propre à celui-ci.
+  var exSuffix = KPI_CONFIGURED ? '' : ' (exemple)';
   var badge=document.getElementById('kpi-preview-badge');
-  if(badge)badge.textContent=Math.round(minPerYearMenage/60)+'h gagnées/an';
+  if(badge)badge.textContent=Math.round(minPerYearMenage/60)+'h gagnées/an'+exSuffix;
   var ciBadge=document.getElementById('kpi-checkin-badge');
-  if(ciBadge)ciBadge.textContent=Math.round(minPerYearCheckin/60)+'h gagnées/an';
+  if(ciBadge)ciBadge.textContent=Math.round(minPerYearCheckin/60)+'h gagnées/an'+exSuffix;
 
   // Update result grid (hotel panel)
   var grid=document.getElementById('kpi-result-grid');
@@ -6781,7 +6795,7 @@ function exportTranslations(){
 }
 
 // ═══════════════════════════════════════════════ SAVE / PUBLISH
-function savePan(){collectAll();saveCfg();toast('Sauvegardé et publié ✓');renderDash();}
+function savePan(){collectAll();saveCfg();KPI_CONFIGURED=true;syncKpiPreview();toast('Sauvegardé et publié ✓');renderDash();}
 function publish(){collectAll();saveCfg();toast('Configuration publiée vers l\'interface client ✓');}
 function updateHotelInitials(){
   var el=document.getElementById('tbHotelInitials');
@@ -10473,7 +10487,15 @@ function renderKpiPreview(overrideKpi){
   setKpi('kpi-h-csej', cSej.toFixed(0)+' '+sym);
   setKpi('kpi-h-can', cAn.toFixed(0)+' '+sym);
   setKpi('kpi-h-rate', '@ '+kpi.hourlyRate.toFixed(0)+' '+sym+'/h chargé');
-  setKpi('kpi-h-stays', kpi.annualStays+' séjours estimés/an');
+  // Valeurs d'exemple génériques (identiques pour tout établissement, y
+  // compris via le simulateur ci-dessous qui part des mêmes défauts tant
+  // qu'aucun réglage n'a été enregistré) tant que rien n'a été réglé/
+  // enregistré pour CET établissement — cf. KPI_CONFIGURED (populateAll).
+  // Sans ce marqueur, un nouvel établissement affiche la même projection
+  // "917h gagnées/an" que tous les autres établissements jamais
+  // configurés, donnant l'impression de statistiques héritées d'un autre
+  // établissement.
+  setKpi('kpi-h-stays', kpi.annualStays+' séjours estimés/an'+(!KPI_CONFIGURED ? ' (exemple, à paramétrer)' : ''));
   setKpi('kpi-h-hrs-menage', Math.round(hAnMenage)+' h/an');
   setKpi('kpi-h-hrs-checkin', Math.round(hAnCheckin)+' h/an');
 
