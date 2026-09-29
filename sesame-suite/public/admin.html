@@ -12535,8 +12535,13 @@ function qnRemoveOption(ctx, idx, type){
   qnRerenderOptionsEditor(ctx, type);
 }
 function qnRerenderOptionsEditor(ctx, type){
-  if(ctx==='new'){ qnRenderNewOptions(); return; }
-  var el = document.getElementById('qn-edit-options-'+ctx);
+  // Ne JAMAIS passer par qnRenderNewOptions() ici pour ctx==='new' : cette
+  // fonction supprime QN_OPT_ROWS['new'] avant de redessiner (utile au
+  // changement de TYPE, cf. onchange sur #qn-new-type), ce qui effaçait les
+  // options déjà saisies (et la ligne qu'on vient d'ajouter) à chaque clic
+  // sur "Ajouter une option" du formulaire "Nouvelle question" — bug
+  // signalé : les questions à choix multiple ne se conservaient jamais.
+  var el = ctx==='new' ? document.getElementById('qn-new-options') : document.getElementById('qn-edit-options-'+ctx);
   if(el) el.innerHTML = qnOptionsEditorHtml(ctx, type);
 }
 
