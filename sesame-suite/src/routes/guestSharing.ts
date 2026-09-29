@@ -91,6 +91,7 @@ guestSharingRouter.get(
         phone: o.personPhone || "",
         photo: o.guestSharingProfile?.photo || "",
         interests: (o.guestSharingProfile?.interests as string[]) || [],
+        facilityCode: o.facilityCode || "",
       }));
 
     res.json({ optedIn: true, guests });

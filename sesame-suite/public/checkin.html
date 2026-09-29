@@ -4779,12 +4779,15 @@ async function espRenderSharingNearby(){
     }
     wrap.innerHTML = d.guests.map(function(g){
       var initials = ((g.firstname||'').charAt(0)+(g.lastname||'').charAt(0)).toUpperCase();
+      var room = (CFG.rooms||[]).find(function(r){return r.code===g.facilityCode;});
+      var roomLabel = room ? (room.name && room.name!==room.code ? room.name : room.code) : (g.facilityCode||'');
       return '<div class="card" style="display:flex;gap:12px;align-items:center">'
         + (g.photo
             ? '<img src="'+g.photo+'" style="width:48px;height:48px;border-radius:50%;object-fit:cover;flex-shrink:0">'
             : '<div style="width:48px;height:48px;border-radius:50%;background:var(--pl);color:var(--primary);display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">'+esc(initials)+'</div>')
         + '<div style="flex:1;min-width:0">'
         + '<div style="font-weight:600;font-size:14px">'+esc(g.firstname)+' '+esc(g.lastname)+'</div>'
+        + (roomLabel ? '<div style="font-size:12px;color:var(--mu)"><i class="ti ti-door" style="font-size:11px"></i> '+esc(roomLabel)+'</div>' : '')
         + (g.email ? '<div style="font-size:12px;color:var(--mu)"><i class="ti ti-mail" style="font-size:11px"></i> '+esc(g.email)+'</div>' : '')
         + (g.phone ? '<div style="font-size:12px;color:var(--mu)"><i class="ti ti-phone" style="font-size:11px"></i> '+esc(g.phone)+'</div>' : '')
         + (g.interests && g.interests.length
