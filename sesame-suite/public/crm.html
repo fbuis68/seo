@@ -2482,6 +2482,11 @@ async function crmContactBulkDelete(prospectId){
   }catch(e){ flash(e.message||'Erreur de suppression'); }
 }
 
+/** Prélèvement GoCardless d'un client dont le pays (AccCustomer.country, cf. lib/gocardless.ts matchOrCreateCustomer) n'est pas la France — TVA française non applicable. */
+function gcCountryBadge(country){
+  if(!country || country==='FR') return '';
+  return `<span class="tag t-amber" style="font-size:10px;padding:1px 7px" title="Client hors France (${esc(country)}) — TVA française non applicable">Hors France — sans TVA</span>`;
+}
 const CRM_GC_STATUS_TAG={pending_customer_approval:'t-gray',pending_submission:'t-gray',submitted:'t-gray',confirmed:'t-amber',paid_out:'t-green',cancelled:'t-red',customer_approval_denied:'t-red',failed:'t-red',charged_back:'t-red'};
 
 async function loadComptaCard(c){
@@ -2573,6 +2578,7 @@ function renderComptaCard(detail, prospectId){
     </tr>`).join('');
   el.innerHTML = `
     <div class="card-head"><div class="ch-ico">▦</div><span class="ch-title">Comptabilité — ${esc(detail.customerName||'')}</span>
+      ${gcCountryBadge(detail.customerCountry)}
       <button class="chact" onclick="crmUnlinkAccCustomer('${prospectId}')" title="Dissocier ce compte client">🔗 Dissocier</button></div>
     <div style="display:flex;gap:24px;flex-wrap:wrap;font-size:12px;margin-bottom:6px">
       <div>Total facturé (TTC) <strong style="font-family:monospace">${fmtEUR2(pos.totalTtc)}</strong></div>
@@ -9161,7 +9167,7 @@ function renderAccCustomerModal(c, detail){
   document.getElementById('modal-ct').innerHTML = `
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box" style="max-width:760px">
-      <div class="modal-head"><div style="font-size:16px;font-weight:500">${c.id?'Compte client — '+esc(c.name):'Nouveau client'}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">${c.id?'Compte client — '+esc(c.name):'Nouveau client'}</div>${gcCountryBadge(c.country)}<button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
       <div style="max-height:74vh;overflow-y:auto;padding-right:4px">
       <div class="ff"><label>Nom</label><input id="cus-name" value="${esc(c.name)}"></div>
       <div class="form-grid" style="margin-top:8px">
@@ -10050,7 +10056,7 @@ async function loadAccBankMatchGoCardlessDetail(payoutId){
   const gcStatusTag = {pending_customer_approval:'t-gray',pending_submission:'t-gray',submitted:'t-gray',confirmed:'t-amber',paid_out:'t-green',cancelled:'t-red',customer_approval_denied:'t-red',failed:'t-red',charged_back:'t-red'};
   const rows = (payout.payments||[]).map(p=>`
     <tr>
-      <td>${p.customer?(p.customer.crmProspectId?`<span class="bc-link" style="cursor:pointer" onclick="closeModal();showFiche('${p.customer.crmProspectId}')">${esc(p.customer.name)}</span>`:esc(p.customer.name)):'<span style="color:var(--mu)">Non rapproché</span>'}</td>
+      <td>${p.customer?(p.customer.crmProspectId?`<span class="bc-link" style="cursor:pointer" onclick="closeModal();showFiche('${p.customer.crmProspectId}')">${esc(p.customer.name)}</span>`:esc(p.customer.name)):'<span style="color:var(--mu)">Non rapproché</span>'} ${p.customer?gcCountryBadge(p.customer.country):''}</td>
       <td style="text-align:right;font-family:monospace">${fmtEUR2(p.amount)}</td>
       <td><span class="tag ${gcStatusTag[p.status]||'t-gray'}" style="font-size:10px;padding:1px 7px">${esc(p.status)}</span></td>
     </tr>`).join('');

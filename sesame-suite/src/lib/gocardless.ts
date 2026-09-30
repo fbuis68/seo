@@ -56,26 +56,33 @@ export async function testGoCardlessConnection(creds: GoCardlessCredentials): Pr
  * non rapproché (customerId null côté AccGoCardlessPayment), cf.
  * syncGoCardlessPayments.
  */
-export async function matchOrCreateCustomer(entityId: string | null, gcCustomer: { id?: string; email?: string | null; given_name?: string | null; family_name?: string | null; company_name?: string | null }): Promise<AccCustomer | null> {
+export async function matchOrCreateCustomer(entityId: string | null, gcCustomer: { id?: string; email?: string | null; given_name?: string | null; family_name?: string | null; company_name?: string | null; country_code?: string | null }): Promise<AccCustomer | null> {
   if (!gcCustomer.id) return null;
 
   const name = (gcCustomer.company_name || [gcCustomer.given_name, gcCustomer.family_name].filter(Boolean).join(" ") || gcCustomer.email || "Client GoCardless sans nom").trim();
 
-  // Déjà rapproché — remet nom/email à jour à CHAQUE resynchronisation
+  // Déjà rapproché — remet nom/email/pays à jour à CHAQUE resynchronisation
   // (changement de raison sociale côté GoCardless, ex : société rachetée)
   // plutôt que de figer la fiche pour toujours à son premier rapprochement.
+  // country_code sert notamment à repérer un prélèvement hors France (donc
+  // sans TVA française applicable, cf. badge "Hors France — sans TVA" sur
+  // les listes de prélèvements côté fiche client/CRM).
   const byGcId = await prisma.accCustomer.findUnique({ where: { gocardlessCustomerId: gcCustomer.id } });
   if (byGcId) {
     const data: Record<string, string> = {};
     if (name && name !== byGcId.name) data.name = name;
     if (gcCustomer.email && gcCustomer.email !== byGcId.email) data.email = gcCustomer.email;
+    if (gcCustomer.country_code && gcCustomer.country_code !== byGcId.country) data.country = gcCustomer.country_code;
     return Object.keys(data).length ? prisma.accCustomer.update({ where: { id: byGcId.id }, data }) : byGcId;
   }
 
   if (gcCustomer.email) {
     const byEmail = await prisma.accCustomer.findFirst({ where: { entityId, email: gcCustomer.email, gocardlessCustomerId: null } });
     if (byEmail) {
-      return prisma.accCustomer.update({ where: { id: byEmail.id }, data: { gocardlessCustomerId: gcCustomer.id } });
+      return prisma.accCustomer.update({
+        where: { id: byEmail.id },
+        data: { gocardlessCustomerId: gcCustomer.id, country: gcCustomer.country_code || byEmail.country },
+      });
     }
   }
 
@@ -85,6 +92,7 @@ export async function matchOrCreateCustomer(entityId: string | null, gcCustomer:
       name,
       email: gcCustomer.email || undefined,
       gocardlessCustomerId: gcCustomer.id,
+      country: gcCustomer.country_code || undefined,
     },
   });
 }

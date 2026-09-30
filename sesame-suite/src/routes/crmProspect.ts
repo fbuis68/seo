@@ -985,6 +985,7 @@ crmProspectRouter.get(
       linked: true,
       customerId: customer.id,
       customerName: customer.name,
+      customerCountry: customer.country,
       position: { totalHt, totalTtc, totalPaid, balanceDue: Math.max(0, totalTtc - totalPaid) },
       invoices,
       payments,

@@ -1578,7 +1578,7 @@ accountingRouter.get(
       where: { id: req.params.id, entityId },
       include: {
         payments: {
-          include: { customer: { select: { id: true, name: true, crmProspectId: true } } },
+          include: { customer: { select: { id: true, name: true, crmProspectId: true, country: true } } },
           orderBy: { chargeDate: "desc" },
         },
       },
