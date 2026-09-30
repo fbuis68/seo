@@ -27,16 +27,40 @@ function fromHeader(
   return name ? `"${name.replace(/"/g, "")}" <${email}>` : email;
 }
 
+// Extensions des types de pièce jointe usuels sur un ticket support (photo,
+// mais aussi PDF/Office/archive) — repli sur le sous-type MIME nettoyé (ou
+// "bin") pour tout type non listé plutôt que de perdre l'extension.
+const ATTACHMENT_MIME_EXT: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/gif": "gif",
+  "image/webp": "webp",
+  "image/heic": "heic",
+  "application/pdf": "pdf",
+  "application/msword": "doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+  "application/vnd.ms-excel": "xls",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+  "application/zip": "zip",
+  "text/plain": "txt",
+  "text/csv": "csv",
+};
+
 /**
  * data:<mime>;base64,<data> → pièce jointe nodemailer — même convention que
  * Room.photos/CrmTicketMessage.attachments (data URI stockée telle quelle en
- * base). Un fichier qui n'est pas une data URI valide est ignoré plutôt que
- * de faire échouer tout l'envoi.
+ * base). Accepte N'IMPORTE QUEL type MIME (pas seulement une image — une
+ * pièce jointe de réponse à un ticket est aussi souvent un PDF/Word/Excel,
+ * silencieusement perdue jusqu'ici : la regex ne matchait que "image/...",
+ * cf. §30/09/2026). Un fichier qui n'est pas une data URI valide est ignoré
+ * plutôt que de faire échouer tout l'envoi.
  */
 function decodeDataUriAttachment(dataUri: string, index: number): { filename: string; content: Buffer } | null {
-  const m = /^data:(image\/(\w+));base64,(.+)$/.exec(dataUri);
+  const m = /^data:([^;]+);base64,(.+)$/.exec(dataUri);
   if (!m) return null;
-  return { filename: `piece-jointe-${index + 1}.${m[2] === "jpeg" ? "jpg" : m[2]}`, content: Buffer.from(m[3], "base64") };
+  const mime = m[1].toLowerCase();
+  const ext = ATTACHMENT_MIME_EXT[mime] || mime.split("/")[1]?.replace(/[^a-z0-9]/g, "").slice(0, 10) || "bin";
+  return { filename: `piece-jointe-${index + 1}.${ext}`, content: Buffer.from(m[2], "base64") };
 }
 
 /**
