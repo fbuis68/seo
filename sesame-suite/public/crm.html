@@ -7866,9 +7866,11 @@ function renderComptaPanel(){
     <div id="acc-dash-tiles"></div>
     <div class="card">
       <div class="card-head"><div class="ch-ico">▦</div><span class="ch-title">Comptabilité</span>
-        <div class="autoviewtoggle" style="margin-left:auto;position:relative">
-          ${ACC_TABS.filter(t=>ACC_TABS_MAIN.includes(t.k)).map(t=>`<button type="button" class="${ACC_TAB===t.k?'on':''}" onclick="accSetTab('${t.k}')">${t.label}</button>`).join('')}
-          <button type="button" class="${settingsActive?'on':''}" onclick="accToggleSettingsMenu(event)">${settingsActive?esc(settingsTabs.find(t=>t.k===ACC_TAB).label):'Paramétrage'} ▾</button>
+        <div style="margin-left:auto;position:relative">
+          <div class="autoviewtoggle">
+            ${ACC_TABS.filter(t=>ACC_TABS_MAIN.includes(t.k)).map(t=>`<button type="button" class="${ACC_TAB===t.k?'on':''}" onclick="accSetTab('${t.k}')">${t.label}</button>`).join('')}
+            <button type="button" class="${settingsActive?'on':''}" onclick="accToggleSettingsMenu(event)">${settingsActive?esc(settingsTabs.find(t=>t.k===ACC_TAB).label):'Paramétrage'} ▾</button>
+          </div>
           <div id="acc-settings-menu" style="display:${ACC_SETTINGS_MENU_OPEN?'block':'none'};position:absolute;top:100%;right:0;margin-top:4px;background:var(--card);border:0.5px solid var(--bdr);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:20;min-width:160px;overflow:hidden">
             ${settingsTabs.map(t=>`<button type="button" onclick="accSetTab('${t.k}')" style="display:block;width:100%;text-align:left;border:none;background:${ACC_TAB===t.k?'var(--a)':'var(--card)'};color:${ACC_TAB===t.k?'#fff':'var(--tx)'};padding:8px 12px;cursor:pointer;font-size:13px" onmouseover="if('${ACC_TAB}'!=='${t.k}')this.style.background='var(--hover)'" onmouseout="if('${ACC_TAB}'!=='${t.k}')this.style.background='var(--card)'">${t.label}</button>`).join('')}
           </div>
