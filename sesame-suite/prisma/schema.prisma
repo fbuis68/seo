@@ -3214,6 +3214,7 @@ model AccEntry {
 
   lines   AccEntryLine[]
   invoice AccInvoice?
+  bankTransaction AccBankTransaction? @relation("BankTransactionEntry")
 
   @@index([entityId, journalId, status])
 }
@@ -3428,6 +3429,18 @@ model AccBankTransaction {
 
   matches AccBankMatch[]
   gocardlessPayout AccGoCardlessPayout?
+
+  // Écriture générée DIRECTEMENT depuis cette transaction, sans passer par
+  // une facture (30/09/2026, cf. accEntryService.ts
+  // createDirectEntryFromBankTransaction) — pour un tiers comme l'URSSAF
+  // dont le prélèvement n'a souvent aucune facture jamais déposée : affecter
+  // un fournisseur (et son compte de charge par défaut, AccSupplier.
+  // defaultAccountId) directement sur l'opération de banque plutôt que
+  // d'attendre un document à rapprocher qui n'arrivera jamais. status passe
+  // alors à ENTRY_CREATED plutôt que MATCHED (aucun AccBankMatch/AccInvoice
+  // impliqué).
+  entryId String?   @unique
+  entry   AccEntry? @relation("BankTransactionEntry", fields: [entryId], references: [id], onDelete: SetNull)
 
   @@unique([bankAccountId, externalId])
   @@index([entityId, status])

@@ -8950,9 +8950,10 @@ function pickSupEntreprise(i){
   if(search) search.value = '';
 }
 
-function openAccSupplierModal(id){
-  const s = id ? ACC_SUPPLIERS.find(x=>x.id===id) : {id:null,name:'',siren:'',siret:'',vatNumber:'',email:'',phone:'',addressLine:'',postalCode:'',city:'',country:'FR',iban:'',bic:'',paymentTermDays:null,paymentTermMode:null,paymentMethod:null,noReconciliationNeeded:false};
+async function openAccSupplierModal(id){
+  const s = id ? ACC_SUPPLIERS.find(x=>x.id===id) : {id:null,name:'',siren:'',siret:'',vatNumber:'',email:'',phone:'',addressLine:'',postalCode:'',city:'',country:'FR',iban:'',bic:'',paymentTermDays:null,paymentTermMode:null,paymentMethod:null,noReconciliationNeeded:false,defaultAccountId:null};
   if(!s) return;
+  await ensureAccAccountsLoaded();
   document.getElementById('modal-ct').innerHTML = `
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box" style="max-width:560px">
@@ -8984,6 +8985,12 @@ function openAccSupplierModal(id){
         ${Object.keys(PAYMENT_METHOD_LABEL).map(k=>`<option value="${k}" ${(s.paymentMethod||'')===k?'selected':''}>${PAYMENT_METHOD_LABEL[k]}</option>`).join('')}
       </select></div>
       <div style="font-size:11px;color:var(--mu);margin-top:2px">"Prélèvement" fait passer automatiquement les factures de ce fournisseur en "Payée" dès leur comptabilisation — le règlement se fait tout seul, pas besoin de le pointer à la main.</div>
+      <div class="modal-section">Compte de charge par défaut</div>
+      <div class="ff"><select id="sup-defaultAccountId">
+        <option value="">— Aucun (à choisir à chaque facture) —</option>
+        ${ACC_ACCOUNTS.filter(a=>a.type==='charge').map(a=>`<option value="${a.id}" ${s.defaultAccountId===a.id?'selected':''}>${esc(a.number)} — ${esc(a.label)}</option>`).join('')}
+      </select></div>
+      <div style="font-size:11px;color:var(--mu);margin-top:2px">Proposé par défaut pour ses factures, et utilisé pour affecter directement un mouvement de banque à ce fournisseur sans facture (ex : URSSAF) — onglet Banque.</div>
       <div class="modal-section">Délai de paiement (calcul de l'échéance)</div>
       <div class="form-grid">
         <div class="ff"><label>Nombre de jours</label><input type="number" id="sup-paymentTermDays" value="${s.paymentTermDays!=null?s.paymentTermDays:''}" placeholder="vide = réglage général"></div>
@@ -9022,7 +9029,7 @@ async function deleteAccSupplier(id){
 
 async function saveAccSupplier(id){
   const g=i=>(document.getElementById(i)||{value:''}).value.trim();
-  const body = {name:g('sup-name'),siren:g('sup-siren'),siret:g('sup-siret'),vatNumber:g('sup-vatNumber'),email:g('sup-email'),phone:g('sup-phone'),country:g('sup-country'),iban:g('sup-iban'),bic:g('sup-bic'),addressLine:g('sup-addressLine'),postalCode:g('sup-postalCode'),city:g('sup-city'),paymentTermDays:g('sup-paymentTermDays')===''?null:+g('sup-paymentTermDays'),paymentTermMode:g('sup-paymentTermMode')||null,paymentMethod:g('sup-paymentMethod')||null,noReconciliationNeeded:(document.getElementById('sup-noReconciliationNeeded')||{}).checked||false};
+  const body = {name:g('sup-name'),siren:g('sup-siren'),siret:g('sup-siret'),vatNumber:g('sup-vatNumber'),email:g('sup-email'),phone:g('sup-phone'),country:g('sup-country'),iban:g('sup-iban'),bic:g('sup-bic'),addressLine:g('sup-addressLine'),postalCode:g('sup-postalCode'),city:g('sup-city'),paymentTermDays:g('sup-paymentTermDays')===''?null:+g('sup-paymentTermDays'),paymentTermMode:g('sup-paymentTermMode')||null,paymentMethod:g('sup-paymentMethod')||null,defaultAccountId:g('sup-defaultAccountId')||null,noReconciliationNeeded:(document.getElementById('sup-noReconciliationNeeded')||{}).checked||false};
   if(!body.name){ flash('Le nom est requis'); return; }
   try{
     const r = await apiFetch(id?('/wa/acc/suppliers/'+id+'?scope=crm'):'/wa/acc/suppliers?scope=crm', {method:id?'PUT':'POST', body:JSON.stringify(body)});
@@ -9388,6 +9395,7 @@ function renderAccBank(){
     const total = Math.abs(t.amount);
     let recoBadge;
     if(t.status==='IGNORED'||t.status==='INTERNAL_TRANSFER') recoBadge = `<span class="tpill">${t.status==='IGNORED'?'Écartée':'Virement interne'}</span>`;
+    else if(t.status==='ENTRY_CREATED') recoBadge = `<span class="tag t-green" style="font-size:10px;padding:1px 7px" title="Écriture générée directement, sans facture">Écriture directe</span>`;
     else if(matched<=0.009) recoBadge = `<span class="tag t-gray" style="font-size:10px;padding:1px 7px">Non rapprochée</span>`;
     else if(matched<total-0.009) recoBadge = `<span class="tag t-amber" style="font-size:10px;padding:1px 7px">Partielle (${fmtEUR2(matched)}/${fmtEUR2(total)})</span>`;
     else recoBadge = `<span class="tag t-green" style="font-size:10px;padding:1px 7px">Rapprochée</span>`;
@@ -9911,17 +9919,67 @@ async function openAccBankMatchModal(txId){
   const tx = ACC_BANK_TX.find(t=>t.id===txId);
   if(!tx) return;
   ABM_SHOW_ALL = false;
+  await Promise.all([ensureAccSuppliersLoaded(), ensureAccAccountsLoaded()]);
   document.getElementById('modal-ct').innerHTML = `
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box" style="max-width:640px">
       <div class="modal-head"><div style="font-size:16px;font-weight:500">Rapprochement — ${esc(tx.rawLabel)}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
       <div style="font-size:12px;color:var(--mu);margin-bottom:10px">${new Date(tx.operationDate).toLocaleDateString('fr-FR')} · <strong style="color:${tx.amount<0?'#a32d2d':'#1f7a3f'}">${fmtEUR2(tx.amount)}</strong></div>
+      ${renderAccBankAssignTiersHtml(tx)}
       <div id="abm-gc-body"></div>
       <div id="abm-body"><div class="log-empty">Chargement…</div></div>
     </div>
   </div>`;
   if(tx.gocardlessPayout) loadAccBankMatchGoCardlessDetail(tx.gocardlessPayout.id);
   await loadAccBankMatchModal(txId);
+}
+
+/**
+ * Affectation directe d'un fournisseur à une transaction bancaire, SANS
+ * facture (30/09/2026 — cas de l'URSSAF ou tout tiers dont le prélèvement
+ * n'a pas de facture à déposer/rapprocher). Uniquement pour une transaction
+ * débitrice pas déjà traitée (ni écriture directe, ni rapprochement
+ * facture) — les factures restent le chemin normal quand il y en a une.
+ */
+function renderAccBankAssignTiersHtml(tx){
+  if(tx.amount>=0 || tx.entryId || (tx.matchedAmount||0)>0) return '';
+  return `
+    <div class="modal-section" style="margin-top:0">Affecter un fournisseur (sans facture)</div>
+    <div style="font-size:11px;color:var(--mu);margin-bottom:6px">Pour un tiers comme l'URSSAF dont vous n'avez pas de facture — génère directement une écriture sur le compte de charge du fournisseur.</div>
+    <div class="form-grid">
+      <div class="ff"><label>Fournisseur</label><select id="abm-tiers-supplier" onchange="accAbmTiersSupplierChange()">
+        <option value="">— Choisir —</option>
+        ${ACC_SUPPLIERS.map(s=>`<option value="${s.id}" data-account="${s.defaultAccountId||''}">${esc(s.name)}</option>`).join('')}
+      </select></div>
+      <div class="ff"><label>Compte de charge</label><select id="abm-tiers-account">
+        <option value="">—</option>
+        ${ACC_ACCOUNTS.filter(a=>a.type==='charge').map(a=>`<option value="${a.id}">${esc(a.number)} — ${esc(a.label)}</option>`).join('')}
+      </select></div>
+    </div>
+    <div style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="accAssignSupplierToTx('${tx.id}')">Affecter</button></div>`;
+}
+
+function accAbmTiersSupplierChange(){
+  const sel = document.getElementById('abm-tiers-supplier');
+  const acc = document.getElementById('abm-tiers-account');
+  if(!sel||!acc) return;
+  const defaultAccountId = sel.options[sel.selectedIndex]?.dataset.account || '';
+  if(defaultAccountId) acc.value = defaultAccountId;
+}
+
+async function accAssignSupplierToTx(txId){
+  const supplierId = (document.getElementById('abm-tiers-supplier')||{value:''}).value;
+  if(!supplierId){ flash('Choisissez un fournisseur'); return; }
+  const accountId = (document.getElementById('abm-tiers-account')||{value:''}).value || undefined;
+  try{
+    const r = await apiFetch('/wa/acc/bank/transactions/'+txId+'/assignSupplier?scope=crm', {method:'POST', body:JSON.stringify({supplierId, accountId})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash('Fournisseur affecté — écriture '+(data.number||''));
+    closeModal();
+    await loadAccBankTransactions();
+    renderAccBank();
+  }catch(e){ flash(e.message||'Erreur d\'affectation'); }
 }
 
 // Détail du virement groupé GoCardless (§ un virement de 1000€ = 4

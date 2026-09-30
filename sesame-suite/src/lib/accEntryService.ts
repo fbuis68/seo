@@ -90,6 +90,67 @@ export async function generateDraftEntry(invoiceId: string): Promise<AccEntry> {
   return entry;
 }
 
+/**
+ * Écriture générée DIRECTEMENT depuis une transaction bancaire, sans
+ * passer par une facture (30/09/2026, demande client : un tiers comme
+ * l'URSSAF n'a souvent aucune facture jamais déposée — traiter le
+ * prélèvement "à posteriori" en affectant directement l'opération de
+ * banque à son compte de charge plutôt que d'attendre un document qui
+ * n'arrivera jamais). Journal "BQ" (Banque), deux lignes : compte de
+ * charge (débit) / compte bancaire de AccBankAccount.accountId (crédit) —
+ * pas de compte 401 tiers intermédiaire, contrairement à generateDraftEntry :
+ * il n'y a ici aucune facture non réglée à suivre au 401, le paiement EST
+ * la transaction. Validée immédiatement (numérotée) — le geste de
+ * l'utilisateur ("affecter ce tiers") vaut confirmation, pas juste
+ * brouillon (cf. validateEntry, réutilisée telle quelle : son bloc
+ * `if (entry.invoice)` est simplement ignoré ici, aucune facture liée).
+ */
+export async function createDirectEntryFromBankTransaction(
+  bankTransactionId: string,
+  supplierId: string,
+  accountId: string | null,
+  userId: string | null
+): Promise<AccEntry> {
+  const tx = await prisma.accBankTransaction.findUnique({ where: { id: bankTransactionId }, include: { bankAccount: true, matches: true } });
+  if (!tx) throw new EntryGenerationError("Transaction bancaire introuvable");
+  if (tx.entryId) throw new EntryGenerationError("Une écriture existe déjà pour cette transaction");
+  if (tx.matches.length > 0) throw new EntryGenerationError("Cette transaction est déjà rapprochée à une facture — retirez ce rapprochement d'abord");
+  if (tx.amount >= 0) throw new EntryGenerationError("Seule une transaction débitrice peut être affectée à un fournisseur");
+
+  const supplier = await prisma.accSupplier.findFirst({ where: { id: supplierId, entityId: tx.entityId } });
+  if (!supplier) throw new EntryGenerationError("Fournisseur introuvable");
+
+  const finalAccountId = accountId || supplier.defaultAccountId;
+  if (!finalAccountId) throw new EntryGenerationError("Aucun compte de charge — choisissez-en un ou définissez un compte par défaut sur ce fournisseur");
+  const chargeAccount = await prisma.accAccount.findFirst({ where: { id: finalAccountId, entityId: tx.entityId } });
+  if (!chargeAccount) throw new EntryGenerationError("Compte de charge introuvable");
+
+  const journal = await prisma.accJournal.findFirst({ where: { entityId: tx.entityId, code: "BQ" } });
+  if (!journal) throw new EntryGenerationError('Journal "BQ" introuvable — initialisez d\'abord le plan comptable (seedAccounting)');
+
+  const amount = round2(Math.abs(tx.amount));
+  const label = [supplier.name, tx.rawLabel].filter(Boolean).join(" — ");
+  const lines = [
+    { accountId: chargeAccount.id, label, debit: amount, credit: 0, auxiliaryRef: supplierId },
+    { accountId: tx.bankAccount.accountId, label, debit: 0, credit: amount },
+  ];
+  assertBalanced(lines);
+
+  const entry = await prisma.accEntry.create({
+    data: {
+      entityId: tx.entityId,
+      journalId: journal.id,
+      date: tx.operationDate,
+      reference: tx.transactionRef || undefined,
+      label,
+      status: "DRAFT",
+      lines: { create: lines },
+    },
+  });
+  await prisma.accBankTransaction.update({ where: { id: tx.id }, data: { entryId: entry.id, status: "ENTRY_CREATED" } });
+  return validateEntry(entry.id, userId);
+}
+
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }

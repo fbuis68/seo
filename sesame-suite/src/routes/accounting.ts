@@ -7,7 +7,7 @@ import { resolveScope } from "../lib/scope";
 import { processUploadedDocument, PipelineError } from "../lib/accPipeline";
 import { DocumentIngestionError } from "../lib/accDocument";
 import { seedAccounting } from "../lib/accSeed";
-import { generateDraftEntry, validateEntry, reverseEntry, EntryGenerationError } from "../lib/accEntryService";
+import { generateDraftEntry, validateEntry, reverseEntry, createDirectEntryFromBankTransaction, EntryGenerationError } from "../lib/accEntryService";
 import { learnRuleFromCorrection } from "../lib/accRulesEngine";
 import { worstLevel, CheckResult } from "../lib/accChecks";
 import { recordAuditLog } from "../lib/accAudit";
@@ -718,10 +718,13 @@ accountingRouter.post(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const entityId = await resolveScope(req);
-    const b = req.body as { name?: string; paymentTermMode?: string; paymentMethod?: string };
+    const b = req.body as { name?: string; paymentTermMode?: string; paymentMethod?: string; defaultAccountId?: string };
     if (!b.name) throw new HttpError(400, "name requis");
     if (b.paymentTermMode && b.paymentTermMode !== "net" && b.paymentTermMode !== "eom") throw new HttpError(400, "Mode de calcul invalide");
     if (b.paymentMethod && !PAYMENT_METHODS.has(b.paymentMethod)) throw new HttpError(400, "Mode de règlement invalide");
+    if (b.defaultAccountId && !(await prisma.accAccount.findFirst({ where: { id: b.defaultAccountId, entityId } }))) {
+      throw new HttpError(400, "Compte de charge introuvable");
+    }
     const created = await prisma.accSupplier.create({
       data: {
         entityId,
@@ -756,7 +759,7 @@ accountingRouter.put(
     const entityId = await resolveScope(req);
     const existing = await prisma.accSupplier.findFirst({ where: { id: req.params.id, entityId } });
     if (!existing) throw new HttpError(404, "Fournisseur introuvable");
-    const fields = ["name", "siren", "siret", "vatNumber", "addressLine", "postalCode", "city", "country", "email", "phone", "iban", "bic", "defaultAccountId"] as const;
+    const fields = ["name", "siren", "siret", "vatNumber", "addressLine", "postalCode", "city", "country", "email", "phone", "iban", "bic"] as const;
     const data: Record<string, unknown> = {};
     for (const f of fields) if (f in req.body) data[f] = req.body[f];
     // Champ vidé côté formulaire = "utiliser le réglage général" (null),
@@ -774,6 +777,11 @@ accountingRouter.put(
       const v = req.body.paymentMethod as string | null;
       if (v && !PAYMENT_METHODS.has(v)) throw new HttpError(400, "Mode de règlement invalide");
       data.paymentMethod = v || null;
+    }
+    if ("defaultAccountId" in req.body) {
+      const v = (req.body.defaultAccountId as string) || null;
+      if (v && !(await prisma.accAccount.findFirst({ where: { id: v, entityId } }))) throw new HttpError(400, "Compte de charge introuvable");
+      data.defaultAccountId = v;
     }
     if ("noReconciliationNeeded" in req.body) data.noReconciliationNeeded = !!req.body.noReconciliationNeeded;
     const updated = await prisma.accSupplier.update({ where: { id: existing.id }, data });
@@ -1734,6 +1742,38 @@ accountingRouter.delete(
       res.json({ ok: true });
     } catch (e) {
       if (e instanceof ReconciliationError) throw new HttpError(400, e.message);
+      throw e;
+    }
+  })
+);
+
+/**
+ * POST /wa/acc/bank/transactions/:id/assignSupplier — affecte directement un
+ * fournisseur (tiers) à une transaction bancaire, SANS passer par une
+ * facture (30/09/2026, demande client : cas d'un tiers comme l'URSSAF dont
+ * le prélèvement n'a souvent aucune facture jamais déposée). Génère et
+ * valide immédiatement une écriture "BQ" (cf. createDirectEntryFromBankTransaction) —
+ * pour corriger, extourner l'écriture comme n'importe quelle écriture
+ * validée (POST /acc/entries/:id/reverse), jamais de suppression directe.
+ */
+accountingRouter.post(
+  "/acc/bank/transactions/:id/assignSupplier",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const tx = await prisma.accBankTransaction.findFirst({ where: { id: req.params.id, entityId } });
+    if (!tx) throw new HttpError(404, "Transaction introuvable");
+    const b = req.body as { supplierId?: string; accountId?: string };
+    if (!b.supplierId) throw new HttpError(400, "supplierId requis");
+    try {
+      const entry = await createDirectEntryFromBankTransaction(tx.id, b.supplierId, b.accountId || null, actorId(req));
+      await recordAuditLog({
+        entityId, userId: actorId(req), action: "bank_tiers_assigned", targetType: "AccBankTransaction", targetId: tx.id,
+        newValue: { supplierId: b.supplierId, accountId: b.accountId || null, entryId: entry.id }, ip: req.ip,
+      });
+      res.json(entry);
+    } catch (e) {
+      if (e instanceof EntryGenerationError) throw new HttpError(400, e.message);
       throw e;
     }
   })
