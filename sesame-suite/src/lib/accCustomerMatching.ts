@@ -57,11 +57,42 @@ export function canAutoCreateCustomer(extracted: { recipientSiret?: string | nul
   return !!(extracted.recipientName && (extracted.recipientSiret || extracted.recipientSiren || extracted.recipientVat));
 }
 
+/**
+ * Cherche une fiche CRM (CrmProspect) déjà existante pour ce SIRET/SIREN —
+ * SIRET > SIREN, même ordre de priorité que matchCustomer ci-dessus.
+ * Ignore une correspondance déjà prise par une AUTRE fiche AccCustomer
+ * (crmProspectId unique) plutôt que de faire échouer la création avec une
+ * violation de contrainte.
+ */
+async function findLinkableCrmProspect(
+  entityId: string | null,
+  extracted: { recipientSiren?: string | null; recipientSiret?: string | null }
+): Promise<string | undefined> {
+  for (const where of [
+    extracted.recipientSiret ? { entityId, siret: extracted.recipientSiret } : null,
+    extracted.recipientSiren ? { entityId, siren: extracted.recipientSiren } : null,
+  ]) {
+    if (!where) continue;
+    const prospect = await prisma.crmProspect.findFirst({ where });
+    if (!prospect) continue;
+    const alreadyLinked = await prisma.accCustomer.findUnique({ where: { crmProspectId: prospect.id } });
+    if (!alreadyLinked) return prospect.id;
+  }
+  return undefined;
+}
+
 export async function createCustomerFromExtraction(
   entityId: string | null,
   extracted: { recipientName?: string | null; recipientSiren?: string | null; recipientSiret?: string | null; recipientVat?: string | null }
 ): Promise<AccCustomer> {
   const lookup = extracted.recipientSiret ? await lookupEntrepriseBySiret(extracted.recipientSiret) : null;
+  // Rapproche la fiche CRM (CrmProspect) correspondante DÈS LA CRÉATION —
+  // sans ça, AccCustomer et CrmProspect restaient deux fiches distinctes du
+  // même client tant que personne n'ouvrait par hasard l'onglet
+  // Comptabilité de la fiche CRM (GET /crmProspect/:id/accounting, qui ne
+  // fait ce lien QUE par email et seulement au premier accès à CETTE
+  // fiche-là — jamais à la création côté compta).
+  const crmProspectId = await findLinkableCrmProspect(entityId, extracted);
   return prisma.accCustomer.create({
     data: {
       entityId,
@@ -73,6 +104,7 @@ export async function createCustomerFromExtraction(
       postalCode: lookup?.postalCode || undefined,
       city: lookup?.city || undefined,
       country: lookup?.country || undefined,
+      crmProspectId,
     },
   });
 }
