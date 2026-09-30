@@ -8997,9 +8997,22 @@ function openAccSupplierModal(id){
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="saveAccSupplier(${id?`'${id}'`:'null'})">Enregistrer</button>
         <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+        ${id?`<button class="btn btn-ghost" style="color:#a32d2d;margin-left:auto" onclick="deleteAccSupplier('${id}')">🗑 Supprimer</button>`:''}
       </div>
     </div>
   </div>`;
+}
+
+async function deleteAccSupplier(id){
+  if(!confirm('Supprimer ce fournisseur ? Impossible s\'il a des factures liées.')) return;
+  try{
+    const r = await apiFetch('/wa/acc/suppliers/'+id+'?scope=crm', {method:'DELETE'});
+    if(!r.ok){ const e = await r.json().catch(()=>({})); flash(e.error||'Suppression impossible'); return; }
+    closeModal();
+    flash('Fournisseur supprimé');
+    ACC_LOADED.suppliers = false;
+    loadAccSuppliersTab();
+  }catch(e){ flash('Erreur de suppression'); }
 }
 
 async function saveAccSupplier(id){
@@ -9134,9 +9147,22 @@ function renderAccCustomerModal(c, detail){
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="saveAccCustomer(${c.id?`'${c.id}'`:'null'})">Enregistrer</button>
         <button class="btn btn-ghost" onclick="closeModal()">${c.id?'Fermer':'Annuler'}</button>
+        ${c.id?`<button class="btn btn-ghost" style="color:#a32d2d;margin-left:auto" onclick="deleteAccCustomer('${c.id}')">🗑 Supprimer</button>`:''}
       </div>
     </div>
   </div>`;
+}
+
+async function deleteAccCustomer(id){
+  if(!confirm('Supprimer ce client ? Impossible s\'il a des factures ou prélèvements GoCardless liés.')) return;
+  try{
+    const r = await apiFetch('/wa/acc/customers/'+id+'?scope=crm', {method:'DELETE'});
+    if(!r.ok){ const e = await r.json().catch(()=>({})); flash(e.error||'Suppression impossible'); return; }
+    closeModal();
+    flash('Client supprimé');
+    ACC_LOADED.customers = false;
+    loadAccCustomersTab();
+  }catch(e){ flash('Erreur de suppression'); }
 }
 
 async function saveAccCustomer(id){

@@ -780,6 +780,30 @@ accountingRouter.put(
   })
 );
 
+/**
+ * DELETE /wa/acc/suppliers/:id — refusée si des factures référencent encore
+ * ce fournisseur (AccInvoice.supplierId n'est jamais mis à null en douce —
+ * il faudrait d'abord les réaffecter ou les supprimer) ou si une règle
+ * d'affectation comptable le cible (AccRule, supprimée en cascade sinon
+ * silencieusement invalide).
+ */
+accountingRouter.delete(
+  "/acc/suppliers/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const existing = await prisma.accSupplier.findFirst({ where: { id: req.params.id, entityId } });
+    if (!existing) throw new HttpError(404, "Fournisseur introuvable");
+    const invoiceCount = await prisma.accInvoice.count({ where: { supplierId: existing.id } });
+    if (invoiceCount > 0) {
+      throw new HttpError(400, "Ce fournisseur a des factures liées — réaffectez-les d'abord");
+    }
+    await prisma.accSupplier.delete({ where: { id: existing.id } });
+    await recordAuditLog({ entityId, userId: actorId(req), action: "supplier_deleted", targetType: "AccSupplier", targetId: existing.id, oldValue: { name: existing.name }, ip: req.ip });
+    res.json({ ok: true });
+  })
+);
+
 // ───────────────────────── Clients (facture de vente) ─────────────────────────
 
 accountingRouter.get(
@@ -835,6 +859,32 @@ accountingRouter.put(
     const updated = await prisma.accCustomer.update({ where: { id: existing.id }, data });
     await recordAuditLog({ entityId, userId: actorId(req), action: "customer_updated", targetType: "AccCustomer", targetId: existing.id, oldValue: existing, newValue: data, ip: req.ip });
     res.json(updated);
+  })
+);
+
+/**
+ * DELETE /wa/acc/customers/:id — refusée si des factures ou des prélèvements
+ * GoCardless référencent encore ce client (mêmes principes que la
+ * suppression d'un fournisseur, cf. ci-dessus).
+ */
+accountingRouter.delete(
+  "/acc/customers/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const existing = await prisma.accCustomer.findFirst({ where: { id: req.params.id, entityId } });
+    if (!existing) throw new HttpError(404, "Client introuvable");
+    const invoiceCount = await prisma.accInvoice.count({ where: { customerId: existing.id } });
+    if (invoiceCount > 0) {
+      throw new HttpError(400, "Ce client a des factures liées — réaffectez-les d'abord");
+    }
+    const gcPaymentCount = await prisma.accGoCardlessPayment.count({ where: { customerId: existing.id } });
+    if (gcPaymentCount > 0) {
+      throw new HttpError(400, "Ce client a des prélèvements GoCardless liés — impossible de le supprimer");
+    }
+    await prisma.accCustomer.delete({ where: { id: existing.id } });
+    await recordAuditLog({ entityId, userId: actorId(req), action: "customer_deleted", targetType: "AccCustomer", targetId: existing.id, oldValue: { name: existing.name }, ip: req.ip });
+    res.json({ ok: true });
   })
 );
 
