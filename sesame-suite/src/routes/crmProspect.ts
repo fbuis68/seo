@@ -918,11 +918,17 @@ crmProspectRouter.post(
  * modèles historiquement indépendants sans lien entre eux — sans cette
  * route, la fiche client n'avait AUCUN moyen d'afficher ces données même
  * quand elles existent côté compta (constaté 22/09/2026). Rapproche
- * AccCustomer.crmProspectId au premier accès (par email, insensible à la
- * casse) et le fige ensuite — même convention que gocardlessCustomerId
- * (cf. lib/gocardless.ts matchOrCreateCustomer). Ne crée jamais de fiche
- * AccCustomer : sans correspondance, retourne simplement linked:false
- * plutôt que de polluer le module compta avec une fiche vide.
+ * AccCustomer.crmProspectId au premier accès — SIRET > SIREN > email
+ * (insensible à la casse), même ordre que lib/accCustomerMatching.ts —
+ * et le fige ensuite, même convention que gocardlessCustomerId (cf.
+ * lib/gocardless.ts matchOrCreateCustomer). Couvre aussi bien une fiche
+ * AccCustomer créée après ce rapprochement automatique (30/09/2026, SIRET
+ * absent ou différemment formaté à l'extraction, cf. POST
+ * /crmProspect/:id/accounting/link pour un rattachement manuel quand
+ * cette recherche échoue) qu'une fiche plus ancienne jamais retentée
+ * depuis. Ne crée jamais de fiche AccCustomer : sans correspondance,
+ * retourne simplement linked:false plutôt que de polluer le module
+ * compta avec une fiche vide.
  */
 crmProspectRouter.get(
   "/crmProspect/:id/accounting",
@@ -933,12 +939,18 @@ crmProspectRouter.get(
     if (!prospect) throw new HttpError(404, "Fiche introuvable");
 
     let customer = await prisma.accCustomer.findUnique({ where: { crmProspectId: prospect.id } });
-    if (!customer && prospect.email) {
-      const candidate = await prisma.accCustomer.findFirst({
-        where: { entityId: prospect.entityId, crmProspectId: null, email: { equals: prospect.email, mode: "insensitive" } },
-      });
-      if (candidate) {
-        customer = await prisma.accCustomer.update({ where: { id: candidate.id }, data: { crmProspectId: prospect.id } });
+    if (!customer) {
+      const wheres = [
+        prospect.siret ? { entityId: prospect.entityId, crmProspectId: null, siret: prospect.siret } : null,
+        prospect.siren ? { entityId: prospect.entityId, crmProspectId: null, siren: prospect.siren } : null,
+        prospect.email ? { entityId: prospect.entityId, crmProspectId: null, email: { equals: prospect.email, mode: "insensitive" as const } } : null,
+      ].filter((w): w is NonNullable<typeof w> => w !== null);
+      for (const where of wheres) {
+        const candidate = await prisma.accCustomer.findFirst({ where });
+        if (candidate) {
+          customer = await prisma.accCustomer.update({ where: { id: candidate.id }, data: { crmProspectId: prospect.id } });
+          break;
+        }
       }
     }
     if (!customer) {
@@ -972,10 +984,54 @@ crmProspectRouter.get(
     res.json({
       linked: true,
       customerId: customer.id,
+      customerName: customer.name,
       position: { totalHt, totalTtc, totalPaid, balanceDue: Math.max(0, totalTtc - totalPaid) },
       invoices,
       payments,
       gocardlessPayments,
     });
+  })
+);
+
+/**
+ * POST /wa/crmProspect/:id/accounting/link — rattachement manuel à une
+ * fiche AccCustomer existante (30/09/2026, demande client : le
+ * rapprochement automatique par SIRET/SIREN/email échoue parfois — SIRET
+ * absent du document, formaté différemment, fiche compta créée avant
+ * qu'un identifiant fort n'ait été saisi... — sans bloquer la mise à jour
+ * manuelle par un compte "sesame" qui sait, lui, quelle fiche compta
+ * correspond). Refuse un AccCustomer déjà lié à une AUTRE fiche CRM
+ * (crmProspectId unique) plutôt que de lui voler discrètement son lien.
+ */
+crmProspectRouter.post(
+  "/crmProspect/:id/accounting/link",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const prospect = await prisma.crmProspect.findUnique({ where: { id: req.params.id } });
+    if (!prospect) throw new HttpError(404, "Fiche introuvable");
+    const accCustomerId = req.body?.accCustomerId as string | undefined;
+    if (!accCustomerId) throw new HttpError(400, "accCustomerId requis");
+    const customer = await prisma.accCustomer.findUnique({ where: { id: accCustomerId } });
+    if (!customer) throw new HttpError(404, "Compte client introuvable");
+    if (customer.crmProspectId && customer.crmProspectId !== prospect.id) {
+      throw new HttpError(400, "Ce compte client est déjà rattaché à une autre fiche CRM");
+    }
+    const updated = await prisma.accCustomer.update({ where: { id: customer.id }, data: { crmProspectId: prospect.id } });
+    res.json({ ok: true, customerId: updated.id, customerName: updated.name });
+  })
+);
+
+/** POST /wa/crmProspect/:id/accounting/unlink — détache le compte client rattaché (rapprochement automatique ou manuel erroné). */
+crmProspectRouter.post(
+  "/crmProspect/:id/accounting/unlink",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const prospect = await prisma.crmProspect.findUnique({ where: { id: req.params.id } });
+    if (!prospect) throw new HttpError(404, "Fiche introuvable");
+    const customer = await prisma.accCustomer.findUnique({ where: { crmProspectId: prospect.id } });
+    if (customer) await prisma.accCustomer.update({ where: { id: customer.id }, data: { crmProspectId: null } });
+    res.json({ ok: true });
   })
 );

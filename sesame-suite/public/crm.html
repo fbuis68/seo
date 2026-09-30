@@ -2492,16 +2492,60 @@ async function loadComptaCard(c){
     const r = await apiFetch('/wa/crmProspect/'+c.id+'/accounting');
     detail = r.ok ? await r.json() : null;
   }catch(e){ detail = null; }
-  renderComptaCard(detail);
+  renderComptaCard(detail, c.id);
 }
 
-function renderComptaCard(detail){
+async function crmOpenLinkAccCustomer(prospectId){
+  const el = document.getElementById('compta-link-picker');
+  if(!el) return;
+  el.innerHTML = '<div class="log-empty">Chargement…</div>';
+  let customers = [];
+  try{
+    const r = await apiFetch('/wa/acc/customers?scope=crm');
+    customers = r.ok ? await r.json() : [];
+  }catch(e){}
+  const options = customers.filter(c=>!c.crmProspectId).map(c=>`<option value="${c.id}">${esc(c.name)}${c.siret?' — SIRET '+esc(c.siret):''}</option>`).join('');
+  el.innerHTML = `
+    <div class="ff" style="margin-top:8px">
+      <label>Lier manuellement à un compte client existant</label>
+      <select id="compta-link-select"><option value="">— Choisir —</option>${options}</select>
+    </div>
+    <button class="btn btn-s" onclick="crmLinkAccCustomer('${prospectId}')" style="margin-top:6px">Lier</button>`;
+}
+
+async function crmLinkAccCustomer(prospectId){
+  const accCustomerId = (document.getElementById('compta-link-select')||{value:''}).value;
+  if(!accCustomerId){ flash('Choisissez un compte client'); return; }
+  try{
+    const r = await apiFetch('/wa/crmProspect/'+prospectId+'/accounting/link', {method:'POST', body:JSON.stringify({accCustomerId})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash('Compte client lié');
+    const c = clients.find(x=>x.id===prospectId);
+    if(c) loadComptaCard(c);
+  }catch(e){ flash(e.message||'Erreur de liaison'); }
+}
+
+async function crmUnlinkAccCustomer(prospectId){
+  if(!confirm('Dissocier ce compte client ?')) return;
+  try{
+    const r = await apiFetch('/wa/crmProspect/'+prospectId+'/accounting/unlink', {method:'POST'});
+    if(!r.ok) throw new Error('http '+r.status);
+    flash('Compte client dissocié');
+    const c = clients.find(x=>x.id===prospectId);
+    if(c) loadComptaCard(c);
+  }catch(e){ flash(e.message||'Erreur'); }
+}
+
+function renderComptaCard(detail, prospectId){
   const el = document.getElementById('compta-card');
   if(!el) return;
   if(!detail || !detail.linked){
     el.innerHTML = `
     <div class="card-head"><div class="ch-ico">▦</div><span class="ch-title">Comptabilité</span></div>
-    <div class="log-empty">Aucune fiche compta rapprochée (aucune facture/prélèvement enregistré pour cet email pour l'instant).</div>`;
+    <div class="log-empty">Aucune fiche compta rapprochée (aucune facture/prélèvement enregistré pour cet email/SIRET/SIREN pour l'instant).</div>
+    <div id="compta-link-picker"></div>
+    <button class="btn btn-ghost btn-sm" onclick="crmOpenLinkAccCustomer('${prospectId}')">Lier manuellement…</button>`;
     return;
   }
   const pos = detail.position;
@@ -2528,7 +2572,8 @@ function renderComptaCard(detail){
       <td><span class="tag ${CRM_GC_STATUS_TAG[p.status]||'t-gray'}" style="font-size:10px;padding:1px 7px">${esc(p.status)}</span></td>
     </tr>`).join('');
   el.innerHTML = `
-    <div class="card-head"><div class="ch-ico">▦</div><span class="ch-title">Comptabilité</span></div>
+    <div class="card-head"><div class="ch-ico">▦</div><span class="ch-title">Comptabilité — ${esc(detail.customerName||'')}</span>
+      <button class="chact" onclick="crmUnlinkAccCustomer('${prospectId}')" title="Dissocier ce compte client">🔗 Dissocier</button></div>
     <div style="display:flex;gap:24px;flex-wrap:wrap;font-size:12px;margin-bottom:6px">
       <div>Total facturé (TTC) <strong style="font-family:monospace">${fmtEUR2(pos.totalTtc)}</strong></div>
       <div>Total réglé <strong style="font-family:monospace">${fmtEUR2(pos.totalPaid)}</strong></div>
