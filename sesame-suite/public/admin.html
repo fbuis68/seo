@@ -4815,6 +4815,7 @@ function showPan(id){
   target.classList.add('on');
   document.querySelectorAll('.ni[data-pan="'+id+'"]').forEach(function(el){el.classList.add('on')});
   closeSidebar();
+  if(id!=='reservations') resaStopPolling();
   // Panel-specific init
   if(id==='charte'){renderColorList();}
   if(id==='hotel'){try{renderModuleCards();ensureQuestionnairesLoaded();}catch(e){}}
@@ -4824,7 +4825,7 @@ function showPan(id){
   if(id==='rooms'){ renderRoomGrid(); fetchStaffList().then(renderRoomGrid); nyInit(); }
   if(id==='preview'){try{renderFullPreview();renderPrevSummary();}catch(e){}}
   if(id==='dash'){try{renderDash();}catch(e){}}
-  if(id==='reservations'){ loadReservations(); }
+  if(id==='reservations'){ loadReservations(); resaStartPolling(); }
   if(id==='api'){ bsInit(); }
   if(id==='payment'){ payInit(); }
   if(id==='wallet'){ walInit(); }
@@ -14541,10 +14542,21 @@ var RESA_CACHE = [];
 // réponse concerne toujours la fiche actuellement affichée avant d'écrire.
 var RESA_DETAIL_CODE = null;
 
-async function loadReservations(){
+/**
+ * silent=true (cf. resaStartPolling) : réutilisé pour le rafraîchissement
+ * automatique en tâche de fond pendant que ce panneau reste ouvert (§
+ * "synchronisation temps réel" du connecteur PMS, cf. Intégration
+ * réservations → syncIntervalMinutes=1 — sans ceci, les nouvelles
+ * réservations importées côté serveur toutes les minutes n'apparaissaient
+ * jamais tant que le personnel ne rechargeait pas la page à la main).
+ * N'affiche PAS le halo "Chargement…" (contrairement à un appel explicite
+ * via le bouton "Actualiser") pour ne pas faire disparaître la liste sous
+ * les yeux de quelqu'un qui la consulte.
+ */
+async function loadReservations(silent){
   var listEl = document.getElementById('resa-list');
   if(!listEl) return;
-  listEl.innerHTML = '<div class="alt alt-b"><i class="ti ti-loader"></i><span>Chargement…</span></div>';
+  if(!silent) listEl.innerHTML = '<div class="alt alt-b"><i class="ti ti-loader"></i><span>Chargement…</span></div>';
   try{
     var results = await Promise.all([
       adminFetch('/wa/booking/list'),
@@ -14595,8 +14607,18 @@ async function loadReservations(){
     resaPopulateFilters();
     renderReservations();
   }catch(e){
-    listEl.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Erreur de chargement des arrivées.</span></div>';
+    if(!silent) listEl.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Erreur de chargement des arrivées.</span></div>';
   }
+}
+
+var RESA_POLL_TIMER = null;
+/** Démarré en entrant sur le panneau Réservations (showPan), arrêté en le quittant — cf. loadReservations(silent). */
+function resaStartPolling(){
+  if(RESA_POLL_TIMER) return;
+  RESA_POLL_TIMER = setInterval(function(){ loadReservations(true); }, 30000);
+}
+function resaStopPolling(){
+  if(RESA_POLL_TIMER){ clearInterval(RESA_POLL_TIMER); RESA_POLL_TIMER = null; }
 }
 
 var RESA_TAB = 'inhouse';
