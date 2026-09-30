@@ -741,6 +741,7 @@ accountingRouter.post(
         paymentTermDays: req.body.paymentTermDays != null && req.body.paymentTermDays !== "" ? Number(req.body.paymentTermDays) : undefined,
         paymentTermMode: b.paymentTermMode || undefined,
         paymentMethod: b.paymentMethod || undefined,
+        noReconciliationNeeded: !!req.body.noReconciliationNeeded,
       },
     });
     await recordAuditLog({ entityId, userId: actorId(req), action: "supplier_created", targetType: "AccSupplier", targetId: created.id, newValue: { name: created.name }, ip: req.ip });
@@ -774,6 +775,7 @@ accountingRouter.put(
       if (v && !PAYMENT_METHODS.has(v)) throw new HttpError(400, "Mode de règlement invalide");
       data.paymentMethod = v || null;
     }
+    if ("noReconciliationNeeded" in req.body) data.noReconciliationNeeded = !!req.body.noReconciliationNeeded;
     const updated = await prisma.accSupplier.update({ where: { id: existing.id }, data });
     await recordAuditLog({ entityId, userId: actorId(req), action: "supplier_updated", targetType: "AccSupplier", targetId: existing.id, oldValue: existing, newValue: data, ip: req.ip });
     res.json(updated);
@@ -839,6 +841,7 @@ accountingRouter.post(
         country: (req.body.country as string) || undefined,
         email: (req.body.email as string) || undefined,
         phone: (req.body.phone as string) || undefined,
+        noReconciliationNeeded: !!req.body.noReconciliationNeeded,
       },
     });
     await recordAuditLog({ entityId, userId: actorId(req), action: "customer_created", targetType: "AccCustomer", targetId: created.id, newValue: { name: created.name }, ip: req.ip });
@@ -856,6 +859,7 @@ accountingRouter.put(
     const fields = ["name", "siren", "siret", "vatNumber", "addressLine", "postalCode", "city", "country", "email", "phone"] as const;
     const data: Record<string, unknown> = {};
     for (const f of fields) if (f in req.body) data[f] = req.body[f];
+    if ("noReconciliationNeeded" in req.body) data.noReconciliationNeeded = !!req.body.noReconciliationNeeded;
     const updated = await prisma.accCustomer.update({ where: { id: existing.id }, data });
     await recordAuditLog({ entityId, userId: actorId(req), action: "customer_updated", targetType: "AccCustomer", targetId: existing.id, oldValue: existing, newValue: data, ip: req.ip });
     res.json(updated);

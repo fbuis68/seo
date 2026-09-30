@@ -2887,6 +2887,14 @@ model AccSupplier {
   // pour un virement à faire.
   paymentMethod String?
 
+  // Tiers dont le règlement ne passera jamais par un relevé bancaire
+  // rapprochable (compensation intragroupe, troc, abandon de créance...) —
+  // mêmes effets que paymentMethod="prelevement" (facture directement PAID
+  // à la validation de l'écriture, cf. validateEntry) mais indépendant du
+  // mode de règlement affiché (30/09/2026, demande client : "créer des
+  // tiers qui ne nécessitent pas de rapprochement").
+  noReconciliationNeeded Boolean @default(false)
+
   // Compte comptable fournisseur par défaut (ex: sous-compte auxiliaire
   // 401xxx) — assigné à la première facture rapprochée si absent, cf.
   // lib/accRulesEngine.ts.
@@ -2926,6 +2934,11 @@ model AccCustomer {
   country     String? @default("FR")
   email       String?
   phone       String?
+
+  // Cf. AccSupplier.noReconciliationNeeded — même principe côté client
+  // (facture de vente directement PAID à la validation de l'écriture,
+  // sans attendre un rapprochement bancaire qui n'arrivera jamais).
+  noReconciliationNeeded Boolean @default(false)
 
   // Identifiant client GoCardless ("CU...") — lien stable une fois rapproché
   // une première fois (par email, cf. lib/gocardless.ts matchOrCreateCustomer),

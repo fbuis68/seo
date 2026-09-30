@@ -8951,7 +8951,7 @@ function pickSupEntreprise(i){
 }
 
 function openAccSupplierModal(id){
-  const s = id ? ACC_SUPPLIERS.find(x=>x.id===id) : {id:null,name:'',siren:'',siret:'',vatNumber:'',email:'',phone:'',addressLine:'',postalCode:'',city:'',country:'FR',iban:'',bic:'',paymentTermDays:null,paymentTermMode:null,paymentMethod:null};
+  const s = id ? ACC_SUPPLIERS.find(x=>x.id===id) : {id:null,name:'',siren:'',siret:'',vatNumber:'',email:'',phone:'',addressLine:'',postalCode:'',city:'',country:'FR',iban:'',bic:'',paymentTermDays:null,paymentTermMode:null,paymentMethod:null,noReconciliationNeeded:false};
   if(!s) return;
   document.getElementById('modal-ct').innerHTML = `
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
@@ -8994,6 +8994,11 @@ function openAccSupplierModal(id){
         </select></div>
       </div>
       <div style="font-size:11px;color:var(--mu);margin-top:2px">Laisser vide pour utiliser le réglage général (Comptabilité → Réglages). Ne s'applique que si la facture n'indique pas elle-même sa date d'échéance.</div>
+      <div class="ff" style="margin-top:8px;display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="sup-noReconciliationNeeded" ${s.noReconciliationNeeded?'checked':''} style="width:auto">
+        <label for="sup-noReconciliationNeeded" style="margin:0">Règlement hors banque — ne nécessite pas de rapprochement</label>
+      </div>
+      <div style="font-size:11px;color:var(--mu);margin-top:2px">Ses factures passent directement en "Payée" dès leur comptabilisation (compensation, troc, abandon de créance...) — aucun virement à rapprocher n'arrivera jamais côté Banque.</div>
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="saveAccSupplier(${id?`'${id}'`:'null'})">Enregistrer</button>
         <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
@@ -9017,7 +9022,7 @@ async function deleteAccSupplier(id){
 
 async function saveAccSupplier(id){
   const g=i=>(document.getElementById(i)||{value:''}).value.trim();
-  const body = {name:g('sup-name'),siren:g('sup-siren'),siret:g('sup-siret'),vatNumber:g('sup-vatNumber'),email:g('sup-email'),phone:g('sup-phone'),country:g('sup-country'),iban:g('sup-iban'),bic:g('sup-bic'),addressLine:g('sup-addressLine'),postalCode:g('sup-postalCode'),city:g('sup-city'),paymentTermDays:g('sup-paymentTermDays')===''?null:+g('sup-paymentTermDays'),paymentTermMode:g('sup-paymentTermMode')||null,paymentMethod:g('sup-paymentMethod')||null};
+  const body = {name:g('sup-name'),siren:g('sup-siren'),siret:g('sup-siret'),vatNumber:g('sup-vatNumber'),email:g('sup-email'),phone:g('sup-phone'),country:g('sup-country'),iban:g('sup-iban'),bic:g('sup-bic'),addressLine:g('sup-addressLine'),postalCode:g('sup-postalCode'),city:g('sup-city'),paymentTermDays:g('sup-paymentTermDays')===''?null:+g('sup-paymentTermDays'),paymentTermMode:g('sup-paymentTermMode')||null,paymentMethod:g('sup-paymentMethod')||null,noReconciliationNeeded:(document.getElementById('sup-noReconciliationNeeded')||{}).checked||false};
   if(!body.name){ flash('Le nom est requis'); return; }
   try{
     const r = await apiFetch(id?('/wa/acc/suppliers/'+id+'?scope=crm'):'/wa/acc/suppliers?scope=crm', {method:id?'PUT':'POST', body:JSON.stringify(body)});
@@ -9070,7 +9075,7 @@ async function openAccCustomerModal(id){
       if(r.ok) detail = await r.json();
     }catch(e){}
   }
-  const c = detail ? detail.customer : {id:null,name:'',siren:'',siret:'',vatNumber:'',email:'',phone:'',addressLine:'',postalCode:'',city:'',country:'FR'};
+  const c = detail ? detail.customer : {id:null,name:'',siren:'',siret:'',vatNumber:'',email:'',phone:'',addressLine:'',postalCode:'',city:'',country:'FR',noReconciliationNeeded:false};
   renderAccCustomerModal(c, detail);
 }
 
@@ -9120,6 +9125,11 @@ function renderAccCustomerModal(c, detail){
         <div class="ff"><label>Code postal</label><input id="cus-postalCode" value="${esc(c.postalCode)}"></div>
         <div class="ff"><label>Ville</label><input id="cus-city" value="${esc(c.city)}"></div>
       </div>
+      <div class="ff" style="margin-top:8px;display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="cus-noReconciliationNeeded" ${c.noReconciliationNeeded?'checked':''} style="width:auto">
+        <label for="cus-noReconciliationNeeded" style="margin:0">Règlement hors banque — ne nécessite pas de rapprochement</label>
+      </div>
+      <div style="font-size:11px;color:var(--mu);margin-top:2px">Ses factures passent directement en "Payée" dès leur comptabilisation (compensation, troc, abandon de créance...) — aucun virement à rapprocher n'arrivera jamais côté Banque.</div>
       ${pos?`
       <div class="modal-section">Position du compte</div>
       <div style="display:flex;gap:24px;flex-wrap:wrap;font-size:12px;margin-bottom:6px">
@@ -9167,7 +9177,7 @@ async function deleteAccCustomer(id){
 
 async function saveAccCustomer(id){
   const g=i=>(document.getElementById(i)||{value:''}).value.trim();
-  const body = {name:g('cus-name'),siren:g('cus-siren'),siret:g('cus-siret'),vatNumber:g('cus-vatNumber'),email:g('cus-email'),phone:g('cus-phone'),country:g('cus-country'),addressLine:g('cus-addressLine'),postalCode:g('cus-postalCode'),city:g('cus-city')};
+  const body = {name:g('cus-name'),siren:g('cus-siren'),siret:g('cus-siret'),vatNumber:g('cus-vatNumber'),email:g('cus-email'),phone:g('cus-phone'),country:g('cus-country'),addressLine:g('cus-addressLine'),postalCode:g('cus-postalCode'),city:g('cus-city'),noReconciliationNeeded:(document.getElementById('cus-noReconciliationNeeded')||{}).checked||false};
   if(!body.name){ flash('Le nom est requis'); return; }
   try{
     const r = await apiFetch(id?('/wa/acc/customers/'+id+'?scope=crm'):'/wa/acc/customers?scope=crm', {method:id?'PUT':'POST', body:JSON.stringify(body)});

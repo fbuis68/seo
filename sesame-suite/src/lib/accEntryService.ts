@@ -124,13 +124,18 @@ export async function validateEntry(entryId: string, userId: string | null): Pro
 
   if (entry.invoice) {
     // Fournisseur réglé par prélèvement automatique (AccSupplier.paymentMethod)
-    // : le règlement se fait tout seul dès la comptabilisation, inutile de
-    // repasser par la bascule manuelle "Marquer payée" comme pour un
-    // virement à faire — la facture part directement en PAID.
+    // ou tiers marqué noReconciliationNeeded (compensation, troc, abandon de
+    // créance... — jamais de virement à rapprocher) : le règlement se fait
+    // tout seul dès la comptabilisation, inutile de repasser par la bascule
+    // manuelle "Marquer payée" comme pour un virement à faire — la facture
+    // part directement en PAID.
     let status: "ACCOUNTED" | "PAID" = "ACCOUNTED";
     if (entry.invoice.supplierId) {
       const supplier = await prisma.accSupplier.findUnique({ where: { id: entry.invoice.supplierId } });
-      if (supplier?.paymentMethod === "prelevement") status = "PAID";
+      if (supplier?.paymentMethod === "prelevement" || supplier?.noReconciliationNeeded) status = "PAID";
+    } else if (entry.invoice.customerId) {
+      const customer = await prisma.accCustomer.findUnique({ where: { id: entry.invoice.customerId } });
+      if (customer?.noReconciliationNeeded) status = "PAID";
     }
     await prisma.accInvoice.update({ where: { id: entry.invoice.id }, data: { status } });
   }
