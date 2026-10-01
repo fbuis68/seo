@@ -8194,7 +8194,7 @@ async function accGraphMailDeactivate(purpose){
 
 // ───────── Onglet Factures (inbox de validation, §37) ─────────
 
-let ACC_INBOX_FILTER={status:'',direction:'',unpaid:false,dueDateFrom:'',dueDateTo:''};
+let ACC_INBOX_FILTER={status:'',direction:'',unpaid:false,dueDateFrom:'',dueDateTo:'',q:''};
 let ACC_INBOX_SELECTED=new Set();
 
 async function loadAccInboxTab(){
@@ -8228,7 +8228,9 @@ function accToggleInboxSelect(id, checked){
   renderAccInbox();
 }
 function accToggleInboxSelectAll(checked){
-  ACC_INBOX_SELECTED = new Set(checked ? ACC_INVOICES.map(i=>i.id) : []);
+  const visible = accFilteredInvoices().map(i=>i.id);
+  if(checked){ visible.forEach(id=>ACC_INBOX_SELECTED.add(id)); }
+  else{ visible.forEach(id=>ACC_INBOX_SELECTED.delete(id)); }
   renderAccInbox();
 }
 
@@ -8239,18 +8241,46 @@ function accDueDateCell(inv){
   return `<span style="${overdue?'color:#a32d2d;font-weight:600':''}">${due.toLocaleDateString('fr-FR')}</span>`;
 }
 
+/** Nom du tiers d'une facture — acheteur (client) en vente, émetteur
+ * (fournisseur) en achat, avec repli sur le texte brut extrait du document
+ * quand le tiers n'a pas encore été rapproché à une fiche. Partagé par
+ * l'affichage (renderAccInbox) et le filtre de recherche ci-dessous. */
+function accInvoiceTiersName(inv){
+  return (inv.direction==='sale'?(inv.customer?inv.customer.name:inv.recipientName):(inv.supplier?inv.supplier.name:inv.issuerName))||'';
+}
+
+function accSetInboxSearch(val){
+  ACC_INBOX_FILTER.q = val;
+  renderAccInbox();
+}
+
+/** Recherche client — par nom de client/fournisseur ou numéro de facture
+ * (ex : "URSSAF", "FA-2026-042") — filtre l'inbox déjà chargée plutôt que
+ * de redemander au serveur à chaque frappe, l'onglet tenant déjà jusqu'à
+ * 100 factures en mémoire (cf. accReloadInvoices). Partagé par
+ * renderAccInbox (affichage) et accToggleInboxSelectAll ("tout cocher" ne
+ * doit porter que sur les lignes visibles). */
+function accFilteredInvoices(){
+  const q = (ACC_INBOX_FILTER.q||'').trim().toLowerCase();
+  if(!q) return ACC_INVOICES;
+  return ACC_INVOICES.filter(inv=>
+    accInvoiceTiersName(inv).toLowerCase().includes(q) || (inv.invoiceNumber||'').toLowerCase().includes(q)
+  );
+}
+
 function renderAccInbox(){
   const el = document.getElementById('acc-tab-body');
   if(!el) return;
   const statusOpts = ['', ...Object.keys(ACC_STATUS_LABEL)];
-  const allSelected = ACC_INVOICES.length>0 && ACC_INVOICES.every(i=>ACC_INBOX_SELECTED.has(i.id));
-  const rows = ACC_INVOICES.map(inv=>{
+  const invoices = accFilteredInvoices();
+  const allSelected = invoices.length>0 && invoices.every(i=>ACC_INBOX_SELECTED.has(i.id));
+  const rows = invoices.map(inv=>{
     const level = accWorstCheckLevel(inv.checks);
     return `<tr>
       <td onclick="event.stopPropagation()"><input type="checkbox" ${ACC_INBOX_SELECTED.has(inv.id)?'checked':''} onchange="accToggleInboxSelect('${inv.id}', this.checked)"></td>
       <td>${inv.invoiceDate?new Date(inv.invoiceDate).toLocaleDateString('fr-FR'):'—'}</td>
       <td>${ACC_DOCTYPE_LABEL[inv.documentType]||inv.documentType||'—'}</td>
-      <td><div class="nom-cell" onclick="openAccInvoiceModal('${inv.id}')">${esc(inv.direction==='sale'?(inv.customer?inv.customer.name:(inv.recipientName||'—')):(inv.supplier?inv.supplier.name:(inv.issuerName||'—')))}</div></td>
+      <td><div class="nom-cell" onclick="openAccInvoiceModal('${inv.id}')">${esc(accInvoiceTiersName(inv)||'—')}</div></td>
       <td>${esc(inv.invoiceNumber||'—')}</td>
       <td style="text-align:right">${inv.amountHt!=null?fmtEUR2(inv.amountHt):'—'}</td>
       <td style="text-align:right">${inv.amountVat!=null?fmtEUR2(inv.amountVat):'—'}</td>
@@ -8263,8 +8293,9 @@ function renderAccInbox(){
       <td style="white-space:nowrap"><button class="ta-btn" onclick="openAccInvoiceModal('${inv.id}')" title="Ouvrir">👁</button><button class="ta-btn" onclick="event.stopPropagation();accDeleteInvoice('${inv.id}')" title="Supprimer">🗑</button></td>
     </tr>`;
   }).join('');
-  el.innerHTML = `
+  withFocusKept('#acc-inbox-search', ()=>{ el.innerHTML = `
     <div class="list-toolbar" style="flex-wrap:wrap">
+      <input id="acc-inbox-search" class="lsel" style="min-width:220px" placeholder="Rechercher client, fournisseur, n° facture…" value="${esc(ACC_INBOX_FILTER.q)}" oninput="accSetInboxSearch(this.value)">
       <select class="lsel" onchange="accSetInboxFilter('status', this.value)">
         ${statusOpts.map(s=>`<option value="${s}" ${ACC_INBOX_FILTER.status===s?'selected':''}>${s?ACC_STATUS_LABEL[s]:'Tous les statuts'}</option>`).join('')}
       </select>
@@ -8276,15 +8307,15 @@ function renderAccInbox(){
       <label style="display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap"><input type="checkbox" ${ACC_INBOX_FILTER.unpaid?'checked':''} onchange="accToggleUnpaidFilter(this.checked)">Non payées uniquement</label>
       <label style="display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap">Échéance du <input type="date" class="lsel" style="width:140px" value="${ACC_INBOX_FILTER.dueDateFrom}" onchange="accSetInboxFilter('dueDateFrom', this.value)"></label>
       <label style="display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap">au <input type="date" class="lsel" style="width:140px" value="${ACC_INBOX_FILTER.dueDateTo}" onchange="accSetInboxFilter('dueDateTo', this.value)"></label>
-      <span class="count-lbl">${ACC_INVOICES.length} facture(s)</span>
+      <span class="count-lbl">${invoices.length}${invoices.length!==ACC_INVOICES.length?' / '+ACC_INVOICES.length:''} facture(s)</span>
       ${ACC_INBOX_SELECTED.size>0?`<button class="btn btn-primary btn-sm" onclick="openAccRelanceModal()">Envoyer une relance (${ACC_INBOX_SELECTED.size})</button>`:''}
     </div>
     <div id="acc-inbox-dropzone" style="border:2px dashed transparent;border-radius:12px;transition:border-color .1s,background .1s">
       <div class="tbl-wrap"><table>
         <thead><tr><th style="width:32px"><input type="checkbox" ${allSelected?'checked':''} onchange="accToggleInboxSelectAll(this.checked)"></th><th>Date</th><th>Type</th><th>Tiers</th><th>N° facture</th><th style="text-align:right">HT</th><th style="text-align:right">TVA</th><th style="text-align:right">TTC</th><th>Échéance</th><th>Compte</th><th>Contrôles</th><th>État</th><th style="width:80px">Réglée</th><th style="width:44px"></th></tr></thead>
-        <tbody>${rows||'<tr><td colspan="14" class="log-empty">Aucune facture — déposez-en une avec le bouton en haut à droite, ou glissez un fichier ici.</td></tr>'}</tbody>
+        <tbody>${rows||(ACC_INVOICES.length?'<tr><td colspan="14" class="log-empty">Aucune facture ne correspond à la recherche.</td></tr>':'<tr><td colspan="14" class="log-empty">Aucune facture — déposez-en une avec le bouton en haut à droite, ou glissez un fichier ici.</td></tr>')}</tbody>
       </table></div>
-    </div>`;
+    </div>`; });
 
   const dz = document.getElementById('acc-inbox-dropzone');
   ['dragenter','dragover'].forEach(evt=>dz.addEventListener(evt, e=>{
@@ -8946,10 +8977,17 @@ async function loadAccSuppliersTab(){
   renderAccSuppliers();
 }
 
+let ACC_SUP_SEARCH='';
+function accSetSupSearch(val){ ACC_SUP_SEARCH=val; renderAccSuppliers(); }
+
 function renderAccSuppliers(){
   const el = document.getElementById('acc-tab-body');
   if(!el) return;
-  const rows = ACC_SUPPLIERS.map(s=>`
+  const q = ACC_SUP_SEARCH.trim().toLowerCase();
+  const suppliers = !q ? ACC_SUPPLIERS : ACC_SUPPLIERS.filter(s=>
+    (s.name||'').toLowerCase().includes(q) || (s.siret||'').toLowerCase().includes(q) || (s.siren||'').toLowerCase().includes(q)
+  );
+  const rows = suppliers.map(s=>`
     <tr>
       <td><div class="nom-cell" onclick="openAccSupplierModal('${s.id}')">${esc(s.name)}</div></td>
       <td style="font-size:11px;color:#888">${esc(s.siret||'—')}</td>
@@ -8958,12 +8996,16 @@ function renderAccSuppliers(){
       <td style="font-size:12px">${s.paymentMethod?PAYMENT_METHOD_LABEL[s.paymentMethod]:'—'}</td>
       <td style="white-space:nowrap"><button class="ta-btn" onclick="openAccSupplierModal('${s.id}')" title="Modifier">✎</button></td>
     </tr>`).join('');
-  el.innerHTML = `
-    <div class="list-toolbar"><button class="btn btn-primary btn-sm" onclick="openAccSupplierModal(null)">+ Fournisseur</button><span class="count-lbl">${ACC_SUPPLIERS.length} fournisseur(s)</span></div>
+  withFocusKept('#acc-sup-search', ()=>{ el.innerHTML = `
+    <div class="list-toolbar">
+      <input id="acc-sup-search" class="lsel" style="min-width:220px" placeholder="Rechercher un fournisseur (nom, SIRET)…" value="${esc(ACC_SUP_SEARCH)}" oninput="accSetSupSearch(this.value)">
+      <button class="btn btn-primary btn-sm" onclick="openAccSupplierModal(null)">+ Fournisseur</button>
+      <span class="count-lbl">${suppliers.length}${suppliers.length!==ACC_SUPPLIERS.length?' / '+ACC_SUPPLIERS.length:''} fournisseur(s)</span>
+    </div>
     <div class="tbl-wrap"><table>
       <thead><tr><th>Nom</th><th style="width:140px">SIRET</th><th style="width:200px">IBAN</th><th>Email</th><th style="width:110px">Règlement</th><th style="width:50px"></th></tr></thead>
-      <tbody>${rows||'<tr><td colspan="6" class="log-empty">Aucun fournisseur — créé automatiquement au premier dépôt de facture avec un SIRET/SIREN/TVA reconnu.</td></tr>'}</tbody>
-    </table></div>`;
+      <tbody>${rows||(ACC_SUPPLIERS.length?'<tr><td colspan="6" class="log-empty">Aucun fournisseur ne correspond à la recherche.</td></tr>':'<tr><td colspan="6" class="log-empty">Aucun fournisseur — créé automatiquement au premier dépôt de facture avec un SIRET/SIREN/TVA reconnu.</td></tr>')}</tbody>
+    </table></div>`; });
 }
 
 // Recherche d'entreprises (même API publique que la fiche client, cf.
@@ -9114,10 +9156,17 @@ async function loadAccCustomersTab(){
   renderAccCustomers();
 }
 
+let ACC_CUST_SEARCH='';
+function accSetCustSearch(val){ ACC_CUST_SEARCH=val; renderAccCustomers(); }
+
 function renderAccCustomers(){
   const el = document.getElementById('acc-tab-body');
   if(!el) return;
-  const rows = ACC_CUSTOMERS.map(c=>`
+  const q = ACC_CUST_SEARCH.trim().toLowerCase();
+  const customers = !q ? ACC_CUSTOMERS : ACC_CUSTOMERS.filter(c=>
+    (c.name||'').toLowerCase().includes(q) || (c.siret||'').toLowerCase().includes(q) || (c.siren||'').toLowerCase().includes(q)
+  );
+  const rows = customers.map(c=>`
     <tr>
       <td><div class="nom-cell" onclick="openAccCustomerModal('${c.id}')">${esc(c.name)}</div></td>
       <td style="font-size:11px;color:#888">${esc(c.siret||'—')}</td>
@@ -9125,12 +9174,16 @@ function renderAccCustomers(){
       <td>${esc(c.city||'—')}</td>
       <td style="white-space:nowrap"><button class="ta-btn" onclick="openAccCustomerModal('${c.id}')" title="Ouvrir">✎</button></td>
     </tr>`).join('');
-  el.innerHTML = `
-    <div class="list-toolbar"><button class="btn btn-primary btn-sm" onclick="openAccCustomerModal(null)">+ Client</button><span class="count-lbl">${ACC_CUSTOMERS.length} client(s)</span></div>
+  withFocusKept('#acc-cust-search', ()=>{ el.innerHTML = `
+    <div class="list-toolbar">
+      <input id="acc-cust-search" class="lsel" style="min-width:220px" placeholder="Rechercher un client (nom, SIRET)…" value="${esc(ACC_CUST_SEARCH)}" oninput="accSetCustSearch(this.value)">
+      <button class="btn btn-primary btn-sm" onclick="openAccCustomerModal(null)">+ Client</button>
+      <span class="count-lbl">${customers.length}${customers.length!==ACC_CUSTOMERS.length?' / '+ACC_CUSTOMERS.length:''} client(s)</span>
+    </div>
     <div class="tbl-wrap"><table>
       <thead><tr><th>Nom</th><th style="width:140px">SIRET</th><th>Email</th><th style="width:160px">Ville</th><th style="width:50px"></th></tr></thead>
-      <tbody>${rows||'<tr><td colspan="5" class="log-empty">Aucun client — créé automatiquement au premier dépôt de facture de vente avec un SIRET/SIREN/TVA reconnu.</td></tr>'}</tbody>
-    </table></div>`;
+      <tbody>${rows||(ACC_CUSTOMERS.length?'<tr><td colspan="5" class="log-empty">Aucun client ne correspond à la recherche.</td></tr>':'<tr><td colspan="5" class="log-empty">Aucun client — créé automatiquement au premier dépôt de facture de vente avec un SIRET/SIREN/TVA reconnu.</td></tr>')}</tbody>
+    </table></div>`; });
 }
 
 /**
