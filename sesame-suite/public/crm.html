@@ -2187,6 +2187,17 @@ function featDefFor(c){
   return [['WebApp',c.webApp],['Mobile V2',c.mobileV2],['Offline',c.offline],['Livret digital',c.livret],['Check-in mobile',c.checkin],['Gestion demande',c.gestionDemande],['Choix chambre',c.onbChoixChambres],['Occupant',c.onbOccupant],['Identité',c.onbIdentite],['Ménage',c.onbMenage],['Boutique',c.espBoutique],['Points fidélité',c.espPoint],['Évènements',c.espEvenement]];
 }
 
+// Fiche ouverte sur vue simplifiée par défaut (champs essentiels — email,
+// téléphone, commercial, MRR, établissement — seulement) : masque le détail
+// administratif (SIRET, adresse, modules…) et les affiliations, peu utiles
+// au quotidien, derrière ce bouton plutôt que de toujours tout afficher.
+function toggleFicheExtra(btn){
+  const els = document.querySelectorAll('.fiche-extra');
+  const hidden = els.length && els[0].style.display==='none';
+  els.forEach(e=>{ e.style.display = hidden ? '' : 'none'; });
+  btn.innerHTML = hidden ? '▴ Vue simplifiée' : '▾ Voir plus d\'informations';
+}
+
 function renderFiche(c){
   const sc=riskScore(c);
   const featDef=featDefFor(c);
@@ -2226,7 +2237,7 @@ function renderFiche(c){
           ${typeBadge(c.type)}
           <span class="tag t-gray">${c.secteur?sectorIcon(c.secteur):'◻'} ${c.secteur||'—'}${c.etoiles?' '+c.etoiles:''}</span>
           ${c.ville?`<span class="tag t-blue">◉ ${c.ville}</span>`:''}
-          ${(c.affiliations||[]).map(a=>`<span class="tag t-purple">⛓ ${esc(a)}</span>`).join('')}
+          <span class="fiche-extra" style="display:none">${(c.affiliations||[]).map(a=>`<span class="tag t-purple">⛓ ${esc(a)}</span>`).join('')}</span>
           ${c.danger==='Bon client'?'<span class="tag t-green">Bon client</span>':c.danger==='Élevé !!'?'<span class="tag t-red">Élevé !!</span>':'<span class="tag t-amber">Modéré</span>'}
           ${scoreBadge(c)}
           ${inboundBadge(c)}
@@ -2241,29 +2252,30 @@ function renderFiche(c){
     </div>
     <hr class="divl">
     <div class="fgrid">
-      <div class="field"><div class="fl"><span class="fl-ico">D</span> Dénomination sociale</div><div class="fv">${c.denominationSociale?esc(c.denominationSociale):'—'}</div></div>
-      <div class="field"><div class="fl"><span class="fl-ico">S</span> SIRET</div><div class="fv">${c.siret?esc(c.siret)+(c.siren?' <span style="color:var(--mu,#888);font-size:11px">(SIREN '+esc(c.siren)+')</span>':''):'—'}</div></div>
-      <div class="field"><div class="fl"><span class="fl-ico">J</span> Forme juridique</div><div class="fv">${c.formeJuridique?esc(c.formeJuridique):'—'}</div></div>
-      <div class="field"><div class="fl"><span class="fl-ico">C</span> Créée le</div><div class="fv">${c.dateCreationEntreprise?new Date(c.dateCreationEntreprise).toLocaleDateString('fr-FR'):'—'}</div></div>
-      <div class="field"><div class="fl"><span class="fl-ico">N</span> Effectif salarié</div><div class="fv">${c.effectifSalarie?esc(c.effectifSalarie):'—'}</div></div>
-      <div class="field"><div class="fl"><span class="fl-ico">A</span> Adresse</div><div class="fv">${c.adresse?esc(c.adresse)+(c.ville?', '+esc(c.ville):'')+(c.pays?', '+esc(c.pays):''):'—'}</div></div>
-      <div class="field"><div class="fl"><span class="fl-ico">R</span> Référent</div><div class="fv">${c.referent||'—'}</div></div>
-      <div class="field"><div class="fl"><span class="fl-ico">◆</span> Commercial</div><div class="fv">${c.commercialName||'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">@</span> Email</div><div class="fv">${c.email?`<a href="mailto:${c.email}">${c.email}</a>`:'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">T</span> Téléphone</div><div class="fv">${c.tel||'—'}</div></div>
-      <div class="field"><div class="fl"><span class="fl-ico">W</span> Site web</div><div class="fv">${c.site?`<a href="https://${c.site}" target="_blank">${c.site}</a>`:'—'}</div></div>
-      <div class="field"><div class="fl"><span class="fl-ico">E</span> Établissement Sesame</div><div class="fv">${c.entityCode||'—'}</div></div>
-      <div class="field"><div class="fl"><span class="fl-ico">◔</span> Langue / Devise / Fuseau</div><div class="fv">${c.entityCode?(langLabel(c.lang)+' · '+(c.currency||'—')+' · '+(c.timezone||'—')):'—'}</div></div>
-      <div class="field"><div class="fl"><span class="fl-ico">M</span> Modules</div><div class="fv">${c.modules||'—'}${c.moduleSesame?' <span class="tag t-green" style="font-size:11px">Sesame</span>':''}${c.moduleTtlock?' <span class="tag t-blue" style="font-size:11px">Ttlock</span>':''}${c.moduleOneway?' <span class="tag t-amber" style="font-size:11px">Oneway</span>':''}</div></div>
-      <div class="field"><div class="fl"><span class="fl-ico">A</span> Nombre d'accès</div><div class="fv">${c.nbAcces||'—'}</div></div>
+      <div class="field"><div class="fl"><span class="fl-ico">◆</span> Commercial</div><div class="fv">${c.commercialName||'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">€</span> MRR</div><div class="fv">${c.mrr?fmtEUR(c.mrr)+'/mois':'—'}</div></div>
-      <div class="field"><div class="fl"><span class="fl-ico">P</span> PMS intégré</div><div class="fv">${c.pms?pmsBadge(c.pms):'—'}</div></div>
-      <div class="field"><div class="fl"><span class="fl-ico">✉</span> Messagerie</div><div class="fv">${c.messagerie==='Client'?'<span class="tag t-green" style="font-size:11px">Client</span>':'<span class="tag t-gray" style="font-size:11px">Noreply</span>'}</div></div>
+      <div class="field"><div class="fl"><span class="fl-ico">E</span> Établissement Sesame</div><div class="fv">${c.entityCode||'—'}</div></div>
+      <div class="field fiche-extra" style="display:none"><div class="fl"><span class="fl-ico">D</span> Dénomination sociale</div><div class="fv">${c.denominationSociale?esc(c.denominationSociale):'—'}</div></div>
+      <div class="field fiche-extra" style="display:none"><div class="fl"><span class="fl-ico">S</span> SIRET</div><div class="fv">${c.siret?esc(c.siret)+(c.siren?' <span style="color:var(--mu,#888);font-size:11px">(SIREN '+esc(c.siren)+')</span>':''):'—'}</div></div>
+      <div class="field fiche-extra" style="display:none"><div class="fl"><span class="fl-ico">J</span> Forme juridique</div><div class="fv">${c.formeJuridique?esc(c.formeJuridique):'—'}</div></div>
+      <div class="field fiche-extra" style="display:none"><div class="fl"><span class="fl-ico">C</span> Créée le</div><div class="fv">${c.dateCreationEntreprise?new Date(c.dateCreationEntreprise).toLocaleDateString('fr-FR'):'—'}</div></div>
+      <div class="field fiche-extra" style="display:none"><div class="fl"><span class="fl-ico">N</span> Effectif salarié</div><div class="fv">${c.effectifSalarie?esc(c.effectifSalarie):'—'}</div></div>
+      <div class="field fiche-extra" style="display:none"><div class="fl"><span class="fl-ico">A</span> Adresse</div><div class="fv">${c.adresse?esc(c.adresse)+(c.ville?', '+esc(c.ville):'')+(c.pays?', '+esc(c.pays):''):'—'}</div></div>
+      <div class="field fiche-extra" style="display:none"><div class="fl"><span class="fl-ico">R</span> Référent</div><div class="fv">${c.referent||'—'}</div></div>
+      <div class="field fiche-extra" style="display:none"><div class="fl"><span class="fl-ico">W</span> Site web</div><div class="fv">${c.site?`<a href="https://${c.site}" target="_blank">${c.site}</a>`:'—'}</div></div>
+      <div class="field fiche-extra" style="display:none"><div class="fl"><span class="fl-ico">◔</span> Langue / Devise / Fuseau</div><div class="fv">${c.entityCode?(langLabel(c.lang)+' · '+(c.currency||'—')+' · '+(c.timezone||'—')):'—'}</div></div>
+      <div class="field fiche-extra" style="display:none"><div class="fl"><span class="fl-ico">M</span> Modules</div><div class="fv">${c.modules||'—'}${c.moduleSesame?' <span class="tag t-green" style="font-size:11px">Sesame</span>':''}${c.moduleTtlock?' <span class="tag t-blue" style="font-size:11px">Ttlock</span>':''}${c.moduleOneway?' <span class="tag t-amber" style="font-size:11px">Oneway</span>':''}</div></div>
+      <div class="field fiche-extra" style="display:none"><div class="fl"><span class="fl-ico">A</span> Nombre d'accès</div><div class="fv">${c.nbAcces||'—'}</div></div>
+      <div class="field fiche-extra" style="display:none"><div class="fl"><span class="fl-ico">P</span> PMS intégré</div><div class="fv">${c.pms?pmsBadge(c.pms):'—'}</div></div>
+      <div class="field fiche-extra" style="display:none"><div class="fl"><span class="fl-ico">✉</span> Messagerie</div><div class="fv">${c.messagerie==='Client'?'<span class="tag t-green" style="font-size:11px">Client</span>':'<span class="tag t-gray" style="font-size:11px">Noreply</span>'}</div></div>
     </div>
     <hr class="divl">
     <div class="alert-row">
       ${c.contrat==='non'?'<span class="apill">◻ Contrat non localisé</span>':''}
-      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="openModal('${c.id}')">✎ Modifier la fiche</button>
+      <button class="btn btn-ghost btn-sm" id="fiche-toggle-btn" style="margin-left:auto" onclick="toggleFicheExtra(this)">▾ Voir plus d'informations</button>
+      <button class="btn btn-ghost btn-sm" onclick="openModal('${c.id}')">✎ Modifier la fiche</button>
     </div>
   </div>
 
