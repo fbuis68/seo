@@ -95,7 +95,13 @@ export async function sendMessage(opts: {
   const subject = renderTemplate(template.subject, vars);
   let body = renderTemplate(template.bodyHtml, vars);
 
-  if (opts.channel === "email" && opts.entityId === null && opts.trackOpenProspectId) {
+  // template.category === "support" exclu du score d'intérêt (30/09/2026,
+  // demande client) : un échange support (ex: réponse à une question
+  // technique envoyée manuellement depuis la fiche, hors flux ticket dédié
+  // qui n'utilise de toute façon pas ce chemin) n'indique aucun intérêt
+  // commercial — seuls les modèles marketing/commercial (ou non catégorisés)
+  // posent le pixel de suivi.
+  if (opts.channel === "email" && opts.entityId === null && opts.trackOpenProspectId && template.category !== "support") {
     const base = opts.baseUrl || config.publicBaseUrl;
     const pixelUrl = `${base}/wa/crmScoring/trackOpen?pid=${encodeURIComponent(opts.trackOpenProspectId)}`;
     // Pas de style="display:none" : un pixel 1×1 est déjà invisible, et ce
