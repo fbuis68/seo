@@ -2254,6 +2254,7 @@ function renderFiche(c){
     <div class="fgrid">
       <div class="field"><div class="fl"><span class="fl-ico">@</span> Email</div><div class="fv">${c.email?`<a href="mailto:${c.email}">${c.email}</a>`:'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">T</span> Téléphone</div><div class="fv">${c.tel||'—'}</div></div>
+      <div class="field"><div class="fl"><span class="fl-ico">in</span> LinkedIn</div><div class="fv">${c.linkedinUrl&&/^https?:\/\//i.test(c.linkedinUrl)?`<a href="${esc(c.linkedinUrl)}" target="_blank" rel="noopener">Voir le profil ↗</a>`:'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">◆</span> Commercial</div><div class="fv">${c.commercialName||'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">€</span> MRR</div><div class="fv">${c.mrr?fmtEUR(c.mrr)+'/mois':'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">E</span> Établissement Sesame</div><div class="fv">${c.entityCode||'—'}</div></div>
@@ -3602,6 +3603,7 @@ function renderModal(mc){
         <div class="ff"><label>Email</label><input type="email" id="m-email" value="${esc(mc.email)}" placeholder="—"></div>
         <div class="ff"><label>Téléphone</label><input id="m-tel" value="${esc(mc.tel)}" placeholder="—"></div>
         <div class="ff"><label>Site web</label><input id="m-site" value="${esc(mc.site)}" placeholder="ex. hotel.fr"></div>
+        <div class="ff"><label>LinkedIn</label><input id="m-linkedinUrl" value="${esc(mc.linkedinUrl)}" placeholder="https://www.linkedin.com/in/…"></div>
       </div>
 
       <div class="modal-section">Identité légale</div>
@@ -3713,7 +3715,7 @@ async function saveModal(id,isNew){
     // jamais écrasés par un géocodage qui n'a pas eu lieu dans cette édition.
     lat:g('m-lat').value?+g('m-lat').value:null,lng:g('m-lng').value?+g('m-lng').value:null,
     etoiles:g('m-etoiles').value,referent:g('m-referent').value,
-    email:g('m-email').value,tel:g('m-tel').value,site:g('m-site').value,
+    email:g('m-email').value,tel:g('m-tel').value,site:g('m-site').value,linkedinUrl:g('m-linkedinUrl').value,
     pms:(g('m-pms').value==='__other__'?g('m-pms-other').value.trim():g('m-pms').value),messagerie:g('m-msg').value,danger:g('m-danger').value,commercialId:g('m-commercial').value||null,
     potentiel:+g('m-pot').value,modules:+g('m-mod').value,moduleSesame:['sesame','mix'].includes(g('m-mod-type').value),moduleTtlock:['ttlock','mix'].includes(g('m-mod-type').value),moduleOneway:g('m-mod-type').value==='oneway',nbAcces:+g('m-nbacces').value,mrr:g('m-mrr').value.trim()?+g('m-mrr').value:null,contrat:g('m-contrat').value,
     priorite:+g('m-prio').value,appel:g('m-appel').value,

@@ -82,6 +82,7 @@ function shapeProspect(p: {
   email: string | null;
   tel: string | null;
   site: string | null;
+  linkedinUrl: string | null;
   nfc: number;
   qr: number;
   mobile: number;
@@ -162,6 +163,7 @@ function shapeProspect(p: {
     email: p.email || "",
     tel: p.tel || "",
     site: p.site || "",
+    linkedinUrl: p.linkedinUrl || "",
     nfc: p.nfc,
     qr: p.qr,
     mobile: p.mobile,
@@ -254,6 +256,7 @@ interface ProspectBody {
   email?: string;
   tel?: string;
   site?: string;
+  linkedinUrl?: string;
   nfc?: number;
   qr?: number;
   mobile?: number;
@@ -328,6 +331,7 @@ crmProspectRouter.post(
         email: b.email,
         tel: b.tel,
         site: b.site,
+        linkedinUrl: b.linkedinUrl,
         nfc: b.nfc ?? 0,
         qr: b.qr ?? 0,
         mobile: b.mobile ?? 0,
@@ -485,6 +489,7 @@ crmProspectRouter.post(
         email: b.email,
         tel: b.tel,
         site: b.site,
+        linkedinUrl: b.linkedinUrl,
         nfc: b.nfc,
         qr: b.qr,
         mobile: b.mobile,
