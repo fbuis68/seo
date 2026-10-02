@@ -232,3 +232,199 @@ export async function processUploadedDocument(
 
   return { invoice, isDuplicateDocument: false };
 }
+
+// Statuts à partir desquels une facture a déjà reçu une confirmation
+// humaine (validation, comptabilisation, règlement) ou une décision
+// définitive (rejet) — un nouveau scan y rouvrirait des champs que la
+// validation (§13/§19) a figés, ou réimporterait une facture qu'un humain a
+// délibérément écartée. Un rescan reste donc réservé aux statuts d'AVANT
+// cette confirmation (RECEIVED/PROCESSING/OCR_COMPLETED/EXTRACTED/
+// CHECK_REQUIRED) — exactement les factures encore "en attente de
+// traitement", typiquement celles tombées en CHECK_REQUIRED à cause d'un
+// bug d'extraction (cf. accExtraction.ts, 02/10/2026) plutôt qu'un vrai
+// problème sur le document lui-même.
+const RESCAN_BLOCKED_STATUSES = ["VALIDATED", "ACCOUNTED", "PARTIALLY_PAID", "PAID", "REJECTED"];
+
+/**
+ * Relit le document déjà importé (re-OCR + ré-extraction + recontrôles,
+ * §7-14) et met à jour la facture EXISTANTE en place (jamais une nouvelle
+ * ligne) — sert à corriger une facture tombée en erreur à cause d'un bug du
+ * moteur d'extraction (ex : montants tronqués, cf. accExtraction.ts) sans
+ * repasser par un nouvel upload. Le rapprochement fournisseur/client est
+ * préservé s'il a déjà été fait (automatique ou manuel) — un rescan rafraîchit
+ * les champs extraits et la proposition de compte, il ne doit jamais changer
+ * SILENCIEUSEMENT le tiers déjà rattaché à cette facture.
+ */
+export async function rescanInvoice(entityId: string | null, invoiceId: string): Promise<AccInvoice> {
+  const existing = await prisma.accInvoice.findFirst({ where: { id: invoiceId, entityId }, include: { document: true } });
+  if (!existing) throw new PipelineError("Facture introuvable");
+  if (RESCAN_BLOCKED_STATUSES.includes(existing.status)) {
+    throw new PipelineError("Cette facture a déjà été validée/comptabilisée/rejetée — un nouveau scan n'est possible qu'avant validation.");
+  }
+
+  const document = existing.document;
+  const buffer = Buffer.from(document.contentBase64, "base64");
+  const { result: ocrResult, needsImageOcr } = await extractDocumentText(buffer, document.mimeType);
+  const text = ocrResult?.text || "";
+
+  await prisma.accDocument.update({
+    where: { id: document.id },
+    data: {
+      extractedText: text || undefined,
+      extractionMethod: ocrResult?.method || undefined,
+      extractionConfidence: ocrResult?.confidence ?? undefined,
+    },
+  });
+
+  const classification = text ? classifyDocument(text) : { documentType: "non_accounting", confidence: 0 };
+  const extracted: ExtractedInvoiceData | null = text ? extractInvoiceData(text) : null;
+  const direction = existing.direction as "purchase" | "sale";
+
+  // Tiers déjà rapproché (automatiquement au premier import, ou corrigé à la
+  // main depuis la fiche facture) — conservé tel quel, jamais réécrasé par
+  // un nouveau rapprochement automatique. Seule une facture encore SANS
+  // tiers rapproché tente un nouveau matching sur les champs fraîchement
+  // extraits.
+  let supplierId = existing.supplierId;
+  let supplierMatchConfidence = existing.supplierMatchConfidence;
+  let customerId = existing.customerId;
+  let customerMatchConfidence = existing.customerMatchConfidence;
+
+  if (!supplierId && direction === "purchase" && extracted) {
+    const match = await matchSupplier(entityId, extracted);
+    if (match.supplier) {
+      supplierId = match.supplier.id;
+      supplierMatchConfidence = match.confidence;
+    } else if (canAutoCreateSupplier(extracted)) {
+      const created = await createSupplierFromExtraction(entityId, extracted);
+      supplierId = created.id;
+      supplierMatchConfidence = 1.0;
+    }
+  } else if (!customerId && direction === "sale" && extracted) {
+    const match = await matchCustomer(entityId, extracted);
+    if (match.customer) {
+      customerId = match.customer.id;
+      customerMatchConfidence = match.confidence;
+    } else if (canAutoCreateCustomer(extracted)) {
+      const created = await createCustomerFromExtraction(entityId, extracted);
+      customerId = created.id;
+      customerMatchConfidence = 1.0;
+    }
+  }
+
+  const tiersNameForRules = direction === "sale" ? extracted?.recipientName : extracted?.issuerName;
+  const accountProposal = await proposeAccount(entityId, {
+    supplierId,
+    description: classification.documentType,
+    issuerName: tiersNameForRules || null,
+  });
+
+  let computedDueDate: Date | null = null;
+  if (extracted && !extracted.dueDate && extracted.invoiceDate) {
+    const supplier = supplierId ? await prisma.accSupplier.findUnique({ where: { id: supplierId } }) : null;
+    let termDays = supplier?.paymentTermDays ?? null;
+    let termMode = supplier?.paymentTermMode ?? null;
+    if (termDays == null) {
+      const settings = await prisma.accSettings.findFirst({ where: { entityId } });
+      termDays = settings?.defaultPaymentTermDays ?? 30;
+      termMode = settings?.defaultPaymentTermMode ?? "net";
+    }
+    computedDueDate = computeDueDate(extracted.invoiceDate, termDays, termMode || "net");
+  }
+
+  let priorSupplierIbans: string[] = [];
+  if (supplierId) {
+    const priorInvoices = await prisma.accInvoice.findMany({
+      where: { entityId, supplierId, issuerIban: { not: null } },
+      select: { issuerIban: true },
+      distinct: ["issuerIban"],
+      take: 20,
+    });
+    priorSupplierIbans = priorInvoices.map((p) => p.issuerIban).filter((v): v is string => !!v);
+  }
+
+  let checks: CheckResult[];
+  if (extracted) {
+    checks = runInvoiceChecks(
+      {
+        invoiceDate: extracted.invoiceDate,
+        dueDate: extracted.dueDate,
+        amountHt: extracted.amountHt,
+        amountVat: extracted.amountVat,
+        amountTtc: extracted.amountTtc,
+        lines: [],
+        vatLines: extracted.vatLines,
+        issuerSiren: extracted.issuerSiren,
+        issuerSiret: extracted.issuerSiret,
+        issuerVat: extracted.issuerVat,
+        issuerIban: extracted.issuerIban,
+      },
+      priorSupplierIbans
+    );
+  } else {
+    checks = [{ code: "NO_TEXT_EXTRACTED", level: needsImageOcr ? "BLOCKING" : "ERROR", message: needsImageOcr ? "Aucune couche texte exploitable — OCR image requis (non disponible dans cette phase)" : "Aucun texte extrait" }];
+  }
+
+  const duplicateMatches = await findDuplicateInvoices(entityId, {
+    direction,
+    supplierId,
+    customerId,
+    tiersName: (direction === "purchase" ? extracted?.issuerName : extracted?.recipientName) || null,
+    invoiceNumber: extracted?.invoiceNumber || null,
+    amountTtc: extracted?.amountTtc ?? null,
+    invoiceDate: extracted?.invoiceDate || null,
+  });
+  checks = checks.concat(duplicateMatchesToChecks(duplicateMatches));
+  if (duplicateMatches.length) await recordDuplicateCandidates(entityId, document.id, duplicateMatches);
+
+  let status: string;
+  if (needsImageOcr) status = "CHECK_REQUIRED";
+  else if (worstLevel(checks) === "BLOCKING" || worstLevel(checks) === "ERROR") status = "CHECK_REQUIRED";
+  else if (extracted) status = "EXTRACTED";
+  else status = "CHECK_REQUIRED";
+
+  const confidenceValues = extracted ? Object.values(extracted.confidence) : [];
+  const globalConfidence = confidenceValues.length ? confidenceValues.reduce((s, c) => s + c, 0) / confidenceValues.length : 0;
+
+  await prisma.accInvoiceLine.deleteMany({ where: { invoiceId } }); // relus intégralement — pas de merge partiel ligne à ligne
+  const invoice = await prisma.accInvoice.update({
+    where: { id: invoiceId },
+    data: {
+      documentType: classification.documentType,
+      documentTypeConfidence: classification.confidence,
+      status,
+      invoiceNumber: extracted?.invoiceNumber || null,
+      invoiceDate: extracted?.invoiceDate || null,
+      dueDate: extracted?.dueDate || computedDueDate || null,
+      currency: extracted?.currency || null,
+      issuerName: extracted?.issuerName || null,
+      issuerSiren: extracted?.issuerSiren || null,
+      issuerSiret: extracted?.issuerSiret || null,
+      issuerVat: extracted?.issuerVat || null,
+      issuerIban: extracted?.issuerIban || null,
+      issuerBic: extracted?.issuerBic || null,
+      recipientName: extracted?.recipientName || null,
+      recipientSiren: extracted?.recipientSiren || null,
+      recipientSiret: extracted?.recipientSiret || null,
+      recipientVat: extracted?.recipientVat || null,
+      supplierId: supplierId || null,
+      supplierMatchConfidence: supplierMatchConfidence ?? null,
+      customerId: customerId || null,
+      customerMatchConfidence: customerMatchConfidence ?? null,
+      amountHt: extracted?.amountHt ?? null,
+      amountVat: extracted?.amountVat ?? null,
+      amountTtc: extracted?.amountTtc ?? null,
+      proposedAccountId: accountProposal.accountId || null,
+      proposedAccountConfidence: accountProposal.confidence,
+      fieldConfidence: extracted ? (extracted.confidence as object) : undefined,
+      globalConfidence,
+      checks: checks as unknown as object,
+      vatLines: {
+        deleteMany: {},
+        create: extracted?.vatLines.length ? extracted.vatLines.map((l) => ({ rate: l.rate, baseAmount: l.baseAmount, vatAmount: l.vatAmount })) : [],
+      },
+    },
+  });
+
+  return invoice;
+}

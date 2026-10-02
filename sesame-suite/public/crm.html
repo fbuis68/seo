@@ -8319,7 +8319,8 @@ function renderAccInbox(){
       <label style="display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap">Échéance du <input type="date" class="lsel" style="width:140px" value="${ACC_INBOX_FILTER.dueDateFrom}" onchange="accSetInboxFilter('dueDateFrom', this.value)"></label>
       <label style="display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap">au <input type="date" class="lsel" style="width:140px" value="${ACC_INBOX_FILTER.dueDateTo}" onchange="accSetInboxFilter('dueDateTo', this.value)"></label>
       <span class="count-lbl">${invoices.length}${invoices.length!==ACC_INVOICES.length?' / '+ACC_INVOICES.length:''} facture(s)</span>
-      ${ACC_INBOX_SELECTED.size>0?`<button class="btn btn-primary btn-sm" onclick="openAccRelanceModal()">Envoyer une relance (${ACC_INBOX_SELECTED.size})</button>`:''}
+      ${ACC_INBOX_SELECTED.size>0?`<button class="btn btn-primary btn-sm" onclick="openAccRelanceModal()">Envoyer une relance (${ACC_INBOX_SELECTED.size})</button>
+      <button class="btn btn-ghost btn-sm" onclick="accBulkRescanInvoices()">↻ Rescanner (${ACC_INBOX_SELECTED.size})</button>`:''}
     </div>
     <div id="acc-inbox-dropzone" style="border:2px dashed transparent;border-radius:12px;transition:border-color .1s,background .1s">
       <div class="tbl-wrap"><table>
@@ -8731,6 +8732,7 @@ function renderAccInvoiceModal(inv){
       </div>
       <div class="modal-footer">
         ${!locked?`<button class="btn btn-primary" onclick="accSaveInvoiceFields('${inv.id}')">Enregistrer</button>
+        ${inv.status!=='REJECTED'?`<button class="btn btn-ghost" onclick="accRescanInvoice('${inv.id}')" title="Relit le document et réextrait les champs — garde le tiers déjà rapproché">↻ Rescanner le document</button>`:''}
         <button class="btn btn-primary" style="background:#1f7a3f" onclick="accApplyAccount('${inv.id}')">Appliquer le compte (mémoriser la règle)</button>
         <button class="btn btn-primary" style="background:#2f6f2f" onclick="accValidateInvoice('${inv.id}')">Valider</button>
         <button class="btn btn-ghost" style="color:#a32d2d" onclick="accRejectInvoice('${inv.id}')">Rejeter</button>`:''}
@@ -8932,6 +8934,40 @@ async function accValidateInvoice(id){
     if(ACC_TAB==='entries') loadAccEntriesTab();
     closeModal();
   }catch(e){ flash('Erreur : '+(e.message||'échec de la validation')); }
+}
+
+/** Relit le document importé (ré-OCR + ré-extraction, cf. POST
+ * /wa/acc/invoices/:id/rescan) — pour une facture tombée en erreur à cause
+ * d'un bug du moteur d'extraction plutôt qu'un vrai problème du document. */
+/** Rescan groupé depuis la sélection de la liste Factures — une facture déjà
+ * validée/comptabilisée/rejetée (donc exclue par rescanInvoice côté
+ * serveur) est simplement ignorée plutôt que de faire échouer tout le lot. */
+async function accBulkRescanInvoices(){
+  const ids = [...ACC_INBOX_SELECTED];
+  if(!ids.length) return;
+  if(!confirm('Relire '+ids.length+' facture(s) sélectionnée(s) ? Les champs extraits (montants, dates...) seront remplacés par le résultat de la nouvelle lecture.')) return;
+  let ok=0, skipped=0;
+  for(const id of ids){
+    try{
+      const r = await apiFetch('/wa/acc/invoices/'+id+'/rescan?scope=crm', {method:'POST'});
+      if(r.ok) ok++; else skipped++;
+    }catch(e){ skipped++; }
+  }
+  flash(ok+' facture(s) relue(s)'+(skipped?', '+skipped+' ignorée(s) (déjà validée/rejetée)':''));
+  loadAccDashboard();
+  accReloadInvoices();
+}
+
+async function accRescanInvoice(id){
+  try{
+    const r = await apiFetch('/wa/acc/invoices/'+id+'/rescan?scope=crm', {method:'POST'});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash('Document relu — champs mis à jour');
+    loadAccDashboard();
+    if(ACC_TAB==='inbox') accReloadInvoices();
+    openAccInvoiceModal(id);
+  }catch(e){ flash('Erreur : '+(e.message||'échec du nouveau scan')); }
 }
 
 async function accRejectInvoice(id){

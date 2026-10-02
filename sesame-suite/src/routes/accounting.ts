@@ -4,7 +4,7 @@ import { prisma } from "../db";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { resolveScope } from "../lib/scope";
-import { processUploadedDocument, PipelineError } from "../lib/accPipeline";
+import { processUploadedDocument, rescanInvoice, PipelineError } from "../lib/accPipeline";
 import { DocumentIngestionError } from "../lib/accDocument";
 import { seedAccounting } from "../lib/accSeed";
 import { generateDraftEntry, validateEntry, reverseEntry, createDirectEntryFromBankTransaction, EntryGenerationError } from "../lib/accEntryService";
@@ -414,6 +414,43 @@ accountingRouter.post(
     });
     await recordAuditLog({ entityId, userId: actorId(req), action: "invoice_validated", targetType: "AccInvoice", targetId: invoice.id, oldValue: { status: invoice.status }, newValue: { status: "VALIDATED" }, ip: req.ip });
     res.json(updated);
+  })
+);
+
+/**
+ * POST /wa/acc/invoices/:id/rescan — relit le document déjà importé
+ * (ré-OCR + ré-extraction + recontrôles, cf. rescanInvoice dans
+ * lib/accPipeline.ts) sans repasser par un nouvel upload — utile quand une
+ * facture est tombée en CHECK_REQUIRED à cause d'un bug du moteur
+ * d'extraction plutôt qu'un vrai problème du document (ex : montants
+ * tronqués corrigés le 02/10/2026). Réservé aux factures PAS ENCORE
+ * validées/comptabilisées/rejetées (cf. RESCAN_BLOCKED_STATUSES).
+ */
+accountingRouter.post(
+  "/acc/invoices/:id/rescan",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const before = await prisma.accInvoice.findFirst({ where: { id: req.params.id, entityId } });
+    if (!before) throw new HttpError(404, "Facture introuvable");
+    let invoice;
+    try {
+      invoice = await rescanInvoice(entityId, req.params.id);
+    } catch (err) {
+      if (err instanceof PipelineError) throw new HttpError(400, err.message);
+      throw err;
+    }
+    await recordAuditLog({
+      entityId,
+      userId: actorId(req),
+      action: "invoice_rescanned",
+      targetType: "AccInvoice",
+      targetId: invoice.id,
+      oldValue: { status: before.status, amountHt: before.amountHt, amountVat: before.amountVat, amountTtc: before.amountTtc },
+      newValue: { status: invoice.status, amountHt: invoice.amountHt, amountVat: invoice.amountVat, amountTtc: invoice.amountTtc },
+      ip: req.ip,
+    });
+    res.json(invoice);
   })
 );
 
