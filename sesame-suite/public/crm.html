@@ -8245,7 +8245,11 @@ function accDueDateCell(inv){
   if(!inv.dueDate) return '<span style="color:var(--mu)">—</span>';
   const due = new Date(inv.dueDate);
   const overdue = due.getTime() < Date.now() && !['PAID','REJECTED'].includes(inv.status);
-  return `<span style="${overdue?'color:#a32d2d;font-weight:600':''}">${due.toLocaleDateString('fr-FR')}</span>`;
+  // Le retard ne doit jamais se lire à la seule couleur (rouge) — ajoute un
+  // repère textuel "En retard" visible même en niveaux de gris / daltonisme,
+  // la couleur restant un renfort visuel, pas le seul signal.
+  if(!overdue) return `<span>${due.toLocaleDateString('fr-FR')}</span>`;
+  return `<span style="color:#a32d2d;font-weight:600;white-space:nowrap">${due.toLocaleDateString('fr-FR')} <span class="tpill" style="background:#fbe2e2;color:#a32d2d;font-weight:600;font-size:10px;padding:1px 6px;border-radius:5px;margin-left:2px">En retard</span></span>`;
 }
 
 /** Nom du tiers d'une facture — acheteur (client) en vente, émetteur
@@ -8297,7 +8301,7 @@ function renderAccInbox(){
       <td>${level!=='OK'?'<span class="tag '+ACC_CHECK_TAG[level]+'" style="font-size:10px;padding:1px 7px">'+level+'</span>':'<span class="tpill bg">OK</span>'}</td>
       <td>${accStatusBadge(inv.status)}</td>
       <td>${accPaidIndicator(inv)}</td>
-      <td style="white-space:nowrap"><button class="ta-btn" onclick="openAccInvoiceModal('${inv.id}')" title="Ouvrir">👁</button><button class="ta-btn" onclick="event.stopPropagation();accDeleteInvoice('${inv.id}')" title="Supprimer">🗑</button></td>
+      <td style="white-space:nowrap"><button class="ta-btn" onclick="openAccInvoiceModal('${inv.id}')" title="Ouvrir" aria-label="Ouvrir la facture">👁</button><button class="ta-btn" onclick="event.stopPropagation();accDeleteInvoice('${inv.id}')" title="Supprimer" aria-label="Supprimer la facture">🗑</button></td>
     </tr>`;
   }).join('');
   withFocusKept('#acc-inbox-search', ()=>{ el.innerHTML = `
