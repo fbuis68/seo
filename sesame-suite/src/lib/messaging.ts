@@ -5,6 +5,7 @@ import { sendChannelRaw, sendWhatsAppTemplate } from "./sms";
 import { Channel } from "./messageTemplate";
 import { config } from "../config";
 import { attachQuestionnaireLink } from "./questionnaire";
+import { createUnsubscribeToken } from "./unsubscribeToken";
 
 /**
  * Point de convergence unique : quel que soit le canal (email/sms/whatsapp),
@@ -91,6 +92,19 @@ export async function sendMessage(opts: {
   // AutomationRule.questionnaireId AVANT d'appeler sendMessage).
   if (template.questionnaireId && opts.entityId === null && opts.trackOpenProspectId && !vars.lienQuestionnaire) {
     vars = await attachQuestionnaireLink(template.questionnaireId, "crmProspect", opts.trackOpenProspectId, vars);
+  }
+  // {{lienDesabonnement}} — rendu disponible pour TOUT modèle email en
+  // portée CRM, pas uniquement les campagnes (qui ajoutent déjà leur propre
+  // pied de page fixe via campaignScheduler.ts, cf. unsubscribeFooterHtml) :
+  // un modèle manuel (relance, newsletter ponctuelle...) peut insérer ce
+  // lien lui-même en tapant la variable dans son corps. Jamais injecté de
+  // force — si le modèle ne contient pas {{lienDesabonnement}}, la variable
+  // calculée ici reste simplement inutilisée, renderTemplate() ne remplaçant
+  // que ce qui apparaît réellement dans le texte.
+  if (opts.channel === "email" && opts.entityId === null && !vars.lienDesabonnement) {
+    const base = opts.baseUrl || config.publicBaseUrl;
+    const token = createUnsubscribeToken({ entityId: null, target: opts.to });
+    vars = { ...vars, lienDesabonnement: `${base}/wa/unsubscribe?token=${encodeURIComponent(token)}` };
   }
   const subject = renderTemplate(template.subject, vars);
   let body = renderTemplate(template.bodyHtml, vars);

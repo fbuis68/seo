@@ -3560,22 +3560,23 @@ function renderModal(mc){
       <div class="modal-head">
         <div class="avatar" style="width:36px;height:36px;font-size:12px">${ini(mc.nom||'?')}</div>
         <input class="name-inp" id="m-nom" value="${esc(mc.nom)}" placeholder="Nom du client">
+        <button class="btn btn-ghost btn-icon" id="m-extra-toggle-btn" onclick="toggleModalExtra(this)" style="margin-left:auto;margin-right:6px;font-size:11px;white-space:nowrap" title="Afficher tous les champs">▾ Voir plus de champs</button>
         <button class="btn btn-ghost btn-icon" onclick="closeModal()">✕</button>
       </div>
 
       <div class="modal-section">Identité &amp; contact</div>
       <div class="form-grid">
         <div class="ff"><label>Type</label><select id="m-type" onchange="toggleAdresseRequired()">${TYPES.map(t=>`<option value="${t}" ${mc.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
-        <div class="ff"><label>Groupe</label><input id="m-groupe" value="${esc(mc.groupe)}" placeholder="—"></div>
+        <div class="ff m-extra" style="display:none"><label>Groupe</label><input id="m-groupe" value="${esc(mc.groupe)}" placeholder="—"></div>
         <div class="ff">
           <label>Secteur <a href="#" onclick="event.preventDefault();openListManager('secteur')" style="font-weight:400;font-size:11px;margin-left:4px">Gérer…</a></label>
           <select id="m-secteur" onchange="toggleHotelOnlyFields()">${sectAll.map(s=>`<option value="${s}" ${mc.secteur===s?'selected':''}>${s}</option>`).join('')}</select>
         </div>
-        <div class="ff">
+        <div class="ff m-extra" style="display:none">
           <label>Origine <a href="#" onclick="event.preventDefault();openListManager('origine')" style="font-weight:400;font-size:11px;margin-left:4px">Gérer…</a></label>
           <select id="m-origine"><option value="">—</option>${origAll.map(o=>`<option value="${o}" ${mc.origine===o?'selected':''}>${o}</option>`).join('')}</select>
         </div>
-        <div class="ff hotel-only-field" style="grid-column:1/-1;${SECTEURS_NON_HOTEL.includes(mc.secteur)?'display:none':''}">
+        <div class="ff m-extra hotel-only-field" style="display:none;grid-column:1/-1;${SECTEURS_NON_HOTEL.includes(mc.secteur)?'display:none':''}">
           <label>Affiliations (enseigne et/ou label — cumulables)</label>
           <div id="m-affiliations-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px">
             ${affAll.map(a=>`<label style="display:flex;align-items:center;gap:5px;border:1px solid var(--bdr);border-radius:20px;padding:4px 10px;font-size:12px;cursor:pointer">
@@ -3593,21 +3594,27 @@ function renderModal(mc){
           <div id="m-adresse-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:var(--card,#fff);border:1px solid var(--bdr,#e2dfd9);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.1);max-height:180px;overflow-y:auto"></div>
         </div>
         <div class="ff"><label>Ville <span id="m-ville-req">${mc.type==='Suspect'?'':'*'}</span></label><input id="m-ville" value="${esc(mc.ville)}" placeholder="—" oninput="clearMLatLng()"></div>
-        <div class="ff">
+        <div class="ff m-extra" style="display:none">
           <label>Pays</label>
           <input id="m-pays" value="${esc(mc.pays||'France')}" placeholder="France" list="m-pays-options" oninput="clearMLatLng()">
           <datalist id="m-pays-options"><option value="France"><option value="Belgique"><option value="Suisse"><option value="Luxembourg"><option value="Monaco"><option value="Italie"><option value="Espagne"><option value="Allemagne"><option value="Royaume-Uni"><option value="Portugal"></datalist>
         </div>
-        <div class="ff hotel-only-field" style="${SECTEURS_NON_HOTEL.includes(mc.secteur)?'display:none':''}"><label>Étoiles</label><input id="m-etoiles" value="${esc(mc.etoiles)}" placeholder="ex. ***"></div>
+        <div class="ff m-extra hotel-only-field" style="display:none;${SECTEURS_NON_HOTEL.includes(mc.secteur)?'display:none':''}"><label>Étoiles</label><input id="m-etoiles" value="${esc(mc.etoiles)}" placeholder="ex. ***"></div>
         <div class="ff"><label>Référent</label><input id="m-referent" value="${esc(mc.referent)}" placeholder="Nom, prénom"></div>
         <div class="ff"><label>Email</label><input type="email" id="m-email" value="${esc(mc.email)}" placeholder="—"></div>
         <div class="ff"><label>Téléphone</label><input id="m-tel" value="${esc(mc.tel)}" placeholder="—"></div>
-        <div class="ff"><label>Site web</label><input id="m-site" value="${esc(mc.site)}" placeholder="ex. hotel.fr"></div>
-        <div class="ff"><label>LinkedIn</label><input id="m-linkedinUrl" value="${esc(mc.linkedinUrl)}" placeholder="https://www.linkedin.com/in/…"></div>
+        <div class="ff m-extra" style="display:none"><label>Site web</label><input id="m-site" value="${esc(mc.site)}" placeholder="ex. hotel.fr"></div>
+        <div class="ff m-extra" style="display:none"><label>LinkedIn</label><input id="m-linkedinUrl" value="${esc(mc.linkedinUrl)}" placeholder="https://www.linkedin.com/in/…"></div>
+        <div class="ff" style="grid-column:1/-1">
+          <label style="display:flex;align-items:center;gap:6px;font-weight:400">
+            <input type="checkbox" id="m-emailOptOut" ${mc.emailOptOut?'checked':''}> Désabonné des emails marketing (newsletters/campagnes)
+          </label>
+          <div style="font-size:11px;color:var(--mu);margin-top:4px">${mc.emailOptOutAt?'Désabonné le '+new Date(mc.emailOptOutAt).toLocaleDateString('fr-FR')+'. ':''}Exclut la fiche de toute audience de campagne future — n'affecte jamais les échanges transactionnels/commerciaux ponctuels (réponse à un ticket, relance manuelle...).</div>
+        </div>
       </div>
 
-      <div class="modal-section">Identité légale</div>
-      <div class="form-grid">
+      <div class="modal-section m-extra" style="display:none">Identité légale</div>
+      <div class="form-grid m-extra" style="display:none">
         <div class="ff" style="grid-column:1/-1;position:relative">
           <label>Rechercher une entreprise (dénomination ou SIRET)</label>
           <input id="m-entreprise-search" placeholder="ex. Hôtel de la Gare Autun" autocomplete="off" oninput="entrepriseAutocomplete()">
@@ -3622,10 +3629,9 @@ function renderModal(mc){
         <input type="hidden" id="m-lat" value="${mc.lat??''}">
         <input type="hidden" id="m-lng" value="${mc.lng??''}">
       </div>
-
       <div class="modal-section">Installation &amp; commercial</div>
       <div class="form-grid">
-        <div class="ff"><label>PMS</label>
+        <div class="ff m-extra" style="display:none"><label>PMS</label>
           <select id="m-pms" onchange="document.getElementById('m-pms-other').style.display=this.value==='__other__'?'':'none'">
             <option value="">—</option>
             ${PMS_OPTIONS.map(p=>`<option value="${esc(p)}" ${mc.pms===p?'selected':''}>${esc(p)}</option>`).join('')}
@@ -3633,11 +3639,11 @@ function renderModal(mc){
           </select>
           <input id="m-pms-other" value="${esc(mc.pms && !PMS_OPTIONS.includes(mc.pms)?mc.pms:'')}" placeholder="Nom du PMS" style="margin-top:6px;display:${mc.pms && !PMS_OPTIONS.includes(mc.pms)?'block':'none'}">
         </div>
-        <div class="ff"><label>Messagerie</label><select id="m-msg"><option value="Noreply" ${mc.messagerie!=='Client'?'selected':''}>Noreply</option><option value="Client" ${mc.messagerie==='Client'?'selected':''}>Client</option></select></div>
+        <div class="ff m-extra" style="display:none"><label>Messagerie</label><select id="m-msg"><option value="Noreply" ${mc.messagerie!=='Client'?'selected':''}>Noreply</option><option value="Client" ${mc.messagerie==='Client'?'selected':''}>Client</option></select></div>
         <div class="ff"><label>Risque churn</label><select id="m-danger">${DANGERS.map(d=>`<option value="${d}" ${mc.danger===d?'selected':''}>${d}</option>`).join('')}</select></div>
-        <div class="ff"><label>Potentiel</label><select id="m-pot"><option value="0">—</option><option value="1" ${mc.potentiel===1?'selected':''}>1</option><option value="2" ${mc.potentiel===2?'selected':''}>2</option><option value="3" ${mc.potentiel===3?'selected':''}>3</option></select></div>
-        <div class="ff"><label>Nb modules</label><input type="number" id="m-mod" value="${mc.modules||0}" min="0"></div>
-        <div class="ff"><label>Type de module</label>
+        <div class="ff m-extra" style="display:none"><label>Potentiel</label><select id="m-pot"><option value="0">—</option><option value="1" ${mc.potentiel===1?'selected':''}>1</option><option value="2" ${mc.potentiel===2?'selected':''}>2</option><option value="3" ${mc.potentiel===3?'selected':''}>3</option></select></div>
+        <div class="ff m-extra" style="display:none"><label>Nb modules</label><input type="number" id="m-mod" value="${mc.modules||0}" min="0"></div>
+        <div class="ff m-extra" style="display:none"><label>Type de module</label>
           <select id="m-mod-type">
             <option value="" ${!mc.moduleSesame&&!mc.moduleTtlock&&!mc.moduleOneway?'selected':''}>—</option>
             <option value="sesame" ${mc.moduleSesame&&!mc.moduleTtlock?'selected':''}>Sesame</option>
@@ -3646,24 +3652,24 @@ function renderModal(mc){
             <option value="mix" ${mc.moduleSesame&&mc.moduleTtlock?'selected':''}>Mix (Sesame + Ttlock)</option>
           </select>
         </div>
-        <div class="ff"><label>Nombre d'accès</label><input type="number" id="m-nbacces" value="${mc.nbAcces||0}" min="0"></div>
+        <div class="ff m-extra" style="display:none"><label>Nombre d'accès</label><input type="number" id="m-nbacces" value="${mc.nbAcces||0}" min="0"></div>
         <div class="ff"><label>MRR (€/mois)</label><input type="number" id="m-mrr" value="${mc.mrr||''}" min="0" step="0.01"></div>
         <div class="ff"><label>Contrat</label><select id="m-contrat"><option value="non" ${mc.contrat==='non'?'selected':''}>non</option><option value="oui" ${mc.contrat==='oui'?'selected':''}>oui</option><option value="en cours" ${mc.contrat==='en cours'?'selected':''}>en cours</option></select></div>
-        <div class="ff"><label>Priorité appel</label><select id="m-prio"><option value="0">—</option><option value="1" ${mc.priorite===1?'selected':''}>1</option><option value="2" ${mc.priorite===2?'selected':''}>2</option><option value="3" ${mc.priorite===3?'selected':''}>3</option></select></div>
-        <div class="ff"><label>Statut appel</label><input id="m-appel" value="${esc(mc.appel)}" placeholder="date ou Ne pas appeler"></div>
+        <div class="ff m-extra" style="display:none"><label>Priorité appel</label><select id="m-prio"><option value="0">—</option><option value="1" ${mc.priorite===1?'selected':''}>1</option><option value="2" ${mc.priorite===2?'selected':''}>2</option><option value="3" ${mc.priorite===3?'selected':''}>3</option></select></div>
+        <div class="ff m-extra" style="display:none"><label>Statut appel</label><input id="m-appel" value="${esc(mc.appel)}" placeholder="date ou Ne pas appeler"></div>
         <div class="ff"><label>Commercial</label><select id="m-commercial"><option value="">—</option>${COMMERCIALS.map(c=>`<option value="${c.id}" ${mc.commercialId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
       </div>
 
-      <div class="modal-section">Taux d'usage (%) — les 4 se totalisent à 100%</div>
-      <div class="form-grid">
+      <div class="modal-section m-extra" style="display:none">Taux d'usage (%) — les 4 se totalisent à 100%</div>
+      <div class="form-grid m-extra" style="display:none">
         <div class="ff"><label>NFC %</label><input type="number" id="m-nfc" value="${mc.nfc||0}" min="0" max="100"></div>
         <div class="ff"><label>Mobile %</label><input type="number" id="m-mob" value="${mc.mobile||0}" min="0" max="100"></div>
         <div class="ff"><label>Code %</label><input type="number" id="m-code" value="${mc.code||0}" min="0" max="100"></div>
         <div class="ff"><label>QR Code %</label><input type="number" id="m-qr" value="${mc.qr||0}" min="0" max="100"></div>
       </div>
 
-      <div class="modal-section">Options actives</div>
-      <div class="feat-checks">
+      <div class="modal-section m-extra" style="display:none">Options actives</div>
+      <div class="feat-checks m-extra" style="display:none">
         <label><input type="checkbox" id="m-webapp" ${mc.webApp?'checked':''}> WebApp</label>
         <label><input type="checkbox" id="m-v2" ${mc.mobileV2?'checked':''}> Mobile V2</label>
         <label><input type="checkbox" id="m-offline" ${mc.offline?'checked':''}> Offline</label>
@@ -3688,6 +3694,19 @@ function renderModal(mc){
       </div>
     </div>
   </div>`;
+}
+
+// Vue simplifiée par défaut pour la modale d'édition (mêmes champs masqués
+// par défaut que renderFiche/toggleFicheExtra, mais classe/fonction
+// distinctes : la fiche ET sa modale d'édition peuvent coexister dans le
+// DOM en même temps (modale ouverte PAR-DESSUS la fiche), un seul
+// querySelectorAll('.fiche-extra') partagé aurait fait fuiter l'état
+// "replié/déplié" de l'une vers l'autre.
+function toggleModalExtra(btn){
+  const els = document.querySelectorAll('.m-extra');
+  const hidden = els.length && els[0].style.display==='none';
+  els.forEach(e=>{ e.style.display = hidden ? '' : 'none'; });
+  btn.innerHTML = hidden ? '▴ Vue simplifiée' : '▾ Voir plus de champs';
 }
 
 async function saveModal(id,isNew){
@@ -3716,6 +3735,7 @@ async function saveModal(id,isNew){
     lat:g('m-lat').value?+g('m-lat').value:null,lng:g('m-lng').value?+g('m-lng').value:null,
     etoiles:g('m-etoiles').value,referent:g('m-referent').value,
     email:g('m-email').value,tel:g('m-tel').value,site:g('m-site').value,linkedinUrl:g('m-linkedinUrl').value,
+    emailOptOut:g('m-emailOptOut').checked,
     pms:(g('m-pms').value==='__other__'?g('m-pms-other').value.trim():g('m-pms').value),messagerie:g('m-msg').value,danger:g('m-danger').value,commercialId:g('m-commercial').value||null,
     potentiel:+g('m-pot').value,modules:+g('m-mod').value,moduleSesame:['sesame','mix'].includes(g('m-mod-type').value),moduleTtlock:['ttlock','mix'].includes(g('m-mod-type').value),moduleOneway:g('m-mod-type').value==='oneway',nbAcces:+g('m-nbacces').value,mrr:g('m-mrr').value.trim()?+g('m-mrr').value:null,contrat:g('m-contrat').value,
     priorite:+g('m-prio').value,appel:g('m-appel').value,
@@ -7025,7 +7045,7 @@ async function openTemplateModal(id){
           <textarea class="htmled-src" id="tpl-body" style="display:none" oninput="htmlEdSyncFromSrc('tpl-body')">${esc(t.bodyHtml||'')}</textarea>
         </div>
       </div>
-      <div style="font-size:11px;color:var(--mu);margin-top:6px">Variables — envoi depuis une fiche prospect : {{nom}} {{secteur}} {{referent}} {{ville}} · envoi depuis "Utilisateurs CRM" (identifiants de connexion) : {{login}} {{password}} {{loginUrl}} · déclencheurs ticket support (Nouveau ticket / Client a répondu / Changement de statut) : {{numero}} {{sujet}} {{statut}} {{agent}} {{ancienStatut}} {{nouveauStatut}}</div>
+      <div style="font-size:11px;color:var(--mu);margin-top:6px">Variables — envoi depuis une fiche prospect : {{nom}} {{secteur}} {{referent}} {{ville}} · envoi depuis "Utilisateurs CRM" (identifiants de connexion) : {{login}} {{password}} {{loginUrl}} · déclencheurs ticket support (Nouveau ticket / Client a répondu / Changement de statut) : {{numero}} {{sujet}} {{statut}} {{agent}} {{ancienStatut}} {{nouveauStatut}} · tout envoi email : <code>{{lienDesabonnement}}</code> (lien de désabonnement du destinataire — à insérer vous-même dans le corps, jamais ajouté automatiquement hors campagne)</div>
       <div class="ff" id="tpl-sid-wrap" style="margin-top:8px"><label>${(WA_CFG&&WA_CFG.provider==='infobip')?"Nom du modèle Infobip (WhatsApp)":(WA_CFG&&WA_CFG.provider==='meta')?"Nom du modèle Meta (WhatsApp)":'Content SID Twilio (WhatsApp)'}</label><input id="tpl-sid" value="${esc(t.whatsappContentSid||'')}" placeholder="${(WA_CFG&&WA_CFG.provider==='infobip')?'mon_modele_whatsapp':(WA_CFG&&WA_CFG.provider==='meta')?'mon_modele_whatsapp':'HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'}">
         <div style="font-size:11px;color:#888;margin-top:4px">${(WA_CFG&&WA_CFG.provider==='infobip')
           ? "WhatsApp Business interdit le texte libre hors session client — créez d'abord ce modèle dans le portail Infobip, faites-le approuver par Meta, puis collez ici son nom exact. Les variables {{var}} ci-dessus doivent apparaître dans le même ordre que les paramètres du modèle approuvé."

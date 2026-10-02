@@ -83,6 +83,8 @@ function shapeProspect(p: {
   tel: string | null;
   site: string | null;
   linkedinUrl: string | null;
+  emailOptOut: boolean;
+  emailOptOutAt: Date | null;
   nfc: number;
   qr: number;
   mobile: number;
@@ -164,6 +166,8 @@ function shapeProspect(p: {
     tel: p.tel || "",
     site: p.site || "",
     linkedinUrl: p.linkedinUrl || "",
+    emailOptOut: p.emailOptOut,
+    emailOptOutAt: p.emailOptOutAt,
     nfc: p.nfc,
     qr: p.qr,
     mobile: p.mobile,
@@ -257,6 +261,7 @@ interface ProspectBody {
   tel?: string;
   site?: string;
   linkedinUrl?: string;
+  emailOptOut?: boolean;
   nfc?: number;
   qr?: number;
   mobile?: number;
@@ -513,6 +518,14 @@ crmProspectRouter.post(
         signe: b.signe,
         previsionnel: b.previsionnel,
         commercialId: b.commercialId === undefined ? undefined : b.commercialId || null,
+        // Bascule manuelle depuis la fiche (en plus du clic sur le lien de
+        // désabonnement signé, cf. routes/unsubscribe.ts) — emailOptOutAt
+        // tracé uniquement au moment du changement réel, pas réécrit si la
+        // case cochée est renvoyée telle quelle à chaque sauvegarde du reste
+        // de la fiche.
+        ...(b.emailOptOut === undefined || b.emailOptOut === existing.emailOptOut
+          ? {}
+          : { emailOptOut: b.emailOptOut, emailOptOutAt: b.emailOptOut ? new Date() : null }),
       },
       include: PROSPECT_INCLUDE,
     });
