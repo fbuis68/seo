@@ -132,6 +132,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,san
 .badge{display:inline-flex;align-items:center;font-size:11px;padding:2px 8px;border-radius:20px;font-weight:500;white-space:nowrap}
 .bd{background:#fcebeb;color:#791f1f}.bw{background:#faeeda;color:#633806}
 .bg{background:#eaf3de;color:#27500a}.bn{background:#f1efe8;color:#999}.bi{background:#e6f1fb;color:#0c447c}
+.bp{background:#eeedfe;color:#3c3489}
 
 /* ── FICHE ── */
 .hero-row{display:flex;align-items:flex-start;gap:14px;margin-bottom:13px}
@@ -754,7 +755,7 @@ document.addEventListener('DOMContentLoaded', function(){
 const DANGERS = ['Bon client','Modéré','Élevé !!'];
 // "Suspect" (04/09/2026) = contact non qualifié (ex : badge scanné sur un
 // salon) — adresse non exigée à la création côté serveur, cf. crmProspect.ts.
-const TYPES = ['Suspect','Prospect','Client'];
+const TYPES = ['Suspect','Prospect','Client','Partenaire'];
 // Chargée depuis CrmSectorOption (GET /wa/crmSector/list) au démarrage —
 // remplace la liste jusque-là codée en dur ici, pour être éditable depuis le
 // CRM (bouton "Gérer les secteurs" à côté du champ Secteur de la fiche) sans
@@ -1030,7 +1031,7 @@ function filtered(){
 function dBadge(d){if(d==='Élevé !!')return'<span class="badge bd">⚠ Élevé</span>';if(d==='Bon client')return'<span class="badge bg">✓ Bon client</span>';if(d==='Modéré')return'<span class="badge bw">Modéré</span>';return'<span class="badge bn">—</span>';}
 function pBadge(p){const c=['bn','bi','bw','bg'];return p?`<span class="badge ${c[p]||'bn'}">${p}/3</span>`:'<span class="badge bn">—</span>';}
 function cPill(v){const m={oui:'bg',non:'bd','en cours':'bw'};return`<span class="tpill ${m[v]||'bn'}">${v||'—'}</span>`;}
-function typeBadge(t){return t==='Suspect'?'<span class="tpill bw">Suspect</span>':t==='Prospect'?'<span class="tpill bi">Prospect</span>':'<span class="tpill bg">Client</span>';}
+function typeBadge(t){return t==='Suspect'?'<span class="tpill bw">Suspect</span>':t==='Prospect'?'<span class="tpill bi">Prospect</span>':t==='Partenaire'?'<span class="tpill bp">Partenaire</span>':'<span class="tpill bg">Client</span>';}
 // Signal d'engagement entrant (POST /wa/crmProspect/inboundSignal) — nombre
 // d'emails reçus de ce contact, alimenté par le flux Power Automate sur les
 // boîtes partagées fbuis@/jtlod@sesame-technology.com. Masqué à 0 pour ne
