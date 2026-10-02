@@ -162,7 +162,19 @@ const IBAN_RE = /^([A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){2,7}\s?[A-Z0-9]{1,4})/;
 const BIC_RE = /^([A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?)\b/;
 const DATE_RE = /^(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{4})/;
 const WRITTEN_DATE_RE = /^(\d{1,2}[ \t]+[a-zéû]+[ \t]+\d{4})/i;
-const AMOUNT_RE = /^(\d{1,3}(?:[\s.]\d{3})*(?:[,.]\d{2})?)/;
+// Deux formes distinctes, jamais une seule avec un groupe optionnel ("*") —
+// un nombre de 4+ chiffres SANS séparateur de milliers (ex : "6575.00€",
+// très courant sur les factures qui n'espacent pas les milliers) tombait
+// sur la même branche que "1 234,56" avec zéro répétition du groupe
+// séparateur : \d{1,3} ne capturait QUE les 3 premiers chiffres ("657"),
+// laissant "5.00" de côté — ce résidu était ensuite réinterprété comme un
+// nombre à part plus loin dans le texte (cf. extractGroupedTotals),
+// produisant des montants tronqués/décalés aléatoires selon la position du
+// nombre dans le document (constaté en production, 02/10/2026 : une facture
+// à 6575,00€/1315,00€/7890,00€ HT/TVA/TTC lue comme 657/5/131). La branche
+// "groupé" exige maintenant AU MOINS UN séparateur pour s'appliquer, sinon
+// c'est la branche "brut" (\d+ sans plafond) qui prend le relais.
+const AMOUNT_RE = /^(\d{1,3}(?:[\s.]\d{3})+(?:[,.]\d{1,2})?|\d+(?:[,.]\d{1,2})?)/;
 const INVOICE_NUMBER_RE = /^([A-Z0-9][A-Z0-9\-\/_.]{2,29})/;
 
 // Espacement volontairement limité à [ \t]* (jamais \s* / \n) entre les
@@ -250,7 +262,7 @@ function extractGroupedTotals(text: string): { ht: number; vat: number; ttc: num
   if (!m) return null;
   const window = text.slice(m.index + m[0].length, m.index + m[0].length + TOTALS_BLOCK_WINDOW_CHARS);
   const amounts: number[] = [];
-  const amtRe = /(\d{1,3}(?:[\s.]\d{3})*(?:[,.]\d{2})?)/g;
+  const amtRe = /(\d{1,3}(?:[\s.]\d{3})+(?:[,.]\d{1,2})?|\d+(?:[,.]\d{1,2})?)/g;
   let am: RegExpExecArray | null;
   while ((am = amtRe.exec(window)) && amounts.length < 3) {
     const n = parseFrenchNumber(am[1]);
