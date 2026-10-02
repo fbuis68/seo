@@ -69,6 +69,7 @@ function shapeMessage(m: {
   kind: string;
   body: string;
   attachments: unknown;
+  ccEmails?: string | null;
   createdAt: Date;
 }) {
   return {
@@ -78,6 +79,7 @@ function shapeMessage(m: {
     kind: m.kind,
     body: m.body,
     attachments: (m.attachments as string[]) || [],
+    ccEmails: m.ccEmails || "",
     createdAt: m.createdAt,
   };
 }
@@ -493,6 +495,29 @@ interface ReplyBody {
   attachments?: string[];
   kind: "reply" | "note";
   aiSuggestionId?: string;
+  /** Destinataires en copie — kind="reply" uniquement, ignoré pour une note interne. */
+  cc?: string;
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Nettoie la liste d'adresses Cc saisie en libre texte (virgule ou
+ * point-virgule) — ne garde que les adresses syntaxiquement valides,
+ * dédupliquées, plutôt que de laisser nodemailer échouer sur toute la ligne
+ * à cause d'une seule entrée mal formée. */
+function normalizeCcList(raw: string | undefined): string[] {
+  if (!raw) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of raw.split(/[,;]/)) {
+    const email = part.trim();
+    if (!email || !EMAIL_RE.test(email)) continue;
+    const key = email.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(email);
+  }
+  return out;
 }
 
 /**
@@ -517,6 +542,8 @@ crmTicketRouter.post(
     const admin = req.admin ? await prisma.adminUser.findUnique({ where: { id: req.admin.adminId }, select: { name: true, email: true } }) : null;
     const authorName = admin ? admin.name || admin.email : "";
 
+    const ccList = kind === "reply" ? normalizeCcList(b.cc) : [];
+
     if (kind === "reply") {
       const smtp = await getSmtpConfig(null);
       const fromName = smtp?.supportFromName || smtp?.fromName || undefined;
@@ -526,11 +553,20 @@ crmTicketRouter.post(
       await sendEmailRaw(null, ticket.contactEmail, subject, html, fromName, {
         fromEmailOverride: fromEmail,
         attachments: b.attachments,
+        cc: ccList.length ? ccList.join(", ") : undefined,
       });
     }
 
     const message = await prisma.crmTicketMessage.create({
-      data: { ticketId: ticket.id, authorType: "agent", authorName, kind, body: bodyText, attachments: sanitizeTicketAttachments(b.attachments) },
+      data: {
+        ticketId: ticket.id,
+        authorType: "agent",
+        authorName,
+        kind,
+        body: bodyText,
+        attachments: sanitizeTicketAttachments(b.attachments),
+        ccEmails: ccList.length ? ccList.join(", ") : null,
+      },
     });
 
     const data: Record<string, unknown> = { updatedAt: new Date() };

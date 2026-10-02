@@ -158,7 +158,7 @@ export async function sendEmailRaw(
   subject: string,
   html: string,
   fromNameOverride?: string,
-  opts?: { fromEmailOverride?: string; attachments?: string[]; namedAttachments?: { fileName: string; dataUrl: string }[] }
+  opts?: { fromEmailOverride?: string; attachments?: string[]; namedAttachments?: { fileName: string; dataUrl: string }[]; cc?: string }
 ) {
   const smtp = await getSmtpConfig(entityId);
   if (!smtp) throw new HttpError(400, "Aucun serveur SMTP configuré pour cette portée");
@@ -171,6 +171,7 @@ export async function sendEmailRaw(
     await transporter.sendMail({
       from: fromHeader(smtp, fromNameOverride, opts?.fromEmailOverride),
       to,
+      cc: opts?.cc || undefined,
       subject,
       html,
       attachments: attachments.length ? attachments : undefined,

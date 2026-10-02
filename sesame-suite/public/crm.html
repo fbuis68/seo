@@ -5937,6 +5937,7 @@ function ticketMessageHtml(m){
       <strong style="font-size:12px">${esc(m.authorName||(isAgent?'Équipe support':'Client'))}${isNote?' <span class="tpill bw" style="margin-left:4px">Note interne</span>':''}</strong>
       <span style="font-size:11px;color:#999">${new Date(m.createdAt).toLocaleString('fr-FR')}</span>
     </div>
+    ${m.ccEmails?`<div style="font-size:11px;color:var(--mu);margin-bottom:4px">Cc : ${esc(m.ccEmails)}</div>`:''}
     <div style="font-size:13px;white-space:pre-wrap">${esc(m.body)}</div>
     ${(m.attachments||[]).length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${m.attachments.map(a=>renderTicketAttachment(a)).join('')}</div>`:''}
   </div>`;
@@ -6010,6 +6011,10 @@ function renderTicketDetail(t){
         ${ticketTpls.length?`<select id="tkt-tpl-pick" onchange="ticketInsertTemplate()" style="margin-bottom:6px"><option value="">— Choisir un modèle —</option>${ticketTpls.map(m=>`<option value="${esc(m.key)}" ${defaultTpl&&m.id===defaultTpl.id?'selected':''}>${esc(m.name)}</option>`).join('')}</select>`:''}
         <textarea id="tkt-reply-body" style="height:120px" placeholder="Votre réponse…">${defaultTpl?esc(ticketTemplateBodyText(defaultTpl)):''}</textarea>
       </div>`; })()}
+      <div class="ff" id="tkt-cc-wrap" style="margin-top:6px">
+        <label>Copie (Cc) <span style="color:var(--mu);font-weight:400">— un ou plusieurs emails séparés par des virgules</span></label>
+        <input type="text" id="tkt-reply-cc" placeholder="ex. collegue@sesame.fr, direction@client.fr">
+      </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
         <input type="file" id="tkt-reply-files" accept="image/*" multiple style="max-width:220px">
         <button class="btn btn-primary btn-sm" onclick="ticketSendReply('${t.id}','reply')">Répondre</button>
@@ -6281,10 +6286,12 @@ function ticketSendReply(id, kind){
   const bodyEl = document.getElementById('tkt-reply-body');
   const text = bodyEl.value.trim();
   if(!text){ flash('Message requis'); return; }
+  const ccEl = document.getElementById('tkt-reply-cc');
+  const cc = kind==='reply' ? (ccEl?ccEl.value.trim():'') : '';
   const filesEl = document.getElementById('tkt-reply-files');
   filesToDataUrls(filesEl.files, async (attachments)=>{
     try{
-      const r = await apiFetch('/wa/crmTicket/reply', {method:'POST', body:JSON.stringify({ id, body:text, attachments, kind, aiSuggestionId: kind==='reply'?(window._activeAiSuggestionId||undefined):undefined })});
+      const r = await apiFetch('/wa/crmTicket/reply', {method:'POST', body:JSON.stringify({ id, body:text, attachments, kind, cc, aiSuggestionId: kind==='reply'?(window._activeAiSuggestionId||undefined):undefined })});
       const data = await r.json();
       if(!r.ok) throw new Error(data.error||'http '+r.status);
     }catch(e){ flash(e.message||'Erreur de connexion au serveur'); return; }

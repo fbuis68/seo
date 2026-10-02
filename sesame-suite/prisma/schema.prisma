@@ -2353,6 +2353,12 @@ model CrmTicketMessage {
   body        String  @db.Text
   attachments Json    @default("[]") // string[] data URI — même convention que Room.photos
 
+  // Destinataires en copie (CC) de l'email réellement envoyé — kind="reply"
+  // uniquement, toujours null pour une note interne. Chaîne brute telle que
+  // saisie (adresses séparées par virgule), gardée pour trace/affichage dans
+  // le fil plutôt que recalculée depuis la liste validée côté serveur.
+  ccEmails String?
+
   // Id du message Microsoft Graph d'origine, quand ce message a été importé
   // automatiquement depuis la boîte support (cf. lib/graph.ts,
   // routes/graphMail.ts) — sert uniquement de garde-fou anti-doublon : une
