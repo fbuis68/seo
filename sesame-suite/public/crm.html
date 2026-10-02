@@ -764,7 +764,7 @@ let SECTEURS = [];
 // Idem pour l'origine des contacts (d'où ils viennent — ex : "FHT2026",
 // "Site web") — chargée depuis CrmOrigineOption, éditable via "Gérer…" à
 // côté du champ Origine, et sert aussi de filtre à la sélection des envois
-// d'email groupés (cf. fOrigine dans filtered()).
+// d'email groupés (cf. fOrigines dans filtered()).
 let ORIGINES = [];
 // Affiliations hôtelières — enseignes/marques (un établissement en porte le
 // plus souvent une seule) et collections/labels (cumulables avec une marque,
@@ -810,7 +810,7 @@ let SELECTED_IDS = new Set();
 // même principe) — sert à la suppression groupée et à la fusion de
 // tickets (cf. renderTicketsList, ticketBulkDelete, openTicketMergeModal).
 let TICKET_SELECTED_IDS = new Set();
-let srch='', fDanger='', fSecteur='', fOrigine='', fContrat='', fType='', fNoEmail=false, fNoPhone=false, editingId=null, toastT=null;
+let srch='', fDanger='', fSecteurs=new Set(), fOrigines=new Set(), fContrat='', fType='', fNoEmail=false, fNoPhone=false, editingId=null, toastT=null;
 let deals=[], COMMERCIALS=[], tickets=[], cashLines=[], SECTOR_OPTIONS=[], ORIGINE_OPTIONS=[];
 let cashSettings = {revenuMode:'detail',revenuMontant:0,revenuFrequence:'mensuel',revenuMois:null,depenseMode:'detail',depenseMontant:0,depenseFrequence:'mensuel',depenseMois:null};
 let cashYear = new Date().getFullYear();
@@ -893,7 +893,7 @@ function bc(parts){document.getElementById('bc').innerHTML=parts.map((p,i)=>i<pa
 function tba(html){document.getElementById('tb-actions').innerHTML=html;}
 
 // ── QUICK FILTER ──
-function qf(f,v){srch='';fDanger='';fSecteur='';fOrigine='';fContrat='';fType='';fNoEmail=false;fNoPhone=false;if(f==='danger')fDanger=v;else if(f==='contrat')fContrat=v;showList();}
+function qf(f,v){srch='';fDanger='';fSecteurs=new Set();fOrigines=new Set();fContrat='';fType='';fNoEmail=false;fNoPhone=false;if(f==='danger')fDanger=v;else if(f==='contrat')fContrat=v;showList();}
 
 // ════════════════════════════════════════
 // HOME — vue d'ensemble (indicateurs seuls, sans la liste des fiches)
@@ -1017,8 +1017,8 @@ function filtered(){
   return clients.filter(c=>{
     if(srch){const s=srch.toLowerCase();if(![c.nom,c.ville||'',c.groupe||'',c.referent||''].some(x=>x.toLowerCase().includes(s)))return false;}
     if(fDanger&&c.danger!==fDanger)return false;
-    if(fSecteur&&c.secteur!==fSecteur)return false;
-    if(fOrigine&&c.origine!==fOrigine)return false;
+    if(fSecteurs.size&&!fSecteurs.has(c.secteur))return false;
+    if(fOrigines.size&&!fOrigines.has(c.origine))return false;
     if(fContrat&&c.contrat!==fContrat)return false;
     if(fType&&c.type!==fType)return false;
     if(fNoEmail&&((c.email&&c.email.trim())||c.hasContactEmail))return false;
@@ -1341,8 +1341,18 @@ function renderList(){
   const toolbar=`<div class="list-toolbar">
     <div class="srch-wrap"><span class="srch-ico">⌕</span><input type="text" placeholder="Client, ville, groupe…" value="${esc(srch)}" oninput="srch=this.value;renderList()"></div>
     <select class="lsel" onchange="fDanger=this.value;renderList()"><option value="">Tous risques</option>${DANGERS.map(d=>`<option value="${d}" ${fDanger===d?'selected':''}>${d}</option>`).join('')}</select>
-    <select class="lsel" onchange="fSecteur=this.value;renderList()"><option value="">Tous secteurs</option>${sectAll.map(s=>`<option value="${s}" ${fSecteur===s?'selected':''}>${s}</option>`).join('')}</select>
-    <select class="lsel" onchange="fOrigine=this.value;renderList()"><option value="">Toutes origines</option>${origAll.map(o=>`<option value="${o}" ${fOrigine===o?'selected':''}>${o}</option>`).join('')}</select>
+    <div style="position:relative">
+      <button class="btn btn-ghost btn-sm" onclick="crmToggleFilterMenu(event,'secteur')">Secteurs${fSecteurs.size?' ('+fSecteurs.size+')':''} ▾</button>
+      <div id="crm-f-secteur-menu" style="display:none;position:absolute;top:100%;left:0;margin-top:4px;background:var(--card,#fff);border:0.5px solid var(--bdr,#ddd);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);padding:8px 12px;z-index:20;min-width:200px;max-height:260px;overflow-y:auto" onclick="event.stopPropagation()">
+        ${sectAll.length?sectAll.map(s=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:400;padding:4px 0;white-space:nowrap"><input type="checkbox" ${fSecteurs.has(s)?'checked':''} onchange="crmToggleFilterValue('secteur','${esc(s)}')">${esc(s)}</label>`).join(''):'<div style="font-size:12px;color:var(--mu)">Aucun secteur</div>'}
+      </div>
+    </div>
+    <div style="position:relative">
+      <button class="btn btn-ghost btn-sm" onclick="crmToggleFilterMenu(event,'origine')">Origines${fOrigines.size?' ('+fOrigines.size+')':''} ▾</button>
+      <div id="crm-f-origine-menu" style="display:none;position:absolute;top:100%;left:0;margin-top:4px;background:var(--card,#fff);border:0.5px solid var(--bdr,#ddd);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);padding:8px 12px;z-index:20;min-width:200px;max-height:260px;overflow-y:auto" onclick="event.stopPropagation()">
+        ${origAll.length?origAll.map(o=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:400;padding:4px 0;white-space:nowrap"><input type="checkbox" ${fOrigines.has(o)?'checked':''} onchange="crmToggleFilterValue('origine','${esc(o)}')">${esc(o)}</label>`).join(''):'<div style="font-size:12px;color:var(--mu)">Aucune origine</div>'}
+      </div>
+    </div>
     <select class="lsel" onchange="fContrat=this.value;renderList()"><option value="">Tous contrats</option><option value="oui" ${fContrat==='oui'?'selected':''}>oui</option><option value="non" ${fContrat==='non'?'selected':''}>non</option><option value="en cours" ${fContrat==='en cours'?'selected':''}>en cours</option></select>
     <select class="lsel" onchange="fType=this.value;renderList()"><option value="">Tous types</option>${TYPES.map(t=>`<option value="${t}" ${fType===t?'selected':''}>${t}</option>`).join('')}</select>
     <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--mu);white-space:nowrap"><input type="checkbox" ${fNoEmail?'checked':''} onchange="fNoEmail=this.checked;renderList()"> Sans email</label>
@@ -1440,6 +1450,28 @@ function renderList(){
 }
 
 function srt(c){if(sortC===c)sortD*=-1;else{sortC=c;sortD=1;}renderList();}
+
+// Filtres Secteur/Origine — multi-sélection (ex : relance groupée
+// "Hôtellerie + Camping" en un seul envoi plutôt que deux passages
+// successifs sur le filtre, demande client 02/10/2026) — même pattern
+// bouton+menu à cases que l'onglet Banque (cf. accBankToggleExcludeMenu).
+const CRM_FILTER_SETS = {secteur:()=>fSecteurs, origine:()=>fOrigines};
+function crmToggleFilterValue(kind, value){
+  const set = CRM_FILTER_SETS[kind]();
+  if(set.has(value)) set.delete(value); else set.add(value);
+  renderList();
+}
+function crmToggleFilterMenu(ev, kind){
+  ev.stopPropagation();
+  const menu = document.getElementById('crm-f-'+kind+'-menu');
+  if(!menu) return;
+  const opening = menu.style.display==='none';
+  menu.style.display = opening?'block':'none';
+  if(opening){
+    const closeOnOutside = (e)=>{ if(!menu.contains(e.target)){ menu.style.display='none'; document.removeEventListener('click', closeOnOutside); } };
+    setTimeout(()=>document.addEventListener('click', closeOnOutside), 0);
+  }
+}
 
 // ── Sélection multiple (vue liste) — cf. SELECTED_IDS et openBulkEmailModal ──
 function crmToggleSelect(id, checked){
