@@ -58,6 +58,20 @@ html[data-theme="nuit"]{
   --dch-nfc:#3987e5;--dch-code:#c98500;--dch-mobile:#d55181;--dch-qr:#008300;--dch-violet:#9085e9;
   --tr-mrr:#1f9e78;--tr-signe:#5f8ee0;--tr-pipeline:#b8791f;--tr-depense:#e8546f;
 }
+/* "Contraste renforcé" — fond blanc pur, texte quasi noir, bordures
+   franches, accent bleu saturé : toutes les paires texte/fond vérifiées
+   >=6.8:1 (AA large/petit texte confortablement couvert, proche AAA), bien
+   au-dessus des ~3:1 des autres thèmes clairs (--mu:#999 notamment).
+   Demande client 30/09-04/10/2026 (audit ergonomie, "fond d'abord, thèmes
+   après"). */
+html[data-theme="contraste"]{
+  --bg:#ffffff;--card:#ffffff;--bdr:#000;--bdr2:#000;--div:#d9d9d9;--hover:#e8e8e8;
+  --tx:#000;--mu:#404040;--hi:#000;
+  --a:#0033a0;--ah:#001d5c;--al:rgba(0,51,160,.14);
+  --scb:#8a8a8a;--scbh:#4d4d4d;
+  --dch-nfc:#0033a0;--dch-code:#7a5300;--dch-mobile:#8c1d4e;--dch-qr:#005c00;--dch-violet:#3a2a8c;
+  --tr-mrr:#005c3f;--tr-signe:#0033a0;--tr-pipeline:#7a5300;--tr-depense:#a30000;
+}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;color:var(--tx);background:var(--bg);display:flex;flex-direction:column;height:100vh;overflow:hidden}
 
@@ -587,14 +601,14 @@ function togglePwVisibility(id, btn){
 // formulaire par le gestionnaire de mots de passe du navigateur).
 function renderLoginForm(okMsg){
   document.getElementById('lg-box').innerHTML = `
-    <div class="lg-title">Sesame <em style="color:#8a2b2b;font-style:normal">CRM</em></div>
+    <div class="lg-title">Sesame <em style="color:var(--a);font-style:normal">CRM</em></div>
     <div class="lg-sub">Réservé aux comptes Sesame Technology.</div>
     <form id="lg-form" onsubmit="event.preventDefault();crmLogin();return false;">
       <div class="ff"><label>Email</label><input type="email" id="lg-email" name="email" autocomplete="username" placeholder="vous@sesame.technology"></div>
       <div class="ff"><label>Mot de passe</label><div class="pwwrap"><input type="password" id="lg-password" name="password" autocomplete="current-password" placeholder="••••••••"><button type="button" class="pwtoggle-btn" tabindex="-1" aria-label="Afficher le mot de passe" onclick="togglePwVisibility('lg-password',this)"><i class="ti ti-eye"></i></button></div></div>
       <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center">Se connecter</button>
     </form>
-    <div style="text-align:center;margin-top:10px"><a href="#" onclick="renderForgotForm();return false;" style="font-size:12px;color:#8a2b2b">Mot de passe oublié ?</a></div>
+    <div style="text-align:center;margin-top:10px"><a href="#" onclick="renderForgotForm();return false;" style="font-size:12px;color:var(--a)">Mot de passe oublié ?</a></div>
     <div class="lg-err" id="lg-err"></div>
     ${okMsg?`<div style="color:#1a6b47;font-size:12px;margin-top:8px;text-align:center">${okMsg}</div>`:''}`;
 }
@@ -605,7 +619,7 @@ function renderForgotForm(){
     <div class="lg-sub">Indiquez votre email — un lien de réinitialisation vous sera envoyé s'il correspond à un compte.</div>
     <div class="ff"><label>Email</label><input type="email" id="fg-email" placeholder="vous@sesame.technology" onkeydown="if(event.key==='Enter')sendForgotEmail()"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="sendForgotEmail()">Envoyer le lien</button>
-    <div style="text-align:center;margin-top:10px"><a href="#" onclick="renderLoginForm();return false;" style="font-size:12px;color:#8a2b2b">Retour à la connexion</a></div>
+    <div style="text-align:center;margin-top:10px"><a href="#" onclick="renderLoginForm();return false;" style="font-size:12px;color:var(--a)">Retour à la connexion</a></div>
     <div class="lg-err" id="lg-err"></div>
     <div id="lg-ok" style="display:none;color:#1a6b47;font-size:12px;margin-top:8px;text-align:center"></div>`;
 }
@@ -708,6 +722,7 @@ var UI_THEMES = [
   { id:'ocean',     label:'Océan',     dot:'#1A4880' },
   { id:'ardoise',   label:'Ardoise',   dot:'#4F46E5' },
   { id:'nuit',      label:'Nuit',      dot:'#E0536E' },
+  { id:'contraste', label:'Contraste renforcé', dot:'#0033A0' },
 ];
 function applyUiTheme(id){
   document.documentElement.setAttribute('data-theme', id);

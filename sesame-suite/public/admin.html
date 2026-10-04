@@ -79,6 +79,26 @@ html[data-theme="nuit"]{
   --wa:#E0935B;--wal:rgba(224,147,91,.14);
   --r:10px;--rs:6px;
 }
+/* "Contraste renforcé" — fond blanc pur, texte quasi noir, bordures
+   franches, accent bleu saturé : toutes les paires texte/fond vérifiées
+   >=6.8:1 (AA large/petit texte confortablement couvert, proche AAA), bien
+   au-dessus des ~3:1 des autres thèmes clairs (--mu:#7A7870 notamment).
+   Demande client 30/09-04/10/2026 (audit ergonomie, "fond d'abord, thèmes
+   après"). Mêmes valeurs que public/crm.html (même mécanisme partagé,
+   localStorage SESAME_UI_THEME) — jeu de variables différent (admin.html
+   n'a pas les variables dch/tr de crm.html), adapté 1:1 à sa propre
+   convention. */
+html[data-theme="contraste"]{
+  --sb:#000;--sbb:rgba(255,255,255,.2);
+  --bg:#fff;--card:#fff;--bdr:#000;
+  --tx:#000;--mu:#404040;--hi:#000;
+  --a:#0033A0;--al:#DCE6FA;--am:#0033A0;--primary:#0033A0;--pl:#DCE6FA;
+  --bu:#003380;--bul:#DCE6FA;
+  --go:#7A5300;--gol:#FBEEC8;
+  --re:#A30000;--rel:#FBD9D9;
+  --wa:#7A3D00;--wal:#FBE4CC;
+  --r:10px;--rs:6px;
+}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--tx);background:var(--bg)}
 html{scrollbar-width:thin;scrollbar-color:var(--mu) transparent}
@@ -4728,6 +4748,7 @@ var UI_THEMES = [
   { id:'ocean',     label:'Océan',     dot:'#1A4880' },
   { id:'ardoise',   label:'Ardoise',   dot:'#4F46E5' },
   { id:'nuit',      label:'Nuit',      dot:'#E0536E' },
+  { id:'contraste', label:'Contraste renforcé', dot:'#0033A0' },
 ];
 function applyUiTheme(id){
   document.documentElement.setAttribute('data-theme', id);
