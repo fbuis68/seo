@@ -384,8 +384,15 @@ export function extractInvoiceData(text: string): ExtractedInvoiceData {
   // (lib/accSupplierMatching.ts) plutôt qu'à ce stade. Exclut aussi les
   // lignes de type "Tel : ..."/"Fax : ..." — jamais une raison sociale,
   // constaté en production, 22/09/2026, sur une facture dont l'en-tête ne
-  // contient QUE adresse + téléphone avant le vrai nom.
-  const NAME_LINE_EXCLUDE_RE = /^(t[ée]l[ée]?(?:phone)?|fax|mobile|email|e-?mail|contact)[ \t]*:/i;
+  // contient QUE adresse + téléphone avant le vrai nom. "Interlocuteur :" /
+  // "Suivi par : <nom>" exclus de même (04/10/2026) : ce bloc décrit le
+  // contact commercial suivant le dossier, pas le nom du client — placé
+  // juste avant "FACTURE N°" sur certains modèles, il tombait pile dans la
+  // fenêtre des 4 dernières lignes du repli positionnel
+  // (extractRecipientBlockFallback ci-dessous) et était pris pour le nom du
+  // client ("Interlocuteur :" littéralement recopié dans le champ, faisant
+  // ensuite chercher "Interlocuteur" dans l'annuaire des entreprises).
+  const NAME_LINE_EXCLUDE_RE = /^(t[ée]l[ée]?(?:phone)?|fax|mobile|email|e-?mail|contact|interlocuteur|suivi(?:[ \t]*par)?)[ \t]*:/i;
   // Mentions légales de bas de page (RCS, SIRET, forme sociale + capital,
   // Code APE, IBAN/BIC, tribunal compétent, conditions de vente...) — même
   // texte que le NÔTRE (l'émetteur) apparaît souvent en double sur le
