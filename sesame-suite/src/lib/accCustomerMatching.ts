@@ -81,28 +81,60 @@ async function findLinkableCrmProspect(
   return undefined;
 }
 
+/**
+ * Même recherche que findLinkableCrmProspect ci-dessus, mais CRÉE la fiche
+ * CRM (type "Client") quand aucune ne correspond (05/10/2026, demande
+ * client) — jusqu'ici une société nouvelle rapprochée côté compta restait
+ * invisible de la liste "Clients" du CRM tant que personne ne la créait à
+ * la main. Jamais appelée sans nom exploitable (cf. appelants :
+ * canAutoCreateCustomer exige déjà un identifiant fort + un nom, et la
+ * recherche d'entreprise manuelle fournit toujours une raison sociale).
+ */
+export async function findOrCreateLinkableCrmProspect(
+  entityId: string | null,
+  info: { name: string; siren?: string | null; siret?: string | null; addressLine?: string | null; postalCode?: string | null; city?: string | null }
+): Promise<string> {
+  const existing = await findLinkableCrmProspect(entityId, { recipientSiren: info.siren, recipientSiret: info.siret });
+  if (existing) return existing;
+  const created = await prisma.crmProspect.create({
+    data: {
+      entityId,
+      nom: info.name,
+      type: "Client",
+      siret: info.siret || undefined,
+      siren: info.siren || undefined,
+      adresse: info.addressLine || undefined,
+      ville: info.city || undefined,
+    },
+  });
+  return created.id;
+}
+
 export async function createCustomerFromExtraction(
   entityId: string | null,
   extracted: { recipientName?: string | null; recipientSiren?: string | null; recipientSiret?: string | null; recipientVat?: string | null }
 ): Promise<AccCustomer> {
   const lookup = extracted.recipientSiret ? await lookupEntrepriseBySiret(extracted.recipientSiret) : null;
-  // Rapproche la fiche CRM (CrmProspect) correspondante DÈS LA CRÉATION —
-  // sans ça, AccCustomer et CrmProspect restaient deux fiches distinctes du
-  // même client tant que personne n'ouvrait par hasard l'onglet
-  // Comptabilité de la fiche CRM (GET /crmProspect/:id/accounting, qui ne
-  // fait ce lien QUE par email et seulement au premier accès à CETTE
-  // fiche-là — jamais à la création côté compta).
-  const crmProspectId = await findLinkableCrmProspect(entityId, extracted);
+  const name = (lookup?.name || extracted.recipientName || "Client sans nom").trim();
+  const siren = extracted.recipientSiren || lookup?.siren || undefined;
+  const siret = extracted.recipientSiret || lookup?.siret || undefined;
+  const addressLine = lookup?.addressLine || undefined;
+  const city = lookup?.city || undefined;
+  // Rapproche la fiche CRM (CrmProspect) correspondante DÈS LA CRÉATION, et
+  // la crée si aucune n'existe (05/10/2026) — sans ça, AccCustomer et
+  // CrmProspect restaient deux fiches distinctes du même client tant que
+  // personne ne créait la fiche CRM à la main.
+  const crmProspectId = await findOrCreateLinkableCrmProspect(entityId, { name, siren, siret, addressLine, city });
   return prisma.accCustomer.create({
     data: {
       entityId,
-      name: (lookup?.name || extracted.recipientName || "Client sans nom").trim(),
-      siren: extracted.recipientSiren || lookup?.siren || undefined,
-      siret: extracted.recipientSiret || lookup?.siret || undefined,
+      name,
+      siren,
+      siret,
       vatNumber: extracted.recipientVat || undefined,
-      addressLine: lookup?.addressLine || undefined,
+      addressLine,
       postalCode: lookup?.postalCode || undefined,
-      city: lookup?.city || undefined,
+      city,
       country: lookup?.country || undefined,
       crmProspectId,
     },

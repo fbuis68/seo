@@ -10,6 +10,7 @@ import { DocumentIngestionError } from "../lib/accDocument";
 import { seedAccounting } from "../lib/accSeed";
 import { generateDraftEntry, validateEntry, reverseEntry, createDirectEntryFromBankTransaction, EntryGenerationError } from "../lib/accEntryService";
 import { learnRuleFromCorrection } from "../lib/accRulesEngine";
+import { findOrCreateLinkableCrmProspect } from "../lib/accCustomerMatching";
 import { worstLevel, CheckResult } from "../lib/accChecks";
 import { recordAuditLog } from "../lib/accAudit";
 import { parseBankFile, importBankTransactions, BankImportError, BankImportSource } from "../lib/accBanking";
@@ -318,7 +319,13 @@ accountingRouter.put(
     const entityId = await resolveScope(req);
     const existing = await prisma.accInvoice.findFirst({ where: { id: req.params.id, entityId } });
     if (!existing) throw new HttpError(404, "Facture introuvable");
-    if (existing.status === "VALIDATED" || existing.status === "ACCOUNTED") {
+    // Un devis/contrat "classé" (statut VALIDATED, cf. /validate ci-dessus)
+    // ne porte aucune écriture à extourner — rien n'empêche de corriger le
+    // sens/type/tiers après coup, contrairement à une vraie facture
+    // comptabilisée (05/10/2026, demande client : libellé Fournisseur figé
+    // à tort sur un devis uploadé par erreur côté Achats).
+    const isNonAccounting = NON_ACCOUNTING_DOC_TYPES.includes(existing.documentType || "");
+    if ((existing.status === "VALIDATED" || existing.status === "ACCOUNTED") && !isNonAccounting) {
       throw new HttpError(400, "Facture déjà validée — utilisez une extourne d'écriture pour corriger");
     }
 
@@ -881,20 +888,30 @@ accountingRouter.post(
     const entityId = await resolveScope(req);
     const b = req.body as { name?: string };
     if (!b.name) throw new HttpError(400, "name requis");
+    const siren = (req.body.siren as string) || undefined;
+    const siret = (req.body.siret as string) || undefined;
+    const addressLine = (req.body.addressLine as string) || undefined;
+    const city = (req.body.city as string) || undefined;
+    // Rapproche/crée la fiche CRM (CrmProspect) correspondante dès que la
+    // société est identifiée par SIRET/SIREN (05/10/2026, cf. pickAiEntreprise
+    // dans crm.html qui passe toujours par cette route après une recherche
+    // via l'annuaire public) — jamais sur un nom seul, trop peu fiable.
+    const crmProspectId = siret || siren ? await findOrCreateLinkableCrmProspect(entityId, { name: b.name, siren, siret, addressLine, city }) : undefined;
     const created = await prisma.accCustomer.create({
       data: {
         entityId,
         name: b.name,
-        siren: (req.body.siren as string) || undefined,
-        siret: (req.body.siret as string) || undefined,
+        siren,
+        siret,
         vatNumber: (req.body.vatNumber as string) || undefined,
-        addressLine: (req.body.addressLine as string) || undefined,
+        addressLine,
         postalCode: (req.body.postalCode as string) || undefined,
-        city: (req.body.city as string) || undefined,
+        city,
         country: (req.body.country as string) || undefined,
         email: (req.body.email as string) || undefined,
         phone: (req.body.phone as string) || undefined,
         noReconciliationNeeded: !!req.body.noReconciliationNeeded,
+        crmProspectId,
       },
     });
     await recordAuditLog({ entityId, userId: actorId(req), action: "customer_created", targetType: "AccCustomer", targetId: created.id, newValue: { name: created.name }, ip: req.ip });

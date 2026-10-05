@@ -8776,10 +8776,14 @@ function renderAccInvoiceModal(inv){
   const tiersLabel = inv.direction==='sale' ? 'Client' : 'Fournisseur';
   const accountType = inv.direction==='sale' ? 'produit' : 'charge';
   const accountOpts = `<option value="">— Aucun —</option>` + ACC_ACCOUNTS.filter(a=>a.type===accountType && (a.active || a.id===inv.proposedAccountId)).map(a=>`<option value="${a.id}" ${inv.proposedAccountId===a.id?'selected':''}>${esc(a.number)} — ${esc(a.label)}${!a.active?' (inactif)':''}</option>`).join('');
-  const locked = ['VALIDATED','ACCOUNTED','PARTIALLY_PAID','PAID'].includes(inv.status);
   const isNonAccounting = ACC_NON_ACCOUNTING_DOCTYPES.includes(inv.documentType);
+  // Un devis/contrat "classé" ne porte aucune écriture à extourner — garder
+  // le formulaire éditable après coup (sens, type, tiers) plutôt que de
+  // figer définitivement un libellé Fournisseur/Client mal choisi à
+  // l'upload (05/10/2026).
+  const locked = ['VALIDATED','ACCOUNTED','PARTIALLY_PAID','PAID'].includes(inv.status) && !isNonAccounting;
   const canTogglePaid = ['ACCOUNTED','PARTIALLY_PAID','PAID'].includes(inv.status);
-  const canManageSettlement = ['VALIDATED','ACCOUNTED','PARTIALLY_PAID','PAID'].includes(inv.status);
+  const canManageSettlement = ['VALIDATED','ACCOUNTED','PARTIALLY_PAID','PAID'].includes(inv.status) && !isNonAccounting;
   const remainingDue = Math.max(0, accInvoiceTotal(inv) - (inv.amountPaid||0));
   const bankMatches = inv.bankMatches||[];
   const settlementRows = bankMatches.map(m=>`
