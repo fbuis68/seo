@@ -1584,10 +1584,16 @@ async function sendBulkEmail(){
   const btn=document.getElementById('bulk-send-btn'); if(btn){ btn.disabled=true; btn.textContent='Envoi…'; }
   const progress=document.getElementById('bulk-send-progress'); if(progress) progress.style.display='block';
 
-  // Envois en parallèle, chacun indépendant (Promise.allSettled) — un échec
-  // isolé (email invalide côté serveur, timeout...) ne doit pas bloquer les
-  // autres destinataires ni empêcher le résumé final de s'afficher.
-  const results = await Promise.allSettled(recipients.map(async rc=>{
+  // Envoi par lots de BULK_BATCH_SIZE, avec pause entre deux lots — jusqu'ici
+  // tout partait en une seule rafale parallèle (Promise.allSettled sur TOUTE
+  // la sélection d'un coup), exactement le pattern qui a fait bloquer
+  // support@sesame-technology.com par Microsoft 365 ("Potentially
+  // compromised user account" sur un envoi de ~200 emails, 05/10/2026). Au
+  // sein d'un même lot, les envois restent en parallèle (chacun indépendant,
+  // un échec isolé ne bloque jamais les autres).
+  const BULK_BATCH_SIZE = 20;
+  const BULK_BATCH_DELAY_MS = 5000;
+  const sendOne = async (rc)=>{
     const c = rc.client || {};
     const r = await apiFetch('/wa/message/send', {method:'POST', body:JSON.stringify({
       scope:'crm', channel:'email', templateKey:key, to:rc.email, prospectId:rc.prospectId,
@@ -1600,7 +1606,14 @@ async function sendBulkEmail(){
       prospectId:rc.prospectId, type:'Email', text:'Email envoyé (groupé) à '+label+' : "'+(data.subject||'')+'"', authorName:'CRM'
     })});
     if(ar.ok){ const entry=await ar.json(); if(c && !c.journal)c.journal=[]; if(c) c.journal.push(entry); }
-  }));
+  };
+  const results = [];
+  for(let i=0; i<recipients.length; i+=BULK_BATCH_SIZE){
+    const batch = recipients.slice(i, i+BULK_BATCH_SIZE);
+    if(progress) progress.textContent = 'Envoi en cours… ('+Math.min(i+batch.length,recipients.length)+'/'+recipients.length+')';
+    results.push(...await Promise.allSettled(batch.map(sendOne)));
+    if(i+BULK_BATCH_SIZE < recipients.length) await new Promise(res=>setTimeout(res, BULK_BATCH_DELAY_MS));
+  }
 
   const ok = results.filter(r=>r.status==='fulfilled').length;
   const fail = results.length - ok;

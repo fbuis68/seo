@@ -12,6 +12,20 @@ import { config } from "../config";
 const CHECK_INTERVAL_MS = 60_000;
 let running = false;
 
+// Espacement entre lots d'envoi (05/10/2026, suite à un blocage Microsoft
+// 365 "Potentially compromised user account" déclenché par une campagne de
+// ~200 emails) — une boîte Exchange normale qui envoie un gros volume
+// d'affilée, même en série (un par un, comme déjà fait ici), reste détectée
+// comme un pattern de compte compromis par l'heuristique anti-spam M365.
+// Pause entre chaque PAQUET de destinataires plutôt qu'entre chaque email
+// un par un, pour ne pas allonger inutilement l'envoi d'une petite
+// campagne (<=20 destinataires : aucune pause).
+const CAMPAIGN_BATCH_SIZE = 20;
+const CAMPAIGN_BATCH_DELAY_MS = 5_000;
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export function startCampaignScheduler() {
   setInterval(async () => {
     if (running) return;
@@ -72,7 +86,8 @@ export async function processDueCampaign(campaignId: string): Promise<void> {
     let success = 0;
     let failure = 0;
     let lastError = "";
-    for (const r of recipients) {
+    for (let i = 0; i < recipients.length; i++) {
+      const r = recipients[i];
       try {
         const appendBodyHtml = campaign.channel === "email" ? unsubscribeFooterHtml(campaign.entityId, r.toEmail) : undefined;
         await sendMessage({
@@ -87,6 +102,11 @@ export async function processDueCampaign(campaignId: string): Promise<void> {
       } catch (e) {
         failure += 1;
         lastError = e instanceof Error ? e.message : "Erreur d'envoi";
+      }
+      // Pause en fin de lot — jamais après le dernier destinataire (inutile,
+      // la campagne est terminée).
+      if (campaign.channel === "email" && (i + 1) % CAMPAIGN_BATCH_SIZE === 0 && i + 1 < recipients.length) {
+        await sleep(CAMPAIGN_BATCH_DELAY_MS);
       }
     }
 
