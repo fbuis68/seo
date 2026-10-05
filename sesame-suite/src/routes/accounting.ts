@@ -5,6 +5,7 @@ import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { resolveScope } from "../lib/scope";
 import { processUploadedDocument, rescanInvoice, PipelineError } from "../lib/accPipeline";
+import { NON_ACCOUNTING_DOC_TYPES } from "../lib/accClassification";
 import { DocumentIngestionError } from "../lib/accDocument";
 import { seedAccounting } from "../lib/accSeed";
 import { generateDraftEntry, validateEntry, reverseEntry, createDirectEntryFromBankTransaction, EntryGenerationError } from "../lib/accEntryService";
@@ -280,6 +281,7 @@ accountingRouter.get(
 
 const EDITABLE_INVOICE_FIELDS = [
   "direction",
+  "documentType",
   "invoiceNumber",
   "invoiceDate",
   "dueDate",
@@ -388,6 +390,11 @@ accountingRouter.patch(
  * n'existe pas déjà (idempotent). Une alerte BLOCKING (§14, ex : IBAN
  * fournisseur changé) n'empêche jamais cette validation explicite — elle
  * bloque seulement toute validation AUTOMATIQUE côté pipeline.
+ *
+ * Devis/contrat/document non comptable (NON_ACCOUNTING_DOC_TYPES,
+ * 05/10/2026) : jamais d'écriture — ces documents servent seulement à être
+ * classés et rattachés à un client, pas à produire un mouvement en partie
+ * double (un devis n'a pas de montant TTC fiable au sens comptable).
  */
 accountingRouter.post(
   "/acc/invoices/:id/validate",
@@ -398,7 +405,8 @@ accountingRouter.post(
     if (!invoice) throw new HttpError(404, "Facture introuvable");
     if (invoice.status === "REJECTED") throw new HttpError(400, "Une facture rejetée ne peut pas être validée");
 
-    if (!invoice.entryId) {
+    const isNonAccounting = NON_ACCOUNTING_DOC_TYPES.includes(invoice.documentType || "");
+    if (!invoice.entryId && !isNonAccounting) {
       try {
         await generateDraftEntry(invoice.id);
       } catch (err) {

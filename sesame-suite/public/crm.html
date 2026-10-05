@@ -7951,7 +7951,10 @@ const ACC_LOADED={};
 const ACC_STATUS_LABEL={RECEIVED:'Reçue',PROCESSING:'En traitement',OCR_COMPLETED:'OCR effectué',EXTRACTED:'Extraite',CHECK_REQUIRED:'À vérifier',VALIDATED:'Validée',ACCOUNTED:'Comptabilisée',PARTIALLY_PAID:'Partiellement payée',PAID:'Payée',REJECTED:'Rejetée'};
 const ACC_STATUS_TAG={RECEIVED:'t-gray',PROCESSING:'t-gray',OCR_COMPLETED:'t-gray',EXTRACTED:'t-blue',CHECK_REQUIRED:'t-amber',VALIDATED:'t-purple',ACCOUNTED:'t-green',PARTIALLY_PAID:'t-blue',PAID:'t-green',REJECTED:'t-red'};
 const ACC_CHECK_TAG={OK:'t-green',WARNING:'t-amber',ERROR:'t-red',BLOCKING:'t-red'};
-const ACC_DOCTYPE_LABEL={invoice:'Facture',credit_note:'Avoir',deposit_invoice:'Facture d\'acompte',receipt:'Reçu',statement:'Relevé de compte',non_accounting:'Non comptable'};
+const ACC_DOCTYPE_LABEL={invoice:'Facture',credit_note:'Avoir',deposit_invoice:'Facture d\'acompte',receipt:'Reçu',statement:'Relevé de compte',quote:'Devis',contract:'Contrat',non_accounting:'Non comptable'};
+// Types de document qui ne génèrent jamais d'écriture comptable (05/10/2026)
+// — même liste que NON_ACCOUNTING_DOC_TYPES côté serveur (accClassification.ts).
+const ACC_NON_ACCOUNTING_DOCTYPES=['quote','contract','non_accounting'];
 
 function fmtEUR2(n){ return (n==null?0:+n).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'; }
 // Montant total d'une facture — replié sur amountHt quand amountTtc est
@@ -8774,6 +8777,7 @@ function renderAccInvoiceModal(inv){
   const accountType = inv.direction==='sale' ? 'produit' : 'charge';
   const accountOpts = `<option value="">— Aucun —</option>` + ACC_ACCOUNTS.filter(a=>a.type===accountType && (a.active || a.id===inv.proposedAccountId)).map(a=>`<option value="${a.id}" ${inv.proposedAccountId===a.id?'selected':''}>${esc(a.number)} — ${esc(a.label)}${!a.active?' (inactif)':''}</option>`).join('');
   const locked = ['VALIDATED','ACCOUNTED','PARTIALLY_PAID','PAID'].includes(inv.status);
+  const isNonAccounting = ACC_NON_ACCOUNTING_DOCTYPES.includes(inv.documentType);
   const canTogglePaid = ['ACCOUNTED','PARTIALLY_PAID','PAID'].includes(inv.status);
   const canManageSettlement = ['VALIDATED','ACCOUNTED','PARTIALLY_PAID','PAID'].includes(inv.status);
   const remainingDue = Math.max(0, accInvoiceTotal(inv) - (inv.amountPaid||0));
@@ -8802,6 +8806,7 @@ function renderAccInvoiceModal(inv){
           <div class="modal-section">Identification</div>
           <div class="form-grid">
             <div class="ff"><label>Sens</label><select id="ai-direction" ${locked?'disabled':''}><option value="purchase" ${inv.direction!=='sale'?'selected':''}>Achat (fournisseur)</option><option value="sale" ${inv.direction==='sale'?'selected':''}>Vente (client)</option></select></div>
+            <div class="ff"><label>Type de document</label><select id="ai-documentType" ${locked?'disabled':''}>${Object.entries(ACC_DOCTYPE_LABEL).map(([k,l])=>`<option value="${k}" ${inv.documentType===k?'selected':''}>${l}</option>`).join('')}</select></div>
             <div class="ff"><label>N° facture</label><input id="ai-invoiceNumber" value="${esc(inv.invoiceNumber||'')}" ${locked?'disabled':''}></div>
             <div class="ff"><label>Devise</label><input id="ai-currency" value="${esc(inv.currency||'EUR')}" ${locked?'disabled':''}></div>
             <div class="ff"><label>Date facture</label><input type="date" id="ai-invoiceDate" value="${toDateInputValue(inv.invoiceDate)}" ${locked?'disabled':''}></div>
@@ -8834,6 +8839,9 @@ function renderAccInvoiceModal(inv){
             <div class="ff"><label>N° TVA</label><input id="ai-issuerVat" value="${esc(inv.issuerVat||'')}" ${locked?'disabled':''}></div>
             <div class="ff"><label>IBAN</label><input id="ai-issuerIban" value="${esc(inv.issuerIban||'')}" ${locked?'disabled':''}></div>
           </div>`}
+          ${isNonAccounting?`
+          <div class="tpill bi" style="margin:10px 0">Devis / contrat / document non comptable — aucune écriture ne sera générée, l'association au ${tiersLabel.toLowerCase()} ci-dessus suffit.</div>
+          `:`
           <div class="modal-section">Montants</div>
           <div class="form-grid">
             <div class="ff"><label>Total HT</label><input type="number" step="0.01" id="ai-amountHt" value="${inv.amountHt!=null?inv.amountHt:''}" ${locked?'disabled':''}></div>
@@ -8843,7 +8851,7 @@ function renderAccInvoiceModal(inv){
           <div class="modal-section">Compte comptable proposé</div>
           <div class="form-grid">
             <div class="ff"><label>Compte (${accountType})${inv.proposedAccountConfidence!=null?' — confiance '+accConfidencePct(inv.proposedAccountConfidence):''}</label><select id="ai-proposedAccountId" ${locked?'disabled':''}>${accountOpts}</select></div>
-          </div>
+          </div>`}
           <div class="modal-section">Contrôles de cohérence</div>
           ${checksHtml||'<div class="log-empty">Aucun contrôle.</div>'}
           ${canManageSettlement?`
@@ -8867,8 +8875,8 @@ function renderAccInvoiceModal(inv){
       <div class="modal-footer">
         ${!locked?`<button class="btn btn-primary" onclick="accSaveInvoiceFields('${inv.id}')">Enregistrer</button>
         ${inv.status!=='REJECTED'?`<button class="btn btn-ghost" onclick="accRescanInvoice('${inv.id}')" title="Relit le document et réextrait les champs — garde le tiers déjà rapproché">↻ Rescanner le document</button>`:''}
-        <button class="btn btn-primary" style="background:#1f7a3f" onclick="accApplyAccount('${inv.id}')">Appliquer le compte (mémoriser la règle)</button>
-        <button class="btn btn-primary" style="background:#2f6f2f" onclick="accValidateInvoice('${inv.id}')">Valider</button>
+        ${!isNonAccounting?`<button class="btn btn-primary" style="background:#1f7a3f" onclick="accApplyAccount('${inv.id}')">Appliquer le compte (mémoriser la règle)</button>`:''}
+        <button class="btn btn-primary" style="background:#2f6f2f" onclick="accValidateInvoice('${inv.id}')">${isNonAccounting?'Classer':'Valider'}</button>
         <button class="btn btn-ghost" style="color:#a32d2d" onclick="accRejectInvoice('${inv.id}')">Rejeter</button>`:''}
         ${canTogglePaid?`<button class="btn ${inv.status==='PAID'?'btn-ghost':'btn-primary'}" onclick="accTogglePaid('${inv.id}', ${inv.status!=='PAID'})">${inv.status==='PAID'?'Marquer non payée':'Marquer payée'}</button>`:''}
         ${!inv.entryId && !bankMatches.length?`<button class="btn btn-ghost" style="color:#a32d2d" onclick="accDeleteInvoice('${inv.id}')">🗑 Supprimer</button>`:`<button class="btn btn-ghost" disabled title="Écriture comptable et/ou rapprochement bancaire existants — annulez-les d'abord">🗑 Supprimer</button>`}
@@ -8990,6 +8998,7 @@ function accInvoiceFieldsFromForm(){
   const g = id=>{ const el=document.getElementById(id); return el?el.value:''; };
   const fields = {
     direction: g('ai-direction')||'purchase',
+    documentType: g('ai-documentType')||null,
     invoiceNumber: g('ai-invoiceNumber')||null,
     currency: g('ai-currency')||null,
     invoiceDate: g('ai-invoiceDate')||null,

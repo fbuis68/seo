@@ -20,12 +20,22 @@ interface Rule {
   weight: number;
 }
 
+// Types de document qui ne donnent JAMAIS lieu à une écriture comptable
+// (05/10/2026, demande client) : un devis ou un contrat déposé dans le
+// module Comptabilité sert à le rattacher à un client (cf. AccInvoice.
+// customerId, réutilisé tel quel) et à le classer, pas à produire un
+// mouvement en partie double — cf. routes/accounting.ts /validate qui
+// saute volontairement generateDraftEntry pour ces types.
+export const NON_ACCOUNTING_DOC_TYPES = ["quote", "contract", "non_accounting"];
+
 // Ordre = priorité en cas d'égalité de score — un avoir mentionne souvent
 // aussi le mot "facture" quelque part, donc les motifs les plus SPÉCIFIQUES
-// (avoir, acompte, reçu, relevé) sont testés avant le motif générique
-// "facture".
+// (avoir, acompte, reçu, relevé, devis, contrat) sont testés avant le motif
+// générique "facture".
 const RULES: Rule[] = [
   { type: "credit_note", patterns: [/\bavoir\b/i, /\bnote de cr[ée]dit\b/i, /\bcredit note\b/i], weight: 3 },
+  { type: "quote", patterns: [/\bdevis\b/i, /\bquotation\b/i, /\boffre de prix\b/i], weight: 3 },
+  { type: "contract", patterns: [/\bcontrat\b/i, /\bconvention\b/i, /\bavenant\b/i], weight: 3 },
   { type: "deposit_invoice", patterns: [/\bfacture d.acompte\b/i, /\bacompte\b/i, /\bdeposit invoice\b/i], weight: 2 },
   { type: "receipt", patterns: [/\bre[çc]u\b/i, /\breceipt\b/i, /\bticket de caisse\b/i], weight: 2 },
   { type: "statement", patterns: [/\brelev[ée] de compte\b/i, /\bstatement\b/i, /\bbilling statement\b/i], weight: 2 },
