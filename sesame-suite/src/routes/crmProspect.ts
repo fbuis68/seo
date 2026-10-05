@@ -976,10 +976,15 @@ crmProspectRouter.get(
       return;
     }
 
+    // documentType inclus (05/10/2026) — la fiche client CRM n'affichait que
+    // des lignes de facture sans jamais permettre d'ouvrir le document
+    // source (devis, contrat, facture) lui-même, pourtant déjà uploadé et
+    // consultable côté Comptabilité (cf. openAccInvoiceModal, réutilisé tel
+    // quel côté crm.html).
     const invoices = await prisma.accInvoice.findMany({
       where: { customerId: customer.id },
       orderBy: { invoiceDate: "desc" },
-      select: { id: true, invoiceNumber: true, invoiceDate: true, dueDate: true, status: true, amountHt: true, amountVat: true, amountTtc: true, amountPaid: true, currency: true },
+      select: { id: true, invoiceNumber: true, invoiceDate: true, dueDate: true, status: true, documentType: true, amountHt: true, amountVat: true, amountTtc: true, amountPaid: true, currency: true },
     });
     const payments = await prisma.accBankMatch.findMany({
       where: { invoice: { customerId: customer.id } },
