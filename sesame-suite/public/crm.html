@@ -7919,7 +7919,11 @@ let ACC_BANK_ACCOUNTS=[], ACC_BANK_TX=[], ACC_BANK_SELECTED=null;
 // prélèvements'" : c'est un moyen de paiement DIFFÉRENT, cf. accIsCB). dateFrom/
 // dateTo vides par défaut (aucune restriction) — seul le calcul "TVA du
 // mois" applique un défaut (mois courant), indépendamment de ce filtre.
-let ACC_BANK_FILTER={type:'all', label:'', excludeKinds:new Set(), dateFrom:'', dateTo:''};
+// label par défaut "Salaire" (demande client 05/10/2026) — si le compte
+// sélectionné n'a jamais utilisé ce label Qonto, la liste de transactions
+// s'affiche simplement vide plutôt que de retomber silencieusement sur
+// "Tous labels" ; l'utilisateur repasse par le sélecteur pour l'enlever.
+let ACC_BANK_FILTER={type:'all', label:'Salaire', excludeKinds:new Set(), dateFrom:'', dateTo:''};
 let ACC_VAT_SUMMARY=null;
 let ACC_QONTO_CONFIG=null, ACC_QONTO_TEST_ACCOUNTS=null;
 let ACC_GOCARDLESS_CONFIG=null;
@@ -9948,7 +9952,11 @@ function accBankDateFilterChange(){
 
 function accSelectBankAccount(id){
   ACC_BANK_SELECTED = id;
-  ACC_BANK_FILTER.label=''; // les labels analytiques diffèrent par compte — celui d'un autre compte n'a pas de sens ici
+  // Les labels analytiques diffèrent par compte — celui d'un autre compte
+  // n'a pas de sens ici. Retombe sur "Salaire" (valeur par défaut du
+  // filtre, demande client 05/10/2026) plutôt que "Tous labels" : si ce
+  // compte n'a jamais utilisé ce label, la liste s'affiche simplement vide.
+  ACC_BANK_FILTER.label='Salaire';
   loadAccBankTransactions().then(renderAccBank);
 }
 
