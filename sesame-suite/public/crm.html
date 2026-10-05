@@ -8903,35 +8903,60 @@ function renderAccInvoiceModal(inv){
  * pouvoir choisir directement depuis la fiche facture sans repasser par
  * l'onglet Banque.
  */
+let ACC_SETTLEMENT_ROWS = [];
+let ACC_SETTLEMENT_INVOICE_ID = null;
+
 async function accOpenSettlementPicker(invoiceId){
+  ACC_SETTLEMENT_INVOICE_ID = invoiceId;
   document.getElementById('modal-ct').insertAdjacentHTML('beforeend', `
   <div class="modal-bg" id="asp-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)this.remove()">
     <div class="modal-box" style="max-width:600px">
       <div class="modal-head"><div style="font-size:16px;font-weight:500">Affecter un règlement</div><button class="btn btn-ghost btn-icon" onclick="document.getElementById('asp-bg').remove()" style="margin-left:auto">✕</button></div>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <input id="asp-search-tiers" placeholder="Rechercher fournisseur/client…" oninput="accFilterSettlementRows()" style="flex:1">
+        <input id="asp-search-amount" type="number" step="0.01" placeholder="Montant…" oninput="accFilterSettlementRows()" style="width:140px">
+      </div>
       <div id="asp-body"><div class="log-empty">Chargement…</div></div>
     </div>
   </div>`);
   const body = document.getElementById('asp-body');
-  let rows;
   try{
     const r = await apiFetch('/wa/acc/invoices/'+invoiceId+'/unmatchedTransactions?scope=crm');
     if(!r.ok) throw new Error('http '+r.status);
-    rows = await r.json();
+    ACC_SETTLEMENT_ROWS = await r.json();
   }catch(e){ body.innerHTML = '<div class="log-empty">Erreur de chargement</div>'; return; }
+  accRenderSettlementRows(ACC_SETTLEMENT_ROWS);
+}
 
+function accRenderSettlementRows(rows){
+  const body = document.getElementById('asp-body');
+  if(!body) return;
   const txRows = rows.map(t=>`
     <tr>
       <td>${new Date(t.operationDate).toLocaleDateString('fr-FR')}</td>
       <td>${esc(t.rawLabel)}</td>
       <td>${esc(t.counterpartyName||'—')}</td>
       <td style="text-align:right;font-family:monospace">${fmtEUR2(t.remainingCapacity)}</td>
-      <td><button class="btn btn-ghost btn-sm" onclick="accOpenAssignAmount('${t.id}','${invoiceId}',${t.remainingCapacity})">Affecter</button></td>
+      <td><button class="btn btn-ghost btn-sm" onclick="accOpenAssignAmount('${t.id}','${ACC_SETTLEMENT_INVOICE_ID}',${t.remainingCapacity})">Affecter</button></td>
     </tr>`).join('');
   body.innerHTML = `
     <div class="tbl-wrap"><table>
       <thead><tr><th style="width:100px">Date</th><th>Libellé</th><th>Contrepartie</th><th style="width:100px;text-align:right">Disponible</th><th style="width:90px"></th></tr></thead>
       <tbody>${txRows||'<tr><td colspan="5" class="log-empty">Aucun règlement bancaire non affecté trouvé.</td></tr>'}</tbody>
     </table></div>`;
+}
+
+/** Filtre côté client (liste déjà chargée en une fois, cf. unmatchedTransactions — max 200 lignes) — fournisseur/client sur le libellé+contrepartie, montant par proximité (±0,01) sur le disponible restant. */
+function accFilterSettlementRows(){
+  const q = (document.getElementById('asp-search-tiers')||{value:''}).value.trim().toLowerCase();
+  const amountStr = (document.getElementById('asp-search-amount')||{value:''}).value;
+  const amount = amountStr===''?null:+amountStr;
+  const filtered = ACC_SETTLEMENT_ROWS.filter(t=>{
+    if(q && !((t.counterpartyName||'').toLowerCase().includes(q) || (t.rawLabel||'').toLowerCase().includes(q))) return false;
+    if(amount!=null && Math.abs(t.remainingCapacity-amount)>0.01) return false;
+    return true;
+  });
+  accRenderSettlementRows(filtered);
 }
 
 function accOpenAssignAmount(txId, invoiceId, txRemainingCapacity){
