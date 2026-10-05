@@ -2225,6 +2225,7 @@ async function renderMapView(data){
 function showFiche(id){
   const c=clients.find(c=>c.id===id);if(!c)return;
   curId=id;view='fiche';setNav('n-fiche');
+  TICKETS_CARD_SHOW_RESOLVED = false;
   bc([{label:'Clients',fn:'showList()'},{label:c.nom}]);
   tba(`<button class="btn btn-ghost" onclick="openModal('${id}')">✎ Modifier</button><button class="btn btn-ghost" onclick="openSendEmailModal('${id}')">✉ Message</button><button class="btn btn-primary" onclick="addActForm('${id}')">+ Activité</button><button class="btn btn-ghost" onclick="openRequalifyModal('${id}')">⇄ Requalifier en contact</button><button class="btn btn-ghost" style="color:#a32d2d" onclick="deleteClient('${id}')">🗑 Supprimer</button>`);
   renderFiche(c);
@@ -2427,22 +2428,40 @@ function renderFiche(c){
  * suivi/Microsoft Graph), pas de bouton "+ Nouveau" ici. Rattachement par
  * prospectId ET par email (cf. ticketsForProspect ci-dessous) : c'est bien
  * l'email de la fiche qui fait foi pour retrouver ses tickets. */
+// Statuts considérés "résolus" — masqués par défaut de la carte fiche (bruit
+// pour un client régulier avec un historique de tickets déjà traités) —
+// cf. demande du 05/10/2026, case à cocher "Afficher les résolus" pour les
+// faire réapparaître ponctuellement. État gardé en mémoire (pas persisté)
+// le temps de la consultation de la fiche.
+const TICKET_RESOLVED_STATUSES = ['Résolu','Fermé'];
+let TICKETS_CARD_SHOW_RESOLVED = false;
+
+function toggleTicketsCardShowResolved(checked){
+  TICKETS_CARD_SHOW_RESOLVED = checked;
+  const c = clients.find(x=>x.id===curId);
+  const el = document.getElementById('tickets-card');
+  if(c && el) el.outerHTML = ticketsCardHtml(c);
+}
+
 function ticketsCardHtml(c){
   const rows = ticketsForProspect(c.id);
-  const sorted = rows.slice().sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
-  return `<div class="card">
+  const visible = TICKETS_CARD_SHOW_RESOLVED ? rows : rows.filter(t=>!TICKET_RESOLVED_STATUSES.includes(t.status));
+  const sorted = visible.slice().sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
+  const resolvedCount = rows.length - rows.filter(t=>!TICKET_RESOLVED_STATUSES.includes(t.status)).length;
+  return `<div class="card" id="tickets-card">
     <div class="card-head"><div class="ch-ico">☎</div><span class="ch-title">Tickets support</span>
-      ${rows.length?`<span style="font-size:12px;color:#aaa;margin-left:8px">${rows.length} ticket${rows.length>1?'s':''}</span>`:''}
+      ${visible.length?`<span style="font-size:12px;color:#aaa;margin-left:8px">${visible.length} ticket${visible.length>1?'s':''}</span>`:''}
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--mu);margin-left:12px;white-space:nowrap"><input type="checkbox" ${TICKETS_CARD_SHOW_RESOLVED?'checked':''} onchange="toggleTicketsCardShowResolved(this.checked)">Afficher les résolus${resolvedCount?' ('+resolvedCount+')':''}</label>
       <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="showTickets('${c.id}')">Voir tout</button>
     </div>
-    ${rows.length?sorted.map(t=>`
+    ${visible.length?sorted.map(t=>`
       <div class="log-item" style="cursor:pointer" onclick="ticketFilterProspectId='${c.id}';showTicketDetail('${t.id}')">
         <div class="log-dot ld-b"></div>
         <div class="log-body">
           <div class="log-text"><strong>${esc(t.subject)}</strong> <span class="tpill ${TICKET_STATUS_PILL[t.status]||'bn'}" style="margin-left:6px">${esc(t.status)}</span> <span class="tpill ${TICKET_PRIORITY_PILL[t.priority]||'bn'}">${esc(t.priority)}</span></div>
           <div class="log-meta">${esc(t.number)}${t.agentName?' · '+esc(t.agentName):' · Non assigné'} · ${new Date(t.updatedAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
         </div>
-      </div>`).join(''):'<div class="log-empty">Aucun ticket support pour ce client.</div>'}
+      </div>`).join(''):`<div class="log-empty">${rows.length?'Aucun ticket non résolu pour ce client.':'Aucun ticket support pour ce client.'}</div>`}
   </div>`;
 }
 
