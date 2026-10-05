@@ -8467,7 +8467,8 @@ function renderAccInbox(){
 
 /** Bascule payée/non payée directement depuis l'inbox, sans ouvrir la fiche — uniquement pour les factures déjà comptabilisées (§34). */
 function accPaidIndicator(inv){
-  if(!['ACCOUNTED','PARTIALLY_PAID','PAID'].includes(inv.status)) return '<span style="color:var(--mu);font-size:11px">—</span>';
+  const isNonAccounting = ACC_NON_ACCOUNTING_DOCTYPES.includes(inv.documentType);
+  if(isNonAccounting || !['VALIDATED','ACCOUNTED','PARTIALLY_PAID','PAID'].includes(inv.status)) return '<span style="color:var(--mu);font-size:11px">—</span>';
   const paid = inv.status==='PAID';
   return `<span class="tpill ${paid?'bg':'bn'}" style="cursor:pointer" onclick="accTogglePaid('${inv.id}', ${!paid})" title="${paid?'Marquer non payée':'Marquer payée'}">${paid?'✓ Payée':'Non payée'}</span>`;
 }
@@ -8782,7 +8783,11 @@ function renderAccInvoiceModal(inv){
   // figer définitivement un libellé Fournisseur/Client mal choisi à
   // l'upload (05/10/2026).
   const locked = ['VALIDATED','ACCOUNTED','PARTIALLY_PAID','PAID'].includes(inv.status) && !isNonAccounting;
-  const canTogglePaid = ['ACCOUNTED','PARTIALLY_PAID','PAID'].includes(inv.status);
+  // VALIDATED inclus depuis le 05/10/2026 — une facture reste sinon coincée
+  // "non payable" tant que son écriture n'est pas validée séparément (onglet
+  // Écritures), étape que personne ne fait en pratique. Jamais pour un
+  // devis/contrat (isNonAccounting) : pas d'écriture, pas de montant payable.
+  const canTogglePaid = ['VALIDATED','ACCOUNTED','PARTIALLY_PAID','PAID'].includes(inv.status) && !isNonAccounting;
   const canManageSettlement = ['VALIDATED','ACCOUNTED','PARTIALLY_PAID','PAID'].includes(inv.status) && !isNonAccounting;
   const remainingDue = Math.max(0, accInvoiceTotal(inv) - (inv.amountPaid||0));
   const bankMatches = inv.bankMatches||[];
@@ -8882,7 +8887,7 @@ function renderAccInvoiceModal(inv){
         ${!isNonAccounting?`<button class="btn btn-primary" style="background:#1f7a3f" onclick="accApplyAccount('${inv.id}')">Appliquer le compte (mémoriser la règle)</button>`:''}
         <button class="btn btn-primary" style="background:#2f6f2f" onclick="accValidateInvoice('${inv.id}')">${isNonAccounting?'Classer':'Valider'}</button>
         <button class="btn btn-ghost" style="color:#a32d2d" onclick="accRejectInvoice('${inv.id}')">Rejeter</button>`:''}
-        ${canTogglePaid?`<button class="btn ${inv.status==='PAID'?'btn-ghost':'btn-primary'}" onclick="accTogglePaid('${inv.id}', ${inv.status!=='PAID'})">${inv.status==='PAID'?'Marquer non payée':'Marquer payée'}</button>`:''}
+        ${canTogglePaid?`<label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:0 4px"><input type="checkbox" ${inv.status==='PAID'?'checked':''} onchange="accTogglePaid('${inv.id}', this.checked)"> Facture payée</label>`:''}
         ${!inv.entryId && !bankMatches.length?`<button class="btn btn-ghost" style="color:#a32d2d" onclick="accDeleteInvoice('${inv.id}')">🗑 Supprimer</button>`:`<button class="btn btn-ghost" disabled title="Écriture comptable et/ou rapprochement bancaire existants — annulez-les d'abord">🗑 Supprimer</button>`}
         <button class="btn btn-ghost" onclick="closeModal()">Fermer</button>
       </div>

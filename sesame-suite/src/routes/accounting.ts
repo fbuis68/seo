@@ -500,7 +500,16 @@ accountingRouter.patch(
     const entityId = await resolveScope(req);
     const invoice = await prisma.accInvoice.findFirst({ where: { id: req.params.id, entityId } });
     if (!invoice) throw new HttpError(404, "Facture introuvable");
-    if (!["ACCOUNTED", "PARTIALLY_PAID", "PAID"].includes(invoice.status)) {
+    // VALIDATED accepté depuis le 05/10/2026 — avant, la bascule "payée"
+    // n'était possible qu'APRÈS avoir séparément validé l'écriture DRAFT
+    // (onglet Écritures), une étape que personne ne faisait en pratique :
+    // toute facture restait coincée en VALIDATED, jamais marquable payée, et
+    // le filtre Réglée/Non réglée (purement basé sur le statut, cf. crm.html
+    // accFilteredInvoices) n'avait donc jamais aucune facture "Réglée" à
+    // montrer. Un devis/contrat (NON_ACCOUNTING_DOC_TYPES) n'a pas d'écriture
+    // à valider ni de sens à être "payé" — explicitement exclu.
+    const isNonAccounting = NON_ACCOUNTING_DOC_TYPES.includes(invoice.documentType || "");
+    if (isNonAccounting || !["VALIDATED", "ACCOUNTED", "PARTIALLY_PAID", "PAID"].includes(invoice.status)) {
       throw new HttpError(400, "Seule une facture comptabilisée peut être marquée payée");
     }
     const paid = !!req.body?.paid;
@@ -508,6 +517,17 @@ accountingRouter.patch(
       const bankMatchCount = await prisma.accBankMatch.count({ where: { invoiceId: invoice.id } });
       if (bankMatchCount > 0) {
         throw new HttpError(400, "Cette facture a un rapprochement bancaire — retirez-le (onglet Banque) avant de la marquer non réglée");
+      }
+    }
+    // Marquer payée une facture encore VALIDATED valide du même coup son
+    // écriture DRAFT (numérotation définitive, §44) — on ne veut jamais
+    // d'une facture PAID dont l'écriture resterait un brouillon non numéroté.
+    if (paid && invoice.status === "VALIDATED" && invoice.entryId) {
+      try {
+        await validateEntry(invoice.entryId, actorId(req));
+      } catch (err) {
+        if (err instanceof EntryGenerationError) throw new HttpError(400, err.message);
+        throw err;
       }
     }
     const amountPaid = paid ? invoiceTotal(invoice) : 0;
