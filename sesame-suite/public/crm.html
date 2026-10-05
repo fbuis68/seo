@@ -4078,7 +4078,12 @@ function dealEncaissementYear(d){
 // sans ça, une affaire encaissée en Octobre d'une AUTRE année se retrouvait
 // additionnée dans l'Octobre de l'année actuellement consultée. ──
 function trDealsFor(m){
-  return deals.filter(d=>d.stage!=='Perdu' && d.moisEncaissement===m && d.montantPonctuel && dealEncaissementYear(d)===cashYear);
+  // Exclut "Gagné" comme "Perdu" (05/10/2026) — même convention que
+  // renderPipelineKpis (Home, cf. `open` là-bas) : une affaire gagnée est
+  // déjà censée être saisie "en dur" côté Trésorerie (ligne "Signé" ou MRR
+  // portefeuille une fois le contrat actif), la compter EN PLUS ici à 100%
+  // de probabilité la comptait deux fois.
+  return deals.filter(d=>d.stage!=='Perdu' && d.stage!=='Gagné' && d.moisEncaissement===m && d.montantPonctuel && dealEncaissementYear(d)===cashYear);
 }
 function trDealsPipelineFor(m){
   return trDealsFor(m).reduce((s,d)=>s+(+d.montantPonctuel||0)*(+d.probability||0)/100, 0);
