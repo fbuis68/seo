@@ -129,7 +129,7 @@ désordonnés, archivage), IA (confirmation, invalidation, quota), banque, SMTP,
 
 ## 4. Mise en production
 
-`docker compose up -d --build` avec un `.env` rempli depuis `.env.example`. Points à fournir :
+Guide pas à pas : **[INSTALL.md](INSTALL.md)**. En résumé, `docker compose up -d --build` avec un `.env` rempli depuis `.env.example`. Points à fournir :
 
 * **Stripe** : créer les prix (Solo/Equipe/Centre × mois/an, options, pack) et renseigner les
   `STRIPE_PRICE_*` ; webhook vers `https://…/api/v1/webhooks/payment`.

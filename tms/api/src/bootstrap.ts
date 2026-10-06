@@ -7,7 +7,8 @@ import { config } from './config';
 
 export async function createApp(): Promise<NestExpressApplication> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true, logger: process.env.NODE_ENV === 'test' ? false : undefined });
-  app.set('trust proxy', 1);
+  // Nombre de proxys de confiance devant l'API (ex. 2 = HTTPS de l'hôte + nginx) : IP réelle pour la limitation.
+  app.set('trust proxy', Number(process.env.TRUST_PROXY ?? 1));
   app.disable('x-powered-by');
   app.useBodyParser('json', { limit: '2mb' });
   app.use((req: any, res: any, next: any) => {

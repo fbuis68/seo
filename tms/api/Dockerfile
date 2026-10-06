@@ -13,6 +13,8 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/migrations ./migrations
 COPY embed /embed
 ENV EMBED_DIR=/embed
+# Le volume nommé hérite de ce propriétaire au premier montage.
+RUN mkdir -p /data/storage && chown node:node /data/storage
 USER node
 EXPOSE 4000
 CMD ["sh", "-c", "node dist/scripts/migrate.js && node dist/src/main.js"]

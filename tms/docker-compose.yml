@@ -9,6 +9,7 @@ services:
       DB_APP_PASSWORD: ${DB_APP_PASSWORD}
     volumes: [dbdata:/var/lib/postgresql/data, ./db-init.sh:/docker-entrypoint-initdb.d/01-roles.sh:ro]
     healthcheck: { test: ["CMD", "pg_isready", "-U", "tms_owner"], interval: 5s, retries: 10 }
+    restart: unless-stopped
   api:
     build: { context: ., dockerfile: api/Dockerfile }
     env_file: .env
@@ -16,9 +17,10 @@ services:
       DATABASE_URL: postgres://tms_app:${DB_APP_PASSWORD}@db:5432/tms
       MIGRATION_DATABASE_URL: postgres://tms_owner:${DB_OWNER_PASSWORD}@db:5432/tms
       STORAGE_DIR: /data/storage
+      TRUST_PROXY: "2"
     volumes: [storage:/data/storage]
     depends_on: { db: { condition: service_healthy } }
-    ports: ["4000:4000"]
+    restart: unless-stopped
   worker:
     build: { context: ., dockerfile: api/Dockerfile }
     env_file: .env
@@ -28,8 +30,11 @@ services:
     command: ["node", "dist/src/worker.js"]
     volumes: [storage:/data/storage]
     depends_on: [api]
+    restart: unless-stopped
   web:
     build: { context: ., dockerfile: web/Dockerfile }
     depends_on: [api]
-    ports: ["8080:80"]
+    # Exposé uniquement en local : le HTTPS est assuré par le reverse proxy de l'hôte (Caddy).
+    ports: ["127.0.0.1:8080:80"]
+    restart: unless-stopped
 volumes: { dbdata: {}, storage: {} }
