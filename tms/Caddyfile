@@ -1,0 +1,23 @@
+# HTTPS automatique (Let's Encrypt) pour l'application et le site vitrine.
+# Domaines définis dans .env : APP_DOMAIN et SITE_DOMAINS.
+{
+	email {$ACME_EMAIL}
+}
+
+{$APP_DOMAIN} {
+	encode gzip
+	request_body {
+		max_size 1100MB
+	}
+	reverse_proxy web:80
+}
+
+{$SITE_DOMAINS} {
+	root * /srv/site
+	encode gzip
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+	file_server
+}

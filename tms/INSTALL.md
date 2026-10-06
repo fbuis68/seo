@@ -42,8 +42,11 @@ nano .env
 
 | Variable | Valeur |
 |----------|--------|
+| `APP_DOMAIN` | `app.exemple.fr` (application) |
+| `SITE_DOMAINS` | `www.exemple.fr, exemple.fr` (site vitrine HTML) |
+| `ACME_EMAIL` | email de contact Let's Encrypt |
 | `PUBLIC_API_URL`, `APP_URL` | `https://app.exemple.fr` |
-| `PUBLIC_ORIGINS` | domaines du site WordPress, ex. `https://www.sesame-technology.fr,https://sesame-technology.fr` |
+| `PUBLIC_ORIGINS` | adresses du site vitrine, ex. `https://www.exemple.fr,https://exemple.fr` |
 | `STRIPE_SECRET_KEY` | `sk_test_…` pour un essai, `sk_live_…` en production |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` (étape 5) |
 | `STRIPE_PRICE_*` | identifiants `price_…` créés dans Stripe (étape 5) |
@@ -53,34 +56,30 @@ nano .env
 Sans `SECRET_KEY` ni clés Stripe, l'API refuse de démarrer en production (comportement voulu).
 Sans `SYSTEM_SMTP_URL`, les emails de vérification ne partent pas : ils sont seulement écrits dans les journaux.
 
-## 4. Lancer
+## 4. Déposer le site vitrine
+
+Copier les fichiers du site HTML dans `site/` (un modèle `site/tarifs.html` intégrant le widget y est
+déjà). Remplacer `app.sesame-technology.fr` par votre `APP_DOMAIN` dans ce modèle si besoin.
+
+```bash
+cp -r /chemin/de/votre/site/* /opt/tms/src/tms/site/
+```
+
+## 5. Lancer (tout est dans Docker)
 
 ```bash
 docker compose up -d --build
-docker compose ps                  # db, api, worker, web : « running »
+docker compose ps                  # db, api, worker, web, caddy : « running »
 docker compose logs -f api         # attendre « API prête »
-curl -s http://127.0.0.1:8080/api/v1/public/catalog | head -c 200
+docker compose logs caddy | grep -i certificate   # certificats HTTPS obtenus
+curl -s https://app.exemple.fr/api/v1/public/catalog | head -c 200
 ```
 
-Les migrations de base de données s'exécutent automatiquement au démarrage de l'API.
+Les migrations de base de données s'exécutent automatiquement au démarrage de l'API. Le conteneur
+`caddy` obtient et renouvelle seul les certificats HTTPS de l'application et du site (ports 80/443
+ouverts et DNS déjà en place requis).
 
-## 5. HTTPS (Caddy) et Stripe
-
-```bash
-sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
-sudo apt update && sudo apt install -y caddy
-
-sudo tee /etc/caddy/Caddyfile >/dev/null <<'EOF'
-app.exemple.fr {
-    encode gzip
-    request_body { max_size 1100MB }
-    reverse_proxy 127.0.0.1:8080
-}
-EOF
-sudo systemctl reload caddy        # certificat Let's Encrypt obtenu automatiquement
-```
+## 6. Stripe
 
 Dans le tableau de bord Stripe :
 1. **Produits** : créer Solo, Equipe, Centre (prix mensuel et annuel = 10 mensualités), « Banque connectée »
@@ -92,38 +91,25 @@ Dans le tableau de bord Stripe :
 
 Puis : `docker compose up -d` pour appliquer le `.env`.
 
-## 6. Brancher le site web (HTML)
 
-Modèle prêt à l'emploi : `embed/tarifs.html` (bloc à coller, contenu de secours indexable, données
-structurées schema.org, suivi des inscriptions). Le strict minimum à coller dans votre page :
+## 7. Intégrer le widget dans vos pages
+
+Le strict minimum à coller dans une page du site (voir `site/tarifs.html` pour la version complète
+avec contenu de secours indexable, données structurées et suivi des inscriptions) :
 
 ```html
 <div data-tms-widget data-api="https://app.exemple.fr" data-show="pricing,modules,signup"></div>
 <script src="https://app.exemple.fr/embed/v1/tms-embed.js" defer></script>
 ```
 
-* Le domaine du site doit figurer dans `PUBLIC_ORIGINS` (sinon le widget affiche « offres indisponibles »).
+* Les adresses du site doivent figurer dans `PUBLIC_ORIGINS` (sinon le widget affiche « offres indisponibles »).
 * Si votre site envoie un en-tête Content-Security-Policy, autoriser `https://app.exemple.fr`
   dans `script-src` et `connect-src`.
 * Variantes : `data-show="pricing"` (grille seule), `data-plan="equipe"` (offre présélectionnée),
   `data-interval="year"`, `data-accent="#0e2a47"` (couleur), `data-theme="light"`.
+* Modifier le site : changer les fichiers dans `site/`, effet immédiat (aucun redémarrage).
 
-Si le site vitrine est hébergé sur le même serveur, Caddy peut le servir aussi. Copier les fichiers
-du site dans `/var/www/site`, puis ajouter à `/etc/caddy/Caddyfile` :
-
-```
-www.exemple.fr, exemple.fr {
-    root * /var/www/site
-    file_server
-    encode gzip
-}
-```
-
-et recharger : `sudo systemctl reload caddy`.
-
-(L'extension `wordpress-plugin/` reste disponible si un site WordPress est utilisé un jour.)
-
-## 7. Sauvegardes et mises à jour
+## 8. Sauvegardes et mises à jour
 
 ```bash
 # Sauvegarde quotidienne (base + documents), à planifier avec cron
