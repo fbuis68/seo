@@ -1,0 +1,35 @@
+# Déploiement de référence (hébergement UE recommandé). Secrets dans .env (voir .env.example).
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: tms
+      POSTGRES_USER: tms_owner
+      POSTGRES_PASSWORD: ${DB_OWNER_PASSWORD}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD}
+    volumes: [dbdata:/var/lib/postgresql/data, ./db-init.sh:/docker-entrypoint-initdb.d/01-roles.sh:ro]
+    healthcheck: { test: ["CMD", "pg_isready", "-U", "tms_owner"], interval: 5s, retries: 10 }
+  api:
+    build: { context: ., dockerfile: api/Dockerfile }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://tms_app:${DB_APP_PASSWORD}@db:5432/tms
+      MIGRATION_DATABASE_URL: postgres://tms_owner:${DB_OWNER_PASSWORD}@db:5432/tms
+      STORAGE_DIR: /data/storage
+    volumes: [storage:/data/storage]
+    depends_on: { db: { condition: service_healthy } }
+    ports: ["4000:4000"]
+  worker:
+    build: { context: ., dockerfile: api/Dockerfile }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://tms_app:${DB_APP_PASSWORD}@db:5432/tms
+      STORAGE_DIR: /data/storage
+    command: ["node", "dist/src/worker.js"]
+    volumes: [storage:/data/storage]
+    depends_on: [api]
+  web:
+    build: { context: ., dockerfile: web/Dockerfile }
+    depends_on: [api]
+    ports: ["8080:80"]
+volumes: { dbdata: {}, storage: {} }

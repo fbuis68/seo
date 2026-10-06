@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { Client } from 'pg';
 import { config } from '../src/config';
@@ -10,7 +10,7 @@ export async function migrate(url = config.migrationDatabaseUrl, log = true): Pr
   try {
     await client.query('CREATE TABLE IF NOT EXISTS schema_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())');
     await client.query('SELECT pg_advisory_lock(424242)');
-    const dir = join(__dirname, '..', 'migrations');
+    const dir = [join(__dirname, '..', 'migrations'), join(__dirname, '..', '..', 'migrations')].find((d) => existsSync(d))!;
     const files = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();
     const done = new Set((await client.query('SELECT name FROM schema_migrations')).rows.map((r) => r.name));
     for (const file of files) {
