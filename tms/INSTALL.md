@@ -92,14 +92,36 @@ Dans le tableau de bord Stripe :
 
 Puis : `docker compose up -d` pour appliquer le `.env`.
 
-## 6. Brancher le site WordPress
+## 6. Brancher le site web (HTML)
 
-1. Copier `wordpress-plugin/tms-souscription` dans `wp-content/plugins/` (ou le zipper et le téléverser) :
-   ```bash
-   cd /opt/tms/src/tms/wordpress-plugin && zip -r tms-souscription.zip tms-souscription
-   ```
-2. Activer l'extension → *Réglages → Souscription en ligne* → URL de l'API : `https://app.exemple.fr`.
-3. Dans la page « Tarifs » : shortcode `[tms_souscription]`.
+Modèle prêt à l'emploi : `embed/tarifs.html` (bloc à coller, contenu de secours indexable, données
+structurées schema.org, suivi des inscriptions). Le strict minimum à coller dans votre page :
+
+```html
+<div data-tms-widget data-api="https://app.exemple.fr" data-show="pricing,modules,signup"></div>
+<script src="https://app.exemple.fr/embed/v1/tms-embed.js" defer></script>
+```
+
+* Le domaine du site doit figurer dans `PUBLIC_ORIGINS` (sinon le widget affiche « offres indisponibles »).
+* Si votre site envoie un en-tête Content-Security-Policy, autoriser `https://app.exemple.fr`
+  dans `script-src` et `connect-src`.
+* Variantes : `data-show="pricing"` (grille seule), `data-plan="equipe"` (offre présélectionnée),
+  `data-interval="year"`, `data-accent="#0e2a47"` (couleur), `data-theme="light"`.
+
+Si le site vitrine est hébergé sur le même serveur, Caddy peut le servir aussi. Copier les fichiers
+du site dans `/var/www/site`, puis ajouter à `/etc/caddy/Caddyfile` :
+
+```
+www.exemple.fr, exemple.fr {
+    root * /var/www/site
+    file_server
+    encode gzip
+}
+```
+
+et recharger : `sudo systemctl reload caddy`.
+
+(L'extension `wordpress-plugin/` reste disponible si un site WordPress est utilisé un jour.)
 
 ## 7. Sauvegardes et mises à jour
 

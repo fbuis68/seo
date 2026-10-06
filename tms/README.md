@@ -21,7 +21,11 @@ Parcours (§4.1) : tarifs publics → création du compte → vérification emai
 sans carte → choix volontaire d'une offre payante → paiement hébergé → confirmation serveur
 (webhook) → activation des quotas.
 
-### WordPress (recommandé)
+### Site HTML
+
+Modèle prêt à copier : `embed/tarifs.html` (bloc widget, contenu de secours indexable, JSON-LD). Bloc minimal ci-dessous.
+
+### WordPress (optionnel)
 
 1. Copier `wordpress-plugin/tms-souscription` dans `wp-content/plugins/` et activer l'extension.
 2. *Réglages → Souscription en ligne* : URL de l'API (ex. `https://app.exemple.fr`), couleur, thème.
@@ -33,7 +37,7 @@ L'extension rend aussi les tarifs **côté serveur** (indexables, cache 1 h) ave
 structurées schema.org (`SoftwareApplication` / `Offer`), puis le widget interactif prend le relais.
 L'événement `tms_signup` est poussé dans `dataLayer` (Google Tag Manager) pour suivre les conversions.
 
-### Autre site (HTML)
+### Bloc HTML à coller
 
 ```html
 <div data-tms-widget data-api="https://app.exemple.fr" data-show="pricing,modules,signup" data-plan="equipe"></div>
