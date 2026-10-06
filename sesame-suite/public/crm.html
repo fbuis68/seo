@@ -9179,7 +9179,10 @@ async function accValidateInvoice(id){
     const r = await apiFetch('/wa/acc/invoices/'+id+'/validate?scope=crm', {method:'POST'});
     const data = await r.json();
     if(!r.ok) throw new Error(data.error||'http '+r.status);
-    flash('Facture validée — écriture brouillon générée');
+    // Un devis/contrat classé ne porte jamais d'écriture (cf. routes/accounting.ts
+    // /validate, saute volontairement generateDraftEntry) — le message ne doit
+    // jamais prétendre le contraire (05/10/2026).
+    flash(data.entryId ? 'Facture validée — écriture brouillon générée' : 'Document classé');
     loadAccDashboard();
     if(ACC_TAB==='inbox') accReloadInvoices();
     if(ACC_TAB==='entries') loadAccEntriesTab();

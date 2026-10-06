@@ -183,7 +183,7 @@ accountingRouter.get(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const entityId = await resolveScope(req);
-    const { status, direction, supplierId, q, unpaid, dueDateFrom, dueDateTo } = req.query as Record<string, string | undefined>;
+    const { status, direction, supplierId, q, unpaid, dueDateFrom, dueDateTo, includeNonAccounting } = req.query as Record<string, string | undefined>;
     const limit = Math.min(200, Number(req.query.limit) || 50);
     const offset = Number(req.query.offset) || 0;
 
@@ -191,6 +191,13 @@ accountingRouter.get(
     if (status) where.status = status;
     if (direction) where.direction = direction;
     if (supplierId) where.supplierId = supplierId;
+    // Devis/contrat/non comptable exclus par défaut (05/10/2026) — cette
+    // liste sert les onglets "Factures fournisseurs"/"Factures clients"
+    // (cf. crm.html accReloadInvoices), qui ne doivent jamais mélanger de
+    // VRAIES factures avec des documents classés sans montant ni écriture.
+    // ?includeNonAccounting=true les réintègre si un jour un écran a besoin
+    // de la liste complète.
+    if (includeNonAccounting !== "true") where.documentType = { notIn: NON_ACCOUNTING_DOC_TYPES };
     if (q) {
       where.OR = [
         { invoiceNumber: { contains: q, mode: "insensitive" } },
