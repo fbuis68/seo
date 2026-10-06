@@ -8353,7 +8353,18 @@ async function accGraphMailDeactivate(purpose){
 
 // ───────── Onglet Factures (inbox de validation, §37) ─────────
 
-let ACC_INBOX_FILTER={status:'',direction:'',dueDateFrom:'',dueDateTo:'',q:'',checkLevel:'',paidFilter:''};
+// direction:'purchase' (Fournisseurs) et paidFilter:'unpaid' par défaut
+// (05/10/2026, demande client) — deux onglets distincts (Fournisseurs/
+// Clients) plutôt qu'une vue mélangée, et seules les factures non réglées
+// affichées d'entrée, la liste réelle n'ayant d'intérêt opérationnel
+// quotidien que pour ce qui reste à traiter/payer.
+let ACC_INBOX_FILTER={status:'',direction:'purchase',dueDateFrom:'',dueDateTo:'',q:'',checkLevel:'',paidFilter:'unpaid'};
+
+function accSetInboxDirection(dir){
+  ACC_INBOX_FILTER.direction = dir;
+  ACC_INBOX_SELECTED.clear();
+  accReloadInvoices();
+}
 let ACC_INBOX_SELECTED=new Set();
 
 async function loadAccInboxTab(){
@@ -8468,15 +8479,14 @@ function renderAccInbox(){
     </tr>`;
   }).join('');
   withFocusKept('#acc-inbox-search', ()=>{ el.innerHTML = `
+    <div class="autoviewtoggle" style="margin-bottom:10px">
+      <button type="button" class="${ACC_INBOX_FILTER.direction==='purchase'?'on':''}" onclick="accSetInboxDirection('purchase')">Factures fournisseurs</button>
+      <button type="button" class="${ACC_INBOX_FILTER.direction==='sale'?'on':''}" onclick="accSetInboxDirection('sale')">Factures clients</button>
+    </div>
     <div class="list-toolbar" style="flex-wrap:wrap">
-      <input id="acc-inbox-search" class="lsel" style="min-width:220px" placeholder="Rechercher client, fournisseur, n° facture…" value="${esc(ACC_INBOX_FILTER.q)}" oninput="accSetInboxSearch(this.value)">
+      <input id="acc-inbox-search" class="lsel" style="min-width:220px" placeholder="Rechercher ${ACC_INBOX_FILTER.direction==='sale'?'client':'fournisseur'}, n° facture…" value="${esc(ACC_INBOX_FILTER.q)}" oninput="accSetInboxSearch(this.value)">
       <select class="lsel" onchange="accSetInboxFilter('status', this.value)">
         ${statusOpts.map(s=>`<option value="${s}" ${ACC_INBOX_FILTER.status===s?'selected':''}>${s?ACC_STATUS_LABEL[s]:'Tous les statuts'}</option>`).join('')}
-      </select>
-      <select class="lsel" onchange="accSetInboxFilter('direction', this.value)">
-        <option value="" ${!ACC_INBOX_FILTER.direction?'selected':''}>Achat + Vente</option>
-        <option value="purchase" ${ACC_INBOX_FILTER.direction==='purchase'?'selected':''}>Achats</option>
-        <option value="sale" ${ACC_INBOX_FILTER.direction==='sale'?'selected':''}>Ventes</option>
       </select>
       <select class="lsel" onchange="accSetCheckLevelFilter(this.value)">
         <option value="" ${!ACC_INBOX_FILTER.checkLevel?'selected':''}>Tous contrôles</option>
@@ -8717,6 +8727,11 @@ async function accUploadNext(direction, i, files, results){
       ? (results[0].ok ? (results[0].isDuplicateDocument?'Document déjà déposé — facture existante rouverte':'Facture déposée et analysée') : 'Erreur : '+results[0].error)
       : `${okCount}/${total} facture(s) déposée(s)${dupCount?' ('+dupCount+' déjà connue(s))':''}`);
     loadAccDashboard();
+    // Bascule sur l'onglet correspondant au sens déposé (05/10/2026, les
+    // deux onglets Fournisseurs/Clients sont désormais mutuellement
+    // exclusifs) — sinon la facture tout juste déposée n'apparaîtrait pas
+    // dans la liste si l'autre onglet était actif.
+    ACC_INBOX_FILTER.direction = direction;
     if(ACC_TAB==='inbox') await accReloadInvoices();
     if(total===1 && results[0].ok) openAccInvoiceModal(results[0].invoiceId);
     return;
