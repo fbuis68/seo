@@ -107,15 +107,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,san
 /* ── SIDEBAR ── */
 .sidebar{width:210px;flex-shrink:0;background:var(--card);border-right:0.5px solid var(--bdr);display:flex;flex-direction:column;overflow-y:auto}
 .sidebar-overlay{display:none}
-.nav-lbl{font-size:10px;font-weight:500;color:#c0bdb8;padding:14px 16px 3px;letter-spacing:.07em;text-transform:uppercase;user-select:none}
-.nav-item{display:flex;align-items:center;gap:8px;padding:7px 16px;font-size:13px;color:#666;cursor:pointer;transition:background .1s;user-select:none}
+.nav-lbl{font-size:10px;font-weight:500;color:#c0bdb8;padding:20px 16px 6px;letter-spacing:.07em;text-transform:uppercase;user-select:none}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 16px;font-size:13px;color:#666;cursor:pointer;transition:background .1s;user-select:none}
 .nav-item:hover{background:var(--hover);color:var(--tx)}
 .nav-item.active{background:var(--hover);color:var(--tx);font-weight:500}
 .nav-ico{width:15px;height:15px;border:1px solid var(--bdr2);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:8px;color:var(--hi);flex-shrink:0}
 .nav-item.active .nav-ico{border-color:#999;color:#666}
 .nb{margin-left:auto;font-size:10px;font-weight:500;padding:1px 6px;border-radius:20px}
 .nb-r{background:#fcebeb;color:#791f1f}.nb-a{background:#faeeda;color:#633806}
-.s-hr{border:none;border-top:0.5px solid var(--div);margin:6px 0}
+.s-hr{border:none;border-top:0.5px solid var(--div);margin:12px 0}
 .view-toggle{display:flex;gap:5px;padding:8px 12px 10px}
 .vt{flex:1;font-size:11px;height:27px;border-radius:7px;border:0.5px solid var(--bdr2);background:var(--card);color:#666;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;transition:all .1s;font-family:inherit}
 .vt:hover{background:var(--hover)}
@@ -372,6 +372,9 @@ input[type=checkbox]{accent-color:var(--a);cursor:pointer;width:14px;height:14px
 .ui-theme-row:hover{background:var(--hover)}
 .ui-theme-dot{width:18px;height:18px;border-radius:50%;flex-shrink:0;border:1px solid rgba(0,0,0,.08);box-shadow:0 0 0 2px var(--card) inset}
 .ui-theme-row .ui-theme-check{margin-left:auto;color:var(--a);font-size:13px}
+.settings-menu{display:none;position:fixed;z-index:600;background:var(--card);border:1px solid var(--bdr);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.18);padding:6px;width:210px}
+.settings-menu.show{display:block}
+.settings-menu .nav-item{border-radius:7px}
 
 /* ── AFFAIRES (pipeline Kanban) ── */
 .kanban-wrap{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;align-items:flex-start}
@@ -514,9 +517,26 @@ svg.tr-chart{display:block;width:100%;height:auto;min-width:640px}
   <div class="breadcrumb" id="bc"></div>
   <div class="tb-right">
     <div id="tb-actions" style="display:flex;gap:7px;align-items:center"></div>
+    <button class="btn btn-ghost btn-icon" id="ui-settings-btn" onclick="toggleSettingsMenu(this)" title="Paramètres">⚙</button>
     <button class="btn btn-ghost btn-icon" id="ui-theme-btn" onclick="toggleThemePicker(this)" title="Thème de l'interface">◐</button>
     <button class="btn btn-ghost btn-icon" onclick="crmLogout()" title="Déconnexion">⏻</button>
   </div>
+</div>
+
+<!-- Menu Paramètres — regroupe les réglages auparavant listés en permanence
+     dans la barre latérale (Canaux, Automatisations, Questionnaires,
+     Scoring, Produits, Utilisateurs CRM), déclenché par la roue dentée à
+     côté de la déconnexion plutôt que d'encombrer la navigation courante
+     (05/10/2026, demande client). Mêmes id/onclick que l'ancien bloc
+     sidebar — setNav() et la visibilité conditionnelle de n-crmusers
+     (cf. enterApp) continuent de fonctionner sans changement. -->
+<div class="settings-menu" id="settings-menu" onclick="if(event.target.closest('.nav-item'))closeSettingsMenu()">
+  <div class="nav-item" id="n-canaux" onclick="showCanauxPanel()"><div class="nav-ico">✉</div> Canaux</div>
+  <div class="nav-item" id="n-auto" onclick="showAutomationPanel()"><div class="nav-ico">◈</div> Automatisations</div>
+  <div class="nav-item" id="n-questionnaires" onclick="showQuestionnaires()"><div class="nav-ico">▤</div> Questionnaires</div>
+  <div class="nav-item" id="n-scoring" onclick="showScoringPanel()"><div class="nav-ico">⚡</div> Scoring</div>
+  <div class="nav-item" id="n-produits" onclick="showCrmProducts()"><div class="nav-ico">◫</div> Produits</div>
+  <div class="nav-item" id="n-crmusers" onclick="showCrmUsers()" style="display:none"><div class="nav-ico">◉</div> Utilisateurs CRM</div>
 </div>
 
 <div class="layout" style="display:none" id="layout">
@@ -533,14 +553,6 @@ svg.tr-chart{display:block;width:100%;height:auto;min-width:640px}
     <div class="nav-item" id="n-faq" onclick="showFaqList()"><div class="nav-ico">✦</div> FAQ</div>
     <div class="nav-item" id="n-activite" onclick="showActivites()"><div class="nav-ico">◈</div> Activités</div>
     <div class="nav-item" id="n-contrats" onclick="showContrats()"><div class="nav-ico">◻</div> Contrats</div>
-    <hr class="s-hr">
-    <div class="nav-lbl">Paramètres</div>
-    <div class="nav-item" id="n-canaux" onclick="showCanauxPanel()"><div class="nav-ico">✉</div> Canaux</div>
-    <div class="nav-item" id="n-auto" onclick="showAutomationPanel()"><div class="nav-ico">◈</div> Automatisations</div>
-    <div class="nav-item" id="n-questionnaires" onclick="showQuestionnaires()"><div class="nav-ico">▤</div> Questionnaires</div>
-    <div class="nav-item" id="n-scoring" onclick="showScoringPanel()"><div class="nav-ico">⚡</div> Scoring</div>
-    <div class="nav-item" id="n-produits" onclick="showCrmProducts()"><div class="nav-ico">◫</div> Produits</div>
-    <div class="nav-item" id="n-crmusers" onclick="showCrmUsers()" style="display:none"><div class="nav-ico">◉</div> Utilisateurs CRM</div>
     <hr class="s-hr">
     <div class="nav-lbl">Filtres rapides</div>
     <div class="nav-item" onclick="qf('danger','Élevé !!')"><div class="nav-ico">!</div> Risque élevé <span class="nb nb-r" id="b-eleve">0</span></div>
@@ -713,6 +725,33 @@ function toggleSidebar(){
 function closeSidebar(){
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('sidebar-overlay').classList.remove('show');
+}
+
+// ── MENU PARAMÈTRES — regroupe Canaux/Automatisations/Questionnaires/
+// Scoring/Produits/Utilisateurs CRM derrière la roue dentée de la barre du
+// haut (05/10/2026) plutôt que de les lister en permanence dans la barre
+// latérale — mêmes nav-item (ids inchangés) que l'ancien bloc sidebar,
+// juste déplacés hors du flux de navigation courante. ──
+function toggleSettingsMenu(anchorEl){
+  var menu = document.getElementById('settings-menu');
+  var wasOpen = menu.classList.contains('show');
+  closeSettingsMenu();
+  if(wasOpen) return;
+  var rect = anchorEl.getBoundingClientRect();
+  menu.style.top = (rect.bottom+6)+'px';
+  menu.style.left = Math.max(8, rect.right-210)+'px';
+  menu.classList.add('show');
+  setTimeout(function(){
+    document.addEventListener('click', function onDoc(e){
+      if(!menu.contains(e.target) && e.target!==anchorEl && !anchorEl.contains(e.target)){
+        closeSettingsMenu();
+        document.removeEventListener('click', onDoc);
+      }
+    });
+  },10);
+}
+function closeSettingsMenu(){
+  document.getElementById('settings-menu').classList.remove('show');
 }
 
 // ── THÈME D'INTERFACE — reskinne crm ET admin (préférence partagée, localStorage) ──
