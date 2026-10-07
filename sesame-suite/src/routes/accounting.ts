@@ -360,6 +360,14 @@ const EDITABLE_INVOICE_FIELDS = [
   "amountShipping",
 ] as const;
 
+// Champs "non comptables" — n'affectent ni l'écriture déjà générée ni le
+// lettrage/rapprochement (contrairement aux montants, tiers, sens, type) —
+// restent corrigibles même sur une facture déjà comptabilisée/réglée
+// (05/10/2026, demande client : une date de facture/échéance mal extraite
+// reste modifiable sans devoir passer par une extourne d'écriture, qui ne
+// sert qu'à corriger des MONTANTS).
+const NON_ACCOUNTING_EDITABLE_FIELDS = ["invoiceNumber", "invoiceDate", "dueDate", "serviceDate", "currency", "orderNumber", "contractRef", "paymentMethod"] as const;
+
 /** PUT /wa/acc/invoices/:id — corrections manuelles avant validation (§13/§38). */
 accountingRouter.put(
   "/acc/invoices/:id",
@@ -374,14 +382,25 @@ accountingRouter.put(
     // comptabilisée (05/10/2026, demande client : libellé Fournisseur figé
     // à tort sur un devis uploadé par erreur côté Achats).
     const isNonAccounting = NON_ACCOUNTING_DOC_TYPES.includes(existing.documentType || "");
-    if ((existing.status === "VALIDATED" || existing.status === "ACCOUNTED") && !isNonAccounting) {
-      throw new HttpError(400, "Facture déjà validée — utilisez une extourne d'écriture pour corriger");
-    }
+    const isLocked = ["VALIDATED", "ACCOUNTED", "PARTIALLY_PAID", "PAID"].includes(existing.status) && !isNonAccounting;
 
     const body = req.body as Record<string, unknown>;
+    if (isLocked) {
+      const blockedFields = Object.keys(body).filter(
+        (f) => (EDITABLE_INVOICE_FIELDS as readonly string[]).includes(f) && !(NON_ACCOUNTING_EDITABLE_FIELDS as readonly string[]).includes(f)
+      );
+      if (blockedFields.length) {
+        throw new HttpError(
+          400,
+          `Facture déjà validée — seules les informations non comptables (n° facture, dates, devise, référence commande/contrat, mode de paiement) restent modifiables. Utilisez une extourne d'écriture pour corriger : ${blockedFields.join(", ")}`
+        );
+      }
+    }
+
     const data: Record<string, unknown> = {};
     const oldValue: Record<string, unknown> = {};
-    for (const field of EDITABLE_INVOICE_FIELDS) {
+    const allowedFields = isLocked ? NON_ACCOUNTING_EDITABLE_FIELDS : EDITABLE_INVOICE_FIELDS;
+    for (const field of allowedFields) {
       if (!(field in body)) continue;
       let value = body[field];
       if (field === "direction" && value !== "purchase" && value !== "sale") throw new HttpError(400, "direction doit être 'purchase' ou 'sale'");
