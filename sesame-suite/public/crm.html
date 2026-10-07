@@ -8654,6 +8654,13 @@ let ACC_DUE_SUMMARY = null;
 async function accReloadInvoices(){
   const params = new URLSearchParams({scope:'crm', limit:'100'});
   if(ACC_INBOX_FILTER.status) params.set('status', ACC_INBOX_FILTER.status);
+  // Réglée/Non réglée doit être appliqué CÔTÉ SERVEUR (pas seulement sur la
+  // page de 100 lignes déjà chargée) — sinon une facture payée ancienne,
+  // hors des 100 lignes les plus récentes, n'apparaît jamais même en
+  // sélectionnant "Réglées" (bug constaté 07/10/2026). Ignoré si un statut
+  // précis est déjà choisi dans l'autre filtre, qui prime.
+  else if(ACC_INBOX_FILTER.paidFilter==='unpaid') params.set('unpaid', 'true');
+  else if(ACC_INBOX_FILTER.paidFilter==='paid') params.set('status', 'PAID');
   if(ACC_INBOX_FILTER.direction) params.set('direction', ACC_INBOX_FILTER.direction);
   if(ACC_INBOX_FILTER.dueDateFrom) params.set('dueDateFrom', ACC_INBOX_FILTER.dueDateFrom);
   if(ACC_INBOX_FILTER.dueDateTo) params.set('dueDateTo', ACC_INBOX_FILTER.dueDateTo);
@@ -8679,7 +8686,7 @@ function accSetInboxFilter(field, val){ ACC_INBOX_FILTER[field]=val; accReloadIn
 // logique que la recherche texte, cf. accFilteredInvoices) : pas besoin
 // d'un aller-retour serveur, re-rendu immédiat.
 function accSetCheckLevelFilter(val){ ACC_INBOX_FILTER.checkLevel=val; renderAccInbox(); }
-function accSetPaidFilter(val){ ACC_INBOX_FILTER.paidFilter=val; renderAccInbox(); }
+function accSetPaidFilter(val){ ACC_INBOX_FILTER.paidFilter=val; accReloadInvoices(); }
 
 function accToggleInboxSelect(id, checked){
   if(checked) ACC_INBOX_SELECTED.add(id); else ACC_INBOX_SELECTED.delete(id);
@@ -8729,12 +8736,11 @@ function accFilteredInvoices(){
     accInvoiceTiersName(inv).toLowerCase().includes(q) || (inv.invoiceNumber||'').toLowerCase().includes(q)
   );
   if(ACC_INBOX_FILTER.checkLevel) list = list.filter(inv=>accWorstCheckLevel(inv.checks)===ACC_INBOX_FILTER.checkLevel);
-  // "Réglée"/"Non réglée" ne concerne que les factures déjà comptabilisées
-  // (cf. accPaidIndicator — avant ça, "réglée" n'a pas de sens, l'écriture
-  // qui porterait le règlement n'existe pas encore) — même périmètre de
-  // statuts que l'ancien filtre serveur "Non payées uniquement".
-  if(ACC_INBOX_FILTER.paidFilter==='paid') list = list.filter(inv=>inv.status==='PAID');
-  else if(ACC_INBOX_FILTER.paidFilter==='unpaid') list = list.filter(inv=>['VALIDATED','ACCOUNTED','PARTIALLY_PAID'].includes(inv.status));
+  // Réglée/Non réglée est appliqué côté serveur (cf. accReloadInvoices) —
+  // sinon une facture payée ancienne, hors des 100 lignes les plus
+  // récentes chargées en mémoire, n'apparaît jamais même en sélectionnant
+  // "Réglées" (bug constaté 07/10/2026). Pas de re-filtrage ici : la liste
+  // déjà chargée correspond exactement au filtre demandé.
   return list;
 }
 
