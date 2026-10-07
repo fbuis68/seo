@@ -8000,7 +8000,12 @@ let ACC_BANK_ACCOUNTS=[], ACC_BANK_TX=[], ACC_BANK_SELECTED=null;
 // sélectionné n'a jamais utilisé ce label Qonto, la liste de transactions
 // s'affiche simplement vide plutôt que de retomber silencieusement sur
 // "Tous labels" ; l'utilisateur repasse par le sélecteur pour l'enlever.
-let ACC_BANK_FILTER={type:'all', label:'Salaire', excludeKinds:new Set(), dateFrom:'', dateTo:''};
+// label:'' (06/10/2026) — le défaut "Salaire" (05/10/2026) masquait TOUTES
+// les transactions dès qu'un compte n'avait aucun mouvement labellisé
+// "Salaire" (ou pas de labels Qonto du tout, ex. compte importé par CSV) :
+// l'onglet Banque semblait vide/cassé alors que les données étaient
+// intactes, juste filtrées par un défaut trop restrictif.
+let ACC_BANK_FILTER={type:'all', label:'', excludeKinds:new Set(), dateFrom:'', dateTo:''};
 let ACC_VAT_SUMMARY=null;
 let ACC_QONTO_CONFIG=null, ACC_QONTO_TEST_ACCOUNTS=null;
 let ACC_GOCARDLESS_CONFIG=null;
@@ -10091,10 +10096,10 @@ function accBankDateFilterChange(){
 function accSelectBankAccount(id){
   ACC_BANK_SELECTED = id;
   // Les labels analytiques diffèrent par compte — celui d'un autre compte
-  // n'a pas de sens ici. Retombe sur "Salaire" (valeur par défaut du
-  // filtre, demande client 05/10/2026) plutôt que "Tous labels" : si ce
-  // compte n'a jamais utilisé ce label, la liste s'affiche simplement vide.
-  ACC_BANK_FILTER.label='Salaire';
+  // n'a pas de sens ici. Repasse sur "Tous labels" (06/10/2026 — l'ancien
+  // défaut "Salaire" masquait toute la liste dès qu'un compte n'avait
+  // aucun mouvement portant ce label).
+  ACC_BANK_FILTER.label='';
   loadAccBankTransactions().then(renderAccBank);
 }
 
