@@ -290,10 +290,108 @@ accountingRouter.get(
         supplier: true, customer: true, document: true, lines: true, vatLines: true, proposedAccount: true,
         entry: { include: { lines: { include: { account: true } } } },
         bankMatches: { include: { bankTransaction: true }, orderBy: { createdAt: "asc" } },
+        installments: { orderBy: { position: "asc" } },
       },
     });
     if (!invoice) throw new HttpError(404, "Facture introuvable");
     res.json(invoice);
+  })
+);
+
+/**
+ * Répartition du règlement en tranches (ex : 65% à telle date, le solde à
+ * une date à déterminer — demande client 07/10/2026, facture de vente).
+ * `amount` est figé à la création (depuis `percentage` × montant total si
+ * fourni, sinon le montant donné directement) : il ne se recalcule jamais
+ * tout seul si la facture est corrigée ensuite — une tranche déjà
+ * communiquée au client ne doit pas bouger dans le dos de l'utilisateur.
+ * `dueDate` omis ou null = "à déterminer".
+ */
+accountingRouter.get(
+  "/acc/invoices/:id/installments",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const invoice = await prisma.accInvoice.findFirst({ where: { id: req.params.id, entityId } });
+    if (!invoice) throw new HttpError(404, "Facture introuvable");
+    const rows = await prisma.accInvoiceInstallment.findMany({ where: { invoiceId: invoice.id }, orderBy: { position: "asc" } });
+    res.json(rows);
+  })
+);
+
+accountingRouter.post(
+  "/acc/invoices/:id/installments",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const invoice = await prisma.accInvoice.findFirst({ where: { id: req.params.id, entityId } });
+    if (!invoice) throw new HttpError(404, "Facture introuvable");
+    const b = req.body as { label?: string; percentage?: number; amount?: number; dueDate?: string | null };
+    const total = invoiceTotal(invoice);
+    let amount: number;
+    let percentage: number | null = null;
+    if (b.percentage != null) {
+      percentage = Number(b.percentage);
+      if (!(percentage > 0) || percentage > 100) throw new HttpError(400, "Pourcentage invalide (entre 0 et 100)");
+      amount = Math.round(total * (percentage / 100) * 100) / 100;
+    } else if (b.amount != null) {
+      amount = Number(b.amount);
+      if (!(amount > 0)) throw new HttpError(400, "Montant invalide");
+    } else {
+      throw new HttpError(400, "percentage ou amount requis");
+    }
+    const existing = await prisma.accInvoiceInstallment.findMany({ where: { invoiceId: invoice.id } });
+    const sumExisting = existing.reduce((s, r) => s + r.amount, 0);
+    if (sumExisting + amount > total + 0.01) {
+      throw new HttpError(400, `La somme des tranches (${(sumExisting + amount).toFixed(2)} €) dépasserait le montant total de la facture (${total.toFixed(2)} €)`);
+    }
+    const created = await prisma.accInvoiceInstallment.create({
+      data: {
+        invoiceId: invoice.id,
+        label: b.label || null,
+        percentage,
+        amount,
+        dueDate: b.dueDate ? new Date(b.dueDate) : null,
+        position: existing.length,
+      },
+    });
+    await recordAuditLog({
+      entityId, userId: actorId(req), action: "invoice_installment_created", targetType: "AccInvoice", targetId: invoice.id,
+      newValue: { amount, percentage, dueDate: created.dueDate }, ip: req.ip,
+    });
+    res.status(201).json(created);
+  })
+);
+
+accountingRouter.patch(
+  "/acc/invoices/:id/installments/:instId",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const invoice = await prisma.accInvoice.findFirst({ where: { id: req.params.id, entityId } });
+    if (!invoice) throw new HttpError(404, "Facture introuvable");
+    const existing = await prisma.accInvoiceInstallment.findFirst({ where: { id: req.params.instId, invoiceId: invoice.id } });
+    if (!existing) throw new HttpError(404, "Tranche introuvable");
+    const data: Record<string, unknown> = {};
+    if ("paid" in req.body) data.paid = Boolean(req.body.paid);
+    if ("dueDate" in req.body) data.dueDate = req.body.dueDate ? new Date(req.body.dueDate) : null;
+    if ("label" in req.body) data.label = req.body.label || null;
+    const updated = await prisma.accInvoiceInstallment.update({ where: { id: existing.id }, data });
+    res.json(updated);
+  })
+);
+
+accountingRouter.delete(
+  "/acc/invoices/:id/installments/:instId",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const invoice = await prisma.accInvoice.findFirst({ where: { id: req.params.id, entityId } });
+    if (!invoice) throw new HttpError(404, "Facture introuvable");
+    const existing = await prisma.accInvoiceInstallment.findFirst({ where: { id: req.params.instId, invoiceId: invoice.id } });
+    if (!existing) throw new HttpError(404, "Tranche introuvable");
+    await prisma.accInvoiceInstallment.delete({ where: { id: existing.id } });
+    res.status(204).end();
   })
 );
 

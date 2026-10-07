@@ -3118,10 +3118,40 @@ model AccInvoice {
 
   lines    AccInvoiceLine[]
   vatLines AccInvoiceVatLine[]
+  installments AccInvoiceInstallment[]
 
   @@index([entityId, status])
   @@index([entityId, supplierId])
   @@index([entityId, invoiceNumber])
+}
+
+// Répartition du règlement en tranches (ex : 65% à telle date, le solde à
+// une date à déterminer) — demande client 07/10/2026, facture de vente.
+// `amount` est le montant figé de la tranche (calculé depuis `percentage` ×
+// montant total de la facture à la création, jamais recalculé après coup
+// même si les montants de la facture changent ensuite) ; `percentage` reste
+// purement informatif pour l'affichage. `dueDate` nul = "à déterminer" :
+// la tranche existe (et compte dans la répartition à 100%) mais sa date
+// n'est pas encore connue. `paid` est une case à cocher manuelle,
+// indépendante du rapprochement bancaire de la facture (celui-ci reste la
+// source de vérité pour AccInvoice.amountPaid/status) — simple pense-bête
+// de suivi par tranche.
+model AccInvoiceInstallment {
+  id        String     @id @default(cuid())
+  invoiceId String
+  invoice   AccInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  label      String?
+  percentage Float?
+  amount     Float
+  dueDate    DateTime?
+  paid       Boolean   @default(false)
+  position   Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([invoiceId])
 }
 
 model AccInvoiceLine {

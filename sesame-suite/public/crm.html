@@ -546,7 +546,6 @@ svg.tr-chart{display:block;width:100%;height:auto;min-width:640px}
     <div class="nav-item" id="n-home" onclick="showHome()"><div class="nav-ico">⌂</div> Home</div>
     <div class="nav-item" id="n-list" onclick="showList()"><div class="nav-ico">≡</div> Client/Prospect</div>
     <div class="nav-item" id="n-affaires" onclick="showAffaires()"><div class="nav-ico">◆</div> Affaires</div>
-    <div class="nav-item" id="n-portefeuille" onclick="showPortefeuille()"><div class="nav-ico">€</div> Portefeuille</div>
     <div class="nav-item" id="n-treso" onclick="showTresorerie()"><div class="nav-ico">Σ</div> Trésorerie</div>
     <div class="nav-item" id="n-compta" onclick="showComptabilite()"><div class="nav-ico">▦</div> Comptabilité <span class="nb nb-a" id="b-compta-check" style="display:none">0</span></div>
     <div class="nav-item" id="n-tickets" onclick="showTickets()"><div class="nav-ico">☎</div> Support <span class="nb nb-r" id="b-tickets-open" style="display:none">0</span></div>
@@ -942,7 +941,7 @@ function ini(n){return(n||'?').split(' ').slice(0,2).map(w=>w[0]||'').join('').t
 function today(){const d=new Date();return d.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});}
 
 // ── NAV ──
-function setNav(id){['n-home','n-list','n-affaires','n-portefeuille','n-treso','n-compta','n-tickets','n-faq','n-produits','n-activite','n-contrats','n-canaux','n-auto','n-crmusers','n-questionnaires'].forEach(n=>document.getElementById(n).classList.remove('active'));var el=document.getElementById(id);if(el)el.classList.add('active');}
+function setNav(id){['n-home','n-list','n-affaires','n-treso','n-compta','n-tickets','n-faq','n-produits','n-activite','n-contrats','n-canaux','n-auto','n-crmusers','n-questionnaires'].forEach(n=>document.getElementById(n).classList.remove('active'));var el=document.getElementById(id);if(el)el.classList.add('active');}
 function setVMode(m){vmode=m;document.getElementById('vt-tbl').classList.toggle('active',m==='table');document.getElementById('vt-grd').classList.toggle('active',m==='grid');document.getElementById('vt-map').classList.toggle('active',m==='map');if(view==='list')renderList();}
 function bc(parts){document.getElementById('bc').innerHTML=parts.map((p,i)=>i<parts.length-1?`<span class="bc-link" onclick="${p.fn}">${p.label}</span><span class="bc-sep"> / </span>`:`<span class="bc-cur">${p.label}</span>`).join('');}
 function tba(html){document.getElementById('tb-actions').innerHTML=html;}
@@ -3986,92 +3985,6 @@ var LANG_LABELS = {fr:'🇫🇷 Français',en:'🇬🇧 English',es:'🇪🇸 Es
 function langLabel(l){ return l ? (LANG_LABELS[l]||l) : '—'; }
 
 // ════════════════════════════════════════
-// PORTEFEUILLE — tableau modifiable MRR / Signé / Prévisionnel
-// ════════════════════════════════════════
-let pfFilter = '';
-
-function showPortefeuille(){
-  view='portefeuille';curId=null;setNav('n-portefeuille');bc([{label:'Portefeuille'}]);
-  tba('');
-  renderPortefeuille();
-}
-
-function pfRows(){
-  const q = pfFilter.trim().toLowerCase();
-  // Un "Suspect" (contact non qualifié, ex. badge scanné sur un salon) n'a
-  // pas encore de valeur commerciale réelle — il n'a rien à faire dans le
-  // portefeuille financier, réservé aux prospects/clients qualifiés.
-  return clients.filter(c=>c.type!=='Suspect' && (!q || c.nom.toLowerCase().includes(q))).slice().sort((a,b)=>a.nom.localeCompare(b.nom));
-}
-
-function pfTotal(c){ return (+c.mrr||0)+(+c.signe||0)+(+c.previsionnel||0); }
-
-function renderPortefeuille(){
-  const rows = pfRows();
-  const sums = { mrr:0, signe:0, previsionnel:0 };
-  rows.forEach(c=>{ sums.mrr+=(+c.mrr||0); sums.signe+=(+c.signe||0); sums.previsionnel+=(+c.previsionnel||0); });
-  const grand = sums.mrr+sums.signe+sums.previsionnel;
-  const cell = (c,field)=>`<input class="ei pf-in" type="number" step="0.01" min="0" data-id="${c.id}" data-field="${field}" value="${c[field]===null||c[field]===undefined?'':c[field]}" placeholder="0" oninput="pfLive()" onchange="pfSave('${c.id}','${field}',this.value)">`;
-  const trs = rows.map(c=>`
-    <tr>
-      <td><div class="nom-cell" style="cursor:pointer" onclick="showFiche('${c.id}')">${typeBadge(c.type)} ${esc(c.nom)}</div></td>
-      <td>${cell(c,'mrr')}</td>
-      <td>${cell(c,'signe')}</td>
-      <td>${cell(c,'previsionnel')}</td>
-      <td class="pf-row-total" style="text-align:right;font-weight:500">${fmtEUR(pfTotal(c))}</td>
-    </tr>`).join('');
-  withFocusKept('#pf-search-input', ()=>{ document.getElementById('main').innerHTML = `
-    <div class="list-toolbar" style="margin-bottom:14px">
-      <input id="pf-search-input" class="lsel" style="min-width:220px" placeholder="Rechercher un client…" value="${esc(pfFilter)}" oninput="pfFilter=this.value;renderPortefeuille()">
-      <span class="count-lbl">${rows.length} client${rows.length>1?'s':''}</span>
-    </div>
-    <div class="tbl-wrap"><table>
-      <thead><tr>
-        <th>Client</th><th style="width:130px">MRR (€/mois)</th><th style="width:130px">Signé (€)</th><th style="width:140px">Prévisionnel (€)</th><th style="width:120px;text-align:right">Total (€)</th>
-      </tr></thead>
-      <tbody>${trs.length?trs:'<tr><td colspan="5" class="log-empty">Aucun client.</td></tr>'}</tbody>
-      <tfoot><tr style="font-weight:600;border-top:2px solid var(--bd,#e3e3e3)">
-        <td>Totaux</td>
-        <td id="pf-sum-mrr">${fmtEUR(sums.mrr)}</td>
-        <td id="pf-sum-signe">${fmtEUR(sums.signe)}</td>
-        <td id="pf-sum-previsionnel">${fmtEUR(sums.previsionnel)}</td>
-        <td id="pf-sum-grand" style="text-align:right">${fmtEUR(grand)}</td>
-      </tr></tfoot>
-    </table></div>`; });
-}
-
-// Recalcule les totaux (pied de tableau + colonne "Total" de chaque ligne)
-// à partir des valeurs actuellement saisies, sans attendre la sauvegarde —
-// pour que l'addition soit immédiate pendant la frappe.
-function pfLive(){
-  const sums = { mrr:0, signe:0, previsionnel:0 };
-  document.querySelectorAll('#main .pf-in').forEach(inp=>{
-    sums[inp.dataset.field] += parseFloat(inp.value)||0;
-  });
-  document.getElementById('pf-sum-mrr').textContent = fmtEUR(sums.mrr);
-  document.getElementById('pf-sum-signe').textContent = fmtEUR(sums.signe);
-  document.getElementById('pf-sum-previsionnel').textContent = fmtEUR(sums.previsionnel);
-  document.getElementById('pf-sum-grand').textContent = fmtEUR(sums.mrr+sums.signe+sums.previsionnel);
-  document.querySelectorAll('#main tbody tr').forEach(tr=>{
-    const inputs = tr.querySelectorAll('.pf-in');
-    if(!inputs.length) return;
-    let rowTotal = 0;
-    inputs.forEach(inp=>rowTotal+=parseFloat(inp.value)||0);
-    const td = tr.querySelector('.pf-row-total');
-    if(td) td.textContent = fmtEUR(rowTotal);
-  });
-}
-
-async function pfSave(id, field, val){
-  const v = val.trim()===''?null:+val;
-  const c = clients.find(c=>c.id===id); if(c) c[field]=v;
-  try{
-    const r = await apiFetch('/wa/crmProspect/update', {method:'POST', body:JSON.stringify({id, [field]:v})});
-    if(!r.ok) throw new Error('http '+r.status);
-  }catch(e){ flash('Erreur d\'enregistrement'); }
-}
-
-// ════════════════════════════════════════
 // TRÉSORERIE — Encaissement + Dépenses, vision annuelle
 // ════════════════════════════════════════
 const TR_MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
@@ -4211,13 +4124,12 @@ function trKindDetailRows(kind, m){
 }
 
 /**
- * Détail complet d'un mois — encaissements (dont MRR portefeuille),
- * dépenses et affaires pondérées qui composent les totaux affichés dans le
- * tableau récapitulatif de la Trésorerie, pour comprendre d'où vient
- * chaque chiffre sans devoir recouper plusieurs panneaux.
+ * Détail complet d'un mois — encaissements, dépenses et affaires pondérées
+ * qui composent les totaux affichés dans le tableau récapitulatif de la
+ * Trésorerie, pour comprendre d'où vient chaque chiffre sans devoir
+ * recouper plusieurs panneaux.
  */
 function openMonthDetail(m){
-  const mrr = trPortfolioMrrMonthly();
   const revenuRows = trKindDetailRows('revenu', m);
   const depenseRows = trKindDetailRows('depense', m);
   const dealRows = trDealsFor(m);
@@ -4237,10 +4149,8 @@ function openMonthDetail(m){
       +(rowsHtml || '<div style="padding:10px 4px;color:var(--mu);font-size:12px">'+emptyLabel+'</div>');
   }
 
-  const revenuTotal = revenuRows.reduce((s,r)=>s+r.montant,0) + mrr;
-  const revenuHtml =
-    (mrr>0 ? moneyRow('MRR portefeuille', 'Récurrent — somme des fiches clients (Portefeuille)', mrr) : '')
-    + revenuRows.map(r=>moneyRow(r.label, trFreqLabel(r.frequence), r.montant)).join('');
+  const revenuTotal = revenuRows.reduce((s,r)=>s+r.montant,0);
+  const revenuHtml = revenuRows.map(r=>moneyRow(r.label, trFreqLabel(r.frequence), r.montant)).join('');
 
   const depenseTotal = depenseRows.reduce((s,r)=>s+r.montant,0);
   const depenseHtml = depenseRows.map(r=>moneyRow(r.label, trFreqLabel(r.frequence), r.montant)).join('');
@@ -4295,23 +4205,12 @@ function trCategoryMonthly(kind, m){
 }
 /** Sous-total d'une catégorie pour un mois donné (affiché à côté du total
  * annuel quand le filtre "Vérifier/modifier" est actif) — mêmes composantes
- * que le total annuel (lignes/saisie globale + MRR + pipeline pour
- * "revenu"), sans le masquage "avant solde d'ouverture" de trComputeMonthly
- * qui sert au calcul de la trésorerie cumulée, pas à la vérification d'un
- * mois donné. */
+ * que le total annuel (lignes/saisie globale + pipeline pour "revenu"),
+ * sans le masquage "avant solde d'ouverture" de trComputeMonthly qui sert
+ * au calcul de la trésorerie cumulée, pas à la vérification d'un mois
+ * donné. */
 function trMonthlySubtotal(kind, m){
-  const base = trCategoryMonthly(kind, m);
-  return kind==='revenu' ? base + trPortfolioMrrMonthly() : base;
-}
-
-// MRR du portefeuille (somme de CrmProspect.mrr, tous types confondus —
-// même somme que le pied de tableau Portefeuille) : un flux récurrent
-// mensuel, indépendant des lignes CrmCashLine ("Signé" ci-dessous, saisies
-// manuellement) et du pipeline pondéré des affaires — reporté
-// automatiquement sur la Trésorerie (25/08/2026) plutôt que de rester
-// cantonné au seul panneau Portefeuille comme jusqu'ici.
-function trPortfolioMrrMonthly(){
-  return clients.reduce((s,c)=>s+(+c.mrr||0), 0);
+  return trCategoryMonthly(kind, m);
 }
 
 function trModeToggle(kind){
@@ -4369,8 +4268,7 @@ function trCategoryCard(kind, title, colorVar){
   const mode = cashSettings[kind+'Mode'];
   const rows = trRows(kind);
   const shownRows = trFilteredRows(kind);
-  const mrr = kind==='revenu' ? trPortfolioMrrMonthly()*12 : 0;
-  const total = trCategoryAnnual(kind) + mrr;
+  const total = trCategoryAnnual(kind);
   const body = mode==='global'
     ? trGlobalBlock(kind)
     : (rows.length===0 ? `<div class="log-empty">Aucune ligne. Ajoutez ${kind==='revenu'?'un encaissement':'une dépense'}.</div>`
@@ -4388,7 +4286,6 @@ function trCategoryCard(kind, title, colorVar){
       </div>
       <div class="tr-panel-body">${body}</div>
       ${mode==='detail'?`<button class="add-row" onclick="trAdd('${kind}')">+ Ajouter une ligne</button>`:''}
-      ${mrr>0?`<div class="tr-caveat">dont <b class="num">${fmtEUR(mrr)}</b> de MRR portefeuille (somme des fiches clients, panneau Portefeuille) — reporté automatiquement, non éditable ici.</div>`:''}
       ${pipeline>0?`<div class="tr-caveat">dont <b class="num">${fmtEUR(pipeline)}</b> pondéré depuis les affaires en cours (montant ponctuel × probabilité, module Affaires) — reporté automatiquement, non éditable ici.</div>`:''}
     </div>`;
 }
@@ -4397,7 +4294,7 @@ function renderTresorerie(){
   const solde = trSolde();
   const startBalance = solde ? solde.montant : 0;
   const startMois = trSoldeMois();
-  const revenuAnnuel = trCategoryAnnual('revenu') + trPortfolioMrrMonthly()*12;
+  const revenuAnnuel = trCategoryAnnual('revenu');
   const depenseAnnuel = trCategoryAnnual('depense');
 
   document.getElementById('main').innerHTML = `
@@ -4437,7 +4334,6 @@ function renderTresorerie(){
       <div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Vision annuelle ${cashYear}</span></div>
       <div class="tr-chart-title">Recettes vs dépenses, par mois</div>
       <div class="tr-legend">
-        <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-mrr)"></span>MRR</span>
         <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-signe)"></span>Signé</span>
         <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-pipeline)"></span>Pipeline pondéré (Affaires)</span>
         <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-depense)"></span>Dépenses</span>
@@ -4457,7 +4353,7 @@ function renderTresorerie(){
       </div>
 
       <div class="tbl-wrap" style="margin-top:18px"><table>
-        <thead><tr><th>Mois</th><th style="text-align:right">MRR</th><th style="text-align:right">Signé</th><th style="text-align:right">Pipeline</th><th style="text-align:right">Recettes</th><th style="text-align:right">Dépenses</th><th style="text-align:right">Net</th><th style="text-align:right">Trésorerie</th></tr></thead>
+        <thead><tr><th>Mois</th><th style="text-align:right">Signé</th><th style="text-align:right">Pipeline</th><th style="text-align:right">Recettes</th><th style="text-align:right">Dépenses</th><th style="text-align:right">Net</th><th style="text-align:right">Trésorerie</th></tr></thead>
         <tbody id="tr-month-tbody"></tbody>
       </table></div>
     </div>
@@ -4822,17 +4718,16 @@ function trComputeMonthly(){
     // montrer fausserait le graphique "Encaissement vs dépenses" en
     // affichant des mois qui ne font pas partie de la période suivie.
     const beforeSolde = m < soldeMois;
-    const mrr = beforeSolde ? 0 : trPortfolioMrrMonthly();
     const revenuBase = beforeSolde ? 0 : trCategoryMonthlyBase('revenu', m);
     const pipeline = beforeSolde ? 0 : trDealsPipelineFor(m);
-    const revenu = mrr + revenuBase + pipeline;
+    const revenu = revenuBase + pipeline;
     const depenses = beforeSolde ? 0 : trCategoryMonthly('depense', m);
     const net = revenu - depenses;
     let curCum;
     if(beforeSolde) curCum = null;
     else if(m === soldeMois){ cum = soldeMontant + net; curCum = cum; }
     else { cum += net; curCum = cum; }
-    months.push({ m, revenu, mrr, revenuBase, pipeline, depenses, net, cum: curCum });
+    months.push({ m, revenu, revenuBase, pipeline, depenses, net, cum: curCum });
   }
   return months;
 }
@@ -4851,7 +4746,7 @@ function trRenderCharts(){
   // complet — une dépense ajoutée/modifiée semblait alors ne "pas
   // apparaître", alors qu'elle était bien enregistrée (visible dans le
   // graphique et le tableau mensuel juste en dessous, déjà mis à jour ici).
-  const revenuAnnuel = trCategoryAnnual('revenu') + trPortfolioMrrMonthly()*12;
+  const revenuAnnuel = trCategoryAnnual('revenu');
   const depenseAnnuel = trCategoryAnnual('depense');
   ['tr-chip-revenu','tr-cardtotal-revenu'].forEach(id=>{
     const el = document.getElementById(id); if(el) el.textContent = fmtEUR(revenuAnnuel) + (id==='tr-cardtotal-revenu'?'/an':'');
@@ -4890,19 +4785,16 @@ function trRenderBarChart(months){
     const cx = padL + groupW*i + groupW/2;
     const baseY = padT + plotH;
     const xR = cx - gap/2 - barW;
-    // Recettes empilées : MRR portefeuille (vert, le socle récurrent) en
-    // bas, lignes/saisie globale "Signé" (bleu) au milieu, pipeline pondéré
-    // des affaires (doré) au sommet — pour distinguer visuellement le
-    // récurrent acquis, le ponctuel déjà signé, et ce qui dépend encore
-    // d'une probabilité de closing.
-    const hMrr = scale(mo.mrr);
+    // Recettes empilées : lignes/saisie globale "Signé" (bleu) en bas,
+    // pipeline pondéré des affaires (doré) au sommet — pour distinguer
+    // visuellement le ponctuel déjà signé de ce qui dépend encore d'une
+    // probabilité de closing.
     const hBase = scale(mo.revenuBase);
     const hPipe = scale(mo.pipeline);
-    if(hMrr>0) s += `<rect x="${xR}" y="${baseY-hMrr}" width="${barW}" height="${Math.max(hMrr-1.5,0)}" rx="2.5" fill="var(--tr-mrr)"></rect>`;
-    if(hBase>0) s += `<rect x="${xR}" y="${baseY-hMrr-hBase}" width="${barW}" height="${Math.max(hBase-1.5,0)}" rx="2.5" fill="var(--tr-signe)"></rect>`;
-    if(hPipe>0) s += `<rect x="${xR}" y="${baseY-hMrr-hBase-hPipe}" width="${barW}" height="${Math.max(hPipe-1.5,0)}" rx="2.5" fill="var(--tr-pipeline)"></rect>`;
-    if(hMrr+hBase+hPipe>0){
-      s += `<text class="tr-bar-lbl" x="${xR+barW/2}" y="${baseY-hMrr-hBase-hPipe-5}">${Math.round(mo.revenu/1000)}k</text>`;
+    if(hBase>0) s += `<rect x="${xR}" y="${baseY-hBase}" width="${barW}" height="${Math.max(hBase-1.5,0)}" rx="2.5" fill="var(--tr-signe)"></rect>`;
+    if(hPipe>0) s += `<rect x="${xR}" y="${baseY-hBase-hPipe}" width="${barW}" height="${Math.max(hPipe-1.5,0)}" rx="2.5" fill="var(--tr-pipeline)"></rect>`;
+    if(hBase+hPipe>0){
+      s += `<text class="tr-bar-lbl" x="${xR+barW/2}" y="${baseY-hBase-hPipe-5}">${Math.round(mo.revenu/1000)}k</text>`;
     }
     const xD = cx + gap/2;
     const hD = scale(mo.depenses);
@@ -4918,7 +4810,6 @@ function trRenderBarChart(months){
     el.addEventListener('mousemove', (ev)=>{
       const i = +el.dataset.month, mo = months[i];
       tt.innerHTML = `<b>${TR_MONTHS[i]}</b>`+
-        (mo.mrr>0?`<div class="tr-tt-row"><span>MRR</span><span class="num">${fmtEUR(mo.mrr)}</span></div>`:'')+
         `<div class="tr-tt-row"><span>Signé</span><span class="num">${fmtEUR(mo.revenuBase)}</span></div>`+
         (mo.pipeline>0?`<div class="tr-tt-row"><span>Pipeline (Affaires)</span><span class="num">${fmtEUR(mo.pipeline)}</span></div>`:'')+
         `<div class="tr-tt-row"><span>Dépenses</span><span class="num">−${fmtEUR(mo.depenses)}</span></div>`+
@@ -5022,7 +4913,6 @@ function trRenderMonthTable(months){
     return `
     <tr${before?' style="opacity:.45"':''}>
       <td${before?'':' style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted" onclick="openMonthDetail('+mo.m+')" title="Détail du mois — encaissements, dépenses, affaires pondérées"'}>${TR_MONTHS[mo.m]}</td>
-      <td class="num" style="text-align:right">${trCell(mo.mrr, before)}</td>
       <td class="num" style="text-align:right">${trCell(mo.revenuBase, before)}</td>
       <td class="num" style="text-align:right${!before&&mo.pipeline?';cursor:pointer;text-decoration:underline;text-decoration-style:dotted' : ''}" ${!before&&mo.pipeline?'onclick="openPipelineDetail('+mo.m+')" title="Voir les affaires qui composent ce pipeline"':''}>${trCell(mo.pipeline, before)}</td>
       <td class="num" style="text-align:right;font-weight:500">${trCell(mo.revenu, before)}</td>
@@ -9324,6 +9214,7 @@ function renderAccInvoiceModal(inv){
             <thead><tr><th style="width:100px">Date</th><th>Libellé banque</th><th style="width:100px">Montant</th><th style="width:90px">Type</th><th style="width:60px"></th></tr></thead>
             <tbody>${settlementRows||'<tr><td colspan="5" class="log-empty">Aucun règlement affecté.</td></tr>'}</tbody>
           </table></div>`:''}
+          ${inv.direction==='sale'?renderAccInstallmentsSection(inv):''}
           ${inv.entry?`<div class="modal-section">Écriture en partie double</div>${renderEntryLinesTable(inv.entry)}`:''}
           <div class="modal-section">Texte extrait du document</div>
           <details>
@@ -9350,6 +9241,114 @@ function renderAccInvoiceModal(inv){
   // reste vide de résultats tant que l'utilisateur n'a pas retapé un
   // caractère (oninput ne se déclenche pas sur un value= posé au rendu).
   if(!locked && !inv.supplierId && (inv.issuerSiret||inv.issuerName)) aiEntrepriseAutocomplete(true);
+}
+
+/**
+ * Répartition du règlement en tranches (ex : 65% à telle date, le solde à
+ * une date à déterminer) — demande client 07/10/2026, facture de VENTE
+ * uniquement (cf. appel conditionnel inv.direction==='sale' dans
+ * renderAccInvoiceModal). "À déterminer" = dueDate nulle, affichée comme
+ * telle plutôt que de forcer une date arbitraire.
+ */
+function renderAccInstallmentsSection(inv){
+  const rows = inv.installments||[];
+  const total = accInvoiceTotal(inv);
+  const allocated = rows.reduce((s,r)=>s+r.amount,0);
+  const remaining = Math.max(0, total - allocated);
+  const trs = rows.map(r=>`
+    <tr>
+      <td>${esc(r.label||'—')}</td>
+      <td style="text-align:right;font-family:monospace">${fmtEUR2(r.amount)}${r.percentage!=null?' <span style="color:var(--mu);font-size:11px">('+r.percentage+'%)</span>':''}</td>
+      <td>${r.dueDate?new Date(r.dueDate).toLocaleDateString('fr-FR'):'<span style="color:var(--mu)">À déterminer</span>'}</td>
+      <td onclick="event.stopPropagation()"><input type="checkbox" ${r.paid?'checked':''} onchange="accToggleInstallmentPaid('${inv.id}','${r.id}',this.checked)" title="Réglée"></td>
+      <td><button class="ta-btn" onclick="accDeleteInstallment('${inv.id}','${r.id}')" title="Supprimer">🗑</button></td>
+    </tr>`).join('');
+  return `
+    <div class="modal-section" style="display:flex;align-items:center;gap:10px">
+      <span>Répartition du règlement</span>
+      <span style="font-size:12px;color:var(--mu);font-weight:400">${rows.length?('Réparti : '+fmtEUR2(allocated)+' / '+fmtEUR2(total)+' — reste à répartir '+fmtEUR2(remaining)):'Non découpé — règlement en une fois'}</span>
+      ${remaining>0.01?`<button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="accOpenAddInstallmentModal('${inv.id}')">+ Ajouter une tranche</button>`:''}
+    </div>
+    ${rows.length?`<div class="tbl-wrap"><table>
+      <thead><tr><th>Libellé</th><th style="text-align:right;width:140px">Montant</th><th style="width:130px">Échéance</th><th style="width:60px">Réglée</th><th style="width:44px"></th></tr></thead>
+      <tbody>${trs}</tbody>
+    </table></div>`:''}`;
+}
+
+function accOpenAddInstallmentModal(invoiceId){
+  const inv = window._accInvoiceEditing;
+  if(!inv || inv.id!==invoiceId) return;
+  const total = accInvoiceTotal(inv);
+  const allocated = (inv.installments||[]).reduce((s,r)=>s+r.amount,0);
+  const remaining = Math.max(0, total - allocated);
+  const remainingPct = total>0 ? Math.round((remaining/total)*10000)/100 : 0;
+  document.getElementById('modal-ct').insertAdjacentHTML('beforeend', `
+  <div class="modal-bg" id="ai-inst-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)this.remove()">
+    <div class="modal-box" style="max-width:380px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Ajouter une tranche</div><button class="btn btn-ghost btn-icon" onclick="document.getElementById('ai-inst-bg').remove()" style="margin-left:auto">✕</button></div>
+      <div style="font-size:12px;color:var(--mu);margin-bottom:10px">Reste à répartir : ${fmtEUR2(remaining)} (${remainingPct}%)</div>
+      <div class="ff"><label>Libellé (optionnel)</label><input id="ai-inst-label" placeholder="Ex. Acompte, Solde…"></div>
+      <div class="form-grid" style="margin-top:8px">
+        <div class="ff"><label>Pourcentage (%)</label><input type="number" step="0.01" min="0.01" max="100" id="ai-inst-pct" value="${remainingPct}" oninput="accInstPctChanged('${invoiceId}')"></div>
+        <div class="ff"><label>Montant (€)</label><input type="number" step="0.01" min="0.01" id="ai-inst-amount" value="${remaining.toFixed(2)}" oninput="accInstAmountChanged('${invoiceId}')"></div>
+      </div>
+      <div class="ff" style="margin-top:8px">
+        <label><input type="checkbox" id="ai-inst-tbd" checked onchange="document.getElementById('ai-inst-date').disabled=this.checked"> Date à déterminer</label>
+      </div>
+      <div class="ff" style="margin-top:4px"><label>Échéance</label><input type="date" id="ai-inst-date" disabled></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="accSaveInstallment('${invoiceId}')">Ajouter</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('ai-inst-bg').remove()">Annuler</button>
+      </div>
+    </div>
+  </div>`);
+}
+
+function accInstPctChanged(invoiceId){
+  const inv = window._accInvoiceEditing; if(!inv) return;
+  const total = accInvoiceTotal(inv);
+  const pct = parseFloat((document.getElementById('ai-inst-pct')||{}).value)||0;
+  document.getElementById('ai-inst-amount').value = (total*pct/100).toFixed(2);
+}
+function accInstAmountChanged(invoiceId){
+  const inv = window._accInvoiceEditing; if(!inv) return;
+  const total = accInvoiceTotal(inv);
+  const amount = parseFloat((document.getElementById('ai-inst-amount')||{}).value)||0;
+  document.getElementById('ai-inst-pct').value = total>0 ? (Math.round((amount/total)*10000)/100) : 0;
+}
+
+async function accSaveInstallment(invoiceId){
+  const label = (document.getElementById('ai-inst-label')||{value:''}).value.trim();
+  const amount = parseFloat((document.getElementById('ai-inst-amount')||{}).value);
+  const tbd = (document.getElementById('ai-inst-tbd')||{}).checked;
+  const dueDate = tbd ? null : (document.getElementById('ai-inst-date')||{}).value || null;
+  if(!(amount>0)){ flash('Montant invalide'); return; }
+  try{
+    const r = await apiFetch('/wa/acc/invoices/'+invoiceId+'/installments?scope=crm', {method:'POST', body:JSON.stringify({label: label||null, amount, dueDate})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    document.getElementById('ai-inst-bg')?.remove();
+    flash('Tranche ajoutée');
+    openAccInvoiceModal(invoiceId);
+  }catch(e){ flash(e.message||'Erreur d\'ajout'); }
+}
+
+async function accToggleInstallmentPaid(invoiceId, instId, paid){
+  try{
+    const r = await apiFetch('/wa/acc/invoices/'+invoiceId+'/installments/'+instId+'?scope=crm', {method:'PATCH', body:JSON.stringify({paid})});
+    if(!r.ok) throw new Error('http '+r.status);
+    openAccInvoiceModal(invoiceId);
+  }catch(e){ flash('Erreur'); }
+}
+
+async function accDeleteInstallment(invoiceId, instId){
+  if(!confirm('Supprimer cette tranche ?')) return;
+  try{
+    const r = await apiFetch('/wa/acc/invoices/'+invoiceId+'/installments/'+instId+'?scope=crm', {method:'DELETE'});
+    if(!r.ok) throw new Error('http '+r.status);
+    flash('Tranche supprimée');
+    openAccInvoiceModal(invoiceId);
+  }catch(e){ flash('Erreur'); }
 }
 
 /**
