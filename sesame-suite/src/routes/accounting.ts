@@ -234,14 +234,17 @@ accountingRouter.get(
 
 /**
  * GET /wa/acc/invoices/dueSummary?direction=purchase|sale — montant restant
- * à payer/encaisser agrégé (05/10/2026, demande client) : total + nombre
- * de factures dont l'échéance tombe ce mois-ci, et dont l'échéance est
- * dans les 30 prochains jours (inclut les échéances déjà dépassées —
- * "à payer sous 30 jours" couvre forcément le retard déjà accumulé).
- * Calculé côté serveur sur TOUTES les factures concernées (pas de
- * pagination à 100 lignes comme la liste) pour un total fiable. Avant la
- * route /acc/invoices/:id, sinon Express la capture comme "dueSummary" en
- * id de facture.
+ * à payer/encaisser agrégé : total + nombre de factures. "Ce mois-ci"
+ * = toute échéance jusqu'à la fin du mois courant INCLUS LE RETARD DÉJÀ
+ * ACCUMULÉ (06/10/2026, demande client côté factures clients : une
+ * facture en retard reste "à encaisser ce mois-ci", elle ne disparaît
+ * pas du radar sous prétexte que son échéance est passée) — pas de borne
+ * basse sur dueDate, seulement dueDate <= fin du mois. "Sous 30 jours"
+ * = même logique sur une fenêtre glissante de 30 jours plutôt que la fin
+ * du mois calendaire. Calculé côté serveur sur TOUTES les factures
+ * concernées (pas de pagination à 100 lignes comme la liste) pour un
+ * total fiable. Avant la route /acc/invoices/:id, sinon Express la
+ * capture comme "dueSummary" en id de facture.
  */
 accountingRouter.get(
   "/acc/invoices/dueSummary",
@@ -260,14 +263,15 @@ accountingRouter.get(
       select: { dueDate: true, amountHt: true, amountTtc: true, amountPaid: true },
     });
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
     const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
     let monthCount = 0, monthTotal = 0, d30Count = 0, d30Total = 0;
     for (const inv of rows) {
       const remaining = Math.max(0, invoiceTotal(inv) - (inv.amountPaid || 0));
       if (remaining <= 0.01 || !inv.dueDate) continue;
-      if (inv.dueDate >= startOfMonth && inv.dueDate <= endOfMonth) { monthCount++; monthTotal += remaining; }
+      // Pas de borne basse : une échéance déjà dépassée reste "à payer/
+      // encaisser ce mois-ci" (et donc aussi sous 30 jours).
+      if (inv.dueDate <= endOfMonth) { monthCount++; monthTotal += remaining; }
       if (inv.dueDate <= in30Days) { d30Count++; d30Total += remaining; }
     }
     res.json({ thisMonth: { count: monthCount, total: monthTotal }, next30Days: { count: d30Count, total: d30Total } });
