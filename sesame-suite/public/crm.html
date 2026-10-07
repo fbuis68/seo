@@ -4401,6 +4401,9 @@ function renderTresorerie(){
   const depenseAnnuel = trCategoryAnnual('depense');
 
   document.getElementById('main').innerHTML = `
+    <div id="tr2-root"><div class="card">Chargement…</div></div>
+    <details style="margin-top:22px" id="tr-legacy-details">
+      <summary style="cursor:pointer;font-size:13px;font-weight:500;color:var(--mu);padding:6px 0;user-select:none">Prévisionnel commercial (CRM — pipeline Affaires, hors trésorerie réelle)</summary>
     <div class="tr-hero">
       <div>
         <div class="tr-hero-eyebrow">Prévisionnel ${cashYear}</div>
@@ -4457,9 +4460,276 @@ function renderTresorerie(){
         <thead><tr><th>Mois</th><th style="text-align:right">MRR</th><th style="text-align:right">Signé</th><th style="text-align:right">Pipeline</th><th style="text-align:right">Recettes</th><th style="text-align:right">Dépenses</th><th style="text-align:right">Net</th><th style="text-align:right">Trésorerie</th></tr></thead>
         <tbody id="tr-month-tbody"></tbody>
       </table></div>
-    </div>`;
+    </div>
+    </details>`;
 
   trRenderCharts();
+  loadTreasuryOverview();
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// TRÉSORERIE RÉELLE — moteur de solde + calendrier (cahier des charges
+// "Outil de gestion de trésorerie" v1.1, 07/10/2026, phase 1) : solde
+// d'ancrage par compte, projection par période à partir des échéances de
+// factures fournisseurs/clients déjà en base (cf. lib/accTreasury.ts côté
+// serveur), retards isolés du flux daté. Récurrences bancaires qualifiées,
+// paie, échéancier client découpé, scénarios/simulations : phases
+// suivantes, non couvertes ici.
+// ════════════════════════════════════════════════════════════════════════
+let TR2_GRANULARITY = 'month';
+let TR2_BANK_ACCOUNT_ID = '';
+let TR2_OVERVIEW = null;
+let TR2_BANK_ACCOUNTS = [];
+let TR2_LIST_MODE = 'horizon'; // horizon | overdue-sale | overdue-purchase
+let TR2_PURCHASE_ROWS = [];
+let TR2_SALE_ROWS = [];
+
+const TR2_PERIODS_BY_GRANULARITY = { day: 30, week: 12, month: 12 };
+const TR2_GRANULARITY_LABEL = { day: 'Jour', week: 'Semaine', month: 'Mois' };
+
+function trFmtPeriodLabel(iso, granularity){
+  const d = new Date(iso);
+  if(granularity==='day') return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'});
+  if(granularity==='week') return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'});
+  return d.toLocaleDateString('fr-FR',{month:'short',year:'2-digit'});
+}
+
+async function loadTreasuryOverview(){
+  try{
+    const bankR = await apiFetch('/wa/acc/bank/accounts?scope=crm');
+    TR2_BANK_ACCOUNTS = bankR.ok ? await bankR.json() : [];
+  }catch(e){ TR2_BANK_ACCOUNTS = []; }
+
+  const periods = TR2_PERIODS_BY_GRANULARITY[TR2_GRANULARITY];
+  const params = new URLSearchParams({ scope:'crm', granularity:TR2_GRANULARITY, periods:String(periods) });
+  if(TR2_BANK_ACCOUNT_ID) params.set('bankAccountId', TR2_BANK_ACCOUNT_ID);
+  try{
+    const r = await apiFetch('/wa/acc/treasury/overview?'+params.toString());
+    TR2_OVERVIEW = r.ok ? await r.json() : null;
+  }catch(e){ TR2_OVERVIEW = null; }
+
+  await loadTreasuryLists();
+  renderTreasuryOverview();
+}
+
+async function loadTreasuryLists(){
+  const today = new Date();
+  const horizonDays = TR2_GRANULARITY==='day' ? 30 : TR2_GRANULARITY==='week' ? 84 : 365;
+  const horizonEnd = new Date(today.getTime() + horizonDays*24*60*60*1000);
+  const toISO = d => d.toISOString().slice(0,10);
+
+  async function fetchRows(direction, dueDateFrom, dueDateTo){
+    const params = new URLSearchParams({ scope:'crm', direction, limit:'100', status:'' });
+    if(dueDateFrom) params.set('dueDateFrom', dueDateFrom);
+    if(dueDateTo) params.set('dueDateTo', dueDateTo);
+    try{
+      const r = await apiFetch('/wa/acc/invoices?'+params.toString());
+      const data = r.ok ? await r.json() : {rows:[]};
+      return (data.rows||[]).filter(inv=>['VALIDATED','ACCOUNTED','PARTIALLY_PAID'].includes(inv.status));
+    }catch(e){ return []; }
+  }
+
+  if(TR2_LIST_MODE==='overdue-sale'){
+    TR2_SALE_ROWS = await fetchRows('sale', '', toISO(today));
+    TR2_PURCHASE_ROWS = [];
+  } else if(TR2_LIST_MODE==='overdue-purchase'){
+    TR2_PURCHASE_ROWS = await fetchRows('purchase', '', toISO(today));
+    TR2_SALE_ROWS = [];
+  } else {
+    [TR2_PURCHASE_ROWS, TR2_SALE_ROWS] = await Promise.all([
+      fetchRows('purchase', toISO(today), toISO(horizonEnd)),
+      fetchRows('sale', toISO(today), toISO(horizonEnd)),
+    ]);
+  }
+  // Ne garder que le reste réellement dû (une ligne PARTIALLY_PAID encore
+  // listée peut avoir un reste nul si le filtre status ci-dessus a laissé
+  // passer une facture soldée entre-temps) — cohérent avec accPaidIndicator.
+  TR2_PURCHASE_ROWS = TR2_PURCHASE_ROWS.filter(inv=>Math.max(0,accInvoiceTotal(inv)-(inv.amountPaid||0))>0.01);
+  TR2_SALE_ROWS = TR2_SALE_ROWS.filter(inv=>Math.max(0,accInvoiceTotal(inv)-(inv.amountPaid||0))>0.01);
+}
+
+function trSetGranularity(g){
+  TR2_GRANULARITY = g;
+  TR2_LIST_MODE = 'horizon';
+  loadTreasuryOverview();
+}
+function trSetBankAccount(id){
+  TR2_BANK_ACCOUNT_ID = id;
+  loadTreasuryOverview();
+}
+function trFilterOverdueMode(mode){
+  TR2_LIST_MODE = TR2_LIST_MODE===mode ? 'horizon' : mode;
+  loadTreasuryLists().then(renderTreasuryOverview);
+}
+
+function renderTreasuryOverview(){
+  const root = document.getElementById('tr2-root');
+  if(!root) return;
+  if(!TR2_OVERVIEW){ root.innerHTML = '<div class="card"><div class="log-empty">Erreur de chargement de la trésorerie.</div></div>'; return; }
+  const ov = TR2_OVERVIEW;
+  const bankOpts = `<option value="">Tous les comptes</option>` + TR2_BANK_ACCOUNTS.map(a=>`<option value="${a.id}" ${TR2_BANK_ACCOUNT_ID===a.id?'selected':''}>${esc(a.name)}</option>`).join('');
+
+  const purchaseRows = TR2_PURCHASE_ROWS.map(inv=>trInvoiceRowHtml(inv)).join('');
+  const saleRows = TR2_SALE_ROWS.map(inv=>trInvoiceRowHtml(inv)).join('');
+  const listTitlePurchase = TR2_LIST_MODE==='overdue-purchase' ? 'Dettes en retard' : 'Décaissements à venir';
+  const listTitleSale = TR2_LIST_MODE==='overdue-sale' ? 'Créances en retard' : 'Encaissements à venir';
+
+  root.innerHTML = `
+    <div class="card">
+      <div class="card-head"><div class="ch-ico">Σ</div><span class="ch-title">Trésorerie</span>
+        <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <select class="lsel" onchange="trSetBankAccount(this.value)">${bankOpts}</select>
+          <button class="btn btn-ghost btn-sm" onclick="openTreasuryAnchorModal()">⚓ Ancrer un solde</button>
+          <div class="autoviewtoggle">
+            ${['day','week','month'].map(g=>`<button type="button" class="${TR2_GRANULARITY===g?'on':''}" onclick="trSetGranularity('${g}')">${TR2_GRANULARITY_LABEL[g]}</button>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div class="stats-row" style="margin-bottom:16px">
+        <div class="stat-card"><div class="stat-lbl">Solde actuel</div><div class="stat-val">${fmtEUR(ov.currentBalance)}</div></div>
+        <div class="stat-card"><div class="stat-lbl">Plus bas solde projeté</div><div class="stat-val" style="${ov.plusBasSolde&&ov.plusBasSolde.amount<0?'color:#a32d2d':''}">${ov.plusBasSolde?fmtEUR(ov.plusBasSolde.amount):'—'}</div><div style="font-size:11px;color:var(--mu)">${ov.plusBasSolde?('au '+new Date(ov.plusBasSolde.date).toLocaleDateString('fr-FR')):''}</div></div>
+        <div class="stat-card" style="cursor:pointer;${TR2_LIST_MODE==='overdue-sale'?'outline:2px solid var(--a)':''}" onclick="trFilterOverdueMode('overdue-sale')"><div class="stat-lbl">Créances en retard</div><div class="stat-val" style="${ov.creancesRetard.total>0?'color:#a32d2d':''}">${fmtEUR(ov.creancesRetard.total)}</div><div style="font-size:11px;color:var(--mu)">${ov.creancesRetard.count} facture(s)</div></div>
+        <div class="stat-card" style="cursor:pointer;${TR2_LIST_MODE==='overdue-purchase'?'outline:2px solid var(--a)':''}" onclick="trFilterOverdueMode('overdue-purchase')"><div class="stat-lbl">Dettes en retard</div><div class="stat-val" style="${ov.dettesRetard.total>0?'color:#a32d2d':''}">${fmtEUR(ov.dettesRetard.total)}</div><div style="font-size:11px;color:var(--mu)">${ov.dettesRetard.count} facture(s)</div></div>
+      </div>
+      <div class="tr-chart-title">Courbe de trésorerie prévisionnelle</div>
+      <div class="tr-legend">
+        <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-signe)"></span>Encaissements prévus</span>
+        <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-depense)"></span>Décaissements prévus</span>
+        <span class="tr-legend-item"><span class="tr-sw tr-line"></span>Solde projeté</span>
+      </div>
+      <div class="tr-chart-wrap">
+        <div class="tr-chart-scroll"><svg class="tr-chart" id="tr2-chart" viewBox="0 0 940 220" preserveAspectRatio="xMinYMid meet"></svg></div>
+        <div class="tr-tooltip" id="tr2-tt"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px">
+        <div>
+          <div class="tr-chart-title">${listTitlePurchase}</div>
+          <div class="tbl-wrap"><table>
+            <thead><tr><th>Tiers</th><th>Type</th><th style="text-align:right">Reste dû</th><th>Échéance</th></tr></thead>
+            <tbody>${purchaseRows||'<tr><td colspan="4" class="log-empty">Aucune.</td></tr>'}</tbody>
+          </table></div>
+        </div>
+        <div>
+          <div class="tr-chart-title">${listTitleSale}</div>
+          <div class="tbl-wrap"><table>
+            <thead><tr><th>Tiers</th><th>Type</th><th style="text-align:right">Reste dû</th><th>Échéance</th></tr></thead>
+            <tbody>${saleRows||'<tr><td colspan="4" class="log-empty">Aucune.</td></tr>'}</tbody>
+          </table></div>
+        </div>
+      </div>
+    </div>`;
+
+  trRenderTreasuryChart(ov.buckets);
+}
+
+function trInvoiceRowHtml(inv){
+  const remaining = Math.max(0, accInvoiceTotal(inv)-(inv.amountPaid||0));
+  const overdue = inv.dueDate && new Date(inv.dueDate) < new Date(new Date().toDateString());
+  return `<tr style="cursor:pointer" onclick="openAccInvoiceModal('${inv.id}')">
+    <td>${esc(accInvoiceTiersName(inv)||'—')}</td>
+    <td>${ACC_DOCTYPE_LABEL[inv.documentType]||inv.documentType||'—'}</td>
+    <td style="text-align:right;font-family:monospace">${fmtEUR2(remaining)}</td>
+    <td>${inv.dueDate?new Date(inv.dueDate).toLocaleDateString('fr-FR'):'—'}${overdue?' <span class="tag t-red" style="font-size:9px;padding:1px 5px">RETARD</span>':''}</td>
+  </tr>`;
+}
+
+function trRenderTreasuryChart(buckets){
+  const svg = document.getElementById('tr2-chart'); if(!svg || !buckets || !buckets.length) { if(svg) svg.innerHTML=''; return; }
+  const W = 940, H = 220, padL = 50, padR = 12, padT = 16, padB = 30;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const soldes = buckets.map(b=>b.soldeFin).concat(buckets.map(b=>b.soldeDebut));
+  const minV = Math.min(0, ...soldes), maxV = Math.max(0, ...soldes);
+  const range = (maxV - minV) || 1;
+  const yFor = v => padT + plotH - ((v-minV)/range)*plotH;
+  const xFor = i => buckets.length===1 ? padL+plotW/2 : padL + (plotW/(buckets.length-1))*i;
+  const zeroY = yFor(0);
+  const barW = Math.max(3, Math.min(22, plotW/buckets.length*0.5));
+
+  let s = '';
+  s += `<line class="tr-zero-line" x1="${padL}" y1="${zeroY}" x2="${W-padR}" y2="${zeroY}"></line>`;
+  s += `<text class="tr-axis-lbl" x="${padL-6}" y="${zeroY+3}" text-anchor="end">0</text>`;
+  s += `<text class="tr-axis-lbl" x="${padL-6}" y="${padT+8}" text-anchor="end">${fmtEUR(maxV)}</text>`;
+  s += `<text class="tr-axis-lbl" x="${padL-6}" y="${padT+plotH}" text-anchor="end">${fmtEUR(minV)}</text>`;
+
+  buckets.forEach((b,i)=>{
+    const x = xFor(i);
+    if(b.encaissementsPrevus>0){
+      const h = Math.abs(yFor(b.encaissementsPrevus)-zeroY);
+      s += `<rect x="${x-barW/2}" y="${zeroY-h}" width="${barW}" height="${Math.max(h-1,0)}" rx="2" fill="var(--tr-signe)" opacity="0.55"></rect>`;
+    }
+    if(b.decaissementsPrevus>0){
+      const h = Math.abs(yFor(b.decaissementsPrevus)-zeroY);
+      s += `<rect x="${x-barW/2}" y="${zeroY}" width="${barW}" height="${Math.max(h-1,0)}" rx="2" fill="var(--tr-depense)" opacity="0.55"></rect>`;
+    }
+  });
+
+  const pts = buckets.map((b,i)=>[xFor(i), yFor(b.soldeFin)]);
+  const linePath = pts.map((p,i)=>(i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+  s += `<path d="${linePath}" fill="none" stroke="var(--tx)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></path>`;
+  pts.forEach((p,idx)=>{
+    const b = buckets[idx];
+    const color = b.soldeFin>=0 ? 'var(--good,#1a6b47)' : 'var(--bad,#b23b2c)';
+    s += `<circle cx="${p[0]}" cy="${p[1]}" r="3.2" fill="${color}" stroke="var(--card)" stroke-width="1.4"></circle>`;
+    s += `<circle cx="${p[0]}" cy="${p[1]}" r="10" fill="transparent" class="tr2-hitpt" data-idx="${idx}"></circle>`;
+  });
+  const step = Math.max(1, Math.ceil(buckets.length/14));
+  buckets.forEach((b,i)=>{
+    if(i%step!==0 && i!==buckets.length-1) return;
+    s += `<text class="tr-month-lbl" x="${xFor(i)}" y="${H-8}">${trFmtPeriodLabel(b.periodStart, TR2_GRANULARITY)}</text>`;
+  });
+  svg.innerHTML = s;
+
+  const tt = document.getElementById('tr2-tt');
+  svg.querySelectorAll('.tr2-hitpt').forEach(el=>{
+    el.addEventListener('mousemove', (ev)=>{
+      const b = buckets[+el.dataset.idx];
+      tt.innerHTML = `<b>${trFmtPeriodLabel(b.periodStart, TR2_GRANULARITY)}</b>`+
+        `<div class="tr-tt-row"><span>Encaissements</span><span class="num">+${fmtEUR(b.encaissementsPrevus)}</span></div>`+
+        `<div class="tr-tt-row"><span>Décaissements</span><span class="num">−${fmtEUR(b.decaissementsPrevus)}</span></div>`+
+        `<div class="tr-tt-row"><span>Solde fin de période</span><span class="num">${fmtEUR(b.soldeFin)}</span></div>`;
+      const wrapRect = svg.closest('.tr-chart-wrap').getBoundingClientRect();
+      tt.style.left = (ev.clientX - wrapRect.left) + 'px';
+      tt.style.top = (ev.clientY - wrapRect.top - 10) + 'px';
+      tt.style.opacity = 1;
+    });
+    el.addEventListener('mouseleave', ()=>{ tt.style.opacity = 0; });
+  });
+}
+
+function openTreasuryAnchorModal(){
+  const opts = TR2_BANK_ACCOUNTS.map(a=>`<option value="${a.id}">${esc(a.name)} (${esc(a.bank)})${a.anchorBalance!=null?' — ancré '+fmtEUR2(a.anchorBalance)+' au '+new Date(a.anchorDate).toLocaleDateString('fr-FR'):''}</option>`).join('');
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:420px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Ancrer un solde</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div style="font-size:12px;color:var(--mu);margin-bottom:10px">Un solde connu à une date donnée (relevé bancaire) — sert de point de départ au calcul du solde réalisé, qui s'ajuste ensuite avec les mouvements postérieurs.</div>
+      <div class="ff"><label>Compte bancaire</label><select id="ta-account">${opts||'<option value="">Aucun compte</option>'}</select></div>
+      <div class="form-grid" style="margin-top:8px">
+        <div class="ff"><label>Solde</label><input type="number" step="0.01" id="ta-balance"></div>
+        <div class="ff"><label>À la date du</label><input type="date" id="ta-date" value="${new Date().toISOString().slice(0,10)}"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="saveTreasuryAnchor()">Enregistrer</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function saveTreasuryAnchor(){
+  const accountId = (document.getElementById('ta-account')||{value:''}).value;
+  const balance = (document.getElementById('ta-balance')||{value:''}).value;
+  const date = (document.getElementById('ta-date')||{value:''}).value;
+  if(!accountId){ flash('Choisissez un compte'); return; }
+  if(balance===''||!date){ flash('Solde et date requis'); return; }
+  try{
+    const r = await apiFetch('/wa/acc/bank/accounts/'+accountId+'/anchor?scope=crm', {method:'PATCH', body:JSON.stringify({balance:+balance, date})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    flash('Solde ancré');
+    closeModal();
+    loadTreasuryOverview();
+  }catch(e){ flash('Erreur : '+(e.message||'échec')); }
 }
 
 // Le solde d'ouverture est désormais constaté à un mois choisi (pas

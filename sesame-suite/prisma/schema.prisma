@@ -3358,6 +3358,18 @@ model AccBankAccount {
 
   connectionStatus String @default("manual") // manual | connected | disconnected | error
 
+  // Solde d'ancrage — module Trésorerie (cahier des charges §6.2, 07/10/2026) :
+  // un solde connu à une date donnée, saisi manuellement par l'utilisateur
+  // (relevé bancaire, solde de clôture...). Le solde réalisé "maintenant" se
+  // recalcule ensuite comme anchorBalance + somme des mouvements dont
+  // operationDate > anchorDate — jamais en resommant depuis le début de
+  // l'historique, qui peut être incomplet ou mal classé. Distinct
+  // d'availableBalance (solde live renvoyé par la banque via l'API) :
+  // l'ancrage reste la référence tant que l'utilisateur ne le met pas à jour,
+  // y compris sur un compte sans connexion API (import CSV/relevé).
+  anchorBalance Float?
+  anchorDate    DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

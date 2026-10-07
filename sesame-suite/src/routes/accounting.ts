@@ -11,6 +11,7 @@ import { seedAccounting } from "../lib/accSeed";
 import { generateDraftEntry, validateEntry, reverseEntry, createDirectEntryFromBankTransaction, EntryGenerationError } from "../lib/accEntryService";
 import { learnRuleFromCorrection } from "../lib/accRulesEngine";
 import { findOrCreateLinkableCrmProspect } from "../lib/accCustomerMatching";
+import { computeTreasuryOverview } from "../lib/accTreasury";
 import { worstLevel, CheckResult } from "../lib/accChecks";
 import { recordAuditLog } from "../lib/accAudit";
 import { parseBankFile, importBankTransactions, BankImportError, BankImportSource } from "../lib/accBanking";
@@ -1313,6 +1314,25 @@ accountingRouter.get(
   })
 );
 
+/**
+ * GET /wa/acc/treasury/overview?granularity=day|week|month&periods=N&bankAccountId=
+ * — module Trésorerie (cahier des charges, 07/10/2026) : solde actuel,
+ * projection par période à partir des échéances fournisseurs/clients déjà
+ * en base, retards isolés, plus bas solde projeté. Cf. lib/accTreasury.ts.
+ */
+accountingRouter.get(
+  "/acc/treasury/overview",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const { granularity, periods, bankAccountId } = req.query as Record<string, string | undefined>;
+    const g = granularity === "day" || granularity === "week" || granularity === "month" ? granularity : "month";
+    const p = Math.min(60, Math.max(1, Number(periods) || 12));
+    const overview = await computeTreasuryOverview(entityId, { granularity: g, periods: p, bankAccountId: bankAccountId || null });
+    res.json(overview);
+  })
+);
+
 // ───────────────────────── Banque (Phase 1 : comptes + import) ─────────────────────────
 
 const BANK_IMPORT_SOURCES = new Set(["csv", "camt053", "mt940", "cfonb"]);
@@ -1373,6 +1393,42 @@ accountingRouter.put(
     const data: Record<string, unknown> = {};
     for (const f of ["bank", "name", "iban", "bic", "currency", "type"] as const) if (f in req.body) data[f] = req.body[f];
     const updated = await prisma.accBankAccount.update({ where: { id: existing.id }, data });
+    res.json(updated);
+  })
+);
+
+/**
+ * PATCH /wa/acc/bank/accounts/:id/anchor — solde d'ancrage (module
+ * Trésorerie, cahier des charges §6.2) : un solde connu à une date
+ * donnée (relevé bancaire, solde de clôture...), référence pour calculer
+ * le solde réalisé = ancrage + mouvements postérieurs. { balance: null }
+ * efface l'ancrage (compte repasse à "non ancré", solde basé sur 0 +
+ * tout l'historique connu).
+ */
+accountingRouter.patch(
+  "/acc/bank/accounts/:id/anchor",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const existing = await prisma.accBankAccount.findFirst({ where: { id: req.params.id, entityId } });
+    if (!existing) throw new HttpError(404, "Compte bancaire introuvable");
+    const balance = req.body?.balance;
+    const date = req.body?.date;
+    if (balance != null && !date) throw new HttpError(400, "date requise avec un solde d'ancrage");
+    const updated = await prisma.accBankAccount.update({
+      where: { id: existing.id },
+      data: { anchorBalance: balance != null ? Number(balance) : null, anchorDate: balance != null ? new Date(date) : null },
+    });
+    await recordAuditLog({
+      entityId,
+      userId: actorId(req),
+      action: "bank_account_anchor_set",
+      targetType: "AccBankAccount",
+      targetId: existing.id,
+      oldValue: { anchorBalance: existing.anchorBalance, anchorDate: existing.anchorDate },
+      newValue: { anchorBalance: updated.anchorBalance, anchorDate: updated.anchorDate },
+      ip: req.ip,
+    });
     res.json(updated);
   })
 );
