@@ -56,6 +56,19 @@ function addMonths(d: Date, n: number): Date {
   return next;
 }
 
+export const RECURRING_FREQUENCIES = ["monthly", "quarterly", "yearly"] as const;
+export type RecurringFrequency = (typeof RECURRING_FREQUENCIES)[number];
+
+const FREQUENCY_STEP_MONTHS: Record<RecurringFrequency, number> = {
+  monthly: 1,
+  quarterly: 3,
+  yearly: 12,
+};
+
+function frequencyStepMonths(frequency: string): number {
+  return FREQUENCY_STEP_MONTHS[frequency as RecurringFrequency] || 1;
+}
+
 /**
  * Solde réalisé "maintenant" — ancrage + mouvements postérieurs — pour un
  * compte donné, ou agrégé sur tous les comptes de la portée si
@@ -157,20 +170,22 @@ export async function computeTreasuryOverview(
     else futureSale.push({ dueDate: inv.dueDate, amount: remaining });
   }
 
-  // Récurrences bancaires qualifiées (phase 2, §4.2 simplifié au mensuel) :
-  // génère les occurrences futures jusqu'à l'horizon demandé et les ajoute
-  // aux flux prévus, au même titre que les échéances de factures.
+  // Récurrences qualifiées (phase 2, §4.2 — fréquence mensuelle,
+  // trimestrielle ou annuelle) : génère les occurrences futures jusqu'à
+  // l'horizon demandé et les ajoute aux flux prévus, au même titre que les
+  // échéances de factures.
   const recurringRules = await prisma.accRecurringRule.findMany({
     where: { entityId, active: true, ...(bankAccountId ? { bankAccountId } : {}) },
-    select: { direction: true, amount: true, nextDate: true },
+    select: { direction: true, amount: true, nextDate: true, frequency: true },
   });
   for (const rule of recurringRules) {
+    const step = frequencyStepMonths(rule.frequency);
     let occ = startOfDay(rule.nextDate);
-    while (occ < horizonStart) occ = addMonths(occ, 1);
+    while (occ < horizonStart) occ = addMonths(occ, step);
     while (occ < horizonEnd) {
       if (rule.direction === "CREDIT") futureSale.push({ dueDate: occ, amount: rule.amount });
       else futurePurchase.push({ dueDate: occ, amount: rule.amount });
-      occ = addMonths(occ, 1);
+      occ = addMonths(occ, step);
     }
   }
 

@@ -11,7 +11,7 @@ import { seedAccounting } from "../lib/accSeed";
 import { generateDraftEntry, validateEntry, reverseEntry, createDirectEntryFromBankTransaction, EntryGenerationError } from "../lib/accEntryService";
 import { learnRuleFromCorrection } from "../lib/accRulesEngine";
 import { findOrCreateLinkableCrmProspect } from "../lib/accCustomerMatching";
-import { computeTreasuryOverview } from "../lib/accTreasury";
+import { computeTreasuryOverview, RECURRING_FREQUENCIES, RecurringFrequency } from "../lib/accTreasury";
 import { worstLevel, CheckResult } from "../lib/accChecks";
 import { recordAuditLog } from "../lib/accAudit";
 import { parseBankFile, importBankTransactions, BankImportError, BankImportSource } from "../lib/accBanking";
@@ -1990,11 +1990,13 @@ accountingRouter.post(
 );
 
 /**
- * Récurrences bancaires qualifiées (module Trésorerie, phase 2, cahier des
- * charges §4.2 simplifié au mensuel) : depuis une transaction bancaire déjà
- * importée, l'utilisateur confirme qu'elle se répète chaque mois — la règle
- * est ensuite intégrée au moteur de projection (lib/accTreasury.ts) au même
- * titre que les échéances de factures.
+ * Récurrences qualifiées (module Trésorerie, phase 2, cahier des charges
+ * §4.2 — fréquence mensuelle, trimestrielle ou annuelle) : depuis une
+ * transaction bancaire déjà importée OU depuis une facture (abonnement
+ * facturé mais pas forcément déjà réglé/importé en banque), l'utilisateur
+ * confirme qu'elle se répète — la règle est ensuite intégrée au moteur de
+ * projection (lib/accTreasury.ts) au même titre que les échéances de
+ * factures.
  */
 accountingRouter.get(
   "/acc/bank/recurring-rules",
@@ -2010,39 +2012,83 @@ accountingRouter.get(
   })
 );
 
+function validateRecurringFrequency(value: unknown): string {
+  const frequency = value || "monthly";
+  if (!RECURRING_FREQUENCIES.includes(frequency as RecurringFrequency)) {
+    throw new HttpError(400, `frequency doit être l'une de: ${RECURRING_FREQUENCIES.join(", ")}`);
+  }
+  return frequency as string;
+}
+
+function defaultNextDate(from: Date, frequency: string): Date {
+  const next = new Date(from);
+  const step = frequency === "yearly" ? 12 : frequency === "quarterly" ? 3 : 1;
+  next.setMonth(next.getMonth() + step);
+  return next;
+}
+
 accountingRouter.post(
   "/acc/bank/recurring-rules",
   requireAdmin,
   asyncHandler(async (req, res) => {
     const entityId = await resolveScope(req);
-    const b = req.body as { sourceTransactionId?: string; amount?: number; nextDate?: string };
-    if (!b.sourceTransactionId) throw new HttpError(400, "sourceTransactionId requis");
-    const tx = await prisma.accBankTransaction.findFirst({ where: { id: b.sourceTransactionId, entityId } });
-    if (!tx) throw new HttpError(404, "Transaction introuvable");
-    const amount = b.amount != null ? Number(b.amount) : Math.abs(tx.amount);
-    if (!(amount > 0)) throw new HttpError(400, "Montant invalide");
-    let nextDate: Date;
-    if (b.nextDate) {
-      nextDate = new Date(b.nextDate);
-    } else {
-      nextDate = new Date(tx.operationDate);
-      nextDate.setMonth(nextDate.getMonth() + 1);
-    }
-    const rule = await prisma.accRecurringRule.create({
-      data: {
-        entityId,
+    const b = req.body as { sourceTransactionId?: string; sourceInvoiceId?: string; amount?: number; nextDate?: string; frequency?: string };
+    if (!b.sourceTransactionId && !b.sourceInvoiceId) throw new HttpError(400, "sourceTransactionId ou sourceInvoiceId requis");
+    const frequency = validateRecurringFrequency(b.frequency);
+
+    let data: {
+      bankAccountId: string | null;
+      sourceTransactionId: string | null;
+      sourceInvoiceId: string | null;
+      direction: string;
+      label: string;
+      counterpartyName: string | null;
+      amount: number;
+      nextDate: Date;
+    };
+
+    if (b.sourceTransactionId) {
+      const tx = await prisma.accBankTransaction.findFirst({ where: { id: b.sourceTransactionId, entityId } });
+      if (!tx) throw new HttpError(404, "Transaction introuvable");
+      const amount = b.amount != null ? Number(b.amount) : Math.abs(tx.amount);
+      if (!(amount > 0)) throw new HttpError(400, "Montant invalide");
+      data = {
         bankAccountId: tx.bankAccountId,
         sourceTransactionId: tx.id,
+        sourceInvoiceId: null,
         direction: tx.direction,
         label: tx.normalizedLabel || tx.rawLabel,
         counterpartyName: tx.counterpartyName,
         amount,
-        nextDate,
-      },
-    });
+        nextDate: b.nextDate ? new Date(b.nextDate) : defaultNextDate(tx.operationDate, frequency),
+      };
+    } else {
+      const invoice = await prisma.accInvoice.findFirst({
+        where: { id: b.sourceInvoiceId!, entityId },
+        include: { supplier: { select: { name: true } }, customer: { select: { name: true } } },
+      });
+      if (!invoice) throw new HttpError(404, "Facture introuvable");
+      const amount = b.amount != null ? Number(b.amount) : invoiceTotal(invoice);
+      if (!(amount > 0)) throw new HttpError(400, "Montant invalide");
+      const counterpartyName = invoice.direction === "sale"
+        ? (invoice.customer?.name || invoice.recipientName || null)
+        : (invoice.supplier?.name || invoice.issuerName || null);
+      data = {
+        bankAccountId: null,
+        sourceTransactionId: null,
+        sourceInvoiceId: invoice.id,
+        direction: invoice.direction === "sale" ? "CREDIT" : "DEBIT",
+        label: invoice.invoiceNumber ? `Facture ${invoice.invoiceNumber}` : (counterpartyName || "Facture récurrente"),
+        counterpartyName,
+        amount,
+        nextDate: b.nextDate ? new Date(b.nextDate) : defaultNextDate(invoice.dueDate || invoice.invoiceDate || new Date(), frequency),
+      };
+    }
+
+    const rule = await prisma.accRecurringRule.create({ data: { entityId, frequency, ...data } });
     await recordAuditLog({
-      entityId, userId: actorId(req), action: "bank_recurring_rule_created", targetType: "AccRecurringRule", targetId: rule.id,
-      newValue: { sourceTransactionId: tx.id, direction: rule.direction, amount, nextDate }, ip: req.ip,
+      entityId, userId: actorId(req), action: "recurring_rule_created", targetType: "AccRecurringRule", targetId: rule.id,
+      newValue: { sourceTransactionId: data.sourceTransactionId, sourceInvoiceId: data.sourceInvoiceId, direction: rule.direction, amount: data.amount, frequency, nextDate: data.nextDate }, ip: req.ip,
     });
     res.status(201).json(rule);
   })
@@ -2062,12 +2108,13 @@ accountingRouter.patch(
       if (!(amount > 0)) throw new HttpError(400, "Montant invalide");
       data.amount = amount;
     }
+    if ("frequency" in req.body) data.frequency = validateRecurringFrequency(req.body.frequency);
     if ("nextDate" in req.body) data.nextDate = new Date(req.body.nextDate);
     const updated = await prisma.accRecurringRule.update({ where: { id: existing.id }, data });
     await recordAuditLog({
       entityId, userId: actorId(req), action: "bank_recurring_rule_updated", targetType: "AccRecurringRule", targetId: existing.id,
-      oldValue: { active: existing.active, amount: existing.amount, nextDate: existing.nextDate },
-      newValue: { active: updated.active, amount: updated.amount, nextDate: updated.nextDate }, ip: req.ip,
+      oldValue: { active: existing.active, amount: existing.amount, frequency: existing.frequency, nextDate: existing.nextDate },
+      newValue: { active: updated.active, amount: updated.amount, frequency: updated.frequency, nextDate: updated.nextDate }, ip: req.ip,
     });
     res.json(updated);
   })

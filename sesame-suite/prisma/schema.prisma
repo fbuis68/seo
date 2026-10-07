@@ -3491,11 +3491,19 @@ model AccRecurringRule {
   bankAccountId       String?
   bankAccount         AccBankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
   sourceTransactionId String?
+  // Qualifiée depuis une facture (client ou fournisseur) plutôt que depuis
+  // une transaction bancaire — ex. abonnement facturé mais pas encore
+  // réglé/importé en banque. Jamais les deux à la fois : l'un ou l'autre
+  // sert de gabarit pour label/contrepartie/montant par défaut à la création.
+  sourceInvoiceId String?
 
   direction        String // DEBIT | CREDIT — même convention que AccBankTransaction.direction
   label            String
   counterpartyName String?
-  amount           Float // montant mensuel estimé, toujours positif
+  amount           Float // montant estimé par occurrence, toujours positif
+  // monthly | quarterly | yearly — cf. cahier §4.2 (fréquence
+  // mensuelle/trimestrielle/annuelle ; "personnalisée" hors phase 2)
+  frequency        String   @default("monthly")
   nextDate         DateTime // prochaine échéance prévue
 
   active Boolean @default(true) // pause/arrêt — conserve la règle (et son historique) sans générer de nouvelles occurrences
