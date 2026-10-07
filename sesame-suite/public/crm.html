@@ -8379,6 +8379,8 @@ async function loadAccInboxTab(){
   await accReloadInvoices();
 }
 
+let ACC_DUE_SUMMARY = null;
+
 async function accReloadInvoices(){
   const params = new URLSearchParams({scope:'crm', limit:'100'});
   if(ACC_INBOX_FILTER.status) params.set('status', ACC_INBOX_FILTER.status);
@@ -8391,6 +8393,14 @@ async function accReloadInvoices(){
     ACC_INVOICES = data.rows||[];
   }catch(e){ ACC_INVOICES=[]; }
   ACC_INBOX_SELECTED = new Set([...ACC_INBOX_SELECTED].filter(id=>ACC_INVOICES.some(i=>i.id===id)));
+  // Agrégat "à payer ce mois / sous 30 jours" — calculé côté serveur sur
+  // TOUTES les factures du sens courant (pas limité aux 100 lignes
+  // affichées), direction=purchase (Fournisseurs) ou sale (Clients) —
+  // cf. GET /acc/invoices/dueSummary (05/10/2026, demande client).
+  try{
+    const dr = await apiFetch('/wa/acc/invoices/dueSummary?scope=crm&direction='+(ACC_INBOX_FILTER.direction||'purchase'));
+    ACC_DUE_SUMMARY = dr.ok ? await dr.json() : null;
+  }catch(e){ ACC_DUE_SUMMARY = null; }
   renderAccInbox();
 }
 
@@ -8475,6 +8485,7 @@ function renderAccInbox(){
       <td style="text-align:right">${inv.amountHt!=null?fmtEUR2(inv.amountHt):'—'}</td>
       <td style="text-align:right">${inv.amountVat!=null?fmtEUR2(inv.amountVat):'—'}</td>
       <td style="text-align:right">${inv.amountTtc!=null?fmtEUR2(inv.amountTtc):'—'}</td>
+      <td style="text-align:right;font-family:monospace">${fmtEUR2(Math.max(0,accInvoiceTotal(inv)-(inv.amountPaid||0)))}</td>
       <td>${accDueDateCell(inv)}</td>
       <td>${inv.proposedAccountId?'<span class="tpill bi">'+accConfidencePct(inv.proposedAccountConfidence)+'</span>':'<span class="tpill bn">Aucun</span>'}</td>
       <td>${level!=='OK'?'<span class="tag '+ACC_CHECK_TAG[level]+'" style="font-size:10px;padding:1px 7px">'+level+'</span>':'<span class="tpill bg">OK</span>'}</td>
@@ -8483,11 +8494,18 @@ function renderAccInbox(){
       <td style="white-space:nowrap"><button class="ta-btn" onclick="openAccInvoiceModal('${inv.id}')" title="Ouvrir" aria-label="Ouvrir la facture">👁</button><button class="ta-btn" onclick="event.stopPropagation();accDeleteInvoice('${inv.id}')" title="Supprimer" aria-label="Supprimer la facture">🗑</button></td>
     </tr>`;
   }).join('');
+  const dueLabel = ACC_INBOX_FILTER.direction==='sale' ? 'à encaisser' : 'à payer';
+  const dueTiles = ACC_DUE_SUMMARY ? `
+    <div class="stats-row" style="margin-bottom:10px">
+      <div class="stat-card"><div class="stat-lbl">Montant ${dueLabel} — ce mois-ci</div><div class="stat-val">${fmtEUR(ACC_DUE_SUMMARY.thisMonth.total)}</div><div style="font-size:11px;color:var(--mu)">${ACC_DUE_SUMMARY.thisMonth.count} facture(s)</div></div>
+      <div class="stat-card"><div class="stat-lbl">Montant ${dueLabel} — sous 30 jours</div><div class="stat-val">${fmtEUR(ACC_DUE_SUMMARY.next30Days.total)}</div><div style="font-size:11px;color:var(--mu)">${ACC_DUE_SUMMARY.next30Days.count} facture(s)</div></div>
+    </div>` : '';
   withFocusKept('#acc-inbox-search', ()=>{ el.innerHTML = `
     <div class="autoviewtoggle" style="margin-bottom:10px">
       <button type="button" class="${ACC_INBOX_FILTER.direction==='purchase'?'on':''}" onclick="accSetInboxDirection('purchase')">Factures fournisseurs</button>
       <button type="button" class="${ACC_INBOX_FILTER.direction==='sale'?'on':''}" onclick="accSetInboxDirection('sale')">Factures clients</button>
     </div>
+    ${dueTiles}
     <div class="list-toolbar" style="flex-wrap:wrap">
       <input id="acc-inbox-search" class="lsel" style="min-width:220px" placeholder="Rechercher ${ACC_INBOX_FILTER.direction==='sale'?'client':'fournisseur'}, n° facture…" value="${esc(ACC_INBOX_FILTER.q)}" oninput="accSetInboxSearch(this.value)">
       <select class="lsel" onchange="accSetInboxFilter('status', this.value)">
@@ -8515,8 +8533,8 @@ function renderAccInbox(){
     </div>
     <div id="acc-inbox-dropzone" style="border:2px dashed transparent;border-radius:12px;transition:border-color .1s,background .1s">
       <div class="tbl-wrap"><table>
-        <thead><tr><th style="width:32px"><input type="checkbox" ${allSelected?'checked':''} onchange="accToggleInboxSelectAll(this.checked)"></th><th>Date</th><th>Type</th><th>Tiers</th><th>N° facture</th><th style="text-align:right">HT</th><th style="text-align:right">TVA</th><th style="text-align:right">TTC</th><th>Échéance</th><th>Compte</th><th>Contrôles</th><th>État</th><th style="width:80px">Réglée</th><th style="width:44px"></th></tr></thead>
-        <tbody>${rows||(ACC_INVOICES.length?'<tr><td colspan="14" class="log-empty">Aucune facture ne correspond à la recherche.</td></tr>':'<tr><td colspan="14" class="log-empty">Aucune facture — déposez-en une avec le bouton en haut à droite, ou glissez un fichier ici.</td></tr>')}</tbody>
+        <thead><tr><th style="width:32px"><input type="checkbox" ${allSelected?'checked':''} onchange="accToggleInboxSelectAll(this.checked)"></th><th>Date</th><th>Type</th><th>Tiers</th><th>N° facture</th><th style="text-align:right">HT</th><th style="text-align:right">TVA</th><th style="text-align:right">TTC</th><th style="text-align:right">Reste dû</th><th>Échéance</th><th>Compte</th><th>Contrôles</th><th>État</th><th style="width:80px">Réglée</th><th style="width:44px"></th></tr></thead>
+        <tbody>${rows||(ACC_INVOICES.length?'<tr><td colspan="15" class="log-empty">Aucune facture ne correspond à la recherche.</td></tr>':'<tr><td colspan="15" class="log-empty">Aucune facture — déposez-en une avec le bouton en haut à droite, ou glissez un fichier ici.</td></tr>')}</tbody>
       </table></div>
     </div>`; });
 
