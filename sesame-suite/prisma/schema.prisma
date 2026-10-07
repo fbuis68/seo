@@ -78,6 +78,7 @@ model Entity {
   scalewayConfig         ScalewayConfig?
   accGoCardlessPayouts   AccGoCardlessPayout[]
   accGoCardlessPayments  AccGoCardlessPayment[]
+  accRecurringRules      AccRecurringRule[]
 }
 
 // Groupe d'établissements (ex : chaîne hôtelière) — gestion réservée aux
@@ -3374,6 +3375,7 @@ model AccBankAccount {
   updatedAt DateTime @updatedAt
 
   transactions AccBankTransaction[]
+  recurringRules AccRecurringRule[]
 
   @@index([entityId])
 }
@@ -3469,6 +3471,39 @@ model AccBankTransaction {
   @@unique([bankAccountId, externalId])
   @@index([entityId, status])
   @@index([entityId, bankAccountId, operationDate])
+}
+
+// Opération bancaire récurrente qualifiée — module Trésorerie, phase 2
+// (cahier des charges §4.2, 07/10/2026) : depuis une transaction bancaire
+// déjà importée (prélèvement ou encaissement), l'utilisateur confirme
+// qu'elle se répète chaque mois, avec un montant estimé — génère alors des
+// occurrences futures mensuelles intégrées au moteur de projection
+// (lib/accTreasury.ts), au même titre que les échéances de factures.
+// sourceTransactionId garde la trace de la transaction d'origine (jamais
+// de contrainte d'unicité dessus : rien n'empêche de requalifier après
+// avoir arrêté une règle). Fréquence limitée à "mensuel" dans cette phase
+// (trimestriel/annuel/personnalisé : phase ultérieure, cf. cahier §4.2).
+model AccRecurringRule {
+  id       String  @id @default(cuid())
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  bankAccountId       String?
+  bankAccount         AccBankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+  sourceTransactionId String?
+
+  direction        String // DEBIT | CREDIT — même convention que AccBankTransaction.direction
+  label            String
+  counterpartyName String?
+  amount           Float // montant mensuel estimé, toujours positif
+  nextDate         DateTime // prochaine échéance prévue
+
+  active Boolean @default(true) // pause/arrêt — conserve la règle (et son historique) sans générer de nouvelles occurrences
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([entityId, active])
 }
 
 // Rapprochement transaction bancaire <-> facture (phase 3, lib/

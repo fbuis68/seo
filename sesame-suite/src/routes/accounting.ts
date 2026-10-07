@@ -1988,3 +1988,103 @@ accountingRouter.post(
     }
   })
 );
+
+/**
+ * Récurrences bancaires qualifiées (module Trésorerie, phase 2, cahier des
+ * charges §4.2 simplifié au mensuel) : depuis une transaction bancaire déjà
+ * importée, l'utilisateur confirme qu'elle se répète chaque mois — la règle
+ * est ensuite intégrée au moteur de projection (lib/accTreasury.ts) au même
+ * titre que les échéances de factures.
+ */
+accountingRouter.get(
+  "/acc/bank/recurring-rules",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const activeOnly = req.query.active === "true";
+    const rules = await prisma.accRecurringRule.findMany({
+      where: { entityId, ...(activeOnly ? { active: true } : {}) },
+      orderBy: { nextDate: "asc" },
+    });
+    res.json(rules);
+  })
+);
+
+accountingRouter.post(
+  "/acc/bank/recurring-rules",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const b = req.body as { sourceTransactionId?: string; amount?: number; nextDate?: string };
+    if (!b.sourceTransactionId) throw new HttpError(400, "sourceTransactionId requis");
+    const tx = await prisma.accBankTransaction.findFirst({ where: { id: b.sourceTransactionId, entityId } });
+    if (!tx) throw new HttpError(404, "Transaction introuvable");
+    const amount = b.amount != null ? Number(b.amount) : Math.abs(tx.amount);
+    if (!(amount > 0)) throw new HttpError(400, "Montant invalide");
+    let nextDate: Date;
+    if (b.nextDate) {
+      nextDate = new Date(b.nextDate);
+    } else {
+      nextDate = new Date(tx.operationDate);
+      nextDate.setMonth(nextDate.getMonth() + 1);
+    }
+    const rule = await prisma.accRecurringRule.create({
+      data: {
+        entityId,
+        bankAccountId: tx.bankAccountId,
+        sourceTransactionId: tx.id,
+        direction: tx.direction,
+        label: tx.normalizedLabel || tx.rawLabel,
+        counterpartyName: tx.counterpartyName,
+        amount,
+        nextDate,
+      },
+    });
+    await recordAuditLog({
+      entityId, userId: actorId(req), action: "bank_recurring_rule_created", targetType: "AccRecurringRule", targetId: rule.id,
+      newValue: { sourceTransactionId: tx.id, direction: rule.direction, amount, nextDate }, ip: req.ip,
+    });
+    res.status(201).json(rule);
+  })
+);
+
+accountingRouter.patch(
+  "/acc/bank/recurring-rules/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const existing = await prisma.accRecurringRule.findFirst({ where: { id: req.params.id, entityId } });
+    if (!existing) throw new HttpError(404, "Règle de récurrence introuvable");
+    const data: Record<string, unknown> = {};
+    if ("active" in req.body) data.active = Boolean(req.body.active);
+    if ("amount" in req.body) {
+      const amount = Number(req.body.amount);
+      if (!(amount > 0)) throw new HttpError(400, "Montant invalide");
+      data.amount = amount;
+    }
+    if ("nextDate" in req.body) data.nextDate = new Date(req.body.nextDate);
+    const updated = await prisma.accRecurringRule.update({ where: { id: existing.id }, data });
+    await recordAuditLog({
+      entityId, userId: actorId(req), action: "bank_recurring_rule_updated", targetType: "AccRecurringRule", targetId: existing.id,
+      oldValue: { active: existing.active, amount: existing.amount, nextDate: existing.nextDate },
+      newValue: { active: updated.active, amount: updated.amount, nextDate: updated.nextDate }, ip: req.ip,
+    });
+    res.json(updated);
+  })
+);
+
+accountingRouter.delete(
+  "/acc/bank/recurring-rules/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const existing = await prisma.accRecurringRule.findFirst({ where: { id: req.params.id, entityId } });
+    if (!existing) throw new HttpError(404, "Règle de récurrence introuvable");
+    await prisma.accRecurringRule.delete({ where: { id: existing.id } });
+    await recordAuditLog({
+      entityId, userId: actorId(req), action: "bank_recurring_rule_deleted", targetType: "AccRecurringRule", targetId: existing.id,
+      oldValue: { direction: existing.direction, amount: existing.amount, nextDate: existing.nextDate }, ip: req.ip,
+    });
+    res.status(204).end();
+  })
+);

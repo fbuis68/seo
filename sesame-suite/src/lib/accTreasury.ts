@@ -9,9 +9,10 @@ import { NON_ACCOUNTING_DOC_TYPES } from "./accClassification";
  * projection du solde par période (jour/semaine/mois) à partir des
  * échéances de factures fournisseurs/clients déjà en base, retards isolés
  * séparément du flux daté (§6.2 : "Isoler arriérés sans date révisée").
- * Récurrences bancaires qualifiées, paie, échéancier client découpé en
- * tranches, scénarios/simulations et rapprochement avancé : hors phase 1,
- * cf. phases suivantes.
+ * Récurrences bancaires qualifiées (phase 2, §4.2 simplifié au mensuel) :
+ * intégrées aux projections ci-dessous. Paie, échéancier client découpé en
+ * tranches, scénarios/simulations et rapprochement avancé : phases
+ * suivantes.
  */
 
 export type Granularity = "day" | "week" | "month";
@@ -47,6 +48,12 @@ function periodStart(d: Date, granularity: Granularity): Date {
   if (granularity === "day") return startOfDay(d);
   if (granularity === "week") return startOfWeek(d);
   return startOfMonth(d);
+}
+
+function addMonths(d: Date, n: number): Date {
+  const next = new Date(d);
+  next.setMonth(next.getMonth() + n);
+  return next;
 }
 
 /**
@@ -148,6 +155,23 @@ export async function computeTreasuryOverview(
     if (remaining <= 0.01 || !inv.dueDate) continue;
     if (inv.dueDate < today) { creancesRetardCount++; creancesRetardTotal += remaining; }
     else futureSale.push({ dueDate: inv.dueDate, amount: remaining });
+  }
+
+  // Récurrences bancaires qualifiées (phase 2, §4.2 simplifié au mensuel) :
+  // génère les occurrences futures jusqu'à l'horizon demandé et les ajoute
+  // aux flux prévus, au même titre que les échéances de factures.
+  const recurringRules = await prisma.accRecurringRule.findMany({
+    where: { entityId, active: true, ...(bankAccountId ? { bankAccountId } : {}) },
+    select: { direction: true, amount: true, nextDate: true },
+  });
+  for (const rule of recurringRules) {
+    let occ = startOfDay(rule.nextDate);
+    while (occ < horizonStart) occ = addMonths(occ, 1);
+    while (occ < horizonEnd) {
+      if (rule.direction === "CREDIT") futureSale.push({ dueDate: occ, amount: rule.amount });
+      else futurePurchase.push({ dueDate: occ, amount: rule.amount });
+      occ = addMonths(occ, 1);
+    }
   }
 
   const buckets: {

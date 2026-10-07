@@ -8259,7 +8259,7 @@ async function testRule(id){
 // schéma-prêts côté backend mais ne sont pas exposés ici.
 // ════════════════════════════════════════
 let ACC_INVOICES=[], ACC_SUPPLIERS=[], ACC_CUSTOMERS=[], ACC_ACCOUNTS=[], ACC_JOURNALS=[], ACC_ENTRIES=[], ACC_RULES=[], ACC_DASH=null;
-let ACC_BANK_ACCOUNTS=[], ACC_BANK_TX=[], ACC_BANK_SELECTED=null;
+let ACC_BANK_ACCOUNTS=[], ACC_BANK_TX=[], ACC_BANK_SELECTED=null, ACC_RECURRING_RULES=[];
 // excludeKinds : ensemble de 'prelevement'|'cb'|'matched'|'labeled' — cases
 // à cocher du menu "Exclure" (remplace les anciennes cases isolées, § "un
 // prélèvement de 1000€ OpenAI/SNCF en CB n'était pas exclu par 'exclure les
@@ -10060,8 +10060,15 @@ async function loadAccBankTab(){
   // "TVA du mois" par défaut au premier chargement de l'onglet — ne réinitialise
   // pas une plage déjà choisie par l'utilisateur lors d'un simple rafraîchissement.
   if(!ACC_BANK_FILTER.dateFrom && !ACC_BANK_FILTER.dateTo) Object.assign(ACC_BANK_FILTER, accBankMonthBounds());
-  await Promise.all([loadAccBankTransactions(), loadAccVatSummary()]);
+  await Promise.all([loadAccBankTransactions(), loadAccVatSummary(), loadAccRecurringRules()]);
   renderAccBank();
+}
+
+async function loadAccRecurringRules(){
+  try{
+    const r = await apiFetch('/wa/acc/bank/recurring-rules?scope=crm');
+    ACC_RECURRING_RULES = r.ok ? await r.json() : [];
+  }catch(e){ ACC_RECURRING_RULES=[]; }
 }
 
 function accBankDateRangeParams(){
@@ -10141,6 +10148,10 @@ function renderAccBank(){
     else recoBadge = `<span class="tag t-green" style="font-size:10px;padding:1px 7px">Rapprochée</span>`;
     const labelBadges = (t.qontoLabels||[]).length?`<div style="margin-top:3px;display:flex;gap:4px;flex-wrap:wrap">${t.qontoLabels.map(l=>`<span class="tag t-gray" style="font-size:9px;padding:1px 6px">${esc(l)}</span>`).join('')}</div>`:'';
     const gcBadge = t.gocardlessPayout?`<div style="margin-top:3px"><span class="tag t-blue" style="font-size:9px;padding:1px 6px" title="Virement groupé de prélèvements GoCardless">⇄ GoCardless</span></div>`:'';
+    const recurringRule = ACC_RECURRING_RULES.find(r=>r.sourceTransactionId===t.id && r.active);
+    const recurBtn = recurringRule
+      ? `<span class="tag t-blue" style="font-size:9px;padding:1px 6px" title="Récurrence mensuelle qualifiée — ${fmtEUR2(recurringRule.amount)}/mois, prochaine échéance ${new Date(recurringRule.nextDate).toLocaleDateString('fr-FR')}">🔁 Récurrente</span>`
+      : `<button class="ta-btn" onclick="event.stopPropagation();openAccRecurringRuleModal('${t.id}')" title="Qualifier comme récurrente chaque mois (intégrée au prévisionnel de trésorerie)">🔁</button>`;
     return `
     <tr style="cursor:pointer" onclick="openAccBankMatchModal('${t.id}')">
       <td>${new Date(t.operationDate).toLocaleDateString('fr-FR')}</td>
@@ -10150,6 +10161,7 @@ function renderAccBank(){
       <td style="text-align:right;font-family:monospace;color:var(--mu)">${t.vatAmount>0.009?fmtEUR2(t.vatAmount):'—'}</td>
       <td>${ACC_BANK_SOURCE_LABEL[t.source]||t.source}</td>
       <td>${recoBadge}</td>
+      <td onclick="event.stopPropagation()">${recurBtn}</td>
     </tr>`;
   }).join('');
 
@@ -10204,9 +10216,86 @@ function renderAccBank(){
       <div style="color:var(--mu)">${ACC_VAT_SUMMARY.matchCount} rapprochement(s) sur la période, tous comptes bancaires</div>
     </div>`:''}
     <div class="tbl-wrap"><table>
-      <thead><tr><th style="width:100px">Date</th><th>Libellé</th><th>Contrepartie</th><th style="width:110px;text-align:right">Montant</th><th style="width:90px;text-align:right">TVA</th><th style="width:90px">Source</th><th style="width:160px">Rapprochement</th></tr></thead>
-      <tbody>${txRows||'<tr><td colspan="7" class="log-empty">'+(selected?(ACC_BANK_TX.length?'Aucune transaction pour ce filtre.':'Aucune transaction importée pour ce compte.'):'Sélectionnez un compte bancaire ci-dessus.')+'</td></tr>'}</tbody>
+      <thead><tr><th style="width:100px">Date</th><th>Libellé</th><th>Contrepartie</th><th style="width:110px;text-align:right">Montant</th><th style="width:90px;text-align:right">TVA</th><th style="width:90px">Source</th><th style="width:160px">Rapprochement</th><th style="width:50px"></th></tr></thead>
+      <tbody>${txRows||'<tr><td colspan="8" class="log-empty">'+(selected?(ACC_BANK_TX.length?'Aucune transaction pour ce filtre.':'Aucune transaction importée pour ce compte.'):'Sélectionnez un compte bancaire ci-dessus.')+'</td></tr>'}</tbody>
+    </table></div>
+    ${renderAccRecurringRulesSection()}`;
+}
+
+function renderAccRecurringRulesSection(){
+  if(!ACC_RECURRING_RULES.length) return '';
+  const rows = ACC_RECURRING_RULES.slice().sort((a,b)=>new Date(a.nextDate)-new Date(b.nextDate)).map(r=>`
+    <tr style="${r.active?'':'opacity:.5'}">
+      <td>${esc(r.label)}</td>
+      <td>${esc(r.counterpartyName||'—')}</td>
+      <td style="text-align:right;font-family:monospace;color:${r.direction==='CREDIT'?'#1f7a3f':'#a32d2d'}">${r.direction==='CREDIT'?'+':'-'}${fmtEUR2(r.amount)}/mois</td>
+      <td>${new Date(r.nextDate).toLocaleDateString('fr-FR')}</td>
+      <td>${r.active?'<span class="tag t-green" style="font-size:10px;padding:1px 7px">Active</span>':'<span class="tag t-gray" style="font-size:10px;padding:1px 7px">En pause</span>'}</td>
+      <td>
+        <button class="ta-btn" onclick="accToggleRecurringRule('${r.id}',${!r.active})" title="${r.active?'Mettre en pause':'Réactiver'}">${r.active?'⏸':'▶'}</button>
+        <button class="ta-btn" onclick="accDeleteRecurringRule('${r.id}')" title="Supprimer">🗑</button>
+      </td>
+    </tr>`).join('');
+  return `
+    <div class="modal-section">Récurrences bancaires qualifiées — intégrées au prévisionnel de trésorerie</div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Libellé</th><th>Contrepartie</th><th style="text-align:right">Montant</th><th>Prochaine échéance</th><th>État</th><th style="width:90px"></th></tr></thead>
+      <tbody>${rows}</tbody>
     </table></div>`;
+}
+
+function openAccRecurringRuleModal(txId){
+  const t = ACC_BANK_TX.find(x=>x.id===txId);
+  if(!t) return;
+  const defaultNext = new Date(t.operationDate);
+  defaultNext.setMonth(defaultNext.getMonth()+1);
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:420px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Qualifier comme récurrente</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div style="font-size:12px;color:var(--mu);margin-bottom:10px">${esc(t.rawLabel)} — ${esc(t.counterpartyName||'—')}<br>Se répète chaque mois avec un montant estimé, intégré au prévisionnel de trésorerie (onglet Trésorerie).</div>
+      <div class="ff"><label>Montant mensuel estimé (€)</label><input id="rr-amount" type="number" step="0.01" value="${Math.abs(t.amount).toFixed(2)}"></div>
+      <div class="ff" style="margin-top:8px"><label>Prochaine échéance</label><input id="rr-nextDate" type="date" value="${defaultNext.toISOString().slice(0,10)}"></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="saveAccRecurringRule('${txId}')">Qualifier</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function saveAccRecurringRule(txId){
+  const amount = parseFloat((document.getElementById('rr-amount')||{}).value);
+  const nextDate = (document.getElementById('rr-nextDate')||{}).value;
+  if(!(amount>0) || !nextDate){ flash('Montant et date requis'); return; }
+  try{
+    const r = await apiFetch('/wa/acc/bank/recurring-rules?scope=crm', {method:'POST', body:JSON.stringify({sourceTransactionId:txId, amount, nextDate})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    closeModal();
+    flash('Récurrence qualifiée — intégrée au prévisionnel de trésorerie');
+    await loadAccRecurringRules();
+    renderAccBank();
+  }catch(e){ flash(e.message||'Erreur de qualification'); }
+}
+
+async function accToggleRecurringRule(id, active){
+  try{
+    const r = await apiFetch('/wa/acc/bank/recurring-rules/'+id+'?scope=crm', {method:'PATCH', body:JSON.stringify({active})});
+    if(!r.ok) throw new Error('http '+r.status);
+    await loadAccRecurringRules();
+    renderAccBank();
+  }catch(e){ flash('Erreur'); }
+}
+
+async function accDeleteRecurringRule(id){
+  if(!confirm('Supprimer cette règle de récurrence ?')) return;
+  try{
+    const r = await apiFetch('/wa/acc/bank/recurring-rules/'+id+'?scope=crm', {method:'DELETE'});
+    if(!r.ok) throw new Error('http '+r.status);
+    await loadAccRecurringRules();
+    renderAccBank();
+  }catch(e){ flash('Erreur'); }
 }
 
 // ───────── Onglet Connecteurs (identifiants API des intégrations externes) ─────────
