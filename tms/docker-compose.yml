@@ -34,10 +34,13 @@ services:
   web:
     build: { context: ., dockerfile: web/Dockerfile }
     depends_on: [api]
-    # Accessible en local pour diagnostic ; le public passe par le conteneur caddy (HTTPS).
-    ports: ["127.0.0.1:8080:80"]
+    # Exposé en local uniquement : le HTTPS est assuré par le reverse proxy (nginx de l'hôte ou conteneur caddy).
+    ports: ["127.0.0.1:${WEB_PORT:-8080}:80"]
     restart: unless-stopped
   caddy:
+    # Optionnel : seulement si aucun serveur web n'occupe déjà les ports 80/443 de l'hôte.
+    # Activer avec : docker compose --profile caddy up -d
+    profiles: ["caddy"]
     image: caddy:2-alpine
     environment:
       APP_DOMAIN: ${APP_DOMAIN}
