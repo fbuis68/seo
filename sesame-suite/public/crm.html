@@ -4483,6 +4483,13 @@ let TR2_BANK_ACCOUNTS = [];
 let TR2_LIST_MODE = 'horizon'; // horizon | overdue-sale | overdue-purchase
 let TR2_PURCHASE_ROWS = [];
 let TR2_SALE_ROWS = [];
+// Pipeline pondéré (Affaires) superposé au graphique de trésorerie, en
+// option — jamais fusionné silencieusement avec les flux réels (factures) :
+// isolé dans une barre distincte + recalcul du solde projeté en conséquence
+// quand actif (07/10/2026, demande client). Disponible seulement en vue
+// mensuelle : le pipeline est saisi par mois (CrmDeal.moisEncaissement),
+// pas de ventilation jour/semaine possible.
+let TR2_INCLUDE_PIPELINE = false;
 
 const TR2_PERIODS_BY_GRANULARITY = { day: 30, week: 12, month: 12 };
 const TR2_GRANULARITY_LABEL = { day: 'Jour', week: 'Semaine', month: 'Mois' };
@@ -4561,6 +4568,49 @@ function trFilterOverdueMode(mode){
   TR2_LIST_MODE = TR2_LIST_MODE===mode ? 'horizon' : mode;
   loadTreasuryLists().then(renderTreasuryOverview);
 }
+function trToggleIncludePipeline(checked){
+  TR2_INCLUDE_PIPELINE = checked;
+  renderTreasuryOverview();
+}
+
+/** Pipeline pondéré (Affaires) d'un mois/année donnés — même convention que
+ * trDealsPipelineFor (Prévisionnel commercial historique : exclut Gagné/
+ * Perdu, montant ponctuel × probabilité) mais indépendant du sélecteur
+ * `cashYear` de ce module-là, puisque le graphique de trésorerie porte sur
+ * un horizon glissant à partir d'aujourd'hui et peut chevaucher deux
+ * années civiles. */
+function trPipelineForYearMonth(year, month){
+  return deals
+    .filter(d=>d.stage!=='Perdu' && d.stage!=='Gagné' && d.moisEncaissement===month && d.montantPonctuel && dealEncaissementYear(d)===year)
+    .reduce((s,d)=>s+(+d.montantPonctuel||0)*(+d.probability||0)/100, 0);
+}
+
+/** Superpose le pipeline pondéré aux buckets du moteur de trésorerie quand
+ * l'option est active (vue mensuelle uniquement) — recalcule solde début/
+ * fin en cascade (jamais juste le bucket touché : un encaissement ajouté
+ * en mois N doit se répercuter sur le solde de départ du mois N+1, etc.),
+ * et le plus bas solde projeté en conséquence. Sans l'option (ou hors vue
+ * mensuelle), passe les buckets du serveur inchangés avec pipelinePondere
+ * à 0 — le graphique et les tuiles restent fidèles au calcul serveur.
+ */
+function trBucketsWithPipelineOverlay(buckets){
+  if(!TR2_INCLUDE_PIPELINE || TR2_GRANULARITY!=='month' || !buckets.length){
+    return { buckets: buckets.map(b=>({...b, pipelinePondere:0})), plusBasSolde: TR2_OVERVIEW ? TR2_OVERVIEW.plusBasSolde : null };
+  }
+  let running = buckets[0].soldeDebut;
+  let plusBasSolde = null;
+  const overlaid = buckets.map(b=>{
+    const d = new Date(b.periodStart);
+    const pipelinePondere = trPipelineForYearMonth(d.getFullYear(), d.getMonth());
+    const encaissementsPrevus = b.encaissementsPrevus + pipelinePondere;
+    const soldeDebut = running;
+    const soldeFin = soldeDebut + encaissementsPrevus - b.decaissementsPrevus;
+    running = soldeFin;
+    if(!plusBasSolde || soldeFin < plusBasSolde.amount) plusBasSolde = { amount: soldeFin, date: b.periodEnd };
+    return { ...b, encaissementsPrevus, soldeDebut, soldeFin, pipelinePondere };
+  });
+  return { buckets: overlaid, plusBasSolde };
+}
 
 function renderTreasuryOverview(){
   const root = document.getElementById('tr2-root');
@@ -4573,6 +4623,11 @@ function renderTreasuryOverview(){
   const saleRows = TR2_SALE_ROWS.map(inv=>trInvoiceRowHtml(inv)).join('');
   const listTitlePurchase = TR2_LIST_MODE==='overdue-purchase' ? 'Dettes en retard' : 'Décaissements à venir';
   const listTitleSale = TR2_LIST_MODE==='overdue-sale' ? 'Créances en retard' : 'Encaissements à venir';
+
+  const pipelineAvailable = TR2_GRANULARITY==='month';
+  const display = trBucketsWithPipelineOverlay(ov.buckets);
+  const plusBasSolde = display.plusBasSolde;
+  const pipelineActive = pipelineAvailable && TR2_INCLUDE_PIPELINE;
 
   root.innerHTML = `
     <div class="card">
@@ -4587,14 +4642,21 @@ function renderTreasuryOverview(){
       </div>
       <div class="stats-row" style="margin-bottom:16px">
         <div class="stat-card"><div class="stat-lbl">Solde actuel</div><div class="stat-val">${fmtEUR(ov.currentBalance)}</div></div>
-        <div class="stat-card"><div class="stat-lbl">Plus bas solde projeté</div><div class="stat-val" style="${ov.plusBasSolde&&ov.plusBasSolde.amount<0?'color:#a32d2d':''}">${ov.plusBasSolde?fmtEUR(ov.plusBasSolde.amount):'—'}</div><div style="font-size:11px;color:var(--mu)">${ov.plusBasSolde?('au '+new Date(ov.plusBasSolde.date).toLocaleDateString('fr-FR')):''}</div></div>
+        <div class="stat-card"><div class="stat-lbl">Plus bas solde projeté</div><div class="stat-val" style="${plusBasSolde&&plusBasSolde.amount<0?'color:#a32d2d':''}">${plusBasSolde?fmtEUR(plusBasSolde.amount):'—'}</div><div style="font-size:11px;color:var(--mu)">${plusBasSolde?('au '+new Date(plusBasSolde.date).toLocaleDateString('fr-FR')):''}</div></div>
         <div class="stat-card" style="cursor:pointer;${TR2_LIST_MODE==='overdue-sale'?'outline:2px solid var(--a)':''}" onclick="trFilterOverdueMode('overdue-sale')"><div class="stat-lbl">Créances en retard</div><div class="stat-val" style="${ov.creancesRetard.total>0?'color:#a32d2d':''}">${fmtEUR(ov.creancesRetard.total)}</div><div style="font-size:11px;color:var(--mu)">${ov.creancesRetard.count} facture(s)</div></div>
         <div class="stat-card" style="cursor:pointer;${TR2_LIST_MODE==='overdue-purchase'?'outline:2px solid var(--a)':''}" onclick="trFilterOverdueMode('overdue-purchase')"><div class="stat-lbl">Dettes en retard</div><div class="stat-val" style="${ov.dettesRetard.total>0?'color:#a32d2d':''}">${fmtEUR(ov.dettesRetard.total)}</div><div style="font-size:11px;color:var(--mu)">${ov.dettesRetard.count} facture(s)</div></div>
       </div>
-      <div class="tr-chart-title">Courbe de trésorerie prévisionnelle</div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div class="tr-chart-title" style="margin-bottom:0">Courbe de trésorerie prévisionnelle</div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;${pipelineAvailable?'':'opacity:.5'}" title="${pipelineAvailable?'Ajoute le pipeline pondéré (Affaires — montant ponctuel × probabilité) aux encaissements prévus, isolé visuellement dans le graphique.':'Disponible uniquement en vue mensuelle — le pipeline est saisi par mois.'}">
+          <input type="checkbox" ${TR2_INCLUDE_PIPELINE?'checked':''} ${pipelineAvailable?'':'disabled'} onchange="trToggleIncludePipeline(this.checked)">
+          Inclure le pipeline pondéré (Affaires)
+        </label>
+      </div>
       <div class="tr-legend">
         <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-signe)"></span>Encaissements prévus</span>
         <span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-depense)"></span>Décaissements prévus</span>
+        ${pipelineActive?'<span class="tr-legend-item"><span class="tr-sw" style="background:var(--tr-pipeline)"></span>Pipeline pondéré (Affaires)</span>':''}
         <span class="tr-legend-item"><span class="tr-sw tr-line"></span>Solde projeté</span>
       </div>
       <div class="tr-chart-wrap">
@@ -4619,7 +4681,7 @@ function renderTreasuryOverview(){
       </div>
     </div>`;
 
-  trRenderTreasuryChart(ov.buckets);
+  trRenderTreasuryChart(display.buckets);
 }
 
 function trInvoiceRowHtml(inv){
@@ -4653,9 +4715,19 @@ function trRenderTreasuryChart(buckets){
 
   buckets.forEach((b,i)=>{
     const x = xFor(i);
-    if(b.encaissementsPrevus>0){
-      const h = Math.abs(yFor(b.encaissementsPrevus)-zeroY);
+    const pipelinePondere = b.pipelinePondere||0;
+    const encaissementsReels = b.encaissementsPrevus - pipelinePondere;
+    if(encaissementsReels>0){
+      const h = Math.abs(yFor(encaissementsReels)-zeroY);
       s += `<rect x="${x-barW/2}" y="${zeroY-h}" width="${barW}" height="${Math.max(h-1,0)}" rx="2" fill="var(--tr-signe)" opacity="0.55"></rect>`;
+    }
+    if(pipelinePondere>0){
+      // Segment distinct empilé au-dessus — jamais fondu avec les
+      // encaissements réels (factures) : c'est une estimation pondérée par
+      // probabilité, pas un montant facturé.
+      const hBase = Math.abs(yFor(encaissementsReels)-zeroY);
+      const hTotal = Math.abs(yFor(b.encaissementsPrevus)-zeroY);
+      s += `<rect x="${x-barW/2}" y="${zeroY-hTotal}" width="${barW}" height="${Math.max(hTotal-hBase-1,0)}" rx="2" fill="var(--tr-pipeline)" opacity="0.55"></rect>`;
     }
     if(b.decaissementsPrevus>0){
       const h = Math.abs(yFor(b.decaissementsPrevus)-zeroY);
@@ -4683,8 +4755,10 @@ function trRenderTreasuryChart(buckets){
   svg.querySelectorAll('.tr2-hitpt').forEach(el=>{
     el.addEventListener('mousemove', (ev)=>{
       const b = buckets[+el.dataset.idx];
+      const pipelinePondere = b.pipelinePondere||0;
       tt.innerHTML = `<b>${trFmtPeriodLabel(b.periodStart, TR2_GRANULARITY)}</b>`+
         `<div class="tr-tt-row"><span>Encaissements</span><span class="num">+${fmtEUR(b.encaissementsPrevus)}</span></div>`+
+        (pipelinePondere>0.009?`<div class="tr-tt-row"><span>dont pipeline pondéré</span><span class="num">+${fmtEUR(pipelinePondere)}</span></div>`:'')+
         `<div class="tr-tt-row"><span>Décaissements</span><span class="num">−${fmtEUR(b.decaissementsPrevus)}</span></div>`+
         `<div class="tr-tt-row"><span>Solde fin de période</span><span class="num">${fmtEUR(b.soldeFin)}</span></div>`;
       const wrapRect = svg.closest('.tr-chart-wrap').getBoundingClientRect();
