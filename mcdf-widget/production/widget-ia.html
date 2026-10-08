@@ -859,11 +859,14 @@ async function buildData(entityId) {
   const parFormateur = {};
   sessions.filter((s) => s.trainerId).forEach((s) => {
     const key = s.trainerId;
-    if (!parFormateur[key]) parFormateur[key] = { nom: s.trainerName || key, nb_sessions: 0, ca_estime: 0 };
+    if (!parFormateur[key]) parFormateur[key] = { nom: s.trainerName || key, nb_sessions: 0, total: 0, byYear: {} };
     parFormateur[key].nb_sessions += 1;
-    parFormateur[key].ca_estime += (s.dailyRate || 0) * (s.days || 0);
+    const montant = (s.dailyRate || 0) * (s.days || 0);
+    parFormateur[key].total += montant;
+    const year = String((new Date(s.startDate)).getFullYear());
+    if (s.startDate) parFormateur[key].byYear[year] = (parFormateur[key].byYear[year] || 0) + montant;
   });
-  const top_formateurs = Object.values(parFormateur).sort((a, b) => b.ca_estime - a.ca_estime).slice(0, 5);
+  const top_formateurs = Object.values(parFormateur).sort((a, b) => b.total - a.total).slice(0, 5);
 
   // Sessions à venir (Planning)
   const today = new Date().toISOString().slice(0, 10);
@@ -1431,7 +1434,7 @@ function appendYearLegend(afterEl, years) {
   afterEl.insertAdjacentElement('afterend', legend);
 }
 
-function renderRankListByYear(wrapId, rows, nameKey, fmt) {
+function renderRankListByYear(wrapId, rows, nameKey, fmt, metaFn) {
   const wrap = document.getElementById(wrapId);
   wrap.innerHTML = '';
   const existingLegend = wrap.parentElement.querySelector('.year-legend');
@@ -1445,7 +1448,7 @@ function renderRankListByYear(wrapId, rows, nameKey, fmt) {
     const row = el('div', 'rank-row');
     row.appendChild(el('div', 'rank-num', String(i + 1).padStart(2, '0')));
     row.appendChild(el('div', 'rank-name', r[nameKey]));
-    row.appendChild(el('div', 'rank-meta', ''));
+    row.appendChild(el('div', 'rank-meta', metaFn ? metaFn(r) : ''));
     const track = el('div', 'rank-bar-track');
     yearSegments(r.byYear).forEach(({ year, val }) => {
       if (!val) return;
@@ -1730,7 +1733,7 @@ function renderAll(DATA) {
   ]);
 
   // Formateurs
-  renderRankList('rank-formateurs', DATA.top_formateurs, 'nom', 'ca_estime', (r) => `${r.nb_sessions} sessions`, fmtEUR);
+  renderRankListByYear('rank-formateurs', DATA.top_formateurs, 'nom', fmtEUR, (r) => `${r.nb_sessions} sessions`);
   renderHeuresFormateur(DATA);
 
   // Listing
@@ -2180,14 +2183,16 @@ function renderFactuTopPayeurs(rows) {
   const byPayeur = {};
   rows.forEach((r) => {
     const name = r.payeur || r.client || '(non renseigné)';
-    if (!byPayeur[name]) byPayeur[name] = { payeur: escapeHtml(name), montant: 0, count: 0 };
-    byPayeur[name].montant += r.montantHT;
+    if (!byPayeur[name]) byPayeur[name] = { payeur: escapeHtml(name), total: 0, count: 0, byYear: {} };
+    byPayeur[name].total += r.montantHT;
     byPayeur[name].count += 1;
+    const year = String(r.date.getFullYear());
+    byPayeur[name].byYear[year] = (byPayeur[name].byYear[year] || 0) + r.montantHT;
   });
-  const top = Object.values(byPayeur).sort((a, b) => b.montant - a.montant).slice(0, 5);
+  const top = Object.values(byPayeur).sort((a, b) => b.total - a.total).slice(0, 5);
   const wrap = document.getElementById('rank-payeurs');
   wrap.innerHTML = '';
-  if (top.length) renderRankList('rank-payeurs', top, 'payeur', 'montant', (r) => `${r.count} facture(s)`, (v) => fmtEUR(v));
+  if (top.length) renderRankListByYear('rank-payeurs', top, 'payeur', (v) => fmtEUR(v), (r) => `${r.count} facture(s)`);
 }
 function populateFactuMonthFilter(rows) {
   const select = document.getElementById('factu-month-filter');
