@@ -811,8 +811,48 @@ async function fetchAll(entity, entityId) {
   return entityId ? data.root.filter((r) => r.entityId === entityId) : data.root;
 }
 
+// ------------------------------------------------------------------
+// Mode demo multi-annee (?demoMultiYear=1 dans l'URL) : purement cote
+// navigateur, aucune ecriture serveur/DB. Prend les vraies factures et
+// sessions remontees par l'API, et en genere des copies datees sur
+// chaque annee de DEMO_MULTI_YEAR_YEARS (memes dossiers/clients reels,
+// juste des dates differentes), pour que tous les graphiques "par annee"
+// aient de quoi s'afficher meme si les vraies donnees ne couvrent qu'une
+// periode courte. Les clients (customers) sont eux juste redates (pas
+// dupliques) pour etaler "Nouveaux clients" sur la meme periode.
+const DEMO_MULTI_YEAR_YEARS = [2024, 2025, 2026];
+function shiftYear(dateStr, year) {
+  if (!dateStr) return dateStr;
+  return String(dateStr).replace(/^\d{4}/, String(year));
+}
+function applyDemoMultiYear(customers, invoices, sessions) {
+  const demoCustomers = customers.map((c, i) => (
+    c.created ? { ...c, created: shiftYear(c.created, DEMO_MULTI_YEAR_YEARS[i % DEMO_MULTI_YEAR_YEARS.length]) } : c
+  ));
+  const demoInvoices = [];
+  DEMO_MULTI_YEAR_YEARS.forEach((year) => {
+    invoices.forEach((inv) => {
+      if (!inv.billingDate) return;
+      demoInvoices.push({ ...inv, id: `${inv.id}-demo${year}`, billingDate: shiftYear(inv.billingDate, year) });
+    });
+  });
+  const demoSessions = [];
+  DEMO_MULTI_YEAR_YEARS.forEach((year) => {
+    sessions.forEach((s) => {
+      if (!s.startDate) return;
+      demoSessions.push({
+        ...s,
+        id: `${s.id}-demo${year}`,
+        startDate: shiftYear(s.startDate, year),
+        endDate: s.endDate ? shiftYear(s.endDate, year) : s.endDate,
+      });
+    });
+  });
+  return { customers: demoCustomers, invoices: demoInvoices, sessions: demoSessions };
+}
+
 async function buildData(entityId) {
-  const [customers, conventions, invoices, attendees, sessions, sessionQualiopi] = await Promise.all([
+  let [customers, conventions, invoices, attendees, sessions, sessionQualiopi] = await Promise.all([
     fetchAll('customer', entityId),
     fetchAll('fullConventionQualiopi', entityId),
     fetchAll('invoice', entityId),
@@ -820,6 +860,13 @@ async function buildData(entityId) {
     fetchAll('session', entityId),
     fetchAll('sessionQualiopi', entityId).catch(() => []),
   ]);
+
+  if (new URLSearchParams(location.search).get('demoMultiYear') === '1') {
+    const demo = applyDemoMultiYear(customers, invoices, sessions);
+    customers = demo.customers;
+    invoices = demo.invoices;
+    sessions = demo.sessions;
+  }
 
   const convById = new Map(conventions.map((c) => [c.id, c]));
 
