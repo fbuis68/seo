@@ -5151,7 +5151,7 @@ function renderAffaires(){
         ${items.length===0?'<div class="kanban-empty">—</div>':items.map(d=>`
           <div class="kanban-card" onclick="openDealModal('${d.id}')">
             <div class="kanban-card-title">${esc(d.title)}</div>
-            <div class="kanban-card-client">${esc(d.prospectNom)}</div>
+            <div class="kanban-card-client bc-link" onclick="event.stopPropagation();showFiche('${d.prospectId}')" title="Voir la fiche client">${esc(d.prospectNom)}</div>
             <div class="kanban-card-foot">
               ${dealCardAmounts(d)}
               <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
@@ -5208,7 +5208,7 @@ function renderAffairesMonthly(filtered){
             <span class="tag ${STAGE_TAG[d.stage]}" style="font-size:10px;flex:0 0 auto">${d.stage}</span>
             <div style="flex:1;min-width:0">
               <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.title)}</div>
-              <div style="font-size:11px;color:var(--mu)">${esc(d.prospectNom)}${d.commercialName?' · '+esc(d.commercialName):''}</div>
+              <div style="font-size:11px;color:var(--mu)"><span class="bc-link" onclick="event.stopPropagation();showFiche('${d.prospectId}')" title="Voir la fiche client">${esc(d.prospectNom)}</span>${d.commercialName?' · '+esc(d.commercialName):''}</div>
             </div>
             <div style="text-align:right;font-size:12px;flex:0 0 auto">
               ${d.amount?`<div>MRR ${fmtEUR(d.amount)}</div>`:''}
@@ -5256,7 +5256,7 @@ function renderAffairesMonthlyKanban(filtered){
           <div class="kanban-card" onclick="openDealModal('${d.id}')">
             <div style="margin-bottom:4px"><span class="tag ${STAGE_TAG[d.stage]}" style="font-size:9px">${d.stage}</span></div>
             <div class="kanban-card-title">${esc(d.title)}</div>
-            <div class="kanban-card-client">${esc(d.prospectNom)}</div>
+            <div class="kanban-card-client bc-link" onclick="event.stopPropagation();showFiche('${d.prospectId}')" title="Voir la fiche client">${esc(d.prospectNom)}</div>
             <div class="kanban-card-foot">
               ${dealCardAmounts(d)}
               <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
@@ -5397,7 +5397,10 @@ function renderDealModal(){
           </div>
           `:`
           <select id="d-prospect">${md._new?`<option value="" ${md.prospectId?'':'selected'}>— Sélectionner un client —</option>`:''}${prospectOptions.map(c=>`<option value="${c.id}" ${md.prospectId===c.id?'selected':''}>${esc(c.nom)}</option>`).join('')}</select>
-          <a href="#" onclick="event.preventDefault();dealToggleNewProspect(true)" style="font-size:12px;display:inline-block;margin-top:4px">+ Nouveau client</a>
+          <div style="margin-top:4px;display:flex;gap:10px">
+            <a href="#" onclick="event.preventDefault();dealToggleNewProspect(true)" style="font-size:12px">+ Nouveau client</a>
+            ${md.prospectId?`<a href="#" onclick="event.preventDefault();closeModal();showFiche('${md.prospectId}')" style="font-size:12px">→ Voir la fiche client</a>`:''}
+          </div>
           `}
         </div>
         <div class="ff"><label>Commercial</label>
