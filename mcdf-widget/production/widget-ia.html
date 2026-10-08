@@ -368,6 +368,7 @@
             <div class="panel chart-pad">
               <div class="mini-chart" id="chart-sessions"></div>
               <div class="mini-labels" id="labels-sessions"></div>
+              <div class="year-legend" id="legend-sessions"></div>
             </div>
           </div>
           <div>
@@ -375,6 +376,7 @@
             <div class="panel chart-pad">
               <div class="mini-chart" id="chart-heures"></div>
               <div class="mini-labels" id="labels-heures"></div>
+              <div class="year-legend" id="legend-heures"></div>
             </div>
           </div>
         </div>
@@ -543,6 +545,7 @@
               <div class="panel chart-pad">
                 <div class="mini-chart" id="chart-factu"></div>
                 <div class="mini-labels" id="labels-factu"></div>
+                <div class="year-legend" id="legend-factu"></div>
               </div>
             </div>
             <div>
@@ -630,6 +633,7 @@
               <div class="chart-pad">
                 <div class="mini-chart" id="chart-obs"></div>
                 <div class="mini-labels" id="labels-obs"></div>
+                <div class="year-legend" id="legend-obs"></div>
               </div>
             </div>
           </div>
@@ -1723,8 +1727,8 @@ function renderAll(DATA) {
   renderDevis(DATA);
 
   // Planning
-  renderMiniChart('chart-sessions', 'labels-sessions', DATA.sessions_programmees, 'nb_sessions', 'mois', (v) => `${v} session(s)`);
-  renderMiniChart('chart-heures', 'labels-heures', DATA.heures_par_mois, 'heures', 'mois', (v) => fmtH(v));
+  renderGroupedMonthChart('chart-sessions', 'labels-sessions', 'legend-sessions', DATA.sessions_programmees, 'nb_sessions', 'mois', (v) => `${v} session(s)`);
+  renderGroupedMonthChart('chart-heures', 'labels-heures', 'legend-heures', DATA.heures_par_mois, 'heures', 'mois', (v) => fmtH(v));
   document.getElementById('sessions-list-hint').textContent = DATA.sessions_a_venir_is_future
     ? `${DATA.sessions_a_venir.length} session(s) à venir`
     : `${DATA.sessions_a_venir.length} session(s) les plus récentes (aucune à venir)`;
@@ -2177,7 +2181,7 @@ function renderFactuChart(rows) {
   const chartRows = Object.keys(byMonth).sort().map((mois) => ({ mois, montant: byMonth[mois] }));
   document.getElementById('chart-factu').innerHTML = '';
   document.getElementById('labels-factu').innerHTML = '';
-  if (chartRows.length) renderMiniChart('chart-factu', 'labels-factu', chartRows, 'montant', 'mois', (v) => fmtEUR(v));
+  if (chartRows.length) renderGroupedMonthChart('chart-factu', 'labels-factu', 'legend-factu', chartRows, 'montant', 'mois', (v) => fmtEUR(v));
 }
 function renderFactuTopPayeurs(rows) {
   const byPayeur = {};
@@ -2439,7 +2443,7 @@ function renderObsResults({ catalogue, entrees, region, type, code }) {
   document.getElementById('chart-obs').innerHTML = '';
   document.getElementById('labels-obs').innerHTML = '';
   if (entreesStats.chartRows.some((r) => r.entrees > 0)) {
-    renderMiniChart('chart-obs', 'labels-obs', entreesStats.chartRows, 'entrees', 'mois', (v) => `${v} entrée(s)`);
+    renderGroupedMonthChart('chart-obs', 'labels-obs', 'legend-obs', entreesStats.chartRows, 'entrees', 'mois', (v) => `${v} entrée(s)`);
   } else {
     document.getElementById('chart-obs').parentElement.appendChild(el('p', 'hint', 'Aucune entrée en formation trouvée pour cette certification sur 24 mois.'));
   }
