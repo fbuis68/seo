@@ -4379,6 +4379,13 @@ let TR2_BANK_ACCOUNTS = [];
 let TR2_LIST_MODE = 'horizon'; // horizon | overdue-sale | overdue-purchase
 let TR2_PURCHASE_ROWS = [];
 let TR2_SALE_ROWS = [];
+// Récurrences bancaires/facture qualifiées (🔁, module Trésorerie phase 2)
+// dont l'échéance générée tombe ce mois-ci — affichées à part des factures
+// (cf. trRecurringOccurrencesThisMonth) : elles n'ont pas de facture ni de
+// transaction dédiée pour ce mois précis, seulement une règle + une
+// périodicité, donc un tableau séparé plutôt que mélangées aux listes
+// "à venir" basées sur AccInvoice (08/10/2026, demande client).
+let TR2_RECURRING_RULES = [];
 // Pipeline pondéré (Affaires) superposé au graphique de trésorerie, en
 // option — jamais fusionné silencieusement avec les flux réels (factures) :
 // isolé dans une barre distincte + recalcul du solde projeté en conséquence
@@ -4411,8 +4418,35 @@ async function loadTreasuryOverview(){
     TR2_OVERVIEW = r.ok ? await r.json() : null;
   }catch(e){ TR2_OVERVIEW = null; }
 
+  try{
+    const params2 = new URLSearchParams({ scope:'crm', active:'true' });
+    if(TR2_BANK_ACCOUNT_ID) params2.set('bankAccountId', TR2_BANK_ACCOUNT_ID);
+    const r2 = await apiFetch('/wa/acc/bank/recurring-rules?'+params2.toString());
+    TR2_RECURRING_RULES = r2.ok ? await r2.json() : [];
+  }catch(e){ TR2_RECURRING_RULES = []; }
+
   await loadTreasuryLists();
   renderTreasuryOverview();
+}
+
+/** Pas en mois d'une périodicité — même convention que lib/accTreasury.ts
+ * (FREQUENCY_STEP_MONTHS) côté serveur, répliquée ici pour ne pas refaire
+ * un aller-retour serveur juste pour savoir si une règle tombe ce mois-ci. */
+const TR2_RECUR_STEP_MONTHS = { monthly:1, quarterly:3, yearly:12 };
+
+/** Date d'occurrence d'une règle récurrente dans le mois courant, ou null
+ * si aucune occurrence ne tombe ce mois-ci (ex. règle trimestrielle dont le
+ * prochain passage n'est que dans deux mois). */
+function trRecurringOccurrenceThisMonth(rule){
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth()+1, 1);
+  const step = TR2_RECUR_STEP_MONTHS[rule.frequency] || 1;
+  let occ = new Date(rule.nextDate);
+  occ = new Date(occ.getFullYear(), occ.getMonth(), occ.getDate());
+  let guard = 0;
+  while(occ < monthStart && guard++ < 1000) occ.setMonth(occ.getMonth()+step);
+  return occ < monthEnd ? occ : null;
 }
 
 async function loadTreasuryLists(){
@@ -4592,9 +4626,47 @@ function renderTreasuryOverview(){
           </table></div>
         </div>
       </div>
+      ${renderTrRecurringSection()}
     </div>`;
 
   trRenderTreasuryChart(display.buckets);
+}
+
+/** Récurrences qualifiées (🔁, cf. onglet Banque/Factures clients) dont
+ * l'échéance générée tombe dans le mois en cours — à part des listes
+ * "à venir" ci-dessus (basées sur de vraies factures) puisqu'une récurrence
+ * n'a ni facture ni transaction dédiée pour ce mois précis, seulement une
+ * règle + une périodicité (08/10/2026, demande client). */
+function renderTrRecurringSection(){
+  const withOccurrence = TR2_RECURRING_RULES
+    .map(r=>({ rule:r, occ: trRecurringOccurrenceThisMonth(r) }))
+    .filter(x=>x.occ);
+  if(!withOccurrence.length) return '';
+  const row = ({rule,occ}) => `<tr>
+    <td>${esc(rule.label)}</td>
+    <td>${esc(rule.counterpartyName||'—')}</td>
+    <td style="text-align:right;font-family:monospace">${fmtEUR2(rule.amount)}</td>
+    <td>${occ.toLocaleDateString('fr-FR')} <span style="color:var(--mu);font-size:11px">(${ACC_RECUR_FREQ_LABEL[rule.frequency]||'mois'})</span></td>
+  </tr>`;
+  const decaissements = withOccurrence.filter(x=>x.rule.direction==='DEBIT');
+  const encaissements = withOccurrence.filter(x=>x.rule.direction==='CREDIT');
+  return `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px">
+      <div>
+        <div class="tr-chart-title">Décaissements récurrents — ce mois-ci 🔁</div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Libellé</th><th>Contrepartie</th><th style="text-align:right">Montant</th><th>Échéance</th></tr></thead>
+          <tbody>${decaissements.length?decaissements.map(row).join(''):'<tr><td colspan="4" class="log-empty">Aucune.</td></tr>'}</tbody>
+        </table></div>
+      </div>
+      <div>
+        <div class="tr-chart-title">Encaissements récurrents — ce mois-ci 🔁</div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Libellé</th><th>Contrepartie</th><th style="text-align:right">Montant</th><th>Échéance</th></tr></thead>
+          <tbody>${encaissements.length?encaissements.map(row).join(''):'<tr><td colspan="4" class="log-empty">Aucune.</td></tr>'}</tbody>
+        </table></div>
+      </div>
+    </div>`;
 }
 
 function trInvoiceRowHtml(inv){
