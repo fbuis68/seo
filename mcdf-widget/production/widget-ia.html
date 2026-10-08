@@ -199,6 +199,14 @@
   .rank-bar-seg:only-child { border-radius: 4px; }
   .rank-value { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; font-size: 13px; }
 
+  .rank-row-multi { padding: 11px 0; border-bottom: 1px solid var(--border); }
+  .rank-row-multi:last-child { border-bottom: none; }
+  .rank-row-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 7px; }
+  .rank-row-head .rank-num { font-family: var(--font-display); color: var(--ink-muted); font-size: 13px; }
+  .rank-row-head .rank-name { font-weight: 500; color: var(--ink); font-size: 13px; flex: 1; }
+  .rank-row-head .rank-meta { font-size: 12px; color: var(--ink-muted); }
+  .rank-row-head .rank-value { font-weight: 600; font-size: 13px; font-variant-numeric: tabular-nums; }
+
   .bar-seg { position: relative; height: 100%; min-width: 2px; }
   .bar-seg:first-child { border-radius: 4px 0 0 4px; }
   .bar-seg:last-child { border-radius: 0 4px 4px 0; }
@@ -1438,35 +1446,45 @@ function appendYearLegend(afterEl, years) {
   afterEl.insertAdjacentElement('afterend', legend);
 }
 
+function buildCompareRows(byYear, years, maxYearVal, fmt) {
+  const rowsWrap = el('div', 'compare-rows');
+  years.forEach((y) => {
+    const val = byYear[y] || 0;
+    if (!val) return;
+    const crow = el('div', 'compare-row');
+    crow.appendChild(el('span', 'compare-year', y));
+    const track = el('div', 'compare-track');
+    const fill = el('div', 'compare-fill');
+    fill.style.width = `${Math.max((val / maxYearVal * 100), 2).toFixed(1)}%`;
+    fill.style.background = yearColor(y, false);
+    track.appendChild(fill);
+    crow.appendChild(track);
+    crow.appendChild(el('span', 'compare-val', fmt(val)));
+    rowsWrap.appendChild(crow);
+  });
+  return rowsWrap;
+}
+
 function renderRankListByYear(wrapId, rows, nameKey, fmt, metaFn) {
   const wrap = document.getElementById(wrapId);
   wrap.innerHTML = '';
   const existingLegend = wrap.parentElement.querySelector('.year-legend');
   if (existingLegend) existingLegend.remove();
-  const max = Math.max(...rows.map((r) => r.total), 1);
   const allYears = new Set();
   rows.forEach((r) => Object.keys(r.byYear).forEach((y) => allYears.add(y)));
   const years = [...allYears].sort();
+  let maxYearVal = 1;
+  rows.forEach((r) => years.forEach((y) => { maxYearVal = Math.max(maxYearVal, r.byYear[y] || 0); }));
 
   rows.forEach((r, i) => {
-    const row = el('div', 'rank-row');
-    row.appendChild(el('div', 'rank-num', String(i + 1).padStart(2, '0')));
-    row.appendChild(el('div', 'rank-name', r[nameKey]));
-    row.appendChild(el('div', 'rank-meta', metaFn ? metaFn(r) : ''));
-    const track = el('div', 'rank-bar-track');
-    yearSegments(r.byYear).forEach(({ year, val }) => {
-      if (!val) return;
-      const seg = el('div', 'rank-bar-seg');
-      seg.style.width = `${(val / max * 100).toFixed(1)}%`;
-      seg.style.background = yearColor(year, false);
-      const tip = el('div', 'mini-tip-g', `${year} : ${fmt(val)}`);
-      seg.appendChild(tip);
-      seg.addEventListener('mouseenter', () => { tip.style.opacity = '1'; });
-      seg.addEventListener('mouseleave', () => { tip.style.opacity = '0'; });
-      track.appendChild(seg);
-    });
-    row.appendChild(track);
-    row.appendChild(el('div', 'rank-value', fmt(r.total)));
+    const row = el('div', 'rank-row-multi');
+    const head = el('div', 'rank-row-head');
+    head.appendChild(el('span', 'rank-num', String(i + 1).padStart(2, '0')));
+    head.appendChild(el('span', 'rank-name', r[nameKey]));
+    if (metaFn) head.appendChild(el('span', 'rank-meta', metaFn(r)));
+    head.appendChild(el('span', 'rank-value', fmt(r.total)));
+    row.appendChild(head);
+    row.appendChild(buildCompareRows(r.byYear, years, maxYearVal, fmt));
     wrap.appendChild(row);
   });
 
@@ -1477,32 +1495,18 @@ function renderCAParClientByYear(DATA) {
   const tbody = document.getElementById('tbl-ca-client');
   tbody.innerHTML = '';
   const rows = DATA.ca_par_client;
-  const max = Math.max(...rows.map((r) => r.total), 1);
   const allYears = new Set();
   rows.forEach((r) => Object.keys(r.byYear).forEach((y) => allYears.add(y)));
   const years = [...allYears].sort();
+  let maxYearVal = 1;
+  rows.forEach((r) => years.forEach((y) => { maxYearVal = Math.max(maxYearVal, r.byYear[y] || 0); }));
 
   rows.forEach((r) => {
     const tr = el('tr');
     const nameTd = el('td', 'strong', r.client); nameTd.title = r.client;
     tr.appendChild(nameTd);
     const barTd = el('td', 'bar-td');
-    const cell = el('div', 'bar-cell');
-    const track = el('div', 'bar-track');
-    yearSegments(r.byYear).forEach(({ year, val }) => {
-      if (!val) return;
-      const seg = el('div', 'bar-seg');
-      seg.style.width = `${(val / max * 100).toFixed(1)}%`;
-      seg.style.background = yearColor(year, false);
-      const tip = el('div', 'mini-tip-g', `${year} : ${fmtEUR(val)}`);
-      seg.appendChild(tip);
-      seg.addEventListener('mouseenter', () => { tip.style.opacity = '1'; });
-      seg.addEventListener('mouseleave', () => { tip.style.opacity = '0'; });
-      track.appendChild(seg);
-    });
-    cell.appendChild(track);
-    cell.appendChild(el('span', 'bar-pct', fmtEUR(r.total)));
-    barTd.appendChild(cell);
+    barTd.appendChild(buildCompareRows(r.byYear, years, maxYearVal, fmtEUR));
     tr.appendChild(barTd);
     tbody.appendChild(tr);
   });
