@@ -1391,8 +1391,9 @@ function renderComparaison(rows, years) {
       const row = el('div', 'compare-row');
       row.appendChild(el('span', 'compare-year', String(v.year)));
       const track = el('div', 'compare-track');
-      const fill = el('div', `compare-fill ${i < r.values.length - 1 ? 'prev' : ''}`.trim());
+      const fill = el('div', 'compare-fill');
       fill.style.width = `${Math.max((v.val / max * 100), 2).toFixed(1)}%`;
+      fill.style.background = yearColor(v.year, false);
       track.appendChild(fill);
       row.appendChild(track);
       row.appendChild(el('span', 'compare-val', fmt(v.val)));
