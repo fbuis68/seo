@@ -1970,10 +1970,44 @@ accountingRouter.get(
         gocardlessPayout: { select: { id: true, gocardlessId: true } },
       },
     });
+
+    // TVA d'un virement groupé GoCardless (08/10/2026) — un payout n'est
+    // JAMAIS rapproché directement à une facture via AccBankMatch (c'est un
+    // lot de plusieurs prélèvements de clients différents, cf.
+    // matchPayoutToBank) : sans ça, la colonne TVA restait à 0 pour toute
+    // transaction issue de GoCardless alors que la TVA de chaque
+    // prélèvement qui la compose est connue (cf. estimateGoCardlessVat).
+    // Cache des factures par client partagé entre tous les payouts de cette
+    // page, pour ne jamais refaire la même requête deux fois.
+    const payoutIds = [...new Set(rows.map((r) => r.gocardlessPayout?.id).filter((id): id is string => !!id))];
+    const vatByPayout = new Map<string, number>();
+    if (payoutIds.length) {
+      const invoicesByCustomer = new Map<string, { amountVat: number | null; amountTtc: number | null; invoiceDate: Date | null }[]>();
+      for (const payoutId of payoutIds) {
+        const payments = await prisma.accGoCardlessPayment.findMany({
+          where: { payoutId },
+          include: { customer: { select: { id: true, country: true } } },
+        });
+        let total = 0;
+        for (const p of payments) {
+          if (!p.customerId) continue;
+          if (!invoicesByCustomer.has(p.customerId)) {
+            invoicesByCustomer.set(
+              p.customerId,
+              await prisma.accInvoice.findMany({ where: { customerId: p.customerId }, select: { amountVat: true, amountTtc: true, invoiceDate: true } })
+            );
+          }
+          total += estimateGoCardlessVat(p.amount, p.customer?.country, invoicesByCustomer.get(p.customerId) || []).vatAmount;
+        }
+        vatByPayout.set(payoutId, total);
+      }
+    }
+
     res.json(rows.map((r) => {
       const { matches, ...rest } = r;
       const matchedAmount = matches.reduce((s, m) => s + m.allocatedAmount, 0);
-      const vatAmount = matches.reduce((s, m) => s + vatShare(m.allocatedAmount, m.invoice), 0);
+      const vatAmount = matches.reduce((s, m) => s + vatShare(m.allocatedAmount, m.invoice), 0)
+        + (r.gocardlessPayout ? vatByPayout.get(r.gocardlessPayout.id) || 0 : 0);
       return { ...rest, matchedAmount, vatAmount };
     }));
   })
