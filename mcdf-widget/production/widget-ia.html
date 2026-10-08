@@ -1214,6 +1214,15 @@ function renderStagiaires(DATA) {
   });
 }
 
+const YEAR_COLORS = {};
+const YEAR_PALETTE = ['#256abf', '#2f9e44', '#e8590c', '#9c36b5', '#e03131', '#0c8599', '#f08c00', '#1971c2'];
+const YEAR_PALETTE_HOVER = ['#3987e5', '#51cf66', '#ff922b', '#be4bdb', '#ff6b6b', '#22b8cf', '#ffa94d', '#4dabf7'];
+function yearColor(year, hover) {
+  if (!(year in YEAR_COLORS)) YEAR_COLORS[year] = Object.keys(YEAR_COLORS).length % YEAR_PALETTE.length;
+  const idx = YEAR_COLORS[year];
+  return hover ? YEAR_PALETTE_HOVER[idx] : YEAR_PALETTE[idx];
+}
+
 function renderMiniChart(chartId, labelsId, rows, valueKey, labelKey, fmt) {
   const chart = document.getElementById(chartId);
   const labels = document.getElementById(labelsId);
@@ -1223,6 +1232,12 @@ function renderMiniChart(chartId, labelsId, rows, valueKey, labelKey, fmt) {
     const tip = el('div', 'mini-tip', fmt(r[valueKey]));
     const bar = el('div', 'mini-bar');
     bar.style.height = `${Math.max((r[valueKey] / max * 100), 2)}%`;
+    const year = String(r[labelKey]).split('-')[0];
+    const baseColor = yearColor(year, false);
+    const hoverColor = yearColor(year, true);
+    bar.style.background = baseColor;
+    col.addEventListener('mouseenter', () => { bar.style.background = hoverColor; });
+    col.addEventListener('mouseleave', () => { bar.style.background = baseColor; });
     col.appendChild(tip);
     col.appendChild(bar);
     chart.appendChild(col);
