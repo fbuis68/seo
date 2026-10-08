@@ -1,0 +1,835 @@
+<meta charset="utf-8">
+<title>Envoi de documents MCDF</title>
+<!--
+  Envoi de documents / messages -- MCDF (v1).
+
+  CONTRAIREMENT A TOUS LES AUTRES WIDGETS DE CE PROJET, celui-ci ECRIT :
+  il declenche un vrai envoi d'email via l'endpoint confirme
+  POST /wa/conventionExport/sendMessage (capture reseau reelle, testee
+  avec succes le 24/08/2026 -- voir modules/03-documents/NOTES.md pour
+  le detail complet du payload).
+
+  Champs envoyes, tous confirmes par la capture :
+    targets (JSON stringifie), conventionId, senderId, cc, bcc,
+    messageTemplateId, title, content, attachedFile.
+  Champs vus dans la capture mais volontairement OMIS ici car leur role
+  exact n'est pas confirme (documentId, conventionDocumentId,
+  templateIds) -- la capture a reussi avec conventionDocumentId et
+  templateIds vides, donc probablement optionnels ; documentId avait une
+  valeur ("Calling") dont on ignore si elle est requise. Si l'envoi
+  echoue depuis ce widget alors qu'il marche depuis MCDF, c'est le
+  premier point a verifier.
+
+  Securite : aucun envoi sans un ecran de confirmation explicite listant
+  destinataires + objet + apercu du contenu. Pas d'envoi automatique,
+  pas de bouton "un clic".
+
+  Envoi individuel (onglet "Envoi individuel") : possibilite d'ajouter
+  plusieurs dossiers les uns apres les autres (recherche -> coche des
+  destinataires -> "Ajouter ce dossier a l'envoi" -> la recherche se
+  reinitialise pour le dossier suivant). Le meme objet/contenu/piece
+  jointe est ensuite envoye a chaque dossier du panier, une requete
+  sendMessage par dossier, sequentiellement (voir "Envoi groupe"
+  ci-dessous pour le meme principe applique a une selection par critere
+  plutot qu'ajoutee dossier par dossier).
+
+  Envoi groupe (onglet "Envoi groupe") : meme endpoint, appele une fois
+  par dossier selectionne (l'API ne prend qu'un conventionId par appel,
+  pas une liste), envoye sequentiellement avec un resultat affiche
+  dossier par dossier. Premier critere de selection disponible :
+  "dossiers avec planning cette semaine" (chevauchement
+  convention.startDate/endDate avec la semaine en cours) -- prevu pour
+  accueillir d'autres criteres plus tard.
+-->
+<style>
+  :root {
+    color-scheme: light;
+    --page:        #f9f9f7;
+    --surface:     #fcfcfb;
+    --surface-2:   #f2f1ec;
+    --ink:         #0b0b0b;
+    --ink-2:       #52514e;
+    --ink-muted:   #898781;
+    --border:      rgba(11,11,11,0.10);
+    --border-2:    rgba(11,11,11,0.16);
+    --accent:      #256abf;
+    --accent-tint: #dbe8f8;
+    --good:        #0ca30c;
+    --good-tint:   #e3f3e3;
+    --good-text:   #006300;
+    --warning:     #b8860b;
+    --warning-tint:#f5ecd6;
+    --critical:    #b23327;
+    --critical-tint: #f6e2df;
+    --font-display: Charter, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322;
+      --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #8f8d86;
+      --border: rgba(255,255,255,0.10); --border-2: rgba(255,255,255,0.18);
+      --accent: #5b9bea; --accent-tint: #1c2e44;
+      --good: #3fc23f; --good-tint: #16301a; --good-text: #4fd44f;
+      --warning: #e0b03a; --warning-tint: #3a3018;
+      --critical: #e2685c; --critical-tint: #3a201d;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322;
+    --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #8f8d86;
+    --border: rgba(255,255,255,0.10); --border-2: rgba(255,255,255,0.18);
+    --accent: #5b9bea; --accent-tint: #1c2e44;
+    --good: #3fc23f; --good-tint: #16301a; --good-text: #4fd44f;
+    --warning: #e0b03a; --warning-tint: #3a3018;
+    --critical: #e2685c; --critical-tint: #3a201d;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink); font-family: var(--font-body); -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 32px 28px 70px; }
+  .eyebrow { text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px; font-weight: 600; color: var(--accent); margin: 0 0 10px; }
+  h1 { font-family: var(--font-display); font-size: clamp(22px, 3vw, 30px); font-weight: 500; margin: 0 0 8px; }
+  .lede { color: var(--ink-2); font-size: 13.5px; line-height: 1.6; margin: 0 0 8px; }
+  header.top { padding-bottom: 22px; margin-bottom: 24px; border-bottom: 1px solid var(--border); }
+
+  .write-warning { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--warning); background: var(--warning-tint); border-radius: 8px; padding: 8px 12px; margin-top: 12px; }
+  .write-warning .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--warning); flex: none; }
+
+  #banner { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 8px; font-size: 13.5px; margin-bottom: 20px; background: var(--surface-2); color: var(--ink-2); }
+  #banner.error { background: var(--critical-tint); color: var(--critical); }
+  .spinner { flex: none; width: 15px; height: 15px; border: 2px solid var(--border-2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.2s; } }
+
+  .field-block { margin-bottom: 20px; }
+  .field-label { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink); margin-bottom: 6px; }
+  .field-hint { font-size: 11.5px; color: var(--ink-muted); margin: 4px 0 0; }
+  input[type="text"], input[type="search"], select, textarea {
+    width: 100%; font: inherit; font-size: 13.5px; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--border-2); border-radius: 8px;
+    padding: 9px 12px;
+  }
+  textarea { min-height: 140px; resize: vertical; font-family: var(--font-mono); font-size: 12.5px; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .search-row { display: flex; gap: 8px; }
+  .search-row input { flex: 1; }
+  .btn { font: inherit; font-size: 13px; font-weight: 600; border-radius: 8px; padding: 9px 16px; cursor: pointer; border: 1px solid var(--border-2); background: var(--surface); color: var(--ink); white-space: nowrap; }
+  .btn.primary { background: var(--accent); color: #ffffff; border-color: var(--accent); }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+
+  .conv-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; margin-top: 8px; }
+  .conv-item { padding: 9px 12px; font-size: 12.5px; cursor: pointer; border-bottom: 1px solid var(--border); }
+  .conv-item:last-child { border-bottom: none; }
+  .conv-item:hover { background: var(--surface-2); }
+  .conv-item .name { color: var(--ink); font-weight: 500; }
+  .conv-item .meta { color: var(--ink-muted); font-size: 11.5px; }
+
+  .selected-conv { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; background: var(--accent-tint); border-radius: 8px; font-size: 13px; color: var(--accent); margin-top: 8px; }
+  .selected-conv button { border: none; background: none; color: inherit; cursor: pointer; font-size: 12px; text-decoration: underline; }
+
+  .attendee-list { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+  .attendee-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .attendee-row label { flex: 1; }
+  .attendee-email { color: var(--ink-muted); font-size: 11.5px; }
+
+  .preview-panel { background: var(--surface); border: 1px solid var(--border-2); border-radius: 10px; padding: 16px 18px; margin-top: 16px; }
+  .preview-panel h3 { font-family: var(--font-display); font-size: 15px; font-weight: 500; margin: 0 0 12px; }
+  .preview-row { display: flex; gap: 10px; font-size: 12.5px; padding: 6px 0; border-top: 1px solid var(--border); }
+  .preview-row:first-child { border-top: none; }
+  .preview-row .k { flex: none; width: 90px; color: var(--ink-muted); }
+  .preview-row .v { flex: 1; color: var(--ink-2); }
+  .preview-content { margin-top: 10px; padding: 10px 12px; background: var(--surface-2); border-radius: 8px; font-size: 12px; font-family: var(--font-mono); white-space: pre-wrap; max-height: 140px; overflow-y: auto; }
+
+  .result-banner { padding: 12px 16px; border-radius: 8px; font-size: 13.5px; margin-top: 16px; }
+  .result-banner.ok { background: var(--good-tint); color: var(--good-text); }
+  .result-banner.ko { background: var(--critical-tint); color: var(--critical); }
+
+  footer { margin-top: 36px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 11.5px; color: var(--ink-muted); line-height: 1.7; }
+  footer code { background: var(--surface-2); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+  .version-tag { font-size: 11px; color: var(--ink-muted); font-family: var(--font-mono); margin: 10px 0 0; }
+  .suggest-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .suggest-btn { font: inherit; font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-tint); border: none; border-radius: 100px; padding: 6px 13px; cursor: pointer; }
+  .suggest-btn:hover { filter: brightness(0.96); }
+
+  .tabs { display: flex; gap: 6px; margin-bottom: 22px; border-bottom: 1px solid var(--border); }
+  .tab-btn { font: inherit; font-size: 13.5px; font-weight: 600; color: var(--ink-muted); background: none; border: none; border-bottom: 2px solid transparent; padding: 10px 6px; margin-bottom: -1px; cursor: pointer; }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .group-list { border: 1px solid var(--border); border-radius: 8px; max-height: 320px; overflow-y: auto; }
+  .group-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; font-size: 12.5px; border-bottom: 1px solid var(--border); }
+  .group-row:last-child { border-bottom: none; }
+  .group-row .name { flex: 1; color: var(--ink); font-weight: 500; }
+  .group-row .meta { color: var(--ink-muted); font-size: 11.5px; }
+  .group-toolbar { display: flex; align-items: center; gap: 12px; margin: 8px 0 6px; font-size: 12px; }
+  .group-toolbar a { color: var(--accent); cursor: pointer; text-decoration: underline; }
+  .group-breakdown { list-style: none; margin: 8px 0 0; padding: 0; font-size: 12px; color: var(--ink-2); }
+  .group-breakdown li { padding: 3px 0; }
+  .group-progress { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+  .group-progress-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+  .group-progress-row .ok { color: var(--good-text); }
+  .group-progress-row .ko { color: var(--critical); }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <p class="eyebrow">Widget IA · MCDF</p>
+    <h1>Envoi de documents</h1>
+    <p class="lede">Envoyer un email (avec pièce jointe éventuelle) à un ou plusieurs participants d'un ou plusieurs dossiers — ajoutés un par un ou sélectionnés par critère — via l'endpoint MCDF confirmé.</p>
+    <div class="write-warning"><span class="dot"></span> Ce widget écrit — chaque envoi déclenche un vrai email. Rien ne part sans confirmation explicite ci-dessous.</div>
+    <p class="version-tag">Version du fichier : 2026-08-27 — si vous voyez une date antérieure ici, videz le cache (Ctrl+Maj+R) ou redéployez.</p>
+    <div class="suggest-row">
+      <button type="button" class="suggest-btn" id="suggest-report-btn">💡 Suggérer une évolution</button>
+      <button type="button" class="suggest-btn" id="suggest-filter-btn">🔎 Suggérer un nouveau filtre/critère</button>
+    </div>
+  </header>
+
+  <div id="banner"><span class="spinner"></span><span>Chargement…</span></div>
+
+  <div id="app" style="display:none">
+
+    <div class="tabs">
+      <button class="tab-btn active" type="button" data-tab="individuel">Envoi individuel</button>
+      <button class="tab-btn" type="button" data-tab="groupe">Envoi groupé</button>
+    </div>
+
+    <div class="tab-panel active" id="tab-individuel">
+
+    <div class="field-block">
+      <label class="field-label" for="conv-search">1. Dossier — ajoutez-en un ou plusieurs, un par un</label>
+      <div class="search-row">
+        <input type="search" id="conv-search" placeholder="Rechercher par nom ou code de dossier…">
+      </div>
+      <div class="conv-list" id="conv-list" style="display:none"></div>
+      <div id="conv-selected"></div>
+    </div>
+
+    <div class="field-block" id="attendees-block" style="display:none">
+      <label class="field-label">2. Destinataires pour ce dossier</label>
+      <div class="attendee-list" id="attendee-list"></div>
+      <p class="field-hint" id="attendees-hint"></p>
+    </div>
+
+    <div class="field-block" id="add-to-cart-wrap" style="display:none">
+      <button type="button" class="btn" id="add-to-cart-btn">+ Ajouter ce dossier à l'envoi</button>
+      <p class="field-hint">Ajoute ce dossier à la liste ci-dessous puis réinitialise la recherche pour en sélectionner un autre.</p>
+    </div>
+
+    <div class="field-block" id="cart-block" style="display:none">
+      <label class="field-label">3. Dossiers ajoutés à l'envoi</label>
+      <div class="group-list" id="cart-list"></div>
+      <p class="field-hint" id="cart-hint"></p>
+    </div>
+
+    <div class="field-block">
+      <label class="field-label" for="tpl-select">4. Modèle de message (optionnel)</label>
+      <select id="tpl-select"><option value="">— aucun —</option></select>
+      <p class="field-hint">Optionnel — sélectionner un modèle ne remplit pas automatiquement l'objet/contenu dans cette v1, à écrire manuellement ci-dessous.</p>
+    </div>
+
+    <div class="field-block">
+      <label class="field-label" for="title-input">5. Objet</label>
+      <input type="text" id="title-input" placeholder="Objet de l'email">
+    </div>
+
+    <div class="field-block">
+      <label class="field-label" for="content-input">6. Contenu</label>
+      <textarea id="content-input" placeholder="Corps du message (HTML accepté). Variables de fusion disponibles : @actor.civility@ @actor.firstname@ @actor.lastname@"></textarea>
+    </div>
+
+    <div class="field-block">
+      <label class="field-label" for="attach-input">7. Pièce jointe (optionnel)</label>
+      <input type="file" id="attach-input">
+    </div>
+
+    <div class="field-block">
+      <button type="button" class="btn primary" id="preview-btn">Aperçu avant envoi</button>
+    </div>
+
+    <div id="preview-wrap"></div>
+    <div id="result-wrap"></div>
+
+    </div>
+
+    <div class="tab-panel" id="tab-groupe">
+
+      <div class="field-block">
+        <label class="field-label" for="group-criteria">1. Critère de sélection</label>
+        <select id="group-criteria">
+          <option value="week">Dossiers avec planning cette semaine</option>
+        </select>
+        <p class="field-hint" id="group-period-hint"></p>
+      </div>
+
+      <div class="field-block">
+        <label class="field-label">2. Dossiers</label>
+        <div class="group-toolbar">
+          <a id="group-select-all">Tout cocher</a>
+          <a id="group-select-none">Tout décocher</a>
+        </div>
+        <div class="group-list" id="group-list"></div>
+        <p class="field-hint" id="group-hint"></p>
+      </div>
+
+      <div class="field-block">
+        <label class="field-label" for="tpl-select-g">3. Modèle de message (optionnel)</label>
+        <select id="tpl-select-g"><option value="">— aucun —</option></select>
+      </div>
+
+      <div class="field-block">
+        <label class="field-label" for="title-input-g">4. Objet</label>
+        <input type="text" id="title-input-g" placeholder="Objet de l'email (le même pour tous les dossiers sélectionnés)">
+      </div>
+
+      <div class="field-block">
+        <label class="field-label" for="content-input-g">5. Contenu</label>
+        <textarea id="content-input-g" placeholder="Corps du message (HTML accepté). Variables de fusion disponibles : @actor.civility@ @actor.firstname@ @actor.lastname@"></textarea>
+      </div>
+
+      <div class="field-block">
+        <label class="field-label" for="attach-input-g">6. Pièce jointe (optionnel, la même pour tous)</label>
+        <input type="file" id="attach-input-g">
+      </div>
+
+      <div class="field-block">
+        <button type="button" class="btn primary" id="preview-btn-g">Aperçu avant envoi groupé</button>
+      </div>
+
+      <div id="preview-wrap-g"></div>
+      <div id="result-wrap-g"></div>
+
+    </div>
+
+  </div>
+
+  <footer>
+    Endpoint : <code>POST /wa/conventionExport/sendMessage</code> (multipart/form-data) — capturé et confirmé le 24/08/2026, voir <code>modules/03-documents/NOTES.md</code>. Expéditeur fixé à <code>entity</code> (adresse par défaut de l'entité), comme dans la capture d'origine. Les champs <code>documentId</code>/<code>conventionDocumentId</code>/<code>templateIds</code> vus dans la capture ne sont pas envoyés ici (rôle non confirmé) — si un envoi échoue de façon inattendue, c'est le premier point à vérifier.
+  </footer>
+</div>
+
+<script>
+function el(tag, cls, html) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html !== undefined) e.innerHTML = html;
+  return e;
+}
+function setBanner(kind, html) {
+  const b = document.getElementById('banner');
+  b.className = kind || '';
+  b.innerHTML = kind === 'error' ? html : `<span class="spinner"></span><span>${html}</span>`;
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+async function fetchAll(entity, entityId) {
+  const res = await fetch(`/wa/${entity}/list?nopaging=1&_dc=${Date.now()}`, { credentials: 'same-origin' });
+  if (res.status === 401 || res.status === 403) throw new Error('AUTH');
+  let data;
+  try { data = await res.json(); } catch (e) { throw new Error('AUTH'); }
+  if (!data.success) throw new Error(`Appel /wa/${entity}/list refusé.`);
+  return entityId ? data.root.filter((r) => r.entityId === entityId) : data.root;
+}
+
+// Devine le meilleur champ "libellé" d'un objet dont la forme exacte
+// n'est pas confirmée (messageTemplate) -- plutôt que de supposer un nom
+// de champ au hasard.
+function guessLabelField(obj) {
+  const candidates = ['name', 'title', 'label', 'code'];
+  for (const c of candidates) if (typeof obj[c] === 'string' && obj[c]) return c;
+  const firstString = Object.keys(obj).find((k) => typeof obj[k] === 'string' && k !== 'id');
+  return firstString || 'id';
+}
+
+let STATE = { entityId: null, conventions: [], allAttendees: [], attendees: [], selectedConv: null, selectedAttendees: new Set(), groupSelected: new Set(), individualCart: [] };
+
+(async () => {
+  STATE.entityId = new URLSearchParams(location.search).get('entityId');
+  setBanner('', 'Chargement des dossiers et modèles de message…');
+  try {
+    const [conventions, templates, allAttendees] = await Promise.all([
+      fetchAll('fullConventionQualiopi', STATE.entityId),
+      fetchAll('messageTemplate', STATE.entityId).catch(() => []),
+      fetchAll('conventionAttendee', STATE.entityId),
+    ]);
+    STATE.conventions = conventions.filter((c) => c.isConvention);
+    STATE.allAttendees = allAttendees.filter((a) => a.attendee && a.email);
+
+    [document.getElementById('tpl-select'), document.getElementById('tpl-select-g')].forEach((tplSelect) => {
+      if (!templates.length) return;
+      const labelField = guessLabelField(templates[0]);
+      templates.forEach((t) => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = t[labelField] || t.id;
+        tplSelect.appendChild(opt);
+      });
+    });
+
+    document.getElementById('banner').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    wireUp();
+    wireGroup();
+  } catch (err) {
+    if (err && err.message === 'AUTH') {
+      setBanner('error', 'Session MCDF non détectée. Ouvrez cette page depuis un onglet déjà connecté à MCDF.');
+    } else {
+      setBanner('error', `Erreur de chargement : ${(err && err.message) || err}`);
+      console.error(err);
+    }
+  }
+})();
+
+document.querySelectorAll('.tab-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+  });
+});
+
+function wireUp() {
+  const searchInput = document.getElementById('conv-search');
+  const listWrap = document.getElementById('conv-list');
+
+  searchInput.addEventListener('input', () => {
+    const q = searchInput.value.trim().toLowerCase();
+    if (!q) { listWrap.style.display = 'none'; listWrap.innerHTML = ''; return; }
+    const matches = STATE.conventions.filter((c) =>
+      (c.name || '').toLowerCase().includes(q) || (c.code || '').toLowerCase().includes(q)
+    ).slice(0, 20);
+    listWrap.innerHTML = '';
+    if (!matches.length) {
+      listWrap.appendChild(el('div', 'conv-item', 'Aucun résultat.'));
+    } else {
+      matches.forEach((c) => {
+        const item = el('div', 'conv-item', `<div class="name">${escapeHtml(c.name || c.code || c.id)}</div><div class="meta">${escapeHtml(c.customerName || '')} · ${escapeHtml(c.code || c.id)}</div>`);
+        item.addEventListener('click', () => selectConvention(c));
+        listWrap.appendChild(item);
+      });
+    }
+    listWrap.style.display = 'block';
+  });
+
+  document.getElementById('preview-btn').addEventListener('click', showPreview);
+  document.getElementById('add-to-cart-btn').addEventListener('click', addToCart);
+}
+
+async function selectConvention(conv) {
+  STATE.selectedConv = conv;
+  document.getElementById('conv-search').value = '';
+  document.getElementById('conv-list').style.display = 'none';
+  const selWrap = document.getElementById('conv-selected');
+  selWrap.innerHTML = '';
+  const chip = el('div', 'selected-conv', `<span>${escapeHtml(conv.name || conv.code || conv.id)}</span>`);
+  const clearBtn = document.createElement('button');
+  clearBtn.type = 'button';
+  clearBtn.textContent = 'Changer';
+  clearBtn.addEventListener('click', () => {
+    STATE.selectedConv = null;
+    STATE.selectedAttendees = new Set();
+    selWrap.innerHTML = '';
+    document.getElementById('attendees-block').style.display = 'none';
+    document.getElementById('add-to-cart-wrap').style.display = 'none';
+  });
+  chip.appendChild(clearBtn);
+  selWrap.appendChild(chip);
+
+  const attBlock = document.getElementById('attendees-block');
+  const attList = document.getElementById('attendee-list');
+  const hint = document.getElementById('attendees-hint');
+  attBlock.style.display = 'block';
+  document.getElementById('add-to-cart-wrap').style.display = 'block';
+
+  const forConv = STATE.allAttendees.filter((a) => a.conventionId === conv.id);
+  STATE.attendees = forConv;
+  STATE.selectedAttendees = new Set();
+
+  attList.innerHTML = '';
+  if (!forConv.length) {
+    attList.appendChild(el('div', 'attendee-row', 'Aucun participant avec email trouvé pour ce dossier.'));
+    hint.textContent = '';
+  } else {
+    forConv.forEach((a) => {
+      const row = el('div', 'attendee-row');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.id = `att-${a.attendeeId}`;
+      cb.addEventListener('change', () => {
+        if (cb.checked) STATE.selectedAttendees.add(a.attendeeId);
+        else STATE.selectedAttendees.delete(a.attendeeId);
+      });
+      row.appendChild(cb);
+      const label = document.createElement('label');
+      label.htmlFor = cb.id;
+      label.innerHTML = `${escapeHtml(a.fullname)} <span class="attendee-email">${escapeHtml(a.email)}</span>`;
+      row.appendChild(label);
+      attList.appendChild(row);
+    });
+    hint.textContent = `${forConv.length} participant(s) avec email.`;
+  }
+}
+
+// Ajoute le dossier + destinataires actuellement selectionnes a la liste
+// d'envoi (le "panier"), puis reinitialise la recherche pour permettre
+// d'ajouter un dossier suivant sans perdre les precedents.
+function addToCart() {
+  if (!STATE.selectedConv) { alert('Sélectionnez un dossier.'); return; }
+  const targets = STATE.attendees.filter((a) => STATE.selectedAttendees.has(a.attendeeId));
+  if (!targets.length) { alert('Sélectionnez au moins un destinataire pour ce dossier.'); return; }
+  if (STATE.individualCart.some((x) => x.conv.id === STATE.selectedConv.id)) {
+    alert('Ce dossier est déjà dans la liste d’envoi.');
+    return;
+  }
+  STATE.individualCart.push({ conv: STATE.selectedConv, targets });
+  renderCart();
+
+  STATE.selectedConv = null;
+  STATE.selectedAttendees = new Set();
+  document.getElementById('conv-selected').innerHTML = '';
+  document.getElementById('attendees-block').style.display = 'none';
+  document.getElementById('add-to-cart-wrap').style.display = 'none';
+  const searchInput = document.getElementById('conv-search');
+  searchInput.value = '';
+  searchInput.focus();
+}
+
+function renderCart() {
+  const block = document.getElementById('cart-block');
+  const listWrap = document.getElementById('cart-list');
+  listWrap.innerHTML = '';
+  if (!STATE.individualCart.length) {
+    block.style.display = 'none';
+    return;
+  }
+  block.style.display = 'block';
+  STATE.individualCart.forEach((x, idx) => {
+    const row = el('div', 'group-row');
+    row.appendChild(el('span', 'name', escapeHtml(x.conv.name || x.conv.code || x.conv.id)));
+    row.appendChild(el('span', 'meta', `${x.targets.length} destinataire(s)`));
+    const removeLink = document.createElement('a');
+    removeLink.textContent = 'Retirer';
+    removeLink.style.cssText = 'cursor:pointer;color:var(--critical);font-size:11.5px;text-decoration:underline;';
+    removeLink.addEventListener('click', () => {
+      STATE.individualCart.splice(idx, 1);
+      renderCart();
+    });
+    row.appendChild(removeLink);
+    listWrap.appendChild(row);
+  });
+  const total = STATE.individualCart.reduce((s, x) => s + x.targets.length, 0);
+  document.getElementById('cart-hint').textContent = `${STATE.individualCart.length} dossier(s) ajouté(s) · ${total} destinataire(s) au total`;
+}
+
+function showPreview() {
+  const resultWrap = document.getElementById('result-wrap');
+  resultWrap.innerHTML = '';
+  const previewWrap = document.getElementById('preview-wrap');
+  previewWrap.innerHTML = '';
+
+  if (!STATE.individualCart.length) { alert('Ajoutez au moins un dossier à l’envoi (bouton "Ajouter ce dossier à l’envoi" après avoir choisi ses destinataires).'); return; }
+  const title = document.getElementById('title-input').value.trim();
+  if (!title) { alert('Renseignez un objet.'); return; }
+  const content = document.getElementById('content-input').value;
+  const totalTargets = STATE.individualCart.reduce((s, x) => s + x.targets.length, 0);
+
+  const panel = el('div', 'preview-panel');
+  panel.appendChild(el('h3', '', 'Vérifier avant envoi'));
+  panel.appendChild(el('div', 'preview-row', `<span class="k">Dossiers</span><span class="v">${STATE.individualCart.length} dossier(s)</span>`));
+  panel.appendChild(el('div', 'preview-row', `<span class="k">Destinataires</span><span class="v">${totalTargets} au total</span>`));
+  panel.appendChild(el('div', 'preview-row', `<span class="k">Objet</span><span class="v">${escapeHtml(title)}</span>`));
+  const file = document.getElementById('attach-input').files[0];
+  if (file) panel.appendChild(el('div', 'preview-row', `<span class="k">Pièce jointe</span><span class="v">${escapeHtml(file.name)}</span>`));
+  panel.appendChild(el('div', 'preview-content', escapeHtml(content || '(vide)')));
+
+  const breakdown = el('ul', 'group-breakdown');
+  STATE.individualCart.forEach((x) => breakdown.appendChild(el('li', '', `${escapeHtml(x.conv.name || x.conv.id)} — ${x.targets.map((t) => escapeHtml(`${t.fullname} <${t.email}>`)).join(', ')}`)));
+  panel.appendChild(breakdown);
+
+  const confirmBtn = document.createElement('button');
+  confirmBtn.type = 'button';
+  confirmBtn.className = 'btn primary';
+  confirmBtn.style.marginTop = '14px';
+  confirmBtn.textContent = `Confirmer et envoyer à ${STATE.individualCart.length} dossier(s) (${totalTargets} destinataire(s))`;
+  confirmBtn.addEventListener('click', () => sendCartMessages(title, content, confirmBtn));
+  panel.appendChild(confirmBtn);
+
+  previewWrap.appendChild(panel);
+}
+
+async function postSendMessage(conventionId, targets, title, content, tplId, file) {
+  const form = new FormData();
+  form.append('targets', JSON.stringify(targets.map((t) => ({
+    name: t.fullname, email: t.email, id: t.attendeeId,
+    civility: t.civility || '', lastname: t.lastname || '', firstname: t.firstname || '',
+  }))));
+  form.append('conventionId', conventionId);
+  form.append('senderId', 'entity');
+  form.append('cc', '');
+  form.append('bcc', '');
+  form.append('messageTemplateId', tplId || '');
+  form.append('title', title);
+  form.append('content', content);
+  if (file) form.append('attachedFile', file);
+
+  try {
+    const res = await fetch('/wa/conventionExport/sendMessage', { method: 'POST', body: form, credentials: 'same-origin' });
+    let data;
+    try { data = await res.json(); } catch (e) { data = null; }
+    return { ok: res.ok && !!(data && data.success), status: res.status, data };
+  } catch (err) {
+    return { ok: false, status: null, error: err.message };
+  }
+}
+
+async function sendCartMessages(title, content, btn) {
+  btn.disabled = true;
+  const resultWrap = document.getElementById('result-wrap');
+  resultWrap.innerHTML = '';
+  const progress = el('div', 'group-progress');
+  resultWrap.appendChild(progress);
+
+  const tplId = document.getElementById('tpl-select').value;
+  const file = document.getElementById('attach-input').files[0];
+  const cart = STATE.individualCart;
+
+  let okCount = 0, koCount = 0;
+  for (const x of cart) {
+    btn.textContent = `Envoi en cours… (${okCount + koCount + 1}/${cart.length})`;
+    const row = el('div', 'group-progress-row', `${escapeHtml(x.conv.name || x.conv.id)} — …`);
+    progress.appendChild(row);
+    const result = await postSendMessage(x.conv.id, x.targets, title, content, tplId, file);
+    if (result.ok) {
+      okCount++;
+      row.innerHTML = `<span class="ok">✓</span> ${escapeHtml(x.conv.name || x.conv.id)} — envoyé à ${x.targets.length} destinataire(s)`;
+    } else {
+      koCount++;
+      const reason = result.error || `HTTP ${result.status}`;
+      row.innerHTML = `<span class="ko">✕</span> ${escapeHtml(x.conv.name || x.conv.id)} — échec (${escapeHtml(String(reason))})`;
+    }
+  }
+
+  const summary = el('div', `result-banner ${koCount ? 'ko' : 'ok'}`, `${okCount} dossier(s) envoyé(s) avec succès${koCount ? `, ${koCount} échec(s)` : ''}.`);
+  resultWrap.appendChild(summary);
+  if (!koCount) {
+    STATE.individualCart = [];
+    renderCart();
+  }
+  btn.disabled = false;
+  btn.textContent = 'Confirmer et envoyer';
+}
+
+// ------------------------------------------------------------------
+// Envoi groupe -- selectionner plusieurs dossiers via une coche, meme
+// message envoye a tous, une requete sendMessage par dossier (l'API ne
+// prend qu'un seul conventionId a la fois).
+// ------------------------------------------------------------------
+function computeWeekRange(d) {
+  const date = new Date(d);
+  const day = (date.getDay() + 6) % 7; // 0 = lundi
+  const monday = new Date(date); monday.setDate(date.getDate() - day); monday.setHours(0, 0, 0, 0);
+  const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6); sunday.setHours(23, 59, 59, 999);
+  return { start: monday, end: sunday };
+}
+function fmtDateFr(d) { return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
+function overlaps(convStart, convEnd, rangeStart, rangeEnd) {
+  if (!convStart || !convEnd) return false;
+  const cs = new Date(convStart.slice(0, 10)), ce = new Date(convEnd.slice(0, 10));
+  return cs <= rangeEnd && ce >= rangeStart;
+}
+
+function attendeesFor(convId) {
+  return STATE.allAttendees.filter((a) => a.conventionId === convId);
+}
+
+function getGroupCandidates() {
+  const criteria = document.getElementById('group-criteria').value;
+  if (criteria === 'week') {
+    const { start, end } = computeWeekRange(new Date());
+    document.getElementById('group-period-hint').textContent = `Semaine du ${fmtDateFr(start)} au ${fmtDateFr(end)}`;
+    return STATE.conventions.filter((c) => overlaps(c.startDate, c.endDate, start, end));
+  }
+  return [];
+}
+
+function renderGroupList() {
+  const candidates = getGroupCandidates();
+  STATE.groupSelected = new Set(candidates.map((c) => c.id)); // tout coche par defaut
+  const listWrap = document.getElementById('group-list');
+  listWrap.innerHTML = '';
+  if (!candidates.length) {
+    listWrap.appendChild(el('div', 'group-row', '<span class="meta">Aucun dossier ne correspond à ce critère.</span>'));
+  } else {
+    candidates.forEach((c) => {
+      const row = el('div', 'group-row');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = true;
+      cb.addEventListener('change', () => {
+        if (cb.checked) STATE.groupSelected.add(c.id);
+        else STATE.groupSelected.delete(c.id);
+        updateGroupHint();
+      });
+      row.appendChild(cb);
+      const nb = attendeesFor(c.id).length;
+      row.appendChild(el('span', 'name', escapeHtml(c.name || c.code || c.id)));
+      row.appendChild(el('span', 'meta', `${escapeHtml(c.customerName || '')} · ${c.startDate ? c.startDate.slice(0, 10) : '?'} → ${c.endDate ? c.endDate.slice(0, 10) : '?'} · ${nb} destinataire(s)`));
+      listWrap.appendChild(row);
+    });
+  }
+  updateGroupHint();
+}
+
+function updateGroupHint() {
+  const selected = STATE.conventions.filter((c) => STATE.groupSelected.has(c.id));
+  const totalAttendees = selected.reduce((s, c) => s + attendeesFor(c.id).length, 0);
+  document.getElementById('group-hint').textContent = `${selected.length} dossier(s) sélectionné(s) · ${totalAttendees} destinataire(s) au total`;
+}
+
+function wireGroup() {
+  document.getElementById('group-criteria').addEventListener('change', renderGroupList);
+  document.getElementById('group-select-all').addEventListener('click', () => {
+    STATE.groupSelected = new Set(getGroupCandidates().map((c) => c.id));
+    document.querySelectorAll('#group-list input[type="checkbox"]').forEach((cb) => { cb.checked = true; });
+    updateGroupHint();
+  });
+  document.getElementById('group-select-none').addEventListener('click', () => {
+    STATE.groupSelected = new Set();
+    document.querySelectorAll('#group-list input[type="checkbox"]').forEach((cb) => { cb.checked = false; });
+    updateGroupHint();
+  });
+  document.getElementById('preview-btn-g').addEventListener('click', showGroupPreview);
+  renderGroupList();
+}
+
+function showGroupPreview() {
+  const resultWrap = document.getElementById('result-wrap-g');
+  resultWrap.innerHTML = '';
+  const previewWrap = document.getElementById('preview-wrap-g');
+  previewWrap.innerHTML = '';
+
+  const selected = STATE.conventions.filter((c) => STATE.groupSelected.has(c.id));
+  if (!selected.length) { alert('Sélectionnez au moins un dossier.'); return; }
+  const title = document.getElementById('title-input-g').value.trim();
+  if (!title) { alert('Renseignez un objet.'); return; }
+  const content = document.getElementById('content-input-g').value;
+
+  const withAttendees = selected.map((c) => ({ conv: c, targets: attendeesFor(c.id) }));
+  const noAttendees = withAttendees.filter((x) => x.targets.length === 0);
+  const sendable = withAttendees.filter((x) => x.targets.length > 0);
+  const totalTargets = sendable.reduce((s, x) => s + x.targets.length, 0);
+
+  const panel = el('div', 'preview-panel');
+  panel.appendChild(el('h3', '', 'Vérifier avant envoi groupé'));
+  panel.appendChild(el('div', 'preview-row', `<span class="k">Dossiers</span><span class="v">${sendable.length} dossier(s) avec destinataires (sur ${selected.length} sélectionné(s))</span>`));
+  panel.appendChild(el('div', 'preview-row', `<span class="k">Destinataires</span><span class="v">${totalTargets} au total — tous les participants avec email de chaque dossier reçoivent ce message</span>`));
+  panel.appendChild(el('div', 'preview-row', `<span class="k">Objet</span><span class="v">${escapeHtml(title)}</span>`));
+  const file = document.getElementById('attach-input-g').files[0];
+  if (file) panel.appendChild(el('div', 'preview-row', `<span class="k">Pièce jointe</span><span class="v">${escapeHtml(file.name)}</span>`));
+  panel.appendChild(el('div', 'preview-content', escapeHtml(content || '(vide)')));
+
+  const breakdown = el('ul', 'group-breakdown');
+  sendable.forEach((x) => breakdown.appendChild(el('li', '', `${escapeHtml(x.conv.name || x.conv.id)} — ${x.targets.length} destinataire(s)`)));
+  if (noAttendees.length) {
+    noAttendees.forEach((x) => breakdown.appendChild(el('li', '', `${escapeHtml(x.conv.name || x.conv.id)} — aucun destinataire avec email, ignoré`)));
+  }
+  panel.appendChild(breakdown);
+
+  if (!sendable.length) {
+    panel.appendChild(el('div', 'result-banner ko', 'Aucun des dossiers sélectionnés n’a de destinataire avec email.'));
+    previewWrap.appendChild(panel);
+    return;
+  }
+
+  const confirmBtn = document.createElement('button');
+  confirmBtn.type = 'button';
+  confirmBtn.className = 'btn primary';
+  confirmBtn.style.marginTop = '14px';
+  confirmBtn.textContent = `Confirmer et envoyer à ${sendable.length} dossier(s) (${totalTargets} destinataire(s))`;
+  confirmBtn.addEventListener('click', () => sendGroupMessages(sendable, title, content, confirmBtn));
+  panel.appendChild(confirmBtn);
+
+  previewWrap.appendChild(panel);
+}
+
+async function sendGroupMessages(sendable, title, content, btn) {
+  btn.disabled = true;
+  const resultWrap = document.getElementById('result-wrap-g');
+  resultWrap.innerHTML = '';
+  const progress = el('div', 'group-progress');
+  resultWrap.appendChild(progress);
+
+  const tplId = document.getElementById('tpl-select-g').value;
+  const file = document.getElementById('attach-input-g').files[0];
+
+  let okCount = 0, koCount = 0;
+  for (const x of sendable) {
+    btn.textContent = `Envoi en cours… (${okCount + koCount + 1}/${sendable.length})`;
+    const row = el('div', 'group-progress-row', `${escapeHtml(x.conv.name || x.conv.id)} — …`);
+    progress.appendChild(row);
+    const result = await postSendMessage(x.conv.id, x.targets, title, content, tplId, file);
+    if (result.ok) {
+      okCount++;
+      row.innerHTML = `<span class="ok">✓</span> ${escapeHtml(x.conv.name || x.conv.id)} — envoyé à ${x.targets.length} destinataire(s)`;
+    } else {
+      koCount++;
+      const reason = result.error || `HTTP ${result.status}`;
+      row.innerHTML = `<span class="ko">✕</span> ${escapeHtml(x.conv.name || x.conv.id)} — échec (${escapeHtml(String(reason))})`;
+    }
+  }
+
+  const summary = el('div', `result-banner ${koCount ? 'ko' : 'ok'}`, `${okCount} dossier(s) envoyé(s) avec succès${koCount ? `, ${koCount} échec(s)` : ''}.`);
+  resultWrap.appendChild(summary);
+  btn.disabled = false;
+  btn.textContent = 'Confirmer et envoyer';
+}
+
+// ------------------------------------------------------------------
+// Boutons "Suggerer..." -- ouvrent widget-suggestions.html avec un
+// prompt deja documente (module, fichier, entites API confirmees ici)
+// pour que la demande d'evolution soit exploitable sans aller-retour.
+// ------------------------------------------------------------------
+const SUGGEST_MODULE = 'Envoi de documents';
+function buildSuggestContext() {
+  return [
+    'Contexte technique (pré-rempli automatiquement) :',
+    '- Widget : Envoi de documents (widget-envoi.html)',
+    '- Entités API MCDF déjà utilisées ici : fullConventionQualiopi, conventionAttendee, messageTemplate (via /wa/{entity}/list?nopaging=1)',
+    '- Endpoint d\'envoi confirmé : POST /wa/conventionExport/sendMessage (multipart/form-data)',
+    '- Onglets existants : Envoi individuel (panier de dossiers ajoutés un par un), Envoi groupé (sélection par critère, ex. "dossiers avec planning cette semaine")',
+    '',
+  ].join('\n');
+}
+function openSuggest(kind) {
+  const context = buildSuggestContext();
+  let titre, desc;
+  if (kind === 'report') {
+    titre = 'Évolution souhaitée : ';
+    desc = context + [
+      'Décrivez l\'évolution souhaitée (nouveau type d\'envoi, nouveau document, etc.) :',
+      '- Objectif : ',
+      '- Donnée/champ nécessaire (si connu) : ',
+      '- Exemple concret attendu : ',
+    ].join('\n');
+  } else {
+    titre = 'Nouveau filtre/critère : ';
+    desc = context + [
+      'Décrivez le nouveau critère de sélection ou filtre souhaité :',
+      '- S\'applique à l\'envoi individuel, à l\'envoi groupé, ou aux deux : ',
+      '- Valeurs ou critère du filtre : ',
+      '- Doit-il se cumuler avec les critères existants ou les remplacer : ',
+    ].join('\n');
+  }
+  const url = `widget-suggestions.html?module=${encodeURIComponent(SUGGEST_MODULE)}&titre=${encodeURIComponent(titre)}&desc=${encodeURIComponent(desc)}`;
+  window.open(url, '_blank');
+}
+document.getElementById('suggest-report-btn').addEventListener('click', () => openSuggest('report'));
+document.getElementById('suggest-filter-btn').addEventListener('click', () => openSuggest('filter'));
+</script>

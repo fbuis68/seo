@@ -1,0 +1,809 @@
+<title>Restitutions MCDF</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page:        #f9f9f7;
+    --surface:     #fcfcfb;
+    --surface-2:   #f2f1ec;
+    --ink:         #0b0b0b;
+    --ink-2:       #52514e;
+    --ink-muted:   #898781;
+    --grid:        #e1e0d9;
+    --border:      rgba(11,11,11,0.10);
+    --border-2:    rgba(11,11,11,0.16);
+    --accent:      #256abf;
+    --accent-ink:  #ffffff;
+    --accent-tint: #dbe8f8;
+    --accent-100:  #cde2fb;
+    --accent-300:  #6da7ec;
+    --good:        #0ca30c;
+    --good-text:   #006300;
+    --warning:     #b8860b;
+    --serious:     #c96a3a;
+    --critical:    #b23327;
+    --critical-tint: #f6e2df;
+    --warning-tint:  #f5ecd6;
+    --font-display: Charter, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page:        #0d0d0d;
+      --surface:     #1a1a19;
+      --surface-2:   #232322;
+      --ink:         #ffffff;
+      --ink-2:       #c3c2b7;
+      --ink-muted:   #8f8d86;
+      --grid:        #2c2c2a;
+      --border:      rgba(255,255,255,0.10);
+      --border-2:    rgba(255,255,255,0.18);
+      --accent:      #5b9bea;
+      --accent-ink:  #06172c;
+      --accent-tint: #1c2e44;
+      --accent-100:  #1c2e44;
+      --accent-300:  #3987e5;
+      --good:        #3fc23f;
+      --good-text:   #4fd44f;
+      --warning:     #e0b03a;
+      --serious:     #e3895c;
+      --critical:    #e2685c;
+      --critical-tint: #3a201d;
+      --warning-tint:  #3a3120;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page:        #0d0d0d;
+    --surface:     #1a1a19;
+    --surface-2:   #232322;
+    --ink:         #ffffff;
+    --ink-2:       #c3c2b7;
+    --ink-muted:   #8f8d86;
+    --grid:        #2c2c2a;
+    --border:      rgba(255,255,255,0.10);
+    --border-2:    rgba(255,255,255,0.18);
+    --accent:      #5b9bea;
+    --accent-ink:  #06172c;
+    --accent-tint: #1c2e44;
+    --accent-100:  #1c2e44;
+    --accent-300:  #3987e5;
+    --good:        #3fc23f;
+    --good-text:   #4fd44f;
+    --warning:     #e0b03a;
+    --serious:     #e3895c;
+    --critical:    #e2685c;
+    --critical-tint: #3a201d;
+    --warning-tint:  #3a3120;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 40px 28px 80px;
+  }
+
+  /* ---------- Header ---------- */
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    margin: 0 0 10px;
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(28px, 3.4vw, 38px);
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    margin: 0 0 8px;
+    text-wrap: balance;
+  }
+  .lede {
+    max-width: 62ch;
+    color: var(--ink-2);
+    font-size: 15px;
+    line-height: 1.6;
+    margin: 0;
+  }
+  header.top {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 20px;
+    padding-bottom: 28px;
+    margin-bottom: 28px;
+    border-bottom: 1px solid var(--border);
+  }
+  .demo-tag {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    color: var(--ink-muted);
+    border: 1px solid var(--border-2);
+    border-radius: 100px;
+    padding: 6px 12px;
+    white-space: nowrap;
+  }
+  .demo-tag .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent);
+  }
+
+  /* ---------- KPI row ---------- */
+  .kpis {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 36px;
+  }
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .kpi-label {
+    font-size: 12px;
+    color: var(--ink-muted);
+    margin: 0 0 10px;
+  }
+  .kpi-value {
+    font-family: var(--font-display);
+    font-size: 30px;
+    font-weight: 500;
+    line-height: 1;
+    margin: 0 0 8px;
+    font-variant-numeric: tabular-nums;
+  }
+  .kpi-sub {
+    font-size: 12.5px;
+    color: var(--ink-2);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .kpi-sub.up { color: var(--good-text); }
+  .kpi-sub.down { color: var(--critical); }
+
+  /* ---------- Sections ---------- */
+  section {
+    margin-bottom: 34px;
+  }
+  .section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .section-head h2 {
+    font-family: var(--font-display);
+    font-size: 19px;
+    font-weight: 500;
+    margin: 0;
+  }
+  .section-head .hint {
+    font-size: 12.5px;
+    color: var(--ink-muted);
+  }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .two-col {
+    display: grid;
+    grid-template-columns: 0.8fr 1.2fr;
+    gap: 16px;
+    align-items: start;
+  }
+  .three-col {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    align-items: start;
+  }
+
+  /* ---------- Tables ---------- */
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  thead th {
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-muted);
+    font-weight: 600;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+    white-space: nowrap;
+  }
+  tbody td {
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--border);
+    color: var(--ink-2);
+    vertical-align: middle;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--surface-2); }
+  td.strong { color: var(--ink); font-weight: 500; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .tight-table { table-layout: fixed; }
+  .tight-table th, .tight-table td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding-left: 12px;
+    padding-right: 8px;
+  }
+  .tight-table td.bar-td, .tight-table td.badge-td { overflow: visible; }
+  .table-scroll { max-height: 460px; overflow-y: auto; overflow-x: auto; }
+  .tight-table { min-width: 480px; }
+
+  .bar-cell { display: flex; align-items: center; gap: 10px; }
+  .bar-track {
+    flex: 1;
+    height: 7px;
+    background: var(--surface-2);
+    border-radius: 4px;
+    overflow: hidden;
+    min-width: 60px;
+  }
+  .bar-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 4px;
+  }
+  .bar-pct {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--ink);
+    width: 46px;
+    text-align: right;
+    flex: none;
+  }
+
+  .compare-rows { display: flex; flex-direction: column; gap: 5px; padding: 4px 0; }
+  .compare-row { display: flex; align-items: center; gap: 8px; }
+  .compare-year {
+    width: 34px; flex: none; font-size: 11px; color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .compare-track {
+    flex: 1; height: 7px; min-width: 40px;
+    background: var(--surface-2); border-radius: 4px; overflow: hidden;
+  }
+  .compare-fill { height: 100%; border-radius: 4px; background: var(--accent); }
+  .compare-fill.prev { background: var(--ink-muted); opacity: 0.55; }
+  .compare-val {
+    width: 76px; flex: none; text-align: right; font-size: 12px;
+    font-variant-numeric: tabular-nums; color: var(--ink-2);
+  }
+  .compare-delta { display: flex; align-items: center; gap: 4px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .compare-delta.up { color: var(--good-text); }
+  .compare-delta.down { color: var(--critical); }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 100px;
+    white-space: nowrap;
+  }
+  .badge .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .badge.st-present { background: var(--accent-tint); color: var(--accent); }
+  .badge.st-present .dot { background: var(--good); }
+  .badge.st-inscrit { background: var(--accent-tint); color: var(--accent); }
+  .badge.st-inscrit .dot { background: var(--accent); }
+  .badge.st-absent { background: var(--warning-tint); color: var(--warning); }
+  .badge.st-absent .dot { background: var(--warning); }
+  .badge.st-annule { background: var(--critical-tint); color: var(--critical); }
+  .badge.st-annule .dot { background: var(--critical); }
+  .badge.age-ok { background: var(--surface-2); color: var(--ink-2); }
+  .badge.age-ok .dot { background: var(--ink-muted); }
+  .badge.age-warn { background: var(--warning-tint); color: var(--warning); }
+  .badge.age-warn .dot { background: var(--warning); }
+  .badge.age-crit { background: var(--critical-tint); color: var(--critical); }
+  .badge.age-crit .dot { background: var(--critical); }
+
+  /* ---------- Mini bar charts ---------- */
+  .chart-pad { padding: 18px 18px 6px; }
+  .mini-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    height: 130px;
+    border-bottom: 1px solid var(--grid);
+    padding-bottom: 2px;
+  }
+  .mini-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    height: 100%;
+    gap: 6px;
+    position: relative;
+  }
+  .mini-bar {
+    width: 100%;
+    max-width: 26px;
+    background: var(--accent);
+    border-radius: 3px 3px 0 0;
+    min-height: 2px;
+  }
+  .mini-labels {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    padding: 0 2px;
+  }
+  .mini-labels span {
+    flex: 1;
+    text-align: center;
+    font-size: 10px;
+    color: var(--ink-muted);
+  }
+  .mini-tip {
+    position: absolute;
+    bottom: 100%;
+    margin-bottom: 6px;
+    background: var(--ink);
+    color: var(--page);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 7px;
+    border-radius: 5px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease;
+    font-variant-numeric: tabular-nums;
+  }
+  .mini-col:hover .mini-tip { opacity: 1; }
+  .mini-col:hover .mini-bar { background: var(--accent-300, var(--accent)); }
+
+  /* ---------- Ranked list (top formateurs) ---------- */
+  .rank-list { padding: 4px 18px 18px; }
+  .rank-row {
+    display: grid;
+    grid-template-columns: 22px 1.4fr 1fr 90px;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .rank-row:last-child { border-bottom: none; }
+  .rank-num {
+    font-family: var(--font-display);
+    color: var(--ink-muted);
+    font-size: 13px;
+  }
+  .rank-name { font-weight: 500; color: var(--ink); font-size: 13.5px; }
+  .rank-meta { font-size: 12px; color: var(--ink-muted); }
+  .rank-bar-track {
+    grid-column: 2 / span 2;
+    height: 6px;
+    background: var(--surface-2);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 2px;
+  }
+  .rank-bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
+  .rank-value {
+    text-align: right;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+  }
+
+  footer {
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    font-size: 12.5px;
+    color: var(--ink-muted);
+    line-height: 1.7;
+    max-width: 74ch;
+  }
+  footer code {
+    background: var(--surface-2);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 11.5px;
+  }
+
+  @media (max-width: 880px) {
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .two-col, .three-col { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <p class="eyebrow">Prototype de widget IA · MCDF</p>
+      <h1>Restitutions dynamiques — Direction</h1>
+      <p class="lede">
+        Premier bloc du copilote&nbsp;: un modèle de données MCDF (clients,
+        stagiaires, sessions, devis, factures) et un moteur de requêtes
+        paramétrables. Chaque bloc ci-dessous est une fonction que l'IA
+        pourra appeler pour répondre en langage naturel.
+      </p>
+    </div>
+    <span class="demo-tag"><span class="dot"></span> Données de démonstration, générées</span>
+  </header>
+
+  <div class="kpis" id="kpis"></div>
+
+  <section>
+    <div class="section-head">
+      <h2 id="compare-title">Comparaison annuelle</h2>
+      <span class="hint">année en cours vs année précédente, à date égale (YTD)</span>
+    </div>
+    <div class="panel">
+      <div class="table-scroll" style="max-height:260px">
+        <table class="tight-table">
+          <colgroup>
+            <col style="width:32%"><col style="width:34%"><col style="width:18%"><col style="width:16%">
+          </colgroup>
+          <thead>
+            <tr><th>Indicateur</th><th>Comparaison</th><th class="num">Écart</th><th class="num">vs N-1</th></tr>
+          </thead>
+          <tbody id="tbl-comparaison"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="two-col">
+
+      <div>
+        <div class="section-head">
+          <h2>Nouveaux clients par mois</h2>
+          <span class="hint">clients créés dans le mois</span>
+        </div>
+        <div class="panel">
+          <div class="table-scroll">
+            <table class="tight-table">
+              <colgroup>
+                <col style="width:30%"><col style="width:70%">
+              </colgroup>
+              <thead>
+                <tr><th>Mois</th><th>Nouveaux clients</th></tr>
+              </thead>
+              <tbody id="tbl-nouveaux"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-head">
+          <h2>30 derniers stagiaires inscrits</h2>
+          <span class="hint" id="stagiaires-count"></span>
+        </div>
+        <div class="panel">
+          <div class="table-scroll">
+            <table class="tight-table">
+              <colgroup>
+                <col style="width:22%"><col style="width:30%"><col style="width:26%"><col style="width:22%">
+              </colgroup>
+              <thead>
+                <tr><th>Stagiaire</th><th>Convention</th><th>Session</th><th>Inscrit le</th></tr>
+              </thead>
+              <tbody id="tbl-stagiaires"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <div class="three-col">
+
+      <div>
+        <div class="section-head"><h2>CA facturé</h2><span class="hint">12 mois</span></div>
+        <div class="panel chart-pad">
+          <div class="mini-chart" id="chart-ca"></div>
+          <div class="mini-labels" id="labels-ca"></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-head"><h2>Taux de remplissage</h2><span class="hint">6 mois</span></div>
+        <div class="panel chart-pad">
+          <div class="mini-chart" id="chart-remplissage"></div>
+          <div class="mini-labels" id="labels-remplissage"></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-head"><h2>Devis à relancer</h2><span class="hint">&gt; 10 jours sans réponse</span></div>
+        <div class="panel">
+          <div class="table-scroll" style="max-height:190px">
+            <table>
+              <tbody id="tbl-devis"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Top formateurs</h2><span class="hint">par CA estimé (tarif jour × durée)</span></div>
+    <div class="panel">
+      <div class="rank-list" id="rank-formateurs"></div>
+    </div>
+  </section>
+
+  <footer>
+    Prototype de modèle de données et de moteur de restitutions pour le
+    widget IA MCDF. Les jeux de données ci-dessus sont générés
+    (<code>seed.py</code>) à partir du schéma relationnel
+    <code>schema.sql</code> ; chaque restitution est une fonction Python
+    isolée dans <code>reports.py</code> — la même brique qu'appellerait le
+    copilote conversationnel (function calling) pour répondre à
+    « quel est le taux de nouveaux clients ce mois-ci&nbsp;? » ou
+    « montre-moi les 30 derniers stagiaires ». Prochaine étape&nbsp;:
+    exposer ces fonctions derrière une API et les brancher sur les données
+    réelles de MCDF.
+  </footer>
+
+</div>
+
+<script>
+const DATA = {"generated_at": "2026-08-14", "nouveaux_clients_par_mois": [{"mois": "2025-09", "nouveaux_clients": 1}, {"mois": "2025-10", "nouveaux_clients": 2}, {"mois": "2025-11", "nouveaux_clients": 2}, {"mois": "2025-12", "nouveaux_clients": 1}, {"mois": "2026-01", "nouveaux_clients": 4}, {"mois": "2026-02", "nouveaux_clients": 4}, {"mois": "2026-03", "nouveaux_clients": 3}, {"mois": "2026-04", "nouveaux_clients": 2}, {"mois": "2026-05", "nouveaux_clients": 3}, {"mois": "2026-06", "nouveaux_clients": 2}, {"mois": "2026-07", "nouveaux_clients": 1}, {"mois": "2026-08", "nouveaux_clients": 2}], "derniers_stagiaires": [{"nom": "Vincent Adam", "convention": "Formation Marketing digital — C00061012", "session": "SST - Sauveteur Secouriste du Travail", "inscrit_le": "2026-07-28T08:30:41"}, {"nom": "Moreau Mathis", "convention": "Formation Marketing digital — C00061012", "session": "SST - Sauveteur Secouriste du Travail", "inscrit_le": "2026-07-25T15:46:52"}, {"nom": "David Léa", "convention": "Formation Marketing digital — C00061012", "session": "SST - Sauveteur Secouriste du Travail", "inscrit_le": "2026-07-25T08:23:08"}, {"nom": "Lefebvre Lucas", "convention": "Formation Marketing digital — C00061012", "session": "SST - Sauveteur Secouriste du Travail", "inscrit_le": "2026-07-21T14:13:28"}, {"nom": "Petit Raphaël", "convention": "Formation Marketing digital — C00061012", "session": "SST - Sauveteur Secouriste du Travail", "inscrit_le": "2026-07-18T09:20:54"}, {"nom": "Thomas Enzo", "convention": "Formation Cybersécurité - Sensibilisation — C00061012", "session": "Management d'équipe", "inscrit_le": "2026-07-17T16:19:20"}, {"nom": "Simon Nathan", "convention": "Formation Cybersécurité - Sensibilisation — C00061012", "session": "Management d'équipe", "inscrit_le": "2026-07-15T11:26:27"}, {"nom": "Fontaine Jade", "convention": "Formation Marketing digital — C00061012", "session": "SST - Sauveteur Secouriste du Travail", "inscrit_le": "2026-07-14T15:14:33"}, {"nom": "Garcia Julie", "convention": "Formation Marketing digital — C00061012", "session": "SST - Sauveteur Secouriste du Travail", "inscrit_le": "2026-07-12T14:14:14"}, {"nom": "Lefebvre Arthur", "convention": "Formation Cybersécurité - Sensibilisation — C00061012", "session": "Management d'équipe", "inscrit_le": "2026-07-05T15:51:42"}, {"nom": "Thomas Nathan", "convention": "Formation Management d'équipe — C00061018", "session": "PowerPoint Avancé", "inscrit_le": "2026-06-30T09:07:04"}, {"nom": "David Marius", "convention": "Formation Management d'équipe — C00061018", "session": "PowerPoint Avancé", "inscrit_le": "2026-06-24T16:12:21"}, {"nom": "Bertrand Chloé", "convention": "Formation Comptabilité générale — C00061012", "session": "Paie et administration RH", "inscrit_le": "2026-05-11T12:00:49"}, {"nom": "Simon Chloé", "convention": "Formation Comptabilité générale — C00061012", "session": "Paie et administration RH", "inscrit_le": "2026-05-03T13:50:25"}, {"nom": "Vincent Nora", "convention": "Formation Comptabilité générale — C00061012", "session": "Paie et administration RH", "inscrit_le": "2026-05-02T12:47:52"}, {"nom": "Bertrand Manon", "convention": "Formation Comptabilité générale — C00061012", "session": "Paie et administration RH", "inscrit_le": "2026-05-02T11:45:38"}, {"nom": "David Anna", "convention": "Formation Comptabilité générale — C00061026", "session": "Paie et administration RH", "inscrit_le": "2026-04-07T14:07:55"}, {"nom": "Lefebvre Mathis", "convention": "Formation Comptabilité générale — C00061026", "session": "Paie et administration RH", "inscrit_le": "2026-04-06T17:11:04"}, {"nom": "Moreau Hugo", "convention": "Formation Comptabilité générale — C00061026", "session": "Paie et administration RH", "inscrit_le": "2026-04-05T16:31:10"}, {"nom": "Martin Léa", "convention": "Formation Comptabilité générale — C00061026", "session": "Paie et administration RH", "inscrit_le": "2026-03-24T18:47:36"}, {"nom": "Simon Inès", "convention": "Formation Comptabilité générale — C00061008", "session": "Comptabilité générale", "inscrit_le": "2026-03-19T14:56:45"}, {"nom": "Dubois Inès", "convention": "Formation Comptabilité générale — C00061008", "session": "Comptabilité générale", "inscrit_le": "2026-03-11T13:42:10"}, {"nom": "Lefebvre Mathis", "convention": "Formation Comptabilité générale — C00061008", "session": "Comptabilité générale", "inscrit_le": "2026-03-10T11:19:29"}, {"nom": "Simon Gabriel", "convention": "Formation Négociation commerciale — C00061009", "session": "Excel VBA", "inscrit_le": "2026-03-06T09:22:57"}, {"nom": "Thomas Inès", "convention": "Formation Comptabilité générale — C00061008", "session": "Comptabilité générale", "inscrit_le": "2026-03-04T14:41:50"}, {"nom": "Dubois Nathan", "convention": "Formation Comptabilité générale — C00061008", "session": "Comptabilité générale", "inscrit_le": "2026-03-03T10:56:59"}, {"nom": "Petit Sarah", "convention": "Formation Négociation commerciale — C00061009", "session": "Excel VBA", "inscrit_le": "2026-02-27T15:29:27"}, {"nom": "Dubois Lucas", "convention": "Formation Négociation commerciale — C00061009", "session": "Excel VBA", "inscrit_le": "2026-02-25T15:20:17"}, {"nom": "Lefebvre Tom", "convention": "Formation Paie et administration RH — C00061003", "session": "Habilitation électrique", "inscrit_le": "2026-02-23T16:49:09"}, {"nom": "Bernard Gabriel", "convention": "Formation Négociation commerciale — C00061009", "session": "Excel VBA", "inscrit_le": "2026-02-23T16:32:34"}], "ca_mensuel": [{"mois": "2025-09", "ca": 6870.03}, {"mois": "2025-10", "ca": 20494.65}, {"mois": "2025-11", "ca": 6363.12}, {"mois": "2025-12", "ca": 19658.47}, {"mois": "2026-01", "ca": 8609.76}, {"mois": "2026-02", "ca": 4897.65}, {"mois": "2026-03", "ca": 4818.86}, {"mois": "2026-04", "ca": 11748.55}, {"mois": "2026-05", "ca": 0}, {"mois": "2026-06", "ca": 0}, {"mois": "2026-07", "ca": 1950.1}, {"mois": "2026-08", "ca": 8549.76}], "devis_a_relancer": [{"id": "C00020300", "name": "Formation Marketing digital — C00061001", "proposal_code": "PR00000", "proposal_status": "expire", "age_jours": 641}, {"id": "C00020305", "name": "Formation Négociation commerciale — C00061009", "proposal_code": "PR00005", "proposal_status": "refuse", "age_jours": 588}, {"id": "C00020307", "name": "Formation CACES R489 — C00061009", "proposal_code": "PR00007", "proposal_status": "expire", "age_jours": 542}, {"id": "C00020301", "name": "Formation Négociation commerciale — C00061005", "proposal_code": "PR00001", "proposal_status": "en_attente", "age_jours": 497}, {"id": "C00020327", "name": "Formation Habilitation électrique — C00061027", "proposal_code": "PR00027", "proposal_status": "expire", "age_jours": 489}, {"id": "C00020315", "name": "Formation Excel VBA — C00061015", "proposal_code": "PR00015", "proposal_status": "expire", "age_jours": 474}, {"id": "C00020317", "name": "Formation Excel VBA — C00061008", "proposal_code": "PR00017", "proposal_status": "refuse", "age_jours": 470}, {"id": "C00020331", "name": "Formation Communication interpersonnelle — C00061003", "proposal_code": "PR00031", "proposal_status": "refuse", "age_jours": 425}, {"id": "C00020339", "name": "Formation Marketing digital — C00061003", "proposal_code": "PR00039", "proposal_status": "refuse", "age_jours": 381}, {"id": "C00020309", "name": "Formation Excel VBA — C00061011", "proposal_code": "PR00009", "proposal_status": "refuse", "age_jours": 375}, {"id": "C00020330", "name": "Formation Négociation commerciale — C00061029", "proposal_code": "PR00030", "proposal_status": "refuse", "age_jours": 311}, {"id": "C00020344", "name": "Formation Négociation commerciale — C00061029", "proposal_code": "PR00044", "proposal_status": "expire", "age_jours": 278}, {"id": "C00020306", "name": "Formation Comptabilité générale — C00061009", "proposal_code": "PR00006", "proposal_status": "refuse", "age_jours": 258}, {"id": "C00020353", "name": "Formation Marketing digital — C00061015", "proposal_code": "PR00053", "proposal_status": "refuse", "age_jours": 253}, {"id": "C00020312", "name": "Formation Excel VBA — C00061017", "proposal_code": "PR00012", "proposal_status": "expire", "age_jours": 241}, {"id": "C00020321", "name": "Formation Management d'équipe — C00061001", "proposal_code": "PR00021", "proposal_status": "expire", "age_jours": 235}, {"id": "C00020335", "name": "Formation Prise de parole en public — C00061021", "proposal_code": "PR00035", "proposal_status": "refuse", "age_jours": 229}, {"id": "C00020352", "name": "Formation Communication interpersonnelle — C00061015", "proposal_code": "PR00052", "proposal_status": "en_attente", "age_jours": 220}, {"id": "C00020316", "name": "Formation Management d'équipe — C00061015", "proposal_code": "PR00016", "proposal_status": "en_attente", "age_jours": 202}, {"id": "C00020304", "name": "Formation Marketing digital — C00061006", "proposal_code": "PR00004", "proposal_status": "refuse", "age_jours": 201}, {"id": "C00020336", "name": "Formation Anglais professionnel — C00061021", "proposal_code": "PR00036", "proposal_status": "refuse", "age_jours": 169}, {"id": "C00020345", "name": "Formation Paie et administration RH — C00061010", "proposal_code": "PR00045", "proposal_status": "refuse", "age_jours": 142}, {"id": "C00020329", "name": "Formation Python pour l'analyse de données — C00061027", "proposal_code": "PR00029", "proposal_status": "expire", "age_jours": 108}, {"id": "C00020320", "name": "Formation Marketing digital — C00061001", "proposal_code": "PR00020", "proposal_status": "en_attente", "age_jours": 98}, {"id": "C00020371", "name": "Formation Gestion de projet — C00061022", "proposal_code": "PR00071", "proposal_status": "refuse", "age_jours": 86}, {"id": "C00020377", "name": "Formation Paie et administration RH — C00061012", "proposal_code": "PR00077", "proposal_status": "en_attente", "age_jours": 83}, {"id": "C00020314", "name": "Formation Python pour l'analyse de données — C00061015", "proposal_code": "PR00014", "proposal_status": "en_attente", "age_jours": 47}, {"id": "C00020354", "name": "Formation Gestion de projet — C00061021", "proposal_code": "PR00054", "proposal_status": "refuse", "age_jours": 41}, {"id": "C00020347", "name": "Formation Excel VBA — C00061010", "proposal_code": "PR00047", "proposal_status": "en_attente", "age_jours": 28}, {"id": "C00020369", "name": "Formation Management d'équipe — C00061007", "proposal_code": "PR00069", "proposal_status": "expire", "age_jours": 23}, {"id": "C00020372", "name": "Formation Anglais professionnel — C00061007", "proposal_code": "PR00072", "proposal_status": "refuse", "age_jours": 19}, {"id": "C00020356", "name": "Formation Excel Perfectionnement — C00061000", "proposal_code": "PR00056", "proposal_status": "expire", "age_jours": 17}, {"id": "C00020319", "name": "Formation SST - Sauveteur Secouriste du Travail — C00061001", "proposal_code": "PR00019", "proposal_status": "expire", "age_jours": 14}], "taux_remplissage": [{"mois": "2026-03", "nb_sessions": 0, "taux_remplissage": 0.0}, {"mois": "2026-04", "nb_sessions": 2, "taux_remplissage": 56.2}, {"mois": "2026-05", "nb_sessions": 0, "taux_remplissage": 0.0}, {"mois": "2026-06", "nb_sessions": 0, "taux_remplissage": 0.0}, {"mois": "2026-07", "nb_sessions": 0, "taux_remplissage": 0.0}, {"mois": "2026-08", "nb_sessions": 0, "taux_remplissage": 0.0}], "top_formateurs": [{"trainer_id": "A00118408", "nom": "Simon Manon", "nb_sessions": 31, "ca_estime": 44100.0}, {"trainer_id": "A00118402", "nom": "Fontaine Enzo", "nb_sessions": 29, "ca_estime": 43400.0}, {"trainer_id": "A00118411", "nom": "Vincent Hugo", "nb_sessions": 28, "ca_estime": 43400.0}, {"trainer_id": "A00118410", "nom": "Simon Julie", "nb_sessions": 25, "ca_estime": 38500.0}, {"trainer_id": "A00118403", "nom": "David Julie", "nb_sessions": 24, "ca_estime": 37100.0}], "comparaison_annuelle": [{"indicateur": "CA facturé (HT)", "annee_courante": 40574.68, "annee_precedente": 28678.32, "delta_pct": 41.5}, {"indicateur": "Nouveaux clients", "annee_courante": 21, "annee_precedente": 17, "delta_pct": 23.5}, {"indicateur": "Stagiaires inscrits", "annee_courante": 44, "annee_precedente": 23, "delta_pct": 91.3}, {"indicateur": "Devis signés", "annee_courante": 9, "annee_precedente": 5, "delta_pct": 80.0}]}
+;
+
+function fmtDate(iso) {
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y.slice(2)}`;
+}
+function fmtMonth(ym) {
+  const [y, m] = ym.split('-');
+  const noms = ['janv.','fév.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+  return `${noms[parseInt(m,10)-1]} ${y.slice(2)}`;
+}
+function fmtEUR(n) {
+  return new Intl.NumberFormat('fr-FR', {style:'currency', currency:'EUR', maximumFractionDigits:0}).format(n);
+}
+function el(tag, cls, html) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html !== undefined) e.innerHTML = html;
+  return e;
+}
+
+// ---------- KPI row ----------
+(function renderKpis(){
+  const nc = DATA.nouveaux_clients_par_mois;
+  const cur = nc[nc.length - 1], prev = nc[nc.length - 2];
+  const delta = cur.nouveaux_clients - prev.nouveaux_clients;
+
+  const ca = DATA.ca_mensuel;
+  const caCur = ca[ca.length - 1].ca, caPrev = ca[ca.length - 2].ca;
+  const caDelta = caPrev ? ((caCur - caPrev) / caPrev * 100) : 0;
+
+  const remplissage = DATA.taux_remplissage;
+  const remplMoyen = remplissage.reduce((s,r)=>s+r.taux_remplissage,0) / remplissage.length;
+
+  const devis = DATA.devis_a_relancer;
+  const devisCritiques = devis.filter(d => d.age_jours > 90).length;
+
+  const kpis = [
+    {
+      label: `Nouveaux clients — ${fmtMonth(cur.mois)}`,
+      value: String(cur.nouveaux_clients),
+      sub: `${delta >= 0 ? '+' : ''}${delta} vs mois précédent`,
+      delta: delta, deltaSuffix: ''
+    },
+    {
+      label: `CA facturé — ${fmtMonth(ca[ca.length-1].mois)}`,
+      value: fmtEUR(caCur),
+      sub: `${caDelta >= 0 ? '+' : ''}${caDelta.toFixed(0)}% vs mois précédent`,
+      delta: caDelta, deltaSuffix: ''
+    },
+    {
+      label: 'Taux de remplissage moyen',
+      value: `${remplMoyen.toFixed(0)}%`,
+      sub: `sur les ${remplissage.length} derniers mois`,
+      delta: null
+    },
+    {
+      label: 'Devis à relancer',
+      value: String(devis.length),
+      sub: devisCritiques > 0 ? `dont ${devisCritiques} en attente depuis +90j` : 'aucun de plus de 90 jours',
+      delta: null, warnCount: devisCritiques
+    },
+  ];
+
+  const wrap = document.getElementById('kpis');
+  kpis.forEach(k => {
+    const card = el('div', 'kpi');
+    card.appendChild(el('p', 'kpi-label', k.label));
+    card.appendChild(el('p', 'kpi-value', k.value));
+    let subCls = 'kpi-sub';
+    if (k.delta !== null && k.delta !== undefined) subCls += k.delta >= 0 ? ' up' : ' down';
+    if (k.warnCount > 0) subCls += ' down';
+    card.appendChild(el('p', subCls, k.sub));
+    wrap.appendChild(card);
+  });
+})();
+
+// ---------- Nouveaux clients par mois (table) ----------
+(function renderNouveaux(){
+  const tbody = document.getElementById('tbl-nouveaux');
+  const max = Math.max(...DATA.nouveaux_clients_par_mois.map(r => r.nouveaux_clients), 1);
+  DATA.nouveaux_clients_par_mois.forEach(r => {
+    const tr = el('tr');
+    tr.appendChild(el('td', 'strong', fmtMonth(r.mois)));
+    const barTd = el('td', 'bar-td');
+    const cell = el('div', 'bar-cell');
+    const track = el('div', 'bar-track');
+    const fill = el('div', 'bar-fill');
+    fill.style.width = `${(r.nouveaux_clients / max * 100).toFixed(1)}%`;
+    track.appendChild(fill);
+    cell.appendChild(track);
+    cell.appendChild(el('span', 'bar-pct', String(r.nouveaux_clients)));
+    barTd.appendChild(cell);
+    tr.appendChild(barTd);
+    tbody.appendChild(tr);
+  });
+})();
+
+// ---------- Derniers stagiaires ----------
+(function renderStagiaires(){
+  const tbody = document.getElementById('tbl-stagiaires');
+  const rows = DATA.derniers_stagiaires;
+  document.getElementById('stagiaires-count').textContent = `${rows.length} inscriptions`;
+  rows.forEach(r => {
+    const tr = el('tr');
+    const nameTd = el('td', 'strong', r.nom); nameTd.title = r.nom;
+    tr.appendChild(nameTd);
+    const convTd = el('td', '', r.convention || '—'); convTd.title = r.convention || '';
+    tr.appendChild(convTd);
+    const sessTd = el('td', '', r.session || '—'); sessTd.title = r.session || '';
+    tr.appendChild(sessTd);
+    tr.appendChild(el('td', '', fmtDate(r.inscrit_le.slice(0, 10))));
+    tbody.appendChild(tr);
+  });
+})();
+
+// ---------- Mini bar chart helper ----------
+function renderMiniChart(chartId, labelsId, rows, valueKey, labelKey, fmt) {
+  const chart = document.getElementById(chartId);
+  const labels = document.getElementById(labelsId);
+  const max = Math.max(...rows.map(r => r[valueKey]), 1);
+  rows.forEach(r => {
+    const col = el('div', 'mini-col');
+    const tip = el('div', 'mini-tip', fmt(r[valueKey]));
+    const bar = el('div', 'mini-bar');
+    bar.style.height = `${Math.max((r[valueKey] / max * 100), 2)}%`;
+    col.appendChild(tip);
+    col.appendChild(bar);
+    chart.appendChild(col);
+    labels.appendChild(el('span', '', fmtMonth(r[labelKey]).replace(' ', '<br>')));
+  });
+}
+
+renderMiniChart('chart-ca', 'labels-ca', DATA.ca_mensuel, 'ca', 'mois', v => fmtEUR(v));
+renderMiniChart('chart-remplissage', 'labels-remplissage', DATA.taux_remplissage, 'taux_remplissage', 'mois', v => `${v.toFixed(0)}%`);
+
+// ---------- Devis à relancer ----------
+(function renderDevis(){
+  const tbody = document.getElementById('tbl-devis');
+  DATA.devis_a_relancer.slice(0, 20).forEach(d => {
+    const tr = el('tr');
+    const left = el('td');
+    left.appendChild(el('div', 'strong', d.name));
+    left.appendChild(el('div', '', `${d.proposal_code || ''} · statut : ${d.proposal_status || 'inconnu'}`));
+    left.lastChild.style.fontSize = '12px';
+    left.lastChild.style.color = 'var(--ink-muted)';
+    tr.appendChild(left);
+    const right = el('td', 'num');
+    let cls = 'age-ok';
+    if (d.age_jours > 90) cls = 'age-crit';
+    else if (d.age_jours > 30) cls = 'age-warn';
+    right.innerHTML = `<span class="badge ${cls}"><span class="dot"></span>${d.age_jours} j</span>`;
+    tr.appendChild(right);
+    tbody.appendChild(tr);
+  });
+})();
+
+// ---------- Top formateurs ----------
+(function renderFormateurs(){
+  const wrap = document.getElementById('rank-formateurs');
+  const rows = DATA.top_formateurs;
+  const max = Math.max(...rows.map(r => r.ca_estime), 1);
+  rows.forEach((r, i) => {
+    const row = el('div', 'rank-row');
+    row.appendChild(el('div', 'rank-num', String(i + 1).padStart(2, '0')));
+    const name = el('div', 'rank-name', r.nom);
+    row.appendChild(name);
+    row.appendChild(el('div', 'rank-meta', `${r.nb_sessions} sessions`));
+    const track = el('div', 'rank-bar-track');
+    const fill = el('div', 'rank-bar-fill');
+    fill.style.width = `${(r.ca_estime / max * 100).toFixed(1)}%`;
+    track.appendChild(fill);
+    row.appendChild(track);
+    row.appendChild(el('div', 'rank-value', fmtEUR(r.ca_estime)));
+    wrap.appendChild(row);
+  });
+})();
+
+// ---------- Comparaison annuelle (N vs N-1, à date égale) ----------
+(function renderComparaison(){
+  const tbody = document.getElementById('tbl-comparaison');
+  const [gy, gm, gd] = DATA.generated_at.split('-').map(Number);
+  const yearN = gy, yearN1 = gy - 1;
+  const cutoff = `${String(gd).padStart(2,'0')}/${String(gm).padStart(2,'0')}`;
+  document.getElementById('compare-title').textContent =
+    `Comparaison ${yearN} vs ${yearN1} (jusqu'au ${cutoff})`;
+
+  const isEUR = (nom) => /CA facturé/i.test(nom);
+
+  DATA.comparaison_annuelle.forEach((r) => {
+    const tr = el('tr');
+    tr.appendChild(el('td', 'strong', r.indicateur));
+
+    const max = Math.max(r.annee_courante, r.annee_precedente, 1);
+    const fmt = (v) => isEUR(r.indicateur) ? fmtEUR(v) : String(v);
+    const compareTd = el('td');
+    const rows = el('div', 'compare-rows');
+    [[yearN, r.annee_courante, ''], [yearN1, r.annee_precedente, 'prev']].forEach(([year, val, mod]) => {
+      const row = el('div', 'compare-row');
+      row.appendChild(el('span', 'compare-year', String(year)));
+      const track = el('div', 'compare-track');
+      const fill = el('div', `compare-fill ${mod}`.trim());
+      fill.style.width = `${Math.max((val / max * 100), 2).toFixed(1)}%`;
+      track.appendChild(fill);
+      row.appendChild(track);
+      row.appendChild(el('span', 'compare-val', fmt(val)));
+      rows.appendChild(row);
+    });
+    compareTd.appendChild(rows);
+    tr.appendChild(compareTd);
+
+    const ecart = r.annee_courante - r.annee_precedente;
+    const ecartTd = el('td', 'num', isEUR(r.indicateur) ? fmtEUR(ecart) : String(ecart));
+    tr.appendChild(ecartTd);
+
+    const deltaTd = el('td', 'num');
+    if (r.delta_pct === null || r.delta_pct === undefined) {
+      deltaTd.innerHTML = '<span class="compare-delta">—</span>';
+    } else {
+      const up = r.delta_pct >= 0;
+      deltaTd.innerHTML = `<span class="compare-delta ${up ? 'up' : 'down'}">${up ? '▲' : '▼'} ${Math.abs(r.delta_pct).toFixed(1)}%</span>`;
+    }
+    tr.appendChild(deltaTd);
+
+    tbody.appendChild(tr);
+  });
+})();
+</script>
