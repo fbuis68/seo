@@ -813,41 +813,70 @@ async function fetchAll(entity, entityId) {
 
 // ------------------------------------------------------------------
 // Mode demo multi-annee (?demoMultiYear=1 dans l'URL) : purement cote
-// navigateur, aucune ecriture serveur/DB. Prend les vraies factures et
-// sessions remontees par l'API, et en genere des copies datees sur
-// chaque annee de DEMO_MULTI_YEAR_YEARS (memes dossiers/clients reels,
-// juste des dates differentes), pour que tous les graphiques "par annee"
-// aient de quoi s'afficher meme si les vraies donnees ne couvrent qu'une
-// periode courte. Les clients (customers) sont eux juste redates (pas
-// dupliques) pour etaler "Nouveaux clients" sur la meme periode.
+// navigateur, aucune ecriture serveur/DB. Prend les vraies factures,
+// sessions et clients remontes par l'API comme "modeles" (memes
+// dossiers/clients/montants reels), et en genere plusieurs copies par
+// MOIS sur chaque annee de DEMO_MULTI_YEAR_YEARS -- pas juste un
+// decalage d'annee, qui laissait des mois vides (dont le mois courant)
+// si les vraies donnees n'avaient par hasard rien ce mois-la, quelle
+// que soit l'annee.
 const DEMO_MULTI_YEAR_YEARS = [2024, 2025, 2026];
-function shiftYear(dateStr, year) {
-  if (!dateStr) return dateStr;
-  return String(dateStr).replace(/^\d{4}/, String(year));
+function demoDate(year, month, dayHint) {
+  const day = String(1 + (dayHint % 27)).padStart(2, '0');
+  return `${year}-${String(month).padStart(2, '0')}-${day}`;
 }
 function applyDemoMultiYear(customers, invoices, sessions) {
-  const demoCustomers = customers.map((c, i) => (
-    c.created ? { ...c, created: shiftYear(c.created, DEMO_MULTI_YEAR_YEARS[i % DEMO_MULTI_YEAR_YEARS.length]) } : c
-  ));
+  let k = 0;
+
+  const demoCustomers = [];
+  if (customers.length) {
+    DEMO_MULTI_YEAR_YEARS.forEach((year) => {
+      for (let m = 1; m <= 12; m++) {
+        const perMonth = 1 + (k % 3);
+        for (let n = 0; n < perMonth; n++) {
+          const tpl = customers[k % customers.length];
+          k++;
+          demoCustomers.push({ ...tpl, id: `${tpl.id}-demo${year}${m}${n}`, created: demoDate(year, m, k) });
+        }
+      }
+    });
+  }
+
   const demoInvoices = [];
-  DEMO_MULTI_YEAR_YEARS.forEach((year) => {
-    invoices.forEach((inv) => {
-      if (!inv.billingDate) return;
-      demoInvoices.push({ ...inv, id: `${inv.id}-demo${year}`, billingDate: shiftYear(inv.billingDate, year) });
+  if (invoices.length) {
+    DEMO_MULTI_YEAR_YEARS.forEach((year) => {
+      for (let m = 1; m <= 12; m++) {
+        const perMonth = 2 + (k % 3);
+        for (let n = 0; n < perMonth; n++) {
+          const tpl = invoices[k % invoices.length];
+          k++;
+          const jitter = 0.7 + (k % 7) * 0.1;
+          demoInvoices.push({
+            ...tpl,
+            id: `${tpl.id}-demo${year}${m}${n}`,
+            billingDate: demoDate(year, m, k),
+            amount: tpl.amount ? Math.round(tpl.amount * jitter) : tpl.amount,
+          });
+        }
+      }
     });
-  });
+  }
+
   const demoSessions = [];
-  DEMO_MULTI_YEAR_YEARS.forEach((year) => {
-    sessions.forEach((s) => {
-      if (!s.startDate) return;
-      demoSessions.push({
-        ...s,
-        id: `${s.id}-demo${year}`,
-        startDate: shiftYear(s.startDate, year),
-        endDate: s.endDate ? shiftYear(s.endDate, year) : s.endDate,
-      });
+  if (sessions.length) {
+    DEMO_MULTI_YEAR_YEARS.forEach((year) => {
+      for (let m = 1; m <= 12; m++) {
+        const perMonth = 1 + (k % 3);
+        for (let n = 0; n < perMonth; n++) {
+          const tpl = sessions[k % sessions.length];
+          k++;
+          const d = demoDate(year, m, k);
+          demoSessions.push({ ...tpl, id: `${tpl.id}-demo${year}${m}${n}`, startDate: d, endDate: tpl.endDate ? d : tpl.endDate });
+        }
+      }
     });
-  });
+  }
+
   return { customers: demoCustomers, invoices: demoInvoices, sessions: demoSessions };
 }
 
