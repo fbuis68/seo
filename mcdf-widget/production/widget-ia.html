@@ -177,6 +177,14 @@
   .mini-col:hover .mini-tip { opacity: 1; }
   .mini-col:hover .mini-bar { background: var(--accent-300); }
 
+  .mini-col-group { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+  .mini-bars-wrap { display: flex; align-items: flex-end; justify-content: center; gap: 2px; width: 100%; height: 100%; }
+  .mini-bar-g { position: relative; flex: 1; max-width: 14px; border-radius: 2px 2px 0 0; min-height: 2px; transition: filter 0.12s ease; }
+  .mini-tip-g { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 6px; background: var(--ink); color: var(--page); font-size: 11px; font-weight: 600; padding: 3px 7px; border-radius: 5px; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.12s ease; font-variant-numeric: tabular-nums; z-index: 2; }
+  .year-legend { display: flex; gap: 14px; margin-top: 10px; padding: 0 2px; flex-wrap: wrap; }
+  .year-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); }
+  .year-legend-dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+
   .rank-list { padding: 4px 18px 18px; }
   .rank-row { display: grid; grid-template-columns: 22px 1.4fr 1fr 90px; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--border); }
   .rank-row:last-child { border-bottom: none; }
@@ -300,6 +308,7 @@
             <div class="panel chart-pad">
               <div class="mini-chart" id="chart-ca"></div>
               <div class="mini-labels" id="labels-ca"></div>
+              <div class="year-legend" id="legend-ca"></div>
             </div>
           </div>
         </div>
@@ -1245,6 +1254,61 @@ function renderMiniChart(chartId, labelsId, rows, valueKey, labelKey, fmt) {
   });
 }
 
+const MONTH_NAMES_SHORT = ['janv.', 'fév.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+function renderGroupedMonthChart(chartId, labelsId, legendId, rows, valueKey, labelKey, fmt) {
+  const chart = document.getElementById(chartId);
+  const labels = document.getElementById(labelsId);
+  const legend = document.getElementById(legendId);
+  chart.innerHTML = '';
+  labels.innerHTML = '';
+  if (legend) legend.innerHTML = '';
+
+  const byMonth = {};
+  const years = [];
+  rows.forEach((r) => {
+    const [y, m] = String(r[labelKey]).split('-');
+    if (years.indexOf(y) < 0) years.push(y);
+    if (!byMonth[m]) byMonth[m] = {};
+    byMonth[m][y] = r[valueKey];
+  });
+  years.sort();
+  const max = Math.max(...rows.map((r) => r[valueKey]), 1);
+
+  for (let mi = 1; mi <= 12; mi++) {
+    const m = String(mi).padStart(2, '0');
+    const col = el('div', 'mini-col-group');
+    const barsWrap = el('div', 'mini-bars-wrap');
+    years.forEach((y) => {
+      if (!byMonth[m] || byMonth[m][y] === undefined) return;
+      const val = byMonth[m][y];
+      const bar = el('div', 'mini-bar-g');
+      bar.style.height = `${Math.max((val / max * 100), 2)}%`;
+      const baseColor = yearColor(y, false);
+      const hoverColor = yearColor(y, true);
+      bar.style.background = baseColor;
+      const tip = el('div', 'mini-tip-g', fmt(val));
+      bar.appendChild(tip);
+      bar.addEventListener('mouseenter', () => { bar.style.background = hoverColor; tip.style.opacity = '1'; });
+      bar.addEventListener('mouseleave', () => { bar.style.background = baseColor; tip.style.opacity = '0'; });
+      barsWrap.appendChild(bar);
+    });
+    col.appendChild(barsWrap);
+    chart.appendChild(col);
+    labels.appendChild(el('span', '', MONTH_NAMES_SHORT[mi - 1]));
+  }
+
+  if (legend) {
+    years.forEach((y) => {
+      const item = el('span', 'year-legend-item');
+      const dot = el('span', 'year-legend-dot');
+      dot.style.background = yearColor(y, false);
+      item.appendChild(dot);
+      item.appendChild(document.createTextNode(y));
+      legend.appendChild(item);
+    });
+  }
+}
+
 function renderDevis(DATA) {
   const tbody = document.getElementById('tbl-devis');
   DATA.devis_a_relancer.slice(0, 20).forEach((d) => {
@@ -1452,7 +1516,7 @@ function refreshCommercial(DATA) {
 
   document.getElementById('chart-ca').innerHTML = '';
   document.getElementById('labels-ca').innerHTML = '';
-  renderMiniChart('chart-ca', 'labels-ca', commercial.ca_mensuel, 'ca', 'mois', (v) => fmtEUR(v));
+  renderGroupedMonthChart('chart-ca', 'labels-ca', 'legend-ca', commercial.ca_mensuel, 'ca', 'mois', (v) => fmtEUR(v));
 
   const periodLabel = years.length > 1
     ? [...years].sort((a, b) => a - b).join(' + ')
