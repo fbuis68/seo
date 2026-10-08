@@ -6495,7 +6495,7 @@ function renderTicketDetail(t){
         return `
       <div class="ff"><label>Réponse ${ticketTpls.length?'— insérer un modèle':''}</label>
         ${ticketTpls.length?`<select id="tkt-tpl-pick" onchange="ticketInsertTemplate()" style="margin-bottom:6px"><option value="">— Choisir un modèle —</option>${ticketTpls.map(m=>`<option value="${esc(m.key)}" ${defaultTpl&&m.id===defaultTpl.id?'selected':''}>${esc(m.name)}</option>`).join('')}</select>`:''}
-        <textarea id="tkt-reply-body" style="height:120px" placeholder="Votre réponse…">${defaultTpl?esc(ticketTemplateBodyText(defaultTpl)):''}</textarea>
+        <textarea id="tkt-reply-body" style="height:220px" placeholder="Votre réponse… (Ctrl+V pour coller une image depuis le presse-papiers)" onpaste="tktReplyPasteFiles(event,'tkt-reply-files')">${defaultTpl?esc(ticketTemplateBodyText(defaultTpl)):''}</textarea>
       </div>`; })()}
       <div class="ff" id="tkt-cc-wrap" style="margin-top:6px">
         <label>Copie (Cc) <span style="color:var(--mu);font-weight:400">— un ou plusieurs emails séparés par des virgules</span></label>
@@ -6503,6 +6503,7 @@ function renderTicketDetail(t){
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
         <input type="file" id="tkt-reply-files" accept="image/*" multiple style="max-width:220px">
+        <span id="tkt-reply-paste-hint" style="font-size:11px;color:var(--mu)"></span>
         <button class="btn btn-primary btn-sm" onclick="ticketSendReply('${t.id}','reply')">Répondre</button>
         <button class="btn btn-ghost btn-sm" onclick="ticketSendReply('${t.id}','note')">Note interne</button>
       </div>
@@ -6605,7 +6606,7 @@ function renderAiSuggestionBox(){
       <span class="tpill" style="background:${confColor};color:#fff">Confiance : ${pct}%</span>
     </div>
     ${sourcesHtml}
-    <textarea id="tkt-ai-suggestion-text" style="height:120px;margin-bottom:8px">${esc(s.text)}</textarea>
+    <textarea id="tkt-ai-suggestion-text" style="height:180px;margin-bottom:8px">${esc(s.text)}</textarea>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
       <button class="btn btn-primary btn-sm" onclick="aiUseSuggestion()">Utiliser</button>
       <button class="btn btn-primary btn-sm" style="background:#2f6f2f" onclick="aiSendSuggestion('${CURRENT_TICKET.id}')">Envoyer</button>
@@ -6755,6 +6756,34 @@ function ticketInsertTemplate(){
   const tpl = MSG_TEMPLATES.find(m=>m.key===key && m.channel==='email');
   if(!tpl) return;
   document.getElementById('tkt-reply-body').value = ticketTemplateBodyText(tpl);
+}
+
+// Colle une image copiée (ex. capture d'écran) directement dans la réponse
+// support, sans passer par un enregistrement sur disque + sélection via
+// l'input file : on l'ajoute au FileList existant de l'input (via
+// DataTransfer, seul moyen de construire un FileList en JS) et on laisse le
+// texte éventuellement présent dans le presse-papiers suivre le
+// comportement natif du textarea.
+function tktReplyPasteFiles(event, filesInputId){
+  const items = (event.clipboardData && event.clipboardData.items) || [];
+  const imgFiles = [];
+  for(const item of items){
+    if(item.kind === 'file' && item.type && item.type.startsWith('image/')){
+      const file = item.getAsFile();
+      if(file) imgFiles.push(file);
+    }
+  }
+  if(!imgFiles.length) return;
+  event.preventDefault();
+  const filesEl = document.getElementById(filesInputId);
+  if(!filesEl) return;
+  const dt = new DataTransfer();
+  Array.from(filesEl.files||[]).forEach(f=>dt.items.add(f));
+  imgFiles.forEach((f,i)=>dt.items.add(new File([f], f.name||('capture-'+Date.now()+'-'+i+'.png'), {type:f.type})));
+  filesEl.files = dt.files;
+  const hint = document.getElementById('tkt-reply-paste-hint');
+  if(hint) hint.textContent = filesEl.files.length+' image(s) jointe(s)';
+  flash(imgFiles.length>1 ? imgFiles.length+' images collées' : 'Image collée');
 }
 
 function filesToDataUrls(fileList, cb){
