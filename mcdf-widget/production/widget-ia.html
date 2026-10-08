@@ -138,7 +138,7 @@
   .tight-table { min-width: 420px; }
 
   .bar-cell { display: flex; align-items: center; gap: 10px; }
-  .bar-track { flex: 1; height: 7px; background: var(--surface-2); border-radius: 4px; overflow: hidden; min-width: 60px; }
+  .bar-track { flex: 1; height: 7px; background: var(--surface-2); border-radius: 4px; overflow: visible; min-width: 60px; display: flex; }
   .bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
   .bar-pct { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); width: 40px; text-align: right; flex: none; }
 
@@ -191,9 +191,18 @@
   .rank-num { font-family: var(--font-display); color: var(--ink-muted); font-size: 13px; }
   .rank-name { font-weight: 500; color: var(--ink); font-size: 13px; }
   .rank-meta { font-size: 12px; color: var(--ink-muted); }
-  .rank-bar-track { grid-column: 2 / span 2; height: 6px; background: var(--surface-2); border-radius: 4px; overflow: hidden; margin-top: 2px; }
+  .rank-bar-track { grid-column: 2 / span 2; height: 6px; background: var(--surface-2); border-radius: 4px; overflow: visible; margin-top: 2px; display: flex; }
   .rank-bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
+  .rank-bar-seg { position: relative; height: 100%; min-width: 2px; }
+  .rank-bar-seg:first-child { border-radius: 4px 0 0 4px; }
+  .rank-bar-seg:last-child { border-radius: 0 4px 4px 0; }
+  .rank-bar-seg:only-child { border-radius: 4px; }
   .rank-value { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; font-size: 13px; }
+
+  .bar-seg { position: relative; height: 100%; min-width: 2px; }
+  .bar-seg:first-child { border-radius: 4px 0 0 4px; }
+  .bar-seg:last-child { border-radius: 0 4px 4px 0; }
+  .bar-seg:only-child { border-radius: 4px; }
 
   .note { padding: 12px 16px; border-radius: 8px; font-size: 12.5px; margin-bottom: 16px; background: var(--surface-2); color: var(--ink-2); line-height: 1.55; }
 
@@ -1122,6 +1131,38 @@ function computeCAParClient(invoices, convById, years, cutoffMonth, cutoffDay) {
   return Object.entries(map).map(([client, ca]) => ({ client, ca })).sort((a, b) => b.ca - a.ca).slice(0, 25);
 }
 
+// Variantes avec repartition par annee (une barre -- segment -- par annee
+// selectionnee), utilisees quand plusieurs annees sont comparees.
+function computeTopByYear(invoices, convById, field, years, cutoffMonth, cutoffDay) {
+  const map = {};
+  invoices.forEach((i) => {
+    if (!inSelectedPeriod(i.billingDate, years, cutoffMonth, cutoffDay)) return;
+    const conv = convById.get(i.conventionId);
+    const key = conv ? conv[field] : null;
+    if (!key || !i.billingDate) return;
+    const year = String(new Date(i.billingDate).getFullYear());
+    if (!map[key]) map[key] = { nom: key, total: 0, byYear: {} };
+    map[key].total += (i.amount || 0);
+    map[key].byYear[year] = (map[key].byYear[year] || 0) + (i.amount || 0);
+  });
+  return Object.values(map).sort((a, b) => b.total - a.total).slice(0, 5);
+}
+
+function computeCAParClientYear(invoices, convById, years, cutoffMonth, cutoffDay) {
+  const map = {};
+  invoices.forEach((i) => {
+    if (!inSelectedPeriod(i.billingDate, years, cutoffMonth, cutoffDay)) return;
+    const conv = convById.get(i.conventionId);
+    const client = conv ? conv.customerName : null;
+    if (!client || !i.billingDate) return;
+    const year = String(new Date(i.billingDate).getFullYear());
+    if (!map[client]) map[client] = { client, total: 0, byYear: {} };
+    map[client].total += (i.amount || 0);
+    map[client].byYear[year] = (map[client].byYear[year] || 0) + (i.amount || 0);
+  });
+  return Object.values(map).sort((a, b) => b.total - a.total).slice(0, 25);
+}
+
 function computeCommercialFiltered(raw, convById, years, cutoffMonth, cutoffDay) {
   const { customers, invoices } = raw;
   const months = monthsForYears(years, cutoffMonth);
@@ -1144,9 +1185,9 @@ function computeCommercialFiltered(raw, convById, years, cutoffMonth, cutoffDay)
 
   return {
     comparaison_annuelle: computeComparaison(raw, years, cutoffMonth, cutoffDay),
-    top_conseillers: computeTopBy(invoices, convById, 'accountManagerName', years, cutoffMonth, cutoffDay),
-    top_clients: computeTopBy(invoices, convById, 'customerName', years, cutoffMonth, cutoffDay),
-    ca_par_client: computeCAParClient(invoices, convById, years, cutoffMonth, cutoffDay),
+    top_conseillers: computeTopByYear(invoices, convById, 'accountManagerName', years, cutoffMonth, cutoffDay),
+    top_clients: computeTopByYear(invoices, convById, 'customerName', years, cutoffMonth, cutoffDay),
+    ca_par_client: computeCAParClientYear(invoices, convById, years, cutoffMonth, cutoffDay),
     nouveaux_clients_par_mois, ca_mensuel,
   };
 }
@@ -1372,6 +1413,99 @@ function renderCAParClient(DATA) {
   });
 }
 
+// Variantes "par annee" : une barre segmentee en couleurs (une couleur par
+// annee comparee) au lieu d'une barre pleine unique, + legende des annees.
+function yearSegments(byYear) {
+  return Object.keys(byYear).sort().map((y) => ({ year: y, val: byYear[y] }));
+}
+function appendYearLegend(afterEl, years) {
+  const legend = el('div', 'year-legend');
+  years.forEach((y) => {
+    const item = el('span', 'year-legend-item');
+    const dot = el('span', 'year-legend-dot');
+    dot.style.background = yearColor(y, false);
+    item.appendChild(dot);
+    item.appendChild(document.createTextNode(y));
+    legend.appendChild(item);
+  });
+  afterEl.insertAdjacentElement('afterend', legend);
+}
+
+function renderRankListByYear(wrapId, rows, nameKey, fmt) {
+  const wrap = document.getElementById(wrapId);
+  wrap.innerHTML = '';
+  const existingLegend = wrap.parentElement.querySelector('.year-legend');
+  if (existingLegend) existingLegend.remove();
+  const max = Math.max(...rows.map((r) => r.total), 1);
+  const allYears = new Set();
+  rows.forEach((r) => Object.keys(r.byYear).forEach((y) => allYears.add(y)));
+  const years = [...allYears].sort();
+
+  rows.forEach((r, i) => {
+    const row = el('div', 'rank-row');
+    row.appendChild(el('div', 'rank-num', String(i + 1).padStart(2, '0')));
+    row.appendChild(el('div', 'rank-name', r[nameKey]));
+    row.appendChild(el('div', 'rank-meta', ''));
+    const track = el('div', 'rank-bar-track');
+    yearSegments(r.byYear).forEach(({ year, val }) => {
+      if (!val) return;
+      const seg = el('div', 'rank-bar-seg');
+      seg.style.width = `${(val / max * 100).toFixed(1)}%`;
+      seg.style.background = yearColor(year, false);
+      const tip = el('div', 'mini-tip-g', `${year} : ${fmt(val)}`);
+      seg.appendChild(tip);
+      seg.addEventListener('mouseenter', () => { tip.style.opacity = '1'; });
+      seg.addEventListener('mouseleave', () => { tip.style.opacity = '0'; });
+      track.appendChild(seg);
+    });
+    row.appendChild(track);
+    row.appendChild(el('div', 'rank-value', fmt(r.total)));
+    wrap.appendChild(row);
+  });
+
+  appendYearLegend(wrap, years);
+}
+
+function renderCAParClientByYear(DATA) {
+  const tbody = document.getElementById('tbl-ca-client');
+  tbody.innerHTML = '';
+  const rows = DATA.ca_par_client;
+  const max = Math.max(...rows.map((r) => r.total), 1);
+  const allYears = new Set();
+  rows.forEach((r) => Object.keys(r.byYear).forEach((y) => allYears.add(y)));
+  const years = [...allYears].sort();
+
+  rows.forEach((r) => {
+    const tr = el('tr');
+    const nameTd = el('td', 'strong', r.client); nameTd.title = r.client;
+    tr.appendChild(nameTd);
+    const barTd = el('td', 'bar-td');
+    const cell = el('div', 'bar-cell');
+    const track = el('div', 'bar-track');
+    yearSegments(r.byYear).forEach(({ year, val }) => {
+      if (!val) return;
+      const seg = el('div', 'bar-seg');
+      seg.style.width = `${(val / max * 100).toFixed(1)}%`;
+      seg.style.background = yearColor(year, false);
+      const tip = el('div', 'mini-tip-g', `${year} : ${fmtEUR(val)}`);
+      seg.appendChild(tip);
+      seg.addEventListener('mouseenter', () => { tip.style.opacity = '1'; });
+      seg.addEventListener('mouseleave', () => { tip.style.opacity = '0'; });
+      track.appendChild(seg);
+    });
+    cell.appendChild(track);
+    cell.appendChild(el('span', 'bar-pct', fmtEUR(r.total)));
+    barTd.appendChild(cell);
+    tr.appendChild(barTd);
+    tbody.appendChild(tr);
+  });
+
+  const tableWrap = tbody.closest('table');
+  const existingLegend = tableWrap.parentElement.querySelector('.year-legend');
+  if (existingLegend) existingLegend.remove();
+  appendYearLegend(tableWrap, years);
+}
+
 function renderSessionsTable(tbodyId, rows, cols) {
   const tbody = document.getElementById(tbodyId);
   rows.forEach((r) => {
@@ -1507,10 +1641,10 @@ function refreshCommercial(DATA) {
 
   document.getElementById('rank-conseillers').innerHTML = '';
   document.getElementById('rank-clients').innerHTML = '';
-  renderRankList('rank-conseillers', commercial.top_conseillers, 'nom', 'ca', () => '', fmtEUR);
-  renderRankList('rank-clients', commercial.top_clients, 'nom', 'ca', () => '', fmtEUR);
+  renderRankListByYear('rank-conseillers', commercial.top_conseillers, 'nom', fmtEUR);
+  renderRankListByYear('rank-clients', commercial.top_clients, 'nom', fmtEUR);
 
-  renderCAParClient(DATA);
+  renderCAParClientByYear(DATA);
 
   document.getElementById('tbl-nouveaux').innerHTML = '';
   renderNouveaux(DATA);
