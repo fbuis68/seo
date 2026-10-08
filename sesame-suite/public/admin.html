@@ -1845,22 +1845,6 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     </div>
   </div>
 
-  <!-- Traçabilité des accès -->
-  <details style="margin-bottom:16px" id="aal-details" open>
-    <summary style="cursor:pointer;font-weight:600;font-size:14px;padding:10px 0;display:flex;align-items:center;gap:8px">
-      <i class="ti ti-history"></i> Traçabilité des accès
-      <button class="chact" style="margin-left:auto" onclick="event.preventDefault();loadAccessActivityLog()"><i class="ti ti-refresh" style="font-size:12px"></i> Actualiser</button>
-    </summary>
-    <div class="ca" style="margin-top:10px">
-      <div class="alt alt-g" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
-        <span>Historique des ouvertures d'accès (porte, casier…), déclenchées par un client (check-in) ou par le personnel — les plus récentes d'abord.</span>
-      </div>
-      <div style="overflow-x:auto"><table class="tbl">
-        <thead><tr><th>Date/heure</th><th>Accès</th><th>Réservation / client</th><th>Déclenché par</th><th>Résultat</th></tr></thead>
-        <tbody id="aal-tbody"><tr><td colspan="5" style="text-align:center;color:var(--mu);padding:16px">Chargement…</td></tr></tbody>
-      </table></div>
-    </div>
-  </details>
 
   <div class="brow"><button class="btn btn-p" onclick="savePan()"><i class="ti ti-device-floppy"></i> Sauvegarder</button></div>
 
@@ -2011,6 +1995,11 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
              première sauvegarde) — cf. rmOpenEdit/rmOpenCreate. -->
         <div id="rm-history-wrap" style="display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--bdr)">
           <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">Historique des ouvertures</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+            <input type="text" id="rm-history-person" placeholder="Filtrer par personne…" oninput="rmHistoryApplyFilters()" style="flex:1;min-width:140px">
+            <input type="date" id="rm-history-from" onchange="rmHistoryApplyFilters()" title="Du" style="width:140px">
+            <input type="date" id="rm-history-to" onchange="rmHistoryApplyFilters()" title="Au" style="width:140px">
+          </div>
           <div style="overflow-x:auto"><table class="tbl">
             <thead><tr><th>Date/heure</th><th>Réservation / client</th><th>Déclenché par</th><th>Résultat</th></tr></thead>
             <tbody id="rm-history-tbody"><tr><td colspan="4" style="text-align:center;color:var(--mu);padding:12px">Chargement…</td></tr></tbody>
@@ -4878,7 +4867,7 @@ function showPan(id){
   if(id==='gains'){renderGains();}
   if(id==='eco'){renderEcoBanner();}
   if(id==='plan'){try{renderPlanCanvas();}catch(e){} try{renderAdminTags();}catch(e){}}
-  if(id==='rooms'){ renderRoomGrid(); fetchStaffList().then(renderRoomGrid); nyInit(); loadAccessActivityLog(); }
+  if(id==='rooms'){ renderRoomGrid(); fetchStaffList().then(renderRoomGrid); nyInit(); }
   if(id==='preview'){try{renderFullPreview();renderPrevSummary();}catch(e){}}
   if(id==='dash'){try{renderDash();}catch(e){}}
   if(id==='reservations'){ loadReservations(); resaStartPolling(); }
@@ -5927,18 +5916,18 @@ async function rmOpenAccess(roomCode){
   }catch(e){
     toast('Erreur lors de l\'ouverture de l\'accès' + (e && e.message ? ' — ' + e.message : ''));
   }
-  loadAccessActivityLog();
+  if(RM_EDITING) loadRoomAccessHistory(RM_EDITING);
 }
 
-// ─── Traçabilité des accès (GET /wa/facility/accessActivityLog) — panneau
-// "Gestion des Accès", § demande client : historique des ouvertures
-// déclenchées via /wa/booking/openDoor (fiche réservation, check-in client)
-// et /wa/facility/openDirect (bouton "Ouverture à distance" ci-dessus).
-// showRoomCol=true pour la liste globale (panneau "Gestion des Accès",
-// colonne "Accès") ; false pour l'historique d'un seul accès (modal
-// d'édition d'une chambre, cf. loadRoomAccessHistory) — colonne redondante
-// puisque déjà filtrée sur ce seul accès.
-function accessActivityLogRowHtml(l, showRoomCol){
+// ─── Traçabilité des accès (GET /wa/facility/accessActivityLog) — § demande
+// client : uniquement "accès par accès" (modal d'édition d'une chambre),
+// plus de liste globale dans le panneau "Gestion des Accès". Historique des
+// ouvertures déclenchées via /wa/booking/openDoor (fiche réservation,
+// check-in client) et /wa/facility/openDirect (bouton "Ouverture à
+// distance" ci-dessus), filtrable par date et/ou par personne — filtrage
+// côté client (RM_HISTORY_LOGS garde la réponse brute, déjà limitée à 200
+// entrées pour cet accès) plutôt qu'un aller-retour serveur par filtre.
+function accessActivityLogRowHtml(l){
   var dt = new Date(l.createdAt);
   var when = dt.toLocaleDateString('fr-FR')+' '+dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
   var who = l.actorType==='staff' ? ('Personnel'+(l.actorLabel?' ('+esc(l.actorLabel)+')':'')) : 'Client';
@@ -5948,22 +5937,10 @@ function accessActivityLogRowHtml(l, showRoomCol){
     : l.success
     ? '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:rgba(26,107,71,.1);color:#1A6B47">Ouverte</span>'
     : '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:rgba(184,48,48,.1);color:#B83030" title="'+esc(l.errorMessage||'')+'">Échec</span>';
-  var cibleTd = showRoomCol ? ('<td>'+esc(l.roomCode || '—')+'</td>') : '';
-  return '<tr><td style="white-space:nowrap">'+when+'</td>'+cibleTd+'<td>'+resa+'</td><td>'+who+'</td><td>'+statut+'</td></tr>';
+  return '<tr><td style="white-space:nowrap">'+when+'</td><td>'+resa+'</td><td>'+who+'</td><td>'+statut+'</td></tr>';
 }
 
-async function loadAccessActivityLog(){
-  var tbody = document.getElementById('aal-tbody');
-  if(!tbody) return;
-  try{
-    var r = await adminFetch('/wa/facility/accessActivityLog?limit=100');
-    var logs = r.ok ? await r.json() : [];
-    if(!logs.length){ tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--mu);padding:16px">Aucune ouverture enregistrée.</td></tr>'; return; }
-    tbody.innerHTML = logs.map(function(l){ return accessActivityLogRowHtml(l, true); }).join('');
-  }catch(e){
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--mu);padding:16px">Erreur de chargement.</td></tr>';
-  }
-}
+var RM_HISTORY_LOGS = [];
 
 // Historique d'un seul accès (modal d'édition d'une chambre) — § demande
 // client "accès par accès" (ex : dates/heures d'ouverture de la chambre 101).
@@ -5971,14 +5948,42 @@ async function loadRoomAccessHistory(code){
   var tbody = document.getElementById('rm-history-tbody');
   if(!tbody) return;
   tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--mu);padding:12px">Chargement…</td></tr>';
+  document.getElementById('rm-history-person').value = '';
+  document.getElementById('rm-history-from').value = '';
+  document.getElementById('rm-history-to').value = '';
   try{
     var r = await adminFetch('/wa/facility/accessActivityLog?limit=200&roomCode='+encodeURIComponent(code));
-    var logs = r.ok ? await r.json() : [];
-    if(!logs.length){ tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--mu);padding:12px">Aucune ouverture enregistrée pour cet accès.</td></tr>'; return; }
-    tbody.innerHTML = logs.map(function(l){ return accessActivityLogRowHtml(l, false); }).join('');
+    RM_HISTORY_LOGS = r.ok ? await r.json() : [];
   }catch(e){
-    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--mu);padding:12px">Erreur de chargement.</td></tr>';
+    RM_HISTORY_LOGS = null;
   }
+  rmHistoryApplyFilters();
+}
+
+// Réappliqué à chaque changement d'un des filtres (personne/dates), sans
+// nouvel appel serveur — cf. RM_HISTORY_LOGS ci-dessus.
+function rmHistoryApplyFilters(){
+  var tbody = document.getElementById('rm-history-tbody');
+  if(!tbody) return;
+  if(RM_HISTORY_LOGS === null){ tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--mu);padding:12px">Erreur de chargement.</td></tr>'; return; }
+  var person = (document.getElementById('rm-history-person').value||'').trim().toLowerCase();
+  var from = document.getElementById('rm-history-from').value; // "YYYY-MM-DD" ou ""
+  var to = document.getElementById('rm-history-to').value;
+  var filtered = RM_HISTORY_LOGS.filter(function(l){
+    if(person){
+      var hay = ((l.guestName||'')+' '+(l.bookingCode||'')+' '+(l.actorLabel||'')).toLowerCase();
+      if(hay.indexOf(person) === -1) return false;
+    }
+    if(from || to){
+      var day = l.createdAt.slice(0,10); // comparaison lexicographique ISO, fiable sur des dates AAAA-MM-JJ
+      if(from && day < from) return false;
+      if(to && day > to) return false;
+    }
+    return true;
+  });
+  if(!RM_HISTORY_LOGS.length){ tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--mu);padding:12px">Aucune ouverture enregistrée pour cet accès.</td></tr>'; return; }
+  if(!filtered.length){ tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--mu);padding:12px">Aucune ouverture ne correspond à ce filtre.</td></tr>'; return; }
+  tbody.innerHTML = filtered.map(accessActivityLogRowHtml).join('');
 }
 
 // ─── Connecteur Nayax — GET/POST /wa/nayaxConfig, GET /wa/nayaxAccess/qr ───
