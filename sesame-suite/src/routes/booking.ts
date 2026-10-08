@@ -10,6 +10,7 @@ import { requireAdmin } from "../middleware/requireAdmin";
 import { encodeNfc, listNfcDevices, fetchAccessQr, openDoor, pushBookingUpdate, adoptBookingIntoSource, BookingSourceError } from "../lib/bookingSource";
 import { sendEmailRaw } from "../lib/email";
 import { listRoomsForStaff, validateManualBookingDraft, createBookingDirectUnpaid, BookingDraft, OCCUPANT_AGE_CATEGORIES } from "../lib/bookingEngine";
+import { logAccessActivity } from "../lib/accessActivityLog";
 
 export const bookingRouter = Router();
 
@@ -638,26 +639,34 @@ bookingRouter.post(
           : `Réservation non reconnue par "${expectedSource}" (jamais synchronisée ni créée avec succès côté source).`;
       }
     }
+    const roomCode = facilityCodeOverride || booking.facilityCode || booking.selectedRoomCode || null;
+    const guestName = `${booking.personFirstname} ${booking.personLastname}`.trim();
+
     if (simulatedReason || !config) {
+      await logAccessActivity(req, {
+        entityId: entity.id,
+        method: "booking",
+        bookingCode: booking.code,
+        guestName,
+        roomCode,
+        success: false,
+        simulated: true,
+      });
       res.json({ simulated: true, simulatedReason });
       return;
     }
 
     try {
-      await openDoor(
-        config,
-        booking.code,
-        facilityCodeOverride || booking.facilityCode || booking.selectedRoomCode || null,
-        booking.personEmail,
-        booking.personLastname,
-        booking.personFirstname
-      );
+      await openDoor(config, booking.code, roomCode, booking.personEmail, booking.personLastname, booking.personFirstname);
       const updated = await prisma.booking.update({
         where: { id: booking.id },
         data: { doorOpenCount: { increment: 1 }, doorLastOpenedAt: new Date() },
       });
+      await logAccessActivity(req, { entityId: entity.id, method: "booking", bookingCode: booking.code, guestName, roomCode, success: true });
       res.json({ simulated: false, opened: true, doorOpenCount: updated.doorOpenCount });
     } catch (e) {
+      const errorMessage = e instanceof BookingSourceError ? e.message : e instanceof Error ? e.message : "Erreur inconnue";
+      await logAccessActivity(req, { entityId: entity.id, method: "booking", bookingCode: booking.code, guestName, roomCode, success: false, errorMessage });
       if (e instanceof BookingSourceError) throw new HttpError(502, e.message);
       throw e;
     }

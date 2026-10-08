@@ -5,6 +5,7 @@ import { normaliseRoom } from "../lib/normalize";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { openFacilityDirect, BookingSourceError } from "../lib/bookingSource";
+import { logAccessActivity } from "../lib/accessActivityLog";
 
 export const facilityRouter = Router();
 
@@ -227,17 +228,42 @@ facilityRouter.post(
       simulatedReason = "Cet accès n'a pas d'identifiant source connu — relancez l'import des chambres.";
     }
     if (simulatedReason || !config || !room.externalFacilityId) {
+      await logAccessActivity(req, { entityId: entity.id, method: "direct", roomCode: room.code, success: false, simulated: true });
       res.json({ simulated: true, simulatedReason });
       return;
     }
 
     try {
       await openFacilityDirect(config, room.externalFacilityId);
+      await logAccessActivity(req, { entityId: entity.id, method: "direct", roomCode: room.code, success: true });
       res.json({ simulated: false, opened: true });
     } catch (e) {
+      const errorMessage = e instanceof BookingSourceError ? e.message : e instanceof Error ? e.message : "Erreur inconnue";
+      await logAccessActivity(req, { entityId: entity.id, method: "direct", roomCode: room.code, success: false, errorMessage });
       if (e instanceof BookingSourceError) throw new HttpError(502, e.message);
       throw e;
     }
+  })
+);
+
+/**
+ * GET /wa/facility/accessActivityLog?limit=100 — journal des ouvertures
+ * d'accès (panneau "Gestion des Accès", § demande client), les plus
+ * récentes d'abord — cf. lib/accessActivityLog.ts pour ce qui y est tracé
+ * (POST /wa/booking/openDoor et /wa/facility/openDirect ci-dessus).
+ */
+facilityRouter.get(
+  "/facility/accessActivityLog",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 500);
+    const logs = await prisma.accessActivityLog.findMany({
+      where: { entityId: entity.id },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    });
+    res.json(logs);
   })
 );
 

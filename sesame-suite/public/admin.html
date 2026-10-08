@@ -1848,6 +1848,23 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     </div>
   </div>
 
+  <!-- Traçabilité des accès -->
+  <details style="margin-bottom:16px" id="aal-details" open>
+    <summary style="cursor:pointer;font-weight:600;font-size:14px;padding:10px 0;display:flex;align-items:center;gap:8px">
+      <i class="ti ti-history"></i> Traçabilité des accès
+      <button class="chact" style="margin-left:auto" onclick="event.preventDefault();loadAccessActivityLog()"><i class="ti ti-refresh" style="font-size:12px"></i> Actualiser</button>
+    </summary>
+    <div class="ca" style="margin-top:10px">
+      <div class="alt alt-g" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
+        <span>Historique des ouvertures d'accès (porte, casier…), déclenchées par un client (check-in) ou par le personnel — les plus récentes d'abord.</span>
+      </div>
+      <div style="overflow-x:auto"><table class="tbl">
+        <thead><tr><th>Date/heure</th><th>Accès</th><th>Réservation / client</th><th>Déclenché par</th><th>Résultat</th></tr></thead>
+        <tbody id="aal-tbody"><tr><td colspan="5" style="text-align:center;color:var(--mu);padding:16px">Chargement…</td></tr></tbody>
+      </table></div>
+    </div>
+  </details>
+
   <div class="brow"><button class="btn btn-p" onclick="savePan()"><i class="ti ti-device-floppy"></i> Sauvegarder</button></div>
 
   <!-- ════ MODAL CHAMBRE (créer / éditer) ════ -->
@@ -4852,7 +4869,7 @@ function showPan(id){
   if(id==='gains'){renderGains();}
   if(id==='eco'){renderEcoBanner();}
   if(id==='plan'){try{renderPlanCanvas();}catch(e){} try{renderAdminTags();}catch(e){}}
-  if(id==='rooms'){ renderRoomGrid(); fetchStaffList().then(renderRoomGrid); nyInit(); }
+  if(id==='rooms'){ renderRoomGrid(); fetchStaffList().then(renderRoomGrid); nyInit(); loadAccessActivityLog(); }
   if(id==='preview'){try{renderFullPreview();renderPrevSummary();}catch(e){}}
   if(id==='dash'){try{renderDash();}catch(e){}}
   if(id==='reservations'){ loadReservations(); resaStartPolling(); }
@@ -5900,6 +5917,36 @@ async function rmOpenAccess(roomCode){
     toast(data.simulated ? ('Ouverture simulée ✓' + (data.simulatedReason ? ' — ' + data.simulatedReason : '')) : 'Accès ouvert ✓');
   }catch(e){
     toast('Erreur lors de l\'ouverture de l\'accès' + (e && e.message ? ' — ' + e.message : ''));
+  }
+  loadAccessActivityLog();
+}
+
+// ─── Traçabilité des accès (GET /wa/facility/accessActivityLog) — panneau
+// "Gestion des Accès", § demande client : historique des ouvertures
+// déclenchées via /wa/booking/openDoor (fiche réservation, check-in client)
+// et /wa/facility/openDirect (bouton "Ouverture à distance" ci-dessus).
+async function loadAccessActivityLog(){
+  var tbody = document.getElementById('aal-tbody');
+  if(!tbody) return;
+  try{
+    var r = await adminFetch('/wa/facility/accessActivityLog?limit=100');
+    var logs = r.ok ? await r.json() : [];
+    if(!logs.length){ tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--mu);padding:16px">Aucune ouverture enregistrée.</td></tr>'; return; }
+    tbody.innerHTML = logs.map(function(l){
+      var dt = new Date(l.createdAt);
+      var when = dt.toLocaleDateString('fr-FR')+' '+dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+      var who = l.actorType==='staff' ? ('Personnel'+(l.actorLabel?' ('+esc(l.actorLabel)+')':'')) : 'Client';
+      var cible = esc(l.roomCode || '—');
+      var resa = l.bookingCode ? (esc(l.guestName||'')+(l.guestName?' — ':'')+esc(l.bookingCode)) : (l.guestName?esc(l.guestName):'—');
+      var statut = l.simulated
+        ? '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:var(--bdr);color:var(--mu)">Simulée</span>'
+        : l.success
+        ? '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:rgba(26,107,71,.1);color:#1A6B47">Ouverte</span>'
+        : '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:rgba(184,48,48,.1);color:#B83030" title="'+esc(l.errorMessage||'')+'">Échec</span>';
+      return '<tr><td style="white-space:nowrap">'+when+'</td><td>'+cible+'</td><td>'+resa+'</td><td>'+who+'</td><td>'+statut+'</td></tr>';
+    }).join('');
+  }catch(e){
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--mu);padding:16px">Erreur de chargement.</td></tr>';
   }
 }
 

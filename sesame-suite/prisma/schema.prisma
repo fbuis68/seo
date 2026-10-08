@@ -29,6 +29,7 @@ model Entity {
   config              EntityModuleConfig?
   rooms               Room[]
   bookings            Booking[]
+  accessActivityLogs  AccessActivityLog[]
   products            Product[]
   orders              Order[]
   taxeRecords         TaxeSejourRecord[]
@@ -424,6 +425,42 @@ model Booking {
   // lib/bookingEngine.ts) — filtre par roomId à chaque appel, sans index
   // jusqu'ici (table scan). Ajouté suite au test de charge du 16/09/2026.
   @@index([roomId])
+}
+
+// Traçabilité des ouvertures d'accès (panneau "Gestion des Accès", § demande
+// client) — journal en lecture seule de chaque tentative d'ouverture, qu'elle
+// aboutisse réellement ou reste simulée faute d'intégration configurée.
+// Couvre les deux mécanismes d'ouverture existants : POST /wa/booking/openDoor
+// (rattachée à une réservation, cf. lib/bookingSource.ts openDoor) et POST
+// /wa/facility/openDirect (accès de service, sans réservation). bookingCode/
+// guestName/roomCode sont dénormalisés (même logique que AccAuditLog.targetId)
+// plutôt que des relations Prisma vers Booking/Room : ce journal doit rester
+// lisible même après suppression de la réservation ou de la chambre d'origine.
+model AccessActivityLog {
+  id       String @id @default(cuid())
+  entityId String
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  method      String // "booking" (via réservation) | "direct" (accès de service)
+  bookingCode String?
+  guestName   String?
+  roomCode    String?
+
+  // "guest" pour une ouverture déclenchée par le client depuis checkin.html
+  // (sans token admin), "staff" sinon (admin.html / reservations.html,
+  // détecté via req.admin — cf. middleware/attachAdmin). actorLabel = email
+  // de l'agent pour "staff", toujours null pour "guest" (pas d'identité
+  // staff à afficher côté client).
+  actorType  String
+  actorLabel String?
+
+  success      Boolean // ouverture réellement déclenchée côté source externe (false = échec, cf. errorMessage)
+  simulated    Boolean @default(false) // aucun connecteur/endpoint configuré — jamais une vraie ouverture
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+
+  @@index([entityId, createdAt])
 }
 
 // Invité(e) d'une réservation, avec son propre badge/carte d'accès — un
