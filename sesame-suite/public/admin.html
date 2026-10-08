@@ -717,10 +717,6 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     <div class="ns" onclick="toggleNavSection(this)">Accueil<i class="ti ti-chevron-down ns-chevron"></i></div>
     <div class="ns-items">
       <div class="ni on" data-pan="dash" onclick="showPan('dash')"><i class="ti ti-layout-dashboard"></i>Accueil</div>
-      <div class="ni sesame-only" data-pan="hotels" onclick="showPan('hotels')" style="display:none;background:rgba(46,204,113,.06);border-left:3px solid var(--a)"><i class="ti ti-building-skyscraper"></i>Entités <span class="nibadge">Multi</span></div>
-      <div class="ni sesame-only" data-pan="groups" onclick="showPan('groups')" style="display:none"><i class="ti ti-hierarchy-3"></i>Groupes</div>
-      <div class="ni sesame-only" data-pan="subscriptions" onclick="showPan('subscriptions')" style="display:none"><i class="ti ti-rocket"></i>Souscriptions</div>
-      <div class="ni hotel-only" data-pan="users" onclick="showPan('users')" style="display:none"><i class="ti ti-users"></i>Utilisateurs</div>
     </div>
   </div>
   <div class="ns-group">
@@ -730,19 +726,9 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     </div>
   </div>
   <div class="ns-group">
-    <div class="ns" onclick="toggleNavSection(this)">Identité &amp; Charte<i class="ti ti-chevron-down ns-chevron"></i></div>
+    <div class="ns" onclick="toggleNavSection(this)">Commandes<i class="ti ti-chevron-down ns-chevron"></i></div>
     <div class="ns-items">
-      <div class="ni" data-pan="charte" onclick="showPan('charte')"><i class="ti ti-palette"></i>Logo &amp; Couleurs</div>
-      <div class="ni" data-pan="typo" onclick="showPan('typo')"><i class="ti ti-typography"></i>Typographie &amp; Textes</div>
-    </div>
-  </div>
-  <div class="ns-group sector-hotel-only">
-    <div class="ns" onclick="toggleNavSection(this)">Module Éco-Séjour<i class="ti ti-chevron-down ns-chevron"></i></div>
-    <div class="ns-items">
-      <div class="ni" data-pan="hotel" onclick="showPan('hotel')"><i class="ti ti-building"></i>Entité &amp; Catégorie</div>
-      <div class="ni" data-pan="tarifs" onclick="showPan('tarifs')"><i class="ti ti-receipt"></i>Barèmes taxe</div>
-      <div class="ni" data-pan="gains" onclick="showPan('gains')"><i class="ti ti-gift"></i>Gains <span class="nibadge">Multi</span></div>
-      <div class="ni" data-pan="eco" onclick="showPan('eco')"><i class="ti ti-leaf"></i>Paramètres éco</div>
+      <div class="ni" data-pan="orders" onclick="showPan('orders')"><i class="ti ti-clipboard-list"></i>Commandes <span class="nibadge" id="ordersBadge" style="display:none">0</span></div>
     </div>
   </div>
   <div class="ns-group">
@@ -753,16 +739,6 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       <div class="ni" data-pan="questionnaires" onclick="showPan('questionnaires')"><i class="ti ti-clipboard-text"></i>Questionnaires</div>
     </div>
   </div>
-  <div class="ns-group">
-    <div class="ns" onclick="toggleNavSection(this)">Boutique<i class="ti ti-chevron-down ns-chevron"></i></div>
-    <div class="ns-items">
-      <div class="ni" data-pan="roomservice" onclick="showPan('roomservice')"><i class="ti ti-bell"></i>Catalogue produits</div>
-      <div class="ni" data-pan="orders" onclick="showPan('orders')"><i class="ti ti-clipboard-list"></i>Commandes <span class="nibadge" id="ordersBadge" style="display:none">0</span></div>
-      <div class="ni" data-pan="payment" onclick="showPan('payment')"><i class="ti ti-credit-card"></i>Paiement en ligne</div>
-      <div class="ni" data-pan="vendors" onclick="showPan('vendors')"><i class="ti ti-building-store"></i>Points de vente</div>
-      <div class="ni" data-pan="livret" onclick="showPan('livret')"><i class="ti ti-book"></i>Livret digital</div>
-    </div>
-  </div>
   <div class="ns-group sector-hotel-only">
     <div class="ns" onclick="toggleNavSection(this)">Planning<i class="ti ti-chevron-down ns-chevron"></i></div>
     <div class="ns-items">
@@ -770,15 +746,36 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     </div>
   </div>
   <div class="ns-group">
-    <div class="ns" onclick="toggleNavSection(this)">Plan &amp; Chambres<i class="ti ti-chevron-down ns-chevron"></i></div>
+    <div class="ns" onclick="toggleNavSection(this)">Gestion des Accès<i class="ti ti-chevron-down ns-chevron"></i></div>
     <div class="ns-items">
-      <div class="ni" data-pan="plan" onclick="showPan('plan')"><i class="ti ti-map"></i>Plan de l'établissement</div>
       <div class="ni" data-pan="rooms" onclick="showPan('rooms')"><i class="ti ti-door"></i>Gestion des Accès</div>
     </div>
   </div>
+  <!-- Tout le reste des menus (jusqu'ici répartis en plusieurs rubriques) est
+       regroupé ici, § demande client — seuls Accueil/Réservations/Commandes/
+       Clients/Planning/Gestion des Accès restent au premier niveau. Les
+       classes sesame-only/hotel-only/sector-hotel-only (gérées par
+       applyRoleVisibility/applySectorVisibility, portée sur n'importe quel
+       élément via querySelectorAll) sont reportées au niveau de chaque item
+       plutôt que du groupe, qui lui doit toujours rester visible. -->
   <div class="ns-group">
-    <div class="ns" onclick="toggleNavSection(this)">Intégration<i class="ti ti-chevron-down ns-chevron"></i></div>
+    <div class="ns" onclick="toggleNavSection(this)">Administration<i class="ti ti-chevron-down ns-chevron"></i></div>
     <div class="ns-items">
+      <div class="ni sesame-only" data-pan="hotels" onclick="showPan('hotels')" style="display:none;background:rgba(46,204,113,.06);border-left:3px solid var(--a)"><i class="ti ti-building-skyscraper"></i>Entités <span class="nibadge">Multi</span></div>
+      <div class="ni sesame-only" data-pan="groups" onclick="showPan('groups')" style="display:none"><i class="ti ti-hierarchy-3"></i>Groupes</div>
+      <div class="ni sesame-only" data-pan="subscriptions" onclick="showPan('subscriptions')" style="display:none"><i class="ti ti-rocket"></i>Souscriptions</div>
+      <div class="ni hotel-only" data-pan="users" onclick="showPan('users')" style="display:none"><i class="ti ti-users"></i>Utilisateurs</div>
+      <div class="ni" data-pan="charte" onclick="showPan('charte')"><i class="ti ti-palette"></i>Logo &amp; Couleurs</div>
+      <div class="ni" data-pan="typo" onclick="showPan('typo')"><i class="ti ti-typography"></i>Typographie &amp; Textes</div>
+      <div class="ni sector-hotel-only" data-pan="hotel" onclick="showPan('hotel')"><i class="ti ti-building"></i>Entité &amp; Catégorie</div>
+      <div class="ni sector-hotel-only" data-pan="tarifs" onclick="showPan('tarifs')"><i class="ti ti-receipt"></i>Barèmes taxe</div>
+      <div class="ni sector-hotel-only" data-pan="gains" onclick="showPan('gains')"><i class="ti ti-gift"></i>Gains <span class="nibadge">Multi</span></div>
+      <div class="ni sector-hotel-only" data-pan="eco" onclick="showPan('eco')"><i class="ti ti-leaf"></i>Paramètres éco</div>
+      <div class="ni" data-pan="roomservice" onclick="showPan('roomservice')"><i class="ti ti-bell"></i>Catalogue produits</div>
+      <div class="ni" data-pan="payment" onclick="showPan('payment')"><i class="ti ti-credit-card"></i>Paiement en ligne</div>
+      <div class="ni" data-pan="vendors" onclick="showPan('vendors')"><i class="ti ti-building-store"></i>Points de vente</div>
+      <div class="ni" data-pan="livret" onclick="showPan('livret')"><i class="ti ti-book"></i>Livret digital</div>
+      <div class="ni" data-pan="plan" onclick="showPan('plan')"><i class="ti ti-map"></i>Plan de l'établissement</div>
       <div class="ni" data-pan="api" onclick="showPan('api')"><i class="ti ti-api"></i>Intégration réservations</div>
       <div class="ni" data-pan="wallet" onclick="showPan('wallet')"><i class="ti ti-wallet"></i>Wallet</div>
       <div class="ni" data-pan="bookingEngine" onclick="showPan('bookingEngine')"><i class="ti ti-calendar-plus"></i>Réservation en ligne</div>
