@@ -2005,6 +2005,18 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
           <div style="font-size:11px;color:var(--mu);margin-top:3px">À imprimer et afficher sur/près du lecteur — le client le scanne pour ouvrir sa page de réservation. L'identifiant du lecteur ci-dessus doit correspondre au terminalId envoyé par Nayax dans son webhook (cf. réglages du connecteur Nayax ci-dessous).</div>
         </div>
 
+        <!-- Historique des ouvertures — § demande client, traçabilité accès
+             par accès plutôt que seule la liste globale en bas du panneau.
+             Masqué à la création (aucun historique possible avant la
+             première sauvegarde) — cf. rmOpenEdit/rmOpenCreate. -->
+        <div id="rm-history-wrap" style="display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--bdr)">
+          <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">Historique des ouvertures</div>
+          <div style="overflow-x:auto"><table class="tbl">
+            <thead><tr><th>Date/heure</th><th>Réservation / client</th><th>Déclenché par</th><th>Résultat</th></tr></thead>
+            <tbody id="rm-history-tbody"><tr><td colspan="4" style="text-align:center;color:var(--mu);padding:12px">Chargement…</td></tr></tbody>
+          </table></div>
+        </div>
+
         <!-- Actions du modal -->
         <div style="display:flex;gap:8px;margin-top:20px;padding-top:14px;border-top:1px solid var(--bdr)">
           <button class="btn btn-p" onclick="rmSaveRoom()" style="flex:1"><i class="ti ti-check"></i> Enregistrer</button>
@@ -5922,6 +5934,24 @@ async function rmOpenAccess(roomCode){
 // "Gestion des Accès", § demande client : historique des ouvertures
 // déclenchées via /wa/booking/openDoor (fiche réservation, check-in client)
 // et /wa/facility/openDirect (bouton "Ouverture à distance" ci-dessus).
+// showRoomCol=true pour la liste globale (panneau "Gestion des Accès",
+// colonne "Accès") ; false pour l'historique d'un seul accès (modal
+// d'édition d'une chambre, cf. loadRoomAccessHistory) — colonne redondante
+// puisque déjà filtrée sur ce seul accès.
+function accessActivityLogRowHtml(l, showRoomCol){
+  var dt = new Date(l.createdAt);
+  var when = dt.toLocaleDateString('fr-FR')+' '+dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+  var who = l.actorType==='staff' ? ('Personnel'+(l.actorLabel?' ('+esc(l.actorLabel)+')':'')) : 'Client';
+  var resa = l.bookingCode ? (esc(l.guestName||'')+(l.guestName?' — ':'')+esc(l.bookingCode)) : (l.guestName?esc(l.guestName):'—');
+  var statut = l.simulated
+    ? '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:var(--bdr);color:var(--mu)">Simulée</span>'
+    : l.success
+    ? '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:rgba(26,107,71,.1);color:#1A6B47">Ouverte</span>'
+    : '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:rgba(184,48,48,.1);color:#B83030" title="'+esc(l.errorMessage||'')+'">Échec</span>';
+  var cibleTd = showRoomCol ? ('<td>'+esc(l.roomCode || '—')+'</td>') : '';
+  return '<tr><td style="white-space:nowrap">'+when+'</td>'+cibleTd+'<td>'+resa+'</td><td>'+who+'</td><td>'+statut+'</td></tr>';
+}
+
 async function loadAccessActivityLog(){
   var tbody = document.getElementById('aal-tbody');
   if(!tbody) return;
@@ -5929,21 +5959,25 @@ async function loadAccessActivityLog(){
     var r = await adminFetch('/wa/facility/accessActivityLog?limit=100');
     var logs = r.ok ? await r.json() : [];
     if(!logs.length){ tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--mu);padding:16px">Aucune ouverture enregistrée.</td></tr>'; return; }
-    tbody.innerHTML = logs.map(function(l){
-      var dt = new Date(l.createdAt);
-      var when = dt.toLocaleDateString('fr-FR')+' '+dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
-      var who = l.actorType==='staff' ? ('Personnel'+(l.actorLabel?' ('+esc(l.actorLabel)+')':'')) : 'Client';
-      var cible = esc(l.roomCode || '—');
-      var resa = l.bookingCode ? (esc(l.guestName||'')+(l.guestName?' — ':'')+esc(l.bookingCode)) : (l.guestName?esc(l.guestName):'—');
-      var statut = l.simulated
-        ? '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:var(--bdr);color:var(--mu)">Simulée</span>'
-        : l.success
-        ? '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:rgba(26,107,71,.1);color:#1A6B47">Ouverte</span>'
-        : '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:rgba(184,48,48,.1);color:#B83030" title="'+esc(l.errorMessage||'')+'">Échec</span>';
-      return '<tr><td style="white-space:nowrap">'+when+'</td><td>'+cible+'</td><td>'+resa+'</td><td>'+who+'</td><td>'+statut+'</td></tr>';
-    }).join('');
+    tbody.innerHTML = logs.map(function(l){ return accessActivityLogRowHtml(l, true); }).join('');
   }catch(e){
     tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--mu);padding:16px">Erreur de chargement.</td></tr>';
+  }
+}
+
+// Historique d'un seul accès (modal d'édition d'une chambre) — § demande
+// client "accès par accès" (ex : dates/heures d'ouverture de la chambre 101).
+async function loadRoomAccessHistory(code){
+  var tbody = document.getElementById('rm-history-tbody');
+  if(!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--mu);padding:12px">Chargement…</td></tr>';
+  try{
+    var r = await adminFetch('/wa/facility/accessActivityLog?limit=200&roomCode='+encodeURIComponent(code));
+    var logs = r.ok ? await r.json() : [];
+    if(!logs.length){ tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--mu);padding:12px">Aucune ouverture enregistrée pour cet accès.</td></tr>'; return; }
+    tbody.innerHTML = logs.map(function(l){ return accessActivityLogRowHtml(l, false); }).join('');
+  }catch(e){
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--mu);padding:12px">Erreur de chargement.</td></tr>';
   }
 }
 
@@ -6074,6 +6108,7 @@ function rmOpenCreate(){
   document.getElementById('rm-deviceId').value = '';
   document.getElementById('rmDeleteBtn').style.display='none';
   document.getElementById('rm-currency-sym').textContent = getCurrSym();
+  document.getElementById('rm-history-wrap').style.display = 'none';
   rmRenderTags();
   rmRenderPhotos();
   rmRenderPresetTags();
@@ -6109,6 +6144,8 @@ function rmOpenEdit(code){
   document.getElementById('rm-deviceId').value = r.deviceId||'';
   document.getElementById('rmDeleteBtn').style.display='';
   document.getElementById('rm-currency-sym').textContent = getCurrSym();
+  document.getElementById('rm-history-wrap').style.display = '';
+  loadRoomAccessHistory(code);
   rmRenderTags();
   rmRenderPhotos();
   rmRenderPresetTags();
