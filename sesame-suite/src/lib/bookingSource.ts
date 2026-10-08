@@ -380,56 +380,90 @@ async function fetchExternalList(
   const url = normalizeBaseUrl(config.baseUrl).replace(/\/$/, "") + (endpointPath || "");
   const { headers: authHeaders, resultFilterValue, resultEntityField } = await buildAuthHeaders(config);
   const isPost = (method || "GET").toUpperCase() === "POST";
-  const params: Record<string, unknown> = bodyParams && typeof bodyParams === "object" ? (bodyParams as Record<string, unknown>) : {};
-  let res: Response;
-  try {
-    if (isPost && (bodyFormat || "form") === "json") {
-      res = await fetchWithTimeout(url, {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          "User-Agent": "SesameSuite-BookingConnector/1.0",
-          ...authHeaders,
-        },
-        body: JSON.stringify(params),
-      });
-    } else if (isPost) {
-      const form = new URLSearchParams();
-      for (const [k, v] of Object.entries(params)) form.set(k, String(v));
-      res = await fetchWithTimeout(url, {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/x-www-form-urlencoded",
-          "User-Agent": "SesameSuite-BookingConnector/1.0",
-          ...authHeaders,
-        },
-        body: form.toString(),
-      });
-    } else {
-      res = await fetchWithTimeout(url, { headers: { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...authHeaders } });
+  const baseParams: Record<string, unknown> = bodyParams && typeof bodyParams === "object" ? (bodyParams as Record<string, unknown>) : {};
+
+  /** Un seul appel HTTP, pour les `params` d'UNE page. */
+  async function fetchOnePage(params: Record<string, unknown>): Promise<unknown[]> {
+    let res: Response;
+    try {
+      if (isPost && (bodyFormat || "form") === "json") {
+        res = await fetchWithTimeout(url, {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "SesameSuite-BookingConnector/1.0",
+            ...authHeaders,
+          },
+          body: JSON.stringify(params),
+        });
+      } else if (isPost) {
+        const form = new URLSearchParams();
+        for (const [k, v] of Object.entries(params)) form.set(k, String(v));
+        res = await fetchWithTimeout(url, {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "SesameSuite-BookingConnector/1.0",
+            ...authHeaders,
+          },
+          body: form.toString(),
+        });
+      } else {
+        res = await fetchWithTimeout(url, { headers: { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...authHeaders } });
+      }
+    } catch (e) {
+      throw new BookingSourceError(`Connexion impossible : ${describeFetchError(e)}`);
     }
-  } catch (e) {
-    throw new BookingSourceError(`Connexion impossible : ${describeFetchError(e)}`);
+    if (!res.ok) throw new BookingSourceError(`Le serveur distant a répondu ${res.status} ${res.statusText}`);
+
+    const body = await parseJsonResponse(res, "La réponse");
+
+    const list = responseListPath ? getPath(body, responseListPath) : body;
+    if (!Array.isArray(list)) {
+      // Inclut un extrait de la réponse reçue (comme pour l'erreur "pas un JSON
+      // valide") — sans ça, un chemin correct sur le papier mais qui échoue en
+      // pratique (forme de réponse différente selon les paramètres envoyés,
+      // erreur applicative renvoyée avec un statut 200...) est impossible à
+      // diagnostiquer depuis ce seul message.
+      const snippet = JSON.stringify(body).slice(0, 300);
+      throw new BookingSourceError(
+        (responseListPath
+          ? `Le chemin "${responseListPath}" ne pointe pas vers un tableau`
+          : `La réponse n'est pas un tableau — précisez le chemin vers la liste des ${what}`) + ` — réponse reçue : "${snippet}"`
+      );
+    }
+    return list;
   }
-  if (!res.ok) throw new BookingSourceError(`Le serveur distant a répondu ${res.status} ${res.statusText}`);
 
-  const body = await parseJsonResponse(res, "La réponse");
-
-  const list = responseListPath ? getPath(body, responseListPath) : body;
-  if (!Array.isArray(list)) {
-    // Inclut un extrait de la réponse reçue (comme pour l'erreur "pas un JSON
-    // valide") — sans ça, un chemin correct sur le papier mais qui échoue en
-    // pratique (forme de réponse différente selon les paramètres envoyés,
-    // erreur applicative renvoyée avec un statut 200...) est impossible à
-    // diagnostiquer depuis ce seul message.
-    const snippet = JSON.stringify(body).slice(0, 300);
-    throw new BookingSourceError(
-      (responseListPath
-        ? `Le chemin "${responseListPath}" ne pointe pas vers un tableau`
-        : `La réponse n'est pas un tableau — précisez le chemin vers la liste des ${what}`) + ` — réponse reçue : "${snippet}"`
-    );
+  // Pagination générique start/limit — § bug confirmé le 08/10/2026 : un
+  // seul appel figé sur les bodyParams configurés (ex : modèle "Sesame
+  // Technology", start=0&limit=30) ne remontait QUE la première page de
+  // l'API externe ; une réservation modifiée au-delà de cette page n'était
+  // alors plus jamais réimportée par la synchronisation automatique, même
+  // après des dizaines de cycles du planificateur (qui tournait pourtant
+  // normalement — le bug était silencieux, aucune erreur ne remontait). La
+  // boucle ne s'active QUE si ces deux clés précises ("start"/"limit") sont
+  // présentes dans bodyParams (convention Sesame Technology, posée par son
+  // modèle de connecteur) et que la méthode est POST — comportement
+  // inchangé (un seul appel) pour tout connecteur sans cette convention
+  // (ex : Mews, un seul appel global sans pagination).
+  const pageSize = isPost ? Number(baseParams.limit) : NaN;
+  let list: unknown[];
+  if (isPost && "start" in baseParams && "limit" in baseParams && pageSize > 0) {
+    const all: unknown[] = [];
+    let start = Number(baseParams.start) || 0;
+    const MAX_PAGES = 500; // garde-fou anti-boucle infinie si l'API ignore "limit"
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const pageItems = await fetchOnePage({ ...baseParams, start: String(start), limit: String(pageSize) });
+      all.push(...pageItems);
+      if (pageItems.length < pageSize) break; // dernière page (moins d'éléments que demandé)
+      start += pageSize;
+    }
+    list = all;
+  } else {
+    list = await fetchOnePage(baseParams);
   }
 
   // Filtre de sécurité anti-fuite inter-établissements — ACTIVÉ PAR DÉFAUT
