@@ -480,6 +480,7 @@
 
       <p class="hint" id="cpf-loading-hint" style="display:none"><span class="spinner" style="display:inline-block; vertical-align:middle; margin-right:6px;"></span>Chargement des dossiers CPF (peut prendre du temps sur un historique important)…</p>
       <p class="hint" id="cpf-error-hint" style="display:none; color:var(--critical)"></p>
+      <p class="hint" id="cpf-skipped-hint" style="display:none; color:var(--warning)"></p>
       <p class="hint" id="cpf-empty-hint" style="display:none">Aucun dossier CPF détecté (payeur « Caisse des Dépôts et Consignations » introuvable dans les données de cette entité).</p>
 
       <div id="cpf-content">
@@ -1829,12 +1830,14 @@ const CPF_CONCURRENCY = 6;
 let CPF_ROWS = [];
 let CPF_LOAD_STATE = 'idle'; // idle | loading | error | ready
 let CPF_LOADED_YEAR = null; // année (nombre) ou 'all' déjà chargée, pour éviter un rechargement inutile
+let CPF_SKIPPED = []; // dossiers dont le chargement a echoue individuellement (ignores, pas fatals)
 
 async function loadCpfLive(customers, convById, invoices, year) {
   if (CPF_LOAD_STATE === 'loading') return;
   if (CPF_LOAD_STATE === 'ready' && CPF_LOADED_YEAR === year) return;
   CPF_LOAD_STATE = 'loading';
   CPF_LOADED_YEAR = year;
+  CPF_SKIPPED = [];
   setCpfHint('loading');
   try {
     const cpfConvIds = findCpfConventionIds(customers, invoices, year);
@@ -1842,14 +1845,27 @@ async function loadCpfLive(customers, convById, invoices, year) {
     for (let i = 0; i < cpfConvIds.length; i += CPF_CONCURRENCY) {
       const batch = cpfConvIds.slice(i, i + CPF_CONCURRENCY);
       const batchResults = await Promise.all(
-        batch.map((convId) => fetchConventionTimetable(convId).then((r) => aggregateCpfDossier(convId, r, convById)))
+        batch.map((convId) => fetchConventionTimetable(convId)
+          .then((r) => aggregateCpfDossier(convId, r, convById))
+          .catch((err) => {
+            console.warn('CPF Sous-traitance : dossier ignoré', convId, err);
+            CPF_SKIPPED.push(convId);
+            return null;
+          }))
       );
-      rows.push(...batchResults);
+      rows.push(...batchResults.filter((r) => r !== null));
       setCpfHint('loading', null, Math.min(i + CPF_CONCURRENCY, cpfConvIds.length), cpfConvIds.length);
     }
     CPF_ROWS = rows;
     CPF_LOAD_STATE = 'ready';
     renderCpfLive();
+    const skippedHint = document.getElementById('cpf-skipped-hint');
+    if (CPF_SKIPPED.length > 0) {
+      skippedHint.style.display = 'block';
+      skippedHint.textContent = `${CPF_SKIPPED.length} dossier(s) n'ont pas pu être chargés et sont absents du tableau ci-dessous : ${CPF_SKIPPED.join(', ')}.`;
+    } else {
+      skippedHint.style.display = 'none';
+    }
   } catch (err) {
     CPF_LOAD_STATE = 'error';
     const msg = err && err.message === 'AUTH'
@@ -1862,6 +1878,7 @@ async function loadCpfLive(customers, convById, invoices, year) {
 function setCpfHint(state, errorMsg, done, total) {
   const loadingHint = document.getElementById('cpf-loading-hint');
   loadingHint.style.display = state === 'loading' ? 'block' : 'none';
+  if (state === 'loading') document.getElementById('cpf-skipped-hint').style.display = 'none';
   if (state === 'loading') {
     loadingHint.innerHTML = total
       ? `<span class="spinner" style="display:inline-block; vertical-align:middle; margin-right:6px;"></span>Chargement des dossiers CPF… (${done}/${total})`
