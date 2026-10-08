@@ -184,7 +184,7 @@ accountingRouter.get(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const entityId = await resolveScope(req);
-    const { status, direction, supplierId, q, unpaid, dueDateFrom, dueDateTo, includeNonAccounting } = req.query as Record<string, string | undefined>;
+    const { status, direction, supplierId, q, unpaid, dueDateFrom, dueDateTo, includeNonAccounting, includeNoDueDate, dueDateIsNull } = req.query as Record<string, string | undefined>;
     const limit = Math.min(200, Number(req.query.limit) || 50);
     const offset = Number(req.query.offset) || 0;
 
@@ -212,11 +212,24 @@ accountingRouter.get(
     // manuelle "réglée", jamais autrement — pas de comparaison montant/
     // montant à refaire ici.
     if (unpaid === "true") where.status = { in: ["VALIDATED", "ACCOUNTED", "PARTIALLY_PAID"] };
-    if (dueDateFrom || dueDateTo) {
-      where.dueDate = {
+    if (dueDateIsNull === "true") {
+      where.dueDate = null;
+    } else if (dueDateFrom || dueDateTo) {
+      const range = {
         ...(dueDateFrom ? { gte: new Date(dueDateFrom) } : {}),
         ...(dueDateTo ? { lte: new Date(dueDateTo) } : {}),
       };
+      // includeNoDueDate=true (Trésorerie, liste "à venir") : une facture
+      // sans échéance renseignée ne doit pas disparaître d'une plage de
+      // dates simplement parce qu'elle n'a pas de date à comparer — sinon
+      // elle manque silencieusement partout (bug constaté 08/10/2026).
+      // Combiné via AND (pas OR, déjà utilisé par ?q= ci-dessus) pour ne
+      // jamais écraser un autre filtre OR éventuel.
+      if (includeNoDueDate === "true") {
+        where.AND = [...(Array.isArray(where.AND) ? (where.AND as unknown[]) : []), { OR: [{ dueDate: range }, { dueDate: null }] }];
+      } else {
+        where.dueDate = range;
+      }
     }
 
     const [rows, total] = await Promise.all([

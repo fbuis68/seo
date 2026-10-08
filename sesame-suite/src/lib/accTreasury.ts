@@ -154,18 +154,28 @@ export async function computeTreasuryOverview(
 
   let dettesRetardCount = 0, dettesRetardTotal = 0;
   let creancesRetardCount = 0, creancesRetardTotal = 0;
+  // Facture non payée mais sans date d'échéance renseignée (extraction
+  // imparfaite, ou champ jamais rempli) : NE DOIT PAS disparaître
+  // silencieusement du radar simplement parce qu'elle ne peut pas être
+  // placée sur le calendrier (bug constaté 08/10/2026 — "il manque des
+  // factures" dans la liste "à venir") — isolée ici comme les retards,
+  // plutôt qu'ignorée.
+  let dettesSansEcheanceCount = 0, dettesSansEcheanceTotal = 0;
+  let creancesSansEcheanceCount = 0, creancesSansEcheanceTotal = 0;
   const futurePurchase: { dueDate: Date; amount: number }[] = [];
   const futureSale: { dueDate: Date; amount: number }[] = [];
 
   for (const inv of purchaseInvoices) {
     const remaining = remainingDue(inv);
-    if (remaining <= 0.01 || !inv.dueDate) continue;
+    if (remaining <= 0.01) continue;
+    if (!inv.dueDate) { dettesSansEcheanceCount++; dettesSansEcheanceTotal += remaining; continue; }
     if (inv.dueDate < today) { dettesRetardCount++; dettesRetardTotal += remaining; }
     else futurePurchase.push({ dueDate: inv.dueDate, amount: remaining });
   }
   for (const inv of saleInvoices) {
     const remaining = remainingDue(inv);
-    if (remaining <= 0.01 || !inv.dueDate) continue;
+    if (remaining <= 0.01) continue;
+    if (!inv.dueDate) { creancesSansEcheanceCount++; creancesSansEcheanceTotal += remaining; continue; }
     if (inv.dueDate < today) { creancesRetardCount++; creancesRetardTotal += remaining; }
     else futureSale.push({ dueDate: inv.dueDate, amount: remaining });
   }
@@ -226,5 +236,7 @@ export async function computeTreasuryOverview(
     plusBasSolde,
     dettesRetard: { count: dettesRetardCount, total: dettesRetardTotal },
     creancesRetard: { count: creancesRetardCount, total: creancesRetardTotal },
+    dettesSansEcheance: { count: dettesSansEcheanceCount, total: dettesSansEcheanceTotal },
+    creancesSansEcheance: { count: creancesSansEcheanceCount, total: creancesSansEcheanceTotal },
   };
 }

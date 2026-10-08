@@ -4421,10 +4421,19 @@ async function loadTreasuryLists(){
   const horizonEnd = new Date(today.getTime() + horizonDays*24*60*60*1000);
   const toISO = d => d.toISOString().slice(0,10);
 
-  async function fetchRows(direction, dueDateFrom, dueDateTo){
+  async function fetchRows(direction, dueDateFrom, dueDateTo, opts){
+    opts = opts||{};
     const params = new URLSearchParams({ scope:'crm', direction, limit:'100', status:'' });
-    if(dueDateFrom) params.set('dueDateFrom', dueDateFrom);
-    if(dueDateTo) params.set('dueDateTo', dueDateTo);
+    if(opts.dueDateIsNull){ params.set('dueDateIsNull', 'true'); }
+    else {
+      if(dueDateFrom) params.set('dueDateFrom', dueDateFrom);
+      if(dueDateTo) params.set('dueDateTo', dueDateTo);
+      // Une facture sans échéance renseignée ne doit pas disparaître
+      // silencieusement de la liste "à venir" simplement parce qu'elle n'a
+      // pas de date à comparer (bug constaté 08/10/2026) — mélangée ici
+      // avec échéance affichée "Non définie" (cf. trInvoiceRowHtml).
+      if(dueDateFrom || dueDateTo) params.set('includeNoDueDate', 'true');
+    }
     try{
       const r = await apiFetch('/wa/acc/invoices?'+params.toString());
       const data = r.ok ? await r.json() : {rows:[]};
@@ -4437,6 +4446,12 @@ async function loadTreasuryLists(){
     TR2_PURCHASE_ROWS = [];
   } else if(TR2_LIST_MODE==='overdue-purchase'){
     TR2_PURCHASE_ROWS = await fetchRows('purchase', '', toISO(today));
+    TR2_SALE_ROWS = [];
+  } else if(TR2_LIST_MODE==='nodue-sale'){
+    TR2_SALE_ROWS = await fetchRows('sale', null, null, {dueDateIsNull:true});
+    TR2_PURCHASE_ROWS = [];
+  } else if(TR2_LIST_MODE==='nodue-purchase'){
+    TR2_PURCHASE_ROWS = await fetchRows('purchase', null, null, {dueDateIsNull:true});
     TR2_SALE_ROWS = [];
   } else {
     [TR2_PURCHASE_ROWS, TR2_SALE_ROWS] = await Promise.all([
@@ -4517,8 +4532,8 @@ function renderTreasuryOverview(){
 
   const purchaseRows = TR2_PURCHASE_ROWS.map(inv=>trInvoiceRowHtml(inv)).join('');
   const saleRows = TR2_SALE_ROWS.map(inv=>trInvoiceRowHtml(inv)).join('');
-  const listTitlePurchase = TR2_LIST_MODE==='overdue-purchase' ? 'Dettes en retard' : 'Décaissements à venir';
-  const listTitleSale = TR2_LIST_MODE==='overdue-sale' ? 'Créances en retard' : 'Encaissements à venir';
+  const listTitlePurchase = TR2_LIST_MODE==='overdue-purchase' ? 'Dettes en retard' : TR2_LIST_MODE==='nodue-purchase' ? 'Dettes sans échéance' : 'Décaissements à venir';
+  const listTitleSale = TR2_LIST_MODE==='overdue-sale' ? 'Créances en retard' : TR2_LIST_MODE==='nodue-sale' ? 'Créances sans échéance' : 'Encaissements à venir';
 
   const pipelineAvailable = TR2_GRANULARITY==='month';
   const display = trBucketsWithPipelineOverlay(ov.buckets);
@@ -4541,6 +4556,8 @@ function renderTreasuryOverview(){
         <div class="stat-card"><div class="stat-lbl">Plus bas solde projeté</div><div class="stat-val" style="${plusBasSolde&&plusBasSolde.amount<0?'color:#a32d2d':''}">${plusBasSolde?fmtEUR(plusBasSolde.amount):'—'}</div><div style="font-size:11px;color:var(--mu)">${plusBasSolde?('au '+new Date(plusBasSolde.date).toLocaleDateString('fr-FR')):''}</div></div>
         <div class="stat-card" style="cursor:pointer;${TR2_LIST_MODE==='overdue-sale'?'outline:2px solid var(--a)':''}" onclick="trFilterOverdueMode('overdue-sale')"><div class="stat-lbl">Créances en retard</div><div class="stat-val" style="${ov.creancesRetard.total>0?'color:#a32d2d':''}">${fmtEUR(ov.creancesRetard.total)}</div><div style="font-size:11px;color:var(--mu)">${ov.creancesRetard.count} facture(s)</div></div>
         <div class="stat-card" style="cursor:pointer;${TR2_LIST_MODE==='overdue-purchase'?'outline:2px solid var(--a)':''}" onclick="trFilterOverdueMode('overdue-purchase')"><div class="stat-lbl">Dettes en retard</div><div class="stat-val" style="${ov.dettesRetard.total>0?'color:#a32d2d':''}">${fmtEUR(ov.dettesRetard.total)}</div><div style="font-size:11px;color:var(--mu)">${ov.dettesRetard.count} facture(s)</div></div>
+        <div class="stat-card" style="cursor:pointer;${TR2_LIST_MODE==='nodue-sale'?'outline:2px solid var(--a)':''}" onclick="trFilterOverdueMode('nodue-sale')" title="Factures clients non payées sans date d'échéance renseignée — exclues du graphique et des totaux ci-dessous faute de date à placer sur le calendrier"><div class="stat-lbl">Créances sans échéance</div><div class="stat-val" style="${ov.creancesSansEcheance.total>0?'color:#b8791f':''}">${fmtEUR(ov.creancesSansEcheance.total)}</div><div style="font-size:11px;color:var(--mu)">${ov.creancesSansEcheance.count} facture(s)</div></div>
+        <div class="stat-card" style="cursor:pointer;${TR2_LIST_MODE==='nodue-purchase'?'outline:2px solid var(--a)':''}" onclick="trFilterOverdueMode('nodue-purchase')" title="Factures fournisseurs non payées sans date d'échéance renseignée — exclues du graphique et des totaux ci-dessous faute de date à placer sur le calendrier"><div class="stat-lbl">Dettes sans échéance</div><div class="stat-val" style="${ov.dettesSansEcheance.total>0?'color:#b8791f':''}">${fmtEUR(ov.dettesSansEcheance.total)}</div><div style="font-size:11px;color:var(--mu)">${ov.dettesSansEcheance.count} facture(s)</div></div>
       </div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <div class="tr-chart-title" style="margin-bottom:0">Courbe de trésorerie prévisionnelle</div>
@@ -4587,7 +4604,7 @@ function trInvoiceRowHtml(inv){
     <td>${esc(accInvoiceTiersName(inv)||'—')}</td>
     <td>${ACC_DOCTYPE_LABEL[inv.documentType]||inv.documentType||'—'}</td>
     <td style="text-align:right;font-family:monospace">${fmtEUR2(remaining)}</td>
-    <td>${inv.dueDate?new Date(inv.dueDate).toLocaleDateString('fr-FR'):'—'}${overdue?' <span class="tag t-red" style="font-size:9px;padding:1px 5px">RETARD</span>':''}</td>
+    <td>${inv.dueDate?new Date(inv.dueDate).toLocaleDateString('fr-FR'):'<span style="color:#b8791f">Non définie</span>'}${overdue?' <span class="tag t-red" style="font-size:9px;padding:1px 5px">RETARD</span>':''}</td>
   </tr>`;
 }
 
