@@ -806,11 +806,20 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       <a class="chact" href="/reservations.html" target="_blank" rel="noopener"><i class="ti ti-device-mobile" style="font-size:12px"></i> Version mobile</a>
       <button class="chact" onclick="resaOpenCreate()"><i class="ti ti-plus" style="font-size:12px"></i> Créer une réservation</button>
     </div>
-    <div id="resa-tabs" style="display:flex;gap:3px;background:var(--bdr);border-radius:var(--rs);padding:3px;width:fit-content;margin-bottom:10px">
-      <div class="ptab" data-filter="all" onclick="resaSetTab('all')">Toutes</div>
-      <div class="ptab" data-filter="arriving" onclick="resaSetTab('arriving')">En arrivées</div>
-      <div class="ptab on" data-filter="inhouse" onclick="resaSetTab('inhouse')">En cours</div>
-      <div class="ptab" data-filter="checkedout" onclick="resaSetTab('checkedout')">Check-out</div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <div id="resa-tabs" style="display:flex;gap:3px;background:var(--bdr);border-radius:var(--rs);padding:3px;width:fit-content">
+        <div class="ptab" data-filter="all" onclick="resaSetTab('all')">Toutes</div>
+        <div class="ptab" data-filter="arriving" onclick="resaSetTab('arriving')">En arrivées</div>
+        <div class="ptab on" data-filter="inhouse" onclick="resaSetTab('inhouse')">En cours</div>
+        <div class="ptab" data-filter="checkedout" onclick="resaSetTab('checkedout')">Check-out</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu)">
+        Trier par
+        <div id="resa-sort" style="display:flex;gap:3px;background:var(--bdr);border-radius:var(--rs);padding:3px">
+          <div class="ptab on" data-sort="date" onclick="resaSetSort('date')">Date d'arrivée</div>
+          <div class="ptab" data-sort="room" onclick="resaSetSort('room')">Chambre</div>
+        </div>
+      </div>
     </div>
     <div id="resa-subfilters" style="display:none;gap:8px;flex-wrap:wrap;margin-bottom:12px;padding:10px;background:var(--bg);border-radius:var(--rs)">
       <select id="resa-f-room" onchange="renderReservations()" style="max-width:180px"><option value="">Toutes les chambres</option></select>
@@ -14643,6 +14652,22 @@ function resaStopPolling(){
 }
 
 var RESA_TAB = 'inhouse';
+// Tri de la liste — 'date' (arrivée, le plus récent en premier, comportement
+// historique) ou 'room' (classé par chambre, § demande client) — s'applique
+// sur tous les onglets, contrairement aux sous-filtres (Chambre/Type/Nom/
+// Check-in) réservés à "En arrivées".
+var RESA_SORT = 'date';
+function resaSetSort(sort){
+  RESA_SORT = sort;
+  document.querySelectorAll('#resa-sort .ptab').forEach(function(el){ el.classList.toggle('on', el.getAttribute('data-sort')===sort); });
+  renderReservations();
+}
+// Tri "naturel" chambre (ex: "9" avant "12") — un simple localeCompare
+// traiterait "12" avant "9" (ordre lexicographique), déroutant pour des
+// numéros de chambre.
+function resaRoomSortKey(code){
+  return (code||'').replace(/\d+/g, function(n){ return n.padStart(6,'0'); });
+}
 // Pass (invités) de la réservation actuellement ouverte dans le détail —
 // chargés à part (GET /wa/booking/passes, cf. resaLoadPasses) car pris par
 // réservation, contrairement au reste de RESA_CACHE déjà chargé en bloc.
@@ -14723,7 +14748,15 @@ function renderReservations(){
       if(checkinF === 'no' && b.checkinDone) return false;
     }
     return true;
-  }).slice().sort(function(a,b){ return (b.booking.startDate||'').localeCompare(a.booking.startDate||''); });
+  }).slice().sort(function(a,b){
+    if(RESA_SORT === 'room'){
+      var roomA = a.booking.selectedRoomCode || a.booking.facilityCode || '';
+      var roomB = b.booking.selectedRoomCode || b.booking.facilityCode || '';
+      var byRoom = resaRoomSortKey(roomA).localeCompare(resaRoomSortKey(roomB));
+      if(byRoom !== 0) return byRoom;
+    }
+    return (b.booking.startDate||'').localeCompare(a.booking.startDate||'');
+  });
 
   if(countEl) countEl.textContent = list.length;
 
@@ -14733,10 +14766,18 @@ function renderReservations(){
   }
 
   var sym = getCurrSym();
-  listEl.innerHTML = list.map(function(r){
+  listEl.innerHTML = list.map(function(r, idx, arr){
     var b = r.booking;
     var room = b.facilityName || b.selectedRoomCode || b.facilityCode || '—';
     var expired = (b.endDate||'').slice(0,10) < todayStr;
+    var groupHeader = '';
+    if(RESA_SORT === 'room'){
+      var curRoomCode = b.selectedRoomCode || b.facilityCode || '';
+      var prevRoomCode = idx > 0 ? (arr[idx-1].booking.selectedRoomCode || arr[idx-1].booking.facilityCode || '') : null;
+      if(idx === 0 || curRoomCode !== prevRoomCode){
+        groupHeader = '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--mu);margin:'+(idx===0?'0':'14px')+' 0 4px 2px"><i class="ti ti-door" style="font-size:11px"></i> Chambre '+esc(room)+'</div>';
+      }
+    }
     var checkinBadge = b.status === 'cancelled'
       ? '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:rgba(184,48,48,.1);color:#B83030"><i class="ti ti-ban" style="font-size:11px"></i> Annulée</span>'
       : b.checkinDone
@@ -14754,7 +14795,7 @@ function renderReservations(){
 
     var nfcBadge = '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:'+(b.nfcCount>0?'rgba(26,107,71,.1);color:#1A6B47':'var(--bdr);color:var(--mu)')+'"><i class="ti ti-nfc" style="font-size:11px"></i> NFC ('+(b.nfcCount||0)+')</span>';
 
-    return '<div class="resa-card" style="cursor:pointer" onclick="resaOpenDetail(\''+esc(b.code)+'\')">'
+    return groupHeader + '<div class="resa-card" style="cursor:pointer" onclick="resaOpenDetail(\''+esc(b.code)+'\')">'
       + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">'
       + '<div>'
       + '<div style="font-size:15px;font-weight:700">'+esc(b.personFirstname)+' '+esc(b.personLastname)+' <span style="font-weight:400;color:var(--mu);font-size:12px">— Chambre '+esc(room)+'</span></div>'
