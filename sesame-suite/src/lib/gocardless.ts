@@ -262,3 +262,45 @@ export async function syncGoCardless(entityId: string | null): Promise<GoCardles
 export async function listPaymentsForCustomer(customerId: string): Promise<AccGoCardlessPayment[]> {
   return prisma.accGoCardlessPayment.findMany({ where: { customerId }, orderBy: { chargeDate: "desc" } });
 }
+
+export interface GoCardlessVatEstimate {
+  vatAmount: number;
+  // matched_invoice = facture du client au même montant TTC (±1 centime) —
+  // TVA exacte reprise telle quelle. rate_estimate = aucune facture au
+  // même montant, taux de TVA déduit de la facture la plus récente du
+  // client et appliqué au prélèvement — approximation à signaler comme
+  // telle. not_applicable = client hors France (cf. gcCountryBadge côté
+  // crm.html). unknown = aucune facture avec TVA renseignée pour ce
+  // client, impossible à estimer.
+  vatSource: "matched_invoice" | "rate_estimate" | "not_applicable" | "unknown";
+}
+
+/**
+ * Estime la TVA d'un prélèvement GoCardless (demande client 08/10/2026) —
+ * GoCardless lui-même ne fournit AUCUNE ventilation TVA via son API (c'est
+ * un simple exécuteur de prélèvements, pas un outil de facturation), donc
+ * rien à "extraire" directement du payload GoCardless : la TVA est déduite
+ * des factures du même client, avec le même principe de prorata que les
+ * transactions bancaires (cf. vatShare, routes/accounting.ts) quand un
+ * montant exact correspond, sinon un taux approché à partir de la facture
+ * la plus récente.
+ */
+export function estimateGoCardlessVat(
+  paymentAmount: number,
+  customerCountry: string | null | undefined,
+  customerInvoices: { amountVat: number | null; amountTtc: number | null; invoiceDate: Date | null }[]
+): GoCardlessVatEstimate {
+  if (customerCountry && customerCountry !== "FR") return { vatAmount: 0, vatSource: "not_applicable" };
+
+  const withVat = customerInvoices.filter((inv) => inv.amountTtc != null && inv.amountVat != null);
+  const exact = withVat.find((inv) => Math.abs((inv.amountTtc as number) - paymentAmount) < 0.01);
+  if (exact) return { vatAmount: exact.amountVat as number, vatSource: "matched_invoice" };
+
+  if (withVat.length) {
+    const mostRecent = withVat.slice().sort((a, b) => (b.invoiceDate?.getTime() || 0) - (a.invoiceDate?.getTime() || 0))[0];
+    const rate = (mostRecent.amountVat as number) / (mostRecent.amountTtc as number);
+    return { vatAmount: Math.round(paymentAmount * rate * 100) / 100, vatSource: "rate_estimate" };
+  }
+
+  return { vatAmount: 0, vatSource: "unknown" };
+}

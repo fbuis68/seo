@@ -5,6 +5,7 @@ import { requireAdmin, requireSesame } from "../middleware/requireAdmin";
 import { fireTrigger } from "../lib/automation";
 import { config } from "../config";
 import { invoiceTotal } from "../lib/accReconciliation";
+import { estimateGoCardlessVat } from "../lib/gocardless";
 
 /**
  * CRM commercial interne de Sesame — pipeline prospects/clients (à ne pas
@@ -991,11 +992,17 @@ crmProspectRouter.get(
       include: { bankTransaction: { select: { operationDate: true, rawLabel: true } }, invoice: { select: { invoiceNumber: true } } },
       orderBy: { createdAt: "desc" },
     });
-    const gocardlessPayments = await prisma.accGoCardlessPayment.findMany({
+    const gocardlessPaymentsRaw = await prisma.accGoCardlessPayment.findMany({
       where: { customerId: customer.id },
       include: { payout: { select: { id: true, status: true, arrivalDate: true, bankTransactionId: true } } },
       orderBy: { chargeDate: "desc" },
     });
+    // TVA estimée (08/10/2026, demande client) — GoCardless ne fournit
+    // aucune ventilation TVA sur ses prélèvements, cf. estimateGoCardlessVat.
+    const gocardlessPayments = gocardlessPaymentsRaw.map((p) => ({
+      ...p,
+      ...estimateGoCardlessVat(p.amount, customer.country, invoices),
+    }));
 
     let totalHt = 0, totalTtc = 0, totalPaid = 0;
     for (const inv of invoices) {

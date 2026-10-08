@@ -16,7 +16,7 @@ import { worstLevel, CheckResult } from "../lib/accChecks";
 import { recordAuditLog } from "../lib/accAudit";
 import { parseBankFile, importBankTransactions, BankImportError, BankImportSource } from "../lib/accBanking";
 import { fetchQontoOrganization, syncQontoBankAccount, QontoError, QontoCredentials } from "../lib/qonto";
-import { testGoCardlessConnection, syncGoCardless, GoCardlessError, GoCardlessCredentials } from "../lib/gocardless";
+import { testGoCardlessConnection, syncGoCardless, GoCardlessError, GoCardlessCredentials, estimateGoCardlessVat } from "../lib/gocardless";
 import { testScalewayConnection, syncScaleway, ScalewayError, ScalewayCredentials } from "../lib/scaleway";
 import { findCandidates, confirmMatch, unmatch, autoReconcileMany, ReconciliationError, invoiceTotal } from "../lib/accReconciliation";
 import { sendRelanceBatch, runRelanceRule } from "../lib/accRelance";
@@ -1195,11 +1195,17 @@ accountingRouter.get(
     // Prélèvements GoCardless de ce client (§ rapprochement demandé) — vide
     // pour tout client non rapproché à un customer GoCardless (customer.
     // gocardlessCustomerId null), jamais bloquant pour le reste de la fiche.
-    const gocardlessPayments = await prisma.accGoCardlessPayment.findMany({
+    const gocardlessPaymentsRaw = await prisma.accGoCardlessPayment.findMany({
       where: { customerId: customer.id },
       include: { payout: { select: { id: true, status: true, arrivalDate: true, bankTransactionId: true } } },
       orderBy: { chargeDate: "desc" },
     });
+    // TVA estimée (08/10/2026, demande client) — GoCardless ne fournit
+    // aucune ventilation TVA sur ses prélèvements, cf. estimateGoCardlessVat.
+    const gocardlessPayments = gocardlessPaymentsRaw.map((p) => ({
+      ...p,
+      ...estimateGoCardlessVat(p.amount, customer.country, invoices),
+    }));
 
     let totalHt = 0, totalTtc = 0, totalPaid = 0;
     for (const inv of invoices) {
@@ -1905,7 +1911,24 @@ accountingRouter.get(
       },
     });
     if (!payout) throw new HttpError(404, "Virement GoCardless introuvable");
-    res.json(payout);
+
+    // TVA estimée par prélèvement (08/10/2026) — une requête par client
+    // distinct composant ce virement (rarement plus de quelques-uns à la
+    // fois), cf. estimateGoCardlessVat.
+    const customerIds = [...new Set(payout.payments.map((p) => p.customerId).filter((id): id is string => !!id))];
+    const invoicesByCustomer = new Map<string, { amountVat: number | null; amountTtc: number | null; invoiceDate: Date | null }[]>();
+    for (const customerId of customerIds) {
+      invoicesByCustomer.set(
+        customerId,
+        await prisma.accInvoice.findMany({ where: { customerId }, select: { amountVat: true, amountTtc: true, invoiceDate: true } })
+      );
+    }
+    const payments = payout.payments.map((p) => ({
+      ...p,
+      ...estimateGoCardlessVat(p.amount, p.customer?.country, p.customerId ? invoicesByCustomer.get(p.customerId) || [] : []),
+    }));
+
+    res.json({ ...payout, payments });
   })
 );
 
