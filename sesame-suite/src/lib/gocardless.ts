@@ -268,27 +268,47 @@ export interface GoCardlessVatEstimate {
   // matched_invoice = facture du client au même montant TTC (±1 centime) —
   // TVA exacte reprise telle quelle. rate_estimate = aucune facture au
   // même montant, taux de TVA déduit de la facture la plus récente du
-  // client et appliqué au prélèvement — approximation à signaler comme
-  // telle. not_applicable = client hors France (cf. gcCountryBadge côté
-  // crm.html). unknown = aucune facture avec TVA renseignée pour ce
-  // client, impossible à estimer.
-  vatSource: "matched_invoice" | "rate_estimate" | "not_applicable" | "unknown";
+  // client et appliqué au prélèvement. rate_default = AUCUNE facture du
+  // tout pour ce client (cas le plus fréquent en pratique : un client
+  // GoCardless n'a souvent jamais de facture déposée dans le module
+  // compta) — taux de TVA par défaut de GoCardlessConfig.vatRate appliqué
+  // au montant TTC du prélèvement, toujours une approximation.
+  // not_applicable = client hors France (cf. gcCountryBadge côté
+  // crm.html).
+  vatSource: "matched_invoice" | "rate_estimate" | "rate_default" | "not_applicable";
+}
+
+/** Extrait la TVA d'un montant TTC pour un taux donné (ex. 120€ à 20% -> 20€). */
+function vatFromTtc(amountTtc: number, ratePct: number): number {
+  return Math.round(amountTtc * (ratePct / (100 + ratePct)) * 100) / 100;
+}
+
+/** Taux de TVA par défaut configuré sur le connecteur GoCardless de cette entité (20% si jamais configuré — cf. GoCardlessConfig.vatRate). */
+export async function getGoCardlessVatRate(entityId: string | null): Promise<number> {
+  const config = await prisma.goCardlessConfig.findFirst({ where: { entityId } });
+  return config?.vatRate ?? 20;
 }
 
 /**
  * Estime la TVA d'un prélèvement GoCardless (demande client 08/10/2026) —
  * GoCardless lui-même ne fournit AUCUNE ventilation TVA via son API (c'est
  * un simple exécuteur de prélèvements, pas un outil de facturation), donc
- * rien à "extraire" directement du payload GoCardless : la TVA est déduite
- * des factures du même client, avec le même principe de prorata que les
- * transactions bancaires (cf. vatShare, routes/accounting.ts) quand un
- * montant exact correspond, sinon un taux approché à partir de la facture
- * la plus récente.
+ * rien à "extraire" directement du payload GoCardless. Trois niveaux,
+ * du plus fiable au plus approximatif : (1) facture du client au même
+ * montant TTC -> TVA exacte reprise telle quelle, même principe de
+ * prorata que les transactions bancaires (cf. vatShare,
+ * routes/accounting.ts) ; (2) pas de montant exact mais au moins une
+ * facture avec TVA -> taux déduit de la plus récente ; (3) en pratique le
+ * cas le plus courant, AUCUNE facture pour ce client dans le module
+ * compta (GoCardless utilisé seul, sans facturation suivie dans l'appli)
+ * -> taux de TVA par défaut configuré sur le connecteur
+ * (defaultVatRatePct, GoCardlessConfig.vatRate).
  */
 export function estimateGoCardlessVat(
   paymentAmount: number,
   customerCountry: string | null | undefined,
-  customerInvoices: { amountVat: number | null; amountTtc: number | null; invoiceDate: Date | null }[]
+  customerInvoices: { amountVat: number | null; amountTtc: number | null; invoiceDate: Date | null }[],
+  defaultVatRatePct: number
 ): GoCardlessVatEstimate {
   if (customerCountry && customerCountry !== "FR") return { vatAmount: 0, vatSource: "not_applicable" };
 
@@ -302,5 +322,5 @@ export function estimateGoCardlessVat(
     return { vatAmount: Math.round(paymentAmount * rate * 100) / 100, vatSource: "rate_estimate" };
   }
 
-  return { vatAmount: 0, vatSource: "unknown" };
+  return { vatAmount: vatFromTtc(paymentAmount, defaultVatRatePct), vatSource: "rate_default" };
 }

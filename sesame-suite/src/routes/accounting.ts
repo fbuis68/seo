@@ -16,7 +16,7 @@ import { worstLevel, CheckResult } from "../lib/accChecks";
 import { recordAuditLog } from "../lib/accAudit";
 import { parseBankFile, importBankTransactions, BankImportError, BankImportSource } from "../lib/accBanking";
 import { fetchQontoOrganization, syncQontoBankAccount, QontoError, QontoCredentials } from "../lib/qonto";
-import { testGoCardlessConnection, syncGoCardless, GoCardlessError, GoCardlessCredentials, estimateGoCardlessVat } from "../lib/gocardless";
+import { testGoCardlessConnection, syncGoCardless, GoCardlessError, GoCardlessCredentials, estimateGoCardlessVat, getGoCardlessVatRate } from "../lib/gocardless";
 import { testScalewayConnection, syncScaleway, ScalewayError, ScalewayCredentials } from "../lib/scaleway";
 import { findCandidates, confirmMatch, unmatch, autoReconcileMany, ReconciliationError, invoiceTotal } from "../lib/accReconciliation";
 import { sendRelanceBatch, runRelanceRule } from "../lib/accRelance";
@@ -1202,9 +1202,10 @@ accountingRouter.get(
     });
     // TVA estimée (08/10/2026, demande client) — GoCardless ne fournit
     // aucune ventilation TVA sur ses prélèvements, cf. estimateGoCardlessVat.
+    const gcVatRate = await getGoCardlessVatRate(entityId);
     const gocardlessPayments = gocardlessPaymentsRaw.map((p) => ({
       ...p,
-      ...estimateGoCardlessVat(p.amount, customer.country, invoices),
+      ...estimateGoCardlessVat(p.amount, customer.country, invoices, gcVatRate),
     }));
 
     let totalHt = 0, totalTtc = 0, totalPaid = 0;
@@ -1736,9 +1737,9 @@ accountingRouter.post(
 
 // ───────── Connecteur GoCardless (prélèvements clients + rapprochement) ─────────
 
-function shapeGoCardlessConfig(c: { accessToken: string; sandbox: boolean } | null) {
-  if (!c) return { accessTokenSet: false, accessTokenLast4: "", sandbox: false };
-  return { accessTokenSet: true, accessTokenLast4: c.accessToken.slice(-4), sandbox: c.sandbox };
+function shapeGoCardlessConfig(c: { accessToken: string; sandbox: boolean; vatRate: number } | null) {
+  if (!c) return { accessTokenSet: false, accessTokenLast4: "", sandbox: false, vatRate: 20 };
+  return { accessTokenSet: true, accessTokenLast4: c.accessToken.slice(-4), sandbox: c.sandbox, vatRate: c.vatRate };
 }
 
 accountingRouter.get(
@@ -1754,6 +1755,7 @@ accountingRouter.get(
 interface GoCardlessConfigBody {
   accessToken?: string;
   sandbox?: boolean;
+  vatRate?: number;
 }
 
 /** PUT /wa/acc/gocardless/config — un accessToken vide conserve la valeur déjà enregistrée (même convention que /wa/acc/bank/qonto/config). */
@@ -1765,10 +1767,11 @@ accountingRouter.put(
     const b = req.body as GoCardlessConfigBody;
     const existing = await prisma.goCardlessConfig.findFirst({ where: { entityId } });
     if (!b.accessToken && !existing) throw new HttpError(400, "accessToken requis à la première configuration");
-    const data = { ...(b.accessToken ? { accessToken: b.accessToken } : {}), sandbox: !!b.sandbox };
+    if (b.vatRate != null && (b.vatRate < 0 || b.vatRate > 100)) throw new HttpError(400, "Taux de TVA invalide (0 à 100)");
+    const data = { ...(b.accessToken ? { accessToken: b.accessToken } : {}), sandbox: !!b.sandbox, ...(b.vatRate != null ? { vatRate: b.vatRate } : {}) };
     const config = existing
       ? await prisma.goCardlessConfig.update({ where: { id: existing.id }, data })
-      : await prisma.goCardlessConfig.create({ data: { entityId, accessToken: b.accessToken!, sandbox: !!b.sandbox } });
+      : await prisma.goCardlessConfig.create({ data: { entityId, accessToken: b.accessToken!, sandbox: !!b.sandbox, ...(b.vatRate != null ? { vatRate: b.vatRate } : {}) } });
     await recordAuditLog({ entityId, userId: actorId(req), action: "gocardless_config_updated", targetType: "GoCardlessConfig", targetId: config.id, ip: req.ip });
     res.json(shapeGoCardlessConfig(config));
   })
@@ -1923,9 +1926,10 @@ accountingRouter.get(
         await prisma.accInvoice.findMany({ where: { customerId }, select: { amountVat: true, amountTtc: true, invoiceDate: true } })
       );
     }
+    const gcVatRate = await getGoCardlessVatRate(entityId);
     const payments = payout.payments.map((p) => ({
       ...p,
-      ...estimateGoCardlessVat(p.amount, p.customer?.country, p.customerId ? invoicesByCustomer.get(p.customerId) || [] : []),
+      ...estimateGoCardlessVat(p.amount, p.customer?.country, p.customerId ? invoicesByCustomer.get(p.customerId) || [] : [], gcVatRate),
     }));
 
     res.json({ ...payout, payments });
@@ -1982,6 +1986,7 @@ accountingRouter.get(
     const payoutIds = [...new Set(rows.map((r) => r.gocardlessPayout?.id).filter((id): id is string => !!id))];
     const vatByPayout = new Map<string, number>();
     if (payoutIds.length) {
+      const gcVatRate = await getGoCardlessVatRate(entityId);
       const invoicesByCustomer = new Map<string, { amountVat: number | null; amountTtc: number | null; invoiceDate: Date | null }[]>();
       for (const payoutId of payoutIds) {
         const payments = await prisma.accGoCardlessPayment.findMany({
@@ -1990,14 +1995,19 @@ accountingRouter.get(
         });
         let total = 0;
         for (const p of payments) {
-          if (!p.customerId) continue;
-          if (!invoicesByCustomer.has(p.customerId)) {
-            invoicesByCustomer.set(
-              p.customerId,
-              await prisma.accInvoice.findMany({ where: { customerId: p.customerId }, select: { amountVat: true, amountTtc: true, invoiceDate: true } })
-            );
-          }
-          total += estimateGoCardlessVat(p.amount, p.customer?.country, invoicesByCustomer.get(p.customerId) || []).vatAmount;
+          // Beaucoup de clients GoCardless n'ont aucune facture déposée
+          // dans le module compta (prélèvements sans facturation suivie
+          // dans l'appli) — sans invoicesByCustomer pour ce client, le taux
+          // par défaut (rate_default) s'applique quand même plutôt que de
+          // compter 0€ de TVA pour ce prélèvement.
+          const customerInvoices = p.customerId
+            ? invoicesByCustomer.get(p.customerId) ?? await (async () => {
+                const invs = await prisma.accInvoice.findMany({ where: { customerId: p.customerId! }, select: { amountVat: true, amountTtc: true, invoiceDate: true } });
+                invoicesByCustomer.set(p.customerId!, invs);
+                return invs;
+              })()
+            : [];
+          total += estimateGoCardlessVat(p.amount, p.customer?.country, customerInvoices, gcVatRate).vatAmount;
         }
         vatByPayout.set(payoutId, total);
       }

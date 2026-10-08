@@ -2620,14 +2620,16 @@ function gcCountryBadge(country){
 }
 
 /** Montant de TVA d'un prélèvement GoCardless — GoCardless ne fournit aucune
- * ventilation TVA, toujours déduite des factures du client côté serveur
- * (cf. estimateGoCardlessVat, lib/gocardless.ts) : "matched_invoice" =
- * facture au même montant trouvée (TVA exacte), "rate_estimate" = taux
- * déduit de la facture la plus récente et appliqué (à signaler comme
- * approximatif), "not_applicable"/"unknown" = tiret. */
+ * ventilation TVA, toujours déduite côté serveur (cf. estimateGoCardlessVat,
+ * lib/gocardless.ts) : "matched_invoice" = facture au même montant trouvée
+ * (TVA exacte), "rate_estimate" = taux déduit de la facture la plus
+ * récente de ce client, "rate_default" = aucune facture du tout pour ce
+ * client (cas le plus fréquent), taux par défaut du connecteur appliqué —
+ * toujours signalé "(est.)", "not_applicable" = tiret (hors France). */
 function gcVatCell(p){
   if(p.vatSource==='matched_invoice') return fmtEUR2(p.vatAmount);
   if(p.vatSource==='rate_estimate') return `<span title="Estimée à partir du taux de TVA de la facture la plus récente de ce client — aucune facture trouvée au même montant exact">${fmtEUR2(p.vatAmount)} <span style="color:var(--mu)">(est.)</span></span>`;
+  if(p.vatSource==='rate_default') return `<span title="Aucune facture pour ce client — taux de TVA par défaut du connecteur GoCardless appliqué (réglable dans Connecteurs)">${fmtEUR2(p.vatAmount)} <span style="color:var(--mu)">(est.)</span></span>`;
   return '<span style="color:var(--mu)">—</span>';
 }
 const CRM_GC_STATUS_TAG={pending_customer_approval:'t-gray',pending_submission:'t-gray',submitted:'t-gray',confirmed:'t-amber',paid_out:'t-green',cancelled:'t-red',customer_approval_denied:'t-red',failed:'t-red',charged_back:'t-red'};
@@ -10892,7 +10894,7 @@ async function accDisconnectQonto(id){
 }
 
 function openAccGoCardlessConfigModal(){
-  const c = ACC_GOCARDLESS_CONFIG || {accessTokenSet:false,accessTokenLast4:'',sandbox:false};
+  const c = ACC_GOCARDLESS_CONFIG || {accessTokenSet:false,accessTokenLast4:'',sandbox:false,vatRate:20};
   document.getElementById('modal-ct').innerHTML = `
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box" style="max-width:460px">
@@ -10900,6 +10902,8 @@ function openAccGoCardlessConfigModal(){
       <div style="font-size:12px;color:var(--mu);margin-bottom:10px">Jeton d'accès disponible dans le dashboard GoCardless (Développeurs &gt; Créer un jeton d'accès).</div>
       <div class="ff"><label>Jeton d'accès${c.accessTokenSet?' (laisser vide pour conserver celui enregistré, finit par '+esc(c.accessTokenLast4)+')':''}</label><input id="gc-accessToken" type="password"></div>
       <div class="ff" style="margin-top:8px"><label><input type="checkbox" id="gc-sandbox" ${c.sandbox?'checked':''} style="width:auto;margin-right:6px">Environnement sandbox (test)</label></div>
+      <div class="ff" style="margin-top:8px"><label>Taux de TVA par défaut (%)</label><input id="gc-vatRate" type="number" step="0.1" min="0" max="100" value="${c.vatRate!=null?c.vatRate:20}"></div>
+      <div style="font-size:11px;color:var(--mu);margin-top:4px">GoCardless ne fournit aucune TVA sur ses prélèvements — reprise d'une facture client au même montant si elle existe, sinon ce taux appliqué au montant du prélèvement (cas le plus fréquent : les clients GoCardless n'ont souvent pas de facture dans le module compta).</div>
       <div id="gc-status" style="font-size:12px;margin-top:8px"></div>
       <div class="modal-footer">
         <button class="btn btn-ghost btn-sm" onclick="accTestGoCardlessConfig()">Tester la connexion</button>
@@ -10912,7 +10916,7 @@ function openAccGoCardlessConfigModal(){
 
 async function saveAccGoCardlessConfig(){
   const g=i=>(document.getElementById(i)||{value:''}).value.trim();
-  const body = {sandbox:document.getElementById('gc-sandbox').checked};
+  const body = {sandbox:document.getElementById('gc-sandbox').checked, vatRate:parseFloat(g('gc-vatRate'))||0};
   const accessToken = g('gc-accessToken');
   if(accessToken) body.accessToken = accessToken;
   if(!body.accessToken && !(ACC_GOCARDLESS_CONFIG&&ACC_GOCARDLESS_CONFIG.accessTokenSet)){ flash('Jeton d\'accès requis'); return; }

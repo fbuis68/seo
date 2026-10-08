@@ -3591,6 +3591,15 @@ model GoCardlessConfig {
   accessToken String
   sandbox     Boolean @default(false)
 
+  // Taux de TVA (%) appliqué par défaut aux prélèvements GoCardless quand
+  // aucune facture client ne permet de la déduire (cf. estimateGoCardlessVat,
+  // lib/gocardless.ts — demande client 08/10/2026 : en pratique les clients
+  // GoCardless n'ont souvent AUCUNE facture enregistrée dans le module
+  // compta, donc le prorata sur facture reste vide). Appliqué sur le
+  // montant TTC du prélèvement (20 = calcul TTC/1.20), jamais sur un client
+  // hors France.
+  vatRate Float @default(20)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
