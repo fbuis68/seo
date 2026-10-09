@@ -7,6 +7,7 @@ import { fireTrigger } from "../lib/automation";
 import { orderTemplateVars, hotelContactInfo } from "../lib/templateVars";
 import { reserveLockersForOrder, cancelLockerReservation, LockerReservationItem } from "../lib/lockerSource";
 import { recordVendorCommissions, resolveInternalVendorIds } from "../lib/vendor";
+import { pushOrderToPms } from "../lib/bookingSource";
 
 export const roomserviceRouter = Router();
 
@@ -25,6 +26,7 @@ function shapeProduct(p: {
   importedFrom: string | null;
   stockQty: number | null;
   forceInStock: boolean;
+  pmsProductCode: string | null;
   vendorId?: string | null;
   vendor?: { name: string } | null;
   saleVendors?: { vendor: { id: string; name: string } }[];
@@ -41,6 +43,10 @@ function shapeProduct(p: {
     videoUrl: p.videoUrl || "",
     active: p.active,
     sortOrder: p.sortOrder,
+    // Code produit côté PMS (ex : ProductId Mews) — correspondance utilisée
+    // pour transmettre les commandes boutique/room-service au PMS, cf.
+    // BookingSourceConfig.orderPushEnabled.
+    pmsProductCode: p.pmsProductCode || "",
     // Produit importé (ex : Mon Casier Frais) : source du produit et stock
     // disponible au dernier sync — null = produit boutique classique, pas
     // de suivi de stock, toujours affiché quelle que soit la quantité.
@@ -84,6 +90,7 @@ function shapeOrder(o: {
   lockerPickupCode: string | null;
   lockerSourceWarning: string | null;
   paymentStatus: string | null;
+  pmsPushWarning: string | null;
 }) {
   return {
     id: o.id,
@@ -107,6 +114,10 @@ function shapeOrder(o: {
     // historique inchangé) ; "pending"|"paid"|"failed" pour les commandes
     // passées par le connecteur Stripe (cf. routes/payment.ts).
     paymentStatus: o.paymentStatus || null,
+    // Push best-effort vers le PMS (ex : Mews) — null = pas applicable
+    // (push désactivé) ou réussi, sinon message d'erreur (cf.
+    // BookingSourceConfig.orderPushEnabled, lib/bookingSource.ts pushOrderToPms).
+    pmsPushWarning: o.pmsPushWarning || null,
   };
 }
 
@@ -140,7 +151,15 @@ roomserviceRouter.get(
 export async function finalizeOrder(
   entity: { id: string },
   order: { id: string; total: number; bookingCode: string | null; roomCode: string | null; roomName: string | null },
-  booking: { id: string; personEmail: string; personPhone: string | null; personFirstname: string; personLastname: string; lockerAccess: unknown } | null,
+  booking: {
+    id: string;
+    personEmail: string;
+    personPhone: string | null;
+    personFirstname: string;
+    personLastname: string;
+    lockerAccess: unknown;
+    externalAccountId: string | null;
+  } | null,
   items: CartItem[],
   note?: string
 ) {
@@ -223,6 +242,42 @@ export async function finalizeOrder(
   // réservation de casier ci-dessus : une erreur ici ne doit jamais faire
   // échouer la commande elle-même.
   await recordVendorCommissions(entity, order, items).catch((e) => console.error("[vendor] recordVendorCommissions:", e));
+
+  // Push best-effort de la commande vers le PMS (ex : Mews orders/add —
+  // § demande client, un hôtel Mews+Adyen facture ainsi directement la
+  // note du séjour sans ressaisie) — cf. lib/bookingSource.ts
+  // pushOrderToPms. Jamais bloquant : la commande locale existe déjà quoi
+  // qu'il arrive ici, pmsPushWarning porte le message d'erreur plutôt
+  // qu'un faux succès (même philosophie que lockerSourceWarning ci-dessus).
+  if (booking) {
+    const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
+    if (config?.orderPushEnabled) {
+      let warning: string | undefined;
+      if (!booking.externalAccountId) {
+        warning = "Identifiant de compte PMS inconnu pour cette réservation — commande non transmise au PMS";
+      } else {
+        const products = await prisma.product.findMany({
+          where: { id: { in: items.map((it) => it.id) }, entityId: entity.id },
+          select: { id: true, label: true, pmsProductCode: true },
+        });
+        const productById = new Map(products.map((p) => [p.id, p]));
+        const missing = items.filter((it) => !productById.get(it.id)?.pmsProductCode);
+        if (missing.length) {
+          warning = `Article(s) sans correspondance de code produit PMS : ${missing.map((it) => it.label).join(", ")}`;
+        } else {
+          const pmsItems = items.map((it) => ({ productId: productById.get(it.id)!.pmsProductCode!, count: it.qty }));
+          const result = await pushOrderToPms(config, booking.externalAccountId, pmsItems).catch((e) => ({
+            ok: false as const,
+            error: e instanceof Error ? e.message : String(e),
+          }));
+          if (!result.ok) warning = result.error;
+        }
+      }
+      if (warning) {
+        finalOrder = await prisma.order.update({ where: { id: order.id }, data: { pmsPushWarning: warning } });
+      }
+    }
+  }
 
   return finalOrder;
 }
@@ -447,6 +502,8 @@ interface ProductBody {
   // l'établissement (cf. resolveInternalVendorIds), pour que la règle "tout
   // produit a au moins un point de vente" ne dépende jamais de la saisie.
   vendorIds?: string[];
+  // Code produit côté PMS — cf. schema.prisma Product.pmsProductCode.
+  pmsProductCode?: string;
 }
 
 async function includeProduct(id: string) {
@@ -479,6 +536,7 @@ roomserviceRouter.post(
         videoUrl: b.videoUrl || null,
         active: b.active !== false,
         sortOrder: b.sortOrder ?? maxOrder,
+        pmsProductCode: b.pmsProductCode || null,
         saleVendors: { create: vendorIds.map((vendorId) => ({ vendorId })) },
       },
     });
@@ -518,6 +576,7 @@ roomserviceRouter.post(
         active: b.active,
         sortOrder: b.sortOrder,
         forceInStock: b.forceInStock,
+        pmsProductCode: b.pmsProductCode,
         ...(vendorIds ? { saleVendors: { deleteMany: {}, create: vendorIds.map((vendorId) => ({ vendorId })) } } : {}),
       },
     });

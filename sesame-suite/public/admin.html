@@ -2266,6 +2266,36 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     <div id="bs-pass-mapping-fields"></div>
   </div>
 
+  <!-- Push des commandes boutique/room-service vers le PMS -->
+  <div class="ca">
+    <div class="ch"><i class="ti ti-receipt-2"></i>Push des commandes vers le PMS</div>
+    <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
+      <span>Optionnel — transmet au PMS (ex : Mews) chaque commande boutique/room-service passée depuis l'espace client, pour facturation directe sur la note du séjour. Requiert "Identifiant de compte PMS" renseigné dans la correspondance des champs plus haut, ainsi qu'un code produit PMS par article (panneau "Catalogue produits", fiche de chaque produit). Non vérifié en conditions réelles — à tester avant mise en production.</span>
+    </div>
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:12px">
+      <input type="checkbox" id="bs-orderPushEnabled" style="accent-color:var(--am)">
+      <span style="font-size:13px">Activer le push des commandes</span>
+    </label>
+    <div class="fi">
+      <label class="lb">Chemin de l'endpoint de création de commande</label>
+      <input type="text" id="bs-orderEndpointPath" placeholder="Ex : /api/connector/v1/orders/add" autocomplete="off">
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Méthode HTTP</label>
+        <select id="bs-orderEndpointMethod"><option value="POST">POST</option></select>
+      </div>
+      <div class="fi">
+        <label class="lb">Identifiant du Service PMS (ex : ServiceId Mews)</label>
+        <input type="text" id="bs-orderServiceIdValue" placeholder="Identifiant fixe — un seul Service pour tout le catalogue">
+      </div>
+    </div>
+    <div class="fi">
+      <label class="lb">Paramètres fixes envoyés avec chaque commande (identifiants…)</label>
+      <textarea id="bs-orderEndpointBodyParams" rows="2" placeholder="ClientToken=&#10;AccessToken=&#10;Client=Sesame Suite 1.0"></textarea>
+    </div>
+  </div>
+
   <!-- Encodage NFC -->
   <div class="ca">
     <div class="ch"><i class="ti ti-nfc"></i>Encodage NFC</div>
@@ -3944,6 +3974,13 @@ Accès au salon Premium</textarea>
         <div class="fi" style="margin-top:10px">
           <label class="lb">Lien vidéo (YouTube, Vimeo, MP4…)</label>
           <input type="text" id="rs-video" placeholder="https://youtube.com/watch?v=…">
+        </div>
+
+        <!-- Code produit PMS -->
+        <div class="fi" style="margin-top:10px">
+          <label class="lb">Code produit PMS (ex : ProductId Mews)</label>
+          <input type="text" id="rs-pmsCode" placeholder="Laisser vide si pas de push des commandes vers le PMS">
+          <div style="font-size:11px;color:var(--mu);margin-top:3px">Utilisé pour transmettre les commandes contenant ce produit au PMS (panneau "Intégration réservations" — "Push des commandes vers le PMS").</div>
         </div>
 
         <div style="display:flex;gap:8px;margin-top:18px;padding-top:14px;border-top:1px solid var(--bdr)">
@@ -6982,6 +7019,12 @@ var BS_MAPPING_FIELDS = [
   // Nécessaire uniquement pour importer la liste des Pass (invitations) de
   // cette réservation, cf. carte "Pass (invitations)" plus bas.
   {k:'externalId', label:'Identifiant externe de la réservation (Pass/invitations)', required:false},
+  // Identifiant du compte/dossier de facturation côté source EXTERNE (ex :
+  // AccountId Mews) — distinct d'externalId ci-dessus (qui identifie la
+  // réservation, pas le compte sur lequel facturer). Nécessaire uniquement
+  // pour pousser une commande boutique/room-service vers le PMS, cf. carte
+  // "Push des commandes vers le PMS" plus bas.
+  {k:'accountId', label:'Identifiant de compte PMS (push des commandes)', required:false},
 ];
 
 var BS_FACILITY_MAPPING_FIELDS = [
@@ -7409,7 +7452,12 @@ var PMS_PRESETS = {
       document.getElementById('bs-authType').value = 'none';
       bsRenderAuthFields();
       document.getElementById('bs-responseListPath').value = 'Reservations';
-      bsRenderMappingFields({code:'Number', startDate:'StartUtc', endDate:'EndUtc', facilityCode:'AssignedSpaceId', status:'State'});
+      bsRenderMappingFields({code:'Number', startDate:'StartUtc', endDate:'EndUtc', facilityCode:'AssignedSpaceId', status:'State', accountId:'AccountId'});
+      // Push des commandes (orders/add) — schéma non vérifié en conditions réelles,
+      // faute d'accès à un compte Mews réel : à confirmer avant mise en prod.
+      document.getElementById('bs-orderEndpointPath').value = '/api/connector/v1/orders/add';
+      document.getElementById('bs-orderEndpointMethod').value = 'POST';
+      document.getElementById('bs-orderEndpointBodyParams').value = 'ClientToken=\nAccessToken=\nClient=Sesame Suite 1.0';
     },
     vars: [
       {label:'URL de base', placeholder:'https://api.mews.com (prod) ou https://api.mews-demo.com (démo)', target:'bs-baseUrl'},
@@ -7851,6 +7899,11 @@ function bsCollectFormValues(){
     passListBookingIdParam: document.getElementById('bs-passListBookingIdParam').value.trim(),
     passListResponseListPath: document.getElementById('bs-passListResponseListPath').value.trim(),
     passFieldMapping: bsCollectPassMapping(),
+    orderPushEnabled: document.getElementById('bs-orderPushEnabled').checked,
+    orderEndpointPath: document.getElementById('bs-orderEndpointPath').value.trim(),
+    orderEndpointMethod: document.getElementById('bs-orderEndpointMethod').value,
+    orderEndpointBodyParams: bsTextToParams(document.getElementById('bs-orderEndpointBodyParams').value||''),
+    orderServiceIdValue: document.getElementById('bs-orderServiceIdValue').value.trim(),
     nfcStartEndpointPath: document.getElementById('bs-nfcStartEndpointPath').value.trim(),
     nfcStartEndpointMethod: document.getElementById('bs-nfcStartEndpointMethod').value,
     nfcStartPassParam: document.getElementById('bs-nfcStartPassParam').value.trim(),
@@ -8001,6 +8054,11 @@ async function bsInit(){
   document.getElementById('bs-passListBookingIdParam').value = BS_CONFIG.passListBookingIdParam||'bookingId';
   document.getElementById('bs-passListResponseListPath').value = BS_CONFIG.passListResponseListPath||'root';
   bsRenderPassMappingFields(BS_CONFIG.passFieldMapping);
+  document.getElementById('bs-orderPushEnabled').checked = !!BS_CONFIG.orderPushEnabled;
+  document.getElementById('bs-orderEndpointPath').value = BS_CONFIG.orderEndpointPath||'';
+  document.getElementById('bs-orderEndpointMethod').value = BS_CONFIG.orderEndpointMethod||'POST';
+  document.getElementById('bs-orderEndpointBodyParams').value = bsParamsToText(BS_CONFIG.orderEndpointBodyParams);
+  document.getElementById('bs-orderServiceIdValue').value = BS_CONFIG.orderServiceIdValue||'';
   document.getElementById('bs-nfcStartEndpointPath').value = BS_CONFIG.nfcStartEndpointPath||'';
   document.getElementById('bs-nfcStartEndpointMethod').value = BS_CONFIG.nfcStartEndpointMethod||'GET';
   document.getElementById('bs-nfcStartPassParam').value = BS_CONFIG.nfcStartPassParam||'id';
@@ -11638,6 +11696,7 @@ function rsOpenCreate(){
   document.getElementById('rs-desc').value='';
   document.getElementById('rs-ico').value='ti-gift';
   document.getElementById('rs-video').value='';
+  document.getElementById('rs-pmsCode').value='';
   document.getElementById('rs-active').checked=true;
   document.getElementById('rsDeleteBtn').style.display='none';
   document.getElementById('rs-pos-field').style.display = 'block';
@@ -11663,6 +11722,7 @@ function rsOpenEdit(idx){
   document.getElementById('rs-desc').value  = p.desc||'';
   document.getElementById('rs-ico').value   = p.ico||'ti-gift';
   document.getElementById('rs-video').value = p.videoUrl||'';
+  document.getElementById('rs-pmsCode').value = p.pmsProductCode||'';
   document.getElementById('rs-active').checked = p.active!==false;
   document.getElementById('rsDeleteBtn').style.display='';
   // Un produit géré par un partenaire (p.vendorId non vide) n'a qu'un seul
@@ -11694,6 +11754,7 @@ async function rsSaveProduct(){
     price: parseFloat(document.getElementById('rs-price').value)||0,
     photos:JSON.parse(JSON.stringify(RS_PHOTOS)),
     videoUrl: document.getElementById('rs-video').value.trim(),
+    pmsProductCode: document.getElementById('rs-pmsCode').value.trim(),
     active:document.getElementById('rs-active').checked
   };
   // Absent pour un produit partenaire (champ masqué, cf. rsOpenEdit) — le

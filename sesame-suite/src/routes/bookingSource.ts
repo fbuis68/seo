@@ -68,6 +68,11 @@ function shapeConfig(c: {
   passListBookingIdParam: string | null;
   passListResponseListPath: string | null;
   passFieldMapping: unknown;
+  orderPushEnabled: boolean;
+  orderEndpointPath: string | null;
+  orderEndpointMethod: string | null;
+  orderEndpointBodyParams: unknown;
+  orderServiceIdValue: string | null;
   nfcStartEndpointPath: string | null;
   nfcStartEndpointMethod: string | null;
   nfcStartPassParam: string | null;
@@ -193,6 +198,11 @@ function shapeConfig(c: {
     passListBookingIdParam: c.passListBookingIdParam || "bookingId",
     passListResponseListPath: c.passListResponseListPath || "root",
     passFieldMapping: c.passFieldMapping || {},
+    orderPushEnabled: c.orderPushEnabled,
+    orderEndpointPath: c.orderEndpointPath || "",
+    orderEndpointMethod: c.orderEndpointMethod || "POST",
+    orderEndpointBodyParams: c.orderEndpointBodyParams || {},
+    orderServiceIdValue: c.orderServiceIdValue || "",
     nfcStartEndpointPath: c.nfcStartEndpointPath || "",
     nfcStartEndpointMethod: c.nfcStartEndpointMethod || "GET",
     nfcStartPassParam: c.nfcStartPassParam || "id",
@@ -360,6 +370,11 @@ interface ConfigBody {
   passListBookingIdParam?: string;
   passListResponseListPath?: string;
   passFieldMapping?: PassFieldMapping;
+  orderPushEnabled?: boolean;
+  orderEndpointPath?: string;
+  orderEndpointMethod?: string;
+  orderEndpointBodyParams?: Record<string, string>;
+  orderServiceIdValue?: string;
   nfcStartEndpointPath?: string;
   nfcStartEndpointMethod?: string;
   nfcStartPassParam?: string;
@@ -486,6 +501,11 @@ bookingSourceRouter.post(
       passListBookingIdParam: b.passListBookingIdParam,
       passListResponseListPath: b.passListResponseListPath,
       passFieldMapping: b.passFieldMapping as never,
+      orderPushEnabled: b.orderPushEnabled,
+      orderEndpointPath: b.orderEndpointPath,
+      orderEndpointMethod: b.orderEndpointMethod,
+      orderEndpointBodyParams: b.orderEndpointBodyParams as never,
+      orderServiceIdValue: b.orderServiceIdValue,
       nfcStartEndpointPath: b.nfcStartEndpointPath,
       nfcStartEndpointMethod: b.nfcStartEndpointMethod,
       nfcStartPassParam: b.nfcStartPassParam,

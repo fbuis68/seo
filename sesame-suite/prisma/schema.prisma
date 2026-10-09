@@ -383,6 +383,17 @@ model Booking {
   // jamais saisi à la main.
   externalId String?
 
+  // Identifiant du compte/dossier de facturation côté source EXTERNE (ex :
+  // AccountId Mews) — distinct d'externalId ci-dessus (qui identifie la
+  // RÉSERVATION) : nécessaire pour transmettre au PMS une commande
+  // boutique/room-service passée depuis l'espace client (cf.
+  // BookingSourceConfig.orderPushEnabled, lib/bookingSource.ts
+  // pushOrderToPms) — sans lui, impossible de savoir sur QUEL compte
+  // imputer la charge côté PMS. Importé via fieldMapping.accountId, jamais
+  // saisi à la main. null tant que ce champ n'est pas mappé (push alors
+  // impossible, cf. Order.pmsPushWarning).
+  externalAccountId String?
+
   // Encodage de cartes/badges NFC pour cette réservation (panneau
   // "Réservations", écran de détail — cf. BookingSourceConfig.nfcStartEndpointPath).
   // Nombre cumulé de cartes encodées avec succès pour cette réservation ;
@@ -901,6 +912,33 @@ model BookingSourceConfig {
   // chaque élément du tableau (ex : {"externalId":"id","master":"master"}).
   passFieldMapping           Json?
 
+  // Push des commandes boutique/room-service de l'espace client VERS le PMS
+  // (ex : API Mews, orders/add — un hôtel utilisant Mews+Adyen facture ainsi
+  // directement la note du séjour sans ressaisie) — § demande client,
+  // correspondance des codes produits (cf. Product.pmsProductCode). Appelé
+  // en best-effort depuis finalizeOrder (routes/roomservice.ts), jamais
+  // bloquant : la commande locale existe toujours même si ce push échoue ou
+  // n'est pas configuré (cf. Order.pmsPushWarning). orderPushEnabled=false
+  // par défaut — opt-in explicite même si les autres champs sont déjà
+  // renseignés (ex : copiés depuis un modèle de connecteur). Non vérifié en
+  // conditions réelles (schéma Mews orders/add d'après sa documentation
+  // publique uniquement) — à tester avant mise en production.
+  orderPushEnabled    Boolean @default(false)
+  orderEndpointPath   String? // ex: "/api/connector/v1/orders/add" — concaténé à baseUrl
+  orderEndpointMethod String? @default("POST")
+  // Paramètres FIXES envoyés avec chaque commande, en plus de
+  // ServiceId/AccountId/ProductOrders calculés par commande — ex : les
+  // identifiants Mews (ClientToken/AccessToken/Client), toujours en JSON
+  // (seul format accepté par l'API Connector Mews, contrairement à
+  // endpointBodyParams ci-dessus qui peut aussi être "form" pour d'autres
+  // opérations/sources).
+  orderEndpointBodyParams Json?
+  // Identifiant du Service Mews (ou équivalent) sous lequel les commandes
+  // boutique/room-service sont facturées — un seul Service fixe pour tout
+  // le catalogue, les PRODUITS (pas les services) distinguant chaque
+  // article (cf. Product.pmsProductCode).
+  orderServiceIdValue String?
+
   // null = synchronisation manuelle uniquement ("Importer maintenant").
   syncIntervalMinutes Int?
 
@@ -1262,6 +1300,13 @@ model Product {
   // pour permettre une resynchronisation sans doublon.
   importedFrom String?
   externalId   String?
+  // Code produit côté PMS (ex : ProductId Mews) — correspondance utilisée
+  // pour transmettre une commande boutique/room-service au PMS (cf.
+  // lib/bookingSource.ts pushOrderToPms, BookingSourceConfig.orderPushEnabled).
+  // Distinct d'externalId ci-dessus (import DEPUIS une source comme Mon
+  // Casier Frais) : celui-ci sert l'envoi VERS le PMS, les deux rôles
+  // pouvant coexister sur un même produit sans rapport l'un avec l'autre.
+  pmsProductCode String?
   // Quantité actuellement disponible en casier au dernier sync — null =
   // pas de suivi de stock (produit boutique classique, toujours affiché).
   // 0 = en rupture, masqué côté boutique client (cf. /product/public).
@@ -1451,6 +1496,13 @@ model Order {
   lockerPickupCode    String? // code de retrait à 6 chiffres transmis à la source
   lockerSourceOrderId String? // id de la réservation côté source (pour annulation)
   lockerSourceWarning String?
+
+  // Push best-effort de cette commande vers le PMS (ex : Mews orders/add) —
+  // même philosophie que lockerSourceWarning ci-dessus : null = pas
+  // applicable (push désactivé) ou réussi, sinon message d'erreur plutôt
+  // qu'un faux succès (cf. BookingSourceConfig.orderPushEnabled,
+  // lib/bookingSource.ts pushOrderToPms, appelé depuis finalizeOrder).
+  pmsPushWarning String?
 
   // Paiement en ligne (Stripe) de cette commande — cf. lib/payment.ts. null
   // tant qu'aucun paiement n'a été demandé (commande gratuite ou connecteur

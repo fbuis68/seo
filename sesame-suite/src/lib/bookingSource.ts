@@ -59,6 +59,12 @@ export interface FieldMapping {
   // liste des Pass de cette réservation (cf.
   // BookingSourceConfig.passListEndpointPath).
   externalId?: string;
+  // Identifiant du compte/dossier de facturation côté source EXTERNE (ex :
+  // AccountId Mews) — distinct d'externalId ci-dessus (qui identifie la
+  // réservation, pas le compte sur lequel facturer). Optionnel — requis
+  // uniquement pour pousser une commande boutique/room-service vers le PMS
+  // (cf. BookingSourceConfig.orderPushEnabled, pushOrderToPms).
+  accountId?: string;
 }
 
 export interface MappedBooking {
@@ -75,6 +81,7 @@ export interface MappedBooking {
   bookingType: string;
   passId: string;
   externalId: string;
+  accountId: string;
 }
 
 export interface MapError {
@@ -639,6 +646,7 @@ export function mapBookings(items: unknown[], mapping: FieldMapping): { mapped: 
       bookingType: mapping.bookingType ? String(getPath(item, mapping.bookingType) ?? "").trim() : "",
       passId: mapping.passId ? String(getPath(item, mapping.passId) ?? "").trim() : "",
       externalId: mapping.externalId ? String(getPath(item, mapping.externalId) ?? "").trim() : "",
+      accountId: mapping.accountId ? String(getPath(item, mapping.accountId) ?? "").trim() : "",
     });
   });
 
@@ -749,6 +757,7 @@ export async function upsertMappedBookings(entity: Entity, mapped: MappedBooking
       bookingType: b.bookingType || existing?.bookingType || undefined,
       passId: b.passId || existing?.passId || undefined,
       externalId: b.externalId || existing?.externalId || undefined,
+      externalAccountId: b.accountId || existing?.externalAccountId || undefined,
       importedFrom: sourceName,
     };
     let rowId: string;
@@ -1683,4 +1692,75 @@ export async function openFacilityDirect(config: BookingSourceConfig, externalFa
     }
   }
   return { opened: true };
+}
+
+export interface PmsOrderItem {
+  /** Code produit côté PMS (Product.pmsProductCode) — jamais vide ici, filtré en amont par l'appelant. */
+  productId: string;
+  count: number;
+}
+
+/**
+ * Pousse une commande boutique/room-service de l'espace client vers le PMS
+ * (ex : API Mews, orders/add) — § demande client, correspondance des codes
+ * produits (cf. Product.pmsProductCode). Best-effort : appelé depuis
+ * finalizeOrder (routes/roomservice.ts) sans jamais faire échouer la
+ * commande locale, qui existe déjà quoi qu'il arrive ici — le résultat sert
+ * uniquement à renseigner Order.pmsPushWarning en cas d'échec, plutôt
+ * qu'un faux succès silencieux.
+ *
+ * Schéma du corps d'après la documentation publique Mews Connector API
+ * (orders/add : ServiceId au premier niveau, ProductOrders:[{ProductId,
+ * Count}]) — NON vérifié en conditions réelles (aucune capture contre un
+ * compte Mews réel), à tester avant mise en production. orderEndpointPath
+ * reste volontairement générique (pas de littéral "Mews" dans ce fichier) :
+ * un autre PMS acceptant un corps JSON équivalent fonctionnerait de la même
+ * façon via sa propre configuration.
+ */
+export async function pushOrderToPms(
+  config: BookingSourceConfig,
+  accountId: string,
+  items: PmsOrderItem[]
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!config.orderPushEnabled) return { ok: false, error: "Push des commandes vers le PMS désactivé" };
+  if (!config.orderEndpointPath) return { ok: false, error: 'Push des commandes activé mais "Chemin de l\'appel" non configuré' };
+  if (!config.orderServiceIdValue) return { ok: false, error: "Identifiant du Service PMS non configuré" };
+  if (!config.baseUrl) return { ok: false, error: "URL de base non configurée" };
+  if (!accountId) return { ok: false, error: "Identifiant de compte PMS inconnu pour cette réservation" };
+  if (!items.length) return { ok: false, error: "Aucun article à transmettre" };
+
+  const url = normalizeBaseUrl(config.baseUrl).replace(/\/$/, "") + config.orderEndpointPath;
+  const { headers: authHeaders } = await buildAuthHeaders(config);
+  const baseParams =
+    config.orderEndpointBodyParams && typeof config.orderEndpointBodyParams === "object"
+      ? (config.orderEndpointBodyParams as Record<string, unknown>)
+      : {};
+  const body = {
+    ...baseParams,
+    ServiceId: config.orderServiceIdValue,
+    AccountId: accountId,
+    ProductOrders: items.map((it) => ({ ProductId: it.productId, Count: it.count })),
+  };
+  const method = (config.orderEndpointMethod || "POST").toUpperCase();
+
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(url, {
+      method,
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": "SesameSuite-BookingConnector/1.0",
+        ...authHeaders,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    return { ok: false, error: `Connexion au PMS impossible : ${describeFetchError(e)}` };
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    return { ok: false, error: `Le PMS a répondu ${res.status} ${res.statusText}${text ? " — " + text.trim().slice(0, 200) : ""}` };
+  }
+  return { ok: true };
 }
