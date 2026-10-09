@@ -7193,14 +7193,28 @@ function bsRenderAuthFields(){
   }
 }
 
-/** Convertit un objet {clé:valeur} en texte "clé=valeur" (une ligne par entrée), et inversement — pour le champ "Paramètres du corps si POST". */
+/**
+ * Convertit un objet {clé:valeur} en texte pour le champ "Paramètres du
+ * corps si POST", et inversement. Deux formats acceptés en saisie :
+ * "clé=valeur" (une ligne par entrée, valeurs toujours des chaînes — forme
+ * historique, convient à la plupart des connecteurs) OU un objet JSON
+ * littéral complet, nécessaire dès qu'une clé attend un tableau ou un
+ * sous-objet (ex : Mews "Limitation":{"Count":1000} ou "ServiceIds":[...]),
+ * ce que la forme ligne par ligne ne peut pas exprimer.
+ */
 function bsParamsToText(obj){
   if(!obj || typeof obj !== 'object') return '';
+  var hasNested = Object.keys(obj).some(function(k){ return obj[k] !== null && typeof obj[k] === 'object'; });
+  if(hasNested) return JSON.stringify(obj, null, 2);
   return Object.keys(obj).map(function(k){ return k+'='+obj[k]; }).join('\n');
 }
 function bsTextToParams(text){
+  var trimmed = (text||'').trim();
+  if(trimmed.charAt(0) === '{'){
+    try{ return JSON.parse(trimmed); }catch(e){ /* retombe sur le format clé=valeur ci-dessous */ }
+  }
   var obj = {};
-  (text||'').split('\n').forEach(function(line){
+  trimmed.split('\n').forEach(function(line){
     line = line.trim();
     if(!line) return;
     var i = line.indexOf('=');
@@ -7457,10 +7471,17 @@ var PMS_PRESETS = {
     noteType: 'w',
     note: 'L\'email et le nom du client ne sont pas inclus par l\'API Mews dans la liste des réservations (il faudrait un appel supplémentaire vers /customers/getAll, non pris en charge par ce connecteur pour l\'instant) — l\'import échouera tant que ce champ requis n\'est pas mappé. Contactez-nous si vous avez besoin de cette jointure.',
     apply: function(){
-      document.getElementById('bs-endpointPath').value = '/api/connector/v1/reservations/getAll';
+      // Version datée (2023-06-06) — l'ancienne (sans date, dépréciée)
+      // exige ServiceIds/Extent en plus, que ce connecteur générique ne sait
+      // pas renseigner automatiquement (ServiceIds est propre à chaque
+      // établissement Mews). "Limitation" est le seul champ obligatoire en
+      // plus des identifiants sur cette version — confirmé le 09/10/2026 en
+      // testant contre le compte démo public (400 "Invalid StartUtc" sur
+      // l'ancienne version sans Limitation/ServiceIds/Extent).
+      document.getElementById('bs-endpointPath').value = '/api/connector/v1/reservations/getAll/2023-06-06';
       document.getElementById('bs-endpointMethod').value = 'POST';
       document.getElementById('bs-endpointBodyFormat').value = 'json';
-      document.getElementById('bs-endpointBodyParams').value = 'ClientToken=\nAccessToken=\nClient=Sesame Suite 1.0';
+      document.getElementById('bs-endpointBodyParams').value = JSON.stringify({ClientToken:'', AccessToken:'', Client:'Sesame Suite 1.0', Limitation:{Count:1000}}, null, 2);
       document.getElementById('bs-authType').value = 'none';
       bsRenderAuthFields();
       document.getElementById('bs-responseListPath').value = 'Reservations';
