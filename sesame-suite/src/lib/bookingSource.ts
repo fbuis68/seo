@@ -423,7 +423,14 @@ async function fetchExternalList(
     } catch (e) {
       throw new BookingSourceError(`Connexion impossible : ${describeFetchError(e)}`);
     }
-    if (!res.ok) throw new BookingSourceError(`Le serveur distant a répondu ${res.status} ${res.statusText}`);
+    if (!res.ok) {
+      // Inclut un extrait du corps de la réponse d'erreur — sans ça, un 400
+      // (validation) ou un 401/403 (identifiants) sont indiscernables à
+      // l'écran l'un de l'autre, alors que la plupart des API distantes
+      // (dont Mews) renvoient un message explicite dans ce corps.
+      const text = await res.text().catch(() => "");
+      throw new BookingSourceError(`Le serveur distant a répondu ${res.status} ${res.statusText}${text ? " — " + text.trim().slice(0, 300) : ""}`);
+    }
 
     const body = await parseJsonResponse(res, "La réponse");
 
