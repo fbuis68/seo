@@ -828,6 +828,13 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
           <div class="ptab on" data-sort="date" onclick="resaSetSort('date')">Date d'arrivée</div>
           <div class="ptab" data-sort="room" onclick="resaSetSort('room')">Chambre</div>
         </div>
+        <button type="button" class="btn btn-s" id="resa-sort-dir-btn" onclick="resaToggleSortDir()" title="Inverser l'ordre" style="padding:6px 9px;width:auto">
+          <i class="ti ti-sort-descending" id="resa-sort-dir-icon"></i>
+        </button>
+      </div>
+      <div style="position:relative;flex:1;min-width:160px;max-width:220px">
+        <i class="ti ti-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--mu);font-size:13px"></i>
+        <input type="text" id="resa-search-name" placeholder="Rechercher un nom…" oninput="renderReservations()" style="padding-left:30px">
       </div>
     </div>
     <div id="resa-subfilters" style="display:none;gap:8px;flex-wrap:wrap;margin-bottom:12px;padding:10px;background:var(--bg);border-radius:var(--rs)">
@@ -14866,9 +14873,21 @@ var RESA_TAB = 'inhouse';
 // sur tous les onglets, contrairement aux sous-filtres (Chambre/Type/Nom/
 // Check-in) réservés à "En arrivées".
 var RESA_SORT = 'date';
+// Sens du tri — 'desc' (le plus récent/proche en premier, comportement
+// historique par défaut) ou 'asc' (le plus ancien/éloigné en premier).
+// S'applique au tri par date ET, en repli, au tri secondaire par chambre.
+var RESA_SORT_DIR = 'desc';
 function resaSetSort(sort){
   RESA_SORT = sort;
   document.querySelectorAll('#resa-sort .ptab').forEach(function(el){ el.classList.toggle('on', el.getAttribute('data-sort')===sort); });
+  renderReservations();
+}
+function resaToggleSortDir(){
+  RESA_SORT_DIR = RESA_SORT_DIR === 'desc' ? 'asc' : 'desc';
+  var icon = document.getElementById('resa-sort-dir-icon');
+  if(icon) icon.className = 'ti ' + (RESA_SORT_DIR === 'desc' ? 'ti-sort-descending' : 'ti-sort-ascending');
+  var btn = document.getElementById('resa-sort-dir-btn');
+  if(btn) btn.title = RESA_SORT_DIR === 'desc' ? 'Le plus proche en premier (cliquer pour inverser)' : 'Le plus éloigné en premier (cliquer pour inverser)';
   renderReservations();
 }
 // Tri "naturel" chambre (ex: "9" avant "12") — un simple localeCompare
@@ -14941,10 +14960,18 @@ function renderReservations(){
   var typeF = applySubfilters ? ((document.getElementById('resa-f-roomtype')||{}).value || '') : '';
   var lastF = applySubfilters ? ((document.getElementById('resa-f-lastname')||{}).value || '').trim().toLowerCase() : '';
   var checkinF = applySubfilters ? ((document.getElementById('resa-f-checkin')||{}).value || '') : '';
+  // Recherche par nom — contrairement à lastF ci-dessus (réservé au
+  // sous-filtre "En arrivées"), s'applique à TOUS les onglets et cherche
+  // dans le nom ET le prénom.
+  var nameQ = ((document.getElementById('resa-search-name')||{}).value || '').trim().toLowerCase();
 
   var list = RESA_CACHE.filter(function(r){
     var b = r.booking;
     if(!matchesTab(b)) return false;
+    if(nameQ){
+      var full = ((b.personFirstname||'')+' '+(b.personLastname||'')).toLowerCase();
+      if(full.indexOf(nameQ) === -1) return false;
+    }
     if(applySubfilters){
       var roomCode = b.selectedRoomCode || b.facilityCode || '';
       if(roomF && roomCode !== roomF) return false;
@@ -14964,7 +14991,8 @@ function renderReservations(){
       var byRoom = resaRoomSortKey(roomA).localeCompare(resaRoomSortKey(roomB));
       if(byRoom !== 0) return byRoom;
     }
-    return (b.booking.startDate||'').localeCompare(a.booking.startDate||'');
+    var byDate = (a.booking.startDate||'').localeCompare(b.booking.startDate||'');
+    return RESA_SORT_DIR === 'asc' ? byDate : -byDate;
   });
 
   if(countEl) countEl.textContent = list.length;
