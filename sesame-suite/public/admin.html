@@ -2078,6 +2078,18 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     <p>Récupérez automatiquement les réservations depuis n'importe quel système externe (PMS, moteur de réservation…) — client Sesame ou non. L'appel se fait depuis le serveur, pas depuis le navigateur : aucun problème de CORS ni de proxy à installer.</p>
   </div>
 
+  <!-- Barre d'actions épinglée — formulaire long (connexion, correspondance
+       des champs, chambres, pass, push PMS, fréquence...), les boutons
+       Enregistrer/Tester tout en bas obligeaient à scroller jusqu'au bout à
+       chaque modification. Reste visible en haut du panneau pendant le
+       scroll (cf. .mn{overflow-y:auto} qui contient ce panneau) — mêmes
+       actions que les boutons en bas de page, conservés pour qui préfère
+       les garder groupés avec "Importer maintenant". -->
+  <div style="position:sticky;top:0;z-index:8;background:var(--bg);padding:10px 0;margin-bottom:4px;display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--bdr)">
+    <button class="btn btn-s" onclick="bsTest()"><i class="ti ti-flask"></i> Tester la connexion</button>
+    <button class="btn btn-p" onclick="bsSave()"><i class="ti ti-device-floppy"></i> Enregistrer</button>
+  </div>
+
   <!-- Modèle de connecteur — choisir un PMS préconfiguré n'affiche plus que
        les identifiants propres à ce client (compte, mot de passe, code
        établissement…) ; tous les réglages techniques fixes (URL d'API,
