@@ -301,6 +301,20 @@ input:focus,select:focus{border-color:var(--accent)}
 </style>
 </head>
 <body>
+<!-- Écran "lien invalide" — § bug remonté le 09/10/2026 : accéder à l'appli
+     SANS ?entityCode= (ex : guest.sesame.technology ouvert directement,
+     sans passer par un lien d'hôtel) retombait silencieusement sur l'entité
+     par défaut du serveur (Hôtel Churchill, entité de démo) et affichait SA
+     vraie charte/nom — trompeur sur un domaine mutualisé servant tous les
+     hôtels. Couvre tout en z-index plutôt que masquer header/contenu un par
+     un ; posé AVANT loadCfg() dans DOMContentLoaded, qui n'est même plus
+     appelé dans ce cas (aucune donnée d'un hôtel précis n'est chargée). -->
+<div id="noEntityScreen" style="display:none;position:fixed;inset:0;background:#14121E;color:#fff;z-index:1000;align-items:center;justify-content:center;text-align:center;padding:24px">
+  <div style="max-width:320px">
+    <div style="font-family:'Fraunces',serif;font-size:24px;font-weight:300;margin-bottom:14px">Sesame</div>
+    <div style="font-size:14px;opacity:.75;line-height:1.6">Ce lien n'est pas valide.<br>Merci d'utiliser le lien fourni par votre établissement (email de confirmation, QR code à la réception…).</div>
+  </div>
+</div>
 <div class="app">
 <header class="hdr">
   <div class="hdr-logo" id="hdrLogo"><span class="hdr-name" id="hdrName">Éco-Séjour</span></div>
@@ -6190,6 +6204,24 @@ gotoStep = function(n){
 
 // ═══════════════════ INIT
 window.addEventListener('DOMContentLoaded',async function(){
+  // Aucun ?entityCode= dans l'URL : pas de lien d'hôtel légitime pour
+  // arriver ici (cf. note HTML sur #noEntityScreen) — n'appelle même pas
+  // loadCfg(), qui chargerait sinon la charte/le nom d'un hôtel réel au
+  // hasard (repli serveur par défaut) sur ce qui doit rester un écran
+  // neutre. Exemptions : DEMO_CODE (lien de démo commerciale générique,
+  // volontairement sans entityCode, cf. loadDemoBooking), AUTOLOGIN_TOKEN
+  // (résout lui-même son établissement, cf. espTryAutologin) et un client
+  // déjà connecté dont la session persistée connaît son propre entityCode
+  // (cf. espTryRestoreSession) — un revenant ne doit pas se retrouver
+  // bloqué ici simplement parce que l'URL qu'il a rouverte ne portait plus
+  // le paramètre.
+  var hasPersistedSession = false;
+  if(!ENTITY_CODE){ try{ hasPersistedSession = !!localStorage.getItem(ESP_SESSION_KEY); }catch(e){} }
+  if(!ENTITY_CODE && !DEMO_CODE && !AUTOLOGIN_TOKEN && !hasPersistedSession){
+    document.getElementById('noEntityScreen').style.display = 'flex';
+    document.querySelector('.app').style.display = 'none';
+    return;
+  }
   await loadCfg(); // GET /wa/entityModuleConfig/list — remplace SESAME_CFG
   initLang(); // langue du client — sessionStorage > CFG.lang (si fr/en/es) > fr
   applyBrand();
