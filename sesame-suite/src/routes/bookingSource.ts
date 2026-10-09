@@ -11,6 +11,7 @@ import {
   mapFacilities,
   upsertMappedFacilities,
   runImport,
+  pushOrderToPms,
   BookingSourceError,
   FieldMapping,
   FacilityMapping,
@@ -799,6 +800,47 @@ bookingSourceRouter.post(
       if (e instanceof BookingSourceError) throw new HttpError(400, e.message);
       throw e;
     }
+  })
+);
+
+/**
+ * POST /wa/bookingSource/orderTest — appel à blanc du connecteur de push
+ * des commandes (aucune commande réellement créée côté PMS n'est garantie
+ * — dépend de ce que le système distant fait d'un AccountId/ProductId de
+ * test). Body : { accountId, productId, count? } en plus des réglages du
+ * formulaire (pas forcément encore enregistrés — mêmes conventions que
+ * /bookingSource/test). Permet de valider URL de base/auth/ServiceId sans
+ * devoir faire une vraie réservation + commande boutique de bout en bout.
+ */
+bookingSourceRouter.post(
+  "/bookingSource/orderTest",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const saved = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
+    const b = req.body as ConfigBody & { accountId?: string; productId?: string; count?: number };
+    const accountId = (b.accountId || "").trim();
+    const productId = (b.productId || "").trim();
+    if (!accountId) throw new HttpError(400, "Identifiant de compte PMS de test requis");
+    if (!productId) throw new HttpError(400, "Code produit PMS de test requis");
+
+    const draft = {
+      orderPushEnabled: true,
+      orderBaseUrl: b.orderBaseUrl ?? saved?.orderBaseUrl ?? null,
+      orderEndpointPath: b.orderEndpointPath ?? saved?.orderEndpointPath ?? null,
+      orderEndpointMethod: b.orderEndpointMethod ?? saved?.orderEndpointMethod ?? "POST",
+      orderEndpointBodyParams: (b.orderEndpointBodyParams ?? saved?.orderEndpointBodyParams ?? {}) as never,
+      orderServiceIdValue: b.orderServiceIdValue ?? saved?.orderServiceIdValue ?? null,
+      orderAuthType: b.orderAuthType ?? saved?.orderAuthType ?? "none",
+      orderAuthApiKeyHeader: b.orderAuthApiKeyHeader ?? saved?.orderAuthApiKeyHeader ?? null,
+      orderAuthApiKeyValue: b.orderAuthApiKeyValue ?? saved?.orderAuthApiKeyValue ?? null,
+      orderAuthBearerToken: b.orderAuthBearerToken ?? saved?.orderAuthBearerToken ?? null,
+      orderAuthBasicUser: b.orderAuthBasicUser ?? saved?.orderAuthBasicUser ?? null,
+      orderAuthBasicPassword: b.orderAuthBasicPassword ?? saved?.orderAuthBasicPassword ?? null,
+    };
+
+    const result = await pushOrderToPms(draft as never, accountId, [{ productId, count: b.count && b.count > 0 ? b.count : 1 }]);
+    res.json(result);
   })
 );
 

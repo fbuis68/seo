@@ -2335,6 +2335,16 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       <label class="lb">Paramètres fixes envoyés avec chaque commande (identifiants…)</label>
       <textarea id="bs-orderEndpointBodyParams" rows="2" placeholder="ClientToken=&#10;AccessToken=&#10;Client=Sesame Suite 1.0"></textarea>
     </div>
+    <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin:14px 0 8px">Tester l'envoi d'une commande</div>
+    <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
+      <span>Appel réel vers le système ci-dessus avec les valeurs de test saisies — ne provient d'aucune vraie commande ni réservation. Valide URL de base/authentification/ServiceId sans devoir passer par une commande boutique réelle.</span>
+    </div>
+    <div class="g2">
+      <div class="fi"><label class="lb">Identifiant de compte PMS de test</label><input type="text" id="bs-orderTestAccountId" placeholder="Ex : un AccountId existant côté PMS"></div>
+      <div class="fi"><label class="lb">Code produit PMS de test</label><input type="text" id="bs-orderTestProductId" placeholder="Ex : un ProductId existant côté PMS"></div>
+    </div>
+    <button class="btn btn-s" onclick="bsTestOrderPush()"><i class="ti ti-flask"></i> Tester l'envoi d'une commande</button>
+    <div id="bs-order-test-result" style="margin-top:10px"></div>
   </div>
 
   <!-- Encodage NFC -->
@@ -9789,6 +9799,32 @@ async function bsTest(){
     bsShowResult('Aperçu du test (10 premiers éléments)', h);
   }catch(e){
     bsShowResult('Échec du test', '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Erreur de connexion au serveur</span></div>');
+  }
+}
+
+async function bsTestOrderPush(){
+  var resEl = document.getElementById('bs-order-test-result');
+  var accountId = document.getElementById('bs-orderTestAccountId').value.trim();
+  var productId = document.getElementById('bs-orderTestProductId').value.trim();
+  if(!accountId || !productId){
+    resEl.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Identifiant de compte et code produit de test requis</span></div>';
+    return;
+  }
+  resEl.innerHTML = '<div style="color:var(--mu);font-size:13px"><div class="spin" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:-2px;margin-right:6px"></div>Appel du système en cours…</div>';
+  var body = bsCollectFormValues();
+  body.accountId = accountId;
+  body.productId = productId;
+  body.count = 1;
+  try{
+    var r = await adminFetch('/wa/bookingSource/orderTest', {method:'POST', body:JSON.stringify(body)});
+    var data = await r.json();
+    if(!r.ok || !data.ok){
+      resEl.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>'+esc(data.error||'Erreur inconnue')+'</span></div>';
+      return;
+    }
+    resEl.innerHTML = '<div class="alt alt-g"><i class="ti ti-check-circle"></i><span>Le système a accepté la commande de test (HTTP 200).</span></div>';
+  }catch(e){
+    resEl.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Erreur de connexion au serveur</span></div>';
   }
 }
 
