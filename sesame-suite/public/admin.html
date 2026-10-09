@@ -1303,6 +1303,11 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         <div class="fi"><label class="lb">Email contact</label><input type="email" id="h-email"></div>
         <div class="fi"><label class="lb">Téléphone contact</label><input type="text" id="h-phone" placeholder="+33 2 40 00 00 00"></div>
       </div>
+      <div class="fi">
+        <label class="lb">Lien conditions générales (CGU/CGV)</label>
+        <input type="text" id="h-termsUrl" placeholder="https://monhotel.fr/cgv">
+        <div style="font-size:11px;color:var(--mu);margin-top:4px">Affiché à l'étape "Mes coordonnées" du check-in — le client doit cocher une case d'acceptation pour continuer, que ce lien soit renseigné ou non.</div>
+      </div>
       <div class="g2">
         <div class="fi"><label class="lb">Devise</label>
           <select id="h-currency" onchange="liveSync()">
@@ -4508,7 +4513,7 @@ Accès au salon Premium</textarea>
 // ═══════════════════════════════════════════════ CONFIG ENGINE
 var DEFAULT = {
   hotelName:'Hôtel Les Jardins',hotelSlogan:'Séjour responsable & récompensé',entityId:'E00000001',
-  stars:3,hotelAddr:'',hotelEmail:'',hotelPhone:'',timezone:'Europe/Paris',
+  stars:3,hotelAddr:'',hotelEmail:'',hotelPhone:'',termsUrl:'',timezone:'Europe/Paris',
   colors:{primary:'#8B1A2E',primaryLight:'#FDEDF0',accent:'#8B1A2E',headerBg:'#17121E',
     headerText:'#FFFFFF',bg:'#F5F3F0',cardBg:'#FFFFFF',border:'#E3DED8',text:'#14121E',btnNav:'#8B1A2E'},
   radius:14,radiusBtn:8,shadow:true,darkH:true,
@@ -4980,7 +4985,7 @@ function populateAll(){
   setVal('h-name',CFG.hotelName);setVal('h-entityId',CFG.entityId);
   var checkinCode = (ADMIN_ROLE==='sesame' && ACTIVE_ENTITY_CODE) ? ACTIVE_ENTITY_CODE : HOME_ENTITY_CODE;
   setVal('h-checkinUrl', checkinCode ? (window.location.origin+'/?entityCode='+checkinCode) : '');
-  setVal('h-addr',CFG.hotelAddr||'');setVal('h-email',CFG.hotelEmail||'');setVal('h-phone',CFG.hotelPhone||'');
+  setVal('h-addr',CFG.hotelAddr||'');setVal('h-email',CFG.hotelEmail||'');setVal('h-phone',CFG.hotelPhone||'');setVal('h-termsUrl',CFG.termsUrl||'');
   setVal('h-stars',CFG.stars);
   setVal('h-currency',CFG.currency||'EUR');
   setVal('h-lang',CFG.lang||'fr');
@@ -5047,7 +5052,7 @@ function collectAll(){
   CFG.shadow=getChk('c-shadow');CFG.darkH=getChk('c-darkH');
   var hn=getVal('h-name');if(hn)CFG.hotelName=hn;
   var ei=getVal('h-entityId');if(ei)CFG.entityId=ei;
-  CFG.hotelAddr=getVal('h-addr')||'';CFG.hotelEmail=getVal('h-email')||'';CFG.hotelPhone=getVal('h-phone')||'';
+  CFG.hotelAddr=getVal('h-addr')||'';CFG.hotelEmail=getVal('h-email')||'';CFG.hotelPhone=getVal('h-phone')||'';CFG.termsUrl=getVal('h-termsUrl')||'';
   CFG.stars=parseInt(getVal('h-stars'))||3;
   CFG.currency=getVal('h-currency')||'EUR';
   CFG.lang=getVal('h-lang')||'fr';

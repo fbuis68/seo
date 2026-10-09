@@ -181,6 +181,11 @@ model EntityModuleConfig {
   // client sur une réservation — utilisé notamment comme variable {{telephoneHotel}}
   // dans les modèles de message (cf. lib/templateVars.ts).
   hotelPhone  String?
+  // Lien vers les conditions générales (CGU/CGV) affiché à l'étape "Mes
+  // coordonnées" du check-in (public/checkin.html) — le client doit cocher
+  // une case d'acceptation pour continuer que ce lien soit renseigné ou non
+  // (null : texte affiché sans lien cliquable).
+  termsUrl    String?
   stars       Int     @default(3)
   // Secteur d'activité de l'entité (24/09/2026) — Hôtellerie par défaut
   // (seul secteur géré jusqu'ici), permet de distinguer les autres types
@@ -370,6 +375,20 @@ model Booking {
   // Pass) — sert de repli quand `passes` est vide. Nouvelles réservations :
   // préférer le Pass marqué `master` dans `passes`.
   passId String?
+
+  // Adresse postale du client — saisie à l'étape "Mes coordonnées" du
+  // check-in (public/checkin.html), APRÈS la pièce d'identité (pré-remplie
+  // depuis l'OCR quand disponible). Distinct des champs "kyc-*" éphémères
+  // côté client (simulation OCR, non persistée) : ces trois champs SONT la
+  // source persistée.
+  personAddress String?
+  personZip     String?
+  personCity    String?
+  // Horodatage de la première acceptation des conditions générales (lien
+  // EntityModuleConfig.termsUrl) à l'étape "Mes coordonnées" — jamais
+  // réécrit ensuite (même logique que checkinStartedAt), null tant que le
+  // client n'a pas encore validé cette étape.
+  cguAcceptedAt DateTime?
 
   // Identifiant de la réservation côté source EXTERNE (ex : "id" de l'API
   // Sesame Technology, "B01024128" — distinct de `code`, le code de

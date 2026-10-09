@@ -232,6 +232,58 @@ bookingRouter.post(
 );
 
 /**
+ * POST /wa/booking/updateContact — body: { code, personFirstname,
+ * personLastname, personEmail, personPhone, personAddress, personZip,
+ * personCity, cguAccepted }. Public (pas requireAdmin, comme
+ * /booking/checkinStart) : appelé par checkin.html à l'étape "Mes
+ * coordonnées" (juste après la pièce d'identité), où le client confirme ses
+ * informations plutôt que de les ressaisir de zéro — pré-remplies depuis la
+ * réservation/l'OCR côté client. Distinct de /booking/update (réservé admin,
+ * édition "Arrivées du jour") : ce guest ne doit pouvoir modifier QUE ses
+ * propres coordonnées de contact, jamais dates/chambre/statut.
+ */
+bookingRouter.post(
+  "/booking/updateContact",
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const b = req.body as {
+      code: string;
+      personFirstname?: string;
+      personLastname?: string;
+      personEmail: string;
+      personPhone: string;
+      personAddress?: string;
+      personZip?: string;
+      personCity?: string;
+      cguAccepted?: boolean;
+    };
+    if (!b.code) throw new HttpError(400, "code requis");
+
+    const email = (b.personEmail || "").trim();
+    if (!email || !email.includes("@")) throw new HttpError(400, "Email requis");
+    const phone = (b.personPhone || "").trim();
+    if (!phone) throw new HttpError(400, "Téléphone requis");
+    if (!b.cguAccepted) throw new HttpError(400, "Acceptation des conditions générales requise");
+
+    const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code: b.code } } });
+    if (!booking) throw new HttpError(404, "Réservation introuvable");
+
+    const data: Record<string, unknown> = { personEmail: email, personPhone: phone };
+    if (b.personFirstname !== undefined && b.personFirstname.trim()) data.personFirstname = b.personFirstname.trim();
+    if (b.personLastname !== undefined && b.personLastname.trim()) data.personLastname = b.personLastname.trim();
+    if (b.personAddress !== undefined) data.personAddress = b.personAddress.trim() || null;
+    if (b.personZip !== undefined) data.personZip = b.personZip.trim() || null;
+    if (b.personCity !== undefined) data.personCity = b.personCity.trim() || null;
+    // Idempotent — même logique que checkinStartedAt plus haut : horodatage
+    // de la PREMIÈRE acceptation, jamais réécrit ensuite.
+    if (!booking.cguAcceptedAt) data.cguAcceptedAt = new Date();
+
+    const updated = await prisma.booking.update({ where: { id: booking.id }, data });
+    res.json(normaliseBooking(updated));
+  })
+);
+
+/**
  * POST /wa/booking/delete — body: { code } — suppression DÉFINITIVE d'une
  * réservation (distincte de "Désactiver", qui ne fait que passer status à
  * "cancelled" et reste réversible). Bloquée si des commandes room service

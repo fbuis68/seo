@@ -336,7 +336,7 @@ input:focus,select:focus{border-color:var(--accent)}
 <div class="scroll" id="scrollArea">
 <div id="scr-sejour" class="scr on">
 
-  <!-- STEP DOTS — 9 étapes -->
+  <!-- STEP DOTS — 10 étapes -->
   <div class="sdots" id="stepDots">
     <div class="sd on" id="sd1" onclick="gotoStepFromDot(1)">1</div><div class="sline" id="sl1"></div>
     <div class="sd" id="sd2" onclick="gotoStepFromDot(2)">2</div><div class="sline" id="sl2"></div>
@@ -344,11 +344,12 @@ input:focus,select:focus{border-color:var(--accent)}
     <div class="sd" id="sd4" data-i18n-title="step_dot_kyc_title" title="Vérification identité" onclick="gotoStepFromDot(4)">
       <i class="ti ti-shield-check" style="font-size:11px"></i>
     </div><div class="sline" id="sl4"></div>
-    <div class="sd" id="sd5" onclick="gotoStepFromDot(5)">5</div><div class="sline" id="sl5"></div>
-    <div class="sd" id="sd6" data-i18n-title="step_dot_boutique_title" title="Boutique" onclick="gotoStepFromDot(6)"><i class="ti ti-shopping-bag" style="font-size:11px"></i></div><div class="sline" id="sl6"></div>
-    <div class="sd" id="sd7" data-i18n-title="step_dot_sharing_title" title="Partage entre clients" onclick="gotoStepFromDot(7)"><i class="ti ti-users" style="font-size:11px"></i></div><div class="sline" id="sl7"></div>
-    <div class="sd" id="sd8" data-i18n-title="step_dot_questionnaire_title" title="Questionnaire" onclick="gotoStepFromDot(8)"><i class="ti ti-list-check" style="font-size:11px"></i></div><div class="sline" id="sl8"></div>
-    <div class="sd" id="sd9" onclick="gotoStepFromDot(9)">9</div>
+    <div class="sd" id="sd5" data-i18n-title="step_dot_contact_title" title="Mes coordonnées" onclick="gotoStepFromDot(5)"><i class="ti ti-id-badge-2" style="font-size:11px"></i></div><div class="sline" id="sl5"></div>
+    <div class="sd" id="sd6" onclick="gotoStepFromDot(6)">6</div><div class="sline" id="sl6"></div>
+    <div class="sd" id="sd7" data-i18n-title="step_dot_boutique_title" title="Boutique" onclick="gotoStepFromDot(7)"><i class="ti ti-shopping-bag" style="font-size:11px"></i></div><div class="sline" id="sl7"></div>
+    <div class="sd" id="sd8" data-i18n-title="step_dot_sharing_title" title="Partage entre clients" onclick="gotoStepFromDot(8)"><i class="ti ti-users" style="font-size:11px"></i></div><div class="sline" id="sl8"></div>
+    <div class="sd" id="sd9" data-i18n-title="step_dot_questionnaire_title" title="Questionnaire" onclick="gotoStepFromDot(9)"><i class="ti ti-list-check" style="font-size:11px"></i></div><div class="sline" id="sl9"></div>
+    <div class="sd" id="sd10" onclick="gotoStepFromDot(10)">10</div>
   </div>
 
   <!-- ── STEP 1: BOOKING ── -->
@@ -504,11 +505,18 @@ input:focus,select:focus{border-color:var(--accent)}
           <div class="fi"><label class="lb" data-i18n="kyc_field_nationality">Nationalité</label><input type="text" id="kyc-nationality" placeholder="FRA"></div>
           <div class="fi"><label class="lb" data-i18n="kyc_field_country">Pays</label><input type="text" id="kyc-pays" placeholder="France"></div>
         </div>
-        <!-- Adresse -->
-        <div class="fi"><label class="lb" data-i18n="kyc_field_address">Adresse</label><input type="text" id="kyc-adresse" placeholder="12 Rue de la Paix"></div>
-        <div class="kyc-field-row">
-          <div class="fi"><label class="lb" data-i18n="kyc_field_zip">Code postal</label><input type="text" id="kyc-cp" placeholder="75001"></div>
-          <div class="fi"><label class="lb" data-i18n="kyc_field_city">Ville</label><input type="text" id="kyc-ville" placeholder="Paris"></div>
+        <!-- Adresse — déplacée vers l'étape "Mes coordonnées" juste après
+             (cf. #contact-adresse/#contact-cp/#contact-ville) : demandée
+             APRÈS la pièce d'identité plutôt qu'ici, pour ne pas surcharger
+             cette étape de détails déjà extraits automatiquement. Les
+             champs ci-dessous restent masqués ("display:none") et ne sont
+             plus affichés — conservés UNIQUEMENT pour que kycExtractOCR()/
+             kycVerifyDocument() continuent d'alimenter le même pipeline
+             d'extraction simulé sans réécriture, cf. setKycField ci-dessous. -->
+        <div style="display:none">
+          <input type="text" id="kyc-adresse">
+          <input type="text" id="kyc-cp">
+          <input type="text" id="kyc-ville">
         </div>
         <!-- MRZ -->
         <div class="fi" style="margin-top:6px">
@@ -591,9 +599,59 @@ input:focus,select:focus{border-color:var(--accent)}
       <button class="btn btn-out" onclick="skipKyc()" style="width:100%"><i class="ti ti-arrow-right"></i> <span data-i18n="kyc_skip">Passer cette étape</span></button>
     </div>
   </div>
+  <!-- ── STEP 5 : MES COORDONNÉES — toujours active, non-skippable (email,
+       téléphone et acceptation des CGU obligatoires) ── -->
   <div id="step5" class="step-panel">
+    <div class="slbl" data-i18n="contact_title">Mes coordonnées</div>
+
+    <div class="card">
+      <div class="ch"><i class="ti ti-id-badge-2"></i><span data-i18n="contact_hdr">Vérifiez vos informations</span></div>
+      <div class="kyc-field-row">
+        <div class="fi"><label class="lb" data-i18n="kyc_field_lastname">Nom</label><input type="text" id="contact-lastname" placeholder="DUPONT"></div>
+        <div class="fi"><label class="lb" data-i18n="kyc_field_firstname">Prénom</label><input type="text" id="contact-firstname" placeholder="Martin"></div>
+      </div>
+      <div class="fi">
+        <label class="lb" data-i18n="contact_email_label">Email <span style="color:var(--re)">*</span></label>
+        <input type="email" id="contact-email" placeholder="vous@email.com" required>
+      </div>
+      <div class="fi">
+        <label class="lb" data-i18n="contact_phone_label">Téléphone <span style="color:var(--re)">*</span></label>
+        <input type="tel" id="contact-phone" placeholder="06 12 34 56 78" required>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ch"><i class="ti ti-map-pin"></i><span data-i18n="contact_address_hdr">Adresse</span></div>
+      <div class="fi"><label class="lb" data-i18n="kyc_field_address">Adresse</label><input type="text" id="contact-adresse" placeholder="12 Rue de la Paix"></div>
+      <div class="kyc-field-row">
+        <div class="fi"><label class="lb" data-i18n="kyc_field_zip">Code postal</label><input type="text" id="contact-cp" placeholder="75001"></div>
+        <div class="fi"><label class="lb" data-i18n="kyc_field_city">Ville</label><input type="text" id="contact-ville" placeholder="Paris"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:12px">
+        <input type="checkbox" id="contact-cgu" style="margin-top:3px;width:18px;height:18px;flex-shrink:0;accent-color:var(--primary)">
+        <span style="font-size:13px;line-height:1.5" id="contact-cgu-label"></span>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+        <input type="checkbox" id="contact-newsletter" style="margin-top:3px;width:18px;height:18px;flex-shrink:0;accent-color:var(--primary)">
+        <span style="font-size:13px;line-height:1.5" data-i18n="esp_newsletter_checkbox_label">Je m'abonne à la newsletter de l'hôtel</span>
+      </label>
+    </div>
+
+    <div id="contact-err" class="alt alt-w" style="display:none;margin-bottom:10px"><i class="ti ti-alert-triangle"></i><span id="contact-err-text"></span></div>
+
+    <div class="brow">
+      <button class="btn btn-out" onclick="gotoStep(4)"><i class="ti ti-arrow-left"></i></button>
+      <button class="btn btn-p" onclick="contactStepNext()" style="flex:1;justify-content:center"><span data-i18n="btn_continue">Continuer</span> <i class="ti ti-arrow-right"></i></button>
+    </div>
+  </div>
+
+  <!-- ── STEP 6 : PRÉFÉRENCES ÉCO (ex-step5) ── -->
+  <div id="step6" class="step-panel">
     <div class="slbl" data-i18n="step5_title">Vos préférences éco</div>
-    <div id="skipTop5" class="skip-top" style="display:none" onclick="skipStep(5)"><i class="ti ti-player-skip-forward"></i> <span data-i18n="kyc_skip">Passer cette étape</span></div>
+    <div id="skipTop6" class="skip-top" style="display:none" onclick="skipStep(6)"><i class="ti ti-player-skip-forward"></i> <span data-i18n="kyc_skip">Passer cette étape</span></div>
     <div class="alt alt-g" id="altEco"><i class="ti ti-leaf"></i><span></span></div>
 
     <!-- TAXE SAVING LIVE METER -->
@@ -646,18 +704,18 @@ input:focus,select:focus{border-color:var(--accent)}
     </div>
 
     <div class="brow">
-      <button class="btn btn-out" onclick="gotoStep(prevActiveStep(5))"><i class="ti ti-arrow-left"></i></button>
-      <button class="btn btn-p" onclick="gotoStep(nextActiveStep(5))"><span data-i18n="step5_btn_next">La boutique</span> <i class="ti ti-shopping-bag"></i></button>
+      <button class="btn btn-out" onclick="gotoStep(prevActiveStep(6))"><i class="ti ti-arrow-left"></i></button>
+      <button class="btn btn-p" onclick="gotoStep(nextActiveStep(6))"><span data-i18n="step5_btn_next">La boutique</span> <i class="ti ti-shopping-bag"></i></button>
     </div>
-    <div id="skipStep5" style="display:none;margin-top:8px">
-      <button class="btn btn-out" onclick="skipStep(5)" style="width:100%"><i class="ti ti-arrow-right"></i> <span data-i18n="kyc_skip">Passer cette étape</span></button>
+    <div id="skipStep6" style="display:none;margin-top:8px">
+      <button class="btn btn-out" onclick="skipStep(6)" style="width:100%"><i class="ti ti-arrow-right"></i> <span data-i18n="kyc_skip">Passer cette étape</span></button>
     </div>
   </div>
 
-  <!-- ── STEP 6: BOUTIQUE ── -->
-  <div id="step6" class="step-panel">
+  <!-- ── STEP 7: BOUTIQUE (ex-step6) ── -->
+  <div id="step7" class="step-panel">
     <div class="slbl"><i class="ti ti-shopping-bag" style="font-size:16px;vertical-align:-2px;margin-right:4px"></i><span data-i18n="step6_title">Boutique</span></div>
-    <div id="skipTop6" class="skip-top" style="display:none" onclick="skipStep(6)"><i class="ti ti-player-skip-forward"></i> <span data-i18n="kyc_skip">Passer cette étape</span></div>
+    <div id="skipTop7" class="skip-top" style="display:none" onclick="skipStep(7)"><i class="ti ti-player-skip-forward"></i> <span data-i18n="kyc_skip">Passer cette étape</span></div>
     <div class="alt alt-b" style="margin-bottom:12px">
       <i class="ti ti-info-circle"></i>
       <div data-i18n-html="step6_info">Commandez maintenant et vos articles seront livrés en chambre avant votre arrivée — ou après votre check-in.<br>
@@ -713,20 +771,20 @@ input:focus,select:focus{border-color:var(--accent)}
     </div>
 
     <div class="brow">
-      <button class="btn btn-out" onclick="gotoStep(prevActiveStep(6))" style="flex-shrink:0"><i class="ti ti-arrow-left"></i></button>
-      <button class="btn btn-out" onclick="gotoStep(nextActiveStep(6))" style="flex:1;justify-content:center">
+      <button class="btn btn-out" onclick="gotoStep(prevActiveStep(7))" style="flex-shrink:0"><i class="ti ti-arrow-left"></i></button>
+      <button class="btn btn-out" onclick="gotoStep(nextActiveStep(7))" style="flex:1;justify-content:center">
         <span data-i18n="btn_pass">Passer</span> <i class="ti ti-arrow-right"></i>
       </button>
-      <button class="btn btn-p" onclick="bqPlaceOrder();setTimeout(function(){gotoStep(nextActiveStep(6));},700)" style="flex:1;justify-content:center;display:none" id="bqContinueBtn">
+      <button class="btn btn-p" onclick="bqPlaceOrder();setTimeout(function(){gotoStep(nextActiveStep(7));},700)" style="flex:1;justify-content:center;display:none" id="bqContinueBtn">
         <i class="ti ti-send"></i> <span data-i18n="step6_order_continue">Commander &amp; continuer</span>
       </button>
     </div>
   </div>
 
-  <!-- ── STEP 7: PARTAGE ENTRE CLIENTS ── -->
-  <div id="step7" class="step-panel">
+  <!-- ── STEP 8: PARTAGE ENTRE CLIENTS (ex-step7) ── -->
+  <div id="step8" class="step-panel">
     <div class="slbl" data-i18n="shr_title">Partage de profil</div>
-    <div id="skipTop7" class="skip-top" style="display:none" onclick="skipStep(7)"><i class="ti ti-player-skip-forward"></i> <span data-i18n="kyc_skip">Passer cette étape</span></div>
+    <div id="skipTop8" class="skip-top" style="display:none" onclick="skipStep(8)"><i class="ti ti-player-skip-forward"></i> <span data-i18n="kyc_skip">Passer cette étape</span></div>
 
     <div class="alt alt-b"><i class="ti ti-info-circle"></i><span data-i18n="shr_intro">Partagez votre nom, vos coordonnées, votre photo et vos centres d'intérêt avec les autres clients présents dans l'établissement pendant votre séjour. Visible uniquement le temps de votre réservation — désactivable à tout moment depuis votre espace.</span></div>
 
@@ -760,36 +818,36 @@ input:focus,select:focus{border-color:var(--accent)}
     </div>
 
     <div class="brow">
-      <button class="btn btn-out" onclick="gotoStep(prevActiveStep(7))"><i class="ti ti-arrow-left"></i></button>
-      <button class="btn btn-p" onclick="gotoStep(nextActiveStep(7))" style="flex:1;justify-content:center"><span data-i18n="btn_continue">Continuer</span> <i class="ti ti-arrow-right"></i></button>
-    </div>
-    <div id="skipStep7" style="display:none;margin-top:8px">
-      <button class="btn btn-out" onclick="skipStep(7)" style="width:100%"><i class="ti ti-arrow-right"></i> <span data-i18n="kyc_skip">Passer cette étape</span></button>
-    </div>
-  </div>
-
-  <!-- ── STEP 8: QUESTIONNAIRE ── -->
-  <div id="step8" class="step-panel">
-    <div class="slbl" id="qstTitle" data-i18n="qst_title">Questionnaire</div>
-    <div id="skipTop8" class="skip-top" style="display:none" onclick="skipStep(8)"><i class="ti ti-player-skip-forward"></i> <span data-i18n="kyc_skip">Passer cette étape</span></div>
-
-    <div id="qstDesc" class="alt alt-b" style="display:none"><i class="ti ti-info-circle"></i><span id="qstDescText"></span></div>
-    <div id="qstQuestions"></div>
-    <div id="qstCompletedMsg" class="alt alt-g" style="display:none"><i class="ti ti-check-circle"></i><span data-i18n="qst_completed">Merci, vos réponses ont bien été enregistrées.</span></div>
-
-    <div class="brow">
       <button class="btn btn-out" onclick="gotoStep(prevActiveStep(8))"><i class="ti ti-arrow-left"></i></button>
-      <button class="btn btn-p" id="qstSubmitBtn" onclick="qstSubmit()" style="flex:1;justify-content:center"><span data-i18n="qst_submit">Envoyer mes réponses</span> <i class="ti ti-arrow-right"></i></button>
+      <button class="btn btn-p" onclick="gotoStep(nextActiveStep(8))" style="flex:1;justify-content:center"><span data-i18n="btn_continue">Continuer</span> <i class="ti ti-arrow-right"></i></button>
     </div>
     <div id="skipStep8" style="display:none;margin-top:8px">
       <button class="btn btn-out" onclick="skipStep(8)" style="width:100%"><i class="ti ti-arrow-right"></i> <span data-i18n="kyc_skip">Passer cette étape</span></button>
     </div>
   </div>
 
-  <!-- ── STEP 9: REWARDS ── -->
+  <!-- ── STEP 9: QUESTIONNAIRE (ex-step8) ── -->
   <div id="step9" class="step-panel">
-    <div class="slbl" data-i18n="step7_title">Vos récompenses</div>
+    <div class="slbl" id="qstTitle" data-i18n="qst_title">Questionnaire</div>
     <div id="skipTop9" class="skip-top" style="display:none" onclick="skipStep(9)"><i class="ti ti-player-skip-forward"></i> <span data-i18n="kyc_skip">Passer cette étape</span></div>
+
+    <div id="qstDesc" class="alt alt-b" style="display:none"><i class="ti ti-info-circle"></i><span id="qstDescText"></span></div>
+    <div id="qstQuestions"></div>
+    <div id="qstCompletedMsg" class="alt alt-g" style="display:none"><i class="ti ti-check-circle"></i><span data-i18n="qst_completed">Merci, vos réponses ont bien été enregistrées.</span></div>
+
+    <div class="brow">
+      <button class="btn btn-out" onclick="gotoStep(prevActiveStep(9))"><i class="ti ti-arrow-left"></i></button>
+      <button class="btn btn-p" id="qstSubmitBtn" onclick="qstSubmit()" style="flex:1;justify-content:center"><span data-i18n="qst_submit">Envoyer mes réponses</span> <i class="ti ti-arrow-right"></i></button>
+    </div>
+    <div id="skipStep9" style="display:none;margin-top:8px">
+      <button class="btn btn-out" onclick="skipStep(9)" style="width:100%"><i class="ti ti-arrow-right"></i> <span data-i18n="kyc_skip">Passer cette étape</span></button>
+    </div>
+  </div>
+
+  <!-- ── STEP 10: REWARDS (ex-step9) ── -->
+  <div id="step10" class="step-panel">
+    <div class="slbl" data-i18n="step7_title">Vos récompenses</div>
+    <div id="skipTop10" class="skip-top" style="display:none" onclick="skipStep(10)"><i class="ti ti-player-skip-forward"></i> <span data-i18n="kyc_skip">Passer cette étape</span></div>
 
     <!-- Points gagnés ce séjour -->
     <div id="rewardPointsHero" style="margin-bottom:12px"></div>
@@ -902,7 +960,7 @@ input:focus,select:focus{border-color:var(--accent)}
     </div>
 
     <div class="brow" style="margin-top:8px">
-      <button class="btn btn-out" onclick="gotoStep(5)"><i class="ti ti-arrow-left"></i></button>
+      <button class="btn btn-out" onclick="gotoStep(6)"><i class="ti ti-arrow-left"></i></button>
     </div>
   </div>
 
@@ -1365,7 +1423,7 @@ function apiFetch(url, opts){
   return fetch(url, opts);
 }
 var DEFAULT_CFG={
-  hotelName:'Éco-Séjour',hotelSlogan:'',entityId:'E00000001',stars:3,
+  hotelName:'Éco-Séjour',hotelSlogan:'',entityId:'E00000001',stars:3,termsUrl:'',
   colors:{primary:'#8B1A2E',primaryLight:'#FDEDF0',accent:'#8B1A2E',headerBg:'#8B1A2E',
     headerText:'#FFFFFF',bg:'#F5F3F0',cardBg:'#FFFFFF',border:'#E3DED8',text:'#14121E',btnNav:'#8B1A2E'},
   radius:14,radiusBtn:8,shadow:true,fontTitle:"'Fraunces',serif",fontBody:"'Sora',sans-serif",
@@ -1699,7 +1757,14 @@ var I18N_FR = {
   err_order_send:"Erreur lors de l'envoi de la commande",toast_order_sent_thanks:'Commande envoyée ✓ — merci !',
   field_email:'Email',
   // Points d'étape
-  step_dot_kyc_title:'Vérification identité',step_dot_boutique_title:'Boutique',step_dot_sharing_title:'Partage entre clients',
+  step_dot_kyc_title:'Vérification identité',step_dot_contact_title:'Mes coordonnées',step_dot_boutique_title:'Boutique',step_dot_sharing_title:'Partage entre clients',
+  // Étape 5 — mes coordonnées (nom, email, téléphone, adresse, CGU, newsletter)
+  contact_title:'Mes coordonnées',contact_hdr:'Vérifiez vos informations',
+  contact_email_label:'Email',contact_phone_label:'Téléphone',contact_address_hdr:'Adresse',
+  contact_cgu_label_tpl:"J'ai lu et j'accepte les {link}.",contact_cgu_link_text:'conditions générales',
+  contact_err_email:'Merci de renseigner une adresse email valide',
+  contact_err_phone:'Merci de renseigner votre numéro de téléphone',
+  contact_err_cgu:"Merci d'accepter les conditions générales pour continuer",
   // Étape 7 — partage de profil entre clients
   shr_title:'Partage de profil',
   shr_intro:"Partagez votre nom, vos coordonnées, votre photo et vos centres d'intérêt avec les autres clients présents dans l'établissement pendant votre séjour. Visible uniquement le temps de votre réservation — désactivable à tout moment depuis votre espace.",
@@ -1768,7 +1833,7 @@ var I18N_FR = {
   kyc_selfie_title:'Selfie biométrique',kyc_selfie_sub:'Comparaison avec la photo du document',
   kyc_selfie_info:"Placez votre visage dans le cercle. La photo sera comparée à votre pièce d'identité.",
   kyc_start_cam:'Activer la caméra',kyc_take_selfie:'Prendre le selfie',
-  kyc_upload_alt:'Ou importer une photo',step4_btn_next:'Préférences éco',
+  kyc_upload_alt:'Ou importer une photo',step4_btn_next:'Mes coordonnées',
   toast_client_recognized:'Client reconnu — informations pré-remplies depuis la base',
   toast_doc_scanned:'Document scanné — vérifiez et complétez les informations',
   verifying_ellipsis:'Vérification…',kyc_expired_title:'Document expiré',
@@ -1953,7 +2018,14 @@ var I18N_EN = {
   rs_no_products_category:'No products in this category.',rs_my_orders_hdr:'My orders',
   err_order_send:'Error sending your order',toast_order_sent_thanks:'Order sent ✓ — thank you!',
   field_email:'Email',
-  step_dot_kyc_title:'Identity verification',step_dot_boutique_title:'Shop',step_dot_sharing_title:'Sharing with other guests',
+  step_dot_kyc_title:'Identity verification',step_dot_contact_title:'My details',step_dot_boutique_title:'Shop',step_dot_sharing_title:'Sharing with other guests',
+  // Step 5 — my details (name, email, phone, address, terms, newsletter)
+  contact_title:'My details',contact_hdr:'Check your information',
+  contact_email_label:'Email',contact_phone_label:'Phone',contact_address_hdr:'Address',
+  contact_cgu_label_tpl:'I have read and accept the {link}.',contact_cgu_link_text:'terms and conditions',
+  contact_err_email:'Please enter a valid email address',
+  contact_err_phone:'Please enter your phone number',
+  contact_err_cgu:'Please accept the terms and conditions to continue',
   shr_title:'Profile sharing',
   shr_intro:'Share your name, contact details, photo and interests with other guests staying at the property at the same time. Only visible for the duration of your reservation — can be turned off anytime from your space.',
   shr_toggle_hdr:'Share my profile',
@@ -2014,7 +2086,7 @@ var I18N_EN = {
   kyc_selfie_title:'Biometric selfie',kyc_selfie_sub:'Compared with the document photo',
   kyc_selfie_info:'Position your face in the circle. The photo will be compared with your ID.',
   kyc_start_cam:'Enable camera',kyc_take_selfie:'Take the selfie',
-  kyc_upload_alt:'Or upload a photo',step4_btn_next:'Eco preferences',
+  kyc_upload_alt:'Or upload a photo',step4_btn_next:'My details',
   toast_client_recognized:'Guest recognized — information pre-filled from our records',
   toast_doc_scanned:'Document scanned — please check and complete the information',
   verifying_ellipsis:'Verifying…',kyc_expired_title:'Expired document',
@@ -2195,7 +2267,14 @@ var I18N_ES = {
   rs_no_products_category:'No hay productos en esta categoría.',rs_my_orders_hdr:'Mis pedidos',
   err_order_send:'Error al enviar el pedido',toast_order_sent_thanks:'Pedido enviado ✓ — ¡gracias!',
   field_email:'Email',
-  step_dot_kyc_title:'Verificación de identidad',step_dot_boutique_title:'Tienda',step_dot_sharing_title:'Compartir con otros clientes',
+  step_dot_kyc_title:'Verificación de identidad',step_dot_contact_title:'Mis datos',step_dot_boutique_title:'Tienda',step_dot_sharing_title:'Compartir con otros clientes',
+  // Etapa 5 — mis datos (nombre, email, teléfono, dirección, términos, newsletter)
+  contact_title:'Mis datos',contact_hdr:'Verifique su información',
+  contact_email_label:'Email',contact_phone_label:'Teléfono',contact_address_hdr:'Dirección',
+  contact_cgu_label_tpl:'He leído y acepto los {link}.',contact_cgu_link_text:'términos y condiciones',
+  contact_err_email:'Introduzca una dirección de email válida',
+  contact_err_phone:'Introduzca su número de teléfono',
+  contact_err_cgu:'Acepte los términos y condiciones para continuar',
   shr_title:'Compartir perfil',
   shr_intro:'Comparta su nombre, sus datos de contacto, su foto y sus intereses con los demás clientes presentes en el establecimiento durante su estancia. Visible solo durante la validez de su reserva — se puede desactivar en cualquier momento desde su espacio.',
   shr_toggle_hdr:'Compartir mi perfil',
@@ -2258,7 +2337,7 @@ var I18N_ES = {
   kyc_selfie_title:'Selfie biométrico',kyc_selfie_sub:'Comparación con la foto del documento',
   kyc_selfie_info:'Coloque su rostro dentro del círculo. La foto se comparará con su documento de identidad.',
   kyc_start_cam:'Activar la cámara',kyc_take_selfie:'Tomar el selfie',
-  kyc_upload_alt:'O subir una foto',step4_btn_next:'Preferencias ecológicas',
+  kyc_upload_alt:'O subir una foto',step4_btn_next:'Mis datos',
   toast_client_recognized:'Cliente reconocido — información precargada desde la base de datos',
   toast_doc_scanned:'Documento escaneado — verifique y complete la información',
   verifying_ellipsis:'Verificando…',kyc_expired_title:'Documento caducado',
@@ -2509,11 +2588,12 @@ var STEP_MODULES = {
   2: 'room',
   3: 'taxe',
   4: 'kyc',
-  5: 'eco',
-  6: 'boutique', // boutique hôtelière — commande pendant le check-in
-  7: 'sharing',  // partage de profil avec les autres clients présents (opt-in)
-  8: 'questionnaire', // questionnaire personnalisé configuré par l'hôtel
-  9: 'rewards'   // récompenses + récapitulatif & paiement (toujours actif)
+  5: null,       // "Mes coordonnées" — toujours active (email/téléphone/CGU obligatoires), pas de bascule admin
+  6: 'eco',
+  7: 'boutique', // boutique hôtelière — commande pendant le check-in
+  8: 'sharing',  // partage de profil avec les autres clients présents (opt-in)
+  9: 'questionnaire', // questionnaire personnalisé configuré par l'hôtel
+  10: 'rewards'  // récompenses + récapitulatif & paiement (toujours actif)
 };
 function isModuleActive(key){
   if(!key) return true;
@@ -2536,11 +2616,11 @@ function isModuleMandatory(key){
   return !m || m.mandatory !== false;
 }
 function nextActiveStep(from){
-  for(var i=from+1;i<=9;i++){
+  for(var i=from+1;i<=10;i++){
     var mk=STEP_MODULES[i];
     if(isModuleActive(mk)) return i;
   }
-  return 9;
+  return 10;
 }
 function prevActiveStep(from){
   for(var i=from-1;i>=1;i--){
@@ -2569,14 +2649,15 @@ function gotoStep(n){
   if(n===2){S.activeRoomTags=[];renderRoomStep();}
   if(n===3){if(!S.occupants.length)S.occupants=[{age:'adulte'},{age:'adulte'}];renderOcc();}
   if(n===4){initKycStep();}
-  if(n===5)renderEcoStep();
-  if(n===7)initSharingStep();
-  if(n===8)initQuestionnaireStep();
-  if(n===9){renderRewardStep();renderSummary();}
+  if(n===5){initContactStep();}
+  if(n===6)renderEcoStep();
+  if(n===8)initSharingStep();
+  if(n===9)initQuestionnaireStep();
+  if(n===10){renderRewardStep();renderSummary();}
   updateSkipButtons();
 }
 function updateSkipButtons(){
-  [3,5,6,7,8,9].forEach(function(n){
+  [3,6,7,8,9,10].forEach(function(n){
     var mk = STEP_MODULES[n];
     var show = !isModuleMandatory(mk);
     var el = document.getElementById('skipStep'+n);
@@ -2600,7 +2681,7 @@ function gotoStepFromDot(n){
   gotoStep(n);
 }
 function updateDots(){
-  for(var i=1;i<=9;i++){
+  for(var i=1;i<=10;i++){
     var d=document.getElementById('sd'+i),l=document.getElementById('sl'+i);
     if(!d) continue;
     var mk=STEP_MODULES[i];
@@ -4127,9 +4208,9 @@ async function espRenderBoutiqueTab(){
 }
 
 function espOpenBoutique(){
-  // Ouvre la boutique en passant directement à l'étape boutique (step 6)
+  // Ouvre la boutique en passant directement à l'étape boutique (step 7)
   gotoScr('sejour');
-  setTimeout(function(){ gotoStep(6); }, 150);
+  setTimeout(function(){ gotoStep(7); }, 150);
 }
 
 // ── FIDÉLITÉ — seuils/avantages issus de CFG.loyaltyTiers (chargé avec la config) ──
@@ -5392,6 +5473,106 @@ function initKycStep() {
     KYC.selfieVerified = true; // ne bloque pas la complétude KYC
     KYC.matchScore = KYC.matchScore || 100;
   }
+}
+
+/**
+ * STEP 5 — "Mes coordonnées", toujours active (cf. STEP_MODULES[5]=null) :
+ * nom/prénom/adresse pré-remplis (réservation + OCR simulée de la pièce
+ * d'identité, cf. #kyc-adresse/#kyc-cp/#kyc-ville masqués à l'étape
+ * précédente), email/téléphone à confirmer (obligatoires), CGU + newsletter.
+ * N'écrase jamais une valeur déjà saisie par le client (ex : retour en
+ * arrière puis nouvelle visite de cette étape).
+ */
+function initContactStep(){
+  var b = S.booking || {};
+  var kycLn = document.getElementById('kyc-lastname');
+  var kycFn = document.getElementById('kyc-firstname');
+  var lnEl = document.getElementById('contact-lastname');
+  var fnEl = document.getElementById('contact-firstname');
+  if(lnEl && !lnEl.value) lnEl.value = (kycLn && kycLn.value) || b.personLastname || '';
+  if(fnEl && !fnEl.value) fnEl.value = (kycFn && kycFn.value) || b.personFirstname || '';
+
+  var emailEl = document.getElementById('contact-email');
+  var phoneEl = document.getElementById('contact-phone');
+  if(emailEl && !emailEl.value) emailEl.value = b.personEmail || '';
+  if(phoneEl && !phoneEl.value) phoneEl.value = b.personPhone || '';
+
+  var kycAdr = document.getElementById('kyc-adresse');
+  var kycCp  = document.getElementById('kyc-cp');
+  var kycVl  = document.getElementById('kyc-ville');
+  var adrEl = document.getElementById('contact-adresse');
+  var cpEl  = document.getElementById('contact-cp');
+  var vlEl  = document.getElementById('contact-ville');
+  if(adrEl && !adrEl.value) adrEl.value = (kycAdr && kycAdr.value) || b.personAddress || '';
+  if(cpEl  && !cpEl.value)  cpEl.value  = (kycCp  && kycCp.value)  || b.personZip     || '';
+  if(vlEl  && !vlEl.value)  vlEl.value  = (kycVl  && kycVl.value)  || b.personCity    || '';
+
+  var cguLabel = document.getElementById('contact-cgu-label');
+  if(cguLabel){
+    var linkText = t('contact_cgu_link_text');
+    var linkHtml = CFG.termsUrl ? '<a href="'+esc(CFG.termsUrl)+'" target="_blank" rel="noopener">'+esc(linkText)+'</a>' : esc(linkText);
+    cguLabel.innerHTML = tf('contact_cgu_label_tpl', {link: linkHtml});
+  }
+
+  var errEl = document.getElementById('contact-err');
+  if(errEl) errEl.style.display = 'none';
+}
+
+function contactStepNext(){
+  var emailEl = document.getElementById('contact-email');
+  var phoneEl = document.getElementById('contact-phone');
+  var cguEl = document.getElementById('contact-cgu');
+  var errEl = document.getElementById('contact-err');
+  var errTextEl = document.getElementById('contact-err-text');
+  var email = (emailEl.value||'').trim();
+  var phone = (phoneEl.value||'').trim();
+
+  if(!email || !email.includes('@')){ errTextEl.textContent = t('contact_err_email'); errEl.style.display='block'; return; }
+  if(!phone){ errTextEl.textContent = t('contact_err_phone'); errEl.style.display='block'; return; }
+  if(!cguEl.checked){ errTextEl.textContent = t('contact_err_cgu'); errEl.style.display='block'; return; }
+  errEl.style.display='none';
+
+  var firstname = (document.getElementById('contact-firstname').value||'').trim();
+  var lastname  = (document.getElementById('contact-lastname').value||'').trim();
+  var adresse   = (document.getElementById('contact-adresse').value||'').trim();
+  var cp        = (document.getElementById('contact-cp').value||'').trim();
+  var ville     = (document.getElementById('contact-ville').value||'').trim();
+  var newsletter = document.getElementById('contact-newsletter').checked;
+
+  if(S.booking){
+    S.booking.personFirstname = firstname || S.booking.personFirstname;
+    S.booking.personLastname  = lastname  || S.booking.personLastname;
+    S.booking.personEmail = email;
+    S.booking.personPhone = phone;
+    S.booking.personAddress = adresse;
+    S.booking.personZip = cp;
+    S.booking.personCity = ville;
+  }
+
+  // Best-effort — jamais bloquant pour la suite du check-in (même
+  // philosophie que espSaveProfile) : la session continue même si
+  // l'enregistrement échoue, le client reste visible côté réception via la
+  // réservation déjà existante.
+  if(S.booking && S.booking.code){
+    apiFetch(API_BASE+'/wa/booking/updateContact', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        code: S.booking.code, personFirstname: firstname, personLastname: lastname,
+        personEmail: email, personPhone: phone,
+        personAddress: adresse, personZip: cp, personCity: ville,
+        cguAccepted: true
+      })
+    }).catch(function(e){ console.error('updateContact error', e); });
+  }
+
+  if(newsletter && email){
+    apiFetch(API_BASE+'/wa/clientPrefs/newsletterOptIn', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({email:email, optIn:true})
+    }).catch(function(e){ console.error('newsletterOptIn error', e); });
+  }
+
+  gotoStep(6);
 }
 
 function selectDocType(type) {
