@@ -12061,10 +12061,15 @@ function renderOrders(){
     // affichage ici la réception n'a aucun moyen de savoir qu'une commande
     // n'a pas été transmise au PMS ou qu'un casier n'a pas été réservé.
     var warnings = [];
-    if(o.pmsPushWarning) warnings.push('<i class="ti ti-alert-triangle" style="font-size:12px"></i> PMS : '+esc(o.pmsPushWarning));
+    if(o.pmsPushWarning){
+      warnings.push('<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">'
+        +'<span><i class="ti ti-alert-triangle" style="font-size:12px"></i> PMS : '+esc(o.pmsPushWarning)+'</span>'
+        +'<button class="btn btn-s" onclick="ordRetryPmsPush(\''+o.id+'\')" style="width:auto;padding:4px 10px;font-size:11px"><i class="ti ti-refresh" style="font-size:11px"></i> Renvoyer au PMS</button>'
+        +'</div>');
+    }
     if(o.lockerSourceWarning) warnings.push('<i class="ti ti-alert-triangle" style="font-size:12px"></i> Casier : '+esc(o.lockerSourceWarning));
     var warnBanner = warnings.length
-      ? '<div style="background:rgba(230,126,34,.1);color:#E67E22;border-radius:var(--rs);padding:6px 10px;margin-bottom:10px;font-size:12px;display:flex;flex-direction:column;gap:3px">'+warnings.join('')+'</div>'
+      ? '<div style="background:rgba(230,126,34,.1);color:#E67E22;border-radius:var(--rs);padding:6px 10px;margin-bottom:10px;font-size:12px;display:flex;flex-direction:column;gap:6px">'+warnings.join('')+'</div>'
       : '';
 
     var nextSt = ordNextStatus(o.status);
@@ -12112,6 +12117,18 @@ function renderOrders(){
       +'<div style="display:flex;gap:8px;flex-wrap:wrap">'+actions+'</div>'
       +'</div>';
   }).join('');
+}
+
+async function ordRetryPmsPush(id){
+  try{
+    var r = await adminFetch('/wa/roomservice/retryPmsPush', {method:'POST', body:JSON.stringify({id:id})});
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Échec du renvoi'); return; }
+    var idx = ORDERS_CACHE.findIndex(function(x){return x.id===id;});
+    if(idx>=0) ORDERS_CACHE[idx] = data;
+    renderOrders();
+    toast(data.pmsPushWarning ? 'Toujours en échec : '+data.pmsPushWarning : 'Commande transmise au PMS ✓');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
 }
 
 async function ordSetStatus(id, status){

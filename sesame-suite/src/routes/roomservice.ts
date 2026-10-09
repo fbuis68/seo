@@ -250,36 +250,52 @@ export async function finalizeOrder(
   // qu'il arrive ici, pmsPushWarning porte le message d'erreur plutôt
   // qu'un faux succès (même philosophie que lockerSourceWarning ci-dessus).
   if (booking) {
-    const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
-    if (config?.orderPushEnabled) {
-      let warning: string | undefined;
-      if (!booking.externalAccountId) {
-        warning = "Identifiant de compte PMS inconnu pour cette réservation — commande non transmise au PMS";
-      } else {
-        const products = await prisma.product.findMany({
-          where: { id: { in: items.map((it) => it.id) }, entityId: entity.id },
-          select: { id: true, label: true, pmsProductCode: true },
-        });
-        const productById = new Map(products.map((p) => [p.id, p]));
-        const missing = items.filter((it) => !productById.get(it.id)?.pmsProductCode);
-        if (missing.length) {
-          warning = `Article(s) sans correspondance de code produit PMS : ${missing.map((it) => it.label).join(", ")}`;
-        } else {
-          const pmsItems = items.map((it) => ({ productId: productById.get(it.id)!.pmsProductCode!, count: it.qty }));
-          const result = await pushOrderToPms(config, booking.externalAccountId, pmsItems).catch((e) => ({
-            ok: false as const,
-            error: e instanceof Error ? e.message : String(e),
-          }));
-          if (!result.ok) warning = result.error;
-        }
-      }
-      if (warning) {
-        finalOrder = await prisma.order.update({ where: { id: order.id }, data: { pmsPushWarning: warning } });
-      }
-    }
+    const pushResult = await pushOrderPmsBestEffort(entity, order.id, booking, items);
+    if (pushResult) finalOrder = pushResult;
   }
 
   return finalOrder;
+}
+
+/**
+ * Extrait de finalizeOrder ci-dessus pour être réutilisable depuis POST
+ * /roomservice/retryPmsPush (panneau "Commandes" — bouton "Renvoyer au
+ * PMS" sur une commande déjà en erreur, cf. Order.pmsPushWarning) : même
+ * logique best-effort, sans refaire tourner locker/commission/notification
+ * de création (déjà faites une fois à la création de la commande). Renvoie
+ * l'Order mis à jour si le warning a changé, sinon null (rien à persister).
+ */
+async function pushOrderPmsBestEffort(
+  entity: { id: string },
+  orderId: string,
+  booking: { externalAccountId: string | null },
+  items: CartItem[]
+) {
+  const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
+  if (!config?.orderPushEnabled) return null;
+
+  let warning: string | undefined;
+  if (!booking.externalAccountId) {
+    warning = "Identifiant de compte PMS inconnu pour cette réservation — commande non transmise au PMS";
+  } else {
+    const products = await prisma.product.findMany({
+      where: { id: { in: items.map((it) => it.id) }, entityId: entity.id },
+      select: { id: true, label: true, pmsProductCode: true },
+    });
+    const productById = new Map(products.map((p) => [p.id, p]));
+    const missing = items.filter((it) => !productById.get(it.id)?.pmsProductCode);
+    if (missing.length) {
+      warning = `Article(s) sans correspondance de code produit PMS : ${missing.map((it) => it.label).join(", ")}`;
+    } else {
+      const pmsItems = items.map((it) => ({ productId: productById.get(it.id)!.pmsProductCode!, count: it.qty }));
+      const result = await pushOrderToPms(config, booking.externalAccountId, pmsItems).catch((e) => ({
+        ok: false as const,
+        error: e instanceof Error ? e.message : String(e),
+      }));
+      if (!result.ok) warning = result.error;
+    }
+  }
+  return prisma.order.update({ where: { id: orderId }, data: { pmsPushWarning: warning || null } });
 }
 
 /**
@@ -336,6 +352,37 @@ roomserviceRouter.post(
 
     const finalOrder = await finalizeOrder(entity, order, booking, itemsWithPos, b.note);
     res.status(201).json(shapeOrder(finalOrder));
+  })
+);
+
+/**
+ * POST /wa/roomservice/retryPmsPush — body: { id } — rejoue le push best-
+ * effort vers le PMS (cf. pushOrderPmsBestEffort ci-dessus) pour une
+ * commande déjà créée, depuis le panneau "Commandes" (bouton "Renvoyer au
+ * PMS", visible sur une commande en échec — Order.pmsPushWarning). Utile
+ * une fois le vrai problème corrigé (ex : AccountId renseigné sur la
+ * réservation entre-temps, code produit PMS ajouté) sans devoir repasser
+ * toute une commande de test depuis l'espace client.
+ */
+roomserviceRouter.post(
+  "/roomservice/retryPmsPush",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const id = (req.body.id as string) || "";
+    if (!id) throw new HttpError(400, "id requis");
+
+    const order = await prisma.order.findFirst({ where: { id, entityId: entity.id } });
+    if (!order) throw new HttpError(404, "Commande introuvable");
+    if (!order.bookingId) throw new HttpError(400, "Cette commande n'est rattachée à aucune réservation — push impossible");
+
+    const booking = await prisma.booking.findUnique({ where: { id: order.bookingId }, select: { externalAccountId: true } });
+    if (!booking) throw new HttpError(404, "Réservation introuvable");
+
+    const items = order.items as CartItem[];
+    const updated = await pushOrderPmsBestEffort(entity, order.id, booking, items);
+    if (!updated) throw new HttpError(400, "Push des commandes vers le PMS désactivé — activez-le dans Intégration réservations");
+    res.json(shapeOrder(updated));
   })
 );
 
