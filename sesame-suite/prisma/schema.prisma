@@ -957,6 +957,19 @@ model BookingSourceConfig {
   // le catalogue, les PRODUITS (pas les services) distinguant chaque
   // article (cf. Product.pmsProductCode).
   orderServiceIdValue String?
+  // Connecteur de push INDÉPENDANT de celui des réservations ci-dessus
+  // (baseUrl/authType/...) — permet d'importer les réservations depuis un
+  // système (ex : API Sesame Technology) et de pousser les commandes vers
+  // un AUTRE système (ex : Mews), chacun avec sa propre URL de base et ses
+  // propres identifiants. orderBaseUrl vide = pas de push possible (même
+  // garde que les autres champs orderXxx, cf. pushOrderToPms).
+  orderBaseUrl            String?
+  orderAuthType           String? @default("none") // none | apiKey | bearer | basic — pas de "login" ici, jamais utile pour un push ponctuel
+  orderAuthApiKeyHeader   String?
+  orderAuthApiKeyValue    String?
+  orderAuthBearerToken    String?
+  orderAuthBasicUser      String?
+  orderAuthBasicPassword  String?
 
   // null = synchronisation manuelle uniquement ("Importer maintenant").
   syncIntervalMinutes Int?

@@ -69,10 +69,17 @@ function shapeConfig(c: {
   passListResponseListPath: string | null;
   passFieldMapping: unknown;
   orderPushEnabled: boolean;
+  orderBaseUrl: string | null;
   orderEndpointPath: string | null;
   orderEndpointMethod: string | null;
   orderEndpointBodyParams: unknown;
   orderServiceIdValue: string | null;
+  orderAuthType: string | null;
+  orderAuthApiKeyHeader: string | null;
+  orderAuthApiKeyValue: string | null;
+  orderAuthBearerToken: string | null;
+  orderAuthBasicUser: string | null;
+  orderAuthBasicPassword: string | null;
   nfcStartEndpointPath: string | null;
   nfcStartEndpointMethod: string | null;
   nfcStartPassParam: string | null;
@@ -199,10 +206,17 @@ function shapeConfig(c: {
     passListResponseListPath: c.passListResponseListPath || "root",
     passFieldMapping: c.passFieldMapping || {},
     orderPushEnabled: c.orderPushEnabled,
+    orderBaseUrl: c.orderBaseUrl || "",
     orderEndpointPath: c.orderEndpointPath || "",
     orderEndpointMethod: c.orderEndpointMethod || "POST",
     orderEndpointBodyParams: c.orderEndpointBodyParams || {},
     orderServiceIdValue: c.orderServiceIdValue || "",
+    orderAuthType: c.orderAuthType || "none",
+    orderAuthApiKeyHeader: c.orderAuthApiKeyHeader || "",
+    orderAuthApiKeyValue: c.orderAuthApiKeyValue || "",
+    orderAuthBearerToken: c.orderAuthBearerToken || "",
+    orderAuthBasicUser: c.orderAuthBasicUser || "",
+    orderAuthBasicPassword: c.orderAuthBasicPassword || "",
     nfcStartEndpointPath: c.nfcStartEndpointPath || "",
     nfcStartEndpointMethod: c.nfcStartEndpointMethod || "GET",
     nfcStartPassParam: c.nfcStartPassParam || "id",
@@ -371,10 +385,17 @@ interface ConfigBody {
   passListResponseListPath?: string;
   passFieldMapping?: PassFieldMapping;
   orderPushEnabled?: boolean;
+  orderBaseUrl?: string;
   orderEndpointPath?: string;
   orderEndpointMethod?: string;
   orderEndpointBodyParams?: Record<string, string>;
   orderServiceIdValue?: string;
+  orderAuthType?: string;
+  orderAuthApiKeyHeader?: string;
+  orderAuthApiKeyValue?: string;
+  orderAuthBearerToken?: string;
+  orderAuthBasicUser?: string;
+  orderAuthBasicPassword?: string;
   nfcStartEndpointPath?: string;
   nfcStartEndpointMethod?: string;
   nfcStartPassParam?: string;
@@ -502,10 +523,17 @@ bookingSourceRouter.post(
       passListResponseListPath: b.passListResponseListPath,
       passFieldMapping: b.passFieldMapping as never,
       orderPushEnabled: b.orderPushEnabled,
+      orderBaseUrl: b.orderBaseUrl,
       orderEndpointPath: b.orderEndpointPath,
       orderEndpointMethod: b.orderEndpointMethod,
       orderEndpointBodyParams: b.orderEndpointBodyParams as never,
       orderServiceIdValue: b.orderServiceIdValue,
+      orderAuthType: b.orderAuthType,
+      orderAuthApiKeyHeader: b.orderAuthApiKeyHeader,
+      orderAuthApiKeyValue: b.orderAuthApiKeyValue,
+      orderAuthBearerToken: b.orderAuthBearerToken,
+      orderAuthBasicUser: b.orderAuthBasicUser,
+      orderAuthBasicPassword: b.orderAuthBasicPassword,
       nfcStartEndpointPath: b.nfcStartEndpointPath,
       nfcStartEndpointMethod: b.nfcStartEndpointMethod,
       nfcStartPassParam: b.nfcStartPassParam,

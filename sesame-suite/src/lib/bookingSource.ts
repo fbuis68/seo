@@ -1701,6 +1701,28 @@ export async function openFacilityDirect(config: BookingSourceConfig, externalFa
   return { opened: true };
 }
 
+/**
+ * Authentification du connecteur "Push des commandes" — INDÉPENDANT de
+ * buildAuthHeaders() ci-dessus (connecteur réservations) : pas de mode
+ * "login" (connexion+mot de passe→token), jamais utile pour un envoi
+ * ponctuel de commande (ex : Mews authentifie par ClientToken/AccessToken
+ * directement dans le corps de chaque requête, cf. orderEndpointBodyParams).
+ */
+function buildOrderAuthHeaders(config: BookingSourceConfig): Record<string, string> {
+  switch (config.orderAuthType) {
+    case "apiKey":
+      if (!config.orderAuthApiKeyHeader || !config.orderAuthApiKeyValue) return {};
+      return { [config.orderAuthApiKeyHeader]: config.orderAuthApiKeyValue };
+    case "bearer":
+      return config.orderAuthBearerToken ? { Authorization: `Bearer ${config.orderAuthBearerToken}` } : {};
+    case "basic":
+      if (!config.orderAuthBasicUser) return {};
+      return { Authorization: "Basic " + Buffer.from(`${config.orderAuthBasicUser}:${config.orderAuthBasicPassword || ""}`).toString("base64") };
+    default:
+      return {};
+  }
+}
+
 export interface PmsOrderItem {
   /** Code produit côté PMS (Product.pmsProductCode) — jamais vide ici, filtré en amont par l'appelant. */
   productId: string;
@@ -1732,12 +1754,15 @@ export async function pushOrderToPms(
   if (!config.orderPushEnabled) return { ok: false, error: "Push des commandes vers le PMS désactivé" };
   if (!config.orderEndpointPath) return { ok: false, error: 'Push des commandes activé mais "Chemin de l\'appel" non configuré' };
   if (!config.orderServiceIdValue) return { ok: false, error: "Identifiant du Service PMS non configuré" };
-  if (!config.baseUrl) return { ok: false, error: "URL de base non configurée" };
+  // Connecteur INDÉPENDANT de celui des réservations (orderBaseUrl, pas
+  // baseUrl) — permet par exemple d'importer les réservations depuis
+  // Sesame Technology et de pousser les commandes vers Mews.
+  if (!config.orderBaseUrl) return { ok: false, error: "URL de base du connecteur de commandes non configurée" };
   if (!accountId) return { ok: false, error: "Identifiant de compte PMS inconnu pour cette réservation" };
   if (!items.length) return { ok: false, error: "Aucun article à transmettre" };
 
-  const url = normalizeBaseUrl(config.baseUrl).replace(/\/$/, "") + config.orderEndpointPath;
-  const { headers: authHeaders } = await buildAuthHeaders(config);
+  const url = normalizeBaseUrl(config.orderBaseUrl).replace(/\/$/, "") + config.orderEndpointPath;
+  const authHeaders = buildOrderAuthHeaders(config);
   const baseParams =
     config.orderEndpointBodyParams && typeof config.orderEndpointBodyParams === "object"
       ? (config.orderEndpointBodyParams as Record<string, unknown>)

@@ -2300,10 +2300,27 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       <input type="checkbox" id="bs-orderPushEnabled" style="accent-color:var(--am)">
       <span style="font-size:13px">Activer le push des commandes</span>
     </label>
+    <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
+      <span>Connecteur INDÉPENDANT de celui des réservations ci-dessus — URL de base et identifiants propres, pour pouvoir pousser les commandes vers un système DIFFÉRENT de celui qui fournit les réservations (ex : réservations importées depuis Sesame Technology, commandes poussées vers Mews).</span>
+    </div>
+    <div class="fi">
+      <label class="lb">URL de base (système destinataire des commandes)</label>
+      <input type="text" id="bs-orderBaseUrl" placeholder="Ex : https://api.mews.com" autocomplete="off">
+    </div>
     <div class="fi">
       <label class="lb">Chemin de l'endpoint de création de commande</label>
       <input type="text" id="bs-orderEndpointPath" placeholder="Ex : /api/connector/v1/orders/add" autocomplete="off">
     </div>
+    <div class="fi">
+      <label class="lb">Type d'authentification</label>
+      <select id="bs-orderAuthType" onchange="bsRenderOrderAuthFields()">
+        <option value="none">Aucune (identifiants dans le corps de la requête, cf. ci-dessous)</option>
+        <option value="apiKey">Clé API (en-tête HTTP)</option>
+        <option value="bearer">Bearer token</option>
+        <option value="basic">Basic auth (utilisateur / mot de passe)</option>
+      </select>
+    </div>
+    <div id="bs-order-auth-fields"></div>
     <div class="g2">
       <div class="fi">
         <label class="lb">Méthode HTTP</label>
@@ -7205,6 +7222,43 @@ function bsRenderAuthFields(){
   }
 }
 
+// Authentification du connecteur "Push des commandes" — INDÉPENDANTE de
+// bsRenderAuthFields() ci-dessus (connecteur réservations) : pas de mode
+// "Connexion" (login+mot de passe→token), jamais utile pour un envoi de
+// commande ponctuel (ex : Mews authentifie par ClientToken/AccessToken
+// directement dans le corps de chaque requête, cf. "Paramètres fixes"
+// juste en dessous).
+function bsRenderOrderAuthFields(){
+  var type = document.getElementById('bs-orderAuthType').value;
+  var el = document.getElementById('bs-order-auth-fields');
+  var h = '';
+  if(type==='apiKey'){
+    h += '<div class="g2">';
+    h += '<div class="fi"><label class="lb">Nom de l\'en-tête</label><input type="text" id="bs-orderAuthApiKeyHeader" placeholder="X-API-Key"></div>';
+    h += '<div class="fi"><label class="lb">Valeur de la clé</label><input type="text" id="bs-orderAuthApiKeyValue" placeholder="••••••••"></div>';
+    h += '</div>';
+  } else if(type==='bearer'){
+    h += '<div class="fi"><label class="lb">Bearer token</label><input type="text" id="bs-orderAuthBearerToken" placeholder="••••••••"></div>';
+  } else if(type==='basic'){
+    h += '<div class="g2">';
+    h += '<div class="fi"><label class="lb">Utilisateur</label><input type="text" id="bs-orderAuthBasicUser"></div>';
+    h += '<div class="fi"><label class="lb">Mot de passe</label><input type="password" id="bs-orderAuthBasicPassword"></div>';
+    h += '</div>';
+  }
+  el.innerHTML = h;
+  if(BS_CONFIG){
+    if(type==='apiKey'){
+      document.getElementById('bs-orderAuthApiKeyHeader').value = BS_CONFIG.orderAuthApiKeyHeader||'';
+      document.getElementById('bs-orderAuthApiKeyValue').value = BS_CONFIG.orderAuthApiKeyValue||'';
+    } else if(type==='bearer'){
+      document.getElementById('bs-orderAuthBearerToken').value = BS_CONFIG.orderAuthBearerToken||'';
+    } else if(type==='basic'){
+      document.getElementById('bs-orderAuthBasicUser').value = BS_CONFIG.orderAuthBasicUser||'';
+      document.getElementById('bs-orderAuthBasicPassword').value = BS_CONFIG.orderAuthBasicPassword||'';
+    }
+  }
+}
+
 /**
  * Convertit un objet {clé:valeur} en texte pour le champ "Paramètres du
  * corps si POST", et inversement. Deux formats acceptés en saisie :
@@ -7500,9 +7554,15 @@ var PMS_PRESETS = {
       bsRenderMappingFields({code:'Number', startDate:'StartUtc', endDate:'EndUtc', facilityCode:'AssignedSpaceId', status:'State', accountId:'AccountId'});
       // Push des commandes (orders/add) — schéma non vérifié en conditions réelles,
       // faute d'accès à un compte Mews réel : à confirmer avant mise en prod.
+      // Connecteur INDÉPENDANT de celui des réservations ci-dessus — repris
+      // par défaut depuis "URL de base" (cas courant : Mews pour les deux),
+      // mais modifiable séparément (ex : réservations Sesame + commandes Mews).
+      document.getElementById('bs-orderBaseUrl').value = document.getElementById('bs-baseUrl').value || '';
       document.getElementById('bs-orderEndpointPath').value = '/api/connector/v1/orders/add';
       document.getElementById('bs-orderEndpointMethod').value = 'POST';
       document.getElementById('bs-orderEndpointBodyParams').value = 'ClientToken=\nAccessToken=\nClient=Sesame Suite 1.0';
+      document.getElementById('bs-orderAuthType').value = 'none';
+      bsRenderOrderAuthFields();
     },
     vars: [
       {label:'URL de base', placeholder:'https://api.mews.com (prod) ou https://api.mews-demo.com (démo)', target:'bs-baseUrl'},
@@ -7945,10 +8005,17 @@ function bsCollectFormValues(){
     passListResponseListPath: document.getElementById('bs-passListResponseListPath').value.trim(),
     passFieldMapping: bsCollectPassMapping(),
     orderPushEnabled: document.getElementById('bs-orderPushEnabled').checked,
+    orderBaseUrl: document.getElementById('bs-orderBaseUrl').value.trim(),
     orderEndpointPath: document.getElementById('bs-orderEndpointPath').value.trim(),
     orderEndpointMethod: document.getElementById('bs-orderEndpointMethod').value,
     orderEndpointBodyParams: bsTextToParams(document.getElementById('bs-orderEndpointBodyParams').value||''),
     orderServiceIdValue: document.getElementById('bs-orderServiceIdValue').value.trim(),
+    orderAuthType: document.getElementById('bs-orderAuthType').value,
+    orderAuthApiKeyHeader: (document.getElementById('bs-orderAuthApiKeyHeader')||{}).value||'',
+    orderAuthApiKeyValue: (document.getElementById('bs-orderAuthApiKeyValue')||{}).value||'',
+    orderAuthBearerToken: (document.getElementById('bs-orderAuthBearerToken')||{}).value||'',
+    orderAuthBasicUser: (document.getElementById('bs-orderAuthBasicUser')||{}).value||'',
+    orderAuthBasicPassword: (document.getElementById('bs-orderAuthBasicPassword')||{}).value||'',
     nfcStartEndpointPath: document.getElementById('bs-nfcStartEndpointPath').value.trim(),
     nfcStartEndpointMethod: document.getElementById('bs-nfcStartEndpointMethod').value,
     nfcStartPassParam: document.getElementById('bs-nfcStartPassParam').value.trim(),
@@ -8100,10 +8167,13 @@ async function bsInit(){
   document.getElementById('bs-passListResponseListPath').value = BS_CONFIG.passListResponseListPath||'root';
   bsRenderPassMappingFields(BS_CONFIG.passFieldMapping);
   document.getElementById('bs-orderPushEnabled').checked = !!BS_CONFIG.orderPushEnabled;
+  document.getElementById('bs-orderBaseUrl').value = BS_CONFIG.orderBaseUrl||'';
   document.getElementById('bs-orderEndpointPath').value = BS_CONFIG.orderEndpointPath||'';
   document.getElementById('bs-orderEndpointMethod').value = BS_CONFIG.orderEndpointMethod||'POST';
   document.getElementById('bs-orderEndpointBodyParams').value = bsParamsToText(BS_CONFIG.orderEndpointBodyParams);
   document.getElementById('bs-orderServiceIdValue').value = BS_CONFIG.orderServiceIdValue||'';
+  document.getElementById('bs-orderAuthType').value = BS_CONFIG.orderAuthType||'none';
+  bsRenderOrderAuthFields();
   document.getElementById('bs-nfcStartEndpointPath').value = BS_CONFIG.nfcStartEndpointPath||'';
   document.getElementById('bs-nfcStartEndpointMethod').value = BS_CONFIG.nfcStartEndpointMethod||'GET';
   document.getElementById('bs-nfcStartPassParam').value = BS_CONFIG.nfcStartPassParam||'id';
