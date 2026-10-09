@@ -7,6 +7,17 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/favicon-192.png">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<!-- PWA (§ demande client "faire de la page une app pwa") — href posé
+     dynamiquement dès que ENTITY_CODE est connu (cf. plus bas), le manifest
+     devant refléter CET établissement (nom, couleurs) plutôt qu'un manifeste
+     générique unique pour tous les hôtels. theme-color reflète la couleur
+     d'en-tête par défaut tant que applyBrand() n'a pas chargé celle de
+     l'établissement (cf. applyBrand, qui la met aussi à jour). -->
+<link rel="manifest" id="pwaManifestLink" href="/wa/pwaManifest">
+<meta name="theme-color" id="pwaThemeColor" content="#8B1A2E">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600&family=Fraunces:opsz,wght@9..144,300;9..144,500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
 <style id="brandStyles">
@@ -293,6 +304,13 @@ input:focus,select:focus{border-color:var(--accent)}
 <div class="app">
 <header class="hdr">
   <div class="hdr-logo" id="hdrLogo"><span class="hdr-name" id="hdrName">Éco-Séjour</span></div>
+  <!-- Installation PWA — n'apparaît que si le navigateur juge la page
+       installable (cf. window.addEventListener('beforeinstallprompt')) ;
+       invisible par défaut (iOS Safari n'a pas cet événement, Chrome ne le
+       déclenche qu'après engagement minimal — jamais bloquant). -->
+  <button type="button" id="pwaInstallBtn" onclick="espInstallPwa()" style="display:none;background:rgba(255,255,255,.15);border:none;color:var(--htx,#fff);border-radius:999px;padding:5px 11px;font-size:11px;align-items:center;gap:4px;cursor:pointer;margin-right:8px">
+    <i class="ti ti-download" style="font-size:13px"></i> <span data-i18n="pwa_install_btn">Installer</span>
+  </button>
   <div class="lang-switch" id="langSwitch" role="group" aria-label="Français / English / Español">
     <button type="button" class="lang-btn" data-lang="fr" onclick="setLang('fr')">FR</button>
     <button type="button" class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
@@ -923,7 +941,12 @@ input:focus,select:focus{border-color:var(--accent)}
   <!-- Contenu espace client -->
   <div id="espContent" style="display:none">
 
-    <div class="slbl" data-i18n="esp_title">Mon espace</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px">
+      <div class="slbl" style="margin-bottom:0" data-i18n="esp_title">Mon espace</div>
+      <button type="button" onclick="espLogout()" style="background:none;border:none;color:var(--mu);font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px;white-space:nowrap;flex-shrink:0">
+        <i class="ti ti-logout" style="font-size:14px"></i> <span data-i18n="esp_logout_btn">Se déconnecter</span>
+      </button>
+    </div>
 
     <!-- Tabs internes -->
     <div class="cat-tabs-wrap" style="margin-bottom:14px">
@@ -1255,6 +1278,57 @@ var API_BASE = '';
 // pointe vers le bon hôtel. Sans ce paramètre, le serveur applique son
 // tenant par défaut (comportement historique mono-tenant).
 var ENTITY_CODE = new URLSearchParams(window.location.search).get('entityCode') || '';
+// Manifest PWA propre à CET établissement (nom, icône, couleurs — cf.
+// GET /wa/pwaManifest) — posé dès que possible plutôt qu'attendu dans
+// DOMContentLoaded, le manifest devant déjà pointer au bon endroit avant
+// qu'une invite d'installation ne puisse se déclencher. Rappelé si
+// ENTITY_CODE change ensuite (connexion "Mon espace" résolvant un autre
+// établissement que celui de l'URL, cf. espApplyLogin).
+function espSetPwaManifest(){
+  var el = document.getElementById('pwaManifestLink');
+  if(el) el.href = '/wa/pwaManifest' + (ENTITY_CODE ? ('?entityCode='+encodeURIComponent(ENTITY_CODE)) : '');
+}
+espSetPwaManifest();
+
+// ═══════════════════ PWA — service worker + invite d'installation
+// Enregistré tôt (pas d'attente de DOMContentLoaded nécessaire — le SW
+// s'exécute dans son propre contexte) ; 'load' plutôt qu'immédiat quand
+// même, pour ne jamais retarder le premier rendu de la page sur un réseau
+// lent (recommandation standard MDN). cf. public/sw.js pour ce qui est
+// réellement mis en cache (jamais /wa/* ni /api/*).
+if('serviceWorker' in navigator){
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('/sw.js').catch(function(){ /* non bloquant — page utilisable sans SW */ });
+  });
+}
+// Chrome/Edge déclenchent cet événement quand la page remplit les critères
+// d'installabilité (manifest + SW + HTTPS) — on empêche l'invite automatique
+// du navigateur (preventDefault) pour la redéclencher nous-mêmes via le
+// bouton "Installer" de l'en-tête, à un moment choisi par le client plutôt
+// que subi. Absent sur iOS Safari (pas de beforeinstallprompt) : le bouton y
+// reste invisible, "Ajouter à l'écran d'accueil" du menu Safari reste le
+// seul chemin — limitation de la plateforme, pas de ce code.
+var PWA_INSTALL_EVENT = null;
+window.addEventListener('beforeinstallprompt', function(e){
+  e.preventDefault();
+  PWA_INSTALL_EVENT = e;
+  var btn = document.getElementById('pwaInstallBtn');
+  if(btn) btn.style.display = 'flex';
+});
+function espInstallPwa(){
+  if(!PWA_INSTALL_EVENT) return;
+  PWA_INSTALL_EVENT.prompt();
+  PWA_INSTALL_EVENT.userChoice.finally(function(){
+    PWA_INSTALL_EVENT = null;
+    var btn = document.getElementById('pwaInstallBtn');
+    if(btn) btn.style.display = 'none';
+  });
+}
+window.addEventListener('appinstalled', function(){
+  var btn = document.getElementById('pwaInstallBtn');
+  if(btn) btn.style.display = 'none';
+});
+
 // Lien de démo commerciale (?demoCode=XXXX) : ouvre directement sur l'étape
 // "Choisir ma chambre" d'une réservation précise, sans passer par l'écran de
 // recherche (conçu pour un vrai client qui retrouve SA réservation, pas
@@ -1777,7 +1851,7 @@ var I18N_FR = {
   esp_other_bookings:'Autres réservations disponibles :',
   esp_login_err_default:'Email ou code de réservation incorrect.',
   err_server_connection_generic:'Erreur de connexion au serveur.',toast_welcome:'Bienvenue',
-  esp_title:'Mon espace',esp_title_with_name:'Mon espace · {name}',
+  esp_title:'Mon espace',esp_title_with_name:'Mon espace · {name}',esp_logout_btn:'Se déconnecter',esp_logout_done:'Déconnecté(e)',pwa_install_btn:'Installer',
   esp_tab_key:'Clé digitale',esp_tab_loyalty:'Points',esp_tab_menage:'Ménage',
   esp_tab_histo:'Historique',esp_tab_livret:'Livret',esp_tab_boutique:'Boutique',
   esp_tab_rs:'Room Service',
@@ -2019,7 +2093,7 @@ var I18N_EN = {
   esp_other_bookings:'Other available bookings:',
   esp_login_err_default:'Incorrect email or booking code.',
   err_server_connection_generic:'Server connection error.',toast_welcome:'Welcome',
-  esp_title:'My space',esp_title_with_name:'My space · {name}',
+  esp_title:'My space',esp_title_with_name:'My space · {name}',esp_logout_btn:'Sign out',esp_logout_done:'Signed out',pwa_install_btn:'Install',
   esp_tab_key:'Digital key',esp_tab_loyalty:'Points',esp_tab_menage:'Housekeeping',
   esp_tab_histo:'History',esp_tab_livret:'Guidebook',esp_tab_boutique:'Shop',
   esp_tab_rs:'Room Service',
@@ -2263,7 +2337,7 @@ var I18N_ES = {
   esp_other_bookings:'Otras reservas disponibles:',
   esp_login_err_default:'Email o código de reserva incorrecto.',
   err_server_connection_generic:'Error de conexión con el servidor.',toast_welcome:'Bienvenido/a',
-  esp_title:'Mi espacio',esp_title_with_name:'Mi espacio · {name}',
+  esp_title:'Mi espacio',esp_title_with_name:'Mi espacio · {name}',esp_logout_btn:'Cerrar sesión',esp_logout_done:'Sesión cerrada',pwa_install_btn:'Instalar',
   esp_tab_key:'Llave digital',esp_tab_loyalty:'Puntos',esp_tab_menage:'Limpieza',
   esp_tab_histo:'Historial',esp_tab_livret:'Guía',esp_tab_boutique:'Tienda',
   esp_tab_rs:'Servicio de habitaciones',
@@ -2385,6 +2459,7 @@ function applyBrand(){
   if(CFG.logoMain){hl.innerHTML='<img src="'+CFG.logoMain+'" alt="'+CFG.hotelName+'" style="max-height:26px;max-width:130px;object-fit:contain">';}
   else{document.getElementById('hdrName').textContent=CFG.hotelName;}
   document.title=CFG.hotelName+' · Éco-Séjour';
+  var tc=document.getElementById('pwaThemeColor'); if(tc) tc.content=c.headerBg;
 }
 
 // ═══════════════════ STATE
@@ -3287,7 +3362,7 @@ function rsLoadOrders(){
  * cette logique à chaque point d'entrée.
  */
 async function espApplyLogin(data){
-  ESP_TOKEN = data.token; // en mémoire uniquement — perdu au rechargement, comme S.checkinDone à l'origine
+  ESP_TOKEN = data.token; // en mémoire uniquement — jamais renvoyé au serveur (aucun appel ne l'utilise), inutile de le persister
 
   // Établissement déterminé par le login lui-même (pas par l'URL) — s'il
   // diffère de ce qui était déjà chargé (ou si rien n'était chargé, cas
@@ -3296,6 +3371,7 @@ async function espApplyLogin(data){
   // des noms de chambre) correspondent au bon établissement.
   if(data.entityCode && data.entityCode !== ENTITY_CODE){
     ENTITY_CODE = data.entityCode;
+    espSetPwaManifest();
     await loadCfg();
     applyBrand();
     // S.posList/selectedPosId et S.paymentEnabled ont été chargés au
@@ -3314,7 +3390,74 @@ async function espApplyLogin(data){
   S.checkinDone  = true;
   S.selectedRoom = CFG.rooms ? CFG.rooms.find(function(r){return r.code===data.booking.facilityCode;}) : null;
 
+  espPersistSession();
+
   await Promise.all([fetchLoyalty(data.booking.personEmail), fetchOrders(data.booking.code), fetchGuestSharingProfile()]);
+}
+
+// ── Persistance de session "Mon espace" (localStorage, pas sessionStorage :
+// doit survivre à la fermeture du navigateur/de l'app installée en PWA) —
+// § demande client "pas de déconnexion auto". Seuls entityCode+bookingCode
+// sont gardés (comme un lien d'autologin, mais sans jeton) : au prochain
+// chargement, on redemande une version FRAÎCHE de la réservation au serveur
+// (espTryRestoreSession) plutôt que de rejouer des données figées — une
+// modification faite entretemps par l'hôtel (dates, chambre…) doit remonter.
+var ESP_SESSION_KEY = 'SESAME_GUEST_SESSION';
+function espPersistSession(){
+  if(!S.booking) return;
+  try{
+    localStorage.setItem(ESP_SESSION_KEY, JSON.stringify({ entityCode: ENTITY_CODE, bookingCode: S.booking.code }));
+  }catch(e){}
+}
+function espClearSession(){
+  try{ localStorage.removeItem(ESP_SESSION_KEY); }catch(e){}
+}
+
+/**
+ * Restaure "Mon espace" depuis la session persistée, au chargement de la
+ * page — tant qu'aucun lien d'autologin n'est présent (prioritaire, cf.
+ * espTryAutologin juste après) et qu'aucune connexion n'a déjà eu lieu par
+ * un autre chemin. Échoue silencieusement (réservation introuvable/
+ * supprimée, hôtel plus accessible) en effaçant la session invalide plutôt
+ * que de laisser le client bloqué dessus — même philosophie que
+ * espTryAutologin pour un lien expiré.
+ */
+async function espTryRestoreSession(){
+  if(AUTOLOGIN_TOKEN || S.checkinDone) return;
+  var raw;
+  try{ raw = localStorage.getItem(ESP_SESSION_KEY); }catch(e){ return; }
+  if(!raw) return;
+  var saved;
+  try{ saved = JSON.parse(raw); }catch(e){ espClearSession(); return; }
+  if(!saved || !saved.bookingCode){ espClearSession(); return; }
+  try{
+    if(saved.entityCode && saved.entityCode !== ENTITY_CODE){
+      ENTITY_CODE = saved.entityCode;
+      await loadCfg();
+      applyBrand();
+    }
+    var r = await apiFetch(API_BASE+'/wa/booking/list?q='+encodeURIComponent(saved.bookingCode));
+    if(!r.ok) throw new Error('http '+r.status);
+    var list = await r.json();
+    var b = list.find(function(bk){ return bk.code===saved.bookingCode; });
+    if(!b) throw new Error('réservation introuvable');
+    await espApplyLogin({ booking: b, token: null, entityCode: saved.entityCode||ENTITY_CODE });
+    gotoScr('infos');
+  }catch(e){
+    espClearSession();
+  }
+}
+
+/** Bouton "Se déconnecter" (§ scr-infos/espContent) — remet le client sur
+ * l'écran de connexion, efface la session persistée. */
+function espLogout(){
+  espClearSession();
+  ESP_TOKEN = null;
+  S.booking = null;
+  S.checkinDone = false;
+  S.selectedRoom = null;
+  renderEspace();
+  toast(t('esp_logout_done'));
 }
 
 // ── Recharge le profil de partage déjà enregistré (opt-in/photo/centres
@@ -4744,6 +4887,7 @@ async function finalizeCheckin(syncStatus){
   await pushTaxeRecord();
   await pushKycRecord();
   S.checkinDone = true;
+  espPersistSession(); // § demande client "pas de déconnexion auto" — pas seulement via "Mon espace" (espApplyLogin), aussi à la fin du check-in lui-même
   var infoBadge=document.getElementById('bnInfosBadge'); if(infoBadge && isModuleActive('roomservice')) infoBadge.style.display='block';
   return result;
 }
@@ -6056,6 +6200,7 @@ window.addEventListener('DOMContentLoaded',async function(){
   // Charger les réservations dès l'ouverture — ou sauter directement à la
   // démo si le lien porte ?demoCode=XXXX (cf. loadDemoBooking).
   if(DEMO_CODE) loadDemoBooking(DEMO_CODE); else fetchBookings();
+  await espTryRestoreSession(); // session "Mon espace" persistée — avant l'autologin, qui reste prioritaire s'il est présent
   espTryAutologin();
 });
 </script>

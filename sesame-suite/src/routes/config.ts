@@ -149,6 +149,44 @@ configRouter.get(
 );
 
 /**
+ * GET /wa/pwaManifest?entityCode=E00000001 — Web App Manifest (§ demande
+ * client "faire de la page une app pwa") pour le parcours client
+ * (public/checkin.html), posé dynamiquement par <link rel="manifest"> côté
+ * client (cf. espSetPwaManifest) plutôt qu'un fichier .json statique : la
+ * même page sert tous les établissements, chacun avec son propre nom,
+ * couleurs et logo — un manifest unique figé n'aurait pu refléter qu'un
+ * seul hôtel à la fois. start_url conserve ?entityCode= pour qu'une
+ * réouverture de l'app installée revienne bien sur CET établissement.
+ * Repli sur hotelName/couleurs par défaut si la config n'existe pas encore
+ * (plutôt qu'un 404 qui casserait l'installabilité), de la même façon que
+ * DEFAULT_CFG côté client.
+ */
+configRouter.get(
+  "/pwaManifest",
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const cfg = await prisma.entityModuleConfig.findUnique({ where: { entityId: entity.id } });
+    const colors = (cfg?.colors as { headerBg?: string; bg?: string } | null) || {};
+    const name = cfg?.hotelName || "Éco-Séjour";
+    const startUrl = `/?entityCode=${encodeURIComponent(entity.code)}`;
+    const icons = [{ src: "/icons/favicon-192.png", sizes: "192x192", type: "image/png" }];
+    if (cfg?.logoMain) icons.unshift({ src: cfg.logoMain, sizes: "any", type: "image/png" });
+
+    res.setHeader("Content-Type", "application/manifest+json");
+    res.json({
+      name: `${name} · Éco-Séjour`,
+      short_name: name.slice(0, 20),
+      start_url: startUrl,
+      scope: "/",
+      display: "standalone",
+      background_color: colors.bg || "#F5F3F0",
+      theme_color: colors.headerBg || "#8B1A2E",
+      icons,
+    });
+  })
+);
+
+/**
  * POST /wa/entityModuleConfig/update
  * Écrit un sous-ensemble de champs de la config (charte, textes, tarifs,
  * gains, modules actifs, catalogues JSON…) — remplace saveCfg() en
