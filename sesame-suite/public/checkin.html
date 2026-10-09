@@ -3628,6 +3628,18 @@ async function espTryAutologin(){
     if(!r.ok) return;
     var data = await r.json();
     await espApplyLogin(data);
+    if(AUTOLOGIN_DEST==='checkin'){
+      // Affiche LA réservation résolue par le token comme sélectionnée à
+      // l'étape 1 (même état que selectBooking() en sélection manuelle) —
+      // fetchBookings() n'est jamais appelé pour un lien d'autologin (cf.
+      // DOMContentLoaded plus bas) : sans ceci, l'étape 1 restait vide (ou,
+      // avant ce correctif, affichait par erreur la réservation la plus
+      // récente de TOUT l'établissement — fuite des coordonnées d'un autre
+      // client).
+      SESAME_CACHE.bookings = [data.booking];
+      renderBookingResults([data.booking]);
+      selectBooking(data.booking.id);
+    }
     gotoScr(AUTOLOGIN_DEST==='checkin' ? 'sejour' : 'infos');
     toast(t('toast_welcome') + ' ' + data.booking.personFirstname + ' !');
   }catch(e){ /* lien invalide/expiré — formulaire de connexion manuel reste disponible */ }
@@ -6435,8 +6447,16 @@ window.addEventListener('DOMContentLoaded',async function(){
   handlePaymentReturn();
   fetchPosList();
   // Charger les réservations dès l'ouverture — ou sauter directement à la
-  // démo si le lien porte ?demoCode=XXXX (cf. loadDemoBooking).
-  if(DEMO_CODE) loadDemoBooking(DEMO_CODE); else fetchBookings();
+  // démo si le lien porte ?demoCode=XXXX (cf. loadDemoBooking). Jamais avec
+  // un lien d'autologin (AUTOLOGIN_TOKEN) : fetchBookings() sans filtre
+  // affiche par défaut la réservation la plus récente de TOUT l'établissement
+  // (cf. commentaire dans fetchBookings — pensé pour le bouton "Démo") —
+  // exposerait le nom/la chambre/les dates d'un AUTRE client pendant que
+  // espTryAutologin() résout le bon séjour plus bas, voire resterait affichée
+  // si l'autologin échoue silencieusement (lien expiré).
+  if(AUTOLOGIN_TOKEN){ /* espTryAutologin() ci-dessous s'en charge */ }
+  else if(DEMO_CODE) loadDemoBooking(DEMO_CODE);
+  else fetchBookings();
   await espTryRestoreSession(); // session "Mon espace" persistée — avant l'autologin, qui reste prioritaire s'il est présent
   espTryAutologin();
 });
