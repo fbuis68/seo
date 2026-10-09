@@ -3437,13 +3437,13 @@ function espClearSession(){
  * espTryAutologin pour un lien expiré.
  */
 async function espTryRestoreSession(){
-  if(AUTOLOGIN_TOKEN || S.checkinDone) return;
+  if(AUTOLOGIN_TOKEN || S.checkinDone) return false;
   var raw;
-  try{ raw = localStorage.getItem(ESP_SESSION_KEY); }catch(e){ return; }
-  if(!raw) return;
+  try{ raw = localStorage.getItem(ESP_SESSION_KEY); }catch(e){ return false; }
+  if(!raw) return false;
   var saved;
-  try{ saved = JSON.parse(raw); }catch(e){ espClearSession(); return; }
-  if(!saved || !saved.bookingCode){ espClearSession(); return; }
+  try{ saved = JSON.parse(raw); }catch(e){ espClearSession(); return false; }
+  if(!saved || !saved.bookingCode){ espClearSession(); return false; }
   try{
     if(saved.entityCode && saved.entityCode !== ENTITY_CODE){
       ENTITY_CODE = saved.entityCode;
@@ -3457,8 +3457,10 @@ async function espTryRestoreSession(){
     if(!b) throw new Error('réservation introuvable');
     await espApplyLogin({ booking: b, token: null, entityCode: saved.entityCode||ENTITY_CODE });
     gotoScr('infos');
+    return true;
   }catch(e){
     espClearSession();
+    return false;
   }
 }
 
@@ -6215,11 +6217,33 @@ window.addEventListener('DOMContentLoaded',async function(){
   // (cf. espTryRestoreSession) — un revenant ne doit pas se retrouver
   // bloqué ici simplement parce que l'URL qu'il a rouverte ne portait plus
   // le paramètre.
+  var hadUrlEntityCode = !!ENTITY_CODE;
   var hasPersistedSession = false;
   if(!ENTITY_CODE){ try{ hasPersistedSession = !!localStorage.getItem(ESP_SESSION_KEY); }catch(e){} }
   if(!ENTITY_CODE && !DEMO_CODE && !AUTOLOGIN_TOKEN && !hasPersistedSession){
     document.getElementById('noEntityScreen').style.display = 'flex';
     document.querySelector('.app').style.display = 'none';
+    return;
+  }
+  // Lien générique (sans ?entityCode=) mais session "Mon espace" déjà
+  // connue : on tente de la restaurer EN PREMIER, avant tout loadCfg().
+  // Sinon le loadCfg() générique juste en dessous se rabat sur l'hôtel par
+  // défaut serveur (même repli que la note sur #noEntityScreen plus haut)
+  // et, si la session s'avère invalide (réservation supprimée, hôtel
+  // désactivé…), le client restait bloqué sur l'écran de connexion d'un
+  // hôtel qui n'est pas forcément le sien plutôt que sur l'écran neutre.
+  if(!hadUrlEntityCode && !DEMO_CODE && !AUTOLOGIN_TOKEN && hasPersistedSession){
+    var restored = await espTryRestoreSession();
+    if(!restored){
+      document.getElementById('noEntityScreen').style.display = 'flex';
+      document.querySelector('.app').style.display = 'none';
+      return;
+    }
+    initLang();
+    applyStaticTranslations();
+    fetchPaymentStatus();
+    handlePaymentReturn();
+    fetchPosList();
     return;
   }
   await loadCfg(); // GET /wa/entityModuleConfig/list — remplace SESAME_CFG
