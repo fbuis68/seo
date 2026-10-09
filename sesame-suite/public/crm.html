@@ -345,7 +345,13 @@ tr.erow td{background:var(--al)}
 .feat-checks{display:flex;flex-wrap:wrap;gap:10px 16px}
 .feat-checks label{font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--tx)}
 input[type=checkbox]{accent-color:var(--a);cursor:pointer;width:14px;height:14px}
-.modal-footer{display:flex;gap:8px;margin-top:16px;align-items:center;padding-top:12px;border-top:0.5px solid var(--div)}
+/* Épinglé en bas de l'écran pendant le scroll (ancêtre scrollable = .modal-bg,
+   position:fixed+overflow-y:auto) — un long formulaire (ex : fiche client)
+   obligeait sinon à scroller jusqu'au bout pour valider. Générique à tous
+   les modals via cette classe partagée : un modal qui tient déjà sur un
+   écran n'est pas affecté (le footer est déjà visible, sticky n'y change
+   rien visuellement). */
+.modal-footer{display:flex;gap:8px;margin-top:16px;align-items:center;padding-top:12px;border-top:0.5px solid var(--div);position:sticky;bottom:-1.4rem;background:var(--card);padding-bottom:1.4rem;margin-bottom:-1.4rem;z-index:2}
 
 /* ── CANAUX / TEMPLATES ── */
 .test-inp{font-family:inherit;font-size:12px;padding:0 8px;height:31px;border:0.5px solid var(--bdr2);border-radius:8px;background:var(--card);color:var(--tx);outline:none;width:170px}
@@ -435,6 +441,7 @@ input[type=checkbox]{accent-color:var(--a);cursor:pointer;width:14px;height:14px
   .count-lbl{margin-left:0;text-align:right}
   .modal-bg{padding:10px}
   .modal-box{max-width:100%;padding:1rem}
+  .modal-footer{bottom:-1rem;padding-bottom:1rem;margin-bottom:-1rem}
   .hero-row{flex-wrap:wrap;gap:10px}
   .score-box{margin-left:0;text-align:left;width:100%;display:flex;align-items:center;gap:8px}
   .score-num{font-size:20px}
