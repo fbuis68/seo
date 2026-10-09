@@ -11905,6 +11905,17 @@ function renderOrders(){
         +(it.price>0?(it.price*it.qty).toFixed(2)+' '+sym:'Offert')+'</span></div>';
     }).join('');
 
+    // Avertissements best-effort (cf. Order.pmsPushWarning/lockerSourceWarning
+    // côté serveur) — n'ont jamais bloqué la commande elle-même, mais sans
+    // affichage ici la réception n'a aucun moyen de savoir qu'une commande
+    // n'a pas été transmise au PMS ou qu'un casier n'a pas été réservé.
+    var warnings = [];
+    if(o.pmsPushWarning) warnings.push('<i class="ti ti-alert-triangle" style="font-size:12px"></i> PMS : '+esc(o.pmsPushWarning));
+    if(o.lockerSourceWarning) warnings.push('<i class="ti ti-alert-triangle" style="font-size:12px"></i> Casier : '+esc(o.lockerSourceWarning));
+    var warnBanner = warnings.length
+      ? '<div style="background:rgba(230,126,34,.1);color:#E67E22;border-radius:var(--rs);padding:6px 10px;margin-bottom:10px;font-size:12px;display:flex;flex-direction:column;gap:3px">'+warnings.join('')+'</div>'
+      : '';
+
     var nextSt = ordNextStatus(o.status);
     var actions = '';
     if(o.status!=='delivered' && o.status!=='cancelled'){
@@ -11945,6 +11956,7 @@ function renderOrders(){
       +'<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;padding-top:6px;margin-top:2px">'
       +'<span>Total</span><span style="color:var(--primary)">'+(o.total||0).toFixed(2)+' '+sym+'</span>'
       +'</div></div>'
+      +warnBanner
       // Actions
       +'<div style="display:flex;gap:8px;flex-wrap:wrap">'+actions+'</div>'
       +'</div>';
