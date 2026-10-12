@@ -158,7 +158,25 @@ export async function sendEmailRaw(
   subject: string,
   html: string,
   fromNameOverride?: string,
-  opts?: { fromEmailOverride?: string; attachments?: string[]; namedAttachments?: { fileName: string; dataUrl: string }[]; cc?: string }
+  opts?: {
+    fromEmailOverride?: string;
+    attachments?: string[];
+    namedAttachments?: { fileName: string; dataUrl: string }[];
+    cc?: string;
+    /**
+     * Envoi de campagne uniquement — ajoute les en-têtes List-Unsubscribe /
+     * List-Unsubscribe-Post (RFC 8058, "un clic") en plus du lien dans le
+     * corps du mail (cf. campaignScheduler.ts unsubscribeFooterHtml) : un
+     * lien seulement dans le HTML n'est lu par AUCUNE passerelle anti-spam,
+     * alors que ces en-têtes sont justement le signal que Microsoft 365/
+     * Gmail utilisent pour distinguer un expéditeur de masse légitime
+     * (qui respecte le désabonnement) d'un pattern suspect — déclenchait
+     * "Suspicious outbound email activity" malgré l'espacement des envois
+     * (12/10/2026, demande client — la seule pause entre lots, ajoutée le
+     * 05/10/2026, ne suffisait pas).
+     */
+    listUnsubscribeUrl?: string;
+  }
 ) {
   const smtp = await getSmtpConfig(entityId);
   if (!smtp) throw new HttpError(400, "Aucun serveur SMTP configuré pour cette portée");
@@ -175,6 +193,9 @@ export async function sendEmailRaw(
       subject,
       html,
       attachments: attachments.length ? attachments : undefined,
+      headers: opts?.listUnsubscribeUrl
+        ? { "List-Unsubscribe": `<${opts.listUnsubscribeUrl}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" }
+        : undefined,
     });
   } catch (err) {
     throw new HttpError(502, "Échec de connexion au serveur SMTP : " + smtpErrorMessage(err));

@@ -12,16 +12,22 @@ import { config } from "../config";
 const CHECK_INTERVAL_MS = 60_000;
 let running = false;
 
-// Espacement entre lots d'envoi (05/10/2026, suite à un blocage Microsoft
-// 365 "Potentially compromised user account" déclenché par une campagne de
-// ~200 emails) — une boîte Exchange normale qui envoie un gros volume
-// d'affilée, même en série (un par un, comme déjà fait ici), reste détectée
-// comme un pattern de compte compromis par l'heuristique anti-spam M365.
-// Pause entre chaque PAQUET de destinataires plutôt qu'entre chaque email
-// un par un, pour ne pas allonger inutilement l'envoi d'une petite
-// campagne (<=20 destinataires : aucune pause).
-const CAMPAIGN_BATCH_SIZE = 20;
-const CAMPAIGN_BATCH_DELAY_MS = 5_000;
+// Espacement entre emails (05/10/2026, puis durci le 12/10/2026) — une
+// boîte Exchange normale qui envoie un gros volume d'affilée, même en
+// pauses par PAQUET de 20 (ancienne version), reste détectée par M365
+// comme un pattern de compte compromis/spam : l'alerte "Suspicious outbound
+// email activity" a continué à se déclencher malgré cette première pause,
+// signe que c'est le DÉBIT en RAFALE (plusieurs dizaines de mails d'un coup
+// avant chaque pause) qui est repéré, pas seulement le volume total. Pause
+// FIXE après CHAQUE email plutôt qu'après chaque paquet : lisse le débit à
+// 20 mails/minute environ, nettement sous le seuil usuel de 30/minute
+// documenté par Microsoft pour une boîte standard, sans rafale au début de
+// chaque lot. Combiné à l'en-tête List-Unsubscribe (cf. lib/email.ts) —
+// toujours insuffisant, c'est que la boîte M365 standard n'est de toute
+// façon pas conçue pour l'envoi de masse ; au-delà de quelques centaines de
+// destinataires, passer par un vrai service transactionnel (SendGrid,
+// Mailgun, Brevo...) authentifié SPF/DKIM/DMARC pour ce domaine.
+const CAMPAIGN_EMAIL_DELAY_MS = 3_000;
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -103,10 +109,10 @@ export async function processDueCampaign(campaignId: string): Promise<void> {
         failure += 1;
         lastError = e instanceof Error ? e.message : "Erreur d'envoi";
       }
-      // Pause en fin de lot — jamais après le dernier destinataire (inutile,
-      // la campagne est terminée).
-      if (campaign.channel === "email" && (i + 1) % CAMPAIGN_BATCH_SIZE === 0 && i + 1 < recipients.length) {
-        await sleep(CAMPAIGN_BATCH_DELAY_MS);
+      // Pause après CHAQUE email — jamais après le dernier destinataire
+      // (inutile, la campagne est terminée).
+      if (campaign.channel === "email" && i + 1 < recipients.length) {
+        await sleep(CAMPAIGN_EMAIL_DELAY_MS);
       }
     }
 

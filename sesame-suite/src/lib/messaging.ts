@@ -139,7 +139,16 @@ export async function sendMessage(opts: {
     // modèle, même logique de priorité que fromHeader() dans lib/email.ts.
     const fromNameOverride = opts.fromNameOverride || template.senderIdentity?.name || undefined;
     const fromEmailOverride = template.senderIdentity?.email || undefined;
-    await sendEmailRaw(opts.entityId, opts.to, subject, body, fromNameOverride, { namedAttachments, fromEmailOverride });
+    // En-tête List-Unsubscribe (cf. lib/email.ts) — recalculé ici plutôt que
+    // transmis par l'appelant : même entrées (entityId, destinataire) que le
+    // lien déjà inséré dans le pied de page par campaignScheduler.ts
+    // (unsubscribeFooterHtml), donc même token — seulement pour un envoi de
+    // campagne (appendBodyHtml, cf. sa définition ci-dessus), jamais sur un
+    // email transactionnel qui n'a pas de lien de désabonnement dans le corps.
+    const listUnsubscribeUrl = opts.appendBodyHtml
+      ? `${opts.baseUrl || config.publicBaseUrl}/wa/unsubscribe?token=${encodeURIComponent(createUnsubscribeToken({ entityId: opts.entityId, target: opts.to }))}`
+      : undefined;
+    await sendEmailRaw(opts.entityId, opts.to, subject, body, fromNameOverride, { namedAttachments, fromEmailOverride, listUnsubscribeUrl });
   } else if (opts.channel === "whatsapp") {
     // WhatsApp Business interdit le texte libre business-initié en dehors
     // d'une fenêtre de session client de 24h (règle Meta, pas une limite
