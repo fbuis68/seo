@@ -184,7 +184,7 @@ accountingRouter.get(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const entityId = await resolveScope(req);
-    const { status, direction, supplierId, q, unpaid, dueDateFrom, dueDateTo, includeNonAccounting, includeNoDueDate, dueDateIsNull } = req.query as Record<string, string | undefined>;
+    const { status, direction, supplierId, q, unpaid, dueDateFrom, dueDateTo, invoiceDateFrom, invoiceDateTo, includeNonAccounting, includeNoDueDate, dueDateIsNull } = req.query as Record<string, string | undefined>;
     const limit = Math.min(200, Number(req.query.limit) || 50);
     const offset = Number(req.query.offset) || 0;
 
@@ -230,6 +230,15 @@ accountingRouter.get(
       } else {
         where.dueDate = range;
       }
+    }
+    // Filtre par DATE DE FACTURE (invoiceDate), distinct de l'échéance
+    // ci-dessus — onglets "Factures fournisseurs"/"Factures clients"
+    // (12/10/2026, demande client).
+    if (invoiceDateFrom || invoiceDateTo) {
+      where.invoiceDate = {
+        ...(invoiceDateFrom ? { gte: new Date(invoiceDateFrom) } : {}),
+        ...(invoiceDateTo ? { lte: new Date(invoiceDateTo) } : {}),
+      };
     }
 
     const [rows, total] = await Promise.all([

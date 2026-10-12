@@ -8837,7 +8837,7 @@ async function accGraphMailDeactivate(purpose){
 // Clients) plutôt qu'une vue mélangée, et seules les factures non réglées
 // affichées d'entrée, la liste réelle n'ayant d'intérêt opérationnel
 // quotidien que pour ce qui reste à traiter/payer.
-let ACC_INBOX_FILTER={status:'',direction:'purchase',dueDateFrom:'',dueDateTo:'',q:'',checkLevel:'',paidFilter:'unpaid'};
+let ACC_INBOX_FILTER={status:'',direction:'purchase',dueDateFrom:'',dueDateTo:'',invoiceDateFrom:'',invoiceDateTo:'',q:'',checkLevel:'',paidFilter:'unpaid'};
 
 function accSetInboxDirection(dir){
   ACC_INBOX_FILTER.direction = dir;
@@ -8868,6 +8868,8 @@ async function accReloadInvoices(){
   if(ACC_INBOX_FILTER.direction) params.set('direction', ACC_INBOX_FILTER.direction);
   if(ACC_INBOX_FILTER.dueDateFrom) params.set('dueDateFrom', ACC_INBOX_FILTER.dueDateFrom);
   if(ACC_INBOX_FILTER.dueDateTo) params.set('dueDateTo', ACC_INBOX_FILTER.dueDateTo);
+  if(ACC_INBOX_FILTER.invoiceDateFrom) params.set('invoiceDateFrom', ACC_INBOX_FILTER.invoiceDateFrom);
+  if(ACC_INBOX_FILTER.invoiceDateTo) params.set('invoiceDateTo', ACC_INBOX_FILTER.invoiceDateTo);
   try{
     const r = await apiFetch('/wa/acc/invoices?'+params.toString());
     const data = r.ok ? await r.json() : {rows:[]};
@@ -9009,6 +9011,8 @@ function renderAccInbox(){
       </select>
       <label style="display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap">Échéance du <input type="date" class="lsel" style="width:140px" value="${ACC_INBOX_FILTER.dueDateFrom}" onchange="accSetInboxFilter('dueDateFrom', this.value)"></label>
       <label style="display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap">au <input type="date" class="lsel" style="width:140px" value="${ACC_INBOX_FILTER.dueDateTo}" onchange="accSetInboxFilter('dueDateTo', this.value)"></label>
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap">Facture du <input type="date" class="lsel" style="width:140px" value="${ACC_INBOX_FILTER.invoiceDateFrom}" onchange="accSetInboxFilter('invoiceDateFrom', this.value)"></label>
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap">au <input type="date" class="lsel" style="width:140px" value="${ACC_INBOX_FILTER.invoiceDateTo}" onchange="accSetInboxFilter('invoiceDateTo', this.value)"></label>
       <span class="count-lbl">${invoices.length}${invoices.length!==ACC_INVOICES.length?' / '+ACC_INVOICES.length:''} facture(s)</span>
       ${ACC_INBOX_SELECTED.size>0?`<button class="btn btn-primary btn-sm" onclick="openAccRelanceModal()">Envoyer une relance (${ACC_INBOX_SELECTED.size})</button>
       <button class="btn btn-ghost btn-sm" onclick="accBulkRescanInvoices()">↻ Rescanner (${ACC_INBOX_SELECTED.size})</button>
