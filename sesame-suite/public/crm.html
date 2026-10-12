@@ -4510,9 +4510,15 @@ async function loadTreasuryLists(){
     TR2_PURCHASE_ROWS = await fetchRows('purchase', null, null, {dueDateIsNull:true});
     TR2_SALE_ROWS = [];
   } else {
+    // Pas de borne basse (dueDateFrom) : une facture non réglée reste dans
+    // "à venir" même si son échéance est déjà dépassée, tant qu'elle n'est
+    // pas marquée payée — elle ne doit disparaître de cette liste qu'en
+    // passant PAID, jamais simplement parce que la date est passée (seule
+    // la tuile "Dettes/Créances en retard" ci-dessus isole les retards,
+    // 12/10/2026 demande client).
     [TR2_PURCHASE_ROWS, TR2_SALE_ROWS] = await Promise.all([
-      fetchRows('purchase', toISO(today), toISO(horizonEnd)),
-      fetchRows('sale', toISO(today), toISO(horizonEnd)),
+      fetchRows('purchase', '', toISO(horizonEnd)),
+      fetchRows('sale', '', toISO(horizonEnd)),
     ]);
   }
   // Ne garder que le reste réellement dû (une ligne PARTIALLY_PAID encore
