@@ -10369,12 +10369,30 @@ async function saveAccAccount(){
 const ACC_BANK_SOURCE_LABEL={csv:'CSV',camt053:'CAMT.053 (XML)',mt940:'MT940 (SWIFT)',cfonb:'CFONB'};
 const ACC_BANK_DIRECTION_LABEL={CREDIT:'Crédit',DEBIT:'Débit'};
 
+// Règles d'alerte "nouveau mouvement bancaire" (crédit/débit) — cf.
+// lib/accBankAlerts.ts côté serveur, appelé au seul point de création
+// d'une transaction (import fichier ou sync Qonto).
+let ACC_BANK_ALERT_RULES = [];
+
 async function loadAccBankTab(){
   await ensureAccAccountsLoaded();
   try{
     const r = await apiFetch('/wa/acc/bank/accounts?scope=crm');
     ACC_BANK_ACCOUNTS = r.ok ? await r.json() : [];
   }catch(e){ ACC_BANK_ACCOUNTS=[]; }
+  try{
+    const r = await apiFetch('/wa/acc/bank/alert-rules?scope=crm');
+    ACC_BANK_ALERT_RULES = r.ok ? await r.json() : [];
+  }catch(e){ ACC_BANK_ALERT_RULES=[]; }
+  // Identités d'expédition (adresse d'envoi des alertes) — déjà chargées si
+  // l'onglet Canaux a été visité, sinon chargement ici (évite un sélecteur
+  // vide tant que l'utilisateur n'est jamais allé dans Canaux).
+  if(!SENDER_IDENTITIES.length){
+    try{
+      const r = await apiFetch('/wa/emailSenderIdentity/list?scope=crm');
+      SENDER_IDENTITIES = r.ok ? await r.json() : [];
+    }catch(e){ /* repli silencieux — le sélecteur reste vide, pas bloquant */ }
+  }
   try{
     const r = await apiFetch('/wa/acc/bank/qonto/config?scope=crm');
     ACC_QONTO_CONFIG = r.ok ? await r.json() : null;
@@ -10436,6 +10454,90 @@ function accBankMonthBounds(){
 
 const ACC_QONTO_STATUS_LABEL={manual:'Manuel',connected:'Connecté',error:'Erreur de connexion'};
 const ACC_QONTO_STATUS_TAG={manual:'t-gray',connected:'t-green',error:'t-red'};
+
+const ACC_BANK_ALERT_DIRECTION_LABEL={'':'Crédit et débit',DEBIT:'Débit seulement',CREDIT:'Crédit seulement'};
+
+function accBankAlertRuleRowHtml(rule){
+  const accName = rule.bankAccount ? esc(rule.bankAccount.name) : 'Tous les comptes';
+  const senderLabel = rule.senderIdentity ? esc(rule.senderIdentity.name)+' <'+esc(rule.senderIdentity.email)+'>' : 'Expéditeur SMTP par défaut';
+  return `<tr style="${rule.active?'':'opacity:.5'}">
+    <td>${ACC_BANK_ALERT_DIRECTION_LABEL[rule.direction||'']}</td>
+    <td>${accName}</td>
+    <td>${rule.minAmount!=null?fmtEUR2(rule.minAmount)+' mini':'Tout montant'}</td>
+    <td>${esc(rule.notifyEmail)}</td>
+    <td style="font-size:11px;color:var(--mu)">${senderLabel}</td>
+    <td style="white-space:nowrap">
+      <button class="btn btn-ghost btn-sm" onclick="accToggleBankAlertRule('${rule.id}',${!rule.active})">${rule.active?'⏸ Désactiver':'▶ Activer'}</button>
+      <button class="btn btn-ghost btn-sm" onclick="accDeleteBankAlertRule('${rule.id}')" title="Supprimer"><i class="ti ti-trash"></i></button>
+    </td>
+  </tr>`;
+}
+
+function renderAccBankAlertRulesSection(){
+  const accOpts = ACC_BANK_ACCOUNTS.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('');
+  const senderOpts = SENDER_IDENTITIES.map(i=>`<option value="${i.id}">${esc(i.name)} — ${esc(i.email)}</option>`).join('');
+  return `
+    <div class="modal-section">Alertes nouveaux mouvements (crédit/débit)</div>
+    <div style="font-size:11px;color:var(--mu);margin-bottom:8px">Un email à chaque nouveau mouvement bancaire (import fichier ou synchronisation Qonto) correspondant aux critères — direction, compte et montant minimum tous optionnels.</div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Sens</th><th>Compte</th><th>Seuil</th><th>Alerter</th><th>Depuis</th><th></th></tr></thead>
+      <tbody>
+        ${ACC_BANK_ALERT_RULES.map(accBankAlertRuleRowHtml).join('')}
+        <tr>
+          <td><select id="aba-direction" class="lsel">
+            <option value="">Crédit et débit</option>
+            <option value="DEBIT">Débit seulement</option>
+            <option value="CREDIT">Crédit seulement</option>
+          </select></td>
+          <td><select id="aba-bankAccountId" class="lsel"><option value="">Tous les comptes</option>${accOpts}</select></td>
+          <td><input type="number" id="aba-minAmount" class="lsel" placeholder="Tout montant" step="0.01" min="0" style="width:100px"></td>
+          <td><input type="email" id="aba-notifyEmail" class="lsel" placeholder="email@..." style="width:160px"></td>
+          <td><select id="aba-senderIdentityId" class="lsel"><option value="">Expéditeur par défaut</option>${senderOpts}</select></td>
+          <td><button class="btn btn-ghost btn-sm" onclick="accAddBankAlertRule()"><i class="ti ti-plus"></i> Ajouter</button></td>
+        </tr>
+      </tbody>
+    </table></div>`;
+}
+
+async function accAddBankAlertRule(){
+  const g=i=>(document.getElementById(i)||{value:''}).value;
+  const notifyEmail = g('aba-notifyEmail').trim();
+  if(!notifyEmail){ flash('Adresse email requise'); return; }
+  const body = {
+    direction: g('aba-direction')||null,
+    bankAccountId: g('aba-bankAccountId')||null,
+    minAmount: g('aba-minAmount')===''?null:Number(g('aba-minAmount')),
+    notifyEmail,
+    senderIdentityId: g('aba-senderIdentityId')||null,
+  };
+  try{
+    const r = await apiFetch('/wa/acc/bank/alert-rules?scope=crm', {method:'POST', body:JSON.stringify(body)});
+    const d = await r.json().catch(()=>({}));
+    if(!r.ok){ flash('Erreur : '+(d.error||'échec')); return; }
+    ACC_BANK_ALERT_RULES.unshift(d);
+    renderAccBank();
+  }catch(e){ flash('Erreur de connexion au serveur'); }
+}
+
+async function accToggleBankAlertRule(id, active){
+  try{
+    const r = await apiFetch('/wa/acc/bank/alert-rules/'+id+'?scope=crm', {method:'PATCH', body:JSON.stringify({active})});
+    if(!r.ok){ const d = await r.json().catch(()=>({})); flash('Erreur : '+(d.error||'échec')); return; }
+    const rule = ACC_BANK_ALERT_RULES.find(r=>r.id===id);
+    if(rule) rule.active = active;
+    renderAccBank();
+  }catch(e){ flash('Erreur de connexion au serveur'); }
+}
+
+async function accDeleteBankAlertRule(id){
+  if(!confirm('Supprimer cette règle d\'alerte ?')) return;
+  try{
+    const r = await apiFetch('/wa/acc/bank/alert-rules/'+id+'?scope=crm', {method:'DELETE'});
+    if(!r.ok && r.status!==204){ const d = await r.json().catch(()=>({})); flash('Erreur : '+(d.error||'échec')); return; }
+    ACC_BANK_ALERT_RULES = ACC_BANK_ALERT_RULES.filter(r=>r.id!==id);
+    renderAccBank();
+  }catch(e){ flash('Erreur de connexion au serveur'); }
+}
 
 function renderAccBank(){
   const el = document.getElementById('acc-tab-body');
@@ -10503,6 +10605,7 @@ function renderAccBank(){
       <thead><tr><th>Nom</th><th>Banque</th><th>IBAN</th><th style="width:120px">Connexion</th><th style="width:140px">Dernier import</th><th style="width:90px"></th></tr></thead>
       <tbody>${accRows||'<tr><td colspan="6" class="log-empty">Aucun compte bancaire — cliquez sur "+ Compte bancaire".</td></tr>'}</tbody>
     </table></div>
+    ${renderAccBankAlertRulesSection()}
     ${selected?`
     <div style="display:flex;align-items:center;gap:10px;margin:12px 0;padding:10px 14px;background:var(--hover);border-radius:8px">
       <span style="font-size:12px;color:var(--mu)">Solde — ${esc(selected.name)}</span>

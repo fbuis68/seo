@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 import { XMLParser } from "fast-xml-parser";
 import { prisma } from "../db";
 import { Prisma } from "@prisma/client";
+import { checkAndSendBankAlerts } from "./accBankAlerts";
 
 export class BankImportError extends Error {}
 
@@ -406,6 +407,10 @@ export async function importBankTransactions(
       throw e;
     }
   }
+
+  // Best-effort (comme pushOrderPmsBestEffort) : un échec d'envoi d'alerte
+  // ne doit jamais faire échouer l'import, qui a déjà réussi.
+  await checkAndSendBankAlerts(entityId, createdIds).catch(() => {});
 
   return { created, skipped, createdIds };
 }

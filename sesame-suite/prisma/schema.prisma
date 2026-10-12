@@ -81,6 +81,7 @@ model Entity {
   accGoCardlessPayments  AccGoCardlessPayment[]
   accRecurringRules      AccRecurringRule[]
   accManualCashflows     AccManualCashflow[]
+  accBankAlertRules      AccBankAlertRule[]
 }
 
 // Groupe d'établissements (ex : chaîne hôtelière) — gestion réservée aux
@@ -2738,6 +2739,7 @@ model EmailSenderIdentity {
   email String
 
   templates MessageTemplate[]
+  bankAlertRules AccBankAlertRule[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3528,6 +3530,7 @@ model AccBankAccount {
 
   transactions AccBankTransaction[]
   recurringRules AccRecurringRule[]
+  alertRules AccBankAlertRule[]
 
   @@index([entityId])
 }
@@ -3693,6 +3696,43 @@ model AccManualCashflow {
   updatedAt DateTime @updatedAt
 
   @@index([entityId, paid, dueDate])
+}
+
+// Alerte nouveau mouvement bancaire (onglet Banque — demande client
+// 12/10/2026) : un email dès qu'une NOUVELLE transaction (pas une déjà
+// connue remise à jour — cf. lib/accBankAlerts.ts, vérifiée au seul point
+// de création de transaction, lib/accBanking.ts importBankTransactions)
+// correspond aux critères. direction/bankAccountId/minAmount tous optionnels
+// (null = aucune restriction sur ce critère) — une règle vide se déclenche
+// sur tout nouveau mouvement, crédit ou débit, tout compte.
+model AccBankAlertRule {
+  id       String  @id @default(cuid())
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  direction String? // DEBIT | CREDIT | null = les deux
+
+  bankAccountId String?
+  bankAccount   AccBankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+
+  minAmount Float? // optionnel — alerte seulement si |montant| >= ce seuil
+
+  notifyEmail String
+
+  // Adresse D'ENVOI de l'alerte (From), distincte de notifyEmail
+  // ci-dessus (destinataire) — réutilise EmailSenderIdentity (même modèle
+  // que MessageTemplate.senderIdentity) plutôt qu'un champ libre, pour
+  // rester cohérent avec le reste de l'app. null = repli sur l'expéditeur
+  // SMTP par défaut de la portée (cf. lib/email.ts fromHeader).
+  senderIdentityId String?
+  senderIdentity   EmailSenderIdentity? @relation(fields: [senderIdentityId], references: [id], onDelete: SetNull)
+
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([entityId, active])
 }
 
 // Rapprochement transaction bancaire <-> facture (phase 3, lib/
