@@ -4,12 +4,21 @@ import { Ctx, RequestContext, RequirePermission } from '../../core/context';
 import { isoDate, money, page, parse } from '../../core/validation';
 import { PlanningService } from './planning.service';
 import { SessionsService } from './sessions.service';
+import { PlanningAdmin } from './planning/admin';
+import { PlanningController } from './planning/planning.controller';
+import { PlanningEngine } from './planning/engine';
+import { PlanningQueries } from './planning/queries';
 
 const sessionSchema = z.object({
   programVersionId: z.string().uuid(), kind: z.enum(['inter', 'intra']), clientId: z.string().uuid().nullable().optional(),
   title: z.string().max(200).optional(), capacity: z.number().int().positive().nullable().optional(), timezone: z.string().max(64).optional(),
   startsOn: isoDate.nullable().optional(), endsOn: isoDate.nullable().optional(), location: z.string().max(300).nullable().optional(),
+  reference: z.string().max(60).nullable().optional(), minParticipants: z.number().int().min(0).nullable().optional(), siteId: z.string().uuid().nullable().optional(),
+  responsible: z.string().max(200).nullable().optional(), targetMinutes: z.number().int().positive().nullable().optional(),
+  requiredSkills: z.array(z.string().min(1).max(100)).max(30).optional(), requiredEquipment: z.array(z.string().min(1).max(100)).max(30).optional(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(), internalNotes: z.string().max(5000).nullable().optional(),
 });
+const hm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$|^24:00$/, 'Heure HH:MM attendue');
 
 const slotSchema = z.object({
   startsAt: z.string().datetime({ offset: true }), endsAt: z.string().datetime({ offset: true }),
@@ -22,6 +31,9 @@ const resourceSchema = z.object({
   kind: z.enum(['site', 'room', 'equipment']), name: z.string().min(1).max(200), category: z.string().max(200).nullable().optional(),
   location: z.string().max(300).nullable().optional(), address: z.string().max(500).nullable().optional(), capacity: z.number().int().positive().nullable().optional(),
   serialNumber: z.string().max(100).nullable().optional(), inspectionDueOn: isoDate.nullable().optional(), notes: z.string().max(2000).nullable().optional(),
+  siteId: z.string().uuid().nullable().optional(), equipment: z.array(z.string().min(1).max(100)).max(50).optional(), accessible: z.boolean().nullable().optional(),
+  setupMinutes: z.number().int().min(0).max(1440).optional(), teardownMinutes: z.number().int().min(0).max(1440).optional(),
+  openingHours: z.record(z.string().regex(/^[1-7]$/), z.array(z.tuple([hm, hm])).max(6)).nullable().optional(),
 });
 
 @Controller('api/v1')
@@ -55,7 +67,7 @@ export class SessionsController {
   }
   @RequirePermission('sessions.write') @Patch('slots/:slotId')
   updateSlot(@Ctx() c: RequestContext, @Param('slotId', ParseUUIDPipe) slotId: string, @Body() b: unknown) {
-    return this.planning.updateSlot(c, slotId, parse(slotSchema.partial(), b));
+    return this.planning.updateSlot(c, slotId, parse(slotSchema.partial().extend({ version: z.number().int().optional() }), b));
   }
   @RequirePermission('sessions.write') @Delete('slots/:slotId')
   deleteSlot(@Ctx() c: RequestContext, @Param('slotId', ParseUUIDPipe) slotId: string) { return this.planning.deleteSlot(c, slotId); }
@@ -103,7 +115,13 @@ export class SessionsController {
     return this.s.enroll(c, id, parse(z.object({
       personId: z.string().uuid(), clientId: z.string().uuid().nullable().optional(), status: z.enum(['provisional', 'confirmed']).optional(),
       fundedAmount: money.nullable().optional(), fundings: z.array(z.object({ funderClientId: z.string().uuid(), amount: money })).max(10).optional(),
+      startsOn: isoDate.nullable().optional(), endsOn: isoDate.nullable().optional(), groupLabel: z.string().max(100).nullable().optional(),
     }), b));
+  }
+  /** Changement de groupe ou de dates d'entrée/sortie : séances futures revérifiées. */
+  @RequirePermission('sessions.write') @Patch('enrollments/:id')
+  updateEnrollment(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string, @Body() b: unknown) {
+    return this.s.updateEnrollment(c, id, parse(z.object({ startsOn: isoDate.nullable().optional(), endsOn: isoDate.nullable().optional(), groupLabel: z.string().max(100).nullable().optional() }), b));
   }
   @RequirePermission('sessions.write') @Post('enrollments/:id/status')
   enrollStatus(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string, @Body() b: unknown) {
@@ -120,5 +138,9 @@ export class SessionsController {
   sheet(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string) { return this.s.attendanceSheet(c, id); }
 }
 
-@Module({ controllers: [SessionsController], providers: [SessionsService, PlanningService], exports: [SessionsService, PlanningService] })
+@Module({
+  controllers: [SessionsController, PlanningController],
+  providers: [SessionsService, PlanningService, PlanningEngine, PlanningQueries, PlanningAdmin],
+  exports: [SessionsService, PlanningService, PlanningEngine],
+})
 export class SessionsModule {}

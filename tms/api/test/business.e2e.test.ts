@@ -89,6 +89,9 @@ describe('Quotas Free et règles métier', () => {
     const slot = await u.api.post(`/api/v1/sessions/${s.id}/slots`, { startsAt: '2025-10-26T01:30:00+02:00', endsAt: '2025-10-26T03:30:00+01:00', trainerId: trainer.id }).expect(201);
     const clash = await u.api.post(`/api/v1/sessions/${s.id}/slots`, { startsAt: '2025-10-26T02:00:00+01:00', endsAt: '2025-10-26T04:00:00+01:00', trainerId: trainer.id });
     expect(clash.status).toBe(409);
+    // Double réservation bloquante par défaut, même motivée ; dérogeable seulement si le centre l'autorise.
+    expect((await u.api.post(`/api/v1/sessions/${s.id}/slots`, { startsAt: '2025-10-26T02:00:00+01:00', endsAt: '2025-10-26T04:00:00+01:00', trainerId: trainer.id, overrideReason: 'Co-animation validée' })).status).toBe(409);
+    await u.api.put('/api/v1/planning/settings', { overlap_derogable: true }).expect(200);
     await u.api.post(`/api/v1/sessions/${s.id}/slots`, { startsAt: '2025-10-26T02:00:00+01:00', endsAt: '2025-10-26T04:00:00+01:00', trainerId: trainer.id, overrideReason: 'Co-animation validée' }).expect(201);
     const p = await person(u, 1);
     const e = (await u.api.post(`/api/v1/sessions/${s.id}/enrollments`, { personId: p.id }).expect(201)).body;
@@ -119,8 +122,10 @@ describe('Formateur affecté après création de la session', () => {
     const clash = await u.api.post(`/api/v1/sessions/${s2.id}/trainer`, { trainerId: t.id });
     expect(clash.status).toBe(409);
     expect((await u.api.get(`/api/v1/sessions/${s2.id}`)).body.slots[0].trainers).toHaveLength(0);
+    expect((await u.api.post(`/api/v1/sessions/${s2.id}/trainer`, { trainerId: t.id, overrideReason: 'Co-animation prévue' })).status).toBe(409);
+    await u.api.put('/api/v1/planning/settings', { overlap_derogable: true }).expect(200);
     await u.api.post(`/api/v1/sessions/${s2.id}/trainer`, { trainerId: t.id, overrideReason: 'Co-animation prévue' }).expect(201);
-    expect((await u.api.get(`/api/v1/sessions/${s2.id}`)).body.slots[0].overlap_override_reason).toBe('Co-animation prévue');
+    expect((await u.api.get(`/api/v1/sessions/${s2.id}`)).body.slots[0].derogation.reason).toBe('Co-animation prévue');
     // Changement sur un seul créneau, puis retrait.
     const firstSlot = detail.slots[0].id;
     await u.api.post(`/api/v1/sessions/${s1.id}/trainer`, { trainerId: null, slotIds: [firstSlot] }).expect(201);

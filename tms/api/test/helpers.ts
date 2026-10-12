@@ -49,6 +49,7 @@ export async function signupAndLogin(opts: { plan?: string; legalName?: string }
     get: (url: string) => http().get(url).set(auth),
     post: (url: string, body?: unknown) => http().post(url).set(auth).send(body as any),
     patch: (url: string, body?: unknown) => http().patch(url).set(auth).send(body as any),
+    put: (url: string, body?: unknown) => http().put(url).set(auth).send(body as any),
     del: (url: string) => http().delete(url).set(auth),
   };
   return { email, password, tenantId, token: login.body.token as string, auth, api };

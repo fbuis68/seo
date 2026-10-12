@@ -5,25 +5,32 @@ import { toCents } from '../../core/decimal';
 import { Db, Tx, many, one } from '../../core/db';
 import { badRequest, conflict, forbidden, notFound } from '../../core/errors';
 import { EntitlementsService } from '../billing/entitlements.service';
+import { PlanningEngine } from './planning/engine';
+import { reconcileEnrollment } from './planning/rules';
+import { lock } from '../../core/db';
 
 const fmtH = (m: number) => `${Math.floor(m / 60)} h${m % 60 ? String(m % 60).padStart(2, '0') : ''}`;
 
 /** Créneaux avec partie, formateurs et ressources (lieux, salles, matériel). */
 export const SLOTS_SQL = `
-  SELECT sl.id, sl.session_id, sl.part_id, sl.starts_at, sl.ends_at, sl.overlap_override_reason,
+  SELECT sl.id, sl.session_id, sl.part_id, sl.starts_at, sl.ends_at, sl.status, sl.version, sl.title, sl.modality, sl.video_url, sl.breaks,
+         sl.group_label, sl.notes, sl.series_id, sl.derogation, sl.cancel_reason, sl.published_at,
          extract(epoch FROM sl.ends_at - sl.starts_at)::int / 60 AS duration_minutes,
-         coalesce((SELECT json_agg(json_build_object('id', p.id, 'name', p.first_name || ' ' || p.last_name) ORDER BY p.last_name)
+         slot_pedagogical_minutes(sl.starts_at, sl.ends_at, sl.breaks) AS pedagogical_minutes,
+         coalesce((SELECT json_agg(json_build_object('id', p.id, 'name', p.first_name || ' ' || p.last_name, 'role', st.role) ORDER BY st.role DESC, p.last_name)
                      FROM slot_trainers st JOIN persons p ON p.id=st.person_id WHERE st.slot_id=sl.id), '[]') AS trainers,
          coalesce((SELECT json_agg(json_build_object('id', r.id, 'name', r.name, 'kind', r.kind, 'category', r.category, 'inspection_due_on', r.inspection_due_on) ORDER BY r.kind, r.name)
-                     FROM slot_resources sr JOIN resources r ON r.id=sr.resource_id WHERE sr.slot_id=sl.id), '[]') AS resources
+                     FROM slot_resources sr JOIN resources r ON r.id=sr.resource_id WHERE sr.slot_id=sl.id), '[]') AS resources,
+         (SELECT count(*) FROM slot_expected x WHERE x.slot_id = sl.id AND x.mode IN ('onsite','remote') AND x.dates_ok)::int AS expected,
+         (SELECT count(*) FROM slot_expected x WHERE x.slot_id = sl.id AND x.mode = 'to_resolve')::int AS to_resolve
     FROM slots sl WHERE sl.session_id=$1 ORDER BY sl.starts_at`;
 
 /** Parties : durée prévue vs planifiée, formateurs intervenant sur la partie. */
 export const PARTS_SQL = `
   SELECT pt.id, pt.title, pt.planned_minutes, pt.position, pt.notes,
-         coalesce((SELECT sum(extract(epoch FROM sl.ends_at - sl.starts_at)::int / 60) FROM slots sl WHERE sl.part_id=pt.id), 0)::int AS scheduled_minutes,
+         coalesce((SELECT sum(slot_pedagogical_minutes(sl.starts_at, sl.ends_at, sl.breaks)) FROM slots sl WHERE sl.part_id=pt.id AND sl.status <> 'cancelled'), 0)::int AS scheduled_minutes,
          coalesce((SELECT json_agg(DISTINCT jsonb_build_object('id', p.id, 'name', p.first_name || ' ' || p.last_name))
-                     FROM slots sl JOIN slot_trainers st ON st.slot_id=sl.id JOIN persons p ON p.id=st.person_id WHERE sl.part_id=pt.id), '[]') AS trainers
+                     FROM slots sl JOIN slot_trainers st ON st.slot_id=sl.id JOIN persons p ON p.id=st.person_id WHERE sl.part_id=pt.id AND sl.status <> 'cancelled'), '[]') AS trainers
     FROM session_parts pt WHERE pt.session_id=$1 ORDER BY pt.position, pt.created_at`;
 
 export type SessionStatus = 'draft' | 'planned' | 'confirmed' | 'in_progress' | 'completed' | 'archived' | 'cancelled';
@@ -42,11 +49,13 @@ export const TRANSITIONS: Record<SessionStatus, SessionStatus[]> = {
 export interface SessionInput {
   programVersionId: string; kind: 'inter' | 'intra'; clientId?: string | null; title?: string;
   capacity?: number | null; timezone?: string; startsOn?: string | null; endsOn?: string | null; location?: string | null;
+  reference?: string | null; minParticipants?: number | null; siteId?: string | null; responsible?: string | null; targetMinutes?: number | null;
+  requiredSkills?: string[]; requiredEquipment?: string[]; color?: string | null; internalNotes?: string | null;
 }
 
 @Injectable()
 export class SessionsService {
-  constructor(private db: Db, private ent: EntitlementsService, private audit: AuditService) {}
+  constructor(private db: Db, private ent: EntitlementsService, private audit: AuditService, private engine: PlanningEngine) {}
 
   /** Le formateur ne voit que les sessions où il est affecté. */
   private trainerFilter(ctx: RequestContext) {
@@ -66,7 +75,7 @@ export class SessionsService {
 
   async get(ctx: RequestContext, id: string, tx?: Tx) {
     const run = async (t: Tx) => {
-      const s = await one(t, `SELECT s.*, p.title program_title, p.id program_id, v.version program_version, v.duration_minutes, v.price_ht, v.vat_rate, v.modality
+      const s = await one(t, `SELECT s.*, p.title program_title, p.id program_id, v.version program_version, v.duration_minutes, coalesce(s.target_minutes, v.duration_minutes) AS target, v.price_ht, v.vat_rate, v.modality
                                 FROM training_sessions s JOIN program_versions v ON v.id=s.program_version_id JOIN programs p ON p.id=v.program_id WHERE s.id=$1`, [id]);
       if (!s) throw notFound('Session');
       const trainer = this.trainerFilter(ctx);
@@ -75,9 +84,9 @@ export class SessionsService {
       s.parts = await many(t, PARTS_SQL, [id]);
       s.trainers = await many(t, `SELECT DISTINCT p.id, p.first_name || ' ' || p.last_name AS name
                                     FROM slots sl JOIN slot_trainers st ON st.slot_id=sl.id JOIN persons p ON p.id=st.person_id
-                                   WHERE sl.session_id=$1 ORDER BY 2`, [id]);
+                                   WHERE sl.session_id=$1 AND sl.status <> 'cancelled' ORDER BY 2`, [id]);
       // Formateur : liste strictement nécessaire des inscrits (pas de données financières).
-      s.enrollments = await many(t, `SELECT e.id, e.status, e.person_id, p.first_name, p.last_name ${trainer ? '' : ', p.email, e.client_id, c.name client_name'}
+      s.enrollments = await many(t, `SELECT e.id, e.status, e.person_id, e.starts_on, e.ends_on, e.group_label, p.first_name, p.last_name ${trainer ? '' : ', p.email, e.client_id, c.name client_name'}
                                        FROM enrollments e JOIN persons p ON p.id=e.person_id LEFT JOIN clients c ON c.id=e.client_id
                                       WHERE e.session_id=$1 ORDER BY p.last_name`, [id]);
       s.missing = trainer ? [] : await this.missingPieces(t, s);
@@ -89,24 +98,29 @@ export class SessionsService {
   /** Assistant : pièces manquantes, sans bloquer les étapes. */
   private async missingPieces(tx: Tx, s: any) {
     const missing: string[] = [];
-    if (!s.slots.length) missing.push('Aucun créneau planifié');
-    const noTrainer = s.slots.filter((x: any) => !x.trainers.length).length;
+    const slots = s.slots.filter((x: any) => x.status !== 'cancelled'); // séances annulées : hors durées et réservations
+    if (!slots.length) missing.push('Aucun créneau planifié');
+    const noTrainer = slots.filter((x: any) => !x.trainers.length).length;
     if (noTrainer) missing.push(`${noTrainer} créneau(x) sans formateur`);
-    const scheduled = s.slots.reduce((a: number, x: any) => a + x.duration_minutes, 0);
-    if (s.slots.length && scheduled !== s.duration_minutes) {
-      missing.push(`Planning : ${fmtH(scheduled)} planifiées pour ${fmtH(s.duration_minutes)} prévues au programme (${scheduled < s.duration_minutes ? 'incomplet' : 'dépassement'})`);
+    const scheduled = slots.reduce((a: number, x: any) => a + x.pedagogical_minutes, 0);
+    if (slots.length && scheduled !== s.target) {
+      missing.push(`Planning : ${fmtH(scheduled)} planifiées pour ${fmtH(s.target)} prévues au programme (${scheduled < s.target ? 'incomplet' : 'dépassement'})`);
     }
+    const unpublished = slots.filter((x: any) => ['draft', 'pending'].includes(x.status)).length;
+    if (unpublished) missing.push(`${unpublished} séance(s) non publiée(s)`);
+    const toResolve = slots.reduce((a: number, x: any) => a + x.to_resolve, 0);
+    if (toResolve) missing.push(`${toResolve} participation(s) à résoudre (collision ou capacité)`);
     if (s.parts.length) {
       const planned = s.parts.reduce((a: number, x: any) => a + x.planned_minutes, 0);
-      if (planned !== s.duration_minutes) missing.push(`Découpage : ${fmtH(planned)} réparties en parties pour ${fmtH(s.duration_minutes)} au programme`);
+      if (planned !== s.target) missing.push(`Découpage : ${fmtH(planned)} réparties en parties pour ${fmtH(s.target)} au programme`);
       for (const pt of s.parts) if (pt.scheduled_minutes < pt.planned_minutes) missing.push(`Partie « ${pt.title} » : ${fmtH(pt.scheduled_minutes)} planifiées sur ${fmtH(pt.planned_minutes)}`);
-      const orphan = s.slots.filter((x: any) => !x.part_id).length;
+      const orphan = slots.filter((x: any) => !x.part_id).length;
       if (orphan) missing.push(`${orphan} créneau(x) non rattaché(s) à une partie`);
     }
     // Matériel (ex. engins CACES) : vérification périodique échue à la date du créneau.
     const day = (d: string | Date) => new Intl.DateTimeFormat('en-CA', { timeZone: s.timezone }).format(new Date(d)); // AAAA-MM-JJ
     const overdue = new Map<string, string>();
-    for (const sl of s.slots) for (const r of sl.resources) {
+    for (const sl of slots) for (const r of sl.resources) {
       if (r.kind === 'equipment' && r.inspection_due_on && String(r.inspection_due_on).slice(0, 10) < day(sl.starts_at) && !overdue.has(r.id)) {
         overdue.set(r.id, `${r.name} : vérification périodique échue le ${String(r.inspection_due_on).slice(0, 10)} (utilisé le ${day(sl.starts_at)})`);
       }
@@ -130,9 +144,12 @@ export class SessionsService {
       // Figer la version de programme utilisée.
       await t.query(`UPDATE program_versions SET locked_at = coalesce(locked_at, now()) WHERE id=$1`, [v.id]);
       const tz = b.timezone ?? (await one(t, `SELECT timezone FROM tenants WHERE id=$1`, [ctx.tenantId]))!.timezone;
-      const s = await one(t, `INSERT INTO training_sessions(tenant_id, program_version_id, kind, client_id, title, capacity, timezone, starts_on, ends_on, location)
-                              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-        [ctx.tenantId, v.id, b.kind, b.clientId ?? null, b.title ?? v.title, b.capacity ?? null, tz, b.startsOn ?? null, b.endsOn ?? null, b.location ?? null]);
+      if (b.siteId && !(await one(t, `SELECT 1 FROM resources WHERE id=$1 AND kind='site'`, [b.siteId]))) throw badRequest('invalid_site', 'Site inconnu.', 'siteId');
+      const s = await one(t, `INSERT INTO training_sessions(tenant_id, program_version_id, kind, client_id, title, capacity, timezone, starts_on, ends_on, location,
+                                reference, min_participants, site_id, responsible, target_minutes, required_skills, required_equipment, color, internal_notes)
+                              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *`,
+        [ctx.tenantId, v.id, b.kind, b.clientId ?? null, b.title ?? v.title, b.capacity ?? null, tz, b.startsOn ?? null, b.endsOn ?? null, b.location ?? null,
+          b.reference ?? null, b.minParticipants ?? null, b.siteId ?? null, b.responsible ?? null, b.targetMinutes ?? null, b.requiredSkills ?? [], b.requiredEquipment ?? [], b.color ?? null, b.internalNotes ?? null]);
       await this.audit.log(t, { tenantId: ctx.tenantId, actor: ctx.userId, action: 'session.created', entityType: 'session', entityId: s!.id });
       return s;
     };
@@ -141,10 +158,15 @@ export class SessionsService {
 
   update(ctx: RequestContext, id: string, version: number, b: Partial<SessionInput>) {
     return this.db.tenantTx(ctx.tenantId, async (tx) => {
-      const s = await one(tx, `UPDATE training_sessions SET title=coalesce($3,title), capacity=coalesce($4,capacity), starts_on=coalesce($5,starts_on),
-                                 ends_on=coalesce($6,ends_on), location=coalesce($7,location), version=version+1
+      if (b.siteId && !(await one(tx, `SELECT 1 FROM resources WHERE id=$1 AND kind='site'`, [b.siteId]))) throw badRequest('invalid_site', 'Site inconnu.', 'siteId');
+      // Champs fournis uniquement (null = effacer pour les champs facultatifs du planning).
+      const cols: [string, unknown][] = [['title', b.title], ['capacity', b.capacity], ['starts_on', b.startsOn], ['ends_on', b.endsOn], ['location', b.location],
+        ['reference', b.reference], ['min_participants', b.minParticipants], ['site_id', b.siteId], ['responsible', b.responsible], ['target_minutes', b.targetMinutes],
+        ['required_skills', b.requiredSkills], ['required_equipment', b.requiredEquipment], ['color', b.color], ['internal_notes', b.internalNotes]];
+      const set = cols.filter(([, v]) => v !== undefined);
+      const s = await one(tx, `UPDATE training_sessions SET ${[...set.map(([c], i) => `${c}=$${i + 3}`), 'version=version+1'].join(', ')}
                                WHERE id=$1 AND version=$2 AND status NOT IN ('archived','cancelled') RETURNING *`,
-        [id, version, b.title ?? null, b.capacity ?? null, b.startsOn ?? null, b.endsOn ?? null, b.location ?? null]);
+        [id, version, ...set.map(([, v]) => v)]);
       if (!s) throw conflict('version_conflict', 'Session modifiée entre-temps ou close.');
       // Modification après démarrage : tracée.
       if (['in_progress', 'completed'].includes(s.status)) await this.audit.log(tx, { tenantId: ctx.tenantId, actor: ctx.userId, action: 'session.modified_after_start', entityType: 'session', entityId: id, data: b });
@@ -161,6 +183,8 @@ export class SessionsService {
       if (ACTIVE.includes(to) && !ACTIVE.includes(s.status)) await this.ent.assertQuota(tx, ctx.tenantId, 'activeSessions');
       if (to === 'planned' && !s.starts_on) throw badRequest('dates_required', 'Dates requises pour planifier la session.', 'startsOn');
       const r = await one(tx, `UPDATE training_sessions SET status=$2, cancel_reason=coalesce($3,cancel_reason), version=version+1 WHERE id=$1 RETURNING *`, [id, to, reason ?? null]);
+      // Session annulée : séances annulées (réservations libérées, notifications si publiées).
+      if (to === 'cancelled') await this.engine.cancelSessionSlots(tx, ctx, id, `Session annulée : ${reason}`);
       await this.audit.log(tx, { tenantId: ctx.tenantId, actor: ctx.userId, action: 'session.status_changed', entityType: 'session', entityId: id, data: { from: s.status, to, reason } });
       return r;
     });
@@ -170,6 +194,7 @@ export class SessionsService {
   async enroll(ctx: RequestContext, sessionId: string, b: {
     personId: string; clientId?: string | null; status?: 'provisional' | 'confirmed';
     fundedAmount?: string | null; fundings?: { funderClientId: string; amount: string }[];
+    startsOn?: string | null; endsOn?: string | null; groupLabel?: string | null;
   }, tx?: Tx) {
     const run = async (t: Tx) => {
       const s = await one(t, `SELECT * FROM training_sessions WHERE id=$1 FOR UPDATE`, [sessionId]);
@@ -194,15 +219,37 @@ export class SessionsService {
                                      WHERE e.person_id=$1 AND NOT ts.is_historical AND extract(year FROM ts.starts_on)=$2`, [b.personId, year]);
       if (!s.is_historical && !counted) await this.ent.assertQuota(t, ctx.tenantId, 'learnersPerYear', 1, undefined, year);
       await t.query(`INSERT INTO person_roles(tenant_id, person_id, role) VALUES ($1,$2,'learner') ON CONFLICT DO NOTHING`, [ctx.tenantId, b.personId]);
-      const e = await one(t, `INSERT INTO enrollments(tenant_id, session_id, person_id, client_id, status) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-        [ctx.tenantId, sessionId, b.personId, b.clientId ?? null, b.status ?? 'provisional']);
+      if (b.startsOn && b.endsOn && b.endsOn < b.startsOn) throw badRequest('invalid_range', 'Date de sortie antérieure à la date d’entrée.', 'endsOn');
+      const e = await one(t, `INSERT INTO enrollments(tenant_id, session_id, person_id, client_id, status, starts_on, ends_on, group_label) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+        [ctx.tenantId, sessionId, b.personId, b.clientId ?? null, b.status ?? 'provisional', b.startsOn ?? null, b.endsOn ?? null, b.groupLabel ?? null]);
       for (const f of fundings) {
         await t.query(`INSERT INTO funding_allocations(tenant_id, enrollment_id, funder_client_id, amount) VALUES ($1,$2,$3,$4)`, [ctx.tenantId, e!.id, f.funderClientId, f.amount]);
       }
       await this.audit.log(t, { tenantId: ctx.tenantId, actor: ctx.userId, action: 'enrollment.created', entityType: 'enrollment', entityId: e!.id });
-      return e;
+      // Séances futures revérifiées : collision ou surcapacité → participation à résoudre.
+      await lock(t, `planning:${ctx.tenantId}`);
+      const toResolve = await reconcileEnrollment(t, ctx.tenantId, e!.id);
+      return { ...e, toResolve };
     };
     return tx ? run(tx) : this.db.tenantTx(ctx.tenantId, run);
+  }
+
+  /** Groupe ou dates d'entrée/sortie modifiés : revérification des séances futures. */
+  updateEnrollment(ctx: RequestContext, id: string, b: { startsOn?: string | null; endsOn?: string | null; groupLabel?: string | null }) {
+    return this.db.tenantTx(ctx.tenantId, async (tx) => {
+      await lock(tx, `planning:${ctx.tenantId}`);
+      const cur = await one(tx, `SELECT * FROM enrollments WHERE id=$1 FOR UPDATE`, [id]);
+      if (!cur) throw notFound('Inscription');
+      const startsOn = b.startsOn !== undefined ? b.startsOn : cur.starts_on; const endsOn = b.endsOn !== undefined ? b.endsOn : cur.ends_on;
+      if (startsOn && endsOn && endsOn < startsOn) throw badRequest('invalid_range', 'Date de sortie antérieure à la date d’entrée.', 'endsOn');
+      const e = await one(tx, `UPDATE enrollments SET starts_on=$2, ends_on=$3, group_label=$4 WHERE id=$1 RETURNING *`,
+        [id, startsOn, endsOn, b.groupLabel !== undefined ? b.groupLabel : cur.group_label]);
+      // Nouveau groupe : les exceptions « à résoudre » précédentes sont réévaluées.
+      await tx.query(`DELETE FROM slot_participants WHERE enrollment_id=$1 AND mode='to_resolve'`, [id]);
+      const toResolve = await reconcileEnrollment(tx, ctx.tenantId, id);
+      await this.audit.log(tx, { tenantId: ctx.tenantId, actor: ctx.userId, action: 'enrollment.updated', entityType: 'enrollment', entityId: id, data: b });
+      return { ...e, toResolve };
+    });
   }
 
   /** Annulation : motif, aucune pièce ni trace supprimée, quota annuel non libéré. */

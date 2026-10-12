@@ -94,7 +94,7 @@ export class DocumentsService {
         if (!s) throw notFound('Session');
         const tz = s.timezone;
         // Créneaux avec partie, formateurs, lieu/salle et matériel.
-        const slots = (await many(tx, SLOTS_SQL, [s.session_id])).map((sl: any) => ({
+        const slots = (await many(tx, SLOTS_SQL, [s.session_id])).filter((sl: any) => sl.status !== 'cancelled').map((sl: any) => ({
           ...sl,
           trainerNames: sl.trainers.map((t: any) => t.name).join(', '),
           place: sl.resources.filter((r: any) => r.kind !== 'equipment').map((r: any) => r.name).join(', '),

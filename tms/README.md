@@ -88,7 +88,8 @@ contrôles serveur lisent tous ce même catalogue. Tarifs indicatifs, à confirm
 | billing | Catalogue, droits/quotas, Stripe Checkout + webhooks signés idempotents, upgrade/downgrade/résiliation, crédits de signature | §7, FREE-01, REC-09/10/25-29 |
 | crm | Clients/prospects, personnes multi-rôles, SIRET (Luhn), fusion validée, archivage | REF-01/02 |
 | catalog | Programmes versionnés, version figée dès usage (trigger SQL) | CAT-01, REC-05 |
-| sessions | Cycle de vie ; déroulé en parties (ex. théorie / pratique) ; créneaux (UTC + fuseau IANA) avec un ou plusieurs formateurs ; ressources : lieux, salles, matériel (engins CACES, n° de série, vérification périodique) ; chevauchements formateur / salle / matériel avec dérogation tracée ; inscriptions, financeurs, présences | SES-01, INS-01, PRE-01 |
+| sessions | Cycle de vie ; déroulé en parties ; séances avec un ou plusieurs formateurs ; ressources : lieux, salles, matériel (engins CACES, vérification périodique) ; inscriptions (groupes, dates d'entrée/sortie), financeurs, présences | SES-01, INS-01, PRE-01 |
+| planning | Voir section « Planning » ci-dessous | Cahier planning P1 |
 | quality | Questionnaires, réponses individuelles, réclamations | QUA-01 |
 | finance | Devis, factures/acomptes/avoirs immuables, numérotation atomique, règlements et affectations, facturation électronique (partenaire) | FIN-01/02, REC-07/08 |
 | documents | Génération PDF (convention, convocation, attestation, émargement, facture), dépôt, téléchargement contrôlé | DOC-01 |
@@ -100,6 +101,43 @@ contrôles serveur lisent tous ce même catalogue. Tarifs indicatifs, à confirm
 | ai | BYOK OpenAI/Gemini, outils allowlistés, propositions confirmées et invalidées si données changent, budget | AI-01, §5.2, REC-37-40 |
 | bank | Agrégateur lecture seule, consentement, synchro curseur, rapprochement déterministe validé | BANK-01..10, REC-43-45 |
 | mail | SMTP client (465/587, TLS vérifié, anti-SSRF), file avec `delivery_unknown` | MAIL-01, REC-46/47 |
+
+## 2 bis. Planning (sessions, formateurs, salles, stagiaires)
+
+Écran **Planning** : vues jour, semaine, mois, Timeline (lignes par formateur, salle, matériel, site,
+session, groupe ou stagiaire ; zoom jour / semaine / mois) et liste (mobile, clavier, édition groupée).
+Barre : Aujourd'hui, précédent / suivant, date, vue, regroupement, filtres combinables, recherche,
+« Nouvelle séance » ; préférences et vues favorites mémorisées. Panneau latéral : création / modification
+avec contrôle en direct, ressources libres et raisons d'indisponibilité, prochains créneaux compatibles,
+récurrence, duplication, workflow, historique. Glisser-déposer et redimensionnement : aperçu des conflits,
+enregistrement après confirmation, sinon position initiale.
+
+Règles serveur (`api/src/modules/sessions/planning/rules.ts`), identiques pour saisie, glisser-déposer,
+import, API, duplication et récurrence :
+
+* intervalles `[début, fin[`, instants UTC, affichage et récurrences en heure locale du centre ; horaire
+  inexistant / ambigu au changement d'heure refusé ;
+* **bloquant** : double réservation formateur / salle / matériel / stagiaire (brouillons compris, même hors
+  filtre), temps de préparation de salle et de déplacement formateur, indisponibilité, ressource ou
+  formateur inactif, hors ouverture, fermeture, capacité physique (hybride : distants non comptés),
+  pauses invalides, dates d'inscription, compétence / équipement requis, site autorisé ; à la publication :
+  formateur, lien visio (distanciel / hybride), lieu, vérification périodique du matériel ;
+* **alertes** : durée cible, effectif minimum, charge formateur, horaires habituels ou inhabituels, délai court ;
+* dérogation seulement sur règle dérogeable, permission `planning.derogate`, motif tracé ; double
+  réservation non dérogeable sauf paramètre du centre.
+
+Statuts : Brouillon → À valider → Publié → Réalisé ; Annulé (motif, réservations libérées, historique
+conservé) ; suppression physique réservée au brouillon jamais publié. Publication : `planning.publish`
+ou publication directe paramétrable. Chaque écriture : version attendue (conflit explicite), verrou par
+organisme (deux réservations simultanées → une seule réussit), en-tête `Idempotency-Key`. Historique
+versionné avec différences, événements sortants (`GET /api/v1/planning/events`), notifications regroupées
+par personne envoyées après validation, relance sans doublon. Portails `Mon planning` formateur et
+stagiaire (séances publiées, sans données des autres stagiaires, export ICS), demandes d'indisponibilité
+formateur soumises à validation. Onglets : conflits, aperçu avant publication, disponibilités et profils
+formateurs, fermetures, indicateurs (heures, charge, occupation), import CSV / Excel (aperçu, atomique,
+partiel explicite, doublons ignorés), exports CSV / PDF / ICS, journal, paramètres.
+
+Recette R01–R14 : `api/test/planning.e2e.test.ts`.
 
 ## 3. Démarrer en local
 
@@ -122,7 +160,7 @@ signés ; les emails système sont affichés dans la console de l'API.
 ### Tests
 
 ```bash
-cd tms/api && npm test     # 30 scénarios e2e sur base réelle (tms_test)
+cd tms/api && npm test     # 45 scénarios e2e sur base réelle (tms_test), dont la recette planning R01–R14
 ```
 
 Couvrent notamment : souscription et webhooks (doublons, signature invalide, past_due), quotas Free

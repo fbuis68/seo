@@ -7,6 +7,7 @@ export const PERMISSIONS = [
   'ai.use', 'ai.configure', 'analytics.read',
   'bank.connect', 'bank.read', 'bank.reconcile',
   'mail.configure', 'mail.send', 'mail.receive', 'audit.read',
+  'planning.publish', 'planning.derogate',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 export type Role = 'owner' | 'manager' | 'trainer' | 'learner' | 'support';
@@ -16,6 +17,8 @@ const MANAGER: Permission[] = [
   'attendance.write', 'documents.read', 'documents.write', 'quality.read', 'quality.write',
   'finance.read', 'finance.write', 'signatures.send', 'opendata.enrich', 'ai.use', 'analytics.read',
   'bank.read', 'bank.reconcile', 'mail.send', 'mail.receive',
+  // Responsable pédagogique : publication et dérogations ; à retirer (revoked_permissions) pour un simple planificateur.
+  'planning.publish', 'planning.derogate',
 ];
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {

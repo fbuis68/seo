@@ -4,16 +4,18 @@ import { api, fmtDT, fmtT, post, zonedIso } from '../api';
 const KIND_LABEL: Record<string, string> = { site: 'Lieu', room: 'Salle', equipment: 'Matériel' };
 const h = (m: number) => `${Math.floor(m / 60)} h${m % 60 ? String(m % 60).padStart(2, '0') : ''}`;
 
-/** Envoi avec gestion du chevauchement : demande un motif de dérogation puis réessaie. */
+/** Envoi avec contrôle du planning : conflit dérogeable → motif demandé puis nouvel essai ; sinon message. */
 async function withOverride<T>(send: (overrideReason?: string) => Promise<T>): Promise<T | undefined> {
   try { return await send(); }
   catch (e: any) {
-    if (e.code !== 'slot_overlap') throw e;
-    const reason = prompt(`${e.message}\nMotif de dérogation pour forcer (5 caractères min.), ou Annuler :`);
+    const blocking = e.details?.report?.flatMap((r: any) => r.blocking) ?? [];
+    if (e.code !== 'planning_conflict' || !blocking.length || !blocking.every((i: any) => i.derogable)) throw e;
+    const reason = prompt(`${blocking.map((i: any) => i.message).join('\n')}\n\nMotif de dérogation (responsable habilité, 5 caractères min.), ou Annuler :`);
     if (!reason) return undefined;
     return send(reason);
   }
 }
+const STATUS: Record<string, [string, string]> = { draft: ['Brouillon', ''], pending: ['À valider', 'warn'], published: ['Publié', 'ok'], done: ['Réalisé', 'ok'], cancelled: ['Annulé', 'err'] };
 
 function Checks({ items, value, onChange, label }: { items: { id: string; label: string; hint?: string }[]; value: string[]; onChange: (v: string[]) => void; label: string }) {
   if (!items.length) return <span className="small muted">{label} : aucun disponible</span>;
@@ -44,15 +46,21 @@ export default function Planning({ session: d, canWrite, trainers, resources, on
   }));
   const run = async (fn: () => Promise<unknown>) => { onError(null); try { await fn(); onChange(); } catch (e: any) { onError(e.message); } };
   const planned = d.parts.reduce((a: number, p: any) => a + p.planned_minutes, 0);
-  const scheduled = d.slots.reduce((a: number, s: any) => a + s.duration_minutes, 0);
+  const active = d.slots.filter((s: any) => s.status !== 'cancelled');
+  const scheduled = active.reduce((a: number, s: any) => a + s.pedagogical_minutes, 0);
+  const target = d.target ?? d.duration_minutes;
+  const unpublished = active.filter((s: any) => ['draft', 'pending'].includes(s.status)).length;
   const partTitle = (id: string | null) => d.parts.find((p: any) => p.id === id)?.title;
 
   return (
     <div className="panel" style={{ marginBottom: 16 }}>
       <strong>Déroulé et planning</strong>
       <p className="small muted" style={{ margin: '4px 0 10px' }}>
-        Programme : {h(d.duration_minutes)} · Réparti en parties : {h(planned)} · Planifié : <span style={{ color: scheduled !== d.duration_minutes ? 'var(--warn)' : 'var(--ok)' }}>{h(scheduled)}</span>
+        Durée cible : {h(target)} · Réparti en parties : {h(planned)} · Planifié (hors pauses et annulations) : <span style={{ color: scheduled !== target ? 'var(--warn)' : 'var(--ok)' }}>{h(scheduled)}</span>
+        {' '}· <a href={`/planning`} onClick={() => { try { const k = 'tms.planning.prefs'; const p = JSON.parse(localStorage.getItem(k) || '{}'); localStorage.setItem(k, JSON.stringify({ ...p, filters: { ...(p.filters ?? {}), sessionId: d.id }, view: 'list' })); } catch { /* */ } }}>Ouvrir dans le planning</a>
       </p>
+      {canWrite && unpublished > 0 && <div className="toolbar"><span className="small">{unpublished} séance(s) non publiée(s) : invisibles des formateurs et stagiaires.</span>
+        <button className="btn sm" onClick={() => run(() => post('/api/v1/planning/transition', { sessionId: d.id, status: 'published' }))}>Publier les séances</button></div>}
 
       {/* Parties */}
       <table>
@@ -96,10 +104,10 @@ export default function Planning({ session: d, canWrite, trainers, resources, on
       {/* Créneaux */}
       <h2 style={{ fontSize: '1rem' }}>Créneaux</h2>
       <table>
-        <thead><tr><th>Date</th><th className="num">Durée</th><th>Partie</th><th>Formateur(s)</th><th>Lieu / salle</th><th>Matériel</th><th /></tr></thead>
+        <thead><tr><th>Date</th><th className="num">Durée</th><th>Partie</th><th>Formateur(s)</th><th>Lieu / salle</th><th>Matériel</th><th>Statut</th><th /></tr></thead>
         <tbody>
           {d.slots.map((sl: any) => editSlot?.id === sl.id ? (
-            <tr key={sl.id}><td colSpan={7}>
+            <tr key={sl.id}><td colSpan={8}>
               <div style={{ display: 'grid', gap: 8 }}>
                 <strong className="small">{fmtDT(sl.starts_at, d.timezone)} → {fmtT(sl.ends_at, d.timezone)}</strong>
                 {d.parts.length > 0 && <label>Partie<select value={editSlot.partId} onChange={(e) => setEditSlot({ ...editSlot, partId: e.target.value })}><option value="">— aucune —</option>{d.parts.map((p: any) => <option key={p.id} value={p.id}>{p.title}</option>)}</select></label>}
@@ -108,7 +116,7 @@ export default function Planning({ session: d, canWrite, trainers, resources, on
                 <Checks label="Matériel" items={resourceItems(['equipment'])} value={editSlot.resourceIds} onChange={(v) => setEditSlot({ ...editSlot, resourceIds: v })} />
                 <div className="toolbar">
                   <button className="btn sm" onClick={() => run(async () => {
-                    await withOverride((overrideReason) => api('PATCH', `/api/v1/slots/${sl.id}`, { partId: editSlot.partId || null, trainerIds: editSlot.trainerIds, resourceIds: editSlot.resourceIds, overrideReason }));
+                    await withOverride((overrideReason) => api('PATCH', `/api/v1/slots/${sl.id}`, { version: editSlot.version, partId: editSlot.partId || null, trainerIds: editSlot.trainerIds, resourceIds: editSlot.resourceIds, overrideReason }));
                     setEditSlot(null);
                   })}>Enregistrer</button>
                   <button className="btn ghost sm" onClick={() => setEditSlot(null)}>Annuler</button>
@@ -118,19 +126,22 @@ export default function Planning({ session: d, canWrite, trainers, resources, on
           ) : (
             <tr key={sl.id}>
               <td>{fmtDT(sl.starts_at, d.timezone)} → {fmtT(sl.ends_at, d.timezone)}
-                {sl.overlap_override_reason && <> <span className="pill warn" title={sl.overlap_override_reason}>dérogation</span></>}</td>
-              <td className="num">{h(sl.duration_minutes)}</td>
+                {sl.derogation && <> <span className="pill warn" title={sl.derogation.reason}>dérogation</span></>}</td>
+              <td className="num">{h(sl.pedagogical_minutes)}{sl.pedagogical_minutes !== sl.duration_minutes && <div className="small muted">pauses {h(sl.duration_minutes - sl.pedagogical_minutes)}</div>}</td>
               <td>{partTitle(sl.part_id) ?? <span className="muted">—</span>}</td>
               <td>{sl.trainers.map((t: any) => t.name).join(', ') || <span className="pill warn">aucun</span>}</td>
               <td>{sl.resources.filter((r: any) => r.kind !== 'equipment').map((r: any) => r.name).join(', ') || <span className="muted">—</span>}</td>
               <td>{sl.resources.filter((r: any) => r.kind === 'equipment').map((r: any) => r.name).join(', ') || <span className="muted">—</span>}</td>
-              <td>{canWrite && <>
-                <button className="btn ghost sm" onClick={() => setEditSlot({ id: sl.id, partId: sl.part_id ?? '', trainerIds: sl.trainers.map((t: any) => t.id), resourceIds: sl.resources.map((r: any) => r.id) })}>Modifier</button>{' '}
-                <button className="btn ghost sm" onClick={() => confirm('Supprimer ce créneau ?') && run(() => api('DELETE', `/api/v1/slots/${sl.id}`))}>Supprimer</button>
+              <td><span className={`pill ${STATUS[sl.status][1]}`} title={sl.cancel_reason ?? ''}>{STATUS[sl.status][0]}</span>{sl.to_resolve > 0 && <div className="small" style={{ color: 'var(--warn)' }}>{sl.to_resolve} à résoudre</div>}</td>
+              <td>{canWrite && !['cancelled', 'done'].includes(sl.status) && <>
+                <button className="btn ghost sm" onClick={() => setEditSlot({ id: sl.id, version: sl.version, partId: sl.part_id ?? '', trainerIds: sl.trainers.map((t: any) => t.id), resourceIds: sl.resources.map((r: any) => r.id) })}>Modifier</button>{' '}
+                {sl.status === 'draft' && !sl.published_at
+                  ? <button className="btn ghost sm" onClick={() => confirm('Supprimer ce brouillon ?') && run(() => api('DELETE', `/api/v1/slots/${sl.id}`))}>Supprimer</button>
+                  : <button className="btn ghost sm" onClick={() => { const reason = prompt('Annuler la séance (les personnes concernées seront prévenues). Motif :'); if (reason) run(() => post(`/api/v1/planning/slots/${sl.id}/cancel`, { reason })); }}>Annuler</button>}
               </>}</td>
             </tr>
           ))}
-          {!d.slots.length && <tr><td colSpan={7} className="muted small">Aucun créneau planifié.</td></tr>}
+          {!d.slots.length && <tr><td colSpan={8} className="muted small">Aucun créneau planifié.</td></tr>}
         </tbody>
       </table>
 
@@ -155,7 +166,7 @@ export default function Planning({ session: d, canWrite, trainers, resources, on
             <Checks label="Lieu / salle" items={resourceItems(['site', 'room'])} value={slot.resourceIds} onChange={(v) => setSlot({ ...slot, resourceIds: v })} />
             <Checks label="Matériel" items={resourceItems(['equipment'])} value={slot.resourceIds} onChange={(v) => setSlot({ ...slot, resourceIds: v })} />
           </div>
-          <div><button className="btn sm">Ajouter le créneau</button> <span className="small muted">Lieux, salles et matériel se créent dans « Lieux & matériel » ; formateurs dans « Clients & apprenants ».</span></div>
+          <div><button className="btn sm">Ajouter le créneau</button> <span className="small muted">Créé en brouillon (ressources réservées), à publier ensuite. Pauses, récurrences et modalité distancielle : écran Planning.</span></div>
         </form>
       )}
     </div>

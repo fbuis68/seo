@@ -13,7 +13,8 @@ export const EXPORT_FORMAT_VERSION = '1.0';
 /** Tables exportées (données de l'organisme) ; colonnes secrètes exclues. */
 export const EXPORT_TABLES: { table: string; omit?: string[] }[] = [
   { table: 'persons' }, { table: 'person_roles' }, { table: 'clients' }, { table: 'client_contacts' },
-  { table: 'programs' }, { table: 'program_versions' }, { table: 'resources' }, { table: 'training_sessions' }, { table: 'session_parts' }, { table: 'slots' }, { table: 'slot_trainers' }, { table: 'slot_resources' },
+  { table: 'programs' }, { table: 'program_versions' }, { table: 'resources' }, { table: 'training_sessions' }, { table: 'session_parts' }, { table: 'planning_series' }, { table: 'slots' }, { table: 'slot_trainers' }, { table: 'slot_resources' },
+  { table: 'slot_participants' }, { table: 'trainer_profiles' }, { table: 'availabilities' }, { table: 'closures' }, { table: 'planning_history' }, { table: 'planning_settings' },
   { table: 'enrollments' }, { table: 'funding_allocations' }, { table: 'attendance' },
   { table: 'documents', omit: ['storage_key'] }, { table: 'invoice_series' }, { table: 'quotes' }, { table: 'invoices' }, { table: 'invoice_lines' },
   { table: 'payments' }, { table: 'payment_allocations' }, { table: 'signature_envelopes' }, { table: 'signature_signers' },
