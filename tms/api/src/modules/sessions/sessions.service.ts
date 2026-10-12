@@ -6,6 +6,26 @@ import { Db, Tx, many, one } from '../../core/db';
 import { badRequest, conflict, forbidden, notFound } from '../../core/errors';
 import { EntitlementsService } from '../billing/entitlements.service';
 
+const fmtH = (m: number) => `${Math.floor(m / 60)} h${m % 60 ? String(m % 60).padStart(2, '0') : ''}`;
+
+/** Créneaux avec partie, formateurs et ressources (lieux, salles, matériel). */
+export const SLOTS_SQL = `
+  SELECT sl.id, sl.session_id, sl.part_id, sl.starts_at, sl.ends_at, sl.overlap_override_reason,
+         extract(epoch FROM sl.ends_at - sl.starts_at)::int / 60 AS duration_minutes,
+         coalesce((SELECT json_agg(json_build_object('id', p.id, 'name', p.first_name || ' ' || p.last_name) ORDER BY p.last_name)
+                     FROM slot_trainers st JOIN persons p ON p.id=st.person_id WHERE st.slot_id=sl.id), '[]') AS trainers,
+         coalesce((SELECT json_agg(json_build_object('id', r.id, 'name', r.name, 'kind', r.kind, 'category', r.category, 'inspection_due_on', r.inspection_due_on) ORDER BY r.kind, r.name)
+                     FROM slot_resources sr JOIN resources r ON r.id=sr.resource_id WHERE sr.slot_id=sl.id), '[]') AS resources
+    FROM slots sl WHERE sl.session_id=$1 ORDER BY sl.starts_at`;
+
+/** Parties : durée prévue vs planifiée, formateurs intervenant sur la partie. */
+export const PARTS_SQL = `
+  SELECT pt.id, pt.title, pt.planned_minutes, pt.position, pt.notes,
+         coalesce((SELECT sum(extract(epoch FROM sl.ends_at - sl.starts_at)::int / 60) FROM slots sl WHERE sl.part_id=pt.id), 0)::int AS scheduled_minutes,
+         coalesce((SELECT json_agg(DISTINCT jsonb_build_object('id', p.id, 'name', p.first_name || ' ' || p.last_name))
+                     FROM slots sl JOIN slot_trainers st ON st.slot_id=sl.id JOIN persons p ON p.id=st.person_id WHERE sl.part_id=pt.id), '[]') AS trainers
+    FROM session_parts pt WHERE pt.session_id=$1 ORDER BY pt.position, pt.created_at`;
+
 export type SessionStatus = 'draft' | 'planned' | 'confirmed' | 'in_progress' | 'completed' | 'archived' | 'cancelled';
 const ACTIVE: SessionStatus[] = ['planned', 'confirmed', 'in_progress'];
 /** Cycle de vie §5.1 : brouillon → planifiée → confirmée → en cours → terminée → archivée ; annulation motivée. */
@@ -39,7 +59,7 @@ export class SessionsService {
         (SELECT count(*) FROM enrollments e WHERE e.session_id=s.id AND e.status <> 'cancelled') enrolled
         FROM training_sessions s JOIN program_versions v ON v.id=s.program_version_id JOIN programs p ON p.id=v.program_id
        WHERE ($1::text IS NULL OR s.status=$1) AND ($2::date IS NULL OR s.starts_on >= $2) AND ($3::date IS NULL OR s.starts_on <= $3)
-         AND ($4::uuid IS NULL OR EXISTS (SELECT 1 FROM slots sl WHERE sl.session_id=s.id AND sl.trainer_id=$4))
+         AND ($4::uuid IS NULL OR EXISTS (SELECT 1 FROM slots sl JOIN slot_trainers st ON st.slot_id=sl.id WHERE sl.session_id=s.id AND st.person_id=$4))
        ORDER BY s.starts_on NULLS LAST, s.created_at LIMIT $5 OFFSET $6`,
       [q.status ?? null, q.from ?? null, q.to ?? null, this.trainerFilter(ctx), q.limit, q.offset]));
   }
@@ -50,11 +70,12 @@ export class SessionsService {
                                 FROM training_sessions s JOIN program_versions v ON v.id=s.program_version_id JOIN programs p ON p.id=v.program_id WHERE s.id=$1`, [id]);
       if (!s) throw notFound('Session');
       const trainer = this.trainerFilter(ctx);
-      s.slots = await many(t, `SELECT sl.*, r.name room_name, extract(epoch FROM sl.ends_at - sl.starts_at)::int / 60 duration_minutes,
-                                      tp.first_name || ' ' || tp.last_name trainer_name
-                                 FROM slots sl LEFT JOIN rooms r ON r.id=sl.room_id LEFT JOIN persons tp ON tp.id=sl.trainer_id
-                                WHERE sl.session_id=$1 ORDER BY sl.starts_at`, [id]);
-      if (trainer && !s.slots.some((x: any) => x.trainer_id === trainer)) throw notFound('Session');
+      s.slots = await many(t, SLOTS_SQL, [id]);
+      if (trainer && !s.slots.some((x: any) => x.trainers.some((tr: any) => tr.id === trainer))) throw notFound('Session');
+      s.parts = await many(t, PARTS_SQL, [id]);
+      s.trainers = await many(t, `SELECT DISTINCT p.id, p.first_name || ' ' || p.last_name AS name
+                                    FROM slots sl JOIN slot_trainers st ON st.slot_id=sl.id JOIN persons p ON p.id=st.person_id
+                                   WHERE sl.session_id=$1 ORDER BY 2`, [id]);
       // Formateur : liste strictement nécessaire des inscrits (pas de données financières).
       s.enrollments = await many(t, `SELECT e.id, e.status, e.person_id, p.first_name, p.last_name ${trainer ? '' : ', p.email, e.client_id, c.name client_name'}
                                        FROM enrollments e JOIN persons p ON p.id=e.person_id LEFT JOIN clients c ON c.id=e.client_id
@@ -69,7 +90,28 @@ export class SessionsService {
   private async missingPieces(tx: Tx, s: any) {
     const missing: string[] = [];
     if (!s.slots.length) missing.push('Aucun créneau planifié');
-    if (s.slots.some((x: any) => !x.trainer_id)) missing.push('Créneau sans formateur');
+    const noTrainer = s.slots.filter((x: any) => !x.trainers.length).length;
+    if (noTrainer) missing.push(`${noTrainer} créneau(x) sans formateur`);
+    const scheduled = s.slots.reduce((a: number, x: any) => a + x.duration_minutes, 0);
+    if (s.slots.length && scheduled !== s.duration_minutes) {
+      missing.push(`Planning : ${fmtH(scheduled)} planifiées pour ${fmtH(s.duration_minutes)} prévues au programme (${scheduled < s.duration_minutes ? 'incomplet' : 'dépassement'})`);
+    }
+    if (s.parts.length) {
+      const planned = s.parts.reduce((a: number, x: any) => a + x.planned_minutes, 0);
+      if (planned !== s.duration_minutes) missing.push(`Découpage : ${fmtH(planned)} réparties en parties pour ${fmtH(s.duration_minutes)} au programme`);
+      for (const pt of s.parts) if (pt.scheduled_minutes < pt.planned_minutes) missing.push(`Partie « ${pt.title} » : ${fmtH(pt.scheduled_minutes)} planifiées sur ${fmtH(pt.planned_minutes)}`);
+      const orphan = s.slots.filter((x: any) => !x.part_id).length;
+      if (orphan) missing.push(`${orphan} créneau(x) non rattaché(s) à une partie`);
+    }
+    // Matériel (ex. engins CACES) : vérification périodique échue à la date du créneau.
+    const day = (d: string | Date) => new Intl.DateTimeFormat('en-CA', { timeZone: s.timezone }).format(new Date(d)); // AAAA-MM-JJ
+    const overdue = new Map<string, string>();
+    for (const sl of s.slots) for (const r of sl.resources) {
+      if (r.kind === 'equipment' && r.inspection_due_on && String(r.inspection_due_on).slice(0, 10) < day(sl.starts_at) && !overdue.has(r.id)) {
+        overdue.set(r.id, `${r.name} : vérification périodique échue le ${String(r.inspection_due_on).slice(0, 10)} (utilisé le ${day(sl.starts_at)})`);
+      }
+    }
+    missing.push(...overdue.values());
     const docs = await many(tx, `SELECT kind, owner_id FROM documents WHERE owner_type='enrollment' AND owner_id = ANY($1)`, [s.enrollments.map((e: any) => e.id)]);
     const active = s.enrollments.filter((e: any) => e.status !== 'cancelled');
     const without = (kind: string) => active.filter((e: any) => !docs.some((d) => d.owner_id === e.id && d.kind === kind)).length;
@@ -123,70 +165,6 @@ export class SessionsService {
       return r;
     });
   }
-
-  // ─── Créneaux, salles, formateurs ───────────────────────────────────────
-  async addSlot(ctx: RequestContext, sessionId: string, b: { startsAt: string; endsAt: string; roomId?: string | null; trainerId?: string | null; overrideReason?: string }) {
-    if (new Date(b.endsAt) <= new Date(b.startsAt)) throw badRequest('invalid_slot', 'La fin doit être postérieure au début.', 'endsAt');
-    return this.db.tenantTx(ctx.tenantId, async (tx) => {
-      const s = await one(tx, `SELECT status FROM training_sessions WHERE id=$1`, [sessionId]);
-      if (!s) throw notFound('Session');
-      if (['archived', 'cancelled', 'completed'].includes(s.status)) throw conflict('session_closed', 'Session close.');
-      if (b.trainerId && !(await one(tx, `SELECT 1 FROM person_roles WHERE person_id=$1 AND role='trainer'`, [b.trainerId]))) throw badRequest('not_a_trainer', "La personne n'a pas le rôle formateur.", 'trainerId');
-      const conflicts = await many(tx, `
-        SELECT sl.id, sl.session_id, sl.starts_at, sl.ends_at, CASE WHEN sl.room_id=$3 THEN 'room' ELSE 'trainer' END kind
-          FROM slots sl JOIN training_sessions ts ON ts.id=sl.session_id
-         WHERE ts.status NOT IN ('cancelled','archived') AND sl.starts_at < $2 AND sl.ends_at > $1
-           AND ((sl.room_id IS NOT NULL AND sl.room_id=$3) OR (sl.trainer_id IS NOT NULL AND sl.trainer_id=$4))`,
-        [b.startsAt, b.endsAt, b.roomId ?? null, b.trainerId ?? null]);
-      // Chevauchement salle/formateur : alerte ; dérogation possible seulement si justifiée (tracée).
-      if (conflicts.length && !b.overrideReason) throw conflict('slot_overlap', 'Chevauchement salle ou formateur détecté.', conflicts);
-      const slot = await one(tx, `INSERT INTO slots(tenant_id, session_id, starts_at, ends_at, room_id, trainer_id, overlap_override_reason) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-        [ctx.tenantId, sessionId, b.startsAt, b.endsAt, b.roomId ?? null, b.trainerId ?? null, conflicts.length ? b.overrideReason : null]);
-      if (conflicts.length) await this.audit.log(tx, { tenantId: ctx.tenantId, actor: ctx.userId, action: 'slot.overlap_override', entityType: 'slot', entityId: slot!.id, data: { reason: b.overrideReason, conflicts } });
-      return { ...slot, overlaps: conflicts };
-    });
-  }
-
-  /**
-   * Affectation (ou retrait) d'un formateur après coup, sur des créneaux précis ou sur tous
-   * ceux de la session. Tout ou rien : un chevauchement non justifié bloque l'ensemble.
-   */
-  async assignTrainer(ctx: RequestContext, sessionId: string, b: { trainerId: string | null; slotIds?: string[]; overrideReason?: string }) {
-    return this.db.tenantTx(ctx.tenantId, async (tx) => {
-      const s = await one(tx, `SELECT status FROM training_sessions WHERE id=$1 FOR UPDATE`, [sessionId]);
-      if (!s) throw notFound('Session');
-      if (['archived', 'cancelled'].includes(s.status)) throw conflict('session_closed', 'Session close.');
-      if (b.trainerId && !(await one(tx, `SELECT 1 FROM person_roles WHERE person_id=$1 AND role='trainer'`, [b.trainerId]))) throw badRequest('not_a_trainer', "La personne n'a pas le rôle formateur.", 'trainerId');
-      const slots = await many(tx, `SELECT id, starts_at, ends_at, trainer_id FROM slots WHERE session_id=$1 AND ($2::uuid[] IS NULL OR id = ANY($2::uuid[])) ORDER BY starts_at`,
-        [sessionId, b.slotIds?.length ? b.slotIds : null]);
-      if (!slots.length) throw badRequest('no_slot', 'Aucun créneau à affecter : ajoutez d’abord un créneau à la session.');
-      if (b.slotIds?.length && slots.length !== new Set(b.slotIds).size) throw notFound('Créneau');
-      const conflicts: any[] = [];
-      if (b.trainerId) {
-        for (const sl of slots) {
-          conflicts.push(...await many(tx, `
-            SELECT sl.id, sl.session_id, sl.starts_at, sl.ends_at, 'trainer' kind, $4::uuid target_slot_id
-              FROM slots sl JOIN training_sessions ts ON ts.id=sl.session_id
-             WHERE ts.status NOT IN ('cancelled','archived') AND sl.trainer_id=$3 AND sl.id <> $4
-               AND sl.starts_at < $2 AND sl.ends_at > $1`, [sl.starts_at, sl.ends_at, b.trainerId, sl.id]));
-        }
-      }
-      if (conflicts.length && !b.overrideReason) throw conflict('slot_overlap', 'Ce formateur est déjà affecté sur un créneau qui se chevauche.', conflicts);
-      for (const sl of slots) {
-        const overlapped = conflicts.some((c) => c.target_slot_id === sl.id);
-        await tx.query(`UPDATE slots SET trainer_id=$2, overlap_override_reason = CASE WHEN $3::boolean THEN $4 ELSE overlap_override_reason END WHERE id=$1`,
-          [sl.id, b.trainerId, overlapped, b.overrideReason ?? null]);
-      }
-      await this.audit.log(tx, { tenantId: ctx.tenantId, actor: ctx.userId, action: 'session.trainer_assigned', entityType: 'session', entityId: sessionId,
-        data: { trainerId: b.trainerId, slots: slots.map((x) => x.id), overrideReason: conflicts.length ? b.overrideReason : undefined } });
-      return { updated: slots.length, overlaps: conflicts };
-    });
-  }
-
-  createRoom(ctx: RequestContext, b: { name: string; location?: string; capacity?: number }) {
-    return this.db.tenantTx(ctx.tenantId, (tx) => one(tx, `INSERT INTO rooms(tenant_id, name, location, capacity) VALUES ($1,$2,$3,$4) RETURNING *`, [ctx.tenantId, b.name, b.location ?? null, b.capacity ?? null]));
-  }
-  rooms(ctx: RequestContext) { return this.db.tenantTx(ctx.tenantId, (tx) => many(tx, `SELECT * FROM rooms ORDER BY name`)); }
 
   // ─── Inscriptions et financements ────────────────────────────────────────
   async enroll(ctx: RequestContext, sessionId: string, b: {
@@ -242,10 +220,11 @@ export class SessionsService {
   /** Présence par apprenant/créneau ; durée effectuée bornée par la durée du créneau. */
   recordAttendance(ctx: RequestContext, b: { enrollmentId: string; slotId: string; status: 'present' | 'absent' | 'partial'; minutes?: number }, proof: Record<string, unknown> = {}) {
     return this.db.tenantTx(ctx.tenantId, async (tx) => {
-      const r = await one(tx, `SELECT sl.id, sl.trainer_id, extract(epoch FROM sl.ends_at - sl.starts_at)::int / 60 dur, e.status estatus
-                                 FROM slots sl JOIN enrollments e ON e.session_id = sl.session_id WHERE sl.id=$1 AND e.id=$2`, [b.slotId, b.enrollmentId]);
+      const r = await one(tx, `SELECT sl.id, extract(epoch FROM sl.ends_at - sl.starts_at)::int / 60 dur, e.status estatus,
+                                      EXISTS (SELECT 1 FROM slot_trainers st WHERE st.slot_id=sl.id AND st.person_id=$3) assigned
+                                 FROM slots sl JOIN enrollments e ON e.session_id = sl.session_id WHERE sl.id=$1 AND e.id=$2`, [b.slotId, b.enrollmentId, ctx.personId ?? null]);
       if (!r) throw badRequest('slot_enrollment_mismatch', "Créneau et inscription n'appartiennent pas à la même session.");
-      if (ctx.role === 'trainer' && r.trainer_id !== ctx.personId) throw forbidden('not_assigned', "Vous n'êtes pas affecté à ce créneau.");
+      if (ctx.role === 'trainer' && !r.assigned) throw forbidden('not_assigned', "Vous n'êtes pas affecté à ce créneau.");
       if (r.estatus === 'cancelled') throw conflict('enrollment_cancelled', 'Inscription annulée.');
       const minutes = b.status === 'absent' ? 0 : b.status === 'present' ? (b.minutes ?? r.dur) : b.minutes;
       if (minutes == null || minutes < 0 || minutes > r.dur) throw badRequest('invalid_minutes', `Durée effectuée entre 0 et ${r.dur} minutes.`, 'minutes');

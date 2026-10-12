@@ -113,21 +113,72 @@ describe('Formateur affecté après création de la session', () => {
     const all = (await u.api.post(`/api/v1/sessions/${s1.id}/trainer`, { trainerId: t.id }).expect(201)).body;
     expect(all.updated).toBe(2);
     let detail = (await u.api.get(`/api/v1/sessions/${s1.id}`)).body;
-    expect(detail.slots.every((sl: any) => sl.trainer_id === t.id && sl.trainer_name === 'Jeanne Formatrice')).toBe(true);
-    expect(detail.missing).not.toContain('Créneau sans formateur');
+    expect(detail.slots.every((sl: any) => sl.trainers.length === 1 && sl.trainers[0].id === t.id && sl.trainers[0].name === 'Jeanne Formatrice')).toBe(true);
+    expect(detail.missing.some((m: string) => m.includes('sans formateur'))).toBe(false);
     // Même formateur sur la session 2, créneau qui chevauche : refusé (rien modifié), puis forcé avec motif.
     const clash = await u.api.post(`/api/v1/sessions/${s2.id}/trainer`, { trainerId: t.id });
     expect(clash.status).toBe(409);
-    expect((await u.api.get(`/api/v1/sessions/${s2.id}`)).body.slots[0].trainer_id).toBeNull();
+    expect((await u.api.get(`/api/v1/sessions/${s2.id}`)).body.slots[0].trainers).toHaveLength(0);
     await u.api.post(`/api/v1/sessions/${s2.id}/trainer`, { trainerId: t.id, overrideReason: 'Co-animation prévue' }).expect(201);
     expect((await u.api.get(`/api/v1/sessions/${s2.id}`)).body.slots[0].overlap_override_reason).toBe('Co-animation prévue');
     // Changement sur un seul créneau, puis retrait.
     const firstSlot = detail.slots[0].id;
     await u.api.post(`/api/v1/sessions/${s1.id}/trainer`, { trainerId: null, slotIds: [firstSlot] }).expect(201);
     detail = (await u.api.get(`/api/v1/sessions/${s1.id}`)).body;
-    expect(detail.slots.find((sl: any) => sl.id === firstSlot).trainer_id).toBeNull();
-    expect(detail.slots.filter((sl: any) => sl.trainer_id === t.id)).toHaveLength(1);
-    expect(detail.missing).toContain('Créneau sans formateur');
+    expect(detail.slots.find((sl: any) => sl.id === firstSlot).trainers).toHaveLength(0);
+    expect(detail.slots.filter((sl: any) => sl.trainers.some((x: any) => x.id === t.id))).toHaveLength(1);
+    expect(detail.missing).toContain('1 créneau(x) sans formateur');
+  });
+});
+
+describe('Session découpée en parties, plusieurs formateurs, lieux et matériel (CACES)', () => {
+  it('14 h = 7 h théorie (prof 1) + 7 h pratique engin (prof 2) ; engin et salle non réservables deux fois ; VGP échue signalée', async () => {
+    const u = await signupAndLogin();
+    const prog = (await u.api.post('/api/v1/programs', { title: 'CACES R489 cat. 3', durationMinutes: 840, modality: 'onsite' }).expect(201)).body;
+    const s = await session(u, prog.versions[0].id, '2026-11-16');
+    const other = await session(u, prog.versions[0].id, '2026-11-16');
+    const p1 = (await u.api.post('/api/v1/persons', { firstName: 'Paul', lastName: 'Théorie', roles: ['trainer'] }).expect(201)).body;
+    const p2 = (await u.api.post('/api/v1/persons', { firstName: 'Lina', lastName: 'Pratique', roles: ['trainer'] }).expect(201)).body;
+    const site = (await u.api.post('/api/v1/resources', { kind: 'site', name: 'Centre de Lyon', address: '1 rue des Engins, 69000 Lyon' }).expect(201)).body;
+    const room = (await u.api.post('/api/v1/resources', { kind: 'room', name: 'Salle A', location: 'Centre de Lyon', capacity: 12 }).expect(201)).body;
+    const engin = (await u.api.post('/api/v1/resources', { kind: 'equipment', name: 'Chariot n°3', category: 'Chariot élévateur cat. 3', serialNumber: 'CH-2023-003', inspectionDueOn: '2026-11-01' }).expect(201)).body;
+    expect((await u.api.post('/api/v1/resources', { kind: 'room', name: 'X', serialNumber: '1' })).status).toBe(400);
+    const theory = (await u.api.post(`/api/v1/sessions/${s.id}/parts`, { title: 'Théorie', plannedMinutes: 420 }).expect(201)).body;
+    const practice = (await u.api.post(`/api/v1/sessions/${s.id}/parts`, { title: 'Pratique engin', plannedMinutes: 420 }).expect(201)).body;
+    const slot = (partId: string, d: string, h1: string, h2: string, trainerIds: string[], resourceIds: string[], extra: any = {}) =>
+      u.api.post(`/api/v1/sessions/${s.id}/slots`, { startsAt: `${d}T${h1}:00+01:00`, endsAt: `${d}T${h2}:00+01:00`, partId, trainerIds, resourceIds, ...extra });
+    await slot(theory.id, '2026-11-16', '09:00', '12:30', [p1.id], [site.id, room.id]).expect(201);
+    await slot(theory.id, '2026-11-16', '13:30', '17:00', [p1.id], [site.id, room.id]).expect(201);
+    await slot(practice.id, '2026-11-17', '09:00', '12:30', [p2.id], [site.id, engin.id]).expect(201);
+    // Co-animation : deux formateurs sur le même créneau.
+    await slot(practice.id, '2026-11-17', '13:30', '17:00', [p2.id, p1.id], [site.id, engin.id]).expect(201);
+    // Même engin réservé par une autre session au même moment : refusé ; le site, lui, est partageable.
+    const clash = await u.api.post(`/api/v1/sessions/${other.id}/slots`, { startsAt: '2026-11-17T10:00:00+01:00', endsAt: '2026-11-17T11:00:00+01:00', resourceIds: [site.id, engin.id] });
+    expect(clash.status).toBe(409);
+    expect(clash.body.message).toContain('Chariot n°3');
+    await u.api.post(`/api/v1/sessions/${other.id}/slots`, { startsAt: '2026-11-17T10:00:00+01:00', endsAt: '2026-11-17T11:00:00+01:00', resourceIds: [site.id] }).expect(201);
+    const d = (await u.api.get(`/api/v1/sessions/${s.id}`).expect(200)).body;
+    expect(d.parts.map((p: any) => [p.title, p.planned_minutes, p.scheduled_minutes])).toEqual([['Théorie', 420, 420], ['Pratique engin', 420, 420]]);
+    expect(d.parts[0].trainers.map((t: any) => t.name)).toEqual(['Paul Théorie']);
+    expect(d.parts[1].trainers.map((t: any) => t.name).sort()).toEqual(['Lina Pratique', 'Paul Théorie']);
+    expect(d.trainers).toHaveLength(2);
+    expect(d.missing.some((m: string) => m.includes('Chariot n°3') && m.includes('vérification périodique'))).toBe(true);
+    expect(d.missing.some((m: string) => m.startsWith('Planning') || m.startsWith('Découpage'))).toBe(false);
+    // Affecter un formateur à toute une partie (mode ajout), puis retirer.
+    await u.api.post(`/api/v1/sessions/${s.id}/trainer`, { partId: theory.id, trainerIds: [p2.id], mode: 'add' }).expect(201);
+    let d2 = (await u.api.get(`/api/v1/sessions/${s.id}`)).body;
+    expect(d2.parts[0].trainers).toHaveLength(2);
+    await u.api.post(`/api/v1/sessions/${s.id}/trainer`, { partId: theory.id, trainerIds: [p2.id], mode: 'remove' }).expect(201);
+    d2 = (await u.api.get(`/api/v1/sessions/${s.id}`)).body;
+    expect(d2.parts[0].trainers.map((t: any) => t.name)).toEqual(['Paul Théorie']);
+    // Le matériel apparaît sur la convention et la feuille d'émargement générées.
+    const conv = (await u.api.post('/api/v1/documents/generate', { template: 'attendance_sheet', sessionId: s.id }).expect(201)).body;
+    const pdf = await u.api.get(`/api/v1/documents/${conv.id}/download`).buffer(true).parse((res: any, cb: any) => { const c: Buffer[] = []; res.on('data', (x: Buffer) => c.push(x)); res.on('end', () => cb(null, Buffer.concat(c))); });
+    expect(pdf.body.toString('latin1')).toContain('Chariot n');
+    // Engin remis en conformité : alerte levée.
+    await u.api.patch(`/api/v1/resources/${engin.id}`, { inspectionDueOn: '2027-05-01' }).expect(200);
+    expect((await u.api.get(`/api/v1/sessions/${s.id}`)).body.missing.some((m: string) => m.includes('vérification'))).toBe(false);
+    expect((await u.api.get('/api/v1/resources?kind=equipment')).body[0].serial_number).toBe('CH-2023-003');
   });
 });
 

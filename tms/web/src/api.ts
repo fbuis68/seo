@@ -39,3 +39,21 @@ export async function download(path: string, filename: string) {
 export const eur = (v: string | number | null | undefined, cur = 'EUR') =>
   v == null ? '—' : Number(v).toLocaleString('fr-FR', { style: 'currency', currency: cur });
 export const date = (d?: string | null) => (d ? new Date(d.length === 10 ? `${d}T12:00:00` : d).toLocaleDateString('fr-FR') : '—');
+
+/** Heures affichées et saisies dans le fuseau de la session (pas celui du navigateur). */
+export const fmtDT = (d: string, tz?: string) => new Date(d).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short', timeZone: tz });
+export const fmtT = (d: string, tz?: string) => new Date(d).toLocaleTimeString('fr-FR', { timeStyle: 'short', timeZone: tz });
+export const fmtDayT = (d: string, tz?: string) => new Date(d).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: tz });
+export function zonedIso(day: string, hm: string, tz?: string): string {
+  if (!tz) return new Date(`${day}T${hm}:00`).toISOString();
+  const [y, m, dd] = day.split('-').map(Number); const [hh, mm] = hm.split(':').map(Number);
+  const guess = Date.UTC(y, m - 1, dd, hh, mm);
+  const offsetAt = (t: number) => {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+      .formatToParts(new Date(t)).map((x) => [x.type, x.value]));
+    return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute) - t;
+  };
+  let t = guess - offsetAt(guess);
+  t = guess - offsetAt(t);
+  return new Date(t).toISOString();
+}

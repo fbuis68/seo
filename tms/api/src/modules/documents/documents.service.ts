@@ -7,6 +7,7 @@ import { badRequest, notFound } from '../../core/errors';
 import { Block, renderPdf } from '../../core/pdf';
 import { StorageService } from '../../core/storage';
 import { EntitlementsService } from '../billing/entitlements.service';
+import { PARTS_SQL, SLOTS_SQL } from '../sessions/sessions.service';
 
 export type TemplateKind = 'convention' | 'convocation' | 'attestation' | 'attendance_sheet' | 'invoice';
 
@@ -46,7 +47,7 @@ export class DocumentsService {
       if (!d) throw notFound('Document');
       if (d.kind === 'export' && !ctx.permissions.has('exports.full')) throw notFound('Document');
       if (ctx.role === 'trainer') {
-        const ok = await one(tx, `SELECT 1 FROM slots sl WHERE sl.trainer_id=$2 AND (
+        const ok = await one(tx, `SELECT 1 FROM slots sl JOIN slot_trainers st ON st.slot_id=sl.id WHERE st.person_id=$2 AND (
             ($3='session' AND sl.session_id=$1) OR ($3='enrollment' AND sl.session_id=(SELECT session_id FROM enrollments WHERE id=$1)))`, [d.owner_id, ctx.personId, d.owner_type]);
         if (!ok) throw notFound('Document');
       }
@@ -91,8 +92,18 @@ export class DocumentsService {
                                    FROM training_sessions s JOIN program_versions v ON v.id=s.program_version_id JOIN programs p ON p.id=v.program_id
                                    LEFT JOIN clients c ON c.id=s.client_id WHERE s.id=$1`, [b.sessionId]);
         if (!s) throw notFound('Session');
-        const slots = await many(tx, `SELECT sl.*, r.name room FROM slots sl LEFT JOIN rooms r ON r.id=sl.room_id WHERE session_id=$1 ORDER BY starts_at`, [s.session_id]);
         const tz = s.timezone;
+        // Créneaux avec partie, formateurs, lieu/salle et matériel.
+        const slots = (await many(tx, SLOTS_SQL, [s.session_id])).map((sl: any) => ({
+          ...sl,
+          trainerNames: sl.trainers.map((t: any) => t.name).join(', '),
+          place: sl.resources.filter((r: any) => r.kind !== 'equipment').map((r: any) => r.name).join(', '),
+          equipment: sl.resources.filter((r: any) => r.kind === 'equipment').map((r: any) => r.name + (r.category ? ` (${r.category})` : '')).join(', '),
+        }));
+        const parts = await many(tx, PARTS_SQL, [s.session_id]);
+        const partTitle = (id: string | null) => parts.find((p: any) => p.id === id)?.title ?? '';
+        const planningRows = slots.map((sl: any) => [fmtDateTime(sl.starts_at, tz), fmtDateTime(sl.ends_at, tz), partTitle(sl.part_id) || '—', sl.trainerNames || '—', [sl.place || s.location, sl.equipment].filter(Boolean).join(' — ') || '—']);
+        const planningCols = [{ label: 'Début', width: 18 }, { label: 'Fin', width: 18 }, { label: 'Partie', width: 18 }, { label: 'Formateur(s)', width: 20 }, { label: 'Lieu / matériel', width: 26 }];
         const dates = `du ${fmtDate(s.starts_on)} au ${fmtDate(s.ends_on ?? s.starts_on)}`;
         if (b.template === 'convention') {
           blocks = [
@@ -104,6 +115,9 @@ export class DocumentsService {
             { type: 'heading', text: 'Objectifs' }, { type: 'text', text: s.objectives || '—' },
             { type: 'heading', text: 'Prérequis et public' }, { type: 'text', text: `${s.prerequisites || '—'}\n${s.audience || ''}` },
             { type: 'heading', text: "Modalités d'évaluation" }, { type: 'text', text: s.evaluation || '—' },
+            ...(parts.length ? [{ type: 'heading' as const, text: 'Déroulé' }, { type: 'table' as const, columns: [{ label: 'Partie', width: 60 }, { label: 'Durée', width: 20, align: 'right' as const }, { label: 'Formateur(s)', width: 40 }],
+              rows: parts.map((p: any) => [p.title, hours(p.planned_minutes), p.trainers.map((t: any) => t.name).join(', ') || '—']) }] : []),
+            ...(slots.length ? [{ type: 'heading' as const, text: 'Planning' }, { type: 'table' as const, columns: planningCols, rows: planningRows }] : []),
             { type: 'heading', text: 'Prix' }, { type: 'text', text: s.price_ht ? `${eur(s.price_ht)} HT${s.vat_rate ? ` (TVA ${Number(s.vat_rate)} %)` : ''}` : 'Selon devis.' },
             { type: 'spacer', height: 20 },
             { type: 'signature', labels: ["Pour l'organisme de formation", 'Pour le client'] },
@@ -113,7 +127,8 @@ export class DocumentsService {
           const learners = await many(tx, `SELECT p.first_name, p.last_name FROM enrollments e JOIN persons p ON p.id=e.person_id WHERE e.session_id=$1 AND e.status<>'cancelled' ORDER BY p.last_name`, [s.session_id]);
           blocks = [{ type: 'title', text: `Feuille d'émargement — ${s.session_title}` }, { type: 'text', text: org }];
           for (const sl of slots) {
-            blocks.push({ type: 'heading', text: `${fmtDateTime(sl.starts_at, tz)} → ${fmtDateTime(sl.ends_at, tz)}${sl.room ? ` — ${sl.room}` : ''}` });
+            blocks.push({ type: 'heading', text: `${fmtDateTime(sl.starts_at, tz)} → ${fmtDateTime(sl.ends_at, tz)}${partTitle(sl.part_id) ? ` — ${partTitle(sl.part_id)}` : ''}` });
+            blocks.push({ type: 'text', text: `Formateur(s) : ${sl.trainerNames || '—'}${sl.place ? ` · Lieu : ${sl.place}` : ''}${sl.equipment ? ` · Matériel : ${sl.equipment}` : ''}`, size: 9 });
             blocks.push({ type: 'table', columns: [{ label: 'Apprenant', width: 50 }, { label: 'Signature', width: 50 }], rows: learners.map((l) => [`${l.last_name} ${l.first_name}`, '']) });
           }
           ownerType = 'session'; ownerId = s.session_id; filename = `emargement-${s.session_id.slice(0, 8)}.pdf`;
@@ -125,8 +140,7 @@ export class DocumentsService {
               { type: 'title', text: 'Convocation' }, { type: 'text', text: org }, { type: 'spacer' },
               { type: 'text', text: `${e.first_name} ${e.last_name},` },
               { type: 'text', text: `Vous êtes convoqué(e) à la formation « ${s.program_title} » (${MODALITY[s.modality]}), ${dates}.` },
-              { type: 'table', columns: [{ label: 'Début', width: 40 }, { label: 'Fin', width: 40 }, { label: 'Salle', width: 20 }],
-                rows: slots.map((sl) => [fmtDateTime(sl.starts_at, tz), fmtDateTime(sl.ends_at, tz), sl.room ?? s.location ?? '—']) },
+              { type: 'table', columns: planningCols, rows: planningRows },
               { type: 'text', text: `Prérequis : ${s.prerequisites || 'aucun'}` },
             ];
           } else {

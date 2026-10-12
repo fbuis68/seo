@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Module, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Module, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { z } from 'zod';
 import { Ctx, RequestContext, RequirePermission } from '../../core/context';
 import { isoDate, money, page, parse } from '../../core/validation';
+import { PlanningService } from './planning.service';
 import { SessionsService } from './sessions.service';
 
 const sessionSchema = z.object({
@@ -10,9 +11,22 @@ const sessionSchema = z.object({
   startsOn: isoDate.nullable().optional(), endsOn: isoDate.nullable().optional(), location: z.string().max(300).nullable().optional(),
 });
 
+const slotSchema = z.object({
+  startsAt: z.string().datetime({ offset: true }), endsAt: z.string().datetime({ offset: true }),
+  partId: z.string().uuid().nullable().optional(),
+  trainerIds: z.array(z.string().uuid()).max(20).optional(), resourceIds: z.array(z.string().uuid()).max(20).optional(),
+  overrideReason: z.string().min(5).max(500).optional(),
+});
+const partSchema = z.object({ title: z.string().min(1).max(200), plannedMinutes: z.number().int().min(1).max(100000), notes: z.string().max(2000).nullable().optional() });
+const resourceSchema = z.object({
+  kind: z.enum(['site', 'room', 'equipment']), name: z.string().min(1).max(200), category: z.string().max(200).nullable().optional(),
+  location: z.string().max(300).nullable().optional(), address: z.string().max(500).nullable().optional(), capacity: z.number().int().positive().nullable().optional(),
+  serialNumber: z.string().max(100).nullable().optional(), inspectionDueOn: isoDate.nullable().optional(), notes: z.string().max(2000).nullable().optional(),
+});
+
 @Controller('api/v1')
 export class SessionsController {
-  constructor(private s: SessionsService) {}
+  constructor(private s: SessionsService, private planning: PlanningService) {}
 
   @RequirePermission('sessions.read') @Get('sessions')
   list(@Ctx() c: RequestContext, @Query() q: unknown) {
@@ -30,23 +44,59 @@ export class SessionsController {
     const p = parse(z.object({ status: z.enum(['draft', 'planned', 'confirmed', 'in_progress', 'completed', 'archived', 'cancelled']), reason: z.string().max(500).optional() }), b);
     return this.s.transition(c, id, p.status, p.reason);
   }
+  // ─── Planning : créneaux, parties, formateurs ───────────────────────────
   @RequirePermission('sessions.write') @Post('sessions/:id/slots')
   slot(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string, @Body() b: unknown) {
-    return this.s.addSlot(c, id, parse(z.object({
-      startsAt: z.string().datetime({ offset: true }), endsAt: z.string().datetime({ offset: true }),
-      roomId: z.string().uuid().nullable().optional(), trainerId: z.string().uuid().nullable().optional(), overrideReason: z.string().min(5).max(500).optional(),
-    }), b));
+    const p = parse(slotSchema.extend({ roomId: z.string().uuid().nullable().optional(), trainerId: z.string().uuid().nullable().optional() }), b);
+    // Compatibilité : trainerId / roomId uniques acceptés.
+    return this.planning.addSlot(c, id, {
+      ...p, trainerIds: p.trainerIds ?? (p.trainerId ? [p.trainerId] : []), resourceIds: p.resourceIds ?? (p.roomId ? [p.roomId] : []),
+    });
   }
-  /** Affecter / changer / retirer le formateur après création (tous les créneaux si slotIds absent). */
+  @RequirePermission('sessions.write') @Patch('slots/:slotId')
+  updateSlot(@Ctx() c: RequestContext, @Param('slotId', ParseUUIDPipe) slotId: string, @Body() b: unknown) {
+    return this.planning.updateSlot(c, slotId, parse(slotSchema.partial(), b));
+  }
+  @RequirePermission('sessions.write') @Delete('slots/:slotId')
+  deleteSlot(@Ctx() c: RequestContext, @Param('slotId', ParseUUIDPipe) slotId: string) { return this.planning.deleteSlot(c, slotId); }
+
+  /** Formateur(s) après création : toute la session, une partie (partId) ou des créneaux (slotIds). */
   @RequirePermission('sessions.write') @Post('sessions/:id/trainer')
   trainer(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string, @Body() b: unknown) {
-    return this.s.assignTrainer(c, id, parse(z.object({
-      trainerId: z.string().uuid().nullable(), slotIds: z.array(z.string().uuid()).max(500).optional(), overrideReason: z.string().min(5).max(500).optional(),
-    }), b));
+    const p = parse(z.object({
+      trainerIds: z.array(z.string().uuid()).max(20).optional(), trainerId: z.string().uuid().nullable().optional(),
+      slotIds: z.array(z.string().uuid()).max(500).optional(), partId: z.string().uuid().optional(),
+      mode: z.enum(['replace', 'add', 'remove']).optional(), overrideReason: z.string().min(5).max(500).optional(),
+    }), b);
+    return this.planning.assignTrainers(c, id, { ...p, trainerIds: p.trainerIds ?? (p.trainerId ? [p.trainerId] : []) });
   }
-  @RequirePermission('sessions.read') @Get('rooms') rooms(@Ctx() c: RequestContext) { return this.s.rooms(c); }
-  @RequirePermission('sessions.write') @Post('rooms')
-  room(@Ctx() c: RequestContext, @Body() b: unknown) { return this.s.createRoom(c, parse(z.object({ name: z.string().min(1).max(100), location: z.string().max(300).optional(), capacity: z.number().int().positive().optional() }), b)); }
+
+  @RequirePermission('sessions.write') @Post('sessions/:id/parts')
+  createPart(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string, @Body() b: unknown) {
+    return this.planning.createPart(c, id, parse(partSchema, b));
+  }
+  @RequirePermission('sessions.write') @Patch('session-parts/:partId')
+  updatePart(@Ctx() c: RequestContext, @Param('partId', ParseUUIDPipe) partId: string, @Body() b: unknown) {
+    return this.planning.updatePart(c, partId, parse(partSchema.partial().extend({ position: z.number().int().min(1).max(100).optional() }), b));
+  }
+  @RequirePermission('sessions.write') @Delete('session-parts/:partId')
+  deletePart(@Ctx() c: RequestContext, @Param('partId', ParseUUIDPipe) partId: string) { return this.planning.deletePart(c, partId); }
+
+  // ─── Ressources : lieux, salles, matériel ───────────────────────────────
+  @RequirePermission('sessions.read') @Get('resources')
+  resources(@Ctx() c: RequestContext, @Query() q: unknown) {
+    return this.planning.listResources(c, parse(z.object({ kind: z.enum(['site', 'room', 'equipment']).optional(), archived: z.coerce.boolean().optional() }), q));
+  }
+  @RequirePermission('sessions.write') @Post('resources')
+  createResource(@Ctx() c: RequestContext, @Body() b: unknown) { return this.planning.createResource(c, parse(resourceSchema, b)); }
+  @RequirePermission('sessions.write') @Patch('resources/:rid')
+  updateResource(@Ctx() c: RequestContext, @Param('rid', ParseUUIDPipe) rid: string, @Body() b: unknown) {
+    return this.planning.updateResource(c, rid, parse(resourceSchema.omit({ kind: true }).partial(), b));
+  }
+  @RequirePermission('sessions.write') @Post('resources/:rid/archive')
+  archiveResource(@Ctx() c: RequestContext, @Param('rid', ParseUUIDPipe) rid: string, @Body() b: unknown) {
+    return this.planning.archiveResource(c, rid, parse(z.object({ archived: z.boolean().default(true) }), b).archived);
+  }
 
   @RequirePermission('sessions.write') @Post('sessions/:id/enrollments')
   enroll(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string, @Body() b: unknown) {
@@ -70,5 +120,5 @@ export class SessionsController {
   sheet(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string) { return this.s.attendanceSheet(c, id); }
 }
 
-@Module({ controllers: [SessionsController], providers: [SessionsService], exports: [SessionsService] })
+@Module({ controllers: [SessionsController], providers: [SessionsService, PlanningService], exports: [SessionsService, PlanningService] })
 export class SessionsModule {}

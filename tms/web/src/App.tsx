@@ -8,6 +8,7 @@ import Clients from './pages/Clients';
 import Dashboard from './pages/Dashboard';
 import Imports from './pages/Imports';
 import Invoices from './pages/Invoices';
+import Resources from './pages/Resources';
 import Login, { VerifyEmail } from './pages/Login';
 import SessionDetail from './pages/SessionDetail';
 import Sessions from './pages/Sessions';
@@ -53,7 +54,7 @@ function Shell() {
   const logout = () => post('/api/v1/auth/logout').finally(() => { session.set(null); location.href = '/login'; });
   const e = org.entitlements;
   const links: [string, string, boolean][] = [
-    ['/', 'Accueil', true], ['/sessions', 'Sessions', can(org, 'sessions.read')], ['/clients', 'Clients & apprenants', can(org, 'crm.read')],
+    ['/', 'Accueil', true], ['/sessions', 'Sessions', can(org, 'sessions.read')], ['/resources', 'Lieux & matériel', can(org, 'sessions.read') && org.role !== 'trainer'], ['/clients', 'Clients & apprenants', can(org, 'crm.read')],
     ['/invoices', 'Facturation', can(org, 'finance.read')], ['/assistant', 'Assistant IA', can(org, 'ai.use')],
     ['/imports', 'Reprise de données', can(org, 'imports.manage')], ['/billing', 'Mon abonnement', can(org, 'billing.manage')], ['/settings', 'Réglages', true],
   ];
@@ -81,6 +82,7 @@ function Shell() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/sessions" element={<Sessions />} />
             <Route path="/sessions/:id" element={<SessionDetail />} />
+            <Route path="/resources" element={<Resources />} />
             <Route path="/clients" element={<Clients />} />
             <Route path="/invoices" element={<Invoices />} />
             <Route path="/assistant" element={<Assistant />} />

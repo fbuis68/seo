@@ -88,7 +88,7 @@ contrôles serveur lisent tous ce même catalogue. Tarifs indicatifs, à confirm
 | billing | Catalogue, droits/quotas, Stripe Checkout + webhooks signés idempotents, upgrade/downgrade/résiliation, crédits de signature | §7, FREE-01, REC-09/10/25-29 |
 | crm | Clients/prospects, personnes multi-rôles, SIRET (Luhn), fusion validée, archivage | REF-01/02 |
 | catalog | Programmes versionnés, version figée dès usage (trigger SQL) | CAT-01, REC-05 |
-| sessions | Cycle de vie, créneaux (UTC + fuseau IANA), chevauchements avec dérogation tracée, inscriptions, financeurs, présences | SES-01, INS-01, PRE-01 |
+| sessions | Cycle de vie ; déroulé en parties (ex. théorie / pratique) ; créneaux (UTC + fuseau IANA) avec un ou plusieurs formateurs ; ressources : lieux, salles, matériel (engins CACES, n° de série, vérification périodique) ; chevauchements formateur / salle / matériel avec dérogation tracée ; inscriptions, financeurs, présences | SES-01, INS-01, PRE-01 |
 | quality | Questionnaires, réponses individuelles, réclamations | QUA-01 |
 | finance | Devis, factures/acomptes/avoirs immuables, numérotation atomique, règlements et affectations, facturation électronique (partenaire) | FIN-01/02, REC-07/08 |
 | documents | Génération PDF (convention, convocation, attestation, émargement, facture), dépôt, téléchargement contrôlé | DOC-01 |

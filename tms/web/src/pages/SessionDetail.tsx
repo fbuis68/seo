@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { date, download, post } from '../api';
+import { date, download, fmtDayT, post } from '../api';
 import { can, has, useApp } from '../context';
 import { useAction, useFetch } from '../hooks';
+import Planning from '../components/Planning';
 import { SESSION_STATUS } from './Sessions';
 
 const NEXT: Record<string, string[]> = { draft: ['planned'], planned: ['confirmed', 'draft'], confirmed: ['in_progress', 'planned'], in_progress: ['completed'], completed: ['archived'] };
@@ -14,29 +15,15 @@ export default function SessionDetail() {
   const docs = useFetch<any[]>(`/api/v1/documents?ownerType=session&ownerId=${id}`);
   const learners = useFetch<any[]>(can(org, 'crm.read') ? '/api/v1/persons?role=learner&limit=200' : null);
   const trainers = useFetch<any[]>(can(org, 'crm.read') ? '/api/v1/persons?role=trainer&limit=200' : null);
+  const resources = useFetch<any[]>('/api/v1/resources');
   const sheet = useFetch<any[]>(`/api/v1/sessions/${id}/attendance`);
   const act = useAction();
-  const [slot, setSlot] = useState({ day: '', start: '09:00', end: '12:30', trainerId: '', override: '' });
   const [enroll, setEnroll] = useState({ personId: '', firstName: '', lastName: '', email: '' });
   const [sign, setSign] = useState<{ docId: string; name: string; email: string } | null>(null);
-  /** Affectation après coup ; en cas de chevauchement, demande un motif de dérogation puis réessaie. */
-  const assignTrainer = async (trainerId: string | null, slotIds?: string[]) => {
-    const send = (overrideReason?: string) => post(`/api/v1/sessions/${id}/trainer`, { trainerId, slotIds, overrideReason });
-    act.setError(null);
-    try { await send(); }
-    catch (e: any) {
-      if (e.code !== 'slot_overlap') { act.setError(e.message); return; }
-      const reason = prompt('Ce formateur est déjà pris sur un créneau qui se chevauche. Motif de dérogation (5 caractères min.) ?');
-      if (!reason) return;
-      try { await send(reason); } catch (e2: any) { act.setError(e2.message); return; }
-    }
-    s.reload();
-  };
   if (s.error) return <p className="alert">{s.error.message}</p>;
   if (!s.data) return <p className="muted">Chargement…</p>;
   const d = s.data;
   const reload = () => { s.reload(); docs.reload(); sheet.reload(); };
-  const tzIso = (day: string, hm: string) => new Date(`${day}T${hm}:00`).toISOString();
   const att = (enrollmentId: string, slotId: string) => sheet.data?.find((a) => a.enrollment_id === enrollmentId && a.slot_id === slotId);
 
   return (
@@ -54,38 +41,9 @@ export default function SessionDetail() {
       )}
       {act.error && <p className="alert">{act.error}</p>}
 
+      <Planning session={d} canWrite={can(org, 'sessions.write')} trainers={trainers.data ?? []} resources={resources.data ?? []} onChange={reload} onError={act.setError} />
+
       <div className="grid2">
-        <div className="panel">
-          <strong>Créneaux</strong>
-          <table><tbody>{d.slots.map((sl: any) => (
-            <tr key={sl.id}>
-              <td>{new Date(sl.starts_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })} → {new Date(sl.ends_at).toLocaleTimeString('fr-FR', { timeStyle: 'short' })}</td>
-              <td>{sl.duration_minutes} min</td>
-              <td>{can(org, 'sessions.write')
-                ? <select aria-label="Formateur du créneau" value={sl.trainer_id ?? ''} onChange={(e) => assignTrainer(e.target.value || null, [sl.id])}>
-                    <option value="">— aucun formateur —</option>{trainers.data?.map((t) => <option key={t.id} value={t.id}>{t.first_name} {t.last_name}</option>)}</select>
-                : sl.trainer_name ?? '—'}</td>
-              <td>{sl.overlap_override_reason && <span className="pill warn" title={sl.overlap_override_reason}>dérogation</span>}</td>
-            </tr>))}</tbody></table>
-          {can(org, 'sessions.write') && d.slots.length > 1 && (
-            <div className="toolbar" style={{ marginTop: 8 }}>
-              <label>Formateur pour tous les créneaux<select value="" onChange={(e) => e.target.value && assignTrainer(e.target.value === 'none' ? null : e.target.value)}>
-                <option value="">— choisir —</option><option value="none">Retirer le formateur partout</option>
-                {trainers.data?.map((t) => <option key={t.id} value={t.id}>{t.first_name} {t.last_name}</option>)}</select></label>
-            </div>
-          )}
-          {can(org, 'sessions.write') && !trainers.data?.length && <p className="small muted">Aucun formateur : créez-en un dans « Clients & apprenants » (rôle Formateur).</p>}
-          {can(org, 'sessions.write') && (
-            <form className="inline" onSubmit={(e) => { e.preventDefault(); act.run(() => post(`/api/v1/sessions/${id}/slots`, { startsAt: tzIso(slot.day, slot.start), endsAt: tzIso(slot.day, slot.end), trainerId: slot.trainerId || null, overrideReason: slot.override || undefined }), reload); }} style={{ marginTop: 8 }}>
-              <label>Jour<input type="date" required value={slot.day} onChange={(e) => setSlot({ ...slot, day: e.target.value })} /></label>
-              <label>Début<input type="time" value={slot.start} onChange={(e) => setSlot({ ...slot, start: e.target.value })} /></label>
-              <label>Fin<input type="time" value={slot.end} onChange={(e) => setSlot({ ...slot, end: e.target.value })} /></label>
-              <label>Formateur<select value={slot.trainerId} onChange={(e) => setSlot({ ...slot, trainerId: e.target.value })}><option value="">—</option>{trainers.data?.map((t) => <option key={t.id} value={t.id}>{t.first_name} {t.last_name}</option>)}</select></label>
-              {act.error?.includes('Chevauchement') && <label>Motif de dérogation<input value={slot.override} onChange={(e) => setSlot({ ...slot, override: e.target.value })} /></label>}
-              <button className="btn sm">Ajouter</button>
-            </form>
-          )}
-        </div>
         <div className="panel">
           <strong>Documents</strong>
           <table><tbody>{docs.data?.map((doc) => <tr key={doc.id}><td>{doc.filename}</td><td>{date(doc.created_at)}</td><td>
@@ -105,7 +63,7 @@ export default function SessionDetail() {
 
       <h2>Inscrits et présences</h2>
       <div className="panel">
-        <table><thead><tr><th>Apprenant</th><th>Statut</th>{d.slots.map((sl: any) => <th key={sl.id}>{new Date(sl.starts_at).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })} {new Date(sl.starts_at).toLocaleTimeString('fr-FR', { timeStyle: 'short' })}</th>)}<th /></tr></thead>
+        <table><thead><tr><th>Apprenant</th><th>Statut</th>{d.slots.map((sl: any) => <th key={sl.id}>{fmtDayT(sl.starts_at, d.timezone)}</th>)}<th /></tr></thead>
           <tbody>{d.enrollments.map((e: any) => (
             <tr key={e.id}><td>{e.last_name} {e.first_name}</td><td>{e.status}</td>
               {d.slots.map((sl: any) => { const a = att(e.id, sl.id); return (
