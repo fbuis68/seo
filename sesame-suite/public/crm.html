@@ -8109,6 +8109,12 @@ const TRIGGERS_CRM = [
   {key:'crm.ticket_client_replied', label:'Client a répondu à un ticket', timingModes:['immediate'], category:'support'},
   {key:'crm.ticket_status_changed', label:'Changement de statut de ticket', timingModes:['immediate'], category:'support'},
   {key:'crm.questionnaire_completed', label:'Questionnaire complété', timingModes:['immediate']},
+  // Pas de client/prospect associé à un mouvement bancaire — toujours
+  // recipientMode="custom" (cf. même logique que crm.ticket_created).
+  // Filtré via audienceFilter {direction, bankAccountId, minAmount}, cf.
+  // renderRuleAudienceFields/saveRule ci-dessous (12/10/2026, demande
+  // client — déplacé depuis un panneau dédié de l'onglet Banque).
+  {key:'bank.transaction.created', label:'Nouveau mouvement bancaire', timingModes:['immediate']},
 ];
 let AUTO_RULES=[];
 
@@ -8348,15 +8354,53 @@ function renderRuleRecurrenceDetail(){
 
 function renderRuleAudienceFields(triggerKey){
   const r = window._ruleEditing || {};
-  const af = r.audienceFilter || {type:'all',secteur:''};
   const el = document.getElementById('rule-audience-fields');
   if(!el)return;
-  if(triggerKey!=='crm.newsletter'){ el.innerHTML=''; return; }
-  el.innerHTML = `<div class="modal-section">Audience</div>
+  if(triggerKey==='crm.newsletter'){
+    const af = r.audienceFilter || {type:'all',secteur:''};
+    el.innerHTML = `<div class="modal-section">Audience</div>
+      <div class="form-grid">
+        <div class="ff"><label>Type de fiche</label><select id="rule-aud-type"><option value="all" ${!af.type||af.type==='all'?'selected':''}>Toutes</option><option value="Prospect" ${af.type==='Prospect'?'selected':''}>Prospects</option><option value="Client" ${af.type==='Client'?'selected':''}>Clients</option></select></div>
+        <div class="ff"><label>Secteur (optionnel)</label><input id="rule-aud-secteur" value="${esc(af.secteur||'')}" placeholder="Tous secteurs"></div>
+      </div>`;
+    return;
+  }
+  if(triggerKey==='bank.transaction.created'){
+    renderRuleBankFilterFields(r.audienceFilter||{});
+    return;
+  }
+  el.innerHTML='';
+}
+
+/** Compte bancaire au choix (optionnel, onglet Banque) — chargé à la volée
+ * si le panneau Automatisations est ouvert sans être passé par Banque dans
+ * la même session (ACC_BANK_ACCOUNTS vide tant que non chargé). */
+async function renderRuleBankFilterFields(af){
+  const el = document.getElementById('rule-audience-fields');
+  if(!el)return;
+  if(!ACC_BANK_ACCOUNTS.length){
+    el.innerHTML = '<div class="modal-section">Mouvement bancaire</div><div style="font-size:12px;color:var(--mu)">Chargement des comptes bancaires…</div>';
+    try{
+      const r = await apiFetch('/wa/acc/bank/accounts?scope=crm');
+      ACC_BANK_ACCOUNTS = r.ok ? await r.json() : [];
+    }catch(e){ /* repli — le sélecteur ne proposera que "Tous les comptes" */ }
+  }
+  // Le trigger a pu changer pendant le chargement (utilisateur impatient) —
+  // ne pas écraser un autre bloc de filtre affiché entre-temps.
+  const triggerKey = (document.getElementById('rule-trigger')||{}).value;
+  if(triggerKey!=='bank.transaction.created') return;
+  const accOpts = ACC_BANK_ACCOUNTS.map(a=>`<option value="${a.id}" ${af.bankAccountId===a.id?'selected':''}>${esc(a.name)}</option>`).join('');
+  el.innerHTML = `<div class="modal-section">Mouvement bancaire</div>
     <div class="form-grid">
-      <div class="ff"><label>Type de fiche</label><select id="rule-aud-type"><option value="all" ${!af.type||af.type==='all'?'selected':''}>Toutes</option><option value="Prospect" ${af.type==='Prospect'?'selected':''}>Prospects</option><option value="Client" ${af.type==='Client'?'selected':''}>Clients</option></select></div>
-      <div class="ff"><label>Secteur (optionnel)</label><input id="rule-aud-secteur" value="${esc(af.secteur||'')}" placeholder="Tous secteurs"></div>
-    </div>`;
+      <div class="ff"><label>Sens</label><select id="rule-bank-direction">
+        <option value="" ${!af.direction?'selected':''}>Crédit et débit</option>
+        <option value="DEBIT" ${af.direction==='DEBIT'?'selected':''}>Débit seulement</option>
+        <option value="CREDIT" ${af.direction==='CREDIT'?'selected':''}>Crédit seulement</option>
+      </select></div>
+      <div class="ff"><label>Compte</label><select id="rule-bank-account"><option value="">Tous les comptes</option>${accOpts}</select></div>
+      <div class="ff"><label>Montant minimum (optionnel)</label><input type="number" id="rule-bank-minAmount" value="${af.minAmount!=null?af.minAmount:''}" step="0.01" min="0" placeholder="Tout montant"></div>
+    </div>
+    <div style="font-size:11px;color:var(--mu);margin-top:2px">Variables disponibles dans le modèle : <code>{{sens}}</code> <code>{{montant}}</code> <code>{{date}}</code> <code>{{libelle}}</code> <code>{{compte}}</code> <code>{{contrepartie}}</code>.</div>`;
 }
 
 function renderRuleTplOptions(){
@@ -8403,6 +8447,13 @@ async function saveRule(id){
   };
   if(triggerKey==='crm.newsletter'){
     body.audienceFilter = { type: g('rule-aud-type')||'all', secteur: g('rule-aud-secteur')||'' };
+  }
+  if(triggerKey==='bank.transaction.created'){
+    body.audienceFilter = {
+      direction: g('rule-bank-direction')||null,
+      bankAccountId: g('rule-bank-account')||null,
+      minAmount: g('rule-bank-minAmount')===''?null:Number(g('rule-bank-minAmount')),
+    };
   }
   if(!body.name){flash('Le nom est requis');return;}
   if(!body.templateKey){flash('Sélectionnez un modèle pour ce canal');return;}
@@ -10369,30 +10420,12 @@ async function saveAccAccount(){
 const ACC_BANK_SOURCE_LABEL={csv:'CSV',camt053:'CAMT.053 (XML)',mt940:'MT940 (SWIFT)',cfonb:'CFONB'};
 const ACC_BANK_DIRECTION_LABEL={CREDIT:'Crédit',DEBIT:'Débit'};
 
-// Règles d'alerte "nouveau mouvement bancaire" (crédit/débit) — cf.
-// lib/accBankAlerts.ts côté serveur, appelé au seul point de création
-// d'une transaction (import fichier ou sync Qonto).
-let ACC_BANK_ALERT_RULES = [];
-
 async function loadAccBankTab(){
   await ensureAccAccountsLoaded();
   try{
     const r = await apiFetch('/wa/acc/bank/accounts?scope=crm');
     ACC_BANK_ACCOUNTS = r.ok ? await r.json() : [];
   }catch(e){ ACC_BANK_ACCOUNTS=[]; }
-  try{
-    const r = await apiFetch('/wa/acc/bank/alert-rules?scope=crm');
-    ACC_BANK_ALERT_RULES = r.ok ? await r.json() : [];
-  }catch(e){ ACC_BANK_ALERT_RULES=[]; }
-  // Identités d'expédition (adresse d'envoi des alertes) — déjà chargées si
-  // l'onglet Canaux a été visité, sinon chargement ici (évite un sélecteur
-  // vide tant que l'utilisateur n'est jamais allé dans Canaux).
-  if(!SENDER_IDENTITIES.length){
-    try{
-      const r = await apiFetch('/wa/emailSenderIdentity/list?scope=crm');
-      SENDER_IDENTITIES = r.ok ? await r.json() : [];
-    }catch(e){ /* repli silencieux — le sélecteur reste vide, pas bloquant */ }
-  }
   try{
     const r = await apiFetch('/wa/acc/bank/qonto/config?scope=crm');
     ACC_QONTO_CONFIG = r.ok ? await r.json() : null;
@@ -10455,88 +10488,14 @@ function accBankMonthBounds(){
 const ACC_QONTO_STATUS_LABEL={manual:'Manuel',connected:'Connecté',error:'Erreur de connexion'};
 const ACC_QONTO_STATUS_TAG={manual:'t-gray',connected:'t-green',error:'t-red'};
 
-const ACC_BANK_ALERT_DIRECTION_LABEL={'':'Crédit et débit',DEBIT:'Débit seulement',CREDIT:'Crédit seulement'};
-
-function accBankAlertRuleRowHtml(rule){
-  const accName = rule.bankAccount ? esc(rule.bankAccount.name) : 'Tous les comptes';
-  const senderLabel = rule.senderIdentity ? esc(rule.senderIdentity.name)+' <'+esc(rule.senderIdentity.email)+'>' : 'Expéditeur SMTP par défaut';
-  return `<tr style="${rule.active?'':'opacity:.5'}">
-    <td>${ACC_BANK_ALERT_DIRECTION_LABEL[rule.direction||'']}</td>
-    <td>${accName}</td>
-    <td>${rule.minAmount!=null?fmtEUR2(rule.minAmount)+' mini':'Tout montant'}</td>
-    <td>${esc(rule.notifyEmail)}</td>
-    <td style="font-size:11px;color:var(--mu)">${senderLabel}</td>
-    <td style="white-space:nowrap">
-      <button class="btn btn-ghost btn-sm" onclick="accToggleBankAlertRule('${rule.id}',${!rule.active})">${rule.active?'⏸ Désactiver':'▶ Activer'}</button>
-      <button class="btn btn-ghost btn-sm" onclick="accDeleteBankAlertRule('${rule.id}')" title="Supprimer"><i class="ti ti-trash"></i></button>
-    </td>
-  </tr>`;
-}
-
+// Alertes "nouveau mouvement bancaire" : paramétrées dans Automatisations
+// (déclencheur "Nouveau mouvement bancaire") depuis le 12/10/2026, plus ici
+// — ce bandeau ne fait que pointer vers le bon panneau.
 function renderAccBankAlertRulesSection(){
-  const accOpts = ACC_BANK_ACCOUNTS.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('');
-  const senderOpts = SENDER_IDENTITIES.map(i=>`<option value="${i.id}">${esc(i.name)} — ${esc(i.email)}</option>`).join('');
-  return `
-    <div class="modal-section">Alertes nouveaux mouvements (crédit/débit)</div>
-    <div style="font-size:11px;color:var(--mu);margin-bottom:8px">Un email à chaque nouveau mouvement bancaire (import fichier ou synchronisation Qonto) correspondant aux critères — direction, compte et montant minimum tous optionnels.</div>
-    <div class="tbl-wrap"><table>
-      <thead><tr><th>Sens</th><th>Compte</th><th>Seuil</th><th>Alerter</th><th>Depuis</th><th></th></tr></thead>
-      <tbody>
-        ${ACC_BANK_ALERT_RULES.map(accBankAlertRuleRowHtml).join('')}
-        <tr>
-          <td><select id="aba-direction" class="lsel">
-            <option value="">Crédit et débit</option>
-            <option value="DEBIT">Débit seulement</option>
-            <option value="CREDIT">Crédit seulement</option>
-          </select></td>
-          <td><select id="aba-bankAccountId" class="lsel"><option value="">Tous les comptes</option>${accOpts}</select></td>
-          <td><input type="number" id="aba-minAmount" class="lsel" placeholder="Tout montant" step="0.01" min="0" style="width:100px"></td>
-          <td><input type="email" id="aba-notifyEmail" class="lsel" placeholder="email@..." style="width:160px"></td>
-          <td><select id="aba-senderIdentityId" class="lsel"><option value="">Expéditeur par défaut</option>${senderOpts}</select></td>
-          <td><button class="btn btn-ghost btn-sm" onclick="accAddBankAlertRule()"><i class="ti ti-plus"></i> Ajouter</button></td>
-        </tr>
-      </tbody>
-    </table></div>`;
-}
-
-async function accAddBankAlertRule(){
-  const g=i=>(document.getElementById(i)||{value:''}).value;
-  const notifyEmail = g('aba-notifyEmail').trim();
-  if(!notifyEmail){ flash('Adresse email requise'); return; }
-  const body = {
-    direction: g('aba-direction')||null,
-    bankAccountId: g('aba-bankAccountId')||null,
-    minAmount: g('aba-minAmount')===''?null:Number(g('aba-minAmount')),
-    notifyEmail,
-    senderIdentityId: g('aba-senderIdentityId')||null,
-  };
-  try{
-    const r = await apiFetch('/wa/acc/bank/alert-rules?scope=crm', {method:'POST', body:JSON.stringify(body)});
-    const d = await r.json().catch(()=>({}));
-    if(!r.ok){ flash('Erreur : '+(d.error||'échec')); return; }
-    ACC_BANK_ALERT_RULES.unshift(d);
-    renderAccBank();
-  }catch(e){ flash('Erreur de connexion au serveur'); }
-}
-
-async function accToggleBankAlertRule(id, active){
-  try{
-    const r = await apiFetch('/wa/acc/bank/alert-rules/'+id+'?scope=crm', {method:'PATCH', body:JSON.stringify({active})});
-    if(!r.ok){ const d = await r.json().catch(()=>({})); flash('Erreur : '+(d.error||'échec')); return; }
-    const rule = ACC_BANK_ALERT_RULES.find(r=>r.id===id);
-    if(rule) rule.active = active;
-    renderAccBank();
-  }catch(e){ flash('Erreur de connexion au serveur'); }
-}
-
-async function accDeleteBankAlertRule(id){
-  if(!confirm('Supprimer cette règle d\'alerte ?')) return;
-  try{
-    const r = await apiFetch('/wa/acc/bank/alert-rules/'+id+'?scope=crm', {method:'DELETE'});
-    if(!r.ok && r.status!==204){ const d = await r.json().catch(()=>({})); flash('Erreur : '+(d.error||'échec')); return; }
-    ACC_BANK_ALERT_RULES = ACC_BANK_ALERT_RULES.filter(r=>r.id!==id);
-    renderAccBank();
-  }catch(e){ flash('Erreur de connexion au serveur'); }
+  return `<div class="alt alt-b" style="margin-top:12px">
+    <i class="ti ti-bell"></i>
+    <span>Pour être alerté par email d'un nouveau mouvement (crédit/débit, seuil, compte au choix), c'est dans <a href="javascript:void(0)" onclick="showAutomationPanel()" style="color:inherit;text-decoration:underline">Automatisations</a> → déclencheur "Nouveau mouvement bancaire".</span>
+  </div>`;
 }
 
 function renderAccBank(){

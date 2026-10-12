@@ -70,6 +70,13 @@ export const TRIGGERS: TriggerDef[] = [
   { key: "crm.ticket_status_changed", label: "Changement de statut de ticket", scope: "crm", timingModes: ["immediate"] },
   { key: "questionnaire.completed", label: "Questionnaire complété", scope: "hotel", timingModes: ["immediate"] },
   { key: "crm.questionnaire_completed", label: "Questionnaire complété", scope: "crm", timingModes: ["immediate"] },
+  // Recipient event=null (comme crm.ticket_created) : un mouvement bancaire
+  // n'a pas de client/prospect associé, toujours recipientMode="custom".
+  // Filtré via AutomationRule.audienceFilter ({direction, bankAccountId,
+  // minAmount}, tous optionnels) — cf. matchesBankFilter ci-dessous
+  // (12/10/2026, demande client : déplacé depuis un panneau dédié dans
+  // l'onglet Banque vers les règles d'automatisation génériques).
+  { key: "bank.transaction.created", label: "Nouveau mouvement bancaire", scope: "crm", timingModes: ["immediate"] },
 ];
 
 export function getTrigger(key: string) {
@@ -82,6 +89,29 @@ interface FireContext {
   targetId: string;
   recipient: { email?: string | null; phone?: string | null };
   variables: Record<string, string>;
+  /**
+   * Données structurées de l'événement, filtrées contre
+   * AutomationRule.audienceFilter AVANT l'envoi — seul "bank.transaction.
+   * created" l'utilise pour l'instant (direction/bankAccountId/minAmount,
+   * cf. matchesBankFilter). Absent pour tout autre déclencheur, qui n'a
+   * donc aucun filtre au-delà de son ciblage habituel (timing/destinataire).
+   */
+  matchData?: Record<string, unknown>;
+}
+
+/**
+ * Filtre {direction, bankAccountId, minAmount} (tous optionnels, null/absent
+ * = pas de restriction sur ce critère) saisi sur une règle "bank.
+ * transaction.created" contre les données réelles du mouvement — même
+ * principe que l'AudienceFilter de crm.newsletter plus bas, mais appliqué à
+ * un déclencheur IMMÉDIAT plutôt qu'à un balayage périodique.
+ */
+function matchesBankFilter(filter: unknown, matchData: Record<string, unknown>): boolean {
+  const f = (filter || {}) as { direction?: string; bankAccountId?: string; minAmount?: number };
+  if (f.direction && f.direction !== matchData.direction) return false;
+  if (f.bankAccountId && f.bankAccountId !== matchData.bankAccountId) return false;
+  if (f.minAmount != null && Number(matchData.amount ?? 0) < Number(f.minAmount)) return false;
+  return true;
 }
 
 /**
@@ -142,6 +172,7 @@ export async function fireTrigger(triggerKey: string, ctx: FireContext): Promise
   }
 
   for (const rule of rules) {
+    if (ctx.matchData && !matchesBankFilter(rule.audienceFilter, ctx.matchData)) continue;
     const to = resolveRecipient(rule, ctx.recipient.email, ctx.recipient.phone);
     if (!to) {
       // Cas fréquent et jusqu'ici invisible : la fiche à l'origine de l'événement
