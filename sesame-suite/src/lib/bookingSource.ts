@@ -1796,3 +1796,72 @@ export async function pushOrderToPms(
   }
   return { ok: true };
 }
+
+export interface MewsServiceInfo {
+  id: string;
+  name: string;
+}
+
+export interface MewsProductInfo {
+  id: string;
+  name: string;
+  serviceId: string;
+}
+
+/**
+ * Diagnostic ponctuel (bouton admin "Lister produits Mews") — appelle
+ * services/getAll puis products/getAll de l'API Connector Mews pour
+ * retrouver les vrais Id de Service/Produit à utiliser dans "Identifiant du
+ * Service" et pour le bouton "Tester l'envoi d'une commande" : sans ça,
+ * l'admin doit aller les chercher à la main dans Mews Commander. Appel
+ * direct (pas via pushOrderToPms/orderEndpointPath) car ce sont deux
+ * endpoints Mews différents, non configurables par ce connecteur générique.
+ */
+export async function mewsListProducts(
+  baseUrl: string,
+  clientToken: string,
+  accessToken: string
+): Promise<{ services: MewsServiceInfo[]; products: MewsProductInfo[] }> {
+  const root = normalizeBaseUrl(baseUrl).replace(/\/$/, "");
+  const call = async (path: string, extraBody: Record<string, unknown>) => {
+    let res: Response;
+    try {
+      res = await fetchWithTimeout(root + path, {
+        method: "POST",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({ ClientToken: clientToken, AccessToken: accessToken, ...extraBody }),
+      });
+    } catch (e) {
+      throw new BookingSourceError(`Connexion à Mews impossible (${path}) : ${describeFetchError(e)}`);
+    }
+    const text = await res.text().catch(() => "");
+    if (!res.ok) {
+      throw new BookingSourceError(`Mews a répondu ${res.status} ${res.statusText} sur ${path}${text ? " — " + text.trim().slice(0, 300) : ""}`);
+    }
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new BookingSourceError(`Réponse Mews non JSON sur ${path} : ${text.slice(0, 200)}`);
+    }
+  };
+
+  const servicesRes = await call("/api/connector/v1/services/getAll", {});
+  const rawServices: unknown[] = Array.isArray(servicesRes?.Services) ? servicesRes.Services : [];
+  const services: MewsServiceInfo[] = rawServices
+    .map((s) => ({ id: String((s as { Id?: unknown })?.Id ?? ""), name: String((s as { Name?: unknown })?.Name ?? "") }))
+    .filter((s) => s.id);
+
+  if (!services.length) return { services, products: [] };
+
+  const productsRes = await call("/api/connector/v1/products/getAll", { ServiceIds: services.map((s) => s.id) });
+  const rawProducts: unknown[] = Array.isArray(productsRes?.Products) ? productsRes.Products : [];
+  const products: MewsProductInfo[] = rawProducts
+    .map((p) => ({
+      id: String((p as { Id?: unknown })?.Id ?? ""),
+      name: String((p as { Name?: { Value?: unknown } | string })?.Name && typeof (p as { Name?: unknown }).Name === "object" ? ((p as { Name?: { Value?: unknown } }).Name?.Value ?? "") : (p as { Name?: unknown })?.Name ?? ""),
+      serviceId: String((p as { ServiceId?: unknown })?.ServiceId ?? ""),
+    }))
+    .filter((p) => p.id);
+
+  return { services, products };
+}

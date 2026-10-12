@@ -12,6 +12,7 @@ import {
   upsertMappedFacilities,
   runImport,
   pushOrderToPms,
+  mewsListProducts,
   BookingSourceError,
   FieldMapping,
   FacilityMapping,
@@ -841,6 +842,39 @@ bookingSourceRouter.post(
 
     const result = await pushOrderToPms(draft as never, accountId, [{ productId, count: b.count && b.count > 0 ? b.count : 1 }]);
     res.json(result);
+  })
+);
+
+/**
+ * POST /wa/bookingSource/mewsListProducts — diagnostic ponctuel (bouton
+ * admin) : liste les Service/Produit Mews réels pour retrouver les Id à
+ * mettre dans "Identifiant du Service" et dans le test d'envoi de commande,
+ * sans devoir fouiller Mews Commander. Spécifique à Mews (pas générique
+ * comme le reste du connecteur) — les deux endpoints appelés ne sont pas
+ * configurables par ce connecteur. Body : { baseUrl?, clientToken,
+ * accessToken } — baseUrl retombe sur orderBaseUrl déjà enregistré sinon.
+ */
+bookingSourceRouter.post(
+  "/bookingSource/mewsListProducts",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const saved = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
+    const b = req.body as { baseUrl?: string; clientToken?: string; accessToken?: string };
+    const baseUrl = (b.baseUrl || saved?.orderBaseUrl || "").trim();
+    const clientToken = (b.clientToken || "").trim();
+    const accessToken = (b.accessToken || "").trim();
+    if (!baseUrl) throw new HttpError(400, "URL de base Mews requise");
+    if (!clientToken) throw new HttpError(400, "Client Token requis");
+    if (!accessToken) throw new HttpError(400, "Access Token requis");
+
+    try {
+      const result = await mewsListProducts(baseUrl, clientToken, accessToken);
+      res.json(result);
+    } catch (e) {
+      if (e instanceof BookingSourceError) throw new HttpError(400, e.message);
+      throw e;
+    }
   })
 );
 

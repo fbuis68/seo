@@ -2345,6 +2345,12 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     </div>
     <button class="btn btn-s" onclick="bsTestOrderPush()"><i class="ti ti-flask"></i> Tester l'envoi d'une commande</button>
     <div id="bs-order-test-result" style="margin-top:10px"></div>
+    <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin:14px 0 8px">Retrouver un Service/Produit Mews (optionnel)</div>
+    <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
+      <span>Spécifique à Mews — appelle services/getAll puis products/getAll avec l'URL de base et le ClientToken/AccessToken déjà renseignés ci-dessus ("Paramètres fixes"), pour retrouver les vrais Id à utiliser dans "Identifiant du Service" et dans le test ci-dessus, sans fouiller Mews Commander.</span>
+    </div>
+    <button class="btn btn-s" onclick="bsListMewsProducts()"><i class="ti ti-list-search"></i> Lister les Services/Produits Mews</button>
+    <div id="bs-mews-products-result" style="margin-top:10px"></div>
   </div>
 
   <!-- Encodage NFC -->
@@ -7812,7 +7818,14 @@ function bsRenderPresetVars(preset){
   preset.vars.forEach(function(v, i){
     var input = document.getElementById('bs-pvar-'+i);
     if(v.bodyParamKey){
-      input.value = bsTextToParams(document.getElementById('bs-endpointBodyParams').value)[v.bodyParamKey] || '';
+      // Lu en priorité depuis le connecteur réservations, sinon depuis celui
+      // des commandes (ex : un identifiant saisi seulement côté push) — les
+      // deux connecteurs sont indépendants mais un jeton Mews type
+      // ClientToken/AccessToken sert aux deux API.
+      var resaVal = bsTextToParams(document.getElementById('bs-endpointBodyParams').value)[v.bodyParamKey];
+      var orderEl = document.getElementById('bs-orderEndpointBodyParams');
+      var orderVal = orderEl ? bsTextToParams(orderEl.value)[v.bodyParamKey] : undefined;
+      input.value = resaVal || orderVal || '';
     } else if(v.target && document.getElementById(v.target)){
       input.value = document.getElementById(v.target).value || '';
     }
@@ -7823,10 +7836,18 @@ function bsPresetVarChanged(i){
   var v = CURRENT_PRESET.vars[i];
   var val = document.getElementById('bs-pvar-'+i).value;
   if(v.bodyParamKey){
-    var ta = document.getElementById('bs-endpointBodyParams');
-    var obj = bsTextToParams(ta.value);
-    obj[v.bodyParamKey] = val;
-    ta.value = bsParamsToText(obj);
+    // Écrit dans les DEUX connecteurs (réservations ET commandes) : depuis la
+    // séparation des connecteurs, un jeton comme ClientToken/AccessToken
+    // Mews doit être transmis aux deux API, sinon le push de commande échoue
+    // avec "ClientToken or AccessToken is missing" même quand le connecteur
+    // réservations est correctement configuré.
+    ['bs-endpointBodyParams', 'bs-orderEndpointBodyParams'].forEach(function(id){
+      var ta = document.getElementById(id);
+      if(!ta) return;
+      var obj = bsTextToParams(ta.value);
+      obj[v.bodyParamKey] = val;
+      ta.value = bsParamsToText(obj);
+    });
   } else if(v.target && document.getElementById(v.target)){
     document.getElementById(v.target).value = val;
   }
@@ -9823,6 +9844,49 @@ async function bsTestOrderPush(){
       return;
     }
     resEl.innerHTML = '<div class="alt alt-g"><i class="ti ti-check-circle"></i><span>Le système a accepté la commande de test (HTTP 200).</span></div>';
+  }catch(e){
+    resEl.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Erreur de connexion au serveur</span></div>';
+  }
+}
+
+async function bsListMewsProducts(){
+  var resEl = document.getElementById('bs-mews-products-result');
+  var baseUrl = document.getElementById('bs-orderBaseUrl').value.trim();
+  var params = bsTextToParams(document.getElementById('bs-orderEndpointBodyParams').value || '');
+  var clientToken = (params.ClientToken || '').trim();
+  var accessToken = (params.AccessToken || '').trim();
+  if(!baseUrl || !clientToken || !accessToken){
+    resEl.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Renseigne "URL de base" et ClientToken/AccessToken (champ "Paramètres fixes" ci-dessus) avant de lister.</span></div>';
+    return;
+  }
+  resEl.innerHTML = '<div style="color:var(--mu);font-size:13px"><div class="spin" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:-2px;margin-right:6px"></div>Appel de Mews en cours…</div>';
+  try{
+    var r = await adminFetch('/wa/bookingSource/mewsListProducts', {method:'POST', body:JSON.stringify({baseUrl:baseUrl, clientToken:clientToken, accessToken:accessToken})});
+    var data = await r.json();
+    if(!r.ok){
+      resEl.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>'+esc(data.error||'Erreur inconnue')+'</span></div>';
+      return;
+    }
+    var services = data.services||[], products = data.products||[];
+    if(!services.length){
+      resEl.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Mews n\'a renvoyé aucun Service.</span></div>';
+      return;
+    }
+    var h = '<div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;margin-bottom:6px">Services ('+services.length+')</div>';
+    h += services.map(function(s){
+      return '<div class="alt alt-b" style="margin-bottom:4px"><span style="font-family:monospace;font-size:11px">'+esc(s.id)+'</span><span>'+esc(s.name)+'</span>'
+        + '<button class="btn btn-s" style="margin-left:auto" onclick="document.getElementById(\'bs-orderServiceIdValue\').value='+JSON.stringify(s.id)+'">Utiliser</button></div>';
+    }).join('');
+    h += '<div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;margin:10px 0 6px">Produits ('+products.length+')</div>';
+    if(!products.length){
+      h += '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Aucun produit — créez-en un dans Mews Commander (Shop) pour ce Service avant de tester l\'envoi d\'une commande.</span></div>';
+    } else {
+      h += products.map(function(p){
+        return '<div class="alt alt-b" style="margin-bottom:4px"><span style="font-family:monospace;font-size:11px">'+esc(p.id)+'</span><span>'+esc(p.name)+'</span>'
+          + '<button class="btn btn-s" style="margin-left:auto" onclick="document.getElementById(\'bs-orderTestProductId\').value='+JSON.stringify(p.id)+'">Utiliser pour le test</button></div>';
+      }).join('');
+    }
+    resEl.innerHTML = h;
   }catch(e){
     resEl.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Erreur de connexion au serveur</span></div>';
   }
