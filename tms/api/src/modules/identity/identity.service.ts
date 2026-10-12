@@ -89,9 +89,11 @@ export class IdentityService {
     if (!u) { await verifyPassword(password, 'scrypt$AAAAAAAAAAAAAAAAAAAAAA==$' + 'A'.repeat(86) + '==').catch(() => false); throw fail(); }
     if (u.locked_until && u.locked_until > new Date()) throw new AppError(429, 'account_locked', 'Trop de tentatives. Réessayez dans quelques minutes.');
     if (!(await verifyPassword(password, u.password_hash))) {
+      // Au MAX_FAILED-ième échec : verrouillage 15 min et remise à zéro du compteur.
       const n = u.failed_logins + 1;
-      await this.db.query(`UPDATE users SET failed_logins=$2, locked_until = CASE WHEN $2 >= $3 THEN now() + interval '15 minutes' ELSE NULL END WHERE id=$1`,
-        [u.id, n >= MAX_FAILED ? 0 : n, MAX_FAILED]);
+      const lock = n >= MAX_FAILED;
+      await this.db.query(`UPDATE users SET failed_logins=$2::int, locked_until = CASE WHEN $3::boolean THEN now() + interval '15 minutes' ELSE NULL END WHERE id=$1`,
+        [u.id, lock ? 0 : n, lock]);
       throw fail();
     }
     await this.db.query(`UPDATE users SET failed_logins=0, locked_until=NULL WHERE id=$1`, [u.id]);

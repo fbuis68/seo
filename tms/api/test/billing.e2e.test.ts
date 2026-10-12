@@ -42,6 +42,19 @@ describe('Souscription en ligne', () => {
     expect(r.body.code).toBe('email_not_verified');
   });
 
+  it('mauvais mot de passe : 401 (pas d’erreur interne), verrouillage au 5e échec', async () => {
+    const u = await signupAndLogin();
+    for (let i = 0; i < 4; i++) {
+      const r = await http().post('/api/v1/auth/login').send({ email: u.email, password: 'mauvais-mot-de-passe' });
+      expect(r.status).toBe(401);
+      expect(r.body.code).toBe('invalid_credentials');
+    }
+    expect((await http().post('/api/v1/auth/login').send({ email: u.email, password: 'mauvais-mot-de-passe' })).status).toBe(401);
+    const locked = await http().post('/api/v1/auth/login').send({ email: u.email, password: u.password });
+    expect(locked.status).toBe(429);
+    expect(locked.body.code).toBe('account_locked');
+  });
+
   it('active l’offre uniquement après webhook vérifié, sans double abonnement', async () => {
     const u = await signupAndLogin();
     const c1 = await u.api.post('/api/v1/billing/checkout', { plan: 'equipe', interval: 'month', addons: [{ code: 'bank', quantity: 1 }] }).expect(201);
