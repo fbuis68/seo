@@ -19,6 +19,19 @@ export default function SessionDetail() {
   const [slot, setSlot] = useState({ day: '', start: '09:00', end: '12:30', trainerId: '', override: '' });
   const [enroll, setEnroll] = useState({ personId: '', firstName: '', lastName: '', email: '' });
   const [sign, setSign] = useState<{ docId: string; name: string; email: string } | null>(null);
+  /** Affectation après coup ; en cas de chevauchement, demande un motif de dérogation puis réessaie. */
+  const assignTrainer = async (trainerId: string | null, slotIds?: string[]) => {
+    const send = (overrideReason?: string) => post(`/api/v1/sessions/${id}/trainer`, { trainerId, slotIds, overrideReason });
+    act.setError(null);
+    try { await send(); }
+    catch (e: any) {
+      if (e.code !== 'slot_overlap') { act.setError(e.message); return; }
+      const reason = prompt('Ce formateur est déjà pris sur un créneau qui se chevauche. Motif de dérogation (5 caractères min.) ?');
+      if (!reason) return;
+      try { await send(reason); } catch (e2: any) { act.setError(e2.message); return; }
+    }
+    s.reload();
+  };
   if (s.error) return <p className="alert">{s.error.message}</p>;
   if (!s.data) return <p className="muted">Chargement…</p>;
   const d = s.data;
@@ -44,7 +57,24 @@ export default function SessionDetail() {
       <div className="grid2">
         <div className="panel">
           <strong>Créneaux</strong>
-          <table><tbody>{d.slots.map((sl: any) => <tr key={sl.id}><td>{new Date(sl.starts_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })} → {new Date(sl.ends_at).toLocaleTimeString('fr-FR', { timeStyle: 'short' })}</td><td>{sl.duration_minutes} min</td><td>{sl.overlap_override_reason && <span className="pill warn" title={sl.overlap_override_reason}>dérogation</span>}</td></tr>)}</tbody></table>
+          <table><tbody>{d.slots.map((sl: any) => (
+            <tr key={sl.id}>
+              <td>{new Date(sl.starts_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })} → {new Date(sl.ends_at).toLocaleTimeString('fr-FR', { timeStyle: 'short' })}</td>
+              <td>{sl.duration_minutes} min</td>
+              <td>{can(org, 'sessions.write')
+                ? <select aria-label="Formateur du créneau" value={sl.trainer_id ?? ''} onChange={(e) => assignTrainer(e.target.value || null, [sl.id])}>
+                    <option value="">— aucun formateur —</option>{trainers.data?.map((t) => <option key={t.id} value={t.id}>{t.first_name} {t.last_name}</option>)}</select>
+                : sl.trainer_name ?? '—'}</td>
+              <td>{sl.overlap_override_reason && <span className="pill warn" title={sl.overlap_override_reason}>dérogation</span>}</td>
+            </tr>))}</tbody></table>
+          {can(org, 'sessions.write') && d.slots.length > 1 && (
+            <div className="toolbar" style={{ marginTop: 8 }}>
+              <label>Formateur pour tous les créneaux<select value="" onChange={(e) => e.target.value && assignTrainer(e.target.value === 'none' ? null : e.target.value)}>
+                <option value="">— choisir —</option><option value="none">Retirer le formateur partout</option>
+                {trainers.data?.map((t) => <option key={t.id} value={t.id}>{t.first_name} {t.last_name}</option>)}</select></label>
+            </div>
+          )}
+          {can(org, 'sessions.write') && !trainers.data?.length && <p className="small muted">Aucun formateur : créez-en un dans « Clients & apprenants » (rôle Formateur).</p>}
           {can(org, 'sessions.write') && (
             <form className="inline" onSubmit={(e) => { e.preventDefault(); act.run(() => post(`/api/v1/sessions/${id}/slots`, { startsAt: tzIso(slot.day, slot.start), endsAt: tzIso(slot.day, slot.end), trainerId: slot.trainerId || null, overrideReason: slot.override || undefined }), reload); }} style={{ marginTop: 8 }}>
               <label>Jour<input type="date" required value={slot.day} onChange={(e) => setSlot({ ...slot, day: e.target.value })} /></label>

@@ -98,6 +98,39 @@ describe('Quotas Free et règles métier', () => {
   });
 });
 
+describe('Formateur affecté après création de la session', () => {
+  it('affecte sur tous les créneaux, refuse un chevauchement sans motif, permet le retrait', async () => {
+    const u = await signupAndLogin();
+    const prog = await program(u);
+    const s1 = await session(u, prog.versions[0].id);
+    const s2 = await session(u, prog.versions[0].id);
+    for (const [sid, start, end] of [[s1.id, '2026-11-12T09:00:00+01:00', '2026-11-12T12:00:00+01:00'], [s1.id, '2026-11-12T13:00:00+01:00', '2026-11-12T17:00:00+01:00'], [s2.id, '2026-11-12T10:00:00+01:00', '2026-11-12T11:00:00+01:00']]) {
+      await u.api.post(`/api/v1/sessions/${sid}/slots`, { startsAt: start, endsAt: end }).expect(201);
+    }
+    const t = (await u.api.post('/api/v1/persons', { firstName: 'Jeanne', lastName: 'Formatrice', roles: ['trainer'] }).expect(201)).body;
+    const learner = await person(u, 99);
+    expect((await u.api.post(`/api/v1/sessions/${s1.id}/trainer`, { trainerId: learner.id })).status).toBe(400); // pas formateur
+    const all = (await u.api.post(`/api/v1/sessions/${s1.id}/trainer`, { trainerId: t.id }).expect(201)).body;
+    expect(all.updated).toBe(2);
+    let detail = (await u.api.get(`/api/v1/sessions/${s1.id}`)).body;
+    expect(detail.slots.every((sl: any) => sl.trainer_id === t.id && sl.trainer_name === 'Jeanne Formatrice')).toBe(true);
+    expect(detail.missing).not.toContain('Créneau sans formateur');
+    // Même formateur sur la session 2, créneau qui chevauche : refusé (rien modifié), puis forcé avec motif.
+    const clash = await u.api.post(`/api/v1/sessions/${s2.id}/trainer`, { trainerId: t.id });
+    expect(clash.status).toBe(409);
+    expect((await u.api.get(`/api/v1/sessions/${s2.id}`)).body.slots[0].trainer_id).toBeNull();
+    await u.api.post(`/api/v1/sessions/${s2.id}/trainer`, { trainerId: t.id, overrideReason: 'Co-animation prévue' }).expect(201);
+    expect((await u.api.get(`/api/v1/sessions/${s2.id}`)).body.slots[0].overlap_override_reason).toBe('Co-animation prévue');
+    // Changement sur un seul créneau, puis retrait.
+    const firstSlot = detail.slots[0].id;
+    await u.api.post(`/api/v1/sessions/${s1.id}/trainer`, { trainerId: null, slotIds: [firstSlot] }).expect(201);
+    detail = (await u.api.get(`/api/v1/sessions/${s1.id}`)).body;
+    expect(detail.slots.find((sl: any) => sl.id === firstSlot).trainer_id).toBeNull();
+    expect(detail.slots.filter((sl: any) => sl.trainer_id === t.id)).toHaveLength(1);
+    expect(detail.missing).toContain('Créneau sans formateur');
+  });
+});
+
 describe('Finance', () => {
   it('REC-07 : émission concurrente → numéros uniques ; facture émise immuable ; avoir et paiement partiel', async () => {
     const u = await signupAndLogin();

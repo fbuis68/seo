@@ -37,6 +37,13 @@ export class SessionsController {
       roomId: z.string().uuid().nullable().optional(), trainerId: z.string().uuid().nullable().optional(), overrideReason: z.string().min(5).max(500).optional(),
     }), b));
   }
+  /** Affecter / changer / retirer le formateur après création (tous les créneaux si slotIds absent). */
+  @RequirePermission('sessions.write') @Post('sessions/:id/trainer')
+  trainer(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string, @Body() b: unknown) {
+    return this.s.assignTrainer(c, id, parse(z.object({
+      trainerId: z.string().uuid().nullable(), slotIds: z.array(z.string().uuid()).max(500).optional(), overrideReason: z.string().min(5).max(500).optional(),
+    }), b));
+  }
   @RequirePermission('sessions.read') @Get('rooms') rooms(@Ctx() c: RequestContext) { return this.s.rooms(c); }
   @RequirePermission('sessions.write') @Post('rooms')
   room(@Ctx() c: RequestContext, @Body() b: unknown) { return this.s.createRoom(c, parse(z.object({ name: z.string().min(1).max(100), location: z.string().max(300).optional(), capacity: z.number().int().positive().optional() }), b)); }

@@ -50,8 +50,10 @@ export class SessionsService {
                                 FROM training_sessions s JOIN program_versions v ON v.id=s.program_version_id JOIN programs p ON p.id=v.program_id WHERE s.id=$1`, [id]);
       if (!s) throw notFound('Session');
       const trainer = this.trainerFilter(ctx);
-      s.slots = await many(t, `SELECT sl.*, r.name room_name, extract(epoch FROM sl.ends_at - sl.starts_at)::int / 60 duration_minutes
-                                 FROM slots sl LEFT JOIN rooms r ON r.id=sl.room_id WHERE sl.session_id=$1 ORDER BY sl.starts_at`, [id]);
+      s.slots = await many(t, `SELECT sl.*, r.name room_name, extract(epoch FROM sl.ends_at - sl.starts_at)::int / 60 duration_minutes,
+                                      tp.first_name || ' ' || tp.last_name trainer_name
+                                 FROM slots sl LEFT JOIN rooms r ON r.id=sl.room_id LEFT JOIN persons tp ON tp.id=sl.trainer_id
+                                WHERE sl.session_id=$1 ORDER BY sl.starts_at`, [id]);
       if (trainer && !s.slots.some((x: any) => x.trainer_id === trainer)) throw notFound('Session');
       // Formateur : liste strictement nécessaire des inscrits (pas de données financières).
       s.enrollments = await many(t, `SELECT e.id, e.status, e.person_id, p.first_name, p.last_name ${trainer ? '' : ', p.email, e.client_id, c.name client_name'}
@@ -142,6 +144,42 @@ export class SessionsService {
         [ctx.tenantId, sessionId, b.startsAt, b.endsAt, b.roomId ?? null, b.trainerId ?? null, conflicts.length ? b.overrideReason : null]);
       if (conflicts.length) await this.audit.log(tx, { tenantId: ctx.tenantId, actor: ctx.userId, action: 'slot.overlap_override', entityType: 'slot', entityId: slot!.id, data: { reason: b.overrideReason, conflicts } });
       return { ...slot, overlaps: conflicts };
+    });
+  }
+
+  /**
+   * Affectation (ou retrait) d'un formateur après coup, sur des créneaux précis ou sur tous
+   * ceux de la session. Tout ou rien : un chevauchement non justifié bloque l'ensemble.
+   */
+  async assignTrainer(ctx: RequestContext, sessionId: string, b: { trainerId: string | null; slotIds?: string[]; overrideReason?: string }) {
+    return this.db.tenantTx(ctx.tenantId, async (tx) => {
+      const s = await one(tx, `SELECT status FROM training_sessions WHERE id=$1 FOR UPDATE`, [sessionId]);
+      if (!s) throw notFound('Session');
+      if (['archived', 'cancelled'].includes(s.status)) throw conflict('session_closed', 'Session close.');
+      if (b.trainerId && !(await one(tx, `SELECT 1 FROM person_roles WHERE person_id=$1 AND role='trainer'`, [b.trainerId]))) throw badRequest('not_a_trainer', "La personne n'a pas le rôle formateur.", 'trainerId');
+      const slots = await many(tx, `SELECT id, starts_at, ends_at, trainer_id FROM slots WHERE session_id=$1 AND ($2::uuid[] IS NULL OR id = ANY($2::uuid[])) ORDER BY starts_at`,
+        [sessionId, b.slotIds?.length ? b.slotIds : null]);
+      if (!slots.length) throw badRequest('no_slot', 'Aucun créneau à affecter : ajoutez d’abord un créneau à la session.');
+      if (b.slotIds?.length && slots.length !== new Set(b.slotIds).size) throw notFound('Créneau');
+      const conflicts: any[] = [];
+      if (b.trainerId) {
+        for (const sl of slots) {
+          conflicts.push(...await many(tx, `
+            SELECT sl.id, sl.session_id, sl.starts_at, sl.ends_at, 'trainer' kind, $4::uuid target_slot_id
+              FROM slots sl JOIN training_sessions ts ON ts.id=sl.session_id
+             WHERE ts.status NOT IN ('cancelled','archived') AND sl.trainer_id=$3 AND sl.id <> $4
+               AND sl.starts_at < $2 AND sl.ends_at > $1`, [sl.starts_at, sl.ends_at, b.trainerId, sl.id]));
+        }
+      }
+      if (conflicts.length && !b.overrideReason) throw conflict('slot_overlap', 'Ce formateur est déjà affecté sur un créneau qui se chevauche.', conflicts);
+      for (const sl of slots) {
+        const overlapped = conflicts.some((c) => c.target_slot_id === sl.id);
+        await tx.query(`UPDATE slots SET trainer_id=$2, overlap_override_reason = CASE WHEN $3::boolean THEN $4 ELSE overlap_override_reason END WHERE id=$1`,
+          [sl.id, b.trainerId, overlapped, b.overrideReason ?? null]);
+      }
+      await this.audit.log(tx, { tenantId: ctx.tenantId, actor: ctx.userId, action: 'session.trainer_assigned', entityType: 'session', entityId: sessionId,
+        data: { trainerId: b.trainerId, slots: slots.map((x) => x.id), overrideReason: conflicts.length ? b.overrideReason : undefined } });
+      return { updated: slots.length, overlaps: conflicts };
     });
   }
 
