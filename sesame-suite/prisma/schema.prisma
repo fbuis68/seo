@@ -80,6 +80,7 @@ model Entity {
   accGoCardlessPayouts   AccGoCardlessPayout[]
   accGoCardlessPayments  AccGoCardlessPayment[]
   accRecurringRules      AccRecurringRule[]
+  accManualCashflows     AccManualCashflow[]
 }
 
 // Groupe d'établissements (ex : chaîne hôtelière) — gestion réservée aux
@@ -3663,6 +3664,35 @@ model AccRecurringRule {
   updatedAt DateTime @updatedAt
 
   @@index([entityId, active])
+}
+
+// Décaissement/encaissement ponctuel HORS FACTURATION (Trésorerie — demande
+// client 12/10/2026) : une dépense ou une recette prévue qui n'a pas (ou pas
+// encore) de facture/document associé — ex. échéance de paie, achat ponctuel
+// décidé mais pas encore facturé — saisie à la main pour l'inclure quand
+// même dans la projection de trésorerie (lib/accTreasury.ts), au même titre
+// que les échéances de factures et les récurrences qualifiées. `paid` (pas
+// de statut à la AccInvoice) : une ligne manuelle n'a ni document ni
+// écriture comptable à faire évoluer, juste un booléen "réglé" ou non —
+// tant qu'elle n'est pas réglée elle reste dans "à venir" même une fois son
+// échéance dépassée, exactement comme une facture non réglée.
+model AccManualCashflow {
+  id       String  @id @default(cuid())
+  entityId String?
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  direction String // DEBIT | CREDIT — même convention qu'AccBankTransaction/AccRecurringRule
+  label     String
+  amount    Float // toujours positif
+  dueDate   DateTime
+
+  paid   Boolean   @default(false)
+  paidAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([entityId, paid, dueDate])
 }
 
 // Rapprochement transaction bancaire <-> facture (phase 3, lib/

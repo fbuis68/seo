@@ -4408,6 +4408,12 @@ let TR2_SALE_ROWS = [];
 // périodicité, donc un tableau séparé plutôt que mélangées aux listes
 // "à venir" basées sur AccInvoice (08/10/2026, demande client).
 let TR2_RECURRING_RULES = [];
+// Décaissements/encaissements ponctuels hors facturation (tableaux dédiés,
+// 12/10/2026, demande client) — lignes saisies à la main (label+montant+
+// échéance), fusionnées côté serveur dans la même projection que les
+// factures (cf. lib/accTreasury.ts) ; affichées ici à part puisqu'elles
+// n'ont ni tiers ni document, juste un libellé libre.
+let TR2_MANUAL_CASHFLOWS = [];
 // Pipeline pondéré (Affaires) superposé au graphique de trésorerie, en
 // option — jamais fusionné silencieusement avec les flux réels (factures) :
 // isolé dans une barre distincte + recalcul du solde projeté en conséquence
@@ -4446,6 +4452,11 @@ async function loadTreasuryOverview(){
     const r2 = await apiFetch('/wa/acc/bank/recurring-rules?'+params2.toString());
     TR2_RECURRING_RULES = r2.ok ? await r2.json() : [];
   }catch(e){ TR2_RECURRING_RULES = []; }
+
+  try{
+    const r3 = await apiFetch('/wa/acc/manual-cashflow?scope=crm');
+    TR2_MANUAL_CASHFLOWS = r3.ok ? await r3.json() : [];
+  }catch(e){ TR2_MANUAL_CASHFLOWS = []; }
 
   await loadTreasuryLists();
   renderTreasuryOverview();
@@ -4616,8 +4627,8 @@ function renderTreasuryOverview(){
       <div class="stats-row" style="margin-bottom:16px">
         <div class="stat-card"><div class="stat-lbl">Solde actuel</div><div class="stat-val">${fmtEUR(ov.currentBalance)}</div></div>
         <div class="stat-card"><div class="stat-lbl">Plus bas solde projeté</div><div class="stat-val" style="${plusBasSolde&&plusBasSolde.amount<0?'color:#a32d2d':''}">${plusBasSolde?fmtEUR(plusBasSolde.amount):'—'}</div><div style="font-size:11px;color:var(--mu)">${plusBasSolde?('au '+new Date(plusBasSolde.date).toLocaleDateString('fr-FR')):''}</div></div>
-        <div class="stat-card" style="cursor:pointer;${TR2_LIST_MODE==='overdue-sale'?'outline:2px solid var(--a)':''}" onclick="trFilterOverdueMode('overdue-sale')"><div class="stat-lbl">Créances en retard</div><div class="stat-val" style="${ov.creancesRetard.total>0?'color:#a32d2d':''}">${fmtEUR(ov.creancesRetard.total)}</div><div style="font-size:11px;color:var(--mu)">${ov.creancesRetard.count} facture(s)</div></div>
-        <div class="stat-card" style="cursor:pointer;${TR2_LIST_MODE==='overdue-purchase'?'outline:2px solid var(--a)':''}" onclick="trFilterOverdueMode('overdue-purchase')"><div class="stat-lbl">Dettes en retard</div><div class="stat-val" style="${ov.dettesRetard.total>0?'color:#a32d2d':''}">${fmtEUR(ov.dettesRetard.total)}</div><div style="font-size:11px;color:var(--mu)">${ov.dettesRetard.count} facture(s)</div></div>
+        <div class="stat-card" style="cursor:pointer;${TR2_LIST_MODE==='overdue-sale'?'outline:2px solid var(--a)':''}" onclick="trFilterOverdueMode('overdue-sale')"><div class="stat-lbl">Créances en retard</div><div class="stat-val" style="${ov.creancesRetard.total>0?'color:#a32d2d':''}">${fmtEUR(ov.creancesRetard.total)}</div><div style="font-size:11px;color:var(--mu)">${ov.creancesRetard.count} élément(s)</div></div>
+        <div class="stat-card" style="cursor:pointer;${TR2_LIST_MODE==='overdue-purchase'?'outline:2px solid var(--a)':''}" onclick="trFilterOverdueMode('overdue-purchase')"><div class="stat-lbl">Dettes en retard</div><div class="stat-val" style="${ov.dettesRetard.total>0?'color:#a32d2d':''}">${fmtEUR(ov.dettesRetard.total)}</div><div style="font-size:11px;color:var(--mu)">${ov.dettesRetard.count} élément(s)</div></div>
         <div class="stat-card" style="cursor:pointer;${TR2_LIST_MODE==='nodue-sale'?'outline:2px solid var(--a)':''}" onclick="trFilterOverdueMode('nodue-sale')" title="Factures clients non payées sans date d'échéance renseignée — exclues du graphique et des totaux ci-dessous faute de date à placer sur le calendrier"><div class="stat-lbl">Créances sans échéance</div><div class="stat-val" style="${ov.creancesSansEcheance.total>0?'color:#b8791f':''}">${fmtEUR(ov.creancesSansEcheance.total)}</div><div style="font-size:11px;color:var(--mu)">${ov.creancesSansEcheance.count} facture(s)</div></div>
         <div class="stat-card" style="cursor:pointer;${TR2_LIST_MODE==='nodue-purchase'?'outline:2px solid var(--a)':''}" onclick="trFilterOverdueMode('nodue-purchase')" title="Factures fournisseurs non payées sans date d'échéance renseignée — exclues du graphique et des totaux ci-dessous faute de date à placer sur le calendrier"><div class="stat-lbl">Dettes sans échéance</div><div class="stat-val" style="${ov.dettesSansEcheance.total>0?'color:#b8791f':''}">${fmtEUR(ov.dettesSansEcheance.total)}</div><div style="font-size:11px;color:var(--mu)">${ov.dettesSansEcheance.count} facture(s)</div></div>
       </div>
@@ -4655,9 +4666,89 @@ function renderTreasuryOverview(){
         </div>
       </div>
       ${renderTrRecurringSection()}
+      ${renderTrManualCashflowSection()}
     </div>`;
 
   trRenderTreasuryChart(display.buckets);
+}
+
+/** Lignes ponctuelles hors facturation (cf. TR2_MANUAL_CASHFLOWS) — table
+ * éditable : ajouter une ligne, la marquer payée (elle sort alors de la
+ * projection, cf. accTreasury.ts), ou la supprimer. */
+function trManualCashflowRowHtml(row){
+  return `<tr style="${row.paid?'opacity:.5':''}">
+    <td>${esc(row.label)}</td>
+    <td style="text-align:right;font-family:monospace">${fmtEUR2(row.amount)}</td>
+    <td>${new Date(row.dueDate).toLocaleDateString('fr-FR')}</td>
+    <td style="white-space:nowrap">
+      <button class="btn btn-ghost btn-sm" onclick="trToggleManualPaid('${row.id}',${!row.paid})">${row.paid?'↩ Annuler':'✓ Marquer payé'}</button>
+      <button class="btn btn-ghost btn-sm" onclick="trDeleteManualCashflow('${row.id}')" title="Supprimer"><i class="ti ti-trash"></i></button>
+    </td>
+  </tr>`;
+}
+
+function trManualCashflowAddRowHtml(direction){
+  const p = direction==='DEBIT' ? 'debit' : 'credit';
+  return `<tr>
+    <td><input type="text" id="tr-manual-${p}-label" placeholder="Libellé" style="width:100%"></td>
+    <td><input type="number" id="tr-manual-${p}-amount" placeholder="Montant" step="0.01" min="0" style="width:100%;text-align:right"></td>
+    <td><input type="date" id="tr-manual-${p}-date" style="width:100%"></td>
+    <td><button class="btn btn-ghost btn-sm" onclick="trAddManualCashflow('${direction}')"><i class="ti ti-plus"></i> Ajouter</button></td>
+  </tr>`;
+}
+
+function renderTrManualCashflowSection(){
+  const decaissements = TR2_MANUAL_CASHFLOWS.filter(r=>r.direction==='DEBIT');
+  const encaissements = TR2_MANUAL_CASHFLOWS.filter(r=>r.direction==='CREDIT');
+  return `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px">
+      <div>
+        <div class="tr-chart-title">Décaissement ponctuel (hors facturation)</div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Libellé</th><th style="text-align:right">Montant</th><th>Échéance</th><th></th></tr></thead>
+          <tbody>${decaissements.map(trManualCashflowRowHtml).join('')}${trManualCashflowAddRowHtml('DEBIT')}</tbody>
+        </table></div>
+      </div>
+      <div>
+        <div class="tr-chart-title">Encaissement ponctuel (hors facturation)</div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Libellé</th><th style="text-align:right">Montant</th><th>Échéance</th><th></th></tr></thead>
+          <tbody>${encaissements.map(trManualCashflowRowHtml).join('')}${trManualCashflowAddRowHtml('CREDIT')}</tbody>
+        </table></div>
+      </div>
+    </div>`;
+}
+
+async function trAddManualCashflow(direction){
+  const p = direction==='DEBIT' ? 'debit' : 'credit';
+  const label = document.getElementById('tr-manual-'+p+'-label').value.trim();
+  const amount = Number(document.getElementById('tr-manual-'+p+'-amount').value);
+  const dueDate = document.getElementById('tr-manual-'+p+'-date').value;
+  if(!label || !(amount>0) || !dueDate){ flash('Libellé, montant et échéance requis'); return; }
+  try{
+    const r = await apiFetch('/wa/acc/manual-cashflow?scope=crm', {method:'POST', body:JSON.stringify({direction, label, amount, dueDate})});
+    const d = await r.json().catch(()=>({}));
+    if(!r.ok){ flash('Erreur : '+(d.error||'échec')); return; }
+    await loadTreasuryOverview();
+  }catch(e){ flash('Erreur de connexion au serveur'); }
+}
+
+async function trToggleManualPaid(id, paid){
+  try{
+    const r = await apiFetch('/wa/acc/manual-cashflow/'+id+'?scope=crm', {method:'PATCH', body:JSON.stringify({paid})});
+    const d = await r.json().catch(()=>({}));
+    if(!r.ok){ flash('Erreur : '+(d.error||'échec')); return; }
+    await loadTreasuryOverview();
+  }catch(e){ flash('Erreur de connexion au serveur'); }
+}
+
+async function trDeleteManualCashflow(id){
+  if(!confirm('Supprimer cette ligne ?')) return;
+  try{
+    const r = await apiFetch('/wa/acc/manual-cashflow/'+id+'?scope=crm', {method:'DELETE'});
+    if(!r.ok && r.status!==204){ const d = await r.json().catch(()=>({})); flash('Erreur : '+(d.error||'échec')); return; }
+    await loadTreasuryOverview();
+  }catch(e){ flash('Erreur de connexion au serveur'); }
 }
 
 /** Récurrences qualifiées (🔁, cf. onglet Banque/Factures clients) dont

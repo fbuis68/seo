@@ -2313,3 +2313,107 @@ accountingRouter.delete(
     res.status(204).end();
   })
 );
+
+/**
+ * Décaissements/encaissements ponctuels HORS FACTURATION (Trésorerie,
+ * tableaux "Décaissement ponctuel"/"Encaissement ponctuel" — demande
+ * client 12/10/2026) : une ligne saisie à la main, sans document ni facture,
+ * pour l'inclure quand même dans la projection de trésorerie (fusionnée
+ * dans computeTreasuryOverview, lib/accTreasury.ts). Marquer "payé" la fait
+ * sortir de la projection, exactement comme régler une facture.
+ */
+accountingRouter.get(
+  "/acc/manual-cashflow",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const rows = await prisma.accManualCashflow.findMany({
+      where: { entityId },
+      orderBy: { dueDate: "asc" },
+    });
+    res.json(rows);
+  })
+);
+
+function validateManualCashflowDirection(value: unknown): string {
+  if (value !== "DEBIT" && value !== "CREDIT") throw new HttpError(400, "direction doit être DEBIT ou CREDIT");
+  return value;
+}
+
+accountingRouter.post(
+  "/acc/manual-cashflow",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const b = req.body as { direction?: string; label?: string; amount?: number; dueDate?: string };
+    const direction = validateManualCashflowDirection(b.direction);
+    const label = (b.label || "").trim();
+    if (!label) throw new HttpError(400, "Libellé requis");
+    const amount = Number(b.amount);
+    if (!(amount > 0)) throw new HttpError(400, "Montant invalide");
+    if (!b.dueDate) throw new HttpError(400, "Date d'échéance requise");
+    const dueDate = new Date(b.dueDate);
+    if (Number.isNaN(dueDate.getTime())) throw new HttpError(400, "Date d'échéance invalide");
+
+    const row = await prisma.accManualCashflow.create({ data: { entityId, direction, label, amount, dueDate } });
+    await recordAuditLog({
+      entityId, userId: actorId(req), action: "manual_cashflow_created", targetType: "AccManualCashflow", targetId: row.id,
+      newValue: { direction, label, amount, dueDate }, ip: req.ip,
+    });
+    res.status(201).json(row);
+  })
+);
+
+accountingRouter.patch(
+  "/acc/manual-cashflow/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const existing = await prisma.accManualCashflow.findFirst({ where: { id: req.params.id, entityId } });
+    if (!existing) throw new HttpError(404, "Ligne introuvable");
+    const data: Record<string, unknown> = {};
+    if ("paid" in req.body) {
+      const paid = Boolean(req.body.paid);
+      data.paid = paid;
+      data.paidAt = paid ? new Date() : null;
+    }
+    if ("label" in req.body) {
+      const label = (req.body.label || "").trim();
+      if (!label) throw new HttpError(400, "Libellé requis");
+      data.label = label;
+    }
+    if ("amount" in req.body) {
+      const amount = Number(req.body.amount);
+      if (!(amount > 0)) throw new HttpError(400, "Montant invalide");
+      data.amount = amount;
+    }
+    if ("dueDate" in req.body) {
+      const dueDate = new Date(req.body.dueDate);
+      if (Number.isNaN(dueDate.getTime())) throw new HttpError(400, "Date d'échéance invalide");
+      data.dueDate = dueDate;
+    }
+    const updated = await prisma.accManualCashflow.update({ where: { id: existing.id }, data });
+    await recordAuditLog({
+      entityId, userId: actorId(req), action: "manual_cashflow_updated", targetType: "AccManualCashflow", targetId: existing.id,
+      oldValue: { paid: existing.paid, label: existing.label, amount: existing.amount, dueDate: existing.dueDate },
+      newValue: { paid: updated.paid, label: updated.label, amount: updated.amount, dueDate: updated.dueDate }, ip: req.ip,
+    });
+    res.json(updated);
+  })
+);
+
+accountingRouter.delete(
+  "/acc/manual-cashflow/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const existing = await prisma.accManualCashflow.findFirst({ where: { id: req.params.id, entityId } });
+    if (!existing) throw new HttpError(404, "Ligne introuvable");
+    await prisma.accManualCashflow.delete({ where: { id: existing.id } });
+    await recordAuditLog({
+      entityId, userId: actorId(req), action: "manual_cashflow_deleted", targetType: "AccManualCashflow", targetId: existing.id,
+      oldValue: { direction: existing.direction, label: existing.label, amount: existing.amount, dueDate: existing.dueDate }, ip: req.ip,
+    });
+    res.status(204).end();
+  })
+);

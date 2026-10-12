@@ -180,6 +180,27 @@ export async function computeTreasuryOverview(
     else futureSale.push({ dueDate: inv.dueDate, amount: remaining });
   }
 
+  // Décaissements/encaissements ponctuels hors facturation (12/10/2026,
+  // demande client) : lignes saisies à la main (pas de facture/document),
+  // fusionnées dans les MÊMES compteurs retard/à-venir que les factures
+  // ci-dessus — une ligne manuelle non réglée reste "à venir" même après son
+  // échéance, exactement comme une facture non réglée, et en sort dès
+  // qu'elle est marquée payée (filtrée ici via paid:false).
+  const manualCashflows = await prisma.accManualCashflow.findMany({
+    where: { entityId, paid: false },
+    select: { direction: true, amount: true, dueDate: true },
+  });
+  for (const m of manualCashflows) {
+    if (m.amount <= 0.01) continue;
+    if (m.direction === "DEBIT") {
+      if (m.dueDate < today) { dettesRetardCount++; dettesRetardTotal += m.amount; }
+      else futurePurchase.push({ dueDate: m.dueDate, amount: m.amount });
+    } else {
+      if (m.dueDate < today) { creancesRetardCount++; creancesRetardTotal += m.amount; }
+      else futureSale.push({ dueDate: m.dueDate, amount: m.amount });
+    }
+  }
+
   // Récurrences qualifiées (phase 2, §4.2 — fréquence mensuelle,
   // trimestrielle ou annuelle) : génère les occurrences futures jusqu'à
   // l'horizon demandé et les ajoute aux flux prévus, au même titre que les
