@@ -1,0 +1,453 @@
+<meta charset="utf-8">
+<title>Indicateurs Qualiopi</title>
+<!--
+  Reference operationnelle : indicateurs de gestion Qualiopi (7 criteres
+  du referentiel national qualite), mapping vers les donnees MCDF deja
+  confirmees ou encore a decouvrir, et plan d'actions par frequence.
+
+  Reprend a l'identique les tokens visuels de widget-ia.html /
+  widget-qualiopi.html (meme famille de produit) : accent #256abf clair
+  / #5b9bea sombre, Charter en display, badges de statut deja utilises
+  dans widget-ia.html (age-ok/age-warn/age-crit).
+-->
+<style>
+  :root {
+    color-scheme: light;
+    --page:        #f9f9f7;
+    --surface:     #fcfcfb;
+    --surface-2:   #f2f1ec;
+    --ink:         #0b0b0b;
+    --ink-2:       #52514e;
+    --ink-muted:   #898781;
+    --border:      rgba(11,11,11,0.10);
+    --border-2:    rgba(11,11,11,0.16);
+    --accent:      #256abf;
+    --accent-tint: #dbe8f8;
+    --good:        #0ca30c;
+    --good-tint:   #e3f3e3;
+    --good-text:   #006300;
+    --warning:     #b8860b;
+    --warning-tint:#f5ecd6;
+    --critical:    #b23327;
+    --critical-tint: #f6e2df;
+    --font-display: Charter, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322;
+      --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #8f8d86;
+      --border: rgba(255,255,255,0.10); --border-2: rgba(255,255,255,0.18);
+      --accent: #5b9bea; --accent-tint: #1c2e44;
+      --good: #3fc23f; --good-tint: #16301a; --good-text: #4fd44f;
+      --warning: #e0b03a; --warning-tint: #3a3018;
+      --critical: #e2685c; --critical-tint: #3a201d;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322;
+    --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #8f8d86;
+    --border: rgba(255,255,255,0.10); --border-2: rgba(255,255,255,0.18);
+    --accent: #5b9bea; --accent-tint: #1c2e44;
+    --good: #3fc23f; --good-tint: #16301a; --good-text: #4fd44f;
+    --warning: #e0b03a; --warning-tint: #3a3018;
+    --critical: #e2685c; --critical-tint: #3a201d;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink); font-family: var(--font-body); -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 40px 28px 90px; }
+
+  .eyebrow { text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px; font-weight: 600; color: var(--accent); margin: 0 0 10px; }
+  h1 { font-family: var(--font-display); font-size: clamp(26px, 3.4vw, 36px); font-weight: 500; letter-spacing: -0.01em; margin: 0 0 10px; text-wrap: balance; }
+  .lede { max-width: 68ch; color: var(--ink-2); font-size: 14.5px; line-height: 1.65; margin: 0; }
+  header.top { padding-bottom: 26px; margin-bottom: 30px; border-bottom: 1px solid var(--border); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 18px; font-size: 12.5px; color: var(--ink-2); }
+  .legend-item { display: flex; align-items: center; gap: 7px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+  section.critere { margin-bottom: 30px; }
+  .critere-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .critere-num { font-family: var(--font-display); font-size: 14px; font-weight: 500; color: var(--accent); background: var(--accent-tint); border-radius: 100px; padding: 3px 12px; flex: none; }
+  .critere-head h2 { font-family: var(--font-display); font-size: 19px; font-weight: 500; margin: 0; letter-spacing: -0.005em; }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); font-weight: 600; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); white-space: nowrap; }
+  tbody td { padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--ink-2); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--surface-2); }
+  td.strong { color: var(--ink); font-weight: 500; }
+  td.calc { font-size: 12px; color: var(--ink-muted); font-family: var(--font-mono); }
+  td.target { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+  .field-chip { display: inline-block; font-size: 11px; font-family: var(--font-mono); background: var(--surface-2); border-radius: 5px; padding: 2px 7px; color: var(--ink); white-space: nowrap; }
+
+  .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 100px; white-space: nowrap; }
+  .badge .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .badge.ok { background: var(--good-tint); color: var(--good-text); }
+  .badge.ok .dot { background: var(--good); }
+  .badge.build { background: var(--warning-tint); color: var(--warning); }
+  .badge.build .dot { background: var(--warning); }
+  .badge.gap { background: var(--critical-tint); color: var(--critical); }
+  .badge.gap .dot { background: var(--critical); }
+
+  .plan { margin-top: 44px; }
+  .plan-head { margin-bottom: 18px; }
+  .plan-head h2 { font-family: var(--font-display); font-size: 22px; font-weight: 500; margin: 0 0 8px; }
+  .plan-head p { color: var(--ink-2); font-size: 13.5px; max-width: 68ch; margin: 0; line-height: 1.6; }
+
+  .cadence-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .cadence-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 18px 6px; }
+  .cadence-title { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-size: 15px; font-weight: 500; margin: 0 0 4px; }
+  .cadence-sub { font-size: 11.5px; color: var(--ink-muted); margin: 0 0 14px; }
+  .action-list { list-style: none; margin: 0; padding: 0; }
+  .action-list li { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+  .action-list li:first-child { border-top: none; }
+  .action-check { flex: none; width: 15px; height: 15px; border: 1.5px solid var(--border-2); border-radius: 4px; margin-top: 1px; }
+  .action-tag { display: inline-block; font-size: 10px; font-family: var(--font-mono); color: var(--ink-muted); margin-top: 3px; }
+
+  footer { margin-top: 44px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 12px; color: var(--ink-muted); line-height: 1.7; max-width: 74ch; }
+  footer code { background: var(--surface-2); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+
+  @media (max-width: 980px) {
+    .cadence-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 600px) {
+    .cadence-grid { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="top">
+    <p class="eyebrow">Widget IA · MCDF</p>
+    <h1>Indicateurs de gestion Qualiopi</h1>
+    <p class="lede">
+      Organisé selon les 7 critères du référentiel national qualité. Pour
+      chaque critère : les indicateurs de gestion à suivre, leur mode de
+      calcul, une cible indicative, et l'état des données MCDF pour les
+      alimenter — ce qui est déjà exploitable avec le pipeline confirmé
+      (<code>widget-ia.html</code>), ce qui nécessite une entité Qualiopi
+      encore à confirmer, et ce qui n'a aucune source connue à ce jour.
+    </p>
+    <div class="legend">
+      <span class="legend-item"><span class="legend-dot" style="background:var(--good)"></span> Donnée disponible aujourd'hui dans MCDF</span>
+      <span class="legend-item"><span class="legend-dot" style="background:var(--warning)"></span> Entité repérée, champs à confirmer</span>
+      <span class="legend-item"><span class="legend-dot" style="background:var(--critical)"></span> Aucune source connue — à investiguer</span>
+    </div>
+  </header>
+
+  <section class="critere">
+    <div class="critere-head">
+      <span class="critere-num">Critère 1</span>
+      <h2>Conditions d'information du public</h2>
+    </div>
+    <div class="panel"><div class="table-scroll">
+      <table>
+        <thead><tr><th>Indicateur</th><th>Calcul</th><th>Cible</th><th>Source MCDF</th><th>État</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="strong">Fraîcheur du catalogue public</td>
+            <td class="calc">fiches modifiées < 12 mois / total fiches</td>
+            <td class="target">100 %</td>
+            <td><span class="field-chip">templateDao</span> <span class="field-chip">session</span></td>
+            <td><span class="badge build"><span class="dot"></span>à confirmer</span></td>
+          </tr>
+          <tr>
+            <td class="strong">Délai moyen de réponse à une demande d'info</td>
+            <td class="calc">1er contact → 1ère réponse, en jours</td>
+            <td class="target">&lt; 48 h</td>
+            <td><span class="field-chip">actor.created</span></td>
+            <td><span class="badge gap"><span class="dot"></span>aucune source</span></td>
+          </tr>
+          <tr>
+            <td class="strong">Résultats publiés (réussite, satisfaction)</td>
+            <td class="calc">indicateurs affichés / indicateurs exigés</td>
+            <td class="target">100 %</td>
+            <td>—</td>
+            <td><span class="badge gap"><span class="dot"></span>aucune source</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div></div>
+  </section>
+
+  <section class="critere">
+    <div class="critere-head">
+      <span class="critere-num">Critère 2</span>
+      <h2>Objectifs des prestations et adaptation au public</h2>
+    </div>
+    <div class="panel"><div class="table-scroll">
+      <table>
+        <thead><tr><th>Indicateur</th><th>Calcul</th><th>Cible</th><th>Source MCDF</th><th>État</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="strong">Taux de transformation devis → dossier signé</td>
+            <td class="calc">devis signés / devis émis (période)</td>
+            <td class="target">&gt; 35 %</td>
+            <td><span class="field-chip">convention.isProposal</span> <span class="field-chip">signingDate</span></td>
+            <td><span class="badge ok"><span class="dot"></span>disponible</span></td>
+          </tr>
+          <tr>
+            <td class="strong">Devis en attente de relance</td>
+            <td class="calc">devis &gt; 10 j sans réponse</td>
+            <td class="target">0</td>
+            <td><span class="field-chip">convention.provisionalDate</span></td>
+            <td><span class="badge ok"><span class="dot"></span>disponible</span></td>
+          </tr>
+          <tr>
+            <td class="strong">Devis avec objectifs pédagogiques formalisés</td>
+            <td class="calc">devis avec objectifs renseignés / total</td>
+            <td class="target">100 %</td>
+            <td><span class="field-chip">convention.name</span> (champ libre)</td>
+            <td><span class="badge build"><span class="dot"></span>à confirmer</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div></div>
+  </section>
+
+  <section class="critere">
+    <div class="critere-head">
+      <span class="critere-num">Critère 3</span>
+      <h2>Adaptation aux publics bénéficiaires</h2>
+    </div>
+    <div class="panel"><div class="table-scroll">
+      <table>
+        <thead><tr><th>Indicateur</th><th>Calcul</th><th>Cible</th><th>Source MCDF</th><th>État</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="strong">Positionnement réalisé avant entrée en formation</td>
+            <td class="calc">stagiaires positionnés / inscrits</td>
+            <td class="target">100 %</td>
+            <td><span class="field-chip">conventionAttendee</span></td>
+            <td><span class="badge build"><span class="dot"></span>à confirmer</span></td>
+          </tr>
+          <tr>
+            <td class="strong">Taux d'abandon en cours de formation</td>
+            <td class="calc">abandons / inscrits (session terminée)</td>
+            <td class="target">&lt; 5 %</td>
+            <td><span class="field-chip">conventionAttendee.activated</span></td>
+            <td><span class="badge build"><span class="dot"></span>à confirmer</span></td>
+          </tr>
+          <tr>
+            <td class="strong">Situations de handicap accompagnées</td>
+            <td class="calc">demandes traitées / signalées</td>
+            <td class="target">100 %</td>
+            <td>—</td>
+            <td><span class="badge gap"><span class="dot"></span>aucune source</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div></div>
+  </section>
+
+  <section class="critere">
+    <div class="critere-head">
+      <span class="critere-num">Critère 4</span>
+      <h2>Moyens pédagogiques, techniques et encadrement</h2>
+    </div>
+    <div class="panel"><div class="table-scroll">
+      <table>
+        <thead><tr><th>Indicateur</th><th>Calcul</th><th>Cible</th><th>Source MCDF</th><th>État</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="strong">Taux de remplissage des sessions</td>
+            <td class="calc">inscrits / capacité (numberMaxi)</td>
+            <td class="target">&gt; 70 %</td>
+            <td><span class="field-chip">session.numberMaxi</span></td>
+            <td><span class="badge build"><span class="dot"></span>lien session↔inscrit à confirmer</span></td>
+          </tr>
+          <tr>
+            <td class="strong">Volume de sessions programmées</td>
+            <td class="calc">nb sessions / mois</td>
+            <td class="target">stable ou croissant</td>
+            <td><span class="field-chip">session.startDate</span></td>
+            <td><span class="badge ok"><span class="dot"></span>disponible</span></td>
+          </tr>
+          <tr>
+            <td class="strong">Support pédagogique déposé au dossier</td>
+            <td class="calc">sessions avec support / total</td>
+            <td class="target">100 %</td>
+            <td><span class="field-chip">sessionDocumentDao</span></td>
+            <td><span class="badge build"><span class="dot"></span>à confirmer</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div></div>
+  </section>
+
+  <section class="critere">
+    <div class="critere-head">
+      <span class="critere-num">Critère 5</span>
+      <h2>Qualification et compétences des personnels</h2>
+    </div>
+    <div class="panel"><div class="table-scroll">
+      <table>
+        <thead><tr><th>Indicateur</th><th>Calcul</th><th>Cible</th><th>Source MCDF</th><th>État</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="strong">Formateurs actifs sur la période</td>
+            <td class="calc">nb formateurs distincts ayant animé ≥ 1 session</td>
+            <td class="target">—</td>
+            <td><span class="field-chip">session.trainerId</span></td>
+            <td><span class="badge ok"><span class="dot"></span>disponible</span></td>
+          </tr>
+          <tr>
+            <td class="strong">CV / diplôme à jour au dossier formateur</td>
+            <td class="calc">formateurs à jour / total</td>
+            <td class="target">100 %</td>
+            <td><span class="field-chip">actorDocumentDao</span></td>
+            <td><span class="badge build"><span class="dot"></span>à confirmer</span></td>
+          </tr>
+          <tr>
+            <td class="strong">Heures de formation continue / formateur / an</td>
+            <td class="calc">heures suivies (déclaratif)</td>
+            <td class="target">&gt; 14 h</td>
+            <td>—</td>
+            <td><span class="badge gap"><span class="dot"></span>aucune source</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div></div>
+  </section>
+
+  <section class="critere">
+    <div class="critere-head">
+      <span class="critere-num">Critère 6</span>
+      <h2>Inscription dans l'environnement professionnel</h2>
+    </div>
+    <div class="panel"><div class="table-scroll">
+      <table>
+        <thead><tr><th>Indicateur</th><th>Calcul</th><th>Cible</th><th>Source MCDF</th><th>État</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="strong">Nouveaux clients / mois</td>
+            <td class="calc">clients créés dans le mois</td>
+            <td class="target">stable ou croissant</td>
+            <td><span class="field-chip">customer.created</span></td>
+            <td><span class="badge ok"><span class="dot"></span>disponible</span></td>
+          </tr>
+          <tr>
+            <td class="strong">Taux d'insertion professionnelle à 6 mois</td>
+            <td class="calc">stagiaires en emploi / diplômés</td>
+            <td class="target">&gt; 60 %</td>
+            <td>—</td>
+            <td><span class="badge gap"><span class="dot"></span>aucune source</span></td>
+          </tr>
+          <tr>
+            <td class="strong">Veille réglementaire / métier réalisée</td>
+            <td class="calc">mises à jour référentiel / trimestre</td>
+            <td class="target">≥ 1 / trimestre</td>
+            <td>—</td>
+            <td><span class="badge gap"><span class="dot"></span>aucune source</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div></div>
+  </section>
+
+  <section class="critere">
+    <div class="critere-head">
+      <span class="critere-num">Critère 7</span>
+      <h2>Appréciations et réclamations des parties prenantes</h2>
+    </div>
+    <div class="panel"><div class="table-scroll">
+      <table>
+        <thead><tr><th>Indicateur</th><th>Calcul</th><th>Cible</th><th>Source MCDF</th><th>État</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="strong">Taux de satisfaction stagiaires</td>
+            <td class="calc">moyenne enquêtes à chaud</td>
+            <td class="target">&gt; 4 / 5</td>
+            <td>—</td>
+            <td><span class="badge gap"><span class="dot"></span>aucune source</span></td>
+          </tr>
+          <tr>
+            <td class="strong">Taux de réponse aux enquêtes</td>
+            <td class="calc">réponses reçues / envoyées</td>
+            <td class="target">&gt; 60 %</td>
+            <td>—</td>
+            <td><span class="badge gap"><span class="dot"></span>aucune source</span></td>
+          </tr>
+          <tr>
+            <td class="strong">Réclamations reçues et traitées</td>
+            <td class="calc">réclamations closes / reçues, délai moyen</td>
+            <td class="target">100 % sous 30 j</td>
+            <td>—</td>
+            <td><span class="badge gap"><span class="dot"></span>aucune source</span></td>
+          </tr>
+          <tr>
+            <td class="strong">Actions correctives clôturées</td>
+            <td class="calc">actions closes / ouvertes</td>
+            <td class="target">100 %</td>
+            <td>—</td>
+            <td><span class="badge gap"><span class="dot"></span>aucune source</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div></div>
+  </section>
+
+  <div class="plan">
+    <div class="plan-head">
+      <h2>Plan d'actions</h2>
+      <p>Classé par fréquence de suivi plutôt que par critère : c'est ce rythme, pas la conformité point par point, qui constitue la preuve d'amélioration continue attendue à l'audit.</p>
+    </div>
+    <div class="cadence-grid">
+      <div class="cadence-card">
+        <p class="cadence-title">Immédiat</p>
+        <p class="cadence-sub">avant le prochain audit</p>
+        <ul class="action-list">
+          <li><span class="action-check"></span><div>Lancer <code>live-qualiopi-check.js</code> sur un compte réel pour confirmer les entités Qualiopi<span class="action-tag" style="display:block">critère 4, 5</span></div></li>
+          <li><span class="action-check"></span><div>Identifier où loger les enquêtes de satisfaction et les réclamations (aucune source MCDF connue)<span class="action-tag" style="display:block">critère 7</span></div></li>
+          <li><span class="action-check"></span><div>Constituer le classeur de preuves par critère à partir des documents déjà déposés<span class="action-tag" style="display:block">tous critères</span></div></li>
+        </ul>
+      </div>
+      <div class="cadence-card">
+        <p class="cadence-title">Mensuel</p>
+        <p class="cadence-sub">pilotage courant</p>
+        <ul class="action-list">
+          <li><span class="action-check"></span><div>Relancer les devis en attente &gt; 10 jours<span class="action-tag" style="display:block">widget-ia.html — déjà outillé</span></div></li>
+          <li><span class="action-check"></span><div>Suivre le taux de remplissage des sessions du mois<span class="action-tag" style="display:block">critère 4</span></div></li>
+          <li><span class="action-check"></span><div>Recenser les réclamations reçues dans le mois<span class="action-tag" style="display:block">critère 7</span></div></li>
+        </ul>
+      </div>
+      <div class="cadence-card">
+        <p class="cadence-title">Trimestriel</p>
+        <p class="cadence-sub">revue de pilotage</p>
+        <ul class="action-list">
+          <li><span class="action-check"></span><div>Bilan de satisfaction stagiaires du trimestre<span class="action-tag" style="display:block">critère 7</span></div></li>
+          <li><span class="action-check"></span><div>Revue des compétences et heures de formation des formateurs<span class="action-tag" style="display:block">critère 5</span></div></li>
+          <li><span class="action-check"></span><div>Mise à jour du catalogue public de formation<span class="action-tag" style="display:block">critère 1</span></div></li>
+        </ul>
+      </div>
+      <div class="cadence-card">
+        <p class="cadence-title">Annuel</p>
+        <p class="cadence-sub">audit de surveillance</p>
+        <ul class="action-list">
+          <li><span class="action-check"></span><div>Export complet du tableau de bord des indicateurs de gestion<span class="action-tag" style="display:block">tous critères</span></div></li>
+          <li><span class="action-check"></span><div>Bilan des partenariats et de la veille métier<span class="action-tag" style="display:block">critère 6</span></div></li>
+          <li><span class="action-check"></span><div>Clôture des actions correctives ouvertes dans l'année<span class="action-tag" style="display:block">critère 7</span></div></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Repères indicatifs (cibles et périmètre à ajuster à l'activité réelle) —
+    à recouper avec la version du référentiel national qualité détenue par
+    votre certificateur. Les indicateurs marqués « disponible » sont déjà
+    calculés en direct par <code>widget-ia.html</code> ; ceux marqués
+    « à confirmer » dépendent du résultat de <code>widget-qualiopi.html</code>
+    et de <code>browser/live-qualiopi-check.js</code> ; ceux marqués
+    « aucune source » nécessitent de décider où ces données seront saisies
+    (nouveau module dans MCDF ou outil externe) avant de pouvoir être suivis ici.
+  </footer>
+
+</div>
