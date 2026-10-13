@@ -1,4 +1,5 @@
 import type { WalletConfig, Booking } from "@prisma/client";
+import { prisma } from "../db";
 import { assertSafeUrl } from "./ssrfGuard";
 
 // Connecteur EldoWallet (module "Wallet" du catalogue d'abonnement) — un
@@ -45,23 +46,77 @@ async function parseJsonResponse(res: Response, context: string): Promise<any> {
   }
 }
 
+export type EldoWalletAuthConfig = {
+  entityId: string;
+  hotelId: string | null;
+  apiToken: string | null;
+  apiUsername?: string | null;
+  apiPassword?: string | null;
+  lang: string;
+  apiBase?: string | null;
+};
+
+/**
+ * POST /auth/login ("Login a user and return authentication token") —
+ * body {username, password} → 201 {token} (confirmé par le client
+ * 13/10/2026 via capture Swagger, pas de champ d'expiration dans la
+ * réponse : EldoWallet ne dit jamais combien de temps un jeton reste
+ * valable, juste qu'il finit par expirer).
+ */
+async function loginEldoWallet(apiBase: string, username: string, password: string, lang: string): Promise<string> {
+  const url = `${apiBase}/auth/login`;
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json", ...(lang ? { "x-lang": lang } : {}) },
+      body: JSON.stringify({ username, password }),
+    });
+  } catch (e) {
+    throw new WalletError(`Connexion à EldoWallet impossible (login) : ${describeFetchError(e)}`);
+  }
+  const json = await parseJsonResponse(res, "La réponse de connexion EldoWallet");
+  if (!res.ok) {
+    const message = json?.message || `Erreur HTTP ${res.status}`;
+    throw new WalletError(`Échec de connexion EldoWallet : ${json?.errorCode ? `${message} (code : ${json.errorCode})` : message}`);
+  }
+  if (!json?.token) throw new WalletError('Réponse de connexion EldoWallet sans champ "token"');
+  return json.token as string;
+}
+
+/**
+ * Jeton à utiliser pour le PROCHAIN appel — celui déjà en cache (apiToken)
+ * s'il existe, sinon un login immédiat si identifiant/mot de passe sont
+ * renseignés. Ne vérifie jamais si le jeton en cache est encore valide
+ * (EldoWallet ne donne pas sa durée de vie) : c'est le 401 de l'appel réel,
+ * géré dans eldoWalletRequest ci-dessous, qui déclenche un re-login.
+ */
+async function ensureToken(config: EldoWalletAuthConfig, apiBase: string): Promise<string> {
+  if (config.apiToken) return config.apiToken;
+  if (!config.apiUsername || !config.apiPassword) throw new WalletError("Token EldoWallet non configuré");
+  const token = await loginEldoWallet(apiBase, config.apiUsername, config.apiPassword, config.lang);
+  await prisma.walletConfig.update({ where: { entityId: config.entityId }, data: { apiToken: token } });
+  return token;
+}
+
 async function eldoWalletRequest(
-  config: { hotelId: string | null; apiToken: string | null; lang: string; apiBase?: string | null },
+  config: EldoWalletAuthConfig,
   method: "GET" | "POST",
   path: string,
-  body?: Record<string, unknown>
+  body?: Record<string, unknown>,
+  _retrying = false
 ): Promise<any> {
-  if (!config.apiToken) throw new WalletError("Token EldoWallet non configuré");
   if (!config.hotelId) throw new WalletError("Identifiant hôtel EldoWallet non configuré");
   const base = config.apiBase || ELDOWALLET_API_BASE_DEFAULT;
+  const token = await ensureToken(config, base);
   const url = `${base}${path}`;
   const requestHeaders = {
-    Authorization: `Bearer ${config.apiToken}`,
+    Authorization: `Bearer ${token}`,
     // EldoWallet exige aussi ce second en-tête, distinct du Bearer
     // standard (confirmé le 07/09/2026 via leur documentation Swagger,
     // dont l'exemple "Try it out" envoie systématiquement les deux avec
     // la même valeur de token).
-    "x-access-token": config.apiToken,
+    "x-access-token": token,
     "Content-Type": "application/json",
     Accept: "application/json",
     ...(config.lang ? { "x-lang": config.lang } : {}),
@@ -88,6 +143,17 @@ async function eldoWalletRequest(
   const json = await parseJsonResponse(res, "La réponse d'EldoWallet");
   console.log("[diag eldoWallet] status=%d response=%s", res.status, JSON.stringify(json).slice(0, 800));
   if (!res.ok) {
+    // 401 + identifiant/mot de passe renseignés : le jeton en cache a
+    // probablement expiré (EldoWallet ne prévient pas à l'avance, cf.
+    // demande client 13/10/2026) — un seul re-login puis nouvel essai,
+    // plutôt que de faire échouer l'appel et obliger l'admin à venir coller
+    // un nouveau jeton à la main. _retrying évite une boucle si le login
+    // réussit mais que l'appel échoue encore pour une autre raison.
+    if (res.status === 401 && !_retrying && config.apiUsername && config.apiPassword) {
+      const freshToken = await loginEldoWallet(base, config.apiUsername, config.apiPassword, config.lang);
+      await prisma.walletConfig.update({ where: { entityId: config.entityId }, data: { apiToken: freshToken } });
+      return eldoWalletRequest({ ...config, apiToken: freshToken }, method, path, body, true);
+    }
     // Format d'erreur EldoWallet observé : { message, errorCode, path, date }.
     // errorCode ajouté au message affiché (04/09/2026) : un "Non autorisé !"
     // seul ne dit pas si c'est le token, l'identifiant hôtel, ou autre chose
@@ -152,12 +218,7 @@ export interface HotelWalletInfo {
  * deux formes sont donc lues ici, et l'appel reste loggé par le diagnostic
  * temporaire d'eldoWalletRequest en cas de forme imprévue.
  */
-export async function getHotelInfo(config: {
-  hotelId: string | null;
-  apiToken: string | null;
-  lang: string;
-  apiBase?: string | null;
-}): Promise<HotelWalletInfo> {
+export async function getHotelInfo(config: EldoWalletAuthConfig): Promise<HotelWalletInfo> {
   const json = await eldoWalletRequest(config, "GET", `/hotels/${encodeURIComponent(config.hotelId!)}`);
   const hotel = json?.hotel || json;
   const wallet = hotel?.wallet || {};

@@ -1135,7 +1135,18 @@ model WalletConfig {
 
   enabled  Boolean @default(false)
   hotelId  String?
+  // Jeton API — n'est plus saisi à la main une fois pour toutes : EldoWallet
+  // le fait expirer (confirmé par le client 13/10/2026, POST /auth/login
+  // "Login a user and return authentication token", body {username,
+  // password} → {token}, pas de champ d'expiration dans la réponse).
+  // Toujours stocké ici comme CACHE (lib/eldoWallet.ts se reconnecte tout
+  // seul et le remplace dès qu'un appel répond 401), mais reste saisissable
+  // à la main pour un compte sans identifiant/mot de passe renseignés —
+  // dans ce cas, redevient aussi fragile qu'avant (pas de rafraîchissement
+  // automatique possible sans identifiants).
   apiToken String?
+  apiUsername String?
+  apiPassword String?
   lang     String  @default("fr") // header x-lang envoyé à l'API EldoWallet
   // URL de base de l'API EldoWallet — EldoWallet fournit un environnement
   // "beta" séparé (api-v2.beta.eldowallet.fr) avec ses propres identifiants

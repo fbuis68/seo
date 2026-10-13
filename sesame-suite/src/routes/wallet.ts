@@ -8,14 +8,17 @@ import type { Booking, WalletConfig } from "@prisma/client";
 
 export const walletRouter = Router();
 
-function shapeConfig(c: { enabled: boolean; hotelId: string | null; apiToken: string | null; lang: string; apiBase: string | null }) {
+function shapeConfig(c: { enabled: boolean; hotelId: string | null; apiToken: string | null; apiUsername: string | null; apiPassword: string | null; lang: string; apiBase: string | null }) {
   return {
     enabled: c.enabled,
     hotelId: c.hotelId || "",
-    // Le token n'est jamais renvoyé en clair une fois enregistré — même
-    // principe que PaymentConfig.secretKey (cf. routes/payment.ts).
+    // Ni le token (toujours — même principe que PaymentConfig.secretKey,
+    // cf. routes/payment.ts) ni le mot de passe ne sont jamais renvoyés en
+    // clair une fois enregistrés.
     apiTokenSet: !!c.apiToken,
     apiTokenLast4: c.apiToken ? c.apiToken.slice(-4) : "",
+    apiUsername: c.apiUsername || "",
+    apiPasswordSet: !!c.apiPassword,
     lang: c.lang,
     apiBase: c.apiBase || "",
   };
@@ -65,21 +68,35 @@ interface ConfigBody {
   enabled?: boolean;
   hotelId?: string;
   apiToken?: string;
+  apiUsername?: string;
+  apiPassword?: string;
   lang?: string;
   apiBase?: string;
 }
 
-/** POST /wa/wallet/config/update — un apiToken vide conserve la valeur déjà enregistrée. */
+/**
+ * POST /wa/wallet/config/update — un apiToken/apiPassword vide conserve la
+ * valeur déjà enregistrée. Enregistrer un nouvel identifiant/mot de passe
+ * efface le jeton en cache (apiToken) plutôt que de le garder : sinon
+ * l'ancien jeton resterait utilisé tant qu'il n'a pas expiré, masquant une
+ * éventuelle erreur de saisie dans les nouveaux identifiants jusqu'au
+ * premier 401 — mieux vaut se reconnecter tout de suite avec les nouveaux
+ * identifiants pour vérifier qu'ils fonctionnent (cf. lib/eldoWallet.ts
+ * ensureToken, qui se reconnecte automatiquement si apiToken est vide).
+ */
 walletRouter.post(
   "/wallet/config/update",
   requireAdmin,
   asyncHandler(async (req, res) => {
     const entity = await resolveEntity(req);
     const b = req.body as ConfigBody;
+    const credentialsChanged = !!(b.apiUsername || b.apiPassword);
     const data = {
       enabled: b.enabled,
       hotelId: b.hotelId,
-      ...(b.apiToken ? { apiToken: b.apiToken } : {}),
+      ...(b.apiToken ? { apiToken: b.apiToken } : credentialsChanged ? { apiToken: null } : {}),
+      ...(b.apiUsername !== undefined ? { apiUsername: b.apiUsername || null } : {}),
+      ...(b.apiPassword ? { apiPassword: b.apiPassword } : {}),
       lang: b.lang || "fr",
       apiBase: b.apiBase || null,
     };
@@ -104,8 +121,8 @@ walletRouter.get(
   asyncHandler(async (req, res) => {
     const entity = await resolveEntity(req);
     const config = await prisma.walletConfig.findUnique({ where: { entityId: entity.id } });
-    if (!config || !config.hotelId || !config.apiToken) {
-      throw new HttpError(400, "Identifiant hôtel et token EldoWallet requis pour interroger le modèle");
+    if (!config || !config.hotelId || !(config.apiToken || (config.apiUsername && config.apiPassword))) {
+      throw new HttpError(400, "Identifiant hôtel et token (ou identifiant/mot de passe) EldoWallet requis pour interroger le modèle");
     }
     try {
       const info = await getHotelInfo(config);

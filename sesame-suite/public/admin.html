@@ -4205,9 +4205,20 @@ Accès au salon Premium</textarea>
         <div style="font-size:11px;color:var(--mu);margin-top:4px">Identifiant technique interne EldoWallet (pas le nom de l'hôtel) — confirmé le 07/09/2026 : format ObjectId de 24 caractères, visible dans l'URL "Try it out" de leur documentation Swagger pour l'hôtel concerné.</div>
       </div>
       <div class="fi">
-        <label class="lb">Token API EldoWallet</label>
+        <label class="lb">Token API EldoWallet (optionnel si identifiant/mot de passe renseignés)</label>
         <input type="password" id="wal-apiToken" placeholder="Jeton fourni par EldoWallet" autocomplete="off">
         <div style="font-size:11px;color:var(--mu);margin-top:4px" id="wal-apiToken-hint">Fourni par EldoWallet pour votre compte.</div>
+      </div>
+    </div>
+    <div class="g2">
+      <div class="fi">
+        <label class="lb">Identifiant EldoWallet</label>
+        <input type="text" id="wal-apiUsername" placeholder="username" autocomplete="off">
+      </div>
+      <div class="fi">
+        <label class="lb">Mot de passe EldoWallet</label>
+        <input type="password" id="wal-apiPassword" placeholder="mot de passe" autocomplete="off">
+        <div style="font-size:11px;color:var(--mu);margin-top:4px" id="wal-apiPassword-hint">Le jeton EldoWallet expire sans préavis — avec identifiant+mot de passe renseignés, un nouveau jeton est demandé automatiquement dès que l'ancien ne fonctionne plus (pas besoin de revenir en coller un nouveau à la main).</div>
       </div>
     </div>
     <div class="g2">
@@ -8393,10 +8404,12 @@ function walRenderStatusBanner(){
   var el = document.getElementById('wal-status-banner');
   if(!WAL_CONFIG){ el.style.display='none'; return; }
   el.style.display='block';
-  if(WAL_CONFIG.enabled && WAL_CONFIG.apiTokenSet && WAL_CONFIG.hotelId){
-    el.innerHTML = '<div class="alt alt-g"><i class="ti ti-check-circle"></i><span>Wallet actif — le bouton "Générer le pass Wallet" est disponible sur les fiches réservation.</span></div>';
+  var hasAuth = WAL_CONFIG.apiTokenSet || (WAL_CONFIG.apiUsername && WAL_CONFIG.apiPasswordSet);
+  if(WAL_CONFIG.enabled && hasAuth && WAL_CONFIG.hotelId){
+    var autoNote = (WAL_CONFIG.apiUsername && WAL_CONFIG.apiPasswordSet) ? ' Jeton renouvelé automatiquement à expiration.' : '';
+    el.innerHTML = '<div class="alt alt-g"><i class="ti ti-check-circle"></i><span>Wallet actif — le bouton "Générer le pass Wallet" est disponible sur les fiches réservation.'+autoNote+'</span></div>';
   } else if(WAL_CONFIG.enabled){
-    el.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Activé mais identifiant hôtel et/ou token manquant — la génération de pass échouera.</span></div>';
+    el.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Activé mais identifiant hôtel et/ou token (ou identifiant/mot de passe) manquant — la génération de pass échouera.</span></div>';
   } else {
     el.innerHTML = '<div class="alt alt-b"><i class="ti ti-info-circle"></i><span>Wallet désactivé.</span></div>';
   }
@@ -8413,6 +8426,9 @@ async function walInit(){
   document.getElementById('wal-lang').value = WAL_CONFIG.lang || 'fr';
   document.getElementById('wal-apiToken').value = '';
   document.getElementById('wal-apiToken').placeholder = WAL_CONFIG.apiTokenSet ? ('Déjà enregistré (…'+esc(WAL_CONFIG.apiTokenLast4)+') — laisser vide pour ne pas le changer') : 'Jeton fourni par EldoWallet';
+  document.getElementById('wal-apiUsername').value = WAL_CONFIG.apiUsername || '';
+  document.getElementById('wal-apiPassword').value = '';
+  document.getElementById('wal-apiPassword').placeholder = WAL_CONFIG.apiPasswordSet ? 'Déjà enregistré — laisser vide pour ne pas le changer' : 'mot de passe';
   var apiBase = WAL_CONFIG.apiBase || '';
   var envSel = document.getElementById('wal-env');
   var isKnown = !apiBase || apiBase==='https://api-v2.beta.eldowallet.fr';
@@ -8430,15 +8446,20 @@ async function walSave(){
     hotelId: document.getElementById('wal-hotelId').value.trim(),
     lang: document.getElementById('wal-lang').value,
     apiBase: apiBase,
+    apiUsername: document.getElementById('wal-apiUsername').value.trim(),
   };
   var apiToken = document.getElementById('wal-apiToken').value.trim();
   if(apiToken) body.apiToken = apiToken;
+  var apiPassword = document.getElementById('wal-apiPassword').value.trim();
+  if(apiPassword) body.apiPassword = apiPassword;
   try{
     var r = await adminFetch('/wa/wallet/config/update', {method:'POST', body:JSON.stringify(body)});
     if(!r.ok){ toast('Erreur lors de l\'enregistrement'); return; }
     WAL_CONFIG = await r.json();
     document.getElementById('wal-apiToken').value = '';
     document.getElementById('wal-apiToken').placeholder = WAL_CONFIG.apiTokenSet ? ('Déjà enregistré (…'+esc(WAL_CONFIG.apiTokenLast4)+') — laisser vide pour ne pas le changer') : 'Jeton fourni par EldoWallet';
+    document.getElementById('wal-apiPassword').value = '';
+    document.getElementById('wal-apiPassword').placeholder = WAL_CONFIG.apiPasswordSet ? 'Déjà enregistré — laisser vide pour ne pas le changer' : 'mot de passe';
     walRenderStatusBanner();
     toast('Configuration Wallet enregistrée ✓');
   }catch(e){ toast('Erreur de connexion au serveur'); }
