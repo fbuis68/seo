@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { download, patch, post } from '../api';
 import { can, has, useApp } from '../context';
 import { useAction, useFetch } from '../hooks';
+import { Help } from '../help';
 
 export default function Settings() {
   const { org, reload } = useApp();
@@ -36,7 +37,7 @@ export default function Settings() {
 
       {members.data && (
         <div className="panel" style={{ marginTop: 16 }}>
-          <strong>Équipe</strong>
+          <strong>Équipe</strong> <Help k="reglages.equipe" />
           <table><tbody>{members.data.map((m) => <tr key={m.id}><td>{m.full_name}</td><td>{m.email}</td><td>{m.role}</td></tr>)}</tbody></table>
           <form className="inline" onSubmit={(e) => { e.preventDefault(); act.run(() => post('/api/v1/invitations', inv), () => { setInv({ ...inv, email: '' }); alert('Invitation envoyée'); }); }}>
             <label>Email<input type="email" required value={inv.email} onChange={(e) => setInv({ ...inv, email: e.target.value })} /></label>
@@ -48,7 +49,7 @@ export default function Settings() {
 
       {ai.data && (
         <div className="panel" style={{ marginTop: 16 }}>
-          <strong>Assistant IA — fournisseurs</strong>
+          <strong>Assistant IA — fournisseurs</strong> <Help k="reglages.ia" />
           <ul className="small">{providers.data?.map((p) => <li key={p.id}>{p.name} — <span className={`pill ${p.status === 'available' ? 'ok' : 'warn'}`}>{p.status === 'available' ? 'disponible' : p.status === 'unavailable' ? 'indisponible' : 'bientôt'}</span> {p.note}</li>)}</ul>
           <table><tbody>{ai.data.map((c) => <tr key={c.id}><td>{c.provider} / {c.model}</td><td>clé {c.key_hint}</td><td>{c.scope === 'tenant' ? 'organisme' : 'personnelle'}</td><td><span className={`pill ${c.status === 'active' ? 'ok' : 'err'}`}>{c.status}</span></td>
             <td><button className="btn ghost sm" onClick={() => act.run(() => post(`/api/v1/ai/connections/${c.id}/revoke`), () => ai.reload())}>Déconnecter</button></td></tr>)}</tbody></table>
@@ -66,7 +67,7 @@ export default function Settings() {
 
       {smtp.data && (
         <div className="panel" style={{ marginTop: 16 }}>
-          <strong>Envoi depuis votre messagerie (SMTP)</strong> {!has(org, 'smtp.custom') && <span className="pill warn">offres payantes</span>}
+          <strong>Envoi depuis votre messagerie (SMTP)</strong> <Help k="reglages.smtp" /> {!has(org, 'smtp.custom') && <span className="pill warn">offres payantes</span>}
           <table><tbody>{smtp.data.map((c) => <tr key={c.id}><td>{c.from_email}</td><td>{c.host}:{c.port}</td><td><span className={`pill ${c.status === 'ok' ? 'ok' : c.status === 'error' ? 'err' : ''}`}>{c.status}</span> {c.last_error}</td>
             <td><button className="btn ghost sm" onClick={() => act.run(() => post(`/api/v1/mail/connections/${c.id}/test`), () => smtp.reload())}>Tester</button></td></tr>)}</tbody></table>
           {has(org, 'smtp.custom') && (
@@ -84,7 +85,7 @@ export default function Settings() {
 
       {bank.data && (
         <div className="panel" style={{ marginTop: 16 }}>
-          <strong>Banque connectée (lecture seule)</strong> {!has(org, 'bank') && <span className="pill warn">option payante</span>}
+          <strong>Banque connectée (lecture seule)</strong> <Help k="reglages.banque" /> {!has(org, 'bank') && <span className="pill warn">option payante</span>}
           <table><tbody>{bank.data.map((c) => <tr key={c.id}><td>{c.institution}</td><td>{c.status}</td><td>dernière synchro {c.last_sync_at ? new Date(c.last_sync_at).toLocaleString('fr-FR') : '—'}</td>
             <td>{(c.accounts ?? []).map((a: any) => `${a.name} ${a.iban_masked ?? ''} : ${a.balance ?? '—'} ${a.currency}`).join(' · ')}</td></tr>)}</tbody></table>
           {has(org, 'bank') && can(org, 'bank.connect') && <button className="btn sm" onClick={() => act.run(() => post('/api/v1/bank/connections'), (r: any) => { location.href = r.url; })}>Connecter une banque</button>}
@@ -93,7 +94,7 @@ export default function Settings() {
 
       {exportsList.data && (
         <div className="panel" style={{ marginTop: 16 }}>
-          <strong>Réversibilité — export complet</strong>
+          <strong>Réversibilité — export complet</strong> <Help k="reglages.export" />
           <p className="small muted">Données, documents, preuves de signature et manifeste (empreintes SHA-256). Inclus dans toutes les offres.</p>
           <button className="btn sm" onClick={() => act.run(() => post('/api/v1/exports'), () => setTimeout(exportsList.reload, 2500))}>Lancer un export</button>
           <ul className="small">{exportsList.data.exports.map((x: any) => <li key={x.id}><a href="#" onClick={(e) => { e.preventDefault(); download(`/api/v1/documents/${x.id}/download`, x.filename); }}>{x.filename}</a> — {(x.size_bytes / 1024).toFixed(0)} Ko</li>)}

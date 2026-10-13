@@ -5,6 +5,7 @@ import { BarChart, LineChart, PieChart } from '../components/Charts';
 import { can, has, useApp } from '../context';
 import { useFetch } from '../hooks';
 import { SESSION_STATUS } from './Sessions';
+import { Help } from '../help';
 
 export default function Dashboard() {
   const { org } = useApp();
@@ -22,7 +23,7 @@ export default function Dashboard() {
   const c = dash.data?.cards;
   return (
     <>
-      <h1>Bonjour</h1>
+      <h1>Bonjour <Help k="accueil" /></h1>
       {c && (
         <div className="cards">
           <div className="panel card"><div className="label">Sessions à venir</div><div className="value">{c.upcomingSessions}</div></div>

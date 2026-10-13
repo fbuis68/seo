@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { date, download, eur, post } from '../api';
 import { can, useApp } from '../context';
 import { useAction, useFetch } from '../hooks';
+import { Help } from '../help';
 
 export default function Invoices() {
   const { org } = useApp();
@@ -14,7 +15,7 @@ export default function Invoices() {
   const pdf = (i: any) => act.run(() => post('/api/v1/documents/generate', { template: 'invoice', invoiceId: i.id }), (d: any) => download(`/api/v1/documents/${d.id}/download`, d.filename));
   return (
     <>
-      <h1>Facturation</h1>
+      <h1>Facturation <Help k="facturation" /></h1>
       {can(org, 'finance.write') && (
         <form className="panel inline" onSubmit={(e) => { e.preventDefault(); act.run(() => post('/api/v1/invoices', {
           clientId: f.clientId, kind: f.kind, creditedInvoiceId: f.kind === 'credit_note' ? f.credited : undefined,

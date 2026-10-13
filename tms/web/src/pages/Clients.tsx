@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { get, post } from '../api';
 import { can, useApp } from '../context';
 import { useAction, useFetch } from '../hooks';
+import { Help } from '../help';
 
 export default function Clients() {
   const { org } = useApp();
@@ -16,7 +17,7 @@ export default function Clients() {
   const searchSirene = () => act.run(() => get(`/api/v1/opendata/search?source=sirene&q=${encodeURIComponent(c.name)}`), (r: any) => setSirene(r.results));
   return (
     <>
-      <h1>Clients & apprenants</h1>
+      <h1>Clients & apprenants <Help k="clients" /></h1>
       <div className="grid2">
         {can(org, 'crm.write') && (
           <form className="panel stack" onSubmit={(e) => { e.preventDefault(); act.run(() => post('/api/v1/clients', { kind: 'company', name: c.name, siret: c.siret || null, status: c.status, billingEmail: c.billingEmail || null }), () => { setC({ name: '', siret: '', status: 'prospect', billingEmail: '' }); setSirene([]); clients.reload(); }); }}>

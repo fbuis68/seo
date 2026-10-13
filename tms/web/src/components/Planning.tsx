@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api, fmtDT, fmtT, post, zonedIso } from '../api';
+import { Help } from '../help';
 
 const KIND_LABEL: Record<string, string> = { site: 'Lieu', room: 'Salle', equipment: 'Matériel' };
 const h = (m: number) => `${Math.floor(m / 60)} h${m % 60 ? String(m % 60).padStart(2, '0') : ''}`;
@@ -54,7 +55,7 @@ export default function Planning({ session: d, canWrite, trainers, resources, on
 
   return (
     <div className="panel" style={{ marginBottom: 16 }}>
-      <strong>Déroulé et planning</strong>
+      <strong>Déroulé et planning</strong> <Help k="session.deroule" />
       <p className="small muted" style={{ margin: '4px 0 10px' }}>
         Durée cible : {h(target)} · Réparti en parties : {h(planned)} · Planifié (hors pauses et annulations) : <span style={{ color: scheduled !== target ? 'var(--warn)' : 'var(--ok)' }}>{h(scheduled)}</span>
         {' '}· <a href={`/planning`} onClick={() => { try { const k = 'tms.planning.prefs'; const p = JSON.parse(localStorage.getItem(k) || '{}'); localStorage.setItem(k, JSON.stringify({ ...p, filters: { ...(p.filters ?? {}), sessionId: d.id }, view: 'list' })); } catch { /* */ } }}>Ouvrir dans le planning</a>
@@ -102,7 +103,7 @@ export default function Planning({ session: d, canWrite, trainers, resources, on
       )}
 
       {/* Créneaux */}
-      <h2 style={{ fontSize: '1rem' }}>Créneaux</h2>
+      <h2 style={{ fontSize: '1rem' }}>Créneaux <Help k="session.creneaux" /></h2>
       <table>
         <thead><tr><th>Date</th><th className="num">Durée</th><th>Partie</th><th>Formateur(s)</th><th>Lieu / salle</th><th>Matériel</th><th>Statut</th><th /></tr></thead>
         <tbody>

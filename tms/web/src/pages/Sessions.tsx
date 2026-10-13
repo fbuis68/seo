@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { date, post } from '../api';
 import { can, useApp } from '../context';
 import { useAction, useFetch } from '../hooks';
+import { Help } from '../help';
 
 export const SESSION_STATUS: Record<string, string> = { draft: 'Brouillon', planned: 'Planifiée', confirmed: 'Confirmée', in_progress: 'En cours', completed: 'Terminée', archived: 'Archivée', cancelled: 'Annulée' };
 
@@ -27,7 +28,7 @@ export default function Sessions() {
 
   return (
     <>
-      <h1>Sessions</h1>
+      <h1>Sessions <Help k="sessions" /></h1>
       {can(org, 'sessions.write') && (
         <div className="grid2">
           <form className="panel stack" onSubmit={createProgram}>

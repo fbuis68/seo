@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard';
 import Imports from './pages/Imports';
 import Invoices from './pages/Invoices';
 import Resources from './pages/Resources';
+import HelpPage from './pages/HelpPage';
 import PlanningPage from './pages/PlanningPage';
 import { MyPlanning } from './planning/tabs';
 import Login, { VerifyEmail } from './pages/Login';
@@ -59,7 +60,7 @@ function Shell() {
     ['/', 'Accueil', true], ['/planning', 'Planning', can(org, 'sessions.read') && org.role !== 'trainer'], ['/my-planning', 'Mon planning', ['trainer', 'learner'].includes(org.role)],
     ['/sessions', 'Sessions', can(org, 'sessions.read')], ['/resources', 'Lieux & matériel', can(org, 'sessions.read') && org.role !== 'trainer'], ['/clients', 'Clients & apprenants', can(org, 'crm.read')],
     ['/invoices', 'Facturation', can(org, 'finance.read')], ['/assistant', 'Assistant IA', can(org, 'ai.use')],
-    ['/imports', 'Reprise de données', can(org, 'imports.manage')], ['/billing', 'Mon abonnement', can(org, 'billing.manage')], ['/settings', 'Réglages', true],
+    ['/imports', 'Reprise de données', can(org, 'imports.manage')], ['/billing', 'Mon abonnement', can(org, 'billing.manage')], ['/settings', 'Réglages', true], ['/aide', 'Aide', true],
   ];
   return (
     <AppCtx.Provider value={{ me, org, reload: load, switchTenant }}>
@@ -94,6 +95,7 @@ function Shell() {
             <Route path="/imports" element={<Imports />} />
             <Route path="/billing" element={<Billing />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/aide" element={<HelpPage />} />
             <Route path="/bank/callback" element={<BankCallback />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>

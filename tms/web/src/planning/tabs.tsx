@@ -3,6 +3,7 @@ import { api, download, post } from '../api';
 import { useAction, useFetch } from '../hooks';
 import { HistoryList, HmInput, Issues } from './SlotPanel';
 import { STATUS, at, fmtH, parts } from './lib';
+import { Help } from '../help';
 
 const fmtDT = (d: string, tz: string) => new Date(d).toLocaleString('fr-FR', { timeZone: tz, dateStyle: 'short', timeStyle: 'short' });
 const RULES: Record<string, string> = {
@@ -109,7 +110,7 @@ export function AvailabilityTab({ lookups, tz, perms }: { lookups: any; tz: stri
         <label>Formateur ou ressource<select value={`${owner.type}:${owner.id}`} onChange={(e) => { const [type, id] = e.target.value.split(':'); setOwner({ type: type as any, id }); setImpacted(null); }}>
           <optgroup label="Formateurs">{lookups.trainers.map((t: any) => <option key={t.id} value={`person:${t.id}`}>{t.name}</option>)}</optgroup>
           <optgroup label="Salles, matériel, lieux">{lookups.resources.map((r: any) => <option key={r.id} value={`resource:${r.id}`}>{r.name}</option>)}</optgroup></select></label>
-        <h2>Périodes de {ownerName ?? '—'}</h2>
+        <h2>Périodes de {ownerName ?? '—'} <Help k="planning.disponibilites" /></h2>
         <table><tbody>{(list.data ?? []).map((a) => (
           <tr key={a.id}><td><span className={`pill ${a.kind === 'unavailable' ? 'err' : 'ok'}`}>{a.kind === 'unavailable' ? 'Indisponible' : 'Disponible (exception)'}</span></td>
             <td className="small">{fmtDT(a.starts_at, tz)} → {fmtDT(a.ends_at, tz)}</td><td className="small">{a.reason}</td>
@@ -142,7 +143,7 @@ export function AvailabilityTab({ lookups, tz, perms }: { lookups: any; tz: stri
       </div>
       {owner.type === 'person' && pf && (
         <div className="panel">
-          <h2 style={{ marginTop: 0 }}>Profil formateur</h2>
+          <h2 style={{ marginTop: 0 }}>Profil formateur <Help k="planning.profil" /></h2>
           <form className="pl-form" onSubmit={(e) => { e.preventDefault(); act.run(() => api('PUT', `/api/v1/planning/trainers/${owner.id}/profile`, {
             status: pf.status, active: pf.active, travelMinutes: Number(pf.travel_minutes) || 0, maxWeeklyMinutes: pf.maxWeeklyHours ? Math.round(Number(pf.maxWeeklyHours.replace(',', '.')) * 60) : null,
             allowedSiteIds: pf.allowed_site_ids, workingHours: pf.working_hours && Object.values(pf.working_hours).some((x: any) => x?.length) ? pf.working_hours : null,
@@ -209,7 +210,7 @@ export function IndicatorsTab({ from, to, label }: { from: string; to: string; l
         <div className="panel card"><div className="label">Séances incomplètes</div><div className="value">{x.incomplete}</div></div>
       </div>
       <div className="grid2" style={{ marginTop: 16 }}>
-        <div className="panel"><strong>Charge formateur</strong>
+        <div className="panel"><strong>Charge formateur</strong> <Help k="planning.indicateurs" />
           <table><thead><tr><th>Formateur</th><th className="num">Prévu</th><th className="num">Réalisé</th><th className="num">Disponible</th><th className="num">Charge</th></tr></thead>
             <tbody>{x.trainers.map((t: any) => <tr key={t.id}><td>{t.name}</td><td className="num">{fmtH(t.planned_minutes)}</td><td className="num">{fmtH(t.done_minutes)}</td><td className="num">{t.available_minutes == null ? '—' : fmtH(t.available_minutes)}</td>
               <td className="num"><span className={t.load > 100 ? 'pill err' : ''}>{pct(t.load)}</span></td></tr>)}</tbody></table></div>
@@ -239,7 +240,7 @@ export function ImportExportTab({ query, label, perms, onChange }: { query: stri
   return (
     <div className="grid2">
       <div className="panel">
-        <strong>Exporter ({label}, filtres appliqués)</strong>
+        <strong>Exporter ({label}, filtres appliqués)</strong> <Help k="planning.export" />
         <div className="toolbar" style={{ marginTop: 8 }}>
           <button className="btn ghost sm" onClick={() => download(`/api/v1/planning/export.csv?${query}`, 'planning.csv')}>CSV (Excel)</button>
           <label className="row small">PDF par<select value={groupBy} onChange={(e) => setGroupBy(e.target.value)}><option value="session">session</option><option value="trainer">formateur</option><option value="room">salle</option><option value="group">groupe</option></select></label>
@@ -249,7 +250,7 @@ export function ImportExportTab({ query, label, perms, onChange }: { query: stri
         <p className="small muted">Colonnes : début, fin, durée, durée pédagogique, session, lieu, salles, matériel, formateurs, modalité, statut. Seuls les champs autorisés sont exportés.</p>
       </div>
       {perms.write && <div className="panel">
-        <strong>Importer des séances (CSV ou Excel)</strong>
+        <strong>Importer des séances (CSV ou Excel)</strong> <Help k="planning.import" />
         <p className="small muted">Colonnes reconnues : Session (référence), Date, Début, Fin, Formateurs (email ou « Prénom Nom », séparés par |), Salles, Intitulé, Modalité, Lien. Mêmes contrôles que l’écran ; doublons ignorés.</p>
         <input type="file" accept=".csv,.txt,.xlsx" aria-label="Fichier à importer" onChange={(e) => e.target.files?.[0] && pick(e.target.files[0])} />
         <label className="row small"><input type="checkbox" checked={partial} onChange={(e) => setPartial(e.target.checked)} />Mode partiel : enregistrer les lignes valides et rejeter les autres (sinon tout ou rien)</label>
@@ -318,7 +319,7 @@ export function MyPlanning({ tz }: { tz: string }) {
   const d = useFetch<any>(`/api/v1/planning/me?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, [from, to]);
   return (
     <>
-      <h1>Mon planning</h1>
+      <h1>Mon planning <Help k="planning.mon-planning" /></h1>
       <div className="toolbar">
         <button className="btn ghost sm" onClick={() => setWeek(addDaysLocal(week, -28))}>‹ 4 semaines</button>
         <button className="btn ghost sm" onClick={() => setWeek(parts(new Date(), tz).date)}>Aujourd’hui</button>
@@ -337,7 +338,7 @@ export function MyPlanning({ tz }: { tz: string }) {
               {s.trainers.length ? ` · ${s.trainers.map((t: any) => t.name).join(', ')}` : ''}{d.data.role === 'trainer' ? ` · ${s.expected_onsite + s.expected_remote} participant(s)` : ''}</div>
             {s.video_url && s.status !== 'cancelled' && (s.modality !== 'onsite') && <a href={s.video_url} target="_blank" rel="noreferrer">Rejoindre la visioconférence</a>}
           </div>))}</div>
-        {d.data.changes.length > 0 && <><h2>Derniers changements</h2><ul className="small">{d.data.changes.map((c: any) => <li key={c.id}>{new Date(c.created_at).toLocaleDateString('fr-FR')} · {c.summary}</li>)}</ul></>}
+        {d.data.changes.length > 0 && <><h2>Derniers changements <Help k="planning.notifications" /></h2><ul className="small">{d.data.changes.map((c: any) => <li key={c.id}>{new Date(c.created_at).toLocaleDateString('fr-FR')} · {c.summary}</li>)}</ul></>}
       </>}
       {d.data?.role === 'trainer' && <TrainerAvailability tz={tz} personId={d.data.personId} />}
     </>
@@ -352,7 +353,7 @@ function TrainerAvailability({ tz, personId }: { tz: string; personId: string })
   const [f, setF] = useState({ startDate: '', endDate: '', reason: '' });
   return (
     <>
-      <h2>Mes indisponibilités</h2>
+      <h2>Mes indisponibilités <Help k="planning.disponibilites" /></h2>
       <table><tbody>{(list.data ?? []).map((a) => <tr key={a.id}><td className="small">{fmtDT(a.starts_at, tz)} → {fmtDT(a.ends_at, tz)}</td><td className="small">{a.reason}</td>
         <td><span className={`pill ${a.status === 'approved' ? 'ok' : a.status === 'pending' ? 'warn' : 'err'}`}>{({ approved: 'validée', pending: 'en attente', rejected: 'refusée' } as any)[a.status]}</span></td></tr>)}</tbody></table>
       <form className="inline" onSubmit={(e) => { e.preventDefault(); act.run(async () => {

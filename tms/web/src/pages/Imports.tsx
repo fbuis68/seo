@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api, download, post } from '../api';
 import { useAction, useFetch } from '../hooks';
+import { Help } from '../help';
 
 const ENTITY: Record<string, string> = { client: 'Clients', person: 'Personnes', program: 'Programmes', session: 'Sessions', enrollment: 'Inscriptions', attendance: 'Présences', invoice: 'Factures', payment: 'Règlements', document: 'Pièces' };
 
@@ -32,7 +33,7 @@ export default function Imports() {
 
   return (
     <>
-      <h1>Reprise de vos données</h1>
+      <h1>Reprise de vos données <Help k="reprise" /></h1>
       <p className="muted">Reprise exclusivement à partir des fichiers de sauvegarde ou d’exports que vous déposez : aucun identifiant ni accès à votre ancien logiciel n’est demandé.</p>
       <div className="grid2">
         <div className="panel stack">

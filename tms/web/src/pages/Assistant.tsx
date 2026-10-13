@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { post } from '../api';
 import { useAction, useFetch } from '../hooks';
+import { Help } from '../help';
 
 export default function Assistant() {
   const conns = useFetch<any[]>('/api/v1/ai/connections');
@@ -25,11 +26,11 @@ export default function Assistant() {
   const confirmProposal = (p: any) => act.run(() => post(`/api/v1/ai/proposals/${p.id}/confirm`, { payloadHash: p.payload_hash }), (r: any) => setMessages((m) => [...m, { role: 'assistant', content: `Action exécutée : ${JSON.stringify(r.result)}` }]));
 
   if (conns.data && !active.length) return (
-    <><h1>Assistant IA</h1><div className="panel"><p>Connectez votre propre accès OpenAI ou Gemini pour utiliser l’assistant. Les frais du fournisseur sont facturés directement sur votre compte.</p><Link className="btn" to="/settings">Connecter un fournisseur</Link></div></>
+    <><h1>Assistant IA <Help k="assistant" /></h1><div className="panel"><p>Connectez votre propre accès OpenAI ou Gemini pour utiliser l’assistant. Les frais du fournisseur sont facturés directement sur votre compte.</p><Link className="btn" to="/settings">Connecter un fournisseur</Link></div></>
   );
   return (
     <>
-      <h1>Assistant IA</h1>
+      <h1>Assistant IA <Help k="assistant" /></h1>
       <p className="small muted">Modèle : {active[0]?.provider} / {active[0]?.model}. Les chiffres proviennent du moteur de métriques ; toute création ou envoi vous est soumis pour confirmation.</p>
       <div className="panel">
         <div className="chat" aria-live="polite">

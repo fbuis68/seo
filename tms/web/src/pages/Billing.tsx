@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { eur, date, get, post } from '../api';
 import { useApp } from '../context';
 import { useAction, useFetch } from '../hooks';
+import { Help } from '../help';
 
 const QUOTA_LABELS: Record<string, string> = {
   billedClients: 'Clients facturés', crmProspects: 'Prospects', learnersPerYear: 'Apprenants (année civile)', activeSessions: 'Sessions actives',
@@ -48,7 +49,7 @@ export default function Billing() {
 
   return (
     <>
-      <h1>Mon abonnement</h1>
+      <h1>Mon abonnement <Help k="abonnement" /></h1>
       {params.get('checkout') === 'success' && <div className="banner">Paiement transmis. L’offre s’active dès la confirmation par notre prestataire (quelques secondes).</div>}
       <div className="grid2">
         <div className="panel">

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, get, post } from '../api';
 import { MODALITY, STATUS, addDays, at, fmtH, parts } from './lib';
+import { Help } from '../help';
 
 export interface Draft { startsAt: string; endsAt: string; key?: { by: string; id: string }; sessionId?: string }
 interface Props {
@@ -46,6 +47,7 @@ export function DerogationBox({ onSubmit }: { onSubmit: (reason: string) => void
   const [reason, setReason] = useState('');
   return (
     <div className="pl-derog">
+      <span className="small">Dérogation <Help k="planning.derogation" /></span>
       <label>Motif de dérogation (tracé dans l’historique)<input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="ex. accord du responsable de site" /></label>
       <button type="button" className="btn sm danger" disabled={reason.trim().length < 5} onClick={() => onSubmit(reason.trim())}>Enregistrer avec dérogation</button>
     </div>
@@ -168,7 +170,7 @@ export default function SlotPanel({ slotId, draft, lookups, tz, perms, onClose, 
   return (
     <aside className="pl-panel" ref={panelRef} tabIndex={-1} aria-label={slot ? 'Fiche séance' : 'Nouvelle séance'}>
       <div className="pl-panel-h">
-        <strong>{slot ? 'Séance' : 'Nouvelle séance'}</strong>
+        <strong>{slot ? 'Séance' : 'Nouvelle séance'} <Help k="planning.fiche" /></strong>
         {slot && <span className={`pill st-${slot.status}`}>{STATUS[slot.status].mark} {STATUS[slot.status].label} · v{slot.version}</span>}
         <button className="btn ghost sm" onClick={onClose} aria-label="Fermer le panneau">Fermer</button>
       </div>
@@ -190,7 +192,7 @@ export default function SlotPanel({ slotId, draft, lookups, tz, perms, onClose, 
           </div>
           <p className="small muted" style={{ margin: 0 }}>Durée {fmtH(Math.max(0, duration))}{breakMin ? ` · pauses ${fmtH(breakMin)} · pédagogique ${fmtH(Math.max(0, duration - breakMin))}` : ''}{endDate !== f.date ? ' · se termine le lendemain' : ''} · fuseau {sTz}</p>
           <div>
-            <span className="small" style={{ fontWeight: 600 }}>Pauses non pédagogiques</span>
+            <span className="small" style={{ fontWeight: 600 }}>Pauses non pédagogiques</span> <Help k="planning.pauses" />
             {f.breaks.map((b: any, i: number) => (
               <div key={i} className="pl-row">
                 <HmInput label="Début de pause" value={b.start} onChange={(v) => set({ breaks: f.breaks.map((x: any, j: number) => j === i ? { ...x, start: v } : x) })} />
@@ -201,7 +203,7 @@ export default function SlotPanel({ slotId, draft, lookups, tz, perms, onClose, 
             <button type="button" className="btn ghost sm" onClick={() => set({ breaks: [...f.breaks, { start: f.start < '12:00' && f.end > '13:00' ? '12:00' : f.start, end: f.start < '12:00' && f.end > '13:00' ? '13:00' : f.start }] })}>+ Pause</button>
           </div>
           <div className="pl-row">
-            <label>Modalité<select value={f.modality} onChange={(e) => set({ modality: e.target.value })}>{Object.entries(MODALITY).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
+            <Help k="planning.modalite" /><label>Modalité<select value={f.modality} onChange={(e) => set({ modality: e.target.value })}>{Object.entries(MODALITY).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
             {f.modality !== 'onsite' && <label style={{ flex: 1 }}>Lien de visioconférence<input type="url" value={f.videoUrl} onChange={(e) => set({ videoUrl: e.target.value })} placeholder="https://…" /></label>}
             {session?.groups?.length > 0 && <label>Groupe<select value={f.groupLabel} onChange={(e) => set({ groupLabel: e.target.value })}><option value="">Tous</option>{session.groups.map((g: string) => <option key={g}>{g}</option>)}</select></label>}
           </div>
@@ -223,7 +225,7 @@ export default function SlotPanel({ slotId, draft, lookups, tz, perms, onClose, 
             </fieldset>
           ))}
           {slot && slot.participants?.length > 0 && (
-            <details className="pl-fs"><summary>Participants : {slot.expected_onsite} présent(s), {slot.expected_remote} à distance{slot.to_resolve ? `, ${slot.to_resolve} à résoudre` : ''}</summary>
+            <details className="pl-fs"><summary><Help k="planning.participants" /> Participants : {slot.expected_onsite} présent(s), {slot.expected_remote} à distance{slot.to_resolve ? `, ${slot.to_resolve} à résoudre` : ''}</summary>
               <table><tbody>{slot.participants.map((p: any) => (
                 <tr key={p.enrollment_id}><td>{p.name}{p.group_label ? <span className="small muted"> · {p.group_label}</span> : null}{!p.dates_ok && <span className="pill warn">hors dates</span>}{p.mode === 'to_resolve' && <div className="small" style={{ color: 'var(--warn)' }}>{p.reason}</div>}</td>
                   <td><select aria-label={`Participation de ${p.name}`} value={f.participants[p.enrollment_id] ?? 'default'} onChange={(e) => set({ participants: { ...f.participants, [p.enrollment_id]: e.target.value } })}>
@@ -234,7 +236,7 @@ export default function SlotPanel({ slotId, draft, lookups, tz, perms, onClose, 
           <label>Notes internes<textarea rows={2} value={f.notes} onChange={(e) => set({ notes: e.target.value })} /></label>
 
           {!slot && (
-            <fieldset className="pl-fs"><legend><label className="row"><input type="checkbox" checked={repeat.on} onChange={(e) => setRepeat({ ...repeat, on: e.target.checked, preview: undefined })} />Répéter (heure locale conservée)</label></legend>
+            <fieldset className="pl-fs"><legend><label className="row"><input type="checkbox" checked={repeat.on} onChange={(e) => setRepeat({ ...repeat, on: e.target.checked, preview: undefined })} />Répéter (heure locale conservée)</label> <Help k="planning.recurrence" /></legend>
               {repeat.on && <>
                 <div className="pl-row" role="group" aria-label="Jours">{WEEKDAYS.map((d, i) => <label key={i} className="row"><input type="checkbox" checked={repeat.days.includes(i + 1)} onChange={(e) => setRepeat({ ...repeat, preview: undefined, days: e.target.checked ? [...repeat.days, i + 1] : repeat.days.filter((x) => x !== i + 1) })} />{d}</label>)}</div>
                 <div className="pl-row"><label>Jusqu’au<input type="date" value={repeat.until} onChange={(e) => setRepeat({ ...repeat, until: e.target.value, preview: undefined })} /></label>
@@ -248,7 +250,7 @@ export default function SlotPanel({ slotId, draft, lookups, tz, perms, onClose, 
             </fieldset>
           )}
           {slot?.series_id && (
-            <div className="pl-row" role="radiogroup" aria-label="Portée de la modification">
+            <div className="pl-row" role="radiogroup" aria-label="Portée de la modification"><Help k="planning.recurrence" label="portée dans une série" />
               {[['this', 'Cette séance'], ['following', 'Celle-ci et les suivantes'], ['all', 'Toute la série']].map(([v, l]) => <label key={v} className="row"><input type="radio" name="scope" checked={f.scope === v} onChange={() => set({ scope: v })} />{l}</label>)}
             </div>
           )}
@@ -257,6 +259,7 @@ export default function SlotPanel({ slotId, draft, lookups, tz, perms, onClose, 
         <div className="pl-check" aria-live="polite">{check?.error ? <p className="alert small">{check.error}</p> : check && <Issues report={[check]} />}</div>
         {sub.state.error && <p className="alert">{sub.state.error}{sub.state.versionConflict && <> <button type="button" className="btn ghost sm" onClick={reload}>Recharger</button></>}</p>}
         {sub.state.error && <Issues report={sub.state.report} />}
+        {sub.state.error && <Help k="planning.controles" label="contrôles" />}
         {sub.state.derogable && <DerogationBox onSubmit={(r) => save(r)} />}
         {!readOnly && <div className="toolbar"><button className="btn" disabled={sub.state.busy || !body}>{slot ? 'Enregistrer' : repeat.on ? 'Créer la série' : 'Créer en brouillon'}</button>
           {!slot && <span className="small muted">Le brouillon réserve les ressources sans apparaître dans les portails.</span>}</div>}
@@ -264,11 +267,12 @@ export default function SlotPanel({ slotId, draft, lookups, tz, perms, onClose, 
 
       {slot && perms.write && (
         <div className="pl-actions">
+          <Help k="planning.statuts" label="statuts et actions" />
           {slot.status === 'draft' && <button className="btn ghost sm" onClick={() => action('submit', () => post('/api/v1/planning/transition', { slotIds: [slot.id], status: 'pending' }))}>Demander la validation</button>}
           {slot.status === 'pending' && <button className="btn ghost sm" onClick={() => action('back', () => post('/api/v1/planning/transition', { slotIds: [slot.id], status: 'draft' }))}>Renvoyer en brouillon</button>}
           {['draft', 'pending'].includes(slot.status) && (perms.publish || perms.directPublish) && <button className="btn sm" onClick={() => action('publish', () => post('/api/v1/planning/transition', { slotIds: [slot.id], status: 'published' }))}>Publier</button>}
           {slot.status === 'published' && new Date(slot.ends_at) < new Date() && <button className="btn ghost sm" onClick={() => action('done', () => post('/api/v1/planning/transition', { slotIds: [slot.id], status: 'done' }))}>Marquer réalisée</button>}
-          {slot.status !== 'cancelled' && <details><summary>Dupliquer</summary>
+          {slot.status !== 'cancelled' && <details><summary>Dupliquer <Help k="planning.duplication" /></summary>
             <div className="pl-row"><input aria-label="Dates de duplication" value={dupDates} onChange={(e) => setDupDates(e.target.value)} placeholder="JJ/MM/AAAA, …" />
               <button className="btn ghost sm" onClick={() => action('dup', () => post(`/api/v1/planning/slots/${slot.id}/duplicate`, { dates: dupDates.split(/[\s,;]+/).filter(Boolean).map(frDate) }))}>Dupliquer</button></div>
             <p className="small muted">Copie pédagogique et affectations ; ni émargement ni historique.</p></details>}

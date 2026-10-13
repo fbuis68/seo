@@ -5,6 +5,7 @@ import { can, has, useApp } from '../context';
 import { useAction, useFetch } from '../hooks';
 import Planning from '../components/Planning';
 import { SESSION_STATUS } from './Sessions';
+import { Help } from '../help';
 
 const NEXT: Record<string, string[]> = { draft: ['planned'], planned: ['confirmed', 'draft'], confirmed: ['in_progress', 'planned'], in_progress: ['completed'], completed: ['archived'] };
 
@@ -29,7 +30,7 @@ export default function SessionDetail() {
 
   return (
     <>
-      <h1>{d.title} <span className="pill">{SESSION_STATUS[d.status]}</span></h1>
+      <h1>{d.title} <span className="pill">{SESSION_STATUS[d.status]}</span> <Help k="session.fiche" /></h1>
       <p className="muted">{d.program_title} v{d.program_version} · {date(d.starts_on)} → {date(d.ends_on)} · {d.kind === 'intra' ? 'Intra' : 'Inter'}{d.capacity ? ` · ${d.capacity} places` : ''}</p>
       {d.missing?.length > 0 && <div className="banner warn"><strong>À compléter :</strong> {d.missing.join(' · ')}</div>}
       {can(org, 'sessions.write') && (
@@ -47,7 +48,7 @@ export default function SessionDetail() {
 
       <div className="grid2">
         <div className="panel">
-          <strong>Documents</strong>
+          <strong>Documents</strong> <Help k="session.documents" />
           <table><tbody>{docs.data?.map((doc) => <tr key={doc.id}><td>{doc.filename}</td><td>{date(doc.created_at)}</td><td>
             <button className="btn ghost sm" onClick={() => download(`/api/v1/documents/${doc.id}/download`, doc.filename)}>Télécharger</button>{' '}
             {can(org, 'signatures.send') && doc.mime === 'application/pdf' && <button className="btn ghost sm" disabled={!has(org, 'signatures')} title={has(org, 'signatures') ? '' : 'Offres payantes'} onClick={() => setSign({ docId: doc.id, name: '', email: '' })}>Faire signer</button>}
@@ -63,7 +64,7 @@ export default function SessionDetail() {
         </div>
       </div>
 
-      <h2>Inscrits et présences</h2>
+      <h2>Inscrits et présences <Help k="session.inscrits" /></h2>
       <div className="panel">
         <table><thead><tr><th>Apprenant</th><th>Statut</th>{d.slots.map((sl: any) => <th key={sl.id}>{fmtDayT(sl.starts_at, d.timezone)}</th>)}<th /></tr></thead>
           <tbody>{d.enrollments.map((e: any) => (
@@ -106,7 +107,7 @@ function PlanningSettings({ d, resources, onSaved, onError }: { d: any; resource
   const list = (v: string) => v.split(',').map((x) => x.trim()).filter(Boolean);
   return (
     <details className="panel" style={{ marginBottom: 16 }}>
-      <summary>Paramètres de planning{d.reference ? ` · ${d.reference}` : ''}</summary>
+      <summary>Paramètres de planning{d.reference ? ` · ${d.reference}` : ''} <Help k="session.parametres" /></summary>
       <form className="inline" style={{ marginTop: 10 }} onSubmit={(e) => { e.preventDefault(); onError(null); api('PATCH', `/api/v1/sessions/${d.id}`, {
         version: d.version, reference: f.reference || null, minParticipants: f.minParticipants === '' ? null : Number(f.minParticipants), capacity: f.capacity === '' ? undefined : Number(f.capacity),
         siteId: f.siteId || null, responsible: f.responsible || null, targetMinutes: f.targetHours ? Math.round(Number(String(f.targetHours).replace(',', '.')) * 60) : null,

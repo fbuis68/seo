@@ -3,6 +3,7 @@ import { api, date, post } from '../api';
 import { can, useApp } from '../context';
 import { useAction, useFetch } from '../hooks';
 import { WeeklyEditor } from '../planning/tabs';
+import { Help } from '../help';
 
 const KINDS: [string, string, string][] = [
   ['site', 'Lieux de formation', 'Site, centre, adresse d’intervention (partageable entre sessions simultanées).'],
@@ -31,7 +32,7 @@ export default function Resources() {
 
   return (
     <>
-      <h1>Lieux & matériel</h1>
+      <h1>Lieux & matériel <Help k="ressources" /></h1>
       {write && (
         <form className="panel" onSubmit={submit} style={{ display: 'grid', gap: 10 }}>
           <strong>Ajouter</strong>
@@ -55,7 +56,7 @@ export default function Resources() {
             {f.kind !== 'site' && <><label>Préparation (min)<input size={4} value={f.setup} onChange={(e) => setF({ ...f, setup: e.target.value.replace(/\D/g, '') })} /></label>
               <label>Remise en état (min)<input size={4} value={f.teardown} onChange={(e) => setF({ ...f, teardown: e.target.value.replace(/\D/g, '') })} /></label></>}
           </div>
-          <details><summary>Horaires d’ouverture (sinon sans contrainte)</summary><WeeklyEditor value={f.hours} onChange={(v) => setF({ ...f, hours: v })} /></details>
+          <details><summary>Horaires d’ouverture (sinon sans contrainte) <Help k="ressources.planning" /></summary><WeeklyEditor value={f.hours} onChange={(v) => setF({ ...f, hours: v })} /></details>
           <label>Notes<input value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} /></label>
           <div><button className="btn">Ajouter</button></div>
         </form>
@@ -65,7 +66,7 @@ export default function Resources() {
         const rows = list.data?.filter((r) => r.kind === kind) ?? [];
         return (
           <div key={kind}>
-            <h2>{title}</h2>
+            <h2>{title} {kind === 'equipment' && <Help k="ressources.vgp" />}</h2>
             <p className="small muted" style={{ marginTop: -6 }}>{help}</p>
             <div className="panel">
               {!rows.length && <p className="muted small">Aucun.</p>}

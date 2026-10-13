@@ -6,6 +6,7 @@ import { ColorBy, GROUP_LABEL, GroupBy, MODALITY, STATUS, View, Zoom, addDays, a
 import SlotPanel, { DerogationBox, Draft, Issues } from '../planning/SlotPanel';
 import { AvailabilityTab, ClosuresTab, ConflictsTab, ImportExportTab, IndicatorsTab, JournalTab, PublishTab, SettingsTab } from '../planning/tabs';
 import { ListView, MonthView, TimeGrid, Timeline, describe } from '../planning/views';
+import { Help } from '../help';
 
 const KEY = 'tms.planning.prefs';
 interface Filters { q: string; siteId: string; programId: string; sessionId: string; groupLabel: string; modality: string; status: string; trainerId: string; resourceId: string; learnerId: string; incomplete: boolean }
@@ -19,6 +20,8 @@ function useNarrow() {
   return n;
 }
 
+const TAB_HELP: Record<string, string> = { planning: 'planning', conflicts: 'planning.conflits', publish: 'planning.publication', availability: 'planning.disponibilites',
+  closures: 'planning.fermetures', indicators: 'planning.indicateurs', import: 'planning.import', journal: 'planning.journal', settings: 'planning.parametres' };
 const TABS: [string, string, string?][] = [['planning', 'Planning'], ['conflicts', 'Conflits', 'sessions.write'], ['publish', 'Publication', 'sessions.write'], ['availability', 'Disponibilités'],
   ['closures', 'Fermetures'], ['indicators', 'Indicateurs'], ['import', 'Import / export'], ['journal', 'Journal'], ['settings', 'Paramètres', 'org.manage']];
 
@@ -80,7 +83,7 @@ export default function PlanningPage() {
 
   return (
     <div className={`pl-wide${panel ? ' pl-with-panel' : ''}`}>
-      <h1>Planning</h1>
+      <h1>Planning <Help k={TAB_HELP[tab]} /></h1>
       <nav className="pl-tabs" aria-label="Sections du planning">
         {TABS.filter(([, , perm]) => !perm || can(org, perm)).map(([k, l]) => <button key={k} className={tab === k ? 'active' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => setTab(k)}>{l}</button>)}
       </nav>
@@ -91,6 +94,7 @@ export default function PlanningPage() {
           <button className="btn ghost sm" aria-label="Période suivante" onClick={() => set({ date: step(view, prefs.zoom, prefs.date, 1) })}>›</button>
           <input type="date" aria-label="Date" value={prefs.date} onChange={(e) => e.target.value && set({ date: e.target.value })} />
           <strong className="pl-anchor">{anchorLabel}</strong>
+          <Help k="planning.vues" />
           <div className="pl-seg" role="group" aria-label="Vue">
             {(['day', 'week', 'month', 'timeline', 'list'] as View[]).map((v) => <button key={v} className={prefs.view === v ? 'active' : ''} aria-pressed={prefs.view === v} onClick={() => set({ view: v })}>{({ day: 'Jour', week: 'Semaine', month: 'Mois', timeline: 'Timeline', list: 'Liste' })[v]}</button>)}
           </div>
@@ -101,7 +105,7 @@ export default function PlanningPage() {
           {perms.write && <button className="btn sm" onClick={() => setPanel({ draft: { startsAt: at(prefs.date, '09:00', tz), endsAt: at(prefs.date, '12:00', tz), sessionId: prefs.filters.sessionId || undefined } })}>Nouvelle séance</button>}
         </div>
         <details className="pl-filters" open={activeFilters > 0}>
-          <summary>Filtres et affichage{activeFilters ? ` (${activeFilters} actif${activeFilters > 1 ? 's' : ''})` : ''}</summary>
+          <summary>Filtres et affichage{activeFilters ? ` (${activeFilters} actif${activeFilters > 1 ? 's' : ''})` : ''} <Help k="planning.filtres" /></summary>
           <div className="pl-toolbar">
             <input type="search" aria-label="Rechercher" placeholder="Intitulé, référence, formateur, salle, stagiaire…" value={prefs.filters.q} onChange={(e) => setFilter({ q: e.target.value })} style={{ minWidth: 260 }} />
             <Sel label="Site" value={prefs.filters.siteId} onChange={(v) => setFilter({ siteId: v })} options={lk.resources.filter((x: any) => x.kind === 'site').map((x: any) => [x.id, x.name])} />
@@ -126,11 +130,12 @@ export default function PlanningPage() {
           </div>
         </details>
         <div className="legend pl-legend" aria-label="Légende">
+          <Help k="planning.legende" label="légende" />
           {legendOf(items, prefs.colorBy).slice(0, 14).map(([l, c]) => <span key={l}><i style={{ background: c }} />{l}</span>)}
           <span className="muted">{Object.values(STATUS).map((s) => `${s.mark} ${s.label}`).join('  ')} · ⚠ incomplète · hachures = pause / indisponibilité</span>
         </div>
         <p className="small muted" aria-live="polite">{loading ? 'Chargement…' : `${items.length} séance(s) · ${fmtH(total)} pédagogiques`}{data?.truncated ? ' · affichage tronqué : affiner les filtres' : ''}
-          {narrow && prefs.view !== view ? ' · vue liste sur mobile' : ''}{perms.write && view !== 'list' ? ' · double-clic sur un créneau libre pour créer ; glisser pour déplacer, bord bas pour redimensionner' : ''}</p>
+          {narrow && prefs.view !== view ? ' · vue liste sur mobile' : ''}{perms.write && view !== 'list' ? ' · double-clic sur un créneau libre pour créer ; glisser pour déplacer, bord bas pour redimensionner' : ''}{perms.write && view !== 'list' && <Help k="planning.glisser" />}</p>
         {loadErr && <p className="alert">{loadErr}</p>}
         {view === 'list' && selected.length > 0 && <BulkBar ids={selected} lookups={lk} perms={perms} onDone={() => { setSelected([]); load(); }} />}
         <div className="pl-view">
@@ -196,7 +201,7 @@ function ChangeDialog({ p, tz, derogate, onClose }: { p: { s: any; change: any }
   return (
     <div className="pl-modal" role="dialog" aria-modal="true" aria-labelledby="pl-change-title" onKeyDown={(e) => e.key === 'Escape' && onClose(false)}>
       <div className="panel">
-        <h2 id="pl-change-title" style={{ marginTop: 0 }}>Confirmer la modification</h2>
+        <h2 id="pl-change-title" style={{ marginTop: 0 }}>Confirmer la modification <Help k="planning.controles" /></h2>
         <p className="small">Avant : {describe(p.s, tz)}</p>
         <p className="small"><strong>Après : {describe(after, tz)}</strong>{p.change.swap ? ` · ${GROUP_LABEL[p.change.swap.by as GroupBy].toLowerCase()} remplacé(e)` : ''}</p>
         {p.s.status === 'published' && <p className="small banner warn">Séance publiée : les personnes concernées seront notifiées après confirmation.</p>}
@@ -244,7 +249,7 @@ function BulkBar({ ids, lookups, perms, onDone }: { ids: string[]; lookups: any;
   };
   return (
     <div className="panel pl-bulk" aria-label="Édition groupée">
-      <strong>{ids.length} séance(s) sélectionnée(s)</strong>
+      <strong>{ids.length} séance(s) sélectionnée(s)</strong> <Help k="planning.groupee" />
       <div className="pl-toolbar">
         <select aria-label="Opération" value={op.kind} onChange={(e) => { setOp({ ...op, kind: e.target.value, value: e.target.value === 'modality' ? 'onsite' : '1' }); setPreview(null); }}>
           <option value="shiftDays">Décaler de N jours</option><option value="shiftMinutes">Décaler de N minutes</option><option value="trainer">Formateur</option><option value="room">Salle / matériel</option>
