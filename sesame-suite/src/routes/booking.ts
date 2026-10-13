@@ -82,13 +82,13 @@ bookingRouter.post(
       },
     });
 
-    hotelContactInfo(entity.id).then((hotel) =>
+    hotelContactInfo(entity.id).then(async (hotel) =>
       fireTrigger("checkin.completed", {
         entityId: entity.id,
         targetType: "booking",
         targetId: updated.id,
         recipient: { email: updated.personEmail, phone: updated.personPhone },
-        variables: bookingTemplateVars(updated, hotel),
+        variables: await bookingTemplateVars(updated, hotel),
       })
     ).catch((e) => console.error("[automation] checkin.completed:", e));
 
@@ -610,7 +610,7 @@ bookingRouter.get(
     const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code } } });
     if (!booking) throw new HttpError(404, "Réservation introuvable");
 
-    const url = buildAutologinUrl(booking, entity.code);
+    const url = await buildAutologinUrl(booking, entity.code);
     if (!url) throw new HttpError(500, "Impossible de générer le lien");
     const qrImage = await QRCode.toDataURL(url, { margin: 1, width: 320 });
     res.json({ url, qrImage });
@@ -634,7 +634,7 @@ bookingRouter.get(
     const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code } } });
     if (!booking) throw new HttpError(404, "Réservation introuvable");
 
-    const url = buildAutologinCheckinUrl(booking, entity.code);
+    const url = await buildAutologinCheckinUrl(booking, entity.code);
     if (!url) throw new HttpError(500, "Impossible de générer le lien");
     const qrImage = await QRCode.toDataURL(url, { margin: 1, width: 320 });
     res.json({ url, qrImage });

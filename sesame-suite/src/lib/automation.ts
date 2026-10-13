@@ -311,7 +311,7 @@ async function sweepDateRule(rule: {
         rule.questionnaireId,
         "booking",
         b.id,
-        bookingTemplateVars(b, hotel)
+        await bookingTemplateVars(b, hotel)
       );
       await sendMessage({
         entityId: rule.entityId,

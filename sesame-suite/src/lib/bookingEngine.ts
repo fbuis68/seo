@@ -260,13 +260,13 @@ async function createBookingDirect(entity: Entity, draft: BookingDraft, opts: { 
     },
   });
 
-  hotelContactInfo(entity.id).then((hotel) =>
+  hotelContactInfo(entity.id).then(async (hotel) =>
     fireTrigger("booking.created", {
       entityId: entity.id,
       targetType: "booking",
       targetId: booking.id,
       recipient: { email: booking.personEmail, phone: booking.personPhone },
-      variables: bookingTemplateVars(booking, hotel),
+      variables: await bookingTemplateVars(booking, hotel),
     })
   ).catch((e) => console.error("[automation] booking.created:", e));
 

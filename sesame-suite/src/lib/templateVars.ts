@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { randomBytes } from "crypto";
 import { prisma } from "../db";
 import { config } from "../config";
 
@@ -62,19 +63,28 @@ interface BookingLike {
 }
 
 /**
- * Jeton d'autologin de l'espace client (checkin.html "Mon espace client") —
- * même mécanisme et même secret que POST /api/auth/guest-login (cf.
- * routes/auth.ts), mais porté par un lien plutôt que saisi à la main
- * (email/nom + code de réservation). Vérifié par POST /api/auth/autologin.
- * Expire 2 jours après le départ plutôt qu'une durée fixe courte : un lien
- * envoyé par email doit rester utilisable pendant tout le séjour, pas
- * seulement dans les heures suivant l'envoi (cf. discussion du 15/09/2026).
+ * Code d'autologin de l'espace client (checkin.html "Mon espace client") —
+ * court code aléatoire stocké en base (AutologinCode) plutôt qu'un JWT
+ * auto-porteur embarqué dans l'URL : même lien final mais ~8 caractères au
+ * lieu de ~250 (13/10/2026, demande client — URL "extrêmement longue").
+ * Vérifié par POST /api/auth/autologin, qui échange le code contre un vrai
+ * token de session (jamais exposé dans une URL).
+ *
+ * Expire au moins 2 jours à partir de MAINTENANT (pas seulement 2 jours
+ * après le départ) : l'ancien plancher était 1h, ce qui rendait le lien
+ * quasiment inutilisable dès qu'il était généré pour une réservation déjà
+ * terminée (résa de démo, test, renvoi d'un lien pour un client déjà
+ * parti) — le lien semblait "ne plus marcher" dès qu'on le testait plus
+ * d'une heure après l'avoir généré.
  */
-function autologinToken(b: { id: string; entityId: string; personEmail?: string | null; endDate: Date }): string {
-  const expiresInSeconds = Math.max(3600, Math.round((b.endDate.getTime() + 2 * 86400000 - Date.now()) / 1000));
-  return jwt.sign({ entityId: b.entityId, bookingId: b.id, email: b.personEmail || undefined }, config.jwtSecret, {
-    expiresIn: expiresInSeconds,
+async function autologinToken(b: { id: string; personEmail?: string | null; endDate: Date }): Promise<string> {
+  const floorMs = 2 * 86400000;
+  const expiresInMs = Math.max(floorMs, b.endDate.getTime() + 2 * 86400000 - Date.now());
+  const code = randomBytes(6).toString("base64url");
+  await prisma.autologinCode.create({
+    data: { code, bookingId: b.id, email: b.personEmail || null, expiresAt: new Date(Date.now() + expiresInMs) },
   });
+  return code;
 }
 
 /**
@@ -83,9 +93,10 @@ function autologinToken(b: { id: string; entityId: string; personEmail?: string 
  * imprimer/afficher — cf. routes/booking.ts), qui a besoin du lien seul
  * sans construire tout l'objet de variables d'email.
  */
-export function buildAutologinUrl(b: { id: string; entityId: string; personEmail?: string | null; endDate: Date }, entityCode: string): string {
+export async function buildAutologinUrl(b: { id: string; personEmail?: string | null; endDate: Date }, entityCode: string): Promise<string> {
   if (!entityCode) return "";
-  return `${config.guestBaseUrl}/checkin.html?entityCode=${encodeURIComponent(entityCode)}&autologinToken=${autologinToken(b)}`;
+  const code = await autologinToken(b);
+  return `${config.guestBaseUrl}/checkin.html?entityCode=${encodeURIComponent(entityCode)}&autologinToken=${code}`;
 }
 
 /**
@@ -95,15 +106,21 @@ export function buildAutologinUrl(b: { id: string; entityId: string; personEmail
  * check-in n'est pas terminé, cf. renderEspace/S.checkinDone dans
  * checkin.html) — utile pour une invitation à check-in avant l'arrivée,
  * quand "Mon espace" n'a justement pas encore de sens pour ce client.
+ * ?dest=checkin est lu directement depuis l'URL côté client (checkin.html
+ * AUTOLOGIN_DEST), pas depuis le code lui-même.
  */
-export function buildAutologinCheckinUrl(b: { id: string; entityId: string; personEmail?: string | null; endDate: Date }, entityCode: string): string {
-  const url = buildAutologinUrl(b, entityCode);
+export async function buildAutologinCheckinUrl(b: { id: string; personEmail?: string | null; endDate: Date }, entityCode: string): Promise<string> {
+  const url = await buildAutologinUrl(b, entityCode);
   return url ? `${url}&dest=checkin` : "";
 }
 
 /** prenom/nom/code déjà utilisés partout — hotel/adresseHotel/telephoneHotel/chambre/dateArrivee/dateDepart/nuits/lienAutologin/lienAutologinCheckin sont les nouvelles variables. */
-export function bookingTemplateVars(b: BookingLike, hotel: HotelInfo): Record<string, string> {
+export async function bookingTemplateVars(b: BookingLike, hotel: HotelInfo): Promise<Record<string, string>> {
   const nights = Math.max(1, Math.round((b.endDate.getTime() - b.startDate.getTime()) / 86400000));
+  const [lienAutologin, lienAutologinCheckin] = await Promise.all([
+    buildAutologinUrl(b, hotel.entityCode),
+    buildAutologinCheckinUrl(b, hotel.entityCode),
+  ]);
   return {
     prenom: b.personFirstname,
     nom: b.personLastname,
@@ -117,8 +134,8 @@ export function bookingTemplateVars(b: BookingLike, hotel: HotelInfo): Record<st
     dateArrivee: formatDateFr(b.startDate),
     dateDepart: formatDateFr(b.endDate),
     nuits: String(nights),
-    lienAutologin: buildAutologinUrl(b, hotel.entityCode),
-    lienAutologinCheckin: buildAutologinCheckinUrl(b, hotel.entityCode),
+    lienAutologin,
+    lienAutologinCheckin,
   };
 }
 

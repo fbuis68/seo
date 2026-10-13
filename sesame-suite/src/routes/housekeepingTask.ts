@@ -249,13 +249,13 @@ housekeepingTaskRouter.post(
     if (updated.status === "done" && task.status !== "done" && updated.bookingCode) {
       const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code: updated.bookingCode } } });
       if (booking) {
-        hotelContactInfo(entity.id).then((hotel) =>
+        hotelContactInfo(entity.id).then(async (hotel) =>
           fireTrigger("housekeeping.completed", {
             entityId: entity.id,
             targetType: "housekeepingTask",
             targetId: updated.id,
             recipient: { email: booking.personEmail, phone: booking.personPhone },
-            variables: bookingTemplateVars(booking, hotel),
+            variables: await bookingTemplateVars(booking, hotel),
           })
         ).catch((e) => console.error("[automation] housekeeping.completed:", e));
       }

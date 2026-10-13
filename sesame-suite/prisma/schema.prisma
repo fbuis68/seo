@@ -449,6 +449,7 @@ model Booking {
   orders      Order[]
   passes      Pass[]
   guestSharingProfile GuestSharingProfile?
+  autologinCodes AutologinCode[]
 
   @@unique([entityId, code])
   @@index([personEmail])
@@ -456,6 +457,28 @@ model Booking {
   // lib/bookingEngine.ts) — filtre par roomId à chaque appel, sans index
   // jusqu'ici (table scan). Ajouté suite au test de charge du 16/09/2026.
   @@index([roomId])
+}
+
+// Lien d'autologin espace client ({{lienAutologin}}/{{lienAutologinCheckin}},
+// cf. lib/templateVars.ts) — remplace l'ancien JWT auto-porteur embarqué
+// dans l'URL (illisible, ~250 caractères) par un code court aléatoire
+// (randomBytes(6) en base64url, 8 caractères) qu'on résout ici plutôt que
+// de le décoder (13/10/2026, demande client : URL "extrêmement longue").
+// Vérifié par POST /api/auth/autologin (routes/auth.ts), qui échange le
+// code contre un vrai token de session JWT (jamais exposé dans une URL,
+// donc sa longueur ne compte pas). Pas à usage unique — un même lien peut
+// être rouvert plusieurs fois (téléphone puis ordinateur...) tant qu'il
+// n'a pas expiré, même comportement que l'ancien JWT.
+model AutologinCode {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  bookingId String
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  email     String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
 }
 
 // Traçabilité des ouvertures d'accès (panneau "Gestion des Accès", § demande
