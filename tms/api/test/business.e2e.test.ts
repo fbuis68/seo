@@ -241,3 +241,32 @@ describe('Isolation multi-organismes (REC-02)', () => {
     expect(list.body.find((c: any) => c.id === client.id)).toBeUndefined();
   });
 });
+
+describe('Identité visuelle', () => {
+  it('logo et couleurs enregistrés ; logo public ; logo et couleur repris sur les documents PDF', async () => {
+    const fs = await import('fs');
+    const u = await signupAndLogin();
+    const png = fs.readFileSync(`${__dirname}/fixtures/logo.png`).toString('base64');
+    const jpeg = fs.readFileSync(`${__dirname}/fixtures/logo.jpg`).toString('base64');
+    // Contenu non image (ex. SVG / script) refusé.
+    expect((await http().put('/api/v1/organization/logo').set(u.auth).send({ png: Buffer.from('<svg onload=alert(1)>').toString('base64'), jpeg })).status).toBe(400);
+    const b = (await http().put('/api/v1/organization/logo').set(u.auth).send({ png, jpeg }).expect(200)).body;
+    expect([b.logoWidth, b.logoHeight]).toEqual([240, 80]);
+    const colors = (await http().put('/api/v1/organization/branding').set(u.auth).send({ accentColor: '#C2185B', docColor: '#1B4F9C', theme: 'dark' }).expect(200)).body;
+    expect([colors.accentColor, colors.theme]).toEqual(['#C2185B', 'dark']);
+    expect((await http().put('/api/v1/organization/branding').set(u.auth).send({ accentColor: 'red' })).status).toBe(400);
+    const pub = await http().get(b.logoUrl).expect(200);
+    expect(pub.headers['content-type']).toBe('image/png');
+    // Document généré : image JPEG intégrée et titres dans la couleur choisie.
+    const prog = (await u.api.post('/api/v1/programs', { title: 'Logo test', durationMinutes: 60, modality: 'onsite' }).expect(201)).body;
+    const s = (await u.api.post('/api/v1/sessions', { programVersionId: prog.versions[0].id, kind: 'inter', startsOn: '2027-01-10' }).expect(201)).body;
+    const doc = (await u.api.post('/api/v1/documents/generate', { template: 'attendance_sheet', sessionId: s.id }).expect(201)).body;
+    const pdf = await u.api.get(`/api/v1/documents/${doc.id}/download`).buffer(true).parse((res: any, cb: any) => { const c: Buffer[] = []; res.on('data', (x: Buffer) => c.push(x)); res.on('end', () => cb(null, Buffer.concat(c))); });
+    const text = pdf.body.toString('latin1');
+    expect(text).toContain('/Subtype /Image /Width 240 /Height 80');
+    expect(text).toContain('/Im1 Do');
+    expect(text).toContain('0.106 0.310 0.612 rg');
+    await http().delete('/api/v1/organization/logo').set(u.auth).expect(200);
+    expect((await http().get(b.logoUrl)).status).toBe(404);
+  });
+});

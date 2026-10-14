@@ -39,21 +39,29 @@ function wrap(text: string, maxWidth: number, size: number, bold?: boolean): str
   return lines;
 }
 
-export function renderPdf(blocks: Block[], meta: { title: string; footer?: string }): Buffer {
+import type { PdfLogo } from './branding';
+
+export function renderPdf(blocks: Block[], meta: { title: string; footer?: string; logo?: PdfLogo; color?: [number, number, number] }): Buffer {
   const W = 595, H = 842, M = 50;
+  // Logo en haut à droite de chaque page (hauteur max. 34 pt, largeur max. 150 pt) ; contenu décalé d'autant.
+  const logo = meta.logo;
+  const scale = logo ? Math.min(34 / logo.height, 150 / logo.width) : 0;
+  const lw = logo ? logo.width * scale : 0; const lh = logo ? logo.height * scale : 0;
+  const top = H - M - (logo ? 18 : 0);
+  const rgb = meta.color ? `${meta.color.map((c) => c.toFixed(3)).join(' ')} rg` : '';
   const pages: string[] = [];
   let ops: string[] = [];
-  let y = H - M;
-  const newPage = () => { pages.push(ops.join('\n')); ops = []; y = H - M; };
+  let y = top;
+  const newPage = () => { pages.push(ops.join('\n')); ops = []; y = top; };
   const ensure = (h: number) => { if (y - h < M + 30) newPage(); };
-  const text = (x: number, size: number, s: string, bold = false) => ops.push(`BT /${bold ? 'F2' : 'F1'} ${size} Tf ${x.toFixed(1)} ${y.toFixed(1)} Td (${encode(s)}) Tj ET`);
+  const text = (x: number, size: number, s: string, bold = false, color = false) => ops.push(`${color && rgb ? `${rgb} ` : ''}BT /${bold ? 'F2' : 'F1'} ${size} Tf ${x.toFixed(1)} ${y.toFixed(1)} Td (${encode(s)}) Tj ET${color && rgb ? ' 0 g' : ''}`);
 
   for (const b of blocks) {
     if (b.type === 'title' || b.type === 'heading' || b.type === 'text') {
       const size = b.type === 'title' ? 16 : b.type === 'heading' ? 12 : b.size ?? 10;
       const bold = b.type !== 'text' || !!b.bold;
       if (b.type !== 'text') y -= 6;
-      for (const line of wrap(b.text, W - 2 * M, size, bold)) { ensure(size + 4); text(M, size, line, bold); y -= size + 4; }
+      for (const line of wrap(b.text, W - 2 * M, size, bold)) { ensure(size + 4); text(M, size, line, bold, b.type !== 'text'); y -= size + 4; }
       if (b.type === 'title') y -= 6;
     } else if (b.type === 'spacer') {
       y -= b.height ?? 10;
@@ -65,16 +73,16 @@ export function renderPdf(blocks: Block[], meta: { title: string; footer?: strin
         const h = Math.max(...wrapped.map((w) => w.length)) * 12 + 4;
         ensure(h);
         let x = M;
-        const top = y;
+        const rowTop = y;
         wrapped.forEach((lines, i) => {
           lines.forEach((l, j) => {
             const col = b.columns[i];
             const tx = col.align === 'right' ? x + widths[i] - 3 - l.length * charWidth(9, bold) : x + 3;
-            ops.push(`BT /${bold ? 'F2' : 'F1'} 9 Tf ${tx.toFixed(1)} ${(top - 10 - j * 12).toFixed(1)} Td (${encode(l)}) Tj ET`);
+            ops.push(`BT /${bold ? 'F2' : 'F1'} 9 Tf ${tx.toFixed(1)} ${(rowTop - 10 - j * 12).toFixed(1)} Td (${encode(l)}) Tj ET`);
           });
           x += widths[i];
         });
-        ops.push(`0.6 w ${M} ${(top - h + 2).toFixed(1)} m ${W - M} ${(top - h + 2).toFixed(1)} l S`);
+        ops.push(`${bold && meta.color ? `${meta.color.map((c) => c.toFixed(3)).join(' ')} RG ` : ''}0.6 w ${M} ${(rowTop - h + 2).toFixed(1)} m ${W - M} ${(rowTop - h + 2).toFixed(1)} l S${bold && meta.color ? ' 0 G' : ''}`);
         y -= h;
       };
       drawRow(b.columns.map((c) => c.label), true);
@@ -93,17 +101,22 @@ export function renderPdf(blocks: Block[], meta: { title: string; footer?: strin
   pages.push(ops.join('\n'));
 
   // Pied de page numéroté.
-  const contents = pages.map((p, i) => `${p}\nBT /F1 8 Tf ${M} 25 Td (${encode(`${meta.footer ?? meta.title} — page ${i + 1}/${pages.length}`)}) Tj ET`);
+  const logoOps = logo ? `q ${lw.toFixed(2)} 0 0 ${lh.toFixed(2)} ${(W - M - lw).toFixed(2)} ${(H - 22 - lh).toFixed(2)} cm /Im1 Do Q\n` : '';
+  const contents = pages.map((p, i) => `${logoOps}${p}\nBT /F1 8 Tf ${M} 25 Td (${encode(`${meta.footer ?? meta.title} — page ${i + 1}/${pages.length}`)}) Tj ET`);
   const objs: string[] = [];
   objs.push('<< /Type /Catalog /Pages 2 0 R >>');
   const pageIds = contents.map((_, i) => 5 + i * 2);
   objs.push(`<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${contents.length} >>`);
   objs.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
   objs.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+  const imgId = 5 + contents.length * 2;
   contents.forEach((c, i) => {
-    objs.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${pageIds[i] + 1} 0 R >>`);
+    objs.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >>${logo ? ` /XObject << /Im1 ${imgId} 0 R >>` : ''} >> /Contents ${pageIds[i] + 1} 0 R >>`);
     objs.push(`<< /Length ${Buffer.byteLength(c, 'latin1')} >>\nstream\n${c}\nendstream`);
   });
+  if (logo) {
+    objs.push(`<< /Type /XObject /Subtype /Image /Width ${logo.width} /Height ${logo.height} /ColorSpace /${logo.components === 1 ? 'DeviceGray' : 'DeviceRGB'} /BitsPerComponent 8 /Filter /DCTDecode /Length ${logo.data.length} >>\nstream\n${logo.data.toString('latin1')}\nendstream`);
+  }
   objs.push(`<< /Title (${encode(meta.title)}) /Producer (TMS) >>`);
   let out = '%PDF-1.4\n%\xe2\xe3\xcf\xd3\n';
   const offsets: number[] = [];

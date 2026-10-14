@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { get, post, session } from './api';
 import { AppCtx, Me, Org, can } from './context';
+import { Branding, applyBranding } from './branding';
 import Assistant from './pages/Assistant';
 import Billing from './pages/Billing';
 import Clients from './pages/Clients';
@@ -29,6 +30,8 @@ function Shell() {
   const [me, setMe] = useState<Me | null>(null);
   const [org, setOrg] = useState<Org | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [branding, setBrandingState] = useState<Branding | null>(null);
+  const setBranding = useCallback((b: Branding) => { setBrandingState(b); applyBranding(b); }, []);
 
   const load = useCallback(async () => {
     try {
@@ -38,9 +41,10 @@ function Shell() {
       if (!s.tenantId || !m.memberships.some((x) => x.tenant_id === s.tenantId)) session.set({ ...s, tenantId: m.memberships[0]?.tenant_id });
       if (!m.emailVerified) { setErr('unverified'); return; }
       setOrg(await get<Org>('/api/v1/organization'));
+      get<Branding>('/api/v1/organization/branding').then(setBranding, () => applyBranding(null));
       setErr(null);
     } catch (e: any) { setErr(e.message); }
-  }, []);
+  }, [setBranding]);
   useEffect(() => { load(); }, [load]);
 
   if (err === 'unverified') return (
@@ -63,10 +67,10 @@ function Shell() {
     ['/imports', 'Reprise de données', can(org, 'imports.manage')], ['/billing', 'Mon abonnement', can(org, 'billing.manage')], ['/settings', 'Réglages', true], ['/aide', 'Aide', true],
   ];
   return (
-    <AppCtx.Provider value={{ me, org, reload: load, switchTenant }}>
+    <AppCtx.Provider value={{ me, org, reload: load, switchTenant, branding, setBranding }}>
       <div className="layout">
         <nav className="side" aria-label="Navigation principale">
-          <div className="brand">{org.legal_name}<div className="small muted">Offre {e.planCode}{e.status !== 'active' && e.status !== 'free' ? ` · ${e.status}` : ''}</div></div>
+          <div className="brand">{branding?.logoUrl && <img className="brand-logo" src={branding.logoUrl} alt={`Logo ${org.legal_name}`} />}{org.legal_name}<div className="small muted">Offre {e.planCode}{e.status !== 'active' && e.status !== 'free' ? ` · ${e.status}` : ''}</div></div>
           {links.filter((l) => l[2]).map(([to, label]) => <NavLink key={to} to={to} end={to === '/'}>{label}</NavLink>)}
           <div className="spacer" />
           {me.memberships.length > 1 && (

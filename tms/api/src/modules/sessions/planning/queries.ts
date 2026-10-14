@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { RequestContext } from '../../../core/context';
+import { loadDocBranding } from '../../../core/branding';
 import { csvCell } from '../../../core/csv';
 import { Db, Tx, many, one } from '../../../core/db';
 import { badRequest, forbidden, notFound } from '../../../core/errors';
@@ -342,7 +343,8 @@ export class PlanningQueries {
           STATUS_LABEL[s.status]]) });
     }
     if (!items.length) blocks.push({ type: 'text', text: 'Aucune séance sur la période.' });
-    return renderPdf(blocks, { title: 'Planning', footer: `Édité le ${fmtDay(new Date(), tz)}` });
+    const branding = await this.db.tenantTx(ctx.tenantId, loadDocBranding);
+    return renderPdf(blocks, { title: 'Planning', footer: `Édité le ${fmtDay(new Date(), tz)}`, ...branding });
   }
 
   toIcs(items: any[], name: string) {

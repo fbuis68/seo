@@ -100,6 +100,7 @@ contrôles serveur lisent tous ce même catalogue. Tarifs indicatifs, à confirm
 | opendata | Registre des sources, ingestion avec quarantaine, Sirene, propositions d'enrichissement | OD-01, §8.2-8.4, REC-32-34 |
 | ai | BYOK OpenAI/Gemini, outils allowlistés, propositions confirmées et invalidées si données changent, budget | AI-01, §5.2, REC-37-40 |
 | bank | Agrégateur lecture seule, consentement, synchro curseur, rapprochement déterministe validé | BANK-01..10, REC-43-45 |
+| branding | Logo (PNG interface, JPEG documents, redimensionné dans le navigateur, SVG refusé) et couleurs de l'interface et des PDF ; logo apposé automatiquement sur chaque document généré | Réglages → Apparence |
 | mail | SMTP client (465/587, TLS vérifié, anti-SSRF), file avec `delivery_unknown` | MAIL-01, REC-46/47 |
 
 ## 2 bis. Planning (sessions, formateurs, salles, stagiaires)
@@ -160,7 +161,7 @@ signés ; les emails système sont affichés dans la console de l'API.
 ### Tests
 
 ```bash
-cd tms/api && npm test     # 45 scénarios e2e sur base réelle (tms_test), dont la recette planning R01–R14
+cd tms/api && npm test     # 46 scénarios e2e sur base réelle (tms_test), dont la recette planning R01–R14
 ```
 
 Couvrent notamment : souscription et webhooks (doublons, signature invalide, past_due), quotas Free

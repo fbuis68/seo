@@ -4,6 +4,7 @@ import { AuditService } from '../../core/audit.service';
 import { RequestContext } from '../../core/context';
 import { Db, Tx, many, one } from '../../core/db';
 import { badRequest, notFound } from '../../core/errors';
+import { loadDocBranding } from '../../core/branding';
 import { Block, renderPdf } from '../../core/pdf';
 import { StorageService } from '../../core/storage';
 import { EntitlementsService } from '../billing/entitlements.service';
@@ -156,7 +157,8 @@ export class DocumentsService {
           ownerType = 'enrollment'; ownerId = e.id; filename = `${b.template}-${e.last_name}-${s.session_id.slice(0, 8)}.pdf`;
         }
       }
-      const pdf = renderPdf(blocks, { title: filename, footer: t!.legal_name });
+      // Logo et couleur de l'organisme appliqués automatiquement à chaque document généré.
+      const pdf = renderPdf(blocks, { title: filename, footer: t!.legal_name, ...(await loadDocBranding(tx)) });
       const doc = await this.store(tx, ctx, { ownerType, ownerId, kind: b.template, filename, mime: 'application/pdf', data: pdf, provenance: { template: b.template, version: 1 } });
       await this.audit.log(tx, { tenantId: ctx.tenantId, actor: ctx.userId, action: 'document.generated', entityType: 'document', entityId: doc!.id, data: { template: b.template } });
       return doc;

@@ -3,6 +3,7 @@ import { download, patch, post } from '../api';
 import { can, has, useApp } from '../context';
 import { useAction, useFetch } from '../hooks';
 import { Help } from '../help';
+import Appearance from '../components/Appearance';
 
 export default function Settings() {
   const { org, reload } = useApp();
@@ -34,6 +35,7 @@ export default function Settings() {
           <button className="btn">Enregistrer</button>
         </form>
       )}
+      {can(org, 'org.manage') && <Appearance />}
 
       {members.data && (
         <div className="panel" style={{ marginTop: 16 }}>
