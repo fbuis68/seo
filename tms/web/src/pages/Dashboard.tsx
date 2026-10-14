@@ -6,6 +6,7 @@ import { can, has, useApp } from '../context';
 import { useFetch } from '../hooks';
 import { SESSION_STATUS } from './Sessions';
 import { Help } from '../help';
+import { BILLING_STATE } from '../components/SessionBilling';
 
 export default function Dashboard() {
   const { org } = useApp();
@@ -18,6 +19,7 @@ export default function Dashboard() {
   const cash = useFetch(finance ? `/api/v1/analytics/metrics?metric=cash_in_ttc&from=${y}-01-01&to=${y}-12-31&granularity=month` : null);
   const byProg = useFetch(finance ? `/api/v1/analytics/breakdown?metric=revenue_net_ht&dimension=program&from=${y}-01-01&to=${y}-12-31` : null);
   const recv = useFetch(finance ? '/api/v1/analytics/receivables' : null);
+  const toBill = useFetch<any[]>(finance ? '/api/v1/billing/to-bill' : null);
   const detail = useFetch(drill ? `/api/v1/analytics/drilldown?metric=revenue_net_ht&from=${drill}&to=${new Date(new Date(drill).getFullYear(), new Date(drill).getMonth() + 1, 0).toISOString().slice(0, 10)}` : null, [drill]);
   const months = (s: any[]) => s.map((p) => ({ label: new Date(p.period).toLocaleDateString('fr-FR', { month: 'short' }), value: Number(p.value) }));
   const c = dash.data?.cards;
@@ -31,6 +33,14 @@ export default function Dashboard() {
           {finance && <div className="panel card"><div className="label">CA facturé net HT {y}</div><div className="value">{eur(c.revenueYtdHt)}</div></div>}
           {finance && <div className="panel card"><div className="label">Encaissements TTC {y}</div><div className="value">{eur(c.cashInYtdTtc)}</div></div>}
           {finance && <div className="panel card"><div className="label">Impayés échus TTC</div><div className="value" style={{ color: Number(c.overdueTtc) > 0 ? 'var(--err)' : undefined }}>{eur(c.overdueTtc)}</div></div>}
+        </div>
+      )}
+      {finance && (toBill.data?.length ?? 0) > 0 && (
+        <div className="panel" style={{ marginTop: 16 }}>
+          <strong>Sessions terminées à facturer ({toBill.data!.length})</strong> <Help k="session.facturation" />
+          <table><tbody>{toBill.data!.slice(0, 10).map((x) => <tr key={x.id}><td><Link to={`/sessions/${x.id}`}>{x.title}</Link>{x.reference ? <span className="small muted"> · {x.reference}</span> : null}</td>
+            <td className="small">{date(x.ends_on ?? x.starts_on)}</td><td className="small">{x.learners} apprenant(s)</td>
+            <td><span className={`pill ${BILLING_STATE[x.billingState]?.[1] ?? ''}`}>{BILLING_STATE[x.billingState]?.[0] ?? x.billingState}</span></td></tr>)}</tbody></table>
         </div>
       )}
       {c && c.upcoming.length === 0 && (

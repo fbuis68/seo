@@ -90,6 +90,7 @@ contrôles serveur lisent tous ce même catalogue. Tarifs indicatifs, à confirm
 | catalog | Programmes versionnés, version figée dès usage (trigger SQL) | CAT-01, REC-05 |
 | sessions | Cycle de vie ; déroulé en parties ; séances avec un ou plusieurs formateurs ; ressources : lieux, salles, matériel (engins CACES, vérification périodique) ; inscriptions (groupes, dates d'entrée/sortie), financeurs, présences | SES-01, INS-01, PRE-01 |
 | planning | Voir section « Planning » ci-dessous | Cahier planning P1 |
+| clôture et facturation de session | Clôture contrôlée (séances réalisées, émargement complet, forçage motivé), séance réalisée automatiquement à émargement complet, brouillons de factures par client et financeur au forfait ou au prorata des heures émargées, sans double facturation, état de facturation et sessions à facturer | `finance/session-billing.service.ts` |
 | quality | Questionnaires, réponses individuelles, réclamations | QUA-01 |
 | finance | Devis, factures/acomptes/avoirs immuables, numérotation atomique, règlements et affectations, facturation électronique (partenaire) | FIN-01/02, REC-07/08 |
 | documents | Génération PDF (convention, convocation, attestation, émargement, facture), dépôt, téléchargement contrôlé | DOC-01 |
@@ -161,7 +162,7 @@ signés ; les emails système sont affichés dans la console de l'API.
 ### Tests
 
 ```bash
-cd tms/api && npm test     # 46 scénarios e2e sur base réelle (tms_test), dont la recette planning R01–R14
+cd tms/api && npm test     # 48 scénarios e2e sur base réelle (tms_test), dont la recette planning R01–R14
 ```
 
 Couvrent notamment : souscription et webhooks (doublons, signature invalide, past_due), quotas Free

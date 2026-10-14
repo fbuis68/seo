@@ -5,6 +5,7 @@ import { isoDate, money, page, parse } from '../../core/validation';
 import { CrmModule } from '../crm/crm.module';
 import { EINVOICE_PROVIDER, FakeEInvoiceProvider } from './einvoice.provider';
 import { FinanceService } from './finance.service';
+import { SessionBillingService } from './session-billing.service';
 
 const line = z.object({
   label: z.string().min(1).max(300),
@@ -16,7 +17,20 @@ const allocation = z.object({ invoiceId: z.string().uuid(), amount: money });
 
 @Controller('api/v1')
 export class FinanceController {
-  constructor(private f: FinanceService) {}
+  constructor(private f: FinanceService, private billing: SessionBillingService) {}
+
+  // ─── Facturation depuis la session (forfait ou heures émargées) ─────────
+  @RequirePermission('finance.read') @Get('sessions/:id/billing')
+  sessionBilling(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string, @Query() q: unknown) {
+    const p = parse(z.object({ basis: z.enum(['flat', 'hours']).default('flat'), absenceToClient: z.enum(['true', 'false']).optional() }), q);
+    return this.billing.get(c, id, { basis: p.basis, absenceToClient: p.absenceToClient === 'true' });
+  }
+  @RequirePermission('finance.write') @Post('sessions/:id/billing')
+  generateBilling(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string, @Body() b: unknown) {
+    return this.billing.generate(c, id, parse(z.object({ basis: z.enum(['flat', 'hours']), absenceToClient: z.boolean().optional(), dueDate: isoDate.nullable().optional() }), b));
+  }
+  @RequirePermission('finance.read') @Get('billing/to-bill')
+  toBill(@Ctx() c: RequestContext) { return this.billing.toBill(c); }
 
   @RequirePermission('finance.read') @Get('invoices')
   list(@Ctx() c: RequestContext, @Query() q: unknown) { return this.f.listInvoices(c, parse(page.extend({ status: z.enum(['draft', 'issued']).optional(), clientId: z.string().uuid().optional() }), q)); }
@@ -63,7 +77,7 @@ export class FinanceController {
 @Module({
   imports: [CrmModule],
   controllers: [FinanceController],
-  providers: [FinanceService, { provide: EINVOICE_PROVIDER, useValue: new FakeEInvoiceProvider() }],
+  providers: [FinanceService, SessionBillingService, { provide: EINVOICE_PROVIDER, useValue: new FakeEInvoiceProvider() }],
   exports: [FinanceService],
 })
 export class FinanceModule {}

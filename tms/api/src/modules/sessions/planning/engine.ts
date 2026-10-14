@@ -455,12 +455,47 @@ export class PlanningEngine {
     return n;
   }
 
+  /**
+   * Séance publiée, terminée, dont tous les participants attendus sont émargés → Réalisé.
+   * Sans effet sinon ; un refus du moteur n'empêche jamais l'enregistrement de la présence.
+   */
+  async autoDone(tx: Tx, ctx: RequestContext, slotId: string) {
+    const ready = await one(tx, `
+      SELECT 1 FROM slots sl WHERE sl.id = $1 AND sl.status = 'published' AND sl.ends_at <= now()
+         AND EXISTS (SELECT 1 FROM slot_expected x WHERE x.slot_id = sl.id AND x.mode IN ('onsite','remote') AND x.dates_ok)
+         AND NOT EXISTS (SELECT 1 FROM slot_expected x WHERE x.slot_id = sl.id AND x.mode IN ('onsite','remote') AND x.dates_ok
+                           AND NOT EXISTS (SELECT 1 FROM attendance a WHERE a.slot_id = x.slot_id AND a.enrollment_id = x.enrollment_id))`, [slotId]);
+    if (!ready) return false;
+    await tx.query('SAVEPOINT auto_done');
+    try {
+      await this.runIn(tx, ctx, 'slot.auto_done', { reason: 'Émargement complet' }, async (t, w) => {
+        await w.touch(slotId, 'done');
+        await t.query(`UPDATE slots SET status = 'done' WHERE id = $1`, [slotId]);
+      });
+      await tx.query('RELEASE SAVEPOINT auto_done');
+      return true;
+    } catch {
+      await tx.query('ROLLBACK TO SAVEPOINT auto_done');
+      return false;
+    }
+  }
+
+  /** Participants attendus sans présence saisie (séances données). */
+  async missingAttendance(tx: Tx, slotIds: string[]) {
+    return many(tx, `SELECT x.slot_id, pe.first_name || ' ' || pe.last_name AS name FROM slot_expected x JOIN persons pe ON pe.id = x.person_id
+                      WHERE x.slot_id = ANY($1::uuid[]) AND x.mode IN ('onsite','remote') AND x.dates_ok
+                        AND NOT EXISTS (SELECT 1 FROM attendance a WHERE a.slot_id = x.slot_id AND a.enrollment_id = x.enrollment_id) ORDER BY pe.last_name`, [slotIds]);
+  }
+
   transition(ctx: RequestContext, b: { slotIds?: string[]; sessionId?: string; status: 'draft' | 'pending' | 'published' | 'done' }, opts: WriteOpts) {
     return this.run(ctx, `slot.${b.status}`, opts, async (tx, w) => {
       const FROM: Record<string, string[]> = { draft: ['pending'], pending: ['draft'], published: ['draft', 'pending'], done: ['published'] };
       const ids = b.slotIds?.length ? b.slotIds : (await many(tx, `SELECT id FROM slots WHERE session_id = $1 AND status = ANY($2::text[])`, [b.sessionId, FROM[b.status]])).map((r) => r.id);
       if (!ids.length) throw badRequest('no_slot', 'Aucune séance concernée.');
-      return { updated: await this.setStatus(tx, ctx, w, ids, b.status) };
+      const updated = await this.setStatus(tx, ctx, w, ids, b.status);
+      // Réalisé n'est pas une preuve de présence : émargements manquants signalés.
+      const missing = b.status === 'done' ? await this.missingAttendance(tx, ids) : [];
+      return { updated, ...(b.status === 'done' ? { missingAttendance: missing } : {}) };
     });
   }
 

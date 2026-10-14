@@ -17,6 +17,7 @@ const sessionSchema = z.object({
   responsible: z.string().max(200).nullable().optional(), targetMinutes: z.number().int().positive().nullable().optional(),
   requiredSkills: z.array(z.string().min(1).max(100)).max(30).optional(), requiredEquipment: z.array(z.string().min(1).max(100)).max(30).optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(), internalNotes: z.string().max(5000).nullable().optional(),
+  priceHt: money.nullable().optional(), priceBasis: z.enum(['per_learner', 'per_session']).nullable().optional(),
 });
 const hm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$|^24:00$/, 'Heure HH:MM attendue');
 
@@ -53,9 +54,11 @@ export class SessionsController {
   }
   @RequirePermission('sessions.write') @Post('sessions/:id/status')
   status(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string, @Body() b: unknown) {
-    const p = parse(z.object({ status: z.enum(['draft', 'planned', 'confirmed', 'in_progress', 'completed', 'archived', 'cancelled']), reason: z.string().max(500).optional() }), b);
-    return this.s.transition(c, id, p.status, p.reason);
+    const p = parse(z.object({ status: z.enum(['draft', 'planned', 'confirmed', 'in_progress', 'completed', 'archived', 'cancelled']), reason: z.string().max(500).optional(), force: z.boolean().optional() }), b);
+    return this.s.transition(c, id, p.status, p.reason, p.force);
   }
+  @RequirePermission('sessions.read') @Get('sessions/:id/closure')
+  closure(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string) { return this.s.closure(c, id); }
   // ─── Planning : créneaux, parties, formateurs ───────────────────────────
   @RequirePermission('sessions.write') @Post('sessions/:id/slots')
   slot(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string, @Body() b: unknown) {
@@ -121,7 +124,7 @@ export class SessionsController {
   /** Changement de groupe ou de dates d'entrée/sortie : séances futures revérifiées. */
   @RequirePermission('sessions.write') @Patch('enrollments/:id')
   updateEnrollment(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string, @Body() b: unknown) {
-    return this.s.updateEnrollment(c, id, parse(z.object({ startsOn: isoDate.nullable().optional(), endsOn: isoDate.nullable().optional(), groupLabel: z.string().max(100).nullable().optional() }), b));
+    return this.s.updateEnrollment(c, id, parse(z.object({ startsOn: isoDate.nullable().optional(), endsOn: isoDate.nullable().optional(), groupLabel: z.string().max(100).nullable().optional(), clientId: z.string().uuid().nullable().optional() }), b));
   }
   @RequirePermission('sessions.write') @Post('enrollments/:id/status')
   enrollStatus(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string, @Body() b: unknown) {

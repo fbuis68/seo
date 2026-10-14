@@ -270,3 +270,72 @@ describe('Identité visuelle', () => {
     expect((await http().get(b.logoUrl)).status).toBe(404);
   });
 });
+
+describe('Session ↔ émargement ↔ facturation', () => {
+  it('clôture contrôlée, séance réalisée par émargement complet, facturation au prorata des heures sans double facturation', async () => {
+    const u = await signupAndLogin();
+    const prog = (await u.api.post('/api/v1/programs', { title: 'Habilitation électrique', durationMinutes: 420, modality: 'onsite', priceHt: '900.00', vatRate: '20' }).expect(201)).body;
+    const s = (await u.api.post('/api/v1/sessions', { programVersionId: prog.versions[0].id, kind: 'inter', startsOn: '2026-09-01', endsOn: '2026-09-01' }).expect(201)).body;
+    const room = (await u.api.post('/api/v1/resources', { kind: 'room', name: 'Salle Volta', capacity: 10 }).expect(201)).body;
+    const t = (await u.api.post('/api/v1/persons', { firstName: 'Ampère', lastName: 'Formateur', roles: ['trainer'] }).expect(201)).body;
+    const clientA = (await u.api.post('/api/v1/clients', { kind: 'company', name: 'Entreprise A', status: 'customer' }).expect(201)).body;
+    const clientB = (await u.api.post('/api/v1/clients', { kind: 'person', name: 'Particulier B', status: 'customer' }).expect(201)).body;
+    const opco = (await u.api.post('/api/v1/clients', { kind: 'company', name: 'OPCO Test', status: 'customer', isFunder: true }).expect(201)).body;
+    const p = async (n: string) => (await u.api.post('/api/v1/persons', { firstName: n, lastName: 'Stagiaire', roles: ['learner'] }).expect(201)).body;
+    const e1 = (await u.api.post(`/api/v1/sessions/${s.id}/enrollments`, { personId: (await p('Un')).id, clientId: clientA.id, status: 'confirmed', fundedAmount: '600.00', fundings: [{ funderClientId: opco.id, amount: '600.00' }] }).expect(201)).body;
+    const e2 = (await u.api.post(`/api/v1/sessions/${s.id}/enrollments`, { personId: (await p('Deux')).id, clientId: clientA.id, status: 'confirmed' }).expect(201)).body;
+    const e3 = (await u.api.post(`/api/v1/sessions/${s.id}/enrollments`, { personId: (await p('Trois')).id, clientId: clientB.id, status: 'confirmed' }).expect(201)).body;
+    const mk = async (h1: string, h2: string) => (await u.api.post('/api/v1/planning/slots', { sessionId: s.id, startsAt: `2026-09-01T${h1}:00+02:00`, endsAt: `2026-09-01T${h2}:00+02:00`, trainerIds: [t.id], resourceIds: [room.id], status: 'published' }).expect(201)).body.id;
+    const sl1 = await mk('09:00', '12:30'); const sl2 = await mk('13:30', '17:00');
+    for (const st of ['planned', 'confirmed', 'in_progress']) await u.api.post(`/api/v1/sessions/${s.id}/status`, { status: st }).expect(201);
+    // Clôture refusée : séances non réalisées, émargement manquant.
+    const refused = await u.api.post(`/api/v1/sessions/${s.id}/status`, { status: 'completed' });
+    expect(refused.status).toBe(409);
+    expect(refused.body.code).toBe('closure_incomplete');
+    expect(refused.body.details.issues.map((i: any) => i.code)).toEqual(['slots_not_done', 'attendance_missing']);
+    // Émargement : la séance passe « Réalisé » dès que tous les attendus sont saisis.
+    let r = await u.api.post('/api/v1/attendance', { enrollmentId: e1.id, slotId: sl1, status: 'present' }).expect(201);
+    expect(r.body.slotDone).toBe(false);
+    await u.api.post('/api/v1/attendance', { enrollmentId: e2.id, slotId: sl1, status: 'present' }).expect(201);
+    r = await u.api.post('/api/v1/attendance', { enrollmentId: e3.id, slotId: sl1, status: 'present' }).expect(201);
+    expect(r.body.slotDone).toBe(true);
+    expect(r.body.minutes).toBe(210);
+    await u.api.post('/api/v1/attendance', { enrollmentId: e1.id, slotId: sl2, status: 'present' }).expect(201);
+    await u.api.post('/api/v1/attendance', { enrollmentId: e2.id, slotId: sl2, status: 'absent' }).expect(201);
+    await u.api.post('/api/v1/attendance', { enrollmentId: e3.id, slotId: sl2, status: 'present' }).expect(201);
+    expect((await u.api.get(`/api/v1/sessions/${s.id}/closure`)).body).toEqual({ ok: true, issues: [] });
+    await u.api.post(`/api/v1/sessions/${s.id}/status`, { status: 'completed' }).expect(201);
+    expect((await u.api.get(`/api/v1/sessions/${s.id}`)).body.missing).toContain('Session terminée non facturée');
+    expect((await u.api.get('/api/v1/billing/to-bill')).body.map((x: any) => x.id)).toContain(s.id);
+    // Aperçu au prorata des heures émargées : financeur, reste à charge client, absences.
+    const prev = (await u.api.get(`/api/v1/sessions/${s.id}/billing?basis=hours`).expect(200)).body;
+    expect(prev.state).toBe('not_billed');
+    const totals = Object.fromEntries(prev.invoices.map((i: any) => [i.clientName, i.totalHt]));
+    expect(totals).toEqual({ 'OPCO Test': '600.00', 'Entreprise A': '750.00', 'Particulier B': '900.00' });
+    const gen = (await u.api.post(`/api/v1/sessions/${s.id}/billing`, { basis: 'hours' }).expect(201)).body;
+    expect(gen.created).toHaveLength(3);
+    expect((await u.api.get(`/api/v1/sessions/${s.id}/billing?basis=hours`)).body.state).toBe('drafts');
+    expect((await u.api.post(`/api/v1/sessions/${s.id}/billing`, { basis: 'hours' })).status).toBe(409); // pas de double facturation
+    // Brouillon supprimé → partie à refacturer ; seule celle-ci est recréée.
+    const b = gen.created.find((x: any) => x.clientName === 'Particulier B');
+    await u.api.del(`/api/v1/invoices/${b.id}`).expect(200);
+    expect((await u.api.get(`/api/v1/sessions/${s.id}/billing?basis=hours`)).body.state).toBe('partial');
+    const again = (await u.api.post(`/api/v1/sessions/${s.id}/billing`, { basis: 'hours' }).expect(201)).body;
+    expect(again.created.map((x: any) => [x.clientName, x.totalHt])).toEqual([['Particulier B', '900.00']]);
+    for (const inv of [...gen.created.filter((x: any) => x.id !== b.id), ...again.created]) await u.api.post(`/api/v1/invoices/${inv.id}/issue`).expect(201);
+    const fin = (await u.api.get(`/api/v1/sessions/${s.id}/billing?basis=hours`)).body;
+    expect(fin.state).toBe('billed');
+    expect(fin.billed).toHaveLength(4);
+    expect((await u.api.get('/api/v1/billing/to-bill')).body.map((x: any) => x.id)).not.toContain(s.id);
+    expect((await u.api.get(`/api/v1/sessions/${s.id}`)).body.missing).not.toContain('Session terminée non facturée');
+  });
+
+  it('clôture forcée : motif obligatoire, tracée', async () => {
+    const u = await signupAndLogin();
+    const prog = (await u.api.post('/api/v1/programs', { title: 'Sans séance', durationMinutes: 60, modality: 'onsite' }).expect(201)).body;
+    const s = (await u.api.post('/api/v1/sessions', { programVersionId: prog.versions[0].id, kind: 'inter', startsOn: '2026-09-02' }).expect(201)).body;
+    for (const st of ['planned', 'confirmed', 'in_progress']) await u.api.post(`/api/v1/sessions/${s.id}/status`, { status: st }).expect(201);
+    expect((await u.api.post(`/api/v1/sessions/${s.id}/status`, { status: 'completed', force: true })).status).toBe(400);
+    await u.api.post(`/api/v1/sessions/${s.id}/status`, { status: 'completed', force: true, reason: 'Session réalisée hors plateforme' }).expect(201);
+  });
+});

@@ -59,8 +59,8 @@ export class FinanceService {
   async createInvoice(ctx: RequestContext, b: {
     clientId: string; kind: 'invoice' | 'deposit' | 'credit_note'; sessionId?: string | null; lines: LineInput[];
     dueDate?: string | null; creditedInvoiceId?: string | null; deductDepositIds?: string[]; currency?: string;
-  }) {
-    return this.db.tenantTx(ctx.tenantId, async (tx) => {
+  }, outer?: Tx) {
+    const run = async (tx: Tx) => {
       const lines = [...b.lines];
       if (b.kind === 'credit_note') {
         if (!b.creditedInvoiceId) throw badRequest('credited_invoice_required', "Un avoir référence la facture d'origine.", 'creditedInvoiceId');
@@ -84,7 +84,8 @@ export class FinanceService {
         [ctx.tenantId, b.kind, b.clientId, b.sessionId ?? null, b.dueDate ?? null, currency, t.totalHt, t.totalVat, t.totalTtc, b.creditedInvoiceId ?? null, b.deductDepositIds?.[0] ?? null]);
       for (const l of t.lines) await this.insertLine(tx, ctx.tenantId, inv!.id, l);
       return this.getInvoice(ctx, inv!.id, tx);
-    });
+    };
+    return outer ? run(outer) : this.db.tenantTx(ctx.tenantId, run);
   }
 
   private insertLine(tx: Tx, tenantId: string, invoiceId: string, l: ReturnType<typeof computeLines>['lines'][number]) {
