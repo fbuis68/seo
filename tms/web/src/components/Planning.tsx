@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { api, fmtDT, fmtT, post, zonedIso } from '../api';
 import { Help } from '../help';
+import { HmInput } from '../planning/SlotPanel';
+import { addDays, parts } from '../planning/lib';
 
 const KIND_LABEL: Record<string, string> = { site: 'Lieu', room: 'Salle', equipment: 'Matériel' };
 const h = (m: number) => `${Math.floor(m / 60)} h${m % 60 ? String(m % 60).padStart(2, '0') : ''}`;
@@ -111,13 +113,23 @@ export default function Planning({ session: d, canWrite, trainers, resources, on
             <tr key={sl.id}><td colSpan={8}>
               <div style={{ display: 'grid', gap: 8 }}>
                 <strong className="small">{fmtDT(sl.starts_at, d.timezone)} → {fmtT(sl.ends_at, d.timezone)}</strong>
+                <div className="toolbar" style={{ margin: 0 }}>
+                  <label>Date<input type="date" required value={editSlot.day} disabled={editSlot.locked} onChange={(e) => setEditSlot({ ...editSlot, day: e.target.value })} /></label>
+                  <label>Début<HmInput required value={editSlot.start} disabled={editSlot.locked} onChange={(v) => setEditSlot({ ...editSlot, start: v })} /></label>
+                  <label>Fin<HmInput required value={editSlot.end} disabled={editSlot.locked} onChange={(v) => setEditSlot({ ...editSlot, end: v })} /></label>
+                  <span className="small muted">{editSlot.locked ? 'Présences déjà saisies : horaires figés.' : `Fuseau ${d.timezone}${editSlot.end <= editSlot.start ? ' · fin le lendemain' : ''}`}</span>
+                </div>
                 {d.parts.length > 0 && <label>Partie<select value={editSlot.partId} onChange={(e) => setEditSlot({ ...editSlot, partId: e.target.value })}><option value="">— aucune —</option>{d.parts.map((p: any) => <option key={p.id} value={p.id}>{p.title}</option>)}</select></label>}
                 <Checks label="Formateur(s)" items={trainerItems} value={editSlot.trainerIds} onChange={(v) => setEditSlot({ ...editSlot, trainerIds: v })} />
                 <Checks label="Lieu / salle" items={resourceItems(['site', 'room'])} value={editSlot.resourceIds} onChange={(v) => setEditSlot({ ...editSlot, resourceIds: v })} />
                 <Checks label="Matériel" items={resourceItems(['equipment'])} value={editSlot.resourceIds} onChange={(v) => setEditSlot({ ...editSlot, resourceIds: v })} />
                 <div className="toolbar">
                   <button className="btn sm" onClick={() => run(async () => {
-                    await withOverride((overrideReason) => api('PATCH', `/api/v1/slots/${sl.id}`, { version: editSlot.version, partId: editSlot.partId || null, trainerIds: editSlot.trainerIds, resourceIds: editSlot.resourceIds, overrideReason }));
+                    const startsAt = zonedIso(editSlot.day, editSlot.start, d.timezone);
+                    const endsAt = zonedIso(editSlot.end <= editSlot.start ? addDays(editSlot.day, 1) : editSlot.day, editSlot.end, d.timezone);
+                    const moved = +new Date(startsAt) !== +new Date(sl.starts_at) || +new Date(endsAt) !== +new Date(sl.ends_at);
+                    await withOverride((overrideReason) => api('PATCH', `/api/v1/slots/${sl.id}`, { version: editSlot.version, partId: editSlot.partId || null, trainerIds: editSlot.trainerIds, resourceIds: editSlot.resourceIds, overrideReason,
+                      ...(moved ? { startsAt, endsAt } : {}) }));
                     setEditSlot(null);
                   })}>Enregistrer</button>
                   <button className="btn ghost sm" onClick={() => setEditSlot(null)}>Annuler</button>
@@ -135,7 +147,7 @@ export default function Planning({ session: d, canWrite, trainers, resources, on
               <td>{sl.resources.filter((r: any) => r.kind === 'equipment').map((r: any) => r.name).join(', ') || <span className="muted">—</span>}</td>
               <td><span className={`pill ${STATUS[sl.status][1]}`} title={sl.cancel_reason ?? ''}>{STATUS[sl.status][0]}</span>{sl.to_resolve > 0 && <div className="small" style={{ color: 'var(--warn)' }}>{sl.to_resolve} à résoudre</div>}</td>
               <td>{canWrite && !['cancelled', 'done'].includes(sl.status) && <>
-                <button className="btn ghost sm" onClick={() => setEditSlot({ id: sl.id, version: sl.version, partId: sl.part_id ?? '', trainerIds: sl.trainers.map((t: any) => t.id), resourceIds: sl.resources.map((r: any) => r.id) })}>Modifier</button>{' '}
+                <button className="btn ghost sm" onClick={() => setEditSlot({ id: sl.id, version: sl.version, day: parts(sl.starts_at, d.timezone).date, start: parts(sl.starts_at, d.timezone).hm, end: parts(sl.ends_at, d.timezone).hm, locked: sl.attendance_count > 0, partId: sl.part_id ?? '', trainerIds: sl.trainers.map((t: any) => t.id), resourceIds: sl.resources.map((r: any) => r.id) })}>Modifier</button>{' '}
                 {sl.status === 'draft' && !sl.published_at
                   ? <button className="btn ghost sm" onClick={() => confirm('Supprimer ce brouillon ?') && run(() => api('DELETE', `/api/v1/slots/${sl.id}`))}>Supprimer</button>
                   : <button className="btn ghost sm" onClick={() => { const reason = prompt('Annuler la séance (les personnes concernées seront prévenues). Motif :'); if (reason) run(() => post(`/api/v1/planning/slots/${sl.id}/cancel`, { reason })); }}>Annuler</button>}
@@ -158,8 +170,8 @@ export default function Planning({ session: d, canWrite, trainers, resources, on
           <strong className="small">Ajouter un créneau</strong>
           <div className="toolbar">
             <label>Jour<input type="date" required value={slot.day} onChange={(e) => setSlot({ ...slot, day: e.target.value })} /></label>
-            <label>Début<input type="time" required value={slot.start} onChange={(e) => setSlot({ ...slot, start: e.target.value })} /></label>
-            <label>Fin<input type="time" required value={slot.end} onChange={(e) => setSlot({ ...slot, end: e.target.value })} /></label>
+            <label>Début<HmInput required value={slot.start} onChange={(v) => setSlot({ ...slot, start: v })} /></label>
+            <label>Fin<HmInput required value={slot.end} onChange={(v) => setSlot({ ...slot, end: v })} /></label>
             {d.parts.length > 0 && <label>Partie<select value={slot.partId} onChange={(e) => setSlot({ ...slot, partId: e.target.value })}><option value="">— aucune —</option>{d.parts.map((p: any) => <option key={p.id} value={p.id}>{p.title}</option>)}</select></label>}
           </div>
           <div className="grid2" style={{ gap: 8 }}>

@@ -62,6 +62,8 @@ export const HELP: Record<string, Topic> = {
     intro: 'Chaque séance a une date, des horaires, un ou plusieurs formateurs et des ressources (lieu, salle, matériel).',
     points: ['Une séance est créée en brouillon : elle réserve déjà les ressources, mais n’est visible des formateurs et stagiaires qu’après publication.',
       'Un brouillon jamais publié se supprime ; une séance publiée s’annule avec un motif (elle reste dans l’historique).',
+      '« Modifier » permet de changer la date, l’heure de début et de fin (fin avant le début = séance sur deux jours), la partie, les formateurs et les ressources ; les mêmes contrôles de conflits s’appliquent, et une séance publiée modifiée est notifiée aux personnes concernées.',
+      'Dès qu’une présence est saisie, la date et les horaires de la séance sont figés.',
       'Horaires saisis et affichés dans le fuseau de la session, quel que soit l’ordinateur.',
       'Pauses, récurrences, distanciel et suggestions de ressources libres : écran Planning.'] },
   'session.documents': { section: 'Formations et sessions', title: 'Documents de la session',
