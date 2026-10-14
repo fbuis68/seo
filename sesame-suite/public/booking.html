@@ -86,7 +86,7 @@ h1{font-family:var(--font-title);font-size:26px;font-weight:500;margin-bottom:6p
   <!-- ═══════ ÉCRAN 1 : recherche ═══════ -->
   <div class="scr" id="scr-search">
     <h1>Réserver un séjour</h1>
-    <p class="sub" id="search-sub">Choisissez vos dates et le nombre d'occupants pour voir les chambres disponibles.</p>
+    <p class="sub" id="search-sub">Choisissez vos dates et le nombre d'occupants pour voir les accès disponibles.</p>
     <div class="card">
       <div class="grid2">
         <div class="ff"><label>Arrivée</label><input type="date" id="in-start" onchange="onDurationDateChange()"></div>
@@ -94,7 +94,7 @@ h1{font-family:var(--font-title);font-size:26px;font-weight:500;margin-bottom:6p
       </div>
       <div id="duration-presets" style="display:none;flex-wrap:wrap;gap:8px;margin:10px 0 4px"></div>
       <div id="occupant-steppers" style="display:flex;flex-direction:column;gap:10px;margin:14px 0"></div>
-      <button class="btn btn-p" id="search-btn" onclick="searchRooms()">Voir les chambres disponibles</button>
+      <button class="btn btn-p" id="search-btn" onclick="searchRooms()">Voir les accès disponibles</button>
       <div class="err" id="search-err" style="display:none"></div>
     </div>
   </div>
@@ -102,14 +102,14 @@ h1{font-family:var(--font-title);font-size:26px;font-weight:500;margin-bottom:6p
   <!-- ═══════ ÉCRAN 2 : liste des chambres ═══════ -->
   <div class="scr" id="scr-rooms">
     <button class="btn btn-ghost" onclick="gotoScr('search')">← Modifier les dates</button>
-    <h1 style="margin-top:10px">Chambres disponibles</h1>
+    <h1 style="margin-top:10px">Accès disponibles</h1>
     <p class="sub" id="rooms-sub"></p>
     <div id="rooms-list"></div>
   </div>
 
   <!-- ═══════ ÉCRAN 3 : coordonnées + récapitulatif ═══════ -->
   <div class="scr" id="scr-form">
-    <button class="btn btn-ghost" id="form-back-btn" onclick="formBack()">← Choisir une autre chambre</button>
+    <button class="btn btn-ghost" id="form-back-btn" onclick="formBack()">← Choisir un autre accès</button>
     <h1 style="margin-top:10px">Vos coordonnées</h1>
     <div class="card" id="classic-guest-form">
       <div class="grid2">
@@ -317,7 +317,7 @@ async function searchRooms(){
     if(!r.ok) throw new Error(data.error||'Erreur');
     STATE.rooms = data.rooms || [];
   }catch(e){
-    errEl.textContent = 'Impossible de charger les chambres disponibles.'; errEl.style.display='block';
+    errEl.textContent = 'Impossible de charger les accès disponibles.'; errEl.style.display='block';
     return;
   }
   // Ressource unique (BookingEngineConfig.hideRoomSelection) : accès par
@@ -339,7 +339,7 @@ function renderRooms(){
   document.getElementById('rooms-sub').textContent = STATE.nights+' nuit'+(STATE.nights>1?'s':'')+' · '+new Date(STATE.start).toLocaleDateString('fr-FR')+' → '+new Date(STATE.end).toLocaleDateString('fr-FR');
   var el = document.getElementById('rooms-list');
   if(!STATE.rooms.length){
-    el.innerHTML = '<div class="empty">Aucune chambre disponible sur ces dates. Essayez une autre période.</div>';
+    el.innerHTML = '<div class="empty">Aucun accès disponible sur ces dates. Essayez une autre période.</div>';
     return;
   }
   el.innerHTML = STATE.rooms.map(function(r, i){
@@ -364,7 +364,7 @@ function selectRoom(i){
   // Ressource unique : pas d'écran "chambres" à revenir voir, le retour
   // ramène directement à la recherche (dates/durée).
   if(BOOK_STATUS.hideRoomSelection){ backBtn.textContent='← Modifier les dates'; }
-  else { backBtn.textContent='← Choisir une autre chambre'; }
+  else { backBtn.textContent='← Choisir un autre accès'; }
   gotoScr('form');
 }
 

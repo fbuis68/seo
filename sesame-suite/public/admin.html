@@ -1761,7 +1761,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 <!-- ════════════════ ROOMS ════════════════ -->
 <div id="pan-rooms" class="pan">
   <div class="ph"><h2>Gestion des Accès</h2>
-    <p>Créez et configurez les accès (chambres, casiers…) manuellement ou importez-les depuis Sesame ou Mon Casier Frais. Chaque accès peut être édité, photographié et assigné à un agent.</p>
+    <p>Créez et configurez les accès (casiers, lecteurs…) manuellement ou importez-les depuis Sesame ou Mon Casier Frais. Chaque accès peut être édité, photographié et assigné à un agent.</p>
   </div>
 
   <!-- Barre d'actions -->
@@ -1797,7 +1797,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       <div style="font-size:13px;color:var(--mu);margin-bottom:14px">Créez vos accès manuellement.</div>
       <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
         <button class="btn btn-p btn-s" onclick="rmOpenCreate()"><i class="ti ti-plus"></i> Créer un accès</button>
-        <button class="btn btn-s" onclick="rmQuickGenerate()"><i class="ti ti-wand"></i> Générer des chambres</button>
+        <button class="btn btn-s" onclick="rmQuickGenerate()"><i class="ti ti-wand"></i> Générer des accès</button>
       </div>
     </div>
   </div>
@@ -1859,7 +1859,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       <button class="chact" onclick="exportPlanning()"><i class="ti ti-download" style="font-size:12px"></i> Export</button>
     </div>
     <div class="alt alt-g" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
-      <span>Assignez le personnel aux chambres. Les agents retrouvent leurs affectations dans l'application mobile.</span>
+      <span>Assignez le personnel aux accès. Les agents retrouvent leurs affectations dans l'application mobile.</span>
     </div>
     <div id="staffPlanningList"></div>
     <div style="display:flex;gap:8px;margin-top:10px">
@@ -1902,7 +1902,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         </div>
         <div class="fi">
           <label class="lb">Nom affiché au client</label>
-          <input type="text" id="rm-name" placeholder="Chambre 101 — Standard">
+          <input type="text" id="rm-name" placeholder="Accès 101 — Standard">
         </div>
         <div class="g2">
           <div class="fi">
@@ -1975,7 +1975,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
           </label>
           <label class="room-only-field" style="display:flex;align-items:center;gap:10px;cursor:pointer">
             <input type="checkbox" id="rm-pmr" style="accent-color:var(--am)">
-            <span style="font-size:13px">Chambre PMR (accessibilité renforcée)</span>
+            <span style="font-size:13px">Accès PMR (accessibilité renforcée)</span>
           </label>
           <label class="room-only-field" style="display:flex;align-items:center;gap:10px;cursor:pointer">
             <input type="checkbox" id="rm-nosmoking" checked style="accent-color:var(--am)">
@@ -1983,7 +1983,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
           </label>
           <label class="room-only-field" style="display:flex;align-items:center;gap:10px;cursor:pointer">
             <input type="checkbox" id="rm-connected" style="accent-color:var(--am)">
-            <span style="font-size:13px">Chambre communicante disponible</span>
+            <span style="font-size:13px">Accès communicant disponible</span>
           </label>
           <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
             <input type="checkbox" id="rm-housekeepingExempt" style="accent-color:var(--am)">
@@ -1991,7 +1991,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
           </label>
           <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
             <input type="checkbox" id="rm-showOnPlan" checked style="accent-color:var(--am)">
-            <span style="font-size:13px">Afficher sur le plan de l'établissement (proposé dans la liste "chambre à positionner")</span>
+            <span style="font-size:13px">Afficher sur le plan de l'établissement (proposé dans la liste "accès à positionner")</span>
           </label>
           <div id="rm-planPosition-wrap" style="display:none;font-size:12px;color:var(--mu);margin-left:24px">
             Déjà positionnée sur le plan — <a href="#" onclick="event.preventDefault();rmClearPlanPosition()" style="color:var(--a)">retirer sa position pour la replacer</a>
@@ -2048,7 +2048,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         <button onclick="document.getElementById('rmBulkModal').style.display='none'" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
       </div>
       <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
-        <span>Entrez les codes des chambres séparés par des virgules ou des sauts de ligne. Elles seront créées avec les valeurs par défaut, modifiables ensuite.</span>
+        <span>Entrez les codes des accès séparés par des virgules ou des sauts de ligne. Ils seront créés avec les valeurs par défaut, modifiables ensuite.</span>
       </div>
       <div class="g2" style="margin-bottom:10px">
         <div class="fi">
@@ -2069,9 +2069,9 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       </div>
       <div style="font-size:11px;color:var(--mu);margin-bottom:12px">
         Ou générez automatiquement :
-        <a href="#" onclick="rmAutoFill('standard');return false" style="color:var(--a)">Hôtel standard (12 ch.)</a> ·
-        <a href="#" onclick="rmAutoFill('boutique');return false" style="color:var(--a)">Boutique (8 ch.)</a> ·
-        <a href="#" onclick="rmAutoFill('full');return false" style="color:var(--a)">Complet (20 ch.)</a>
+        <a href="#" onclick="rmAutoFill('standard');return false" style="color:var(--a)">Hôtel standard (12 accès)</a> ·
+        <a href="#" onclick="rmAutoFill('boutique');return false" style="color:var(--a)">Boutique (8 accès)</a> ·
+        <a href="#" onclick="rmAutoFill('full');return false" style="color:var(--a)">Complet (20 accès)</a>
       </div>
       <div id="bulk-preview" style="font-size:12px;color:var(--mu);margin-bottom:12px"></div>
       <div style="display:flex;gap:8px">
@@ -6210,7 +6210,7 @@ function rmOpenCreate(){
   RM_EDITING = null;
   RM_PHOTOS  = [];
   RM_TAGS    = [];
-  document.getElementById('rmModalTitle').textContent = 'Nouvelle chambre';
+  document.getElementById('rmModalTitle').textContent = 'Nouvel accès';
   document.getElementById('rm-code').value    = '';
   document.getElementById('rm-floor').value   = '0';
   document.getElementById('rm-name').value    = '';
@@ -6334,7 +6334,7 @@ async function rmBulkHideCasiers(){
  */
 async function rmClearPlanPosition(){
   if(!RM_EDITING) return;
-  if(!confirm('Retirer la position de cette chambre sur le plan ? Elle redeviendra sélectionnable dans "chambre à positionner".')) return;
+  if(!confirm('Retirer la position de cet accès sur le plan ? Il redeviendra sélectionnable dans "accès à positionner".')) return;
   try{
     await adminFetch('/wa/facility/update', {method:'POST', body:JSON.stringify({code:RM_EDITING, x:null, y:null})});
     await refreshRooms();
@@ -6345,7 +6345,7 @@ async function rmClearPlanPosition(){
 
 async function rmSaveRoom(){
   var code = document.getElementById('rm-code').value.trim();
-  if(!code){ toast('Le code chambre est obligatoire'); document.getElementById('rm-code').focus(); return; }
+  if(!code){ toast('Le code d\'accès est obligatoire'); document.getElementById('rm-code').focus(); return; }
   if(!RM_EDITING && CFG.rooms.find(function(r){return r.code===code;})){
     toast('Code "'+code+'" déjà utilisé'); return;
   }
@@ -6388,18 +6388,18 @@ async function rmSaveRoom(){
   await refreshRooms();
   rmCloseModal();
   renderRoomGrid();
-  toast((RM_EDITING?'Chambre mise à jour':'Chambre créée')+' ✓ — '+code);
+  toast((RM_EDITING?'Accès mis à jour':'Accès créé')+' ✓ — '+code);
 }
 
 // ── Supprimer une chambre — POST /wa/facility/delete ──
 async function rmDeleteRoom(){
   if(!RM_EDITING) return;
-  if(!confirm('Supprimer la chambre "'+RM_EDITING+'" ?')) return;
+  if(!confirm('Supprimer l\'accès "'+RM_EDITING+'" ?')) return;
   await adminFetch('/wa/facility/delete', {method:'POST', body:JSON.stringify({code:RM_EDITING})});
   await refreshRooms();
   rmCloseModal();
   renderRoomGrid();
-  toast('Chambre supprimée');
+  toast('Accès supprimé');
 }
 
 // ── Tags ──
@@ -6484,7 +6484,7 @@ function rmAutoFill(preset){
 function rmPreviewBulk(){
   var codes = parseBulkCodes();
   var el=document.getElementById('bulk-preview');
-  if(el) el.textContent=codes.length+' chambre(s) à créer : '+codes.slice(0,8).join(', ')+(codes.length>8?'…':'');
+  if(el) el.textContent=codes.length+' accès à créer : '+codes.slice(0,8).join(', ')+(codes.length>8?'…':'');
 }
 function parseBulkCodes(){
   var raw  = document.getElementById('bulk-codes')?.value||'';
@@ -6501,7 +6501,7 @@ async function rmImportBulk(){
     if(existing.includes(code)){skipped++;continue;}
     try{
       await adminFetch('/wa/facility/create', {method:'POST', body:JSON.stringify({
-        code:code,floor:floor,name:'Chambre '+code,type:'',capacity:2,
+        code:code,floor:floor,name:'Accès '+code,type:'',capacity:2,
         surface:0,rate:0,description:'',tags:[],photos:[],available:true,
         pmr:false,nosmoking:true,connected:false
       })});
@@ -6511,7 +6511,7 @@ async function rmImportBulk(){
   await refreshRooms();
   document.getElementById('rmBulkModal').style.display='none';
   renderRoomGrid();
-  toast(added+' chambre(s) créée(s)'+(skipped?' · '+skipped+' ignorée(s) (déjà existante(s))':''));
+  toast(added+' accès créé(s)'+(skipped?' · '+skipped+' ignoré(s) (déjà existant(s))':''));
 }
 
 // ── Génération rapide depuis l'écran vide ──
