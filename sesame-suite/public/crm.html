@@ -882,6 +882,11 @@ let trMonthFilter = null;
 // Filtre de la liste de tâches en page d'accueil (demande client
 // 15/10/2026) — status: open (à faire) | overdue (en retard) | done (faites) | all.
 let HOME_TASK_FILTER = {status:'open', type:'', author:''};
+// Sélection multiple sur le tableau de tâches en page d'accueil (demande
+// client 15/10/2026, "mécanisme de changement de statut en masse") — même
+// principe qu'un Set d'ids que SELECTED_IDS, vidé à chaque changement de
+// filtre pour ne jamais garder sélectionnée une tâche qui sort de la vue.
+let HOME_TASK_SELECTED_IDS = new Set();
 
 async function loadData(){
   var r = await apiFetch('/wa/crmProspect/list');
@@ -987,6 +992,25 @@ function homeTaskFilterOptions(tasks){
 
 function homeTaskSetFilter(field, value){
   HOME_TASK_FILTER[field] = value;
+  HOME_TASK_SELECTED_IDS.clear();
+  const el = document.getElementById('home-tasks-card');
+  if(el) el.outerHTML = renderHomeTasksCard();
+}
+
+function homeTaskToggleSelect(id, checked){
+  if(checked) HOME_TASK_SELECTED_IDS.add(id); else HOME_TASK_SELECTED_IDS.delete(id);
+  const el = document.getElementById('home-tasks-card');
+  if(el) el.outerHTML = renderHomeTasksCard();
+}
+
+function homeTaskToggleSelectAllVisible(checked, visibleIds){
+  visibleIds.forEach(id=>{ if(checked) HOME_TASK_SELECTED_IDS.add(id); else HOME_TASK_SELECTED_IDS.delete(id); });
+  const el = document.getElementById('home-tasks-card');
+  if(el) el.outerHTML = renderHomeTasksCard();
+}
+
+function homeTaskClearSelection(){
+  HOME_TASK_SELECTED_IDS.clear();
   const el = document.getElementById('home-tasks-card');
   if(el) el.outerHTML = renderHomeTasksCard();
 }
@@ -1005,28 +1029,31 @@ function renderHomeTasksCard(){
   });
   rows.sort((a,b)=> new Date(a.activityDate||a.createdAt) - new Date(b.activityDate||b.createdAt));
   const authors = homeTaskFilterOptions(all);
+  const visibleIdsJs = JSON.stringify(rows.map(r=>r.id));
+  const allSelected = rows.length>0 && rows.every(t=>HOME_TASK_SELECTED_IDS.has(t.id));
+  const selBar = HOME_TASK_SELECTED_IDS.size ? `<div class="list-toolbar" style="margin-top:-6px;margin-bottom:10px;padding:8px 12px;background:var(--pl,#fdedf0);border-radius:8px">
+    <span style="font-size:13px;font-weight:600">${HOME_TASK_SELECTED_IDS.size} sélectionnée${HOME_TASK_SELECTED_IDS.size>1?'s':''}</span>
+    <button class="btn btn-sm" style="margin-left:10px" onclick="homeTaskBulkMarkDone()">✓ Marquer fait (en masse)</button>
+    <button class="btn btn-ghost btn-sm" onclick="homeTaskClearSelection()">Désélectionner</button>
+  </div>` : '';
   const rowsHtml = rows.length===0
-    ? '<div class="log-empty">Aucune tâche pour ces filtres.</div>'
+    ? `<tr><td colspan="6" class="log-empty">Aucune tâche pour ces filtres.</td></tr>`
     : rows.map(t=>{
         const overdue = !t.done && t.activityDate && new Date(t.activityDate) < today;
-        return `<div class="log-item" id="hli-${t.id}">
-          <div class="log-dot ld-${DOT_MAP[t.type]||'b'}"></div>
-          <div class="log-body">
-            <div style="display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap">
-              <span class="tag t-gray" style="font-size:10px;padding:1px 7px;flex-shrink:0">${t.type||'Note'}</span>
-              ${overdue?'<span class="tag t-red" style="font-size:9px;padding:1px 7px">RETARD</span>':''}
-              <span class="log-text" style="cursor:pointer" onclick="${t.dealId?`openDealModal('${t.dealId}')`:`showFiche('${t.prospectId}')`}">${t.text}</span>
-            </div>
-            <div class="log-meta">
-              ${t.activityDate?new Date(t.activityDate).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}):'—'}
-              — <a href="#" onclick="event.preventDefault();showFiche('${t.prospectId}')">${esc(t.prospectName)}</a>${t.dealTitle?' · <a href="#" onclick="event.preventDefault();openDealModal(\''+t.dealId+'\')">'+esc(t.dealTitle)+'</a>':''}
-              ${t.authorName?' — '+esc(t.authorName):''}
-            </div>
-            <div class="log-acts">
-              ${!t.done?`<button class="btn btn-sm btn-ghost" onclick="homeMarkTaskDone('${t.prospectId}','${t.id}')">✓ Marquer fait</button>`:''}
-            </div>
-          </div>
-        </div>`;
+        return `<tr id="htr-${t.id}">
+          <td><input type="checkbox" class="crm-sel-cb" ${HOME_TASK_SELECTED_IDS.has(t.id)?'checked':''} onchange="homeTaskToggleSelect('${t.id}',this.checked)"></td>
+          <td><span class="tag t-gray" style="font-size:10px;padding:1px 7px">${t.type||'Note'}</span></td>
+          <td>
+            <span style="cursor:pointer" onclick="${t.dealId?`openDealModal('${t.dealId}')`:`showFiche('${t.prospectId}')`}">${t.text}</span>
+            ${overdue?' <span class="tag t-red" style="font-size:9px;padding:1px 7px">RETARD</span>':''}
+          </td>
+          <td style="white-space:nowrap">${t.activityDate?new Date(t.activityDate).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'}):'—'}</td>
+          <td style="white-space:nowrap">
+            <a href="#" onclick="event.preventDefault();showFiche('${t.prospectId}')">${esc(t.prospectName)}</a>${t.dealTitle?' · <a href="#" onclick="event.preventDefault();openDealModal(\''+t.dealId+'\')">'+esc(t.dealTitle)+'</a>':''}
+          </td>
+          <td style="white-space:nowrap">${t.authorName?esc(t.authorName):'—'}</td>
+          <td>${!t.done?`<button class="btn btn-sm btn-ghost" onclick="homeMarkTaskDone('${t.prospectId}','${t.id}')">✓ Fait</button>`:'<span class="tag t-green" style="font-size:10px;padding:1px 7px">Fait</span>'}</td>
+        </tr>`;
       }).join('');
   return `<div class="card" id="home-tasks-card">
     <div class="card-head" style="flex-wrap:wrap;gap:8px">
@@ -1049,7 +1076,19 @@ function renderHomeTasksCard(){
         </select>
       </div>
     </div>
-    <div>${rowsHtml}</div>
+    ${selBar}
+    <div class="tbl-wrap"><table>
+      <thead><tr>
+        <th style="width:26px"><input type="checkbox" class="crm-sel-cb" ${allSelected?'checked':''} onchange="homeTaskToggleSelectAllVisible(this.checked, ${esc(visibleIdsJs)})"></th>
+        <th style="width:90px">Type</th>
+        <th>Tâche</th>
+        <th style="width:95px">Échéance</th>
+        <th style="width:200px">Client / Affaire</th>
+        <th style="width:110px">Personne</th>
+        <th style="width:90px">Statut</th>
+      </tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table></div>
   </div>`;
 }
 
@@ -1060,7 +1099,29 @@ async function homeMarkTaskDone(prospectId, jid){
     if(!r.ok) throw new Error('http '+r.status);
   }catch(e){ flash('Erreur'); return; }
   const j=(c.journal||[]).find(j=>j.id===jid); if(j) j.done=true;
+  HOME_TASK_SELECTED_IDS.delete(jid);
   flash('Marqué comme fait');
+  const el = document.getElementById('home-tasks-card');
+  if(el) el.outerHTML = renderHomeTasksCard();
+}
+
+async function homeTaskBulkMarkDone(){
+  const ids = [...HOME_TASK_SELECTED_IDS];
+  if(!ids.length) return;
+  const all = buildAllTasks();
+  const tasks = ids.map(id=>all.find(t=>t.id===id)).filter(t=>t && !t.done);
+  if(!tasks.length){ HOME_TASK_SELECTED_IDS.clear(); return; }
+  try{
+    const results = await Promise.all(tasks.map(t=>apiFetch('/wa/crmProspect/activity/markDone', {method:'POST', body:JSON.stringify({id:t.id})})));
+    if(results.some(r=>!r.ok)) throw new Error('http');
+  }catch(e){ flash('Erreur lors du marquage en masse'); return; }
+  tasks.forEach(t=>{
+    const c = clients.find(x=>x.id===t.prospectId);
+    const j = c && (c.journal||[]).find(j=>j.id===t.id);
+    if(j) j.done = true;
+  });
+  HOME_TASK_SELECTED_IDS.clear();
+  flash(tasks.length+' tâche(s) marquée(s) comme faite(s)');
   const el = document.getElementById('home-tasks-card');
   if(el) el.outerHTML = renderHomeTasksCard();
 }
