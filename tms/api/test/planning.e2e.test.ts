@@ -381,3 +381,22 @@ describe('Planning — recette', () => {
     await u.api.put('/api/v1/planning/settings', { direct_publish: false }).expect(200);
   });
 });
+
+describe('Horaires modifiables tant que non validé ou non commencé', () => {
+  it('brouillon passé modifiable ; publié futur modifiable ; publié commencé figé', async () => {
+    const u = await signupAndLogin();
+    const prog = (await u.api.post('/api/v1/programs', { title: 'Horaires', durationMinutes: 180, modality: 'onsite' }).expect(201)).body;
+    const s = (await u.api.post('/api/v1/sessions', { programVersionId: prog.versions[0].id, kind: 'inter', startsOn: '2026-09-01' }).expect(201)).body;
+    const t = (await u.api.post('/api/v1/persons', { firstName: 'Héra', lastName: 'Formatrice', roles: ['trainer'] }).expect(201)).body;
+    const site = (await u.api.post('/api/v1/resources', { kind: 'site', name: 'Site H' }).expect(201)).body;
+    const mk = async (d: string, status?: string) => (await u.api.post('/api/v1/planning/slots', { sessionId: s.id, startsAt: `${d}T09:00:00+02:00`, endsAt: `${d}T12:00:00+02:00`, trainerIds: [t.id], resourceIds: [site.id], status }).expect(201)).body.id;
+    const draftPast = await mk('2026-09-01');
+    const pubFuture = await mk('2027-09-01', 'published');
+    const pubPast = await mk('2026-09-02', 'published');
+    await u.api.patch(`/api/v1/slots/${draftPast}`, { startsAt: '2026-09-01T10:00:00+02:00', endsAt: '2026-09-01T13:00:00+02:00' }).expect(200);
+    await u.api.patch(`/api/v1/slots/${pubFuture}`, { startsAt: '2027-09-01T10:00:00+02:00', endsAt: '2027-09-01T13:00:00+02:00' }).expect(200);
+    const r = await u.api.patch(`/api/v1/slots/${pubPast}`, { startsAt: '2026-09-02T10:00:00+02:00', endsAt: '2026-09-02T13:00:00+02:00' });
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe('slot_started');
+  });
+});

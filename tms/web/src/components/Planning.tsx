@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, fmtDT, fmtT, post, zonedIso } from '../api';
 import { Help } from '../help';
 import { HmInput } from '../planning/SlotPanel';
@@ -32,6 +32,51 @@ function Checks({ items, value, onChange, label }: { items: { id: string; label:
         </label>
       ))}
     </fieldset>
+  );
+}
+
+/** Sélection multiple compacte (liste déroulante à cases) pour tenir sur une ligne. */
+function Pick({ items, value, onChange, label }: { items: { id: string; label: string; hint?: string }[]; value: string[]; onChange: (v: string[]) => void; label: string }) {
+  const sel = items.filter((i) => value.includes(i.id));
+  const ref = useRef<HTMLDetailsElement>(null);
+  useEffect(() => { // fermeture au clic extérieur
+    const out = (e: MouseEvent) => { if (ref.current?.open && !ref.current.contains(e.target as Node)) ref.current.open = false; };
+    document.addEventListener('mousedown', out); return () => document.removeEventListener('mousedown', out);
+  }, []);
+  return (
+    <label>{label}
+      <details className="pick" ref={ref}>
+        <summary aria-label={label}>{sel.length ? sel.map((i) => i.label).join(', ') : <span className="muted">{items.length ? '— aucun —' : 'aucun disponible'}</span>}</summary>
+        <div className="pick-list">{items.map((it) => (
+          <label key={it.id} className="row small"><input type="checkbox" checked={value.includes(it.id)} onChange={(e) => onChange(e.target.checked ? [...value, it.id] : value.filter((x) => x !== it.id))} />
+            {it.label}{it.hint && <span className="muted"> — {it.hint}</span>}</label>))}
+          {!items.length && <span className="small muted">Aucun : à créer dans {label === 'Formateur(s)' ? '« Clients & apprenants »' : '« Lieux & matériel »'}.</span>}
+        </div>
+      </details>
+    </label>
+  );
+}
+
+/** Horaires modifiables : séance non validée (brouillon, à valider) ou pas encore commencée, sans présence saisie. */
+const timesEditable = (sl: any) => !['cancelled', 'done'].includes(sl.status) && !sl.attendance_count && (['draft', 'pending'].includes(sl.status) || new Date(sl.starts_at) > new Date());
+
+/** Date et horaires modifiables directement dans la ligne du créneau. */
+function InlineTimes({ sl, tz, onSave }: { sl: any; tz: string; onSave: (startsAt: string, endsAt: string) => Promise<unknown> }) {
+  const init = () => ({ day: parts(sl.starts_at, tz).date, start: parts(sl.starts_at, tz).hm, end: parts(sl.ends_at, tz).hm });
+  const [f, setF] = useState(init);
+  const [busy, setBusy] = useState(false);
+  const i = init();
+  const dirty = f.day !== i.day || f.start !== i.start || f.end !== i.end;
+  const save = async () => {
+    setBusy(true);
+    try { await onSave(zonedIso(f.day, f.start, tz), zonedIso(f.end <= f.start ? addDays(f.day, 1) : f.day, f.end, tz)); } finally { setBusy(false); }
+  };
+  return (
+    <span className="inline-times">
+      <input type="date" aria-label="Date du créneau" value={f.day} onChange={(e) => setF({ ...f, day: e.target.value })} />
+      <HmInput label="Début" value={f.start} onChange={(v) => setF({ ...f, start: v })} />→<HmInput label="Fin" value={f.end} onChange={(v) => setF({ ...f, end: v })} />
+      {dirty && <><button type="button" className="btn sm" disabled={busy} onClick={save}>OK</button><button type="button" className="btn ghost sm" onClick={() => setF(init())}>Annuler</button></>}
+    </span>
   );
 }
 
@@ -117,7 +162,7 @@ export default function Planning({ session: d, canWrite, trainers, resources, on
                   <label>Date<input type="date" required value={editSlot.day} disabled={editSlot.locked} onChange={(e) => setEditSlot({ ...editSlot, day: e.target.value })} /></label>
                   <label>Début<HmInput required value={editSlot.start} disabled={editSlot.locked} onChange={(v) => setEditSlot({ ...editSlot, start: v })} /></label>
                   <label>Fin<HmInput required value={editSlot.end} disabled={editSlot.locked} onChange={(v) => setEditSlot({ ...editSlot, end: v })} /></label>
-                  <span className="small muted">{editSlot.locked ? 'Présences déjà saisies : horaires figés.' : `Fuseau ${d.timezone}${editSlot.end <= editSlot.start ? ' · fin le lendemain' : ''}`}</span>
+                  <span className="small muted">{editSlot.locked ? 'Séance commencée ou émargée : horaires figés.' : `Fuseau ${d.timezone}${editSlot.end <= editSlot.start ? ' · fin le lendemain' : ''}`}</span>
                 </div>
                 {d.parts.length > 0 && <label>Partie<select value={editSlot.partId} onChange={(e) => setEditSlot({ ...editSlot, partId: e.target.value })}><option value="">— aucune —</option>{d.parts.map((p: any) => <option key={p.id} value={p.id}>{p.title}</option>)}</select></label>}
                 <Checks label="Formateur(s)" items={trainerItems} value={editSlot.trainerIds} onChange={(v) => setEditSlot({ ...editSlot, trainerIds: v })} />
@@ -138,7 +183,9 @@ export default function Planning({ session: d, canWrite, trainers, resources, on
             </td></tr>
           ) : (
             <tr key={sl.id}>
-              <td>{fmtDT(sl.starts_at, d.timezone)} → {fmtT(sl.ends_at, d.timezone)}
+              <td>{canWrite && timesEditable(sl)
+                  ? <InlineTimes key={sl.version} sl={sl} tz={d.timezone} onSave={(startsAt, endsAt) => run(() => withOverride((overrideReason) => api('PATCH', `/api/v1/slots/${sl.id}`, { version: sl.version, startsAt, endsAt, overrideReason })))} />
+                  : <>{fmtDT(sl.starts_at, d.timezone)} → {fmtT(sl.ends_at, d.timezone)}</>}
                 {sl.derogation && <> <span className="pill warn" title={sl.derogation.reason}>dérogation</span></>}</td>
               <td className="num">{h(sl.pedagogical_minutes)}{sl.pedagogical_minutes !== sl.duration_minutes && <div className="small muted">pauses {h(sl.duration_minutes - sl.pedagogical_minutes)}</div>}</td>
               <td>{partTitle(sl.part_id) ?? <span className="muted">—</span>}</td>
@@ -147,7 +194,7 @@ export default function Planning({ session: d, canWrite, trainers, resources, on
               <td>{sl.resources.filter((r: any) => r.kind === 'equipment').map((r: any) => r.name).join(', ') || <span className="muted">—</span>}</td>
               <td><span className={`pill ${STATUS[sl.status][1]}`} title={sl.cancel_reason ?? ''}>{STATUS[sl.status][0]}</span>{sl.to_resolve > 0 && <div className="small" style={{ color: 'var(--warn)' }}>{sl.to_resolve} à résoudre</div>}</td>
               <td>{canWrite && !['cancelled', 'done'].includes(sl.status) && <>
-                <button className="btn ghost sm" onClick={() => setEditSlot({ id: sl.id, version: sl.version, day: parts(sl.starts_at, d.timezone).date, start: parts(sl.starts_at, d.timezone).hm, end: parts(sl.ends_at, d.timezone).hm, locked: sl.attendance_count > 0, partId: sl.part_id ?? '', trainerIds: sl.trainers.map((t: any) => t.id), resourceIds: sl.resources.map((r: any) => r.id) })}>Modifier</button>{' '}
+                <button className="btn ghost sm" onClick={() => setEditSlot({ id: sl.id, version: sl.version, day: parts(sl.starts_at, d.timezone).date, start: parts(sl.starts_at, d.timezone).hm, end: parts(sl.ends_at, d.timezone).hm, locked: !timesEditable(sl), partId: sl.part_id ?? '', trainerIds: sl.trainers.map((t: any) => t.id), resourceIds: sl.resources.map((r: any) => r.id) })}>Modifier</button>{' '}
                 {sl.status === 'draft' && !sl.published_at
                   ? <button className="btn ghost sm" onClick={() => confirm('Supprimer ce brouillon ?') && run(() => api('DELETE', `/api/v1/slots/${sl.id}`))}>Supprimer</button>
                   : <button className="btn ghost sm" onClick={() => { const reason = prompt('Annuler la séance (les personnes concernées seront prévenues). Motif :'); if (reason) run(() => post(`/api/v1/planning/slots/${sl.id}/cancel`, { reason })); }}>Annuler</button>}
@@ -168,18 +215,17 @@ export default function Planning({ session: d, canWrite, trainers, resources, on
           if (r) setSlot({ ...slot, start: slot.end, end: slot.end < '13:00' ? '17:00' : slot.end });
         }); }}>
           <strong className="small">Ajouter un créneau</strong>
-          <div className="toolbar">
+          <div className="slot-line">
             <label>Jour<input type="date" required value={slot.day} onChange={(e) => setSlot({ ...slot, day: e.target.value })} /></label>
             <label>Début<HmInput required value={slot.start} onChange={(v) => setSlot({ ...slot, start: v })} /></label>
             <label>Fin<HmInput required value={slot.end} onChange={(v) => setSlot({ ...slot, end: v })} /></label>
             {d.parts.length > 0 && <label>Partie<select value={slot.partId} onChange={(e) => setSlot({ ...slot, partId: e.target.value })}><option value="">— aucune —</option>{d.parts.map((p: any) => <option key={p.id} value={p.id}>{p.title}</option>)}</select></label>}
+            <Pick label="Formateur(s)" items={trainerItems} value={slot.trainerIds} onChange={(v) => setSlot({ ...slot, trainerIds: v })} />
+            <Pick label="Lieu / salle" items={resourceItems(['site', 'room'])} value={slot.resourceIds} onChange={(v) => setSlot({ ...slot, resourceIds: v })} />
+            {resourceItems(['equipment']).length > 0 && <Pick label="Matériel" items={resourceItems(['equipment'])} value={slot.resourceIds} onChange={(v) => setSlot({ ...slot, resourceIds: v })} />}
+            <button className="btn sm">Ajouter</button>
           </div>
-          <div className="grid2" style={{ gap: 8 }}>
-            <Checks label="Formateur(s)" items={trainerItems} value={slot.trainerIds} onChange={(v) => setSlot({ ...slot, trainerIds: v })} />
-            <Checks label="Lieu / salle" items={resourceItems(['site', 'room'])} value={slot.resourceIds} onChange={(v) => setSlot({ ...slot, resourceIds: v })} />
-            <Checks label="Matériel" items={resourceItems(['equipment'])} value={slot.resourceIds} onChange={(v) => setSlot({ ...slot, resourceIds: v })} />
-          </div>
-          <div><button className="btn sm">Ajouter le créneau</button> <span className="small muted">Créé en brouillon (ressources réservées), à publier ensuite. Pauses, récurrences et modalité distancielle : écran Planning.</span></div>
+          <span className="small muted">Créé en brouillon (ressources réservées), à publier ensuite. Horaires modifiables directement dans la liste tant que le créneau n’est pas validé ou pas commencé. Pauses, récurrences, distanciel : écran Planning.</span>
         </form>
       )}
     </div>

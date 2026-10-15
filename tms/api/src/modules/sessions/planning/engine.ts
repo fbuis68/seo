@@ -293,6 +293,10 @@ export class PlanningEngine {
       if (!o.reason) throw badRequest('reason_required', 'Correction administrative d’une séance réalisée : motif obligatoire.', 'reason');
       if (!ctx.permissions.has('planning.publish')) throw forbidden('permission_denied', 'Correction d’une séance réalisée réservée aux responsables.');
     }
+    // Horaires modifiables tant que la séance n'est pas validée (brouillon, à valider) ou pas commencée.
+    if (timeChange && cur.status === 'published' && new Date(cur.starts_at) <= new Date()) {
+      throw conflict('slot_started', 'Séance publiée déjà commencée : horaires non modifiables.');
+    }
     if (timeChange && (await one(tx, `SELECT 1 FROM attendance WHERE slot_id = $1`, [slotId]))) {
       throw conflict('slot_has_attendance', 'Présences déjà saisies sur cette séance : horaires non modifiables.');
     }
