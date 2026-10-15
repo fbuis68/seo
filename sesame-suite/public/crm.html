@@ -879,6 +879,9 @@ let cashYear = new Date().getFullYear();
 // Recettes/Dépenses de la Trésorerie — null = tous les mois. N'affecte que
 // les lignes affichées, jamais les totaux/le graphique (cf. trCategoryCard).
 let trMonthFilter = null;
+// Filtre de la liste de tâches en page d'accueil (demande client
+// 15/10/2026) — status: open (à faire) | overdue (en retard) | done (faites) | all.
+let HOME_TASK_FILTER = {status:'open', type:'', author:''};
 
 async function loadData(){
   var r = await apiFetch('/wa/crmProspect/list');
@@ -959,10 +962,113 @@ function qf(f,v){srch='';fDanger='';fSecteurs=new Set();fOrigines=new Set();fCon
 // ════════════════════════════════════════
 // HOME — vue d'ensemble (indicateurs seuls, sans la liste des fiches)
 // ════════════════════════════════════════
+
+/** Liste à plat de toutes les activités (fiches + affaires), enrichie du
+ * nom du client et, le cas échéant, du titre de l'affaire — construite
+ * côté client depuis les données déjà chargées (clients[].journal inclut
+ * déjà toutes les activités de toutes les fiches, cf. PROSPECT_INCLUDE
+ * côté serveur), pas d'appel réseau dédié (demande client 15/10/2026,
+ * "liste de tâches à réaliser" en Home avec filtres statut/tâche/personne). */
+function buildAllTasks(){
+  const out=[];
+  clients.forEach(c=>{
+    (c.journal||[]).forEach(j=>{
+      const deal = j.dealId ? deals.find(d=>d.id===j.dealId) : null;
+      out.push({...j, prospectId:c.id, prospectName:c.nom, dealTitle: deal?deal.title:null});
+    });
+  });
+  return out;
+}
+
+function homeTaskFilterOptions(tasks){
+  const authors = Array.from(new Set(tasks.map(t=>t.authorName).filter(Boolean))).sort();
+  return authors;
+}
+
+function homeTaskSetFilter(field, value){
+  HOME_TASK_FILTER[field] = value;
+  const el = document.getElementById('home-tasks-card');
+  if(el) el.outerHTML = renderHomeTasksCard();
+}
+
+function renderHomeTasksCard(){
+  const all = buildAllTasks();
+  const today = new Date(new Date().toDateString());
+  const f = HOME_TASK_FILTER;
+  let rows = all.filter(t=>{
+    if(f.status==='open' && t.done) return false;
+    if(f.status==='done' && !t.done) return false;
+    if(f.status==='overdue' && (t.done || !t.activityDate || new Date(t.activityDate)>=today)) return false;
+    if(f.type && t.type!==f.type) return false;
+    if(f.author && t.authorName!==f.author) return false;
+    return true;
+  });
+  rows.sort((a,b)=> new Date(a.activityDate||a.createdAt) - new Date(b.activityDate||b.createdAt));
+  const authors = homeTaskFilterOptions(all);
+  const rowsHtml = rows.length===0
+    ? '<div class="log-empty">Aucune tâche pour ces filtres.</div>'
+    : rows.map(t=>{
+        const overdue = !t.done && t.activityDate && new Date(t.activityDate) < today;
+        return `<div class="log-item" id="hli-${t.id}">
+          <div class="log-dot ld-${DOT_MAP[t.type]||'b'}"></div>
+          <div class="log-body">
+            <div style="display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap">
+              <span class="tag t-gray" style="font-size:10px;padding:1px 7px;flex-shrink:0">${t.type||'Note'}</span>
+              ${overdue?'<span class="tag t-red" style="font-size:9px;padding:1px 7px">RETARD</span>':''}
+              <span class="log-text" style="cursor:pointer" onclick="${t.dealId?`openDealModal('${t.dealId}')`:`showFiche('${t.prospectId}')`}">${t.text}</span>
+            </div>
+            <div class="log-meta">
+              ${t.activityDate?new Date(t.activityDate).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}):'—'}
+              — <a href="#" onclick="event.preventDefault();showFiche('${t.prospectId}')">${esc(t.prospectName)}</a>${t.dealTitle?' · <a href="#" onclick="event.preventDefault();openDealModal(\''+t.dealId+'\')">'+esc(t.dealTitle)+'</a>':''}
+              ${t.authorName?' — '+esc(t.authorName):''}
+            </div>
+            <div class="log-acts">
+              ${!t.done?`<button class="btn btn-sm btn-ghost" onclick="homeMarkTaskDone('${t.prospectId}','${t.id}')">✓ Marquer fait</button>`:''}
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+  return `<div class="card" id="home-tasks-card">
+    <div class="card-head" style="flex-wrap:wrap;gap:8px">
+      <div class="ch-ico">☑</div><span class="ch-title">Tâches à réaliser</span>
+      <span style="font-size:12px;color:#aaa">${rows.length}</span>
+      <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+        <select class="lsel" style="width:auto" onchange="homeTaskSetFilter('status', this.value)">
+          <option value="open" ${f.status==='open'?'selected':''}>À faire</option>
+          <option value="overdue" ${f.status==='overdue'?'selected':''}>En retard</option>
+          <option value="done" ${f.status==='done'?'selected':''}>Faites</option>
+          <option value="all" ${f.status==='all'?'selected':''}>Toutes</option>
+        </select>
+        <select class="lsel" style="width:auto" onchange="homeTaskSetFilter('type', this.value)">
+          <option value="">Tous types</option>
+          ${ACT_TYPES.map(t=>`<option value="${t}" ${f.type===t?'selected':''}>${t}</option>`).join('')}
+        </select>
+        <select class="lsel" style="width:auto" onchange="homeTaskSetFilter('author', this.value)">
+          <option value="">Toutes personnes</option>
+          ${authors.map(a=>`<option value="${esc(a)}" ${f.author===a?'selected':''}>${esc(a)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div>${rowsHtml}</div>
+  </div>`;
+}
+
+async function homeMarkTaskDone(prospectId, jid){
+  const c = clients.find(x=>x.id===prospectId); if(!c) return;
+  try{
+    const r = await apiFetch('/wa/crmProspect/activity/markDone', {method:'POST', body:JSON.stringify({id:jid})});
+    if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash('Erreur'); return; }
+  const j=(c.journal||[]).find(j=>j.id===jid); if(j) j.done=true;
+  flash('Marqué comme fait');
+  const el = document.getElementById('home-tasks-card');
+  if(el) el.outerHTML = renderHomeTasksCard();
+}
+
 function showHome(){
   view='home';editingId=null;setNav('n-home');bc([{label:'Home'}]);tba('');
   document.getElementById('main').innerHTML = clients.length
-    ? renderPipelineKpis()+renderInsights()
+    ? renderPipelineKpis()+renderHomeTasksCard()+renderInsights()
     : '<div style="padding:40px;text-align:center;color:#999;font-size:13px">Aucune fiche client pour le moment.</div>';
 }
 
@@ -4679,12 +4785,25 @@ function trManualCashflowRowHtml(row){
   return `<tr style="${row.paid?'opacity:.5':''}">
     <td>${esc(row.label)}</td>
     <td style="text-align:right;font-family:monospace">${fmtEUR2(row.amount)}</td>
-    <td>${new Date(row.dueDate).toLocaleDateString('fr-FR')}</td>
+    <td><input type="date" value="${toDateInputValue(row.dueDate)}" ${row.paid?'disabled':''} style="width:140px" onchange="trEditManualCashflowDate('${row.id}', this.value)"></td>
     <td style="white-space:nowrap">
       <button class="btn btn-ghost btn-sm" onclick="trToggleManualPaid('${row.id}',${!row.paid})">${row.paid?'↩ Annuler':'✓ Marquer payé'}</button>
       <button class="btn btn-ghost btn-sm" onclick="trDeleteManualCashflow('${row.id}')" title="Supprimer"><i class="ti ti-trash"></i></button>
     </td>
   </tr>`;
+}
+
+/** Modifie uniquement la date d'échéance (date prévisionnelle) d'une ligne
+ * ponctuelle hors facturation, en inline direct depuis la Trésorerie — sans
+ * passer par un modal (demande client 15/10/2026). */
+async function trEditManualCashflowDate(id, dueDate){
+  if(!dueDate) return;
+  try{
+    const r = await apiFetch('/wa/acc/manual-cashflow/'+id+'?scope=crm', {method:'PATCH', body:JSON.stringify({dueDate})});
+    const d = await r.json().catch(()=>({}));
+    if(!r.ok){ flash('Erreur : '+(d.error||'échec')); return; }
+    await loadTreasuryOverview();
+  }catch(e){ flash('Erreur de connexion au serveur'); }
 }
 
 function trManualCashflowAddRowHtml(direction){
@@ -4795,8 +4914,26 @@ function trInvoiceRowHtml(inv){
     <td>${esc(accInvoiceTiersName(inv)||'—')}</td>
     <td>${ACC_DOCTYPE_LABEL[inv.documentType]||inv.documentType||'—'}</td>
     <td style="text-align:right;font-family:monospace">${fmtEUR2(remaining)}</td>
-    <td>${inv.dueDate?new Date(inv.dueDate).toLocaleDateString('fr-FR'):'<span style="color:#b8791f">Non définie</span>'}${overdue?' <span class="tag t-red" style="font-size:9px;padding:1px 5px">RETARD</span>':''}</td>
+    <td onclick="event.stopPropagation()">
+      <input type="date" value="${toDateInputValue(inv.dueDate)}" style="width:140px" onchange="trEditInvoiceDueDate('${inv.id}', this.value)">
+      ${overdue?' <span class="tag t-red" style="font-size:9px;padding:1px 5px">RETARD</span>':''}
+    </td>
   </tr>`;
+}
+
+/** Modifie uniquement la date d'échéance (date prévisionnelle) d'une
+ * facture en inline direct depuis la Trésorerie, sans ouvrir le modal
+ * complet — reste modifiable même sur une facture déjà validée/réglée
+ * (dueDate fait partie de NON_ACCOUNTING_EDITABLE_FIELDS côté serveur,
+ * demande client 15/10/2026). */
+async function trEditInvoiceDueDate(id, dueDate){
+  if(!dueDate) return;
+  try{
+    const r = await apiFetch('/wa/acc/invoices/'+id+'?scope=crm', {method:'PUT', body:JSON.stringify({dueDate})});
+    const d = await r.json().catch(()=>({}));
+    if(!r.ok){ flash('Erreur : '+(d.error||'échec')); return; }
+    await loadTreasuryOverview();
+  }catch(e){ flash('Erreur de connexion au serveur'); }
 }
 
 function trRenderTreasuryChart(buckets){
@@ -5566,6 +5703,100 @@ function dealToggleNewProspect(show){
  * même logique que trEditLocal pour la Trésorerie). */
 function dealProbaLive(v){ const el=document.getElementById('d-proba-badge'); if(el) el.innerHTML = dealProbaBadge(+v||0); }
 
+/** Journal d'activité filtré sur une affaire précise (demande client
+ * 15/10/2026) — réutilise le journal déjà chargé sur la fiche client
+ * parente (clients[].journal) plutôt que de refaire un appel réseau : une
+ * activité liée à une affaire est de toute façon incluse dans le journal
+ * de son prospect côté serveur (cf. CrmActivity.dealId, prospectId dérivé
+ * du deal à la création). */
+function dealActivityHtml(dealId){
+  const d = deals.find(x=>x.id===dealId);
+  const c = d ? clients.find(x=>x.id===d.prospectId) : null;
+  const items = ((c&&c.journal)||[]).filter(j=>j.dealId===dealId);
+  if(!items.length) return '<div class="log-empty">Aucune activité enregistrée pour cette affaire.</div>';
+  return items.slice().reverse().map(j=>`
+    <div class="log-item" id="dli-${j.id}">
+      <div class="log-dot ld-${DOT_MAP[j.type]||'b'}"></div>
+      <div class="log-body">
+        <div style="display:flex;align-items:flex-start;gap:6px">
+          <span class="tag t-gray" style="font-size:10px;padding:1px 7px;flex-shrink:0">${j.type||'Note'}</span>
+          <span class="log-text">${j.text}</span>
+        </div>
+        <div class="log-meta">${new Date(j.activityDate||j.createdAt).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})}${j.authorName?' — '+j.authorName:''}</div>
+        <div class="log-acts">
+          ${!j.done?`<button class="btn btn-sm btn-ghost" onclick="markDoneDealAct('${dealId}','${j.id}')">✓ Marquer fait</button>`:''}
+          <button class="btn btn-sm btn-ghost" onclick="deleteDealAct('${dealId}','${j.id}')" style="color:#a32d2d">Supprimer</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function addDealActForm(dealId){
+  const slot=document.getElementById('dact-form-slot');
+  if(!slot)return;
+  const todayStr=new Date().toISOString().split('T')[0];
+  slot.innerHTML=`<div class="act-form">
+    <textarea id="dact-txt" placeholder="Décrivez l'activité — appel, email, relance, devis envoyé…" rows="3"></textarea>
+    <div class="act-form-row">
+      <select class="act-type-sel" id="dact-type">
+        ${ACT_TYPES.map(t=>`<option value="${t}">${t}</option>`).join('')}
+      </select>
+      <input type="date" class="act-date-inp" id="dact-date" value="${todayStr}">
+      <input class="ei" id="dact-author" placeholder="Auteur (optionnel)" style="width:140px;height:30px">
+      <button class="btn btn-primary btn-sm" onclick="saveDealActivity('${dealId}')">Enregistrer</button>
+      <button class="btn btn-ghost btn-sm" onclick="cancelDealActForm()">Annuler</button>
+    </div>
+  </div>`;
+  document.getElementById('dact-txt').focus();
+}
+function cancelDealActForm(){const s=document.getElementById('dact-form-slot');if(s)s.innerHTML='';}
+
+async function saveDealActivity(dealId){
+  const txt=(document.getElementById('dact-txt')||{}).value||'';
+  if(!txt.trim()){flash('Veuillez saisir une description');return;}
+  const type=(document.getElementById('dact-type')||{}).value||'Note interne';
+  const dateV=(document.getElementById('dact-date')||{}).value||'';
+  const author=(document.getElementById('dact-author')||{}).value||'';
+  const d = deals.find(x=>x.id===dealId); if(!d) return;
+  const c = clients.find(x=>x.id===d.prospectId); if(!c) return;
+  try{
+    const r = await apiFetch('/wa/crmProspect/activity/create', {method:'POST', body:JSON.stringify({
+      dealId, type, text:txt.trim(), authorName:author, activityDate: dateV || undefined
+    })});
+    if(!r.ok) throw new Error('http '+r.status);
+    const entry = await r.json();
+    if(!c.journal) c.journal=[];
+    c.journal.push(entry);
+  }catch(e){ flash('Erreur d\'enregistrement'); return; }
+  flash('Activité enregistrée');
+  cancelDealActForm();
+  document.getElementById('dact-items').innerHTML = dealActivityHtml(dealId);
+}
+
+async function markDoneDealAct(dealId,jid){
+  const d = deals.find(x=>x.id===dealId); if(!d) return;
+  const c = clients.find(x=>x.id===d.prospectId); if(!c) return;
+  try{
+    const r = await apiFetch('/wa/crmProspect/activity/markDone', {method:'POST', body:JSON.stringify({id:jid})});
+    if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash('Erreur'); return; }
+  const j=(c.journal||[]).find(j=>j.id===jid); if(j) j.done=true;
+  flash('Marqué comme fait');
+  document.getElementById('dact-items').innerHTML = dealActivityHtml(dealId);
+}
+
+async function deleteDealAct(dealId,jid){
+  const d = deals.find(x=>x.id===dealId); if(!d) return;
+  const c = clients.find(x=>x.id===d.prospectId); if(!c) return;
+  try{
+    const r = await apiFetch('/wa/crmProspect/activity/delete', {method:'POST', body:JSON.stringify({id:jid})});
+    if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash('Erreur'); return; }
+  c.journal=(c.journal||[]).filter(j=>j.id!==jid);
+  flash('Activité supprimée');
+  document.getElementById('dact-items').innerHTML = dealActivityHtml(dealId);
+}
+
 function renderDealModal(){
   const md = DEAL_DRAFT;
   const prospectOptions = clients.slice().sort((a,b)=>a.nom.localeCompare(b.nom));
@@ -5629,6 +5860,13 @@ function renderDealModal(){
           </div>`).join('')}
       </div>
       <button class="btn btn-ghost btn-sm" onclick="openQuoteModal('${md.id}',null)">+ Nouveau devis</button>
+
+      <div class="modal-section" style="display:flex;align-items:center;gap:8px">
+        Journal d'activité
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="addDealActForm('${md.id}')">+ Ajouter</button>
+      </div>
+      <div id="dact-form-slot"></div>
+      <div id="dact-items">${dealActivityHtml(md.id)}</div>
       `}
 
       <div class="modal-footer">

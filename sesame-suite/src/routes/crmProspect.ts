@@ -34,9 +34,10 @@ function normalizeAffiliations(list: unknown): string[] {
   return out;
 }
 
-function shapeActivity(a: { id: string; type: string; text: string; authorName: string | null; activityDate: Date | null; done: boolean; createdAt: Date }) {
+function shapeActivity(a: { id: string; dealId?: string | null; type: string; text: string; authorName: string | null; activityDate: Date | null; done: boolean; createdAt: Date }) {
   return {
     id: a.id,
+    dealId: a.dealId || null,
     type: a.type,
     text: a.text,
     authorName: a.authorName || "",
@@ -854,14 +855,25 @@ crmProspectRouter.post(
   requireAdmin,
   requireSesame,
   asyncHandler(async (req, res) => {
-    const b = req.body as { prospectId: string; type?: string; text: string; authorName?: string; activityDate?: string };
-    if (!b.prospectId) throw new HttpError(400, "prospectId requis");
+    const b = req.body as { prospectId?: string; dealId?: string; type?: string; text: string; authorName?: string; activityDate?: string };
     if (!b.text || !b.text.trim()) throw new HttpError(400, "Description de l'activité requise");
-    const prospect = await prisma.crmProspect.findUnique({ where: { id: b.prospectId } });
+    let prospectId = b.prospectId || "";
+    // dealId optionnel (demande client 15/10/2026 : journal d'activité
+    // aussi sur les affaires) — le prospectId du parent est dérivé du deal
+    // plutôt que redemandé au front, qui connaît déjà l'un ou l'autre selon
+    // l'écran (fiche client vs modal affaire).
+    if (b.dealId) {
+      const deal = await prisma.crmDeal.findUnique({ where: { id: b.dealId } });
+      if (!deal) throw new HttpError(404, "Affaire introuvable");
+      prospectId = deal.prospectId;
+    }
+    if (!prospectId) throw new HttpError(400, "prospectId ou dealId requis");
+    const prospect = await prisma.crmProspect.findUnique({ where: { id: prospectId } });
     if (!prospect) throw new HttpError(404, "Prospect introuvable");
     const activity = await prisma.crmActivity.create({
       data: {
-        prospectId: b.prospectId,
+        prospectId,
+        dealId: b.dealId || null,
         type: b.type || "Note interne",
         text: b.text.trim(),
         authorName: b.authorName,
