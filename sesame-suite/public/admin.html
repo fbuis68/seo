@@ -8585,7 +8585,8 @@ async function rcCreateBooking(){
   var phone = document.getElementById('rc-phone').value.trim();
   var bookingType = document.getElementById('rc-bookingtype').value.trim();
   if(!firstName || !lastName){ rcShowError('Nom et prénom requis.'); return; }
-  if(!email || email.indexOf('@')===-1){ rcShowError('Email valide requis.'); return; }
+  if(email && email.indexOf('@')===-1){ rcShowError('Email invalide.'); return; }
+  if(!email && !phone){ rcShowError('Email ou téléphone requis.'); return; }
 
   var btn = document.getElementById('rc-create-btn');
   btn.disabled = true; btn.innerHTML = '<div class="spin"></div> Création…';

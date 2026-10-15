@@ -783,7 +783,23 @@ bookingRouter.post(
     const b = req.body as CreateManualBody;
     if (!b.roomId) throw new HttpError(400, "Chambre requise");
     if (!b.firstName?.trim() || !b.lastName?.trim()) throw new HttpError(400, "Nom et prénom requis");
-    if (!b.email?.trim() || !b.email.includes("@")) throw new HttpError(400, "Email valide requis");
+    const emailInput = b.email?.trim() || "";
+    if (emailInput && !emailInput.includes("@")) throw new HttpError(400, "Email invalide");
+    const phoneInput = b.phone?.trim() || "";
+    if (!emailInput && !phoneInput) throw new HttpError(400, "Email ou téléphone requis");
+    // Email laissé vide par le personnel (saisie au guichet/téléphone,
+    // client n'ayant communiqué qu'un numéro) — même tolérance que le
+    // parcours public "empreinte bancaire" (cf. parseCardOnFileDraft,
+    // bookingEngine.ts), qui accepte déjà téléphone seul. Contrairement à
+    // ce dernier, qui laisse personEmail="" (pas de contrainte NOT NULL en
+    // base), une valeur générée est préférable ici : certains flux dérivés
+    // (ex : {{codeAcces}}, cf. lib/messaging.ts fetchAccessQr) utilisent
+    // l'email comme second identifiant de recherche côté source externe,
+    // et un champ vide y échoue silencieusement plutôt que d'y être toléré
+    // — demande client 15/10/2026, "générer un no mail comme côté serveur".
+    const generatedEmail = !emailInput
+      ? `sans-email-${(phoneInput.replace(/[^0-9]/g, "") || Date.now().toString(36))}@sesame.technology`
+      : "";
 
     const occupants: Record<string, number> = {};
     for (const cat of OCCUPANT_AGE_CATEGORIES) {
@@ -796,8 +812,8 @@ bookingRouter.post(
       endDate: b.endDate,
       firstName: b.firstName.trim(),
       lastName: b.lastName.trim(),
-      email: b.email.trim().toLowerCase(),
-      phone: b.phone?.trim() || undefined,
+      email: (emailInput || generatedEmail).toLowerCase(),
+      phone: phoneInput || undefined,
       bookingType: b.bookingType?.trim() || undefined,
       occupants,
     };
