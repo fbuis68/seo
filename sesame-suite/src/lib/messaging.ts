@@ -134,12 +134,20 @@ export async function sendMessage(opts: {
   // configurée → simplement journalisé, {{codeAcces}} reste vide comme
   // toute variable non fournie par le déclencheur, le reste de l'envoi
   // n'est jamais bloqué pour autant.
+  //
+  // PAS limité au canal email (bug corrigé le 15/10/2026) : un modèle SMS
+  // dont le corps est justement "{{codeAcces}}" (ex. règle "Réservation
+  // créée" → SMS) se retrouvait avec un corps entièrement vide une fois
+  // rendu, que DocPartner rejette avec "message is required" — alors que
+  // {{codeAcces}} est un code texte, parfaitement envoyable par SMS/WhatsApp
+  // (contrairement à {{qrCode}}, une image, qui elle reste email uniquement
+  // — cf. plus bas).
   const wantsAccessCode =
     template.bodyHtml.includes("{{codeAcces}}") ||
     template.subject.includes("{{codeAcces}}") ||
     template.bodyHtml.includes("{{qrCode}}") ||
     template.subject.includes("{{qrCode}}");
-  if (opts.channel === "email" && opts.entityId && vars.code && !vars.codeAcces && wantsAccessCode) {
+  if (opts.entityId && vars.code && !vars.codeAcces && wantsAccessCode) {
     try {
       const bsConfig = await prisma.bookingSourceConfig.findUnique({ where: { entityId: opts.entityId } });
       if (bsConfig?.qrEndpointPath) {
