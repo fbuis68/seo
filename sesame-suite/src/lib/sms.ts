@@ -214,7 +214,7 @@ async function sendViaSmsPartner(cfg: { apiKey: string | null; fromNumber: strin
   // "body used already" si le JSON est invalide) : l'API renvoie du JSON
   // structuré dans tous les cas documentés, mais on reste tolérant.
   const text = await res.text();
-  let j: { success?: boolean; code?: number; message_id?: number; errors?: { elementId?: string; message?: string }[] } = {};
+  let j: { success?: boolean; code?: number; message?: string; message_id?: number; errors?: { elementId?: string; message?: string }[] } = {};
   try {
     j = JSON.parse(text);
   } catch {
@@ -222,14 +222,25 @@ async function sendViaSmsPartner(cfg: { apiKey: string | null; fromNumber: strin
   }
 
   if (!res.ok || j.success === false) {
+    // Journalisé intégralement (pas seulement le `code` numérique) : la
+    // documentation DocPartner/SMSPartner ne liste pas tous ses codes
+    // d'erreur du endpoint /send (contrairement à /rcs/send, cf.
+    // sendViaSmsPartnerRcs ci-dessous), donc un `code DocPartner 43` seul
+    // ne suffit pas à diagnostiquer sans recouper avec eux — le corps
+    // complet en log serveur permet de voir un éventuel champ `message`
+    // que le message d'erreur HttpError (tronqué pour l'utilisateur) n'a
+    // pas forcément remonté.
+    console.error("[sms] Échec DocPartner /send — réponse complète :", text);
     const detail = j.errors?.length
       ? j.errors
           .map((e) => e.message)
           .filter(Boolean)
           .join(" ; ")
-      : j.code !== undefined
-        ? `code DocPartner ${j.code}`
-        : text || `HTTP ${res.status}`;
+      : j.message
+        ? j.message
+        : j.code !== undefined
+          ? `code DocPartner ${j.code}`
+          : text || `HTTP ${res.status}`;
     throw new HttpError(502, `Échec de l'envoi DocPartner (HTTP ${res.status}) : ${detail}`);
   }
 }
