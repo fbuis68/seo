@@ -7,6 +7,13 @@ import { Channel } from "./messageTemplate";
 import { config } from "../config";
 import { attachQuestionnaireLink } from "./questionnaire";
 import { createUnsubscribeToken } from "./unsubscribeToken";
+// fetchAccessQr vient de ./bookingSource, qui importe lui-même ./automation,
+// qui importe sendMessage() d'ICI — cycle d'imports existant (bookingSource
+// → automation → messaging), fermé ici en sens inverse. Sans risque tant
+// que fetchAccessQr n'est référencé qu'À L'INTÉRIEUR du corps de
+// sendMessage() (jamais au niveau module), donc seulement une fois tous les
+// modules chargés — jamais au chargement initial de ce fichier.
+import { fetchAccessQr } from "./bookingSource";
 
 /**
  * Point de convergence unique : quel que soit le canal (email/sms/whatsapp),
@@ -107,16 +114,45 @@ export async function sendMessage(opts: {
     const token = createUnsubscribeToken({ entityId: null, target: opts.to });
     vars = { ...vars, lienDesabonnement: `${base}/wa/unsubscribe?token=${encodeURIComponent(token)}` };
   }
-  // {{qrCode}} — image QR (data URL PNG) du code transmis en {{code}},
-  // disponible sur tout modèle email dès que {{code}} est renseigné (ex :
-  // code d'accès magasin/casier des modèles commerciaux) plutôt que limité
-  // à un déclencheur réservation particulier — demande client 15/10/2026,
-  // "rajouter le code et l'image du QR Code sur les templates commerciaux".
-  // Même principe que {{lienDesabonnement}} ci-dessus : calculée seulement
-  // si absente, jamais si l'appelant l'a déjà fournie, et simplement
-  // inutilisée si le modèle ne contient pas {{qrCode}}.
-  if (opts.channel === "email" && vars.code && !vars.qrCode) {
-    vars = { ...vars, qrCode: await QRCode.toDataURL(vars.code, { margin: 1, width: 320 }) };
+  // {{codeAcces}} — code d'accès RÉEL généré par la serrure/PMS pour cette
+  // réservation, PAS le code de réservation ({{code}}) : demande client
+  // 15/10/2026, après avoir confirmé que {{code}} renvoie Booking.code
+  // (numéro de réservation) et pas le code d'ouverture de porte. Récupéré
+  // à la demande via la même intégration que le bouton "Générer une clé"
+  // (fetchAccessQr, cf. routes/booking.ts, qrEndpointPath de
+  // BookingSourceConfig) — seulement en portée hôtel (opts.entityId non
+  // null, jamais en CRM) et seulement si le modèle référence effectivement
+  // {{codeAcces}} ou {{qrCode}} (qui en dépend, cf. plus bas) : un appel
+  // réseau vers la source externe à chaque envoi serait coûteux et fragile
+  // pour les modèles qui n'en ont pas besoin. Échec ou intégration non
+  // configurée → simplement journalisé, {{codeAcces}} reste vide comme
+  // toute variable non fournie par le déclencheur, le reste de l'envoi
+  // n'est jamais bloqué pour autant.
+  const wantsAccessCode =
+    template.bodyHtml.includes("{{codeAcces}}") ||
+    template.subject.includes("{{codeAcces}}") ||
+    template.bodyHtml.includes("{{qrCode}}") ||
+    template.subject.includes("{{qrCode}}");
+  if (opts.channel === "email" && opts.entityId && vars.code && !vars.codeAcces && wantsAccessCode) {
+    try {
+      const bsConfig = await prisma.bookingSourceConfig.findUnique({ where: { entityId: opts.entityId } });
+      if (bsConfig?.qrEndpointPath) {
+        const { accessCode } = await fetchAccessQr(bsConfig, vars.code, opts.to);
+        if (accessCode) vars = { ...vars, codeAcces: accessCode };
+      }
+    } catch (e) {
+      console.error("[messaging] Échec de récupération de {{codeAcces}} :", e);
+    }
+  }
+  // {{qrCode}} — image QR (data URL PNG) encodant {{codeAcces}} (le vrai
+  // code d'ouverture de porte) quand disponible, sinon {{code}} (code de
+  // réservation, à défaut — ex : modèle commercial hors contexte
+  // réservation). Même principe que {{lienDesabonnement}} ci-dessus :
+  // calculée seulement si absente, jamais si l'appelant l'a déjà fournie,
+  // et simplement inutilisée si le modèle ne contient pas {{qrCode}}.
+  const qrSource = vars.codeAcces || vars.code;
+  if (opts.channel === "email" && qrSource && !vars.qrCode) {
+    vars = { ...vars, qrCode: await QRCode.toDataURL(qrSource, { margin: 1, width: 320 }) };
   }
   const subject = renderTemplate(template.subject, vars);
   let body = renderTemplate(template.bodyHtml, vars);

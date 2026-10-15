@@ -9249,7 +9249,8 @@ function emlOpenTemplateModal(id){
 var EML_TPL_VARS = [
   {key:'prenom', desc:'Prénom du client (réservation)'},
   {key:'nom', desc:'Nom du client, ou nom de l\'établissement/prospect selon le déclencheur'},
-  {key:'code', desc:'Code de réservation (numéro de booking) — présent aussi sur les déclencheurs commande, quand la commande est rattachée à une réservation'},
+  {key:'code', desc:'Code de réservation (numéro de booking) — présent aussi sur les déclencheurs commande, quand la commande est rattachée à une réservation. À ne pas confondre avec {{codeAcces}} ci-dessous : ce n\'est PAS le code d\'ouverture de la serrure.'},
+  {key:'codeAcces', desc:'Code d\'accès RÉEL généré par la serrure/PMS pour cette réservation (différent de {{code}}, qui est le numéro de réservation) — récupéré via la même intégration que "Générer une clé" (réglages techniques avancés de l\'Intégration réservations). Vide si cette intégration n\'est pas configurée pour l\'établissement.'},
   {key:'hotel', desc:'Nom de l\'établissement (déclencheurs réservation/commande/ménage)'},
   {key:'adresseHotel', desc:'Adresse de l\'établissement (réglée dans Entité & Catégorie)'},
   {key:'telephoneHotel', desc:'Téléphone de contact de l\'établissement (réglé dans Entité & Catégorie)'},
@@ -9264,7 +9265,7 @@ var EML_TPL_VARS = [
   {key:'total', desc:'Montant total de la commande (room service / boutique)'},
   {key:'secteur', desc:'Secteur d\'activité du prospect (déclencheurs CRM)'},
   {key:'ville', desc:'Ville du prospect, si renseignée'},
-  {key:'qrCode', desc:'Image QR code générée automatiquement à partir de {{code}} (email uniquement) — insère une balise image, typiquement sur un modèle commercial envoyant un code d\'accès'},
+  {key:'qrCode', desc:'Image QR code générée automatiquement (email uniquement) — encode {{codeAcces}} si disponible (le vrai code d\'ouverture), sinon {{code}} à défaut. Insère une balise image, typiquement sur un modèle commercial envoyant un code d\'accès.'},
 ];
 function emlInsertVar(key){
   // {{qrCode}} est une image (data URL PNG générée côté serveur), pas un
