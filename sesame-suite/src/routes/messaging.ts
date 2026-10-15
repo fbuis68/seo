@@ -200,6 +200,7 @@ function shapeTemplate(t: {
   subject: string;
   bodyHtml: string;
   whatsappContentSid: string | null;
+  rcsModelToken: string | null;
   category: string | null;
   questionnaireId: string | null;
   senderIdentityId: string | null;
@@ -215,6 +216,7 @@ function shapeTemplate(t: {
     subject: t.subject,
     bodyHtml: t.bodyHtml,
     whatsappContentSid: t.whatsappContentSid || "",
+    rcsModelToken: t.rcsModelToken || "",
     category: t.category || "",
     questionnaireId: t.questionnaireId || "",
     senderIdentityId: t.senderIdentityId || "",
@@ -255,6 +257,7 @@ interface TemplateBody {
   subject: string;
   bodyHtml: string;
   whatsappContentSid?: string;
+  rcsModelToken?: string;
   category?: string;
   questionnaireId?: string;
   senderIdentityId?: string;
@@ -292,16 +295,25 @@ messagingRouter.post(
   asyncHandler(async (req, res) => {
     const entityId = await resolveScope(req);
     const b = req.body as TemplateBody;
-    if (!isChannel(b.channel)) throw new HttpError(400, "channel doit être email, sms ou whatsapp");
+    if (!isChannel(b.channel)) throw new HttpError(400, "channel doit être email, sms, whatsapp ou rcs");
     if (!b.name || !b.name.trim()) throw new HttpError(400, "Nom du modèle requis");
     if (b.channel === "email" && (!b.subject || !b.subject.trim())) throw new HttpError(400, "Objet requis pour un modèle email");
-    if (!b.bodyHtml || !b.bodyHtml.trim()) throw new HttpError(400, "Corps du message requis");
+    // rcs : le contenu vient du modèle SMSPartner (rcsModelToken), pas de
+    // bodyHtml à renseigner côté Sesame — cf. validation rcsModelToken
+    // ci-dessous.
+    if (b.channel !== "rcs" && (!b.bodyHtml || !b.bodyHtml.trim())) throw new HttpError(400, "Corps du message requis");
     // WhatsApp Business interdit le texte libre business-initié en dehors
     // d'une session client de 24h (règle Meta) — un modèle WhatsApp doit
     // donc toujours pointer vers un Content Template approuvé, sans quoi
     // l'envoi échouerait de toute façon (cf. src/lib/messaging.ts).
     if (b.channel === "whatsapp" && (!b.whatsappContentSid || !b.whatsappContentSid.trim())) {
       throw new HttpError(400, "Content SID Twilio requis pour un modèle WhatsApp (créez-le d'abord dans Twilio Content Template Builder, faites-le approuver, puis collez son SID ici)");
+    }
+    // RCS SMSPartner interdit lui aussi le contenu libre depuis Sesame : le
+    // modèle doit exister côté plateforme (my.smspartner.fr), sans quoi
+    // l'envoi échouerait (cf. src/lib/messaging.ts).
+    if (b.channel === "rcs" && (!b.rcsModelToken || !b.rcsModelToken.trim())) {
+      throw new HttpError(400, "Identifiant de modèle SMSPartner requis pour un modèle RCS (créez-le d'abord sur my.smspartner.fr, puis collez son identifiant ici)");
     }
     let senderIdentityId: string | null = null;
     if (b.channel === "email" && b.senderIdentityId) {
@@ -312,8 +324,9 @@ messagingRouter.post(
     const row = await upsertMessageTemplate(entityId, b.channel, (b.key || "").trim().toLowerCase(), {
       name: b.name.trim(),
       subject: (b.subject || "").trim(),
-      bodyHtml: b.bodyHtml,
+      bodyHtml: b.channel === "rcs" ? "" : b.bodyHtml,
       whatsappContentSid: b.channel === "whatsapp" ? (b.whatsappContentSid || "").trim() : "",
+      rcsModelToken: b.channel === "rcs" ? (b.rcsModelToken || "").trim() : "",
       category: parseCategory(b.category),
       questionnaireId: b.questionnaireId || null,
       senderIdentityId,
@@ -386,6 +399,8 @@ interface SendBody {
   variables?: Record<string, string>;
   /** Portée CRM uniquement — cf. sendMessage() trackOpenProspectId (score d'intérêt, +1 à l'ouverture) ET questionnaire du modèle (MessageTemplate.questionnaireId), attaché automatiquement si réglé. */
   prospectId?: string;
+  /** RCS uniquement — cf. sendMessage() rcsFailover. */
+  rcsFailover?: { sender: string; message: string };
 }
 
 messagingRouter.post(
@@ -394,7 +409,7 @@ messagingRouter.post(
   asyncHandler(async (req, res) => {
     const entityId = await resolveScope(req);
     const b = req.body as SendBody;
-    if (!isChannel(b.channel)) throw new HttpError(400, "channel doit être email, sms ou whatsapp");
+    if (!isChannel(b.channel)) throw new HttpError(400, "channel doit être email, sms, whatsapp ou rcs");
     if (!b.to) throw new HttpError(400, "Destinataire requis");
     if (!b.templateKey) throw new HttpError(400, "Modèle requis");
     const sent = await sendMessage({
@@ -405,6 +420,7 @@ messagingRouter.post(
       variables: b.variables,
       trackOpenProspectId: entityId === null ? b.prospectId : undefined,
       baseUrl: `${req.protocol}://${req.get("host")}`,
+      rcsFailover: b.channel === "rcs" ? b.rcsFailover : undefined,
     });
     res.json({ ok: true, ...sent });
   })

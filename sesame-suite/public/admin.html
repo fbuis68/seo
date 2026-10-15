@@ -8908,7 +8908,7 @@ var EML_TEMPLATES = [];
 var SENDER_IDENTITIES = [];
 
 var EML_TPL_TAB = 'email';
-var CHAN_LABEL = {email:'Email', sms:'SMS', whatsapp:'WhatsApp'};
+var CHAN_LABEL = {email:'Email', sms:'SMS', whatsapp:'WhatsApp', rcs:'RCS'};
 var TPL_CATEGORY_LABEL = {marketing:'Marketing', support:'Support', commercial:'Commercial'};
 var EML_TPL_CATEGORY_FILTER = '';
 
@@ -9139,7 +9139,7 @@ async function emlLoadTemplates(){
 function emlRenderTemplates(){
   var tabsEl = document.getElementById('eml-tpl-tabs');
   if(tabsEl){
-    tabsEl.innerHTML = ['email','sms','whatsapp'].map(function(c){
+    tabsEl.innerHTML = ['email','sms','whatsapp','rcs'].map(function(c){
       return '<button class="btn btn-s'+(EML_TPL_TAB===c?' btn-p':'')+'" onclick="EML_TPL_TAB=\''+c+'\';emlRenderTemplates()">'+CHAN_LABEL[c]+'</button>';
     }).join('');
   }
@@ -9164,8 +9164,9 @@ function emlRenderTemplates(){
     return;
   }
   el.innerHTML = tpls.map(function(t){
-    var detail = t.channel==='email' ? ('Objet : '+esc(t.subject)) : esc(t.bodyHtml).slice(0,80);
+    var detail = t.channel==='email' ? ('Objet : '+esc(t.subject)) : t.channel==='rcs' ? '' : esc(t.bodyHtml).slice(0,80);
     if(t.channel==='whatsapp') detail += t.whatsappContentSid ? ' · Content SID : '+esc(t.whatsappContentSid) : ' · <span style="color:var(--bad,#b23b2c)">Content SID manquant — envoi impossible</span>';
+    if(t.channel==='rcs') detail += t.rcsModelToken ? 'Modèle RCS : '+esc(t.rcsModelToken) : '<span style="color:var(--bad,#b23b2c)">Identifiant de modèle manquant — envoi impossible</span>';
     return '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--bdr)">'
       + '<div style="flex:1"><strong style="font-size:13px">'+esc(t.name)+'</strong> <span style="color:var(--mu);font-size:11px">('+esc(t.key)+')</span>'
       + (t.category?' <span class="bdg" style="background:var(--bdr);color:var(--mu)">'+(TPL_CATEGORY_LABEL[t.category]||esc(t.category))+'</span>':'')
@@ -9184,7 +9185,7 @@ function emlOpenTemplateModal(id){
     + '<div class="ca" style="width:100%;max-width:560px">'
     + '<div class="ch">'+(t.id?'Modifier le modèle':'Nouveau modèle')+'<button class="btn btn-g" style="margin-left:auto" onclick="emlCloseTemplateModal()"><i class="ti ti-x"></i></button></div>'
     + '<div class="g2">'
-    + '<div class="fi"><label class="lb">Canal</label><select id="eml-tpl-channel" '+(t.id?'disabled':'')+' onchange="emlRenderTplSubjectVisibility()">'+['email','sms','whatsapp'].map(function(c){return '<option value="'+c+'" '+(t.channel===c?'selected':'')+'>'+CHAN_LABEL[c]+'</option>';}).join('')+'</select></div>'
+    + '<div class="fi"><label class="lb">Canal</label><select id="eml-tpl-channel" '+(t.id?'disabled':'')+' onchange="emlRenderTplSubjectVisibility()">'+['email','sms','whatsapp','rcs'].map(function(c){return '<option value="'+c+'" '+(t.channel===c?'selected':'')+'>'+CHAN_LABEL[c]+'</option>';}).join('')+'</select></div>'
     + '<div class="fi"><label class="lb">Clé (identifiant technique)</label><input type="text" id="eml-tpl-key" value="'+esc(t.key)+'" placeholder="ex. bienvenue-client" '+(t.id?'disabled':'')+'></div>'
     + '</div>'
     + '<div class="fi"><label class="lb">Nom affiché</label><input type="text" id="eml-tpl-name" value="'+esc(t.name)+'" placeholder="Email de bienvenue"></div>'
@@ -9197,7 +9198,7 @@ function emlOpenTemplateModal(id){
     + '<option value="">Adresse générale (config SMTP)</option>'
     + SENDER_IDENTITIES.map(function(i){return '<option value="'+i.id+'" '+(t.senderIdentityId===i.id?'selected':'')+'>'+esc(i.name)+' — '+esc(i.email)+'</option>';}).join('')
     + '</select><div style="font-size:11px;color:var(--mu);margin-top:4px">Gérées dans la carte "Adresses d\'expédition" ci-dessus.</div></div>'
-    + '<div class="fi"><label class="lb">Corps (email : éditeur HTML ; SMS/WhatsApp : texte)</label>'
+    + '<div class="fi" id="eml-tpl-body-fi"><label class="lb">Corps (email : éditeur HTML ; SMS/WhatsApp : texte)</label>'
     + '<div class="htmled" id="eml-tpl-body-wrap">'
     + '<div class="htmled-tb" id="eml-tpl-body-tb">'
     + '<button type="button" class="htmled-btn" onmousedown="event.preventDefault()" onclick="htmlEdCmd(\'eml-tpl-body\',\'bold\')" title="Gras"><b>G</b></button>'
@@ -9215,11 +9216,13 @@ function emlOpenTemplateModal(id){
     + '<div class="htmled-ce" id="eml-tpl-body-ce" contenteditable="true" data-placeholder="Corps de l\'email…" oninput="htmlEdSync(\'eml-tpl-body\')"></div>'
     + '<textarea class="htmled-src" id="eml-tpl-body" style="display:none" oninput="htmlEdSyncFromSrc(\'eml-tpl-body\')">'+esc(t.bodyHtml||'')+'</textarea>'
     + '</div></div>'
-    + '<div style="font-size:11px;color:var(--mu);margin:-6px 0 12px">'
+    + '<div style="font-size:11px;color:var(--mu);margin:-6px 0 12px" id="eml-tpl-vars-wrap">'
     + 'Variables disponibles (cliquer pour insérer) — non fournies par le déclencheur choisi, elles restent vides à l\'envoi :<br>'
     + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'
     + EML_TPL_VARS.map(function(v){return '<span class="bdg bgb" style="cursor:pointer" title="'+esc(v.desc)+'" onclick="emlInsertVar(\''+v.key+'\')">{{'+v.key+'}}</span>';}).join('')
     + '</div></div>'
+    + '<div class="fi" id="eml-tpl-rcs-wrap"><label class="lb">Identifiant du modèle RCS (SMSPartner)</label><input type="text" id="eml-tpl-rcs-token" value="'+esc(t.rcsModelToken||'')+'" placeholder="9f8c2b1a7d4e6f30a1b2c3d4e5f60718" maxlength="32">'
+    + '<div style="font-size:11px;color:var(--mu);margin-top:4px">Le contenu (texte, carte enrichie, carrousel…) se crée et s\'héberge sur <a href="https://my.smspartner.fr/dashboard/model/list" target="_blank" rel="noopener">my.smspartner.fr</a> (Modèles de message, type RCS) — collez ici son identifiant (colonne "Identifiant", ou panneau "Identifiant API" de la fiche du modèle). Le canal SMS doit être configuré avec le fournisseur DocPartner/SMSPartner pour que l\'envoi RCS fonctionne (même compte, même clé API).</div></div>'
     + '<div class="fi" id="eml-tpl-sid-wrap"><label class="lb">'+(CHAN_WA_PROVIDER==='infobip'?'Nom du modèle Infobip (WhatsApp)':CHAN_WA_PROVIDER==='meta'?'Nom du modèle Meta (WhatsApp)':'Content SID Twilio (WhatsApp)')+'</label><input type="text" id="eml-tpl-sid" value="'+esc(t.whatsappContentSid||'')+'" placeholder="'+(CHAN_WA_PROVIDER==='infobip'?'mon_modele_whatsapp':CHAN_WA_PROVIDER==='meta'?'mon_modele_whatsapp':'HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')+'">'
     + '<div style="font-size:11px;color:var(--mu);margin-top:4px">'+(CHAN_WA_PROVIDER==='infobip'
         ? "WhatsApp Business interdit le texte libre hors session client — créez d'abord ce modèle dans le portail Infobip, faites-le approuver par Meta, puis collez ici son nom exact. Les variables {{var}} ci-dessus doivent apparaître dans le même ordre que les paramètres du modèle approuvé."
@@ -9303,9 +9306,18 @@ function emlRenderTplSubjectVisibility(){
   var wrap = document.getElementById('eml-tpl-subject-wrap');
   var sidWrap = document.getElementById('eml-tpl-sid-wrap');
   var senderWrap = document.getElementById('eml-tpl-sender-wrap');
+  var rcsWrap = document.getElementById('eml-tpl-rcs-wrap');
+  var bodyFi = document.getElementById('eml-tpl-body-fi');
+  var varsWrap = document.getElementById('eml-tpl-vars-wrap');
   if(sel && wrap) wrap.style.display = sel.value==='email' ? '' : 'none';
   if(sel && senderWrap) senderWrap.style.display = sel.value==='email' ? '' : 'none';
   if(sel && sidWrap) sidWrap.style.display = sel.value==='whatsapp' ? '' : 'none';
+  // rcs : contenu entièrement piloté par rcsModelToken côté SMSPartner —
+  // ni corps ni variables Sesame n'ont de sens, seul le champ identifiant
+  // de modèle est affiché (cf. eml-tpl-rcs-wrap).
+  if(sel && rcsWrap) rcsWrap.style.display = sel.value==='rcs' ? '' : 'none';
+  if(sel && bodyFi) bodyFi.style.display = sel.value==='rcs' ? 'none' : '';
+  if(sel && varsWrap) varsWrap.style.display = sel.value==='rcs' ? 'none' : '';
   if(sel) htmlEdSetEmailMode('eml-tpl-body', sel.value==='email');
 }
 
@@ -9450,10 +9462,11 @@ async function emlSaveTemplate(id){
     subject: document.getElementById('eml-tpl-subject').value.trim(),
     bodyHtml: document.getElementById('eml-tpl-body').value,
     whatsappContentSid: document.getElementById('eml-tpl-sid').value.trim(),
+    rcsModelToken: document.getElementById('eml-tpl-rcs-token') ? document.getElementById('eml-tpl-rcs-token').value.trim() : '',
     category: document.getElementById('eml-tpl-category').value,
     senderIdentityId: document.getElementById('eml-tpl-sender') ? (document.getElementById('eml-tpl-sender').value || null) : null,
   };
-  if(!body.key || !body.name || !body.bodyHtml || (body.channel==='email' && !body.subject) || (body.channel==='whatsapp' && !body.whatsappContentSid)){ toast('Tous les champs sont requis'); return; }
+  if(!body.key || !body.name || (body.channel!=='rcs' && !body.bodyHtml) || (body.channel==='email' && !body.subject) || (body.channel==='whatsapp' && !body.whatsappContentSid) || (body.channel==='rcs' && !body.rcsModelToken)){ toast('Tous les champs sont requis'); return; }
   try{
     var r = await adminFetch('/wa/messageTemplate/upsert', {method:'POST', body:JSON.stringify(body)});
     var data = await r.json();

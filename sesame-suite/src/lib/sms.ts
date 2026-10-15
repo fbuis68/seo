@@ -234,6 +234,87 @@ async function sendViaSmsPartner(cfg: { apiKey: string | null; fromNumber: strin
   }
 }
 
+/**
+ * RCS via DocPartner/SMSPartner.fr (POST /v1/rcs/send, 15/10/2026, doc
+ * officielle fournie par le client) — distinct de sendViaSmsPartner
+ * ci-dessus (SMS classique, endpoint /send) : contenu différent
+ * (richContent ou modelToken, jamais un simple texte) et endpoint dédié.
+ * Seul modelToken est géré pour l'instant (pas de richContent construit
+ * depuis Sesame) : le contenu riche (texte/fichier/carte/carrousel) se
+ * prépare sur la plateforme SMSPartner, Sesame se contente d'en piloter
+ * l'envoi (destinataires, programmation, callbacks, failover SMS).
+ * Même compte que le canal SMS (une seule clé API DocPartner par portée) :
+ * pas de ChannelConfig "rcs" séparé, cf. sendRcsTemplate ci-dessous qui
+ * réutilise la config du canal "sms".
+ */
+async function sendViaSmsPartnerRcs(
+  cfg: { apiKey: string | null },
+  to: string,
+  modelToken: string,
+  failover?: { sender: string; message: string }
+) {
+  if (!cfg.apiKey) {
+    throw new HttpError(400, "Configuration SMS incomplète (clé API DocPartner manquante) — requise aussi pour le RCS");
+  }
+  const payload: Record<string, unknown> = { apiKey: cfg.apiKey, phoneNumbers: to, isUnicode: 1, modelToken };
+  if (failover?.sender && failover?.message) {
+    payload.failover = { sender: failover.sender, message: failover.message };
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${SMSPARTNER_API_BASE}/rcs/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    throw new HttpError(502, "Échec de connexion à l'API RCS DocPartner : " + String(err instanceof Error ? err.message : err));
+  }
+
+  const text = await res.text();
+  let j: { success?: boolean; code?: number; message_id?: number; errors?: { elementId?: string; message?: string }[] } = {};
+  try {
+    j = JSON.parse(text);
+  } catch {
+    // corps non-JSON, géré ci-dessous via `text` brut
+  }
+
+  if (!res.ok || j.success === false) {
+    // Codes dédiés documentés par SMSPartner : 60 (modelToken introuvable
+    // ou pointant vers un modèle SMS), 61 (modèle RCS vide), 62
+    // (modelToken ET richContent envoyés ensemble — n'arrive jamais ici
+    // puisque richContent n'est pas construit côté Sesame).
+    const detail = j.errors?.length
+      ? j.errors
+          .map((e) => e.message)
+          .filter(Boolean)
+          .join(" ; ")
+      : j.code !== undefined
+        ? `code DocPartner ${j.code}` +
+          (j.code === 60 ? " (modèle RCS introuvable — vérifiez l'identifiant collé depuis my.smspartner.fr)" : j.code === 61 ? " (modèle RCS vide, à ré-enregistrer sur la plateforme)" : "")
+        : text || `HTTP ${res.status}`;
+    throw new HttpError(502, `Échec de l'envoi RCS DocPartner (HTTP ${res.status}) : ${detail}`);
+  }
+}
+
+/** Envoi RCS par modèle — appelé par messaging.ts, même principe que
+ * sendChannelRaw mais sur un canal au format de contenu différent (pas de
+ * `body` texte, un `modelToken` SMSPartner). Réutilise la configuration du
+ * canal "sms" (même compte DocPartner) plutôt qu'un ChannelConfig "rcs"
+ * séparé, qui dupliquerait inutilement la même clé API à saisir deux fois
+ * et risquerait de diverger. */
+export async function sendRcsTemplate(entityId: string | null, to: string, modelToken: string, failover?: { sender: string; message: string }) {
+  const cfg = await getChannelConfig(entityId, "sms");
+  if (!cfg || cfg.provider !== "smspartner") {
+    throw new HttpError(
+      400,
+      "RCS disponible uniquement avec le fournisseur DocPartner/SMSPartner — configurez le canal SMS avec ce fournisseur avant d'utiliser un modèle RCS."
+    );
+  }
+  await sendViaSmsPartnerRcs(cfg, to, modelToken, failover);
+}
+
 const INFOBIP_SMS_PATH = "/sms/2/text/advanced";
 const INFOBIP_WHATSAPP_TEXT_PATH = "/whatsapp/1/message/text";
 const INFOBIP_WHATSAPP_TEMPLATE_PATH = "/whatsapp/1/message/template";

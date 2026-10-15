@@ -7475,7 +7475,7 @@ async function saveScoringConfig(){
 // (portée CRM/Sesame, scope=crm — même mécanisme générique repris à
 // l'identique côté back-office de chaque hôtel, voir admin.html)
 // ════════════════════════════════════════
-const CHANNEL_LABEL = {email:'Email', sms:'SMS', whatsapp:'WhatsApp'};
+const CHANNEL_LABEL = {email:'Email', sms:'SMS', whatsapp:'WhatsApp', rcs:'RCS'};
 const TPL_CATEGORY_LABEL = {marketing:'Marketing', support:'Support', commercial:'Commercial', relance:'Relance'};
 let tplCategoryFilter='';
 let SMTP_CFG=null, SMS_CFG=null, WA_CFG=null, GRAPH_MAIL=null;
@@ -7678,7 +7678,7 @@ function renderCanauxPanel(){
       <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="openBulkImportModal()">Importer (JSON)</button>
       <button class="btn btn-primary btn-sm" onclick="openTemplateModal(null)">+ Nouveau modèle</button>
     </div>
-    <div class="chan-tabs">${['email','sms','whatsapp'].map(c=>`<button class="chan-tab ${tplChannelTab===c?'active':''}" onclick="tplChannelTab='${c}';renderCanauxPanel()">${CHANNEL_LABEL[c]}</button>`).join('')}</div>
+    <div class="chan-tabs">${['email','sms','whatsapp','rcs'].map(c=>`<button class="chan-tab ${tplChannelTab===c?'active':''}" onclick="tplChannelTab='${c}';renderCanauxPanel()">${CHANNEL_LABEL[c]}</button>`).join('')}</div>
     <div style="margin-bottom:10px"><select id="tpl-category-filter" onchange="tplCategoryFilter=this.value;renderCanauxPanel()" style="max-width:220px">
       <option value="">Toutes les catégories</option>
       ${Object.keys(TPL_CATEGORY_LABEL).map(k=>`<option value="${k}" ${tplCategoryFilter===k?'selected':''}>${TPL_CATEGORY_LABEL[k]}</option>`).join('')}
@@ -7689,7 +7689,7 @@ function renderCanauxPanel(){
         <div class="log-dot ld-b"></div>
         <div class="log-body">
           <div class="log-text"><strong>${esc(t.name)}</strong> <span style="color:#aaa;font-size:11px">(${esc(t.key)})</span>${t.category?` <span class="tag t-gray" style="font-size:10px">${TPL_CATEGORY_LABEL[t.category]||esc(t.category)}</span>`:''}${t.isDefaultForTicketReply?` <span class="tag t-green" style="font-size:10px">Par défaut — réponses tickets</span>`:''}</div>
-          <div class="log-meta">${t.channel==='email'?'Objet : '+esc(t.subject):esc(t.bodyHtml).slice(0,80)}${t.channel==='whatsapp'?(t.whatsappContentSid?' · Content SID : '+esc(t.whatsappContentSid):' · <span style="color:#b23b2c">Content SID manquant — envoi impossible</span>'):''}</div>
+          <div class="log-meta">${t.channel==='email'?'Objet : '+esc(t.subject):t.channel==='rcs'?'':esc(t.bodyHtml).slice(0,80)}${t.channel==='whatsapp'?(t.whatsappContentSid?' · Content SID : '+esc(t.whatsappContentSid):' · <span style="color:#b23b2c">Content SID manquant — envoi impossible</span>'):''}${t.channel==='rcs'?(t.rcsModelToken?'Modèle RCS : '+esc(t.rcsModelToken):'<span style="color:#b23b2c">Identifiant de modèle manquant — envoi impossible</span>'):''}</div>
           <div class="log-acts">
             <button class="btn btn-sm btn-ghost" onclick="openTemplateModal('${t.id}')">Modifier</button>
             <button class="btn btn-sm btn-ghost" style="color:#a32d2d" onclick="deleteTemplate('${t.id}')">Supprimer</button>
@@ -7909,7 +7909,7 @@ async function openTemplateModal(id){
     <div class="modal-box">
       <div class="modal-head"><div style="font-size:16px;font-weight:500">${t.id?'Modifier le modèle':'Nouveau modèle'}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
       <div class="form-grid">
-        <div class="ff"><label>Canal</label><select id="tpl-channel" ${t.id?'disabled':''} onchange="renderTplSubjectVisibility()">${['email','sms','whatsapp'].map(c=>`<option value="${c}" ${t.channel===c?'selected':''}>${CHANNEL_LABEL[c]}</option>`).join('')}</select></div>
+        <div class="ff"><label>Canal</label><select id="tpl-channel" ${t.id?'disabled':''} onchange="renderTplSubjectVisibility()">${['email','sms','whatsapp','rcs'].map(c=>`<option value="${c}" ${t.channel===c?'selected':''}>${CHANNEL_LABEL[c]}</option>`).join('')}</select></div>
         <div class="ff"><label>Clé (identifiant technique)</label><input id="tpl-key" value="${esc(t.key)}" placeholder="ex. prospect-relance" ${t.id?'disabled':''}></div>
       </div>
       <div class="ff" style="margin-top:8px"><label>Nom affiché</label><input id="tpl-name" value="${esc(t.name)}" placeholder="Relance prospect"></div>
@@ -7932,7 +7932,7 @@ async function openTemplateModal(id){
         ${SENDER_IDENTITIES.map(i=>`<option value="${esc(i.id)}" ${t.senderIdentityId===i.id?'selected':''}>${esc(i.name)} — ${esc(i.email)}</option>`).join('')}
       </select>
       <div style="font-size:11px;color:var(--mu,#888);margin-top:4px">Gérées dans la carte "Adresses d'expédition" ci-dessus.</div></div>
-      <div class="ff" style="margin-top:8px"><label>Corps (email : éditeur HTML ; SMS/WhatsApp : texte)</label>
+      <div class="ff" id="tpl-body-fi" style="margin-top:8px"><label>Corps (email : éditeur HTML ; SMS/WhatsApp : texte)</label>
         <div class="htmled" id="tpl-body-wrap">
           <div class="htmled-tb" id="tpl-body-tb">
             <button type="button" class="htmled-btn" onmousedown="event.preventDefault()" onclick="htmlEdCmd('tpl-body','bold')" title="Gras"><b>G</b></button>
@@ -7951,7 +7951,10 @@ async function openTemplateModal(id){
           <textarea class="htmled-src" id="tpl-body" style="display:none" oninput="htmlEdSyncFromSrc('tpl-body')">${esc(t.bodyHtml||'')}</textarea>
         </div>
       </div>
-      <div style="font-size:11px;color:var(--mu);margin-top:6px">Variables — envoi depuis une fiche prospect : {{nom}} {{secteur}} {{referent}} {{ville}} · envoi depuis "Utilisateurs CRM" (identifiants de connexion) : {{login}} {{password}} {{loginUrl}} · déclencheurs ticket support (Nouveau ticket / Client a répondu / Changement de statut) : {{numero}} {{sujet}} {{statut}} {{agent}} {{ancienStatut}} {{nouveauStatut}} · tout envoi email : <code>{{lienDesabonnement}}</code> (lien de désabonnement du destinataire — à insérer vous-même dans le corps, jamais ajouté automatiquement hors campagne)</div>
+      <div style="font-size:11px;color:var(--mu);margin-top:6px" id="tpl-vars-hint">Variables — envoi depuis une fiche prospect : {{nom}} {{secteur}} {{referent}} {{ville}} · envoi depuis "Utilisateurs CRM" (identifiants de connexion) : {{login}} {{password}} {{loginUrl}} · déclencheurs ticket support (Nouveau ticket / Client a répondu / Changement de statut) : {{numero}} {{sujet}} {{statut}} {{agent}} {{ancienStatut}} {{nouveauStatut}} · tout envoi email : <code>{{lienDesabonnement}}</code> (lien de désabonnement du destinataire — à insérer vous-même dans le corps, jamais ajouté automatiquement hors campagne)</div>
+      <div class="ff" id="tpl-rcs-wrap" style="margin-top:8px"><label>Identifiant du modèle RCS (SMSPartner)</label><input id="tpl-rcs-token" value="${esc(t.rcsModelToken||'')}" placeholder="9f8c2b1a7d4e6f30a1b2c3d4e5f60718" maxlength="32">
+        <div style="font-size:11px;color:var(--mu,#888);margin-top:4px">Le contenu (texte, carte enrichie, carrousel…) se crée et s'héberge sur <a href="https://my.smspartner.fr/dashboard/model/list" target="_blank" rel="noopener">my.smspartner.fr</a> (Modèles de message, type RCS) — collez ici son identifiant (colonne "Identifiant", ou panneau "Identifiant API" de la fiche du modèle). Le canal SMS doit être configuré avec le fournisseur DocPartner/SMSPartner pour que l'envoi RCS fonctionne (même compte, même clé API).</div>
+      </div>
       <div class="ff" id="tpl-sid-wrap" style="margin-top:8px"><label>${(WA_CFG&&WA_CFG.provider==='infobip')?"Nom du modèle Infobip (WhatsApp)":(WA_CFG&&WA_CFG.provider==='meta')?"Nom du modèle Meta (WhatsApp)":'Content SID Twilio (WhatsApp)'}</label><input id="tpl-sid" value="${esc(t.whatsappContentSid||'')}" placeholder="${(WA_CFG&&WA_CFG.provider==='infobip')?'mon_modele_whatsapp':(WA_CFG&&WA_CFG.provider==='meta')?'mon_modele_whatsapp':'HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'}">
         <div style="font-size:11px;color:#888;margin-top:4px">${(WA_CFG&&WA_CFG.provider==='infobip')
           ? "WhatsApp Business interdit le texte libre hors session client — créez d'abord ce modèle dans le portail Infobip, faites-le approuver par Meta, puis collez ici son nom exact. Les variables {{var}} ci-dessus doivent apparaître dans le même ordre que les paramètres du modèle approuvé."
@@ -8000,11 +8003,20 @@ function renderTplSubjectVisibility(){
   const attWrap=document.getElementById('tpl-attachments-wrap');
   const defWrap=document.getElementById('tpl-default-wrap');
   const senderWrap=document.getElementById('tpl-sender-wrap');
+  const rcsWrap=document.getElementById('tpl-rcs-wrap');
+  const bodyFi=document.getElementById('tpl-body-fi');
+  const varsHint=document.getElementById('tpl-vars-hint');
   if(sel&&wrap) wrap.style.display = sel.value==='email' ? '' : 'none';
   if(sel&&senderWrap) senderWrap.style.display = sel.value==='email' ? '' : 'none';
   if(sel&&sidWrap) sidWrap.style.display = sel.value==='whatsapp' ? '' : 'none';
   if(sel&&attWrap) attWrap.style.display = sel.value==='email' ? '' : 'none';
   if(sel&&defWrap) defWrap.style.display = sel.value==='email' ? '' : 'none'; // sélecteur "insérer un modèle" du ticket ne liste que les modèles email
+  // rcs : contenu entièrement piloté par rcsModelToken côté SMSPartner —
+  // ni corps ni variables Sesame n'ont de sens ici (même principe que
+  // tpl-sid-wrap pour WhatsApp, cf. admin.html emlRenderTplSubjectVisibility).
+  if(sel&&rcsWrap) rcsWrap.style.display = sel.value==='rcs' ? '' : 'none';
+  if(sel&&bodyFi) bodyFi.style.display = sel.value==='rcs' ? 'none' : '';
+  if(sel&&varsHint) varsHint.style.display = sel.value==='rcs' ? 'none' : '';
   if(sel) htmlEdSetEmailMode('tpl-body', sel.value==='email');
 }
 
@@ -8085,8 +8097,8 @@ async function createMetaTemplate(){
 async function saveTemplate(id){
   const g=i=>(document.getElementById(i)||{value:''}).value;
   const isDefaultTicketReply = !!document.getElementById('tpl-default-ticket-reply')?.checked;
-  const body={channel:g('tpl-channel'),key:g('tpl-key').trim().toLowerCase(),name:g('tpl-name').trim(),subject:g('tpl-subject').trim(),bodyHtml:g('tpl-body'),whatsappContentSid:g('tpl-sid').trim(),category:g('tpl-category'),questionnaireId:g('tpl-questionnaire')||null,senderIdentityId:g('tpl-sender')||null,defaultAttachments:TPL_ATTACHMENTS,isDefaultForTicketReply:isDefaultTicketReply,scope:'crm'};
-  if(!body.key||!body.name||!body.bodyHtml||(body.channel==='email'&&!body.subject)||(body.channel==='whatsapp'&&!body.whatsappContentSid)){flash('Tous les champs sont requis');return;}
+  const body={channel:g('tpl-channel'),key:g('tpl-key').trim().toLowerCase(),name:g('tpl-name').trim(),subject:g('tpl-subject').trim(),bodyHtml:g('tpl-body'),whatsappContentSid:g('tpl-sid').trim(),rcsModelToken:g('tpl-rcs-token').trim(),category:g('tpl-category'),questionnaireId:g('tpl-questionnaire')||null,senderIdentityId:g('tpl-sender')||null,defaultAttachments:TPL_ATTACHMENTS,isDefaultForTicketReply:isDefaultTicketReply,scope:'crm'};
+  if(!body.key||!body.name||(body.channel!=='rcs'&&!body.bodyHtml)||(body.channel==='email'&&!body.subject)||(body.channel==='whatsapp'&&!body.whatsappContentSid)||(body.channel==='rcs'&&!body.rcsModelToken)){flash('Tous les champs sont requis');return;}
   try{
     var r = await apiFetch('/wa/messageTemplate/upsert', {method:'POST', body:JSON.stringify(body)});
     var data = await r.json();

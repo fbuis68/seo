@@ -2,7 +2,7 @@ import QRCode from "qrcode";
 import { prisma } from "../db";
 import { HttpError } from "./asyncHandler";
 import { sendEmailRaw } from "./email";
-import { sendChannelRaw, sendWhatsAppTemplate } from "./sms";
+import { sendChannelRaw, sendWhatsAppTemplate, sendRcsTemplate } from "./sms";
 import { Channel } from "./messageTemplate";
 import { config } from "../config";
 import { attachQuestionnaireLink } from "./questionnaire";
@@ -83,6 +83,12 @@ export async function sendMessage(opts: {
    * modélisable comme pièce jointe fixe du modèle lui-même.
    */
   extraAttachments?: { fileName: string; dataUrl: string }[];
+  /**
+   * RCS uniquement — bascule SMS si le RCS n'est pas accepté sur l'appareil
+   * du destinataire (champ `failover` de l'API SMSPartner). Optionnel :
+   * sans lui, un destinataire sans RCS ne reçoit simplement rien.
+   */
+  rcsFailover?: { sender: string; message: string };
 }) {
   const template = await prisma.messageTemplate.findFirst({
     where: { entityId: opts.entityId, channel: opts.channel, key: opts.templateKey },
@@ -214,6 +220,18 @@ export async function sendMessage(opts: {
       extractOrderedVariableValues(template.bodyHtml, vars).map((v, i) => [String(i + 1), v])
     );
     await sendWhatsAppTemplate(opts.entityId, opts.to, template.whatsappContentSid, contentVariables);
+  } else if (opts.channel === "rcs") {
+    // RCS SMSPartner (15/10/2026) : le contenu vient exclusivement d'un
+    // modèle enregistré sur leur plateforme (rcsModelToken), jamais du
+    // bodyHtml du modèle Sesame — même raison que whatsappContentSid
+    // ci-dessus, refus explicite plutôt que d'envoyer un RCS vide.
+    if (!template.rcsModelToken) {
+      throw new HttpError(
+        400,
+        "Ce modèle RCS n'a pas d'identifiant de modèle SMSPartner — créez le modèle correspondant sur my.smspartner.fr (Modèles de message, type RCS), puis collez son identifiant (32 caractères) dans ce modèle Sesame."
+      );
+    }
+    await sendRcsTemplate(opts.entityId, opts.to, template.rcsModelToken, opts.rcsFailover);
   } else {
     await sendChannelRaw(opts.entityId, opts.channel, opts.to, body);
   }

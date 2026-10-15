@@ -1,10 +1,10 @@
 import { prisma } from "../db";
 import { HttpError } from "./asyncHandler";
 
-export type Channel = "email" | "sms" | "whatsapp";
+export type Channel = "email" | "sms" | "whatsapp" | "rcs";
 
 export function isChannel(v: unknown): v is Channel {
-  return v === "email" || v === "sms" || v === "whatsapp";
+  return v === "email" || v === "sms" || v === "whatsapp" || v === "rcs";
 }
 
 // Fonction du message — sert à filtrer les modèles selon le contexte
@@ -38,6 +38,7 @@ export async function upsertMessageTemplate(
     subject: string;
     bodyHtml: string;
     whatsappContentSid?: string;
+    rcsModelToken?: string;
     category?: TemplateCategory | null;
     questionnaireId?: string | null;
     senderIdentityId?: string | null;

@@ -2704,11 +2704,11 @@ model MessageTemplate {
   entityId String?
   entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  channel  String @default("email") // email | sms | whatsapp
+  channel  String @default("email") // email | sms | whatsapp | rcs
   key      String // slug interne, ex: "prospect-relance" — cible de sendMessage()
   name     String // libellé affiché dans le sélecteur de modèle
   subject  String // email uniquement ; supporte {{variable}}
-  bodyHtml String // email : HTML ; sms/whatsapp : texte brut — supporte {{variable}}
+  bodyHtml String // email : HTML ; sms/whatsapp : texte brut ; rcs : ignoré (contenu piloté par rcsModelToken) — supporte {{variable}}
 
   // whatsapp uniquement — Content SID Twilio (ex. "HX...") du modèle
   // approuvé par Meta correspondant à ce bodyHtml. WhatsApp Business
@@ -2717,6 +2717,15 @@ model MessageTemplate {
   // donc obligatoirement passer par un Content Template Twilio pré-approuvé
   // plutôt que par le corps texte brut — cf. src/lib/messaging.ts.
   whatsappContentSid String?
+
+  // rcs uniquement — identifiant (32 caractères) d'un modèle RCS enregistré
+  // sur la plateforme SMSPartner (my.smspartner.fr/dashboard/model/list),
+  // 15/10/2026. Même principe que whatsappContentSid ci-dessus : le
+  // contenu riche (texte/fichier/carte enrichie/carrousel) se construit et
+  // s'héberge chez SMSPartner, Sesame ne fait que piloter l'envoi
+  // (destinataires, programmation, callbacks, failover SMS) en référençant
+  // ce modèle — pas de richContent construit depuis Sesame pour l'instant.
+  rcsModelToken String?
 
   // Fonction du message — marketing | support | commercial | null (non
   // catégorisé). Sert à filtrer la liste des modèles selon le contexte
