@@ -804,21 +804,19 @@ bookingRouter.post(
 
     try {
       await validateManualBookingDraft(entity.id, draft); // dates + existence de la chambre uniquement
-      let booking = await createBookingDirectUnpaid(entity, draft, "saisie manuelle (personnel)", "createAnyway");
-      // Tentative best-effort de faire connaître cette réservation à la
-      // source externe (cf. adoptBookingIntoSource) — jamais bloquante :
-      // sans connecteur capable de créer, ou si l'appel échoue, la
-      // réservation reste utilisable, seuls le QR/l'ouverture de porte
-      // resteront en mode simulé. Contrairement à POST /booking/update
-      // (silencieux, cf. plus haut), l'échec est ici remonté via
-      // sourcePushWarning : une création manuelle est une action ponctuelle
-      // et consciente, pas une modification répétée — un échec de push ici
-      // mérite d'être visible plutôt qu'enfoui dans les seuls logs serveur
-      // (demande client 15/10/2026, "les résas créées côté admin.sesame ne
-      // sont pas envoyées", jusque-là invisible de bout en bout).
-      const adopted = await adoptBookingIntoSource(entity.id, booking).catch((e) => ({ booking, warning: e instanceof Error ? e.message : String(e) }));
-      booking = adopted.booking;
-      res.status(201).json({ ...normaliseBooking(booking), sourcePushWarning: adopted.warning || null });
+      // L'adoption vers la source externe (cf. adoptBookingIntoSource) est
+      // désormais déclenchée DANS createBookingDirectUnpaid elle-même (cf.
+      // lib/bookingEngine.ts createBookingDirect) — centralisé pour couvrir
+      // aussi les créations via le widget "Réservation en ligne"
+      // (bookDirect/cardOnFile/paiement Stripe confirmé), qui n'en
+      // bénéficiaient pas avant (demande client 15/10/2026, "les résas
+      // créées côté admin.sesame ne sont pas envoyées"). Plus d'appel
+      // explicite ici : le warning, lui, reste remonté — une création
+      // manuelle est une action ponctuelle et consciente, pas une
+      // modification répétée comme PUT /booking/update (silencieux par
+      // design, cf. plus haut), un échec de push mérite d'être visible.
+      const { booking, warning } = await createBookingDirectUnpaid(entity, draft, "saisie manuelle (personnel)", "createAnyway");
+      res.status(201).json({ ...normaliseBooking(booking), sourcePushWarning: warning || null });
     } catch (e) {
       throw new HttpError(400, e instanceof Error ? e.message : "Réservation impossible");
     }

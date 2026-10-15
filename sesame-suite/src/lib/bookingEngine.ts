@@ -3,6 +3,7 @@ import { prisma } from "../db";
 import { fireTrigger } from "./automation";
 import { computeTaxeSejourAmount } from "./payment";
 import { bookingTemplateVars, hotelContactInfo } from "./templateVars";
+import { adoptBookingIntoSource } from "./bookingSource";
 
 // Module "Réservation en ligne" (09/09/2026) — page publique
 // (public/booking.html) : un visiteur choisit ses dates, voit les chambres
@@ -270,7 +271,21 @@ async function createBookingDirect(entity: Entity, draft: BookingDraft, opts: { 
     })
   ).catch((e) => console.error("[automation] booking.created:", e));
 
-  return booking;
+  // Fait connaître la réservation à la source externe dès sa création,
+  // quel que soit le chemin emprunté (réservation en ligne payée ou non,
+  // empreinte bancaire, saisie manuelle staff) — centralisé ici plutôt que
+  // dupliqué par appelant : avant ce correctif, seules POST
+  // /booking/createManual et PUT /booking/update le déclenchaient, laissant
+  // TOUTE réservation créée via le widget public "Réservation en ligne"
+  // (bookDirect/cardOnFile/paiement Stripe confirmé) sans jamais tenter
+  // d'adoption — demande client 15/10/2026, "les résas créées côté
+  // admin.sesame ne sont pas envoyées" (symptôme constaté avec des
+  // résas RES... issues précisément de ce flux). Awaité (pas fire-and-
+  // forget) pour que le résultat (notamment un warning à afficher) soit
+  // disponible à l'appelant, et pour éviter toute course avec un second
+  // appel redondant côté route.
+  const adopted = await adoptBookingIntoSource(entity.id, booking).catch((e) => ({ booking, warning: e instanceof Error ? e.message : String(e) }));
+  return adopted;
 }
 
 /**
@@ -286,7 +301,8 @@ export async function createBookingFromPaidOrder(entity: Entity, order: Order) {
   const draft = order.bookingDraft as unknown as BookingDraft | null;
   if (!draft) throw new Error(`Order ${order.id} (bookingEngine) sans bookingDraft`);
 
-  const booking = await createBookingDirect(entity, draft, { source: `order payé ${order.id}`, onRaceLost: "createAnyway" });
+  const { booking, warning } = await createBookingDirect(entity, draft, { source: `order payé ${order.id}`, onRaceLost: "createAnyway" });
+  if (warning) console.error(`[bookingEngine] createBookingFromPaidOrder(${booking.code}) — adoption source externe échouée :`, warning);
   await prisma.order.update({ where: { id: order.id }, data: { bookingId: booking.id, bookingCode: booking.code } });
   return booking;
 }

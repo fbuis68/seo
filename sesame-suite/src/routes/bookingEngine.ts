@@ -283,7 +283,7 @@ bookingEngineRouter.post(
     const draft = parseDraft(req.body as CheckoutBody);
     try {
       await quoteBooking(entity.id, draft); // valide dates/chambre/disponibilité avant création
-      const booking = await createBookingDirectUnpaid(entity, draft, "réservation directe (paiement sur place)");
+      const { booking } = await createBookingDirectUnpaid(entity, draft, "réservation directe (paiement sur place)");
       res.status(201).json({ code: booking.code });
     } catch (e) {
       throw new HttpError(400, e instanceof Error ? e.message : "Réservation impossible");
@@ -424,7 +424,7 @@ bookingEngineRouter.post(
     // lui-même l'existence de la chambre et sa disponibilité (respecte
     // skipAvailabilityCheck) sans cette contrainte de tarif.
     try {
-      const booking = await createBookingDirectUnpaid(entity, draft, "empreinte bancaire (accès immédiat, carte non débitée)");
+      const { booking } = await createBookingDirectUnpaid(entity, draft, "empreinte bancaire (accès immédiat, carte non débitée)");
       res.status(201).json({ code: booking.code });
     } catch (e) {
       throw new HttpError(400, e instanceof Error ? e.message : "Réservation impossible");
