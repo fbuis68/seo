@@ -1378,9 +1378,25 @@ export async function pushBookingUpsert(
  * plus léger).
  */
 export async function adoptBookingIntoSource(entityId: string, booking: Booking): Promise<{ booking: Booking; warning?: string }> {
-  if (booking.importedFrom) return { booking };
+  // Journalisation inconditionnelle de CHAQUE issue (y compris les skips
+  // volontaires) — demande client 15/10/2026 : même avec les 3 champs
+  // (endpoint + personEmail + personLastname) confirmés remplis et
+  // persistés sur le BON établissement, ni warning ni log n'apparaissaient
+  // sur un échec de push. Avant cet ajout, aucune des branches de sortie
+  // (déjà connue / pas de config / skip dans pushBookingUpsert) n'était
+  // tracée — impossible de savoir laquelle était réellement empruntée.
+  if (booking.importedFrom) {
+    console.log(`[bookingSource] adoptBookingIntoSource(${booking.code}) — déjà connue (importedFrom="${booking.importedFrom}"), aucune tentative.`);
+    return { booking };
+  }
   const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId } });
-  if (!config) return { booking };
+  if (!config) {
+    console.log(`[bookingSource] adoptBookingIntoSource(${booking.code}) — aucune BookingSourceConfig pour entityId=${entityId}.`);
+    return { booking };
+  }
+  console.log(
+    `[bookingSource] adoptBookingIntoSource(${booking.code}) — tentative (entityId=${entityId}, updateEndpointPath=${JSON.stringify(config.updateEndpointPath)}, updateEmailParam=${JSON.stringify(config.updateEmailParam)}, updateLastnameParam=${JSON.stringify(config.updateLastnameParam)}, baseUrl=${JSON.stringify(config.baseUrl)}).`
+  );
   const result = await pushBookingUpsert(config, {
     code: booking.code,
     personEmail: booking.personEmail,
@@ -1414,7 +1430,11 @@ export async function adoptBookingIntoSource(entityId: string, booking: Booking)
     console.error(`[bookingSource] adoptBookingIntoSource — échec de création de la réservation ${booking.code} côté source externe :`, result.error);
     return { booking, warning: result.error };
   }
-  if (result.skipped) return { booking };
+  if (result.skipped) {
+    console.log(`[bookingSource] adoptBookingIntoSource(${booking.code}) — skip volontaire (endpoint ou email/nom non configurés côté pushBookingUpsert).`);
+    return { booking };
+  }
+  console.log(`[bookingSource] adoptBookingIntoSource(${booking.code}) — succès, marquée importedFrom="${config.sourceName || "Connecteur externe"}".`);
   const updated = await prisma.booking.update({ where: { id: booking.id }, data: { importedFrom: config.sourceName || "Connecteur externe" } });
   return { booking: updated };
 }
