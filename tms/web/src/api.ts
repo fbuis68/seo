@@ -19,6 +19,7 @@ export async function api<T = any>(method: string, path: string, body?: unknown,
   const res = await fetch(path, { method, headers, body: payload });
   if (opts.raw) { if (!res.ok) throw { status: res.status, code: 'http_error', message: res.statusText } as ApiError; return res as any; }
   const json = await res.json().catch(() => ({}));
+  if (res.status === 413) throw { status: 413, code: 'payload_too_large', message: 'Envoi trop volumineux pour le serveur (limite du proxy nginx : client_max_body_size).' } as ApiError;
   if (!res.ok) {
     if (res.status === 401) { session.set(null); if (!location.pathname.startsWith('/login')) location.href = '/login'; }
     throw { status: res.status, code: json.code, message: json.message ?? res.statusText, details: json.details } as ApiError;

@@ -36,18 +36,22 @@ export function applyBranding(b: Branding | null) {
 export async function prepareLogo(file: File): Promise<{ png: string; jpeg: string; previewUrl: string }> {
   if (!/^image\/(png|jpeg|webp|gif|svg\+xml)$/.test(file.type)) throw new Error('Format accepté : PNG, JPEG, WebP, GIF ou SVG.');
   if (file.size > 5_000_000) throw new Error('Fichier trop volumineux (5 Mo maximum).');
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise<HTMLImageElement>((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ko(new Error('Image illisible.')); i.src = url; });
-    const w0 = img.naturalWidth || 600; const h0 = img.naturalHeight || 240;
-    const k = Math.min(1, 600 / w0, 240 / h0);
+  // Lecture en data: URL (autorisée par la politique de sécurité du site, contrairement aux URL blob:).
+  const src = await new Promise<string>((ok, ko) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = () => ko(new Error('Fichier illisible.')); r.readAsDataURL(file); });
+  const img = await new Promise<HTMLImageElement>((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ko(new Error('Image illisible : essayez un PNG ou un JPEG.')); i.src = src; });
+  const w0 = img.naturalWidth || 480; const h0 = img.naturalHeight || 192;
+  // Taille réduite jusqu'à tenir sous ~350 Ko par image (limite serveur 600 Ko).
+  for (const max of [[480, 192], [360, 144], [240, 96]]) {
+    const k = Math.min(1, max[0] / w0, max[1] / h0);
     const w = Math.max(1, Math.round(w0 * k)); const h = Math.max(1, Math.round(h0 * k));
     const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
     const ctx = canvas.getContext('2d')!;
     ctx.drawImage(img, 0, 0, w, h);
     const png = canvas.toDataURL('image/png');
     ctx.globalCompositeOperation = 'destination-over'; ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h);
-    const jpeg = canvas.toDataURL('image/jpeg', 0.9);
-    return { png: png.split(',')[1], jpeg: jpeg.split(',')[1], previewUrl: png };
-  } finally { URL.revokeObjectURL(url); }
+    const jpeg = canvas.toDataURL('image/jpeg', 0.88);
+    const out = { png: png.split(',')[1], jpeg: jpeg.split(',')[1], previewUrl: png };
+    if (out.png.length < 470_000 && out.jpeg.length < 470_000) return out;
+  }
+  throw new Error('Logo trop détaillé : utilisez une image plus simple (PNG à fond transparent).');
 }
