@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ColorBy, GroupBy, MODALITY, STATUS, addDays, at, colorOf, dayLabel, dowOf, fmtH, hmToMin, keysOf, lanes, minToHm, parts, rowsOf, today } from './lib';
+import { ColorBy, GROUP_LABEL, GroupBy, MODALITY, STATUS, addDays, at, colorOf, dayLabel, dowOf, fmtH, hmToMin, keysOf, lanes, minToHm, parts, rowsOf, today } from './lib';
 
 export interface ViewProps {
   items: any[]; tz: string; colorBy: ColorBy; settings: any; canWrite: boolean;
@@ -197,7 +197,7 @@ export function MonthView(p: ViewProps & { start: string; days: number; month: s
  * Timeline : axe horizontal, lignes par ressource, entêtes fixes au défilement,
  * chevauchements empilés, glisser horizontal = date / heure, vertical = autre ressource du même type.
  */
-export function Timeline(p: ViewProps & { start: string; days: number; zoom: 'day' | 'week' | 'month'; groupBy: GroupBy; lookups: any; rowHeight: number; unavailable?: any[] }) {
+export function Timeline(p: ViewProps & { start: string; days: number; zoom: 'day' | 'week' | 'month'; groupBy: GroupBy; lookups: any; rowHeight: number; unavailable?: any[]; onlyRow?: string }) {
   const { tz, settings } = p;
   // Axe limité à la plage visible paramétrée (séances hors plage ramenées aux bornes).
   const dayStart = hmToMin(settings.day_start); const dayEnd = hmToMin(settings.day_end);
@@ -209,7 +209,7 @@ export function Timeline(p: ViewProps & { start: string; days: number; zoom: 'da
     const m = Math.max(dayStart, Math.min(dayEnd, a.minutes));
     return d * pxPerDay + ((m - dayStart) / (dayEnd - dayStart)) * pxPerDay;
   };
-  const rows = rowsOf(p.groupBy, p.lookups, p.items);
+  const rows = rowsOf(p.groupBy, p.lookups, p.items).filter((r) => !p.onlyRow || r.id === p.onlyRow);
   const rowDrag = useRef<string | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -289,20 +289,25 @@ export function Timeline(p: ViewProps & { start: string; days: number; zoom: 'da
 }
 
 /** Vue liste (mobile, clavier, sélection pour édition groupée). */
-export function ListView(p: ViewProps & { selected: string[]; onSelect: (ids: string[]) => void }) {
+export function ListView(p: ViewProps & { selected: string[]; onSelect: (ids: string[]) => void; groupBy?: GroupBy | null; lookups?: any }) {
+  // Sections par jour, ou par ressource (formateur, salle, session…) quand un regroupement est choisi.
   const byDay = new Map<string, any[]>();
-  for (const s of p.items) { const d = parts(s.starts_at, p.tz).date; if (!byDay.has(d)) byDay.set(d, []); byDay.get(d)!.push(s); }
+  if (p.groupBy && p.lookups) {
+    const labels = new Map(rowsOf(p.groupBy, p.lookups, p.items).map((r) => [r.id, r.label]));
+    for (const s of p.items) for (const k of keysOf(s, p.groupBy)) { const l = labels.get(k) ?? k; if (!byDay.has(l)) byDay.set(l, []); byDay.get(l)!.push(s); }
+  } else for (const s of p.items) { const d = parts(s.starts_at, p.tz).date; if (!byDay.has(d)) byDay.set(d, []); byDay.get(d)!.push(s); }
+  const grouped = !!(p.groupBy && p.lookups);
   const toggle = (id: string) => p.onSelect(p.selected.includes(id) ? p.selected.filter((x) => x !== id) : [...p.selected, id]);
   if (!p.items.length) return <p className="muted">Aucune séance sur la période avec ces filtres.</p>;
   return (
     <div className="pl-list">
       {[...byDay.entries()].map(([d, list]) => (
         <section key={d}>
-          <h3>{dayLabel(d)} <span className="small muted">· {fmtH(list.reduce((a, s) => a + (s.status === 'cancelled' ? 0 : s.pedagogical_minutes), 0))}</span></h3>
+          <h3>{grouped ? d : dayLabel(d)} <span className="small muted">· {fmtH(list.reduce((a, s) => a + (s.status === 'cancelled' ? 0 : s.pedagogical_minutes), 0))}</span></h3>
           <table><tbody>{list.map((s) => (
             <tr key={s.id} className={`st-${s.status}`}>
               {p.canWrite && <td style={{ width: 28 }}><input type="checkbox" aria-label={`Sélectionner ${describe(s, p.tz)}`} checked={p.selected.includes(s.id)} onChange={() => toggle(s.id)} /></td>}
-              <td style={{ width: 110 }}><span className="pl-dot" style={{ background: colorOf(s, p.colorBy) }} aria-hidden /> {parts(s.starts_at, p.tz).hm}–{parts(s.ends_at, p.tz).hm}</td>
+              <td style={{ width: grouped ? 170 : 110 }}><span className="pl-dot" style={{ background: colorOf(s, p.colorBy) }} aria-hidden /> {grouped ? `${dayLabel(parts(s.starts_at, p.tz).date)} ` : ''}{parts(s.starts_at, p.tz).hm}–{parts(s.ends_at, p.tz).hm}</td>
               <td><button className="linklike" onClick={() => p.onOpen(s)}>{s.title || s.part_title || s.session_title}</button>
                 <div className="small muted">{s.session_title}{s.session_reference ? ` (${s.session_reference})` : ''}{s.group_label ? ` · groupe ${s.group_label}` : ''}</div></td>
               <td className="small">{places(s) || <span className="pill warn">sans lieu</span>}</td>
@@ -313,5 +318,49 @@ export function ListView(p: ViewProps & { selected: string[]; onSelect: (ids: st
         </section>
       ))}
     </div>
+  );
+}
+
+/**
+ * Semaine ou mois par ressource : une ligne par formateur, salle, session, groupe ou stagiaire,
+ * une colonne par jour. Semaine : séances détaillées ; mois : nombre de séances et heures.
+ */
+export function GroupedGrid(p: ViewProps & { days: string[]; groupBy: GroupBy; lookups: any; compact?: boolean; onPick: (date: string, rowId: string) => void; closures?: any[] }) {
+  const rows = rowsOf(p.groupBy, p.lookups, p.items);
+  const cell = (rowId: string, d: string) => p.items.filter((s) => keysOf(s, p.groupBy).includes(rowId) && parts(s.starts_at, p.tz).date === d)
+    .sort((a, b) => +new Date(a.starts_at) - +new Date(b.starts_at));
+  if (!rows.length) return <p className="muted" style={{ padding: 12 }}>Aucune ressource à afficher.</p>;
+  return (
+    <table className={`pl-gg${p.compact ? ' compact' : ''}`}>
+      <thead><tr><th className="pl-gg-h">{GROUP_LABEL[p.groupBy]}</th>{p.days.map((d) => {
+        const closed = p.closures?.some((x) => x.starts_on <= d && x.ends_on >= d);
+        return <th key={d} className={`${d === today(p.tz) ? 'today' : ''}${dowOf(d) > 5 ? ' we' : ''}`} title={closed ? 'Fermeture' : undefined}>
+          {p.compact ? <>{dayLabel(d).slice(0, 1).toUpperCase()}<br />{Number(d.slice(8, 10))}</> : dayLabel(d)}{closed && <div className="pl-closed">fermé</div>}</th>;
+      })}<th className="num">Total</th></tr></thead>
+      <tbody>{rows.map((r) => {
+        const all = p.items.filter((s) => keysOf(s, p.groupBy).includes(r.id) && s.status !== 'cancelled');
+        return (
+          <tr key={r.id}>
+            <th className="pl-gg-h">{r.label}{r.sub && <div className="small muted">{r.sub}</div>}</th>
+            {p.days.map((d) => {
+              const list = cell(r.id, d);
+              if (p.compact) {
+                const mins = list.filter((s) => s.status !== 'cancelled').reduce((a, s) => a + s.pedagogical_minutes, 0);
+                return <td key={d} className={dowOf(d) > 5 ? 'we' : ''}>{list.length > 0 && <button className="pl-gg-count" onClick={() => p.onPick(d, r.id)} title={list.map((s) => describe(s, p.tz)).join('\n')}
+                  style={{ ['--c' as any]: colorOf(list[0], p.colorBy) }}>{list.length}<span>{fmtH(mins)}</span></button>}</td>;
+              }
+              return <td key={d} className={dowOf(d) > 5 ? 'we' : ''} onDoubleClick={(e) => { if (!p.canWrite || e.target !== e.currentTarget) return; p.onCreate(at(d, '09:00', p.tz), at(d, '12:00', p.tz), r.id !== '__none' && !['session', 'group', 'learner'].includes(p.groupBy) ? { by: p.groupBy, id: r.id } : undefined); }}>
+                {list.map((s) => (
+                  <div key={s.id} role="button" tabIndex={0} className={`pl-mitem st-${s.status}`} style={{ ['--c' as any]: colorOf(s, p.colorBy) }} title={describe(s, p.tz)}
+                    onClick={() => p.onOpen(s)} onKeyDown={(e) => e.key === 'Enter' && p.onOpen(s)}>
+                    <span aria-hidden>{STATUS[s.status].mark}</span> {parts(s.starts_at, p.tz).hm}–{parts(s.ends_at, p.tz).hm} {s.title || s.part_title || s.session_title}
+                  </div>))}
+              </td>;
+            })}
+            <td className="num small">{fmtH(all.reduce((a, s) => a + s.pedagogical_minutes, 0))}</td>
+          </tr>
+        );
+      })}</tbody>
+    </table>
   );
 }

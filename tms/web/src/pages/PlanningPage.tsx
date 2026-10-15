@@ -2,16 +2,17 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, get, post } from '../api';
 import { can, useApp } from '../context';
 import { useFetch } from '../hooks';
-import { ColorBy, GROUP_LABEL, GroupBy, MODALITY, STATUS, View, Zoom, addDays, at, dayLabel, fmtH, legendOf, loadPrefs, longDay, monthLabel, parts, rangeOf, savePrefs, step, today } from '../planning/lib';
+import { ColorBy, GROUP_LABEL, GroupBy, MODALITY, STATUS, View, Zoom, addDays, at, daysBetween, dayLabel, fmtH, legendOf, loadPrefs, longDay, monthLabel, parts, rangeOf, savePrefs, step, today } from '../planning/lib';
 import SlotPanel, { DerogationBox, Draft, Issues } from '../planning/SlotPanel';
 import { AvailabilityTab, ClosuresTab, ConflictsTab, ImportExportTab, IndicatorsTab, JournalTab, PublishTab, SettingsTab } from '../planning/tabs';
-import { ListView, MonthView, TimeGrid, Timeline, describe } from '../planning/views';
+import { GroupedGrid, ListView, MonthView, TimeGrid, Timeline, describe } from '../planning/views';
 import { Help } from '../help';
 
 const KEY = 'tms.planning.prefs';
 interface Filters { q: string; siteId: string; programId: string; sessionId: string; groupLabel: string; modality: string; status: string; trainerId: string; resourceId: string; learnerId: string; incomplete: boolean }
 const NO_FILTERS: Filters = { q: '', siteId: '', programId: '', sessionId: '', groupLabel: '', modality: '', status: '', trainerId: '', resourceId: '', learnerId: '', incomplete: false };
-interface Prefs { view: View; zoom: Zoom; date: string; groupBy: GroupBy; colorBy: ColorBy; rowHeight: number; allDays: boolean; filters: Filters; favorites: { name: string; filters: Filters; view: View; groupBy: GroupBy }[] }
+type Subject = { by: 'all' | GroupBy; id: string };
+interface Prefs { view: View; zoom: Zoom; date: string; groupBy: GroupBy; subject: Subject; colorBy: ColorBy; rowHeight: number; allDays: boolean; filters: Filters; favorites: { name: string; filters: Filters; view: View; groupBy: GroupBy; subject?: Subject }[] }
 
 function useNarrow() {
   const q = '(max-width: 760px)';
@@ -22,6 +23,16 @@ function useNarrow() {
 
 const TAB_HELP: Record<string, string> = { planning: 'planning', conflicts: 'planning.conflits', publish: 'planning.publication', availability: 'planning.disponibilites',
   closures: 'planning.fermetures', indicators: 'planning.indicateurs', import: 'planning.import', journal: 'planning.journal', settings: 'planning.parametres' };
+const SUBJECT_LABEL: Record<'all' | GroupBy, string> = { all: 'Tout', trainer: 'Formateurs', session: 'Sessions', room: 'Salles', equipment: 'Matériel', site: 'Sites', group: 'Groupes', learner: 'Stagiaires' };
+const ALL_LABEL: Record<GroupBy, string> = { trainer: 'Tous les formateurs', session: 'Toutes les sessions', room: 'Toutes les salles', equipment: 'Tout le matériel', site: 'Tous les sites', group: 'Tous les groupes', learner: 'Tous les stagiaires' };
+const SUBJECT_FILTER: Record<GroupBy, keyof Filters> = { trainer: 'trainerId', room: 'resourceId', equipment: 'resourceId', site: 'siteId', session: 'sessionId', group: 'groupLabel', learner: 'learnerId' };
+function subjectOptions(by: GroupBy, lk: any): [string, string][] {
+  if (by === 'trainer') return lk.trainers.map((t: any) => [t.id, t.name]);
+  if (by === 'session') return lk.sessions.map((s: any) => [s.id, s.title + (s.reference ? ` (${s.reference})` : '')]);
+  if (by === 'group') return lk.groups.map((g: string) => [g, g]);
+  if (by === 'learner') return lk.learners.map((l: any) => [l.id, l.name]);
+  return lk.resources.filter((r: any) => r.kind === by).map((r: any) => [r.id, r.name]);
+}
 const TABS: [string, string, string?][] = [['planning', 'Planning'], ['conflicts', 'Conflits', 'sessions.write'], ['publish', 'Publication', 'sessions.write'], ['availability', 'Disponibilités'],
   ['closures', 'Fermetures'], ['indicators', 'Indicateurs'], ['import', 'Import / export'], ['journal', 'Journal'], ['settings', 'Paramètres', 'org.manage']];
 
@@ -29,7 +40,7 @@ const TABS: [string, string, string?][] = [['planning', 'Planning'], ['conflicts
 export default function PlanningPage() {
   const { org } = useApp();
   const tz: string = (org as any).timezone ?? 'Europe/Paris';
-  const [prefs, setPrefs] = useState<Prefs>(() => loadPrefs<Prefs>(KEY, { view: 'week', zoom: 'week', date: today(tz), groupBy: 'trainer', colorBy: 'session', rowHeight: 46, allDays: false, filters: NO_FILTERS, favorites: [] }));
+  const [prefs, setPrefs] = useState<Prefs>(() => loadPrefs<Prefs>(KEY, { view: 'week', zoom: 'week', date: today(tz), groupBy: 'trainer', subject: { by: 'all', id: '' }, colorBy: 'session', rowHeight: 46, allDays: false, filters: NO_FILTERS, favorites: [] }));
   useEffect(() => savePrefs(KEY, { ...prefs, date: undefined }), [prefs]);
   const set = (p: Partial<Prefs>) => setPrefs((x) => ({ ...x, ...p }));
   const setFilter = (p: Partial<Filters>) => setPrefs((x) => ({ ...x, filters: { ...x.filters, ...p } }));
@@ -45,12 +56,16 @@ export default function PlanningPage() {
     return view === 'week' && !prefs.allDays && settings ? all.filter((d) => settings.workdays.includes(((new Date(`${d}T12:00:00Z`).getUTCDay() + 6) % 7) + 1)) : all;
   }, [r.start, r.days, view, prefs.allDays, settings]);
   const from = at(r.start, '00:00', tz); const to = at(addDays(r.start, r.days), '00:00', tz);
+  // « Planning de » : formateur, salle, session… — une ressource précise (filtre) ou toutes (regroupement), dans toutes les vues.
+  const subject: Subject = prefs.subject ?? { by: 'all', id: '' };
+  const groupBy: GroupBy | null = subject.by === 'all' ? null : subject.by;
+  const effectiveFilters = useMemo(() => subject.by !== 'all' && subject.id ? { ...prefs.filters, [SUBJECT_FILTER[subject.by]]: subject.id } : prefs.filters, [prefs.filters, subject.by, subject.id]);
   const query = useMemo(() => {
     const q = new URLSearchParams({ from, to });
-    for (const [k, v] of Object.entries(prefs.filters)) if (v) q.set(k, String(v));
-    if (view === 'timeline' && prefs.groupBy === 'learner') q.set('withLearners', 'true');
+    for (const [k, v] of Object.entries(effectiveFilters)) if (v) q.set(k, String(v));
+    if (groupBy === 'learner' || (view === 'timeline' && prefs.groupBy === 'learner')) q.set('withLearners', 'true');
     return q.toString();
-  }, [from, to, prefs.filters, view, prefs.groupBy]);
+  }, [from, to, effectiveFilters, view, groupBy, prefs.groupBy]);
   const [data, setData] = useState<{ items: any[]; truncated: boolean } | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -65,12 +80,13 @@ export default function PlanningPage() {
   const [proposal, setProposal] = useState<{ s: any; change: any } | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
 
+  const subjectKey = subject.id && ['trainer', 'room', 'equipment', 'site'].includes(subject.by) ? { by: subject.by as GroupBy, id: subject.id } : undefined;
   const perms = { write: can(org, 'sessions.write'), publish: can(org, 'planning.publish'), derogate: can(org, 'planning.derogate'), directPublish: !!settings?.direct_publish && can(org, 'sessions.write') };
   const items = data?.items ?? [];
   const vp = {
     items, tz, colorBy: prefs.colorBy, settings, canWrite: perms.write,
     onOpen: (s: any) => setPanel({ slotId: s.id }),
-    onCreate: (startsAt: string, endsAt: string, key?: { by: GroupBy; id: string }) => setPanel({ draft: { startsAt, endsAt, key, sessionId: prefs.filters.sessionId || undefined } }),
+    onCreate: (startsAt: string, endsAt: string, key?: { by: GroupBy; id: string }) => setPanel({ draft: { startsAt, endsAt, key: key ?? subjectKey, sessionId: effectiveFilters.sessionId || undefined } }),
     onPropose: (s: any, change: any) => setProposal({ s, change }),
   };
   const anchorLabel = view === 'day' || (view === 'timeline' && prefs.zoom === 'day') ? longDay(prefs.date)
@@ -98,11 +114,23 @@ export default function PlanningPage() {
           <div className="pl-seg" role="group" aria-label="Vue">
             {(['day', 'week', 'month', 'timeline', 'list'] as View[]).map((v) => <button key={v} className={prefs.view === v ? 'active' : ''} aria-pressed={prefs.view === v} onClick={() => set({ view: v })}>{({ day: 'Jour', week: 'Semaine', month: 'Mois', timeline: 'Timeline', list: 'Liste' })[v]}</button>)}
           </div>
-          {(view === 'timeline' || view === 'day') && <label className="row small">Regrouper par<select value={prefs.groupBy} onChange={(e) => set({ groupBy: e.target.value as GroupBy })}>
-            {(Object.keys(GROUP_LABEL) as GroupBy[]).filter((g) => view === 'timeline' || g !== 'learner').map((g) => <option key={g} value={g}>{GROUP_LABEL[g]}</option>)}</select></label>}
+          {view === 'timeline' && subject.by === 'all' && <label className="row small">Lignes par<select value={prefs.groupBy} onChange={(e) => set({ groupBy: e.target.value as GroupBy })}>
+            {(Object.keys(GROUP_LABEL) as GroupBy[]).map((g) => <option key={g} value={g}>{GROUP_LABEL[g]}</option>)}</select></label>}
           {view === 'timeline' && <label className="row small">Zoom<select value={prefs.zoom} onChange={(e) => set({ zoom: e.target.value as Zoom })}><option value="day">jour (heures)</option><option value="week">semaine (jours)</option><option value="month">mois (jours)</option></select></label>}
           {view === 'week' && <label className="row small"><input type="checkbox" checked={prefs.allDays} onChange={(e) => set({ allDays: e.target.checked })} />7 jours</label>}
-          {perms.write && <button className="btn sm" onClick={() => setPanel({ draft: { startsAt: at(prefs.date, '09:00', tz), endsAt: at(prefs.date, '12:00', tz), sessionId: prefs.filters.sessionId || undefined } })}>Nouvelle séance</button>}
+          {perms.write && <button className="btn sm" onClick={() => setPanel({ draft: { startsAt: at(prefs.date, '09:00', tz), endsAt: at(prefs.date, '12:00', tz), key: subjectKey, sessionId: effectiveFilters.sessionId || undefined } })}>Nouvelle séance</button>}
+        </div>
+        <div className="pl-toolbar pl-subject" role="group" aria-label="Planning de">
+          <strong className="small">Planning :</strong>
+          <div className="pl-seg">
+            {(['all', 'trainer', 'session', 'room', 'equipment', 'site', 'group', 'learner'] as const).map((b) => (
+              <button key={b} className={subject.by === b ? 'active' : ''} aria-pressed={subject.by === b} onClick={() => set({ subject: { by: b, id: '' } })}>{SUBJECT_LABEL[b]}</button>))}
+          </div>
+          {subject.by !== 'all' && <select aria-label={`Choisir : ${SUBJECT_LABEL[subject.by]}`} value={subject.id} onChange={(e) => set({ subject: { ...subject, id: e.target.value } })}>
+            <option value="">{ALL_LABEL[subject.by]} (une ligne par {GROUP_LABEL[subject.by].toLowerCase()})</option>
+            {subjectOptions(subject.by, lk).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>}
+          <Help k="planning.vues" label="planning par formateur, salle, session…" />
         </div>
         <details className="pl-filters" open={activeFilters > 0}>
           <summary>Filtres et affichage{activeFilters ? ` (${activeFilters} actif${activeFilters > 1 ? 's' : ''})` : ''} <Help k="planning.filtres" /></summary>
@@ -124,9 +152,9 @@ export default function PlanningPage() {
             <label className="row small">Couleur par<select value={prefs.colorBy} onChange={(e) => set({ colorBy: e.target.value as ColorBy })}><option value="session">session</option><option value="program">formation</option><option value="status">statut</option></select></label>
             {view === 'timeline' && <label className="row small">Hauteur de ligne<input type="range" min={34} max={80} value={prefs.rowHeight} onChange={(e) => set({ rowHeight: Number(e.target.value) })} /></label>}
             <span className="small muted">Vues favorites :</span>
-            {prefs.favorites.map((fv, i) => <span key={i} className="pl-fav"><button className="linklike small" onClick={() => set({ filters: fv.filters, view: fv.view, groupBy: fv.groupBy })}>{fv.name}</button>
+            {prefs.favorites.map((fv, i) => <span key={i} className="pl-fav"><button className="linklike small" onClick={() => set({ filters: fv.filters, view: fv.view, groupBy: fv.groupBy, subject: (fv as any).subject ?? { by: 'all', id: '' } })}>{fv.name}</button>
               <button className="linklike small" aria-label={`Supprimer la vue ${fv.name}`} onClick={() => set({ favorites: prefs.favorites.filter((_, j) => j !== i) })}>×</button></span>)}
-            <button className="btn ghost sm" onClick={() => { const name = prompt('Nom de la vue favorite :'); if (name) set({ favorites: [...prefs.favorites, { name, filters: prefs.filters, view: prefs.view, groupBy: prefs.groupBy }] }); }}>Enregistrer cette vue</button>
+            <button className="btn ghost sm" onClick={() => { const name = prompt('Nom de la vue favorite :'); if (name) set({ favorites: [...prefs.favorites, { name, filters: prefs.filters, view: prefs.view, groupBy: prefs.groupBy, subject }] }); }}>Enregistrer cette vue</button>
           </div>
         </details>
         <div className="legend pl-legend" aria-label="Légende">
@@ -139,10 +167,15 @@ export default function PlanningPage() {
         {loadErr && <p className="alert">{loadErr}</p>}
         {view === 'list' && selected.length > 0 && <BulkBar ids={selected} lookups={lk} perms={perms} onDone={() => { setSelected([]); load(); }} />}
         <div className="pl-view">
-          {(view === 'week' || view === 'day') && settings && <TimeGrid {...vp} days={view === 'day' ? [prefs.date] : visibleDays} groupBy={view === 'day' ? prefs.groupBy : undefined} lookups={lk} unavailable={unav.data ?? []} closures={closures.data ?? []} />}
-          {view === 'month' && <MonthView {...vp} start={r.start} days={r.days} month={prefs.date.slice(0, 7)} onDay={(d) => set({ date: d, view: 'day' })} closures={closures.data ?? []} />}
-          {view === 'timeline' && settings && <Timeline {...vp} start={r.start} days={r.days} zoom={prefs.zoom} groupBy={prefs.groupBy} lookups={lk} rowHeight={prefs.rowHeight} unavailable={unav.data ?? []} />}
-          {view === 'list' && <ListView {...vp} selected={selected} onSelect={setSelected} />}
+          {view === 'day' && settings && <TimeGrid {...vp} days={[prefs.date]} groupBy={groupBy && !subject.id ? groupBy : undefined} lookups={lk} unavailable={unav.data ?? []} closures={closures.data ?? []} />}
+          {view === 'week' && settings && (groupBy && !subject.id
+            ? <GroupedGrid {...vp} days={visibleDays} groupBy={groupBy} lookups={lk} closures={closures.data ?? []} onPick={(d, id) => set({ date: d, view: 'day', subject: { by: groupBy, id: id === '__none' ? '' : id } })} />
+            : <TimeGrid {...vp} days={visibleDays} lookups={lk} unavailable={unav.data ?? []} closures={closures.data ?? []} />)}
+          {view === 'month' && groupBy && !subject.id && <GroupedGrid {...vp} compact days={Array.from({ length: daysBetween(`${prefs.date.slice(0, 8)}01`, addDays(`${prefs.date.slice(0, 8)}01`, 32).slice(0, 8) + '01') }, (_, i) => addDays(`${prefs.date.slice(0, 8)}01`, i))}
+            groupBy={groupBy} lookups={lk} closures={closures.data ?? []} onPick={(d, id) => set({ date: d, view: 'day', subject: { by: groupBy, id: id === '__none' ? '' : id } })} />}
+          {view === 'month' && !(groupBy && !subject.id) && <MonthView {...vp} start={r.start} days={r.days} month={prefs.date.slice(0, 7)} onDay={(d) => set({ date: d, view: 'day' })} closures={closures.data ?? []} />}
+          {view === 'timeline' && settings && <Timeline {...vp} start={r.start} days={r.days} zoom={prefs.zoom} groupBy={groupBy ?? prefs.groupBy} onlyRow={subject.id || undefined} lookups={lk} rowHeight={prefs.rowHeight} unavailable={unav.data ?? []} />}
+          {view === 'list' && <ListView {...vp} selected={selected} onSelect={setSelected} groupBy={groupBy && !subject.id ? groupBy : null} lookups={lk} />}
         </div>
       </>}
       {tab === 'conflicts' && <ConflictsTab from={from} to={to} label={anchorLabel} tz={tz} onOpen={(id) => { setTab('planning'); setPanel({ slotId: id }); }} />}
