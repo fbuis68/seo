@@ -27,6 +27,21 @@ function renderTemplate(str: string, vars: Record<string, string>): string {
 }
 
 /**
+ * Détecte si un modèle référence une variable {{key}} donnée — mêmes
+ * espaces tolérés à l'intérieur des accolades que renderTemplate ci-dessus
+ * (ex : "{{ codeAcces }}"). Un simple `str.includes("{{key}}")` (version
+ * précédente) ratait tout modèle saisi avec un espacement différent de
+ * celui que produit le bouton d'insertion de variable de l'éditeur — ce
+ * qui arrive plus facilement sur un modèle SMS/WhatsApp (éditeur texte
+ * brut) que sur un modèle email (bouton dédié) — bug confirmé le
+ * 15/10/2026 : {{codeAcces}} vide en SMS, correct en email, MÊME
+ * réservation (donc même personEmail, excluant la cause précédente).
+ */
+function usesVariable(str: string, key: string): boolean {
+  return new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`).test(str);
+}
+
+/**
  * Valeurs des variables {{var}} d'un modèle, dans leur ordre d'apparition —
  * sert à construire les ContentVariables Twilio ("1","2",...) attendues par
  * un Content Template WhatsApp approuvé, dont les emplacements numérotés
@@ -143,10 +158,10 @@ export async function sendMessage(opts: {
   // (contrairement à {{qrCode}}, une image, qui elle reste email uniquement
   // — cf. plus bas).
   const wantsAccessCode =
-    template.bodyHtml.includes("{{codeAcces}}") ||
-    template.subject.includes("{{codeAcces}}") ||
-    template.bodyHtml.includes("{{qrCode}}") ||
-    template.subject.includes("{{qrCode}}");
+    usesVariable(template.bodyHtml, "codeAcces") ||
+    usesVariable(template.subject, "codeAcces") ||
+    usesVariable(template.bodyHtml, "qrCode") ||
+    usesVariable(template.subject, "qrCode");
   if (opts.entityId && vars.code && !vars.codeAcces && wantsAccessCode) {
     try {
       const bsConfig = await prisma.bookingSourceConfig.findUnique({ where: { entityId: opts.entityId } });
