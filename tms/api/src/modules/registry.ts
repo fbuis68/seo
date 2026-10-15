@@ -2,6 +2,7 @@ import { AiModule } from './ai/ai.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { BankModule } from './bank/bank.module';
 import { BrandingModule } from './branding/branding.module';
+import { PlatformModule } from './platform/platform.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { CrmModule } from './crm/crm.module';
 import { DocumentsModule } from './documents/documents.module';
@@ -21,5 +22,5 @@ import { SignaturesModule } from './signatures/signatures.module';
  */
 export const MODULE_IMPORTS: any[] = [
   CrmModule, CatalogModule, SessionsModule, QualityModule, FinanceModule, DocumentsModule, SignaturesModule,
-  AnalyticsModule, ExportsModule, MigrationModule, OpenDataModule, MailModule, BankModule, AiModule, BrandingModule,
+  AnalyticsModule, ExportsModule, MigrationModule, OpenDataModule, MailModule, BankModule, AiModule, BrandingModule, PlatformModule,
 ];

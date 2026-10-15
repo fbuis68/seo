@@ -30,8 +30,9 @@ export const http = () => request(app!.getHttpServer());
 
 let seq = 0;
 /** Inscription publique + vérification email + connexion : renvoie un client authentifié. */
-export async function signupAndLogin(opts: { plan?: string; legalName?: string } = {}) {
-  const email = `user${Date.now()}_${++seq}@example.test`;
+export async function signupAndLogin(opts: { plan?: string; legalName?: string; email?: string } = {}) {
+  const email = opts.email ?? `user${Date.now()}_${++seq}@example.test`;
+  if (opts.email) ++seq;
   const password = 'motdepasse-solide-42';
   const res = await http().post('/api/v1/public/signup').send({
     email, password, fullName: 'Camille Martin', organization: { legalName: opts.legalName ?? `OF ${seq}` },

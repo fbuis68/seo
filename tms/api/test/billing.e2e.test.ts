@@ -118,3 +118,33 @@ describe('Souscription en ligne', () => {
     expect(st.body.entitlements.canSendSignatures).toBe(true);
   });
 });
+
+describe('Back-office éditeur', () => {
+  it('réservé aux comptes éditeur ; vue des organismes ; actions tracées (offre offerte, retour Free, suspension)', async () => {
+    const admin = await signupAndLogin({ email: 'editeur@example.test', legalName: 'Éditeur' });
+    const client = await signupAndLogin({ legalName: 'Centre Client BO' });
+    const as = (u: typeof admin) => ({ get: (p: string) => http().get(p).set({ Authorization: `Bearer ${u.token}` }), post: (p: string, b: any) => http().post(p).set({ Authorization: `Bearer ${u.token}` }).send(b) });
+    expect((await as(client).get('/api/v1/platform/overview')).status).toBe(404);
+    expect((await http().get('/api/v1/me').set({ Authorization: `Bearer ${admin.token}` })).body.isPlatformAdmin).toBe(true);
+    const ov = (await as(admin).get('/api/v1/platform/overview').expect(200)).body;
+    expect(ov.tenants).toBeGreaterThanOrEqual(2);
+    expect(ov.months).toHaveLength(12);
+    const list = (await as(admin).get('/api/v1/platform/tenants?q=Client BO').expect(200)).body;
+    expect(list.map((t: any) => t.id)).toEqual([client.tenantId]);
+    expect(list[0].owner_email).toBe(client.email);
+    // Offre offerte : droits appliqués immédiatement, motif obligatoire, journal.
+    expect((await as(admin).post(`/api/v1/platform/tenants/${client.tenantId}/actions`, { action: 'comp', plan: 'centre' })).status).toBe(400);
+    const d = (await as(admin).post(`/api/v1/platform/tenants/${client.tenantId}/actions`, { action: 'comp', plan: 'centre', until: '2099-12-31', reason: 'Partenaire pilote' }).expect(201)).body;
+    expect([d.plan_code, d.status, d.mrr_cents]).toEqual(['centre', 'active', 0]);
+    expect(d.events[0]).toMatchObject({ action: 'platform.comp', actor: 'editeur@example.test' });
+    expect((await client.api.get('/api/v1/billing/usage')).body.plan).toBe('centre');
+    await as(admin).post(`/api/v1/platform/tenants/${client.tenantId}/actions`, { action: 'free', reason: 'Fin du pilote' }).expect(201);
+    expect((await client.api.get('/api/v1/billing/usage')).body.plan).toBe('free');
+    // Suspension : accès coupé ; réactivation.
+    await as(admin).post(`/api/v1/platform/tenants/${client.tenantId}/actions`, { action: 'suspend', reason: 'Impayé contentieux' }).expect(201);
+    expect([401, 403]).toContain((await client.api.get('/api/v1/billing/usage')).status);
+    await as(admin).post(`/api/v1/platform/tenants/${client.tenantId}/actions`, { action: 'reactivate', reason: 'Régularisé' }).expect(201);
+    const relog = await http().post('/api/v1/auth/login').send({ email: client.email, password: client.password }).expect(201);
+    await http().get('/api/v1/billing/usage').set({ Authorization: `Bearer ${relog.body.token}`, 'X-Tenant-Id': client.tenantId }).expect(200);
+  });
+});

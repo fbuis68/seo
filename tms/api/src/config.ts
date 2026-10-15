@@ -8,13 +8,29 @@ function env(name: string, fallback?: string): string {
 
 const isProd = process.env.NODE_ENV === 'production';
 
+/**
+ * URL publique : variable explicite, sinon dérivée de APP_DOMAIN. Une valeur d'exemple
+ * laissée telle quelle (« exemple.fr ») est remplacée par https://APP_DOMAIN, avec avertissement.
+ */
+function publicUrl(name: string, fallback: string): string {
+  const domain = process.env.APP_DOMAIN?.trim();
+  const v = process.env[name]?.trim();
+  if (domain && !/exemple\.(fr|com)$/.test(domain) && (!v || /exemple\.(fr|com)/.test(v))) {
+    if (v) console.warn(`[config] ${name}=${v} est une valeur d'exemple : https://${domain} utilisé à la place. Corrigez le fichier .env.`);
+    return `https://${domain}`;
+  }
+  return (v || fallback).replace(/\/+$/, '');
+}
+
 export const config = {
   isProd,
   port: Number(env('PORT', '4000')),
   /** URL publique de l'API (utilisée par le widget du site web et les retours de paiement). */
-  publicApiUrl: env('PUBLIC_API_URL', 'http://localhost:4000'),
+  publicApiUrl: publicUrl('PUBLIC_API_URL', 'http://localhost:4000'),
   /** URL de l'application (SPA) vers laquelle on redirige après inscription/paiement. */
-  appUrl: env('APP_URL', 'http://localhost:5173'),
+  appUrl: publicUrl('APP_URL', 'http://localhost:5173'),
+  /** Comptes éditeur ayant accès au back-office (emails séparés par des virgules). */
+  platformAdmins: (process.env.PLATFORM_ADMINS ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
   /** Origines autorisées à appeler les endpoints publics (site vitrine WordPress, etc.). */
   publicOrigins: env('PUBLIC_ORIGINS', 'http://localhost:5173,http://localhost:8080')
     .split(',').map((s) => s.trim()).filter(Boolean),

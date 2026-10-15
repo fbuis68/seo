@@ -4,14 +4,14 @@ import { useApp } from '../context';
 import { useAction, useFetch } from '../hooks';
 import { Help } from '../help';
 
-const QUOTA_LABELS: Record<string, string> = {
+export const QUOTA_LABELS: Record<string, string> = {
   billedClients: 'Clients facturés', crmProspects: 'Prospects', learnersPerYear: 'Apprenants (année civile)', activeSessions: 'Sessions actives',
   draftSessions: 'Sessions brouillon', managers: 'Gestionnaires', storageBytes: 'Stockage', emailsPerMonth: 'Emails (mois)', aiRequestsPerMonth: 'Requêtes IA (mois)',
   opendataSearchesPerDay: 'Recherches OpenData (jour)', smtpMailboxes: 'Boîtes SMTP', bankAccounts: 'Comptes bancaires', bankInstitutions: 'Établissements bancaires',
 };
 const STATUS: Record<string, string> = { free: 'Free', trialing: 'Essai', active: 'Actif', past_due: 'Paiement en échec', read_only: 'Lecture seule', cancelled: 'Résilié' };
 
-function fmtQuota(k: string, v: number) { return k === 'storageBytes' ? `${(v / 1024 ** 3).toFixed(2)} Go` : v.toLocaleString('fr-FR'); }
+export function fmtQuota(k: string, v: number) { return k === 'storageBytes' ? `${(v / 1024 ** 3).toFixed(2)} Go` : v.toLocaleString('fr-FR'); }
 
 export default function Billing() {
   const { me, reload } = useApp();

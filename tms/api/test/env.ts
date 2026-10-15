@@ -5,3 +5,4 @@ process.env.PAYMENT_PROVIDER = 'fake';
 process.env.FAKE_PAYMENT_WEBHOOK_SECRET = 'test-secret';
 process.env.STORAGE_DIR = require('path').join(require('os').tmpdir(), `tms-test-storage-${process.pid}`);
 process.env.ALLOW_PRIVATE_HOSTS = '1';
+process.env.PLATFORM_ADMINS = 'editeur@example.test';

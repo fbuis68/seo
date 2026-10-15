@@ -116,7 +116,8 @@ export class IdentityService {
       `SELECT t.id tenant_id, t.legal_name, m.role, s.plan_code, s.status, t.signup_intent
          FROM memberships m JOIN tenants t ON t.id=m.tenant_id LEFT JOIN subscriptions s ON s.tenant_id=t.id
         WHERE m.user_id=$1 AND t.closed_at IS NULL AND (m.expires_at IS NULL OR m.expires_at > now()) ORDER BY t.created_at`, [userId]);
-    return { id: u.id, email: u.email, fullName: u.full_name, emailVerified: !!u.email_verified_at, memberships };
+    const isPlatformAdmin = !!u.email_verified_at && config.platformAdmins.includes(String(u.email).toLowerCase());
+    return { id: u.id, email: u.email, fullName: u.full_name, emailVerified: !!u.email_verified_at, memberships, isPlatformAdmin };
   }
 
   async getTenant(tenantId: string) {
