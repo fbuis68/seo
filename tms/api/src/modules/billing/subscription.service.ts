@@ -35,6 +35,14 @@ export class SubscriptionService {
     this.jobs.register('billing.apply_pending_change', (p) => this.applyPendingChange(p.tenantId));
     this.jobs.register('billing.reconcile', () => this.reconcileAll());
   }
+  /** Paiement simulé en production sans DEMO_PAYMENTS : refus explicite plutôt qu'une page introuvable. */
+  private assertCheckoutAvailable() {
+    if (config.isProd && config.payment.provider === 'fake' && !config.payment.demo) {
+      throw new AppError(503, 'payment_not_configured', 'Paiement en ligne non configuré : renseignez les clés Stripe, ou DEMO_PAYMENTS=true sur un serveur de démonstration.');
+    }
+    return this.provider;
+  }
+
 
   validateChoice(c: PlanChoice) {
     if (!PAID_PLANS.includes(c.plan)) throw badRequest('invalid_plan', 'Offre payante attendue (solo, equipe, centre).', 'plan');
@@ -85,7 +93,7 @@ export class SubscriptionService {
       const existing = await one(tx, `SELECT url FROM checkout_sessions WHERE idempotency_key=$1 AND status='open'`, [key]);
       if (existing) return { url: existing.url, reused: true };
       const checkoutId = (await one(tx, `SELECT gen_random_uuid() id`))!.id;
-      const res = await this.provider.createCheckout({
+      const res = await this.assertCheckoutAvailable().createCheckout({
         tenantId, checkoutId, customerEmail: actor.email, customerId: sub.provider_customer_id, kind: 'subscription',
         plan: choice.plan, interval: choice.interval, addons: choice.addons, trialDays: trial ? config.trialDays : undefined,
         successUrl: `${config.appUrl}${returnPath}?checkout=success`, cancelUrl: `${config.appUrl}${returnPath}?checkout=cancelled`,
@@ -105,7 +113,7 @@ export class SubscriptionService {
     const [sub] = await this.db.query(`SELECT provider_customer_id FROM subscriptions WHERE tenant_id=$1`, [tenantId]);
     const checkoutId = (await this.db.query(`SELECT gen_random_uuid() id`))[0].id;
     const key = `pack:${tenantId}:${checkoutId}`;
-    const res = await this.provider.createCheckout({
+    const res = await this.assertCheckoutAvailable().createCheckout({
       tenantId, checkoutId, customerEmail: actor.email, customerId: sub.provider_customer_id, kind: 'signature_pack', addons: [],
       successUrl: `${config.appUrl}/billing?pack=success`, cancelUrl: `${config.appUrl}/billing?pack=cancelled`, idempotencyKey: key,
     });

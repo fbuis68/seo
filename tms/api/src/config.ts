@@ -28,6 +28,8 @@ export const config = {
     stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? '',
     stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? '',
     fakeWebhookSecret: env('FAKE_PAYMENT_WEBHOOK_SECRET', randomBytes(16).toString('hex')),
+    /** Serveur de démonstration : page de paiement simulée autorisée même en production (jamais avec de vrais clients). */
+    demo: process.env.DEMO_PAYMENTS === 'true',
   },
   signature: {
     provider: env('SIGNATURE_PROVIDER', 'fake'),
