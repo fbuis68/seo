@@ -50,7 +50,7 @@ function Pick({ items, value, onChange, label }: { items: { id: string; label: s
         <div className="pick-list">{items.map((it) => (
           <label key={it.id} className="row small"><input type="checkbox" checked={value.includes(it.id)} onChange={(e) => onChange(e.target.checked ? [...value, it.id] : value.filter((x) => x !== it.id))} />
             {it.label}{it.hint && <span className="muted"> — {it.hint}</span>}</label>))}
-          {!items.length && <span className="small muted">Aucun : à créer dans {label === 'Formateur(s)' ? '« Clients & apprenants »' : '« Lieux & matériel »'}.</span>}
+          {!items.length && <span className="small muted">Aucun : à créer dans {label === 'Formateur(s)' ? '« Clients & apprenants »' : '« Réglages → Lieux & matériel »'}.</span>}
         </div>
       </details>
     </label>

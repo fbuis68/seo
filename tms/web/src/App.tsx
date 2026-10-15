@@ -28,6 +28,7 @@ export default function App() {
 }
 
 function Shell() {
+  const loc = useLocation();
   const [me, setMe] = useState<Me | null>(null);
   const [org, setOrg] = useState<Org | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -63,16 +64,27 @@ function Shell() {
   const e = org.entitlements;
   const links: [string, string, boolean][] = [
     ['/', 'Accueil', true], ['/planning', 'Planning', can(org, 'sessions.read') && org.role !== 'trainer'], ['/my-planning', 'Mon planning', ['trainer', 'learner'].includes(org.role)],
-    ['/sessions', 'Sessions', can(org, 'sessions.read')], ['/resources', 'Lieux & matériel', can(org, 'sessions.read') && org.role !== 'trainer'], ['/clients', 'Clients & apprenants', can(org, 'crm.read')],
+    ['/sessions', 'Sessions', can(org, 'sessions.read')], ['/clients', 'Clients & apprenants', can(org, 'crm.read')],
     ['/invoices', 'Facturation', can(org, 'finance.read')], ['/assistant', 'Assistant IA', can(org, 'ai.use')],
-    ['/imports', 'Reprise de données', can(org, 'imports.manage')], ['/billing', 'Mon abonnement', can(org, 'billing.manage')], ['/settings', 'Réglages', true], ['/aide', 'Aide', true], ['/platform', 'Back-office éditeur', !!me.isPlatformAdmin],
+    ['/billing', 'Mon abonnement', can(org, 'billing.manage')], ['/settings', 'Réglages', true], ['/aide', 'Aide', true], ['/platform', 'Back-office éditeur', !!me.isPlatformAdmin],
   ];
+  // Sous-menu Réglages : général, lieux & matériel, reprise de données.
+  const settingsLinks: [string, string, boolean][] = [
+    ['/settings', 'Général', true], ['/settings/lieux', 'Lieux & matériel', can(org, 'sessions.read') && org.role !== 'trainer'],
+    ['/settings/reprise', 'Reprise de données', can(org, 'imports.manage')],
+  ];
+  const inSettings = loc.pathname.startsWith('/settings');
   return (
     <AppCtx.Provider value={{ me, org, reload: load, switchTenant, branding, setBranding }}>
       <div className="layout">
         <nav className="side" aria-label="Navigation principale">
           <div className="brand">{branding?.logoUrl && <img className="brand-logo" src={branding.logoUrl} alt={`Logo ${org.legal_name}`} />}{org.legal_name}<div className="small muted">Offre {e.planCode}{e.status !== 'active' && e.status !== 'free' ? ` · ${e.status}` : ''}</div></div>
-          {links.filter((l) => l[2]).map(([to, label]) => <NavLink key={to} to={to} end={to === '/'}>{label}</NavLink>)}
+          {links.filter((l) => l[2]).map(([to, label]) => to === '/settings' ? (
+            <div key={to} className="nav-group">
+              <NavLink to={to} aria-expanded={inSettings} className={({ isActive }) => (isActive || inSettings ? 'active' : '')}>{label} <span aria-hidden className="nav-caret">{inSettings ? '▾' : '▸'}</span></NavLink>
+              {inSettings && <div className="nav-sub">{settingsLinks.filter((l) => l[2]).map(([sto, slabel]) => <NavLink key={sto} to={sto} end>{slabel}</NavLink>)}</div>}
+            </div>
+          ) : <NavLink key={to} to={to} end={to === '/'}>{label}</NavLink>)}
           <div className="spacer" />
           {me.memberships.length > 1 && (
             <select aria-label="Organisme" value={org.id} onChange={(ev) => switchTenant(ev.target.value)}>
@@ -91,13 +103,15 @@ function Shell() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/sessions" element={<Sessions />} />
             <Route path="/sessions/:id" element={<SessionDetail />} />
-            <Route path="/resources" element={<Resources />} />
+            <Route path="/settings/lieux" element={<Resources />} />
+            <Route path="/resources" element={<Navigate to="/settings/lieux" replace />} />
             <Route path="/planning" element={<PlanningPage />} />
             <Route path="/my-planning" element={<MyPlanning tz={(org as any).timezone ?? 'Europe/Paris'} />} />
             <Route path="/clients" element={<Clients />} />
             <Route path="/invoices" element={<Invoices />} />
             <Route path="/assistant" element={<Assistant />} />
-            <Route path="/imports" element={<Imports />} />
+            <Route path="/settings/reprise" element={<Imports />} />
+            <Route path="/imports" element={<Navigate to="/settings/reprise" replace />} />
             <Route path="/billing" element={<Billing />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/aide" element={<HelpPage />} />

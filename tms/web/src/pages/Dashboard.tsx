@@ -46,7 +46,7 @@ export default function Dashboard() {
       {c && c.upcoming.length === 0 && (
         <div className="panel" style={{ marginTop: 16 }}>
           <h2 style={{ marginTop: 0 }}>Démarrer</h2>
-          <ol><li>Créez un programme et une session (<Link to="/sessions">Sessions</Link>)</li><li>Ajoutez vos apprenants (<Link to="/clients">Clients & apprenants</Link>)</li><li>Ou reprenez vos données existantes (<Link to="/imports">Reprise de données</Link>)</li></ol>
+          <ol><li>Créez un programme et une session (<Link to="/sessions">Sessions</Link>)</li><li>Ajoutez vos apprenants (<Link to="/clients">Clients & apprenants</Link>)</li><li>Ou reprenez vos données existantes (<Link to="/settings/reprise">Réglages → Reprise de données</Link>)</li></ol>
         </div>
       )}
       {finance && (
