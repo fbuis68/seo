@@ -1,3 +1,4 @@
+import QRCode from "qrcode";
 import { prisma } from "../db";
 import { HttpError } from "./asyncHandler";
 import { sendEmailRaw } from "./email";
@@ -105,6 +106,17 @@ export async function sendMessage(opts: {
     const base = opts.baseUrl || config.publicBaseUrl;
     const token = createUnsubscribeToken({ entityId: null, target: opts.to });
     vars = { ...vars, lienDesabonnement: `${base}/wa/unsubscribe?token=${encodeURIComponent(token)}` };
+  }
+  // {{qrCode}} — image QR (data URL PNG) du code transmis en {{code}},
+  // disponible sur tout modèle email dès que {{code}} est renseigné (ex :
+  // code d'accès magasin/casier des modèles commerciaux) plutôt que limité
+  // à un déclencheur réservation particulier — demande client 15/10/2026,
+  // "rajouter le code et l'image du QR Code sur les templates commerciaux".
+  // Même principe que {{lienDesabonnement}} ci-dessus : calculée seulement
+  // si absente, jamais si l'appelant l'a déjà fournie, et simplement
+  // inutilisée si le modèle ne contient pas {{qrCode}}.
+  if (opts.channel === "email" && vars.code && !vars.qrCode) {
+    vars = { ...vars, qrCode: await QRCode.toDataURL(vars.code, { margin: 1, width: 320 }) };
   }
   const subject = renderTemplate(template.subject, vars);
   let body = renderTemplate(template.bodyHtml, vars);

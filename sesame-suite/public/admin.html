@@ -9264,8 +9264,13 @@ var EML_TPL_VARS = [
   {key:'total', desc:'Montant total de la commande (room service / boutique)'},
   {key:'secteur', desc:'Secteur d\'activité du prospect (déclencheurs CRM)'},
   {key:'ville', desc:'Ville du prospect, si renseignée'},
+  {key:'qrCode', desc:'Image QR code générée automatiquement à partir de {{code}} (email uniquement) — insère une balise image, typiquement sur un modèle commercial envoyant un code d\'accès'},
 ];
 function emlInsertVar(key){
+  // {{qrCode}} est une image (data URL PNG générée côté serveur), pas un
+  // simple texte à remplacer : insère la balise <img> toute faite plutôt
+  // que le texte brut "{{qrCode}}", qui ne s'afficherait pas comme image.
+  if(key==='qrCode'){ htmlEdInsertHtml('eml-tpl-body', '<img src="{{qrCode}}" alt="QR code" width="160" height="160">'); return; }
   htmlEdInsertText('eml-tpl-body', '{{'+key+'}}');
 }
 
@@ -9410,6 +9415,25 @@ function htmlEdInsertText(id, text){
     src.value = src.value.slice(0,start) + text + src.value.slice(end);
     src.focus();
     src.selectionStart = src.selectionEnd = start + text.length;
+  }
+}
+/** Comme htmlEdInsertText, mais insère du HTML (ex : balise <img>) plutôt
+ * que du texte échappé — nécessaire pour {{qrCode}}, qui doit apparaître
+ * dans le corps comme une vraie balise <img src="{{qrCode}}"> et non comme
+ * du texte brut. */
+function htmlEdInsertHtml(id, html){
+  var ce = document.getElementById(id+'-ce'), src = document.getElementById(id);
+  if(!src) return;
+  if(HTMLED_STATE[id] === 'wysiwyg' && ce && ce.style.display !== 'none'){
+    ce.focus();
+    htmlEdRestoreRange(id);
+    document.execCommand('insertHTML', false, html);
+    htmlEdSync(id);
+  } else {
+    var start = src.selectionStart||0, end = src.selectionEnd||0;
+    src.value = src.value.slice(0,start) + html + src.value.slice(end);
+    src.focus();
+    src.selectionStart = src.selectionEnd = start + html.length;
   }
 }
 
