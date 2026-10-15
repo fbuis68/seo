@@ -974,10 +974,18 @@ function qf(f,v){srch='';fDanger='';fSecteurs=new Set();fOrigines=new Set();fCon
  * déjà toutes les activités de toutes les fiches, cf. PROSPECT_INCLUDE
  * côté serveur), pas d'appel réseau dédié (demande client 15/10/2026,
  * "liste de tâches à réaliser" en Home avec filtres statut/tâche/personne). */
+// Les activités de type "Email" générées automatiquement à l'envoi d'un
+// email (texte "Email envoyé : ..." / "Email envoyé (groupé) ..." /
+// "Questionnaire envoyé : ...") ne sont pas des tâches à faire — l'action
+// a déjà eu lieu — donc exclues de la liste des tâches (demande client
+// 15/10/2026). Une activité "Email" ajoutée manuellement (ex : "Envoyer
+// devis par email") reste visible, seul ce préfixe précis est filtré.
+const AUTO_EMAIL_LOG_RE = /^(Email envoyé|Questionnaire envoyé)/;
 function buildAllTasks(){
   const out=[];
   clients.forEach(c=>{
     (c.journal||[]).forEach(j=>{
+      if(j.type==='Email' && AUTO_EMAIL_LOG_RE.test(j.text||'')) return;
       const deal = j.dealId ? deals.find(d=>d.id===j.dealId) : null;
       out.push({...j, prospectId:c.id, prospectName:c.nom, dealTitle: deal?deal.title:null});
     });
@@ -1036,24 +1044,33 @@ function renderHomeTasksCard(){
     <button class="btn btn-sm" style="margin-left:10px" onclick="homeTaskBulkMarkDone()">✓ Marquer fait (en masse)</button>
     <button class="btn btn-ghost btn-sm" onclick="homeTaskClearSelection()">Désélectionner</button>
   </div>` : '';
+  const selectAllRow = rows.length>0 ? `<label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--mu);padding:4px 0 8px;cursor:pointer">
+    <input type="checkbox" class="crm-sel-cb" ${allSelected?'checked':''} onchange="homeTaskToggleSelectAllVisible(this.checked, ${esc(visibleIdsJs)})">
+    Tout sélectionner
+  </label>` : '';
   const rowsHtml = rows.length===0
-    ? `<tr><td colspan="6" class="log-empty">Aucune tâche pour ces filtres.</td></tr>`
+    ? '<div class="log-empty">Aucune tâche pour ces filtres.</div>'
     : rows.map(t=>{
         const overdue = !t.done && t.activityDate && new Date(t.activityDate) < today;
-        return `<tr id="htr-${t.id}">
-          <td><input type="checkbox" class="crm-sel-cb" ${HOME_TASK_SELECTED_IDS.has(t.id)?'checked':''} onchange="homeTaskToggleSelect('${t.id}',this.checked)"></td>
-          <td><span class="tag t-gray" style="font-size:10px;padding:1px 7px">${t.type||'Note'}</span></td>
-          <td>
-            <span style="cursor:pointer" onclick="${t.dealId?`openDealModal('${t.dealId}')`:`showFiche('${t.prospectId}')`}">${t.text}</span>
-            ${overdue?' <span class="tag t-red" style="font-size:9px;padding:1px 7px">RETARD</span>':''}
-          </td>
-          <td style="white-space:nowrap">${t.activityDate?new Date(t.activityDate).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'}):'—'}</td>
-          <td style="white-space:nowrap">
-            <a href="#" onclick="event.preventDefault();showFiche('${t.prospectId}')">${esc(t.prospectName)}</a>${t.dealTitle?' · <a href="#" onclick="event.preventDefault();openDealModal(\''+t.dealId+'\')">'+esc(t.dealTitle)+'</a>':''}
-          </td>
-          <td style="white-space:nowrap">${t.authorName?esc(t.authorName):'—'}</td>
-          <td>${!t.done?`<button class="btn btn-sm btn-ghost" onclick="homeMarkTaskDone('${t.prospectId}','${t.id}')">✓ Fait</button>`:'<span class="tag t-green" style="font-size:10px;padding:1px 7px">Fait</span>'}</td>
-        </tr>`;
+        return `<div class="log-item" id="hli-${t.id}">
+          <input type="checkbox" class="crm-sel-cb" style="margin-top:4px" ${HOME_TASK_SELECTED_IDS.has(t.id)?'checked':''} onchange="homeTaskToggleSelect('${t.id}',this.checked)">
+          <div class="log-dot ld-${DOT_MAP[t.type]||'b'}"></div>
+          <div class="log-body">
+            <div style="display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap">
+              <span class="tag t-gray" style="font-size:10px;padding:1px 7px;flex-shrink:0">${t.type||'Note'}</span>
+              ${overdue?'<span class="tag t-red" style="font-size:9px;padding:1px 7px">RETARD</span>':''}
+              <span class="log-text" style="cursor:pointer" onclick="${t.dealId?`openDealModal('${t.dealId}')`:`showFiche('${t.prospectId}')`}">${t.text}</span>
+            </div>
+            <div class="log-meta">
+              ${t.activityDate?new Date(t.activityDate).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}):'—'}
+              — <a href="#" onclick="event.preventDefault();showFiche('${t.prospectId}')">${esc(t.prospectName)}</a>${t.dealTitle?' · <a href="#" onclick="event.preventDefault();openDealModal(\''+t.dealId+'\')">'+esc(t.dealTitle)+'</a>':''}
+              ${t.authorName?' — '+esc(t.authorName):''}
+            </div>
+            <div class="log-acts">
+              ${!t.done?`<button class="btn btn-sm btn-ghost" onclick="homeMarkTaskDone('${t.prospectId}','${t.id}')">✓ Marquer fait</button>`:''}
+            </div>
+          </div>
+        </div>`;
       }).join('');
   return `<div class="card" id="home-tasks-card">
     <div class="card-head" style="flex-wrap:wrap;gap:8px">
@@ -1077,18 +1094,8 @@ function renderHomeTasksCard(){
       </div>
     </div>
     ${selBar}
-    <div class="tbl-wrap"><table>
-      <thead><tr>
-        <th style="width:26px"><input type="checkbox" class="crm-sel-cb" ${allSelected?'checked':''} onchange="homeTaskToggleSelectAllVisible(this.checked, ${esc(visibleIdsJs)})"></th>
-        <th style="width:90px">Type</th>
-        <th>Tâche</th>
-        <th style="width:95px">Échéance</th>
-        <th style="width:200px">Client / Affaire</th>
-        <th style="width:110px">Personne</th>
-        <th style="width:90px">Statut</th>
-      </tr></thead>
-      <tbody>${rowsHtml}</tbody>
-    </table></div>
+    ${selectAllRow}
+    <div>${rowsHtml}</div>
   </div>`;
 }
 
