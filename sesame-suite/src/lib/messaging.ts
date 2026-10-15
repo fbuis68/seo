@@ -151,7 +151,17 @@ export async function sendMessage(opts: {
     try {
       const bsConfig = await prisma.bookingSourceConfig.findUnique({ where: { entityId: opts.entityId } });
       if (bsConfig?.qrEndpointPath) {
-        const { accessCode } = await fetchAccessQr(bsConfig, vars.code, opts.to);
+        // fetchAccessQr prend l'email du CLIENT (identifiant secondaire de
+        // recherche exigé par certaines sources, cf. qrEmailParam) — PAS
+        // opts.to, qui est le destinataire DE CE MESSAGE et vaut l'email
+        // uniquement sur un envoi email ; sur SMS/WhatsApp, opts.to est le
+        // numéro de mobile, envoyé par erreur comme email à la source
+        // externe (aucune correspondance trouvée, code silencieusement
+        // vide) — bug corrigé le 15/10/2026, "{{codeAcces}} arrive vide
+        // sur SMS, Ok sur email". Toujours recherché via le code de
+        // réservation (vars.code), indépendamment du canal d'envoi.
+        const booking = await prisma.booking.findFirst({ where: { entityId: opts.entityId, code: vars.code }, select: { personEmail: true } });
+        const { accessCode } = await fetchAccessQr(bsConfig, vars.code, booking?.personEmail);
         if (accessCode) vars = { ...vars, codeAcces: accessCode };
       }
     } catch (e) {
