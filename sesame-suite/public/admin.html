@@ -8598,6 +8598,7 @@ async function rcCreateBooking(){
     if(!r.ok) throw new Error(data.error||'Erreur');
     resaCloseCreate();
     toast('Réservation '+data.code+' créée ✓');
+    if(data.sourcePushWarning) toast('⚠ Non répercuté vers la source externe : '+data.sourcePushWarning);
     loadReservations();
   }catch(e){
     rcShowError(e.message||'Erreur lors de la création de la réservation');

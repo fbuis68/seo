@@ -1377,10 +1377,10 @@ export async function pushBookingUpsert(
  * fois connue, les modifications suivantes repassent par pushBookingUpdate,
  * plus léger).
  */
-export async function adoptBookingIntoSource(entityId: string, booking: Booking): Promise<Booking> {
-  if (booking.importedFrom) return booking;
+export async function adoptBookingIntoSource(entityId: string, booking: Booking): Promise<{ booking: Booking; warning?: string }> {
+  if (booking.importedFrom) return { booking };
   const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId } });
-  if (!config) return booking;
+  if (!config) return { booking };
   const result = await pushBookingUpsert(config, {
     code: booking.code,
     personEmail: booking.personEmail,
@@ -1400,8 +1400,23 @@ export async function adoptBookingIntoSource(entityId: string, booking: Booking)
   // porte "réels" (accessQr/openDoor) alors qu'elle est inconnue de la
   // source, provoquant un échec (ou pire, un appel silencieusement inerte)
   // au lieu du repli simulé attendu.
-  if (!result.ok || result.skipped) return booking;
-  return prisma.booking.update({ where: { id: booking.id }, data: { importedFrom: config.sourceName || "Connecteur externe" } });
+  //
+  // result.ok===false ICI (pas skipped) était auparavant avalé sans trace
+  // (ni log ni warning renvoyé à l'appelant) — un échec de création réelle
+  // côté source externe (endpoint joignable mais erreur HTTP/réseau) était
+  // donc invisible de bout en bout, y compris dans les logs serveur
+  // (demande client 15/10/2026, "les résas créées côté admin.sesame ne
+  // sont pas envoyées"). Toujours journalisé ; le warning n'est renvoyé à
+  // l'appelant QUE sur un échec réel, jamais sur un skip volontaire (pas de
+  // connecteur créateur configuré) pour ne pas alerter inutilement les
+  // établissements qui n'en ont simplement pas besoin.
+  if (!result.ok) {
+    console.error(`[bookingSource] adoptBookingIntoSource — échec de création de la réservation ${booking.code} côté source externe :`, result.error);
+    return { booking, warning: result.error };
+  }
+  if (result.skipped) return { booking };
+  const updated = await prisma.booking.update({ where: { id: booking.id }, data: { importedFrom: config.sourceName || "Connecteur externe" } });
+  return { booking: updated };
 }
 
 /**

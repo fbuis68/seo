@@ -199,8 +199,9 @@ bookingRouter.post(
       // la source, active le QR/l'ouverture de porte réels pour cette
       // réservation. Silencieuse en cas d'échec (pas de sourcePushWarning
       // ici) — un établissement sans connecteur capable de créer ne doit
-      // pas voir un avertissement à chaque modification.
-      updated = await adoptBookingIntoSource(entity.id, updated).catch(() => updated);
+      // pas voir un avertissement à chaque modification. L'échec reste
+      // tout de même journalisé côté serveur (cf. adoptBookingIntoSource).
+      updated = (await adoptBookingIntoSource(entity.id, updated).catch((e) => ({ booking: updated, warning: e instanceof Error ? e.message : String(e) }))).booking;
     }
 
     res.json({ ...normaliseBooking(updated), sourcePushWarning: pushWarning || null });
@@ -808,9 +809,16 @@ bookingRouter.post(
       // source externe (cf. adoptBookingIntoSource) — jamais bloquante :
       // sans connecteur capable de créer, ou si l'appel échoue, la
       // réservation reste utilisable, seuls le QR/l'ouverture de porte
-      // resteront en mode simulé.
-      booking = await adoptBookingIntoSource(entity.id, booking).catch(() => booking);
-      res.status(201).json(normaliseBooking(booking));
+      // resteront en mode simulé. Contrairement à POST /booking/update
+      // (silencieux, cf. plus haut), l'échec est ici remonté via
+      // sourcePushWarning : une création manuelle est une action ponctuelle
+      // et consciente, pas une modification répétée — un échec de push ici
+      // mérite d'être visible plutôt qu'enfoui dans les seuls logs serveur
+      // (demande client 15/10/2026, "les résas créées côté admin.sesame ne
+      // sont pas envoyées", jusque-là invisible de bout en bout).
+      const adopted = await adoptBookingIntoSource(entity.id, booking).catch((e) => ({ booking, warning: e instanceof Error ? e.message : String(e) }));
+      booking = adopted.booking;
+      res.status(201).json({ ...normaliseBooking(booking), sourcePushWarning: adopted.warning || null });
     } catch (e) {
       throw new HttpError(400, e instanceof Error ? e.message : "Réservation impossible");
     }
