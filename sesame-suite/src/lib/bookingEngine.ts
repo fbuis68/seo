@@ -261,16 +261,6 @@ async function createBookingDirect(entity: Entity, draft: BookingDraft, opts: { 
     },
   });
 
-  hotelContactInfo(entity.id).then(async (hotel) =>
-    fireTrigger("booking.created", {
-      entityId: entity.id,
-      targetType: "booking",
-      targetId: booking.id,
-      recipient: { email: booking.personEmail, phone: booking.personPhone },
-      variables: await bookingTemplateVars(booking, hotel),
-    })
-  ).catch((e) => console.error("[automation] booking.created:", e));
-
   // Fait connaître la réservation à la source externe dès sa création,
   // quel que soit le chemin emprunté (réservation en ligne payée ou non,
   // empreinte bancaire, saisie manuelle staff) — centralisé ici plutôt que
@@ -284,7 +274,33 @@ async function createBookingDirect(entity: Entity, draft: BookingDraft, opts: { 
   // forget) pour que le résultat (notamment un warning à afficher) soit
   // disponible à l'appelant, et pour éviter toute course avec un second
   // appel redondant côté route.
+  //
+  // PLACÉ AVANT fireTrigger ci-dessous (inversion délibérée, 16/10/2026,
+  // demande client "faire un appel api en création directement... pour
+  // éviter la synchronisation et pouvoir envoyer immédiatement le code
+  // dès la réservation faite") : fireTrigger déclenche potentiellement un
+  // envoi automatique (SMS/email "Réservation créée") dont le modèle peut
+  // référencer {{codeAcces}}/{{qrCode}}, lesquels interrogent la source
+  // externe pour CETTE réservation (cf. lib/messaging.ts fetchAccessQr).
+  // Avec l'ancien ordre (fireTrigger en fire-and-forget AVANT l'adoption,
+  // elle awaitée), l'envoi automatique pouvait partir — et donc interroger
+  // la source — AVANT que la réservation n'y soit connue, renvoyant un
+  // code vide une fois sur deux selon le timing. Le planificateur
+  // bookingSourceScheduler (sync périodique, 60s) reste un filet de
+  // sécurité si cette adoption immédiate échoue, mais n'est plus le seul
+  // chemin.
   const adopted = await adoptBookingIntoSource(entity.id, booking).catch((e) => ({ booking, warning: e instanceof Error ? e.message : String(e) }));
+
+  hotelContactInfo(entity.id).then(async (hotel) =>
+    fireTrigger("booking.created", {
+      entityId: entity.id,
+      targetType: "booking",
+      targetId: adopted.booking.id,
+      recipient: { email: adopted.booking.personEmail, phone: adopted.booking.personPhone },
+      variables: await bookingTemplateVars(adopted.booking, hotel),
+    })
+  ).catch((e) => console.error("[automation] booking.created:", e));
+
   return adopted;
 }
 
