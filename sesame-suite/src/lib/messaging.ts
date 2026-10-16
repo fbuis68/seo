@@ -16,6 +16,38 @@ import { createUnsubscribeToken } from "./unsubscribeToken";
 import { fetchAccessQr } from "./bookingSource";
 
 /**
+ * Cache mémoire très court (quelques secondes) du résultat de
+ * fetchAccessQr, par (entityId, code de réservation) — demande client
+ * 16/10/2026 : "SMS part [...] sans la balise [{{codeAcces}}]" alors que
+ * l'email de la MÊME réservation reçoit bien le code. Cause probable : le
+ * déclencheur "Réservation créée" tire DEUX règles (SMS + email) sur le
+ * même événement, chacune appelant sendMessage() séparément, donc CHACUNE
+ * ré-interrogeant la source externe indépendamment pour le même code — si
+ * ce passcode est à usage unique côté source (cas plausible pour un code
+ * d'accès de sécurité), le premier appel le consomme et le second ne
+ * trouve plus rien. Ce cache fait qu'un seul appel réel part par
+ * réservation sur une courte fenêtre, peu importe combien de règles/canaux
+ * s'en servent ensuite — les appels suivants réutilisent le même résultat
+ * (succès OU échec, pour ne pas marteler une source qui vient de répondre
+ * une erreur).
+ */
+const ACCESS_CODE_CACHE_TTL_MS = 15_000;
+const accessCodeCache = new Map<string, { value: string | undefined; expiresAt: number }>();
+
+async function fetchAccessCodeCached(entityId: string, bsConfig: Parameters<typeof fetchAccessQr>[0], code: string, personEmail: string | null | undefined): Promise<string | undefined> {
+  const cacheKey = `${entityId}:${code}`;
+  const cached = accessCodeCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    console.log(`[messaging] codeAcces: résultat en cache réutilisé pour ${cacheKey} (évite un second appel réel à la source).`);
+    return cached.value;
+  }
+  const fetched = await fetchAccessQr(bsConfig, code, personEmail);
+  console.log(`[messaging] codeAcces: fetchAccessQr =`, fetched);
+  accessCodeCache.set(cacheKey, { value: fetched.accessCode, expiresAt: Date.now() + ACCESS_CODE_CACHE_TTL_MS });
+  return fetched.accessCode;
+}
+
+/**
  * Point de convergence unique : quel que soit le canal (email/sms/whatsapp),
  * l'appelant (routes/email.ts pour l'envoi manuel, automation.ts pour les
  * règles) passe par sendMessage() — c'est ici, et seulement ici, que le
@@ -199,9 +231,8 @@ export async function sendMessage(opts: {
         // l'impression trompeuse que "ça marche" ailleurs (16/10/2026).
         const expectedSource = bsConfig.sourceName || "Connecteur externe";
         if (booking?.importedFrom === expectedSource) {
-          const fetched = await fetchAccessQr(bsConfig, vars.code, booking.personEmail);
-          console.log(`[messaging] codeAcces: fetchAccessQr =`, fetched);
-          if (fetched.accessCode) vars = { ...vars, codeAcces: fetched.accessCode };
+          const accessCode = await fetchAccessCodeCached(opts.entityId, bsConfig, vars.code, booking.personEmail);
+          if (accessCode) vars = { ...vars, codeAcces: accessCode };
         } else {
           console.log(`[messaging] codeAcces: réservation pas (encore) adoptée par la source (importedFrom=${JSON.stringify(booking?.importedFrom)}, attendu=${JSON.stringify(expectedSource)}) — appel réel sauté.`);
         }
