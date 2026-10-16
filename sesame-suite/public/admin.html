@@ -4278,6 +4278,23 @@ Accès au salon Premium</textarea>
   <div class="ca" id="bke-status-banner" style="display:none;margin-bottom:16px"></div>
 
   <div class="ca">
+    <div class="ch"><i class="ti ti-typography"></i>Libellé et texte de la page</div>
+    <div class="fi">
+      <label class="lb">Titre de la page</label>
+      <input type="text" id="bke-page-title" placeholder="Réserver un séjour" maxlength="300">
+      <div style="font-size:11px;color:var(--mu);margin-top:4px">Affiché en haut de la page et dans l'onglet du navigateur. Laissez vide pour garder "Réserver un séjour" (adapté à un hôtel) — à personnaliser pour un autre usage (ex. "Réserver un accès", "Louer une Cabana").</div>
+    </div>
+    <div class="fi">
+      <label class="lb">Texte d'introduction</label>
+      <input type="text" id="bke-page-intro" placeholder="Choisissez vos dates et le nombre d'occupants pour voir les accès disponibles." maxlength="300">
+      <div style="font-size:11px;color:var(--mu);margin-top:4px">Phrase sous le titre. Laissez vide pour garder le texte par défaut.</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+      <button class="btn btn-p" onclick="bkeSave()"><i class="ti ti-device-floppy"></i> Enregistrer</button>
+    </div>
+  </div>
+
+  <div class="ca">
     <div class="ch"><i class="ti ti-calendar-plus"></i>Activation</div>
     <div class="fi">
       <label class="lb">Activer la réservation en ligne</label>
@@ -8660,6 +8677,8 @@ async function bkeInit(){
     document.getElementById('bke-hide-occupants').checked = !!(cfg && cfg.hideOccupants);
     document.getElementById('bke-skip-availability').checked = !!(cfg && cfg.skipAvailabilityCheck);
     document.getElementById('bke-card-on-file').checked = !!(cfg && cfg.cardOnFileMode);
+    document.getElementById('bke-page-title').value = (cfg && cfg.pageTitle) || '';
+    document.getElementById('bke-page-intro').value = (cfg && cfg.pageIntro) || '';
     BKE_DURATION_OPTIONS = (cfg && Array.isArray(cfg.durationOptions)) ? cfg.durationOptions.slice() : [];
     bkeRenderDurationList();
   }catch(e){}
@@ -8688,7 +8707,9 @@ async function bkeSave(){
     hideRoomSelection: document.getElementById('bke-hide-room').checked,
     hideOccupants: document.getElementById('bke-hide-occupants').checked,
     skipAvailabilityCheck: document.getElementById('bke-skip-availability').checked,
-    cardOnFileMode: document.getElementById('bke-card-on-file').checked
+    cardOnFileMode: document.getElementById('bke-card-on-file').checked,
+    pageTitle: document.getElementById('bke-page-title').value.trim(),
+    pageIntro: document.getElementById('bke-page-intro').value.trim()
   };
   try{
     var r = await adminFetch('/wa/bookingEngine/config/update', {method:'POST', body:JSON.stringify(body)});

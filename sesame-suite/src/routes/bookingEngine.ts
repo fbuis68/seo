@@ -50,9 +50,13 @@ bookingEngineRouter.get(
       hideOccupants: config.hideOccupants,
       skipAvailabilityCheck: config.skipAvailabilityCheck,
       cardOnFileMode: config.cardOnFileMode,
+      pageTitle: config.pageTitle || "",
+      pageIntro: config.pageIntro || "",
     });
   })
 );
+
+const MAX_PAGE_TEXT_LENGTH = 300;
 
 /** POST /wa/bookingEngine/config/update */
 bookingEngineRouter.post(
@@ -67,6 +71,16 @@ bookingEngineRouter.post(
     const hideOccupants = req.body.hideOccupants !== undefined ? !!req.body.hideOccupants : undefined;
     const skipAvailabilityCheck = req.body.skipAvailabilityCheck !== undefined ? !!req.body.skipAvailabilityCheck : undefined;
     const cardOnFileMode = req.body.cardOnFileMode !== undefined ? !!req.body.cardOnFileMode : undefined;
+    let pageTitle: string | undefined;
+    if (req.body.pageTitle !== undefined) {
+      pageTitle = String(req.body.pageTitle).trim();
+      if (pageTitle.length > MAX_PAGE_TEXT_LENGTH) throw new HttpError(400, `Libellé de la page limité à ${MAX_PAGE_TEXT_LENGTH} caractères`);
+    }
+    let pageIntro: string | undefined;
+    if (req.body.pageIntro !== undefined) {
+      pageIntro = String(req.body.pageIntro).trim();
+      if (pageIntro.length > MAX_PAGE_TEXT_LENGTH) throw new HttpError(400, `Texte de la page limité à ${MAX_PAGE_TEXT_LENGTH} caractères`);
+    }
     const data = {
       enabled,
       ...(requirePayment !== undefined ? { requirePayment } : {}),
@@ -75,6 +89,8 @@ bookingEngineRouter.post(
       ...(hideOccupants !== undefined ? { hideOccupants } : {}),
       ...(skipAvailabilityCheck !== undefined ? { skipAvailabilityCheck } : {}),
       ...(cardOnFileMode !== undefined ? { cardOnFileMode } : {}),
+      ...(pageTitle !== undefined ? { pageTitle } : {}),
+      ...(pageIntro !== undefined ? { pageIntro } : {}),
     };
     const config = await prisma.bookingEngineConfig.upsert({
       where: { entityId: entity.id },
@@ -89,6 +105,8 @@ bookingEngineRouter.post(
       hideOccupants: config.hideOccupants,
       skipAvailabilityCheck: config.skipAvailabilityCheck,
       cardOnFileMode: config.cardOnFileMode,
+      pageTitle: config.pageTitle || "",
+      pageIntro: config.pageIntro || "",
     });
   })
 );
@@ -130,6 +148,8 @@ bookingEngineRouter.get(
       hideOccupants: !!engineConfig?.hideOccupants,
       cardOnFileMode,
       stripePublishableKey: cardOnFileMode && cardOnFileReady ? paymentConfig?.publishableKey : "",
+      pageTitle: engineConfig?.pageTitle || "",
+      pageIntro: engineConfig?.pageIntro || "",
     });
   })
 );

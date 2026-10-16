@@ -701,6 +701,18 @@ window.addEventListener('DOMContentLoaded', async function(){
   }catch(e){ gotoScr('unavailable'); return; }
   renderDurationPresets();
 
+  // Libellé et texte d'intro personnalisables (BookingEngineConfig.
+  // pageTitle/pageIntro, 16/10/2026) — un établissement non hôtelier (ex.
+  // magasin/casier) a son propre vocabulaire plutôt que "Réserver un
+  // séjour" par défaut. Appliqués avant le bloc hideOccupants ci-dessous,
+  // qui ne doit écraser le sous-titre par son propre texte par défaut que
+  // si aucun pageIntro n'a été réglé.
+  if(BOOK_STATUS.pageTitle){
+    document.querySelector('#scr-search h1').textContent = BOOK_STATUS.pageTitle;
+    document.title = BOOK_STATUS.pageTitle;
+  }
+  if(BOOK_STATUS.pageIntro) document.getElementById('search-sub').textContent = BOOK_STATUS.pageIntro;
+
   // Occupants fixés à 1 adulte, sans sélecteur affiché (BookingEngineConfig.
   // hideOccupants) — un seul adulte, comme sur une réservation d'accès à un
   // magasin. La taxe de séjour reste calculée normalement côté serveur pour
@@ -708,7 +720,7 @@ window.addEventListener('DOMContentLoaded', async function(){
   if(BOOK_STATUS.hideOccupants){
     OCC = {adulte:1, ado:0, enfant:0, bebe:0};
     document.getElementById('occupant-steppers').style.display='none';
-    document.getElementById('search-sub').textContent = 'Choisissez vos dates pour voir la disponibilité.';
+    if(!BOOK_STATUS.pageIntro) document.getElementById('search-sub').textContent = 'Choisissez vos dates pour voir la disponibilité.';
   } else {
     renderOccupantSteppers();
   }
