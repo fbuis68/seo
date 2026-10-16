@@ -2590,10 +2590,18 @@ var STEP_MODULES = {
   4: 'kyc',
   5: null,       // "Mes coordonnées" — toujours active (email/téléphone/CGU obligatoires), pas de bascule admin
   6: 'eco',
-  7: 'boutique', // boutique hôtelière — commande pendant le check-in
+  // Clé 'roomservice' — PAS 'boutique' (c'était le bug : admin.html/MODULE_DEFS
+  // n'a jamais eu de clé 'boutique', seulement 'roomservice' ; avec l'ancienne
+  // clé, désactiver "Boutique" dans Entité & Catégorie → Modules ne masquait
+  // jamais cette étape du parcours check-in, cf. demande client 16/10/2026).
+  7: 'roomservice',
   8: 'sharing',  // partage de profil avec les autres clients présents (opt-in)
   9: 'questionnaire', // questionnaire personnalisé configuré par l'hôtel
-  10: 'rewards'  // récompenses + récapitulatif & paiement (toujours actif)
+  // null (pas 'rewards') — récap/paiement/QR final toujours joignable même si
+  // le module Récompenses est désactivé (ou auto-désactivé via le module Éco,
+  // cf. admin.html toggleModule). Seul le contenu "récompenses" de cette étape
+  // se masque de lui-même (cf. renderRewardStep, rewardsEnabled).
+  10: null
 };
 function isModuleActive(key){
   if(!key) return true;
@@ -3672,6 +3680,13 @@ function renderEspace(){
   var occupantsPill = document.querySelector('#espTabs .pill[data-tab="occupants"]');
   if(occupantsPill) occupantsPill.style.display = isModuleActive('sharing') ? '' : 'none';
   if(!isModuleActive('sharing') && (ESP_ACTIVE_TAB==='sharing' || ESP_ACTIVE_TAB==='occupants')) ESP_ACTIVE_TAB='key';
+  // Onglet Boutique de l'Espace client — manquait, contrairement à
+  // sharing/occupants ci-dessus : le module "roomservice" (Boutique,
+  // Entité & Catégorie → Modules) désactivait bien l'étape 7 du parcours
+  // check-in, mais pas cet onglet post-check-in.
+  var boutiquePill = document.querySelector('#espTabs .pill[data-tab="boutique"]');
+  if(boutiquePill) boutiquePill.style.display = isModuleActive('roomservice') ? '' : 'none';
+  if(!isModuleActive('roomservice') && ESP_ACTIVE_TAB==='boutique') ESP_ACTIVE_TAB='key';
 
   espSetTab(ESP_ACTIVE_TAB);
   updateCatTabsArrows('espTabs');
