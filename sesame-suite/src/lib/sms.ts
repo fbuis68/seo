@@ -292,6 +292,12 @@ async function sendViaSmsPartnerRcs(
   }
 
   if (!res.ok || j.success === false) {
+    // Debug temporaire 16/10/2026 — HTTP 401 inattendu sur /rcs/send avec
+    // la même clé API que /send (SMS classique, fonctionnel) : corps brut
+    // pour voir si DocPartner renvoie un message distinct (RCS non activé
+    // sur le compte ? clé RCS différente de la clé SMS ?).
+    console.error("[sendViaSmsPartnerRcs] échec HTTP", res.status, "corps brut:", text);
+
     // Codes dédiés documentés par SMSPartner : 60 (modelToken introuvable
     // ou pointant vers un modèle SMS), 61 (modèle RCS vide), 62
     // (modelToken ET richContent envoyés ensemble — n'arrive jamais ici
