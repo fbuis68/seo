@@ -186,11 +186,25 @@ export async function sendMessage(opts: {
         // vide) — bug corrigé le 15/10/2026, "{{codeAcces}} arrive vide
         // sur SMS, Ok sur email". Toujours recherché via le code de
         // réservation (vars.code), indépendamment du canal d'envoi.
-        const booking = await prisma.booking.findFirst({ where: { entityId: opts.entityId, code: vars.code }, select: { personEmail: true } });
-        console.log(`[messaging] codeAcces: booking trouvé=${!!booking} personEmail=${JSON.stringify(booking?.personEmail)}`);
-        const fetched = await fetchAccessQr(bsConfig, vars.code, booking?.personEmail);
-        console.log(`[messaging] codeAcces: fetchAccessQr =`, fetched);
-        if (fetched.accessCode) vars = { ...vars, codeAcces: fetched.accessCode };
+        const booking = await prisma.booking.findFirst({ where: { entityId: opts.entityId, code: vars.code }, select: { personEmail: true, importedFrom: true } });
+        console.log(`[messaging] codeAcces: booking trouvé=${!!booking} personEmail=${JSON.stringify(booking?.personEmail)} importedFrom=${JSON.stringify(booking?.importedFrom)}`);
+        // Même garde-fou que GET /wa/booking/accessQr (routes/booking.ts,
+        // panneau staff "Clé digitale") : n'appeler la source externe QUE
+        // si CETTE réservation lui a été adoptée avec succès (importedFrom
+        // === sourceName configuré), jamais sur une réservation "locale
+        // seulement" — un appel réel échouerait de toute façon côté source
+        // (elle ne la connaît pas). Absent jusqu'ici, ce qui produisait un
+        // vrai 404 en boucle ici alors que le panneau staff, lui, retombait
+        // silencieusement sur un code simulé — incohérence qui donnait
+        // l'impression trompeuse que "ça marche" ailleurs (16/10/2026).
+        const expectedSource = bsConfig.sourceName || "Connecteur externe";
+        if (booking?.importedFrom === expectedSource) {
+          const fetched = await fetchAccessQr(bsConfig, vars.code, booking.personEmail);
+          console.log(`[messaging] codeAcces: fetchAccessQr =`, fetched);
+          if (fetched.accessCode) vars = { ...vars, codeAcces: fetched.accessCode };
+        } else {
+          console.log(`[messaging] codeAcces: réservation pas (encore) adoptée par la source (importedFrom=${JSON.stringify(booking?.importedFrom)}, attendu=${JSON.stringify(expectedSource)}) — appel réel sauté.`);
+        }
       }
     } catch (e) {
       console.log(`[messaging] codeAcces: exception =`, e);
