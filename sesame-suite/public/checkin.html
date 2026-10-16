@@ -874,89 +874,103 @@ input:focus,select:focus{border-color:var(--accent)}
       <div id="rewardSumLines"></div>
     </div>
 
-    <!-- ── Récapitulatif & Paiement (fusionné dans cette même étape) ── -->
-    <div style="margin:20px 0 14px;padding-top:16px;border-top:2px solid var(--bdr)">
-      <div class="slbl" style="margin-top:0" data-i18n="step7_recap_title">Récapitulatif &amp; Paiement</div>
-    </div>
+    <!-- ── Récapitulatif & Paiement (fusionné dans cette même étape) — masqué en
+         bloc si le module "Paiement en ligne" est désactivé (pas de taxe à
+         payer : rien à récapituler ni à encaisser, cf. noPaymentFinish
+         ci-dessous) ── -->
+    <div id="recapPaymentBlock">
+      <div style="margin:20px 0 14px;padding-top:16px;border-top:2px solid var(--bdr)">
+        <div class="slbl" style="margin-top:0" data-i18n="step7_recap_title">Récapitulatif &amp; Paiement</div>
+      </div>
 
-    <!-- Chambre sélectionnée avec photos -->
-    <div id="recapRoomCard" style="display:none">
-      <div class="card" style="padding:0;overflow:hidden">
-        <div id="recapRoomGallery" class="rc-gallery"></div>
-        <div class="rc-body">
-          <div class="rc-top">
-            <div>
-              <div class="rc-code" id="recapRoomCode">—</div>
-              <div class="rc-name" id="recapRoomName">—</div>
+      <!-- Chambre sélectionnée avec photos -->
+      <div id="recapRoomCard" style="display:none">
+        <div class="card" style="padding:0;overflow:hidden">
+          <div id="recapRoomGallery" class="rc-gallery"></div>
+          <div class="rc-body">
+            <div class="rc-top">
+              <div>
+                <div class="rc-code" id="recapRoomCode">—</div>
+                <div class="rc-name" id="recapRoomName">—</div>
+              </div>
+              <span class="bdg bdg-g"><i class="ti ti-check" style="font-size:11px"></i><span data-i18n="badge_selected">Sélectionnée</span></span>
             </div>
-            <span class="bdg bdg-g"><i class="ti ti-check" style="font-size:11px"></i><span data-i18n="badge_selected">Sélectionnée</span></span>
           </div>
         </div>
       </div>
+
+      <!-- Séjour details -->
+      <div class="card">
+        <div class="ch"><i class="ti ti-file-text"></i><span data-i18n="step7_stay_details_hdr">Détail du séjour</span></div>
+        <div id="summaryLines"></div>
+      </div>
+
+      <!-- Taxe savings block — PROMINENT -->
+      <div id="summaryTaxeBlock"></div>
+
+      <!-- Choix du mode de paiement -->
+      <div class="card">
+        <div class="ch"><i class="ti ti-wallet"></i><span data-i18n="step7_pay_mode_hdr">Mode de paiement</span></div>
+        <div style="display:flex;gap:8px">
+          <div class="rf on" id="payModeCard" onclick="setPayMode('card')" style="flex:1;text-align:center;cursor:pointer"><i class="ti ti-credit-card"></i> <span data-i18n="step7_pay_card">Carte bancaire</span></div>
+          <div class="rf" id="payModeHotel" onclick="setPayMode('hotel')" style="flex:1;text-align:center;cursor:pointer"><i class="ti ti-building"></i> <span data-i18n="step7_pay_hotel">Payer à l'hôtel</span></div>
+        </div>
+      </div>
+
+      <!-- Payment form (carte) -->
+      <div class="card" id="payCardSection">
+        <div class="ch"><i class="ti ti-credit-card"></i><span data-i18n="step7_pay_taxe_hdr">Paiement de la taxe de séjour</span></div>
+        <div class="cviz">
+          <div class="cv-chip"></div>
+          <div class="cv-num" id="cvNum">•••• •••• •••• ••••</div>
+          <div class="cv-holder" id="cvHolder">NOM PRÉNOM</div>
+          <div class="cv-meta"><span>VALID <span id="cvExp">MM/AA</span></span><span>CVV <span id="cvCvv">•••</span></span></div>
+        </div>
+        <div class="fi"><label class="lb" data-i18n="step7_card_number">Numéro de carte</label>
+          <input type="text" id="payNum" maxlength="19" placeholder="1234 5678 9012 3456" oninput="fmtCard(this)" inputmode="numeric">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="fi"><label class="lb" data-i18n="step7_card_expiry">Expiration</label><input type="text" id="payExp" maxlength="5" placeholder="MM/AA" oninput="fmtExp(this)" inputmode="numeric"></div>
+          <div class="fi"><label class="lb" data-i18n="step7_card_cvv">CVV</label><input type="text" id="payCvv" maxlength="3" placeholder="123" inputmode="numeric" oninput="document.getElementById('cvCvv').textContent=this.value?'•'.repeat(this.value.length):'•••'"></div>
+        </div>
+        <div class="fi"><label class="lb" data-i18n="step7_card_holder">Nom sur la carte</label>
+          <input type="text" id="payHolder" placeholder="MARTIN DUPONT" oninput="document.getElementById('cvHolder').textContent=this.value||'NOM PRÉNOM'">
+        </div>
+        <div class="fi"><label class="lb" data-i18n="step7_card_split">Fractionnement</label>
+          <select id="paySplit" onchange="updatePaySplit()">
+            <option value="1" data-i18n="step7_split_1">Paiement en 1 fois</option>
+            <option value="2" data-i18n="step7_split_2">En 2 fois sans frais</option>
+            <option value="3" data-i18n="step7_split_3">En 3 fois sans frais</option>
+          </select>
+        </div>
+        <div class="alt alt-b" id="splitAlt" style="display:none"><i class="ti ti-info-circle"></i><span id="splitTxt"></span></div>
+        <!-- Payment lines with saving highlighted -->
+        <div id="payLines"></div>
+        <div style="font-size:11px;color:var(--mu);display:flex;align-items:center;gap:5px;margin-top:10px">
+          <i class="ti ti-lock" style="font-size:13px"></i><span data-i18n="step7_secure_pay">Paiement sécurisé · SSL · PCI-DSS</span>
+        </div>
+      </div>
+      <button class="btn btn-p" id="payConfirmBtn" onclick="confirmPay()"><i class="ti ti-lock"></i> <span data-i18n="step7_confirm_pay">Confirmer &amp; envoyer à Sesame</span></button>
+      <div id="payResult" style="margin-top:10px"></div>
+
+      <!-- Bloc "Payer à l'hôtel" -->
+      <div id="payHotelSection" class="card" style="display:none">
+        <div class="ch"><i class="ti ti-qrcode"></i><span data-i18n="step7_pay_hotel_hdr">Paiement à l'hôtel</span></div>
+        <div class="alt alt-b"><i class="ti ti-info-circle"></i>
+          <span data-i18n="step7_pay_hotel_info">Votre réservation est confirmée. Présentez ce QR code à la réception pour finaliser votre check-in et régler la taxe de séjour sur place.</span>
+        </div>
+        <div id="payHotelQr" style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:16px"></div>
+        <button class="btn btn-p" id="payHotelConfirmBtn" onclick="confirmPayAtHotel()"><i class="ti ti-check"></i> <span data-i18n="step7_pay_hotel_continue">Continuer vers mon espace</span></button>
+      </div>
     </div>
 
-    <!-- Séjour details -->
-    <div class="card">
-      <div class="ch"><i class="ti ti-file-text"></i><span data-i18n="step7_stay_details_hdr">Détail du séjour</span></div>
-      <div id="summaryLines"></div>
-    </div>
-
-    <!-- Taxe savings block — PROMINENT -->
-    <div id="summaryTaxeBlock"></div>
-
-    <!-- Choix du mode de paiement -->
-    <div class="card">
-      <div class="ch"><i class="ti ti-wallet"></i><span data-i18n="step7_pay_mode_hdr">Mode de paiement</span></div>
-      <div style="display:flex;gap:8px">
-        <div class="rf on" id="payModeCard" onclick="setPayMode('card')" style="flex:1;text-align:center;cursor:pointer"><i class="ti ti-credit-card"></i> <span data-i18n="step7_pay_card">Carte bancaire</span></div>
-        <div class="rf" id="payModeHotel" onclick="setPayMode('hotel')" style="flex:1;text-align:center;cursor:pointer"><i class="ti ti-building"></i> <span data-i18n="step7_pay_hotel">Payer à l'hôtel</span></div>
-      </div>
-    </div>
-
-    <!-- Payment form (carte) -->
-    <div class="card" id="payCardSection">
-      <div class="ch"><i class="ti ti-credit-card"></i><span data-i18n="step7_pay_taxe_hdr">Paiement de la taxe de séjour</span></div>
-      <div class="cviz">
-        <div class="cv-chip"></div>
-        <div class="cv-num" id="cvNum">•••• •••• •••• ••••</div>
-        <div class="cv-holder" id="cvHolder">NOM PRÉNOM</div>
-        <div class="cv-meta"><span>VALID <span id="cvExp">MM/AA</span></span><span>CVV <span id="cvCvv">•••</span></span></div>
-      </div>
-      <div class="fi"><label class="lb" data-i18n="step7_card_number">Numéro de carte</label>
-        <input type="text" id="payNum" maxlength="19" placeholder="1234 5678 9012 3456" oninput="fmtCard(this)" inputmode="numeric">
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div class="fi"><label class="lb" data-i18n="step7_card_expiry">Expiration</label><input type="text" id="payExp" maxlength="5" placeholder="MM/AA" oninput="fmtExp(this)" inputmode="numeric"></div>
-        <div class="fi"><label class="lb" data-i18n="step7_card_cvv">CVV</label><input type="text" id="payCvv" maxlength="3" placeholder="123" inputmode="numeric" oninput="document.getElementById('cvCvv').textContent=this.value?'•'.repeat(this.value.length):'•••'"></div>
-      </div>
-      <div class="fi"><label class="lb" data-i18n="step7_card_holder">Nom sur la carte</label>
-        <input type="text" id="payHolder" placeholder="MARTIN DUPONT" oninput="document.getElementById('cvHolder').textContent=this.value||'NOM PRÉNOM'">
-      </div>
-      <div class="fi"><label class="lb" data-i18n="step7_card_split">Fractionnement</label>
-        <select id="paySplit" onchange="updatePaySplit()">
-          <option value="1" data-i18n="step7_split_1">Paiement en 1 fois</option>
-          <option value="2" data-i18n="step7_split_2">En 2 fois sans frais</option>
-          <option value="3" data-i18n="step7_split_3">En 3 fois sans frais</option>
-        </select>
-      </div>
-      <div class="alt alt-b" id="splitAlt" style="display:none"><i class="ti ti-info-circle"></i><span id="splitTxt"></span></div>
-      <!-- Payment lines with saving highlighted -->
-      <div id="payLines"></div>
-      <div style="font-size:11px;color:var(--mu);display:flex;align-items:center;gap:5px;margin-top:10px">
-        <i class="ti ti-lock" style="font-size:13px"></i><span data-i18n="step7_secure_pay">Paiement sécurisé · SSL · PCI-DSS</span>
-      </div>
-    </div>
-    <button class="btn btn-p" id="payConfirmBtn" onclick="confirmPay()"><i class="ti ti-lock"></i> <span data-i18n="step7_confirm_pay">Confirmer &amp; envoyer à Sesame</span></button>
-    <div id="payResult" style="margin-top:10px"></div>
-
-    <!-- Bloc "Payer à l'hôtel" -->
-    <div id="payHotelSection" class="card" style="display:none">
-      <div class="ch"><i class="ti ti-qrcode"></i><span data-i18n="step7_pay_hotel_hdr">Paiement à l'hôtel</span></div>
+    <!-- Pas de module Paiement : rien à récapituler ni encaisser, juste finaliser -->
+    <div id="noPaymentFinish" class="card" style="display:none">
+      <div class="ch"><i class="ti ti-check"></i><span data-i18n="step7_finish_hdr">Terminer mon check-in</span></div>
       <div class="alt alt-b"><i class="ti ti-info-circle"></i>
-        <span data-i18n="step7_pay_hotel_info">Votre réservation est confirmée. Présentez ce QR code à la réception pour finaliser votre check-in et régler la taxe de séjour sur place.</span>
+        <span data-i18n="step7_finish_info">Toutes les informations nécessaires ont été transmises. Finalisez pour accéder à votre clé numérique.</span>
       </div>
-      <div id="payHotelQr" style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:16px"></div>
-      <button class="btn btn-p" id="payHotelConfirmBtn" onclick="confirmPayAtHotel()"><i class="ti ti-check"></i> <span data-i18n="step7_pay_hotel_continue">Continuer vers mon espace</span></button>
+      <button class="btn btn-p" id="noPaymentFinishBtn" onclick="finishWithoutPayment()"><i class="ti ti-check"></i> <span data-i18n="step7_finish_btn">Terminer mon check-in</span></button>
     </div>
 
     <div class="brow" style="margin-top:8px">
@@ -1891,6 +1905,9 @@ var I18N_FR = {
   step7_confirm_pay:'Confirmer & envoyer à Sesame',step7_pay_hotel_hdr:"Paiement à l'hôtel",
   step7_pay_hotel_info:'Votre réservation est confirmée. Présentez ce QR code à la réception pour finaliser votre check-in et régler la taxe de séjour sur place.',
   step7_pay_hotel_continue:'Continuer vers mon espace',
+  step7_finish_hdr:'Terminer mon check-in',
+  step7_finish_info:'Toutes les informations nécessaires ont été transmises. Finalisez pour accéder à votre clé numérique.',
+  step7_finish_btn:'Terminer mon check-in',
   pay_split_detail:'Paiement en {v} fois : {amount} × {v} versements',
   err_card_number_incomplete:'Numéro incomplet',
   err_card_expiry_invalid:"Date d'expiration invalide",err_card_cvv_invalid:'CVV invalide',
@@ -1900,6 +1917,7 @@ var I18N_FR = {
   pay_hotel_booking_label:'Réservation {code}',
   pay_hotel_present_code:"Présentez ce code à l'accueil (mode simulation)",
   toast_checkin_confirmed_pay_hotel:"Check-in confirmé · Paiement à régler à l'accueil ✓",
+  toast_checkin_confirmed_no_payment:'Check-in confirmé ✓',
   err_sync_status:'Erreur de synchronisation ({status})',
   err_sync_message:'Erreur de synchronisation : {msg}',
   reward_balance_label:'Solde total disponible',
@@ -2141,6 +2159,9 @@ var I18N_EN = {
   step7_confirm_pay:'Confirm & send to Sesame',step7_pay_hotel_hdr:'Payment at the hotel',
   step7_pay_hotel_info:'Your booking is confirmed. Show this QR code at the front desk to finalize your check-in and pay the tourist tax on site.',
   step7_pay_hotel_continue:'Continue to my space',
+  step7_finish_hdr:'Finish my check-in',
+  step7_finish_info:'All required information has been submitted. Finish to access your digital key.',
+  step7_finish_btn:'Finish my check-in',
   pay_split_detail:'Payment in {v} instalments: {amount} × {v} payments',
   err_card_number_incomplete:'Incomplete card number',
   err_card_expiry_invalid:'Invalid expiry date',err_card_cvv_invalid:'Invalid CVV',
@@ -2150,6 +2171,7 @@ var I18N_EN = {
   pay_hotel_booking_label:'Booking {code}',
   pay_hotel_present_code:'Show this code at the front desk (simulation mode)',
   toast_checkin_confirmed_pay_hotel:'Check-in confirmed · Pay at the front desk ✓',
+  toast_checkin_confirmed_no_payment:'Check-in confirmed ✓',
   err_sync_status:'Synchronization error ({status})',
   err_sync_message:'Synchronization error: {msg}',
   reward_balance_label:'Total available balance',
@@ -2392,6 +2414,9 @@ var I18N_ES = {
   step7_confirm_pay:'Confirmar y enviar a Sesame',step7_pay_hotel_hdr:'Pago en el hotel',
   step7_pay_hotel_info:'Su reserva está confirmada. Muestre este código QR en recepción para finalizar su check-in y pagar la tasa turística in situ.',
   step7_pay_hotel_continue:'Continuar a mi espacio',
+  step7_finish_hdr:'Finalizar mi check-in',
+  step7_finish_info:'Toda la información necesaria ha sido enviada. Finalice para acceder a su llave digital.',
+  step7_finish_btn:'Finalizar mi check-in',
   pay_split_detail:'Pago en {v} plazos: {amount} × {v} cuotas',
   err_card_number_incomplete:'Número incompleto',
   err_card_expiry_invalid:'Fecha de caducidad no válida',err_card_cvv_invalid:'CVV no válido',
@@ -2401,6 +2426,7 @@ var I18N_ES = {
   pay_hotel_booking_label:'Reserva {code}',
   pay_hotel_present_code:'Presente este código en recepción (modo simulación)',
   toast_checkin_confirmed_pay_hotel:'Check-in confirmado · Pago pendiente en recepción ✓',
+  toast_checkin_confirmed_no_payment:'Check-in confirmado ✓',
   err_sync_status:'Error de sincronización ({status})',
   err_sync_message:'Error de sincronización: {msg}',
   reward_balance_label:'Saldo total disponible',
@@ -4880,6 +4906,12 @@ function rsRenderTracking(){
 
 // ═══════════════════ SUMMARY + RECAP
 function renderSummary(){
+  // Pas de module Paiement : pas de taxe à encaisser, rien à récapituler —
+  // juste un bouton pour finaliser le check-in (demande client 16/10/2026).
+  var paymentEnabled = isModuleActive('payment');
+  document.getElementById('recapPaymentBlock').style.display = paymentEnabled ? '' : 'none';
+  document.getElementById('noPaymentFinish').style.display = paymentEnabled ? 'none' : 'block';
+  if(!paymentEnabled) return;
   updateEco();
   setPayMode('card');
   var b=S.booking||{},n=S.nuits,fd=calcDeduction(),taxeNet=Math.max(0,S.taxeTotal-fd);
@@ -5454,6 +5486,20 @@ function rsSimulatedQr(text){
     }
   }
   return '<svg viewBox="0 0 '+px+' '+px+'" style="width:200px;height:200px;background:#fff;border-radius:10px;padding:8px;border:1px solid var(--border);box-sizing:border-box">'+rects+'</svg>';
+}
+
+// ── Finalisation sans paiement (module "Paiement en ligne" désactivé) ──
+async function finishWithoutPayment(){
+  var btn=document.getElementById('noPaymentFinishBtn');
+  btn.disabled=true;btn.innerHTML='<div class="spin"></div> '+t('processing_ellipsis');
+  try {
+    await finalizeCheckin('checkedin');
+    toast(t('toast_checkin_confirmed_no_payment'));
+    ESP_ACTIVE_TAB='key'; setTimeout(function(){ gotoScr('sejour'); }, 600);
+  } catch(err){
+    toast(tf('err_generic',{msg:err.message}));
+  }
+  btn.disabled=false;btn.innerHTML='<i class="ti ti-check"></i> '+t('step7_finish_btn');
 }
 
 // ── Confirmation "Payer à l'hôtel" ──
