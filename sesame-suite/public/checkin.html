@@ -3714,6 +3714,19 @@ function renderEspace(){
   if(boutiquePill) boutiquePill.style.display = isModuleActive('roomservice') ? '' : 'none';
   if(!isModuleActive('roomservice') && ESP_ACTIVE_TAB==='boutique') ESP_ACTIVE_TAB='key';
 
+  // Onglet Points (récompenses) — masqué si le module "rewards" est
+  // désactivé (ou auto-désactivé via "eco", cf. toggleModule côté admin) :
+  // même bug que boutique ci-dessus, l'onglet restait visible quoi qu'il
+  // arrive. Demande client 16/10/2026.
+  var loyaltyPill = document.querySelector('#espTabs .pill[data-tab="loyalty"]');
+  if(loyaltyPill) loyaltyPill.style.display = isModuleActive('rewards') ? '' : 'none';
+  if(!isModuleActive('rewards') && ESP_ACTIVE_TAB==='loyalty') ESP_ACTIVE_TAB='key';
+
+  // Onglet Ménage — lié au module "eco" (préférences ménage/serviettes).
+  var menagePill = document.querySelector('#espTabs .pill[data-tab="menage"]');
+  if(menagePill) menagePill.style.display = isModuleActive('eco') ? '' : 'none';
+  if(!isModuleActive('eco') && ESP_ACTIVE_TAB==='menage') ESP_ACTIVE_TAB='key';
+
   espSetTab(ESP_ACTIVE_TAB);
   updateCatTabsArrows('espTabs');
 }
