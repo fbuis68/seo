@@ -4289,6 +4289,16 @@ Accès au salon Premium</textarea>
       <input type="text" id="bke-page-intro" placeholder="Choisissez vos dates et le nombre d'occupants pour voir les accès disponibles." maxlength="300">
       <div style="font-size:11px;color:var(--mu);margin-top:4px">Phrase sous le titre. Laissez vide pour garder le texte par défaut.</div>
     </div>
+    <div class="fi">
+      <label class="lb">Titre du message de validation</label>
+      <input type="text" id="bke-confirm-title" placeholder="Réservation confirmée !" maxlength="300">
+      <div style="font-size:11px;color:var(--mu);margin-top:4px">Affiché une fois la réservation créée. Laissez vide pour garder le titre par défaut.</div>
+    </div>
+    <div class="fi">
+      <label class="lb">Texte du message de validation</label>
+      <input type="text" id="bke-confirm-message" placeholder="Merci, votre réservation ({{code}}) est enregistrée…" maxlength="300">
+      <div style="font-size:11px;color:var(--mu);margin-top:4px">{{code}} est remplacé par la référence de réservation (absent si paiement en ligne Checkout, la référence n'est alors pas connue à cet écran). Laissez vide pour garder le texte par défaut.</div>
+    </div>
     <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
       <button class="btn btn-p" onclick="bkeSave()"><i class="ti ti-device-floppy"></i> Enregistrer</button>
     </div>
@@ -8679,6 +8689,8 @@ async function bkeInit(){
     document.getElementById('bke-card-on-file').checked = !!(cfg && cfg.cardOnFileMode);
     document.getElementById('bke-page-title').value = (cfg && cfg.pageTitle) || '';
     document.getElementById('bke-page-intro').value = (cfg && cfg.pageIntro) || '';
+    document.getElementById('bke-confirm-title').value = (cfg && cfg.confirmationTitle) || '';
+    document.getElementById('bke-confirm-message').value = (cfg && cfg.confirmationMessage) || '';
     BKE_DURATION_OPTIONS = (cfg && Array.isArray(cfg.durationOptions)) ? cfg.durationOptions.slice() : [];
     bkeRenderDurationList();
   }catch(e){}
@@ -8709,7 +8721,9 @@ async function bkeSave(){
     skipAvailabilityCheck: document.getElementById('bke-skip-availability').checked,
     cardOnFileMode: document.getElementById('bke-card-on-file').checked,
     pageTitle: document.getElementById('bke-page-title').value.trim(),
-    pageIntro: document.getElementById('bke-page-intro').value.trim()
+    pageIntro: document.getElementById('bke-page-intro').value.trim(),
+    confirmationTitle: document.getElementById('bke-confirm-title').value.trim(),
+    confirmationMessage: document.getElementById('bke-confirm-message').value.trim()
   };
   try{
     var r = await adminFetch('/wa/bookingEngine/config/update', {method:'POST', body:JSON.stringify(body)});

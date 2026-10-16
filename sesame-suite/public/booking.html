@@ -655,9 +655,23 @@ async function bookDirect(btn){
   }
 }
 
-function showDirectBookingSuccess(code){
+// Titre/texte de l'écran de confirmation personnalisables (BOOK_STATUS.confirmationTitle/
+// confirmationMessage) — {{code}} dans le message est remplacé par la référence de
+// réservation quand elle est connue (création directe), sinon retiré (retour Stripe : la
+// page est rechargée après redirection, la référence n'est pas disponible côté client).
+var DEFAULT_CONFIRMATION_TITLE = 'Réservation confirmée !';
+var DEFAULT_CONFIRMATION_MESSAGE_WITH_CODE = 'Merci, votre réservation ({{code}}) est enregistrée — le paiement se fera sur place à l\'hôtel. Un email de confirmation vous sera envoyé.';
+var DEFAULT_CONFIRMATION_MESSAGE_PAID = 'Merci, votre paiement a bien été reçu. Un email de confirmation vous sera envoyé.';
+
+function renderConfirmation(code){
+  var title = BOOK_STATUS.confirmationTitle || DEFAULT_CONFIRMATION_TITLE;
+  var message = BOOK_STATUS.confirmationMessage || (code ? DEFAULT_CONFIRMATION_MESSAGE_WITH_CODE : DEFAULT_CONFIRMATION_MESSAGE_PAID);
+  message = code ? message.replace(/\{\{\s*code\s*\}\}/g, code) : message.replace(/\{\{\s*code\s*\}\}/g, '');
   var el = document.getElementById('return-content');
-  el.innerHTML = '<div class="ico">✅</div><h1>Réservation confirmée !</h1><p class="sub">Merci, votre réservation ('+esc(code)+') est enregistrée — le paiement se fera sur place à l\'hôtel. Un email de confirmation vous sera envoyé.</p>';
+  el.innerHTML = '<div class="ico">✅</div><h1>'+esc(title)+'</h1><p class="sub">'+esc(message)+'</p>';
+}
+function showDirectBookingSuccess(code){
+  renderConfirmation(code);
   gotoScr('return');
 }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
@@ -667,7 +681,7 @@ function handleBookingReturn(){
   if(!v) return false;
   var el = document.getElementById('return-content');
   if(v==='success'){
-    el.innerHTML = '<div class="ico">✅</div><h1>Réservation confirmée !</h1><p class="sub">Merci, votre paiement a bien été reçu. Un email de confirmation vous sera envoyé.</p>';
+    renderConfirmation(null);
   } else {
     el.innerHTML = '<div class="ico">✕</div><h1>Paiement annulé</h1><p class="sub">Votre réservation n\'a pas été finalisée — aucun montant n\'a été débité.</p><button class="btn btn-p" style="width:auto;margin-top:10px" onclick="window.location.href=window.location.pathname+(ENTITY_CODE?\'?entityCode=\'+ENTITY_CODE:\'\')">Recommencer</button>';
   }

@@ -52,6 +52,8 @@ bookingEngineRouter.get(
       cardOnFileMode: config.cardOnFileMode,
       pageTitle: config.pageTitle || "",
       pageIntro: config.pageIntro || "",
+      confirmationTitle: config.confirmationTitle || "",
+      confirmationMessage: config.confirmationMessage || "",
     });
   })
 );
@@ -81,6 +83,16 @@ bookingEngineRouter.post(
       pageIntro = String(req.body.pageIntro).trim();
       if (pageIntro.length > MAX_PAGE_TEXT_LENGTH) throw new HttpError(400, `Texte de la page limité à ${MAX_PAGE_TEXT_LENGTH} caractères`);
     }
+    let confirmationTitle: string | undefined;
+    if (req.body.confirmationTitle !== undefined) {
+      confirmationTitle = String(req.body.confirmationTitle).trim();
+      if (confirmationTitle.length > MAX_PAGE_TEXT_LENGTH) throw new HttpError(400, `Titre de confirmation limité à ${MAX_PAGE_TEXT_LENGTH} caractères`);
+    }
+    let confirmationMessage: string | undefined;
+    if (req.body.confirmationMessage !== undefined) {
+      confirmationMessage = String(req.body.confirmationMessage).trim();
+      if (confirmationMessage.length > MAX_PAGE_TEXT_LENGTH) throw new HttpError(400, `Message de confirmation limité à ${MAX_PAGE_TEXT_LENGTH} caractères`);
+    }
     const data = {
       enabled,
       ...(requirePayment !== undefined ? { requirePayment } : {}),
@@ -91,6 +103,8 @@ bookingEngineRouter.post(
       ...(cardOnFileMode !== undefined ? { cardOnFileMode } : {}),
       ...(pageTitle !== undefined ? { pageTitle } : {}),
       ...(pageIntro !== undefined ? { pageIntro } : {}),
+      ...(confirmationTitle !== undefined ? { confirmationTitle } : {}),
+      ...(confirmationMessage !== undefined ? { confirmationMessage } : {}),
     };
     const config = await prisma.bookingEngineConfig.upsert({
       where: { entityId: entity.id },
@@ -107,6 +121,8 @@ bookingEngineRouter.post(
       cardOnFileMode: config.cardOnFileMode,
       pageTitle: config.pageTitle || "",
       pageIntro: config.pageIntro || "",
+      confirmationTitle: config.confirmationTitle || "",
+      confirmationMessage: config.confirmationMessage || "",
     });
   })
 );
@@ -150,6 +166,8 @@ bookingEngineRouter.get(
       stripePublishableKey: cardOnFileMode && cardOnFileReady ? paymentConfig?.publishableKey : "",
       pageTitle: engineConfig?.pageTitle || "",
       pageIntro: engineConfig?.pageIntro || "",
+      confirmationTitle: engineConfig?.confirmationTitle || "",
+      confirmationMessage: engineConfig?.confirmationMessage || "",
     });
   })
 );
