@@ -162,9 +162,20 @@ export async function sendMessage(opts: {
     usesVariable(template.subject, "codeAcces") ||
     usesVariable(template.bodyHtml, "qrCode") ||
     usesVariable(template.subject, "qrCode");
+  // Traçage complet (16/10/2026) — "marche toujours pas" répété sur
+  // {{codeAcces}} en SMS malgré les corrections précédentes (param email,
+  // détection avec espaces, ordre adoption/déclencheur) : plutôt que de
+  // continuer à deviner, journalise chaque étape pour voir enfin laquelle
+  // échoue réellement sur ce cas précis (jamais déclenchée / pas de config
+  // / endpoint non configuré / booking introuvable / accessCode vide dans
+  // la réponse / erreur réseau).
+  console.log(
+    `[messaging] codeAcces: channel=${opts.channel} entityId=${opts.entityId} code=${JSON.stringify(vars.code)} wantsAccessCode=${wantsAccessCode} bodyHtml=${JSON.stringify(template.bodyHtml)}`
+  );
   if (opts.entityId && vars.code && !vars.codeAcces && wantsAccessCode) {
     try {
       const bsConfig = await prisma.bookingSourceConfig.findUnique({ where: { entityId: opts.entityId } });
+      console.log(`[messaging] codeAcces: bsConfig trouvé=${!!bsConfig} qrEndpointPath=${JSON.stringify(bsConfig?.qrEndpointPath)} qrAccessCodePath=${JSON.stringify(bsConfig?.qrAccessCodePath)}`);
       if (bsConfig?.qrEndpointPath) {
         // fetchAccessQr prend l'email du CLIENT (identifiant secondaire de
         // recherche exigé par certaines sources, cf. qrEmailParam) — PAS
@@ -176,10 +187,13 @@ export async function sendMessage(opts: {
         // sur SMS, Ok sur email". Toujours recherché via le code de
         // réservation (vars.code), indépendamment du canal d'envoi.
         const booking = await prisma.booking.findFirst({ where: { entityId: opts.entityId, code: vars.code }, select: { personEmail: true } });
-        const { accessCode } = await fetchAccessQr(bsConfig, vars.code, booking?.personEmail);
-        if (accessCode) vars = { ...vars, codeAcces: accessCode };
+        console.log(`[messaging] codeAcces: booking trouvé=${!!booking} personEmail=${JSON.stringify(booking?.personEmail)}`);
+        const fetched = await fetchAccessQr(bsConfig, vars.code, booking?.personEmail);
+        console.log(`[messaging] codeAcces: fetchAccessQr =`, fetched);
+        if (fetched.accessCode) vars = { ...vars, codeAcces: fetched.accessCode };
       }
     } catch (e) {
+      console.log(`[messaging] codeAcces: exception =`, e);
       console.error("[messaging] Échec de récupération de {{codeAcces}} :", e);
     }
   }
