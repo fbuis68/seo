@@ -3595,11 +3595,16 @@ async function espTryRestoreSession(){
   try{ saved = JSON.parse(raw); }catch(e){ espClearSession(); return false; }
   if(!saved || !saved.bookingCode){ espClearSession(); return false; }
   try{
-    if(saved.entityCode && saved.entityCode !== ENTITY_CODE){
-      ENTITY_CODE = saved.entityCode;
-      await loadCfg();
-      applyBrand();
-    }
+    // loadCfg() systématique, pas seulement si l'entityCode diffère de
+    // l'URL : ce point d'entrée (boot PWA réouverte) peut être le tout
+    // premier chargement de la page, où aucun loadCfg() n'a encore eu lieu
+    // ailleurs — sans ça, couleurs/logo/CFG.rooms restaient sur les
+    // valeurs par défaut (DEFAULT_CFG) malgré la bonne réservation
+    // restaurée.
+    if(saved.entityCode) ENTITY_CODE = saved.entityCode;
+    espSetPwaManifest();
+    await loadCfg();
+    applyBrand();
     var r = await apiFetch(API_BASE+'/wa/booking/list?q='+encodeURIComponent(saved.bookingCode));
     if(!r.ok) throw new Error('http '+r.status);
     var list = await r.json();
@@ -6521,32 +6526,44 @@ window.addEventListener('DOMContentLoaded',async function(){
   // le paramètre.
   var hadUrlEntityCode = !!ENTITY_CODE;
   var hasPersistedSession = false;
-  if(!ENTITY_CODE){ try{ hasPersistedSession = !!localStorage.getItem(ESP_SESSION_KEY); }catch(e){} }
+  try{ hasPersistedSession = !!localStorage.getItem(ESP_SESSION_KEY); }catch(e){}
   if(!ENTITY_CODE && !DEMO_CODE && !AUTOLOGIN_TOKEN && !hasPersistedSession){
     document.getElementById('noEntityScreen').style.display = 'flex';
     document.querySelector('.app').style.display = 'none';
     return;
   }
-  // Lien générique (sans ?entityCode=) mais session "Mon espace" déjà
-  // connue : on tente de la restaurer EN PREMIER, avant tout loadCfg().
-  // Sinon le loadCfg() générique juste en dessous se rabat sur l'hôtel par
-  // défaut serveur (même repli que la note sur #noEntityScreen plus haut)
-  // et, si la session s'avère invalide (réservation supprimée, hôtel
-  // désactivé…), le client restait bloqué sur l'écran de connexion d'un
-  // hôtel qui n'est pas forcément le sien plutôt que sur l'écran neutre.
-  if(!hadUrlEntityCode && !DEMO_CODE && !AUTOLOGIN_TOKEN && hasPersistedSession){
+  // Session "Mon espace" déjà connue : on tente de la restaurer EN
+  // PREMIER, avant tout loadCfg()/fetchBookings() — qu'il y ait ou non un
+  // ?entityCode= dans l'URL. Important notamment pour l'app installée en
+  // PWA (icône "Sur l'écran d'accueil") : son manifest pointe vers
+  // "/?entityCode=…" (CET établissement) mais JAMAIS vers le jeton
+  // d'autologin personnel du client (cf. GET /wa/pwaManifest, jeton non
+  // figeable dans une icône) — sans cette restauration prioritaire,
+  // l'ancien code tombait dans le flux générique ci-dessous dès que
+  // hadUrlEntityCode était vrai (ce qui est TOUJOURS le cas en PWA
+  // réouverte) et appelait fetchBookings(), qui affiche par défaut la
+  // réservation la PLUS RÉCENTE DE TOUT L'ÉTABLISSEMENT (celle d'un autre
+  // client), avant que la restauration ne corrige (ou échoue en
+  // silence) — d'où la confusion "je retombe sur un autre hôtel/client au
+  // lieu du mien" (demande client 17/10/2026).
+  if(!DEMO_CODE && !AUTOLOGIN_TOKEN && hasPersistedSession){
     var restored = await espTryRestoreSession();
-    if(!restored){
+    if(restored){
+      initLang();
+      applyStaticTranslations();
+      fetchPaymentStatus();
+      handlePaymentReturn();
+      fetchPosList();
+      return;
+    }
+    if(!hadUrlEntityCode){
       document.getElementById('noEntityScreen').style.display = 'flex';
       document.querySelector('.app').style.display = 'none';
       return;
     }
-    initLang();
-    applyStaticTranslations();
-    fetchPaymentStatus();
-    handlePaymentReturn();
-    fetchPosList();
-    return;
+    // Restauration échouée (réservation supprimée, hôtel désactivé…) mais
+    // l'URL porte bien un entityCode légitime : retombe sur le flux
+    // générique ci-dessous plutôt que l'écran neutre.
   }
   await loadCfg(); // GET /wa/entityModuleConfig/list — remplace SESAME_CFG
   initLang(); // langue du client — sessionStorage > CFG.lang (si fr/en/es) > fr
