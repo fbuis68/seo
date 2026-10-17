@@ -3869,7 +3869,6 @@ async function espTryRestoreSession(){
     gotoScr('infos');
     return true;
   }catch(e){
-    alert('DEBUG restore erreur: '+e.message);
     espClearSession();
     return false;
   }
@@ -3949,13 +3948,13 @@ var AUTOLOGIN_TOKEN = new URLSearchParams(window.location.search).get('autologin
 // check-in avant l'arrivée, quand "Mon espace" n'a pas encore de sens.
 var AUTOLOGIN_DEST = new URLSearchParams(window.location.search).get('dest') || '';
 async function espTryAutologin(){
-  if(!AUTOLOGIN_TOKEN) return;
+  if(!AUTOLOGIN_TOKEN) return false;
   try{
     var r = await apiFetch(API_BASE+'/api/auth/autologin', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({token: AUTOLOGIN_TOKEN})
     });
-    if(!r.ok){ alert('DEBUG autologin échec HTTP '+r.status); return false; }
+    if(!r.ok) return false;
     var data = await r.json();
     await espApplyLogin(data);
     if(AUTOLOGIN_DEST==='checkin'){
@@ -3974,7 +3973,6 @@ async function espTryAutologin(){
     toast(t('toast_welcome') + ' ' + data.booking.personFirstname + ' !');
     return true;
   }catch(e){
-    alert('DEBUG autologin exception: '+e.message);
     return false; /* lien invalide/expiré — formulaire de connexion manuel reste disponible */
   }
 }
@@ -6789,13 +6787,6 @@ window.addEventListener('DOMContentLoaded',async function(){
   var hadUrlEntityCode = !!ENTITY_CODE;
   var hasPersistedSession = false;
   try{ hasPersistedSession = !!localStorage.getItem(ESP_SESSION_KEY); }catch(e){}
-  // DEBUG TEMPORAIRE 17/10/2026 — pas de console accessible sur iPhone,
-  // affiche l'état réel au boot pour diagnostiquer "retombe sur Hotel
-  // Churchill" (localStorage vide ? session présente mais restauration
-  // échoue ?). À retirer une fois le diagnostic posé.
-  try{
-    alert('DEBUG boot\nhadUrlEntityCode='+hadUrlEntityCode+'\nENTITY_CODE='+ENTITY_CODE+'\nAUTOLOGIN_TOKEN='+(AUTOLOGIN_TOKEN?'present':'vide')+'\nhasPersistedSession='+hasPersistedSession+'\nraw='+localStorage.getItem(ESP_SESSION_KEY));
-  }catch(e){ alert('DEBUG boot erreur: '+e.message); }
   if(!ENTITY_CODE && !DEMO_CODE && !AUTOLOGIN_TOKEN && !hasPersistedSession){
     document.getElementById('noEntityScreen').style.display = 'flex';
     document.querySelector('.app').style.display = 'none';
@@ -6817,7 +6808,6 @@ window.addEventListener('DOMContentLoaded',async function(){
   // lieu du mien" (demande client 17/10/2026).
   if(!DEMO_CODE && !AUTOLOGIN_TOKEN && hasPersistedSession){
     var restored = await espTryRestoreSession();
-    alert('DEBUG restore\nrestored='+restored);
     if(restored){
       initLang();
       applyStaticTranslations();
@@ -6854,12 +6844,10 @@ window.addEventListener('DOMContentLoaded',async function(){
   if(AUTOLOGIN_TOKEN){ /* espTryAutologin() ci-dessous s'en charge */ }
   else if(DEMO_CODE) loadDemoBooking(DEMO_CODE);
   else fetchBookings();
-  var restoredLate = await espTryRestoreSession(); // session "Mon espace" persistée — avant l'autologin, qui reste prioritaire s'il est présent
-  alert('DEBUG restore (tardif, après loadCfg)\nrestored='+restoredLate+'\nAUTOLOGIN_TOKEN='+(AUTOLOGIN_TOKEN?'present':'vide')+'\nAUTOLOGIN_DEST='+AUTOLOGIN_DEST);
-  var autologinOk = await espTryAutologin();
-  alert('DEBUG autologin final\nok='+autologinOk);
+  await espTryRestoreSession(); // session "Mon espace" persistée — avant l'autologin, qui reste prioritaire s'il est présent
+  espTryAutologin();
  }catch(bootErr){
-  alert('DEBUG boot EXCEPTION NON CAPTURÉE: '+bootErr.message+'\n'+bootErr.stack);
+  console.error('[boot] exception non gérée', bootErr);
  }
 });
 </script>
