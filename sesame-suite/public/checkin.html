@@ -3955,7 +3955,7 @@ async function espTryAutologin(){
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({token: AUTOLOGIN_TOKEN})
     });
-    if(!r.ok) return;
+    if(!r.ok){ alert('DEBUG autologin échec HTTP '+r.status); return false; }
     var data = await r.json();
     await espApplyLogin(data);
     if(AUTOLOGIN_DEST==='checkin'){
@@ -3972,7 +3972,11 @@ async function espTryAutologin(){
     }
     gotoScr(AUTOLOGIN_DEST==='checkin' ? 'sejour' : 'infos');
     toast(t('toast_welcome') + ' ' + data.booking.personFirstname + ' !');
-  }catch(e){ /* lien invalide/expiré — formulaire de connexion manuel reste disponible */ }
+    return true;
+  }catch(e){
+    alert('DEBUG autologin exception: '+e.message);
+    return false; /* lien invalide/expiré — formulaire de connexion manuel reste disponible */
+  }
 }
 
 var ESP_ACTIVE_TAB = 'key';
@@ -6770,6 +6774,7 @@ gotoStep = function(n){
 
 // ═══════════════════ INIT
 window.addEventListener('DOMContentLoaded',async function(){
+ try{
   // Aucun ?entityCode= dans l'URL : pas de lien d'hôtel légitime pour
   // arriver ici (cf. note HTML sur #noEntityScreen) — n'appelle même pas
   // loadCfg(), qui chargerait sinon la charte/le nom d'un hôtel réel au
@@ -6849,8 +6854,13 @@ window.addEventListener('DOMContentLoaded',async function(){
   if(AUTOLOGIN_TOKEN){ /* espTryAutologin() ci-dessous s'en charge */ }
   else if(DEMO_CODE) loadDemoBooking(DEMO_CODE);
   else fetchBookings();
-  await espTryRestoreSession(); // session "Mon espace" persistée — avant l'autologin, qui reste prioritaire s'il est présent
-  espTryAutologin();
+  var restoredLate = await espTryRestoreSession(); // session "Mon espace" persistée — avant l'autologin, qui reste prioritaire s'il est présent
+  alert('DEBUG restore (tardif, après loadCfg)\nrestored='+restoredLate+'\nAUTOLOGIN_TOKEN='+(AUTOLOGIN_TOKEN?'present':'vide')+'\nAUTOLOGIN_DEST='+AUTOLOGIN_DEST);
+  var autologinOk = await espTryAutologin();
+  alert('DEBUG autologin final\nok='+autologinOk);
+ }catch(bootErr){
+  alert('DEBUG boot EXCEPTION NON CAPTURÉE: '+bootErr.message+'\n'+bootErr.stack);
+ }
 });
 </script>
 </body>
