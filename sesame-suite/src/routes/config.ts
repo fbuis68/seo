@@ -174,6 +174,13 @@ configRouter.get(
     const icons = [{ src: "/icons/favicon-192.png", sizes: "192x192", type: "image/png" }];
     if (cfg?.logoMain) icons.unshift({ src: cfg.logoMain, sizes: "any", type: "image/png" });
 
+    // Cache-Control explicite — sans ça, Safari iOS met en cache cette
+    // réponse JSON indépendamment de la query string (observé : le manifest
+    // d'un premier test sans entityCode, ou d'un autre établissement, reste
+    // servi tel quel malgré <link rel="manifest"> mis à jour côté client,
+    // "Sur l'écran d'accueil" installant alors l'ancien établissement/la
+    // démo) — demande client 17/10/2026.
+    res.setHeader("Cache-Control", "no-store");
     res.setHeader("Content-Type", "application/manifest+json");
     res.json({
       name: `${name} · Éco-Séjour`,
