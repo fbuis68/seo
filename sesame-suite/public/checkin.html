@@ -349,6 +349,23 @@ input:focus,select:focus{border-color:var(--accent)}
   </div>
 </div>
 
+<!-- ════ VERROU FACE ID — gate LOCAL sur cet appareil avant de révéler "Mon
+     espace" restauré (clé numérique, PII, paiement). Pas une authentification
+     serveur : WebAuthn est utilisé ici en local pur (création + vérification
+     d'un credential plateforme, jamais envoyé au serveur) puisque "Mon
+     espace" n'a de toute façon pas de compte/mot de passe à protéger côté
+     serveur -- juste un verrou d'appareil opt-in (cf. faceIdEnable/
+     faceIdGateIfEnabled). Toujours un repli "Utiliser mon lien" pour ne
+     jamais bloquer définitivement (matériel biométrique indisponible,
+     changement de visage, etc.). ════ -->
+<div id="faceIdLock" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:400;align-items:center;justify-content:center;padding:16px;flex-direction:column;text-align:center">
+  <div style="width:72px;height:72px;border-radius:50%;background:var(--pl);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:34px;margin-bottom:16px"><i class="ti ti-face-id"></i></div>
+  <div style="font-size:17px;font-weight:700;margin-bottom:6px" data-i18n="faceid_lock_title">Authentification requise</div>
+  <div style="font-size:13px;color:var(--mu);margin-bottom:22px;max-width:280px" data-i18n="faceid_lock_desc">Déverrouillez avec Face ID pour accéder à Mon espace sur cet appareil.</div>
+  <button type="button" id="faceIdUnlockBtn" onclick="faceIdUnlock()" class="btn btn-p" style="width:100%;max-width:280px;justify-content:center;margin-bottom:12px"><i class="ti ti-face-id"></i> <span data-i18n="faceid_unlock_btn">Déverrouiller</span></button>
+  <button type="button" onclick="faceIdUseLinkInstead()" style="background:none;border:none;color:var(--mu);font-size:12px;cursor:pointer;text-decoration:underline" data-i18n="faceid_use_link">Utiliser mon lien de réservation</button>
+</div>
+
 <div class="scroll" id="scrollArea">
 <div id="scr-sejour" class="scr on">
 
@@ -1048,6 +1065,24 @@ input:focus,select:focus{border-color:var(--accent)}
       <button type="button" onclick="espLogout()" style="background:none;border:none;color:var(--mu);font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px;white-space:nowrap;flex-shrink:0">
         <i class="ti ti-logout" style="font-size:14px"></i> <span data-i18n="esp_logout_btn">Se déconnecter</span>
       </button>
+    </div>
+
+    <!-- Bannière Face ID — verrou LOCAL sur cet appareil (pas une
+         authentification serveur : "Mon espace" n'en a pas, cf.
+         ESP_SESSION_KEY). Affichée une fois la session restaurée, tant
+         que Face ID n'est pas déjà activé et que le bandeau n'a pas été
+         fermé (cf. faceIdDismiss). Masquée par défaut, pilotée par
+         renderEspace()/espRenderFaceIdBanner. -->
+    <div id="faceIdBanner" class="card" style="display:none;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="width:40px;height:40px;border-radius:10px;background:var(--pl);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0"><i class="ti ti-face-id"></i></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700" data-i18n="faceid_banner_title">Sécuriser cet appareil</div>
+          <div style="font-size:11px;color:var(--mu)" data-i18n="faceid_banner_desc">Déverrouillez Mon espace avec Face ID la prochaine fois</div>
+        </div>
+        <button type="button" onclick="faceIdEnable()" class="btn btn-p" style="flex-shrink:0;padding:7px 12px;font-size:12px" data-i18n="faceid_banner_btn">Activer</button>
+        <button type="button" onclick="faceIdDismiss()" style="background:none;border:none;color:var(--mu);font-size:16px;cursor:pointer;padding:4px;flex-shrink:0"><i class="ti ti-x"></i></button>
+      </div>
     </div>
 
     <!-- Tabs internes -->
@@ -1982,6 +2017,10 @@ var I18N_FR = {
   err_server_connection_generic:'Erreur de connexion au serveur.',toast_welcome:'Bienvenue',
   esp_title:'Mon espace',esp_title_with_name:'Mon espace · {name}',esp_logout_btn:'Se déconnecter',esp_logout_done:'Déconnecté(e)',pwa_install_btn:'Installer',
   pwa_ios_title:"Installer l'application",pwa_ios_step1:'Appuyez sur Partager dans la barre Safari',pwa_ios_step2:"Puis Sur l'écran d'accueil",
+  faceid_banner_title:'Sécuriser cet appareil',faceid_banner_desc:'Déverrouillez Mon espace avec Face ID la prochaine fois',faceid_banner_btn:'Activer',
+  faceid_lock_title:'Authentification requise',faceid_lock_desc:'Déverrouillez avec Face ID pour accéder à Mon espace sur cet appareil.',
+  faceid_unlock_btn:'Déverrouiller',faceid_use_link:'Utiliser mon lien de réservation',
+  faceid_unsupported:"Face ID n'est pas disponible sur cet appareil",faceid_enabled:'Face ID activé ✓',faceid_enable_failed:"Impossible d'activer Face ID",faceid_failed:'Authentification échouée',
   esp_tab_key:'Clé digitale',esp_tab_loyalty:'Points',esp_tab_menage:'Ménage',
   esp_tab_histo:'Historique',esp_tab_livret:'Livret',esp_tab_boutique:'Boutique',
   esp_tab_rs:'Room Service',
@@ -2236,6 +2275,10 @@ var I18N_EN = {
   err_server_connection_generic:'Server connection error.',toast_welcome:'Welcome',
   esp_title:'My space',esp_title_with_name:'My space · {name}',esp_logout_btn:'Sign out',esp_logout_done:'Signed out',pwa_install_btn:'Install',
   pwa_ios_title:'Install the app',pwa_ios_step1:'Tap Share in the Safari toolbar',pwa_ios_step2:'Then Add to Home Screen',
+  faceid_banner_title:'Secure this device',faceid_banner_desc:'Unlock My Space with Face ID next time',faceid_banner_btn:'Enable',
+  faceid_lock_title:'Authentication required',faceid_lock_desc:'Unlock with Face ID to access My Space on this device.',
+  faceid_unlock_btn:'Unlock',faceid_use_link:'Use my booking link instead',
+  faceid_unsupported:'Face ID is not available on this device',faceid_enabled:'Face ID enabled ✓',faceid_enable_failed:'Could not enable Face ID',faceid_failed:'Authentication failed',
   esp_tab_key:'Digital key',esp_tab_loyalty:'Points',esp_tab_menage:'Housekeeping',
   esp_tab_histo:'History',esp_tab_livret:'Guidebook',esp_tab_boutique:'Shop',
   esp_tab_rs:'Room Service',
@@ -2492,6 +2535,10 @@ var I18N_ES = {
   err_server_connection_generic:'Error de conexión con el servidor.',toast_welcome:'Bienvenido/a',
   esp_title:'Mi espacio',esp_title_with_name:'Mi espacio · {name}',esp_logout_btn:'Cerrar sesión',esp_logout_done:'Sesión cerrada',pwa_install_btn:'Instalar',
   pwa_ios_title:'Instalar la aplicación',pwa_ios_step1:'Toque Compartir en la barra de Safari',pwa_ios_step2:'Luego En la pantalla de inicio',
+  faceid_banner_title:'Proteger este dispositivo',faceid_banner_desc:'Desbloquee Mi espacio con Face ID la próxima vez',faceid_banner_btn:'Activar',
+  faceid_lock_title:'Autenticación requerida',faceid_lock_desc:'Desbloquee con Face ID para acceder a Mi espacio en este dispositivo.',
+  faceid_unlock_btn:'Desbloquear',faceid_use_link:'Usar mi enlace de reserva',
+  faceid_unsupported:'Face ID no está disponible en este dispositivo',faceid_enabled:'Face ID activado ✓',faceid_enable_failed:'No se pudo activar Face ID',faceid_failed:'Autenticación fallida',
   esp_tab_key:'Llave digital',esp_tab_loyalty:'Puntos',esp_tab_menage:'Limpieza',
   esp_tab_histo:'Historial',esp_tab_livret:'Guía',esp_tab_boutique:'Tienda',
   esp_tab_rs:'Servicio de habitaciones',
@@ -3570,11 +3617,141 @@ var ESP_SESSION_KEY = 'SESAME_GUEST_SESSION';
 function espPersistSession(){
   if(!S.booking) return;
   try{
-    localStorage.setItem(ESP_SESSION_KEY, JSON.stringify({ entityCode: ENTITY_CODE, bookingCode: S.booking.code }));
+    // Garde faceIdCred UNIQUEMENT si c'est toujours la même réservation —
+    // un appareil réutilisé pour un AUTRE client/séjour ne doit pas
+    // hériter du verrou biométrique du précédent.
+    var prev = null;
+    try{ prev = JSON.parse(localStorage.getItem(ESP_SESSION_KEY) || 'null'); }catch(e){}
+    var faceIdCred = (prev && prev.bookingCode === S.booking.code) ? prev.faceIdCred : undefined;
+    localStorage.setItem(ESP_SESSION_KEY, JSON.stringify({ entityCode: ENTITY_CODE, bookingCode: S.booking.code, faceIdCred: faceIdCred }));
   }catch(e){}
 }
 function espClearSession(){
   try{ localStorage.removeItem(ESP_SESSION_KEY); }catch(e){}
+}
+
+// ═══════════════════ FACE ID — verrou LOCAL de l'appareil (pas une
+// authentification serveur, cf. commentaire sur #faceIdLock) : WebAuthn
+// (navigator.credentials) utilisé en pur local, challenge/credential
+// jamais envoyés au serveur. Le credential vit DANS le même objet que la
+// session "Mon espace" (ESP_SESSION_KEY) pour rester scopé à LA MÊME
+// réservation (cf. espPersistSession) et disparaître avec elle (logout,
+// changement de séjour sur l'appareil).
+function espGetSessionObj(){
+  try{ var raw = localStorage.getItem(ESP_SESSION_KEY); return raw ? JSON.parse(raw) : null; }catch(e){ return null; }
+}
+function espFaceIdCred(){
+  var o = espGetSessionObj();
+  return (o && o.faceIdCred) || null;
+}
+function espSetFaceIdCred(credIdB64){
+  var o = espGetSessionObj() || { entityCode: ENTITY_CODE, bookingCode: S.booking ? S.booking.code : undefined };
+  o.faceIdCred = credIdB64;
+  try{ localStorage.setItem(ESP_SESSION_KEY, JSON.stringify(o)); }catch(e){}
+}
+function espClearFaceIdCred(){
+  var o = espGetSessionObj();
+  if(!o) return;
+  delete o.faceIdCred;
+  try{ localStorage.setItem(ESP_SESSION_KEY, JSON.stringify(o)); }catch(e){}
+}
+function faceIdSupported(){
+  return !!(window.PublicKeyCredential && navigator.credentials && navigator.credentials.create);
+}
+function faceIdArrToB64(buf){
+  var bytes = new Uint8Array(buf), bin = '';
+  for(var i=0;i<bytes.length;i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+function faceIdB64ToArr(b64){
+  var bin = atob(b64), bytes = new Uint8Array(bin.length);
+  for(var i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
+}
+var FACEID_DISMISS_KEY = 'SESAME_FACEID_DISMISSED';
+function faceIdDismiss(){
+  try{ localStorage.setItem(FACEID_DISMISS_KEY, '1'); }catch(e){}
+  var el = document.getElementById('faceIdBanner');
+  if(el) el.style.display = 'none';
+}
+// Bannière "Activer Face ID" — affichée au rendu de "Mon espace" si
+// supporté, pas déjà activé, et pas explicitement fermée par le client.
+// La disponibilité réelle (isUserVerifyingPlatformAuthenticatorAvailable)
+// n'est vérifiée qu'au clic sur "Activer" (appel async, inutile de
+// bloquer le rendu de la bannière dessus — faceIdEnable gère l'échec).
+function espRenderFaceIdBanner(){
+  var el = document.getElementById('faceIdBanner');
+  if(!el) return;
+  var dismissed = false;
+  try{ dismissed = localStorage.getItem(FACEID_DISMISS_KEY) === '1'; }catch(e){}
+  el.style.display = (faceIdSupported() && !espFaceIdCred() && !dismissed) ? 'block' : 'none';
+}
+async function faceIdEnable(){
+  if(!faceIdSupported()){ toast(t('faceid_unsupported')); return; }
+  try{
+    var available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+    if(!available){ toast(t('faceid_unsupported')); return; }
+    var b = S.booking || {};
+    var cred = await navigator.credentials.create({
+      publicKey: {
+        challenge: crypto.getRandomValues(new Uint8Array(32)),
+        rp: { name: CFG.hotelName || 'Sesame', id: location.hostname },
+        user: {
+          id: crypto.getRandomValues(new Uint8Array(16)),
+          name: b.code || 'guest',
+          displayName: ((b.personFirstname||'')+' '+(b.personLastname||'')).trim() || 'Guest',
+        },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+        authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' },
+        timeout: 60000,
+        attestation: 'none',
+      },
+    });
+    espSetFaceIdCred(faceIdArrToB64(cred.rawId));
+    toast(t('faceid_enabled'));
+    espRenderFaceIdBanner();
+  }catch(e){
+    toast(t('faceid_enable_failed'));
+  }
+}
+// Gate appelé au boot juste après une restauration de session réussie —
+// bloque l'affichage de "Mon espace" tant que la vérification biométrique
+// n'a pas réussi. N'auto-déclenche PAS navigator.credentials.get() : iOS
+// Safari exige un geste utilisateur explicite pour ce prompt (cf. bouton
+// "Déverrouiller" sur #faceIdLock), un appel automatique échouerait en
+// silence au premier chargement.
+function faceIdGateIfEnabled(){
+  if(!espFaceIdCred()) return;
+  document.getElementById('faceIdLock').style.display = 'flex';
+}
+async function faceIdUnlock(){
+  var credId = espFaceIdCred();
+  if(!credId){ document.getElementById('faceIdLock').style.display = 'none'; return; }
+  var btn = document.getElementById('faceIdUnlockBtn');
+  btn.disabled = true;
+  try{
+    await navigator.credentials.get({
+      publicKey: {
+        challenge: crypto.getRandomValues(new Uint8Array(32)),
+        allowCredentials: [{ type: 'public-key', id: faceIdB64ToArr(credId), transports: ['internal'] }],
+        userVerification: 'required',
+        timeout: 60000,
+      },
+    });
+    document.getElementById('faceIdLock').style.display = 'none';
+  }catch(e){
+    toast(t('faceid_failed'));
+  }
+  btn.disabled = false;
+}
+// Repli toujours disponible — ne jamais bloquer définitivement l'accès
+// (matériel biométrique indisponible, visage non reconnu, Face ID
+// désactivé entre-temps dans les réglages iOS…) : redémarre sur l'écran
+// de connexion normal plutôt que ressayer Face ID indéfiniment.
+function faceIdUseLinkInstead(){
+  espClearFaceIdCred();
+  document.getElementById('faceIdLock').style.display = 'none';
+  espLogout();
 }
 
 /**
@@ -3734,6 +3911,7 @@ function renderEspace(){
   }
   locked.style.display='none';
   content.style.display='block';
+  espRenderFaceIdBanner();
 
   // Nom du client dans le header
   if(S.booking){
@@ -6554,6 +6732,7 @@ window.addEventListener('DOMContentLoaded',async function(){
       fetchPaymentStatus();
       handlePaymentReturn();
       fetchPosList();
+      faceIdGateIfEnabled();
       return;
     }
     if(!hadUrlEntityCode){
