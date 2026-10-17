@@ -3869,6 +3869,7 @@ async function espTryRestoreSession(){
     gotoScr('infos');
     return true;
   }catch(e){
+    alert('DEBUG restore erreur: '+e.message);
     espClearSession();
     return false;
   }
@@ -6783,6 +6784,13 @@ window.addEventListener('DOMContentLoaded',async function(){
   var hadUrlEntityCode = !!ENTITY_CODE;
   var hasPersistedSession = false;
   try{ hasPersistedSession = !!localStorage.getItem(ESP_SESSION_KEY); }catch(e){}
+  // DEBUG TEMPORAIRE 17/10/2026 — pas de console accessible sur iPhone,
+  // affiche l'état réel au boot pour diagnostiquer "retombe sur Hotel
+  // Churchill" (localStorage vide ? session présente mais restauration
+  // échoue ?). À retirer une fois le diagnostic posé.
+  try{
+    alert('DEBUG boot\nhadUrlEntityCode='+hadUrlEntityCode+'\nENTITY_CODE='+ENTITY_CODE+'\nAUTOLOGIN_TOKEN='+(AUTOLOGIN_TOKEN?'present':'vide')+'\nhasPersistedSession='+hasPersistedSession+'\nraw='+localStorage.getItem(ESP_SESSION_KEY));
+  }catch(e){ alert('DEBUG boot erreur: '+e.message); }
   if(!ENTITY_CODE && !DEMO_CODE && !AUTOLOGIN_TOKEN && !hasPersistedSession){
     document.getElementById('noEntityScreen').style.display = 'flex';
     document.querySelector('.app').style.display = 'none';
@@ -6804,6 +6812,7 @@ window.addEventListener('DOMContentLoaded',async function(){
   // lieu du mien" (demande client 17/10/2026).
   if(!DEMO_CODE && !AUTOLOGIN_TOKEN && hasPersistedSession){
     var restored = await espTryRestoreSession();
+    alert('DEBUG restore\nrestored='+restored);
     if(restored){
       initLang();
       applyStaticTranslations();
