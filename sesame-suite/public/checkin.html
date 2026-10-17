@@ -14,6 +14,26 @@
      d'en-tête par défaut tant que applyBrand() n'a pas chargé celle de
      l'établissement (cf. applyBrand, qui la met aussi à jour). -->
 <link rel="manifest" id="pwaManifestLink" href="/wa/pwaManifest">
+<!-- Correction SYNCHRONE immédiate, dans le flux de parsing du <head>, pas
+     dans le <script> principal tout en bas de page (§ bug remonté le
+     17/10/2026 : "Sur l'écran d'accueil" proposait systématiquement
+     l'établissement par défaut du serveur/démo, quel que soit le vrai
+     entityCode de l'URL). Certains navigateurs (observé : Safari/Chrome
+     iOS) résolvent/préchargent le manifest dès la découverte du <link> au
+     parsing du <head> — un href corrigé seulement par le script principal,
+     exécuté bien plus tard (fin de <body>), arrivait après cette
+     résolution, donc trop tard pour l'icône "Sur l'écran d'accueil"
+     (son nom/icône restaient ceux du manifest par défaut déjà résolu),
+     même si le reste de la page (chargée séparément via loadCfg) affichait
+     bien le bon établissement. espSetPwaManifest() plus bas reste
+     nécessaire pour le cas où l'entityCode n'est connu qu'après coup
+     (restauration de session sur un lien générique sans ?entityCode=). -->
+<script>
+(function(){
+  var ec = new URLSearchParams(window.location.search).get('entityCode');
+  if(ec) document.getElementById('pwaManifestLink').href = '/wa/pwaManifest?entityCode=' + encodeURIComponent(ec);
+})();
+</script>
 <meta name="theme-color" id="pwaThemeColor" content="#8B1A2E">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
