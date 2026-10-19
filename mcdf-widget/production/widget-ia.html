@@ -335,25 +335,29 @@
         <div class="two-col">
           <div>
             <div class="section-head"><h2>Top 5 conseillers</h2><span class="hint" id="top-conseillers-hint">par CA facturé</span></div>
-            <div class="panel"><div class="rank-list" id="rank-conseillers"></div></div>
+            <div class="panel chart-pad">
+              <div class="mini-chart" id="chart-conseillers"></div>
+              <div class="mini-labels" id="labels-conseillers"></div>
+              <div class="year-legend" id="legend-conseillers"></div>
+            </div>
           </div>
           <div>
             <div class="section-head"><h2>Top 5 clients</h2><span class="hint" id="top-clients-hint">par CA facturé</span></div>
-            <div class="panel"><div class="rank-list" id="rank-clients"></div></div>
+            <div class="panel chart-pad">
+              <div class="mini-chart" id="chart-clients"></div>
+              <div class="mini-labels" id="labels-clients"></div>
+              <div class="year-legend" id="legend-clients"></div>
+            </div>
           </div>
         </div>
       </section>
 
       <section>
         <div class="section-head"><h2>CA par client</h2><span class="hint" id="ca-client-hint"></span></div>
-        <div class="panel">
-          <div class="table-scroll">
-            <table class="tight-table">
-              <colgroup><col style="width:30%"><col style="width:70%"></colgroup>
-              <thead><tr><th>Client</th><th>CA facturé</th></tr></thead>
-              <tbody id="tbl-ca-client"></tbody>
-            </table>
-          </div>
+        <div class="panel chart-pad">
+          <div class="mini-chart" id="chart-ca-client"></div>
+          <div class="mini-labels" id="labels-ca-client"></div>
+          <div class="year-legend" id="legend-ca-client"></div>
         </div>
       </section>
 
@@ -410,7 +414,11 @@
 
       <section>
         <div class="section-head"><h2>Top formateurs</h2><span class="hint">par CA estimé (tarif jour × durée des sessions)</span></div>
-        <div class="panel"><div class="rank-list" id="rank-formateurs"></div></div>
+        <div class="panel chart-pad">
+          <div class="mini-chart" id="chart-formateurs"></div>
+          <div class="mini-labels" id="labels-formateurs"></div>
+          <div class="year-legend" id="legend-formateurs"></div>
+        </div>
       </section>
 
       <section>
@@ -558,7 +566,11 @@
             </div>
             <div>
               <div class="section-head"><h2>Top 5 payeurs / OPCO</h2><span class="hint">par montant HT net</span></div>
-              <div class="panel"><div class="rank-list" id="rank-payeurs"></div></div>
+              <div class="panel chart-pad">
+                <div class="mini-chart" id="chart-payeurs"></div>
+                <div class="mini-labels" id="labels-payeurs"></div>
+                <div class="year-legend" id="legend-payeurs"></div>
+              </div>
             </div>
           </div>
         </section>
@@ -1443,6 +1455,62 @@ function renderGroupedMonthChart(chartId, labelsId, legendId, rows, valueKey, la
   }
 }
 
+// Meme format que renderGroupedMonthChart, mais x = categories (noms de
+// conseillers/clients/formateurs...) au lieu de mois -- utilise pour les
+// classements, pour un rendu visuel coherent sur tout le widget.
+function renderGroupedCategoryChart(chartId, labelsId, legendId, rows, nameKey, fmt) {
+  const chart = document.getElementById(chartId);
+  const labels = document.getElementById(labelsId);
+  const legend = document.getElementById(legendId);
+  chart.innerHTML = '';
+  labels.innerHTML = '';
+  if (legend) legend.innerHTML = '';
+  chart.style.overflowX = 'auto';
+  labels.style.overflowX = 'auto';
+
+  const years = new Set();
+  rows.forEach((r) => Object.keys(r.byYear).forEach((y) => years.add(y)));
+  const yearList = [...years].sort();
+  let max = 1;
+  rows.forEach((r) => yearList.forEach((y) => { max = Math.max(max, r.byYear[y] || 0); }));
+
+  rows.forEach((r) => {
+    const col = el('div', 'mini-col-group');
+    col.style.cssText = 'min-width:70px; flex:0 0 auto;';
+    const barsWrap = el('div', 'mini-bars-wrap');
+    yearList.forEach((y) => {
+      const val = r.byYear[y] || 0;
+      if (!val) return;
+      const bar = el('div', 'mini-bar-g');
+      bar.style.height = `${Math.max((val / max * 100), 2)}%`;
+      const baseColor = yearColor(y, false);
+      const hoverColor = yearColor(y, true);
+      bar.style.background = baseColor;
+      const tip = el('div', 'mini-tip-g', `${y} : ${fmt(val)}`);
+      bar.appendChild(tip);
+      bar.addEventListener('mouseenter', () => { bar.style.background = hoverColor; tip.style.opacity = '1'; });
+      bar.addEventListener('mouseleave', () => { bar.style.background = baseColor; tip.style.opacity = '0'; });
+      barsWrap.appendChild(bar);
+    });
+    col.appendChild(barsWrap);
+    chart.appendChild(col);
+    const lbl = el('div', '', r[nameKey]);
+    lbl.style.cssText = 'min-width:70px; flex:0 0 auto; text-align:center; font-size:10px; color:var(--ink-muted); white-space:normal; word-break:break-word; padding:0 2px;';
+    labels.appendChild(lbl);
+  });
+
+  if (legend) {
+    yearList.forEach((y) => {
+      const item = el('span', 'year-legend-item');
+      const dot = el('span', 'year-legend-dot');
+      dot.style.background = yearColor(y, false);
+      item.appendChild(dot);
+      item.appendChild(document.createTextNode(y));
+      legend.appendChild(item);
+    });
+  }
+}
+
 function renderDevis(DATA) {
   const tbody = document.getElementById('tbl-devis');
   DATA.devis_a_relancer.slice(0, 20).forEach((d) => {
@@ -1727,12 +1795,10 @@ function refreshCommercial(DATA) {
 
   renderComparaison(commercial.comparaison_annuelle, years);
 
-  document.getElementById('rank-conseillers').innerHTML = '';
-  document.getElementById('rank-clients').innerHTML = '';
-  renderRankListByYear('rank-conseillers', commercial.top_conseillers, 'nom', fmtEUR);
-  renderRankListByYear('rank-clients', commercial.top_clients, 'nom', fmtEUR);
+  renderGroupedCategoryChart('chart-conseillers', 'labels-conseillers', 'legend-conseillers', commercial.top_conseillers, 'nom', fmtEUR);
+  renderGroupedCategoryChart('chart-clients', 'labels-clients', 'legend-clients', commercial.top_clients, 'nom', fmtEUR);
 
-  renderCAParClientByYear(DATA);
+  renderGroupedCategoryChart('chart-ca-client', 'labels-ca-client', 'legend-ca-client', DATA.ca_par_client, 'client', fmtEUR);
 
   document.getElementById('tbl-nouveaux').innerHTML = '';
   renderNouveaux(DATA);
@@ -1818,7 +1884,7 @@ function renderAll(DATA) {
   ]);
 
   // Formateurs
-  renderRankListByYear('rank-formateurs', DATA.top_formateurs, 'nom', fmtEUR, (r) => `${r.nb_sessions} sessions`);
+  renderGroupedCategoryChart('chart-formateurs', 'labels-formateurs', 'legend-formateurs', DATA.top_formateurs, 'nom', fmtEUR);
   renderHeuresFormateur(DATA);
 
   // Listing
@@ -2275,9 +2341,7 @@ function renderFactuTopPayeurs(rows) {
     byPayeur[name].byYear[year] = (byPayeur[name].byYear[year] || 0) + r.montantHT;
   });
   const top = Object.values(byPayeur).sort((a, b) => b.total - a.total).slice(0, 5);
-  const wrap = document.getElementById('rank-payeurs');
-  wrap.innerHTML = '';
-  if (top.length) renderRankListByYear('rank-payeurs', top, 'payeur', (v) => fmtEUR(v), (r) => `${r.count} facture(s)`);
+  if (top.length) renderGroupedCategoryChart('chart-payeurs', 'labels-payeurs', 'legend-payeurs', top, 'payeur', (v) => fmtEUR(v));
 }
 function populateFactuMonthFilter(rows) {
   const select = document.getElementById('factu-month-filter');
