@@ -930,7 +930,6 @@ async function buildData(entityId) {
     .map((c) => ({ id: c.id, name: c.name, proposal_code: c.proposalCode, proposal_status: c.proposalStatus, age_jours: c.age }));
 
   const months12 = lastNMonths(12);
-  const months6 = lastNMonths(6);
   const sesMap = {};
   sessions.filter((s) => s.numberMaxi).forEach((s) => {
     const m = monthKey(s.startDate);
@@ -939,7 +938,7 @@ async function buildData(entityId) {
     sesMap[m].nb_sessions += 1;
     sesMap[m].capacite_totale += s.numberMaxi;
   });
-  const sessions_programmees = months6.map((m) => ({
+  const sessions_programmees = months12.map((m) => ({
     mois: m,
     nb_sessions: (sesMap[m] || {}).nb_sessions || 0,
     capacite_totale: (sesMap[m] || {}).capacite_totale || 0,
