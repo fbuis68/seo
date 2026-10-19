@@ -497,7 +497,7 @@
     <!-- ============================= CPF SOUS-TRAITANCE (API MCDF en direct) ============================= -->
     <div class="tab-panel" id="tab-cpf">
       <div class="note">
-        Aucun champ « CPF » n'existe dans l'API MCDF : un dossier est considéré CPF ici si le payeur d'au moins une de ses factures (<code>invoice.payerId</code>/<code>payerName</code>) est « Caisse des Dépôts et Consignations » (gestionnaire de Mon Compte Formation) — confirmé manuellement le 02/09/2026. Le détail (heures, sous-traitance) est ensuite récupéré dossier par dossier via <code>conventionTraining/listWithTimetable</code> (même appel que l'interface MCDF sur une fiche dossier), la sous-traitance venant du champ <code>timetable.subcontracted</code>. Données en direct, aucun import.
+        Un dossier est considéré CPF ici si le payeur d'au moins une de ses factures est « Caisse des Dépôts et Consignations » (gestionnaire de Mon Compte Formation) — confirmé manuellement le 02/09/2026. Le détail (heures, sous-traitance) est récupéré dossier par dossier, en direct, aucun import.
       </div>
 
       <div class="field-block" style="margin-bottom:14px;">
@@ -713,34 +713,30 @@
     <footer>
       Widget IA MCDF — module « génération de rapports » (lecture seule),
       structuré à partir des rapports Power BI existants (Suivi Commercial,
-      Suivi Formateurs, Rapports Listings). Les données viennent de l'API
-      MCDF en direct (<code>/wa/{entité}/list</code>), pas d'un jeu de
-      démonstration. Le CA par formateur est estimé (tarif jour × durée),
-      pas facturé réellement. Le détail « Prévues/Planifiées » par
-      formateur dépend d'une jointure entre <code>sessionQualiopi</code>
-      et <code>session</code> qui n'est fiable que si les deux entités
-      partagent le même identifiant — un bandeau l'indique si ce n'est
-      pas le cas sur ce compte. La répartition Training/Coaching (page
-      d'accueil Power BI d'origine) n'a pas de champ MCDF confirmé, elle
-      n'a donc pas été reconstruite ici. L'onglet « CPF Sous-traitance » lit
-      l'API MCDF en direct (<code>conventionTraining</code>/<code>timetable</code>) mais
+      Suivi Formateurs, Rapports Listings). Les données viennent de MCDF
+      en direct, pas d'un jeu de démonstration. Le CA par formateur est
+      estimé (tarif jour × durée), pas facturé réellement. Le détail
+      « Prévues/Planifiées » par formateur n'est disponible que si les
+      données qualité de votre compte sont correctement reliées aux
+      sessions — un bandeau l'indique si ce n'est pas le cas. La
+      répartition Training/Coaching (page d'accueil Power BI d'origine)
+      n'a pas pu être reconstruite ici, faute de donnée correspondante
+      dans MCDF. L'onglet « CPF Sous-traitance » lit MCDF en direct mais
       approxime deux notions qui n'ont pas de champ dédié : un dossier est
       retenu comme « CPF » si son payeur est la Caisse des Dépôts et
-      Consignations, et la sous-traitance vient du champ
-      <code>timetable.subcontracted</code> — voir la note en haut de
-      l'onglet. L'onglet « Facturation » reste différent : il n'y a pas
-      d'entité facturation confirmée dans l'API, il affiche un export Excel
-      (<code>.xlsx</code>/<code>.xls</code>/<code>.csv</code>) importé
+      Consignations, et la sous-traitance est déduite des informations de
+      planning disponibles — voir la note en haut de l'onglet. L'onglet
+      « Facturation » reste différent : il n'y a pas de source de
+      facturation confirmée dans MCDF, il affiche un export Excel importé
       manuellement et gardé uniquement dans ce navigateur. L'onglet
       « Observatoire marché » interroge en direct, depuis votre navigateur,
-      l'open data publique de Mon Compte Formation
-      (<code>opendata.caissedesdepots.fr</code>, licence ouverte Etalab) —
-      ni MCDF ni ce widget n'hébergent ces données, elles ne transitent par
-      aucun serveur à nous. L'onglet « Formation → compétences » fonctionne
-      sur le même principe d'import manuel que « Facturation », à partir du
-      référentiel ROME (France Travail) ; le prompt qu'il génère est à
-      copier dans l'assistant IA de votre choix — ce widget n'appelle
-      aucune IA lui-même.
+      l'open data publique de Mon Compte Formation (licence ouverte
+      Etalab) — ni MCDF ni ce widget n'hébergent ces données, elles ne
+      transitent par aucun serveur à nous. L'onglet « Formation →
+      compétences » fonctionne sur le même principe d'import manuel que
+      « Facturation », à partir du référentiel ROME (France Travail) ; le
+      prompt qu'il génère est à copier dans l'assistant IA de votre choix
+      — ce widget n'appelle aucune IA lui-même.
     </footer>
 
   </div>
@@ -1709,7 +1705,7 @@ function renderHeuresFormateur(DATA) {
   const note = document.getElementById('formateurs-heures-note');
   const panel = document.getElementById('formateurs-heures-panel');
   if (!DATA.heures_formateur) {
-    note.innerHTML = `<div class="note">Détail Prévues/Réalisées/Planifiées non disponible pour ce compte : les identifiants de <code>sessionQualiopi</code> ne correspondent pas (ou trop peu) à ceux de <code>session</code> (${Math.round(DATA.join_ratio * 100)}% de correspondance). Le classement « Top formateurs » ci-dessus reste basé sur <code>session</code> directement.</div>`;
+    note.innerHTML = `<div class="note">Détail Prévues/Réalisées/Planifiées non disponible pour ce compte : les données qualité ne sont pas correctement reliées aux sessions (${Math.round(DATA.join_ratio * 100)}% de correspondance). Le classement « Top formateurs » ci-dessus reste basé sur les sessions directement.</div>`;
     return;
   }
   panel.style.display = 'block';
@@ -1914,7 +1910,7 @@ let CPF_ENTITY_ID = null;
     if (entityId) {
       setStatus('', `<span class="dot"></span> Entité ${entityId} · lecture seule`);
     } else {
-      setStatus('warn', '<span class="dot"></span> Toutes entités accessibles · pensez à passer ?entityId=…');
+      setStatus('warn', '<span class="dot"></span> Toutes les données sont accessibles · pensez à filtrer sur un seul centre si besoin');
     }
 
     document.getElementById('banner').style.display = 'none';
@@ -1952,8 +1948,8 @@ function buildSuggestContext() {
   return [
     'Contexte technique (pré-rempli automatiquement) :',
     '- Widget : Génération de rapports (widget-ia.html)',
-    '- Entités API MCDF déjà utilisées ici : customer, fullConventionQualiopi, invoice, conventionAttendee, session, sessionQualiopi, conventionTraining, timetable (via /wa/{entity}/list?nopaging=1)',
-    '- Onglets existants : Commercial, Planning, Formateurs, Listing, CPF Sous-traitance (API en direct, dossier retenu si payeur = Caisse des Dépôts et Consignations, sous-traitance = timetable.subcontracted), Facturation (import Excel manuel), Observatoire marché (open data Mon Compte Formation en direct), Formation → compétences (import Excel du référentiel ROME + génération de prompt pédagogique à copier)',
+    '- Données MCDF déjà utilisées ici : clients, factures, dossiers, sessions, formateurs, convocations',
+    '- Onglets existants : Commercial, Planning, Formateurs, Listing, CPF Sous-traitance (données MCDF en direct, dossier retenu si payeur = Caisse des Dépôts et Consignations, sous-traitance déduite du planning), Facturation (import Excel manuel), Observatoire marché (open data Mon Compte Formation en direct), Formation → compétences (import Excel du référentiel ROME + génération de prompt pédagogique à copier)',
     '',
   ].join('\n');
 }
