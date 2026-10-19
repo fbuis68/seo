@@ -799,7 +799,8 @@ document.querySelectorAll('.tab-btn').forEach((btn) => {
 // Récupération des données en direct (même pattern que browser/live-reports.js)
 // ------------------------------------------------------------------
 async function fetchAll(entity, entityId) {
-  const res = await fetch(`/wa/${entity}/list?nopaging=1&_dc=${Date.now()}`, { credentials: 'same-origin' });
+  const entityFilter = entityId ? `&entityId=${encodeURIComponent(entityId)}` : '';
+  const res = await fetch(`/wa/${entity}/list?nopaging=1${entityFilter}&_dc=${Date.now()}`, { credentials: 'same-origin' });
   if (res.status === 401 || res.status === 403) throw new Error('AUTH');
   let data;
   try {
