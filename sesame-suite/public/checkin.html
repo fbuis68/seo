@@ -2890,7 +2890,7 @@ function renderBookingResults(list) {
       +'</div>';
   });
   res.innerHTML = h;
-  if (S.booking) document.getElementById('step1next').style.display = 'block';
+  if (S.booking && isModuleActive('room')) document.getElementById('step1next').style.display = 'block';
 }
 
 /**
@@ -2919,7 +2919,15 @@ function selectBooking(id) {
   document.querySelectorAll('.bi').forEach(function(el){
     el.classList.toggle('on', el.querySelector('.bi-code')?.textContent === S.booking.code);
   });
-  document.getElementById('step1next').style.display = 'block';
+  // Module "room" désactivé : pas de choix de chambre possible, donc pas de
+  // bouton "Choisir ma chambre" — on passe directement à la prochaine étape
+  // active (gotoStep(2) l'aurait fait sauter de toute façon, cf. STEP_MODULES).
+  if(isModuleActive('room')){
+    document.getElementById('step1next').style.display = 'block';
+  } else {
+    document.getElementById('step1next').style.display = 'none';
+    gotoStep(nextActiveStep(1));
+  }
   toast(t('toast_booking_selected')+' · '+S.booking.personFirstname+' '+S.booking.personLastname);
   fetchLoyalty(S.booking.personEmail); // préchargement en tâche de fond pour l'étape 7
   fetchOrders(S.booking.code);
@@ -3472,9 +3480,9 @@ function renderRewardStep(){
   if(g.produit.active&&(menS>0||srvS>0))
     g.produit.list.forEach(function(p,i){rewards.push({key:'prod'+i,ico:'ti-gift',bg:'#FEF0DC',tc:'#A85A0A',nm:p,sb:t('reward_product_sub')});});
 
+  document.getElementById('rewardDirectCard').style.display = rewardsEnabled ? '' : 'none';
   if(!rewardsEnabled){
-    document.getElementById('rewardDirectCard').innerHTML='<div class="ch"><i class="ti ti-gift"></i>'+t('step7_direct_hdr')+'</div>'
-      +'<div class="alt alt-w"><i class="ti ti-lock"></i><span>'+t('reward_program_disabled')+'</span></div>';
+    document.getElementById('rewardDirectCard').innerHTML='';
     document.getElementById('rewardCatalogCard').style.display='none';
     document.getElementById('rewardSumCard').style.display='none';
     document.getElementById('rewardPointsHero').innerHTML='';
@@ -5782,7 +5790,7 @@ async function confirmPay(){
       +(calcPointsEarned()>0?'<br><span style="font-size:12px;color:var(--primary)"><i class="ti ti-star"></i> '+tf('pay_points_credited',{pts:calcPointsEarned()})+'</span>':'')
       +'</div></div>';
     toast(t('toast_payment_confirmed'));
-    ESP_ACTIVE_TAB='key'; setTimeout(function(){ gotoScr('sejour'); }, 900);
+    ESP_ACTIVE_TAB='key'; setTimeout(function(){ gotoScr('infos'); }, 900);
   } catch(err) {
     document.getElementById('payResult').innerHTML='<div class="alt alt-w"><i class="ti ti-alert-circle"></i><span>'+tf('err_generic',{msg:err.message})+'</span></div>';
   }
@@ -5828,7 +5836,7 @@ async function finishWithoutPayment(){
   try {
     await finalizeCheckin('checkedin');
     toast(t('toast_checkin_confirmed_no_payment'));
-    ESP_ACTIVE_TAB='key'; setTimeout(function(){ gotoScr('sejour'); }, 600);
+    ESP_ACTIVE_TAB='key'; setTimeout(function(){ gotoScr('infos'); }, 600);
   } catch(err){
     toast(tf('err_generic',{msg:err.message}));
   }
@@ -5842,7 +5850,7 @@ async function confirmPayAtHotel(){
   try {
     var sesameResult = await finalizeCheckin('confirmed'); // statut "confirmed" : check-in fait, paiement en attente sur place
     toast(t('toast_checkin_confirmed_pay_hotel'));
-    ESP_ACTIVE_TAB='key'; setTimeout(function(){ gotoScr('sejour'); }, 600);
+    ESP_ACTIVE_TAB='key'; setTimeout(function(){ gotoScr('infos'); }, 600);
   } catch(err){
     toast(tf('err_generic',{msg:err.message}));
   }
