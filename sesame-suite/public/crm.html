@@ -10253,15 +10253,30 @@ async function accRejectInvoice(id){
   }catch(e){ flash('Erreur lors du rejet'); }
 }
 
-/** Suppression définitive — refusée côté serveur si écriture comptable ou rapprochement bancaire existants (cf. routes/accounting.ts). */
-async function accDeleteInvoice(id){
+/**
+ * Suppression définitive — refusée côté serveur si rapprochement bancaire
+ * existant (cf. routes/accounting.ts), ou si écriture comptable déjà
+ * VALIDÉE sans confirmation {force:true} (second confirm() ci-dessous,
+ * réservé aux comptes Sesame côté serveur) : casse volontairement
+ * l'inaltérabilité comptable légale, l'extourne (bouton "Extourner" sur
+ * l'écriture) reste la correction normale, sans rien supprimer.
+ */
+async function accDeleteInvoice(id, force){
   const inv = ACC_INVOICES.find(i=>i.id===id);
   const label = inv ? (inv.direction==='sale'?(inv.customer?inv.customer.name:inv.recipientName):(inv.supplier?inv.supplier.name:inv.issuerName))||'cette facture' : 'cette facture';
-  if(!confirm('Supprimer définitivement '+label+(inv&&inv.invoiceNumber?' (n° '+inv.invoiceNumber+')':'')+' ?\n\nCette action est irréversible.')) return;
+  if(!force && !confirm('Supprimer définitivement '+label+(inv&&inv.invoiceNumber?' (n° '+inv.invoiceNumber+')':'')+' ?\n\nCette action est irréversible.')) return;
   try{
-    const r = await apiFetch('/wa/acc/invoices/'+id+'?scope=crm', {method:'DELETE'});
+    const r = await apiFetch('/wa/acc/invoices/'+id+'?scope=crm', {method:'DELETE', body: force?JSON.stringify({force:true}):undefined});
     const data = await r.json().catch(()=>({}));
-    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    if(!r.ok){
+      if(!force && r.status===400 && /écriture comptable/.test(data.error||'')){
+        if(confirm((data.error||'')+'\n\nConfirmer la suppression FORCÉE (irréversible, casse la traçabilité comptable légale — réservé aux comptes Sesame) ?')){
+          return accDeleteInvoice(id, true);
+        }
+        return;
+      }
+      throw new Error(data.error||'http '+r.status);
+    }
     flash('Facture supprimée');
     loadAccDashboard();
     if(ACC_TAB==='inbox') accReloadInvoices();

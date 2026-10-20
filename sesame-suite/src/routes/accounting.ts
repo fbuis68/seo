@@ -748,19 +748,44 @@ accountingRouter.delete(
     const entityId = await resolveScope(req);
     const invoice = await prisma.accInvoice.findFirst({ where: { id: req.params.id, entityId } });
     if (!invoice) throw new HttpError(404, "Facture introuvable");
-    if (invoice.entryId) {
-      throw new HttpError(400, "Cette facture a une écriture comptable — dévalidez-la d'abord");
-    }
     const bankMatchCount = await prisma.accBankMatch.count({ where: { invoiceId: invoice.id } });
     if (bankMatchCount > 0) {
       throw new HttpError(400, "Cette facture a un rapprochement bancaire — retirez-le (onglet Banque) avant de la supprimer");
     }
-    await prisma.accInvoice.delete({ where: { id: invoice.id } });
+    // Suppression forcée d'une facture dont l'écriture est déjà VALIDÉE
+    // (numérotée) — demande client 20/10/2026, malgré l'extourne (§44,
+    // POST /acc/entries/:id/reverse) déjà prévue comme correction normale
+    // SANS rien supprimer, pour préserver l'inaltérabilité comptable
+    // légale (loi anti-fraude TVA / NF203). Casse volontairement cette
+    // garantie : réservé aux comptes Sesame (pas l'hôtel lui-même),
+    // confirmation explicite requise ({force:true}, jamais déclenchée par
+    // inadvertance via le bouton "Supprimer" normal), et snapshot complet
+    // de la facture ET de l'écriture dans le journal d'audit AVANT
+    // suppression — seule trace qui subsiste une fois l'écriture effacée.
+    const force = req.body?.force === true;
+    let entry: { id: string; number: string | null; status: string; date: Date; lines: unknown[] } | null = null;
+    if (invoice.entryId) {
+      entry = await prisma.accEntry.findUnique({ where: { id: invoice.entryId }, include: { lines: true } });
+      if (!force) {
+        throw new HttpError(
+          400,
+          "Cette facture a une écriture comptable — extournez-la (correction normale, sans suppression) ou confirmez la suppression forcée (casse la traçabilité légale, réservé aux comptes Sesame)"
+        );
+      }
+      if (req.admin?.role !== "sesame") {
+        throw new HttpError(403, "Suppression forcée d'une facture avec écriture comptable réservée aux comptes Sesame");
+      }
+    }
     await recordAuditLog({
-      entityId, userId: actorId(req), action: "invoice_deleted", targetType: "AccInvoice", targetId: invoice.id,
-      oldValue: { invoiceNumber: invoice.invoiceNumber, issuerName: invoice.issuerName, recipientName: invoice.recipientName, amountTtc: invoice.amountTtc, status: invoice.status },
+      entityId, userId: actorId(req), action: entry ? "invoice_force_deleted" : "invoice_deleted", targetType: "AccInvoice", targetId: invoice.id,
+      oldValue: {
+        invoiceNumber: invoice.invoiceNumber, issuerName: invoice.issuerName, recipientName: invoice.recipientName, amountTtc: invoice.amountTtc, status: invoice.status,
+        entry: entry ? { id: entry.id, number: entry.number, status: entry.status, date: entry.date, lines: entry.lines } : undefined,
+      },
       ip: req.ip,
     });
+    if (entry) await prisma.accEntry.delete({ where: { id: entry.id } }); // cascade les lignes, invoice.entryId repasse à NULL (onDelete: SetNull)
+    await prisma.accInvoice.delete({ where: { id: invoice.id } });
     res.json({ ok: true });
   })
 );
