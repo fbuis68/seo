@@ -15322,6 +15322,7 @@ function renderReservations(){
       + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">'
       + checkinBadge
       + nfcBadge
+      + '<button class="btn btn-s" style="padding:4px 10px;font-size:12px" onclick="event.stopPropagation();resaQuickEncode(\''+esc(b.code)+'\')"><i class="ti ti-nfc"></i> Encoder</button>'
       + '<button class="btn btn-s" style="padding:4px 10px;font-size:12px" onclick="event.stopPropagation();resaOpenEdit(\''+esc(b.code)+'\')"><i class="ti ti-edit"></i> Modifier</button>'
       + '</div>'
       + '</div>'
@@ -16096,6 +16097,20 @@ function resaCloseDetail(){
  */
 async function resaEncodeNfc(code){
   return resaEncodeNfcCommon(code, 'resa-detail-nfc-btn', null);
+}
+
+/** Bouton "Encoder" directement sur chaque ligne de la liste (§ demande
+ * client) — resaEncodeNfcCommon dépend d'éléments DOM qui n'existent que
+ * dans le détail (resa-detail-nfc-error/-devices…, injectés par
+ * resaOpenDetail) : on ouvre donc le détail en premier (await, pas
+ * seulement son préfixe synchrone — resaLoadPasses doit être fini avant
+ * resaLoadKey pour détecter les réservations à accès multiples, cf.
+ * resaOpenDetail), puis on enchaîne directement sur l'encodage, sans
+ * action supplémentaire côté utilisateur.
+ */
+async function resaQuickEncode(code){
+  await resaOpenDetail(code);
+  resaEncodeNfc(code);
 }
 
 /** Bouton "Encoder" d'un invité précis (cf. resaRenderPassesSection) — même
