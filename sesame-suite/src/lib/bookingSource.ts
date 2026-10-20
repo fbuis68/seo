@@ -322,6 +322,21 @@ async function performLogin(
       resultFilterValue = idRaw;
     }
   } else {
+    // Garde-fou spécifique au modèle "Sesame Technology" (presetId="sesame") :
+    // ce connecteur est CONNU pour exposer plusieurs établissements sur un
+    // même compte (cf. filtre anti-fuite ci-dessus, déjà vécu une fois avec
+    // "Le Victor" reçu sur le connecteur "Deer Forest") — une config de ce
+    // preset sans loginProfileListPath/MatchField/MatchValue est presque
+    // toujours une config créée avant l'ajout de ce filtre (ou un assistant
+    // non rempli jusqu'au bout) plutôt qu'une source réellement mono-
+    // établissement : on refuse plutôt que d'importer sans filtrage.
+    if (config.presetId === "sesame" && !config.skipEntityFilter) {
+      throw new BookingSourceError(
+        'Filtrage anti-fuite inter-établissements non configuré pour ce connecteur "Sesame Technology" — ' +
+          "renseignez le tableau de profils (étape \"connexion\") ou cochez explicitement la case " +
+          "désactivant ce filtre si ce compte n'a accès qu'à cet établissement."
+      );
+    }
     token = config.loginTokenPath ? getPath(responseBody, config.loginTokenPath) : undefined;
   }
 
