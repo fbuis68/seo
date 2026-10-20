@@ -445,6 +445,7 @@ input:focus,select:focus{border-color:var(--accent)}
     </div>
     <!-- Room cards list -->
     <div id="roomList"></div>
+    <div id="roomSelectionSummary" style="display:none;text-align:center;font-size:12px;font-weight:600;color:var(--primary);margin-bottom:8px"></div>
     <div class="brow">
       <button class="btn btn-out" onclick="gotoStep(1)"><i class="ti ti-arrow-left"></i></button>
       <button class="btn btn-p" id="btnStep2Next" onclick="gotoStep(3)"><span data-i18n="btn_continue">Continuer</span> <i class="ti ti-arrow-right"></i></button>
@@ -946,11 +947,15 @@ input:focus,select:focus{border-color:var(--accent)}
                 <div class="rc-code" id="recapRoomCode">—</div>
                 <div class="rc-name" id="recapRoomName">—</div>
               </div>
-              <span class="bdg bdg-g"><i class="ti ti-check" style="font-size:11px"></i><span data-i18n="badge_selected">Sélectionnée</span></span>
+              <span class="bdg bdg-g"><i class="ti ti-check" style="font-size:11px"></i><span id="recapRoomBadgeLabel" data-i18n="badge_selected">Sélectionnée</span></span>
             </div>
           </div>
         </div>
       </div>
+      <!-- Chambres supplémentaires (sélection multiple, demande client
+           20/10/2026) — liste compacte sous la chambre principale
+           ci-dessus, pas de galerie photo par chambre pour rester simple. -->
+      <div id="recapExtraRooms" style="display:none;margin-top:8px"></div>
 
       <!-- Séjour details -->
       <div class="card">
@@ -1846,7 +1851,7 @@ var I18N_FR = {
   btn_continue:'Continuer',btn_search:'Rechercher',btn_search_ellipsis:'Rechercher…',
   btn_demo:'Démo',btn_order:'Commander',btn_pass:'Passer',btn_cancel:'Annuler',
   btn_add_to_cart:'Ajouter au panier',btn_modify:'Modifier',btn_added_to_cart:'Ajouté au panier',
-  badge_selected:'Sélectionnée',price_free:'Offert',
+  badge_selected:'Sélectionnée',badge_main_room:'Chambre principale',price_free:'Offert',
   cart_my_cart:'Mon panier',cart_total:'Total',cart_empty:'Votre panier est vide.',
   cart_per_unit:'/ unité',cart_added_to_room_bill:'Le montant sera ajouté à votre note de chambre.',
   cart_pay_online:'Vous allez être redirigé vers une page de paiement sécurisée.',
@@ -1906,7 +1911,7 @@ var I18N_FR = {
   room_floor_3:'3ème étage',room_floor_4:'4ème étage',room_no_photo:'Pas de photo disponible',
   room_none_configured:'Aucune chambre configurée — votre chambre de réservation sera utilisée.',
   room_none_match:'Aucune chambre ne correspond à ces critères.',
-  toast_room_selected_suffix:'sélectionnée ✓',
+  toast_room_selected_suffix:'sélectionnée ✓',toast_room_deselected_suffix:'retirée',room_selection_summary:'{n} chambres sélectionnées',
   // Étape 3 — occupants & taxe
   step3_title:'Occupants du séjour',step3_occ_hdr:'Déclarer les occupants',
   step3_add_occ:'Ajouter un occupant',occ_none:'Aucun occupant.',occ_label_prefix:'Occ.',
@@ -2117,7 +2122,7 @@ var I18N_EN = {
   btn_continue:'Continue',btn_search:'Search',btn_search_ellipsis:'Search…',
   btn_demo:'Demo',btn_order:'Order',btn_pass:'Skip',btn_cancel:'Cancel',
   btn_add_to_cart:'Add to cart',btn_modify:'Edit',btn_added_to_cart:'Added to cart',
-  badge_selected:'Selected',price_free:'Free',
+  badge_selected:'Selected',badge_main_room:'Main room',price_free:'Free',
   cart_my_cart:'My cart',cart_total:'Total',cart_empty:'Your cart is empty.',
   cart_per_unit:'/ unit',cart_added_to_room_bill:'The amount will be added to your room bill.',
   cart_pay_online:'You will be redirected to a secure payment page.',
@@ -2170,7 +2175,7 @@ var I18N_EN = {
   room_filter_all:'All',room_floor_0:'Ground floor',room_floor_1:'1st floor',room_floor_2:'2nd floor',
   room_floor_3:'3rd floor',room_floor_4:'4th floor',room_no_photo:'No photo available',
   room_none_configured:'No rooms configured — your booked room will be used.',
-  room_none_match:'No room matches these criteria.',toast_room_selected_suffix:'selected ✓',
+  room_none_match:'No room matches these criteria.',toast_room_selected_suffix:'selected ✓',toast_room_deselected_suffix:'removed',room_selection_summary:'{n} rooms selected',
   step3_title:'Guests staying',step3_occ_hdr:'Declare your guests',
   step3_add_occ:'Add a guest',occ_none:'No guests.',occ_label_prefix:'Guest',
   occ_age_adulte:'Adult (18+)',occ_age_ado:'Teen (13-17)',occ_age_enfant:'Child (<13)',
@@ -2375,7 +2380,7 @@ var I18N_ES = {
   btn_continue:'Continuar',btn_search:'Buscar',btn_search_ellipsis:'Buscar…',
   btn_demo:'Demo',btn_order:'Pedir',btn_pass:'Omitir',btn_cancel:'Cancelar',
   btn_add_to_cart:'Añadir al carrito',btn_modify:'Modificar',btn_added_to_cart:'Añadido al carrito',
-  badge_selected:'Seleccionada',price_free:'Gratis',
+  badge_selected:'Seleccionada',badge_main_room:'Habitación principal',price_free:'Gratis',
   cart_my_cart:'Mi carrito',cart_total:'Total',cart_empty:'Su carrito está vacío.',
   cart_per_unit:'/ unidad',cart_added_to_room_bill:'El importe se añadirá a la factura de su habitación.',
   cart_pay_online:'Será redirigido a una página de pago segura.',
@@ -2430,7 +2435,7 @@ var I18N_ES = {
   room_floor_3:'3.ª planta',room_floor_4:'4.ª planta',room_no_photo:'Sin foto disponible',
   room_none_configured:'No hay habitaciones configuradas — se usará la habitación de su reserva.',
   room_none_match:'Ninguna habitación coincide con estos criterios.',
-  toast_room_selected_suffix:'seleccionada ✓',
+  toast_room_selected_suffix:'seleccionada ✓',toast_room_deselected_suffix:'eliminada',room_selection_summary:'{n} habitaciones seleccionadas',
   step3_title:'Ocupantes de la estancia',step3_occ_hdr:'Declarar los ocupantes',
   step3_add_occ:'Añadir un ocupante',occ_none:'Sin ocupantes.',occ_label_prefix:'Ocup.',
   occ_age_adulte:'Adulto (18+)',occ_age_ado:'Adolescente (13-17)',occ_age_enfant:'Niño (<13)',
@@ -2685,7 +2690,7 @@ function applyBrand(){
 
 // ═══════════════════ STATE
 var S={
-  step:1, booking:null, selectedRoom:null,
+  step:1, booking:null, selectedRoom:null, selectedRooms:[],
   occupants:[], menage:1, serviette:3, nuits:3,
   eau:0, co2:0, taxeTotal:0, deductChoice:'note',
   activeRewards:[], activeRoomTags:[],
@@ -2959,7 +2964,7 @@ function renderFilteredRooms(){
     h='<div class="alt alt-w"><i class="ti ti-alert-circle"></i><span>'+t('room_none_match')+'</span></div>';
   } else {
     rooms.forEach(function(r){
-      var isSel=S.selectedRoom&&S.selectedRoom.code===r.code;
+      var isSel=S.selectedRooms.some(function(sr){return sr.code===r.code;});
       var photos=r.photos||[];
       h+='<div class="room-card'+(isSel?' on':'')+'" onclick="selectRoom(\''+r.code+'\')" id="rc_'+r.code+'">';
       // GALLERY
@@ -2991,14 +2996,16 @@ function renderFilteredRooms(){
     });
   }
   document.getElementById('roomList').innerHTML = h;
-  // Auto-sélection si pas de chambres configurées
-  if(!CFG.rooms.length && !S.selectedRoom && S.booking && S.booking.facilityCode){
-    S.selectedRoom = {
-      code: S.booking.facilityCode,
-      name: S.booking.facilityName || S.booking.facilityCode,
-      floor: 0, tags: [], photos: []
-    };
+  // Auto-sélection si pas de chambres configurées — booking.facilityCode
+  // peut déjà porter plusieurs codes séparés par des virgules (même
+  // convention que espGetAccessPoints), d'où le split ici aussi.
+  if(!CFG.rooms.length && !S.selectedRooms.length && S.booking && S.booking.facilityCode){
+    S.selectedRooms = S.booking.facilityCode.split(',').map(function(s){ return s.trim(); }).filter(Boolean).map(function(code){
+      return { code: code, name: S.booking.facilityName || code, floor: 0, tags: [], photos: [] };
+    });
+    S.selectedRoom = S.selectedRooms[0] || null;
   }
+  updateRoomSelectionSummary();
 }
 var photoIndexes={};
 function slidePhoto(e,code,dir){
@@ -3011,26 +3018,54 @@ function slidePhoto(e,code,dir){
   if(strip)strip.style.transform='translateX(-'+idx*100+'%)';
   r.photos.forEach(function(_,i){var dot=document.getElementById('rcdot_'+code+'_'+i);if(dot)dot.className='rc-gallery-dot'+(i===idx?' on':'');});
 }
+// Sélection MULTIPLE (demande client 20/10/2026 : "une réservation = plusieurs
+// chambres" — groupe/famille avec un seul séjour mais plusieurs chambres à
+// occuper, une clé numérique par chambre choisie). Toggle (ajoute/retire),
+// PAS exclusif comme avant. S.selectedRoom reste la "chambre principale"
+// (= la première choisie) pour tout le code existant qui n'attend qu'UNE
+// chambre (tarifs, libellé étape 6, etc.) ; S.selectedRooms porte la liste
+// complète, utilisée pour générer un accès par chambre à la fin (cf.
+// finalizeCheckin → selectedRoomCode liste séparée par des virgules, même
+// convention que booking.facilityCode, cf. espGetAccessPoints).
 function selectRoom(code){
-  S.selectedRoom = CFG.rooms.find(function(r){return r.code===code;})
-                || {code:code, name:code, floor:0, tags:[], photos:[]};
-  // Mettre à jour visuellement les cartes sans re-render complet
-  document.querySelectorAll('.room-card').forEach(function(el){
-    el.classList.toggle('on', el.id==='rc_'+code);
+  var idx = S.selectedRooms.findIndex(function(r){return r.code===code;});
+  var nowSelected = idx < 0;
+  if(nowSelected){
+    var room = CFG.rooms.find(function(r){return r.code===code;}) || {code:code, name:code, floor:0, tags:[], photos:[]};
+    S.selectedRooms.push(room);
+  } else {
+    S.selectedRooms.splice(idx,1);
+  }
+  S.selectedRoom = S.selectedRooms[0] || null;
+  // Mettre à jour visuellement la carte concernée sans re-render complet
+  var el = document.getElementById('rc_'+code);
+  if(el){
+    el.classList.toggle('on', nowSelected);
     var badge = el.querySelector('.rc-selected-badge');
-    if(badge) badge.style.display = el.id==='rc_'+code ? 'block' : 'none';
-  });
+    if(badge) badge.style.display = nowSelected ? 'block' : 'none';
+  }
   if(CFG.hotelPlan) renderRoomMap();
+  updateRoomSelectionSummary();
   // Activer le bouton avec feedback visuel
   var btn = document.getElementById('btnStep2Next');
-  if(btn){
-    btn.disabled = false;
+  if(btn && nowSelected){
     btn.innerHTML = t('btn_continue')+' <i class="ti ti-arrow-right"></i>';
     btn.style.boxShadow = '0 0 0 4px rgba(26,107,71,.25)';
     setTimeout(function(){ if(btn) btn.style.boxShadow=''; }, 800);
     setTimeout(function(){ if(btn) btn.scrollIntoView({behavior:'smooth', block:'nearest'}); }, 100);
   }
-  toast(t('word_room')+' '+code+' '+t('toast_room_selected_suffix'));
+  toast(t('word_room')+' '+code+' '+t(nowSelected?'toast_room_selected_suffix':'toast_room_deselected_suffix'));
+}
+// Rappel "N chambres sélectionnées" au-dessus du bouton Continuer — affiché
+// seulement à partir de 2 (pour 0 ou 1, la mise en avant de la carte suffit,
+// comportement historique inchangé).
+function updateRoomSelectionSummary(){
+  var el = document.getElementById('roomSelectionSummary');
+  if(!el) return;
+  var n = S.selectedRooms.length;
+  if(n < 2){ el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  el.textContent = tf('room_selection_summary', {n: n});
 }
 function renderRoomMap(){
   var canvas=document.getElementById('roomCanvas');if(!canvas||!CFG.hotelPlan)return;
@@ -3040,7 +3075,7 @@ function renderRoomMap(){
     ctx.drawImage(img,0,0,canvas.width,canvas.height);
     var scx=canvas.width/540,scy=canvas.height/380;
     CFG.rooms.filter(function(r){return r.available!==false;}).forEach(function(r){
-      var isSel=S.selectedRoom&&S.selectedRoom.code===r.code;
+      var isSel=S.selectedRooms.some(function(sr){return sr.code===r.code;});
       var hasPh=r.photos&&r.photos.length>0;
       var cx=r.x*scx,cy=r.y*scy;
       // Halo doux autour de la chambre sélectionnée + ombre portée sur
@@ -3619,7 +3654,16 @@ async function espApplyLogin(data){
   // Injecter dans l'état S comme si le check-in était fait
   S.booking      = data.booking;
   S.checkinDone  = true;
-  S.selectedRoom = CFG.rooms ? CFG.rooms.find(function(r){return r.code===data.booking.facilityCode;}) : null;
+  // facilityCode/selectedRoomCode peuvent porter plusieurs codes séparés
+  // par des virgules (sélection multiple, cf. espGetAccessPoints) — repris
+  // ici à l'identique pour que S.selectedRooms reflète les VRAIES chambres
+  // de la réservation après une connexion/restauration de session.
+  var rawCodes = data.booking.selectedRoomCode || data.booking.facilityCode || '';
+  var codes = rawCodes.split(',').map(function(s){return s.trim();}).filter(Boolean);
+  S.selectedRooms = codes.map(function(code){
+    return (CFG.rooms||[]).find(function(r){return r.code===code;}) || {code:code, name:code, floor:0, tags:[], photos:[]};
+  });
+  S.selectedRoom = S.selectedRooms[0] || null;
 
   espPersistSession();
 
@@ -3824,6 +3868,7 @@ function espLogout(){
   S.booking = null;
   S.checkinDone = false;
   S.selectedRoom = null;
+  S.selectedRooms = [];
   renderEspace();
   toast(t('esp_logout_done'));
 }
@@ -4001,12 +4046,21 @@ function espGetAccessPoints(){
   // (ex: "201,203", cf. doc officielle "Booking Creation") : constaté en
   // pratique (25/08/2026), une réservation avec plusieurs serrures
   // associées n'en affichait qu'une seule ici, faute de les distinguer.
+  // booking.selectedRoomCode (chambre(s) choisie(s) par le client à l'étape
+  // 2, même convention de virgules — cf. finalizeCheckin, demande client
+  // 20/10/2026 "sélection multiple de chambres") est fusionné avec
+  // facilityCode plutôt que de le remplacer : une réservation avec
+  // facilityCode déjà renseigné par le PMS ET un choix client doit garder
+  // les deux, sans doublon.
   var b = S.booking;
-  var codes = (b && b.facilityCode) ? b.facilityCode.split(',').map(function(s){ return s.trim(); }).filter(Boolean) : [];
+  var fcCodes = (b && b.facilityCode) ? b.facilityCode.split(',').map(function(s){ return s.trim(); }).filter(Boolean) : [];
+  var selCodes = (b && b.selectedRoomCode) ? b.selectedRoomCode.split(',').map(function(s){ return s.trim(); }).filter(Boolean) : [];
+  var codes = fcCodes.slice();
+  selCodes.forEach(function(c){ if(codes.indexOf(c)===-1) codes.push(c); });
   if(codes.length){
     return codes.map(function(code){
       var room = (CFG.rooms||[]).find(function(r){ return r.code===code; });
-      var isSelected = code === ((b&&b.selectedRoomCode)||'');
+      var isSelected = selCodes.indexOf(code) > -1;
       return {
         id: code,
         label: (room && (room.name||room.code)) || code,
@@ -5195,6 +5249,27 @@ function renderSummary(){
       gal.innerHTML='<i class="ti ti-bed" style="font-size:32px;color:var(--mu);opacity:.4"></i><div style="font-size:12px;color:var(--mu);opacity:.6">'+t('room_no_photo')+'</div>';
     }
   } else rcCard.style.display='none';
+  // Chambres supplémentaires (sélection multiple) — liste compacte sous la
+  // chambre principale. Libellé du badge ajusté pour ne pas laisser croire
+  // que c'est la SEULE chambre retenue.
+  var badgeLbl=document.getElementById('recapRoomBadgeLabel');
+  var extraEl=document.getElementById('recapExtraRooms');
+  var extraRooms=S.selectedRooms.slice(1);
+  if(badgeLbl) badgeLbl.textContent = extraRooms.length ? t('badge_main_room') : t('badge_selected');
+  if(extraEl){
+    if(extraRooms.length){
+      extraEl.style.display='block';
+      extraEl.innerHTML=extraRooms.map(function(er){
+        return '<div class="card" style="display:flex;align-items:center;gap:10px;padding:10px 12px;margin-top:6px">'
+          +'<div style="width:30px;height:30px;border-radius:8px;background:var(--pl);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0"><i class="ti ti-door"></i></div>'
+          +'<div><div class="rc-code" style="font-size:12px">'+esc(er.code)+'</div>'+(er.name&&er.name!==er.code?'<div class="rc-name" style="font-size:12px">'+esc(er.name)+'</div>':'')+'</div>'
+          +'</div>';
+      }).join('');
+    } else {
+      extraEl.style.display='none';
+      extraEl.innerHTML='';
+    }
+  }
   // Summary lines
   document.getElementById('summaryLines').innerHTML=[
     srow(t('summary_label_booking'),b.code||'—'),
@@ -5284,7 +5359,10 @@ async function finalizeCheckin(syncStatus){
         body: JSON.stringify({
           code: S.booking.code,
           status: syncStatus||'checkedin',
-          selectedRoomCode: (S.selectedRoom && S.selectedRoom.code) || S.booking.facilityCode
+          // Liste des codes séparés par des virgules si plusieurs chambres
+          // choisies (même convention que booking.facilityCode, cf.
+          // espGetAccessPoints) — un accès/une clé numérique par chambre.
+          selectedRoomCode: S.selectedRooms.length ? S.selectedRooms.map(function(r){return r.code;}).join(',') : S.booking.facilityCode
         })
       });
       result = r2.ok ? '' : ' · '+tf('err_sync_status',{status:r2.status});
