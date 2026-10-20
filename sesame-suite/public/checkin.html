@@ -2840,11 +2840,11 @@ function updateDots(){
     if(!d) continue;
     var mk=STEP_MODULES[i];
     var inactive=mk&&!isModuleActive(mk);
-    if(inactive){
-      d.style.opacity='0.25';d.style.pointerEvents='none';
-    } else {
-      d.style.opacity='';d.style.pointerEvents='';
-    }
+    // Étape non activée dans le paramétrage de l'entité : rond retiré de la
+    // frise (pas juste grisé) — demande client 20/10/2026, le scénario
+    // affiché ne doit montrer que les étapes réellement parcourues.
+    d.style.display = inactive ? 'none' : '';
+    if(l) l.style.display = inactive ? 'none' : '';
     d.className='sd'+(i<S.step?' done':i===S.step?' on':'');
     if(l)l.className='sline'+(i<S.step?' done':'');
   }
@@ -6873,6 +6873,7 @@ window.addEventListener('DOMContentLoaded',async function(){
   await loadCfg(); // GET /wa/entityModuleConfig/list — remplace SESAME_CFG
   initLang(); // langue du client — sessionStorage > CFG.lang (si fr/en/es) > fr
   applyBrand();
+  updateDots(); // reflète les modules actifs de CFG dès le 1er affichage (étape 1), pas seulement après un gotoStep
   applyStaticTranslations();
   fetchPaymentStatus();
   handlePaymentReturn();
