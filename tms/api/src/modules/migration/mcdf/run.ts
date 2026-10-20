@@ -69,6 +69,7 @@ const ROLLBACK: [string, string, string[]][] = [
   ['session', 'training_sessions', []],
   ['convention', 'conventions', ['DELETE FROM convention_payers WHERE convention_id = ANY($1)', 'DELETE FROM convention_staff WHERE convention_id = ANY($1)', 'UPDATE conventions SET template_id = NULL WHERE template_id = ANY($1)']],
   ['resource', 'resources', []],
+  ['site', 'resources', ['UPDATE resources SET site_id = NULL WHERE site_id = ANY($1)']],
   ['program', 'programs', ['DELETE FROM tariff_prices WHERE program_id = ANY($1)', 'DELETE FROM program_versions WHERE program_id = ANY($1)']],
   ['qualification', 'person_qualifications', []],
   ['client', 'clients', ['UPDATE persons SET employer_client_id = NULL WHERE employer_client_id = ANY($1)', 'DELETE FROM client_contacts WHERE client_id = ANY($1)']],

@@ -260,8 +260,22 @@ export async function runMcdf(tx: Tx, w: McdfWriter, tables: Map<string, DumpTab
   try { await w.flush(); await tx.query(`RELEASE SAVEPOINT tp`); }
   catch { await tx.query(`ROLLBACK TO SAVEPOINT tp`); w.warn('tariff_price', null, 'Tarifs déjà repris : ignorés.'); }
 
-  // ─── 5. Salles (room) ─────────────────────────────────────────────────────
+  // ─── 5. Sites (un par centre MCDF repris, si plusieurs) et salles (room) ──
   const rooms = await known('resources');
+  const siteOf = new Map<string, string>(); // ENTITY_ID → site
+  if (ents.size > 1) {
+    const names = new Map(T('entity').map((e) => [str(e.ID)!, str(e.NAME)]));
+    for (const e of ents) {
+      const legacy = `site:${e}`;
+      w.read('site');
+      if (rooms.has(legacy)) { siteOf.set(e, rooms.get(legacy)!); w.unchanged('site'); continue; }
+      const uuid = w.newId();
+      rooms.set(legacy, uuid); siteOf.set(e, uuid);
+      w.add('site', 'resources', ['id', 'tenant_id', 'kind', 'name', 'legacy_id', 'code'], [uuid, w.tenantId, 'site', names.get(e) ?? `Centre ${e}`, legacy, e], { id: uuid, legacyId: legacy });
+    }
+    await w.flush();
+  }
+  const site = (r: Row) => siteOf.get(str(r.ENTITY_ID) ?? '') ?? null;
   for (const r of T('room').filter(local)) {
     const id = str(r.ID)!;
     w.read('resource');
@@ -269,9 +283,9 @@ export async function runMcdf(tx: Tx, w: McdfWriter, tables: Map<string, DumpTab
     const uuid = w.newId();
     rooms.set(id, uuid);
     const a = address(r);
-    w.add('resource', 'resources', ['id', 'tenant_id', 'kind', 'name', 'location', 'address', 'archived_at', 'legacy_id', 'code', 'color', 'hourly_cost', 'is_external',
+    w.add('resource', 'resources', ['id', 'tenant_id', 'site_id', 'kind', 'name', 'location', 'address', 'archived_at', 'legacy_id', 'code', 'color', 'hourly_cost', 'is_external',
       'uncontrolled', 'postal_address', 'contact', 'logistic_type_id', 'legacy'],
-    [uuid, w.tenantId, 'room', str(r.NAME) ?? str(r.CODE) ?? `Salle ${id}`, (a as any).city ?? null, [a.line1, a.line2, a.postal_code, a.city].filter(Boolean).join(', ') || null,
+    [uuid, w.tenantId, site(r), 'room', str(r.NAME) ?? str(r.CODE) ?? `Salle ${id}`, (a as any).city ?? null, [a.line1, a.line2, a.postal_code, a.city].filter(Boolean).join(', ') || null,
       bool(r.ACTIVATED) === false ? new Date().toISOString() : null, id, str(r.CODE), str(r.COLOR), num(r.HOURLY_COST), !!bool(r.EXTERNAL), !!bool(r.UNCONTROLLED),
       JSON.stringify(a), str(r.CONTACT_NAME) || str(r.CONTACT_PHONE) || str(r.CONTACT_EMAIL) ? JSON.stringify({ name: str(r.CONTACT_NAME), phone: str(r.CONTACT_PHONE), email: str(r.CONTACT_EMAIL) }) : null,
       ref('logistic_type', r.LOGISTIC_TYPE_ID), JSON.stringify(leftovers(r, USED.room))], { id: uuid, legacyId: id });
@@ -355,10 +369,10 @@ export async function runMcdf(tx: Tx, w: McdfWriter, tables: Map<string, DumpTab
     const cap = int(r.NUMBER_MAXI), min = int(r.NUMBER_MINI);
     const hours = num(r.HOURS);
     w.add('session', 'training_sessions', ['id', 'tenant_id', 'program_version_id', 'kind', 'client_id', 'title', 'status', 'capacity', 'timezone', 'starts_on', 'ends_on',
-      'location', 'is_historical', 'reference', 'min_participants', 'target_minutes', 'legacy_id', 'hourly_rate', 'daily_rate', 'planned_days', 'default_trainer_id',
+      'location', 'site_id', 'is_historical', 'reference', 'min_participants', 'target_minutes', 'legacy_id', 'hourly_rate', 'daily_rate', 'planned_days', 'default_trainer_id',
       'default_room_id', 'manager_person_id', 'discipline_id', 'default_times', 'registrations_open', 'overbooking', 'motive', 'outfit', 'features', 'custom_fields', 'legacy', 'created_at'],
     [uuid, w.tenantId, programVersion.get(program), lineSession.has(id) ? 'intra' : 'inter', lineSession.get(id) ?? null, str(r.NAME) ?? `Session ${id}`, status,
-      cap && cap > 0 ? cap : null, o.timezone, start, end && start && end < start ? start : end, null, historical, reference, min && min >= 0 ? min : null,
+      cap && cap > 0 ? cap : null, o.timezone, start, end && start && end < start ? start : end, null, site(r), historical, reference, min && min >= 0 ? min : null,
       hours && hours > 0 ? Math.round(hours * 60) : null, id, num(r.HOURLY_RATE), num(r.DAILY_RATE), num(r.DAYS), pref(r.TRAINER_ID), rooms.get(str(r.ROOM_ID) ?? '') ?? null,
       pref(r.MANAGER_ID), ref('discipline', r.DISCIPLINE_ID),
       JSON.stringify({ start: time(r.START_TIME), end: time(r.END_TIME), week_days: str(r.WEEK_DAY) }), bool(r.OPENED), bool(r.SURBOOKING), str(r.MOTIF), str(r.OUTFIT),
