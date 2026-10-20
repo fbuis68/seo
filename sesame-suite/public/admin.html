@@ -113,6 +113,20 @@ html{scrollbar-width:thin;scrollbar-color:var(--mu) transparent}
    scrollbar fine/thémée ci-dessus, volontaire sur le reste de la page. */
 [style*="overflow-y:auto"][style*="max-height"],[style*="overflow:auto"][style*="max-height"]{scrollbar-width:none;-ms-overflow-style:none}
 [style*="overflow-y:auto"][style*="max-height"]::-webkit-scrollbar,[style*="overflow:auto"][style*="max-height"]::-webkit-scrollbar{display:none}
+/* Fenêtres modales redimensionnées pour ne plus défiler DANS la fenêtre
+   (§ demande client 20/10/2026) — le scroll bascule sur le fond plein écran
+   (même principe que .modal-bg/.modal-box dans crm.html), qui défile
+   naturellement si le contenu dépasse la hauteur de l'écran. Ciblé
+   précisément sur max-height:90vh — les autres max-height (ex: 280px sur
+   une liste déroulante de résultats) restent des listes volontairement
+   contraintes, pas des fenêtres modales entières. align-items:flex-start
+   obligatoire : center sur un conteneur flex qui doit défiler coupe le haut
+   du contenu (comportement connu, pas un oubli). */
+[style*="max-height:90vh"]{max-height:none !important}
+div[style*="position:fixed"][style*="inset:0"]:has(>[style*="max-height:90vh"]){
+  align-items:flex-start !important;
+  overflow-y:auto !important;
+}
 /* SHELL */
 .sh{display:grid;grid-template-columns:220px 1fr;grid-template-rows:52px 1fr;height:100vh;overflow:hidden}
 /* TOPBAR */
