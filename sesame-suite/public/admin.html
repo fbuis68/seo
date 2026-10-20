@@ -15680,10 +15680,10 @@ async function resaLoadAutologinQr(code){
     var data = await r.json();
     if(RESA_DETAIL_CODE !== code) return;
     if(!r.ok){ body.innerHTML = '<div style="font-size:12px;color:#b45309">⚠ '+esc(data.error||'Lien indisponible')+'</div>'; return; }
-    body.innerHTML = '<img src="'+data.qrImage+'" alt="QR connexion automatique" style="width:160px;height:160px;border-radius:10px;border:1px solid var(--bdr);display:block;margin:0 auto">'
-      + '<div style="font-size:11px;color:var(--mu);margin-top:8px">Scanné ou cliqué, ce lien connecte directement le client à son espace, sans ressaisir email/code.</div>'
-      + '<div style="display:flex;gap:6px;align-items:center;margin-top:8px">'
+    body.innerHTML = '<div style="font-size:11px;color:var(--mu);margin-bottom:8px">Cliqué ou envoyé par email, ce lien connecte directement le client à son espace, sans ressaisir email/code.</div>'
+      + '<div style="display:flex;gap:6px;align-items:center">'
       + '<input type="text" value="'+esc(data.url)+'" readonly style="flex:1;font-family:monospace;font-size:11px" onclick="this.select()">'
+      + '<button class="btn btn-s" style="width:auto;flex-shrink:0;padding:8px 10px" onclick="resaSendAutologinLinkByEmail(\''+esc(code)+'\',\'espace\',this)" title="Envoyer ce lien par email"><i class="ti ti-mail"></i></button>'
       + '</div>';
   }catch(e){
     body.innerHTML = '<div style="font-size:12px;color:var(--mu)">Lien indisponible</div>';
@@ -15702,13 +15702,44 @@ async function resaLoadAutologinCheckinQr(code){
     var data = await r.json();
     if(RESA_DETAIL_CODE !== code) return;
     if(!r.ok){ body.innerHTML = '<div style="font-size:12px;color:#b45309">⚠ '+esc(data.error||'Lien indisponible')+'</div>'; return; }
-    body.innerHTML = '<img src="'+data.qrImage+'" alt="QR connexion automatique — check-in" style="width:160px;height:160px;border-radius:10px;border:1px solid var(--bdr);display:block;margin:0 auto">'
-      + '<div style="font-size:11px;color:var(--mu);margin-top:8px">Scanné ou cliqué, ce lien connecte directement le client et l\'amène sur le processus de check-in, sans ressaisir email/code.</div>'
-      + '<div style="display:flex;gap:6px;align-items:center;margin-top:8px">'
+    body.innerHTML = '<div style="font-size:11px;color:var(--mu);margin-bottom:8px">Cliqué ou envoyé par email, ce lien connecte directement le client et l\'amène sur le processus de check-in, sans ressaisir email/code.</div>'
+      + '<div style="display:flex;gap:6px;align-items:center">'
       + '<input type="text" value="'+esc(data.url)+'" readonly style="flex:1;font-family:monospace;font-size:11px" onclick="this.select()">'
+      + '<button class="btn btn-s" style="width:auto;flex-shrink:0;padding:8px 10px" onclick="resaSendAutologinLinkByEmail(\''+esc(code)+'\',\'checkin\',this)" title="Envoyer ce lien par email"><i class="ti ti-mail"></i></button>'
       + '</div>';
   }catch(e){
     body.innerHTML = '<div style="font-size:12px;color:var(--mu)">Lien indisponible</div>';
+  }
+}
+/**
+ * Envoi en un clic (pas de formulaire compose) du lien de connexion
+ * automatique affiché juste au-dessus — réutilise POST /wa/booking/sendEmail
+ * (même route que "Envoyer un email", qui gère déjà proprement l'absence
+ * d'adresse email sur la réservation) avec un sujet/message prêts à
+ * l'emploi. kind distingue le lien "Mon espace" du lien "check-in" pour
+ * adapter le texte du message.
+ */
+async function resaSendAutologinLinkByEmail(code, kind, btn){
+  var linkInput = btn.previousElementSibling;
+  var url = linkInput ? linkInput.value : '';
+  if(!url) return;
+  var subject = kind==='checkin' ? 'Votre lien de check-in en ligne' : 'Votre accès à votre espace client';
+  var message = (kind==='checkin'
+    ? 'Bonjour,\n\nVoici votre lien pour effectuer votre check-in en ligne :\n'
+    : 'Bonjour,\n\nVoici votre lien pour accéder à votre espace client :\n') + url;
+  var orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spin"></div>';
+  try{
+    var r = await adminFetch('/wa/booking/sendEmail', {method:'POST', body:JSON.stringify({code:code, subject:subject, message:message})});
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error || 'Erreur lors de l\'envoi.');
+    toast('Lien envoyé par email ✓');
+  }catch(e){
+    toast(e.message || 'Erreur lors de l\'envoi.');
+  }finally{
+    btn.disabled = false;
+    btn.innerHTML = orig;
   }
 }
 /** facilityCode vide (chaîne '') si resaAccessCodesFor n'a trouvé aucun
