@@ -36,6 +36,9 @@ async function main() {
 
   const size = statSync(file).size;
   log(`Sauvegarde ${file} (${Math.round(size / 1024 / 1024)} Mo)`);
+  // Lot MCDF précédent resté en simulation (rien n'a été écrit) : abandonné pour repartir proprement.
+  const stale = await db.tenantTx(tenantId, (tx) => tx.query(`SELECT id FROM import_batches WHERE source_software='mcdf' AND status IN ('uploaded','detected','mapped','simulated','rejected','failed')`));
+  for (const x of stale.rows) { await m.cancel(ctx, x.id); log(`Lot précédent abandonné : ${x.id}`); }
   const b = await m.create(ctx, { sourceSoftware: 'mcdf', sourceInstanceId: arg('instance') ?? 'mcdf' });
   const up = await m.upload(ctx, b.id, createReadStream(file), basename(file), { maxBytes: 8 * 1024 ** 3 });
   if (up.status === 'rejected') throw new Error(`Refusée : ${JSON.stringify(up.diagnostic.rejections)}`);
