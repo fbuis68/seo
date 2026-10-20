@@ -386,17 +386,6 @@ input:focus,select:focus{border-color:var(--accent)}
   <button type="button" onclick="faceIdUseLinkInstead()" style="background:none;border:none;color:var(--mu);font-size:12px;cursor:pointer;text-decoration:underline" data-i18n="faceid_use_link">Utiliser mon lien de réservation</button>
 </div>
 
-<!-- ════ CHOIX DE LA PORTE pour Face ID — affiché à l'activation seulement
-     si la réservation a PLUSIEURS accès (cf. faceIdShowDoorPicker) : lequel
-     ouvrir automatiquement une fois le Face ID vérifié. ════ -->
-<div id="faceIdDoorPicker" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;align-items:center;justify-content:center;padding:16px">
-  <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:380px;box-shadow:0 24px 60px rgba(0,0,0,.4);padding:24px;position:relative">
-    <div style="font-size:16px;font-weight:700;margin-bottom:4px" data-i18n="faceid_picker_title">Quelle porte ouvrir ?</div>
-    <div style="font-size:12px;color:var(--mu);margin-bottom:16px" data-i18n="faceid_picker_desc">Face ID ouvrira directement cet accès.</div>
-    <div id="faceIdDoorList"></div>
-  </div>
-</div>
-
 <div class="scroll" id="scrollArea">
 <div id="scr-sejour" class="scr on">
 
@@ -2052,7 +2041,6 @@ var I18N_FR = {
   faceid_lock_title:'Authentification requise',faceid_lock_desc:'Déverrouillez avec Face ID pour accéder à Mon espace sur cet appareil.',
   faceid_unlock_btn:'Déverrouiller',faceid_use_link:'Utiliser mon lien de réservation',
   faceid_unsupported:"Face ID n'est pas disponible sur cet appareil",faceid_enabled:'Face ID activé ✓',faceid_enable_failed:"Impossible d'activer Face ID",faceid_failed:'Authentification échouée',
-  faceid_picker_title:'Quelle porte ouvrir ?',faceid_picker_desc:'Face ID ouvrira directement cet accès.',
   esp_tab_key:'Clé digitale',esp_tab_loyalty:'Points',esp_tab_menage:'Ménage',
   esp_tab_histo:'Historique',esp_tab_livret:'Livret',esp_tab_boutique:'Boutique',
   esp_tab_rs:'Room Service',
@@ -2311,7 +2299,6 @@ var I18N_EN = {
   faceid_lock_title:'Authentication required',faceid_lock_desc:'Unlock with Face ID to access My Space on this device.',
   faceid_unlock_btn:'Unlock',faceid_use_link:'Use my booking link instead',
   faceid_unsupported:'Face ID is not available on this device',faceid_enabled:'Face ID enabled ✓',faceid_enable_failed:'Could not enable Face ID',faceid_failed:'Authentication failed',
-  faceid_picker_title:'Which door to open?',faceid_picker_desc:'Face ID will open this access directly.',
   esp_tab_key:'Digital key',esp_tab_loyalty:'Points',esp_tab_menage:'Housekeeping',
   esp_tab_histo:'History',esp_tab_livret:'Guidebook',esp_tab_boutique:'Shop',
   esp_tab_rs:'Room Service',
@@ -2572,7 +2559,6 @@ var I18N_ES = {
   faceid_lock_title:'Autenticación requerida',faceid_lock_desc:'Desbloquee con Face ID para acceder a Mi espacio en este dispositivo.',
   faceid_unlock_btn:'Desbloquear',faceid_use_link:'Usar mi enlace de reserva',
   faceid_unsupported:'Face ID no está disponible en este dispositivo',faceid_enabled:'Face ID activado ✓',faceid_enable_failed:'No se pudo activar Face ID',faceid_failed:'Autenticación fallida',
-  faceid_picker_title:'¿Qué puerta abrir?',faceid_picker_desc:'Face ID abrirá directamente este acceso.',
   esp_tab_key:'Llave digital',esp_tab_loyalty:'Puntos',esp_tab_menage:'Limpieza',
   esp_tab_histo:'Historial',esp_tab_livret:'Guía',esp_tab_boutique:'Tienda',
   esp_tab_rs:'Servicio de habitaciones',
@@ -3687,20 +3673,6 @@ function espClearFaceIdCred(){
   var o = espGetSessionObj();
   if(!o) return;
   delete o.faceIdCred;
-  delete o.faceIdAccessPoint;
-  try{ localStorage.setItem(ESP_SESSION_KEY, JSON.stringify(o)); }catch(e){}
-}
-// Porte associée au déverrouillage Face ID (demande client 17/10/2026) —
-// choisie à l'activation si plusieurs accès existent sur la réservation
-// (cf. faceIdShowDoorPicker), sinon le seul disponible est pris par
-// défaut sans demander.
-function espFaceIdAccessPoint(){
-  var o = espGetSessionObj();
-  return (o && o.faceIdAccessPoint) || null;
-}
-function espSetFaceIdAccessPoint(ap){
-  var o = espGetSessionObj() || { entityCode: ENTITY_CODE, bookingCode: S.booking ? S.booking.code : undefined };
-  o.faceIdAccessPoint = ap ? { facilityCode: ap.facilityCode || '', label: ap.label || '' } : null;
   try{ localStorage.setItem(ESP_SESSION_KEY, JSON.stringify(o)); }catch(e){}
 }
 function faceIdSupported(){
@@ -3756,39 +3728,11 @@ async function faceIdEnable(){
       },
     });
     espSetFaceIdCred(faceIdArrToB64(cred.rawId));
-    // Porte associée au déverrouillage Face ID : demandée seulement s'il y
-    // a un choix réel (plusieurs accès sur cette réservation), sinon le
-    // seul disponible est pris directement.
-    var pts = espGetAccessPoints();
-    if(pts.length > 1){
-      faceIdShowDoorPicker(pts);
-    } else {
-      espSetFaceIdAccessPoint(pts[0] || null);
-      toast(t('faceid_enabled'));
-      espRenderFaceIdBanner();
-    }
+    toast(t('faceid_enabled'));
+    espRenderFaceIdBanner();
   }catch(e){
     toast(t('faceid_enable_failed'));
   }
-}
-function faceIdShowDoorPicker(pts){
-  var list = document.getElementById('faceIdDoorList');
-  list.innerHTML = pts.map(function(ap, idx){
-    return '<div class="card" style="display:flex;align-items:center;gap:12px;padding:12px;cursor:pointer;margin-bottom:8px" onclick="faceIdPickDoor('+idx+')">'
-      +'<div style="width:38px;height:38px;border-radius:10px;background:var(--pl);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0"><i class="ti '+(ap.ico||'ti-key')+'"></i></div>'
-      +'<div style="font-size:14px;font-weight:600">'+esc(ap.label)+'</div>'
-      +'</div>';
-  }).join('');
-  document.getElementById('faceIdDoorPicker').style.display = 'flex';
-}
-function faceIdPickDoor(idx){
-  var pts = espGetAccessPoints();
-  var ap = pts[idx];
-  if(!ap) return;
-  espSetFaceIdAccessPoint(ap);
-  document.getElementById('faceIdDoorPicker').style.display = 'none';
-  toast(t('faceid_enabled'));
-  espRenderFaceIdBanner();
 }
 // Gate appelé au boot juste après une restauration de session réussie —
 // bloque l'affichage de "Mon espace" tant que la vérification biométrique
@@ -3815,32 +3759,10 @@ async function faceIdUnlock(){
       },
     });
     document.getElementById('faceIdLock').style.display = 'none';
-    await faceIdOpenAssociatedDoor();
   }catch(e){
     toast(t('faceid_failed'));
   }
   btn.disabled = false;
-}
-// Ouvre directement la porte associée au Face ID (demande client
-// 17/10/2026 : "l'ouverture Face ID pourrait déclencher l'ouverture d'une
-// porte en particulier") — même appel/mêmes messages que
-// espOpenAccessConfirm (bouton manuel dans l'onglet Clé digitale), ici
-// déclenché automatiquement juste après la vérification biométrique
-// réussie plutôt qu'au clic sur un bouton séparé.
-async function faceIdOpenAssociatedDoor(){
-  var ap = espFaceIdAccessPoint();
-  if(!ap || !S.booking) return;
-  try{
-    var r = await apiFetch(API_BASE+'/wa/booking/openDoor', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({code:S.booking.code, facilityCode: ap.facilityCode||undefined})
-    });
-    var data = await r.json().catch(function(){ return {}; });
-    if(!r.ok) throw new Error(data.error || ('HTTP '+r.status));
-    toast(tf(data.simulated ? 'esp_key_unlocked_sim' : 'esp_key_unlocked_real_label', {label: ap.label||t('word_access')}));
-  }catch(e){
-    toast(t('esp_door_open_error'));
-  }
 }
 // Repli toujours disponible — ne jamais bloquer définitivement l'accès
 // (matériel biométrique indisponible, visage non reconnu, Face ID
