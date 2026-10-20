@@ -755,7 +755,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
        applyRoleVisibility/applySectorVisibility, portée sur n'importe quel
        élément via querySelectorAll) sont reportées au niveau de chaque item
        plutôt que du groupe, qui lui doit toujours rester visible. -->
-  <div class="ns-group">
+  <div class="ns-group" data-default-collapsed="1">
     <div class="ns" onclick="toggleNavSection(this)">Administration<i class="ti ti-chevron-down ns-chevron"></i></div>
     <div class="ns-items">
       <div class="ni sesame-only" data-pan="hotels" onclick="showPan('hotels')" style="display:none;background:rgba(46,204,113,.06);border-left:3px solid var(--a)"><i class="ti ti-building-skyscraper"></i>Entités <span class="nibadge">Multi</span></div>
@@ -16643,7 +16643,7 @@ function initNavSections(){
     if(!label) return;
     var saved;
     try{ saved = localStorage.getItem(navSectionKey(label)); }catch(e){ saved = null; }
-    if(saved === '1') group.classList.add('collapsed');
+    if(saved === '1' || (saved === null && group.dataset.defaultCollapsed === '1')) group.classList.add('collapsed');
   });
 }
 // Déplie TOUS les .ns-group ancêtres de l'item (pas seulement le plus
