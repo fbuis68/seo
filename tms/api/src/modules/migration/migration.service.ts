@@ -83,9 +83,10 @@ export class MigrationService {
   }
 
   /** Dépôt du paquet (flux) : taille bornée par l'offre, empreinte SHA-256, inventaire sécurisé. */
-  async upload(ctx: RequestContext, id: string, stream: NodeJS.ReadableStream, filename: string) {
+  async upload(ctx: RequestContext, id: string, stream: NodeJS.ReadableStream, filename: string, opts: { maxBytes?: number } = {}) {
     const e = await this.ent.get(ctx.tenantId);
-    const limit = Math.min(e.limits.importPackageBytes, HARD_PACKAGE_LIMIT);
+    // opts.maxBytes : commande serveur (administrateur) uniquement, jamais exposé par l'API HTTP.
+    const limit = opts.maxBytes ?? Math.min(e.limits.importPackageBytes, HARD_PACKAGE_LIMIT);
     const chunks: Buffer[] = []; let size = 0;
     await new Promise<void>((resolve, reject) => {
       stream.on('data', (c: Buffer) => {

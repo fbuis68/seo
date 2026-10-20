@@ -33,6 +33,18 @@ Ensuite, dans Réglages → Reprise des données :
 
 Le fichier est lu, jamais exécuté : seuls `CREATE TABLE` et `INSERT INTO` sont interprétés.
 
+## Import en ligne de commande (gros volumes)
+
+Sans limite de dépôt ni délai HTTP. Le lot apparaît ensuite dans Réglages → Reprise (rapport, annulation).
+
+```
+cd /opt/tms/src/tms
+docker compose run --rm -v /data/mcdf-dump:/import:ro -e NODE_OPTIONS=--max-old-space-size=6144 api \
+  node dist/scripts/mcdf-import.js --file /import/mcdf-donnees.sql.gz --email moi@centre.fr                       # liste des organismes
+#   … --entities E1            → simulation (rien n'est écrit)
+#   … --entities E1 --publish  → simulation puis publication
+```
+
 ## Correspondance
 
 ### Référentiels

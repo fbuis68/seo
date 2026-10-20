@@ -12,7 +12,12 @@ export const MCDF_TABLES = new Set([
   'invoice_attendee', 'payment', 'payment_invoice', 'actor_document', 'company_document', 'convention_document', 'session_document', 'training_document',
 ]);
 
-export const parseMcdf = (buf: Buffer) => parseDump(buf, { only: MCDF_TABLES });
+/** Colonnes volumineuses inutiles à la reprise (photos, logos, images en base64) : non chargées en mémoire. */
+const HEAVY = new Set(['PHOTO', 'IMAGE', 'LOGO', 'IT_ACCESS_TOKEN']);
+export const parseMcdf = (buf: Buffer) => parseDump(buf, {
+  only: MCDF_TABLES,
+  skipColumns: (t, c) => HEAVY.has(c) || ((c === 'CONTENT' || c === 'DOCUMENT') && !t.endsWith('_document')),
+});
 
 /** Diagnostic : organismes (table entity) avec leurs volumes, pour choisir le périmètre. */
 export function mcdfDiagnostic(tables: Map<string, DumpTable>) {

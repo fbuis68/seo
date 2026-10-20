@@ -18,7 +18,7 @@ export const looksLikeDump = (b: Buffer) => {
 const BQ = 0x60, SQ = 0x27, BS = 0x5c, LP = 0x28, RP = 0x29, COMMA = 0x2c, SEMI = 0x3b;
 const ESC: Record<number, number> = { 0x30: 0, 0x27: 0x27, 0x22: 0x22, 0x62: 8, 0x6e: 10, 0x72: 13, 0x74: 9, 0x5a: 26, 0x5c: 0x5c };
 
-export function parseDump(input: Buffer, opts: { only?: Set<string> } = {}): Map<string, DumpTable> {
+export function parseDump(input: Buffer, opts: { only?: Set<string>; skipColumns?: (table: string, column: string) => boolean } = {}): Map<string, DumpTable> {
   const buf = isGzip(input) ? gunzipSync(input) : input;
   const tables = new Map<string, DumpTable>();
   const n = buf.length;
@@ -126,6 +126,7 @@ export function parseDump(input: Buffer, opts: { only?: Set<string> } = {}): Map
         }
         continue;
       }
+      const skip = new Set(opts.skipColumns ? t.columns.map((c, k) => (opts.skipColumns!(t.name.toLowerCase(), c.toUpperCase()) ? k : -1)).filter((k) => k >= 0) : []);
       const bitCols = new Set(t.types.map((ty, k) => (ty.startsWith('bit') ? k : -1)).filter((k) => k >= 0));
       for (;;) {
         skipWs();
@@ -144,8 +145,9 @@ export function parseDump(input: Buffer, opts: { only?: Set<string> } = {}): Map
         const row: DumpValue[] = new Array(t.columns.length).fill(null);
         raw.forEach((v, k) => {
           const col = order ? order[k] : k;
-          if (col < 0 || col >= row.length) return;
-          row[col] = decode(v, t.types[col], bitCols.has(col));
+          if (col < 0 || col >= row.length || skip.has(col)) return;
+          const d = decode(v, t.types[col], bitCols.has(col));
+          row[col] = typeof d === 'string' && d.length <= 32 ? intern(d) : d;
         });
         t.rows.push(row);
       }
@@ -159,6 +161,15 @@ export function parseDump(input: Buffer, opts: { only?: Set<string> } = {}): Map
 }
 
 const BINARY = /^(tiny|medium|long)?blob|^binary|^varbinary/;
+/** Mutualise les valeurs courtes répétées (ENTITY_ID, statuts, dates) : mémoire divisée sur les grosses tables. */
+const pool = new Map<string, string>();
+function intern(s: string) {
+  const x = pool.get(s);
+  if (x !== undefined) return x;
+  if (pool.size > 2_000_000) pool.clear();
+  pool.set(s, s);
+  return s;
+}
 function decode(v: DumpValue | { bits: string }, type: string, isBit: boolean): DumpValue {
   if (v === null) return null;
   if (typeof v === 'object' && !Buffer.isBuffer(v)) return String(parseInt(v.bits || '0', 2));

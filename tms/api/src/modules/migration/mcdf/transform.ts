@@ -40,7 +40,8 @@ export interface McdfDocument { table: string; legacyId: string; ownerType: stri
  */
 export async function runMcdf(tx: Tx, w: McdfWriter, tables: Map<string, DumpTable>, o: McdfOptions) {
   const ents = new Set(o.entityIds);
-  const T = (name: string) => rowsOf(tables.get(name));
+  const cache = new Map<string, Row[]>();
+  const T = (name: string) => { let r = cache.get(name); if (!r) { r = rowsOf(tables.get(name)); cache.set(name, r); tables.get(name) && (tables.get(name)!.rows = []); } return r; };
   const mine = (r: Row) => r.ENTITY_ID == null || ents.has(String(r.ENTITY_ID));
   const local = (r: Row) => r.ENTITY_ID != null && ents.has(String(r.ENTITY_ID));
   const docs: McdfDocument[] = [];
@@ -162,10 +163,11 @@ export async function runMcdf(tx: Tx, w: McdfWriter, tables: Map<string, DumpTab
     if (c && bool(r.CONTACT) && !existingPersons.has(str(r.ID)!)) contactPairs.set(`${c}|${persons.get(str(r.ID)!)}`, contactPairs.get(`${c}|${persons.get(str(r.ID)!)}`) ?? false);
   }
   const actorById = new Map(actors.map((a) => [str(a.ID)!, a]));
+  const actorByUuid = new Map(actors.map((a) => [persons.get(str(a.ID)!)!, a]));
   const actorCompany = new Map(T('actor_company').filter(local).map((r) => [str(r.ID)!, str(r.ACTOR_ID)]));
   for (const [k, inv] of contactPairs) {
     const [c, p] = k.split('|');
-    const a = actorById.get([...persons.entries()].find(([, u]) => u === p)?.[0] ?? '');
+    const a = actorByUuid.get(p);
     w.add('contact', 'client_contacts', ['tenant_id', 'client_id', 'person_id', 'position', 'receives_invoices'], [w.tenantId, c, p, a ? str(a.AS_FUNCTION) : null, inv], { journal: false });
   }
   await w.flush();
@@ -328,10 +330,11 @@ export async function runMcdf(tx: Tx, w: McdfWriter, tables: Map<string, DumpTab
   const sessions = await known('training_sessions');
   const sessRows = T('session').filter(local);
   const refUsed = new Set((await many(tx, `SELECT lower(reference) r FROM training_sessions WHERE reference IS NOT NULL`)).map((x) => x.r));
+  const convById = new Map(convRows.map((x) => [str(x.ID)!, x]));
   const lineSession = new Map<string, string>(); // session legacy → client (intra) quand une seule convention/un seul client
   const sessClients = new Map<string, Set<string>>();
   for (const l of T('convention_training')) {
-    const s = str(l.SESSION_ID ?? l.session_id), c = convRows.find((x) => str(x.ID) === str(l.CONVENTION_ID));
+    const s = str(l.SESSION_ID ?? l.session_id), c = convById.get(str(l.CONVENTION_ID) ?? '');
     if (s && c && payer(c.CUSTOMER_ID)) { sessClients.set(s, (sessClients.get(s) ?? new Set()).add(payer(c.CUSTOMER_ID)!)); }
   }
   for (const [s, set] of sessClients) if (set.size === 1) lineSession.set(s, [...set][0]);
@@ -442,7 +445,7 @@ export async function runMcdf(tx: Tx, w: McdfWriter, tables: Map<string, DumpTab
     if (enrollments.has(key)) { w.unchanged('enrollment'); return; }
     const uuid = w.newId();
     enrollments.set(key, uuid);
-    const personRow = actorById.get([...persons.entries()].find(([, u]) => u === person)?.[0] ?? '');
+    const personRow = actorByUuid.get(person);
     const client = (conv ? convClient.get(conv) : null) ?? (personRow ? clients.get(str(personRow.COMPANY_ID) ?? '') : null) ?? null;
     w.add('enrollment', 'enrollments', ['id', 'tenant_id', 'session_id', 'person_id', 'client_id', 'status', 'legacy_id', 'convention_id', 'objective'],
       [uuid, w.tenantId, session, person, client, 'confirmed', legacyId, conv, objective], { id: uuid, legacyId });
@@ -642,6 +645,7 @@ export async function runMcdf(tx: Tx, w: McdfWriter, tables: Map<string, DumpTab
   await w.flush();
   const newInvIds = new Set(newInv.map((x) => str(x.r.ID)!));
   const pos = new Map<string, number>();
+  const instLinks: [string, string][] = [];
   for (const r of T('invoice_line').filter(mine)) {
     w.read('invoice_line');
     const invLegacy = str(r.INVOICE_ID) ?? '';
@@ -660,7 +664,12 @@ export async function runMcdf(tx: Tx, w: McdfWriter, tables: Map<string, DumpTab
       JSON.stringify({ training_code: str(r.TRAINING_CODE), session_code: str(r.SESSION_CODE), session_name: str(r.SESSION_NAME), trainer: str(r.TRAINER_NAME),
         convention_code: str(r.CONVENTION_CODE), convention_name: str(r.CONVENTION_NAME), support_number: str(r.CONVENTION_SUPPORT_NUMBER) })], { id: uuid, legacyId: str(r.ID) });
     const inst = installmentByLine.get(str(r.ID)!);
-    if (inst) await w.flush(), await tx.query(`UPDATE convention_installments SET invoice_line_id=$2 WHERE id=$1`, [inst, uuid]);
+    if (inst) instLinks.push([inst, uuid]);
+  }
+  await w.flush();
+  for (let i = 0; i < instLinks.length; i += 5000) {
+    const c = instLinks.slice(i, i + 5000);
+    await tx.query(`UPDATE convention_installments ci SET invoice_line_id=t.l FROM unnest($1::uuid[], $2::uuid[]) t(i, l) WHERE ci.id=t.i`, [c.map((x) => x[0]), c.map((x) => x[1])]);
   }
   for (const r of T('invoice_attendee').filter(mine)) {
     w.read('invoice_attendee');

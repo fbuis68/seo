@@ -6,7 +6,7 @@ import { AppModule } from './app.module';
 import { config } from './config';
 
 export async function createApp(): Promise<NestExpressApplication> {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true, logger: process.env.NODE_ENV === 'test' ? false : undefined });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true, logger: process.env.NODE_ENV === 'test' ? false : process.env.TMS_CLI === '1' ? ['error', 'warn'] : undefined });
   // Nombre de proxys de confiance devant l'API (ex. 2 = HTTPS de l'hôte + nginx) : IP réelle pour la limitation.
   app.set('trust proxy', Number(process.env.TRUST_PROXY ?? 1));
   app.disable('x-powered-by');
