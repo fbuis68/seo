@@ -752,6 +752,7 @@ bookingRouter.get(
 
 interface CreateManualBody {
   roomId: string;
+  roomIds?: string[]; // sélection multiple (demande client, cf. BookingDraft.roomIds)
   startDate: string;
   endDate: string;
   firstName: string;
@@ -781,7 +782,8 @@ bookingRouter.post(
   asyncHandler(async (req, res) => {
     const entity = await resolveEntity(req);
     const b = req.body as CreateManualBody;
-    if (!b.roomId) throw new HttpError(400, "Chambre requise");
+    const roomIds = Array.isArray(b.roomIds) ? b.roomIds.filter(Boolean) : [];
+    if (!b.roomId && !roomIds.length) throw new HttpError(400, "Chambre requise");
     if (!b.firstName?.trim() || !b.lastName?.trim()) throw new HttpError(400, "Nom et prénom requis");
     const emailInput = b.email?.trim() || "";
     if (emailInput && !emailInput.includes("@")) throw new HttpError(400, "Email invalide");
@@ -807,7 +809,8 @@ bookingRouter.post(
       if (n) occupants[cat] = n;
     }
     const draft: BookingDraft = {
-      roomId: b.roomId,
+      roomId: roomIds[0] || b.roomId,
+      roomIds: roomIds.length ? roomIds : undefined,
       startDate: b.startDate,
       endDate: b.endDate,
       firstName: b.firstName.trim(),

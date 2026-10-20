@@ -8515,12 +8515,19 @@ async function walFetchTemplate(){
 }
 
 // ═══════════════════ CRÉER UNE RÉSERVATION (saisie manuelle, personnel) ═══════════════════
-var RC_STATE = { rooms: [], selectedRoom: null };
+// Sélection MULTIPLE de chambres (demande client 20/10/2026 : "une
+// réservation = plusieurs chambres") — même principe que côté check-in
+// client (checkin.html selectRoom/S.selectedRooms) : toggle, pas exclusif.
+// selectedRooms[0] reste la chambre "principale" envoyée comme roomId pour
+// compatibilité ; la liste complète part en roomIds (cf. rcCreateBooking)
+// et aboutit dans Booking.facilityCode (liste séparée par des virgules,
+// une clé numérique par chambre, cf. espGetAccessPoints côté client).
+var RC_STATE = { rooms: [], selectedRooms: [] };
 
 function resaOpenCreate(){
   var today = new Date();
   var tomorrow = new Date(today.getTime()+86400000);
-  RC_STATE = { rooms: [], selectedRoom: null };
+  RC_STATE = { rooms: [], selectedRooms: [] };
   document.getElementById('resa-create-body').innerHTML =
     '<div class="g2">'
     + '<div class="fi"><label class="lb">Arrivée</label><input type="date" id="rc-start" value="'+today.toISOString().slice(0,10)+'"></div>'
@@ -8545,7 +8552,7 @@ async function rcSearchRooms(){
   var end = document.getElementById('rc-end').value;
   if(!start || !end || end<=start){ rcShowError('Dates invalides (départ après arrivée).'); return; }
   RC_STATE.start = start; RC_STATE.end = end;
-  RC_STATE.selectedRoom = null;
+  RC_STATE.selectedRooms = [];
   document.getElementById('rc-guest-section').innerHTML = '';
   try{
     var r = await adminFetch('/wa/booking/availableRooms?start='+encodeURIComponent(start)+'&end='+encodeURIComponent(end));
@@ -8563,19 +8570,30 @@ function rcRenderRooms(){
   // (simple badge d'info, jamais bloquant) — le personnel peut avoir
   // besoin de rajouter une clé à une réservation existante ou de créer une
   // clé "staff" sans rapport avec l'occupation réelle.
-  el.innerHTML = '<div style="font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px">Chambres</div>'
+  var n = RC_STATE.selectedRooms.length;
+  el.innerHTML = '<div style="font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px">Chambres'+(n>1?' — '+n+' sélectionnées':'')+'</div>'
     + RC_STATE.rooms.map(function(rm, i){
-        var on = RC_STATE.selectedRoom && RC_STATE.selectedRoom.id===rm.id;
+        var on = RC_STATE.selectedRooms.some(function(r){return r.id===rm.id;});
         return '<div onclick="rcSelectRoom('+i+')" style="border:1.5px solid '+(on?'var(--am)':'var(--bdr)')+';border-radius:var(--rs);padding:10px 12px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center'+(on?';background:rgba(139,26,46,.05)':'')+'">'
-          + '<div><div style="font-weight:600;font-size:13px;display:flex;align-items:center;gap:6px">'+esc(rm.name)+(rm.occupied?'<span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:8px;background:rgba(133,79,11,.1);color:#854f0b">Occupée</span>':'')+'</div><div style="font-size:11px;color:var(--mu)">'+[rm.category, rm.capacity?('jusqu’à '+rm.capacity+' pers.'):null].filter(Boolean).map(esc).join(' · ')+'</div></div>'
+          + '<div><div style="font-weight:600;font-size:13px;display:flex;align-items:center;gap:6px">'+(on?'<i class="ti ti-square-check" style="color:var(--am)"></i>':'<i class="ti ti-square" style="color:var(--bdr)"></i>')+esc(rm.name)+(rm.occupied?'<span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:8px;background:rgba(133,79,11,.1);color:#854f0b">Occupée</span>':'')+'</div><div style="font-size:11px;color:var(--mu)">'+[rm.category, rm.capacity?('jusqu’à '+rm.capacity+' pers.'):null].filter(Boolean).map(esc).join(' · ')+'</div></div>'
           + (rm.roomTotal ? '<div style="font-weight:600;font-size:13px">'+rm.roomTotal.toLocaleString('fr-FR')+' € <span style="font-weight:400;color:var(--mu);font-size:11px">/ '+rm.nights+'n</span></div>' : '')
           + '</div>';
       }).join('');
 }
 
 function rcSelectRoom(i){
-  RC_STATE.selectedRoom = RC_STATE.rooms[i];
+  var rm = RC_STATE.rooms[i];
+  var idx = RC_STATE.selectedRooms.findIndex(function(r){return r.id===rm.id;});
+  var hadAny = RC_STATE.selectedRooms.length > 0;
+  if(idx>=0) RC_STATE.selectedRooms.splice(idx,1); else RC_STATE.selectedRooms.push(rm);
   rcRenderRooms();
+  if(!RC_STATE.selectedRooms.length){
+    // Dernière chambre désélectionnée — retire le formulaire plutôt que de
+    // laisser "Créer la réservation" actionnable sans aucune chambre.
+    document.getElementById('rc-guest-section').innerHTML = '';
+    return;
+  }
+  if(hadAny) return; // formulaire déjà affiché (saisie en cours) — ne pas l'écraser en ajoutant/retirant une 2e chambre
   document.getElementById('rc-guest-section').innerHTML =
     '<div style="font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.03em;margin:14px 0 8px">Coordonnées du client</div>'
     + '<div class="g2">'
@@ -8616,7 +8634,9 @@ async function rcCreateBooking(){
   btn.disabled = true; btn.innerHTML = '<div class="spin"></div> Création…';
   try{
     var r = await adminFetch('/wa/booking/createManual', {method:'POST', body:JSON.stringify({
-      roomId: RC_STATE.selectedRoom.id, startDate: RC_STATE.start, endDate: RC_STATE.end,
+      roomId: RC_STATE.selectedRooms[0].id,
+      roomIds: RC_STATE.selectedRooms.map(function(rm){return rm.id;}),
+      startDate: RC_STATE.start, endDate: RC_STATE.end,
       firstName: firstName, lastName: lastName, email: email, phone: phone, bookingType: bookingType
     })});
     var data = await r.json();

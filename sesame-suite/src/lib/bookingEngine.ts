@@ -18,6 +18,14 @@ export type OccupantAgeCategory = (typeof OCCUPANT_AGE_CATEGORIES)[number];
 
 export interface BookingDraft {
   roomId: string;
+  // Sélection multiple (saisie manuelle uniquement, cf. createManual) —
+  // une réservation = plusieurs chambres (groupe/famille), même convention
+  // que Booking.selectedRoomCode côté check-in client (liste séparée par
+  // des virgules dans facilityCode, cf. espGetAccessPoints) : une clé
+  // numérique par chambre. roomId reste requis (chambre "principale", 1ère
+  // de la liste) pour tout code qui n'attend qu'une seule chambre —
+  // ignoré si roomIds est fourni avec plus d'un élément.
+  roomIds?: string[];
   startDate: string; // ISO
   endDate: string; // ISO
   firstName: string;
@@ -226,13 +234,25 @@ async function generateBookingCode(entityId: string): Promise<string> {
 async function createBookingDirect(entity: Entity, draft: BookingDraft, opts: { source: string; onRaceLost: "createAnyway" | "reject" }) {
   const start = new Date(draft.startDate);
   const end = new Date(draft.endDate);
-  const room = await prisma.room.findFirst({ where: { id: draft.roomId, entityId: entity.id } });
-  if (!room) throw new Error(`Chambre ${draft.roomId} introuvable`);
+  const roomIds = draft.roomIds?.length ? draft.roomIds : [draft.roomId];
+  const rooms = await prisma.room.findMany({ where: { id: { in: roomIds }, entityId: entity.id } });
+  if (rooms.length !== roomIds.length) {
+    const missing = roomIds.filter((id) => !rooms.some((r) => r.id === id));
+    throw new Error(`Chambre ${missing.join(", ")} introuvable`);
+  }
+  // Conserve l'ordre choisi par l'appelant (findMany ne le garantit pas) —
+  // roomIds[0] reste la chambre "principale" affichée partout ailleurs.
+  const orderedRooms = roomIds.map((id) => rooms.find((r) => r.id === id)!);
+  const room = orderedRooms[0];
 
   const { skipAvailabilityCheck } = await getBookingEngineFlags(entity.id);
-  if (!skipAvailabilityCheck && !(await isRoomAvailable(room.id, start, end))) {
-    if (opts.onRaceLost === "reject") throw new Error("Cette chambre n'est plus disponible sur ces dates");
-    console.error(`[bookingEngine] chambre ${room.code} déjà prise sur la période (${opts.source}) — réservation créée quand même, à vérifier manuellement`);
+  if (!skipAvailabilityCheck) {
+    for (const r of orderedRooms) {
+      if (!(await isRoomAvailable(r.id, start, end))) {
+        if (opts.onRaceLost === "reject") throw new Error("Cette chambre n'est plus disponible sur ces dates");
+        console.error(`[bookingEngine] chambre ${r.code} déjà prise sur la période (${opts.source}) — réservation créée quand même, à vérifier manuellement`);
+      }
+    }
   }
 
   const code = await generateBookingCode(entity.id);
@@ -247,8 +267,8 @@ async function createBookingDirect(entity: Entity, draft: BookingDraft, opts: { 
       startDate: start,
       endDate: end,
       roomId: room.id,
-      facilityCode: room.code,
-      facilityName: room.name,
+      facilityCode: orderedRooms.map((r) => r.code).join(","),
+      facilityName: orderedRooms.map((r) => r.name).join(", "),
       bookingType: draft.bookingType || null,
       stripeCustomerId: draft.stripeCustomerId || null,
       stripePaymentMethodId: draft.stripePaymentMethodId || null,
@@ -401,6 +421,7 @@ export async function validateManualBookingDraft(entityId: string, draft: Bookin
   const start = new Date(draft.startDate);
   const end = new Date(draft.endDate);
   if (nightsBetween(start, end) <= 0) throw new Error("Dates invalides");
-  const room = await prisma.room.findFirst({ where: { id: draft.roomId, entityId } });
-  if (!room) throw new Error("Chambre introuvable");
+  const roomIds = draft.roomIds?.length ? draft.roomIds : [draft.roomId];
+  const rooms = await prisma.room.findMany({ where: { id: { in: roomIds }, entityId } });
+  if (rooms.length !== roomIds.length) throw new Error("Chambre introuvable");
 }
