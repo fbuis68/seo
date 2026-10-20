@@ -134,7 +134,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--mu) transparent}
 .tbav{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;margin-left:10px}
 /* SIDEBAR */
 .sb{background:var(--sb);border-right:1px solid var(--sbb);overflow-y:auto;padding:10px 0}
-.ns{padding:5px 15px 3px;font-size:10px;letter-spacing:.1em;color:rgba(255,255,255,.22);font-weight:600;text-transform:uppercase;margin-top:10px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;user-select:none}
+.ns{padding:5px 15px 3px;font-size:13px;letter-spacing:.06em;color:rgba(255,255,255,.4);font-weight:800;text-transform:uppercase;margin-top:10px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;user-select:none}
 .ns:hover{color:rgba(255,255,255,.4)}
 .ns-chevron{font-size:11px;transition:transform .15s ease}
 .ns-group.collapsed .ns-chevron{transform:rotate(-90deg)}
@@ -719,16 +719,18 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       <div class="ni on" data-pan="dash" onclick="showPan('dash')"><i class="ti ti-layout-dashboard"></i>Accueil</div>
     </div>
   </div>
+  <!-- Réservations/Commandes/Planning/Gestion des Accès fusionnées ici
+       (§ demande client) — même principe que la fusion Administration
+       ci-dessous : sector-hotel-only reporté sur l'item Planning plutôt que
+       sur le groupe entier, qui lui doit rester visible (les autres items
+       ne sont pas spécifiques au secteur hôtelier). -->
   <div class="ns-group">
-    <div class="ns" onclick="toggleNavSection(this)">Réservations<i class="ti ti-chevron-down ns-chevron"></i></div>
+    <div class="ns" onclick="toggleNavSection(this)">Opérations<i class="ti ti-chevron-down ns-chevron"></i></div>
     <div class="ns-items">
       <div class="ni" data-pan="reservations" onclick="showPan('reservations')"><i class="ti ti-calendar-check"></i>Réservations</div>
-    </div>
-  </div>
-  <div class="ns-group">
-    <div class="ns" onclick="toggleNavSection(this)">Commandes<i class="ti ti-chevron-down ns-chevron"></i></div>
-    <div class="ns-items">
       <div class="ni" data-pan="orders" onclick="showPan('orders')"><i class="ti ti-clipboard-list"></i>Commandes <span class="nibadge" id="ordersBadge" style="display:none">0</span></div>
+      <div class="ni sector-hotel-only" data-pan="planning" onclick="showPan('planning')"><i class="ti ti-calendar-event"></i>Planning</div>
+      <div class="ni" data-pan="rooms" onclick="showPan('rooms')"><i class="ti ti-door"></i>Gestion des Accès</div>
     </div>
   </div>
   <div class="ns-group">
@@ -739,21 +741,9 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       <div class="ni" data-pan="questionnaires" onclick="showPan('questionnaires')"><i class="ti ti-clipboard-text"></i>Questionnaires</div>
     </div>
   </div>
-  <div class="ns-group sector-hotel-only">
-    <div class="ns" onclick="toggleNavSection(this)">Planning<i class="ti ti-chevron-down ns-chevron"></i></div>
-    <div class="ns-items">
-      <div class="ni" data-pan="planning" onclick="showPan('planning')"><i class="ti ti-calendar-event"></i>Planning</div>
-    </div>
-  </div>
-  <div class="ns-group">
-    <div class="ns" onclick="toggleNavSection(this)">Gestion des Accès<i class="ti ti-chevron-down ns-chevron"></i></div>
-    <div class="ns-items">
-      <div class="ni" data-pan="rooms" onclick="showPan('rooms')"><i class="ti ti-door"></i>Gestion des Accès</div>
-    </div>
-  </div>
   <!-- Tout le reste des menus (jusqu'ici répartis en plusieurs rubriques) est
-       regroupé ici, § demande client — seuls Accueil/Réservations/Commandes/
-       Clients/Planning/Gestion des Accès restent au premier niveau. Les
+       regroupé ici, § demande client — seuls Accueil/Opérations/Clients
+       restent au premier niveau. Les
        classes sesame-only/hotel-only/sector-hotel-only (gérées par
        applyRoleVisibility/applySectorVisibility, portée sur n'importe quel
        élément via querySelectorAll) sont reportées au niveau de chaque item
