@@ -106,6 +106,13 @@ html{scrollbar-width:thin;scrollbar-color:var(--mu) transparent}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--mu);border-radius:4px}
 ::-webkit-scrollbar-thumb:hover{background:var(--tx)}
+/* Barre de défilement masquée dans les fenêtres modales (§ demande client)
+   — scroll toujours fonctionnel, seule la barre visible disparaît. Cible
+   spécifiquement les cartes modales (max-height + overflow-y:auto en style
+   inline, pas de classe partagée entre elles) pour ne pas toucher la
+   scrollbar fine/thémée ci-dessus, volontaire sur le reste de la page. */
+[style*="overflow-y:auto"][style*="max-height"],[style*="overflow:auto"][style*="max-height"]{scrollbar-width:none;-ms-overflow-style:none}
+[style*="overflow-y:auto"][style*="max-height"]::-webkit-scrollbar,[style*="overflow:auto"][style*="max-height"]::-webkit-scrollbar{display:none}
 /* SHELL */
 .sh{display:grid;grid-template-columns:220px 1fr;grid-template-rows:52px 1fr;height:100vh;overflow:hidden}
 /* TOPBAR */
