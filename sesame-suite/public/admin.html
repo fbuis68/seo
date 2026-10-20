@@ -12556,6 +12556,18 @@ async function crmOpenClient(key){
   h += '<div class="fi"><label class="lb">Téléphone</label><input type="text" value="'+esc(c.phone||'—')+'" readonly></div>';
   h += '</div>';
 
+  // Adresse/CGU/newsletter — saisis par le client à l'étape "Mes
+  // coordonnées" du check-in (cf. checkin.html contactStepNext).
+  if(detail.address || detail.cguAcceptedAt || detail.prefs){
+    var addr = detail.address;
+    var addrLine = addr ? [addr.address, [addr.zip,addr.city].filter(Boolean).join(' ')].filter(Boolean).join(', ') : '';
+    h += '<div class="fi" style="margin-bottom:14px"><label class="lb">Adresse</label><input type="text" value="'+esc(addrLine||'—')+'" readonly></div>';
+    h += '<div class="g2" style="margin-bottom:14px">';
+    h += '<div class="fi"><label class="lb">Conditions générales</label><input type="text" value="'+(detail.cguAcceptedAt?('Acceptées le '+new Date(detail.cguAcceptedAt).toLocaleDateString('fr-FR')):'Non renseigné')+'" readonly></div>';
+    h += '<div class="fi"><label class="lb">Newsletter</label><input type="text" value="'+(detail.prefs&&detail.prefs.newsletterOptIn?'Abonné':'Non abonné')+'" readonly></div>';
+    h += '</div>';
+  }
+
   h += '<div class="g4" style="margin-bottom:14px">';
   h += '<div class="stat"><div class="sv" style="color:var(--am)">'+c.points+'</div><div class="sl">Points</div></div>';
   h += '<div class="stat"><div class="sv" style="color:var(--a)">'+c.sejours+'</div><div class="sl">Séjours</div></div>';

@@ -5936,7 +5936,10 @@ function initContactStep(){
   var cguLabel = document.getElementById('contact-cgu-label');
   if(cguLabel){
     var linkText = t('contact_cgu_link_text');
-    var linkHtml = CFG.termsUrl ? '<a href="'+esc(CFG.termsUrl)+'" target="_blank" rel="noopener">'+esc(linkText)+'</a>' : esc(linkText);
+    // Repli sur une page CGU générique (/cgu.html) si l'hôtel n'a pas encore
+    // renseigné sa propre URL (CFG.termsUrl) — mieux qu'un texte sans lien,
+    // que le client ne peut alors jamais consulter avant d'accepter.
+    var linkHtml = '<a href="'+esc(CFG.termsUrl||'/cgu.html')+'" target="_blank" rel="noopener">'+esc(linkText)+'</a>';
     cguLabel.innerHTML = tf('contact_cgu_label_tpl', {link: linkHtml});
   }
 

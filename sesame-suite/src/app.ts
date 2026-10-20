@@ -1,6 +1,9 @@
 import express from "express";
 import cors from "cors";
 import path from "node:path";
+import fs from "node:fs/promises";
+import { prisma } from "./db";
+import { resolveEntity } from "./lib/entity";
 import { configRouter } from "./routes/config";
 import { facilityRouter } from "./routes/facility";
 import { bookingRouter } from "./routes/booking";
@@ -156,8 +159,31 @@ export function createApp() {
 
   // Apps statiques (HTML/CSS/JS d'origine, rebranchées sur l'API)
   const publicDir = path.join(__dirname, "..", "public");
+
+  // checkin.html/"/" — injecte un <title> dynamique (nom réel de
+  // l'établissement) AVANT le express.static ci-dessous, qui servirait sinon
+  // le fichier tel quel avec son <title>"Éco-Séjour"</title> statique (placeholder
+  // de dev) — c'est ce titre qui apparaît dans l'aperçu du lien partagé
+  // (WhatsApp, iMessage…), qui ne lit que le HTML brut, jamais le JS/CFG
+  // chargé ensuite côté client. § demande client 20/10/2026.
+  const escHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const serveCheckin = async (req: express.Request, res: express.Response) => {
+    let title = "Check-in en ligne";
+    try {
+      const entity = await resolveEntity(req);
+      const cfg = await prisma.entityModuleConfig.findUnique({ where: { entityId: entity.id } });
+      if (cfg?.hotelName) title = `Check-in · ${cfg.hotelName}`;
+    } catch {
+      // entityCode absent/invalide (premier accès sans lien, démo…) — repli
+      // sur le titre générique ci-dessus plutôt que de faire échouer la page.
+    }
+    const html = await fs.readFile(path.join(publicDir, "checkin.html"), "utf8");
+    res.setHeader("Cache-Control", "no-store");
+    res.type("html").send(html.replace("<title>Éco-Séjour</title>", `<title>${escHtml(title)}</title>`));
+  };
+  app.get("/checkin.html", serveCheckin);
+  app.get("/", serveCheckin);
   app.use(express.static(publicDir));
-  app.get("/", (_req, res) => res.sendFile(path.join(publicDir, "checkin.html")));
   app.get("/admin", (_req, res) => res.sendFile(path.join(publicDir, "admin.html")));
   app.get("/onboarding", (_req, res) => res.sendFile(path.join(publicDir, "onboarding.html")));
   app.get("/crm", (_req, res) => res.sendFile(path.join(publicDir, "crm.html")));

@@ -171,6 +171,15 @@ crmRouter.get(
       prisma.kycRecord.findMany({ where: { bookingId: { in: bookingIds } }, orderBy: { createdAt: "desc" } }),
     ]);
 
+    // Adresse/CGU — pris sur la réservation la plus récente qui les renseigne
+    // (bookings déjà triés startDate desc) : ces champs sont saisis par le
+    // client à l'étape "Mes coordonnées" du check-in (cf. checkin.html
+    // contactStepNext/POST /wa/booking/updateContact), pas stockés une
+    // seule fois par client — une ancienne réservation sans adresse ne doit
+    // pas masquer celle saisie sur une réservation plus récente.
+    const bookingWithAddress = bookings.find((b) => b.personAddress || b.personZip || b.personCity);
+    const bookingWithCgu = bookings.find((b) => b.cguAcceptedAt);
+
     const ordersByCode = new Map<string, typeof orders>();
     for (const o of orders) {
       if (!o.bookingCode) continue;
@@ -182,8 +191,21 @@ crmRouter.get(
 
     res.json({
       prefs: prefs
-        ? { menageFreq: prefs.menageFreq, servFreq: prefs.servFreq, menageNote: prefs.menageNote }
+        ? {
+            menageFreq: prefs.menageFreq,
+            servFreq: prefs.servFreq,
+            menageNote: prefs.menageNote,
+            newsletterOptIn: prefs.newsletterOptIn,
+          }
         : null,
+      address: bookingWithAddress
+        ? {
+            address: bookingWithAddress.personAddress || "",
+            zip: bookingWithAddress.personZip || "",
+            city: bookingWithAddress.personCity || "",
+          }
+        : null,
+      cguAcceptedAt: bookingWithCgu ? bookingWithCgu.cguAcceptedAt!.toISOString() : null,
       bookings: bookings.map((b) => ({
         code: b.code,
         startDate: b.startDate.toISOString().slice(0, 10),
