@@ -191,7 +191,8 @@ describe('Reprise par fichiers de sauvegarde', () => {
 
   it('REC-23 : le module de reprise ne contient aucun client réseau (aucune API source)', () => {
     const dir = join(__dirname, '..', 'src', 'modules', 'migration');
-    for (const f of readdirSync(dir)) {
+    for (const f of readdirSync(dir, { recursive: true }) as string[]) {
+      if (!f.endsWith('.ts')) continue;
       const src = readFileSync(join(dir, f), 'utf8');
       expect(src).not.toMatch(/\bfetch\s*\(|from ['"](node:)?(http|https|net|tls|dgram)['"]|require\(['"](http|https|net)['"]\)|axios|undici|nodemailer/);
     }

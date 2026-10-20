@@ -7,7 +7,7 @@ import { CrmService } from './crm.service';
 const personSchema = z.object({
   firstName: z.string().min(1).max(100), lastName: z.string().min(1).max(100),
   email: z.string().email().nullable().optional(), phone: z.string().max(30).nullable().optional(),
-  roles: z.array(z.enum(['learner', 'trainer', 'contact'])).min(1), skills: z.array(z.string().max(80)).max(50).optional(),
+  roles: z.array(z.enum(['learner', 'trainer', 'contact', 'tutor', 'staff'])).min(1), skills: z.array(z.string().max(80)).max(50).optional(),
 });
 const clientSchema = z.object({
   kind: z.enum(['company', 'person']), name: z.string().min(1).max(200), status: z.enum(['prospect', 'customer']).optional(),
@@ -22,7 +22,7 @@ export class CrmController {
 
   @RequirePermission('crm.read') @Get('persons')
   persons(@Ctx() ctx: RequestContext, @Query() q: unknown) {
-    const p = parse(page.extend({ role: z.enum(['learner', 'trainer', 'contact']).optional() }), q);
+    const p = parse(page.extend({ role: z.enum(['learner', 'trainer', 'contact', 'tutor', 'staff']).optional() }), q);
     return this.crm.listPersons(ctx, p);
   }
   @RequirePermission('crm.write') @Post('persons')

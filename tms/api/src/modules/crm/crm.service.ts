@@ -5,7 +5,7 @@ import { Db, Tx, many, one } from '../../core/db';
 import { badRequest, conflict, notFound } from '../../core/errors';
 import { EntitlementsService } from '../billing/entitlements.service';
 
-export interface PersonInput { firstName: string; lastName: string; email?: string | null; phone?: string | null; roles: ('learner' | 'trainer' | 'contact')[]; skills?: string[] }
+export interface PersonInput { firstName: string; lastName: string; email?: string | null; phone?: string | null; roles: ('learner' | 'trainer' | 'contact' | 'tutor' | 'staff')[]; skills?: string[] }
 export interface ClientInput {
   kind: 'company' | 'person'; name: string; status?: 'prospect' | 'customer'; isFunder?: boolean;
   siren?: string | null; siret?: string | null; personId?: string | null; billingEmail?: string | null; billingAddress?: Record<string, string>;

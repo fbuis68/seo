@@ -18,7 +18,7 @@ export class MigrationController {
 
   @RequireFeature('migration.self') @RequirePermission('imports.manage') @Post()
   create(@Ctx() c: RequestContext, @Body() b: unknown) {
-    return this.m.create(c, parse(z.object({ sourceSoftware: z.enum(['dendreo', 'digiforma', 'agate', 'generic', 'native', 'other']), sourceInstanceId: z.string().min(1).max(120) }), b));
+    return this.m.create(c, parse(z.object({ sourceSoftware: z.enum(['dendreo', 'digiforma', 'agate', 'generic', 'native', 'mcdf', 'other']), sourceInstanceId: z.string().min(1).max(120) }), b));
   }
 
   /** Dépôt du paquet en flux binaire (application/zip, text/csv, xlsx). */
@@ -34,6 +34,7 @@ export class MigrationController {
     return this.m.confirmProfile(c, id, parse(z.object({
       profile: z.string().max(40),
       files: z.array(z.object({ path: z.string().max(500), entity, columns: z.record(z.string(), z.string().max(200)) })).max(100).optional(),
+      entityIds: z.array(z.string().min(1).max(20)).max(50).optional(),
     }), b) as any);
   }
 

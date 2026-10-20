@@ -3,7 +3,13 @@ import { api, download, post } from '../api';
 import { useAction, useFetch } from '../hooks';
 import { Help } from '../help';
 
-const ENTITY: Record<string, string> = { client: 'Clients', person: 'Personnes', program: 'Programmes', session: 'Sessions', enrollment: 'Inscriptions', attendance: 'Présences', invoice: 'Factures', payment: 'Règlements', document: 'Pièces' };
+const ENTITY: Record<string, string> = {
+  client: 'Clients', person: 'Personnes', program: 'Programmes', session: 'Sessions', enrollment: 'Inscriptions', attendance: 'Présences', invoice: 'Factures', payment: 'Règlements', document: 'Pièces',
+  reference: 'Référentiels', qualification: 'Compétences et diplômes', contact: 'Contacts entreprise', resource: 'Salles', tariff_price: 'Tarifs', slot: 'Créneaux',
+  convention: 'Conventions / propositions', convention_line: 'Lignes de convention', convention_payer: 'Financeurs de convention', convention_attendee: 'Stagiaires de convention',
+  installment: 'Échéancier', convention_staff: 'Commissions', cost: 'Frais', trainer_attendance: 'Émargement formateur', invoice_line: 'Lignes de facture',
+  invoice_attendee: 'Stagiaires facturés', allocation: 'Lettrage règlements',
+};
 
 /** Assistant de reprise : sauvegarde déposée → détection → association → simulation → publication → rapport. */
 export default function Imports() {
@@ -26,8 +32,9 @@ export default function Imports() {
     if (up.status !== 'rejected') setDetect(await post(`/api/v1/imports/${b.id}/detect`));
     batches.reload();
   });
+  const [entities, setEntities] = useState<string[]>([]);
   const simulate = (p: string) => act.run(async () => {
-    await post(`/api/v1/imports/${batch.id}/mapping`, { profile: p });
+    await post(`/api/v1/imports/${batch.id}/mapping`, p === 'mcdf' ? { profile: p, entityIds: entities } : { profile: p });
     setSim(await post(`/api/v1/imports/${batch.id}/simulate`, { partial }));
   });
 
@@ -38,12 +45,12 @@ export default function Imports() {
       <div className="grid2">
         <div className="panel stack">
           <label>Logiciel d’origine<select value={software} onChange={(e) => setSoftware(e.target.value)}>
-            <option value="dendreo">Dendreo</option><option value="digiforma">Digiforma</option><option value="generic">Autre / fichiers CSV-Excel</option><option value="native">Export de cette application</option></select></label>
+            <option value="dendreo">Dendreo</option><option value="digiforma">Digiforma</option><option value="mcdf">MCDF (sauvegarde de la base MariaDB)</option><option value="generic">Autre / fichiers CSV-Excel</option><option value="native">Export de cette application</option></select></label>
           <label>Compte source (ex. nom de l’espace)<input value={instance} onChange={(e) => setInstance(e.target.value)} placeholder="compte-principal" /></label>
           {profile && <div className="small"><strong>Comment obtenir la sauvegarde :</strong> {profile.obtain}
             <ul>{profile.limits.map((l: string) => <li key={l}>{l}</li>)}</ul>
             {profile.status === 'provisional' && <span className="pill warn">Profil provisoire — compatibilité non garantie</span>}</div>}
-          <label>Paquet (ZIP, CSV ou XLSX)<input type="file" accept=".zip,.csv,.xlsx" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} disabled={act.busy} /></label>
+          <label>{software === 'mcdf' ? 'Sauvegarde (.sql ou .sql.gz)' : 'Paquet (ZIP, CSV ou XLSX)'}<input type="file" accept={software === 'mcdf' ? '.sql,.gz' : '.zip,.csv,.xlsx'} onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} disabled={act.busy} /></label>
         </div>
         <div className="panel">
           <strong>Lots précédents</strong>
@@ -54,7 +61,19 @@ export default function Imports() {
       </div>
       {act.error && <p className="alert" role="alert">{act.error}</p>}
       {batch?.status === 'rejected' && <div className="banner err"><strong>Paquet refusé :</strong> {batch.diagnostic.rejections.map((r: any) => `${r.message}${r.path ? ` (${r.path})` : ''}`).join(' · ')}</div>}
-      {detect && (
+      {detect?.mcdf && (
+        <div className="panel" style={{ marginTop: 16 }}>
+          <strong>Sauvegarde MCDF</strong> <span className="pill ok">{detect.mcdf.tables} tables lues</span>
+          <p className="muted small">Choisissez le ou les organismes MCDF (table entity) à reprendre dans cet espace. Les identifiants MCDF sont conservés : un nouveau passage ne crée pas de doublon.</p>
+          <table><thead><tr><th /><th>Organisme</th><th>Code</th><th className="num">Personnes</th><th className="num">Sessions</th><th className="num">Conventions</th><th className="num">Factures</th></tr></thead>
+            <tbody>{detect.mcdf.entities.map((e: any) => <tr key={e.id}>
+              <td><input type="checkbox" checked={entities.includes(e.id)} onChange={(ev) => setEntities(ev.target.checked ? [...entities, e.id] : entities.filter((x) => x !== e.id))} /></td>
+              <td>{e.name}</td><td>{e.code}</td><td className="num">{e.persons}</td><td className="num">{e.sessions}</td><td className="num">{e.conventions}</td><td className="num">{e.invoices}</td></tr>)}</tbody></table>
+          {detect.mcdf.warnings?.length > 0 && <ul className="small">{detect.mcdf.warnings.map((w: string) => <li key={w}>{w}</li>)}</ul>}
+          <button className="btn sm" disabled={!entities.length || act.busy} onClick={() => simulate('mcdf')}>Simuler la reprise</button>
+        </div>
+      )}
+      {detect && !detect.mcdf && (
         <div className="panel" style={{ marginTop: 16 }}>
           <strong>Détection</strong> <span className={`pill ${detect.verdict === 'recognized' ? 'ok' : 'warn'}`}>{detect.verdict}</span>
           {detect.message && <p className="muted">{detect.message}</p>}
@@ -69,12 +88,13 @@ export default function Imports() {
         <div className="panel" style={{ marginTop: 16 }}>
           <strong>Simulation (aucune donnée écrite)</strong>
           <table><thead><tr><th>Objet</th><th className="num">Lues</th><th className="num">Créées</th><th className="num">Mises à jour</th><th className="num">Inchangées</th><th className="num">Rejetées</th><th className="num">Exclues</th><th className="num">Alertes</th></tr></thead>
-            <tbody>{Object.entries(sim.summary).map(([k, v]: any) => <tr key={k}><td>{ENTITY[k]}</td>{['read', 'create', 'update', 'unchanged', 'reject', 'exclude', 'warnings'].map((x) => <td key={x} className="num">{v[x]}</td>)}</tr>)}</tbody></table>
+            <tbody>{Object.entries(sim.summary).map(([k, v]: any) => <tr key={k}><td>{ENTITY[k] ?? k}</td>{['read', 'create', 'update', 'unchanged', 'reject', 'exclude', 'warnings'].map((x) => <td key={x} className="num">{v[x]}</td>)}</tr>)}</tbody></table>
           {!sim.quota.fits && <div className="banner warn">{sim.quota.message} ({sim.quota.over.map((o: any) => `${o.quota} : ${o.projected}/${o.limit}`).join(', ')})</div>}
           <div className="toolbar" style={{ marginTop: 10 }}>
             <button className="btn ghost sm" onClick={() => download(`/api/v1/imports/${batch.id}/anomalies.csv`, 'anomalies.csv')}>Télécharger les anomalies (CSV)</button>
             <button className="btn" disabled={!sim.canCommit || act.busy} onClick={() => act.run(() => post(`/api/v1/imports/${batch.id}/commit`), (r) => { setReport(r); batches.reload(); })}>Publier les données</button>
           </div>
+          {sim.issues?.length > 0 && <details style={{ marginTop: 8 }}><summary>{sim.issues.length} alerte(s)</summary><ul className="small">{sim.issues.slice(0, 200).map((i: any, k: number) => <li key={k}><strong>{ENTITY[i.entity] ?? i.entity}</strong> {i.legacyId ? `#${i.legacyId}` : ''} : {i.message}</li>)}</ul></details>}
           {!sim.canCommit && sim.quota.fits && <p className="small muted">{sim.blocking} ligne(s) bloquante(s) : corrigez le paquet ou autorisez un import partiel puis relancez la simulation.</p>}
         </div>
       )}

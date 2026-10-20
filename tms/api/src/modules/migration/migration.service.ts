@@ -15,6 +15,16 @@ import { nativeRows } from './native';
 import { CanonRow, buildRows, severityOf, validateRows } from './pipeline';
 import { FileMapping, NATIVE_PROFILE, PROFILES, detectProfiles, requiredFields } from './profiles';
 import { Table, parseTableFile } from './tabular';
+import { looksLikeDump } from './mcdf/dump';
+import { mcdfDiagnostic, parseMcdf, rollbackMcdf } from './mcdf/run';
+import { runMcdf } from './mcdf/transform';
+import { McdfWriter } from './mcdf/writer';
+
+export const MCDF_PROFILE = {
+  code: 'mcdf', version: '1.0', software: 'mcdf', label: 'MCDF — sauvegarde de la base MariaDB', status: 'validated' as const,
+  obtain: 'Sur le serveur MCDF : mysqldump --single-transaction --default-character-set=utf8mb4 mcdf | gzip > mcdf.sql.gz, puis déposez le fichier .sql.gz (aucune exécution : la sauvegarde est lue, jamais rejouée).',
+  limits: ['Mots de passe, jetons et n° de sécurité sociale jamais repris', 'Questionnaires, messages et modèles de documents non repris', 'Identifiants MCDF conservés (legacy_id) : réimport sans doublon'],
+};
 
 const HARD_PACKAGE_LIMIT = 1024 ** 3;
 
@@ -33,7 +43,7 @@ export class MigrationService {
   constructor(private db: Db, private storage: StorageService, private ent: EntitlementsService, private audit: AuditService) {}
 
   profiles() {
-    return [...PROFILES.map(({ rules, ...p }) => ({ ...p, objects: [...new Set(rules.map((r) => r.entity))] })), NATIVE_PROFILE];
+    return [...PROFILES.map(({ rules, ...p }) => ({ ...p, objects: [...new Set(rules.map((r) => r.entity))] })), NATIVE_PROFILE, MCDF_PROFILE];
   }
 
   private async batch(tx: Tx, id: string, forUpdate = false) {
@@ -91,7 +101,13 @@ export class MigrationService {
     let inventory: InventoryEntry[] = [];
     let rejections: Rejection[] = [];
     const safeName = filename.replace(/[^\w.\-]+/g, '_').slice(0, 120) || 'paquet';
-    if (isZip(buf)) {
+    const software = (await this.db.tenantTx(ctx.tenantId, (tx) => this.batch(tx, id))).source_software;
+    if (software === 'mcdf') {
+      let ok = false;
+      try { ok = !isZip(buf) && looksLikeDump(buf); } catch { ok = false; }
+      if (ok) inventory = [{ path: safeName, size: buf.length, kind: 'table', ext: 'sql' }];
+      else rejections = [{ code: 'not_a_dump', message: 'Fichier non reconnu : déposez la sauvegarde mysqldump de la base MCDF (.sql ou .sql.gz).' }];
+    } else if (isZip(buf)) {
       try { ({ entries: inventory, rejections } = await readZip(buf, undefined, false)); }
       catch (err: any) { rejections = [{ code: err.code ?? 'invalid_zip', message: err.message }]; }
     } else {
@@ -137,6 +153,7 @@ export class MigrationService {
     const buf = await this.storage.get(this.storage.key(tenantId, 'imports', `${b.id}/${b.package_sha256}`));
     if (sha256(buf) !== b.package_sha256) throw new AppError(500, 'package_altered', 'Empreinte du paquet incohérente.');
     const files = new Map<string, Buffer>();
+    if (b.source_software === 'mcdf') { files.set(b.options.filename ?? 'mcdf.sql', buf); return { files, tables: [] }; }
     if (isZip(buf)) {
       const { entries, rejections } = await readZip(buf);
       if (rejections.length) throw badRequest(rejections[0].code, rejections[0].message);
@@ -156,6 +173,19 @@ export class MigrationService {
     const b = await this.db.tenantTx(ctx.tenantId, (tx) => this.batch(tx, id));
     if (!['uploaded', 'detected', 'mapped', 'simulated'].includes(b.status) || !b.package_sha256) throw conflict('invalid_state', 'Déposez d’abord un paquet valide.');
     const { files, tables } = await this.loadPackage(ctx.tenantId, b);
+    if (b.source_software === 'mcdf') {
+      let mcdf;
+      try { mcdf = mcdfDiagnostic(parseMcdf([...files.values()][0])); }
+      catch (err: any) { throw badRequest('unreadable_dump', `Sauvegarde illisible : ${err.message}`); }
+      const diagnostic = {
+        ...b.diagnostic, mcdf, candidates: [{ profile: 'mcdf', version: MCDF_PROFILE.version, status: 'validated', label: MCDF_PROFILE.label, confidence: mcdf.recognized ? 1 : 0, files: [] }],
+        verdict: mcdf.recognized ? 'recognized' : 'unrecognized', message: mcdf.recognized ? undefined : 'Ce fichier ne ressemble pas à une base MCDF (tables actor, convention, schedule absentes).',
+      };
+      return this.db.tenantTx(ctx.tenantId, async (tx) => {
+        await tx.query(`UPDATE import_batches SET status='detected', diagnostic=$2, profile_confidence=$3 WHERE id=$1`, [id, JSON.stringify(diagnostic), mcdf.recognized ? 1 : 0]);
+        return { batchId: id, ...diagnostic };
+      });
+    }
     let candidates: any[];
     const manifest = files.get('manifest.json');
     if (manifest && JSON.parse(manifest.toString('utf8')).format === 'tms-export') {
@@ -181,10 +211,21 @@ export class MigrationService {
   }
 
   /** Confirmation utilisateur du profil et des associations de colonnes. */
-  async confirmProfile(ctx: RequestContext, id: string, body: { profile: string; files?: FileMapping[] }) {
+  async confirmProfile(ctx: RequestContext, id: string, body: { profile: string; files?: FileMapping[]; entityIds?: string[] }) {
     return this.db.tenantTx(ctx.tenantId, async (tx) => {
       const b = await this.batch(tx, id, true);
       if (!['detected', 'mapped', 'simulated'].includes(b.status)) throw conflict('invalid_state', 'Lancez d’abord la détection.');
+      if (body.profile === 'mcdf') {
+        if (b.source_software !== 'mcdf' || !b.diagnostic?.mcdf?.recognized) throw badRequest('unknown_profile', 'Sauvegarde MCDF non reconnue.');
+        const known = new Set((b.diagnostic.mcdf.entities ?? []).map((e: any) => e.id));
+        const entityIds = [...new Set(body.entityIds ?? [])];
+        if (!entityIds.length || entityIds.some((e) => !known.has(e))) throw badRequest('entities_required', 'Choisissez au moins un organisme MCDF présent dans la sauvegarde.');
+        const mapping = { profile: 'mcdf', version: MCDF_PROFILE.version, entityIds, files: [] };
+        const mappingHash = stableHash(mapping);
+        await tx.query(`UPDATE import_batches SET status='mapped', profile_code='mcdf', profile_version=$2, mapping=$3, mapping_hash=$4, profile_confirmed_at=now(), simulation=NULL WHERE id=$1`,
+          [id, MCDF_PROFILE.version, JSON.stringify(mapping), mappingHash]);
+        return { batchId: id, mapping, mappingHash, missingRequired: [] };
+      }
       const isNative = body.profile === 'native';
       const profile = isNative ? NATIVE_PROFILE : PROFILES.find((p) => p.code === body.profile);
       if (!profile) throw badRequest('unknown_profile', 'Profil inconnu.');
@@ -215,6 +256,7 @@ export class MigrationService {
     const b0 = await this.db.tenantTx(ctx.tenantId, (tx) => this.batch(tx, id));
     if (!['mapped', 'simulated'].includes(b0.status)) throw conflict('invalid_state', 'Confirmez d’abord le profil et les associations.');
     const { files, tables } = await this.loadPackage(ctx.tenantId, b0);
+    if (b0.profile_code === 'mcdf') return this.simulateMcdf(ctx, b0, files);
     return this.db.tenantTx(ctx.tenantId, async (tx) => {
       const b = await this.batch(tx, id, true);
       if (b.mapping_hash !== b0.mapping_hash) throw conflict('mapping_changed', 'Associations modifiées pendant la simulation : relancez.');
@@ -387,6 +429,7 @@ export class MigrationService {
       throw conflict('blocking_issues', 'Anomalies bloquantes : corrigez le paquet ou choisissez explicitement un import partiel.', { blocking: b0.simulation?.blocking });
     }
     const { files } = await this.loadPackage(ctx.tenantId, b0);
+    if (b0.profile_code === 'mcdf') return this.commitMcdf(ctx, b0, files);
     return this.db.tenantTx(ctx.tenantId, async (tx) => {
       const b = await this.batch(tx, id, true);
       if (b.status !== 'simulated' || b.mapping_hash !== b0.mapping_hash || b.simulation.computedAt !== b0.simulation.computedAt) throw conflict('batch_changed', 'Le lot a changé : relancez la simulation.');
@@ -587,6 +630,98 @@ export class MigrationService {
       [id, q.severity ?? null, q.entity ?? null, q.limit, q.offset]));
   }
 
+  // ─── Reprise MCDF ─────────────────────────────────────────────────────────
+  /** Exécution complète dans un point de sauvegarde, puis annulation : contraintes réelles, aucune écriture. */
+  private async simulateMcdf(ctx: RequestContext, b0: any, files: Map<string, Buffer>) {
+    const tables = parseMcdf([...files.values()][0]);
+    return this.db.tenantTx(ctx.tenantId, async (tx) => {
+      const b = await this.batch(tx, b0.id, true);
+      if (b.mapping_hash !== b0.mapping_hash) throw conflict('mapping_changed', 'Périmètre modifié pendant la simulation : relancez.');
+      await lock(tx, `import:${ctx.tenantId}`);
+      const tz = (await one(tx, `SELECT timezone FROM tenants WHERE id=$1`, [ctx.tenantId]))!.timezone;
+      await tx.query('SAVEPOINT mcdf_sim');
+      const w = new McdfWriter(tx, ctx.tenantId, b.id, b.source_instance_id);
+      let quota: any, docBytes = 0;
+      try {
+        const { docs } = await runMcdf(tx, w, tables, { entityIds: b.mapping.entityIds, timezone: tz, today: new Date().toISOString().slice(0, 10), dryRun: true });
+        docBytes = docs.reduce((a, d) => a + d.data.length, 0);
+        quota = await this.liveQuotas(tx, ctx.tenantId, docBytes);
+      } catch (err: any) {
+        await tx.query('ROLLBACK TO SAVEPOINT mcdf_sim');
+        throw badRequest('mcdf_failed', `Reprise impossible : ${err.message}${err.detail ? ` (${err.detail})` : ''}`);
+      }
+      await tx.query('ROLLBACK TO SAVEPOINT mcdf_sim');
+      const blocking = w.issues.filter((i) => i.severity === 'blocking').length;
+      const simulation = {
+        mode: 'create_only', partial: true, scope: { entityIds: b.mapping.entityIds }, mappingHash: b.mapping_hash, summary: w.summary, quota, blocking,
+        issues: w.issues, documentsBytes: docBytes, canCommit: quota.fits, computedAt: new Date().toISOString(),
+        note: blocking ? 'Les lignes rejetées (payeur introuvable, numéro en double…) ne seront pas reprises ; tout le reste le sera.' : undefined,
+      };
+      await tx.query(`UPDATE import_batches SET status='simulated', simulation=$2 WHERE id=$1`, [b.id, JSON.stringify(simulation)]);
+      return { batchId: b.id, ...simulation };
+    });
+  }
+
+  private async commitMcdf(ctx: RequestContext, b0: any, files: Map<string, Buffer>) {
+    if (!b0.simulation?.quota?.fits) throw paymentRequired('quota_exceeded', b0.simulation?.quota?.message ?? 'Quota dépassé.', b0.simulation?.quota);
+    const tables = parseMcdf([...files.values()][0]);
+    const written: string[] = [];
+    try {
+      return await this.db.tenantTx(ctx.tenantId, async (tx) => {
+        const b = await this.batch(tx, b0.id, true);
+        if (b.status !== 'simulated' || b.simulation.computedAt !== b0.simulation.computedAt) throw conflict('batch_changed', 'Le lot a changé : relancez la simulation.');
+        await lock(tx, `import:${ctx.tenantId}`);
+        await tx.query(`UPDATE import_batches SET status='committing' WHERE id=$1`, [b.id]);
+        const tz = (await one(tx, `SELECT timezone FROM tenants WHERE id=$1`, [ctx.tenantId]))!.timezone;
+        const w = new McdfWriter(tx, ctx.tenantId, b.id, b.source_instance_id);
+        const { docs } = await runMcdf(tx, w, tables, { entityIds: b.mapping.entityIds, timezone: tz, today: new Date().toISOString().slice(0, 10), dryRun: false });
+        const quota = await this.liveQuotas(tx, ctx.tenantId, docs.reduce((a, d) => a + d.data.length, 0));
+        if (!quota.fits) throw paymentRequired('quota_exceeded', quota.message!, quota);
+        for (const d of docs) {
+          const docId = randomUUID();
+          const key = this.storage.key(ctx.tenantId, 'documents', docId);
+          await this.storage.put(key, d.data); written.push(key);
+          const mime = d.data.subarray(0, 4).toString('latin1') === '%PDF' ? 'application/pdf' : /\.(png)$/i.test(d.name) ? 'image/png' : /\.(jpe?g)$/i.test(d.name) ? 'image/jpeg' : 'application/octet-stream';
+          await tx.query(`INSERT INTO documents(id, tenant_id, owner_type, owner_id, kind, filename, mime, size_bytes, sha256, storage_key, provenance, legacy_id, signed) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+            [docId, ctx.tenantId, d.ownerType, d.ownerId, d.kind, d.name.slice(0, 150), mime, d.data.length, sha256(d.data), key, JSON.stringify({ importBatch: b.id, source: 'mcdf', table: d.table, original: true }), d.legacyId, d.signed]);
+          await tx.query(`INSERT INTO import_changes(tenant_id, batch_id, entity_type, entity_id, action) VALUES ($1,$2,'document',$3,'create')`, [ctx.tenantId, b.id, docId]);
+        }
+        const fin = await one(tx, `SELECT count(*)::int invoices, coalesce(sum(CASE WHEN i.kind='credit_note' THEN -i.total_ttc ELSE i.total_ttc END),0)::text ttc, count(*) FILTER (WHERE i.is_incomplete)::int incomplete
+                                     FROM import_changes c JOIN invoices i ON i.id=c.entity_id WHERE c.batch_id=$1 AND c.entity_type='invoice'`, [b.id]);
+        const pay = await one(tx, `SELECT coalesce(sum(p.amount),0)::text s FROM import_changes c JOIN payments p ON p.id=c.entity_id WHERE c.batch_id=$1 AND c.entity_type='payment'`, [b.id]);
+        const perEntity = Object.fromEntries(Object.entries(w.summary).map(([k, v]) => [k, { read: v.read, created: v.create, updated: 0, unchanged: v.unchanged, rejected: v.reject, excluded: v.exclude }]));
+        const report = {
+          batchId: b.id, profile: `mcdf ${MCDF_PROFILE.version}`, source: { software: 'mcdf', instance: b.source_instance_id, sha256: b.package_sha256, entityIds: b.mapping.entityIds },
+          perEntity, totals: Object.values(perEntity).reduce((a: any, e: any) => { for (const k of Object.keys(e)) a[k] = (a[k] ?? 0) + e[k]; return a; }, {}),
+          balanced: true, financial: [{ currency: 'EUR', invoices: fin!.invoices, totalTtc: fin!.ttc, incomplete: fin!.incomplete, expectedTtcCents: null, differenceCents: null }],
+          paymentsImported: pay!.s, issues: w.issues.slice(0, 2000),
+          coverage: [{ file: 'Colonnes MCDF sans équivalent', ignoredColumns: ['conservées dans le champ legacy de chaque fiche'] }],
+          historicalNotice: 'Historique MCDF repris : aucune facture réémise, aucune convention renvoyée, aucun email déclenché. Identifiants MCDF conservés (legacy_id).',
+        };
+        await tx.query(`UPDATE import_batches SET status='published', published_at=now(), report=$2 WHERE id=$1`, [b.id, JSON.stringify(report)]);
+        await this.audit.log(tx, { tenantId: ctx.tenantId, actor: ctx.userId, action: 'import.published', entityType: 'import', entityId: b.id, data: report.totals });
+        return report;
+      });
+    } catch (err) {
+      for (const k of written) await this.storage.remove(k).catch(() => undefined);
+      throw err;
+    }
+  }
+
+  /** Quotas calculés sur les données réellement écrites (dans la transaction en cours). */
+  private async liveQuotas(tx: Tx, tenantId: string, extraBytes: number) {
+    const e = await this.ent.get(tenantId, tx);
+    const year = yearOf(new Date(), (await one(tx, `SELECT timezone FROM tenants WHERE id=$1`, [tenantId]))!.timezone);
+    const checks: [string, number, number | null][] = [
+      ['billedClients', await USAGE_QUERIES.billedClients(tx, tenantId, year), e.limits.billedClients],
+      ['learnersPerYear', await USAGE_QUERIES.learnersPerYear(tx, tenantId, year), e.limits.learnersPerYear],
+      ['activeSessions', await USAGE_QUERIES.activeSessions(tx, tenantId, year), e.limits.activeSessions],
+      ['storageBytes', (await USAGE_QUERIES.storageBytes(tx, tenantId, year)) + extraBytes, e.limits.storageBytes],
+    ];
+    const over = checks.filter(([, v, l]) => l !== null && v > l).map(([quota, projected, limit]) => ({ quota, projected, limit }));
+    return { fits: over.length === 0, over, plan: e.planCode, message: over.length ? 'Volume au-delà de votre offre : passez à une offre supérieure avant de publier. Aucune publication tronquée.' : undefined };
+  }
+
   // ─── Compensation (rollback) ────────────────────────────────────────────
   /**
    * Après publication : compensations depuis le journal du lot. Suppression d'un objet créé
@@ -599,6 +734,20 @@ export class MigrationService {
         const b = await this.batch(tx, id, true);
         if (b.status !== 'published') throw conflict('invalid_state', 'Seul un lot publié peut être compensé.');
         await tx.query(`SELECT set_config('app.import_rollback', 'on', true)`);
+        if (b.profile_code === 'mcdf') {
+          await lock(tx, `import:${ctx.tenantId}`);
+          try {
+            const { counts, storageKeys: keys } = await rollbackMcdf(tx, id);
+            storageKeys.push(...keys);
+            await tx.query(`DELETE FROM external_identities WHERE batch_id=$1`, [id]);
+            await tx.query(`UPDATE import_batches SET status='rolled_back' WHERE id=$1`, [id]);
+            await this.audit.log(tx, { tenantId: ctx.tenantId, actor: ctx.userId, action: 'import.rolled_back', entityType: 'import', entityId: id, data: counts });
+            return { rolledBack: true, changes: Object.values(counts).reduce((a, n) => a + n, 0), counts };
+          } catch (err: any) {
+            if (err.code === '23503') throw conflict('rollback_blocked', 'Annulation bloquée : des données créées depuis la reprise utilisent des objets du lot. Rien n’a été supprimé.', { detail: err.detail });
+            throw err;
+          }
+        }
         const changes = await many(tx, `SELECT * FROM import_changes WHERE batch_id=$1 ORDER BY id DESC`, [id]);
         const conflicts: { entity: string; id: string; reason: string }[] = [];
         for (const c of changes) {
