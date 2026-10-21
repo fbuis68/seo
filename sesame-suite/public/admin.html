@@ -790,8 +790,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
            self-service hôtel (cf. adminProfile.ts). -->
       <div class="ni sesame-only crm-admin-only" data-pan="adminProfiles" onclick="showPan('adminProfiles')" style="display:none"><i class="ti ti-key"></i>Profils &amp; Droits</div>
       <div class="ni hotel-only" data-pan="users" onclick="showPan('users')" style="display:none"><i class="ti ti-users"></i>Utilisateurs</div>
-      <div class="ni" data-pan="charte" onclick="showPan('charte')"><i class="ti ti-palette"></i>Logo &amp; Couleurs</div>
-      <div class="ni" data-pan="typo" onclick="showPan('typo')"><i class="ti ti-typography"></i>Typographie &amp; Textes</div>
+      <div class="ni" data-pan="charte" onclick="showPan('charte')"><i class="ti ti-palette"></i>Logo, Couleurs &amp; Textes</div>
       <div class="ni sector-hotel-only" data-pan="hotel" onclick="showPan('hotel')"><i class="ti ti-building"></i>Entité &amp; Catégorie</div>
       <div class="ni sector-hotel-only" data-pan="gains" onclick="showPan('gains')"><i class="ti ti-gift"></i>Gains <span class="nibadge">Multi</span></div>
       <div class="ni" data-pan="roomservice" onclick="showPan('roomservice')"><i class="ti ti-bell"></i>Catalogue produits</div>
@@ -1190,7 +1189,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 
 <!-- ════════════════ CHARTE ════════════════ -->
 <div id="pan-charte" class="pan">
-  <div class="ph"><h2>Logo &amp; Charte graphique</h2><p>Personnalisez l'interface client selon l'identité visuelle de l'établissement</p></div>
+  <div class="ph"><h2>Logo, Couleurs, Typographie &amp; Textes</h2><p>Personnalisez l'identité visuelle, les polices et les textes affichés dans l'interface client</p></div>
   <div style="display:flex;gap:24px;align-items:flex-start">
     <div style="flex:1">
       <!-- LOGO -->
@@ -1258,6 +1257,40 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
           </div>
         </div>
       </div>
+      <!-- TYPOGRAPHIE & TEXTES (fusionné ici, § demande client 21/10/2026 —
+           ex-pan-typo, mêmes champs/IDs, savePan()/liveSync() inchangés) -->
+      <div class="g2">
+        <div class="ca">
+          <div class="ch"><i class="ti ti-typography"></i>Polices</div>
+          <div class="fi"><label class="lb">Police des titres</label>
+            <select id="c-fontTitle" onchange="liveSync()">
+              <option value="'Fraunces',serif">Fraunces (serif élégant)</option>
+              <option value="'DM Serif Display',serif">DM Serif Display</option>
+              <option value="'Playfair Display',serif">Playfair Display</option>
+              <option value="'Sora',sans-serif">Sora (sans-serif)</option>
+              <option value="'DM Sans',sans-serif">DM Sans</option>
+            </select>
+          </div>
+          <div class="fi"><label class="lb">Police du corps</label>
+            <select id="c-fontBody" onchange="liveSync()">
+              <option value="'Sora',sans-serif">Sora (actuelle)</option>
+              <option value="'DM Sans',sans-serif">DM Sans</option>
+              <option value="'Inter',sans-serif">Inter</option>
+              <option value="'Nunito',sans-serif">Nunito</option>
+            </select>
+          </div>
+        </div>
+        <div class="ca">
+          <div class="ch"><i class="ti ti-message"></i>Textes UI personnalisables</div>
+          <div class="fi"><label class="lb">Message éco principal</label><textarea id="c-msgEco" rows="2" style="resize:none" oninput="liveSync()"></textarea></div>
+          <div class="fi"><label class="lb">Message de bienvenue</label><textarea id="c-msgWelcome" rows="2" style="resize:none" oninput="liveSync()"></textarea></div>
+          <div class="fi"><label class="lb">Libellé bouton principal</label><input type="text" id="c-btnLabel" oninput="liveSync()"></div>
+          <div class="irow">
+            <div class="fi"><label class="lb">Nom programme points</label><input type="text" id="c-ptsLabel" oninput="liveSync()"></div>
+            <div class="fi"><label class="lb">Nom programme fidélité</label><input type="text" id="c-progName" oninput="liveSync()"></div>
+          </div>
+        </div>
+      </div>
       <div class="brow">
         <button class="btn" onclick="exportCSS()"><i class="ti ti-download"></i> Export CSS</button>
         <button class="btn btn-p" onclick="savePan()"><i class="ti ti-cloud-upload"></i> Sauvegarder &amp; Publier</button>
@@ -1270,48 +1303,6 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       <div style="font-size:11px;color:var(--hi);text-align:center;margin-top:6px">Interface client mobile</div>
     </div>
   </div>
-</div>
-
-<!-- ════════════════ TYPO ════════════════ -->
-<div id="pan-typo" class="pan">
-  <div class="ph"><h2>Typographie &amp; Textes</h2><p>Polices et messages affichés aux clients</p></div>
-  <div class="g2">
-    <div>
-      <div class="ca">
-        <div class="ch"><i class="ti ti-typography"></i>Polices</div>
-        <div class="fi"><label class="lb">Police des titres</label>
-          <select id="c-fontTitle" onchange="liveSync()">
-            <option value="'Fraunces',serif">Fraunces (serif élégant)</option>
-            <option value="'DM Serif Display',serif">DM Serif Display</option>
-            <option value="'Playfair Display',serif">Playfair Display</option>
-            <option value="'Sora',sans-serif">Sora (sans-serif)</option>
-            <option value="'DM Sans',sans-serif">DM Sans</option>
-          </select>
-        </div>
-        <div class="fi"><label class="lb">Police du corps</label>
-          <select id="c-fontBody" onchange="liveSync()">
-            <option value="'Sora',sans-serif">Sora (actuelle)</option>
-            <option value="'DM Sans',sans-serif">DM Sans</option>
-            <option value="'Inter',sans-serif">Inter</option>
-            <option value="'Nunito',sans-serif">Nunito</option>
-          </select>
-        </div>
-      </div>
-    </div>
-    <div>
-      <div class="ca">
-        <div class="ch"><i class="ti ti-message"></i>Textes UI personnalisables</div>
-        <div class="fi"><label class="lb">Message éco principal</label><textarea id="c-msgEco" rows="2" style="resize:none" oninput="liveSync()"></textarea></div>
-        <div class="fi"><label class="lb">Message de bienvenue</label><textarea id="c-msgWelcome" rows="2" style="resize:none" oninput="liveSync()"></textarea></div>
-        <div class="fi"><label class="lb">Libellé bouton principal</label><input type="text" id="c-btnLabel" oninput="liveSync()"></div>
-        <div class="irow">
-          <div class="fi"><label class="lb">Nom programme points</label><input type="text" id="c-ptsLabel" oninput="liveSync()"></div>
-          <div class="fi"><label class="lb">Nom programme fidélité</label><input type="text" id="c-progName" oninput="liveSync()"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="brow"><button class="btn btn-p" onclick="savePan()"><i class="ti ti-device-floppy"></i> Sauvegarder</button></div>
 </div>
 
 <!-- ════════════════ HOTEL ════════════════ -->
@@ -13741,7 +13732,7 @@ var AP_MENU_GROUPS = [
   {label:'Accueil', items:[['dash','Accueil']]},
   {label:'Opérations', items:[['reservations','Réservations'],['orders','Commandes'],['planning','Planning'],['rooms','Gestion des Accès']]},
   {label:'Clients', items:[['crm','Base clients'],['marketing','Actions marketing'],['questionnaires','Questionnaires']]},
-  {label:'Administration', items:[['users','Utilisateurs'],['charte','Logo & Couleurs'],['typo','Typographie & Textes'],['hotel','Entité & Catégorie'],['gains','Gains'],['roomservice','Catalogue produits'],['vendors','Points de vente'],['livret','Livret digital'],['plan',"Plan de l'établissement"],['bookingEngine','Réservation en ligne'],['preview','Aperçu client']]},
+  {label:'Administration', items:[['users','Utilisateurs'],['charte','Logo, Couleurs & Textes'],['hotel','Entité & Catégorie'],['gains','Gains'],['roomservice','Catalogue produits'],['vendors','Points de vente'],['livret','Livret digital'],['plan',"Plan de l'établissement"],['bookingEngine','Réservation en ligne'],['preview','Aperçu client']]},
   {label:'Technique', items:[['api','Intégration réservations'],['payment','Paiement en ligne'],['wallet','Wallet'],['email','Canaux'],['automation','Automatisations']]}
 ];
 var AP_PROFILES = [];
