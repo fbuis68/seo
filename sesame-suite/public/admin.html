@@ -896,7 +896,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       </div>
       <div class="g2">
         <div class="fi"><label class="lb">Type de chambre</label><select id="resa-e-roomtype" onchange="resaFilterRoomOptions()"><option value="">Tous types</option></select></div>
-        <div class="fi"><label class="lb">Chambre(s) <span style="font-weight:400;color:var(--mu)">— ctrl/cmd-clic pour plusieurs</span></label><select id="resa-e-room" multiple size="6"></select></div>
+        <div class="fi"><label class="lb">Chambre(s)</label><div id="resa-e-room" style="max-height:170px;overflow-y:auto;border:1px solid var(--bdr);border-radius:var(--rs);padding:6px 10px"></div></div>
       </div>
       <div class="fi">
         <label class="lb">Type de réservation</label>
@@ -16768,19 +16768,28 @@ function fmtDMY(iso){
 // chambres de ce type (ou toutes si aucun type choisi). preselectCode :
 // code à resélectionner après reconstruction de la liste (édition d'une
 // réservation existante).
+// Sélection multiple par cases à cocher (plus lisible qu'un <select
+// multiple> au ctrl/cmd-clic peu découvrable — demande client 21/10/2026).
+var RESA_E_ROOM_SELECTED = [];
+function resaEToggleRoom(cb){
+  var i = RESA_E_ROOM_SELECTED.indexOf(cb.value);
+  if(cb.checked && i===-1) RESA_E_ROOM_SELECTED.push(cb.value);
+  else if(!cb.checked && i!==-1) RESA_E_ROOM_SELECTED.splice(i,1);
+}
 function resaFilterRoomOptions(preselectCodes){
   var typeSel = document.getElementById('resa-e-roomtype');
-  var roomSel = document.getElementById('resa-e-room');
-  if(!typeSel || !roomSel) return;
+  var listEl = document.getElementById('resa-e-room');
+  if(!typeSel || !listEl) return;
   var typeF = typeSel.value;
   var rooms = (CFG.rooms||[]).filter(function(r){ return !typeF || r.category === typeF; })
     .slice().sort(function(a,b){ return (a.code||'').localeCompare(b.code||''); });
-  // multi-select : conserve la sélection en cours (ou preselectCodes à
-  // l'ouverture d'une résa) même si elle change de type de chambre.
-  var current = preselectCodes !== undefined ? preselectCodes
-    : Array.prototype.slice.call(roomSel.selectedOptions).map(function(o){ return o.value; });
-  roomSel.innerHTML = rooms.map(function(r){ return '<option value="'+esc(r.code)+'">'+esc(r.code)+' — '+esc(r.name||'')+'</option>'; }).join('');
-  Array.prototype.forEach.call(roomSel.options, function(o){ if(current.indexOf(o.value) !== -1) o.selected = true; });
+  // conserve la sélection en cours (ou preselectCodes à l'ouverture d'une
+  // résa) même si elle change de type de chambre.
+  RESA_E_ROOM_SELECTED = (preselectCodes !== undefined ? preselectCodes : RESA_E_ROOM_SELECTED).slice();
+  listEl.innerHTML = rooms.length ? rooms.map(function(r){
+    var checked = RESA_E_ROOM_SELECTED.indexOf(r.code) !== -1;
+    return '<label style="display:flex;align-items:center;gap:7px;padding:3px 0;font-size:13px;cursor:pointer"><input type="checkbox" value="'+esc(r.code)+'" '+(checked?'checked':'')+' onchange="resaEToggleRoom(this)">'+esc(r.code)+(r.name&&r.name!==r.code?' — '+esc(r.name):'')+'</label>';
+  }).join('') : '<div style="font-size:12px;color:var(--mu);padding:4px 0">Aucune chambre</div>';
 }
 
 function resaOpenEdit(code){
@@ -16889,7 +16898,7 @@ async function resaSaveEdit(){
   var errEl = document.getElementById('resa-e-error');
   var errMsg = document.getElementById('resa-e-error-msg');
   errEl.style.display = 'none';
-  var selectedRoomCodes = Array.prototype.slice.call(document.getElementById('resa-e-room').selectedOptions).map(function(o){ return o.value; });
+  var selectedRoomCodes = RESA_E_ROOM_SELECTED.slice();
   var body = {
     code: document.getElementById('resa-e-code').value,
     personFirstname: document.getElementById('resa-e-firstname').value.trim(),
