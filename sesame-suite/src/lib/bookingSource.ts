@@ -1138,11 +1138,16 @@ export async function listSesameOperators(config: BookingSourceConfig): Promise<
 /** POST — crée une personne + lui rattache un UserProfile de profil "gsa1"
  * sur l'établissement ciblé (même flux que le formulaire "New Operator" du
  * portail officiel : /ws/profile/listAll pour résoudre le profileId réel
- * du code "gsa1", /ws/person/create, puis /ws/userProfile/create). */
+ * du code "gsa1", /ws/person/create, puis /ws/userProfile/create). Déclenche
+ * ensuite resendSesameOperatorPassword — /ws/person/create ne fixe AUCUN
+ * mot de passe (le formulaire du portail officiel n'en demande pas non
+ * plus), un opérateur ne pourrait sinon jamais se connecter — best-effort,
+ * ne fait pas échouer la création si cet envoi échoue (déjà rattrapable
+ * depuis l'écran "Opérateurs Sesame", bouton "Renvoyer le mot de passe"). */
 export async function createSesameOperator(
   config: BookingSourceConfig,
   data: { firstname: string; lastname: string; email: string; phone?: string }
-): Promise<void> {
+): Promise<{ passwordEmailSent: boolean }> {
   const { headers, entityId } = await sesameLogin(config);
   if (!entityId) throw new BookingSourceError("Impossible de déterminer l'établissement Sesame cible (profil de connexion)");
 
@@ -1162,6 +1167,15 @@ export async function createSesameOperator(
     balance: 0,
   });
   if (!upResp.success) throw new BookingSourceError((upResp.message as string) || "Échec de la création du profil opérateur");
+
+  let passwordEmailSent = false;
+  try {
+    await resendSesameOperatorPassword(config, data.email);
+    passwordEmailSent = true;
+  } catch {
+    // best-effort — la création a déjà réussi, l'admin peut relancer l'envoi manuellement
+  }
+  return { passwordEmailSent };
 }
 
 /** POST — révoque un opérateur (supprime son UserProfile gsa1/operator sur
@@ -1171,6 +1185,21 @@ export async function revokeSesameOperator(config: BookingSourceConfig, userProf
   const { headers } = await sesameLogin(config);
   const resp = await sesameWsCall(config, headers, "/userProfile/delete", "POST", { id: userProfileId });
   if (!resp.success) throw new BookingSourceError((resp.message as string) || "Échec de la révocation");
+}
+
+/** POST — déclenche l'envoi par la plateforme Sesame Technology elle-même
+ * d'un email de définition de mot de passe à l'opérateur (/ws/login/
+ * resendPassword, PAS authentifié — même appel que le lien "mot de passe
+ * oublié" du portail officiel, cf. wa.resetPassword dans sesamenewportal).
+ * Indispensable : /ws/person/create (cf. createSesameOperator ci-dessus)
+ * ne fixe AUCUN mot de passe — le formulaire "New Operator" du portail
+ * officiel n'en demande pas non plus, un opérateur fraîchement créé ne
+ * peut donc jamais se connecter tant que ce flux n'a pas été déclenché au
+ * moins une fois (symptôme confirmé le 21/10/2026 : "mot de passe non
+ * accepté" sur un opérateur créé depuis ce panneau). */
+export async function resendSesameOperatorPassword(config: BookingSourceConfig, email: string): Promise<void> {
+  const resp = await sesameWsCall(config, {}, "/login/resendPassword", "POST", { email });
+  if (!resp.success) throw new BookingSourceError((resp.message as string) || "Échec de l'envoi");
 }
 
 export interface NfcEncodeResult {

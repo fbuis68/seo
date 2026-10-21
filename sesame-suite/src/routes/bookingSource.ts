@@ -16,6 +16,7 @@ import {
   listSesameOperators,
   createSesameOperator,
   revokeSesameOperator,
+  resendSesameOperatorPassword,
   BookingSourceError,
   FieldMapping,
   FacilityMapping,
@@ -967,7 +968,35 @@ bookingSourceRouter.post(
     const email = (b.email || "").trim();
     if (!firstname || !lastname || !email) throw new HttpError(400, "Prénom, nom et email requis");
     try {
-      await createSesameOperator(config, { firstname, lastname, email, phone: (b.phone || "").trim() || undefined });
+      const result = await createSesameOperator(config, { firstname, lastname, email, phone: (b.phone || "").trim() || undefined });
+      res.json({ ok: true, passwordEmailSent: result.passwordEmailSent });
+    } catch (e) {
+      if (e instanceof BookingSourceError) throw new HttpError(400, e.message);
+      throw e;
+    }
+  })
+);
+
+interface ResendPasswordBody {
+  email?: string;
+}
+
+/** POST /wa/bookingSource/operators/resendPassword — déclenche l'envoi par
+ * Sesame Technology lui-même d'un email de définition de mot de passe
+ * (indispensable pour un opérateur créé avant ce correctif, ou si l'envoi
+ * automatique de createSesameOperator a échoué). */
+bookingSourceRouter.post(
+  "/bookingSource/operators/resendPassword",
+  requireAdmin,
+  requireSesame,
+  requireCrmAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const config = await loadSesameConfigOrThrow(entity);
+    const email = ((req.body as ResendPasswordBody).email || "").trim();
+    if (!email) throw new HttpError(400, "email requis");
+    try {
+      await resendSesameOperatorPassword(config, email);
       res.json({ ok: true });
     } catch (e) {
       if (e instanceof BookingSourceError) throw new HttpError(400, e.message);
