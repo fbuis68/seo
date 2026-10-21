@@ -894,6 +894,10 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         <div class="fi"><label class="lb">Date d'arrivée</label><input type="date" id="resa-e-start"></div>
         <div class="fi"><label class="lb">Date de départ</label><input type="date" id="resa-e-end"></div>
       </div>
+      <div style="font-size:12px;color:var(--mu);margin:-6px 0 12px">
+        Arrivée à partir de <b id="resa-e-checkin-time">15:00</b> — départ avant <b id="resa-e-checkout-time">11:00</b>
+        <button type="button" title="Modifier les horaires standards" onclick="resaOpenScheduleModal()" style="background:none;border:none;cursor:pointer;color:var(--mu);font-size:13px;padding:0 0 0 4px;vertical-align:-2px"><i class="ti ti-settings"></i></button>
+      </div>
       <div class="g2">
         <div class="fi"><label class="lb">Type de chambre</label><select id="resa-e-roomtype" onchange="resaFilterRoomOptions()"><option value="">Tous types</option></select></div>
         <div class="fi"><label class="lb">Chambre</label><select id="resa-e-room"><option value="">— Aucune —</option></select></div>
@@ -5853,6 +5857,10 @@ async function resaSaveSchedule(){
   toast('Horaires mis à jour ✓');
   resaCloseScheduleModal();
   if(RESA_DETAIL_CODE) resaOpenDetail(RESA_DETAIL_CODE);
+  if(document.getElementById('resaEditModal').style.display !== 'none'){
+    document.getElementById('resa-e-checkin-time').textContent = CFG.checkinTime;
+    document.getElementById('resa-e-checkout-time').textContent = CFG.checkoutTime;
+  }
   renderReservations();
 }
 function toggleModuleMandatory(k, mandatory){
@@ -16831,6 +16839,8 @@ function resaOpenEdit(code){
   document.getElementById('resa-e-phone').value = b.personPhone||'';
   document.getElementById('resa-e-start').value = (b.startDate||'').slice(0,10);
   document.getElementById('resa-e-end').value = (b.endDate||'').slice(0,10);
+  document.getElementById('resa-e-checkin-time').textContent = CFG.checkinTime || '15:00';
+  document.getElementById('resa-e-checkout-time').textContent = CFG.checkoutTime || '11:00';
 
   var currentRoomCode = b.selectedRoomCode || b.facilityCode || '';
   var currentRoom = (CFG.rooms||[]).find(function(x){ return x.code === currentRoomCode; });
