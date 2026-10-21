@@ -794,7 +794,6 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       <div class="ni" data-pan="typo" onclick="showPan('typo')"><i class="ti ti-typography"></i>Typographie &amp; Textes</div>
       <div class="ni sector-hotel-only" data-pan="hotel" onclick="showPan('hotel')"><i class="ti ti-building"></i>Entité &amp; Catégorie</div>
       <div class="ni sector-hotel-only" data-pan="gains" onclick="showPan('gains')"><i class="ti ti-gift"></i>Gains <span class="nibadge">Multi</span></div>
-      <div class="ni sector-hotel-only" data-pan="eco" onclick="showPan('eco')"><i class="ti ti-leaf"></i>Paramètres éco</div>
       <div class="ni" data-pan="roomservice" onclick="showPan('roomservice')"><i class="ti ti-bell"></i>Catalogue produits</div>
       <div class="ni" data-pan="vendors" onclick="showPan('vendors')"><i class="ti ti-building-store"></i>Points de vente</div>
       <div class="ni" data-pan="livret" onclick="showPan('livret')"><i class="ti ti-book"></i>Livret digital</div>
@@ -1682,26 +1681,39 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 </div>
 
 <!-- ════════════════ ECO ════════════════ -->
-<div id="pan-eco" class="pan">
-  <div class="ph"><h2>Paramètres éco</h2><p>Références de consommation et fréquences proposées aux clients</p></div>
-  <div id="eco-group-banner" style="display:none;margin-bottom:16px"></div>
-  <div class="g2">
-    <div class="ca">
-      <div class="ch"><i class="ti ti-droplet"></i>Volumes de référence</div>
-      <div class="fi"><label class="lb">Eau par ménage complet (litres)</label><div class="slrow"><input type="range" id="e-eauM" min="5" max="40" step="1" oninput="document.getElementById('e-eauMV').textContent=this.value+' L'"><span class="slv" id="e-eauMV">15 L</span></div></div>
-      <div class="fi"><label class="lb">Eau par lavage serviettes (litres)</label><div class="slrow"><input type="range" id="e-eauS" min="15" max="80" step="1" oninput="document.getElementById('e-eauSV').textContent=this.value+' L'"><span class="slv" id="e-eauSV">40 L</span></div></div>
-      <div class="fi"><label class="lb">Facteur CO₂ (kg/L d'eau)</label><div class="slrow"><input type="range" id="e-co2" min="0.0001" max="0.001" step="0.0001" oninput="document.getElementById('e-co2V').textContent=parseFloat(this.value).toFixed(4)"><span class="slv" id="e-co2V">0.0003</span></div></div>
+<!-- ════ MODAL PARAMÈTRES ÉCO ════ — ouverte depuis la roue dentée de la
+     carte module "Préférences éco" (Entité & Catégorie > Modules),
+     remplace l'ancien menu "Paramètres éco" de la sidebar (§ demande
+     client 21/10/2026) — mêmes IDs de champs qu'avant (e-eauM/e-eauS/
+     e-co2/e-f0../e-f1), savePan()/populateAll() inchangés (agnostiques
+     du panel affiché). -->
+<div id="ecoParamsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:680px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.3)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--bdr)">
+      <h2 style="font-size:17px">Paramètres éco</h2>
+      <button onclick="document.getElementById('ecoParamsModal').style.display='none'" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
     </div>
-    <div class="ca">
-      <div class="ch"><i class="ti ti-list"></i>Fréquences disponibles pour le client</div>
-      <div class="trow"><div style="flex:1"><div class="trowt">Option "Aucun service"</div><div class="trows">Zéro ménage/linge durant tout le séjour</div></div><label class="tg"><input type="checkbox" id="e-f0"><span class="tgl"></span></label></div>
-      <div class="trow"><div style="flex:1"><div class="trowt">Option "Tous les 2 jours"</div></div><label class="tg"><input type="checkbox" id="e-f2"><span class="tgl"></span></label></div>
-      <div class="trow"><div style="flex:1"><div class="trowt">Option "Tous les 3 jours"</div></div><label class="tg"><input type="checkbox" id="e-f3"><span class="tgl"></span></label></div>
-      <div class="trow"><div style="flex:1"><div class="trowt">Option "1 fois par semaine"</div></div><label class="tg"><input type="checkbox" id="e-f7"><span class="tgl"></span></label></div>
-      <div class="trow"><div style="flex:1"><div class="trowt">Option "Quotidien" (standard)</div><div class="trows">Toujours disponible</div></div><label class="tg"><input type="checkbox" id="e-f1"><span class="tgl"></span></label></div>
+    <div style="padding:18px 20px">
+      <div id="eco-group-banner" style="display:none;margin-bottom:16px"></div>
+      <div class="g2">
+        <div class="ca">
+          <div class="ch"><i class="ti ti-droplet"></i>Volumes de référence</div>
+          <div class="fi"><label class="lb">Eau par ménage complet (litres)</label><div class="slrow"><input type="range" id="e-eauM" min="5" max="40" step="1" oninput="document.getElementById('e-eauMV').textContent=this.value+' L'"><span class="slv" id="e-eauMV">15 L</span></div></div>
+          <div class="fi"><label class="lb">Eau par lavage serviettes (litres)</label><div class="slrow"><input type="range" id="e-eauS" min="15" max="80" step="1" oninput="document.getElementById('e-eauSV').textContent=this.value+' L'"><span class="slv" id="e-eauSV">40 L</span></div></div>
+          <div class="fi"><label class="lb">Facteur CO₂ (kg/L d'eau)</label><div class="slrow"><input type="range" id="e-co2" min="0.0001" max="0.001" step="0.0001" oninput="document.getElementById('e-co2V').textContent=parseFloat(this.value).toFixed(4)"><span class="slv" id="e-co2V">0.0003</span></div></div>
+        </div>
+        <div class="ca">
+          <div class="ch"><i class="ti ti-list"></i>Fréquences disponibles pour le client</div>
+          <div class="trow"><div style="flex:1"><div class="trowt">Option "Aucun service"</div><div class="trows">Zéro ménage/linge durant tout le séjour</div></div><label class="tg"><input type="checkbox" id="e-f0"><span class="tgl"></span></label></div>
+          <div class="trow"><div style="flex:1"><div class="trowt">Option "Tous les 2 jours"</div></div><label class="tg"><input type="checkbox" id="e-f2"><span class="tgl"></span></label></div>
+          <div class="trow"><div style="flex:1"><div class="trowt">Option "Tous les 3 jours"</div></div><label class="tg"><input type="checkbox" id="e-f3"><span class="tgl"></span></label></div>
+          <div class="trow"><div style="flex:1"><div class="trowt">Option "1 fois par semaine"</div></div><label class="tg"><input type="checkbox" id="e-f7"><span class="tgl"></span></label></div>
+          <div class="trow"><div style="flex:1"><div class="trowt">Option "Quotidien" (standard)</div><div class="trows">Toujours disponible</div></div><label class="tg"><input type="checkbox" id="e-f1"><span class="tgl"></span></label></div>
+        </div>
+      </div>
+      <div class="brow"><button class="btn btn-p" onclick="savePan()"><i class="ti ti-device-floppy"></i> Sauvegarder</button></div>
     </div>
   </div>
-  <div class="brow"><button class="btn btn-p" onclick="savePan()"><i class="ti ti-device-floppy"></i> Sauvegarder</button></div>
 </div>
 
 <!-- ════════════════ PLAN ════════════════ -->
@@ -5157,7 +5169,7 @@ function deepMerge(target,src){
 }
 
 // ═══════════════════════════════════════════════ PANEL NAV
-var SECTOR_HOTEL_ONLY_PANS = ['hotel', 'eco', 'gains', 'planning'];
+var SECTOR_HOTEL_ONLY_PANS = ['hotel', 'gains', 'planning'];
 function showPan(id){
   if(!id) return;
   if(SECTOR_HOTEL_ONLY_PANS.indexOf(id) !== -1 && SECTEURS_HOTELIER.indexOf(CFG.secteur || 'hotellerie') === -1){
@@ -5175,7 +5187,6 @@ function showPan(id){
   if(id==='charte'){renderColorList();}
   if(id==='hotel'){try{renderModuleCards();ensureQuestionnairesLoaded();}catch(e){}}
   if(id==='gains'){renderGains();}
-  if(id==='eco'){renderEcoBanner();}
   if(id==='plan'){try{renderPlanCanvas();}catch(e){} try{renderAdminTags();}catch(e){}}
   if(id==='rooms'){ renderRoomGrid(); fetchStaffList().then(renderRoomGrid); nyInit(); }
   if(id==='preview'){try{renderFullPreview();renderPrevSummary();}catch(e){}}
@@ -5735,6 +5746,7 @@ function renderModuleCards(){
       // l'ancien menu "Barèmes taxe" de la sidebar, ouvre la modale
       // taxeTarifsModal directement depuis cette carte.
       +(m.k==='taxe'?'<button type="button" title="Barèmes taxe de séjour" onclick="openTaxeTarifsModal()" style="flex-shrink:0;margin-top:2px;background:none;border:none;cursor:pointer;color:var(--mu);font-size:17px;padding:2px"><i class="ti ti-settings"></i></button>':'')
+      +(m.k==='eco'?'<button type="button" title="Paramètres éco" onclick="openEcoParamsModal()" style="flex-shrink:0;margin-top:2px;background:none;border:none;cursor:pointer;color:var(--mu);font-size:17px;padding:2px"><i class="ti ti-settings"></i></button>':'')
       +'<label class="tg" style="flex-shrink:0;margin-top:2px"><input type="checkbox" '+(isReq?'disabled checked ':on?'checked ':'')+' onchange="toggleModule(\''+m.k+'\',this.checked)"><span class="tgl"></span></label>'
       +'</div>'
       +(on?'<div style="font-size:11px;font-weight:600;color:var(--a);margin-top:8px;display:flex;align-items:center;gap:4px"><i class="ti ti-check" style="font-size:11px"></i>Étape active</div>'
@@ -5794,6 +5806,12 @@ function renderModuleCards(){
 function openTaxeTarifsModal(){
   document.getElementById('taxeTarifsModal').style.display = 'flex';
   refreshTaxeExportCount();
+}
+/** Ouvre la modale "Paramètres éco" depuis la roue dentée de la carte
+ * module (remplace l'ancien menu sidebar "Paramètres éco"). */
+function openEcoParamsModal(){
+  document.getElementById('ecoParamsModal').style.display = 'flex';
+  renderEcoBanner();
 }
 function toggleModuleMandatory(k, mandatory){
   if(!CFG.checkinModules[k]) CFG.checkinModules[k]={};
@@ -13723,7 +13741,7 @@ var AP_MENU_GROUPS = [
   {label:'Accueil', items:[['dash','Accueil']]},
   {label:'Opérations', items:[['reservations','Réservations'],['orders','Commandes'],['planning','Planning'],['rooms','Gestion des Accès']]},
   {label:'Clients', items:[['crm','Base clients'],['marketing','Actions marketing'],['questionnaires','Questionnaires']]},
-  {label:'Administration', items:[['users','Utilisateurs'],['charte','Logo & Couleurs'],['typo','Typographie & Textes'],['hotel','Entité & Catégorie'],['gains','Gains'],['eco','Paramètres éco'],['roomservice','Catalogue produits'],['vendors','Points de vente'],['livret','Livret digital'],['plan',"Plan de l'établissement"],['bookingEngine','Réservation en ligne'],['preview','Aperçu client']]},
+  {label:'Administration', items:[['users','Utilisateurs'],['charte','Logo & Couleurs'],['typo','Typographie & Textes'],['hotel','Entité & Catégorie'],['gains','Gains'],['roomservice','Catalogue produits'],['vendors','Points de vente'],['livret','Livret digital'],['plan',"Plan de l'établissement"],['bookingEngine','Réservation en ligne'],['preview','Aperçu client']]},
   {label:'Technique', items:[['api','Intégration réservations'],['payment','Paiement en ligne'],['wallet','Wallet'],['email','Canaux'],['automation','Automatisations']]}
 ];
 var AP_PROFILES = [];
