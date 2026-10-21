@@ -3312,7 +3312,7 @@ function renderSignatures(){
       <div class="card-head"><div class="ch-ico">✎</div><span class="ch-title">Demandes de signature</span>
         <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="sigOpenCreate()">+ Nouvelle demande</button>
       </div>
-      ${SIG_LIST.length ? SIG_LIST.map(sigRowHtml).join('') : '<div class="log-empty">Aucune demande de signature pour l\\'instant.</div>'}
+      ${SIG_LIST.length ? SIG_LIST.map(sigRowHtml).join('') : '<div class="log-empty">Aucune demande de signature pour l\'instant.</div>'}
     </div>`;
 }
 
@@ -3399,7 +3399,7 @@ async function sigCreate(){
     const data = await r.json();
     if(!r.ok){ errEl.textContent = data.error||'Erreur lors de la création'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Créer'; return; }
     closeModal();
-    flash('Demande créée ✓ — pensez à l\\'envoyer');
+    flash('Demande créée ✓ — pensez à l\'envoyer');
     showSignatures();
   }catch(e){ errEl.textContent = 'Erreur de connexion au serveur'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Créer'; }
 }
@@ -3408,7 +3408,7 @@ async function sigSend(id){
   try{
     const r = await apiFetch('/wa/crmSignature/'+id+'/send', {method:'POST'});
     const data = await r.json().catch(()=>({}));
-    if(!r.ok){ flash(data.error||'Erreur lors de l\\'envoi'); return; }
+    if(!r.ok){ flash(data.error||'Erreur lors de l\'envoi'); return; }
     flash('Lien de signature envoyé ✓');
     showSignatures();
   }catch(e){ flash('Erreur de connexion au serveur'); }
