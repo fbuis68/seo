@@ -766,6 +766,10 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
            même, pas une donnée interne Sesame Suite. § demande client
            21/10/2026, reproduit l'écran "Operators" du portail officiel. -->
       <div class="ni sesame-only crm-admin-only" data-pan="sesameOperators" onclick="showPan('sesameOperators')" style="display:none"><i class="ti ti-shield-lock"></i>Opérateurs Sesame</div>
+      <!-- Profils de droits — § demande client 21/10/2026 : créés et
+           affectés UNIQUEMENT par le super-admin Sesame, jamais en
+           self-service hôtel (cf. adminProfile.ts). -->
+      <div class="ni sesame-only crm-admin-only" data-pan="adminProfiles" onclick="showPan('adminProfiles')" style="display:none"><i class="ti ti-key"></i>Profils &amp; Droits</div>
       <div class="ni hotel-only" data-pan="users" onclick="showPan('users')" style="display:none"><i class="ti ti-users"></i>Utilisateurs</div>
       <div class="ni" data-pan="charte" onclick="showPan('charte')"><i class="ti ti-palette"></i>Logo &amp; Couleurs</div>
       <div class="ni" data-pan="typo" onclick="showPan('typo')"><i class="ti ti-typography"></i>Typographie &amp; Textes</div>
@@ -3100,40 +3104,6 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     </div>
   </div>
 
-  <!-- Profils de droits (§ demande client 21/10/2026) — menus non autorisés
-       restent VISIBLES mais grisés pour l'utilisateur concerné (cf.
-       applyMenuRights), jamais masqués : il voit ce qui existe, sans y
-       accéder. -->
-  <div class="ca" style="margin-top:16px">
-    <div class="ch"><i class="ti ti-shield-lock"></i>Profils de droits
-      <button class="chact" onclick="usOpenProfile(null)"><i class="ti ti-plus" style="font-size:12px"></i> Nouveau profil</button>
-    </div>
-    <div class="alt alt-b" style="margin-bottom:10px"><i class="ti ti-info-circle"></i>
-      <span>Affectez un profil à un compte "Admin" pour limiter son accès à certains menus — les autres restent visibles mais grisés (non cliquables), jamais masqués.</span>
-    </div>
-    <div id="us-profiles-list"></div>
-  </div>
-
-  <!-- Modal profil (création/édition) -->
-  <div id="us-profile-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center;padding:16px">
-    <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:460px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.3)">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--bdr)">
-        <h2 style="font-size:17px" id="us-profile-title">Nouveau profil</h2>
-        <button onclick="usCloseProfile()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
-      </div>
-      <div style="padding:18px 20px">
-        <input type="hidden" id="us-profile-id">
-        <div class="fi"><label class="lb">Nom du profil *</label><input type="text" id="us-profile-name" placeholder="Ex : Réceptionniste"></div>
-        <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin:12px 0 4px">Menus autorisés</div>
-        <div id="us-profile-rights"></div>
-        <div style="display:flex;gap:8px;margin-top:14px">
-          <button class="btn btn-p" onclick="usSaveProfile()" style="flex:1;justify-content:center"><i class="ti ti-check"></i> Enregistrer</button>
-          <button class="btn btn-s" onclick="usCloseProfile()">Annuler</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- Modal invitation -->
   <div id="us-invite-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center;padding:20px">
     <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:460px;box-shadow:0 24px 60px rgba(0,0,0,.3)">
@@ -3145,14 +3115,12 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         <label>Email<input type="email" id="us-inv-email" placeholder="prenom.nom@hotel.fr"></label>
         <label>Nom (optionnel)<input type="text" id="us-inv-name" placeholder="Prénom Nom"></label>
         <label>Rôle
-          <select id="us-inv-role" onchange="document.getElementById('us-inv-profile-wrap').style.display=(this.value==='hotel'?'':'none')">
+          <select id="us-inv-role">
             <option value="hotel">Admin — accès complet au back-office</option>
             <option value="housekeeping">Ménage — app tablette ménage/maintenance uniquement</option>
           </select>
         </label>
-        <label id="us-inv-profile-wrap">Profil de droits
-          <select id="us-inv-profile"><option value="">Accès complet</option></select>
-        </label>
+        <div style="font-size:11px;color:var(--mu)">Les droits par menu (profils personnalisés) sont affectés par Sesame Technology, depuis le panneau "Profils &amp; Droits".</div>
         <label id="us-inv-scope-wrap" style="display:none">Portée
           <select id="us-inv-scope">
             <option value="entity">Cet établissement uniquement</option>
@@ -3285,6 +3253,51 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         <div style="display:flex;gap:8px;margin-top:14px">
           <button class="btn btn-p" id="so-create-btn" onclick="soCreate()" style="flex:1;justify-content:center"><i class="ti ti-check"></i> Créer</button>
           <button class="btn btn-s" onclick="document.getElementById('soCreateModal').style.display='none'">Annuler</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ PROFILS & DROITS (super-admin uniquement) ════════════════
+     § demande client 21/10/2026 — révisé le même jour : créés et affectés
+     UNIQUEMENT par le super-admin Sesame (crmRole=admin), jamais en
+     self-service hôtel. Opère sur ACTIVE_ENTITY_CODE comme "Opérateurs
+     Sesame" ci-dessus. Menu non autorisé = grisé côté admin.html pour
+     l'utilisateur concerné (cf. applyMenuRights), jamais masqué. -->
+<div id="pan-adminProfiles" class="pan">
+  <div class="ph"><h2>Profils &amp; Droits</h2><p>Créez des profils de droits par menu et affectez-les aux comptes "Admin" de l'établissement actuellement actif — les menus non autorisés restent visibles mais grisés pour l'utilisateur concerné.</p></div>
+
+  <div class="ca">
+    <div class="ch"><i class="ti ti-shield-lock"></i>Profils de <span id="ap-entity-name">—</span>
+      <button class="chact" onclick="apOpenProfile(null)"><i class="ti ti-plus" style="font-size:12px"></i> Nouveau profil</button>
+    </div>
+    <div id="ap-profiles-list"></div>
+  </div>
+
+  <div class="ca" style="margin-top:16px">
+    <div class="ch"><i class="ti ti-users"></i>Comptes Admin de l'établissement</div>
+    <div class="alt alt-b" style="margin-bottom:10px"><i class="ti ti-info-circle"></i>
+      <span>"Accès complet" = comportement par défaut d'un compte Admin sans profil affecté.</span>
+    </div>
+    <div id="ap-users-list"></div>
+  </div>
+
+  <!-- Modal profil (création/édition) -->
+  <div id="ap-profile-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center;padding:16px">
+    <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:460px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.3)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--bdr)">
+        <h2 style="font-size:17px" id="ap-profile-title">Nouveau profil</h2>
+        <button onclick="apCloseProfile()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="padding:18px 20px">
+        <input type="hidden" id="ap-profile-id">
+        <div class="fi"><label class="lb">Nom du profil *</label><input type="text" id="ap-profile-name" placeholder="Ex : Réceptionniste"></div>
+        <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin:12px 0 4px">Menus autorisés</div>
+        <div id="ap-profile-rights"></div>
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <button class="btn btn-p" onclick="apSaveProfile()" style="flex:1;justify-content:center"><i class="ti ti-check"></i> Enregistrer</button>
+          <button class="btn btn-s" onclick="apCloseProfile()">Annuler</button>
         </div>
       </div>
     </div>
@@ -5130,6 +5143,7 @@ function showPan(id){
   if(id==='subscriptions'){ subInit(); }
   if(id==='users'){ usInit(); }
   if(id==='sesameOperators'){ soInit(); }
+  if(id==='adminProfiles'){ apInit(); }
   if(id==='planning'){
     Promise.all([loadPlanTasks(), fetchPlanBookings(), fetchStaffList()]).then(function(){
       try{ renderPlanGrid(); }catch(e){ console.warn('planning render error:', e); }
@@ -12997,111 +13011,7 @@ async function usInit(){
   }catch(e){ US_CTX = { groupId:null, groupName:null, groupEntities:[] }; }
   var hint = document.getElementById('us-group-hint');
   if(hint) hint.textContent = US_CTX.groupId ? ('Votre établissement fait partie du groupe "'+US_CTX.groupName+'" — un compte peut être limité à cet hôtel ou étendu à tout le groupe.') : '';
-  await usProfilesFetch();
   await usFetchList();
-}
-
-// ── PROFILS (droits par menu, § demande client 21/10/2026) ──
-// Mêmes clés que data-pan des .ni de la sidebar — uniquement celles
-// pertinentes pour un compte role="hotel" (les items sesame-only n'y sont
-// jamais visibles de toute façon, les grader n'aurait pas de sens).
-var MENU_GROUPS = [
-  {label:'Accueil', items:[['dash','Accueil']]},
-  {label:'Opérations', items:[['reservations','Réservations'],['orders','Commandes'],['planning','Planning'],['rooms','Gestion des Accès']]},
-  {label:'Clients', items:[['crm','Base clients'],['marketing','Actions marketing'],['questionnaires','Questionnaires']]},
-  {label:'Administration', items:[['users','Utilisateurs'],['charte','Logo & Couleurs'],['typo','Typographie & Textes'],['hotel','Entité & Catégorie'],['tarifs','Barèmes taxe'],['gains','Gains'],['eco','Paramètres éco'],['roomservice','Catalogue produits'],['vendors','Points de vente'],['livret','Livret digital'],['plan',"Plan de l'établissement"],['bookingEngine','Réservation en ligne'],['preview','Aperçu client']]},
-  {label:'Technique', items:[['api','Intégration réservations'],['payment','Paiement en ligne'],['wallet','Wallet'],['email','Canaux'],['automation','Automatisations']]}
-];
-var US_PROFILES = [];
-
-async function usProfilesFetch(){
-  try{
-    var r = await adminFetch('/wa/adminProfile/list');
-    US_PROFILES = r.ok ? await r.json() : [];
-  }catch(e){ US_PROFILES = []; }
-  usRenderProfiles();
-  usFillProfileSelects();
-}
-function usRenderProfiles(){
-  var el = document.getElementById('us-profiles-list');
-  if(!el) return;
-  if(!US_PROFILES.length){
-    el.innerHTML = '<div style="font-size:12px;color:var(--mu);padding:8px 0">Aucun profil — par défaut, un compte "Admin" a accès à tout le back-office.</div>';
-    return;
-  }
-  el.innerHTML = US_PROFILES.map(function(p){
-    var n = Object.keys(p.menuRights||{}).filter(function(k){return p.menuRights[k];}).length;
-    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bdr)">'
-      + '<div style="flex:1"><div style="font-weight:600">'+esc(p.name)+'</div><div style="font-size:12px;color:var(--mu)">'+n+' menu(s) autorisé(s)</div></div>'
-      + '<button class="btn btn-s" style="padding:5px 10px" onclick="usOpenProfile(\''+p.id+'\')"><i class="ti ti-pencil"></i></button>'
-      + '<button class="btn btn-s" style="padding:5px 10px;color:var(--re)" onclick="usDeleteProfile(\''+p.id+'\')"><i class="ti ti-trash"></i></button>'
-      + '</div>';
-  }).join('');
-}
-/** Remplit le sélecteur de profil des modales invitation/édition — "Accès
- * complet" (valeur vide) toujours en premier, comportement par défaut d'un
- * compte "hotel" sans profil. */
-function usFillProfileSelects(){
-  var opts = '<option value="">Accès complet</option>' + US_PROFILES.map(function(p){ return '<option value="'+esc(p.id)+'">'+esc(p.name)+'</option>'; }).join('');
-  var el = document.getElementById('us-inv-profile');
-  if(el) el.innerHTML = opts;
-}
-function usOpenProfile(id){
-  var p = id ? US_PROFILES.find(function(x){return x.id===id;}) : null;
-  document.getElementById('us-profile-id').value = p ? p.id : '';
-  document.getElementById('us-profile-title').textContent = p ? 'Modifier le profil' : 'Nouveau profil';
-  document.getElementById('us-profile-name').value = p ? p.name : '';
-  var rights = p ? (p.menuRights||{}) : {};
-  document.getElementById('us-profile-rights').innerHTML = MENU_GROUPS.map(function(g){
-    return '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">'+esc(g.label)+'</div>'
-      + g.items.map(function(it){
-          var checked = !!rights[it[0]];
-          return '<label style="display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer;font-size:13px"><input type="checkbox" class="us-profile-right" value="'+it[0]+'"'+(checked?' checked':'')+'> '+esc(it[1])+'</label>';
-        }).join('')
-      + '</div>';
-  }).join('');
-  document.getElementById('us-profile-modal').style.display = 'flex';
-}
-function usCloseProfile(){ document.getElementById('us-profile-modal').style.display = 'none'; }
-async function usSaveProfile(){
-  var id = document.getElementById('us-profile-id').value;
-  var name = (document.getElementById('us-profile-name').value||'').trim();
-  if(!name){ toast('Nom du profil requis'); return; }
-  var menuRights = {};
-  document.querySelectorAll('.us-profile-right').forEach(function(cb){ if(cb.checked) menuRights[cb.value] = true; });
-  try{
-    var r = await adminFetch(id ? '/wa/adminProfile/update' : '/wa/adminProfile/create', {
-      method:'POST', body: JSON.stringify(id ? {id:id, name:name, menuRights:menuRights} : {name:name, menuRights:menuRights})
-    });
-    var data = await r.json();
-    if(!r.ok){ toast(data.error||'Erreur lors de l\'enregistrement'); return; }
-    usCloseProfile();
-    toast('Profil enregistré ✓');
-    await usProfilesFetch();
-  }catch(e){ toast('Erreur de connexion au serveur'); }
-}
-async function usDeleteProfile(id){
-  if(!confirm('Supprimer ce profil ? Les utilisateurs qui l\'ont repasseront en accès complet.')) return;
-  try{
-    var r = await adminFetch('/wa/adminProfile/delete', {method:'POST', body:JSON.stringify({id:id})});
-    var data = await r.json();
-    if(!r.ok){ toast(data.error||'Erreur'); return; }
-    toast('Profil supprimé');
-    await usProfilesFetch();
-    await usFetchList();
-  }catch(e){ toast('Erreur de connexion au serveur'); }
-}
-/** Changement de profil directement depuis la liste (menu déroulant inline,
- * cf. usRenderList) — évite une modale d'édition dédiée juste pour ce seul
- * champ. */
-async function usChangeUserProfile(id, profileId){
-  try{
-    var r = await adminFetch('/wa/hotelUser/update', {method:'POST', body:JSON.stringify({id:id, profileId: profileId || null})});
-    var data = await r.json();
-    if(!r.ok){ toast(data.error||'Erreur'); await usFetchList(); return; }
-    toast('Profil mis à jour ✓');
-    await usFetchList();
-  }catch(e){ toast('Erreur de connexion au serveur'); }
 }
 
 async function usFetchList(){
@@ -13124,11 +13034,9 @@ function usRenderList(){
   tbody.innerHTML = US_LIST.map(function(u){
     var scope = u.groupScoped ? '<span class="bdg" style="background:rgba(46,204,113,.1);color:var(--go)">Tout le groupe</span>' : '<span style="color:var(--mu);font-size:12px">Cet établissement</span>';
     var status = u.active ? '<span class="bdg" style="background:rgba(46,204,113,.1);color:var(--go)">Actif</span>' : '<span class="bdg" style="background:rgba(231,76,60,.1);color:var(--re)">Désactivé</span>';
-    var profileCell = '<span style="color:var(--mu);font-size:12px">—</span>';
-    if(u.role === 'hotel'){
-      var opts = '<option value="">Accès complet</option>' + US_PROFILES.map(function(p){ return '<option value="'+esc(p.id)+'"'+(p.id===u.profileId?' selected':'')+'>'+esc(p.name)+'</option>'; }).join('');
-      profileCell = '<select style="font-size:12px;padding:3px 6px" onchange="usChangeUserProfile(\''+u.id+'\',this.value)">'+opts+'</select>';
-    }
+    // Lecture seule — seul le super-admin Sesame affecte un profil (panneau
+    // "Profils & Droits"), § demande client 21/10/2026.
+    var profileCell = u.role==='hotel' ? (u.profileName ? esc(u.profileName) : '<span style="color:var(--mu);font-size:12px">Accès complet</span>') : '<span style="color:var(--mu);font-size:12px">—</span>';
     return '<tr>'
       + '<td><div style="font-weight:600">'+esc(u.name||u.email)+'</div><div style="font-size:12px;color:var(--mu)">'+esc(u.email)+'</div></td>'
       + '<td>'+esc(US_ROLE_LABEL[u.role]||u.role)+'</td>'
@@ -13148,8 +13056,6 @@ function usOpenInvite(){
   document.getElementById('us-inv-email').value = '';
   document.getElementById('us-inv-name').value = '';
   document.getElementById('us-inv-role').value = 'hotel';
-  document.getElementById('us-inv-profile').value = '';
-  document.getElementById('us-inv-profile-wrap').style.display = '';
   document.getElementById('us-inv-scope').value = 'entity';
   document.getElementById('us-inv-scope-wrap').style.display = US_CTX.groupId ? '' : 'none';
   document.getElementById('us-invite-modal').style.display = 'flex';
@@ -13160,11 +13066,10 @@ async function usSubmitInvite(){
   var email = (document.getElementById('us-inv-email').value||'').trim();
   var name = (document.getElementById('us-inv-name').value||'').trim();
   var role = document.getElementById('us-inv-role').value;
-  var profileId = role==='hotel' ? (document.getElementById('us-inv-profile').value||null) : null;
   var groupScoped = US_CTX.groupId && document.getElementById('us-inv-scope').value === 'group';
   if(!email){ toast('Email requis'); return; }
   try{
-    var r = await adminFetch('/wa/hotelUser/create', {method:'POST', body:JSON.stringify({email:email, name:name, role:role, profileId:profileId, groupScoped:groupScoped})});
+    var r = await adminFetch('/wa/hotelUser/create', {method:'POST', body:JSON.stringify({email:email, name:name, role:role, groupScoped:groupScoped})});
     var data = await r.json();
     if(!r.ok){ toast(data.error||'Erreur lors de la création'); return; }
     usCloseInvite();
@@ -13734,6 +13639,126 @@ async function soRevoke(userProfileId, name){
   }catch(e){
     toast(e.message||'Erreur lors de la révocation');
   }
+}
+
+// ═══════════════════ PROFILS & DROITS (super-admin uniquement, § demande
+// client 21/10/2026) — opère sur ACTIVE_ENTITY_CODE, même principe que
+// "Opérateurs Sesame" ci-dessus.
+var AP_MENU_GROUPS = [
+  {label:'Accueil', items:[['dash','Accueil']]},
+  {label:'Opérations', items:[['reservations','Réservations'],['orders','Commandes'],['planning','Planning'],['rooms','Gestion des Accès']]},
+  {label:'Clients', items:[['crm','Base clients'],['marketing','Actions marketing'],['questionnaires','Questionnaires']]},
+  {label:'Administration', items:[['users','Utilisateurs'],['charte','Logo & Couleurs'],['typo','Typographie & Textes'],['hotel','Entité & Catégorie'],['tarifs','Barèmes taxe'],['gains','Gains'],['eco','Paramètres éco'],['roomservice','Catalogue produits'],['vendors','Points de vente'],['livret','Livret digital'],['plan',"Plan de l'établissement"],['bookingEngine','Réservation en ligne'],['preview','Aperçu client']]},
+  {label:'Technique', items:[['api','Intégration réservations'],['payment','Paiement en ligne'],['wallet','Wallet'],['email','Canaux'],['automation','Automatisations']]}
+];
+var AP_PROFILES = [];
+var AP_USERS = [];
+
+async function apInit(){
+  document.getElementById('ap-entity-name').textContent = CFG.hotelName || ACTIVE_ENTITY_CODE || '—';
+  await apFetchProfiles();
+  await apFetchUsers();
+}
+async function apFetchProfiles(){
+  try{
+    var r = await adminFetch('/wa/adminProfile/list');
+    AP_PROFILES = r.ok ? await r.json() : [];
+  }catch(e){ AP_PROFILES = []; }
+  apRenderProfiles();
+}
+function apRenderProfiles(){
+  var el = document.getElementById('ap-profiles-list');
+  if(!AP_PROFILES.length){
+    el.innerHTML = '<div style="font-size:12px;color:var(--mu);padding:8px 0">Aucun profil pour cet établissement — par défaut, un compte "Admin" a accès à tout le back-office.</div>';
+    return;
+  }
+  el.innerHTML = AP_PROFILES.map(function(p){
+    var n = Object.keys(p.menuRights||{}).filter(function(k){return p.menuRights[k];}).length;
+    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bdr)">'
+      + '<div style="flex:1"><div style="font-weight:600">'+esc(p.name)+'</div><div style="font-size:12px;color:var(--mu)">'+n+' menu(s) autorisé(s)</div></div>'
+      + '<button class="btn btn-s" style="padding:5px 10px" onclick="apOpenProfile(\''+p.id+'\')"><i class="ti ti-pencil"></i></button>'
+      + '<button class="btn btn-s" style="padding:5px 10px;color:var(--re)" onclick="apDeleteProfile(\''+p.id+'\')"><i class="ti ti-trash"></i></button>'
+      + '</div>';
+  }).join('');
+}
+function apOpenProfile(id){
+  var p = id ? AP_PROFILES.find(function(x){return x.id===id;}) : null;
+  document.getElementById('ap-profile-id').value = p ? p.id : '';
+  document.getElementById('ap-profile-title').textContent = p ? 'Modifier le profil' : 'Nouveau profil';
+  document.getElementById('ap-profile-name').value = p ? p.name : '';
+  var rights = p ? (p.menuRights||{}) : {};
+  document.getElementById('ap-profile-rights').innerHTML = AP_MENU_GROUPS.map(function(g){
+    return '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">'+esc(g.label)+'</div>'
+      + g.items.map(function(it){
+          var checked = !!rights[it[0]];
+          return '<label style="display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer;font-size:13px"><input type="checkbox" class="ap-profile-right" value="'+it[0]+'"'+(checked?' checked':'')+'> '+esc(it[1])+'</label>';
+        }).join('')
+      + '</div>';
+  }).join('');
+  document.getElementById('ap-profile-modal').style.display = 'flex';
+}
+function apCloseProfile(){ document.getElementById('ap-profile-modal').style.display = 'none'; }
+async function apSaveProfile(){
+  var id = document.getElementById('ap-profile-id').value;
+  var name = (document.getElementById('ap-profile-name').value||'').trim();
+  if(!name){ toast('Nom du profil requis'); return; }
+  var menuRights = {};
+  document.querySelectorAll('.ap-profile-right').forEach(function(cb){ if(cb.checked) menuRights[cb.value] = true; });
+  try{
+    var r = await adminFetch(id ? '/wa/adminProfile/update' : '/wa/adminProfile/create', {
+      method:'POST', body: JSON.stringify(id ? {id:id, name:name, menuRights:menuRights} : {name:name, menuRights:menuRights})
+    });
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Erreur lors de l\'enregistrement'); return; }
+    apCloseProfile();
+    toast('Profil enregistré ✓');
+    await apFetchProfiles();
+    await apFetchUsers();
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+async function apDeleteProfile(id){
+  if(!confirm('Supprimer ce profil ? Les utilisateurs qui l\'ont repasseront en accès complet.')) return;
+  try{
+    var r = await adminFetch('/wa/adminProfile/delete', {method:'POST', body:JSON.stringify({id:id})});
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Erreur'); return; }
+    toast('Profil supprimé');
+    await apFetchProfiles();
+    await apFetchUsers();
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+async function apFetchUsers(){
+  try{
+    var r = await adminFetch('/wa/adminProfile/usersByEntity');
+    AP_USERS = r.ok ? await r.json() : [];
+  }catch(e){ AP_USERS = []; }
+  apRenderUsers();
+}
+function apRenderUsers(){
+  var el = document.getElementById('ap-users-list');
+  if(!AP_USERS.length){
+    el.innerHTML = '<div style="font-size:12px;color:var(--mu);padding:8px 0">Aucun compte Admin pour cet établissement.</div>';
+    return;
+  }
+  var h = '<table class="tbl"><thead><tr><th>Utilisateur</th><th>Profil</th></tr></thead><tbody>';
+  h += AP_USERS.map(function(u){
+    var opts = '<option value="">Accès complet</option>' + AP_PROFILES.map(function(p){ return '<option value="'+esc(p.id)+'"'+(p.id===u.profileId?' selected':'')+'>'+esc(p.name)+'</option>'; }).join('');
+    return '<tr>'
+      + '<td><div style="font-weight:600">'+esc(u.name||u.email)+'</div><div style="font-size:12px;color:var(--mu)">'+esc(u.email)+'</div></td>'
+      + '<td><select style="font-size:12px;padding:3px 6px" onchange="apAssignUser(\''+u.id+'\',this.value)">'+opts+'</select></td>'
+      + '</tr>';
+  }).join('');
+  h += '</tbody></table>';
+  el.innerHTML = h;
+}
+async function apAssignUser(userId, profileId){
+  try{
+    var r = await adminFetch('/wa/adminProfile/assignUser', {method:'POST', body:JSON.stringify({userId:userId, profileId:profileId||null})});
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Erreur'); await apFetchUsers(); return; }
+    toast('Profil affecté ✓');
+    await apFetchUsers();
+  }catch(e){ toast('Erreur de connexion au serveur'); }
 }
 
 async function subInit(){

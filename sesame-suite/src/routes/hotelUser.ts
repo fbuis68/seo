@@ -107,18 +107,6 @@ interface CreateBody {
   name?: string;
   role?: string;
   groupScoped?: boolean;
-  profileId?: string | null;
-}
-
-/** Vérifie que profileId (optionnel) appartient bien à l'établissement
- * appelant — jamais un profil d'un autre hôtel — et ne vaut que pour
- * role="hotel" (un compte "housekeeping" n'accède pas au back-office
- * complet, un profil n'y a pas de sens). */
-async function resolveProfileId(entityId: string, role: string | undefined, profileId: string | null | undefined): Promise<string | null> {
-  if (!profileId || role !== "hotel") return null;
-  const profile = await prisma.adminProfile.findFirst({ where: { id: profileId, entityId } });
-  if (!profile) throw new HttpError(400, "Profil introuvable pour cet établissement");
-  return profile.id;
 }
 
 /** POST /wa/hotelUser/create — le nouveau compte est toujours rattaché au
@@ -145,11 +133,10 @@ hotelUserRouter.post(
       groupScoped = true;
     }
 
-    const profileId = await resolveProfileId(req.admin!.entityId, b.role, b.profileId);
     const password = randomPassword();
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await prisma.adminUser.create({
-      data: { entityId: req.admin!.entityId, email, name: b.name?.trim() || null, passwordHash, role: b.role as string, groupScoped, profileId },
+      data: { entityId: req.admin!.entityId, email, name: b.name?.trim() || null, passwordHash, role: b.role as string, groupScoped },
       include: { profile: { select: { id: true, name: true } } },
     });
     // Le mot de passe généré n'est retourné qu'une fois, en clair.
@@ -163,7 +150,6 @@ interface UpdateBody {
   role?: string;
   active?: boolean;
   groupScoped?: boolean;
-  profileId?: string | null;
 }
 
 hotelUserRouter.post(
@@ -186,13 +172,9 @@ hotelUserRouter.post(
       if (!entity?.groupId) throw new HttpError(400, "Votre établissement n'appartient à aucun groupe");
     }
 
-    // profileId explicitement présent dans le body (même à null, pour
-    // retirer un profil déjà affecté) : undefined = champ non touché par
-    // cette requête, distinction nécessaire car "data.profileId: undefined"
-    // et "data.profileId: null" n'ont pas le même effet côté Prisma.
-    const profileId =
-      "profileId" in b ? await resolveProfileId(req.admin!.entityId, b.role !== undefined ? b.role : existing.role, b.profileId) : undefined;
-
+    // profileId n'est PAS modifiable ici — réservé au super-admin Sesame
+    // (cf. routes/adminProfile.ts POST /adminProfile/assignUser), § demande
+    // client 21/10/2026 : "seul super admin peut attribuer des droits".
     const row = await prisma.adminUser.update({
       where: { id: b.id },
       data: {
@@ -200,7 +182,6 @@ hotelUserRouter.post(
         role: b.role,
         active: b.active,
         groupScoped,
-        profileId,
       },
       include: { profile: { select: { id: true, name: true } } },
     });
