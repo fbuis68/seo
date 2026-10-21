@@ -761,6 +761,11 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       <div class="ni sesame-only" data-pan="hotels" onclick="showPan('hotels')" style="display:none;background:rgba(46,204,113,.06);border-left:3px solid var(--a)"><i class="ti ti-building-skyscraper"></i>Entités <span class="nibadge">Multi</span></div>
       <div class="ni sesame-only" data-pan="groups" onclick="showPan('groups')" style="display:none"><i class="ti ti-hierarchy-3"></i>Groupes</div>
       <div class="ni sesame-only" data-pan="subscriptions" onclick="showPan('subscriptions')" style="display:none"><i class="ti ti-rocket"></i>Souscriptions</div>
+      <!-- Réservé au super-admin Sesame (crmRole=admin) — crée/révoque de
+           VRAIS comptes opérateurs sur la plateforme Sesame Technology elle-
+           même, pas une donnée interne Sesame Suite. § demande client
+           21/10/2026, reproduit l'écran "Operators" du portail officiel. -->
+      <div class="ni sesame-only crm-admin-only" data-pan="sesameOperators" onclick="showPan('sesameOperators')" style="display:none"><i class="ti ti-shield-lock"></i>Opérateurs Sesame</div>
       <div class="ni hotel-only" data-pan="users" onclick="showPan('users')" style="display:none"><i class="ti ti-users"></i>Utilisateurs</div>
       <div class="ni" data-pan="charte" onclick="showPan('charte')"><i class="ti ti-palette"></i>Logo &amp; Couleurs</div>
       <div class="ni" data-pan="typo" onclick="showPan('typo')"><i class="ti ti-typography"></i>Typographie &amp; Textes</div>
@@ -3202,6 +3207,53 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   </div>
 </div>
 
+<!-- ════════════════ OPÉRATEURS SESAME TECHNOLOGY ════════════════
+     Reproduit l'écran "Operators" du vrai portail Sesame Technology
+     (sesamenewportal) — réservé au super-admin Sesame (crmRole=admin,
+     cf. .crm-admin-only). Opère sur ACTIVE_ENTITY_CODE (cf. panneau
+     "Entités") : les opérateurs créés/révoqués/listés sont ceux de
+     l'établissement actuellement actif, via SA connexion Sesame
+     Technology déjà enregistrée (panneau Intégration réservations) —
+     aucun identifiant ressaisi ici. § demande client 21/10/2026. -->
+<div id="pan-sesameOperators" class="pan">
+  <div class="ph"><h2>Opérateurs Sesame</h2><p>Comptes opérateurs (profil GSA1) sur la vraie plateforme Sesame Technology, pour l'établissement actuellement actif — reproduit l'écran "Operators" du portail officiel Sesame</p></div>
+
+  <div class="alt alt-w" id="so-no-config" style="display:none;margin-bottom:14px"><i class="ti ti-alert-triangle"></i>
+    <span>Connecteur "Sesame Technology" non configuré (ou autre modèle) pour cet établissement — renseignez-le dans <b>Intégration réservations</b> avant de pouvoir gérer ses opérateurs.</span>
+  </div>
+
+  <div class="ca">
+    <div class="ch"><i class="ti ti-shield-lock"></i>Opérateurs de <span id="so-entity-name">—</span>
+      <button class="chact" onclick="soOpenCreate()"><i class="ti ti-plus" style="font-size:12px"></i> Nouvel opérateur</button>
+      <button class="chact" onclick="soInit()"><i class="ti ti-refresh" style="font-size:12px"></i> Actualiser</button>
+    </div>
+    <div id="so-list"><div class="loading"><div class="spin"></div>Chargement…</div></div>
+  </div>
+
+  <!-- ════ MODAL NOUVEL OPÉRATEUR ════ -->
+  <div id="soCreateModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center;padding:16px">
+    <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:440px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.3)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--bdr)">
+        <h2 style="font-size:17px">Nouvel opérateur</h2>
+        <button onclick="document.getElementById('soCreateModal').style.display='none'" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="padding:18px 20px">
+        <div class="g2">
+          <div class="fi"><label class="lb">Prénom *</label><input type="text" id="so-firstname"></div>
+          <div class="fi"><label class="lb">Nom *</label><input type="text" id="so-lastname"></div>
+        </div>
+        <div class="fi"><label class="lb">Email *</label><input type="email" id="so-email"></div>
+        <div class="fi"><label class="lb">Téléphone</label><input type="text" id="so-phone"></div>
+        <div id="so-create-err" class="alt alt-w" style="display:none;margin-top:4px"><i class="ti ti-alert-triangle"></i><span id="so-create-err-msg"></span></div>
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <button class="btn btn-p" id="so-create-btn" onclick="soCreate()" style="flex:1;justify-content:center"><i class="ti ti-check"></i> Créer</button>
+          <button class="btn btn-s" onclick="document.getElementById('soCreateModal').style.display='none'">Annuler</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ════════════════ CRM SESAME (B2B) ════════════════ -->
 <div id="pan-crmsesame" class="pan">
   <div class="ph"><h2>CRM Sesame</h2><p>Gestion commerciale de vos clients hôteliers : pipeline, devis, facturation, support et marketing B2B</p></div>
@@ -4702,6 +4754,11 @@ var API_BASE = '';
 var KPI_CONFIGURED = false; // cf. populateAll() — false tant que CFG.kpi n'a jamais été enregistré côté serveur pour cet établissement
 var ADMIN_TOKEN = sessionStorage.getItem('SESAME_ADMIN_TOKEN') || null;
 var ADMIN_ROLE  = sessionStorage.getItem('SESAME_ADMIN_ROLE') || null;   // 'sesame' | 'hotel'
+// Rôle fonctionnel au sein de l'équipe Sesame (uniquement pertinent pour
+// ADMIN_ROLE==='sesame') — 'admin' = super-admin (gestion des utilisateurs
+// CRM, gestion des opérateurs Sesame Technology), 'commercial' = accès
+// standard. cf. .crm-admin-only / applyRoleVisibility.
+var ADMIN_CRMROLE = sessionStorage.getItem('SESAME_ADMIN_CRMROLE') || null;
 var HOME_ENTITY_CODE = sessionStorage.getItem('SESAME_HOME_ENTITY') || null;
 // Établissement actuellement affiché dans tous les panneaux. Pour un compte
 // "hotel", c'est toujours HOME_ENTITY_CODE (le serveur l'impose de toute
@@ -4870,11 +4927,13 @@ async function adminLogin(){
     }
     ADMIN_TOKEN = data.token;
     ADMIN_ROLE  = data.admin.role;
+    ADMIN_CRMROLE = data.admin.crmRole || null;
     HOME_ENTITY_CODE = data.admin.entityCode;
     GROUP_SCOPED = !!data.admin.groupScoped;
     GROUP_ID = data.admin.groupId || null;
     sessionStorage.setItem('SESAME_ADMIN_TOKEN', ADMIN_TOKEN);
     sessionStorage.setItem('SESAME_ADMIN_ROLE', ADMIN_ROLE);
+    if(ADMIN_CRMROLE) sessionStorage.setItem('SESAME_ADMIN_CRMROLE', ADMIN_CRMROLE); else sessionStorage.removeItem('SESAME_ADMIN_CRMROLE');
     sessionStorage.setItem('SESAME_HOME_ENTITY', HOME_ENTITY_CODE);
     sessionStorage.setItem('SESAME_GROUP_SCOPED', GROUP_SCOPED ? '1' : '0');
     if(GROUP_ID) sessionStorage.setItem('SESAME_GROUP_ID', GROUP_ID); else sessionStorage.removeItem('SESAME_GROUP_ID');
@@ -5023,6 +5082,7 @@ function showPan(id){
   if(id==='groups'){ grpRenderGrid(); }
   if(id==='subscriptions'){ subInit(); }
   if(id==='users'){ usInit(); }
+  if(id==='sesameOperators'){ soInit(); }
   if(id==='planning'){
     Promise.all([loadPlanTasks(), fetchPlanBookings(), fetchStaffList()]).then(function(){
       try{ renderPlanGrid(); }catch(e){ console.warn('planning render error:', e); }
@@ -10347,6 +10407,9 @@ function applyRoleVisibility(){
   document.querySelectorAll('.hotel-only').forEach(function(el){
     el.style.display = (ADMIN_ROLE==='hotel') ? '' : 'none';
   });
+  document.querySelectorAll('.crm-admin-only').forEach(function(el){
+    el.style.display = (ADMIN_ROLE==='sesame' && ADMIN_CRMROLE==='admin') ? '' : 'none';
+  });
   var sw = document.getElementById('tbGroupSwitch');
   if(sw) sw.style.display = (ADMIN_ROLE==='hotel' && GROUP_SCOPED) ? '' : 'none';
   if(ADMIN_ROLE==='hotel' && GROUP_SCOPED) usRefreshGroupSwitch();
@@ -13385,6 +13448,96 @@ function qnRenderResults(sends){
       + '<td style="font-size:12px">'+answersSummary+'</td>'
       + '</tr>';
   }).join('');
+}
+
+// ═══════════════════ OPÉRATEURS SESAME TECHNOLOGY (§ demande client
+// 21/10/2026) — réservé super-admin Sesame, opère sur ACTIVE_ENTITY_CODE.
+var SO_STATE = { operators: [] };
+
+async function soInit(){
+  document.getElementById('so-entity-name').textContent = CFG.hotelName || ACTIVE_ENTITY_CODE || '—';
+  document.getElementById('so-no-config').style.display = 'none';
+  var listEl = document.getElementById('so-list');
+  listEl.innerHTML = '<div class="loading"><div class="spin"></div>Chargement…</div>';
+  try{
+    var r = await adminFetch('/wa/bookingSource/operators');
+    var data = await r.json();
+    if(!r.ok){
+      if(r.status===400){
+        document.getElementById('so-no-config').style.display='block';
+        listEl.innerHTML = '';
+        return;
+      }
+      throw new Error(data.error||'Erreur serveur');
+    }
+    SO_STATE.operators = data.operators || [];
+    soRenderList();
+  }catch(e){
+    listEl.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-circle"></i><span>'+esc(e.message||'Erreur de chargement')+'</span></div>';
+  }
+}
+function soRenderList(){
+  var listEl = document.getElementById('so-list');
+  var ops = SO_STATE.operators;
+  if(!ops.length){
+    listEl.innerHTML = '<div class="alt alt-b" style="text-align:center;padding:20px"><i class="ti ti-shield-lock" style="font-size:28px;display:block;margin-bottom:8px;opacity:.4"></i>Aucun opérateur pour cet établissement</div>';
+    return;
+  }
+  var h = '<p style="font-size:12px;color:var(--mu);margin-bottom:10px"><b>'+ops.length+'</b> opérateur(s)</p>';
+  h += '<table class="tbl"><thead><tr><th>Nom</th><th>Email</th><th>Profil</th><th>Créé le</th><th></th></tr></thead><tbody>';
+  ops.forEach(function(o){
+    var name = ((o.firstname||'')+' '+(o.lastname||'')).trim() || '—';
+    h += '<tr>'
+      + '<td>'+esc(name)+'</td>'
+      + '<td style="font-size:12px;color:var(--mu)">'+esc(o.email||'—')+'</td>'
+      + '<td><span class="badge badge-soft-primary" style="font-size:11px;padding:2px 8px;border-radius:10px;background:var(--bluel);color:var(--blue)">'+esc(o.profileCode||'')+'</span></td>'
+      + '<td style="font-size:12px;color:var(--mu)">'+(o.createdAt?new Date(o.createdAt).toLocaleDateString('fr-FR'):'—')+'</td>'
+      + '<td style="text-align:right"><button class="btn btn-s btn-d" style="padding:4px 10px;font-size:12px" onclick="soRevoke(\''+esc(o.userProfileId)+'\',\''+esc(name).replace(/'/g,"\\'")+'\')"><i class="ti ti-trash"></i> Révoquer</button></td>'
+      + '</tr>';
+  });
+  h += '</tbody></table>';
+  listEl.innerHTML = h;
+}
+function soOpenCreate(){
+  document.getElementById('so-firstname').value = '';
+  document.getElementById('so-lastname').value = '';
+  document.getElementById('so-email').value = '';
+  document.getElementById('so-phone').value = '';
+  document.getElementById('so-create-err').style.display = 'none';
+  document.getElementById('soCreateModal').style.display = 'flex';
+}
+async function soCreate(){
+  var firstname = document.getElementById('so-firstname').value.trim();
+  var lastname  = document.getElementById('so-lastname').value.trim();
+  var email     = document.getElementById('so-email').value.trim();
+  var phone     = document.getElementById('so-phone').value.trim();
+  var errEl = document.getElementById('so-create-err'), errMsg = document.getElementById('so-create-err-msg');
+  if(!firstname || !lastname || !email){ errMsg.textContent='Prénom, nom et email requis'; errEl.style.display='block'; return; }
+  var btn = document.getElementById('so-create-btn');
+  btn.disabled = true; var orig = btn.innerHTML; btn.innerHTML = '<div class="spin"></div> Création…';
+  try{
+    var r = await adminFetch('/wa/bookingSource/operators/create', {method:'POST', body:JSON.stringify({firstname:firstname,lastname:lastname,email:email,phone:phone})});
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error||'Échec de la création');
+    document.getElementById('soCreateModal').style.display = 'none';
+    toast('Opérateur créé ✓');
+    soInit();
+  }catch(e){
+    errMsg.textContent = e.message||'Erreur'; errEl.style.display='block';
+  }
+  btn.disabled = false; btn.innerHTML = orig;
+}
+async function soRevoke(userProfileId, name){
+  if(!confirm('Révoquer l\'opérateur "'+name+'" ? Il perdra son accès à cet établissement sur Sesame Technology (ses autres établissements, le cas échéant, ne sont pas touchés).')) return;
+  try{
+    var r = await adminFetch('/wa/bookingSource/operators/revoke', {method:'POST', body:JSON.stringify({userProfileId:userProfileId})});
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error||'Échec de la révocation');
+    toast('Opérateur révoqué');
+    soInit();
+  }catch(e){
+    toast(e.message||'Erreur lors de la révocation');
+  }
 }
 
 async function subInit(){

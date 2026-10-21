@@ -614,8 +614,20 @@ async function main() {
   const sesamePasswordHash = await bcrypt.hash(SESAME_ADMIN_PASSWORD, 10);
   await prisma.adminUser.upsert({
     where: { email: SESAME_ADMIN_EMAIL },
-    update: {},
-    create: { entityId: sesameHq.id, email: SESAME_ADMIN_EMAIL, passwordHash: sesamePasswordHash, name: "Sesame Technology", role: "sesame" },
+    // crmRole "admin" indispensable ici : c'est ce qui distingue CE compte
+    // (super-admin) des autres comptes role="sesame" pour les
+    // fonctionnalités les plus sensibles (gestion des utilisateurs CRM,
+    // gestion des opérateurs Sesame Technology — cf. requireCrmAdmin) —
+    // mis à jour aussi sur un compte déjà existant (créé avant ce champ).
+    update: { crmRole: "admin" },
+    create: {
+      entityId: sesameHq.id,
+      email: SESAME_ADMIN_EMAIL,
+      passwordHash: sesamePasswordHash,
+      name: "Sesame Technology",
+      role: "sesame",
+      crmRole: "admin",
+    },
   });
   console.log(`Admin Sesame seedé : ${SESAME_ADMIN_EMAIL} / ${SESAME_ADMIN_PASSWORD}`);
 

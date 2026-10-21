@@ -1025,6 +1025,154 @@ export async function listNfcDevices(entityId: string, config: BookingSourceConf
     .filter((d) => d.id);
 }
 
+// ═══════════════════ OPÉRATEURS SESAME TECHNOLOGY (gestion d'utilisateurs)
+//
+// Reproduit l'écran "Operators" du vrai portail Sesame Technology
+// (sesamenewportal, templates/operator-list.html + scripts/operatorlist.js)
+// — § demande client 21/10/2026, réservé au super-admin Sesame (crmRole
+// "admin"), PAS une fonctionnalité exposée aux comptes hôtel. Appelle
+// directement la VRAIE API Sesame (/ws/person, /ws/userProfile,
+// /ws/profile — préfixe "/ws/", pas "/wa/", comme la connexion et
+// l'espace deviceAdmin, cf. commentaire PMS_PRESETS.sesame côté
+// admin.html), avec les identifiants déjà enregistrés pour le connecteur
+// "Sesame Technology" (BookingSourceConfig) de l'établissement ciblé —
+// aucun nouveau réglage à saisir.
+//
+// "Opérateur" = UserProfile de code "gsa1" ou "operator" (libellés affichés
+// "GSA1"/"Operator Profil" côté portail officiel, valeurs réelles
+// confirmées en minuscules par cet écran lui-même le 16/10/2026).
+const OPERATOR_PROFILE_CODES = ["gsa1", "operator"];
+
+async function sesameLogin(config: BookingSourceConfig): Promise<{ headers: Record<string, string>; entityId?: string }> {
+  const { token, cookie, resultFilterValue } = await performLogin(config);
+  const headerName = config.loginTokenHeaderName || "Authorization";
+  return {
+    headers: {
+      [headerName]: (config.loginTokenPrefix || "") + token,
+      ...(cookie ? { Cookie: cookie } : {}),
+    },
+    // resultFilterValue = entityId CÔTÉ SESAME du profil résolu par
+    // performLogin (filtre anti-fuite inter-établissements, cf. runImport
+    // ci-dessus) — c'est exactement l'identifiant attendu par
+    // /ws/userProfile/create ci-dessous, pas la peine d'un appel
+    // supplémentaire pour le retrouver.
+    entityId: resultFilterValue,
+  };
+}
+
+/** Un seul appel HTTP vers /ws<path> de la vraie API Sesame Technology, avec
+ * les en-têtes d'authentification déjà obtenus par sesameLogin() ci-dessus
+ * (réutilisés sur plusieurs appels — pas de re-login à chaque requête). */
+async function sesameWsCall(
+  config: BookingSourceConfig,
+  headers: Record<string, string>,
+  path: string,
+  method: "GET" | "POST",
+  data?: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  if (!config.baseUrl) throw new BookingSourceError("URL de base non configurée");
+  const url = normalizeBaseUrl(config.baseUrl).replace(/\/$/, "") + "/ws" + path;
+  const commonHeaders = { Accept: "application/json", "User-Agent": "SesameSuite-BookingConnector/1.0", ...headers };
+  let res: Response;
+  try {
+    if (method === "GET") {
+      const qs = data ? "?" + new URLSearchParams(data as Record<string, string>).toString() : "";
+      res = await fetchWithTimeout(url + qs, { headers: commonHeaders });
+    } else {
+      res = await fetchWithTimeout(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...commonHeaders },
+        body: JSON.stringify(data || {}),
+      });
+    }
+  } catch (e) {
+    throw new BookingSourceError(`Connexion impossible : ${describeFetchError(e)}`);
+  }
+  if (!res.ok) throw new BookingSourceError(`Le serveur distant a répondu ${res.status} ${res.statusText}`);
+  return (await parseJsonResponse(res, "La réponse")) as Record<string, unknown>;
+}
+
+export interface SesameOperator {
+  userProfileId: string;
+  personId: string;
+  firstname: string;
+  lastname: string;
+  email: string;
+  profileCode: string;
+  createdAt: string | null;
+}
+
+/** GET — liste les opérateurs (profils gsa1/operator) de l'établissement :
+ * /ws/person/list puis /ws/userProfile/list par personne (pas d'endpoint
+ * "liste des opérateurs" direct côté Sesame — même détour que le portail
+ * officiel, cf. commentaire operatorlist.js sur /userProfile/list filtré
+ * par personId plutôt que par entityId). */
+export async function listSesameOperators(config: BookingSourceConfig): Promise<SesameOperator[]> {
+  const { headers } = await sesameLogin(config);
+  const personsResp = await sesameWsCall(config, headers, "/person/list", "GET", { limit: 1000, start: 0 });
+  if (!personsResp.success) throw new BookingSourceError((personsResp.message as string) || "Impossible de lister les personnes");
+  const persons = (personsResp.root as Record<string, unknown>[]) || [];
+
+  const operators: SesameOperator[] = [];
+  for (const p of persons) {
+    const upResp = await sesameWsCall(config, headers, "/userProfile/list", "GET", { personId: p.id as string, limit: 1000, start: 0 });
+    if (!upResp.success) continue;
+    const profiles = (upResp.root as Record<string, unknown>[]) || [];
+    for (const up of profiles) {
+      const code = String(up.profileCode || "").toLowerCase();
+      if (OPERATOR_PROFILE_CODES.indexOf(code) === -1) continue;
+      operators.push({
+        userProfileId: String(up.id),
+        personId: String(p.id),
+        firstname: (p.firstname as string) || (p.firstName as string) || "",
+        lastname: (p.lastname as string) || (p.lastName as string) || "",
+        email: (p.email as string) || "",
+        profileCode: String(up.profileCode || ""),
+        createdAt: (up.created as string) || null,
+      });
+    }
+  }
+  return operators;
+}
+
+/** POST — crée une personne + lui rattache un UserProfile de profil "gsa1"
+ * sur l'établissement ciblé (même flux que le formulaire "New Operator" du
+ * portail officiel : /ws/profile/listAll pour résoudre le profileId réel
+ * du code "gsa1", /ws/person/create, puis /ws/userProfile/create). */
+export async function createSesameOperator(
+  config: BookingSourceConfig,
+  data: { firstname: string; lastname: string; email: string; phone?: string }
+): Promise<void> {
+  const { headers, entityId } = await sesameLogin(config);
+  if (!entityId) throw new BookingSourceError("Impossible de déterminer l'établissement Sesame cible (profil de connexion)");
+
+  const profilesResp = await sesameWsCall(config, headers, "/profile/listAll", "GET");
+  if (!profilesResp.success) throw new BookingSourceError((profilesResp.message as string) || "Impossible de lister les profils");
+  const profiles = (profilesResp.root as Record<string, unknown>[]) || [];
+  const gsaProfile = profiles.find((pr) => String(pr.code || "").toLowerCase() === "gsa1");
+  if (!gsaProfile) throw new BookingSourceError('Profil opérateur "GSA1" introuvable sur ce compte Sesame Technology');
+
+  const personResp = await sesameWsCall(config, headers, "/person/create", "POST", data as unknown as Record<string, unknown>);
+  if (!personResp.success) throw new BookingSourceError((personResp.message as string) || "Échec de la création de la personne");
+
+  const upResp = await sesameWsCall(config, headers, "/userProfile/create", "POST", {
+    personId: personResp.id,
+    entityId,
+    profileId: gsaProfile.id,
+    balance: 0,
+  });
+  if (!upResp.success) throw new BookingSourceError((upResp.message as string) || "Échec de la création du profil opérateur");
+}
+
+/** POST — révoque un opérateur (supprime son UserProfile gsa1/operator sur
+ * CET établissement uniquement — ne touche ni à la Person ni à ses
+ * éventuels profils sur d'autres établissements, cf. operatorlist.js). */
+export async function revokeSesameOperator(config: BookingSourceConfig, userProfileId: string): Promise<void> {
+  const { headers } = await sesameLogin(config);
+  const resp = await sesameWsCall(config, headers, "/userProfile/delete", "POST", { id: userProfileId });
+  if (!resp.success) throw new BookingSourceError((resp.message as string) || "Échec de la révocation");
+}
+
 export interface NfcEncodeResult {
   success: boolean;
   message: string;

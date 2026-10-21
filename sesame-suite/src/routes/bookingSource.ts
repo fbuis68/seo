@@ -3,7 +3,7 @@ import { randomBytes } from "crypto";
 import { prisma } from "../db";
 import { resolveEntity } from "../lib/entity";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
-import { requireAdmin } from "../middleware/requireAdmin";
+import { requireAdmin, requireSesame, requireCrmAdmin } from "../middleware/requireAdmin";
 import {
   fetchExternalBookings,
   fetchExternalFacilities,
@@ -13,6 +13,9 @@ import {
   runImport,
   pushOrderToPms,
   mewsListProducts,
+  listSesameOperators,
+  createSesameOperator,
+  revokeSesameOperator,
   BookingSourceError,
   FieldMapping,
   FacilityMapping,
@@ -904,6 +907,92 @@ bookingSourceRouter.post(
       const { mapped, errors } = mapFacilities(raw, mapping);
       const { created, updated } = await upsertMappedFacilities(entity, mapped);
       res.json({ ok: true, created, updated, errors, total: raw.length });
+    } catch (e) {
+      if (e instanceof BookingSourceError) throw new HttpError(400, e.message);
+      throw e;
+    }
+  })
+);
+
+// ── GESTION DES OPÉRATEURS SESAME TECHNOLOGY ──
+// § demande client 21/10/2026 : reproduit l'écran "Operators" du vrai
+// portail Sesame (sesamenewportal) directement dans l'admin Sesame Suite,
+// réservé au super-admin Sesame (requireCrmAdmin, pas juste requireSesame
+// — un compte "sesame" commercial standard n'y a pas accès) — ces routes
+// créent/révoquent de VRAIS comptes sur la plateforme Sesame Technology
+// elle-même, pas des données internes à Sesame Suite.
+async function loadSesameConfigOrThrow(entity: { id: string }) {
+  const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
+  if (!config || !config.baseUrl) throw new HttpError(400, "Connecteur Sesame Technology non configuré pour cet établissement");
+  if (config.presetId !== "sesame") throw new HttpError(400, "Gestion des opérateurs réservée au connecteur Sesame Technology");
+  return config;
+}
+
+bookingSourceRouter.get(
+  "/bookingSource/operators",
+  requireAdmin,
+  requireSesame,
+  requireCrmAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const config = await loadSesameConfigOrThrow(entity);
+    try {
+      const operators = await listSesameOperators(config);
+      res.json({ ok: true, operators });
+    } catch (e) {
+      if (e instanceof BookingSourceError) throw new HttpError(400, e.message);
+      throw e;
+    }
+  })
+);
+
+interface CreateOperatorBody {
+  firstname?: string;
+  lastname?: string;
+  email?: string;
+  phone?: string;
+}
+
+bookingSourceRouter.post(
+  "/bookingSource/operators/create",
+  requireAdmin,
+  requireSesame,
+  requireCrmAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const config = await loadSesameConfigOrThrow(entity);
+    const b = req.body as CreateOperatorBody;
+    const firstname = (b.firstname || "").trim();
+    const lastname = (b.lastname || "").trim();
+    const email = (b.email || "").trim();
+    if (!firstname || !lastname || !email) throw new HttpError(400, "Prénom, nom et email requis");
+    try {
+      await createSesameOperator(config, { firstname, lastname, email, phone: (b.phone || "").trim() || undefined });
+      res.json({ ok: true });
+    } catch (e) {
+      if (e instanceof BookingSourceError) throw new HttpError(400, e.message);
+      throw e;
+    }
+  })
+);
+
+interface RevokeOperatorBody {
+  userProfileId?: string;
+}
+
+bookingSourceRouter.post(
+  "/bookingSource/operators/revoke",
+  requireAdmin,
+  requireSesame,
+  requireCrmAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const config = await loadSesameConfigOrThrow(entity);
+    const userProfileId = ((req.body as RevokeOperatorBody).userProfileId || "").trim();
+    if (!userProfileId) throw new HttpError(400, "userProfileId requis");
+    try {
+      await revokeSesameOperator(config, userProfileId);
+      res.json({ ok: true });
     } catch (e) {
       if (e instanceof BookingSourceError) throw new HttpError(400, e.message);
       throw e;
