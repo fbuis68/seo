@@ -891,8 +891,8 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         <div class="fi"><label class="lb">Téléphone</label><input type="text" id="resa-e-phone"></div>
       </div>
       <div class="g2">
-        <div class="fi"><label class="lb">Date d'arrivée</label><div style="display:flex;gap:6px;align-items:center"><input type="date" id="resa-e-start" style="flex:1"><span style="font-size:12px;color:var(--mu);white-space:nowrap" id="resa-e-checkin-time">15:00</span></div></div>
-        <div class="fi"><label class="lb">Date de départ</label><div style="display:flex;gap:6px;align-items:center"><input type="date" id="resa-e-end" style="flex:1"><span style="font-size:12px;color:var(--mu);white-space:nowrap" id="resa-e-checkout-time">11:00</span></div></div>
+        <div class="fi"><label class="lb">Date d'arrivée</label><div style="display:flex;gap:6px"><input type="date" id="resa-e-start" style="flex:1"><input type="time" id="resa-e-checkin-time" style="width:90px"></div></div>
+        <div class="fi"><label class="lb">Date de départ</label><div style="display:flex;gap:6px"><input type="date" id="resa-e-end" style="flex:1"><input type="time" id="resa-e-checkout-time" style="width:90px"></div></div>
       </div>
       <div class="g2">
         <div class="fi"><label class="lb">Type de chambre</label><select id="resa-e-roomtype" onchange="resaFilterRoomOptions()"><option value="">Tous types</option></select></div>
@@ -5854,8 +5854,8 @@ async function resaSaveSchedule(){
   resaCloseScheduleModal();
   if(RESA_DETAIL_CODE) resaOpenDetail(RESA_DETAIL_CODE);
   if(document.getElementById('resaEditModal').style.display !== 'none'){
-    document.getElementById('resa-e-checkin-time').textContent = CFG.checkinTime;
-    document.getElementById('resa-e-checkout-time').textContent = CFG.checkoutTime;
+    setVal('resa-e-checkin-time', CFG.checkinTime);
+    setVal('resa-e-checkout-time', CFG.checkoutTime);
   }
   renderReservations();
 }
@@ -16835,8 +16835,8 @@ function resaOpenEdit(code){
   document.getElementById('resa-e-phone').value = b.personPhone||'';
   document.getElementById('resa-e-start').value = (b.startDate||'').slice(0,10);
   document.getElementById('resa-e-end').value = (b.endDate||'').slice(0,10);
-  document.getElementById('resa-e-checkin-time').textContent = CFG.checkinTime || '15:00';
-  document.getElementById('resa-e-checkout-time').textContent = CFG.checkoutTime || '11:00';
+  setVal('resa-e-checkin-time', CFG.checkinTime || '15:00');
+  setVal('resa-e-checkout-time', CFG.checkoutTime || '11:00');
 
   var currentRoomCode = b.selectedRoomCode || b.facilityCode || '';
   var currentRoom = (CFG.rooms||[]).find(function(x){ return x.code === currentRoomCode; });
@@ -16937,7 +16937,18 @@ async function resaSaveEdit(){
     facilityCode: document.getElementById('resa-e-room').value.trim(),
     bookingType: document.getElementById('resa-e-bookingtype').value.trim(),
   };
+  var newCheckin = getVal('resa-e-checkin-time') || '15:00';
+  var newCheckout = getVal('resa-e-checkout-time') || '11:00';
+  var scheduleChanged = newCheckin !== (CFG.checkinTime||'15:00') || newCheckout !== (CFG.checkoutTime||'11:00');
   try{
+    if(scheduleChanged){
+      CFG.checkinTime = newCheckin;
+      CFG.checkoutTime = newCheckout;
+      setVal('h-checkinTime', newCheckin);
+      setVal('h-checkoutTime', newCheckout);
+      var schedOk = await saveCfg();
+      if(!schedOk){ errMsg.textContent = 'Échec de l\'enregistrement des horaires'; errEl.style.display='block'; return; }
+    }
     var r = await adminFetch('/wa/booking/update', {method:'POST', body: JSON.stringify(body)});
     var data = await r.json();
     if(!r.ok){ errMsg.textContent = data.error||'Échec de la mise à jour'; errEl.style.display='block'; return; }
