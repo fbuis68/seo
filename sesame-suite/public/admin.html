@@ -15743,8 +15743,9 @@ function renderReservations(){
   if(!listEl) return;
   var todayStr = hotelToday();
 
-  // "En arrivées" : tout séjour pas encore terminé (avant ou après check-in
-  // — filtrable ensuite par le statut check-in via le sous-filtre dédié).
+  // "En arrivées" : date d'arrivée = aujourd'hui, et seulement aujourd'hui
+  // (demande client 21/10/2026 — affichait auparavant TOUT séjour futur non
+  // terminé, pas seulement les arrivées du jour).
   // "En cours" : sous-ensemble déjà arrivé — checkinDone (passé par le
   // check-in éco de cette app) OU date d'arrivée déjà passée (réservation
   // importée d'un PMS externe, cf. bookingSource.ts, qui ne renseigne jamais
@@ -15759,7 +15760,7 @@ function renderReservations(){
     if(RESA_TAB === 'checkedout') return ended;
     if(ended) return false;
     if(RESA_TAB === 'inhouse') return !!b.checkinDone || (b.startDate||'').slice(0,10) <= todayStr;
-    return true; // 'arriving'
+    return (b.startDate||'').slice(0,10) === todayStr; // 'arriving'
   }
 
   var applySubfilters = RESA_TAB === 'arriving';
