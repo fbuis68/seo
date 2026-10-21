@@ -4653,13 +4653,19 @@ const TR2_RECUR_STEP_MONTHS = { monthly:1, quarterly:3, yearly:12 };
  * prochain passage n'est que dans deux mois). */
 function trRecurringOccurrenceThisMonth(rule){
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const monthEnd = new Date(now.getFullYear(), now.getMonth()+1, 1);
   const step = TR2_RECUR_STEP_MONTHS[rule.frequency] || 1;
   let occ = new Date(rule.nextDate);
   occ = new Date(occ.getFullYear(), occ.getMonth(), occ.getDate());
   let guard = 0;
-  while(occ < monthStart && guard++ < 1000) occ.setMonth(occ.getMonth()+step);
+  // Comparé à AUJOURD'HUI, pas au 1er du mois : une occurrence déjà passée
+  // ce mois-ci est déjà débitée en pratique — la garder dans "ce mois-ci"
+  // la fait apparaître comme encore à venir alors qu'elle a déjà quitté le
+  // compte, et la compte une seconde fois avec le solde bancaire réel qui
+  // l'inclut déjà (demande client 21/10/2026 : "les supprimer de la liste
+  // [une fois débités]").
+  while(occ < today && guard++ < 1000) occ.setMonth(occ.getMonth()+step);
   return occ < monthEnd ? occ : null;
 }
 

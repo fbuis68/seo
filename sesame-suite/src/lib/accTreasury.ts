@@ -212,7 +212,14 @@ export async function computeTreasuryOverview(
   for (const rule of recurringRules) {
     const step = frequencyStepMonths(rule.frequency);
     let occ = startOfDay(rule.nextDate);
-    while (occ < horizonStart) occ = addMonths(occ, step);
+    // Comparé à AUJOURD'HUI, pas horizonStart (ex: début du mois en cours
+    // pour granularity="month") — une occurrence déjà passée CE mois-ci est
+    // déjà débitée en pratique et donc déjà reflétée dans currentBalance
+    // (computeBankBalance, qui somme les vraies transactions bancaires).
+    // La compter encore comme "prévue" ici la soustrairait une seconde fois
+    // du solde projeté — double comptage constaté le 21/10/2026 (demande
+    // client : "ne pas en tenir compte dans les graphiques deux fois").
+    while (occ < today) occ = addMonths(occ, step);
     while (occ < horizonEnd) {
       if (rule.direction === "CREDIT") futureSale.push({ dueDate: occ, amount: rule.amount });
       else futurePurchase.push({ dueDate: occ, amount: rule.amount });
