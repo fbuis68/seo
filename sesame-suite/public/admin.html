@@ -3302,6 +3302,25 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       </div>
     </div>
   </div>
+
+  <!-- Modal réinitialisation mot de passe -->
+  <div id="ap-pwd-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center;padding:16px">
+    <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:400px;box-shadow:0 24px 60px rgba(0,0,0,.3)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--bdr)">
+        <h2 style="font-size:17px">Mot de passe</h2>
+        <button onclick="apClosePwd()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="padding:18px 20px">
+        <input type="hidden" id="ap-pwd-userid">
+        <div class="fi"><label class="lb">Nouveau mot de passe (laisser vide = généré aléatoirement)</label><input type="text" id="ap-pwd-value" placeholder="Min. 10 caractères, 1 chiffre, 1 caractère spécial"></div>
+        <div id="ap-pwd-err" class="alt alt-w" style="display:none;margin-top:4px"><i class="ti ti-alert-triangle"></i><span id="ap-pwd-err-msg"></span></div>
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <button class="btn btn-p" onclick="apSubmitPwd()" style="flex:1;justify-content:center"><i class="ti ti-check"></i> Enregistrer</button>
+          <button class="btn btn-s" onclick="apClosePwd()">Annuler</button>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ════════════════ CRM SESAME (B2B) ════════════════ -->
@@ -13763,15 +13782,27 @@ async function apAssignUser(userId, profileId){
 }
 /** Réinitialise le mot de passe d'un compte Admin depuis "Profils & Droits"
  * (super-admin) — réutilise /wa/adminUser/resetPassword (déjà utilisé
- * depuis la fiche CRM), cross-établissement, pas de duplication. */
-async function apResetPassword(userId){
-  if(!confirm('Générer un nouveau mot de passe temporaire pour cet utilisateur ?')) return;
+ * depuis la fiche CRM), cross-établissement, pas de duplication. Ouvre une
+ * modale pour choisir le mot de passe (ou le laisser vide = généré
+ * aléatoirement, comportement précédent conservé en repli). */
+function apResetPassword(userId){
+  document.getElementById('ap-pwd-userid').value = userId;
+  document.getElementById('ap-pwd-value').value = '';
+  document.getElementById('ap-pwd-err').style.display = 'none';
+  document.getElementById('ap-pwd-modal').style.display = 'flex';
+}
+function apClosePwd(){ document.getElementById('ap-pwd-modal').style.display = 'none'; }
+async function apSubmitPwd(){
+  var userId = document.getElementById('ap-pwd-userid').value;
+  var password = document.getElementById('ap-pwd-value').value;
+  var errEl = document.getElementById('ap-pwd-err'), errMsg = document.getElementById('ap-pwd-err-msg');
   try{
-    var r = await adminFetch('/wa/adminUser/resetPassword', {method:'POST', body:JSON.stringify({id:userId})});
+    var r = await adminFetch('/wa/adminUser/resetPassword', {method:'POST', body:JSON.stringify({id:userId, password:password||undefined})});
     var data = await r.json();
-    if(!r.ok){ toast(data.error||'Erreur'); return; }
-    alert('Nouveau mot de passe temporaire :\n\n'+data.password+'\n\nCommuniquez-le à l\'utilisateur — il ne sera plus jamais affiché.');
-  }catch(e){ toast('Erreur de connexion au serveur'); }
+    if(!r.ok){ errMsg.textContent = data.error||'Erreur'; errEl.style.display='block'; return; }
+    apClosePwd();
+    alert((password?'Mot de passe défini :':'Nouveau mot de passe temporaire :')+'\n\n'+data.password+'\n\nCommuniquez-le à l\'utilisateur — il ne sera plus jamais affiché.');
+  }catch(e){ errMsg.textContent = 'Erreur de connexion au serveur'; errEl.style.display='block'; }
 }
 
 async function subInit(){

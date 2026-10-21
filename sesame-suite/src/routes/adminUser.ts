@@ -104,17 +104,24 @@ adminUserRouter.post(
   })
 );
 
-/** POST /wa/adminUser/resetPassword — body: { id }. Régénère un mot de
- * passe temporaire, retourné une seule fois en clair. */
+/** POST /wa/adminUser/resetPassword — body: { id, password? }. Régénère le
+ * mot de passe, retourné une seule fois en clair — password fourni et
+ * validé (même politique qu'à la création) si l'appelant veut le choisir
+ * lui-même, sinon temporaire aléatoire comme avant. */
 adminUserRouter.post(
   "/adminUser/resetPassword",
   requireAdmin,
   requireSesame,
   asyncHandler(async (req, res) => {
     const id = (req.body.id as string) || "";
+    const chosenPassword = (req.body.password as string) || "";
     const user = await prisma.adminUser.findUnique({ where: { id } });
     if (!user) throw new HttpError(404, "Compte introuvable");
-    const password = randomPassword();
+    if (chosenPassword) {
+      const policyError = validatePasswordPolicy(chosenPassword);
+      if (policyError) throw new HttpError(400, policyError);
+    }
+    const password = chosenPassword || randomPassword();
     const passwordHash = await bcrypt.hash(password, 10);
     await prisma.adminUser.update({ where: { id }, data: { passwordHash } });
     res.json({ ok: true, password });
