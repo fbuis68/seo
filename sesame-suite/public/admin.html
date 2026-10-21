@@ -3089,7 +3089,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     <div style="overflow-x:auto">
       <table class="tbl" id="us-table">
         <thead><tr>
-          <th>Utilisateur</th><th>Rôle</th><th>Portée</th><th>Statut</th><th>Actions</th>
+          <th>Utilisateur</th><th>Rôle</th><th>Profil</th><th>Portée</th><th>Statut</th><th>Actions</th>
         </tr></thead>
         <tbody id="us-tbody"></tbody>
       </table>
@@ -3097,6 +3097,40 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     <div id="us-empty" style="display:none;text-align:center;padding:30px;color:var(--mu)">
       <i class="ti ti-users" style="font-size:32px;display:block;margin-bottom:10px;opacity:.4"></i>
       Aucun autre utilisateur pour l'instant.
+    </div>
+  </div>
+
+  <!-- Profils de droits (§ demande client 21/10/2026) — menus non autorisés
+       restent VISIBLES mais grisés pour l'utilisateur concerné (cf.
+       applyMenuRights), jamais masqués : il voit ce qui existe, sans y
+       accéder. -->
+  <div class="ca" style="margin-top:16px">
+    <div class="ch"><i class="ti ti-shield-lock"></i>Profils de droits
+      <button class="chact" onclick="usOpenProfile(null)"><i class="ti ti-plus" style="font-size:12px"></i> Nouveau profil</button>
+    </div>
+    <div class="alt alt-b" style="margin-bottom:10px"><i class="ti ti-info-circle"></i>
+      <span>Affectez un profil à un compte "Admin" pour limiter son accès à certains menus — les autres restent visibles mais grisés (non cliquables), jamais masqués.</span>
+    </div>
+    <div id="us-profiles-list"></div>
+  </div>
+
+  <!-- Modal profil (création/édition) -->
+  <div id="us-profile-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center;padding:16px">
+    <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:460px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.3)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--bdr)">
+        <h2 style="font-size:17px" id="us-profile-title">Nouveau profil</h2>
+        <button onclick="usCloseProfile()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="padding:18px 20px">
+        <input type="hidden" id="us-profile-id">
+        <div class="fi"><label class="lb">Nom du profil *</label><input type="text" id="us-profile-name" placeholder="Ex : Réceptionniste"></div>
+        <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;margin:12px 0 4px">Menus autorisés</div>
+        <div id="us-profile-rights"></div>
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <button class="btn btn-p" onclick="usSaveProfile()" style="flex:1;justify-content:center"><i class="ti ti-check"></i> Enregistrer</button>
+          <button class="btn btn-s" onclick="usCloseProfile()">Annuler</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -3111,10 +3145,13 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
         <label>Email<input type="email" id="us-inv-email" placeholder="prenom.nom@hotel.fr"></label>
         <label>Nom (optionnel)<input type="text" id="us-inv-name" placeholder="Prénom Nom"></label>
         <label>Rôle
-          <select id="us-inv-role">
+          <select id="us-inv-role" onchange="document.getElementById('us-inv-profile-wrap').style.display=(this.value==='hotel'?'':'none')">
             <option value="hotel">Admin — accès complet au back-office</option>
             <option value="housekeeping">Ménage — app tablette ménage/maintenance uniquement</option>
           </select>
+        </label>
+        <label id="us-inv-profile-wrap">Profil de droits
+          <select id="us-inv-profile"><option value="">Accès complet</option></select>
         </label>
         <label id="us-inv-scope-wrap" style="display:none">Portée
           <select id="us-inv-scope">
@@ -4759,6 +4796,12 @@ var ADMIN_ROLE  = sessionStorage.getItem('SESAME_ADMIN_ROLE') || null;   // 'ses
 // CRM, gestion des opérateurs Sesame Technology), 'commercial' = accès
 // standard. cf. .crm-admin-only / applyRoleVisibility.
 var ADMIN_CRMROLE = sessionStorage.getItem('SESAME_ADMIN_CRMROLE') || null;
+// Droits par menu du profil personnalisé affecté à ce compte (role='hotel'
+// uniquement, cf. AdminProfile / panneau Utilisateurs > Profils) — null =
+// pas de profil, accès complet (comportement historique). Un objet
+// {dataPan: true, ...} : toute clé absente ou à false grise le menu
+// correspondant (visuel seul, cf. applyMenuRights) sans jamais le masquer.
+var MENU_RIGHTS = JSON.parse(sessionStorage.getItem('SESAME_MENU_RIGHTS') || 'null');
 var HOME_ENTITY_CODE = sessionStorage.getItem('SESAME_HOME_ENTITY') || null;
 // Établissement actuellement affiché dans tous les panneaux. Pour un compte
 // "hotel", c'est toujours HOME_ENTITY_CODE (le serveur l'impose de toute
@@ -4928,12 +4971,14 @@ async function adminLogin(){
     ADMIN_TOKEN = data.token;
     ADMIN_ROLE  = data.admin.role;
     ADMIN_CRMROLE = data.admin.crmRole || null;
+    MENU_RIGHTS = data.admin.menuRights || null;
     HOME_ENTITY_CODE = data.admin.entityCode;
     GROUP_SCOPED = !!data.admin.groupScoped;
     GROUP_ID = data.admin.groupId || null;
     sessionStorage.setItem('SESAME_ADMIN_TOKEN', ADMIN_TOKEN);
     sessionStorage.setItem('SESAME_ADMIN_ROLE', ADMIN_ROLE);
     if(ADMIN_CRMROLE) sessionStorage.setItem('SESAME_ADMIN_CRMROLE', ADMIN_CRMROLE); else sessionStorage.removeItem('SESAME_ADMIN_CRMROLE');
+    if(MENU_RIGHTS) sessionStorage.setItem('SESAME_MENU_RIGHTS', JSON.stringify(MENU_RIGHTS)); else sessionStorage.removeItem('SESAME_MENU_RIGHTS');
     sessionStorage.setItem('SESAME_HOME_ENTITY', HOME_ENTITY_CODE);
     sessionStorage.setItem('SESAME_GROUP_SCOPED', GROUP_SCOPED ? '1' : '0');
     if(GROUP_ID) sessionStorage.setItem('SESAME_GROUP_ID', GROUP_ID); else sessionStorage.removeItem('SESAME_GROUP_ID');
@@ -4948,6 +4993,8 @@ async function adminLogin(){
 function adminLogout(){
   sessionStorage.removeItem('SESAME_ADMIN_TOKEN');
   sessionStorage.removeItem('SESAME_ADMIN_ROLE');
+  sessionStorage.removeItem('SESAME_ADMIN_CRMROLE');
+  sessionStorage.removeItem('SESAME_MENU_RIGHTS');
   sessionStorage.removeItem('SESAME_HOME_ENTITY');
   sessionStorage.removeItem('SESAME_ACTIVE_ENTITY');
   sessionStorage.removeItem('SESAME_GROUP_SCOPED');
@@ -10410,9 +10457,25 @@ function applyRoleVisibility(){
   document.querySelectorAll('.crm-admin-only').forEach(function(el){
     el.style.display = (ADMIN_ROLE==='sesame' && ADMIN_CRMROLE==='admin') ? '' : 'none';
   });
+  applyMenuRights();
   var sw = document.getElementById('tbGroupSwitch');
   if(sw) sw.style.display = (ADMIN_ROLE==='hotel' && GROUP_SCOPED) ? '' : 'none';
   if(ADMIN_ROLE==='hotel' && GROUP_SCOPED) usRefreshGroupSwitch();
+}
+
+/** Grise (sans jamais masquer) les items de menu absents des droits du
+ * profil personnalisé affecté à ce compte (MENU_RIGHTS) — § demande client
+ * 21/10/2026. Purement visuel : opacity + pointer-events:none, aucun clic
+ * ne doit déclencher quoi que ce soit (ni message, ni navigation). Un
+ * MENU_RIGHTS null (pas de profil, ou compte non "hotel") laisse tous les
+ * menus déjà visibles (sesame-only/hotel-only) intacts — comportement
+ * historique d'accès complet préservé. */
+function applyMenuRights(){
+  document.querySelectorAll('.ni[data-pan]').forEach(function(el){
+    var allowed = !MENU_RIGHTS || !!MENU_RIGHTS[el.getAttribute('data-pan')];
+    el.style.opacity = allowed ? '' : '.35';
+    el.style.pointerEvents = allowed ? '' : 'none';
+  });
 }
 
 /** Peuple le sélecteur d'établissement du topbar pour un compte hôtel
@@ -12934,7 +12997,111 @@ async function usInit(){
   }catch(e){ US_CTX = { groupId:null, groupName:null, groupEntities:[] }; }
   var hint = document.getElementById('us-group-hint');
   if(hint) hint.textContent = US_CTX.groupId ? ('Votre établissement fait partie du groupe "'+US_CTX.groupName+'" — un compte peut être limité à cet hôtel ou étendu à tout le groupe.') : '';
+  await usProfilesFetch();
   await usFetchList();
+}
+
+// ── PROFILS (droits par menu, § demande client 21/10/2026) ──
+// Mêmes clés que data-pan des .ni de la sidebar — uniquement celles
+// pertinentes pour un compte role="hotel" (les items sesame-only n'y sont
+// jamais visibles de toute façon, les grader n'aurait pas de sens).
+var MENU_GROUPS = [
+  {label:'Accueil', items:[['dash','Accueil']]},
+  {label:'Opérations', items:[['reservations','Réservations'],['orders','Commandes'],['planning','Planning'],['rooms','Gestion des Accès']]},
+  {label:'Clients', items:[['crm','Base clients'],['marketing','Actions marketing'],['questionnaires','Questionnaires']]},
+  {label:'Administration', items:[['users','Utilisateurs'],['charte','Logo & Couleurs'],['typo','Typographie & Textes'],['hotel','Entité & Catégorie'],['tarifs','Barèmes taxe'],['gains','Gains'],['eco','Paramètres éco'],['roomservice','Catalogue produits'],['vendors','Points de vente'],['livret','Livret digital'],['plan',"Plan de l'établissement"],['bookingEngine','Réservation en ligne'],['preview','Aperçu client']]},
+  {label:'Technique', items:[['api','Intégration réservations'],['payment','Paiement en ligne'],['wallet','Wallet'],['email','Canaux'],['automation','Automatisations']]}
+];
+var US_PROFILES = [];
+
+async function usProfilesFetch(){
+  try{
+    var r = await adminFetch('/wa/adminProfile/list');
+    US_PROFILES = r.ok ? await r.json() : [];
+  }catch(e){ US_PROFILES = []; }
+  usRenderProfiles();
+  usFillProfileSelects();
+}
+function usRenderProfiles(){
+  var el = document.getElementById('us-profiles-list');
+  if(!el) return;
+  if(!US_PROFILES.length){
+    el.innerHTML = '<div style="font-size:12px;color:var(--mu);padding:8px 0">Aucun profil — par défaut, un compte "Admin" a accès à tout le back-office.</div>';
+    return;
+  }
+  el.innerHTML = US_PROFILES.map(function(p){
+    var n = Object.keys(p.menuRights||{}).filter(function(k){return p.menuRights[k];}).length;
+    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bdr)">'
+      + '<div style="flex:1"><div style="font-weight:600">'+esc(p.name)+'</div><div style="font-size:12px;color:var(--mu)">'+n+' menu(s) autorisé(s)</div></div>'
+      + '<button class="btn btn-s" style="padding:5px 10px" onclick="usOpenProfile(\''+p.id+'\')"><i class="ti ti-pencil"></i></button>'
+      + '<button class="btn btn-s" style="padding:5px 10px;color:var(--re)" onclick="usDeleteProfile(\''+p.id+'\')"><i class="ti ti-trash"></i></button>'
+      + '</div>';
+  }).join('');
+}
+/** Remplit le sélecteur de profil des modales invitation/édition — "Accès
+ * complet" (valeur vide) toujours en premier, comportement par défaut d'un
+ * compte "hotel" sans profil. */
+function usFillProfileSelects(){
+  var opts = '<option value="">Accès complet</option>' + US_PROFILES.map(function(p){ return '<option value="'+esc(p.id)+'">'+esc(p.name)+'</option>'; }).join('');
+  var el = document.getElementById('us-inv-profile');
+  if(el) el.innerHTML = opts;
+}
+function usOpenProfile(id){
+  var p = id ? US_PROFILES.find(function(x){return x.id===id;}) : null;
+  document.getElementById('us-profile-id').value = p ? p.id : '';
+  document.getElementById('us-profile-title').textContent = p ? 'Modifier le profil' : 'Nouveau profil';
+  document.getElementById('us-profile-name').value = p ? p.name : '';
+  var rights = p ? (p.menuRights||{}) : {};
+  document.getElementById('us-profile-rights').innerHTML = MENU_GROUPS.map(function(g){
+    return '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">'+esc(g.label)+'</div>'
+      + g.items.map(function(it){
+          var checked = !!rights[it[0]];
+          return '<label style="display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer;font-size:13px"><input type="checkbox" class="us-profile-right" value="'+it[0]+'"'+(checked?' checked':'')+'> '+esc(it[1])+'</label>';
+        }).join('')
+      + '</div>';
+  }).join('');
+  document.getElementById('us-profile-modal').style.display = 'flex';
+}
+function usCloseProfile(){ document.getElementById('us-profile-modal').style.display = 'none'; }
+async function usSaveProfile(){
+  var id = document.getElementById('us-profile-id').value;
+  var name = (document.getElementById('us-profile-name').value||'').trim();
+  if(!name){ toast('Nom du profil requis'); return; }
+  var menuRights = {};
+  document.querySelectorAll('.us-profile-right').forEach(function(cb){ if(cb.checked) menuRights[cb.value] = true; });
+  try{
+    var r = await adminFetch(id ? '/wa/adminProfile/update' : '/wa/adminProfile/create', {
+      method:'POST', body: JSON.stringify(id ? {id:id, name:name, menuRights:menuRights} : {name:name, menuRights:menuRights})
+    });
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Erreur lors de l\'enregistrement'); return; }
+    usCloseProfile();
+    toast('Profil enregistré ✓');
+    await usProfilesFetch();
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+async function usDeleteProfile(id){
+  if(!confirm('Supprimer ce profil ? Les utilisateurs qui l\'ont repasseront en accès complet.')) return;
+  try{
+    var r = await adminFetch('/wa/adminProfile/delete', {method:'POST', body:JSON.stringify({id:id})});
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Erreur'); return; }
+    toast('Profil supprimé');
+    await usProfilesFetch();
+    await usFetchList();
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+/** Changement de profil directement depuis la liste (menu déroulant inline,
+ * cf. usRenderList) — évite une modale d'édition dédiée juste pour ce seul
+ * champ. */
+async function usChangeUserProfile(id, profileId){
+  try{
+    var r = await adminFetch('/wa/hotelUser/update', {method:'POST', body:JSON.stringify({id:id, profileId: profileId || null})});
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Erreur'); await usFetchList(); return; }
+    toast('Profil mis à jour ✓');
+    await usFetchList();
+  }catch(e){ toast('Erreur de connexion au serveur'); }
 }
 
 async function usFetchList(){
@@ -12957,9 +13124,15 @@ function usRenderList(){
   tbody.innerHTML = US_LIST.map(function(u){
     var scope = u.groupScoped ? '<span class="bdg" style="background:rgba(46,204,113,.1);color:var(--go)">Tout le groupe</span>' : '<span style="color:var(--mu);font-size:12px">Cet établissement</span>';
     var status = u.active ? '<span class="bdg" style="background:rgba(46,204,113,.1);color:var(--go)">Actif</span>' : '<span class="bdg" style="background:rgba(231,76,60,.1);color:var(--re)">Désactivé</span>';
+    var profileCell = '<span style="color:var(--mu);font-size:12px">—</span>';
+    if(u.role === 'hotel'){
+      var opts = '<option value="">Accès complet</option>' + US_PROFILES.map(function(p){ return '<option value="'+esc(p.id)+'"'+(p.id===u.profileId?' selected':'')+'>'+esc(p.name)+'</option>'; }).join('');
+      profileCell = '<select style="font-size:12px;padding:3px 6px" onchange="usChangeUserProfile(\''+u.id+'\',this.value)">'+opts+'</select>';
+    }
     return '<tr>'
       + '<td><div style="font-weight:600">'+esc(u.name||u.email)+'</div><div style="font-size:12px;color:var(--mu)">'+esc(u.email)+'</div></td>'
       + '<td>'+esc(US_ROLE_LABEL[u.role]||u.role)+'</td>'
+      + '<td>'+profileCell+'</td>'
       + '<td>'+scope+'</td>'
       + '<td>'+status+'</td>'
       + '<td style="white-space:nowrap;display:flex;gap:6px">'
@@ -12975,6 +13148,8 @@ function usOpenInvite(){
   document.getElementById('us-inv-email').value = '';
   document.getElementById('us-inv-name').value = '';
   document.getElementById('us-inv-role').value = 'hotel';
+  document.getElementById('us-inv-profile').value = '';
+  document.getElementById('us-inv-profile-wrap').style.display = '';
   document.getElementById('us-inv-scope').value = 'entity';
   document.getElementById('us-inv-scope-wrap').style.display = US_CTX.groupId ? '' : 'none';
   document.getElementById('us-invite-modal').style.display = 'flex';
@@ -12985,10 +13160,11 @@ async function usSubmitInvite(){
   var email = (document.getElementById('us-inv-email').value||'').trim();
   var name = (document.getElementById('us-inv-name').value||'').trim();
   var role = document.getElementById('us-inv-role').value;
+  var profileId = role==='hotel' ? (document.getElementById('us-inv-profile').value||null) : null;
   var groupScoped = US_CTX.groupId && document.getElementById('us-inv-scope').value === 'group';
   if(!email){ toast('Email requis'); return; }
   try{
-    var r = await adminFetch('/wa/hotelUser/create', {method:'POST', body:JSON.stringify({email:email, name:name, role:role, groupScoped:groupScoped})});
+    var r = await adminFetch('/wa/hotelUser/create', {method:'POST', body:JSON.stringify({email:email, name:name, role:role, profileId:profileId, groupScoped:groupScoped})});
     var data = await r.json();
     if(!r.ok){ toast(data.error||'Erreur lors de la création'); return; }
     usCloseInvite();

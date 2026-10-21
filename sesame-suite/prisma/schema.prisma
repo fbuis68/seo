@@ -39,6 +39,7 @@ model Entity {
   housekeepingTasks   HousekeepingTask[]
   housekeepingStaff   HousekeepingStaff[]
   adminUsers          AdminUser[]
+  adminProfiles       AdminProfile[]
   campaigns           Campaign[]
   subscriptions       Subscription[]
   bookingSource       BookingSourceConfig?
@@ -140,6 +141,15 @@ model AdminUser {
   // restreint au groupe). Sans effet pour role="sesame" (déjà global).
   groupScoped  Boolean @default(false)
 
+  // Profil de droits personnalisé (panneau "Utilisateurs" > "Profils",
+  // compte role="hotel" uniquement) — quand renseigné, les menus absents de
+  // AdminProfile.menuRights restent VISIBLES mais grisés côté admin.html
+  // (pas masqués : l'équipe voit ce qui existe, sans y accéder) plutôt que
+  // l'accès complet par défaut d'un compte "hotel" sans profil. § demande
+  // client 21/10/2026.
+  profileId String?
+  profile   AdminProfile? @relation(fields: [profileId], references: [id], onDelete: SetNull)
+
   resetTokens PasswordResetToken[]
 
   // "Commercial" assigné — uniquement pertinent pour les comptes role="sesame"
@@ -151,6 +161,35 @@ model AdminUser {
   faqEntriesCreated        Faq[]          @relation("FaqCreatedBy")
 
   createdAt DateTime @default(now())
+}
+
+// Profil de droits personnalisé (§ demande client 21/10/2026, panneau
+// "Utilisateurs" > "Profils") — créé/nommé librement par chaque
+// établissement ("Réceptionniste", "Comptable"…), affecté à un ou
+// plusieurs AdminUser(role="hotel") pour restreindre leur accès au
+// back-office à un sous-ensemble de menus, sans jamais les masquer : un
+// menu absent de menuRights reste visible mais grisé côté admin.html
+// (l'équipe voit ce qui existe, sans y avoir accès).
+model AdminProfile {
+  id       String @id @default(cuid())
+  entityId String
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  name String
+
+  // Clé = data-pan de admin.html (ex: "reservations", "rooms", "crm"…),
+  // valeur = true si autorisé. Une clé absente ou à false = menu grisé.
+  // Stocké en JSON plutôt qu'une table de jointure séparée : la liste des
+  // menus est fixe (définie par admin.html, pas par l'utilisateur), un
+  // simple objet suffit et évite une table supplémentaire pour ~30 clés.
+  menuRights Json @default("{}")
+
+  users AdminUser[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([entityId, name])
 }
 
 // Mot de passe oublié — token à usage unique, seul son hash est stocké (le

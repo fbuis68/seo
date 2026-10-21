@@ -28,7 +28,10 @@ loginRouter.post(
     const password = (req.body.password as string) || "";
     if (!email || !password) throw new HttpError(400, "Email et mot de passe requis");
 
-    const admin = await prisma.adminUser.findUnique({ where: { email }, include: { entity: { include: { config: true } } } });
+    const admin = await prisma.adminUser.findUnique({
+      where: { email },
+      include: { entity: { include: { config: true } }, profile: { select: { menuRights: true } } },
+    });
     if (!admin) throw new HttpError(401, "Identifiants incorrects");
 
     const ok = await bcrypt.compare(password, admin.passwordHash);
@@ -58,6 +61,11 @@ loginRouter.post(
         hotelName: admin.entity.config?.hotelName || admin.entity.name,
         groupScoped: admin.groupScoped,
         groupId: admin.groupScoped ? admin.entity.groupId : null,
+        // Droits par menu du profil affecté (role="hotel" uniquement, cf.
+        // AdminProfile) — absent/null = accès complet (comportement
+        // historique d'un compte "hotel" sans profil). Les menus absents de
+        // cet objet sont grisés côté admin.html, jamais masqués.
+        menuRights: admin.profile ? (admin.profile.menuRights as Record<string, boolean>) : null,
       },
     });
   })
