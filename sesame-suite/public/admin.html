@@ -114,7 +114,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--mu) transparent}
 [style*="overflow-y:auto"][style*="max-height"],[style*="overflow:auto"][style*="max-height"]{scrollbar-width:none;-ms-overflow-style:none}
 [style*="overflow-y:auto"][style*="max-height"]::-webkit-scrollbar,[style*="overflow:auto"][style*="max-height"]::-webkit-scrollbar{display:none}
 /* SHELL */
-.sh{display:grid;grid-template-columns:220px 1fr;grid-template-rows:52px 1fr;height:100vh;overflow:hidden}
+.sh{display:grid;grid-template-columns:220px 1fr;grid-template-rows:52px 1fr;height:100vh;height:100dvh;overflow:hidden}
 /* TOPBAR */
 .tb{grid-column:1/-1;background:var(--sb);display:flex;align-items:center;padding:0 18px;gap:12px;z-index:30;flex-shrink:0}
 .menu-toggle{display:none;background:none;border:none;font-size:19px;cursor:pointer;color:rgba(255,255,255,.7);padding:2px 4px;line-height:1}
@@ -441,6 +441,25 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   .sesame-wordmark{display:none}
   .g2,.g3,.g4,.gtiles{grid-template-columns:1fr}
   .resa-opts{grid-template-columns:1fr 1fr}
+}
+@media (max-width: 680px){
+  /* Fenêtres modales : bouton de fermeture inatteignable sur mobile
+     (§ demande client 21/10/2026) — centrées verticalement (align-items:
+     center) dans un fond fixed dimensionné en 100vh, qui ne correspond PAS
+     à la hauteur réellement visible une fois la barre d'adresse mobile
+     prise en compte ; le haut de la fenêtre (avec la croix) se retrouvait
+     poussé hors de l'écran visible, sans aucun moyen d'y faire défiler
+     puisque seule la boîte interne défilait (overflow-y:auto), pas le fond.
+     Ancré en haut + fond lui-même scrollable à la place : la croix reste
+     toujours la première chose visible. Ciblé sur max-height:90vh, le
+     même repère que les autres correctifs de fenêtres modales de cette
+     page — pas les listes déroulantes internes (ex: 280px). */
+  div[style*="position:fixed"][style*="inset:0"]:has(>[style*="max-height:90vh"]){
+    align-items:flex-start !important;
+    overflow-y:auto !important;
+    padding-top:20px !important;
+    padding-bottom:20px !important;
+  }
 }
 
 /* ════════════════ SPLASH SCREEN (écran de démarrage) ════════════════ */
