@@ -565,6 +565,7 @@ svg.tr-chart{display:block;width:100%;height:auto;min-width:640px}
     <div class="nav-item" id="n-faq" onclick="showFaqList()"><div class="nav-ico">✦</div> FAQ</div>
     <div class="nav-item" id="n-activite" onclick="showActivites()"><div class="nav-ico">◈</div> Activités</div>
     <div class="nav-item" id="n-contrats" onclick="showContrats()"><div class="nav-ico">◻</div> Contrats</div>
+    <div class="nav-item" id="n-signature" onclick="showSignatures()"><div class="nav-ico">✎</div> Signature électronique</div>
     <hr class="s-hr">
     <div class="nav-lbl">Filtres rapides</div>
     <div class="nav-item" onclick="qf('danger','Élevé !!')"><div class="nav-ico">!</div> Risque élevé <span class="nb nb-r" id="b-eleve">0</span></div>
@@ -3272,6 +3273,189 @@ function showContrats(){
         <button class="btn btn-amber btn-sm" onclick="event.stopPropagation();setContrat('${c.id}','en cours')">Marquer en cours</button>
       </div>`).join('')}
     </div>`;
+}
+
+// ═══════════════════ SIGNATURE ÉLECTRONIQUE (§ demande client 21/10/2026) ═══════════════════
+// Gestionnaire générique — contrats/devis PDF/PV de réception, envoyés à un
+// signataire qui confirme son identité par un code SMS (public/signature.html),
+// à la manière d'un prestataire tiers (Yousign/DocuSign) — distinct de la
+// signature "clic pour accepter" déjà existante sur les devis structurés
+// (cf. showAffaires > devis, CrmQuoteSignature).
+let SIG_LIST = [];
+const SIG_TYPE_LABEL = { contract:'Contrat', quote:'Devis', pv_reception:'PV de réception' };
+const SIG_STATUS_LABEL = { draft:'Brouillon', sent:'Envoyé', viewed:'Consulté', signed:'Signé', cancelled:'Annulé' };
+const SIG_STATUS_COLOR = { draft:'#888', sent:'#1a5fa3', viewed:'#854f0b', signed:'#27500a', cancelled:'#a32d2d' };
+
+async function showSignatures(){
+  view='signature';setNav('n-signature');
+  bc([{label:'Signature électronique'}]);tba('');
+  document.getElementById('main').innerHTML = `<div class="log-empty">Chargement…</div>`;
+  try{
+    const r = await apiFetch('/wa/crmSignature/list');
+    SIG_LIST = r.ok ? await r.json() : [];
+  }catch(e){ SIG_LIST = []; }
+  renderSignatures();
+}
+
+function renderSignatures(){
+  const draft = SIG_LIST.filter(s=>s.status==='draft').length;
+  const sent = SIG_LIST.filter(s=>s.status==='sent'||s.status==='viewed').length;
+  const signed = SIG_LIST.filter(s=>s.status==='signed').length;
+  document.getElementById('main').innerHTML = `
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-lbl">Brouillons</div><div class="stat-val" style="color:#888">${draft}</div></div>
+      <div class="stat-card"><div class="stat-lbl">En attente de signature</div><div class="stat-val" style="color:#854f0b">${sent}</div></div>
+      <div class="stat-card"><div class="stat-lbl">Signés</div><div class="stat-val" style="color:#27500a">${signed}</div></div>
+      <div class="stat-card"><div class="stat-lbl">Total</div><div class="stat-val">${SIG_LIST.length}</div></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="ch-ico">✎</div><span class="ch-title">Demandes de signature</span>
+        <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="sigOpenCreate()">+ Nouvelle demande</button>
+      </div>
+      ${SIG_LIST.length ? SIG_LIST.map(sigRowHtml).join('') : '<div class="log-empty">Aucune demande de signature pour l\\'instant.</div>'}
+    </div>`;
+}
+
+function sigRowHtml(s){
+  const color = SIG_STATUS_COLOR[s.status]||'#888';
+  const dates = s.signedAt ? 'Signé le '+new Date(s.signedAt).toLocaleString('fr-FR')
+    : s.sentAt ? 'Envoyé le '+new Date(s.sentAt).toLocaleDateString('fr-FR')
+    : 'Créé le '+new Date(s.createdAt).toLocaleDateString('fr-FR');
+  const actions = [];
+  if(s.status==='draft' || s.status==='sent' || s.status==='viewed') actions.push(`<button class="btn btn-sm btn-amber" onclick="event.stopPropagation();sigSend('${s.id}')">${s.status==='draft'?'Envoyer':'Renvoyer'}</button>`);
+  if(s.status!=='signed' && s.status!=='cancelled') actions.push(`<button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();sigCancel('${s.id}')">Annuler</button>`);
+  if(s.status==='draft') actions.push(`<button class="btn btn-sm btn-ghost" style="color:#a32d2d" onclick="event.stopPropagation();sigDelete('${s.id}')">Supprimer</button>`);
+  return `<div class="log-item" style="cursor:pointer" onclick="sigOpenPreview('${s.id}')">
+    <div class="log-dot" style="background:${color}"></div>
+    <div class="log-body">
+      <div class="log-text">${esc(s.title)} <span style="color:#aaa;font-size:11px">${esc(SIG_TYPE_LABEL[s.documentType]||s.documentType)}</span></div>
+      <div class="log-meta">${esc(s.signerFirstname)} ${esc(s.signerLastname)} · ${esc(s.signerEmail)} · ${dates}</div>
+    </div>
+    <span class="badge" style="background:${color}22;color:${color};font-weight:600">${esc(SIG_STATUS_LABEL[s.status]||s.status)}</span>
+    <div style="display:flex;gap:6px;margin-left:10px">${actions.join('')}</div>
+  </div>`;
+}
+
+function sigOpenCreate(){
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:480px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Nouvelle demande de signature</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div class="ff"><label>Type de document</label>
+        <select id="sig-type">
+          <option value="contract">Contrat</option>
+          <option value="quote">Devis (PDF)</option>
+          <option value="pv_reception">PV de réception</option>
+        </select>
+      </div>
+      <div class="ff"><label>Titre</label><input type="text" id="sig-title" placeholder="Ex : Contrat d'abonnement — Hôtel Churchill"></div>
+      <div class="ff"><label>Document (PDF)</label><input type="file" id="sig-file" accept="application/pdf"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="ff"><label>Prénom signataire</label><input type="text" id="sig-firstname"></div>
+        <div class="ff"><label>Nom signataire</label><input type="text" id="sig-lastname"></div>
+      </div>
+      <div class="ff"><label>Email signataire</label><input type="email" id="sig-email"></div>
+      <div class="ff"><label>Téléphone signataire (optionnel — modifiable par le signataire)</label><input type="text" id="sig-phone"></div>
+      <div id="sig-create-err" style="color:#a32d2d;font-size:12px;display:none;margin-top:4px"></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="sig-create-btn" onclick="sigCreate()">Créer</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function sigReadFileAsDataUrl(file){
+  return new Promise((resolve,reject)=>{
+    const r = new FileReader();
+    r.onload = ()=>resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+async function sigCreate(){
+  const errEl = document.getElementById('sig-create-err');
+  errEl.style.display='none';
+  const documentType = document.getElementById('sig-type').value;
+  const title = document.getElementById('sig-title').value.trim();
+  const fileInput = document.getElementById('sig-file');
+  const file = fileInput.files[0];
+  const signerFirstname = document.getElementById('sig-firstname').value.trim();
+  const signerLastname = document.getElementById('sig-lastname').value.trim();
+  const signerEmail = document.getElementById('sig-email').value.trim();
+  const signerPhone = document.getElementById('sig-phone').value.trim();
+  if(!title || !file || !signerFirstname || !signerLastname || !signerEmail){
+    errEl.textContent = 'Titre, document PDF, prénom, nom et email requis'; errEl.style.display='block'; return;
+  }
+  const btn = document.getElementById('sig-create-btn');
+  btn.disabled = true; btn.textContent = 'Envoi…';
+  try{
+    const dataUrl = await sigReadFileAsDataUrl(file);
+    const r = await apiFetch('/wa/crmSignature/create', {method:'POST', body: JSON.stringify({
+      documentType, title, fileName: file.name, fileMimeType: file.type || 'application/pdf',
+      fileContentBase64: dataUrl, signerFirstname, signerLastname, signerEmail, signerPhone
+    })});
+    const data = await r.json();
+    if(!r.ok){ errEl.textContent = data.error||'Erreur lors de la création'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Créer'; return; }
+    closeModal();
+    flash('Demande créée ✓ — pensez à l\\'envoyer');
+    showSignatures();
+  }catch(e){ errEl.textContent = 'Erreur de connexion au serveur'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Créer'; }
+}
+
+async function sigSend(id){
+  try{
+    const r = await apiFetch('/wa/crmSignature/'+id+'/send', {method:'POST'});
+    const data = await r.json().catch(()=>({}));
+    if(!r.ok){ flash(data.error||'Erreur lors de l\\'envoi'); return; }
+    flash('Lien de signature envoyé ✓');
+    showSignatures();
+  }catch(e){ flash('Erreur de connexion au serveur'); }
+}
+
+async function sigCancel(id){
+  if(!confirm('Annuler cette demande de signature ?')) return;
+  try{
+    const r = await apiFetch('/wa/crmSignature/'+id+'/cancel', {method:'POST'});
+    const data = await r.json().catch(()=>({}));
+    if(!r.ok){ flash(data.error||'Erreur'); return; }
+    flash('Demande annulée');
+    showSignatures();
+  }catch(e){ flash('Erreur de connexion au serveur'); }
+}
+
+async function sigDelete(id){
+  if(!confirm('Supprimer ce brouillon ?')) return;
+  try{
+    const r = await apiFetch('/wa/crmSignature/'+id+'/delete', {method:'POST'});
+    const data = await r.json().catch(()=>({}));
+    if(!r.ok){ flash(data.error||'Erreur'); return; }
+    flash('Brouillon supprimé');
+    showSignatures();
+  }catch(e){ flash('Erreur de connexion au serveur'); }
+}
+
+async function sigOpenPreview(id){
+  const s = SIG_LIST.find(x=>x.id===id); if(!s) return;
+  document.getElementById('modal-ct').innerHTML = `<div class="modal-bg"><div class="modal-box" style="max-width:640px"><div class="log-empty">Chargement…</div></div></div>`;
+  let file = null;
+  try{
+    const r = await apiFetch('/wa/crmSignature/'+id+'/file');
+    if(r.ok) file = await r.json();
+  }catch(e){}
+  const color = SIG_STATUS_COLOR[s.status]||'#888';
+  const link = location.origin+'/signature.html?token='+s.signToken;
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:640px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">${esc(s.title)}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div style="margin-bottom:10px"><span class="badge" style="background:${color}22;color:${color};font-weight:600">${esc(SIG_STATUS_LABEL[s.status]||s.status)}</span></div>
+      <div style="font-size:13px;color:var(--mu,#888);margin-bottom:10px">${esc(s.signerFirstname)} ${esc(s.signerLastname)} · ${esc(s.signerEmail)}${s.signerPhone?' · '+esc(s.signerPhone):''}</div>
+      ${s.status!=='draft' ? `<div class="ff"><label>Lien de signature</label><input type="text" readonly value="${esc(link)}" onclick="this.select()"></div>` : ''}
+      ${file ? `<div class="pdfwrap"><embed src="data:${esc(file.fileMimeType)};base64,${file.fileContentBase64}" type="${esc(file.fileMimeType)}" style="width:100%;height:60vh;border:0.5px solid var(--bdr,#e2dfd9);border-radius:8px"></div>` : ''}
+    </div>
+  </div>`;
 }
 
 async function setContrat(id,val){

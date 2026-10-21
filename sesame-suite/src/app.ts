@@ -32,6 +32,7 @@ import { crmSectorRouter } from "./routes/crmSector";
 import { crmOrigineRouter } from "./routes/crmOrigine";
 import { crmDealRouter } from "./routes/crmDeal";
 import { crmQuoteRouter } from "./routes/crmQuote";
+import { crmSignatureRouter } from "./routes/crmSignature";
 import { crmUserRouter } from "./routes/crmUser";
 import { crmProductRouter } from "./routes/crmProduct";
 import { crmContactRouter } from "./routes/crmContact";
@@ -115,6 +116,7 @@ export function createApp() {
   app.use("/wa", geocodeRouter);
   app.use("/wa", crmDealRouter);
   app.use("/wa", crmQuoteRouter);
+  app.use("/wa", crmSignatureRouter);
   app.use("/wa", crmUserRouter);
   app.use("/wa", crmProductRouter);
   app.use("/wa", crmContactRouter);

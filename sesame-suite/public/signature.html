@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Signature électronique — Sesame Technology</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/favicon-192.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<style>
+  :root{--bg:#f5f4f0;--card:#fff;--bdr:#e2dfd9;--tx:#1a1a1a;--mu:#888;--a:#8a2b2b}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--tx);font-size:14px}
+  .hero{background:linear-gradient(135deg,#17121E 0%,var(--a) 120%);color:#fff;padding:22px 20px}
+  .hero .logo{font-size:18px;font-weight:700}
+  .hero .logo em{color:#f0c9c9;font-style:normal}
+  .hero .title{font-size:20px;margin-top:6px;font-weight:600}
+  .wrap{max-width:980px;margin:0 auto;padding:24px 20px 60px;display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
+  .col-doc{flex:1 1 480px;min-width:0}
+  .col-form{flex:0 0 340px;min-width:280px;position:sticky;top:20px}
+  @media (max-width:760px){ .col-form{position:static} }
+  .card{background:var(--card);border:0.5px solid var(--bdr);border-radius:12px;padding:20px;margin-bottom:16px}
+  h1{font-size:16px;margin:0 0 4px}
+  .sub{color:var(--mu);font-size:12px;margin-bottom:14px}
+  .pdfwrap embed{width:100%;height:72vh;min-height:420px;border:0.5px solid var(--bdr);border-radius:8px}
+  label{font-size:12px;color:var(--mu);display:block;margin-bottom:4px}
+  input[type=text],input[type=email],input[type=tel]{width:100%;font-family:inherit;font-size:13px;padding:9px 11px;border:1px solid var(--bdr);border-radius:8px;margin-bottom:12px}
+  .otp-input{text-align:center;font-size:22px;letter-spacing:.3em;font-weight:700}
+  .btn{font-family:inherit;font-size:13px;padding:10px 18px;border-radius:8px;border:none;background:var(--a);color:#fff;cursor:pointer;width:100%;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn-ghost{background:transparent;color:var(--mu);border:1px solid var(--bdr);padding:8px 10px;width:100%;font-size:12px;margin-top:8px}
+  .err{color:#a32d2d;font-size:12px;margin-top:8px;display:none}
+  .ok-box{text-align:center;padding:26px 10px}
+  .ok-icon{font-size:36px;color:#1a6b47;margin-bottom:10px}
+  .hint{font-size:11px;color:var(--mu);margin:-6px 0 14px}
+  .doctype-badge{display:inline-block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 9px;border-radius:10px;background:rgba(139,26,46,.08);color:var(--a);margin-bottom:8px}
+</style>
+</head>
+<body>
+<div class="hero">
+  <div class="logo">SESAME <em>TECHNOLOGY</em></div>
+  <div class="title">Signature électronique</div>
+</div>
+<div class="wrap" id="wrap">
+  <div class="card" style="flex:1 1 100%">Chargement…</div>
+</div>
+
+<script>
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+var DOCTYPE_LABEL = { contract:'Contrat', quote:'Devis', pv_reception:'PV de réception' };
+
+var params = new URLSearchParams(location.search);
+var TOKEN = params.get('token') || '';
+var DOC = null;
+
+async function init(){
+  if(!TOKEN){ renderError('Lien invalide.'); return; }
+  try{
+    var r = await fetch('/wa/crmSignature/public/'+encodeURIComponent(TOKEN));
+    var data = await r.json();
+    if(!r.ok){ renderError(data.error || 'Lien invalide ou expiré.'); return; }
+    DOC = data;
+    render();
+  }catch(e){ renderError('Erreur de connexion au serveur.'); }
+}
+
+function renderError(msg){
+  document.getElementById('wrap').innerHTML = '<div class="card" style="flex:1 1 100%"><h1>Signature électronique</h1><div class="sub">'+esc(msg)+'</div></div>';
+}
+
+function docCardHtml(){
+  return '<div class="card">'
+    + '<span class="doctype-badge">'+esc(DOCTYPE_LABEL[DOC.documentType]||DOC.documentType)+'</span>'
+    + '<h1>'+esc(DOC.title)+'</h1>'
+    + '<div class="sub">'+esc(DOC.fileName)+'</div>'
+    + '<div class="pdfwrap"><embed src="data:'+esc(DOC.fileMimeType)+';base64,'+DOC.fileContentBase64+'" type="'+esc(DOC.fileMimeType)+'"></div>'
+    + '</div>';
+}
+
+function render(){
+  if(DOC.status === 'signed'){
+    var d = DOC.signedAt ? new Date(DOC.signedAt).toLocaleString('fr-FR') : '';
+    document.getElementById('wrap').innerHTML = docCardHtml()
+      + '<div class="col-form"><div class="card"><div class="ok-box"><div class="ok-icon">✓</div><div><strong>Ce document a déjà été signé</strong></div><div class="sub">'+esc(DOC.signerFirstname)+' '+esc(DOC.signerLastname)+(d?' — '+d:'')+'</div></div></div></div>';
+    return;
+  }
+  document.getElementById('wrap').innerHTML =
+    '<div class="col-doc">'+docCardHtml()+'</div>'
+    + '<div class="col-form"><div class="card" id="formCard"></div></div>';
+  renderIdentityStep();
+}
+
+function renderIdentityStep(){
+  document.getElementById('formCard').innerHTML =
+    '<h1 style="font-size:15px">Vos coordonnées</h1>'
+    + '<div class="sub">Un code de confirmation de signature vous sera envoyé par SMS.</div>'
+    + '<label>Prénom *</label><input type="text" id="s-firstname" value="'+esc(DOC.signerFirstname||'')+'">'
+    + '<label>Nom *</label><input type="text" id="s-lastname" value="'+esc(DOC.signerLastname||'')+'">'
+    + '<label>Email *</label><input type="email" id="s-email" value="'+esc(DOC.signerEmail||'')+'">'
+    + '<label>Téléphone portable *</label><input type="tel" id="s-phone" placeholder="06 12 34 56 78" value="'+esc(DOC.signerPhone||'')+'">'
+    + '<button type="button" class="btn" id="s-continue-btn" onclick="requestOtp()">Continuer</button>'
+    + '<div class="err" id="s-err"></div>';
+}
+
+async function requestOtp(){
+  var errEl = document.getElementById('s-err');
+  errEl.style.display = 'none';
+  var firstname = document.getElementById('s-firstname').value.trim();
+  var lastname  = document.getElementById('s-lastname').value.trim();
+  var email     = document.getElementById('s-email').value.trim();
+  var phone     = document.getElementById('s-phone').value.trim();
+  if(!firstname || !lastname || !email || !phone){
+    errEl.textContent = 'Tous les champs sont requis.'; errEl.style.display = 'block'; return;
+  }
+  var btn = document.getElementById('s-continue-btn');
+  btn.disabled = true; btn.textContent = 'Envoi du code…';
+  try{
+    var r = await fetch('/wa/crmSignature/public/'+encodeURIComponent(TOKEN)+'/requestOtp', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({firstname:firstname, lastname:lastname, email:email, phone:phone})
+    });
+    var data = await r.json();
+    if(!r.ok){ errEl.textContent = data.error||'Erreur lors de l\'envoi du code.'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Continuer'; return; }
+  }catch(e){ errEl.textContent = 'Erreur de connexion au serveur.'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Continuer'; return; }
+  renderOtpStep(phone);
+}
+
+function renderOtpStep(phone){
+  document.getElementById('formCard').innerHTML =
+    '<h1 style="font-size:15px">Code de confirmation</h1>'
+    + '<div class="sub">Un code à 6 chiffres a été envoyé par SMS au '+esc(phone)+'.</div>'
+    + '<label>Code reçu par SMS</label><input type="text" id="s-otp" class="otp-input" maxlength="6" inputmode="numeric" placeholder="______">'
+    + '<button type="button" class="btn" id="s-confirm-btn" onclick="verifyOtp()">Confirmer la signature</button>'
+    + '<button type="button" class="btn-ghost" onclick="renderIdentityStep()">Modifier mes coordonnées</button>'
+    + '<div class="err" id="s-err"></div>';
+  document.getElementById('s-otp').focus();
+}
+
+async function verifyOtp(){
+  var errEl = document.getElementById('s-err');
+  errEl.style.display = 'none';
+  var code = document.getElementById('s-otp').value.trim();
+  if(!code){ errEl.textContent = 'Saisissez le code reçu par SMS.'; errEl.style.display='block'; return; }
+  var btn = document.getElementById('s-confirm-btn');
+  btn.disabled = true; btn.textContent = 'Vérification…';
+  try{
+    var r = await fetch('/wa/crmSignature/public/'+encodeURIComponent(TOKEN)+'/verifyOtp', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({code:code})
+    });
+    var data = await r.json();
+    if(!r.ok){ errEl.textContent = data.error||'Code incorrect.'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Confirmer la signature'; return; }
+  }catch(e){ errEl.textContent = 'Erreur de connexion au serveur.'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Confirmer la signature'; return; }
+  document.getElementById('formCard').innerHTML =
+    '<div class="ok-box"><div class="ok-icon">✓</div><div><strong>Document signé avec succès</strong></div><div class="sub">Merci, votre signature a bien été enregistrée.</div></div>';
+}
+
+init();
+</script>
+</body>
+</html>

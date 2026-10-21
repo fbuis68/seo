@@ -159,6 +159,7 @@ model AdminUser {
   crmTicketsAsAgent        CrmTicket[]    @relation("TicketAgent")
   aiSuggestionsCreated     AiSuggestion[] @relation("AiSuggestionCreatedBy")
   faqEntriesCreated        Faq[]          @relation("FaqCreatedBy")
+  crmSignatureRequestsCreated CrmSignatureRequest[] @relation("SignatureRequestCreatedBy")
 
   createdAt DateTime @default(now())
 }
@@ -2256,6 +2257,60 @@ model CrmQuoteSignature {
   userAgent        String?
 
   signedAt DateTime @default(now())
+}
+
+// Gestionnaire de signature électronique générique (§ demande client
+// 21/10/2026) — distinct de CrmQuoteSignature ci-dessus (signature "clic
+// pour accepter" couplée à UN devis structuré) : ici un document
+// quelconque (PDF uploadé tel quel — contrat, devis en PDF, PV de
+// réception...), envoyé à un signataire qui confirme son identité par un
+// code à usage unique reçu par SMS (comme un prestataire tiers type
+// Yousign/DocuSign, mais interne) plutôt qu'un simple tracé à la souris.
+model CrmSignatureRequest {
+  id String @id @default(cuid())
+
+  documentType String // contract | quote | pv_reception
+  title        String // libellé affiché au signataire (ex: "Contrat d'abonnement — Hôtel Churchill")
+
+  fileName          String
+  fileMimeType      String @default("application/pdf")
+  fileContentBase64 String @db.Text
+
+  signerFirstname String
+  signerLastname  String
+  signerEmail     String
+  signerPhone     String?
+
+  // draft (créée, pas encore envoyée) | sent (lien envoyé) | viewed (page
+  // publique ouverte au moins une fois) | signed | declined | cancelled
+  status String @default("draft")
+
+  // Donne accès à la page publique de signature (public/signature.html),
+  // sans compte CRM — même principe que CrmQuote.signToken.
+  signToken String @unique
+
+  // Code à usage unique envoyé par SMS au numéro confirmé par le
+  // signataire à l'étape "Continuer" — hashé (bcrypt, comme un mot de
+  // passe) plutôt que stocké en clair : preuve de signature, pas une
+  // simple commodité comme AutologinCode.code.
+  otpCodeHash  String?
+  otpExpiresAt DateTime?
+  otpAttempts  Int       @default(0)
+
+  signedAt        DateTime?
+  signerIp        String?
+  signerUserAgent String?
+
+  sentAt   DateTime?
+  viewedAt DateTime?
+
+  createdByAdminId String?
+  createdBy        AdminUser? @relation("SignatureRequestCreatedBy", fields: [createdByAdminId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
 }
 
 // Catalogue produits interne Sesame (18/08/2026) — distinct du catalogue
