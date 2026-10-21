@@ -930,6 +930,27 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   </div>
 </div>
 
+<!-- ════ MODAL HORAIRES STANDARDS (arrivée/départ) ════ — accessible depuis
+     la roue dentée de la fiche réservation (§ demande client 21/10/2026) ;
+     même réglage global que Entité & Catégorie (CFG.checkinTime/
+     checkoutTime), pas un horaire par réservation. -->
+<div id="resaScheduleModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:310;align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:380px;box-shadow:0 24px 60px rgba(0,0,0,.3)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--bdr)">
+      <h2 style="font-size:17px">Horaires standards</h2>
+      <button onclick="resaCloseScheduleModal()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
+    </div>
+    <div style="padding:18px 20px">
+      <div style="font-size:12px;color:var(--mu);margin-bottom:12px">Horaires appliqués à toutes les réservations de cet établissement — pas un réglage par réservation.</div>
+      <div class="g2">
+        <div class="fi"><label class="lb">Arrivée</label><input type="time" id="resa-sched-checkin"></div>
+        <div class="fi"><label class="lb">Départ</label><input type="time" id="resa-sched-checkout"></div>
+      </div>
+      <button class="btn btn-p" style="width:100%;justify-content:center;margin-top:14px" onclick="resaSaveSchedule()"><i class="ti ti-check"></i> Enregistrer</button>
+    </div>
+  </div>
+</div>
+
 <!-- ════════════════ CRÉER UNE RÉSERVATION (saisie manuelle) ════════════════
      Bouton "Créer une réservation" du panneau Réservations — pour une
      réservation prise par téléphone/guichet, sans passer par la page
@@ -5811,6 +5832,28 @@ function openTaxeTarifsModal(){
 function openEcoParamsModal(){
   document.getElementById('ecoParamsModal').style.display = 'flex';
   renderEcoBanner();
+}
+/** Modale horaires standards (§ demande client 21/10/2026, accessible
+ * depuis la fiche réservation) — même champ global que Entité &
+ * Catégorie (h-checkinTime/h-checkoutTime), juste un raccourci pour ne
+ * pas changer de panneau. */
+function resaOpenScheduleModal(){
+  setVal('resa-sched-checkin', CFG.checkinTime||'15:00');
+  setVal('resa-sched-checkout', CFG.checkoutTime||'11:00');
+  document.getElementById('resaScheduleModal').style.display = 'flex';
+}
+function resaCloseScheduleModal(){ document.getElementById('resaScheduleModal').style.display = 'none'; }
+async function resaSaveSchedule(){
+  CFG.checkinTime = getVal('resa-sched-checkin') || '15:00';
+  CFG.checkoutTime = getVal('resa-sched-checkout') || '11:00';
+  setVal('h-checkinTime', CFG.checkinTime);
+  setVal('h-checkoutTime', CFG.checkoutTime);
+  var ok = await saveCfg();
+  if(!ok){ toast('Erreur lors de l\'enregistrement'); return; }
+  toast('Horaires mis à jour ✓');
+  resaCloseScheduleModal();
+  if(RESA_DETAIL_CODE) resaOpenDetail(RESA_DETAIL_CODE);
+  renderReservations();
 }
 function toggleModuleMandatory(k, mandatory){
   if(!CFG.checkinModules[k]) CFG.checkinModules[k]={};
@@ -15948,7 +15991,8 @@ async function resaOpenDetail(code){
   if(b.bookingType) rows.push(['Type de réservation', esc(b.bookingType)]);
   rows = rows.concat([
     ['Source', b.importedFrom ? esc(b.importedFrom) : 'Saisie manuelle / check-in éco'],
-    ['Arrivée', esc(fmtDMY(b.startDate))+' <span style="color:var(--mu);font-weight:400">à partir de '+esc(CFG.checkinTime||'15:00')+'</span>'],
+    ['Arrivée', esc(fmtDMY(b.startDate))+' <span style="color:var(--mu);font-weight:400">à partir de '+esc(CFG.checkinTime||'15:00')+'</span>'
+      +' <button type="button" title="Modifier les horaires standards" onclick="event.stopPropagation();resaOpenScheduleModal()" style="background:none;border:none;cursor:pointer;color:var(--mu);font-size:13px;padding:0 0 0 4px;vertical-align:-2px"><i class="ti ti-settings"></i></button>'],
     ['Départ', esc(fmtDMY(b.endDate))+' <span style="color:var(--mu);font-weight:400">avant '+esc(CFG.checkoutTime||'11:00')+'</span>'],
     ['Mise à jour', esc(updated)],
   ]);
