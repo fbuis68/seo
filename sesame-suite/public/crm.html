@@ -565,7 +565,6 @@ svg.tr-chart{display:block;width:100%;height:auto;min-width:640px}
     <div class="nav-item" id="n-faq" onclick="showFaqList()"><div class="nav-ico">✦</div> FAQ</div>
     <div class="nav-item" id="n-activite" onclick="showActivites()"><div class="nav-ico">◈</div> Activités</div>
     <div class="nav-item" id="n-contrats" onclick="showContrats()"><div class="nav-ico">◻</div> Contrats</div>
-    <div class="nav-item" id="n-signature" onclick="showSignatures()"><div class="nav-ico">✎</div> Signature électronique</div>
     <hr class="s-hr">
     <div class="nav-lbl">Filtres rapides</div>
     <div class="nav-item" onclick="qf('danger','Élevé !!')"><div class="nav-ico">!</div> Risque élevé <span class="nb nb-r" id="b-eleve">0</span></div>
@@ -2461,6 +2460,7 @@ function showFiche(id){
   loadScoringCard(c);
   loadContactsCard(c);
   loadComptaCard(c);
+  loadSignatureCard(c);
 }
 
 function riskScore(c){let s=0;if(c.danger==='Élevé !!')s+=5;else if(c.danger==='Modéré')s+=3;if(c.contrat==='non')s+=2;if(!c.webApp&&!c.mobileV2)s+=1;if(!c.nfc&&!c.qr&&!c.mobile&&!c.code)s+=1;return Math.min(s,10);}
@@ -2586,6 +2586,11 @@ function renderFiche(c){
 
   <div class="card" id="admin-access-card">
     <div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Accès admin</span></div>
+    <div class="log-empty">Chargement…</div>
+  </div>
+
+  <div class="card" id="signature-card">
+    <div class="card-head"><div class="ch-ico">✎</div><span class="ch-title">Signature électronique</span></div>
     <div class="log-empty">Chargement…</div>
   </div>
 
@@ -3281,39 +3286,35 @@ function showContrats(){
 // à la manière d'un prestataire tiers (Yousign/DocuSign) — distinct de la
 // signature "clic pour accepter" déjà existante sur les devis structurés
 // (cf. showAffaires > devis, CrmQuoteSignature).
+// Carte de la fiche client/prospect UNIQUEMENT (§ demande client
+// 21/10/2026 : "mettre cette fonction uniquement dans la fonction client
+// prospect" — plus d'écran global, toutes les demandes sont rattachées à
+// une fiche, cf. CrmSignatureRequest.prospectId).
 let SIG_LIST = [];
+let SIG_CURRENT_PROSPECT = null; // {id, nom, email, tel, referent} de la fiche actuellement ouverte
 const SIG_TYPE_LABEL = { contract:'Contrat', quote:'Devis', pv_reception:'PV de réception' };
 const SIG_STATUS_LABEL = { draft:'Brouillon', sent:'Envoyé', viewed:'Consulté', signed:'Signé', cancelled:'Annulé' };
 const SIG_STATUS_COLOR = { draft:'#888', sent:'#1a5fa3', viewed:'#854f0b', signed:'#27500a', cancelled:'#a32d2d' };
 
-async function showSignatures(){
-  view='signature';setNav('n-signature');
-  bc([{label:'Signature électronique'}]);tba('');
-  document.getElementById('main').innerHTML = `<div class="log-empty">Chargement…</div>`;
+async function loadSignatureCard(c){
+  SIG_CURRENT_PROSPECT = c;
+  const el = document.getElementById('signature-card');
+  if(!el) return;
   try{
-    const r = await apiFetch('/wa/crmSignature/list');
+    const r = await apiFetch('/wa/crmSignature/list?prospectId='+encodeURIComponent(c.id));
     SIG_LIST = r.ok ? await r.json() : [];
   }catch(e){ SIG_LIST = []; }
-  renderSignatures();
+  renderSignatureCard();
 }
 
-function renderSignatures(){
-  const draft = SIG_LIST.filter(s=>s.status==='draft').length;
-  const sent = SIG_LIST.filter(s=>s.status==='sent'||s.status==='viewed').length;
-  const signed = SIG_LIST.filter(s=>s.status==='signed').length;
-  document.getElementById('main').innerHTML = `
-    <div class="stats-row">
-      <div class="stat-card"><div class="stat-lbl">Brouillons</div><div class="stat-val" style="color:#888">${draft}</div></div>
-      <div class="stat-card"><div class="stat-lbl">En attente de signature</div><div class="stat-val" style="color:#854f0b">${sent}</div></div>
-      <div class="stat-card"><div class="stat-lbl">Signés</div><div class="stat-val" style="color:#27500a">${signed}</div></div>
-      <div class="stat-card"><div class="stat-lbl">Total</div><div class="stat-val">${SIG_LIST.length}</div></div>
+function renderSignatureCard(){
+  const el = document.getElementById('signature-card');
+  if(!el) return;
+  el.innerHTML = `
+    <div class="card-head"><div class="ch-ico">✎</div><span class="ch-title">Signature électronique</span>
+      <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="sigOpenCreate()">+ Nouvelle demande</button>
     </div>
-    <div class="card">
-      <div class="card-head"><div class="ch-ico">✎</div><span class="ch-title">Demandes de signature</span>
-        <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="sigOpenCreate()">+ Nouvelle demande</button>
-      </div>
-      ${SIG_LIST.length ? SIG_LIST.map(sigRowHtml).join('') : '<div class="log-empty">Aucune demande de signature pour l\'instant.</div>'}
-    </div>`;
+    ${SIG_LIST.length ? SIG_LIST.map(sigRowHtml).join('') : '<div class="log-empty">Aucune demande de signature pour cette fiche.</div>'}`;
 }
 
 function sigRowHtml(s){
@@ -3337,6 +3338,12 @@ function sigRowHtml(s){
 }
 
 function sigOpenCreate(){
+  const c = SIG_CURRENT_PROSPECT || {};
+  // referent = "Prénom Nom" en un seul champ libre côté fiche — split
+  // best-effort pour préremplir, l'admin corrige si besoin.
+  const refParts = (c.referent||'').trim().split(/\s+/);
+  const guessFirst = refParts.length>1 ? refParts[0] : '';
+  const guessLast = refParts.length>1 ? refParts.slice(1).join(' ') : (refParts[0]||'');
   document.getElementById('modal-ct').innerHTML = `
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box" style="max-width:480px">
@@ -3348,14 +3355,14 @@ function sigOpenCreate(){
           <option value="pv_reception">PV de réception</option>
         </select>
       </div>
-      <div class="ff"><label>Titre</label><input type="text" id="sig-title" placeholder="Ex : Contrat d'abonnement — Hôtel Churchill"></div>
+      <div class="ff"><label>Titre</label><input type="text" id="sig-title" placeholder="Ex : Contrat d'abonnement — ${esc(c.nom||'')}"></div>
       <div class="ff"><label>Document (PDF)</label><input type="file" id="sig-file" accept="application/pdf"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div class="ff"><label>Prénom signataire</label><input type="text" id="sig-firstname"></div>
-        <div class="ff"><label>Nom signataire</label><input type="text" id="sig-lastname"></div>
+        <div class="ff"><label>Prénom signataire</label><input type="text" id="sig-firstname" value="${esc(guessFirst)}"></div>
+        <div class="ff"><label>Nom signataire</label><input type="text" id="sig-lastname" value="${esc(guessLast)}"></div>
       </div>
-      <div class="ff"><label>Email signataire</label><input type="email" id="sig-email"></div>
-      <div class="ff"><label>Téléphone signataire (optionnel — modifiable par le signataire)</label><input type="text" id="sig-phone"></div>
+      <div class="ff"><label>Email signataire</label><input type="email" id="sig-email" value="${esc(c.email||'')}"></div>
+      <div class="ff"><label>Téléphone signataire (optionnel — modifiable par le signataire)</label><input type="text" id="sig-phone" value="${esc(c.tel||'')}"></div>
       <div id="sig-create-err" style="color:#a32d2d;font-size:12px;display:none;margin-top:4px"></div>
       <div class="modal-footer">
         <button class="btn btn-primary" id="sig-create-btn" onclick="sigCreate()">Créer</button>
@@ -3393,6 +3400,7 @@ async function sigCreate(){
   try{
     const dataUrl = await sigReadFileAsDataUrl(file);
     const r = await apiFetch('/wa/crmSignature/create', {method:'POST', body: JSON.stringify({
+      prospectId: (SIG_CURRENT_PROSPECT&&SIG_CURRENT_PROSPECT.id)||'',
       documentType, title, fileName: file.name, fileMimeType: file.type || 'application/pdf',
       fileContentBase64: dataUrl, signerFirstname, signerLastname, signerEmail, signerPhone
     })});
@@ -3400,7 +3408,7 @@ async function sigCreate(){
     if(!r.ok){ errEl.textContent = data.error||'Erreur lors de la création'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Créer'; return; }
     closeModal();
     flash('Demande créée ✓ — pensez à l\'envoyer');
-    showSignatures();
+    loadSignatureCard(SIG_CURRENT_PROSPECT);
   }catch(e){ errEl.textContent = 'Erreur de connexion au serveur'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Créer'; }
 }
 
@@ -3410,7 +3418,7 @@ async function sigSend(id){
     const data = await r.json().catch(()=>({}));
     if(!r.ok){ flash(data.error||'Erreur lors de l\'envoi'); return; }
     flash('Lien de signature envoyé ✓');
-    showSignatures();
+    loadSignatureCard(SIG_CURRENT_PROSPECT);
   }catch(e){ flash('Erreur de connexion au serveur'); }
 }
 
@@ -3421,7 +3429,7 @@ async function sigCancel(id){
     const data = await r.json().catch(()=>({}));
     if(!r.ok){ flash(data.error||'Erreur'); return; }
     flash('Demande annulée');
-    showSignatures();
+    loadSignatureCard(SIG_CURRENT_PROSPECT);
   }catch(e){ flash('Erreur de connexion au serveur'); }
 }
 
@@ -3432,7 +3440,7 @@ async function sigDelete(id){
     const data = await r.json().catch(()=>({}));
     if(!r.ok){ flash(data.error||'Erreur'); return; }
     flash('Brouillon supprimé');
-    showSignatures();
+    loadSignatureCard(SIG_CURRENT_PROSPECT);
   }catch(e){ flash('Erreur de connexion au serveur'); }
 }
 

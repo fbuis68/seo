@@ -2060,6 +2060,7 @@ model CrmProspect {
   tickets    CrmTicket[]
   contacts   CrmContact[]
   accCustomer AccCustomer?
+  signatureRequests CrmSignatureRequest[]
 }
 
 // Contacts multiples d'une fiche client/prospect (16/09/2026) — jusqu'ici
@@ -2269,6 +2270,14 @@ model CrmQuoteSignature {
 model CrmSignatureRequest {
   id String @id @default(cuid())
 
+  // Rattachée à une fiche client/prospect (§ demande client 21/10/2026 —
+  // "uniquement dans la fonction client prospect" : plus d'écran global,
+  // la carte "Signature électronique" de la fiche en est le seul point
+  // d'entrée) — jamais null en pratique, nullable seulement pour survivre
+  // à la suppression de la fiche (historique conservé, valeur probante).
+  prospectId String?
+  prospect   CrmProspect? @relation(fields: [prospectId], references: [id], onDelete: SetNull)
+
   documentType String // contract | quote | pv_reception
   title        String // libellé affiché au signataire (ex: "Contrat d'abonnement — Hôtel Churchill")
 
@@ -2311,6 +2320,7 @@ model CrmSignatureRequest {
   updatedAt DateTime @updatedAt
 
   @@index([status])
+  @@index([prospectId])
 }
 
 // Catalogue produits interne Sesame (18/08/2026) — distinct du catalogue

@@ -26,6 +26,7 @@ const OTP_MAX_ATTEMPTS = 5;
 
 function shapeRequest(r: {
   id: string;
+  prospectId: string | null;
   documentType: string;
   title: string;
   fileName: string;
@@ -42,6 +43,7 @@ function shapeRequest(r: {
 }) {
   return {
     id: r.id,
+    prospectId: r.prospectId,
     documentType: r.documentType,
     title: r.title,
     fileName: r.fileName,
@@ -60,17 +62,23 @@ function shapeRequest(r: {
 
 // ══════════════════════════ CÔTÉ ADMIN (CRM, Sesame uniquement) ══════════════════════════
 
+/** GET /wa/crmSignature/list?prospectId=... — § demande client 21/10/2026 :
+ * accessible UNIQUEMENT depuis la fiche client/prospect, prospectId donc
+ * toujours requis (plus d'écran global toutes fiches confondues). */
 crmSignatureRouter.get(
   "/crmSignature/list",
   requireAdmin,
   requireSesame,
-  asyncHandler(async (_req, res) => {
-    const rows = await prisma.crmSignatureRequest.findMany({ orderBy: { createdAt: "desc" } });
+  asyncHandler(async (req, res) => {
+    const prospectId = (req.query.prospectId as string) || "";
+    if (!prospectId) throw new HttpError(400, "prospectId requis");
+    const rows = await prisma.crmSignatureRequest.findMany({ where: { prospectId }, orderBy: { createdAt: "desc" } });
     res.json(rows.map(shapeRequest));
   })
 );
 
 interface CreateBody {
+  prospectId?: string;
   documentType?: string;
   title?: string;
   fileName?: string;
@@ -88,6 +96,10 @@ crmSignatureRouter.post(
   requireSesame,
   asyncHandler(async (req, res) => {
     const b = req.body as CreateBody;
+    const prospectId = (b.prospectId || "").trim();
+    if (!prospectId) throw new HttpError(400, "prospectId requis");
+    const prospect = await prisma.crmProspect.findUnique({ where: { id: prospectId } });
+    if (!prospect) throw new HttpError(404, "Fiche client introuvable");
     const documentType = b.documentType || "";
     if (!DOCUMENT_TYPES.includes(documentType)) throw new HttpError(400, "Type de document invalide (contrat, devis ou PV de réception)");
     const title = (b.title || "").trim();
@@ -106,6 +118,7 @@ crmSignatureRouter.post(
 
     const row = await prisma.crmSignatureRequest.create({
       data: {
+        prospectId,
         documentType,
         title,
         fileName,
