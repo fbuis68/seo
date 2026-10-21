@@ -40,6 +40,11 @@ export interface BookingDraft {
   // d'accès plutôt qu'à un seul (cf. lib/bookingSource.ts pushBookingUpsert) —
   // transmis dès la création si renseigné, plutôt que seulement à l'édition.
   bookingType?: string;
+  // Identifiant réel du BookingType choisi côté source externe (cf.
+  // Booking.bookingTypeId, schema.prisma) — sans lui, le type envoyé à
+  // Sesame (bookingType ci-dessus, son code) était silencieusement ignoré
+  // au profit du type par défaut de l'entité.
+  bookingTypeId?: string;
   // Empreinte bancaire (BookingEngineConfig.cardOnFileMode) — référence
   // Stripe de la carte enregistrée sans être débitée, cf. Booking.
   // stripeCustomerId/stripePaymentMethodId (schema.prisma).
@@ -270,6 +275,7 @@ async function createBookingDirect(entity: Entity, draft: BookingDraft, opts: { 
       facilityCode: orderedRooms.map((r) => r.code).join(","),
       facilityName: orderedRooms.map((r) => r.name).join(", "),
       bookingType: draft.bookingType || null,
+      bookingTypeId: draft.bookingTypeId || null,
       stripeCustomerId: draft.stripeCustomerId || null,
       stripePaymentMethodId: draft.stripePaymentMethodId || null,
       status: "confirmed",

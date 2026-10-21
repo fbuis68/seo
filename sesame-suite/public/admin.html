@@ -2735,6 +2735,12 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     </div>
     <div class="g2">
       <div class="fi">
+        <label class="lb">Nom du paramètre portant l'IDENTIFIANT réel du type de réservation (optionnel)</label>
+        <input type="text" id="bs-updateBookingTypeIdParam" placeholder="Ex : typeId — certaines sources ignorent le type si cet id n'est pas fourni en plus du code">
+      </div>
+    </div>
+    <div class="g2">
+      <div class="fi">
         <label class="lb">Nom du paramètre portant la nouvelle date d'arrivée (optionnel)</label>
         <input type="text" id="bs-updateStartDateParam" placeholder="Ex : startDate — vide si non notifié">
       </div>
@@ -7769,6 +7775,13 @@ var PMS_PRESETS = {
       document.getElementById('bs-updateRoomParam').value = 'facilityCode';
       document.getElementById('bs-updateStatusParam').value = 'status';
       document.getElementById('bs-updateBookingTypeParam').value = 'typeCode';
+      // typeId = identifiant réel du BookingType (cf. schema.prisma
+      // Booking.bookingTypeId) — sans lui, Sesame ignore typeCode et
+      // retombe sur le type par défaut de l'entité (demande client
+      // 21/10/2026, confirmé dans le code du portail officiel
+      // sesamenewportal : new-booking-form-v5.html envoie typeId, pas
+      // typeCode).
+      document.getElementById('bs-updateBookingTypeIdParam').value = 'typeId';
       document.getElementById('bs-updateStartDateParam').value = 'startDate';
       document.getElementById('bs-updateEndDateParam').value = 'endDate';
       // Identité du client — n'entre en jeu que pour l'envoi initial d'une
@@ -8346,6 +8359,7 @@ function bsCollectFormValues(){
     updateRoomParam: document.getElementById('bs-updateRoomParam').value.trim(),
     updateStatusParam: document.getElementById('bs-updateStatusParam').value.trim(),
     updateBookingTypeParam: document.getElementById('bs-updateBookingTypeParam').value.trim(),
+    updateBookingTypeIdParam: document.getElementById('bs-updateBookingTypeIdParam').value.trim(),
     updateStartDateParam: document.getElementById('bs-updateStartDateParam').value.trim(),
     updateEndDateParam: document.getElementById('bs-updateEndDateParam').value.trim(),
     updateEmailParam: document.getElementById('bs-updateEmailParam').value.trim(),
@@ -8504,6 +8518,7 @@ async function bsInit(){
   document.getElementById('bs-updateRoomParam').value = BS_CONFIG.updateRoomParam||'';
   document.getElementById('bs-updateStatusParam').value = BS_CONFIG.updateStatusParam||'';
   document.getElementById('bs-updateBookingTypeParam').value = BS_CONFIG.updateBookingTypeParam||'';
+  document.getElementById('bs-updateBookingTypeIdParam').value = BS_CONFIG.updateBookingTypeIdParam||'';
   document.getElementById('bs-updateStartDateParam').value = BS_CONFIG.updateStartDateParam||'';
   document.getElementById('bs-updateEndDateParam').value = BS_CONFIG.updateEndDateParam||'';
   document.getElementById('bs-updateEmailParam').value = BS_CONFIG.updateEmailParam||'';
@@ -8727,12 +8742,12 @@ async function walFetchTemplate(){
 // compatibilité ; la liste complète part en roomIds (cf. rcCreateBooking)
 // et aboutit dans Booking.facilityCode (liste séparée par des virgules,
 // une clé numérique par chambre, cf. espGetAccessPoints côté client).
-var RC_STATE = { rooms: [], selectedRooms: [] };
+var RC_STATE = { rooms: [], selectedRooms: [], bookingTypes: [] };
 
 function resaOpenCreate(){
   var today = new Date();
   var tomorrow = new Date(today.getTime()+86400000);
-  RC_STATE = { rooms: [], selectedRooms: [] };
+  RC_STATE = { rooms: [], selectedRooms: [], bookingTypes: [] };
   document.getElementById('resa-create-body').innerHTML =
     '<div class="g2">'
     + '<div class="fi"><label class="lb">Arrivée</label><input type="date" id="rc-start" value="'+today.toISOString().slice(0,10)+'"></div>'
@@ -8743,6 +8758,18 @@ function resaOpenCreate(){
     + '<div id="rc-rooms" style="margin-top:14px"></div>'
     + '<div id="rc-guest-section"></div>';
   document.getElementById('resaCreateModal').style.display = 'flex';
+  // Types de réservation réels (API Sesame Technology), avec les chambres
+  // de leur grouping — demande client 21/10/2026 : liste au lieu de saisie
+  // libre, et ne plus laisser Sesame retomber sur le type par défaut de
+  // l'entité faute de choix explicite. [] silencieux si pas de connecteur
+  // Sesame : le champ retombe sur la saisie libre historique.
+  adminFetch('/wa/bookingSource/bookingTypes').then(function(r){ return r.json(); }).then(function(data){
+    RC_STATE.bookingTypes = (data && data.bookingTypes) || [];
+    // Le bloc "guest-section" (donc rc-bookingtype-wrap) n'existe qu'une
+    // fois une chambre sélectionnée — cas où cette réponse arrive après
+    // coup (connecteur lent) : bascule alors la saisie libre déjà affichée.
+    if(document.getElementById('rc-bookingtype-wrap')) rcRenderBookingTypeOptions();
+  }).catch(function(){});
 }
 function resaCloseCreate(){ document.getElementById('resaCreateModal').style.display = 'none'; }
 
@@ -8815,13 +8842,43 @@ function rcSelectRoom(i){
     // facilities). Renseignable dès la création plutôt que seulement à
     // l'édition, pour que le premier envoi à la source externe (cf.
     // adoptBookingIntoSource) le transmette déjà.
-    + '<div class="fi"><label class="lb">Type de réservation (optionnel)</label><input type="text" id="rc-bookingtype" list="rc-bookingtype-options" placeholder="Ex : Standard, Groupe, Corporate…" autocomplete="off"><datalist id="rc-bookingtype-options"></datalist></div>'
+    + '<div class="fi" id="rc-bookingtype-wrap"><label class="lb">Type de réservation (optionnel)</label><input type="text" id="rc-bookingtype" list="rc-bookingtype-options" placeholder="Ex : Standard, Groupe, Corporate…" autocomplete="off"><datalist id="rc-bookingtype-options"></datalist></div>'
     + '<div style="display:flex;gap:8px;margin-top:10px">'
     + '<button class="btn btn-p" onclick="rcCreateBooking()" id="rc-create-btn"><i class="ti ti-check"></i> Créer la réservation</button>'
     + '<button class="btn btn-ghost" onclick="resaCloseCreate()">Annuler</button>'
     + '</div>';
   var knownTypes = Array.from(new Set(RESA_CACHE.map(function(x){ return x.booking.bookingType||''; }).filter(Boolean)));
   document.getElementById('rc-bookingtype-options').innerHTML = knownTypes.map(function(t){ return '<option value="'+esc(t)+'">'; }).join('');
+  if(RC_STATE.bookingTypes.length) rcRenderBookingTypeOptions();
+}
+
+/** Bascule le champ "Type de réservation" en liste réelle (API Sesame
+ * Technology, cf. RC_STATE.bookingTypes) dès qu'elle est disponible —
+ * remplace la saisie libre par défaut si aucun connecteur Sesame. */
+function rcRenderBookingTypeOptions(){
+  var wrap = document.getElementById('rc-bookingtype-wrap');
+  if(!wrap || !RC_STATE.bookingTypes.length) return;
+  wrap.innerHTML = '<label class="lb">Type de réservation</label>'
+    + '<select id="rc-bookingtype-select" onchange="rcOnBookingTypeChange()">'
+    + '<option value="">— Choisir —</option>'
+    + RC_STATE.bookingTypes.map(function(t){ return '<option value="'+esc(t.id)+'">'+esc(t.name||t.code)+'</option>'; }).join('')
+    + '</select>';
+}
+
+/** Pré-coche (sans décocher le reste) les chambres déjà listées
+ * (RC_STATE.rooms, recherche par dates déjà faite) qui appartiennent au
+ * grouping du type choisi — demande client 21/10/2026 : un type "Staff"
+ * dont le grouping couvre toutes les facilities doit ainsi donner accès à
+ * tout par défaut, modifiable ensuite par le personnel. */
+function rcOnBookingTypeChange(){
+  var sel = document.getElementById('rc-bookingtype-select');
+  var t = RC_STATE.bookingTypes.find(function(x){ return x.id === sel.value; });
+  if(!t || !t.roomCodes || !t.roomCodes.length) return;
+  RC_STATE.rooms.forEach(function(rm){
+    if(t.roomCodes.indexOf(rm.code) === -1) return;
+    if(!RC_STATE.selectedRooms.some(function(r){ return r.id===rm.id; })) RC_STATE.selectedRooms.push(rm);
+  });
+  rcRenderRooms();
 }
 
 async function rcCreateBooking(){
@@ -8830,7 +8887,16 @@ async function rcCreateBooking(){
   var lastName = document.getElementById('rc-lastname').value.trim();
   var email = document.getElementById('rc-email').value.trim();
   var phone = document.getElementById('rc-phone').value.trim();
-  var bookingType = document.getElementById('rc-bookingtype').value.trim();
+  var typeSel = document.getElementById('rc-bookingtype-select');
+  var bookingType, bookingTypeId;
+  if(typeSel){
+    var chosenType = RC_STATE.bookingTypes.find(function(t){ return t.id === typeSel.value; });
+    bookingType = chosenType ? (chosenType.code||chosenType.name) : '';
+    bookingTypeId = typeSel.value || '';
+  } else {
+    bookingType = document.getElementById('rc-bookingtype').value.trim();
+    bookingTypeId = '';
+  }
   if(!firstName || !lastName){ rcShowError('Nom et prénom requis.'); return; }
   if(email && email.indexOf('@')===-1){ rcShowError('Email invalide.'); return; }
   if(!email && !phone){ rcShowError('Email ou téléphone requis.'); return; }
@@ -8842,7 +8908,8 @@ async function rcCreateBooking(){
       roomId: RC_STATE.selectedRooms[0].id,
       roomIds: RC_STATE.selectedRooms.map(function(rm){return rm.id;}),
       startDate: RC_STATE.start, endDate: RC_STATE.end,
-      firstName: firstName, lastName: lastName, email: email, phone: phone, bookingType: bookingType
+      firstName: firstName, lastName: lastName, email: email, phone: phone,
+      bookingType: bookingType, bookingTypeId: bookingTypeId
     })});
     var data = await r.json();
     if(!r.ok) throw new Error(data.error||'Erreur');

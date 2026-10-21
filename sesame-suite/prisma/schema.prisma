@@ -384,6 +384,21 @@ model Booking {
   // Réservations, répercuté à la source externe via
   // BookingSourceConfig.updateBookingTypeParam (cf. pushBookingUpdate).
   bookingType      String?
+  // Identifiant RÉEL du BookingType choisi côté source externe (ex :
+  // BookingType.id de l'API Sesame Technology, GET /ws/bookingType/listAll)
+  // — distinct de bookingType ci-dessus (son libellé/code, simple texte).
+  // Sans cet id, le push vers Sesame (updateBookingTypeParam="typeCode")
+  // était silencieusement ignoré par /ws/booking/createOrUpdate : la vraie
+  // API attend un "typeId" (confirmé dans le code du portail officiel
+  // sesamenewportal, new-booking-form-v5.html : `data.typeId = $form.find(
+  // '[name="type"]').val()`, value = BookingType.id) — Sesame retombait
+  // alors sur BookingType.id par défaut de l'entité (`entity.bookingTypeId`,
+  // même défaut que le formulaire officiel sans sélection explicite), d'où
+  // le symptôme "le type choisi n'est jamais pris en compte" (demande
+  // client 21/10/2026). Renseigné uniquement à la création manuelle
+  // (panneau Réservations), quand un connecteur Sesame Technology est
+  // configuré — cf. GET /wa/bookingSource/bookingTypes.
+  bookingTypeId    String?
   otaId            String?
   checkinDone      Boolean   @default(false)
   // Marque le début (pas la fin) du check-in en ligne côté client — posé une
@@ -958,6 +973,14 @@ model BookingSourceConfig {
   // laisser vide si la source externe ne doit pas être notifiée de ce
   // changement.
   updateBookingTypeParam   String?
+  // Nom du paramètre optionnel portant l'IDENTIFIANT réel du type de
+  // réservation (Booking.bookingTypeId, ex: "typeId" côté API Sesame
+  // Technology) — distinct d'updateBookingTypeParam ci-dessus (son libellé/
+  // code) : envoyé EN PLUS quand Booking.bookingTypeId est renseigné, pour
+  // que le type choisi s'applique réellement côté source au lieu de
+  // retomber sur le type par défaut de l'entité (cf. commentaire
+  // Booking.bookingTypeId, schema.prisma).
+  updateBookingTypeIdParam String?
   // Noms des paramètres optionnels portant les nouvelles dates de séjour
   // (format YYYY-MM-DD) — laisser vide si la source externe ne doit pas
   // être notifiée des changements de dates.

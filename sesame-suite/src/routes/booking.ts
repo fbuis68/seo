@@ -778,6 +778,9 @@ interface CreateManualBody {
   phone?: string;
   occupants?: Record<string, number>;
   bookingType?: string;
+  // Identifiant réel du BookingType choisi (cf. GET /wa/bookingSource/
+  // bookingTypes) — cf. commentaire Booking.bookingTypeId (schema.prisma).
+  bookingTypeId?: string;
 }
 
 /**
@@ -835,6 +838,7 @@ bookingRouter.post(
       email: (emailInput || generatedEmail).toLowerCase(),
       phone: phoneInput || undefined,
       bookingType: b.bookingType?.trim() || undefined,
+      bookingTypeId: b.bookingTypeId?.trim() || undefined,
       occupants,
     };
 

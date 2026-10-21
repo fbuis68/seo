@@ -17,6 +17,7 @@ import {
   createSesameOperator,
   revokeSesameOperator,
   resendSesameOperatorPassword,
+  listSesameBookingTypesWithAccess,
   BookingSourceError,
   FieldMapping,
   FacilityMapping,
@@ -147,6 +148,7 @@ function shapeConfig(c: {
   updateStatusParam: string | null;
   updateStatusValueMap: unknown;
   updateBookingTypeParam: string | null;
+  updateBookingTypeIdParam: string | null;
   updateStartDateParam: string | null;
   updateEndDateParam: string | null;
   updateEmailParam: string | null;
@@ -284,6 +286,7 @@ function shapeConfig(c: {
     updateStatusParam: c.updateStatusParam || "",
     updateStatusValueMap: c.updateStatusValueMap || {},
     updateBookingTypeParam: c.updateBookingTypeParam || "",
+    updateBookingTypeIdParam: c.updateBookingTypeIdParam || "",
     updateStartDateParam: c.updateStartDateParam || "",
     updateEndDateParam: c.updateEndDateParam || "",
     updateEmailParam: c.updateEmailParam || "",
@@ -463,6 +466,7 @@ interface ConfigBody {
   updateStatusParam?: string;
   updateStatusValueMap?: Record<string, string>;
   updateBookingTypeParam?: string;
+  updateBookingTypeIdParam?: string;
   updateStartDateParam?: string;
   updateEndDateParam?: string;
   updateEmailParam?: string;
@@ -601,6 +605,7 @@ bookingSourceRouter.post(
       updateStatusParam: b.updateStatusParam,
       updateStatusValueMap: b.updateStatusValueMap as never,
       updateBookingTypeParam: b.updateBookingTypeParam,
+      updateBookingTypeIdParam: b.updateBookingTypeIdParam,
       updateStartDateParam: b.updateStartDateParam,
       updateEndDateParam: b.updateEndDateParam,
       updateEmailParam: b.updateEmailParam,
@@ -1066,6 +1071,43 @@ bookingSourceRouter.post(
     res.json({ success: true });
     if (events.length > 0 && config.enabled && config.baseUrl) {
       runImport(config.entity, config).catch(() => {});
+    }
+  })
+);
+
+/**
+ * GET /wa/bookingSource/bookingTypes — types de réservation réels de
+ * l'établissement actif (API Sesame Technology), avec les chambres
+ * auxquelles chacun donne accès par défaut via son grouping (demande
+ * client 21/10/2026 : "pouvoir lister les booking type lors de la
+ * création d'une réservation et ne pas prendre par défaut le booking type
+ * de l'entité"). Accessible à tout admin de l'établissement (pas réservé
+ * au super-admin Sesame, contrairement aux routes /operators ci-dessus) —
+ * utilisé par le panneau Réservations, ouvert à n'importe quel compte
+ * hôtel créant une réservation manuelle. Retourne [] (jamais d'erreur) si
+ * le connecteur n'est pas de modèle "Sesame Technology" ou n'est pas
+ * configuré : le formulaire de création retombe alors sur la saisie libre
+ * historique plutôt que d'afficher une erreur bloquante pour un
+ * établissement qui n'a simplement pas cette intégration.
+ */
+bookingSourceRouter.get(
+  "/bookingSource/bookingTypes",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
+    if (!config || !config.baseUrl || config.presetId !== "sesame") {
+      res.json({ ok: true, bookingTypes: [] });
+      return;
+    }
+    try {
+      const bookingTypes = await listSesameBookingTypesWithAccess(config, entity.id);
+      res.json({ ok: true, bookingTypes });
+    } catch (e) {
+      // Best-effort — ne bloque jamais la création d'une réservation : le
+      // formulaire retombe sur la saisie libre en cas d'échec.
+      console.error(`[bookingSource] bookingTypes(${entity.code}) — échec:`, e instanceof Error ? e.message : e);
+      res.json({ ok: true, bookingTypes: [] });
     }
   })
 );

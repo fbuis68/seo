@@ -24,6 +24,7 @@ export function normaliseBooking(b: Booking) {
     facilityName: b.facilityName || b.facilityCode || "",
     status: b.status,
     bookingType: b.bookingType || "",
+    bookingTypeId: b.bookingTypeId || "",
     otaId: b.otaId || "",
     checkinDone: b.checkinDone,
     checkinStartedAt: b.checkinStartedAt ? iso(b.checkinStartedAt) : null,

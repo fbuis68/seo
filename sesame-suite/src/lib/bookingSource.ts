@@ -1202,6 +1202,75 @@ export async function resendSesameOperatorPassword(config: BookingSourceConfig, 
   if (!resp.success) throw new BookingSourceError((resp.message as string) || "Échec de l'envoi");
 }
 
+// ── BOOKING TYPES & GROUPINGS (SESAME TECHNOLOGY) ──
+// § demande client 21/10/2026 : "pouvoir lister les booking type lors de la
+// création d'une réservation et ne pas prendre par défaut le booking type
+// de l'entité". Reproduit la logique du formulaire "New booking" du
+// portail officiel (new-booking-form-v5.html + booking-v39.js
+// initBookingForm) : liste des BookingType (GET /ws/bookingType/listAll,
+// champs id/name/code/groupingId — groupingId en liste séparée par
+// virgules, une réservation peut avoir un type rattaché à PLUSIEURS
+// groupings) et des Grouping (GET /ws/grouping/list, champ facilityId en
+// liste séparée par virgules) — un Grouping "donne accès" aux facilities
+// de sa liste. Un type "Staff" rattaché à un grouping qui liste TOUTES les
+// facilities de l'établissement donne donc par défaut accès à tout.
+export interface SesameBookingType {
+  id: string;
+  name: string;
+  code: string;
+  roomCodes: string[]; // résolu via les groupings de ce type + Room.externalFacilityId
+}
+
+interface SesameGrouping {
+  id: string;
+  facilityIds: string[];
+}
+
+async function listSesameBookingTypesRaw(config: BookingSourceConfig, headers: Record<string, string>): Promise<Record<string, unknown>[]> {
+  const resp = await sesameWsCall(config, headers, "/bookingType/listAll", "GET");
+  if (!resp.success) throw new BookingSourceError((resp.message as string) || "Impossible de lister les types de réservation");
+  return (resp.root as Record<string, unknown>[]) || [];
+}
+
+async function listSesameGroupingsRaw(config: BookingSourceConfig, headers: Record<string, string>): Promise<SesameGrouping[]> {
+  const resp = await sesameWsCall(config, headers, "/grouping/list", "GET", { start: 0, limit: 1000 });
+  if (!resp.success) throw new BookingSourceError((resp.message as string) || "Impossible de lister les groupings");
+  const rows = (resp.root as Record<string, unknown>[]) || [];
+  return rows.map((g) => ({
+    id: String(g.id),
+    facilityIds: String(g.facilityId || "").split(",").map((s) => s.trim()).filter(Boolean),
+  }));
+}
+
+/** Types de réservation de l'établissement actif, avec les codes de
+ * chambre (locaux, Room.code) auxquels chacun donne accès par défaut via
+ * son/ses grouping(s) — résolution Grouping.facilityId (id Sesame) ->
+ * Room.externalFacilityId -> Room.code, cf. FacilityMapping.externalId. */
+export async function listSesameBookingTypesWithAccess(
+  config: BookingSourceConfig,
+  entityId: string
+): Promise<SesameBookingType[]> {
+  const { headers } = await sesameLogin(config);
+  const [typesRaw, groupings] = await Promise.all([listSesameBookingTypesRaw(config, headers), listSesameGroupingsRaw(config, headers)]);
+  const groupingMap = new Map(groupings.map((g) => [g.id, g]));
+
+  const rooms = await prisma.room.findMany({ where: { entityId, externalFacilityId: { not: null } } });
+  const roomByExternalId = new Map(rooms.map((r) => [r.externalFacilityId as string, r.code]));
+
+  return typesRaw.map((t) => {
+    const groupingIds = String(t.groupingId || "").split(",").map((s) => s.trim()).filter(Boolean);
+    const facilityIds = new Set<string>();
+    for (const gid of groupingIds) {
+      const g = groupingMap.get(gid);
+      if (g) g.facilityIds.forEach((fid) => facilityIds.add(fid));
+    }
+    const roomCodes = Array.from(facilityIds)
+      .map((fid) => roomByExternalId.get(fid))
+      .filter((code): code is string => !!code);
+    return { id: String(t.id), name: (t.name as string) || "", code: (t.code as string) || "", roomCodes };
+  });
+}
+
 export interface NfcEncodeResult {
   success: boolean;
   message: string;
@@ -1364,7 +1433,14 @@ export async function encodeNfc(config: BookingSourceConfig, passId: string, dev
 export async function pushBookingUpdate(
   config: BookingSourceConfig,
   bookingCode: string,
-  changes: { roomCode?: string | null; status?: string; bookingType?: string | null; startDate?: string | null; endDate?: string | null }
+  changes: {
+    roomCode?: string | null;
+    status?: string;
+    bookingType?: string | null;
+    bookingTypeId?: string | null;
+    startDate?: string | null;
+    endDate?: string | null;
+  }
 ): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
   if (!config.updateEndpointPath) return { ok: true, skipped: true };
   if (!config.baseUrl) return { ok: false, error: "URL de base non configurée" };
@@ -1372,6 +1448,12 @@ export async function pushBookingUpdate(
   const params: Record<string, unknown> = {};
   if (changes.roomCode !== undefined && config.updateRoomParam) params[config.updateRoomParam] = changes.roomCode ?? "";
   if (changes.bookingType !== undefined && config.updateBookingTypeParam) params[config.updateBookingTypeParam] = changes.bookingType ?? "";
+  // Identifiant réel du type (cf. Booking.bookingTypeId) — sans lui, la
+  // vraie API Sesame ignore le type/code envoyé et retombe sur le type par
+  // défaut de l'entité, cf. commentaire schema.prisma.
+  if (changes.bookingTypeId !== undefined && config.updateBookingTypeIdParam) {
+    params[config.updateBookingTypeIdParam] = changes.bookingTypeId ?? "";
+  }
   if (changes.startDate !== undefined && config.updateStartDateParam) params[config.updateStartDateParam] = changes.startDate ?? "";
   if (changes.endDate !== undefined && config.updateEndDateParam) params[config.updateEndDateParam] = changes.endDate ?? "";
   if (changes.status !== undefined && config.updateStatusParam) {
@@ -1479,6 +1561,9 @@ export async function pushBookingUpsert(
     // facilities plutôt qu'une seule), donc important à transmettre dès la
     // création, pas seulement sur les mises à jour ciblées.
     bookingType?: string | null;
+    // Identifiant réel du type (cf. Booking.bookingTypeId) — cf. commentaire
+    // pushBookingUpdate ci-dessus.
+    bookingTypeId?: string | null;
     status: string;
   }
 ): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
@@ -1493,6 +1578,7 @@ export async function pushBookingUpsert(
   if (config.updatePhoneParam) params[config.updatePhoneParam] = booking.personPhone || "";
   if (config.updateRoomParam && booking.facilityCode) params[config.updateRoomParam] = booking.facilityCode;
   if (config.updateBookingTypeParam && booking.bookingType) params[config.updateBookingTypeParam] = booking.bookingType;
+  if (config.updateBookingTypeIdParam && booking.bookingTypeId) params[config.updateBookingTypeIdParam] = booking.bookingTypeId;
   if (config.updateStartDateParam) params[config.updateStartDateParam] = booking.startDate.toISOString().slice(0, 10);
   if (config.updateEndDateParam) params[config.updateEndDateParam] = booking.endDate.toISOString().slice(0, 10);
   if (config.updateStatusParam) {
@@ -1599,6 +1685,7 @@ export async function adoptBookingIntoSource(entityId: string, booking: Booking)
     endDate: booking.endDate,
     facilityCode: booking.facilityCode,
     bookingType: booking.bookingType,
+    bookingTypeId: booking.bookingTypeId,
     status: booking.status,
   }).catch((e) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) }));
   // ok:true ET skipped:true signifie que rien n'a été envoyé (endpoint ou
