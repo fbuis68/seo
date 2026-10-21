@@ -2487,6 +2487,38 @@ function toggleFicheExtra(btn){
   btn.innerHTML = hidden ? '▴ Vue simplifiée' : '▾ Voir plus d\'informations';
 }
 
+// Rubriques repliables de la fiche client (Contacts, Comptabilité, Score,
+// Affaires, Tickets, Journal…) — repliées par défaut pour ne pas afficher
+// tout le détail des enregistrements d'un coup (demande client
+// 21/10/2026). Scinde le contenu d'une .card (tout sauf son .card-head)
+// dans un conteneur masqué, basculé au clic sur l'en-tête — hors boutons/
+// liens/champs qu'il contient. Rejoué à chaque (re)rendu d'une carte,
+// puisque innerHTML="..." repart d'un .card-head neuf à chaque fois.
+function ficheCollapsible(cardId){
+  const card = document.getElementById(cardId);
+  if(!card) return;
+  const head = card.querySelector(':scope > .card-head');
+  if(!head) return;
+  const body = document.createElement('div');
+  body.className = 'fiche-coll-body';
+  Array.from(card.children).forEach(ch=>{ if(ch!==head) body.appendChild(ch); });
+  if(!body.children.length) return; // carte sans contenu à replier
+  card.appendChild(body);
+  const pushedRight = Array.from(head.children).some(el=>el.style && el.style.marginLeft==='auto');
+  const chev = document.createElement('i');
+  chev.className = 'ti ti-chevron-right';
+  chev.style.cssText = 'color:var(--mu);flex-shrink:0;transition:transform .15s'+(pushedRight?'':';margin-left:auto');
+  head.appendChild(chev);
+  head.style.cursor = 'pointer';
+  body.style.display = 'none';
+  head.addEventListener('click', e=>{
+    if(e.target.closest('button,a,input,select,textarea,label')) return;
+    const open = body.style.display !== 'none';
+    body.style.display = open ? 'none' : '';
+    chev.style.transform = open ? '' : 'rotate(90deg)';
+  });
+}
+
 function renderFiche(c){
   const sc=riskScore(c);
   const featDef=featDefFor(c);
@@ -2594,7 +2626,7 @@ function renderFiche(c){
     <div class="log-empty">Chargement…</div>
   </div>
 
-  <div class="card">
+  <div class="card" id="deals-card">
     <div class="card-head"><div class="ch-ico">◆</div><span class="ch-title">Affaires</span><button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="openNewDealModal('${c.id}')">+ Nouvelle affaire</button></div>
     ${(deals.filter(d=>d.prospectId===c.id)).length===0?'<div class="log-empty">Aucune affaire en cours pour ce client.</div>':deals.filter(d=>d.prospectId===c.id).map(d=>`
       <div class="log-item" style="cursor:pointer" onclick="openDealModal('${d.id}')">
@@ -2609,7 +2641,7 @@ function renderFiche(c){
   ${ticketsCardHtml(c)}
 
   <div class="two-col">
-    <div class="card">
+    <div class="card" id="access-usage-card">
       <div class="card-head"><div class="ch-ico">◉</div><span class="ch-title">Usage des accès</span></div>
       ${c.nfc||c.qr||c.mobile||c.code
         ?`<div class="bar-row"><span class="bar-lbl">NFC</span><div class="bar-track"><div class="bar-fill" style="width:${c.nfc}%;background:#185fa5"></div></div><span class="bar-pct">${c.nfc}%</span></div>
@@ -2622,7 +2654,7 @@ function renderFiche(c){
         ${featDef.map(([n,v])=>`<span class="fp ${v?'fp-on':'fp-off'}"><span class="fp-ico">${v?'✓':'✕'}</span>${n}</span>`).join('')}
       </div>
     </div>
-    <div class="card">
+    <div class="card" id="upsell-card">
       <div class="card-head"><div class="ch-ico">↑</div><span class="ch-title">Opportunités upsell</span></div>
       ${upsells.map(u=>`<div class="upsell-row">
         <div class="ups-ico" style="background:${u.bg}">${u.ico}</div>
@@ -2645,6 +2677,7 @@ function renderFiche(c){
   </div>
 
   ${questionnaireSendsCardHtml(c)}`;
+  ['deals-card','tickets-card','access-usage-card','upsell-card','journal-card'].forEach(ficheCollapsible);
 }
 
 /** Carte "Tickets support" de la fiche (renderFiche ci-dessus) — tickets
@@ -2672,7 +2705,7 @@ function toggleTicketsCardShowResolved(checked){
   TICKETS_CARD_SHOW_RESOLVED = checked;
   const c = clients.find(x=>x.id===curId);
   const el = document.getElementById('tickets-card');
-  if(c && el) el.outerHTML = ticketsCardHtml(c);
+  if(c && el){ el.outerHTML = ticketsCardHtml(c); ficheCollapsible('tickets-card'); }
 }
 
 function ticketsCardHtml(c){
@@ -2737,6 +2770,7 @@ async function loadQuestionnaireSendsCard(c){
       ${rowsHtml || '<div class="log-empty">En attente de réponse.</div>'}
     </div>`;
   }).join('');
+  ficheCollapsible('questionnaire-sends-card');
 }
 
 // ── Contacts multiples de la fiche (16/09/2026) — chacun avec une fonction,
@@ -2784,6 +2818,7 @@ function renderContactsCard(prospectId){
     <div class="card-head"><div class="ch-ico">☺</div><span class="ch-title">Contacts</span><button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="openContactModal('${prospectId}',null)">+ Contact</button></div>
     ${selBar}
     ${rows || '<div class="log-empty">Aucun contact additionnel — seul le référent de la fiche est enregistré.</div>'}`;
+  ficheCollapsible('contacts-card');
 }
 
 function crmContactToggleSelect(prospectId, id, checked){
@@ -2890,6 +2925,7 @@ function renderComptaCard(detail, prospectId){
     <div class="log-empty">Aucune fiche compta rapprochée (aucune facture/prélèvement enregistré pour cet email/SIRET/SIREN pour l'instant).</div>
     <div id="compta-link-picker"></div>
     <button class="btn btn-ghost btn-sm" onclick="crmOpenLinkAccCustomer('${prospectId}')">Lier manuellement…</button>`;
+    ficheCollapsible('compta-card');
     return;
   }
   const pos = detail.position;
@@ -2942,6 +2978,7 @@ function renderComptaCard(detail, prospectId){
       <thead><tr><th style="width:90px">Date</th><th>Libellé</th><th style="width:90px;text-align:right">Montant</th><th style="width:90px;text-align:right">TVA</th><th style="width:130px">Statut</th></tr></thead>
       <tbody>${gcRows}</tbody>
     </table></div>`:''}`;
+  ficheCollapsible('compta-card');
 }
 
 function openContactModal(prospectId, id){
@@ -3032,6 +3069,7 @@ async function loadScoringCard(c){
       </div>
     </div>
     ${rowsHtml}`;
+  ficheCollapsible('scoring-card');
 }
 
 // ════════════════════════════════════════
@@ -3044,6 +3082,7 @@ async function loadAdminAccessCard(c){
   if(!c.entityId){
     el.innerHTML=`<div class="card-head"><div class="ch-ico">◈</div><span class="ch-title">Accès admin</span></div>
       <div class="log-empty">Aucun établissement Sesame rattaché à ce contact — l'accès admin nécessite une souscription activée (panneau Souscriptions) pour provisionner l'établissement.</div>`;
+    ficheCollapsible('admin-access-card');
     return;
   }
   var users = [];
@@ -3087,6 +3126,7 @@ function renderAdminAccessCard(c, users){
       <div class="ff"><label>Mot de passe (optionnel — sinon généré)</label><div style="display:flex;gap:6px"><input type="text" id="admin-access-password" placeholder="10 car. min., 1 chiffre, 1 caractère spécial" style="flex:1"><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('admin-access-password').value=crmGenPassword()">Générer</button></div></div>
     </div>
     <div class="log-acts" style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="createAdminAccess('${c.id}')">+ Créer un accès</button></div>`;
+  ficheCollapsible('admin-access-card');
 }
 
 /**
@@ -3315,6 +3355,7 @@ function renderSignatureCard(){
       <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="sigOpenCreate()">+ Nouvelle demande</button>
     </div>
     ${SIG_LIST.length ? SIG_LIST.map(sigRowHtml).join('') : '<div class="log-empty">Aucune demande de signature pour cette fiche.</div>'}`;
+  ficheCollapsible('signature-card');
 }
 
 function sigRowHtml(s){
