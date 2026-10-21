@@ -10569,6 +10569,19 @@ async function bootAdminApp(){
     var pp=document.getElementById('phonePreview');
     if(pp)pp.innerHTML=buildPhoneHTML();
   },100);
+  // "Accueil" (dash) est affiché "on" par défaut dans le HTML statique —
+  // si le profil de ce compte le retire des droits, ne pas y rester
+  // (visible mais grisé) : basculer sur le premier menu réellement
+  // autorisé. Ne redirige QUE si dash est bien le panneau actuellement
+  // affiché (pas de réinitialisation intempestive d'une navigation déjà en
+  // cours) et seulement après le chargement de CFG (showPan() déclenche
+  // l'init du panneau ciblé, qui peut en dépendre). § demande client 21/10/2026.
+  if(MENU_RIGHTS && !MENU_RIGHTS['dash'] && document.getElementById('pan-dash').classList.contains('on')){
+    var apFirstAllowed = Array.prototype.find.call(document.querySelectorAll('.ni[data-pan]'), function(el){
+      return el.style.display !== 'none' && MENU_RIGHTS[el.getAttribute('data-pan')];
+    });
+    if(apFirstAllowed) showPan(apFirstAllowed.getAttribute('data-pan'));
+  }
 }
 // Intégration : appelez window.closeSesameSplash() dès que l'écran suivant
 // est prêt — voir le DOMContentLoaded ci-dessous, qui l'appelle dès que la
