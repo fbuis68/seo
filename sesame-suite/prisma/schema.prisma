@@ -394,6 +394,13 @@ model Booking {
   // parcours client (panneau Réservations, écran de détail).
   checkinStartedAt DateTime?
   selectedRoomCode String? // chambre choisie à l'étape 2 (peut différer de facilityCode)
+  // Horaire d'arrivée/départ spécifique à CETTE réservation — null = repli
+  // sur EntityModuleConfig.checkinTime/checkoutTime (horaire standard de
+  // l'établissement). Édité depuis le formulaire "Modifier la réservation"
+  // (demande client 21/10/2026 : le réglage global modifiait TOUTES les
+  // réservations au lieu de la seule réservation en cours).
+  checkinTime  String?
+  checkoutTime String?
   importedFrom     String? // nom de la source si créée par le connecteur externe (cf. BookingSourceConfig), sinon null
   // Empreinte bancaire (BookingEngineConfig.cardOnFileMode) — référence
   // Stripe de la carte enregistrée SANS être débitée à la réservation, pour

@@ -118,6 +118,8 @@ bookingRouter.post(
       personPhone?: string;
       status?: string;
       bookingType?: string;
+      checkinTime?: string;
+      checkoutTime?: string;
     };
     if (!b.code) throw new HttpError(400, "code requis");
 
@@ -138,15 +140,30 @@ bookingRouter.post(
       data.personEmail = b.personEmail.trim();
     }
     if (b.personPhone !== undefined) data.personPhone = b.personPhone.trim() || null;
+    // Horaire propre à CETTE réservation uniquement — ne touche jamais
+    // EntityModuleConfig.checkinTime/checkoutTime (horaire standard de
+    // l'établissement, réglé séparément via resaOpenScheduleModal).
+    if (b.checkinTime !== undefined) data.checkinTime = b.checkinTime.trim() || null;
+    if (b.checkoutTime !== undefined) data.checkoutTime = b.checkoutTime.trim() || null;
     let roomCodeChanged: string | null | undefined;
     if (b.facilityCode !== undefined) {
-      const code = b.facilityCode.trim();
-      const room = code ? await prisma.room.findUnique({ where: { entityId_code: { entityId: entity.id, code } } }) : null;
-      data.facilityCode = code || null;
-      data.facilityName = room?.name || null;
-      data.selectedRoomCode = code || null;
-      data.roomId = room?.id || null;
-      roomCodeChanged = code || null;
+      // Sélection multiple (même convention qu'à la création, cf.
+      // createBookingDirect) : facilityCode peut être une liste de codes
+      // séparés par des virgules. Auparavant un findUnique sur la chaîne
+      // entière échouait silencieusement dès qu'une résa avait plusieurs
+      // chambres, perdant la sélection à chaque édition (demande client
+      // 21/10/2026, "la sélection précédente saute").
+      const codes = b.facilityCode.split(",").map((c) => c.trim()).filter(Boolean);
+      const rooms = codes.length
+        ? await prisma.room.findMany({ where: { entityId: entity.id, code: { in: codes } } })
+        : [];
+      const orderedRooms = codes.map((c) => rooms.find((r) => r.code === c)).filter((r): r is NonNullable<typeof r> => !!r);
+      const joinedCode = orderedRooms.map((r) => r.code).join(",") || null;
+      data.facilityCode = joinedCode;
+      data.facilityName = orderedRooms.map((r) => r.name).join(", ") || null;
+      data.selectedRoomCode = orderedRooms[0]?.code || null;
+      data.roomId = orderedRooms[0]?.id || null;
+      roomCodeChanged = joinedCode;
     }
     if (b.status !== undefined) {
       if (!["confirmed", "checkin_done", "completed", "cancelled"].includes(b.status)) {

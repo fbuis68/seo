@@ -896,7 +896,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       </div>
       <div class="g2">
         <div class="fi"><label class="lb">Type de chambre</label><select id="resa-e-roomtype" onchange="resaFilterRoomOptions()"><option value="">Tous types</option></select></div>
-        <div class="fi"><label class="lb">Chambre</label><select id="resa-e-room"><option value="">— Aucune —</option></select></div>
+        <div class="fi"><label class="lb">Chambre(s) <span style="font-weight:400;color:var(--mu)">— ctrl/cmd-clic pour plusieurs</span></label><select id="resa-e-room" multiple size="6"></select></div>
       </div>
       <div class="fi">
         <label class="lb">Type de réservation</label>
@@ -927,27 +927,6 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
       <button onclick="resaCloseDetail()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
     </div>
     <div style="padding:18px 20px" id="resa-detail-body"></div>
-  </div>
-</div>
-
-<!-- ════ MODAL HORAIRES STANDARDS (arrivée/départ) ════ — accessible depuis
-     la roue dentée de la fiche réservation (§ demande client 21/10/2026) ;
-     même réglage global que Entité & Catégorie (CFG.checkinTime/
-     checkoutTime), pas un horaire par réservation. -->
-<div id="resaScheduleModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:310;align-items:center;justify-content:center;padding:16px">
-  <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:380px;box-shadow:0 24px 60px rgba(0,0,0,.3)">
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--bdr)">
-      <h2 style="font-size:17px">Horaires standards</h2>
-      <button onclick="resaCloseScheduleModal()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
-    </div>
-    <div style="padding:18px 20px">
-      <div style="font-size:12px;color:var(--mu);margin-bottom:12px">Horaires appliqués à toutes les réservations de cet établissement — pas un réglage par réservation.</div>
-      <div class="g2">
-        <div class="fi"><label class="lb">Arrivée</label><input type="time" id="resa-sched-checkin"></div>
-        <div class="fi"><label class="lb">Départ</label><input type="time" id="resa-sched-checkout"></div>
-      </div>
-      <button class="btn btn-p" style="width:100%;justify-content:center;margin-top:14px" onclick="resaSaveSchedule()"><i class="ti ti-check"></i> Enregistrer</button>
-    </div>
   </div>
 </div>
 
@@ -5837,28 +5816,6 @@ function openEcoParamsModal(){
  * depuis la fiche réservation) — même champ global que Entité &
  * Catégorie (h-checkinTime/h-checkoutTime), juste un raccourci pour ne
  * pas changer de panneau. */
-function resaOpenScheduleModal(){
-  setVal('resa-sched-checkin', CFG.checkinTime||'15:00');
-  setVal('resa-sched-checkout', CFG.checkoutTime||'11:00');
-  document.getElementById('resaScheduleModal').style.display = 'flex';
-}
-function resaCloseScheduleModal(){ document.getElementById('resaScheduleModal').style.display = 'none'; }
-async function resaSaveSchedule(){
-  CFG.checkinTime = getVal('resa-sched-checkin') || '15:00';
-  CFG.checkoutTime = getVal('resa-sched-checkout') || '11:00';
-  setVal('h-checkinTime', CFG.checkinTime);
-  setVal('h-checkoutTime', CFG.checkoutTime);
-  var ok = await saveCfg();
-  if(!ok){ toast('Erreur lors de l\'enregistrement'); return; }
-  toast('Horaires mis à jour ✓');
-  resaCloseScheduleModal();
-  if(RESA_DETAIL_CODE) resaOpenDetail(RESA_DETAIL_CODE);
-  if(document.getElementById('resaEditModal').style.display !== 'none'){
-    setVal('resa-e-checkin-time', CFG.checkinTime);
-    setVal('resa-e-checkout-time', CFG.checkoutTime);
-  }
-  renderReservations();
-}
 function toggleModuleMandatory(k, mandatory){
   if(!CFG.checkinModules[k]) CFG.checkinModules[k]={};
   CFG.checkinModules[k].mandatory = mandatory;
@@ -15873,7 +15830,7 @@ function renderReservations(){
         ? '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:var(--bdr);color:var(--mu)"><i class="ti ti-history" style="font-size:11px"></i> Expirée</span>'
         : '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:var(--gol);color:var(--go)"><i class="ti ti-clock" style="font-size:11px"></i> Pas encore arrivé</span>');
 
-    var dates = fmtDMY(b.startDate)+' ('+(CFG.checkinTime||'15:00')+')'+' → '+fmtDMY(b.endDate)+' ('+(CFG.checkoutTime||'11:00')+')';
+    var dates = fmtDMY(b.startDate)+' ('+(b.checkinTime||CFG.checkinTime||'15:00')+')'+' → '+fmtDMY(b.endDate)+' ('+(b.checkoutTime||CFG.checkoutTime||'11:00')+')';
     var menageVal = (r.prefs && r.prefs.menageFreq!=null) ? 'Tous les '+r.prefs.menageFreq+' jour(s)' : 'Non renseigné';
     var ordersTotal = r.orders.reduce(function(s,o){ return s+(o.total||0); }, 0);
     var boutiqueVal = r.orders.length ? r.orders.length+' commande(s) — '+ordersTotal.toFixed(2)+' '+sym : 'Aucune';
@@ -15995,9 +15952,9 @@ async function resaOpenDetail(code){
   if(b.bookingType) rows.push(['Type de réservation', esc(b.bookingType)]);
   rows = rows.concat([
     ['Source', b.importedFrom ? esc(b.importedFrom) : 'Saisie manuelle / check-in éco'],
-    ['Arrivée', esc(fmtDMY(b.startDate))+' <span style="color:var(--mu);font-weight:400">à partir de '+esc(CFG.checkinTime||'15:00')+'</span>'
-      +' <button type="button" title="Modifier les horaires standards" onclick="event.stopPropagation();resaOpenScheduleModal()" style="background:none;border:none;cursor:pointer;color:var(--mu);font-size:13px;padding:0 0 0 4px;vertical-align:-2px"><i class="ti ti-settings"></i></button>'],
-    ['Départ', esc(fmtDMY(b.endDate))+' <span style="color:var(--mu);font-weight:400">avant '+esc(CFG.checkoutTime||'11:00')+'</span>'],
+    ['Arrivée', esc(fmtDMY(b.startDate))+' <span style="color:var(--mu);font-weight:400">à partir de '+esc(b.checkinTime||CFG.checkinTime||'15:00')+'</span>'
+      +' <button type="button" title="Modifier l\'horaire de cette réservation" onclick="event.stopPropagation();resaOpenEdit(\''+esc(b.code)+'\')" style="background:none;border:none;cursor:pointer;color:var(--mu);font-size:13px;padding:0 0 0 4px;vertical-align:-2px"><i class="ti ti-settings"></i></button>'],
+    ['Départ', esc(fmtDMY(b.endDate))+' <span style="color:var(--mu);font-weight:400">avant '+esc(b.checkoutTime||CFG.checkoutTime||'11:00')+'</span>'],
     ['Mise à jour', esc(updated)],
   ]);
 
@@ -16811,17 +16768,19 @@ function fmtDMY(iso){
 // chambres de ce type (ou toutes si aucun type choisi). preselectCode :
 // code à resélectionner après reconstruction de la liste (édition d'une
 // réservation existante).
-function resaFilterRoomOptions(preselectCode){
+function resaFilterRoomOptions(preselectCodes){
   var typeSel = document.getElementById('resa-e-roomtype');
   var roomSel = document.getElementById('resa-e-room');
   if(!typeSel || !roomSel) return;
   var typeF = typeSel.value;
   var rooms = (CFG.rooms||[]).filter(function(r){ return !typeF || r.category === typeF; })
     .slice().sort(function(a,b){ return (a.code||'').localeCompare(b.code||''); });
-  var current = preselectCode !== undefined ? preselectCode : roomSel.value;
-  roomSel.innerHTML = '<option value="">— Aucune —</option>'
-    + rooms.map(function(r){ return '<option value="'+esc(r.code)+'">'+esc(r.code)+' — '+esc(r.name||'')+'</option>'; }).join('');
-  if(current && rooms.some(function(r){ return r.code === current; })) roomSel.value = current;
+  // multi-select : conserve la sélection en cours (ou preselectCodes à
+  // l'ouverture d'une résa) même si elle change de type de chambre.
+  var current = preselectCodes !== undefined ? preselectCodes
+    : Array.prototype.slice.call(roomSel.selectedOptions).map(function(o){ return o.value; });
+  roomSel.innerHTML = rooms.map(function(r){ return '<option value="'+esc(r.code)+'">'+esc(r.code)+' — '+esc(r.name||'')+'</option>'; }).join('');
+  Array.prototype.forEach.call(roomSel.options, function(o){ if(current.indexOf(o.value) !== -1) o.selected = true; });
 }
 
 function resaOpenEdit(code){
@@ -16835,16 +16794,20 @@ function resaOpenEdit(code){
   document.getElementById('resa-e-phone').value = b.personPhone||'';
   document.getElementById('resa-e-start').value = (b.startDate||'').slice(0,10);
   document.getElementById('resa-e-end').value = (b.endDate||'').slice(0,10);
-  setVal('resa-e-checkin-time', CFG.checkinTime || '15:00');
-  setVal('resa-e-checkout-time', CFG.checkoutTime || '11:00');
+  // Horaire propre à CETTE réservation — repli sur l'horaire standard de
+  // l'établissement seulement si la résa n'a pas de valeur à elle (demande
+  // client 21/10/2026 : éditer ici ne doit PLUS modifier l'horaire de
+  // toutes les autres réservations).
+  setVal('resa-e-checkin-time', b.checkinTime || CFG.checkinTime || '15:00');
+  setVal('resa-e-checkout-time', b.checkoutTime || CFG.checkoutTime || '11:00');
 
-  var currentRoomCode = b.selectedRoomCode || b.facilityCode || '';
-  var currentRoom = (CFG.rooms||[]).find(function(x){ return x.code === currentRoomCode; });
+  var currentRoomCodes = (b.facilityCode||b.selectedRoomCode||'').split(',').map(function(s){return s.trim();}).filter(Boolean);
+  var currentRoom = (CFG.rooms||[]).find(function(x){ return currentRoomCodes.indexOf(x.code) !== -1; });
   var types = Array.from(new Set((CFG.rooms||[]).map(function(x){ return x.category||''; }).filter(Boolean)));
   var typeSel = document.getElementById('resa-e-roomtype');
   typeSel.innerHTML = '<option value="">Tous types</option>' + types.map(function(t){ return '<option value="'+esc(t)+'">'+esc(t)+'</option>'; }).join('');
   typeSel.value = currentRoom ? (currentRoom.category||'') : '';
-  resaFilterRoomOptions(currentRoomCode);
+  resaFilterRoomOptions(currentRoomCodes);
 
   document.getElementById('resa-e-bookingtype').value = b.bookingType||'';
   var knownTypes = Array.from(new Set(RESA_CACHE.map(function(x){ return x.booking.bookingType||''; }).filter(Boolean)));
@@ -16926,6 +16889,7 @@ async function resaSaveEdit(){
   var errEl = document.getElementById('resa-e-error');
   var errMsg = document.getElementById('resa-e-error-msg');
   errEl.style.display = 'none';
+  var selectedRoomCodes = Array.prototype.slice.call(document.getElementById('resa-e-room').selectedOptions).map(function(o){ return o.value; });
   var body = {
     code: document.getElementById('resa-e-code').value,
     personFirstname: document.getElementById('resa-e-firstname').value.trim(),
@@ -16934,21 +16898,13 @@ async function resaSaveEdit(){
     personPhone: document.getElementById('resa-e-phone').value.trim(),
     startDate: document.getElementById('resa-e-start').value,
     endDate: document.getElementById('resa-e-end').value,
-    facilityCode: document.getElementById('resa-e-room').value.trim(),
+    facilityCode: selectedRoomCodes.join(','),
     bookingType: document.getElementById('resa-e-bookingtype').value.trim(),
+    // Horaire propre à cette réservation uniquement (plus de CFG global ici).
+    checkinTime: getVal('resa-e-checkin-time') || '',
+    checkoutTime: getVal('resa-e-checkout-time') || '',
   };
-  var newCheckin = getVal('resa-e-checkin-time') || '15:00';
-  var newCheckout = getVal('resa-e-checkout-time') || '11:00';
-  var scheduleChanged = newCheckin !== (CFG.checkinTime||'15:00') || newCheckout !== (CFG.checkoutTime||'11:00');
   try{
-    if(scheduleChanged){
-      CFG.checkinTime = newCheckin;
-      CFG.checkoutTime = newCheckout;
-      setVal('h-checkinTime', newCheckin);
-      setVal('h-checkoutTime', newCheckout);
-      var schedOk = await saveCfg();
-      if(!schedOk){ errMsg.textContent = 'Échec de l\'enregistrement des horaires'; errEl.style.display='block'; return; }
-    }
     var r = await adminFetch('/wa/booking/update', {method:'POST', body: JSON.stringify(body)});
     var data = await r.json();
     if(!r.ok){ errMsg.textContent = data.error||'Échec de la mise à jour'; errEl.style.display='block'; return; }
