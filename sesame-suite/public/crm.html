@@ -7144,16 +7144,31 @@ function dqRenderServiceTab(q){
 }
 
 function dqRenderDocumentTab(q, lines){
-  const groupHtml = (recurring, label) => {
-    const rows = lines.filter(l=>l.recurring===recurring);
+  // Séparation Matériel (équipements + accessoires) / Service / Licence
+  // (22/10/2026, demande client) — remplace le regroupement par cycle
+  // (Initial/Abonnement) : chaque bloc = une catégorie de ligne
+  // (QuoteLine.category), avec son propre sous-total HT. "Matériel" couvre
+  // à la fois les lignes category:'materiel' du bloc Équipements ET celles
+  // du bloc Accessoires (même catégorie de stockage, cf. QUOTE_DRAFT.group).
+  const DOC_BLOCKS = [
+    {cat:'materiel', label:'Matériel'},
+    {cat:'service', label:'Service'},
+    {cat:'logiciel', label:'Licence'},
+    {cat:'autre', label:'Lignes libres'},
+  ];
+  const groupHtml = (cat, label) => {
+    const rows = lines.filter(l=>(l.category||'materiel')===cat);
     if(!rows.length) return '';
+    const subtotal = rows.reduce((s,l)=>s+(l.unitPrice==null?0:l.qty*l.unitPrice),0);
+    const hasUnpriced = rows.some(l=>l.unitPrice==null);
     return `<h4>${label} · HT</h4>` + rows.map(l=>`
       <div class="sq-docline">
         <input id="dl-name-${l.id}" value="${esc(l.label)}" onchange="dqRerender()">
         <input id="dl-qty-${l.id}" type="number" min="0" step="0.5" value="${l.qty}" onchange="dqRerender()">
         <input id="dl-price-${l.id}" type="number" min="0" step="0.01" placeholder="À saisir" value="${l.unitPrice??''}" onchange="dqRerender()">
-        <output>${l.unitPrice==null?'À chiffrer':fmtEUR(l.qty*l.unitPrice)}</output>
-      </div>`).join('');
+        <output>${l.unitPrice==null?'À chiffrer':fmtEUR(l.qty*l.unitPrice)+(l.recurring?'/mois':'')}</output>
+      </div>`).join('')
+      + `<div class="quote-total-row" style="font-weight:600;border-top:0.5px solid var(--div);margin-top:4px;padding-top:4px"><span>Sous-total ${label}</span><span>${hasUnpriced?'Partiel — ':''}${fmtEUR(subtotal)}</span></div>`;
   };
   const totals = dqComputeTotals(lines, q.config, q.discountPct, q.vatPct, q.depositPct);
   const clientNom = q.prospectId ? (clients.find(c=>c.id===q.prospectId)||{}).nom||'' : '';
@@ -7166,8 +7181,7 @@ function dqRenderDocumentTab(q, lines){
       <div>${esc(q.title)}</div>
     </div>
     <label>Introduction client<div id="dq-intro" class="sq-edit" contenteditable="true" onblur="dqRerender()">${esc(q.introText)}</div></label>
-    ${groupHtml(false,'Investissement initial')}
-    ${groupHtml(true,'Abonnement mensuel')}
+    ${DOC_BLOCKS.map(b=>groupHtml(b.cat,b.label)).join('')}
     <hr class="quote-sep">
     <div class="quote-total-row grand"><strong>Initial HT après remise</strong><strong>${fmtEUR(totals.totalHT)}</strong></div>
     <div class="quote-total-row"><span>TVA ${q.vatPct||0} %</span><span>${fmtEUR(totals.totalTTC-totals.totalHT)}</span></div>
