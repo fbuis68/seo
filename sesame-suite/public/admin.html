@@ -11,6 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="/questionnaireFlow.js"></script>
 <style>
 /*
  * THÈMES D'INTERFACE — à ne pas confondre avec THEMES/CFG.colors plus bas
@@ -4012,7 +4013,9 @@ Accès au salon Premium</textarea>
     </div>
 
     <div class="ca" style="margin-bottom:16px">
-      <div class="ch"><i class="ti ti-list-check"></i>Questions — <span id="qn-d-qcount">0</span></div>
+      <div class="ch"><i class="ti ti-list-check"></i>Questions — <span id="qn-d-qcount">0</span>
+        <button class="chact" onclick="qnOpenDiagram()"><i class="ti ti-binary-tree" style="font-size:12px"></i> Voir le schéma</button>
+      </div>
       <div id="qn-d-questions" style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px"></div>
 
       <div style="border-top:1px solid var(--bdr);padding-top:14px;margin-top:4px">
@@ -4064,6 +4067,44 @@ Accès au salon Premium</textarea>
         </table>
       </div>
       <div id="qn-res-empty" style="display:none;text-align:center;padding:24px;color:var(--mu)">Aucun envoi pour l'instant.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ MODAL BRANCHEMENT D'UNE QUESTION (22/10/2026) ════
+     Simplification assumée : une branche ne teste QUE la réponse à la
+     question en cours d'édition (pas de combinaison multi-questions) —
+     cf. commentaire sur QuestionnaireQuestion.branching (schema.prisma). -->
+<div id="qnBranchModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:560px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.3)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--bdr)">
+      <h2 style="font-size:17px">Branchement conditionnel</h2>
+      <button onclick="document.getElementById('qnBranchModal').style.display='none'" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
+    </div>
+    <div style="padding:18px 20px">
+      <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i><span>Selon la réponse donnée à cette question, passe directement à une autre question (en sautant celles entre les deux) au lieu de suivre l'ordre normal.</span></div>
+      <div id="qn-branch-list" style="display:flex;flex-direction:column;gap:10px"></div>
+      <button class="btn btn-s" style="margin-top:10px" onclick="qnAddBranch()"><i class="ti ti-plus"></i> Ajouter une branche</button>
+      <div style="border-top:1px solid var(--bdr);margin-top:16px;padding-top:12px">
+        <div class="fi"><label class="lb">Sinon (aucune branche ne correspond)</label><select id="qn-branch-else"></select></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="btn btn-p" onclick="qnSaveBranch()"><i class="ti ti-check"></i> Enregistrer</button>
+        <button class="btn btn-s" onclick="document.getElementById('qnBranchModal').style.display='none'">Annuler</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ MODAL SCHÉMA DU QUESTIONNAIRE (lecture seule, 22/10/2026) ════ -->
+<div id="qnDiagramModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:min(1100px,96vw);max-height:92vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.3)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--bdr)">
+      <h2 style="font-size:17px">Schéma du questionnaire</h2>
+      <button onclick="document.getElementById('qnDiagramModal').style.display='none'" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
+    </div>
+    <div style="padding:18px 20px">
+      <div id="qn-diagram-root"></div>
     </div>
   </div>
 </div>
@@ -13376,6 +13417,7 @@ var QN_TYPE_LABEL = { single: 'Choix unique', multi: 'Choix multiple', boolean: 
 var QN_OPT_ROWS = {}; // ctx ('new' | questionId) -> [{key,label}]
 var QN_RATING = {}; // ctx -> {min,max,minLabel,maxLabel}
 var QN_EDITING_ID = null; // id de la question en cours d'édition (une seule à la fois)
+var QN_BRANCH_DRAFT = null; // {questionId, branches:[{id,operator,value,targetQuestionId}], elseTargetQuestionId} — modale qnBranchModal
 
 async function qnInit(){
   try{
@@ -13533,9 +13575,10 @@ function qnRenderQuestions(){
       var o = q.options||{};
       optsSummary = 'Échelle '+(o.min!=null?o.min:1)+' à '+(o.max!=null?o.max:5);
     }
+    var hasBranch = q.branching && (q.branching.branches||[]).length;
     return '<div class="alt alt-b" id="qn-q-row-'+q.id+'" style="align-items:flex-start">'
       + '<div style="flex:1">'
-        + '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu);font-weight:700;margin-bottom:2px">'+QN_TYPE_LABEL[q.type]+(q.required?' · Obligatoire':'')+'</div>'
+        + '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu);font-weight:700;margin-bottom:2px">'+QN_TYPE_LABEL[q.type]+(q.required?' · Obligatoire':'')+(hasBranch?' · <span style="color:#8a5cf6">branchée</span>':'')+'</div>'
         + '<div style="font-size:13px;font-weight:600">'+esc(q.label)+'</div>'
         + (optsSummary?'<div style="font-size:12px;color:var(--mu);margin-top:2px">'+optsSummary+'</div>':'')
         + (q.linkUrl?'<div style="font-size:12px;margin-top:4px"><i class="ti ti-link"></i> <a href="'+esc(q.linkUrl)+'" target="_blank" rel="noopener" style="color:var(--a)">'+esc(q.linkLabel||q.linkUrl)+'</a></div>':'')
@@ -13543,6 +13586,7 @@ function qnRenderQuestions(){
       + '<div style="display:flex;gap:4px;flex-shrink:0">'
         + (idx>0?'<button class="btn btn-s" style="padding:6px 9px" onclick="qnMoveQuestion(\''+q.id+'\',-1)" title="Monter"><i class="ti ti-arrow-up"></i></button>':'')
         + (idx<qs.length-1?'<button class="btn btn-s" style="padding:6px 9px" onclick="qnMoveQuestion(\''+q.id+'\',1)" title="Descendre"><i class="ti ti-arrow-down"></i></button>':'')
+        + (QuestionnaireFlow.canBranch(q.type) && idx<qs.length-1 ? '<button class="btn btn-s" style="padding:6px 9px'+(hasBranch?';color:#8a5cf6':'')+'" onclick="qnOpenBranch(\''+q.id+'\')" title="Branchement"><i class="ti ti-arrows-split"></i></button>' : '')
         + '<button class="btn btn-s" style="padding:6px 9px" onclick="qnEditQuestion(\''+q.id+'\')" title="Modifier"><i class="ti ti-pencil"></i></button>'
         + '<button class="btn btn-s" style="padding:6px 9px;color:var(--re)" onclick="qnDeleteQuestion(\''+q.id+'\')" title="Supprimer"><i class="ti ti-trash"></i></button>'
       + '</div>'
@@ -13746,6 +13790,134 @@ async function qnMoveQuestion(id, dir){
   try{
     await adminFetch('/wa/questionnaire/question/reorder', {method:'POST', body:JSON.stringify({questionnaireId:QNP_CURRENT.id, orderedIds: qs.map(function(q){return q.id;})})});
   }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+// ── Branchement conditionnel (22/10/2026) — cf. public/questionnaireFlow.js
+// pour l'évaluation des conditions et le schéma en arbre, partagés avec
+// public/questionnaire.html (révélation progressive) et crm.html (même
+// éditeur, dupliqué car admin.html/crm.html ne partagent pas de JS inline).
+
+/** Questions pouvant servir de destination à une branche de `q` — celles
+ * situées APRÈS elle dans l'ordre (évite tout retour en arrière/boucle dès
+ * l'éditeur, en plus du garde-fou côté serveur). */
+function qnBranchTargetOptions(q){
+  var qs = QNP_CURRENT.questions || [];
+  return qs.filter(function(x){ return x.order > q.order; });
+}
+
+function qnOpenBranch(id){
+  var q = (QNP_CURRENT.questions||[]).find(function(x){return x.id===id;});
+  if(!q) return;
+  var existing = q.branching || {branches:[], elseTargetQuestionId:null};
+  QN_BRANCH_DRAFT = {
+    questionId: id,
+    branches: (existing.branches||[]).map(function(b){ return Object.assign({}, b); }),
+    elseTargetQuestionId: existing.elseTargetQuestionId || null,
+  };
+  if(!QN_BRANCH_DRAFT.branches.length) qnAddBranch(true);
+  else qnRenderBranchEditor();
+  document.getElementById('qnBranchModal').style.display='flex';
+}
+
+function qnTargetSelectHtml(id, selected){
+  var q = (QNP_CURRENT.questions||[]).find(function(x){return x.id===QN_BRANCH_DRAFT.questionId;});
+  var opts = qnBranchTargetOptions(q);
+  var html = '<select id="'+id+'" onchange="qnBranchFieldChanged()">'
+    + '<option value="" '+(selected===null?'selected':'')+'>— Suite normale —</option>'
+    + '<option value="END" '+(selected==='END'?'selected':'')+'>— Fin du questionnaire —</option>'
+    + opts.map(function(o){ return '<option value="'+o.id+'" '+(selected===o.id?'selected':'')+'>'+esc(o.label)+'</option>'; }).join('')
+    + '</select>';
+  return html;
+}
+
+/** Champ de valeur adapté au type de la question branchée (choix/booléen/texte/nombre). */
+function qnBranchValueFieldHtml(q, idx, branch){
+  var fid = 'qn-branch-val-'+idx;
+  if(q.type==='single' || q.type==='multi'){
+    var opts = q.options||[];
+    return '<select id="'+fid+'" onchange="qnBranchFieldChanged()">'
+      + opts.map(function(o){ return '<option value="'+esc(o.key)+'" '+(branch.value===o.key?'selected':'')+'>'+esc(o.label)+'</option>'; }).join('')
+      + '</select>';
+  }
+  if(q.type==='boolean'){
+    return '<select id="'+fid+'" onchange="qnBranchFieldChanged()"><option value="true" '+(branch.value===true?'selected':'')+'>Oui</option><option value="false" '+(branch.value===false?'selected':'')+'>Non</option></select>';
+  }
+  if(q.type==='rating'){
+    return '<input type="number" id="'+fid+'" value="'+(branch.value!=null?branch.value:'')+'" onchange="qnBranchFieldChanged()">';
+  }
+  return '<input type="text" id="'+fid+'" value="'+esc(branch.value!=null?branch.value:'')+'" onchange="qnBranchFieldChanged()">';
+}
+
+function qnRenderBranchEditor(){
+  var q = (QNP_CURRENT.questions||[]).find(function(x){return x.id===QN_BRANCH_DRAFT.questionId;});
+  var html = QN_BRANCH_DRAFT.branches.map(function(b, i){
+    var ops = QuestionnaireFlow.operatorsForType(q.type);
+    return '<div style="border:1px solid var(--bdr);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center"><strong style="font-size:12px">Branche '+(i+1)+'</strong>'
+      + '<button class="btn btn-s" style="padding:4px 8px;color:var(--re)" onclick="qnRemoveBranch('+i+')"><i class="ti ti-trash"></i></button></div>'
+      + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'
+        + '<span style="font-size:12px;color:var(--mu)">Si la réponse</span>'
+        + '<select id="qn-branch-op-'+i+'" onchange="qnBranchFieldChanged()">'
+          + ops.map(function(op){ return '<option value="'+op+'" '+(b.operator===op?'selected':'')+'>'+esc(QuestionnaireFlow.operatorLabel(op))+'</option>'; }).join('')
+        + '</select>'
+        + qnBranchValueFieldHtml(q, i, b)
+      + '</div>'
+      + '<div class="fi" style="margin:0"><label class="lb">Alors aller à</label>'+qnTargetSelectHtml('qn-branch-target-'+i, b.targetQuestionId)+'</div>'
+      + '</div>';
+  }).join('');
+  document.getElementById('qn-branch-list').innerHTML = html;
+  document.getElementById('qn-branch-else').outerHTML = qnTargetSelectHtml('qn-branch-else', QN_BRANCH_DRAFT.elseTargetQuestionId);
+}
+
+function qnAddBranch(skipCapture){
+  var q = (QNP_CURRENT.questions||[]).find(function(x){return x.id===QN_BRANCH_DRAFT.questionId;});
+  if(!skipCapture) qnCaptureBranchDraft();
+  var ops = QuestionnaireFlow.operatorsForType(q.type);
+  var defaultValue = (q.type==='single'||q.type==='multi') ? ((q.options||[])[0]||{}).key : q.type==='boolean' ? true : '';
+  QN_BRANCH_DRAFT.branches.push({id:'b'+QN_BRANCH_DRAFT.branches.length+'-'+Date.now(), operator:ops[0], value:defaultValue, targetQuestionId:null});
+  qnRenderBranchEditor();
+}
+function qnRemoveBranch(idx){
+  qnCaptureBranchDraft();
+  QN_BRANCH_DRAFT.branches.splice(idx,1);
+  qnRenderBranchEditor();
+}
+function qnBranchFieldChanged(){ /* capture différée à l'enregistrement — cf. qnCaptureBranchDraft() */ }
+
+function qnCaptureBranchDraft(){
+  var q = (QNP_CURRENT.questions||[]).find(function(x){return x.id===QN_BRANCH_DRAFT.questionId;});
+  QN_BRANCH_DRAFT.branches.forEach(function(b, i){
+    var opEl = document.getElementById('qn-branch-op-'+i), valEl = document.getElementById('qn-branch-val-'+i), tEl = document.getElementById('qn-branch-target-'+i);
+    if(opEl) b.operator = opEl.value;
+    if(valEl){
+      if(q.type==='boolean') b.value = valEl.value==='true';
+      else if(q.type==='rating') b.value = valEl.value===''?null:+valEl.value;
+      else b.value = valEl.value;
+    }
+    if(tEl) b.targetQuestionId = tEl.value===''?null:tEl.value;
+  });
+  var elseEl = document.getElementById('qn-branch-else');
+  if(elseEl) QN_BRANCH_DRAFT.elseTargetQuestionId = elseEl.value===''?null:elseEl.value;
+}
+
+async function qnSaveBranch(){
+  qnCaptureBranchDraft();
+  var payload = QN_BRANCH_DRAFT.branches.length ? {branches: QN_BRANCH_DRAFT.branches, elseTargetQuestionId: QN_BRANCH_DRAFT.elseTargetQuestionId} : null;
+  try{
+    var r = await adminFetch('/wa/questionnaire/question/update', {method:'POST', body:JSON.stringify({id:QN_BRANCH_DRAFT.questionId, branching:payload})});
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Erreur'); return; }
+    var idx = QNP_CURRENT.questions.findIndex(function(x){return x.id===QN_BRANCH_DRAFT.questionId;});
+    if(idx>-1) QNP_CURRENT.questions[idx] = data;
+    document.getElementById('qnBranchModal').style.display='none';
+    qnRenderQuestions();
+    toast('Branchement enregistré ✓');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
+function qnOpenDiagram(){
+  document.getElementById('qnDiagramModal').style.display='flex';
+  QuestionnaireFlow.renderDiagram(document.getElementById('qn-diagram-root'), QNP_CURRENT.questions||[]);
 }
 
 // ── Envoi manuel (une réservation) ──

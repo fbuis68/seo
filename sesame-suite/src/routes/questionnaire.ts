@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../db";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
@@ -7,6 +8,7 @@ import { resolveEntity } from "../lib/entity";
 import { fireTrigger } from "../lib/automation";
 import { getOrCreateQuestionnaireSend, questionnaireLinkUrl } from "../lib/questionnaire";
 import { recordScoreEvent } from "../lib/crmScoring";
+import { walkQuestionnairePath, BranchingConfig } from "../lib/questionnaireBranching";
 
 /**
  * Gestionnaire de questionnaires générique (08/09/2026) — cf.
@@ -41,6 +43,7 @@ function shapeQuestion(q: {
   options: unknown;
   linkUrl: string | null;
   linkLabel: string | null;
+  branching?: unknown;
 }) {
   return {
     id: q.id,
@@ -51,7 +54,37 @@ function shapeQuestion(q: {
     options: q.options ?? null,
     linkUrl: q.linkUrl || "",
     linkLabel: q.linkLabel || "",
+    branching: q.branching ?? null,
   };
+}
+
+const BRANCH_OPERATORS = new Set(["equals", "not_equals", "includes", "not_includes", "gt", "lt", "gte", "lte", "contains"]);
+
+/** Valide la forme de QuestionnaireQuestion.branching avant stockage — les
+ * ids de question cible sont vérifiés plus tard (au niveau questionnaire,
+ * cf. validateBranchingTargets) car une question créée dans la même
+ * requête n'a pas encore d'id ici. */
+function validateBranchingShape(raw: unknown): BranchingConfig | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw !== "object") throw new HttpError(400, "Branchement invalide");
+  const b = raw as { branches?: unknown[]; elseTargetQuestionId?: unknown };
+  if (!Array.isArray(b.branches)) throw new HttpError(400, "Branchement invalide (branches)");
+  const branches = b.branches.map((br, i) => {
+    if (!br || typeof br !== "object") throw new HttpError(400, `Branche ${i + 1} invalide`);
+    const r = br as Record<string, unknown>;
+    if (typeof r.operator !== "string" || !BRANCH_OPERATORS.has(r.operator)) throw new HttpError(400, `Branche ${i + 1} : opérateur invalide`);
+    if (r.targetQuestionId !== null && typeof r.targetQuestionId !== "string") throw new HttpError(400, `Branche ${i + 1} : destination invalide`);
+    return {
+      id: typeof r.id === "string" && r.id ? r.id : `b${i}-${Date.now()}`,
+      label: typeof r.label === "string" ? r.label : undefined,
+      operator: r.operator,
+      value: r.value ?? null,
+      targetQuestionId: (r.targetQuestionId as string | null) ?? null,
+    };
+  });
+  const elseTargetQuestionId = b.elseTargetQuestionId === undefined ? null : b.elseTargetQuestionId;
+  if (elseTargetQuestionId !== null && typeof elseTargetQuestionId !== "string") throw new HttpError(400, "Branchement invalide (sinon)");
+  return { branches, elseTargetQuestionId };
 }
 
 function shapeQuestionnaire(q: {
@@ -178,7 +211,7 @@ questionnaireRouter.post(
     const id = (req.body.id as string) || "";
     const existing = await prisma.questionnaire.findFirst({ where: { id, entityId }, include: { questions: { orderBy: { order: "asc" } } } });
     if (!existing) throw new HttpError(404, "Questionnaire introuvable");
-    const copy = await prisma.questionnaire.create({
+    let copy = await prisma.questionnaire.create({
       data: {
         entityId,
         name: `${existing.name} (copie)`,
@@ -189,6 +222,27 @@ questionnaireRouter.post(
       },
       include: { questions: { orderBy: { order: "asc" } } },
     });
+    // Les cibles de branchement pointent vers des ids de l'ORIGINAL — on les
+    // réécrit vers les ids nouvellement créés (même position dans `order`),
+    // sinon chaque branche pointerait dans le vide une fois le questionnaire
+    // dupliqué (branchement introduit le 22/10/2026).
+    const idMap = new Map(existing.questions.map((q, i) => [q.id, copy.questions[i]?.id]));
+    const remap = (t: string | null) => (t === null || t === "END" ? t : idMap.get(t) ?? null);
+    const updates = existing.questions
+      .map((q, i) => {
+        const branching = q.branching as unknown as BranchingConfig | null;
+        if (!branching) return null;
+        const remapped: BranchingConfig = {
+          branches: branching.branches.map((br) => ({ ...br, targetQuestionId: remap(br.targetQuestionId) })),
+          elseTargetQuestionId: remap(branching.elseTargetQuestionId),
+        };
+        return prisma.questionnaireQuestion.update({ where: { id: copy.questions[i].id }, data: { branching: remapped as never } });
+      })
+      .filter((u): u is NonNullable<typeof u> => u !== null);
+    if (updates.length) {
+      await prisma.$transaction(updates);
+      copy = (await prisma.questionnaire.findUnique({ where: { id: copy.id }, include: { questions: { orderBy: { order: "asc" } }, _count: { select: { sends: true } } } }))!;
+    }
     res.status(201).json(shapeQuestionnaire(copy));
   })
 );
@@ -203,6 +257,7 @@ interface QuestionBody {
   options?: unknown;
   linkUrl?: string;
   linkLabel?: string;
+  branching?: unknown;
 }
 
 function validateLink(linkUrl?: string): string | null {
@@ -218,6 +273,20 @@ async function ownedQuestionnaire(entityId: string | null, id: string) {
   return q;
 }
 
+/** Les destinations d'un branchement (branches + sinon) doivent pointer vers
+ * "END" ou une question du MÊME questionnaire — sans quoi un branchement
+ * mal copié (ex: après un /duplicate) pointerait dans le vide. */
+async function validateBranchingTargets(questionnaireId: string, branching: BranchingConfig | null): Promise<void> {
+  if (!branching) return;
+  const targets = [...branching.branches.map((b) => b.targetQuestionId), branching.elseTargetQuestionId].filter(
+    (t): t is string => !!t && t !== "END"
+  );
+  if (!targets.length) return;
+  const rows = await prisma.questionnaireQuestion.findMany({ where: { id: { in: targets }, questionnaireId }, select: { id: true } });
+  const found = new Set(rows.map((r) => r.id));
+  if (targets.some((t) => !found.has(t))) throw new HttpError(400, "Branchement : destination hors de ce questionnaire");
+}
+
 questionnaireRouter.post(
   "/questionnaire/question/create",
   requireAdmin,
@@ -229,6 +298,8 @@ questionnaireRouter.post(
     if (!QUESTION_TYPES.has(b.type)) throw new HttpError(400, "Type de question invalide");
     if (!b.label || !b.label.trim()) throw new HttpError(400, "Intitulé requis");
     const linkUrl = validateLink(b.linkUrl);
+    const branching = validateBranchingShape(b.branching);
+    await validateBranchingTargets(b.questionnaireId, branching);
     const agg = await prisma.questionnaireQuestion.aggregate({ where: { questionnaireId: b.questionnaireId }, _max: { order: true } });
     const row = await prisma.questionnaireQuestion.create({
       data: {
@@ -240,6 +311,7 @@ questionnaireRouter.post(
         options: (b.options as never) ?? undefined,
         linkUrl,
         linkLabel: linkUrl ? (b.linkLabel || "").trim() || null : null,
+        branching: (branching as never) ?? undefined,
       },
     });
     res.status(201).json(shapeQuestion(row));
@@ -254,6 +326,7 @@ interface QuestionUpdateBody {
   options?: unknown;
   linkUrl?: string;
   linkLabel?: string;
+  branching?: unknown;
 }
 
 questionnaireRouter.post(
@@ -268,6 +341,9 @@ questionnaireRouter.post(
     if (b.type !== undefined && !QUESTION_TYPES.has(b.type)) throw new HttpError(400, "Type de question invalide");
     if (b.label !== undefined && !b.label.trim()) throw new HttpError(400, "Intitulé requis");
     const linkUrl = b.linkUrl !== undefined ? validateLink(b.linkUrl) : undefined;
+    const branchingProvided = b.branching !== undefined;
+    const branching = branchingProvided ? validateBranchingShape(b.branching) : undefined;
+    if (branching !== undefined) await validateBranchingTargets(existing.questionnaireId, branching);
     const row = await prisma.questionnaireQuestion.update({
       where: { id: b.id },
       data: {
@@ -277,6 +353,7 @@ questionnaireRouter.post(
         options: (b.options as never) ?? undefined,
         linkUrl,
         linkLabel: linkUrl !== undefined ? (linkUrl ? (b.linkLabel || "").trim() || null : null) : undefined,
+        branching: branchingProvided ? ((branching as never) ?? Prisma.JsonNull) : undefined,
       },
     });
     res.json(shapeQuestion(row));
@@ -291,7 +368,26 @@ questionnaireRouter.post(
     const id = (req.body.id as string) || "";
     const existing = await prisma.questionnaireQuestion.findUnique({ where: { id }, include: { questionnaire: true } });
     if (!existing || existing.questionnaire.entityId !== entityId) throw new HttpError(404, "Question introuvable");
-    await prisma.questionnaireQuestion.delete({ where: { id } });
+    // Débranche toute branche d'une AUTRE question de ce questionnaire qui
+    // ciblait celle-ci — sinon elle pointerait dans le vide après
+    // suppression (branchement introduit le 22/10/2026).
+    const siblings = await prisma.questionnaireQuestion.findMany({
+      where: { questionnaireId: existing.questionnaireId, id: { not: id }, branching: { not: Prisma.JsonNull } },
+    });
+    const clears = siblings
+      .map((s) => {
+        const branching = s.branching as unknown as BranchingConfig | null;
+        if (!branching) return null;
+        const touched = branching.branches.some((b) => b.targetQuestionId === id) || branching.elseTargetQuestionId === id;
+        if (!touched) return null;
+        const fixed: BranchingConfig = {
+          branches: branching.branches.map((b) => (b.targetQuestionId === id ? { ...b, targetQuestionId: null } : b)),
+          elseTargetQuestionId: branching.elseTargetQuestionId === id ? null : branching.elseTargetQuestionId,
+        };
+        return prisma.questionnaireQuestion.update({ where: { id: s.id }, data: { branching: fixed as never } });
+      })
+      .filter((u): u is NonNullable<typeof u> => u !== null);
+    await prisma.$transaction([...clears, prisma.questionnaireQuestion.delete({ where: { id } })]);
     res.json({ ok: true });
   })
 );
@@ -701,8 +797,14 @@ questionnaireRouter.post(
       .map((a) => ({ questionId: a.questionId, value: cleanAnswerValue(questionsById.get(a.questionId)!, a.value) }))
       .filter((a) => Object.keys(a.value).length > 0);
 
+    // N'exige que les questions effectivement sur le chemin suivi — un
+    // branchement peut en sauter certaines (y compris required), cf.
+    // walkQuestionnairePath (lib/questionnaireBranching.ts).
+    const cleanByQuestionId = new Map(clean.map((a) => [a.questionId, a.value]));
+    const path = walkQuestionnairePath(send.questionnaire.questions, cleanByQuestionId);
+    const pathSet = new Set(path);
     const missingRequired = send.questionnaire.questions.some(
-      (q) => q.required && !clean.some((a) => a.questionId === q.id && isNonEmptyAnswer(q.type, a.value))
+      (q) => pathSet.has(q.id) && q.required && !clean.some((a) => a.questionId === q.id && isNonEmptyAnswer(q.type, a.value))
     );
     if (missingRequired) throw new HttpError(400, "Merci de répondre à toutes les questions obligatoires");
     if (!clean.length) throw new HttpError(400, "Aucune réponse valide");

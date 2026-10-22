@@ -47,6 +47,7 @@
   <div id="app"><div class="card">Chargement…</div></div>
 </div>
 
+<script src="/questionnaireFlow.js"></script>
 <script>
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
@@ -137,14 +138,24 @@ function questionHtml(q){
   return '<div class="q">' + label + link + body + '</div>';
 }
 
+/** Questions à afficher compte tenu des réponses déjà données — un
+ * branchement peut sauter certaines questions. Un questionnaire sans
+ * branchement affiche toujours tout (comportement historique inchangé). */
+function visibleQuestions(){
+  var path = QuestionnaireFlow.walkPath(DATA.questions, ANSWERS);
+  var byId = {}; DATA.questions.forEach(function(q){ byId[q.id]=q; });
+  return path.map(function(id){ return byId[id]; }).filter(Boolean);
+}
+
 function render(){
+  var visible = visibleQuestions();
   document.getElementById('app').innerHTML = `
     <div class="card">
       <h1>${esc(DATA.name)}</h1>
       ${DATA.description ? '<div class="intro">'+esc(DATA.description)+'</div>' : ''}
     </div>
     <div class="card">
-      ${DATA.questions.map(questionHtml).join('')}
+      ${visible.map(questionHtml).join('')}
       <button class="btn" id="submitBtn" onclick="submitAnswers()">Envoyer mes réponses</button>
       <div class="err" id="err"></div>
     </div>

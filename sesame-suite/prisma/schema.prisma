@@ -2576,6 +2576,21 @@ model QuestionnaireQuestion {
   linkUrl   String?
   linkLabel String?
 
+  // Branchement conditionnel (22/10/2026, demande client) — évalué juste
+  // après que CETTE question a reçu une réponse, pour décider quelle
+  // question montrer ensuite (saute celles entre les deux dans `order`).
+  // Un seul niveau de condition par branche (la réponse à CETTE question),
+  // pas de combinaison multi-questions — volontairement simple, cf.
+  // lib/questionnaireBranching.ts pour le format exact et la logique
+  // d'évaluation (partagée avec public/questionnaireFlow.js, qui doit
+  // rester synchro à la main — pas de build step JS commun ici).
+  // Forme : {branches:[{id,label?,operator,value,targetQuestionId}],
+  // elseTargetQuestionId}. null = pas de branchement, suite normale
+  // (question suivante dans `order`). targetQuestionId/elseTargetQuestionId
+  // valent soit l'id d'une question, soit "END" (fin du questionnaire),
+  // soit null (= suite normale, seulement valable pour elseTargetQuestionId).
+  branching Json?
+
   answers QuestionnaireAnswer[]
 
   createdAt DateTime @default(now())

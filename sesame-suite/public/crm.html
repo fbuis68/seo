@@ -552,6 +552,7 @@ svg.tr-chart{display:block;width:100%;height:auto;min-width:640px}
      Node dédiée), le fichier ne quitte donc le poste de l'admin que sous
      forme de lignes déjà structurées, envoyées à /wa/crmProspect/importBulk. -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="/questionnaireFlow.js"></script>
 </head>
 <body>
 
@@ -2051,7 +2052,7 @@ function renderQnDetail(){
     </div>
 
     <div class="card">
-      <div class="card-head"><span class="ch-title">Questions — <span id="qn-d-qcount">0</span></span></div>
+      <div class="card-head"><span class="ch-title">Questions — <span id="qn-d-qcount">0</span></span><button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="qnOpenDiagram()">Voir le schéma</button></div>
       <div id="qn-d-questions" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px"></div>
       <div style="border-top:1px solid var(--bdr,#e2dfd9);padding-top:12px">
         <div style="font-size:13px;font-weight:600;margin-bottom:8px">Ajouter une question</div>
@@ -2131,9 +2132,10 @@ function qnRenderQuestions(){
     if(q.type==='single'||q.type==='multi'||q.type==='select') optsSummary = (q.options||[]).map(o=>esc(o.label)).join(' · ');
     else if(q.type==='rating'){ const o=q.options||{}; optsSummary = 'Échelle '+(o.min!=null?o.min:1)+' à '+(o.max!=null?o.max:5); }
     else if(q.type==='number'){ const o=q.options||{}; optsSummary = (o.min!=null||o.max!=null) ? ('Plage '+(o.min!=null?o.min:'—')+' à '+(o.max!=null?o.max:'—')) : ''; }
+    const hasBranch = q.branching && (q.branching.branches||[]).length;
     return `<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;background:var(--bg2,#f5f3ee);border-radius:8px">
       <div style="flex:1">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#aaa;font-weight:700">${QN_TYPE_LABEL[q.type]}${q.required?' · Obligatoire':''}</div>
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#aaa;font-weight:700">${QN_TYPE_LABEL[q.type]}${q.required?' · Obligatoire':''}${hasBranch?' · <span style="color:#8a5cf6">branchée</span>':''}</div>
         <div style="font-size:13px;font-weight:600">${esc(q.label)}</div>
         ${optsSummary?`<div style="font-size:12px;color:#888">${optsSummary}</div>`:''}
         ${q.linkUrl?`<div style="font-size:12px;margin-top:2px"><a href="${esc(q.linkUrl)}" target="_blank" rel="noopener" style="color:var(--a,#4c6fe7)">🔗 ${esc(q.linkLabel||q.linkUrl)}</a></div>`:''}
@@ -2141,6 +2143,7 @@ function qnRenderQuestions(){
       <div style="display:flex;gap:4px;flex-shrink:0">
         ${idx>0?`<button class="ta-btn" onclick="qnMoveQuestion('${q.id}',-1)" title="Monter">↑</button>`:''}
         ${idx<qs.length-1?`<button class="ta-btn" onclick="qnMoveQuestion('${q.id}',1)" title="Descendre">↓</button>`:''}
+        ${QuestionnaireFlow.canBranch(q.type)&&idx<qs.length-1?`<button class="ta-btn" style="${hasBranch?'color:#8a5cf6':''}" onclick="qnOpenBranch('${q.id}')" title="Branchement">⑂</button>`:''}
         <button class="ta-btn" onclick="qnEditQuestion('${q.id}')" title="Modifier">✎</button>
         <button class="ta-btn" style="color:#a32d2d" onclick="qnDeleteQuestion('${q.id}')" title="Supprimer">🗑</button>
       </div>
@@ -2343,6 +2346,149 @@ async function qnMoveQuestion(id, dir){
   try{
     await apiFetch('/wa/questionnaire/question/reorder', {method:'POST', body:JSON.stringify({scope:'crm', questionnaireId:QNP_CURRENT.id, orderedIds:qs.map(q=>q.id)})});
   }catch(e){ flash('Erreur de connexion au serveur'); }
+}
+
+// ── Branchement conditionnel (22/10/2026) — cf. public/questionnaireFlow.js
+// pour l'évaluation des conditions et le schéma en arbre, même éditeur que
+// admin.html (dupliqué, pas de JS partagé entre les deux SPA). Simplification
+// assumée : une branche ne teste que la réponse à la question en cours
+// d'édition (cf. commentaire sur QuestionnaireQuestion.branching, schema.prisma).
+let QN_BRANCH_DRAFT = null;
+
+function qnBranchTargetOptions(q){
+  return (QNP_CURRENT.questions||[]).filter(x=>x.order>q.order);
+}
+
+function qnOpenBranch(id){
+  const q = (QNP_CURRENT.questions||[]).find(x=>x.id===id);
+  if(!q) return;
+  const existing = q.branching || {branches:[], elseTargetQuestionId:null};
+  QN_BRANCH_DRAFT = {
+    questionId: id,
+    branches: (existing.branches||[]).map(b=>Object.assign({},b)),
+    elseTargetQuestionId: existing.elseTargetQuestionId || null,
+  };
+  renderBranchModal();
+  if(!QN_BRANCH_DRAFT.branches.length) qnAddBranch(true);
+}
+
+function qnTargetSelectHtml(id, selected){
+  const q = (QNP_CURRENT.questions||[]).find(x=>x.id===QN_BRANCH_DRAFT.questionId);
+  const opts = qnBranchTargetOptions(q);
+  return `<select id="${id}" onchange="qnBranchFieldChanged()">`
+    + `<option value="" ${selected===null?'selected':''}>— Suite normale —</option>`
+    + `<option value="END" ${selected==='END'?'selected':''}>— Fin du questionnaire —</option>`
+    + opts.map(o=>`<option value="${o.id}" ${selected===o.id?'selected':''}>${esc(o.label)}</option>`).join('')
+    + `</select>`;
+}
+
+function qnBranchValueFieldHtml(q, idx, branch){
+  const fid = 'qn-branch-val-'+idx;
+  if(q.type==='single'||q.type==='multi'||q.type==='select'){
+    const opts = q.options||[];
+    return `<select id="${fid}" onchange="qnBranchFieldChanged()">`
+      + opts.map(o=>`<option value="${esc(o.key)}" ${branch.value===o.key?'selected':''}>${esc(o.label)}</option>`).join('')
+      + `</select>`;
+  }
+  if(q.type==='boolean' || q.type==='checkbox'){
+    return `<select id="${fid}" onchange="qnBranchFieldChanged()"><option value="true" ${branch.value===true?'selected':''}>Oui</option><option value="false" ${branch.value===false?'selected':''}>Non</option></select>`;
+  }
+  if(q.type==='rating' || q.type==='number'){
+    return `<input type="number" id="${fid}" value="${branch.value!=null?branch.value:''}" onchange="qnBranchFieldChanged()">`;
+  }
+  return `<input type="text" id="${fid}" value="${esc(branch.value!=null?branch.value:'')}" onchange="qnBranchFieldChanged()">`;
+}
+
+function renderBranchModal(){
+  const q = (QNP_CURRENT.questions||[]).find(x=>x.id===QN_BRANCH_DRAFT.questionId);
+  const branchesHtml = QN_BRANCH_DRAFT.branches.map((b,i)=>{
+    const ops = QuestionnaireFlow.operatorsForType(q.type);
+    return `<div style="border:1px solid var(--bdr,#e2dfd9);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center"><strong style="font-size:12px">Branche ${i+1}</strong>
+      <button class="ta-btn" style="color:#a32d2d" onclick="qnRemoveBranch(${i})">🗑</button></div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:12px;color:#888">Si la réponse</span>
+        <select id="qn-branch-op-${i}" onchange="qnBranchFieldChanged()">
+          ${ops.map(op=>`<option value="${op}" ${b.operator===op?'selected':''}>${esc(QuestionnaireFlow.operatorLabel(op))}</option>`).join('')}
+        </select>
+        ${qnBranchValueFieldHtml(q, i, b)}
+      </div>
+      <div class="ff" style="margin:0"><label>Alors aller à</label>${qnTargetSelectHtml('qn-branch-target-'+i, b.targetQuestionId)}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Branchement conditionnel</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div class="log-empty" style="font-style:normal;color:var(--mu,#888);margin-bottom:10px">Selon la réponse donnée à cette question, passe directement à une autre question (en sautant celles entre les deux) au lieu de suivre l'ordre normal.</div>
+      <div id="qn-branch-list">${branchesHtml}</div>
+      <button class="btn btn-ghost btn-sm" onclick="qnAddBranch()">+ Ajouter une branche</button>
+      <div style="border-top:1px solid var(--bdr,#e2dfd9);margin-top:14px;padding-top:10px">
+        <div class="ff"><label>Sinon (aucune branche ne correspond)</label>${qnTargetSelectHtml('qn-branch-else', QN_BRANCH_DRAFT.elseTargetQuestionId)}</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="qnSaveBranch()">Enregistrer</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function qnAddBranch(skipCapture){
+  const q = (QNP_CURRENT.questions||[]).find(x=>x.id===QN_BRANCH_DRAFT.questionId);
+  if(!skipCapture) qnCaptureBranchDraft();
+  const ops = QuestionnaireFlow.operatorsForType(q.type);
+  const defaultValue = (q.type==='single'||q.type==='multi'||q.type==='select') ? ((q.options||[])[0]||{}).key : (q.type==='boolean'||q.type==='checkbox') ? true : '';
+  QN_BRANCH_DRAFT.branches.push({id:'b'+QN_BRANCH_DRAFT.branches.length+'-'+Date.now(), operator:ops[0], value:defaultValue, targetQuestionId:null});
+  renderBranchModal();
+}
+function qnRemoveBranch(idx){
+  qnCaptureBranchDraft();
+  QN_BRANCH_DRAFT.branches.splice(idx,1);
+  renderBranchModal();
+}
+function qnBranchFieldChanged(){ /* capturé à l'enregistrement, cf. qnCaptureBranchDraft() */ }
+
+function qnCaptureBranchDraft(){
+  const q = (QNP_CURRENT.questions||[]).find(x=>x.id===QN_BRANCH_DRAFT.questionId);
+  QN_BRANCH_DRAFT.branches.forEach((b,i)=>{
+    const opEl=document.getElementById('qn-branch-op-'+i), valEl=document.getElementById('qn-branch-val-'+i), tEl=document.getElementById('qn-branch-target-'+i);
+    if(opEl) b.operator = opEl.value;
+    if(valEl){
+      if(q.type==='boolean'||q.type==='checkbox') b.value = valEl.value==='true';
+      else if(q.type==='rating'||q.type==='number') b.value = valEl.value===''?null:+valEl.value;
+      else b.value = valEl.value;
+    }
+    if(tEl) b.targetQuestionId = tEl.value===''?null:tEl.value;
+  });
+  const elseEl = document.getElementById('qn-branch-else');
+  if(elseEl) QN_BRANCH_DRAFT.elseTargetQuestionId = elseEl.value===''?null:elseEl.value;
+}
+
+async function qnSaveBranch(){
+  qnCaptureBranchDraft();
+  const payload = QN_BRANCH_DRAFT.branches.length ? {branches:QN_BRANCH_DRAFT.branches, elseTargetQuestionId:QN_BRANCH_DRAFT.elseTargetQuestionId} : null;
+  try{
+    const r = await apiFetch('/wa/questionnaire/question/update', {method:'POST', body:JSON.stringify({scope:'crm', id:QN_BRANCH_DRAFT.questionId, branching:payload})});
+    const data = await r.json();
+    if(!r.ok){ flash(data.error||'Erreur'); return; }
+    const idx = QNP_CURRENT.questions.findIndex(x=>x.id===QN_BRANCH_DRAFT.questionId);
+    if(idx>-1) QNP_CURRENT.questions[idx] = data;
+    closeModal();
+    qnRenderQuestions();
+    flash('Branchement enregistré');
+  }catch(e){ flash('Erreur de connexion au serveur'); }
+}
+
+function qnOpenDiagram(){
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:min(1100px,96vw)">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Schéma du questionnaire</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div id="qn-diagram-root"></div>
+    </div>
+  </div>`;
+  QuestionnaireFlow.renderDiagram(document.getElementById('qn-diagram-root'), QNP_CURRENT.questions||[]);
 }
 
 async function qnFetchResults(){
