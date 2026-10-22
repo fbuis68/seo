@@ -11,7 +11,11 @@ import { requireAdmin, requireSesame } from "../middleware/requireAdmin";
  */
 export const crmProductRouter = Router();
 
-const PRODUCT_CATEGORIES = ["materiel", "logiciel", "service", "autre"] as const;
+// "accessoire" (22/10/2026, demande client) — distinct de "materiel" : sert
+// à isoler la liste "Accessoires & connectivité" du constructeur de devis
+// (onglet Équipements) de celle des modèles/équipements principaux, qui
+// réutilisaient jusqu'ici le même catalogue "materiel" pour les deux.
+const PRODUCT_CATEGORIES = ["materiel", "accessoire", "logiciel", "service", "autre"] as const;
 function isProductCategory(v: unknown): v is (typeof PRODUCT_CATEGORIES)[number] {
   return typeof v === "string" && (PRODUCT_CATEGORIES as readonly string[]).includes(v);
 }

@@ -6986,6 +6986,7 @@ function renderQuoteBuilder(){
 
 function dqRenderHardwareTab(q){
   const materielProducts = crmProducts.filter(p=>p.active && (p.category||'materiel')==='materiel');
+  const accessoireProducts = crmProducts.filter(p=>p.active && p.category==='accessoire');
   const rowHtml = (list, prefix) => list.map((x,i)=>`
     <div class="quote-line">
       <div class="quote-line-main" style="grid-template-columns:1fr 60px 90px 28px">
@@ -7007,8 +7008,9 @@ function dqRenderHardwareTab(q){
     <h3 style="margin-top:24px">Accessoires &amp; connectivité</h3>
     <div class="quote-lines">${rowHtml(q.accessories,'dq-acc') || '<div class="log-empty">Aucun accessoire.</div>'}</div>
     <div class="quote-catalog-pick" style="margin-top:8px">
-      ${materielProducts.map(p=>`<button type="button" onclick="dqAddAccessory('${p.id}')">+ ${esc(p.label)} (${fmtEUR(p.unitPrice)})</button>`).join('')}
+      ${accessoireProducts.map(p=>`<button type="button" onclick="dqAddAccessory('${p.id}')">+ ${esc(p.label)} (${fmtEUR(p.unitPrice)})</button>`).join('')}
     </div>
+    ${!accessoireProducts.length?'<div class="log-empty" style="margin-top:6px">Aucun accessoire au catalogue — <a href="#" onclick="showCrmProducts();return false;">en créer un</a> (catégorie "Accessoires").</div>':''}
     <p class="sq-note">Gateways, plaques de finition et autres accessoires — quantité manuelle selon implantation.</p>`;
 }
 
@@ -7220,7 +7222,7 @@ function renderCrmProducts(){
   </table></div>`;
 }
 
-const CRM_PRODUCT_CATEGORY_LABEL = {materiel:'Équipements', logiciel:'Logiciel', service:'Mise en place', autre:'Autre'};
+const CRM_PRODUCT_CATEGORY_LABEL = {materiel:'Équipements', accessoire:'Accessoires', logiciel:'Logiciel', service:'Mise en place', autre:'Autre'};
 
 function openProductModal(id){
   const p = id ? crmProducts.find(x=>x.id===id) : {id:null,sku:'',label:'',description:'',unitPrice:0,recurring:false,category:'materiel',stockable:false,active:true};
