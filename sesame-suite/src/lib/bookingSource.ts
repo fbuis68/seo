@@ -1113,26 +1113,37 @@ export async function listSesameOperators(config: BookingSourceConfig): Promise<
   if (!personsResp.success) throw new BookingSourceError((personsResp.message as string) || "Impossible de lister les personnes");
   const persons = (personsResp.root as Record<string, unknown>[]) || [];
 
-  const operators: SesameOperator[] = [];
-  for (const p of persons) {
-    const upResp = await sesameWsCall(config, headers, "/userProfile/list", "GET", { personId: p.id as string, limit: 1000, start: 0 });
-    if (!upResp.success) continue;
-    const profiles = (upResp.root as Record<string, unknown>[]) || [];
-    for (const up of profiles) {
-      const code = String(up.profileCode || "").toLowerCase();
-      if (OPERATOR_PROFILE_CODES.indexOf(code) === -1) continue;
-      operators.push({
-        userProfileId: String(up.id),
-        personId: String(p.id),
-        firstname: (p.firstname as string) || (p.firstName as string) || "",
-        lastname: (p.lastname as string) || (p.lastName as string) || "",
-        email: (p.email as string) || "",
-        profileCode: String(up.profileCode || ""),
-        createdAt: (up.created as string) || null,
-      });
-    }
-  }
-  return operators;
+  // Un appel /userProfile/list PAR personne — fait en parallèle plutôt
+  // qu'en séquence (boucle for...await d'origine) : sur un établissement à
+  // plusieurs dizaines/centaines de personnes, l'enchaînement séquentiel
+  // d'autant d'allers-retours vers la plateforme Sesame Technology pouvait
+  // dépasser le délai du proxy/gateway devant le serveur — celui-ci coupe
+  // alors la réponse avec sa propre page d'erreur HTML, que le front reçoit
+  // à la place du JSON attendu ("Unexpected token '<'..." côté navigateur,
+  // écran "Opérateurs Sesame" bloqué sur "Chargement…", confirmé 22/10/2026).
+  const perPerson = await Promise.all(
+    persons.map(async (p) => {
+      const upResp = await sesameWsCall(config, headers, "/userProfile/list", "GET", { personId: p.id as string, limit: 1000, start: 0 });
+      if (!upResp.success) return [] as SesameOperator[];
+      const profiles = (upResp.root as Record<string, unknown>[]) || [];
+      const ops: SesameOperator[] = [];
+      for (const up of profiles) {
+        const code = String(up.profileCode || "").toLowerCase();
+        if (OPERATOR_PROFILE_CODES.indexOf(code) === -1) continue;
+        ops.push({
+          userProfileId: String(up.id),
+          personId: String(p.id),
+          firstname: (p.firstname as string) || (p.firstName as string) || "",
+          lastname: (p.lastname as string) || (p.lastName as string) || "",
+          email: (p.email as string) || "",
+          profileCode: String(up.profileCode || ""),
+          createdAt: (up.created as string) || null,
+        });
+      }
+      return ops;
+    })
+  );
+  return perPerson.flat();
 }
 
 /** POST — crée une personne + lui rattache un UserProfile de profil "gsa1"
