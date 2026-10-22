@@ -6744,11 +6744,11 @@ async function dqOpenClauseLibrary(){
 function renderClauseLibraryModal(){
   const rows = (CRM_CLAUSES||[]).map(c=>`
     <div class="db-row" style="align-items:flex-start;gap:8px;border:1px solid var(--bdr2,#e2dfd9);border-radius:8px;padding:8px;margin-bottom:8px">
-      <div style="flex:1;display:flex;flex-direction:column;gap:6px">
-        <input value="${esc(c.label)}" placeholder="Libellé du bouton" onchange="dqSaveClauseField('${c.id}','label',this.value)">
-        <textarea rows="2" onchange="dqSaveClauseField('${c.id}','text',this.value)">${esc(c.text)}</textarea>
+      <div style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0">
+        <input value="${esc(c.label)}" placeholder="Libellé du bouton" onchange="dqSaveClauseField('${c.id}','label',this.value)" style="width:100%;box-sizing:border-box;font-family:inherit;font-size:12px;font-weight:600;padding:6px 10px;border:0.5px solid var(--bdr2,#e2dfd9);border-radius:7px;background:var(--card,#fff);color:var(--tx,#1a1a1a)">
+        <textarea rows="3" onchange="dqSaveClauseField('${c.id}','text',this.value)" style="width:100%;box-sizing:border-box;font-family:inherit;font-size:12px;padding:6px 10px;border:0.5px solid var(--bdr2,#e2dfd9);border-radius:7px;background:var(--card,#fff);color:var(--tx,#1a1a1a);resize:vertical">${esc(c.text)}</textarea>
       </div>
-      <button class="btn btn-ghost btn-icon" onclick="dqDeleteClause('${c.id}')" title="Supprimer">✕</button>
+      <button class="btn btn-ghost btn-icon" onclick="dqDeleteClause('${c.id}')" title="Supprimer" style="flex-shrink:0">✕</button>
     </div>`).join('');
   document.getElementById('modal-ct').innerHTML = `
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop){closeModal();renderQuoteBuilder();}">
