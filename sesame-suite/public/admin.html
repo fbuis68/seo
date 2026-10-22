@@ -3304,6 +3304,24 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
   </div>
 </div>
 
+<!-- ════ MODAL DE SAISIE GÉNÉRIQUE (remplace window.prompt(), 22/10/2026) ════
+     window.prompt() affiche "<domaine> indique" au-dessus du champ — texte
+     du navigateur, impossible à retirer/personnaliser tant qu'on passe par
+     l'API native. Cette modale HTML classique sert d'équivalent partout où
+     ce bandeau gênait (cf. uiPrompt() dans le script principal). -->
+<div id="uiPromptModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:400px;box-shadow:0 24px 60px rgba(0,0,0,.3)">
+    <div style="padding:20px">
+      <label class="lb" id="ui-prompt-label" style="display:block;margin-bottom:8px"></label>
+      <input type="text" id="ui-prompt-input" onkeydown="if(event.key==='Enter')uiPromptSubmit();if(event.key==='Escape')uiPromptCancel();">
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="btn btn-p" onclick="uiPromptSubmit()" style="flex:1;justify-content:center">OK</button>
+        <button class="btn btn-s" onclick="uiPromptCancel()">Annuler</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ════════════════ PROFILS & DROITS (super-admin uniquement) ════════════════
      § demande client 21/10/2026 — révisé le même jour : créés et affectés
      UNIQUEMENT par le super-admin Sesame (crmRole=admin), jamais en
@@ -3783,7 +3801,27 @@ Accès au salon Premium</textarea>
     <span style="font-size:13px;font-weight:600;color:var(--a)"><span id="crm-selected-count">0</span> client(s) sélectionné(s)</span>
     <div style="flex:1"></div>
     <button class="btn btn-s btn-p" onclick="crmSendToSelection()"><i class="ti ti-send"></i> Envoyer une campagne</button>
+    <button class="btn btn-s" onclick="crmOpenMerge()"><i class="ti ti-arrows-join"></i> Fusionner les doublons</button>
     <button class="btn btn-s" onclick="crmClearSelection()"><i class="ti ti-x"></i> Annuler</button>
+  </div>
+
+  <!-- ════ MODAL FUSION DE CLIENTS (doublons) ════ -->
+  <div id="crmMergeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;align-items:center;justify-content:center;padding:16px">
+    <div style="background:var(--card);border-radius:var(--r);width:100%;max-width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.3)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--bdr)">
+        <h2 style="font-size:17px">Fusionner des doublons</h2>
+        <button onclick="document.getElementById('crmMergeModal').style.display='none'" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--mu)"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="padding:18px 20px">
+        <p style="font-size:12px;color:var(--mu);margin:0 0 10px">Réservations, points de fidélité et préférences des autres fiches seront rattachés à la fiche conservée. Action irréversible.</p>
+        <div id="crm-merge-list" style="display:flex;flex-direction:column;gap:6px"></div>
+        <div id="crm-merge-err" class="alt alt-w" style="display:none;margin-top:10px"><i class="ti ti-alert-triangle"></i><span id="crm-merge-err-msg"></span></div>
+        <div style="display:flex;gap:8px;margin-top:16px">
+          <button class="btn btn-p" id="crm-merge-btn" onclick="crmMergeConfirm()" style="flex:1;justify-content:center"><i class="ti ti-arrows-join"></i> Fusionner</button>
+          <button class="btn btn-s" onclick="document.getElementById('crmMergeModal').style.display='none'">Annuler</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Tableau clients -->
@@ -12816,6 +12854,54 @@ function crmSendToSelection(){
   toast(CRM_SELECTION.size+' client(s) sélectionné(s) pour la campagne');
 }
 
+// ── Fusion de doublons (22/10/2026) — la "Base clients" est recalculée à
+// la volée depuis Booking.personEmail (cf. GET /wa/crm/clients côté
+// serveur) : un même client réel peut apparaître deux fois sous deux
+// emails différents. Fusionner choisit lequel conserver parmi la
+// sélection ; les autres sont réécrits dessus (réservations, fidélité,
+// préférences) côté serveur (POST /wa/crm/clients/merge).
+function crmOpenMerge(){
+  if(CRM_SELECTION.size<2){ toast('Sélectionnez au moins 2 fiches à fusionner'); return; }
+  var clients = crmLoadClients();
+  var selected = Array.from(CRM_SELECTION).map(function(key){ return clients.find(function(c){return c.key===key;}); }).filter(Boolean);
+  var list = document.getElementById('crm-merge-list');
+  list.innerHTML = selected.map(function(c,i){
+    var name = (c.prenom||c.nom) ? ((c.prenom||'')+' '+(c.nom||'')).trim() : 'Client anonyme';
+    return '<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--bdr);border-radius:8px;cursor:pointer">'
+      +'<input type="radio" name="crm-merge-keep" value="'+esc(c.email)+'" '+(i===0?'checked':'')+'>'
+      +'<span><strong>'+esc(name)+'</strong><br><span style="font-size:11px;color:var(--mu)">'+esc(c.email)+' · '+c.points+' pts · '+c.sejours+' séjour(s)</span></span>'
+      +'</label>';
+  }).join('');
+  document.getElementById('crm-merge-err').style.display='none';
+  document.getElementById('crmMergeModal').style.display='flex';
+}
+async function crmMergeConfirm(){
+  var checked = document.querySelector('input[name="crm-merge-keep"]:checked');
+  var errEl = document.getElementById('crm-merge-err'), errMsg = document.getElementById('crm-merge-err-msg');
+  errEl.style.display='none';
+  if(!checked) return;
+  var keepEmail = checked.value;
+  var mergeEmails = Array.from(CRM_SELECTION).map(function(key){
+    var clients = crmLoadClients();
+    var c = clients.find(function(x){return x.key===key;});
+    return c ? c.email : null;
+  }).filter(function(e){ return e && e.toLowerCase()!==keepEmail.toLowerCase(); });
+  if(!confirm('Fusionner '+mergeEmails.length+' fiche(s) dans "'+keepEmail+'" ? Action irréversible.')) return;
+  var btn = document.getElementById('crm-merge-btn');
+  btn.disabled = true;
+  try{
+    var r = await adminFetch('/wa/crm/clients/merge', {method:'POST', body:JSON.stringify({keepEmail:keepEmail, mergeEmails:mergeEmails})});
+    var data = await r.json().catch(function(){return {};});
+    if(!r.ok){ errMsg.textContent = data.error||'Erreur lors de la fusion'; errEl.style.display='block'; btn.disabled=false; return; }
+  }catch(e){ errMsg.textContent = 'Erreur de connexion au serveur'; errEl.style.display='block'; btn.disabled=false; return; }
+  document.getElementById('crmMergeModal').style.display='none';
+  btn.disabled = false;
+  crmClearSelection();
+  toast('Fusion effectuée ✓');
+  await fetchCrmClients();
+  renderCrmTable();
+}
+
 // ── Fiche client détaillée ──
 async function crmOpenClient(key){
   var clients = crmLoadClients();
@@ -13308,8 +13394,32 @@ function qnRenderGrid(){
   }).join('');
 }
 
+let UI_PROMPT_RESOLVE = null;
+/** Remplace window.prompt() (bandeau "<domaine> indique" non personnalisable) par une modale HTML classique. Retourne la saisie, ou null si annulé. */
+function uiPrompt(label, defaultValue){
+  return new Promise(function(resolve){
+    UI_PROMPT_RESOLVE = resolve;
+    document.getElementById('ui-prompt-label').textContent = label;
+    var inp = document.getElementById('ui-prompt-input');
+    inp.value = defaultValue || '';
+    document.getElementById('uiPromptModal').style.display = 'flex';
+    setTimeout(function(){ inp.focus(); }, 50);
+  });
+}
+function uiPromptSubmit(){
+  var v = document.getElementById('ui-prompt-input').value;
+  document.getElementById('uiPromptModal').style.display = 'none';
+  if(UI_PROMPT_RESOLVE) UI_PROMPT_RESOLVE(v);
+  UI_PROMPT_RESOLVE = null;
+}
+function uiPromptCancel(){
+  document.getElementById('uiPromptModal').style.display = 'none';
+  if(UI_PROMPT_RESOLVE) UI_PROMPT_RESOLVE(null);
+  UI_PROMPT_RESOLVE = null;
+}
+
 async function qnCreate(){
-  var name = prompt('Nom du questionnaire :');
+  var name = await uiPrompt('Nom du questionnaire :');
   if(!name || !name.trim()) return;
   try{
     var r = await adminFetch('/wa/questionnaire/create', {method:'POST', body:JSON.stringify({name:name.trim()})});

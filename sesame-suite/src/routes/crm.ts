@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../db";
 import { resolveEntity } from "../lib/entity";
-import { asyncHandler } from "../lib/asyncHandler";
+import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
 
 export const crmRouter = Router();
@@ -231,5 +231,82 @@ crmRouter.get(
         })(),
       })),
     });
+  })
+);
+
+/**
+ * POST /wa/crm/clients/merge — fusion de doublons dans la "Base clients"
+ * (22/10/2026, demande client). Contrairement au CRM Sesame (CrmProspect,
+ * une vraie table), cette fiche est entièrement RECALCULÉE à la volée
+ * depuis Booking.personEmail (cf. GET /crm/clients ci-dessus) — il n'y a
+ * donc rien à "fusionner" au sens d'une ligne qu'on supprimerait, mais un
+ * même client réel peut apparaître deux fois sous deux emails différents
+ * (faute de frappe, ancienne adresse...). Fusionner = réécrire
+ * personEmail sur toutes les réservations du/des email(s) à abandonner
+ * vers l'email à conserver, puis recoller fidélité (somme des points) et
+ * préférences (une ligne par établissement) sur ce même email — portée
+ * identique à GET /crm/clients (groupe à fidélité centralisée ou
+ * établissement seul).
+ */
+crmRouter.post(
+  "/crm/clients/merge",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const group = entity.groupId ? await prisma.group.findUnique({ where: { id: entity.groupId } }) : null;
+    const groupAggregated = group?.loyaltyMode === "centralized";
+    const entityIds = groupAggregated
+      ? (await prisma.entity.findMany({ where: { groupId: group!.id }, select: { id: true } })).map((e) => e.id)
+      : [entity.id];
+
+    const keepEmail = ((req.body.keepEmail as string) || "").trim().toLowerCase();
+    const mergeEmails = ((req.body.mergeEmails as string[]) || []).map((e) => (e || "").trim().toLowerCase()).filter((e) => e && e !== keepEmail);
+    if (!keepEmail) throw new HttpError(400, "Email à conserver requis");
+    if (!mergeEmails.length) throw new HttpError(400, "Aucun email à fusionner");
+
+    for (const mergeEmail of mergeEmails) {
+      // Réservations — le client conservé hérite de tout l'historique.
+      await prisma.booking.updateMany({
+        where: { entityId: { in: entityIds }, personEmail: { equals: mergeEmail, mode: "insensitive" } },
+        data: { personEmail: keepEmail },
+      });
+
+      // Fidélité — un seul compte par portée (entité, ou groupe si
+      // centralisée) : somme des points de l'email abandonné dans celui
+      // conservé, ou simple renommage si l'email conservé n'avait pas
+      // encore de compte sur cette portée.
+      const loyaltyWhereKeep = groupAggregated ? { groupId_email: { groupId: group!.id, email: keepEmail } } : { entityId_email: { entityId: entity.id, email: keepEmail } };
+      const loyaltyWhereMerge = groupAggregated ? { groupId_email: { groupId: group!.id, email: mergeEmail } } : { entityId_email: { entityId: entity.id, email: mergeEmail } };
+      const [keepAcc, mergeAcc] = await Promise.all([
+        prisma.loyaltyAccount.findUnique({ where: loyaltyWhereKeep as never }),
+        prisma.loyaltyAccount.findUnique({ where: loyaltyWhereMerge as never }),
+      ]);
+      if (mergeAcc) {
+        if (keepAcc) {
+          await prisma.$transaction([
+            prisma.loyaltyTransaction.updateMany({ where: { accountId: mergeAcc.id }, data: { accountId: keepAcc.id } }),
+            prisma.loyaltyAccount.update({ where: { id: keepAcc.id }, data: { totalPoints: keepAcc.totalPoints + mergeAcc.totalPoints } }),
+            prisma.loyaltyAccount.delete({ where: { id: mergeAcc.id } }),
+          ]);
+        } else {
+          await prisma.loyaltyAccount.update({ where: { id: mergeAcc.id }, data: { email: keepEmail } });
+        }
+      }
+
+      // Préférences — une ligne par établissement (pas de notion de groupe
+      // ici) : celles de l'email conservé l'emportent si les deux existent.
+      for (const eId of entityIds) {
+        const [keepPref, mergePref] = await Promise.all([
+          prisma.clientPrefs.findFirst({ where: { entityId: eId, email: { equals: keepEmail, mode: "insensitive" } } }),
+          prisma.clientPrefs.findFirst({ where: { entityId: eId, email: { equals: mergeEmail, mode: "insensitive" } } }),
+        ]);
+        if (mergePref) {
+          if (keepPref) await prisma.clientPrefs.delete({ where: { id: mergePref.id } });
+          else await prisma.clientPrefs.update({ where: { id: mergePref.id }, data: { email: keepEmail } });
+        }
+      }
+    }
+
+    res.json({ ok: true });
   })
 );
