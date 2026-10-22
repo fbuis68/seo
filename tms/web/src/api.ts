@@ -22,6 +22,8 @@ export async function api<T = any>(method: string, path: string, body?: unknown,
   if (res.status === 413) throw { status: 413, code: 'payload_too_large', message: 'Envoi trop volumineux pour le serveur (limite du proxy nginx : client_max_body_size).' } as ApiError;
   if (!res.ok) {
     if (res.status === 401) { session.set(null); if (!location.pathname.startsWith('/login')) location.href = '/login'; }
+    // Quota ou module hors offre : invitation globale à changer d'offre (en plus du message local).
+    if (res.status === 402) window.dispatchEvent(new CustomEvent('tms:upgrade', { detail: { code: json.code, message: json.message, details: json.details } }));
     throw { status: res.status, code: json.code, message: json.message ?? res.statusText, details: json.details } as ApiError;
   }
   return json as T;

@@ -5,7 +5,7 @@ import { useAction, useFetch } from '../hooks';
 import { Help } from '../help';
 
 export const QUOTA_LABELS: Record<string, string> = {
-  billedClients: 'Clients facturés', crmProspects: 'Prospects', learnersPerYear: 'Apprenants (année civile)', activeSessions: 'Sessions actives',
+  billedClients: 'Clients facturés', crmProspects: 'Prospects', learnersPerYear: 'Apprenants (année civile)', activeSessions: 'Sessions actives', sessionsPerMonth: 'Sessions (mois en cours)',
   draftSessions: 'Sessions brouillon', managers: 'Gestionnaires', storageBytes: 'Stockage', emailsPerMonth: 'Emails (mois)', aiRequestsPerMonth: 'Requêtes IA (mois)',
   opendataSearchesPerDay: 'Recherches OpenData (jour)', smtpMailboxes: 'Boîtes SMTP', bankAccounts: 'Comptes bancaires', bankInstitutions: 'Établissements bancaires',
 };

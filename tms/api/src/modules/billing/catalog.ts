@@ -20,6 +20,8 @@ export interface Limits {
   learnersPerYear: number;
   activeSessions: number | null;
   draftSessions: number | null;
+  /** Sessions planifiées (hors brouillon et annulées) débutant dans un même mois civil. */
+  sessionsPerMonth: number | null;
   storageBytes: number;
   emailsPerMonth: number;
   signatureEnvelopesPerMonth: number;
@@ -52,8 +54,8 @@ const MB = 1024 ** 2;
 const BASE_FEATURES: FeatureKey[] = ['core', 'exports', 'migration.self', 'opendata.basic', 'analytics.basic', 'ai'];
 const PAID_FEATURES: FeatureKey[] = [...BASE_FEATURES, 'opendata.advanced', 'analytics.advanced', 'signatures', 'smtp.custom'];
 
-const paidLimits = (managers: number, learners: number, storageGb: number, emails: number, envelopes: number, ai: number, smtp: number): Limits => ({
-  managers, billedClients: null, learnersPerYear: learners, activeSessions: null, draftSessions: null,
+const paidLimits = (managers: number, learners: number, storageGb: number, emails: number, envelopes: number, ai: number, smtp: number, sessionsPerMonth: number): Limits => ({
+  managers, billedClients: null, learnersPerYear: learners, activeSessions: null, draftSessions: null, sessionsPerMonth,
   storageBytes: storageGb * GB, emailsPerMonth: emails, signatureEnvelopesPerMonth: envelopes,
   aiRequestsPerMonth: ai, smtpMailboxes: smtp, crmProspects: null, opendataSearchesPerDay: 2000,
   importPackageBytes: 1 * GB, bankInstitutions: 0, bankAccounts: 0, mailInboxes: 0,
@@ -64,7 +66,7 @@ export const PLANS: Record<PlanCode, Plan> = {
     code: 'free', name: 'Free', tagline: 'Pour démarrer, sans carte et sans limite de durée',
     monthlyPriceCents: 0, yearlyPriceCents: 0, features: BASE_FEATURES, support: 'Aide en ligne',
     limits: {
-      managers: 1, billedClients: 10, learnersPerYear: 50, activeSessions: 3, draftSessions: 10,
+      managers: 1, billedClients: 10, learnersPerYear: 50, activeSessions: 3, draftSessions: 10, sessionsPerMonth: null,
       storageBytes: 1 * GB, emailsPerMonth: 100, signatureEnvelopesPerMonth: 0, aiRequestsPerMonth: 20,
       smtpMailboxes: 0, crmProspects: 100, opendataSearchesPerDay: 100, importPackageBytes: 100 * MB,
       bankInstitutions: 0, bankAccounts: 0, mailInboxes: 0,
@@ -73,17 +75,17 @@ export const PLANS: Record<PlanCode, Plan> = {
   solo: {
     code: 'solo', name: 'Solo', tagline: 'Formateur indépendant',
     monthlyPriceCents: 3900, yearlyPriceCents: 39000, features: PAID_FEATURES, support: 'Support email',
-    limits: paidLimits(1, 200, 10, 1000, 5, 500, 1),
+    limits: paidLimits(1, 200, 10, 1000, 5, 500, 1, 10),
   },
   equipe: {
     code: 'equipe', name: 'Equipe', tagline: 'Petite équipe de gestion', highlighted: true,
     monthlyPriceCents: 8900, yearlyPriceCents: 89000, features: PAID_FEATURES, support: 'Support email',
-    limits: paidLimits(3, 1000, 50, 5000, 20, 2000, 3),
+    limits: paidLimits(3, 1000, 50, 5000, 20, 2000, 3, 20),
   },
   centre: {
     code: 'centre', name: 'Centre', tagline: 'Centre de formation structuré',
     monthlyPriceCents: 14900, yearlyPriceCents: 149000, features: PAID_FEATURES, support: 'Support prioritaire',
-    limits: paidLimits(6, 2500, 100, 10000, 50, 5000, 6),
+    limits: paidLimits(6, 2500, 100, 10000, 50, 5000, 6, 50),
   },
 };
 

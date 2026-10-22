@@ -172,10 +172,15 @@ export class SessionsService {
         ['required_skills', b.requiredSkills], ['required_equipment', b.requiredEquipment], ['color', b.color], ['internal_notes', b.internalNotes],
         ['price_ht', b.priceHt], ['price_basis', b.priceBasis]];
       const set = cols.filter(([, v]) => v !== undefined);
+      const before = (await one(tx, `SELECT starts_on FROM training_sessions WHERE id=$1`, [id])) ?? {};
       const s = await one(tx, `UPDATE training_sessions SET ${[...set.map(([c], i) => `${c}=$${i + 3}`), 'version=version+1'].join(', ')}
                                WHERE id=$1 AND version=$2 AND status NOT IN ('archived','cancelled') RETURNING *`,
         [id, version, ...set.map(([, v]) => v)]);
       if (!s) throw conflict('version_conflict', 'Session modifiée entre-temps ou close.');
+      // Déplacement d'une session planifiée vers un autre mois : quota mensuel du mois d'arrivée.
+      if (b.startsOn && s.status !== 'draft' && !s.is_historical && String(b.startsOn).slice(0, 7) !== String(before.starts_on ?? '').slice(0, 7)) {
+        await this.ent.assertSessionsPerMonth(tx, ctx.tenantId, b.startsOn, s.id);
+      }
       // Modification après démarrage : tracée.
       if (['in_progress', 'completed'].includes(s.status)) await this.audit.log(tx, { tenantId: ctx.tenantId, actor: ctx.userId, action: 'session.modified_after_start', entityType: 'session', entityId: id, data: b });
       return s;
@@ -197,6 +202,7 @@ export class SessionsService {
       if (!TRANSITIONS[s.status as SessionStatus].includes(to)) throw conflict('invalid_transition', `Transition ${s.status} → ${to} impossible.`);
       if (to === 'cancelled' && !reason) throw badRequest('reason_required', "Motif d'annulation obligatoire.", 'reason');
       if (ACTIVE.includes(to) && !ACTIVE.includes(s.status)) await this.ent.assertQuota(tx, ctx.tenantId, 'activeSessions');
+      if (!['draft', 'cancelled'].includes(to) && ['draft', 'cancelled'].includes(s.status) && !s.is_historical) await this.ent.assertSessionsPerMonth(tx, ctx.tenantId, s.starts_on, s.id);
       if (to === 'planned' && !s.starts_on) throw badRequest('dates_required', 'Dates requises pour planifier la session.', 'startsOn');
       // Clôture : toutes les séances réalisées (ou annulées) et émargement complet ; forçage motivé et tracé par un responsable.
       if (to === 'completed') {

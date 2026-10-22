@@ -12,7 +12,7 @@ export function yearOf(now = new Date(), tz = 'Europe/Paris'): number {
 }
 
 export type QuotaKey =
-  | 'billedClients' | 'crmProspects' | 'learnersPerYear' | 'activeSessions' | 'draftSessions'
+  | 'billedClients' | 'crmProspects' | 'learnersPerYear' | 'activeSessions' | 'draftSessions' | 'sessionsPerMonth'
   | 'managers' | 'storageBytes' | 'smtpMailboxes' | 'bankAccounts' | 'bankInstitutions';
 
 /**
@@ -32,6 +32,8 @@ export const USAGE_QUERIES: Record<QuotaKey, (tx: Tx, tenantId: string, year: nu
       WHERE NOT s.is_historical AND s.starts_on >= make_date($1,1,1) AND s.starts_on < make_date($1+1,1,1)`, [year]))!.n),
   activeSessions: async (tx) => Number((await one(tx,
     `SELECT count(*) n FROM training_sessions WHERE status IN ('planned','confirmed','in_progress')`))!.n),
+  // Mois civil en cours (fuseau de l'organisme).
+  sessionsPerMonth: async (tx, tenantId) => sessionsInMonth(tx, monthPeriod(new Date(), (await one(tx, `SELECT timezone FROM tenants WHERE id=$1`, [tenantId]))?.timezone ?? 'Europe/Paris')),
   draftSessions: async (tx) => Number((await one(tx,
     `SELECT count(*) n FROM training_sessions WHERE status = 'draft'`))!.n),
   managers: async (tx, tenantId) => Number((await one(tx,
@@ -46,6 +48,28 @@ export const USAGE_QUERIES: Record<QuotaKey, (tx: Tx, tenantId: string, year: nu
     `SELECT count(*) n FROM bank_accounts a JOIN bank_connections c ON c.id=a.connection_id
       WHERE a.selected AND c.status <> 'revoked'`))!.n),
 };
+
+/**
+ * Sessions comptées dans le quota mensuel : débutant dans le mois (AAAA-MM), hors brouillon,
+ * annulées et historique repris. `excludeId` : la session en cours de planification.
+ */
+export async function sessionsInMonth(tx: Tx, month: string, excludeId?: string | null): Promise<number> {
+  return Number((await one(tx,
+    `SELECT count(*) n FROM training_sessions WHERE status NOT IN ('draft','cancelled') AND NOT is_historical
+        AND starts_on >= ($1 || '-01')::date AND starts_on < ($1 || '-01')::date + interval '1 month' AND ($2::uuid IS NULL OR id <> $2)`,
+    [month, excludeId ?? null]))!.n);
+}
+
+/** Mois (à partir de `fromMonth`) le plus chargé en sessions, avec ajouts projetés éventuels. */
+export async function busiestMonth(tx: Tx, fromMonth: string, extra = new Map<string, number>()): Promise<{ month: string | null; n: number }> {
+  const rows = await tx.query(`SELECT to_char(starts_on, 'YYYY-MM') m, count(*)::int n FROM training_sessions
+     WHERE status NOT IN ('draft','cancelled') AND NOT is_historical AND starts_on >= ($1 || '-01')::date GROUP BY 1`, [fromMonth]);
+  const all = new Map<string, number>(rows.rows.map((r: any) => [r.m, r.n]));
+  for (const [m, n] of extra) if (m >= fromMonth) all.set(m, (all.get(m) ?? 0) + n);
+  let best: { month: string | null; n: number } = { month: null, n: 0 };
+  for (const [m, n] of all) if (n > best.n) best = { month: m, n };
+  return best;
+}
 
 /** Sérialise les créations concurrentes d'un même quota dans un organisme. */
 export const lockQuota = (tx: Tx, tenantId: string, key: string) => lock(tx, `quota:${tenantId}:${key}`);

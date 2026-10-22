@@ -23,7 +23,10 @@
     ['managers', function (v) { return v + (v > 1 ? ' gestionnaires' : ' gestionnaire'); }],
     ['billedClients', function (v) { return v === null ? 'Clients sans quota' : v + ' clients facturés'; }],
     ['learnersPerYear', function (v) { return fmtInt(v) + ' apprenants / an'; }],
-    ['activeSessions', function (v) { return v === null ? 'Sessions sans quota' : v + ' sessions actives'; }],
+    ['sessions', function (l, last) {
+      if (l.sessionsPerMonth != null) return l.sessionsPerMonth + ' sessions / mois' + (last ? ' (au-delà : sur demande)' : '');
+      return l.activeSessions == null ? 'Sessions sans quota' : l.activeSessions + ' sessions actives';
+    }],
     ['storageBytes', function (v) { return Math.round(v / 1073741824) + ' Go de stockage'; }],
     ['emailsPerMonth', function (v) { return fmtInt(v) + ' emails / mois'; }],
     ['signatureEnvelopesPerMonth', function (v) { return v ? v + ' signatures électroniques / mois' : 'Signature électronique : non incluse'; }],
@@ -136,9 +139,10 @@
     var grid = el('div', { class: 'grid' }, cat.plans.map(function (p) {
       var price = self.priceOf(p);
       var monthlyEq = self.state.interval === 'year' && price ? ' soit ' + fmtEur(Math.round(price / 12), true) + ' HT / mois' : '';
+      var last = p === cat.plans[cat.plans.length - 1];
       var limits = LIMIT_LABELS.map(function (l) {
-        var v = p.limits[l[0]];
-        return el('li', { class: l[0] === 'signatureEnvelopesPerMonth' && !v ? 'no' : '' , text: l[1](v) });
+        var v = l[0] === 'sessions' ? p.limits : p.limits[l[0]];
+        return el('li', { class: l[0] === 'signatureEnvelopesPerMonth' && !v ? 'no' : '' , text: l[0] === 'sessions' ? l[1](v, last) : l[1](v) });
       });
       var selected = self.state.plan === p.code;
       return el('article', { class: 'card' + (p.highlighted ? ' hl' : '') + (selected ? ' sel' : ''), 'aria-label': 'Offre ' + p.name }, [

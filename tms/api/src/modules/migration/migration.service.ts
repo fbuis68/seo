@@ -8,7 +8,7 @@ import { AppError, badRequest, conflict, notFound, paymentRequired } from '../..
 import { StorageService } from '../../core/storage';
 import { csvCell } from '../../core/csv';
 import { EntitlementsService } from '../billing/entitlements.service';
-import { USAGE_QUERIES, yearOf } from '../billing/usage';
+import { USAGE_QUERIES, busiestMonth, monthPeriod, yearOf } from '../billing/usage';
 import { isZip, readZip, classify, Rejection, InventoryEntry } from './archive';
 import { CANONICAL, ENTITY_ORDER, EntityType, REFS } from './canonical';
 import { nativeRows } from './native';
@@ -405,6 +405,13 @@ export class MigrationService {
       ['activeSessions', (await USAGE_QUERIES.activeSessions(tx, tenantId, year)) + newActive, e.limits.activeSessions],
       ['storageBytes', (await USAGE_QUERIES.storageBytes(tx, tenantId, year)) + newBytes, e.limits.storageBytes],
     ];
+    if (e.limits.sessionsPerMonth !== null) {
+      const perMonth = new Map<string, number>();
+      for (const r of live.filter((r) => r.entity === 'session' && (r.data.ends_on ?? r.data.starts_on) >= today && !['draft', 'cancelled'].includes(r.data.status ?? 'planned'))) {
+        const m = String(r.data.starts_on).slice(0, 7); perMonth.set(m, (perMonth.get(m) ?? 0) + 1);
+      }
+      checks.push(['sessionsPerMonth', (await busiestMonth(tx, monthPeriod(new Date(), tz), perMonth)).n, e.limits.sessionsPerMonth]);
+    }
     const over = checks.filter(([, v, l]) => l !== null && v > l).map(([quota, projected, limit]) => ({ quota, projected, limit }));
     return { fits: over.length === 0, over, plan: e.planCode, message: over.length ? 'Volume au-delà de votre offre : sélectionnez un sous-périmètre cohérent ou passez à une offre payante. Aucune publication tronquée.' : undefined };
   }
@@ -719,6 +726,8 @@ export class MigrationService {
       ['activeSessions', await USAGE_QUERIES.activeSessions(tx, tenantId, year), e.limits.activeSessions],
       ['storageBytes', (await USAGE_QUERIES.storageBytes(tx, tenantId, year)) + extraBytes, e.limits.storageBytes],
     ];
+    const tzLive = (await one(tx, `SELECT timezone FROM tenants WHERE id=$1`, [tenantId]))!.timezone;
+    if (e.limits.sessionsPerMonth !== null) checks.push(['sessionsPerMonth', (await busiestMonth(tx, monthPeriod(new Date(), tzLive))).n, e.limits.sessionsPerMonth]);
     const over = checks.filter(([, v, l]) => l !== null && v > l).map(([quota, projected, limit]) => ({ quota, projected, limit }));
     return { fits: over.length === 0, over, plan: e.planCode, message: over.length ? 'Volume au-delà de votre offre : passez à une offre supérieure avant de publier. Aucune publication tronquée.' : undefined };
   }

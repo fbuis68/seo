@@ -3,7 +3,7 @@ import { Db, Tx, many, one } from '../../core/db';
 import { paymentRequired } from '../../core/errors';
 import { FeatureKey, Limits, PLANS } from './catalog';
 import { Entitlements, computeEntitlements, hasFeature } from './entitlements';
-import { QuotaKey, USAGE_QUERIES, dayPeriod, incrementCounter, lockQuota, monthPeriod, readCounter, yearOf } from './usage';
+import { QuotaKey, USAGE_QUERIES, dayPeriod, incrementCounter, lockQuota, monthPeriod, readCounter, sessionsInMonth, yearOf } from './usage';
 
 const FEATURE_LABELS: Partial<Record<FeatureKey, string>> = {
   signatures: 'La signature électronique est disponible dans les offres payantes.',
@@ -48,6 +48,29 @@ export class EntitlementsService {
     const used = await USAGE_QUERIES[key](tx, tenantId, year ?? yearOf(new Date(), tz));
     if (used + increment > limit) {
       throw paymentRequired('quota_exceeded', quotaMessage(key, limit), { quota: key, limit, used, plan: e.planCode });
+    }
+  }
+
+  /**
+   * Quota mensuel de sessions : planifier une session débutant le `startsOn` ne doit pas
+   * dépasser la limite de l'offre pour ce mois. Bloque en invitant à changer d'offre.
+   */
+  async assertSessionsPerMonth(tx: Tx, tenantId: string, startsOn: string | null | undefined, sessionId?: string | null, e?: Entitlements): Promise<void> {
+    if (!startsOn) return;
+    e ??= await this.get(tenantId, tx);
+    const limit = e.limits.sessionsPerMonth;
+    if (limit === null || limit === undefined) return;
+    const month = String(startsOn).slice(0, 7);
+    await lockQuota(tx, tenantId, `sessionsPerMonth:${month}`);
+    const used = await sessionsInMonth(tx, month, sessionId);
+    if (used + 1 > limit) {
+      const order: string[] = ['solo', 'equipe', 'centre'];
+      const next = order.slice(order.indexOf(e.planCode) + 1).find((p) => (PLANS as any)[p].limits.sessionsPerMonth === null || (PLANS as any)[p].limits.sessionsPerMonth > limit) ?? null;
+      const monthLabel = new Date(`${month}-01T12:00:00Z`).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+      throw paymentRequired('quota_exceeded',
+        `Votre offre ${PLANS[e.planCode].name} permet ${limit} sessions par mois : ${monthLabel} en compte déjà ${used}. `
+        + (next ? `Passez à l'offre ${(PLANS as any)[next].name} (${(PLANS as any)[next].limits.sessionsPerMonth ?? 'plus de'} sessions par mois) pour en planifier davantage.` : 'Contactez-nous pour une offre sur mesure.'),
+        { quota: 'sessionsPerMonth', limit, used, month, plan: e.planCode, upgradeTo: next });
     }
   }
 
@@ -111,6 +134,7 @@ function quotaMessage(key: QuotaKey, limit: number): string {
     learnersPerYear: `Votre offre est limitée à ${limit} apprenants par année civile.`,
     activeSessions: `Votre offre est limitée à ${limit} sessions actives.`,
     draftSessions: `Votre offre est limitée à ${limit} sessions en brouillon.`,
+    sessionsPerMonth: `Votre offre est limitée à ${limit} sessions par mois.`,
     managers: `Votre offre est limitée à ${limit} gestionnaire(s).`,
     storageBytes: `Espace de stockage de l'offre atteint.`,
     smtpMailboxes: `Votre offre permet ${limit} boîte(s) expéditrice(s).`,

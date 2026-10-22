@@ -49,6 +49,12 @@ function Shell() {
   }, [setBranding]);
   useEffect(() => { load(); }, [load]);
 
+  const [upgrade, setUpgrade] = useState<{ message: string; details?: any } | null>(null);
+  useEffect(() => {
+    const on = (ev: Event) => setUpgrade((ev as CustomEvent).detail);
+    window.addEventListener('tms:upgrade', on);
+    return () => window.removeEventListener('tms:upgrade', on);
+  }, []);
   if (err === 'unverified') return (
     <div className="center"><div className="panel" style={{ maxWidth: 420 }}>
       <h1>Confirmez votre email</h1>
@@ -94,6 +100,20 @@ function Shell() {
           <a href="#" onClick={(ev) => { ev.preventDefault(); logout(); }}>Se déconnecter</a>
         </nav>
         <main>
+          {upgrade && (
+            <div className="pl-modal" role="dialog" aria-modal="true" aria-labelledby="upgrade-title" onClick={() => setUpgrade(null)}>
+              <div className="panel stack" onClick={(ev) => ev.stopPropagation()}>
+                <strong id="upgrade-title">Limite de votre offre atteinte</strong>
+                <p>{upgrade.message}</p>
+                <div className="toolbar">
+                  {can(org, 'billing.manage')
+                    ? <NavLink className="btn" to={`/billing${upgrade.details?.upgradeTo ? `?plan=${upgrade.details.upgradeTo}` : ''}`} onClick={() => setUpgrade(null)}>Changer d’offre</NavLink>
+                    : <span className="small muted">Demandez au responsable du compte de changer d’offre.</span>}
+                  <button className="btn ghost" onClick={() => setUpgrade(null)}>Fermer</button>
+                </div>
+              </div>
+            </div>
+          )}
           {e.readOnly && <div className="banner err">Compte en <strong>lecture seule</strong> : votre volume dépasse l’offre Free. Lecture et export restent disponibles. <NavLink to="/billing">Choisir une offre</NavLink></div>}
           {e.planCode === 'free' && !e.readOnly && me.memberships.find((m) => m.tenant_id === org.id)?.signup_intent && can(org, 'billing.manage') && (
             <div className="banner">Vous avez choisi l’offre <strong>{me.memberships.find((m) => m.tenant_id === org.id)!.signup_intent.plan}</strong> sur notre site. <NavLink to="/billing?intent=1">Finaliser l’abonnement</NavLink></div>
