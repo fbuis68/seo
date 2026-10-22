@@ -8,12 +8,17 @@ import { nextSequenceValue } from "../lib/sequence";
 import { sendMessage } from "../lib/messaging";
 
 /**
- * Devis (module "Gestion des affaires", 18/08/2026) — rattachés à une
- * CrmDeal. "Souple" : lignes libres en JSON, mélange de modules Sesame et de
- * lignes personnalisées. "Automatique" : le catalogue de modules proposé
- * pour pré-remplir les lignes vient de la même source de vérité tarifaire
- * que le wizard d'inscription (ONBOARDING_MODULES + PricingConfig), pas
- * d'une grille dupliquée qui risquerait de diverger.
+ * Devis — écran CRM à part entière (refonte du 22/10/2026, reprend
+ * scrupuleusement la structure de la maquette fournie par le client). Un
+ * devis appartient d'abord à un CLIENT (CrmProspect, obligatoire) ; son
+ * rattachement à une affaire (CrmDeal) est optionnel et se fait a
+ * posteriori (§ demande client : "pas de création à partir de l'affaire, on
+ * la rattachera ensuite") via POST /crmQuote/attachDeal. "Souple" : lignes
+ * libres en JSON, mélange de modules Sesame et de lignes personnalisées.
+ * "Automatique" : le catalogue de modules proposé pour pré-remplir
+ * l'onglet Logiciel vient de la même source de vérité tarifaire que le
+ * wizard d'inscription (ONBOARDING_MODULES + PricingConfig), pas d'une
+ * grille dupliquée qui risquerait de diverger.
  */
 export const crmQuoteRouter = Router();
 
@@ -24,20 +29,98 @@ export const crmQuoteRouter = Router();
 export type QuoteLineCategory = "materiel" | "logiciel" | "service" | "autre";
 
 interface QuoteLine {
+  id?: string;
   label: string;
   description?: string; // sous-texte verbeux affiché sous le libellé (cf. devis Sesame réels)
   qty: number;
-  unitPrice: number;
-  recurring: boolean; // true = mensuel (module Sesame), false = ponctuel (frais de mise en place...)
+  unitPrice: number | null; // null = "à chiffrer" (tarif non renseigné), cf. maquette
+  recurring: boolean; // true = mensuel (abonnement), false = ponctuel (équipements/mise en place)
   category?: QuoteLineCategory;
+  // Onglet Équipements uniquement — sépare "Équiper les accès" (main) de
+  // "Accessoires & connectivité" (accessory), mêmes deux sections que la
+  // maquette, purement indicatif/affichage.
+  group?: "main" | "accessory";
+}
+
+// Valeurs brutes des calculateurs des onglets Logiciel + Mise en place —
+// mêmes champs que la maquette (id #sq-xxx), stockées telles quelles pour
+// rester ré-éditables (contrairement à des lignes dérivées, qu'on ne peut
+// pas "dé-calculer").
+interface QuoteConfig {
+  license?: number;
+  pmsInterface?: string;
+  platformSetup?: number;
+  smsQty?: number;
+  smsUnitPrice?: number;
+  subscriptionStart?: string;
+  timeMode?: string;
+  minutesPerAccess?: number;
+  hoursPerDay?: number;
+  installDays?: number;
+  dayRate?: number;
+  setupPerAccess?: number;
+  visitFee?: number;
+  trainingFee?: number;
+  travelFee?: number;
+  devDays?: number;
+  testDays?: number;
+  devRate?: number;
+  specificScope?: string;
+  overrides?: Record<string, Partial<Pick<QuoteLine, "label" | "qty" | "unitPrice">>>;
+  [k: string]: unknown;
+}
+
+function num(v: unknown): number {
+  return Math.max(0, Number(v) || 0);
+}
+
+/**
+ * Port serveur EXACT de dqCalculatorLines() (public/crm.html) — les lignes
+ * dérivées des calculateurs Logiciel/Mise en place (licence, plateforme,
+ * SMS, visite, installation, formation, déplacement, développement
+ * spécifique) ne sont JAMAIS stockées dans CrmQuote.lines (recalculées à la
+ * volée côté constructeur) : la page publique de signature et l'email
+ * envoyé au client doivent donc les recalculer ici aussi, sans quoi le
+ * total affiché au client serait incomplet (ne compterait que le matériel/
+ * logiciel/lignes libres, pas la main d'œuvre).
+ */
+function expandQuoteLines(storedLines: QuoteLine[], hardwareLines: QuoteLine[], config: QuoteConfig): QuoteLine[] {
+  const count = hardwareLines.reduce((a, x) => a + num(x.qty), 0);
+  let installDays = num(config.installDays);
+  if (config.timeMode === "auto") installDays = Math.ceil(((count * num(config.minutesPerAccess)) / (num(config.hoursPerDay) * 60 || 1)) * 2) / 2;
+  const overrides = config.overrides || {};
+  const rows: QuoteLine[] = [];
+  const add = (id: string, label: string, qty: number, unitPrice: number, recurring = false) => {
+    if (qty > 0) rows.push({ id, label, qty, unitPrice, recurring, category: recurring ? "logiciel" : "service", ...(overrides[id] || {}) });
+  };
+  add("setup", "Paramétrage des contrôles d’accès", count, num(config.setupPerAccess));
+  add("platform", "Paramétrage plateforme", 1, num(config.platformSetup));
+  add("sms", "SMS prépayés", num(config.smsQty), num(config.smsUnitPrice));
+  add("visit", "Visite technique avant chantier", 1, num(config.visitFee));
+  add("install", "Installation, tests d’ouverture et recettage · journée-technicien", installDays, num(config.dayRate));
+  add("training", "Formation de 2 administrateurs", 1, num(config.trainingFee));
+  add("travel", "Forfait déplacement", 1, num(config.travelFee));
+  add("dev", "Développement spécifique · journée", num(config.devDays), num(config.devRate));
+  add("test", "Recettage logiciel · journée", num(config.testDays), num(config.devRate));
+  add("license", "Licence clés, support" + (config.pmsInterface === "Misterbooking" ? " et interface Misterbooking" : ""), 1, num(config.license), true);
+  const storedWithOverrides = storedLines.map((l) => ({ ...l, ...(l.id ? overrides[l.id] : undefined) }));
+  return [...storedWithOverrides, ...rows];
 }
 
 function shapeQuote(q: {
   id: string;
-  dealId: string;
+  dealId: string | null;
+  deal?: { id: string; title: string } | null;
+  prospectId: string;
+  prospect?: { id: string; nom: string; email: string | null } | null;
   number: string;
+  title: string;
   status: string;
   lines: unknown;
+  config: unknown;
+  introText: string | null;
+  mentionsText: string | null;
+  termsText: string | null;
   discountPct: number;
   vatPct: number;
   depositPct: number;
@@ -47,15 +130,32 @@ function shapeQuote(q: {
   createdAt: Date;
   updatedAt: Date;
 }) {
+  const lines = (q.lines as QuoteLine[]) || [];
+  const config = (q.config as QuoteConfig) || {};
+  const hardwareLines = lines.filter((l) => l.category === "materiel" && l.group !== "accessory");
+  // Totaux calculés sur les lignes DÉRIVÉES (manuel + calculateurs
+  // Logiciel/Mise en place) — même source que la page publique de
+  // signature/l'email envoyé, pour que la liste des devis (montant affiché)
+  // ne sous-évalue jamais le vrai total (cf. expandQuoteLines ci-dessus).
+  const totals = quoteTotals(expandQuoteLines(lines, hardwareLines, config), q.discountPct, q.vatPct, q.depositPct);
   return {
     id: q.id,
     dealId: q.dealId,
+    dealTitle: q.deal?.title || null,
+    prospectId: q.prospectId,
+    prospectNom: q.prospect?.nom || "",
     number: q.number,
+    title: q.title || "",
     status: q.status,
-    lines: (q.lines as QuoteLine[]) || [],
+    lines,
+    config,
+    introText: q.introText || "",
+    mentionsText: q.mentionsText || "",
+    termsText: q.termsText || "",
     discountPct: q.discountPct,
     vatPct: q.vatPct,
     depositPct: q.depositPct,
+    totals,
     notes: q.notes || "",
     sentAt: q.sentAt,
     signToken: q.signToken,
@@ -82,9 +182,6 @@ crmQuoteRouter.get(
 /**
  * Numéro de devis lisible (ex : DEV-2026-0001), compté par année — cf.
  * nextSequenceValue (lib/sequence.ts), un compteur atomique Postgres.
- * Remplace le 16/09/2026 le schéma "compter les lignes existantes puis
- * deviner le prochain numéro libre" (racy sous charge concurrente, cf.
- * nextTicketNumber dans lib/ticketInbound.ts pour le même correctif).
  */
 async function nextQuoteNumber(): Promise<string> {
   const year = new Date().getFullYear();
@@ -92,25 +189,68 @@ async function nextQuoteNumber(): Promise<string> {
   return `DEV-${year}-${String(n).padStart(4, "0")}`;
 }
 
+const QUOTE_INCLUDE = { deal: { select: { id: true, title: true } }, prospect: { select: { id: true, nom: true, email: true } } } as const;
+
+/**
+ * GET /wa/crmQuote/list — écran "Devis" à part entière (22/10/2026) : liste
+ * globale, filtrable par client/affaire/statut/recherche texte — plus
+ * besoin d'un dealId pour lister (contrairement à avant la refonte).
+ */
 crmQuoteRouter.get(
   "/crmQuote/list",
   requireAdmin,
   requireSesame,
   asyncHandler(async (req, res) => {
-    const dealId = (req.query.dealId as string) || "";
-    if (!dealId) throw new HttpError(400, "dealId requis");
-    const rows = await prisma.crmQuote.findMany({ where: { dealId }, orderBy: { createdAt: "desc" } });
+    const prospectId = (req.query.prospectId as string) || undefined;
+    const dealId = (req.query.dealId as string) || undefined;
+    const status = (req.query.status as string) || undefined;
+    const q = ((req.query.q as string) || "").trim();
+    const rows = await prisma.crmQuote.findMany({
+      where: {
+        prospectId,
+        dealId,
+        status,
+        ...(q
+          ? {
+              OR: [
+                { number: { contains: q, mode: "insensitive" } },
+                { title: { contains: q, mode: "insensitive" } },
+                { prospect: { nom: { contains: q, mode: "insensitive" } } },
+              ],
+            }
+          : {}),
+      },
+      include: QUOTE_INCLUDE,
+      orderBy: { createdAt: "desc" },
+      take: 500,
+    });
     res.json(rows.map(shapeQuote));
   })
 );
 
+crmQuoteRouter.get(
+  "/crmQuote/get",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const id = (req.query.id as string) || "";
+    const row = await prisma.crmQuote.findUnique({ where: { id }, include: QUOTE_INCLUDE });
+    if (!row) throw new HttpError(404, "Devis introuvable");
+    res.json(shapeQuote(row));
+  })
+);
+
 interface QuoteBody {
-  dealId: string;
+  prospectId: string;
+  title?: string;
   lines?: QuoteLine[];
+  config?: QuoteConfig;
+  introText?: string;
+  mentionsText?: string;
+  termsText?: string;
   discountPct?: number;
   vatPct?: number;
   depositPct?: number;
-  notes?: string;
   status?: string;
 }
 
@@ -120,21 +260,26 @@ crmQuoteRouter.post(
   requireSesame,
   asyncHandler(async (req, res) => {
     const b = req.body as QuoteBody;
-    if (!b.dealId) throw new HttpError(400, "dealId requis");
-    const deal = await prisma.crmDeal.findUnique({ where: { id: b.dealId } });
-    if (!deal) throw new HttpError(404, "Affaire introuvable");
+    if (!b.prospectId) throw new HttpError(400, "Client requis");
+    const prospect = await prisma.crmProspect.findUnique({ where: { id: b.prospectId } });
+    if (!prospect) throw new HttpError(404, "Client introuvable");
 
     const number = await nextQuoteNumber();
     const row = await prisma.crmQuote.create({
       data: {
-        dealId: b.dealId,
-        number,
+        prospectId: b.prospectId,
+        title: b.title?.trim() || "",
         lines: (b.lines || []) as object[],
+        config: (b.config || {}) as object,
+        introText: b.introText,
+        mentionsText: b.mentionsText,
+        termsText: b.termsText,
+        number,
         discountPct: b.discountPct ?? 0,
         vatPct: b.vatPct ?? 20,
         depositPct: b.depositPct ?? 0,
-        notes: b.notes,
       },
+      include: QUOTE_INCLUDE,
     });
     res.status(201).json(shapeQuote(row));
   })
@@ -152,15 +297,46 @@ crmQuoteRouter.post(
     const row = await prisma.crmQuote.update({
       where: { id },
       data: {
+        title: b.title === undefined ? undefined : b.title.trim(),
         lines: b.lines === undefined ? undefined : (b.lines as object[]),
+        config: b.config === undefined ? undefined : (b.config as object),
+        introText: b.introText,
+        mentionsText: b.mentionsText,
+        termsText: b.termsText,
         discountPct: b.discountPct,
         vatPct: b.vatPct,
         depositPct: b.depositPct,
-        notes: b.notes,
         status: b.status,
         sentAt: b.status === "envoyé" && existing.status !== "envoyé" ? new Date() : undefined,
       },
+      include: QUOTE_INCLUDE,
     });
+    res.json(shapeQuote(row));
+  })
+);
+
+/**
+ * POST /wa/crmQuote/attachDeal — rattache (ou détache, dealId=null) un
+ * devis à une affaire — action séparée de la création (§ demande client
+ * 22/10/2026 : "pas de création à partir de l'affaire, on la rattachera
+ * ensuite"). L'affaire doit appartenir au MÊME client que le devis, sans
+ * quoi le rattachement n'aurait pas de sens (cf. CrmDeal.prospectId).
+ */
+crmQuoteRouter.post(
+  "/crmQuote/attachDeal",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const id = (req.body.id as string) || "";
+    const dealId = (req.body.dealId as string) || null;
+    const existing = await prisma.crmQuote.findUnique({ where: { id } });
+    if (!existing) throw new HttpError(404, "Devis introuvable");
+    if (dealId) {
+      const deal = await prisma.crmDeal.findUnique({ where: { id: dealId } });
+      if (!deal) throw new HttpError(404, "Affaire introuvable");
+      if (deal.prospectId !== existing.prospectId) throw new HttpError(400, "Cette affaire n'appartient pas au même client que le devis");
+    }
+    const row = await prisma.crmQuote.update({ where: { id }, data: { dealId }, include: QUOTE_INCLUDE });
     res.json(shapeQuote(row));
   })
 );
@@ -179,10 +355,10 @@ crmQuoteRouter.post(
 );
 
 /**
- * POST /wa/crmQuote/duplicate — clone un devis existant (nouvelle version
- * pour la même affaire, ex. après une remise négociée) : mêmes lignes/
- * remise/notes, nouveau numéro, statut réinitialisé à "brouillon", pas de
- * lien vers la signature/l'envoi du devis d'origine.
+ * POST /wa/crmQuote/duplicate — clone un devis existant (ex. après une
+ * remise négociée) : même client/affaire/lignes/config/textes, nouveau
+ * numéro, statut réinitialisé à "brouillon", pas de lien vers la
+ * signature/l'envoi du devis d'origine.
  */
 crmQuoteRouter.post(
   "/crmQuote/duplicate",
@@ -195,14 +371,20 @@ crmQuoteRouter.post(
     const number = await nextQuoteNumber();
     const row = await prisma.crmQuote.create({
       data: {
+        prospectId: existing.prospectId,
         dealId: existing.dealId,
+        title: existing.title,
         number,
         lines: existing.lines as object[],
+        config: existing.config as object,
+        introText: existing.introText,
+        mentionsText: existing.mentionsText,
+        termsText: existing.termsText,
         discountPct: existing.discountPct,
         vatPct: existing.vatPct,
         depositPct: existing.depositPct,
-        notes: existing.notes,
       },
+      include: QUOTE_INCLUDE,
     });
     res.status(201).json(shapeQuote(row));
   })
@@ -299,8 +481,13 @@ crmQuoteRouter.post(
 function quoteTotals(lines: QuoteLine[], discountPct: number, vatPct: number, depositPct: number) {
   let mrr = 0;
   let oneoff = 0;
+  let hasUnpriced = false;
   for (const l of lines) {
-    const t = (l.qty || 0) * (l.unitPrice || 0);
+    if (l.unitPrice === null || l.unitPrice === undefined) {
+      hasUnpriced = true;
+      continue;
+    }
+    const t = (l.qty || 0) * l.unitPrice;
     if (l.recurring) mrr += t;
     else oneoff += t;
   }
@@ -310,7 +497,7 @@ function quoteTotals(lines: QuoteLine[], discountPct: number, vatPct: number, de
   const totalHT = mrrNet + oneoffNet;
   const totalTTC = totalHT * (1 + (vatPct || 0) / 100);
   const depositAmount = totalTTC * ((depositPct || 0) / 100);
-  return { mrr, oneoff, mrrNet, oneoffNet, totalHT, totalTTC, depositAmount };
+  return { mrr, oneoff, mrrNet, oneoffNet, totalHT, totalTTC, depositAmount, hasUnpriced };
 }
 
 /**
@@ -334,6 +521,7 @@ crmQuoteRouter.post(
         status: existing.status === "brouillon" ? "envoyé" : undefined,
         sentAt: existing.sentAt ?? new Date(),
       },
+      include: QUOTE_INCLUDE,
     });
     res.json(shapeQuote(row));
   })
@@ -351,21 +539,26 @@ crmQuoteRouter.get(
     if (!token) throw new HttpError(400, "Lien invalide");
     const quote = await prisma.crmQuote.findUnique({
       where: { signToken: token },
-      include: { deal: { include: { prospect: { select: { nom: true } } } }, signature: true },
+      include: { prospect: { select: { nom: true } }, signature: true },
     });
     if (!quote) throw new HttpError(404, "Lien de signature invalide ou expiré");
-    const lines = (quote.lines as unknown as QuoteLine[]) || [];
+    const storedLines = (quote.lines as unknown as QuoteLine[]) || [];
+    const config = (quote.config as QuoteConfig) || {};
+    const hardwareLines = storedLines.filter((l) => l.category === "materiel" && l.group !== "accessory");
+    const lines = expandQuoteLines(storedLines, hardwareLines, config);
     res.json({
       number: quote.number,
+      title: quote.title,
       status: quote.status,
       lines,
       discountPct: quote.discountPct,
       vatPct: quote.vatPct,
       depositPct: quote.depositPct,
-      notes: quote.notes || "",
+      introText: quote.introText || "",
+      mentionsText: quote.mentionsText || "",
+      termsText: quote.termsText || "",
       totals: quoteTotals(lines, quote.discountPct, quote.vatPct, quote.depositPct),
-      dealTitle: quote.deal.title,
-      prospectNom: quote.deal.prospect.nom,
+      prospectNom: quote.prospect.nom,
       alreadySigned: !!quote.signature,
       signedAt: quote.signature?.signedAt || null,
       signerName: quote.signature?.signerName || null,
@@ -375,9 +568,7 @@ crmQuoteRouter.get(
 
 /**
  * POST /wa/crmQuote/sendEmail — envoie réellement le devis par email au
- * client (22/10/2026, demande "branche cela avec... l'envoie d'email") :
- * jusqu'ici seul un lien de signature à copier/coller existait, aucun envoi
- * réel. Génère le lien de signature si besoin (même logique que
+ * client : génère le lien de signature si besoin (même logique que
  * requestSignature) puis passe par le point de convergence unique
  * sendMessage() (lib/messaging.ts), avec le modèle email de catégorie
  * "devis" (clé "devis-envoi") — modèle à créer une fois dans Messages >
@@ -392,15 +583,18 @@ crmQuoteRouter.post(
     const id = (req.body.id as string) || "";
     const existing = await prisma.crmQuote.findUnique({
       where: { id },
-      include: { deal: { include: { prospect: { select: { id: true, nom: true, email: true } } } } },
+      include: { prospect: { select: { id: true, nom: true, email: true } } },
     });
     if (!existing) throw new HttpError(404, "Devis introuvable");
     if (existing.status === "accepté") throw new HttpError(400, "Ce devis est déjà signé");
-    const prospect = existing.deal.prospect;
+    const prospect = existing.prospect;
     if (!prospect.email) throw new HttpError(400, "Le client n'a pas d'adresse email enregistrée");
 
     const signToken = existing.signToken || crypto.randomBytes(24).toString("hex");
-    const lines = (existing.lines as unknown as QuoteLine[]) || [];
+    const storedLines = (existing.lines as unknown as QuoteLine[]) || [];
+    const config = (existing.config as QuoteConfig) || {};
+    const hardwareLines = storedLines.filter((l) => l.category === "materiel" && l.group !== "accessory");
+    const lines = expandQuoteLines(storedLines, hardwareLines, config);
     const totals = quoteTotals(lines, existing.discountPct, existing.vatPct, existing.depositPct);
     const signUrl = `${req.protocol}://${req.get("host")}/devis-signature.html?token=${signToken}`;
 
@@ -434,6 +628,7 @@ crmQuoteRouter.post(
         status: existing.status === "brouillon" ? "envoyé" : undefined,
         sentAt: existing.sentAt ?? new Date(),
       },
+      include: QUOTE_INCLUDE,
     });
     res.json(shapeQuote(row));
   })
@@ -449,8 +644,9 @@ interface SignBody {
 
 /**
  * POST /wa/crmQuote/sign — enregistre la signature et fait passer
- * automatiquement le statut du devis à "accepté" et l'affaire à "Gagné"
- * (comportement explicitement demandé).
+ * automatiquement le statut du devis à "accepté" (et l'affaire à "Gagné"
+ * SI le devis est rattaché à une affaire — plus systématique depuis que le
+ * rattachement est optionnel, 22/10/2026).
  */
 crmQuoteRouter.post(
   "/crmQuote/sign",
@@ -479,7 +675,7 @@ crmQuoteRouter.post(
         },
       }),
       prisma.crmQuote.update({ where: { id: quote.id }, data: { status: "accepté" } }),
-      prisma.crmDeal.update({ where: { id: quote.dealId }, data: { stage: "Gagné" } }),
+      ...(quote.dealId ? [prisma.crmDeal.update({ where: { id: quote.dealId }, data: { stage: "Gagné" } })] : []),
     ]);
 
     res.json({ ok: true });

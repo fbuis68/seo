@@ -2091,6 +2091,7 @@ model CrmProspect {
   contacts   CrmContact[]
   accCustomer AccCustomer?
   signatureRequests CrmSignatureRequest[]
+  quotes     CrmQuote[]
 }
 
 // Contacts multiples d'une fiche client/prospect (16/09/2026) — jusqu'ici
@@ -2250,25 +2251,47 @@ model CrmDeal {
 // (le constructeur de devis pré-remplit les lignes de modules depuis le même
 // catalogue de prix que le wizard d'inscription, cf. ONBOARDING_MODULES /
 // PricingConfig — une seule source de vérité tarifaire dans toute l'app).
+// Refonte du 22/10/2026 — écran "Devis" à part entière (plus seulement
+// rattaché à une affaire ; § demande client "pas de création à partir de
+// l'affaire, on la rattachera ensuite"), reprenant scrupuleusement la
+// structure de la maquette fournie : dealId devient optionnel (rattachement
+// a posteriori), prospectId devient le lien principal et obligatoire (un
+// devis appartient d'abord à un CLIENT, pas à une affaire). `config` porte
+// les valeurs brutes des calculateurs des onglets Logiciel/Mise en place
+// (licence, PMS, SMS, journées-technicien, développement spécifique…) —
+// mêmes noms de champs que la maquette (cf. public/crm.html, QUOTE_BUILDER) ;
+// `lines` porte les lignes dérivées + tout override manuel saisi dans
+// l'onglet Document, structure inchangée depuis le commit précédent.
 model CrmQuote {
-  id     String  @id @default(cuid())
-  dealId String
-  deal   CrmDeal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  id         String      @id @default(cuid())
+  dealId     String?
+  deal       CrmDeal?    @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  prospectId String
+  prospect   CrmProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
 
   number String @unique // ex: DEV-2026-0001
+  title  String @default("") // "Objet du devis" (maquette : #sq-title)
   status String @default("brouillon") // brouillon | envoyé | accepté | refusé
 
-  lines       Json      @default("[]") // [{label, description?, qty, unitPrice, recurring:bool, category?:'materiel'|'logiciel'|'service'|'autre'}] — description = sous-texte verbeux affiché sous le libellé, comme sur les devis Sesame réels ; category range la ligne sous l'onglet correspondant du constructeur (22/10/2026, maquette devis Sesame)
-  discountPct Float     @default(0)
+  lines  Json @default("[]") // [{id, label, description?, qty, unitPrice, recurring:bool, category:'materiel'|'logiciel'|'service'|'autre', group?:'main'|'accessory'}]
+  config Json @default("{}") // calculateurs Logiciel/Mise en place (license, pmsInterface, platformSetup, smsQty, smsUnitPrice, subscriptionStart, timeMode, minutesPerAccess, hoursPerDay, installDays, dayRate, setupPerAccess, visitFee, trainingFee, travelFee, devDays, testDays, devRate, specificScope)
+
+  // Onglet Document (contenteditable côté maquette) — texte libre conservé
+  // tel quel entre deux recalculs, comme dans la maquette.
+  introText    String?
+  mentionsText String?
+  termsText    String?
+
+  discountPct Float @default(0)
   // TVA et acompte à la signature (22/10/2026, maquette devis Sesame) — la
   // maquette distingue "montant initial HT/TTC" et un acompte en % demandé
   // à la commande ; vatPct a une valeur par défaut de 20 (taux normal FR)
   // plutôt que 0, pour ne pas afficher un HT=TTC trompeur sur un devis
   // nouvellement créé si l'utilisateur oublie de le renseigner.
-  vatPct      Float     @default(20)
-  depositPct  Float     @default(0)
-  notes       String?
-  sentAt      DateTime?
+  vatPct     Float     @default(20)
+  depositPct Float     @default(0)
+  notes      String? // ancien champ libre (pré-refonte) — conservé pour compat des devis existants, plus affiché par le nouvel écran
+  sentAt     DateTime?
 
   // Signature électronique simple (18/08/2026) — signToken donne accès à la
   // page publique de signature (public/devis-signature.html), sans compte

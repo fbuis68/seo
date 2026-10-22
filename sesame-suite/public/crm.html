@@ -423,6 +423,38 @@ input[type=checkbox]{accent-color:var(--a);cursor:pointer;width:14px;height:14px
 .quote-tab{font-family:inherit;font-size:12px;padding:7px 14px;border:none;background:transparent;color:var(--mu);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
 .quote-tab:hover{color:var(--tx)}
 .quote-tab.active{color:var(--tx);font-weight:600;border-bottom-color:var(--a)}
+/* Écran Devis à part entière (22/10/2026) — reprend la structure de la
+   maquette : en-tête (client/objet/statut), layout principal+aside (totaux
+   toujours visibles), onglets déjà stylés ci-dessus (.quote-tab). */
+.db-head-row{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
+.db-head-row .ff{flex:1;min-width:180px}
+.db-status{flex:0 0 auto;min-width:120px}
+.db-layout{display:grid;grid-template-columns:1fr 300px;gap:16px;align-items:start;margin-top:12px}
+.db-aside{position:sticky;top:12px}
+.db-aside-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu)}
+.db-money{font-size:26px;font-weight:700;margin:2px 0 8px}
+.db-actions{display:flex;flex-direction:column;gap:6px;margin-top:14px}
+.db-row{display:flex;gap:8px;align-items:center}
+.db-row-between{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.quote-sep{border:none;border-top:0.5px solid var(--div);margin:10px 0}
+.sq-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:10px 0}
+.sq-fields label{font-size:11px;color:var(--mu);display:block}
+.sq-fields input,.sq-fields select{font-family:inherit;font-size:12px;width:100%;padding:0 8px;height:32px;border:0.5px solid var(--bdr2);border-radius:7px;background:var(--card);color:var(--tx);margin-top:2px}
+.sq-note{font-size:11px;color:var(--mu);font-style:italic;margin:6px 0}
+.sq-summary{font-size:12px;color:var(--mu)}
+.sq-product{font-size:13px}
+.sq-edit{min-height:60px;border:0.5px solid var(--bdr2);border-radius:8px;padding:8px 10px;font-size:12px;background:var(--card);white-space:pre-wrap;margin-top:4px}
+.sq-edit:focus{outline:none;border-color:var(--a);box-shadow:0 0 0 2px var(--al)}
+.sq-mods{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+.sq-mod{display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 0}
+.sq-clause{font-family:inherit;font-size:11px;padding:4px 10px;border-radius:20px;border:0.5px solid var(--bdr2);background:var(--card);color:var(--tx);cursor:pointer}
+.sq-clause:hover{background:var(--hover)}
+.sq-dochead{background:var(--bg);border-radius:8px;padding:10px 12px;margin:10px 0;font-size:12px}
+.sq-dochead .sq-logo{font-weight:700;font-size:13px;margin-bottom:4px}
+.sq-docline{display:grid;grid-template-columns:1fr 60px 90px 90px;gap:6px;align-items:center;padding:4px 0;border-bottom:0.5px solid var(--div)}
+.sq-docline input{font-family:inherit;font-size:12px;padding:0 6px;height:28px;border:0.5px solid var(--bdr2);border-radius:6px;background:var(--card);color:var(--tx)}
+.sq-docline output{font-size:12px;text-align:right}
+@media (max-width:860px){.db-layout{grid-template-columns:1fr}.db-aside{position:static}}
 
 /* ── RESPONSIVE ── */
 @media (max-width: 900px){
@@ -563,6 +595,7 @@ svg.tr-chart{display:block;width:100%;height:auto;min-width:640px}
     <div class="nav-item" id="n-home" onclick="showHome()"><div class="nav-ico">⌂</div> Home</div>
     <div class="nav-item" id="n-list" onclick="showList()"><div class="nav-ico">≡</div> Client/Prospect</div>
     <div class="nav-item" id="n-affaires" onclick="showAffaires()"><div class="nav-ico">◆</div> Affaires</div>
+    <div class="nav-item" id="n-devis" onclick="showDevisList()"><div class="nav-ico">✎</div> Devis</div>
     <div class="nav-item" id="n-treso" onclick="showTresorerie()"><div class="nav-ico">Σ</div> Trésorerie</div>
     <div class="nav-item" id="n-compta" onclick="showComptabilite()"><div class="nav-ico">▦</div> Comptabilité <span class="nb nb-a" id="b-compta-check" style="display:none">0</span></div>
     <div class="nav-item" id="n-tickets" onclick="showTickets()"><div class="nav-ico">☎</div> Support <span class="nb nb-r" id="b-tickets-open" style="display:none">0</span></div>
@@ -966,7 +999,7 @@ function ini(n){return(n||'?').split(' ').slice(0,2).map(w=>w[0]||'').join('').t
 function today(){const d=new Date();return d.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});}
 
 // ── NAV ──
-function setNav(id){['n-home','n-list','n-affaires','n-treso','n-compta','n-tickets','n-faq','n-produits','n-activite','n-contrats','n-canaux','n-auto','n-crmusers','n-questionnaires'].forEach(n=>document.getElementById(n).classList.remove('active'));var el=document.getElementById(id);if(el)el.classList.add('active');}
+function setNav(id){['n-home','n-list','n-affaires','n-devis','n-treso','n-compta','n-tickets','n-faq','n-produits','n-activite','n-contrats','n-canaux','n-auto','n-crmusers','n-questionnaires'].forEach(n=>document.getElementById(n).classList.remove('active'));var el=document.getElementById(id);if(el)el.classList.add('active');}
 function setVMode(m){vmode=m;document.getElementById('vt-tbl').classList.toggle('active',m==='table');document.getElementById('vt-grd').classList.toggle('active',m==='grid');document.getElementById('vt-map').classList.toggle('active',m==='map');if(view==='list')renderList();}
 function bc(parts){document.getElementById('bc').innerHTML=parts.map((p,i)=>i<parts.length-1?`<span class="bc-link" onclick="${p.fn}">${p.label}</span><span class="bc-sep"> / </span>`:`<span class="bc-cur">${p.label}</span>`).join('');}
 function tba(html){document.getElementById('tb-actions').innerHTML=html;}
@@ -6166,18 +6199,17 @@ function renderDealModal(){
       </div>
 
       ${md._new?'':`
-      <div class="modal-section">Devis</div>
+      <div class="modal-section">Devis liés</div>
       <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
-        ${(md.quotes||[]).length===0?'<div class="log-empty">Aucun devis pour cette affaire.</div>':md.quotes.map(q=>`
-          <div class="log-item" style="cursor:pointer" onclick="openQuoteModal('${md.id}','${q.id}')">
+        ${(md.quotes||[]).length===0?'<div class="log-empty">Aucun devis rattaché — un devis se crée depuis l\'écran Devis puis se rattache à cette affaire.</div>':md.quotes.map(q=>`
+          <div class="log-item" style="cursor:pointer" onclick="closeModal();openQuoteBuilder('${q.id}')">
             <div class="log-dot ld-b"></div>
             <div class="log-body">
               <div class="log-text"><strong>${q.number}</strong> <span class="tpill ${q.status==='accepté'?'bg':q.status==='refusé'?'bd':q.status==='envoyé'?'bi':'bn'}" style="margin-left:6px">${q.status}</span></div>
-              <div class="log-acts"><button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();duplicateQuote('${q.id}')">⧉ Dupliquer</button></div>
             </div>
           </div>`).join('')}
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="openQuoteModal('${md.id}',null)">+ Nouveau devis</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal();showDevisList()">Voir tous les devis</button>
 
       <div class="modal-section" style="display:flex;align-items:center;gap:8px">
         Journal d'activité
@@ -6255,386 +6287,727 @@ async function deleteDeal(id){
   if(view==='fiche'&&curId===wasProspectId) showFiche(curId);
 }
 
-// ── Devis ──
-// Constructeur en 4 onglets (22/10/2026, reprend la structure de la maquette
-// devis Sesame fournie par le client) : Équipements / Logiciel / Mise en
-// place rangent chacun les lignes de la catégorie correspondante
-// (CrmProduct.category / QuoteLine.category — materiel/logiciel/service),
-// l'onglet Document regroupe la vue d'ensemble, remise/TVA/acompte, notes,
-// signature et envoi. Données réelles partout : client = CrmProspect de
-// l'affaire, produits = catalogue CrmProduct + modules Sesame
-// (ONBOARDING_MODULES), email = sendMessage (lib/messaging.ts), signature =
-// CrmQuoteSignature existant — aucune simulation, contrairement à la
-// maquette qui était "sans envoi client ni connexion au CRM".
+// ════════════════════════════════════════
+// DEVIS — écran CRM à part entière (refonte 22/10/2026, reprend
+// scrupuleusement la structure de la maquette devis fournie par le client).
+// Un devis appartient d'abord à un CLIENT réel (CrmProspect) ; son
+// rattachement à une affaire (CrmDeal) est optionnel et se fait a
+// posteriori depuis cet écran (bouton "Lier à une affaire", onglet
+// Document) — jamais à la création (§ demande client : "pas de création à
+// partir de l'affaire, on la rattachera ensuite").
+//
+// Constructeur en 4 onglets, identiques à la maquette : 1. Équipements /
+// 2. Logiciel / 3. Mise en place / 4. Document, avec panneau latéral de
+// totaux toujours visible (investissement initial HT/TTC, acompte,
+// abonnement mensuel, récurrent 12 mois). Catalogue réel (CrmProduct +
+// modules Sesame ONBOARDING_MODULES) à la place des dossiers d'exemple de
+// la maquette ; client réel à la place du champ libre "D.S.G" ; envoi par
+// email et signature électronique réels à la place de "Simulation locale ·
+// sans envoi client ni connexion au CRM."
+// ════════════════════════════════════════
 let QUOTE_CATALOG = null;
-let QUOTE_DRAFT = null;
 let QUOTE_TEMPLATES = null;
+let QUOTE_DRAFT = null;
 let QUOTE_TAB = 'materiel';
+let QUOTE_LIST_FILTER = {status:'', q:''};
 const QUOTE_TABS = [
-  {key:'materiel', label:'Équipements'},
-  {key:'logiciel', label:'Logiciel'},
-  {key:'service', label:'Mise en place'},
-  {key:'document', label:'Document'},
+  {key:'materiel', label:'1. Équipements'},
+  {key:'logiciel', label:'2. Logiciel'},
+  {key:'service', label:'3. Mise en place'},
+  {key:'document', label:'4. Document'},
 ];
+const DQ_CAT_LABEL = {materiel:'Équipements', service:'Services', logiciel:'Modules', autre:'Lignes libres'};
+const DQ_CLAUSES = {
+  coffre: "Les coffres mécaniques existants sont conservés, sous réserve de compatibilité et de bon état de fonctionnement lors de l'intervention.",
+  electric: "La fourniture et la pose des alimentations, câblages, prises et systèmes de verrouillage électrique sont à la charge du client ou de son électricien.",
+  gateway: "L'implantation et le nombre de gateways seront confirmés après étude de couverture. Le réseau et les alimentations requis devront être opérationnels avant intervention.",
+  travel: "Les frais de déplacement, transport, hébergement et repas ne sont pas inclus, sauf forfait explicitement chiffré dans ce devis.",
+};
+const DQ_DEFAULT_INTRO = "Nous vous proposons une solution de gestion des accès adaptée à votre établissement, avec fourniture des équipements et accompagnement à la mise en service.";
+const DQ_DEFAULT_TERMS = "Validité : 30 jours. Solde à la livraison. Intervention sous réserve de validation technique et des prérequis chantier. CGV Sesame Technology à joindre dans leur version validée.";
+const DQ_PMS_OPTIONS = ['Misterbooking','Sans interface PMS','Mews','Opera Cloud','Thais','Autre / à étudier'];
+const DQ_START_OPTIONS = ['À la mise en service','À la livraison','À la signature'];
 
-async function openQuoteModal(dealId, quoteId){
+function dqDefaultConfig(){
+  return {
+    license:0, pmsInterface:'Sans interface PMS', platformSetup:0, smsQty:0, smsUnitPrice:0.15, subscriptionStart:'À la mise en service',
+    timeMode:'fixed', minutesPerAccess:45, hoursPerDay:7, installDays:0, dayRate:0, setupPerAccess:0,
+    visitFee:0, trainingFee:0, travelFee:0, devDays:0, testDays:0, devRate:750, specificScope:'',
+    overrides:{},
+  };
+}
+
+// ── Navigation / liste ──
+async function showDevisList(){
+  view='devis'; curId=null; setNav('n-devis'); bc([{label:'Devis'}]);
+  tba('<button class="btn btn-primary btn-sm" onclick="openQuoteBuilder(null)">+ Nouveau devis</button>');
+  document.getElementById('main').innerHTML = '<div class="card">Chargement…</div>';
+  try{
+    const qs = new URLSearchParams();
+    if(QUOTE_LIST_FILTER.status) qs.set('status', QUOTE_LIST_FILTER.status);
+    if(QUOTE_LIST_FILTER.q) qs.set('q', QUOTE_LIST_FILTER.q);
+    const r = await apiFetch('/wa/crmQuote/list'+(qs.toString()?'?'+qs.toString():''));
+    QUOTE_LIST = r.ok ? await r.json() : [];
+  }catch(e){ QUOTE_LIST = []; }
+  renderDevisList();
+}
+let QUOTE_LIST = [];
+
+function dqListFilterChanged(){
+  QUOTE_LIST_FILTER.status = (document.getElementById('dl-status')||{value:''}).value;
+  QUOTE_LIST_FILTER.q = (document.getElementById('dl-search')||{value:''}).value;
+  showDevisList();
+}
+
+function renderDevisList(){
+  const rows = QUOTE_LIST.map(q=>{
+    const t = q.totals || {totalTTC:0, mrrNet:0};
+    return `<tr style="cursor:pointer" onclick="openQuoteBuilder('${q.id}')">
+      <td><strong>${esc(q.number)}</strong></td>
+      <td>${esc(q.prospectNom)}</td>
+      <td>${esc(q.title)||'<span class="log-empty">—</span>'}</td>
+      <td><span class="tpill ${q.status==='accepté'?'bg':q.status==='refusé'?'bd':q.status==='envoyé'?'bi':'bn'}">${esc(q.status)}</span></td>
+      <td style="text-align:right">${fmtEUR(t.totalTTC)}${t.mrrNet?' + '+fmtEUR(t.mrrNet)+'/mois':''}</td>
+      <td style="font-size:12px;color:var(--mu)">${q.dealTitle?esc(q.dealTitle):'<span class="log-empty">Non rattaché</span>'}</td>
+      <td style="font-size:12px;color:var(--mu)">${new Date(q.createdAt).toLocaleDateString('fr-FR')}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('main').innerHTML = `
+    <div class="card" style="margin-bottom:12px">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <div class="ff" style="margin:0"><label>Recherche</label><input id="dl-search" value="${esc(QUOTE_LIST_FILTER.q)}" placeholder="Numéro, objet, client…" onkeydown="if(event.key==='Enter')dqListFilterChanged()"></div>
+        <div class="ff" style="margin:0"><label>Statut</label><select id="dl-status" onchange="dqListFilterChanged()">
+          <option value="">Tous</option>
+          ${['brouillon','envoyé','accepté','refusé'].map(s=>`<option value="${s}" ${QUOTE_LIST_FILTER.status===s?'selected':''}>${s}</option>`).join('')}
+        </select></div>
+        <button class="btn btn-ghost btn-sm" onclick="dqListFilterChanged()">Filtrer</button>
+      </div>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>N°</th><th>Client</th><th>Objet</th><th>Statut</th><th style="text-align:right">Montant</th><th>Affaire</th><th>Créé le</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="7" class="log-empty">Aucun devis — créez-en un.</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+// ── Chargement / état ──
+async function openQuoteBuilder(id){
+  view='devis-builder'; curId=null; setNav('n-devis');
   if(!QUOTE_CATALOG){
-    try{ const r = await apiFetch('/wa/crmQuote/catalog'); QUOTE_CATALOG = r.ok ? await r.json() : {basePrice:0,modules:[]}; }
-    catch(e){ QUOTE_CATALOG = {basePrice:0,modules:[]}; }
+    try{ const r = await apiFetch('/wa/crmQuote/catalog'); QUOTE_CATALOG = r.ok ? await r.json() : {modules:[]}; }
+    catch(e){ QUOTE_CATALOG = {modules:[]}; }
   }
   if(!crmProducts.length){
     try{ const r = await apiFetch('/wa/crmProduct/list'); crmProducts = r.ok ? await r.json() : []; }catch(e){}
   }
   QUOTE_TAB = 'materiel';
-  if(quoteId){
+  if(id){
     try{
-      const r = await apiFetch('/wa/crmQuote/list?dealId='+dealId);
-      const list = r.ok ? await r.json() : [];
-      QUOTE_DRAFT = list.find(x=>x.id===quoteId) || {dealId, id:quoteId, number:'', status:'brouillon', lines:[], discountPct:0, vatPct:20, depositPct:0, notes:''};
-    }catch(e){ flash('Erreur de chargement du devis'); return; }
+      const r = await apiFetch('/wa/crmQuote/get?id='+id);
+      if(!r.ok){ flash('Devis introuvable'); showDevisList(); return; }
+      QUOTE_DRAFT = dqFromServer(await r.json());
+    }catch(e){ flash('Erreur de chargement du devis'); showDevisList(); return; }
   } else {
-    QUOTE_DRAFT = {dealId, id:null, number:'', status:'brouillon', lines:[], discountPct:0, vatPct:20, depositPct:0, notes:'', _new:true};
+    QUOTE_DRAFT = {
+      id:null, number:'', status:'brouillon', prospectId:'', title:'', dealId:null, dealTitle:null,
+      hardware:[], accessories:[],
+      mods:(QUOTE_CATALOG.modules||[]).map(m=>({k:m.k, name:m.label, desc:m.desc, on:false, p:m.price, cycle:'monthly'})),
+      custom:[], config:dqDefaultConfig(),
+      introText:DQ_DEFAULT_INTRO, mentionsText:'', termsText:DQ_DEFAULT_TERMS,
+      discountPct:0, vatPct:20, depositPct:65, _new:true,
+    };
   }
-  renderQuoteModal();
+  bc([{label:'Devis', fn:'showDevisList()'}, {label: QUOTE_DRAFT._new?'Nouveau devis':QUOTE_DRAFT.number}]);
+  tba('<button class="btn btn-ghost btn-sm" onclick="showDevisList()">← Retour à la liste</button>');
+  renderQuoteBuilder();
 }
 
-// Lignes créées avant l'ajout de la catégorie (22/10/2026) n'en portent pas
-// — rangées par défaut sous "Équipements" plutôt que de disparaître.
-function quoteLineCategory(l){ return l.category==='logiciel'||l.category==='service' ? l.category : 'materiel'; }
-
-function quoteTotals(){
-  const q = QUOTE_DRAFT;
-  let mrr=0, oneoff=0;
-  (q.lines||[]).forEach(l=>{ const t=(+l.qty||0)*(+l.unitPrice||0); if(l.recurring) mrr+=t; else oneoff+=t; });
-  const discount = (q.discountPct||0)/100;
-  const mrrNet = mrr*(1-discount), oneoffNet = oneoff*(1-discount);
-  const totalHT = mrrNet+oneoffNet;
-  const totalTTC = totalHT*(1+(q.vatPct||0)/100);
-  const depositAmount = totalTTC*((q.depositPct||0)/100);
-  return { mrr, oneoff, mrrNet, oneoffNet, totalHT, totalTTC, depositAmount };
-}
-
-function captureQuoteLines(){
-  const lines = QUOTE_DRAFT.lines||[];
-  lines.forEach((l,i)=>{
-    const gl=document.getElementById('ql-label-'+i), gd=document.getElementById('ql-desc-'+i), gq=document.getElementById('ql-qty-'+i), gp=document.getElementById('ql-price-'+i), gr=document.getElementById('ql-rec-'+i);
-    if(gl) l.label = gl.value;
-    if(gd) l.description = gd.value;
-    if(gq) l.qty = +gq.value || 0;
-    if(gp) l.unitPrice = +gp.value || 0;
-    if(gr) l.recurring = gr.checked;
+/** Éclate les lignes stockées (plates, avec category/group/moduleKey) en
+ * hardware/accessories/mods/custom — symétrique de dqCollectManualLines(). */
+function dqFromServer(q){
+  const lines = q.lines || [];
+  const hardware = lines.filter(l=>l.category==='materiel' && l.group!=='accessory').map(l=>({...l}));
+  const accessories = lines.filter(l=>l.category==='materiel' && l.group==='accessory').map(l=>({...l}));
+  const customLines = lines.filter(l=>l.category==='autre').map(l=>({...l}));
+  const checkedModules = lines.filter(l=>l.category==='logiciel' && l.moduleKey);
+  const mods = (QUOTE_CATALOG.modules||[]).map(m=>{
+    const checked = checkedModules.find(l=>l.moduleKey===m.k);
+    return {k:m.k, name:m.label, desc:m.desc, on:!!checked, p:checked?checked.unitPrice:m.price, cycle:checked&&!checked.recurring?'once':'monthly'};
   });
-  const gdisc=document.getElementById('q-discount'), gvat=document.getElementById('q-vat'), gdep=document.getElementById('q-deposit'), gn=document.getElementById('q-notes'), gs=document.getElementById('q-status');
-  if(gdisc) QUOTE_DRAFT.discountPct = +gdisc.value || 0;
-  if(gvat) QUOTE_DRAFT.vatPct = +gvat.value || 0;
-  if(gdep) QUOTE_DRAFT.depositPct = +gdep.value || 0;
-  if(gn) QUOTE_DRAFT.notes = gn.value;
-  if(gs) QUOTE_DRAFT.status = gs.value;
+  const config = Object.assign(dqDefaultConfig(), q.config||{});
+  return {
+    id:q.id, number:q.number, status:q.status, prospectId:q.prospectId, title:q.title,
+    dealId:q.dealId, dealTitle:q.dealTitle,
+    hardware, accessories, mods, custom:customLines, config,
+    introText:q.introText||DQ_DEFAULT_INTRO, mentionsText:q.mentionsText||'', termsText:q.termsText||DQ_DEFAULT_TERMS,
+    discountPct:q.discountPct, vatPct:q.vatPct, depositPct:q.depositPct, _new:false,
+  };
 }
 
-function switchQuoteTab(key){ captureQuoteLines(); QUOTE_TAB = key; renderQuoteModal(); }
-
-function addQuoteLine(label, unitPrice, recurring, description, category){
-  captureQuoteLines();
-  QUOTE_DRAFT.lines = QUOTE_DRAFT.lines || [];
-  QUOTE_DRAFT.lines.push({label: label||'', description: description||'', qty:1, unitPrice: unitPrice||0, recurring: recurring!==false, category: category||'materiel'});
-  renderQuoteModal();
+/** Lignes "manuelles" (hardware/accessoires/modules cochés/lignes libres) à
+ * envoyer au serveur tel quel — PAS les lignes dérivées des calculateurs
+ * (licence/plateforme/SMS/mise en place…), recalculées à la volée depuis
+ * `config` à chaque affichage (cf. dqComputeTotals), jamais dupliquées en base. */
+function dqCollectManualLines(q){
+  const out = [];
+  q.hardware.forEach(x=>out.push({...x, category:'materiel', group:'main', recurring:false}));
+  q.accessories.forEach(x=>out.push({...x, category:'materiel', group:'accessory', recurring:false}));
+  q.mods.filter(m=>m.on).forEach(m=>out.push({id:'mod-'+m.k, moduleKey:m.k, label:m.name, description:m.desc||'', qty:1, unitPrice:m.p, recurring:m.cycle!=='once', category:'logiciel'}));
+  q.custom.forEach(x=>out.push({...x, category:'autre'}));
+  return out;
 }
-function removeQuoteLine(i){ captureQuoteLines(); QUOTE_DRAFT.lines.splice(i,1); renderQuoteModal(); }
 
-// ── Modèles de devis récurrents — pour gagner du temps sur des devis
-// verbeux et répétitifs : charger un modèle pré-remplit toutes les lignes
-// (libellés + descriptions + prix), il ne reste qu'à ajuster les quantités.
-async function loadQuoteTemplatesIfNeeded(){
+function dqNum(v){ return Math.max(0, Number(v)||0); }
+
+/** Lignes dérivées des calculateurs Logiciel + Mise en place (licence,
+ * plateforme, SMS, visite, installation, formation, déplacement,
+ * développement spécifique, recettage) — même logique que collect() dans
+ * la maquette, avec les overrides du Document appliqués par-dessus. */
+function dqCalculatorLines(q){
+  const c = q.config;
+  const count = q.hardware.reduce((a,x)=>a+dqNum(x.qty),0);
+  let installDays = dqNum(c.installDays);
+  if(c.timeMode==='auto') installDays = Math.ceil(count*dqNum(c.minutesPerAccess)/(dqNum(c.hoursPerDay)*60||1)*2)/2;
+  const rows = [];
+  const add=(id,label,qty,unitPrice,category,recurring)=>{ if(qty>0) rows.push({id,label,qty,unitPrice,category:category||'service',recurring:!!recurring}); };
+  add('setup','Paramétrage des contrôles d’accès', count, dqNum(c.setupPerAccess));
+  add('platform','Paramétrage plateforme', 1, dqNum(c.platformSetup));
+  add('sms','SMS prépayés', dqNum(c.smsQty), dqNum(c.smsUnitPrice));
+  add('visit','Visite technique avant chantier', 1, dqNum(c.visitFee));
+  add('install','Installation, tests d’ouverture et recettage · journée-technicien', installDays, dqNum(c.dayRate));
+  add('training','Formation de 2 administrateurs', 1, dqNum(c.trainingFee));
+  add('travel','Forfait déplacement', 1, dqNum(c.travelFee));
+  add('dev','Développement spécifique · journée', dqNum(c.devDays), dqNum(c.devRate));
+  add('test','Recettage logiciel · journée', dqNum(c.testDays), dqNum(c.devRate));
+  add('license','Licence clés, support'+(c.pmsInterface==='Misterbooking'?' et interface Misterbooking':''), 1, dqNum(c.license), 'logiciel', true);
+  return rows.map(r=>({...r, ...(c.overrides[r.id]||{})}));
+}
+
+function dqAllLines(q){
+  return [...dqCollectManualLines(q), ...dqCalculatorLines(q)].map(r=>({...r, qty:dqNum(r.qty)}));
+}
+
+function dqComputeTotals(lines, config, discountPct, vatPct, depositPct){
+  let mrr=0, oneoff=0;
+  lines.forEach(l=>{ if(l.unitPrice==null) return; const t=(+l.qty||0)*(+l.unitPrice||0); if(l.recurring) mrr+=t; else oneoff+=t; });
+  const factor = 1-(discountPct||0)/100;
+  const mrrNet = mrr*factor, oneoffNet = oneoff*factor;
+  const totalHT = mrrNet+oneoffNet;
+  const totalTTC = totalHT*(1+(vatPct||0)/100);
+  const depositAmount = totalTTC*((depositPct||0)/100);
+  return {mrr, oneoff, mrrNet, oneoffNet, totalHT, totalTTC, depositAmount};
+}
+
+// ── Capture des champs du DOM vers QUOTE_DRAFT (même convention que le reste du CRM) ──
+function captureQuoteHead(){
+  const q = QUOTE_DRAFT;
+  const gp=document.getElementById('dq-prospect'), gt=document.getElementById('dq-title');
+  if(gp) q.prospectId = gp.value;
+  if(gt) q.title = gt.value;
+}
+function captureHardwareRows(list, prefix){
+  list.forEach((x,i)=>{
+    const gq=document.getElementById(prefix+'-qty-'+i), gp=document.getElementById(prefix+'-price-'+i);
+    if(gq) x.qty = +gq.value||0;
+    if(gp) x.unitPrice = gp.value===''?null:(+gp.value||0);
+  });
+}
+function captureConfigTab(ids){
+  const c = QUOTE_DRAFT.config;
+  ids.forEach(id=>{
+    const el = document.getElementById('dq-'+id);
+    if(!el) return;
+    if(el.type==='number') c[id] = el.value===''?0:+el.value;
+    else c[id] = el.value;
+  });
+}
+function captureDocumentTab(){
+  const q = QUOTE_DRAFT;
+  const intro=document.getElementById('dq-intro'), mentions=document.getElementById('dq-mentions'), terms=document.getElementById('dq-terms');
+  if(intro) q.introText = intro.textContent;
+  if(mentions) q.mentionsText = mentions.textContent;
+  if(terms) q.termsText = terms.textContent;
+  const gd=document.getElementById('dq-discount'), gv=document.getElementById('dq-vat'), gdep=document.getElementById('dq-deposit'), gs=document.getElementById('dq-status');
+  if(gd) q.discountPct = +gd.value||0;
+  if(gv) q.vatPct = +gv.value||0;
+  if(gdep) q.depositPct = +gdep.value||0;
+  if(gs) q.status = gs.value;
+  dqAllLines(q).forEach(r=>{
+    const gn=document.getElementById('dl-name-'+r.id), gq=document.getElementById('dl-qty-'+r.id), gp=document.getElementById('dl-price-'+r.id);
+    if(!gn && !gq && !gp) return;
+    const patch = {};
+    if(gn && gn.value!==r.label) patch.label = gn.value;
+    if(gq && +gq.value!==r.qty) patch.qty = +gq.value||0;
+    if(gp){ const v = gp.value===''?null:(+gp.value||0); if(v!==r.unitPrice) patch.unitPrice = v; }
+    if(Object.keys(patch).length) q.config.overrides[r.id] = {...q.config.overrides[r.id], ...patch};
+  });
+}
+
+function captureCurrentTab(){
+  captureQuoteHead();
+  if(QUOTE_TAB==='materiel'){ captureHardwareRows(QUOTE_DRAFT.hardware,'dq-hw'); captureHardwareRows(QUOTE_DRAFT.accessories,'dq-acc'); }
+  else if(QUOTE_TAB==='logiciel') captureConfigTab(['license','pmsInterface','platformSetup','smsQty','smsUnitPrice','subscriptionStart']);
+  else if(QUOTE_TAB==='service') captureConfigTab(['timeMode','minutesPerAccess','hoursPerDay','installDays','dayRate','setupPerAccess','visitFee','trainingFee','travelFee','devDays','testDays','devRate','specificScope']);
+  else if(QUOTE_TAB==='document') captureDocumentTab();
+}
+
+function switchQuoteTab(key){ captureCurrentTab(); QUOTE_TAB = key; renderQuoteBuilder(); }
+function dqRerender(){ captureCurrentTab(); renderQuoteBuilder(); }
+
+// ── Actions lignes ──
+function dqAddHardware(selectEl){
+  const id = selectEl.value; if(!id) return;
+  const p = crmProducts.find(x=>x.id===id); if(!p) return;
+  captureCurrentTab();
+  const existing = QUOTE_DRAFT.hardware.find(x=>x.productId===id);
+  if(existing) existing.qty = (+existing.qty||0)+1;
+  else QUOTE_DRAFT.hardware.push({id:'h'+QUOTE_DRAFT.hardware.length+'-'+Date.now(), productId:id, label:p.label, description:p.description||'', qty:1, unitPrice:p.unitPrice});
+  selectEl.value=''; renderQuoteBuilder();
+}
+function dqAddAccessory(selectEl){
+  const id = selectEl.value; if(!id) return;
+  const p = crmProducts.find(x=>x.id===id); if(!p) return;
+  captureCurrentTab();
+  const existing = QUOTE_DRAFT.accessories.find(x=>x.productId===id);
+  if(existing) existing.qty = (+existing.qty||0)+1;
+  else QUOTE_DRAFT.accessories.push({id:'a'+QUOTE_DRAFT.accessories.length+'-'+Date.now(), productId:id, label:p.label, description:p.description||'', qty:1, unitPrice:p.unitPrice});
+  selectEl.value=''; renderQuoteBuilder();
+}
+function dqRemoveRow(arrName, idx){ captureCurrentTab(); QUOTE_DRAFT[arrName].splice(idx,1); renderQuoteBuilder(); }
+function dqAddCustomLine(){
+  captureCurrentTab();
+  QUOTE_DRAFT.custom.push({id:'c'+QUOTE_DRAFT.custom.length+'-'+Date.now(), label:'Prestation spécifique client', description:'', qty:1, unitPrice:null, recurring:false});
+  renderQuoteBuilder();
+}
+function dqApplyClause(key){
+  captureCurrentTab();
+  const text = DQ_CLAUSES[key];
+  if(!QUOTE_DRAFT.mentionsText.includes(text)) QUOTE_DRAFT.mentionsText += (QUOTE_DRAFT.mentionsText?'\n\n':'')+text;
+  renderQuoteBuilder();
+}
+
+// ── Modèles de devis récurrents (réutilise les lignes "matériel" comme base) ──
+async function dqLoadTemplatesIfNeeded(){
   if(QUOTE_TEMPLATES) return;
   try{ const r = await apiFetch('/wa/crmQuoteTemplate/list'); QUOTE_TEMPLATES = r.ok ? await r.json() : []; }
   catch(e){ QUOTE_TEMPLATES = []; }
 }
-async function applyQuoteTemplate(selectEl){
-  const id = selectEl.value;
-  selectEl.value = '';
+function dqApplyTemplate(selectEl){
+  const id = selectEl.value; selectEl.value='';
   if(!id) return;
-  const tpl = (QUOTE_TEMPLATES||[]).find(t=>t.id===id);
-  if(!tpl) return;
-  if((QUOTE_DRAFT.lines||[]).length && !confirm('Remplacer les lignes actuelles par celles du modèle "'+tpl.name+'" ?')) return;
-  QUOTE_DRAFT.lines = tpl.lines.map(l=>({...l}));
-  if(tpl.notes) QUOTE_DRAFT.notes = tpl.notes;
-  renderQuoteModal();
+  const tpl = (QUOTE_TEMPLATES||[]).find(t=>t.id===id); if(!tpl) return;
+  if((QUOTE_DRAFT.hardware.length||QUOTE_DRAFT.accessories.length) && !confirm('Remplacer les équipements actuels par ceux du modèle "'+tpl.name+'" ?')) return;
+  QUOTE_DRAFT.hardware = (tpl.lines||[]).filter(l=>(l.category||'materiel')==='materiel' && l.group!=='accessory').map((l,i)=>({...l, id:'h'+i+'-'+Date.now()}));
+  QUOTE_DRAFT.accessories = (tpl.lines||[]).filter(l=>l.category==='materiel' && l.group==='accessory').map((l,i)=>({...l, id:'a'+i+'-'+Date.now()}));
+  renderQuoteBuilder();
 }
-async function saveQuoteAsTemplate(){
-  captureQuoteLines();
-  if(!(QUOTE_DRAFT.lines||[]).length){ flash('Ajoutez au moins une ligne avant d\'enregistrer un modèle'); return; }
-  const name = prompt('Nom du modèle (ex : "Contrôle d\'accès standard hôtel")');
+async function dqSaveAsTemplate(){
+  captureCurrentTab();
+  if(!QUOTE_DRAFT.hardware.length && !QUOTE_DRAFT.accessories.length){ flash('Ajoutez au moins un équipement avant d’enregistrer un modèle'); return; }
+  const name = prompt('Nom du modèle (ex : "Contrôle d’accès standard hôtel")');
   if(!name || !name.trim()) return;
   try{
-    var r = await apiFetch('/wa/crmQuoteTemplate/create', {method:'POST', body:JSON.stringify({name:name.trim(), lines:QUOTE_DRAFT.lines, notes:QUOTE_DRAFT.notes})});
-    if(!r.ok) throw new Error('http '+r.status);
-    var saved = await r.json();
-  }catch(e){ flash('Erreur d\'enregistrement du modèle'); return; }
-  QUOTE_TEMPLATES = QUOTE_TEMPLATES || [];
-  QUOTE_TEMPLATES.push(saved);
-  flash('Modèle "'+saved.name+'" enregistré ✓');
+    const lines = dqCollectManualLines(QUOTE_DRAFT).filter(l=>l.category==='materiel');
+    const r = await apiFetch('/wa/crmQuoteTemplate/create', {method:'POST', body:JSON.stringify({name:name.trim(), lines})});
+    if(!r.ok) throw new Error('http');
+    QUOTE_TEMPLATES = QUOTE_TEMPLATES||[]; QUOTE_TEMPLATES.push(await r.json());
+    flash('Modèle enregistré ✓');
+  }catch(e){ flash('Erreur d’enregistrement du modèle'); }
 }
 
-async function duplicateQuote(id){
-  try{
-    var r = await apiFetch('/wa/crmQuote/duplicate', {method:'POST', body:JSON.stringify({id:id})});
-    if(!r.ok) throw new Error('http '+r.status);
-    var saved = await r.json();
-  }catch(e){ flash('Erreur de duplication'); return; }
-  const deal = deals.find(d=>d.id===saved.dealId);
-  if(deal){ deal.quotes = deal.quotes||[]; deal.quotes.push({id:saved.id, number:saved.number, status:saved.status}); }
-  flash('Devis dupliqué en '+saved.number);
-  openQuoteModal(saved.dealId, saved.id);
-}
-
-async function requestQuoteSignature(){
-  const q = QUOTE_DRAFT; if(!q || !q.id) return;
-  try{
-    var r = await apiFetch('/wa/crmQuote/requestSignature', {method:'POST', body:JSON.stringify({id:q.id})});
-    var data = await r.json();
-    if(!r.ok){ flash(data.error||'Erreur'); return; }
-  }catch(e){ flash('Erreur de connexion au serveur'); return; }
-  QUOTE_DRAFT = {...data, _new:false};
-  renderQuoteModal();
-}
-
-// Envoi réel du devis par email au client (22/10/2026) — reprend le point de
-// convergence unique sendMessage()/MessageTemplate déjà utilisé partout
-// ailleurs dans le CRM (catégorie "Devis", modèle "devis-envoi"), plutôt
-// qu'un simple lien à copier/coller comme c'était le cas jusqu'ici.
-async function sendQuoteEmail(){
-  const q = QUOTE_DRAFT; if(!q || !q.id) return;
-  if(!confirm('Envoyer ce devis par email au client ?')) return;
-  try{
-    var r = await apiFetch('/wa/crmQuote/sendEmail', {method:'POST', body:JSON.stringify({id:q.id})});
-    var data = await r.json();
-    if(!r.ok){ flash(data.error||'Erreur lors de l\'envoi'); return; }
-  }catch(e){ flash('Erreur de connexion au serveur'); return; }
-  QUOTE_DRAFT = {...data, _new:false};
-  flash('Devis envoyé par email ✓');
-  const deal = deals.find(d=>d.id===q.dealId);
-  if(deal){ deal.quotes = deal.quotes||[]; const idx=deal.quotes.findIndex(x=>x.id===q.id); if(idx>=0) deal.quotes[idx].status=data.status; }
-  renderQuoteModal();
-}
-
-function renderQuoteModal(){
+// ── Sauvegarde / cycle de vie ──
+function dqPayload(){
+  captureCurrentTab();
   const q = QUOTE_DRAFT;
-  const totals = quoteTotals();
-  const signUrl = q.signToken ? (location.origin+'/devis-signature.html?token='+q.signToken) : '';
-  const deal = deals.find(d=>d.id===q.dealId);
-
-  const tabsHtml = QUOTE_TABS.map(t=>`<button type="button" class="quote-tab${QUOTE_TAB===t.key?' active':''}" onclick="switchQuoteTab('${t.key}')">${t.label}</button>`).join('');
-
-  let bodyHtml;
-  if(QUOTE_TAB==='document'){
-    bodyHtml = renderQuoteDocumentTab(q, totals, signUrl, deal);
-  } else {
-    bodyHtml = renderQuoteCategoryTab(q, QUOTE_TAB);
-  }
-
-  document.getElementById('modal-ct').innerHTML = `
-  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
-    <div class="modal-box">
-      <div class="modal-head">
-        <div style="font-size:16px;font-weight:500">${q._new?'Nouveau devis':q.number}</div>
-        ${deal?`<div style="font-size:12px;color:var(--mu);margin-left:10px">${esc(deal.prospectNom||'')}</div>`:''}
-        ${q.status?`<span class="tpill ${q.status==='accepté'?'bg':q.status==='refusé'?'bd':q.status==='envoyé'?'bi':'bn'}" style="margin-left:8px">${q.status}</span>`:''}
-        <button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button>
-      </div>
-
-      ${q._new?`<div class="ff" style="max-width:280px;margin-bottom:6px"><label>Partir d'un modèle (optionnel)</label>
-        <select onchange="applyQuoteTemplate(this)" onfocus="loadQuoteTemplatesIfNeeded().then(()=>renderQuoteModal())">
-          <option value="">— Choisir un modèle —</option>
-          ${(QUOTE_TEMPLATES||[]).map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')}
-        </select></div>`:''}
-
-      <div class="quote-tabbar">${tabsHtml}</div>
-      ${bodyHtml}
-
-      <div class="modal-footer" style="flex-wrap:wrap">
-        <button class="btn btn-primary" onclick="saveQuote()">Enregistrer</button>
-        ${q._new?'':'<button class="btn btn-ghost" onclick="printQuote()">🖶 Aperçu / Imprimer</button>'}
-        ${q._new?'':'<button class="btn btn-ghost" onclick="duplicateQuote(\''+q.id+'\')">⧉ Dupliquer</button>'}
-        ${(q.lines||[]).length?'<button class="btn btn-ghost" onclick="saveQuoteAsTemplate()">💾 Enregistrer comme modèle</button>':''}
-        ${q._new?'':'<button class="btn btn-ghost" style="color:#a32d2d" onclick="deleteQuote()">Supprimer</button>'}
-        <button class="btn btn-ghost" onclick="closeModal()">Fermer</button>
-      </div>
-    </div>
-  </div>`;
-}
-
-// Onglets Équipements/Logiciel/Mise en place : catalogue filtré par
-// catégorie (CrmProduct.category, + modules Sesame pour "logiciel"
-// uniquement) et lignes du devis de cette même catégorie.
-function renderQuoteCategoryTab(q, cat){
-  const catLabel = (QUOTE_TABS.find(t=>t.key===cat)||{}).label || cat;
-  const catalogButtons = cat==='logiciel' ? (QUOTE_CATALOG.modules||[]).map(m=>`<button type="button" onclick="addQuoteLine('${jsStr(m.label)}',${m.price},true,'${jsStr(m.desc||'')}','logiciel')">+ ${esc(m.label)} (${fmtEUR(m.price)}/mois)</button>`).join('') : '';
-  const prodCats = cat==='service' ? ['service','autre'] : [cat];
-  const productButtons = crmProducts.filter(p=>p.active && prodCats.includes(p.category||'materiel')).map(p=>`<button type="button" onclick="addQuoteLine('${jsStr(p.label)}',${p.unitPrice},${p.recurring},'${jsStr(p.description)}','${cat}')">+ ${esc(p.label)} (${fmtEUR(p.unitPrice)}${p.recurring?'/mois':''})</button>`).join('');
-  const lines = q.lines||[];
-  const idxInCat = [];
-  lines.forEach((l,i)=>{ if(quoteLineCategory(l)===cat) idxInCat.push(i); });
-
-  return `
-    <div class="modal-section">Ajouter — ${esc(catLabel)}</div>
-    <div class="quote-catalog-pick">${catalogButtons}${productButtons}${!catalogButtons&&!productButtons?'<span class="log-empty">Aucun produit de cette catégorie au catalogue — <a href="#" onclick="closeModal();showCrmProducts();return false;">en créer un</a></span>':''}<button type="button" onclick="addQuoteLine('',0,false,'','${cat}')">+ Ligne personnalisée</button></div>
-
-    <div class="modal-section">Lignes — ${esc(catLabel)}</div>
-    <div class="quote-line-head"><span>Libellé</span><span>Qté</span><span>Prix unit. €</span><span>Mensuel</span><span></span></div>
-    <div class="quote-lines">
-      ${idxInCat.length===0?'<div class="log-empty">Aucune ligne dans cette catégorie — ajoutez un élément du catalogue ou une ligne personnalisée.</div>':idxInCat.map(i=>{ const l=lines[i]; return `
-        <div class="quote-line">
-          <div class="quote-line-main">
-            <input type="text" id="ql-label-${i}" value="${esc(l.label)}" placeholder="Libellé">
-            <input type="number" id="ql-qty-${i}" value="${l.qty}" min="0" onchange="captureQuoteLines();renderQuoteModal()">
-            <input type="number" id="ql-price-${i}" value="${l.unitPrice}" min="0" step="0.01" onchange="captureQuoteLines();renderQuoteModal()">
-            <label style="display:flex;align-items:center;justify-content:center"><input type="checkbox" id="ql-rec-${i}" ${l.recurring?'checked':''} onchange="captureQuoteLines();renderQuoteModal()"></label>
-            <button class="btn btn-ghost btn-icon" style="width:28px;height:28px" onclick="removeQuoteLine(${i})">✕</button>
-          </div>
-          <input type="text" class="quote-line-desc" id="ql-desc-${i}" value="${esc(l.description)}" placeholder="Description (sous-texte affiché sur le devis, optionnel)">
-        </div>`;}).join('')}
-    </div>`;
-}
-
-// Onglet Document : vue d'ensemble complète (toutes catégories), remise/TVA/
-// acompte, notes/conditions, totaux, signature électronique et envoi par
-// email — point d'arrivée du devis avant la case facturation (hors scope ici).
-function renderQuoteDocumentTab(q, totals, signUrl, deal){
-  const lines = q.lines||[];
-  const byCat = {materiel:[], logiciel:[], service:[]};
-  lines.forEach((l,i)=>{ byCat[quoteLineCategory(l)].push(l); });
-  const catLabel = {materiel:'Équipements', logiciel:'Logiciel', service:'Mise en place'};
-  const sectionHtml = (cat)=> byCat[cat].length ? `
-    <div style="font-size:11px;text-transform:uppercase;color:var(--mu);margin:10px 0 2px">${catLabel[cat]}</div>
-    ${byCat[cat].map(l=>`<div class="quote-total-row"><span>${esc(l.label)||'—'}${l.recurring?' <span style="color:#888">(mensuel)</span>':''} × ${l.qty}</span><span>${fmtEUR((+l.qty||0)*(+l.unitPrice||0))}</span></div>`).join('')}
-  `:'';
-
-  return `
-    <div class="modal-section">Récapitulatif</div>
-    <div style="font-size:12px;color:var(--mu);margin-bottom:6px"><strong>Client :</strong> ${esc(deal?deal.prospectNom:'')} — <strong>Affaire :</strong> ${esc(deal?deal.title:'')}</div>
-    ${sectionHtml('materiel')}${sectionHtml('logiciel')}${sectionHtml('service')}
-    ${lines.length===0?'<div class="log-empty">Aucune ligne — ajoutez des éléments depuis les onglets Équipements/Logiciel/Mise en place.</div>':''}
-
-    <div class="form-grid" style="margin-top:14px">
-      <div class="ff"><label>Remise globale (%)</label><input type="number" id="q-discount" value="${q.discountPct||0}" min="0" max="100" onchange="captureQuoteLines();renderQuoteModal()"></div>
-      <div class="ff"><label>TVA (%)</label><input type="number" id="q-vat" value="${q.vatPct??20}" min="0" max="100" step="0.1" onchange="captureQuoteLines();renderQuoteModal()"></div>
-      <div class="ff"><label>Acompte à la commande (%)</label><input type="number" id="q-deposit" value="${q.depositPct||0}" min="0" max="100" onchange="captureQuoteLines();renderQuoteModal()"></div>
-      <div class="ff"><label>Statut</label><select id="q-status" onchange="captureQuoteLines()">${['brouillon','envoyé','accepté','refusé'].map(s=>`<option value="${s}" ${q.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
-    </div>
-    <div class="ff"><label>Notes / conditions</label><textarea id="q-notes" onchange="captureQuoteLines()">${q.notes||''}</textarea></div>
-
-    <div class="modal-section">Total</div>
-    <div class="quote-total-row"><span>Mensuel récurrent</span><span>${fmtEUR(totals.mrr)}${q.discountPct?' → '+fmtEUR(totals.mrrNet)+' après remise':''}</span></div>
-    <div class="quote-total-row"><span>Frais ponctuels</span><span>${fmtEUR(totals.oneoff)}${q.discountPct?' → '+fmtEUR(totals.oneoffNet)+' après remise':''}</span></div>
-    <div class="quote-total-row"><span>Total HT</span><span>${fmtEUR(totals.totalHT)}</span></div>
-    <div class="quote-total-row"><span>TVA (${q.vatPct||0}%)</span><span>${fmtEUR(totals.totalTTC-totals.totalHT)}</span></div>
-    <div class="quote-total-row grand"><span>Total TTC</span><span>${fmtEUR(totals.totalTTC)}</span></div>
-    ${q.depositPct?`<div class="quote-total-row"><span>Acompte à la commande (${q.depositPct}%)</span><span>${fmtEUR(totals.depositAmount)}</span></div>`:''}
-
-    ${!q._new && q.status!=='accepté' ? `
-    <div class="modal-section">Signature électronique</div>
-    <div style="font-size:11px;color:var(--mu);font-style:italic;margin-bottom:8px">⚠ Signature électronique simple (nom saisi + tracé + horodatage) — pas une signature qualifiée eIDAS certifiée par un tiers de confiance.</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
-      <button class="btn btn-primary btn-sm" onclick="sendQuoteEmail()">✉ Envoyer le devis par email</button>
-      ${signUrl?`<button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText('${esc(signUrl)}');flash('Lien copié')">Copier le lien de signature</button>`:`<button class="btn btn-ghost btn-sm" onclick="requestQuoteSignature()">✎ Générer le lien sans l'envoyer</button>`}
-    </div>
-    ${signUrl?`<div class="ff"><label>Lien de signature</label><input type="text" readonly value="${esc(signUrl)}" style="font-size:11px" onclick="this.select()"></div>`:''}
-    `:''}
-    ${q.status==='accepté'?`<div class="tag t-green" style="margin-top:8px;display:inline-flex">✓ Devis signé électroniquement — l'affaire est passée automatiquement au statut "Gagné".</div>`:''}
-  `;
-}
-
-async function saveQuote(){
-  captureQuoteLines();
-  const q = QUOTE_DRAFT;
-  const body = {
-    dealId: q.dealId,
-    lines: (q.lines||[]).map(l=>({label:l.label, description:l.description||'', qty:+l.qty||0, unitPrice:+l.unitPrice||0, recurring:!!l.recurring, category:quoteLineCategory(l)})),
-    discountPct: +q.discountPct||0, vatPct: +q.vatPct||0, depositPct: +q.depositPct||0, notes: q.notes||'', status: q.status||'brouillon'
+  return {
+    prospectId: q.prospectId, title: (q.title||'').trim(),
+    lines: dqCollectManualLines(q),
+    config: q.config,
+    introText: q.introText, mentionsText: q.mentionsText, termsText: q.termsText,
+    discountPct: +q.discountPct||0, vatPct: +q.vatPct||0, depositPct: +q.depositPct||0,
+    status: q.status,
   };
+}
+async function saveQuote(){
+  const q = QUOTE_DRAFT;
+  if(!q.prospectId){ flash('Sélectionnez un client'); QUOTE_TAB='materiel'; renderQuoteBuilder(); return; }
+  const body = dqPayload();
   try{
-    var r = q.id
+    const r = q.id
       ? await apiFetch('/wa/crmQuote/update', {method:'POST', body:JSON.stringify({id:q.id, ...body})})
       : await apiFetch('/wa/crmQuote/create', {method:'POST', body:JSON.stringify(body)});
     if(!r.ok) throw new Error('http '+r.status);
-    var saved = await r.json();
-  }catch(e){ flash('Erreur d\'enregistrement du devis'); return; }
-  QUOTE_DRAFT = {...saved, _new:false};
-  const deal = deals.find(d=>d.id===q.dealId);
-  if(deal){
-    deal.quotes = deal.quotes||[];
-    const idx = deal.quotes.findIndex(x=>x.id===saved.id);
-    const summary = {id:saved.id, number:saved.number, status:saved.status};
-    if(idx>=0) deal.quotes[idx]=summary; else deal.quotes.push(summary);
-  }
-  flash('Devis enregistré ✓');
-  renderQuoteModal();
+    const saved = await r.json();
+    QUOTE_DRAFT = dqFromServer(saved);
+    flash('Devis enregistré ✓');
+    if(!QUOTE_DRAFT.id) QUOTE_DRAFT.id = saved.id;
+    bc([{label:'Devis', fn:'showDevisList()'}, {label: QUOTE_DRAFT.number}]);
+  }catch(e){ flash('Erreur d’enregistrement du devis'); return; }
+  renderQuoteBuilder();
 }
-
 async function deleteQuote(){
   const q = QUOTE_DRAFT; if(!q || !q.id) return;
   if(!confirm('Supprimer ce devis ? Cette action est irréversible.')) return;
   try{
-    var r = await apiFetch('/wa/crmQuote/delete', {method:'POST', body:JSON.stringify({id:q.id})});
-    if(!r.ok) throw new Error('http '+r.status);
+    const r = await apiFetch('/wa/crmQuote/delete', {method:'POST', body:JSON.stringify({id:q.id})});
+    if(!r.ok) throw new Error('http');
   }catch(e){ flash('Erreur de suppression'); return; }
-  const deal = deals.find(d=>d.id===q.dealId);
-  if(deal) deal.quotes = (deal.quotes||[]).filter(x=>x.id!==q.id);
-  closeModal(); flash('Devis supprimé');
-  if(view==='affaires') renderAffaires();
+  flash('Devis supprimé'); showDevisList();
+}
+async function duplicateQuote(id){
+  try{
+    const r = await apiFetch('/wa/crmQuote/duplicate', {method:'POST', body:JSON.stringify({id:id})});
+    if(!r.ok) throw new Error('http');
+    const saved = await r.json();
+    flash('Devis dupliqué en '+saved.number);
+    openQuoteBuilder(saved.id);
+  }catch(e){ flash('Erreur de duplication'); }
+}
+
+// ── Rattachement à une affaire (a posteriori, depuis l'onglet Document) ──
+async function dqOpenAttachDeal(){
+  const q = QUOTE_DRAFT;
+  if(!q.prospectId){ flash('Sélectionnez un client avant de rattacher une affaire'); return; }
+  let dealsOfClient = [];
+  try{ const r = await apiFetch('/wa/crmDeal/list?prospectId='+q.prospectId); dealsOfClient = r.ok ? await r.json() : []; }
+  catch(e){ dealsOfClient = (deals||[]).filter(d=>d.prospectId===q.prospectId); }
+  if(!dealsOfClient.length){ flash('Ce client n’a aucune affaire — créez-en une depuis sa fiche'); return; }
+  const options = dealsOfClient.map(d=>`${d.title} (${d.stage})`);
+  const pick = prompt('Rattacher à quelle affaire ?\n'+options.map((o,i)=>(i+1)+'. '+o).join('\n')+'\n\nNuméro :');
+  const idx = (+pick||0)-1;
+  if(idx<0 || idx>=dealsOfClient.length) return;
+  try{
+    const r = await apiFetch('/wa/crmQuote/attachDeal', {method:'POST', body:JSON.stringify({id:q.id, dealId:dealsOfClient[idx].id})});
+    if(!r.ok) throw new Error('http');
+    QUOTE_DRAFT = dqFromServer(await r.json());
+    flash('Devis rattaché à l’affaire ✓');
+  }catch(e){ flash('Erreur de rattachement'); }
+  renderQuoteBuilder();
+}
+async function dqDetachDeal(){
+  if(!confirm('Détacher ce devis de son affaire ?')) return;
+  try{
+    const r = await apiFetch('/wa/crmQuote/attachDeal', {method:'POST', body:JSON.stringify({id:QUOTE_DRAFT.id, dealId:null})});
+    if(!r.ok) throw new Error('http');
+    QUOTE_DRAFT = dqFromServer(await r.json());
+  }catch(e){ flash('Erreur'); }
+  renderQuoteBuilder();
+}
+
+// ── Signature / envoi ──
+async function requestQuoteSignature(){
+  const q = QUOTE_DRAFT; if(!q || !q.id) return;
+  try{
+    const r = await apiFetch('/wa/crmQuote/requestSignature', {method:'POST', body:JSON.stringify({id:q.id})});
+    const data = await r.json();
+    if(!r.ok){ flash(data.error||'Erreur'); return; }
+    QUOTE_DRAFT = dqFromServer(data);
+  }catch(e){ flash('Erreur de connexion au serveur'); return; }
+  renderQuoteBuilder();
+}
+async function sendQuoteEmail(){
+  const q = QUOTE_DRAFT; if(!q || !q.id) return;
+  if(!confirm('Envoyer ce devis par email au client ?')) return;
+  try{
+    const r = await apiFetch('/wa/crmQuote/sendEmail', {method:'POST', body:JSON.stringify({id:q.id})});
+    const data = await r.json();
+    if(!r.ok){ flash(data.error||'Erreur lors de l’envoi'); return; }
+    QUOTE_DRAFT = dqFromServer(data);
+    flash('Devis envoyé par email ✓');
+  }catch(e){ flash('Erreur de connexion au serveur'); return; }
+  renderQuoteBuilder();
 }
 
 function printQuote(){
   const q = QUOTE_DRAFT;
-  const deal = deals.find(d=>d.id===q.dealId);
-  const totals = quoteTotals();
-  const rowsHtml = (q.lines||[]).map(l=>`
-    <tr>
-      <td>${esc(l.label)}${l.recurring?' <span style="color:#888;font-size:11px">(mensuel)</span>':' <span style="color:#888;font-size:11px">(ponctuel)</span>'}${l.description?`<div style="color:#888;font-size:11px;font-style:italic;margin-top:2px">${esc(l.description)}</div>`:''}</td>
-      <td style="text-align:center">${l.qty}</td>
-      <td style="text-align:right">${fmtEUR(l.unitPrice)}</td>
-      <td style="text-align:right">${fmtEUR((+l.qty||0)*(+l.unitPrice||0))}</td>
-    </tr>`).join('');
-  const html = '<!doctype html><html><head><meta charset="utf-8"><title>'+esc(q.number)+'</title>'
-    +'<style>'
-    +'body{font-family:Arial,sans-serif;color:#1a1a1a;max-width:720px;margin:40px auto;padding:0 20px}'
-    +'h1{font-size:20px;margin-bottom:2px}'
-    +'.sub{color:#888;font-size:12px;margin-bottom:24px}'
+  const lines = dqAllLines(q);
+  const totals = dqComputeTotals(lines, q.config, q.discountPct, q.vatPct, q.depositPct);
+  const rowsHtml = lines.filter(l=>!l.recurring).map(l=>`
+    <tr><td>${esc(l.label)}${l.description?`<div style="color:#888;font-size:11px;font-style:italic;margin-top:2px">${esc(l.description)}</div>`:''}</td>
+    <td style="text-align:center">${l.qty}</td><td style="text-align:right">${l.unitPrice==null?'À chiffrer':fmtEUR(l.unitPrice)}</td>
+    <td style="text-align:right">${l.unitPrice==null?'—':fmtEUR(l.qty*l.unitPrice)}</td></tr>`).join('');
+  const rowsHtmlM = lines.filter(l=>l.recurring).map(l=>`
+    <tr><td>${esc(l.label)}</td><td style="text-align:center">${l.qty}</td>
+    <td style="text-align:right">${l.unitPrice==null?'À chiffrer':fmtEUR(l.unitPrice)}</td>
+    <td style="text-align:right">${l.unitPrice==null?'—':fmtEUR(l.qty*l.unitPrice)}</td></tr>`).join('');
+  const html = '<!doctype html><html><head><meta charset="utf-8"><title>'+esc(q.number||'Devis')+'</title>'
+    +'<style>body{font-family:Arial,sans-serif;color:#1a1a1a;max-width:720px;margin:40px auto;padding:0 20px}'
+    +'h1{font-size:20px;margin-bottom:2px}.sub{color:#888;font-size:12px;margin-bottom:24px}'
     +'.hd{display:flex;justify-content:space-between;margin-bottom:28px}'
     +'table{width:100%;border-collapse:collapse;margin:16px 0}'
     +'th{text-align:left;font-size:11px;text-transform:uppercase;color:#888;border-bottom:1px solid #ddd;padding:6px 4px}'
     +'td{padding:8px 4px;border-bottom:1px solid #f0f0f0;font-size:13px}'
-    +'.totals{margin-top:12px;margin-left:auto;width:280px}'
-    +'.totals div{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}'
+    +'.totals{margin-top:12px;margin-left:auto;width:280px}.totals div{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}'
     +'.totals .grand{font-weight:700;font-size:15px;border-top:1px solid #333;margin-top:6px;padding-top:8px}'
-    +'.notes{margin-top:28px;font-size:12px;color:#555;white-space:pre-wrap}'
-    +'@media print{ body{margin:0 auto} }'
-    +'</style></head><body>'
+    +'.notes{margin-top:28px;font-size:12px;color:#555;white-space:pre-wrap}@media print{body{margin:0 auto}}</style></head><body>'
     +'<div class="hd"><div><h1>Sesame Technology</h1><div class="sub">Devis commercial</div></div>'
-    +'<div style="text-align:right"><div><strong>'+esc(q.number)+'</strong></div><div class="sub">'+new Date(q.createdAt||Date.now()).toLocaleDateString('fr-FR')+'</div></div></div>'
-    +'<div><strong>Client :</strong> '+esc(deal?deal.prospectNom:'')+'</div>'
-    +'<div><strong>Affaire :</strong> '+esc(deal?deal.title:'')+'</div>'
-    +'<table><thead><tr><th>Prestation</th><th style="text-align:center">Qté</th><th style="text-align:right">Prix unitaire</th><th style="text-align:right">Total</th></tr></thead>'
-    +'<tbody>'+rowsHtml+'</tbody></table>'
+    +'<div style="text-align:right"><div><strong>'+esc(q.number||'Brouillon')+'</strong></div><div class="sub">'+new Date().toLocaleDateString('fr-FR')+'</div></div></div>'
+    +'<div><strong>Client :</strong> '+esc(q.prospectId ? (clients.find(c=>c.id===q.prospectId)||{}).nom||'' : '')+'</div>'
+    +'<div><strong>Objet :</strong> '+esc(q.title)+'</div>'
+    +(q.introText?'<p>'+esc(q.introText)+'</p>':'')
+    +'<h3>Investissement initial</h3><table><thead><tr><th>Prestation</th><th style="text-align:center">Qté</th><th style="text-align:right">Prix unitaire</th><th style="text-align:right">Total</th></tr></thead><tbody>'+rowsHtml+'</tbody></table>'
+    +(rowsHtmlM?'<h3>Abonnement mensuel</h3><table><thead><tr><th>Prestation</th><th style="text-align:center">Qté</th><th style="text-align:right">Prix unitaire</th><th style="text-align:right">Total</th></tr></thead><tbody>'+rowsHtmlM+'</tbody></table>':'')
     +'<div class="totals">'
-    +'<div><span>Mensuel récurrent</span><span>'+fmtEUR(totals.mrrNet)+'</span></div>'
-    +'<div><span>Frais ponctuels</span><span>'+fmtEUR(totals.oneoffNet)+'</span></div>'
-    +(q.discountPct?'<div><span>Remise appliquée</span><span>'+q.discountPct+'%</span></div>':'')
-    +'<div><span>Total HT</span><span>'+fmtEUR(totals.totalHT)+'</span></div>'
-    +'<div><span>TVA ('+(q.vatPct||0)+'%)</span><span>'+fmtEUR(totals.totalTTC-totals.totalHT)+'</span></div>'
-    +'<div class="grand"><span>Total TTC</span><span>'+fmtEUR(totals.totalTTC)+'</span></div>'
-    +(q.depositPct?'<div><span>Acompte à la commande ('+q.depositPct+'%)</span><span>'+fmtEUR(totals.depositAmount)+'</span></div>':'')
+    +'<div><span>Initial HT après remise</span><span>'+fmtEUR(totals.totalHT)+'</span></div>'
+    +'<div><span>TVA ('+(q.vatPct||0)+' %)</span><span>'+fmtEUR(totals.totalTTC-totals.totalHT)+'</span></div>'
+    +'<div class="grand"><span>Initial TTC</span><span>'+fmtEUR(totals.totalTTC)+'</span></div>'
+    +'<div><span>Abonnement HT / mois</span><span>'+fmtEUR(totals.mrrNet)+'</span></div>'
+    +(q.depositPct?'<div><span>Acompte ('+q.depositPct+' % TTC)</span><span>'+fmtEUR(totals.depositAmount)+'</span></div>':'')
     +'</div>'
-    +(q.notes?'<div class="notes">'+esc(q.notes).replace(/\n/g,'<br>')+'</div>':'')
+    +(q.mentionsText?'<h3>Mentions spécifiques</h3><div class="notes">'+esc(q.mentionsText).replace(/\n/g,'<br>')+'</div>':'')
+    +(q.termsText?'<h3>Conditions commerciales</h3><div class="notes">'+esc(q.termsText).replace(/\n/g,'<br>')+'</div>':'')
+    +'<h3>Bon pour accord</h3><div class="notes">Date, nom, qualité et signature du client :</div>'
     +'</body></html>';
   const w = window.open('', '_blank');
   if(!w){ flash('Autorisez les popups pour imprimer le devis'); return; }
-  w.document.write(html);
-  w.document.close();
-  w.focus();
+  w.document.write(html); w.document.close(); w.focus();
   setTimeout(function(){ w.print(); }, 300);
 }
+
+// ── Rendu principal ──
+function renderQuoteBuilder(){
+  const q = QUOTE_DRAFT;
+  const prospectOptions = clients.slice().sort((a,b)=>a.nom.localeCompare(b.nom));
+  const tabsHtml = QUOTE_TABS.map(t=>`<button type="button" class="quote-tab${QUOTE_TAB===t.key?' active':''}" onclick="switchQuoteTab('${t.key}')">${t.label}</button>`).join('');
+  const lines = dqAllLines(q);
+  const totals = dqComputeTotals(lines, q.config, q.discountPct, q.vatPct, q.depositPct);
+  const unpriced = lines.filter(l=>l.unitPrice==null).length;
+
+  let panelHtml;
+  if(QUOTE_TAB==='materiel') panelHtml = dqRenderHardwareTab(q);
+  else if(QUOTE_TAB==='logiciel') panelHtml = dqRenderSoftwareTab(q);
+  else if(QUOTE_TAB==='service') panelHtml = dqRenderServiceTab(q);
+  else panelHtml = dqRenderDocumentTab(q, lines);
+
+  document.getElementById('main').innerHTML = `
+  <div class="devis-builder">
+    <div class="db-head card">
+      <div class="db-head-row">
+        <div class="ff"><label>Client / établissement *</label>
+          <select id="dq-prospect" onchange="captureQuoteHead()">
+            <option value="">— Sélectionner un client —</option>
+            ${prospectOptions.map(c=>`<option value="${c.id}" ${q.prospectId===c.id?'selected':''}>${esc(c.nom)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="ff"><label>Objet du devis</label><input id="dq-title" value="${esc(q.title)}" placeholder="Ex : Équipement de 20 accès connectés" onchange="captureQuoteHead()"></div>
+        <div class="ff db-status"><label>Statut</label>
+          <span class="tpill ${q.status==='accepté'?'bg':q.status==='refusé'?'bd':q.status==='envoyé'?'bi':'bn'}">${q._new?'Nouveau':q.status}</span>
+          ${unpriced?`<div style="font-size:11px;color:#a67c00;margin-top:4px">${unpriced} tarif(s) à compléter</div>`:''}
+        </div>
+      </div>
+      ${q._new?`<div class="ff" style="max-width:280px;margin-top:8px"><label>Partir d'un modèle (équipements, optionnel)</label>
+        <select onchange="dqApplyTemplate(this)" onfocus="dqLoadTemplatesIfNeeded().then(()=>renderQuoteBuilder())">
+          <option value="">— Choisir un modèle —</option>
+          ${(QUOTE_TEMPLATES||[]).map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')}
+        </select></div>`:''}
+    </div>
+
+    <div class="db-layout">
+      <main class="db-main">
+        <nav class="quote-tabbar">${tabsHtml}</nav>
+        <div class="db-panel card">${panelHtml}</div>
+      </main>
+      <aside class="db-aside card">
+        <small class="db-aside-lbl">INVESTISSEMENT INITIAL HT</small>
+        <div class="db-money">${fmtEUR(totals.oneoffNet)}</div>
+        <div>${['materiel','service','logiciel','autre'].map(cat=>{
+          const sum = lines.filter(l=>!l.recurring && l.category===cat).reduce((s,l)=>s+(l.unitPrice==null?0:l.qty*l.unitPrice),0);
+          return `<div class="quote-total-row"><span>${DQ_CAT_LABEL[cat]}</span><span>${fmtEUR(sum)}</span></div>`;
+        }).join('')}
+        ${q.discountPct?`<div class="quote-total-row"><span>Remise initiale</span><span>− ${fmtEUR(totals.oneoff-totals.oneoffNet)}</span></div>`:''}
+        </div>
+        <hr class="quote-sep">
+        <div class="quote-total-row"><span>TVA</span><span>${fmtEUR(totals.totalTTC-totals.totalHT)}</span></div>
+        <div class="quote-total-row grand"><strong>Total initial TTC</strong><strong>${fmtEUR(totals.totalTTC)}</strong></div>
+        <div class="quote-total-row"><span>Acompte ${q.depositPct||0} % TTC</span><span>${fmtEUR(totals.depositAmount)}</span></div>
+        <hr class="quote-sep">
+        <small class="db-aside-lbl">ABONNEMENT HT / MOIS</small>
+        <div class="db-money">${fmtEUR(totals.mrrNet)}</div>
+        <small style="color:var(--mu)">${esc(q.config.subscriptionStart)}</small>
+        <div class="quote-total-row"><span>Récurrent sur 12 mois HT</span><span>${fmtEUR(totals.mrrNet*12)}</span></div>
+        <hr class="quote-sep">
+        <p style="font-size:12px;color:var(--mu)">${q.hardware.reduce((a,x)=>a+dqNum(x.qty),0)} accès · ${dqNum(q.config.installDays)} journée(s)-technicien de pose</p>
+        ${unpriced?`<p style="font-size:12px;color:#a67c00">${unpriced} tarif(s) à compléter · totaux partiels.</p>`:''}
+        <button type="button" class="btn btn-primary btn-sm" style="width:100%;margin-top:6px" onclick="switchQuoteTab('document')">Personnaliser le document →</button>
+        <div class="db-actions">
+          <button class="btn btn-primary btn-sm" onclick="saveQuote()">Enregistrer</button>
+          ${q.id?'<button class="btn btn-ghost btn-sm" onclick="printQuote()">🖶 Aperçu / Imprimer</button>':''}
+          ${q.id?'<button class="btn btn-ghost btn-sm" onclick="duplicateQuote(\''+q.id+'\')">⧉ Dupliquer</button>':''}
+          ${q.hardware.length?'<button class="btn btn-ghost btn-sm" onclick="dqSaveAsTemplate()">💾 Enregistrer comme modèle</button>':''}
+          ${q.id?'<button class="btn btn-ghost btn-sm" style="color:#a32d2d" onclick="deleteQuote()">Supprimer</button>':''}
+        </div>
+      </aside>
+    </div>
+  </div>`;
+}
+
+function dqRenderHardwareTab(q){
+  const materielProducts = crmProducts.filter(p=>p.active && (p.category||'materiel')==='materiel');
+  const rowHtml = (list, prefix) => list.map((x,i)=>`
+    <div class="quote-line">
+      <div class="quote-line-main" style="grid-template-columns:1fr 60px 90px 28px">
+        <div><div class="sq-product">${esc(x.label)}</div>${x.description?`<small style="color:var(--mu)">${esc(x.description)}</small>`:''}</div>
+        <input type="number" id="${prefix}-qty-${i}" value="${x.qty}" min="0" onchange="dqRerender()">
+        <input type="number" id="${prefix}-price-${i}" value="${x.unitPrice??''}" placeholder="À saisir" min="0" step="0.01" onchange="dqRerender()">
+        <button class="btn btn-ghost btn-icon" style="width:28px;height:28px" onclick="dqRemoveRow('${prefix==='dq-hw'?'hardware':'accessories'}',${i})">✕</button>
+      </div>
+    </div>`).join('');
+  return `
+    <div class="db-row-between"><h3>Équiper les accès</h3><small style="color:var(--mu)">Quantité + prix, saisie directe</small></div>
+    <div class="quote-line-head" style="grid-template-columns:1fr 60px 90px 28px"><span>Modèle / affectation</span><span>Qté</span><span>PU HT €</span><span></span></div>
+    <div class="quote-lines">${rowHtml(q.hardware,'dq-hw') || '<div class="log-empty">Aucun équipement — ajoutez un modèle ci-dessous.</div>'}</div>
+    <div class="db-row" style="margin-top:8px">
+      <select onchange="dqAddHardware(this)" style="flex:1">
+        <option value="">— Choisir un modèle à ajouter —</option>
+        ${materielProducts.map(p=>`<option value="${p.id}">${esc(p.label)} (${fmtEUR(p.unitPrice)})</option>`).join('')}
+      </select>
+    </div>
+    ${!materielProducts.length?'<div class="log-empty" style="margin-top:6px">Aucun équipement au catalogue — <a href="#" onclick="showCrmProducts();return false;">en créer un</a> (catégorie "Équipements").</div>':''}
+
+    <h3 style="margin-top:24px">Accessoires &amp; connectivité</h3>
+    <div class="quote-lines">${rowHtml(q.accessories,'dq-acc') || '<div class="log-empty">Aucun accessoire.</div>'}</div>
+    <div class="db-row" style="margin-top:8px">
+      <select onchange="dqAddAccessory(this)" style="flex:1">
+        <option value="">— Ajouter un accessoire —</option>
+        ${materielProducts.map(p=>`<option value="${p.id}">${esc(p.label)} (${fmtEUR(p.unitPrice)})</option>`).join('')}
+      </select>
+    </div>
+    <p class="sq-note">Gateways, plaques de finition et autres accessoires — quantité manuelle selon implantation.</p>`;
+}
+
+function dqRenderSoftwareTab(q){
+  const c = q.config;
+  const pmsNote = c.pmsInterface==='Sans interface PMS' ? 'Licence clés et support uniquement.'
+    : c.pmsInterface==='Misterbooking' ? 'Interface Misterbooking incluse dans la licence.'
+    : 'Interface '+esc(c.pmsInterface)+' : compatibilité, périmètre et prix à valider ; aucune majoration automatique.';
+  const modsHtml = q.mods.map((m,i)=>`
+    <div class="sq-mod">
+      <label style="display:flex;align-items:center;gap:8px;flex:1"><input type="checkbox" id="dq-mod-${i}" ${m.on?'checked':''} onchange="QUOTE_DRAFT.mods[${i}].on=this.checked;dqRerender()"> ${esc(m.name)}</label>
+      <input type="number" min="0" step="0.01" placeholder="PU HT €" value="${m.p??''}" onchange="QUOTE_DRAFT.mods[${i}].p=this.value===''?null:+this.value;dqRerender()" style="width:100px">
+      <select onchange="QUOTE_DRAFT.mods[${i}].cycle=this.value;dqRerender()" style="width:110px">
+        <option value="monthly" ${m.cycle==='monthly'?'selected':''}>€/mois</option>
+        <option value="once" ${m.cycle==='once'?'selected':''}>Forfait €</option>
+      </select>
+    </div>`).join('');
+  return `
+    <h3>Logiciel &amp; services digitaux</h3>
+    <div class="sq-fields">
+      <label>Licence clés + support · HT/mois<input type="number" id="dq-license" min="0" step="0.01" value="${c.license}" onchange="dqRerender()"></label>
+      <label>Interface PMS<select id="dq-pmsInterface" onchange="dqRerender()">${DQ_PMS_OPTIONS.map(o=>`<option ${c.pmsInterface===o?'selected':''}>${o}</option>`).join('')}</select></label>
+      <label>Paramétrage plateforme · HT<input type="number" id="dq-platformSetup" min="0" step="0.01" value="${c.platformSetup}" onchange="dqRerender()"></label>
+    </div>
+    <p class="sq-note">${pmsNote}</p>
+    <div class="sq-mods">${modsHtml}</div>
+    <small style="color:var(--mu)">Modules hors catalogue : prix à renseigner, jamais assimilé à un service gratuit.</small>
+    <div class="sq-fields" style="margin-top:20px">
+      <label>SMS prépayés · quantité<input type="number" id="dq-smsQty" min="0" step="1" value="${c.smsQty}" onchange="dqRerender()"></label>
+      <label>SMS · prix unitaire HT<input type="number" id="dq-smsUnitPrice" min="0" step="0.01" value="${c.smsUnitPrice}" onchange="dqRerender()"></label>
+      <label>Déclenchement abonnement<select id="dq-subscriptionStart" onchange="dqRerender()">${DQ_START_OPTIONS.map(o=>`<option ${c.subscriptionStart===o?'selected':''}>${o}</option>`).join('')}</select></label>
+    </div>`;
+}
+
+function dqRenderServiceTab(q){
+  const c = q.config;
+  const count = q.hardware.reduce((a,x)=>a+dqNum(x.qty),0);
+  const timeDetail = c.timeMode==='auto'
+    ? count+' accès × '+c.minutesPerAccess+' min / '+c.hoursPerDay+' h, arrondi à la demi-journée. Hypothèse à valider ; visite et formation chiffrées séparément.'
+    : 'Journées-technicien saisies manuellement. Installation : '+fmtEUR(dqNum(c.installDays)*dqNum(c.dayRate))+' HT.';
+  return `
+    <h3>Temps &amp; prestations</h3>
+    <p class="sq-summary">Journées-technicien et forfaits modifiables.</p>
+    <div class="sq-fields">
+      <label>Mode de chiffrage<select id="dq-timeMode" onchange="dqRerender()">
+        <option value="fixed" ${c.timeMode==='fixed'?'selected':''}>Saisie manuelle</option>
+        <option value="auto" ${c.timeMode==='auto'?'selected':''}>Estimation par accès</option>
+      </select></label>
+      <label>Minutes par accès<input type="number" id="dq-minutesPerAccess" min="0" value="${c.minutesPerAccess}" onchange="dqRerender()"></label>
+      <label>Heures productives / journée<input type="number" id="dq-hoursPerDay" min="1" value="${c.hoursPerDay}" onchange="dqRerender()"></label>
+    </div>
+    <div class="sq-fields" style="margin-top:12px">
+      <label>Journées-technicien facturées<input type="number" id="dq-installDays" min="0" step="0.5" value="${c.installDays}" ${c.timeMode==='auto'?'disabled':''} onchange="dqRerender()"></label>
+      <label>Prix / journée · HT<input type="number" id="dq-dayRate" min="0" value="${c.dayRate}" onchange="dqRerender()"></label>
+      <label>Paramétrage / accès · HT<input type="number" id="dq-setupPerAccess" min="0" value="${c.setupPerAccess}" onchange="dqRerender()"></label>
+    </div>
+    <p class="sq-note">${esc(timeDetail)}</p>
+    <div class="sq-fields">
+      <label>Visite technique · forfait HT<input type="number" id="dq-visitFee" min="0" value="${c.visitFee}" onchange="dqRerender()"></label>
+      <label>Formation · forfait HT<input type="number" id="dq-trainingFee" min="0" value="${c.trainingFee}" onchange="dqRerender()"></label>
+      <label>Déplacement · forfait HT<input type="number" id="dq-travelFee" min="0" value="${c.travelFee}" onchange="dqRerender()"></label>
+    </div>
+    <h3 style="margin-top:23px">Développement spécifique</h3>
+    <div class="sq-fields">
+      <label>Développement · jours<input type="number" id="dq-devDays" min="0" step="0.5" value="${c.devDays}" onchange="dqRerender()"></label>
+      <label>Recettage logiciel · jours<input type="number" id="dq-testDays" min="0" step="0.5" value="${c.testDays}" onchange="dqRerender()"></label>
+      <label>TJM développement / tests · HT<input type="number" id="dq-devRate" min="0" value="${c.devRate}" onchange="dqRerender()"></label>
+    </div>
+    <label style="margin-top:12px;display:block">Périmètre spécifique<textarea id="dq-specificScope" placeholder="Décrire demande client, livrables et critères de recette" onchange="dqRerender()">${esc(c.specificScope)}</textarea></label>`;
+}
+
+function dqRenderDocumentTab(q, lines){
+  const groupHtml = (recurring, label) => {
+    const rows = lines.filter(l=>l.recurring===recurring);
+    if(!rows.length) return '';
+    return `<h4>${label} · HT</h4>` + rows.map(l=>`
+      <div class="sq-docline">
+        <input id="dl-name-${l.id}" value="${esc(l.label)}" onchange="dqRerender()">
+        <input id="dl-qty-${l.id}" type="number" min="0" step="0.5" value="${l.qty}" onchange="dqRerender()">
+        <input id="dl-price-${l.id}" type="number" min="0" step="0.01" placeholder="À saisir" value="${l.unitPrice??''}" onchange="dqRerender()">
+        <output>${l.unitPrice==null?'À chiffrer':fmtEUR(l.qty*l.unitPrice)}</output>
+      </div>`).join('');
+  };
+  const totals = dqComputeTotals(lines, q.config, q.discountPct, q.vatPct, q.depositPct);
+  const clientNom = q.prospectId ? (clients.find(c=>c.id===q.prospectId)||{}).nom||'' : '';
+  return `
+    <div class="db-row-between"><h3>Document client éditable</h3><button type="button" class="btn btn-ghost btn-sm" onclick="dqAddCustomLine()">+ Ligne libre</button></div>
+    <small style="color:var(--mu)">Libellés et prix modifiables directement.</small>
+    <div class="sq-dochead">
+      <div class="sq-logo">SESAME TECHNOLOGY</div>
+      <div class="db-row-between"><strong>${esc(clientNom)}</strong><span>${esc(q.number||'Brouillon')} · ${new Date().toLocaleDateString('fr-FR')}</span></div>
+      <div>${esc(q.title)}</div>
+    </div>
+    <label>Introduction client<div id="dq-intro" class="sq-edit" contenteditable="true" onblur="dqRerender()">${esc(q.introText)}</div></label>
+    ${groupHtml(false,'Investissement initial')}
+    ${groupHtml(true,'Abonnement mensuel')}
+    <hr class="quote-sep">
+    <div class="quote-total-row grand"><strong>Initial HT après remise</strong><strong>${fmtEUR(totals.totalHT)}</strong></div>
+    <div class="quote-total-row"><span>TVA ${q.vatPct||0} %</span><span>${fmtEUR(totals.totalTTC-totals.totalHT)}</span></div>
+    <div class="quote-total-row grand"><strong>Initial TTC</strong><strong>${fmtEUR(totals.totalTTC)}</strong></div>
+    <div class="quote-total-row"><span>Abonnement HT / mois</span><span>${fmtEUR(totals.mrrNet)}</span></div>
+    <small style="color:var(--mu)">${esc(q.config.subscriptionStart)} · durée d’engagement à définir</small>
+
+    <h4 style="margin-top:20px">Mentions spécifiques au client</h4>
+    <div class="db-row" style="margin-bottom:9px;flex-wrap:wrap">
+      ${Object.keys(DQ_CLAUSES).map(k=>`<button class="sq-clause" type="button" onclick="dqApplyClause('${k}')">+ ${k==='coffre'?'Coffres conservés':k==='electric'?'Électricité client':k==='gateway'?'Réseau / gateways':'Déplacements'}</button>`).join('')}
+    </div>
+    <div id="dq-mentions" class="sq-edit" contenteditable="true" onblur="dqRerender()">${esc(q.mentionsText)}</div>
+
+    <h4>Conditions commerciales</h4>
+    <div class="sq-fields">
+      <label>Acompte initial · %<input id="dq-deposit" type="number" min="0" max="100" value="${q.depositPct}" onchange="dqRerender()"></label>
+      <label>TVA · %<input id="dq-vat" type="number" min="0" max="100" value="${q.vatPct}" onchange="dqRerender()"></label>
+      <label>Remise initiale · %<input id="dq-discount" type="number" min="0" max="100" value="${q.discountPct}" onchange="dqRerender()"></label>
+    </div>
+    <div id="dq-terms" class="sq-edit" contenteditable="true" onblur="dqRerender()" style="margin-top:10px">${esc(q.termsText)}</div>
+
+    <h4>Bon pour accord</h4>
+    <div class="sq-edit" style="background:var(--bg)">Date, nom, qualité et signature du client :</div>
+
+    <div class="ff" style="margin-top:16px"><label>Statut</label><select id="dq-status" onchange="dqRerender()">${['brouillon','envoyé','accepté','refusé'].map(s=>`<option value="${s}" ${q.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+
+    <h4 style="margin-top:16px">Affaire liée</h4>
+    ${q.dealId?`<div class="db-row" style="align-items:center;gap:8px"><span class="tpill bn">${esc(q.dealTitle||'')}</span><button class="btn btn-ghost btn-sm" onclick="dqDetachDeal()">Détacher</button></div>`
+      :`<button class="btn btn-ghost btn-sm" ${q.id?'':'disabled title="Enregistrez d\'abord le devis"'} onclick="dqOpenAttachDeal()">Lier à une affaire existante</button>`}
+
+    ${!q._new && q.status!=='accepté' ? `
+    <h4 style="margin-top:16px">Signature électronique</h4>
+    <div style="font-size:11px;color:var(--mu);font-style:italic;margin-bottom:8px">⚠ Signature électronique simple (nom saisi + tracé + horodatage) — pas une signature qualifiée eIDAS certifiée par un tiers de confiance.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <button class="btn btn-primary btn-sm" onclick="sendQuoteEmail()">✉ Envoyer le devis par email</button>
+      ${q.signToken?`<button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText('${esc(location.origin+'/devis-signature.html?token='+q.signToken)}');flash('Lien copié')">Copier le lien de signature</button>`:`<button class="btn btn-ghost btn-sm" onclick="requestQuoteSignature()">✎ Générer le lien sans l'envoyer</button>`}
+    </div>` : ''}
+    ${q.status==='accepté'?`<div class="tag t-green" style="margin-top:8px;display:inline-flex">✓ Devis signé électroniquement.</div>`:''}
+    <p style="font-size:11px;color:var(--mu);margin-top:16px">Document généré depuis des données réelles du CRM (client, catalogue, abonnement) — aucune simulation.</p>`;
+}
+
 
 // ════════════════════════════════════════
 // PRODUITS — catalogue interne Sesame (18/08/2026), stockable ou non, pour

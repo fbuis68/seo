@@ -75,8 +75,8 @@ function quoteRowsHtml(){
     <tr>
       <td>${esc(l.label)}${l.recurring?' <span style="color:#888;font-size:11px">(mensuel)</span>':' <span style="color:#888;font-size:11px">(ponctuel)</span>'}${l.description?`<div class="desc">${esc(l.description)}</div>`:''}</td>
       <td style="text-align:center">${l.qty}</td>
-      <td style="text-align:right">${fmtEUR(l.unitPrice)}</td>
-      <td style="text-align:right">${fmtEUR((+l.qty||0)*(+l.unitPrice||0))}</td>
+      <td style="text-align:right">${l.unitPrice==null?'À chiffrer':fmtEUR(l.unitPrice)}</td>
+      <td style="text-align:right">${l.unitPrice==null?'—':fmtEUR((+l.qty||0)*l.unitPrice)}</td>
     </tr>`).join('');
 }
 
@@ -84,7 +84,8 @@ function quoteSummaryHtml(){
   const t = QUOTE.totals;
   return `
     <h1>Devis ${esc(QUOTE.number)}</h1>
-    <div class="sub">${esc(QUOTE.prospectNom)} — ${esc(QUOTE.dealTitle)}</div>
+    <div class="sub">${esc(QUOTE.prospectNom)}${QUOTE.title?' — '+esc(QUOTE.title):''}</div>
+    ${QUOTE.introText?`<p style="font-size:13px;color:var(--tx)">${esc(QUOTE.introText)}</p>`:''}
     <table>
       <thead><tr><th>Prestation</th><th style="text-align:center">Qté</th><th style="text-align:right">Prix unitaire</th><th style="text-align:right">Total</th></tr></thead>
       <tbody>${quoteRowsHtml()}</tbody>
@@ -98,7 +99,8 @@ function quoteSummaryHtml(){
       <div class="grand"><span>Total TTC</span><span>${fmtEUR(t.totalTTC)}</span></div>
       ${QUOTE.depositPct?`<div><span>Acompte à la commande (${QUOTE.depositPct}%)</span><span>${fmtEUR(t.depositAmount)}</span></div>`:''}
     </div>
-    ${QUOTE.notes?`<div class="notes">${esc(QUOTE.notes)}</div>`:''}
+    ${QUOTE.mentionsText?`<div class="notes"><strong>Mentions spécifiques</strong><br>${esc(QUOTE.mentionsText)}</div>`:''}
+    ${QUOTE.termsText?`<div class="notes"><strong>Conditions commerciales</strong><br>${esc(QUOTE.termsText)}</div>`:''}
   `;
 }
 
