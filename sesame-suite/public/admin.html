@@ -789,10 +789,8 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
            affectés UNIQUEMENT par le super-admin Sesame, jamais en
            self-service hôtel (cf. adminProfile.ts). -->
       <div class="ni sesame-only crm-admin-only" data-pan="adminProfiles" onclick="showPan('adminProfiles')" style="display:none"><i class="ti ti-key"></i>Profils &amp; Droits</div>
-      <div class="ni hotel-only" data-pan="users" onclick="showPan('users')" style="display:none"><i class="ti ti-users"></i>Utilisateurs</div>
-      <div class="ni" data-pan="charte" onclick="showPan('charte')"><i class="ti ti-palette"></i>Logo, Couleurs &amp; Textes</div>
       <div class="ni sector-hotel-only" data-pan="hotel" onclick="showPan('hotel')"><i class="ti ti-building"></i>Entité &amp; Catégorie</div>
-      <div class="ni sector-hotel-only" data-pan="gains" onclick="showPan('gains')"><i class="ti ti-gift"></i>Gains <span class="nibadge">Multi</span></div>
+      <div class="ni sector-hotel-only" data-pan="gains" onclick="showPan('gains')"><i class="ti ti-gift"></i>Gains par fidélité <span class="nibadge">Multi</span></div>
       <div class="ni" data-pan="roomservice" onclick="showPan('roomservice')"><i class="ti ti-bell"></i>Catalogue produits</div>
       <div class="ni" data-pan="vendors" onclick="showPan('vendors')"><i class="ti ti-building-store"></i>Points de vente</div>
       <div class="ni" data-pan="livret" onclick="showPan('livret')"><i class="ti ti-book"></i>Livret digital</div>
@@ -805,10 +803,15 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
            (sélecteurs descendants, indifférents à la profondeur). Seul
            expandNavSectionFor() a dû être généralisé pour déplier TOUS les
            .ns-group ancêtres (pas seulement le plus proche) afin qu'un clic
-           sur un item d'ici déplie aussi Administration si elle était repliée. -->
+           sur un item d'ici déplie aussi Administration si elle était repliée.
+           Utilisateurs et Logo/Couleurs/Textes déplacés ici le 22/10/2026
+           (§ demande client) — mêmes data-pan, inchangés ailleurs (showPan,
+           AP_MENU_GROUPS...). -->
       <div class="ns-group" style="margin-top:4px">
         <div class="ns" onclick="toggleNavSection(this)" style="padding-left:28px">Technique<i class="ti ti-chevron-down ns-chevron"></i></div>
         <div class="ns-items">
+          <div class="ni hotel-only" data-pan="users" onclick="showPan('users')" style="display:none;padding-left:28px"><i class="ti ti-users"></i>Utilisateurs</div>
+          <div class="ni" data-pan="charte" onclick="showPan('charte')" style="padding-left:28px"><i class="ti ti-palette"></i>Logo, Couleurs &amp; Textes</div>
           <div class="ni" data-pan="api" onclick="showPan('api')" style="padding-left:28px"><i class="ti ti-api"></i>Intégration réservations</div>
           <div class="ni" data-pan="payment" onclick="showPan('payment')" style="padding-left:28px"><i class="ti ti-credit-card"></i>Paiement en ligne</div>
           <div class="ni" data-pan="wallet" onclick="showPan('wallet')" style="padding-left:28px"><i class="ti ti-wallet"></i>Wallet</div>
@@ -1102,7 +1105,7 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
     </div>
     <div id="dashSimBody">
       <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
-        <span>Ajustez ces curseurs pour visualiser l'impact en direct, par exemple en rendez-vous commercial — rien n'est enregistré ici, les vrais réglages restent dans <a href="#" onclick="showPan('gains');return false" style="color:var(--a);font-weight:600">Gains</a>.</span>
+        <span>Ajustez ces curseurs pour visualiser l'impact en direct, par exemple en rendez-vous commercial — rien n'est enregistré ici, les vrais réglages restent dans <a href="#" onclick="showPan('gains');return false" style="color:var(--a);font-weight:600">Gains par fidélité</a>.</span>
       </div>
       <div class="g4">
         <div class="fi">
@@ -5213,6 +5216,10 @@ function deepMerge(target,src){
 var SECTOR_HOTEL_ONLY_PANS = ['hotel', 'gains', 'planning'];
 function showPan(id){
   if(!id) return;
+  // Blocage du clic (déplacé ici depuis applyMenuRights — cf. son
+  // commentaire, 22/10/2026) : la bulle d'aide reste visible au survol
+  // même grisé, mais la navigation reste refusée.
+  if(MENU_RIGHTS && !MENU_RIGHTS[id]) return;
   if(SECTOR_HOTEL_ONLY_PANS.indexOf(id) !== -1 && SECTEURS_HOTELIER.indexOf(CFG.secteur || 'hotellerie') === -1){
     id = 'dash';
   }
@@ -10668,16 +10675,20 @@ function applyRoleVisibility(){
 
 /** Grise (sans jamais masquer) les items de menu absents des droits du
  * profil personnalisé affecté à ce compte (MENU_RIGHTS) — § demande client
- * 21/10/2026. Purement visuel : opacity + pointer-events:none, aucun clic
- * ne doit déclencher quoi que ce soit (ni message, ni navigation). Un
- * MENU_RIGHTS null (pas de profil, ou compte non "hotel") laisse tous les
- * menus déjà visibles (sesame-only/hotel-only) intacts — comportement
- * historique d'accès complet préservé. */
+ * 21/10/2026. Opacity réduite + clic bloqué (cf. showPan), mais PAS
+ * pointer-events:none (22/10/2026, demande client "laisser les bulles
+ * d'aide visibles même si la fonction est grisée") : pointer-events:none
+ * empêchait aussi le survol, donc la bulle d'aide (title="...") expliquant
+ * pourquoi l'accès est restreint ne s'affichait jamais. Un MENU_RIGHTS null
+ * (pas de profil, ou compte non "hotel") laisse tous les menus déjà
+ * visibles (sesame-only/hotel-only) intacts — comportement historique
+ * d'accès complet préservé. */
 function applyMenuRights(){
   document.querySelectorAll('.ni[data-pan]').forEach(function(el){
     var allowed = !MENU_RIGHTS || !!MENU_RIGHTS[el.getAttribute('data-pan')];
     el.style.opacity = allowed ? '' : '.35';
-    el.style.pointerEvents = allowed ? '' : 'none';
+    el.style.cursor = allowed ? '' : 'not-allowed';
+    if(allowed) el.removeAttribute('title'); else el.title = 'Fonction non incluse dans votre profil d’accès';
   });
 }
 
@@ -13925,8 +13936,8 @@ var AP_MENU_GROUPS = [
   {label:'Accueil', items:[['dash','Accueil']]},
   {label:'Opérations', items:[['reservations','Réservations'],['orders','Commandes'],['planning','Planning'],['rooms','Gestion des Accès']]},
   {label:'Clients', items:[['crm','Base clients'],['marketing','Actions marketing'],['questionnaires','Questionnaires']]},
-  {label:'Administration', items:[['users','Utilisateurs'],['charte','Logo, Couleurs & Textes'],['hotel','Entité & Catégorie'],['gains','Gains'],['roomservice','Catalogue produits'],['vendors','Points de vente'],['livret','Livret digital'],['plan',"Plan de l'établissement"],['bookingEngine','Réservation en ligne'],['preview','Aperçu client']]},
-  {label:'Technique', items:[['api','Intégration réservations'],['payment','Paiement en ligne'],['wallet','Wallet'],['email','Canaux'],['automation','Automatisations']]}
+  {label:'Administration', items:[['hotel','Entité & Catégorie'],['gains','Gains par fidélité'],['roomservice','Catalogue produits'],['vendors','Points de vente'],['livret','Livret digital'],['plan',"Plan de l'établissement"],['bookingEngine','Réservation en ligne'],['preview','Aperçu client']]},
+  {label:'Technique', items:[['users','Utilisateurs'],['charte','Logo, Couleurs & Textes'],['api','Intégration réservations'],['payment','Paiement en ligne'],['wallet','Wallet'],['email','Canaux'],['automation','Automatisations']]}
 ];
 var AP_PROFILES = [];
 var AP_USERS = [];
