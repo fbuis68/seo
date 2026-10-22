@@ -93,7 +93,10 @@ function quoteSummaryHtml(){
       <div><span>Mensuel récurrent</span><span>${fmtEUR(t.mrrNet)}</span></div>
       <div><span>Frais ponctuels</span><span>${fmtEUR(t.oneoffNet)}</span></div>
       ${QUOTE.discountPct?`<div><span>Remise appliquée</span><span>${QUOTE.discountPct}%</span></div>`:''}
-      <div class="grand"><span>Total 1ère facture</span><span>${fmtEUR(t.mrrNet+t.oneoffNet)}</span></div>
+      <div><span>Total HT</span><span>${fmtEUR(t.totalHT)}</span></div>
+      <div><span>TVA (${QUOTE.vatPct||0}%)</span><span>${fmtEUR(t.totalTTC-t.totalHT)}</span></div>
+      <div class="grand"><span>Total TTC</span><span>${fmtEUR(t.totalTTC)}</span></div>
+      ${QUOTE.depositPct?`<div><span>Acompte à la commande (${QUOTE.depositPct}%)</span><span>${fmtEUR(t.depositAmount)}</span></div>`:''}
     </div>
     ${QUOTE.notes?`<div class="notes">${esc(QUOTE.notes)}</div>`:''}
   `;

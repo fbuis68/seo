@@ -419,6 +419,10 @@ input[type=checkbox]{accent-color:var(--a);cursor:pointer;width:14px;height:14px
 .quote-catalog-pick button:hover{background:var(--hover)}
 .quote-total-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0}
 .quote-total-row.grand{font-size:14px;font-weight:600;border-top:0.5px solid var(--div);margin-top:6px;padding-top:8px}
+.quote-tabbar{display:flex;gap:4px;border-bottom:0.5px solid var(--div);margin:10px 0 14px;flex-wrap:wrap}
+.quote-tab{font-family:inherit;font-size:12px;padding:7px 14px;border:none;background:transparent;color:var(--mu);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.quote-tab:hover{color:var(--tx)}
+.quote-tab.active{color:var(--tx);font-weight:600;border-bottom-color:var(--a)}
 
 /* ── RESPONSIVE ── */
 @media (max-width: 900px){
@@ -6252,9 +6256,26 @@ async function deleteDeal(id){
 }
 
 // ── Devis ──
+// Constructeur en 4 onglets (22/10/2026, reprend la structure de la maquette
+// devis Sesame fournie par le client) : Équipements / Logiciel / Mise en
+// place rangent chacun les lignes de la catégorie correspondante
+// (CrmProduct.category / QuoteLine.category — materiel/logiciel/service),
+// l'onglet Document regroupe la vue d'ensemble, remise/TVA/acompte, notes,
+// signature et envoi. Données réelles partout : client = CrmProspect de
+// l'affaire, produits = catalogue CrmProduct + modules Sesame
+// (ONBOARDING_MODULES), email = sendMessage (lib/messaging.ts), signature =
+// CrmQuoteSignature existant — aucune simulation, contrairement à la
+// maquette qui était "sans envoi client ni connexion au CRM".
 let QUOTE_CATALOG = null;
 let QUOTE_DRAFT = null;
 let QUOTE_TEMPLATES = null;
+let QUOTE_TAB = 'materiel';
+const QUOTE_TABS = [
+  {key:'materiel', label:'Équipements'},
+  {key:'logiciel', label:'Logiciel'},
+  {key:'service', label:'Mise en place'},
+  {key:'document', label:'Document'},
+];
 
 async function openQuoteModal(dealId, quoteId){
   if(!QUOTE_CATALOG){
@@ -6264,24 +6285,33 @@ async function openQuoteModal(dealId, quoteId){
   if(!crmProducts.length){
     try{ const r = await apiFetch('/wa/crmProduct/list'); crmProducts = r.ok ? await r.json() : []; }catch(e){}
   }
+  QUOTE_TAB = 'materiel';
   if(quoteId){
     try{
       const r = await apiFetch('/wa/crmQuote/list?dealId='+dealId);
       const list = r.ok ? await r.json() : [];
-      QUOTE_DRAFT = list.find(x=>x.id===quoteId) || {dealId, id:quoteId, number:'', status:'brouillon', lines:[], discountPct:0, notes:''};
+      QUOTE_DRAFT = list.find(x=>x.id===quoteId) || {dealId, id:quoteId, number:'', status:'brouillon', lines:[], discountPct:0, vatPct:20, depositPct:0, notes:''};
     }catch(e){ flash('Erreur de chargement du devis'); return; }
   } else {
-    QUOTE_DRAFT = {dealId, id:null, number:'', status:'brouillon', lines:[], discountPct:0, notes:'', _new:true};
+    QUOTE_DRAFT = {dealId, id:null, number:'', status:'brouillon', lines:[], discountPct:0, vatPct:20, depositPct:0, notes:'', _new:true};
   }
   renderQuoteModal();
 }
+
+// Lignes créées avant l'ajout de la catégorie (22/10/2026) n'en portent pas
+// — rangées par défaut sous "Équipements" plutôt que de disparaître.
+function quoteLineCategory(l){ return l.category==='logiciel'||l.category==='service' ? l.category : 'materiel'; }
 
 function quoteTotals(){
   const q = QUOTE_DRAFT;
   let mrr=0, oneoff=0;
   (q.lines||[]).forEach(l=>{ const t=(+l.qty||0)*(+l.unitPrice||0); if(l.recurring) mrr+=t; else oneoff+=t; });
   const discount = (q.discountPct||0)/100;
-  return { mrr, oneoff, mrrNet: mrr*(1-discount), oneoffNet: oneoff*(1-discount) };
+  const mrrNet = mrr*(1-discount), oneoffNet = oneoff*(1-discount);
+  const totalHT = mrrNet+oneoffNet;
+  const totalTTC = totalHT*(1+(q.vatPct||0)/100);
+  const depositAmount = totalTTC*((q.depositPct||0)/100);
+  return { mrr, oneoff, mrrNet, oneoffNet, totalHT, totalTTC, depositAmount };
 }
 
 function captureQuoteLines(){
@@ -6294,16 +6324,20 @@ function captureQuoteLines(){
     if(gp) l.unitPrice = +gp.value || 0;
     if(gr) l.recurring = gr.checked;
   });
-  const gdisc=document.getElementById('q-discount'), gn=document.getElementById('q-notes'), gs=document.getElementById('q-status');
+  const gdisc=document.getElementById('q-discount'), gvat=document.getElementById('q-vat'), gdep=document.getElementById('q-deposit'), gn=document.getElementById('q-notes'), gs=document.getElementById('q-status');
   if(gdisc) QUOTE_DRAFT.discountPct = +gdisc.value || 0;
+  if(gvat) QUOTE_DRAFT.vatPct = +gvat.value || 0;
+  if(gdep) QUOTE_DRAFT.depositPct = +gdep.value || 0;
   if(gn) QUOTE_DRAFT.notes = gn.value;
   if(gs) QUOTE_DRAFT.status = gs.value;
 }
 
-function addQuoteLine(label, unitPrice, recurring, description){
+function switchQuoteTab(key){ captureQuoteLines(); QUOTE_TAB = key; renderQuoteModal(); }
+
+function addQuoteLine(label, unitPrice, recurring, description, category){
   captureQuoteLines();
   QUOTE_DRAFT.lines = QUOTE_DRAFT.lines || [];
-  QUOTE_DRAFT.lines.push({label: label||'', description: description||'', qty:1, unitPrice: unitPrice||0, recurring: recurring!==false});
+  QUOTE_DRAFT.lines.push({label: label||'', description: description||'', qty:1, unitPrice: unitPrice||0, recurring: recurring!==false, category: category||'materiel'});
   renderQuoteModal();
 }
 function removeQuoteLine(i){ captureQuoteLines(); QUOTE_DRAFT.lines.splice(i,1); renderQuoteModal(); }
@@ -6365,17 +6399,46 @@ async function requestQuoteSignature(){
   renderQuoteModal();
 }
 
+// Envoi réel du devis par email au client (22/10/2026) — reprend le point de
+// convergence unique sendMessage()/MessageTemplate déjà utilisé partout
+// ailleurs dans le CRM (catégorie "Devis", modèle "devis-envoi"), plutôt
+// qu'un simple lien à copier/coller comme c'était le cas jusqu'ici.
+async function sendQuoteEmail(){
+  const q = QUOTE_DRAFT; if(!q || !q.id) return;
+  if(!confirm('Envoyer ce devis par email au client ?')) return;
+  try{
+    var r = await apiFetch('/wa/crmQuote/sendEmail', {method:'POST', body:JSON.stringify({id:q.id})});
+    var data = await r.json();
+    if(!r.ok){ flash(data.error||'Erreur lors de l\'envoi'); return; }
+  }catch(e){ flash('Erreur de connexion au serveur'); return; }
+  QUOTE_DRAFT = {...data, _new:false};
+  flash('Devis envoyé par email ✓');
+  const deal = deals.find(d=>d.id===q.dealId);
+  if(deal){ deal.quotes = deal.quotes||[]; const idx=deal.quotes.findIndex(x=>x.id===q.id); if(idx>=0) deal.quotes[idx].status=data.status; }
+  renderQuoteModal();
+}
+
 function renderQuoteModal(){
   const q = QUOTE_DRAFT;
   const totals = quoteTotals();
-  const catalogButtons = (QUOTE_CATALOG.modules||[]).map(m=>`<button type="button" onclick="addQuoteLine('${jsStr(m.label)}',${m.price},true)">+ ${esc(m.label)} (${fmtEUR(m.price)}/mois)</button>`).join('');
-  const productButtons = crmProducts.filter(p=>p.active).map(p=>`<button type="button" onclick="addQuoteLine('${jsStr(p.label)}',${p.unitPrice},${p.recurring},'${jsStr(p.description)}')">+ ${esc(p.label)} (${fmtEUR(p.unitPrice)}${p.recurring?'/mois':''})</button>`).join('');
   const signUrl = q.signToken ? (location.origin+'/devis-signature.html?token='+q.signToken) : '';
+  const deal = deals.find(d=>d.id===q.dealId);
+
+  const tabsHtml = QUOTE_TABS.map(t=>`<button type="button" class="quote-tab${QUOTE_TAB===t.key?' active':''}" onclick="switchQuoteTab('${t.key}')">${t.label}</button>`).join('');
+
+  let bodyHtml;
+  if(QUOTE_TAB==='document'){
+    bodyHtml = renderQuoteDocumentTab(q, totals, signUrl, deal);
+  } else {
+    bodyHtml = renderQuoteCategoryTab(q, QUOTE_TAB);
+  }
+
   document.getElementById('modal-ct').innerHTML = `
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box">
       <div class="modal-head">
         <div style="font-size:16px;font-weight:500">${q._new?'Nouveau devis':q.number}</div>
+        ${deal?`<div style="font-size:12px;color:var(--mu);margin-left:10px">${esc(deal.prospectNom||'')}</div>`:''}
         ${q.status?`<span class="tpill ${q.status==='accepté'?'bg':q.status==='refusé'?'bd':q.status==='envoyé'?'bi':'bn'}" style="margin-left:8px">${q.status}</span>`:''}
         <button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button>
       </div>
@@ -6386,46 +6449,8 @@ function renderQuoteModal(){
           ${(QUOTE_TEMPLATES||[]).map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')}
         </select></div>`:''}
 
-      <div class="modal-section">Ajouter depuis le catalogue de modules Sesame</div>
-      <div class="quote-catalog-pick">${catalogButtons||'<span class="log-empty">Aucun module disponible</span>'}</div>
-
-      <div class="modal-section">Ajouter depuis le catalogue produits</div>
-      <div class="quote-catalog-pick">${productButtons||'<span class="log-empty">Aucun produit au catalogue — <a href="#" onclick="closeModal();showCrmProducts();return false;">en créer un</a></span>'}<button type="button" onclick="addQuoteLine('',0,false)">+ Ligne personnalisée</button></div>
-
-      <div class="modal-section">Lignes du devis</div>
-      <div class="quote-line-head"><span>Libellé</span><span>Qté</span><span>Prix unit. €</span><span>Mensuel</span><span></span></div>
-      <div class="quote-lines">
-        ${(q.lines||[]).length===0?'<div class="log-empty">Aucune ligne — ajoutez un module, un produit ou une ligne personnalisée.</div>':(q.lines||[]).map((l,i)=>`
-          <div class="quote-line">
-            <div class="quote-line-main">
-              <input type="text" id="ql-label-${i}" value="${esc(l.label)}" placeholder="Libellé">
-              <input type="number" id="ql-qty-${i}" value="${l.qty}" min="0" onchange="captureQuoteLines();renderQuoteModal()">
-              <input type="number" id="ql-price-${i}" value="${l.unitPrice}" min="0" step="0.01" onchange="captureQuoteLines();renderQuoteModal()">
-              <label style="display:flex;align-items:center;justify-content:center"><input type="checkbox" id="ql-rec-${i}" ${l.recurring?'checked':''} onchange="captureQuoteLines();renderQuoteModal()"></label>
-              <button class="btn btn-ghost btn-icon" style="width:28px;height:28px" onclick="removeQuoteLine(${i})">✕</button>
-            </div>
-            <input type="text" class="quote-line-desc" id="ql-desc-${i}" value="${esc(l.description)}" placeholder="Description (sous-texte affiché sur le devis, optionnel)">
-          </div>`).join('')}
-      </div>
-
-      <div class="form-grid">
-        <div class="ff"><label>Remise globale (%)</label><input type="number" id="q-discount" value="${q.discountPct||0}" min="0" max="100" onchange="captureQuoteLines();renderQuoteModal()"></div>
-        <div class="ff"><label>Statut</label><select id="q-status" onchange="captureQuoteLines()">${['brouillon','envoyé','accepté','refusé'].map(s=>`<option value="${s}" ${q.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
-      </div>
-      <div class="ff"><label>Notes / conditions</label><textarea id="q-notes" onchange="captureQuoteLines()">${q.notes||''}</textarea></div>
-
-      <div class="modal-section">Total</div>
-      <div class="quote-total-row"><span>Mensuel récurrent</span><span>${fmtEUR(totals.mrr)}${q.discountPct?' → '+fmtEUR(totals.mrrNet)+' après remise':''}</span></div>
-      <div class="quote-total-row"><span>Frais ponctuels</span><span>${fmtEUR(totals.oneoff)}${q.discountPct?' → '+fmtEUR(totals.oneoffNet)+' après remise':''}</span></div>
-      <div class="quote-total-row grand"><span>Total 1ère facture</span><span>${fmtEUR(totals.mrrNet+totals.oneoffNet)}</span></div>
-
-      ${!q._new && q.status!=='accepté' ? `
-      <div class="modal-section">Signature électronique</div>
-      <div style="font-size:11px;color:var(--mu);font-style:italic;margin-bottom:8px">⚠ Signature électronique simple (nom saisi + tracé + horodatage) — pas une signature qualifiée eIDAS certifiée par un tiers de confiance.</div>
-      ${signUrl?`<div class="ff"><label>Lien de signature à transmettre au client</label><div style="display:flex;gap:6px"><input type="text" readonly value="${esc(signUrl)}" style="flex:1;font-size:11px" onclick="this.select()"><button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText('${esc(signUrl)}');flash('Lien copié')">Copier</button></div></div>`
-        :`<button class="btn btn-ghost btn-sm" onclick="requestQuoteSignature()">✎ Générer le lien de signature</button>`}
-      `:''}
-      ${q.status==='accepté'?`<div class="tag t-green" style="margin-top:8px;display:inline-flex">✓ Devis signé électroniquement — l'affaire est passée automatiquement au statut "Gagné".</div>`:''}
+      <div class="quote-tabbar">${tabsHtml}</div>
+      ${bodyHtml}
 
       <div class="modal-footer" style="flex-wrap:wrap">
         <button class="btn btn-primary" onclick="saveQuote()">Enregistrer</button>
@@ -6439,13 +6464,94 @@ function renderQuoteModal(){
   </div>`;
 }
 
+// Onglets Équipements/Logiciel/Mise en place : catalogue filtré par
+// catégorie (CrmProduct.category, + modules Sesame pour "logiciel"
+// uniquement) et lignes du devis de cette même catégorie.
+function renderQuoteCategoryTab(q, cat){
+  const catLabel = (QUOTE_TABS.find(t=>t.key===cat)||{}).label || cat;
+  const catalogButtons = cat==='logiciel' ? (QUOTE_CATALOG.modules||[]).map(m=>`<button type="button" onclick="addQuoteLine('${jsStr(m.label)}',${m.price},true,'${jsStr(m.desc||'')}','logiciel')">+ ${esc(m.label)} (${fmtEUR(m.price)}/mois)</button>`).join('') : '';
+  const prodCats = cat==='service' ? ['service','autre'] : [cat];
+  const productButtons = crmProducts.filter(p=>p.active && prodCats.includes(p.category||'materiel')).map(p=>`<button type="button" onclick="addQuoteLine('${jsStr(p.label)}',${p.unitPrice},${p.recurring},'${jsStr(p.description)}','${cat}')">+ ${esc(p.label)} (${fmtEUR(p.unitPrice)}${p.recurring?'/mois':''})</button>`).join('');
+  const lines = q.lines||[];
+  const idxInCat = [];
+  lines.forEach((l,i)=>{ if(quoteLineCategory(l)===cat) idxInCat.push(i); });
+
+  return `
+    <div class="modal-section">Ajouter — ${esc(catLabel)}</div>
+    <div class="quote-catalog-pick">${catalogButtons}${productButtons}${!catalogButtons&&!productButtons?'<span class="log-empty">Aucun produit de cette catégorie au catalogue — <a href="#" onclick="closeModal();showCrmProducts();return false;">en créer un</a></span>':''}<button type="button" onclick="addQuoteLine('',0,false,'','${cat}')">+ Ligne personnalisée</button></div>
+
+    <div class="modal-section">Lignes — ${esc(catLabel)}</div>
+    <div class="quote-line-head"><span>Libellé</span><span>Qté</span><span>Prix unit. €</span><span>Mensuel</span><span></span></div>
+    <div class="quote-lines">
+      ${idxInCat.length===0?'<div class="log-empty">Aucune ligne dans cette catégorie — ajoutez un élément du catalogue ou une ligne personnalisée.</div>':idxInCat.map(i=>{ const l=lines[i]; return `
+        <div class="quote-line">
+          <div class="quote-line-main">
+            <input type="text" id="ql-label-${i}" value="${esc(l.label)}" placeholder="Libellé">
+            <input type="number" id="ql-qty-${i}" value="${l.qty}" min="0" onchange="captureQuoteLines();renderQuoteModal()">
+            <input type="number" id="ql-price-${i}" value="${l.unitPrice}" min="0" step="0.01" onchange="captureQuoteLines();renderQuoteModal()">
+            <label style="display:flex;align-items:center;justify-content:center"><input type="checkbox" id="ql-rec-${i}" ${l.recurring?'checked':''} onchange="captureQuoteLines();renderQuoteModal()"></label>
+            <button class="btn btn-ghost btn-icon" style="width:28px;height:28px" onclick="removeQuoteLine(${i})">✕</button>
+          </div>
+          <input type="text" class="quote-line-desc" id="ql-desc-${i}" value="${esc(l.description)}" placeholder="Description (sous-texte affiché sur le devis, optionnel)">
+        </div>`;}).join('')}
+    </div>`;
+}
+
+// Onglet Document : vue d'ensemble complète (toutes catégories), remise/TVA/
+// acompte, notes/conditions, totaux, signature électronique et envoi par
+// email — point d'arrivée du devis avant la case facturation (hors scope ici).
+function renderQuoteDocumentTab(q, totals, signUrl, deal){
+  const lines = q.lines||[];
+  const byCat = {materiel:[], logiciel:[], service:[]};
+  lines.forEach((l,i)=>{ byCat[quoteLineCategory(l)].push(l); });
+  const catLabel = {materiel:'Équipements', logiciel:'Logiciel', service:'Mise en place'};
+  const sectionHtml = (cat)=> byCat[cat].length ? `
+    <div style="font-size:11px;text-transform:uppercase;color:var(--mu);margin:10px 0 2px">${catLabel[cat]}</div>
+    ${byCat[cat].map(l=>`<div class="quote-total-row"><span>${esc(l.label)||'—'}${l.recurring?' <span style="color:#888">(mensuel)</span>':''} × ${l.qty}</span><span>${fmtEUR((+l.qty||0)*(+l.unitPrice||0))}</span></div>`).join('')}
+  `:'';
+
+  return `
+    <div class="modal-section">Récapitulatif</div>
+    <div style="font-size:12px;color:var(--mu);margin-bottom:6px"><strong>Client :</strong> ${esc(deal?deal.prospectNom:'')} — <strong>Affaire :</strong> ${esc(deal?deal.title:'')}</div>
+    ${sectionHtml('materiel')}${sectionHtml('logiciel')}${sectionHtml('service')}
+    ${lines.length===0?'<div class="log-empty">Aucune ligne — ajoutez des éléments depuis les onglets Équipements/Logiciel/Mise en place.</div>':''}
+
+    <div class="form-grid" style="margin-top:14px">
+      <div class="ff"><label>Remise globale (%)</label><input type="number" id="q-discount" value="${q.discountPct||0}" min="0" max="100" onchange="captureQuoteLines();renderQuoteModal()"></div>
+      <div class="ff"><label>TVA (%)</label><input type="number" id="q-vat" value="${q.vatPct??20}" min="0" max="100" step="0.1" onchange="captureQuoteLines();renderQuoteModal()"></div>
+      <div class="ff"><label>Acompte à la commande (%)</label><input type="number" id="q-deposit" value="${q.depositPct||0}" min="0" max="100" onchange="captureQuoteLines();renderQuoteModal()"></div>
+      <div class="ff"><label>Statut</label><select id="q-status" onchange="captureQuoteLines()">${['brouillon','envoyé','accepté','refusé'].map(s=>`<option value="${s}" ${q.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+    </div>
+    <div class="ff"><label>Notes / conditions</label><textarea id="q-notes" onchange="captureQuoteLines()">${q.notes||''}</textarea></div>
+
+    <div class="modal-section">Total</div>
+    <div class="quote-total-row"><span>Mensuel récurrent</span><span>${fmtEUR(totals.mrr)}${q.discountPct?' → '+fmtEUR(totals.mrrNet)+' après remise':''}</span></div>
+    <div class="quote-total-row"><span>Frais ponctuels</span><span>${fmtEUR(totals.oneoff)}${q.discountPct?' → '+fmtEUR(totals.oneoffNet)+' après remise':''}</span></div>
+    <div class="quote-total-row"><span>Total HT</span><span>${fmtEUR(totals.totalHT)}</span></div>
+    <div class="quote-total-row"><span>TVA (${q.vatPct||0}%)</span><span>${fmtEUR(totals.totalTTC-totals.totalHT)}</span></div>
+    <div class="quote-total-row grand"><span>Total TTC</span><span>${fmtEUR(totals.totalTTC)}</span></div>
+    ${q.depositPct?`<div class="quote-total-row"><span>Acompte à la commande (${q.depositPct}%)</span><span>${fmtEUR(totals.depositAmount)}</span></div>`:''}
+
+    ${!q._new && q.status!=='accepté' ? `
+    <div class="modal-section">Signature électronique</div>
+    <div style="font-size:11px;color:var(--mu);font-style:italic;margin-bottom:8px">⚠ Signature électronique simple (nom saisi + tracé + horodatage) — pas une signature qualifiée eIDAS certifiée par un tiers de confiance.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <button class="btn btn-primary btn-sm" onclick="sendQuoteEmail()">✉ Envoyer le devis par email</button>
+      ${signUrl?`<button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText('${esc(signUrl)}');flash('Lien copié')">Copier le lien de signature</button>`:`<button class="btn btn-ghost btn-sm" onclick="requestQuoteSignature()">✎ Générer le lien sans l'envoyer</button>`}
+    </div>
+    ${signUrl?`<div class="ff"><label>Lien de signature</label><input type="text" readonly value="${esc(signUrl)}" style="font-size:11px" onclick="this.select()"></div>`:''}
+    `:''}
+    ${q.status==='accepté'?`<div class="tag t-green" style="margin-top:8px;display:inline-flex">✓ Devis signé électroniquement — l'affaire est passée automatiquement au statut "Gagné".</div>`:''}
+  `;
+}
+
 async function saveQuote(){
   captureQuoteLines();
   const q = QUOTE_DRAFT;
   const body = {
     dealId: q.dealId,
-    lines: (q.lines||[]).map(l=>({label:l.label, description:l.description||'', qty:+l.qty||0, unitPrice:+l.unitPrice||0, recurring:!!l.recurring})),
-    discountPct: +q.discountPct||0, notes: q.notes||'', status: q.status||'brouillon'
+    lines: (q.lines||[]).map(l=>({label:l.label, description:l.description||'', qty:+l.qty||0, unitPrice:+l.unitPrice||0, recurring:!!l.recurring, category:quoteLineCategory(l)})),
+    discountPct: +q.discountPct||0, vatPct: +q.vatPct||0, depositPct: +q.depositPct||0, notes: q.notes||'', status: q.status||'brouillon'
   };
   try{
     var r = q.id
@@ -6515,7 +6621,10 @@ function printQuote(){
     +'<div><span>Mensuel récurrent</span><span>'+fmtEUR(totals.mrrNet)+'</span></div>'
     +'<div><span>Frais ponctuels</span><span>'+fmtEUR(totals.oneoffNet)+'</span></div>'
     +(q.discountPct?'<div><span>Remise appliquée</span><span>'+q.discountPct+'%</span></div>':'')
-    +'<div class="grand"><span>Total 1ère facture</span><span>'+fmtEUR(totals.mrrNet+totals.oneoffNet)+'</span></div>'
+    +'<div><span>Total HT</span><span>'+fmtEUR(totals.totalHT)+'</span></div>'
+    +'<div><span>TVA ('+(q.vatPct||0)+'%)</span><span>'+fmtEUR(totals.totalTTC-totals.totalHT)+'</span></div>'
+    +'<div class="grand"><span>Total TTC</span><span>'+fmtEUR(totals.totalTTC)+'</span></div>'
+    +(q.depositPct?'<div><span>Acompte à la commande ('+q.depositPct+'%)</span><span>'+fmtEUR(totals.depositAmount)+'</span></div>':'')
     +'</div>'
     +(q.notes?'<div class="notes">'+esc(q.notes).replace(/\n/g,'<br>')+'</div>':'')
     +'</body></html>';
@@ -6572,7 +6681,7 @@ async function importSesameCatalog(){
   for(const m of toImport){
     try{
       const r = await apiFetch('/wa/crmProduct/create', {method:'POST', body:JSON.stringify({
-        sku: m.k, label: m.label, description: m.desc||'', unitPrice: m.price||0, recurring: true, stockable: false,
+        sku: m.k, label: m.label, description: m.desc||'', unitPrice: m.price||0, recurring: true, category: 'logiciel', stockable: false,
       })});
       if(r.ok) created++;
     }catch(e){ /* on continue avec les suivants */ }
@@ -6588,19 +6697,22 @@ function renderCrmProducts(){
     <tr>
       <td><div class="nom-cell">${esc(p.label)}</div>${p.description?`<div class="sub-cell">${esc(p.description)}</div>`:''}</td>
       <td style="font-size:11px;color:#888">${esc(p.sku)||'—'}</td>
+      <td><span class="tpill bn">${esc(CRM_PRODUCT_CATEGORY_LABEL[p.category]||p.category)}</span></td>
       <td>${fmtEUR(p.unitPrice)}${p.recurring?'/mois':''}</td>
       <td>${p.stockable?'<span class="tpill bi">Stockable</span>':'<span class="tpill bn">Non stockable</span>'}</td>
       <td>${p.active?'<span class="tpill bg">Actif</span>':'<span class="tpill bn">Inactif</span>'}</td>
       <td style="white-space:nowrap"><button class="ta-btn" onclick="openProductModal('${p.id}')" title="Modifier">✎</button><button class="ta-btn" style="margin-left:3px;color:#a32d2d" onclick="deleteProduct('${p.id}')" title="Supprimer">🗑</button></td>
     </tr>`).join('');
   document.getElementById('main').innerHTML = `<div class="tbl-wrap"><table>
-    <thead><tr><th>Produit</th><th style="width:90px">SKU</th><th style="width:110px">Prix</th><th style="width:130px">Stock</th><th style="width:90px">Statut</th><th style="width:70px">Actions</th></tr></thead>
-    <tbody>${rows.length?rows:'<tr><td colspan="6" class="log-empty">Aucun produit — créez-en un pour l\'utiliser dans vos devis.</td></tr>'}</tbody>
+    <thead><tr><th>Produit</th><th style="width:90px">SKU</th><th style="width:110px">Catégorie</th><th style="width:110px">Prix</th><th style="width:130px">Stock</th><th style="width:90px">Statut</th><th style="width:70px">Actions</th></tr></thead>
+    <tbody>${rows.length?rows:'<tr><td colspan="7" class="log-empty">Aucun produit — créez-en un pour l\'utiliser dans vos devis.</td></tr>'}</tbody>
   </table></div>`;
 }
 
+const CRM_PRODUCT_CATEGORY_LABEL = {materiel:'Équipements', logiciel:'Logiciel', service:'Mise en place', autre:'Autre'};
+
 function openProductModal(id){
-  const p = id ? crmProducts.find(x=>x.id===id) : {id:null,sku:'',label:'',description:'',unitPrice:0,recurring:false,stockable:false,active:true};
+  const p = id ? crmProducts.find(x=>x.id===id) : {id:null,sku:'',label:'',description:'',unitPrice:0,recurring:false,category:'materiel',stockable:false,active:true};
   if(!p) return;
   document.getElementById('modal-ct').innerHTML = `
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
@@ -6611,6 +6723,7 @@ function openProductModal(id){
         <div class="ff"><label>SKU (optionnel)</label><input id="p-sku" value="${esc(p.sku)}"></div>
         <div class="ff"><label>Prix unitaire (€ HT)</label><input type="number" id="p-price" value="${p.unitPrice||0}" min="0" step="0.01"></div>
         <div class="ff"><label>Facturation</label><select id="p-recurring"><option value="0" ${!p.recurring?'selected':''}>Ponctuel</option><option value="1" ${p.recurring?'selected':''}>Mensuel</option></select></div>
+        <div class="ff"><label>Catégorie (onglet devis)</label><select id="p-category">${Object.entries(CRM_PRODUCT_CATEGORY_LABEL).map(([k,l])=>`<option value="${k}" ${(p.category||'materiel')===k?'selected':''}>${l}</option>`).join('')}</select></div>
       </div>
       <div class="ff" style="margin-top:8px"><label>Description (sous-texte affiché sur le devis)</label><textarea id="p-desc">${esc(p.description)}</textarea></div>
       <div class="feat-checks" style="margin-top:10px">
@@ -6630,7 +6743,7 @@ async function saveProduct(id){
   const g=i=>(document.getElementById(i)||{value:''}).value;
   const body = {
     label: g('p-label').trim(), sku: g('p-sku').trim(), unitPrice: +g('p-price')||0,
-    recurring: g('p-recurring')==='1', description: g('p-desc'),
+    recurring: g('p-recurring')==='1', category: g('p-category')||'materiel', description: g('p-desc'),
     stockable: (document.getElementById('p-stockable')||{checked:false}).checked,
   };
   if(id){ const activeEl=document.getElementById('p-active'); if(activeEl) body.active = activeEl.checked; }
@@ -7721,7 +7834,7 @@ async function saveScoringConfig(){
 // l'identique côté back-office de chaque hôtel, voir admin.html)
 // ════════════════════════════════════════
 const CHANNEL_LABEL = {email:'Email', sms:'SMS', whatsapp:'WhatsApp', rcs:'RCS'};
-const TPL_CATEGORY_LABEL = {marketing:'Marketing', support:'Support', commercial:'Commercial', relance:'Relance', compta:'Comptabilité'};
+const TPL_CATEGORY_LABEL = {marketing:'Marketing', support:'Support', commercial:'Commercial', relance:'Relance', compta:'Comptabilité', devis:'Devis'};
 
 // Variables disponibles par catégorie de modèle (demande client 22/10/2026,
 // "n'affiche que les variables de la categorie") — affichées dans l'éditeur
@@ -7735,6 +7848,7 @@ const TPL_CATEGORY_VARS = {
   relance: `Relance de facture (une facture) : {{numero}} {{tiers}} {{montant}} (reste dû) {{echeance}} — voir aussi la catégorie "Comptabilité" pour relancer plusieurs factures d'un même client en un seul envoi.`,
   compta: `<b>Alerte mouvement bancaire</b> (règle "Nouveau mouvement bancaire") : {{nomClient}} (ou {{contrepartie}}) {{montant}} {{sens}} {{date}} {{libelle}} {{compte}}.<br>
     <b>Relance de facture(s)</b> (une ou plusieurs factures en retard d'un même client, sélection multiple dans Comptabilité → Factures) : {{numero}} {{tiers}} {{montant}} {{echeance}} (facture unique) · {{nombreFactures}} {{montantTotal}} {{listeFactures}} (dès 2 factures sélectionnées pour le même client — liste une facture par ligne).`,
+  devis: `Envoi d'un devis au client (bouton "Envoyer le devis par email", onglet Document du constructeur de devis — clé de modèle attendue : <code>devis-envoi</code>) : {{numeroDevis}} {{nomClient}} {{montantInitial}} (frais ponctuels, après remise) {{montantMensuel}} (récurrent, après remise) {{montantTotalTTC}} {{lienSignature}} (lien vers la page publique de signature électronique).`,
 };
 
 /** Filtre le pavé "Variables" de l'éditeur de modèle à la catégorie

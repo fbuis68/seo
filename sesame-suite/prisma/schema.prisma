@@ -2258,8 +2258,15 @@ model CrmQuote {
   number String @unique // ex: DEV-2026-0001
   status String @default("brouillon") // brouillon | envoyé | accepté | refusé
 
-  lines       Json      @default("[]") // [{label, description?, qty, unitPrice, recurring:bool}] — description = sous-texte verbeux affiché sous le libellé, comme sur les devis Sesame réels
+  lines       Json      @default("[]") // [{label, description?, qty, unitPrice, recurring:bool, category?:'materiel'|'logiciel'|'service'|'autre'}] — description = sous-texte verbeux affiché sous le libellé, comme sur les devis Sesame réels ; category range la ligne sous l'onglet correspondant du constructeur (22/10/2026, maquette devis Sesame)
   discountPct Float     @default(0)
+  // TVA et acompte à la signature (22/10/2026, maquette devis Sesame) — la
+  // maquette distingue "montant initial HT/TTC" et un acompte en % demandé
+  // à la commande ; vatPct a une valeur par défaut de 20 (taux normal FR)
+  // plutôt que 0, pour ne pas afficher un HT=TTC trompeur sur un devis
+  // nouvellement créé si l'utilisateur oublie de le renseigner.
+  vatPct      Float     @default(20)
+  depositPct  Float     @default(0)
   notes       String?
   sentAt      DateTime?
 
@@ -2368,6 +2375,12 @@ model CrmProduct {
   description String? // sous-texte verbeux réutilisé sur les lignes de devis
   unitPrice   Float   @default(0)
   recurring   Boolean @default(false) // mensuel (true) ou ponctuel (false)
+  // Catégorie d'onglet du constructeur de devis (22/10/2026, maquette devis
+  // Sesame) — materiel (Équipements) | logiciel (Logiciel/abonnement) |
+  // service (Mise en place : installation, formation, déploiement...) |
+  // autre. Purement indicatif : ne change rien au calcul, sert seulement à
+  // ranger le produit sous le bon onglet quand on compose un devis.
+  category    String  @default("materiel")
   stockable   Boolean @default(false)
   stockQty    Int? // réservé à la future gestion de stock — non utilisé pour l'instant
   active      Boolean @default(true)

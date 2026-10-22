@@ -5,6 +5,7 @@ import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin, requireSesame } from "../middleware/requireAdmin";
 import { ONBOARDING_MODULES } from "./onboarding";
 import { nextSequenceValue } from "../lib/sequence";
+import { sendMessage } from "../lib/messaging";
 
 /**
  * Devis (module "Gestion des affaires", 18/08/2026) — rattachés à une
@@ -16,12 +17,19 @@ import { nextSequenceValue } from "../lib/sequence";
  */
 export const crmQuoteRouter = Router();
 
+// materiel (Équipements) | logiciel (Logiciel/abonnement) | service (Mise en
+// place : installation, formation, déploiement...) | autre (lignes libres) —
+// cf. CrmProduct.category, même nomenclature, pour que le constructeur de
+// devis range chaque ligne sous le bon onglet (maquette devis Sesame, 22/10/2026).
+export type QuoteLineCategory = "materiel" | "logiciel" | "service" | "autre";
+
 interface QuoteLine {
   label: string;
   description?: string; // sous-texte verbeux affiché sous le libellé (cf. devis Sesame réels)
   qty: number;
   unitPrice: number;
   recurring: boolean; // true = mensuel (module Sesame), false = ponctuel (frais de mise en place...)
+  category?: QuoteLineCategory;
 }
 
 function shapeQuote(q: {
@@ -31,6 +39,8 @@ function shapeQuote(q: {
   status: string;
   lines: unknown;
   discountPct: number;
+  vatPct: number;
+  depositPct: number;
   notes: string | null;
   sentAt: Date | null;
   signToken: string | null;
@@ -44,6 +54,8 @@ function shapeQuote(q: {
     status: q.status,
     lines: (q.lines as QuoteLine[]) || [],
     discountPct: q.discountPct,
+    vatPct: q.vatPct,
+    depositPct: q.depositPct,
     notes: q.notes || "",
     sentAt: q.sentAt,
     signToken: q.signToken,
@@ -96,6 +108,8 @@ interface QuoteBody {
   dealId: string;
   lines?: QuoteLine[];
   discountPct?: number;
+  vatPct?: number;
+  depositPct?: number;
   notes?: string;
   status?: string;
 }
@@ -117,6 +131,8 @@ crmQuoteRouter.post(
         number,
         lines: (b.lines || []) as object[],
         discountPct: b.discountPct ?? 0,
+        vatPct: b.vatPct ?? 20,
+        depositPct: b.depositPct ?? 0,
         notes: b.notes,
       },
     });
@@ -138,6 +154,8 @@ crmQuoteRouter.post(
       data: {
         lines: b.lines === undefined ? undefined : (b.lines as object[]),
         discountPct: b.discountPct,
+        vatPct: b.vatPct,
+        depositPct: b.depositPct,
         notes: b.notes,
         status: b.status,
         sentAt: b.status === "envoyé" && existing.status !== "envoyé" ? new Date() : undefined,
@@ -181,6 +199,8 @@ crmQuoteRouter.post(
         number,
         lines: existing.lines as object[],
         discountPct: existing.discountPct,
+        vatPct: existing.vatPct,
+        depositPct: existing.depositPct,
         notes: existing.notes,
       },
     });
@@ -276,7 +296,7 @@ crmQuoteRouter.post(
 // signature certifiée par un tiers de confiance (Yousign/DocuSign...). Le
 // front-end doit afficher cette nuance clairement au signataire.
 
-function quoteTotals(lines: QuoteLine[], discountPct: number) {
+function quoteTotals(lines: QuoteLine[], discountPct: number, vatPct: number, depositPct: number) {
   let mrr = 0;
   let oneoff = 0;
   for (const l of lines) {
@@ -285,7 +305,12 @@ function quoteTotals(lines: QuoteLine[], discountPct: number) {
     else oneoff += t;
   }
   const factor = 1 - (discountPct || 0) / 100;
-  return { mrr, oneoff, mrrNet: mrr * factor, oneoffNet: oneoff * factor };
+  const mrrNet = mrr * factor;
+  const oneoffNet = oneoff * factor;
+  const totalHT = mrrNet + oneoffNet;
+  const totalTTC = totalHT * (1 + (vatPct || 0) / 100);
+  const depositAmount = totalTTC * ((depositPct || 0) / 100);
+  return { mrr, oneoff, mrrNet, oneoffNet, totalHT, totalTTC, depositAmount };
 }
 
 /**
@@ -335,14 +360,82 @@ crmQuoteRouter.get(
       status: quote.status,
       lines,
       discountPct: quote.discountPct,
+      vatPct: quote.vatPct,
+      depositPct: quote.depositPct,
       notes: quote.notes || "",
-      totals: quoteTotals(lines, quote.discountPct),
+      totals: quoteTotals(lines, quote.discountPct, quote.vatPct, quote.depositPct),
       dealTitle: quote.deal.title,
       prospectNom: quote.deal.prospect.nom,
       alreadySigned: !!quote.signature,
       signedAt: quote.signature?.signedAt || null,
       signerName: quote.signature?.signerName || null,
     });
+  })
+);
+
+/**
+ * POST /wa/crmQuote/sendEmail — envoie réellement le devis par email au
+ * client (22/10/2026, demande "branche cela avec... l'envoie d'email") :
+ * jusqu'ici seul un lien de signature à copier/coller existait, aucun envoi
+ * réel. Génère le lien de signature si besoin (même logique que
+ * requestSignature) puis passe par le point de convergence unique
+ * sendMessage() (lib/messaging.ts), avec le modèle email de catégorie
+ * "devis" (clé "devis-envoi") — modèle à créer une fois dans Messages >
+ * Modèles si absent, comme tout autre modèle du CRM (pas de contenu codé en
+ * dur ici, pour rester cohérent avec le reste du CRM).
+ */
+crmQuoteRouter.post(
+  "/crmQuote/sendEmail",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const id = (req.body.id as string) || "";
+    const existing = await prisma.crmQuote.findUnique({
+      where: { id },
+      include: { deal: { include: { prospect: { select: { id: true, nom: true, email: true } } } } },
+    });
+    if (!existing) throw new HttpError(404, "Devis introuvable");
+    if (existing.status === "accepté") throw new HttpError(400, "Ce devis est déjà signé");
+    const prospect = existing.deal.prospect;
+    if (!prospect.email) throw new HttpError(400, "Le client n'a pas d'adresse email enregistrée");
+
+    const signToken = existing.signToken || crypto.randomBytes(24).toString("hex");
+    const lines = (existing.lines as unknown as QuoteLine[]) || [];
+    const totals = quoteTotals(lines, existing.discountPct, existing.vatPct, existing.depositPct);
+    const signUrl = `${req.protocol}://${req.get("host")}/devis-signature.html?token=${signToken}`;
+
+    try {
+      await sendMessage({
+        entityId: null,
+        channel: "email",
+        templateKey: "devis-envoi",
+        to: prospect.email,
+        trackOpenProspectId: prospect.id,
+        variables: {
+          numeroDevis: existing.number,
+          nomClient: prospect.nom,
+          montantInitial: totals.oneoffNet.toFixed(2).replace(".", ",") + " €",
+          montantMensuel: totals.mrrNet.toFixed(2).replace(".", ",") + " €",
+          montantTotalTTC: totals.totalTTC.toFixed(2).replace(".", ",") + " €",
+          lienSignature: signUrl,
+        },
+      });
+    } catch (e) {
+      if (e instanceof HttpError && e.status === 404) {
+        throw new HttpError(404, 'Aucun modèle email "devis-envoi" (catégorie Devis) — créez-le dans Messages > Modèles avant d\'envoyer.');
+      }
+      throw e;
+    }
+
+    const row = await prisma.crmQuote.update({
+      where: { id },
+      data: {
+        signToken,
+        status: existing.status === "brouillon" ? "envoyé" : undefined,
+        sentAt: existing.sentAt ?? new Date(),
+      },
+    });
+    res.json(shapeQuote(row));
   })
 );
 

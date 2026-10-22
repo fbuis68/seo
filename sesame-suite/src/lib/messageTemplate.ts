@@ -11,7 +11,7 @@ export function isChannel(v: unknown): v is Channel {
 // d'utilisation (cf. commentaire sur MessageTemplate.category dans le
 // schéma). "" (chaîne vide, envoyée par le front pour "non catégorisé")
 // est toujours acceptée et stockée comme null.
-export const TEMPLATE_CATEGORIES = ["marketing", "support", "commercial", "relance", "compta"] as const;
+export const TEMPLATE_CATEGORIES = ["marketing", "support", "commercial", "relance", "compta", "devis"] as const;
 export type TemplateCategory = (typeof TEMPLATE_CATEGORIES)[number];
 
 export function isTemplateCategory(v: unknown): v is TemplateCategory {

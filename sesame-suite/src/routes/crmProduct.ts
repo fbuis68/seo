@@ -11,6 +11,11 @@ import { requireAdmin, requireSesame } from "../middleware/requireAdmin";
  */
 export const crmProductRouter = Router();
 
+const PRODUCT_CATEGORIES = ["materiel", "logiciel", "service", "autre"] as const;
+function isProductCategory(v: unknown): v is (typeof PRODUCT_CATEGORIES)[number] {
+  return typeof v === "string" && (PRODUCT_CATEGORIES as readonly string[]).includes(v);
+}
+
 function shapeProduct(p: {
   id: string;
   sku: string | null;
@@ -18,6 +23,7 @@ function shapeProduct(p: {
   description: string | null;
   unitPrice: number;
   recurring: boolean;
+  category: string;
   stockable: boolean;
   stockQty: number | null;
   active: boolean;
@@ -31,6 +37,7 @@ function shapeProduct(p: {
     description: p.description || "",
     unitPrice: p.unitPrice,
     recurring: p.recurring,
+    category: p.category,
     stockable: p.stockable,
     stockQty: p.stockQty,
     active: p.active,
@@ -55,6 +62,7 @@ interface ProductBody {
   description?: string;
   unitPrice?: number;
   recurring?: boolean;
+  category?: string;
   stockable?: boolean;
   active?: boolean;
 }
@@ -66,6 +74,7 @@ crmProductRouter.post(
   asyncHandler(async (req, res) => {
     const b = req.body as ProductBody;
     if (!b.label || !b.label.trim()) throw new HttpError(400, "Libellé requis");
+    if (b.category !== undefined && !isProductCategory(b.category)) throw new HttpError(400, "Catégorie invalide (materiel, logiciel, service ou autre)");
     const row = await prisma.crmProduct.create({
       data: {
         sku: b.sku?.trim() || null,
@@ -73,6 +82,7 @@ crmProductRouter.post(
         description: b.description,
         unitPrice: b.unitPrice ?? 0,
         recurring: !!b.recurring,
+        category: b.category || "materiel",
         stockable: !!b.stockable,
       },
     });
@@ -88,6 +98,7 @@ crmProductRouter.post(
     const { id, ...b } = req.body as ProductBody & { id: string };
     if (!id) throw new HttpError(400, "id requis");
     if (b.label !== undefined && !b.label.trim()) throw new HttpError(400, "Le libellé ne peut pas être vide");
+    if (b.category !== undefined && !isProductCategory(b.category)) throw new HttpError(400, "Catégorie invalide (materiel, logiciel, service ou autre)");
     const existing = await prisma.crmProduct.findUnique({ where: { id } });
     if (!existing) throw new HttpError(404, "Produit introuvable");
     const row = await prisma.crmProduct.update({
@@ -98,6 +109,7 @@ crmProductRouter.post(
         description: b.description,
         unitPrice: b.unitPrice,
         recurring: b.recurring,
+        category: b.category,
         stockable: b.stockable,
         active: b.active,
       },
