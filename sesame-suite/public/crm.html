@@ -6700,23 +6700,21 @@ function switchQuoteTab(key){ captureCurrentTab(); QUOTE_TAB = key; renderQuoteB
 function dqRerender(){ captureCurrentTab(); renderQuoteBuilder(); }
 
 // ── Actions lignes ──
-function dqAddHardware(selectEl){
-  const id = selectEl.value; if(!id) return;
+function dqAddHardware(id){
   const p = crmProducts.find(x=>x.id===id); if(!p) return;
   captureCurrentTab();
   const existing = QUOTE_DRAFT.hardware.find(x=>x.productId===id);
   if(existing) existing.qty = (+existing.qty||0)+1;
   else QUOTE_DRAFT.hardware.push({id:'h'+QUOTE_DRAFT.hardware.length+'-'+Date.now(), productId:id, label:p.label, description:p.description||'', qty:1, unitPrice:p.unitPrice});
-  selectEl.value=''; renderQuoteBuilder();
+  renderQuoteBuilder();
 }
-function dqAddAccessory(selectEl){
-  const id = selectEl.value; if(!id) return;
+function dqAddAccessory(id){
   const p = crmProducts.find(x=>x.id===id); if(!p) return;
   captureCurrentTab();
   const existing = QUOTE_DRAFT.accessories.find(x=>x.productId===id);
   if(existing) existing.qty = (+existing.qty||0)+1;
   else QUOTE_DRAFT.accessories.push({id:'a'+QUOTE_DRAFT.accessories.length+'-'+Date.now(), productId:id, label:p.label, description:p.description||'', qty:1, unitPrice:p.unitPrice});
-  selectEl.value=''; renderQuoteBuilder();
+  renderQuoteBuilder();
 }
 function dqRemoveRow(arrName, idx){ captureCurrentTab(); QUOTE_DRAFT[arrName].splice(idx,1); renderQuoteBuilder(); }
 function dqAddCustomLine(){
@@ -7001,21 +6999,15 @@ function dqRenderHardwareTab(q){
     <div class="db-row-between"><h3>Équiper les accès</h3><small style="color:var(--mu)">Quantité + prix, saisie directe</small></div>
     <div class="quote-line-head" style="grid-template-columns:1fr 60px 90px 28px"><span>Modèle / affectation</span><span>Qté</span><span>PU HT €</span><span></span></div>
     <div class="quote-lines">${rowHtml(q.hardware,'dq-hw') || '<div class="log-empty">Aucun équipement — ajoutez un modèle ci-dessous.</div>'}</div>
-    <div class="db-row" style="margin-top:8px">
-      <select onchange="dqAddHardware(this)" style="flex:1">
-        <option value="">— Choisir un modèle à ajouter —</option>
-        ${materielProducts.map(p=>`<option value="${p.id}">${esc(p.label)} (${fmtEUR(p.unitPrice)})</option>`).join('')}
-      </select>
+    <div class="quote-catalog-pick" style="margin-top:8px">
+      ${materielProducts.map(p=>`<button type="button" onclick="dqAddHardware('${p.id}')">+ ${esc(p.label)} (${fmtEUR(p.unitPrice)})</button>`).join('')}
     </div>
     ${!materielProducts.length?'<div class="log-empty" style="margin-top:6px">Aucun équipement au catalogue — <a href="#" onclick="showCrmProducts();return false;">en créer un</a> (catégorie "Équipements").</div>':''}
 
     <h3 style="margin-top:24px">Accessoires &amp; connectivité</h3>
     <div class="quote-lines">${rowHtml(q.accessories,'dq-acc') || '<div class="log-empty">Aucun accessoire.</div>'}</div>
-    <div class="db-row" style="margin-top:8px">
-      <select onchange="dqAddAccessory(this)" style="flex:1">
-        <option value="">— Ajouter un accessoire —</option>
-        ${materielProducts.map(p=>`<option value="${p.id}">${esc(p.label)} (${fmtEUR(p.unitPrice)})</option>`).join('')}
-      </select>
+    <div class="quote-catalog-pick" style="margin-top:8px">
+      ${materielProducts.map(p=>`<button type="button" onclick="dqAddAccessory('${p.id}')">+ ${esc(p.label)} (${fmtEUR(p.unitPrice)})</button>`).join('')}
     </div>
     <p class="sq-note">Gateways, plaques de finition et autres accessoires — quantité manuelle selon implantation.</p>`;
 }
