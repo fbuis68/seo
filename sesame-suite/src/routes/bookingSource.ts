@@ -943,8 +943,8 @@ bookingSourceRouter.get(
     const entity = await resolveEntity(req);
     const config = await loadSesameConfigOrThrow(entity);
     try {
-      const operators = await listSesameOperators(config);
-      res.json({ ok: true, operators });
+      const result = await listSesameOperators(config);
+      res.json({ ok: true, operators: result.operators, truncated: result.truncated, personsScanned: result.personsScanned, personsTotal: result.personsTotal });
     } catch (e) {
       if (e instanceof BookingSourceError) throw new HttpError(400, e.message);
       throw e;

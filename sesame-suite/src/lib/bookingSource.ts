@@ -1102,48 +1102,78 @@ export interface SesameOperator {
   createdAt: string | null;
 }
 
+// Nombre d'appels /userProfile/list menés EN PARALLÈLE à la fois (pas tous
+// d'un coup) — un établissement avec des années d'historique peut avoir des
+// milliers de "persons" (= tous les clients y ayant séjourné, pas que le
+// personnel), et dégainer des centaines de requêtes simultanées vers la
+// plateforme Sesame Technology risque de se faire brider/ralentir par son
+// propre serveur (contre-productif : plus lent qu'en séquence).
+const OPERATOR_SCAN_BATCH_SIZE = 10;
+// Budget de temps total avant d'arrêter le scan et de renvoyer ce qui a été
+// trouvé jusque-là plutôt que de laisser l'écran "mouliner" indéfiniment
+// (confirmé 22/10/2026 : établissement à l'historique client trop long pour
+// finir le scan intégral dans un délai raisonnable). Volontairement sous
+// les ~20-30s typiques d'un timeout de proxy/gateway devant le serveur.
+const OPERATOR_SCAN_BUDGET_MS = 18_000;
+
+export interface ListSesameOperatorsResult {
+  operators: SesameOperator[];
+  truncated: boolean;
+  personsScanned: number;
+  personsTotal: number;
+}
+
 /** GET — liste les opérateurs (profils gsa1/operator) de l'établissement :
  * /ws/person/list puis /ws/userProfile/list par personne (pas d'endpoint
  * "liste des opérateurs" direct côté Sesame — même détour que le portail
  * officiel, cf. commentaire operatorlist.js sur /userProfile/list filtré
- * par personId plutôt que par entityId). */
-export async function listSesameOperators(config: BookingSourceConfig): Promise<SesameOperator[]> {
+ * par personId plutôt que par entityId). Scanné par lots avec un budget de
+ * temps global : au-delà, renvoie les opérateurs déjà trouvés avec
+ * truncated=true plutôt que de bloquer indéfiniment. */
+export async function listSesameOperators(config: BookingSourceConfig): Promise<ListSesameOperatorsResult> {
   const { headers } = await sesameLogin(config);
   const personsResp = await sesameWsCall(config, headers, "/person/list", "GET", { limit: 1000, start: 0 });
   if (!personsResp.success) throw new BookingSourceError((personsResp.message as string) || "Impossible de lister les personnes");
   const persons = (personsResp.root as Record<string, unknown>[]) || [];
 
-  // Un appel /userProfile/list PAR personne — fait en parallèle plutôt
-  // qu'en séquence (boucle for...await d'origine) : sur un établissement à
-  // plusieurs dizaines/centaines de personnes, l'enchaînement séquentiel
-  // d'autant d'allers-retours vers la plateforme Sesame Technology pouvait
-  // dépasser le délai du proxy/gateway devant le serveur — celui-ci coupe
-  // alors la réponse avec sa propre page d'erreur HTML, que le front reçoit
-  // à la place du JSON attendu ("Unexpected token '<'..." côté navigateur,
-  // écran "Opérateurs Sesame" bloqué sur "Chargement…", confirmé 22/10/2026).
-  const perPerson = await Promise.all(
-    persons.map(async (p) => {
-      const upResp = await sesameWsCall(config, headers, "/userProfile/list", "GET", { personId: p.id as string, limit: 1000, start: 0 });
-      if (!upResp.success) return [] as SesameOperator[];
-      const profiles = (upResp.root as Record<string, unknown>[]) || [];
-      const ops: SesameOperator[] = [];
-      for (const up of profiles) {
-        const code = String(up.profileCode || "").toLowerCase();
-        if (OPERATOR_PROFILE_CODES.indexOf(code) === -1) continue;
-        ops.push({
-          userProfileId: String(up.id),
-          personId: String(p.id),
-          firstname: (p.firstname as string) || (p.firstName as string) || "",
-          lastname: (p.lastname as string) || (p.lastName as string) || "",
-          email: (p.email as string) || "",
-          profileCode: String(up.profileCode || ""),
-          createdAt: (up.created as string) || null,
-        });
-      }
-      return ops;
-    })
-  );
-  return perPerson.flat();
+  const startedAt = Date.now();
+  const operators: SesameOperator[] = [];
+  let scanned = 0;
+  let truncated = false;
+
+  for (let i = 0; i < persons.length; i += OPERATOR_SCAN_BATCH_SIZE) {
+    if (Date.now() - startedAt > OPERATOR_SCAN_BUDGET_MS) {
+      truncated = true;
+      break;
+    }
+    const batch = persons.slice(i, i + OPERATOR_SCAN_BATCH_SIZE);
+    const batchResults = await Promise.all(
+      batch.map(async (p) => {
+        const upResp = await sesameWsCall(config, headers, "/userProfile/list", "GET", { personId: p.id as string, limit: 1000, start: 0 });
+        if (!upResp.success) return [] as SesameOperator[];
+        const profiles = (upResp.root as Record<string, unknown>[]) || [];
+        const ops: SesameOperator[] = [];
+        for (const up of profiles) {
+          const code = String(up.profileCode || "").toLowerCase();
+          if (OPERATOR_PROFILE_CODES.indexOf(code) === -1) continue;
+          ops.push({
+            userProfileId: String(up.id),
+            personId: String(p.id),
+            firstname: (p.firstname as string) || (p.firstName as string) || "",
+            lastname: (p.lastname as string) || (p.lastName as string) || "",
+            email: (p.email as string) || "",
+            profileCode: String(up.profileCode || ""),
+            createdAt: (up.created as string) || null,
+          });
+        }
+        return ops;
+      })
+    );
+    batchResults.forEach((ops) => operators.push(...ops));
+    scanned += batch.length;
+  }
+
+  return { operators, truncated, personsScanned: scanned, personsTotal: persons.length };
 }
 
 /** POST — crée une personne + lui rattache un UserProfile de profil "gsa1"

@@ -13715,6 +13715,9 @@ async function soInit(){
       throw new Error(data.error||'Erreur serveur (HTTP '+r.status+')');
     }
     SO_STATE.operators = data.operators || [];
+    SO_STATE.truncated = !!data.truncated;
+    SO_STATE.personsScanned = data.personsScanned||0;
+    SO_STATE.personsTotal = data.personsTotal||0;
     soRenderList();
   }catch(e){
     listEl.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-circle"></i><span>'+esc(e.message||'Erreur de chargement')+'</span></div>';
@@ -13723,11 +13726,12 @@ async function soInit(){
 function soRenderList(){
   var listEl = document.getElementById('so-list');
   var ops = SO_STATE.operators;
+  var warn = SO_STATE.truncated ? '<div class="alt alt-w" style="margin-bottom:10px"><i class="ti ti-alert-circle"></i><span>Scan interrompu après délai ('+SO_STATE.personsScanned+' / '+SO_STATE.personsTotal+' personnes vérifiées sur Sesame Technology) — liste possiblement incomplète. Réessayez, ou contactez Sesame Technology si l\'établissement a un historique client très volumineux.</span></div>' : '';
   if(!ops.length){
-    listEl.innerHTML = '<div class="alt alt-b" style="text-align:center;padding:20px"><i class="ti ti-shield-lock" style="font-size:28px;display:block;margin-bottom:8px;opacity:.4"></i>Aucun opérateur pour cet établissement</div>';
+    listEl.innerHTML = warn+'<div class="alt alt-b" style="text-align:center;padding:20px"><i class="ti ti-shield-lock" style="font-size:28px;display:block;margin-bottom:8px;opacity:.4"></i>Aucun opérateur pour cet établissement</div>';
     return;
   }
-  var h = '<p style="font-size:12px;color:var(--mu);margin-bottom:10px"><b>'+ops.length+'</b> opérateur(s)</p>';
+  var h = warn+'<p style="font-size:12px;color:var(--mu);margin-bottom:10px"><b>'+ops.length+'</b> opérateur(s)</p>';
   h += '<table class="tbl"><thead><tr><th>Nom</th><th>Email</th><th>Profil</th><th>Créé le</th><th></th></tr></thead><tbody>';
   ops.forEach(function(o){
     var name = ((o.firstname||'')+' '+(o.lastname||'')).trim() || '—';
