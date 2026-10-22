@@ -229,7 +229,7 @@ function shapeTemplate(t: {
 /** Normalise la catégorie envoyée par le front : "" ⇒ null (non catégorisé), sinon valide contre TEMPLATE_CATEGORIES. */
 function parseCategory(v: unknown): TemplateCategory | null {
   if (v === undefined || v === null || v === "") return null;
-  if (!isTemplateCategory(v)) throw new HttpError(400, "Catégorie invalide (marketing, support ou commercial)");
+  if (!isTemplateCategory(v)) throw new HttpError(400, "Catégorie invalide (marketing, support, commercial, relance ou compta)");
   return v;
 }
 
