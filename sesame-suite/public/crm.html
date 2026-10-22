@@ -10115,7 +10115,7 @@ function renderAccInvoiceModal(inv){
         <button class="btn btn-primary" style="background:#2f6f2f" onclick="accValidateInvoice('${inv.id}')">${isNonAccounting?'Classer':'Valider'}</button>
         <button class="btn btn-ghost" style="color:#a32d2d" onclick="accRejectInvoice('${inv.id}')">Rejeter</button>`:`<button class="btn btn-primary" onclick="accSaveNonAccountingFields('${inv.id}')" title="N° facture, dates, devise, référence commande/contrat, mode de paiement — les montants/tiers déjà comptabilisés passent par une extourne d'écriture">Enregistrer (infos non comptables)</button>`}
         ${canTogglePaid?`<label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:0 4px"><input type="checkbox" ${inv.status==='PAID'?'checked':''} onchange="accTogglePaid('${inv.id}', this.checked)"> Facture payée</label>`:''}
-        ${!inv.entryId && !bankMatches.length?`<button class="btn btn-ghost" style="color:#a32d2d" onclick="accDeleteInvoice('${inv.id}')">🗑 Supprimer</button>`:`<button class="btn btn-ghost" disabled title="Écriture comptable et/ou rapprochement bancaire existants — annulez-les d'abord">🗑 Supprimer</button>`}
+        ${!bankMatches.length?`<button class="btn btn-ghost" style="color:#a32d2d" onclick="accDeleteInvoice('${inv.id}')" title="${inv.entryId?'Écriture comptable existante — suppression forcée proposée, réservée aux comptes Sesame':''}">🗑 Supprimer</button>`:`<button class="btn btn-ghost" disabled title="Rapprochement bancaire existant — retirez-le (onglet Banque) avant de supprimer">🗑 Supprimer</button>`}
         <button class="btn btn-ghost" onclick="closeModal()">Fermer</button>
       </div>
     </div>
