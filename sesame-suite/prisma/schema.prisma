@@ -2427,6 +2427,25 @@ model CrmQuoteTemplate {
   updatedAt DateTime @updatedAt
 }
 
+// Bibliothèque de clauses réutilisables pour l'onglet Document du devis
+// (22/10/2026, demande client "pouvoir en rajouter d'autres facilement") —
+// remplace les 4 clauses figées en dur côté client (coffre/électricité/
+// gateway/déplacement) par une liste éditable : chaque clause est un
+// bouton "+ <label>" dans "Mentions spécifiques au client" qui insère
+// `text` dans le champ mentions du devis en cours. Globale (pas d'entityId)
+// comme CrmQuoteTemplate — une seule bibliothèque Sesame, pas une par hôtel.
+model CrmQuoteClause {
+  id    String @id @default(cuid())
+  label String // texte du bouton, court — ex: "Coffres conservés"
+  text  String // texte inséré dans les mentions au clic
+  order Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([order])
+}
+
 model CrmActivity {
   id         String      @id @default(cuid())
   prospectId String

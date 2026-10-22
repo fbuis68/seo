@@ -6463,12 +6463,15 @@ const QUOTE_TABS = [
   {key:'document', label:'4. Document'},
 ];
 const DQ_CAT_LABEL = {materiel:'Équipements', service:'Services', logiciel:'Modules', autre:'Lignes libres'};
-const DQ_CLAUSES = {
-  coffre: "Les coffres mécaniques existants sont conservés, sous réserve de compatibilité et de bon état de fonctionnement lors de l'intervention.",
-  electric: "La fourniture et la pose des alimentations, câblages, prises et systèmes de verrouillage électrique sont à la charge du client ou de son électricien.",
-  gateway: "L'implantation et le nombre de gateways seront confirmés après étude de couverture. Le réseau et les alimentations requis devront être opérationnels avant intervention.",
-  travel: "Les frais de déplacement, transport, hébergement et repas ne sont pas inclus, sauf forfait explicitement chiffré dans ce devis.",
-};
+// Bibliothèque de clauses (22/10/2026, demande client "pouvoir en rajouter
+// d'autres facilement") — chargée depuis le serveur (CrmQuoteClause),
+// éditable via dqOpenClauseLibrary(). Plus de liste figée en dur.
+let CRM_CLAUSES = null;
+async function dqLoadClausesIfNeeded(){
+  if(CRM_CLAUSES) return;
+  try{ const r = await apiFetch('/wa/crmQuoteClause/list'); CRM_CLAUSES = r.ok ? await r.json() : []; }
+  catch(e){ CRM_CLAUSES = []; }
+}
 const DQ_DEFAULT_INTRO = "Nous vous proposons une solution de gestion des accès adaptée à votre établissement, avec fourniture des équipements et accompagnement à la mise en service.";
 const DQ_DEFAULT_TERMS = "Validité : 30 jours. Solde à la livraison. Intervention sous réserve de validation technique et des prérequis chantier. CGV Sesame Technology à joindre dans leur version validée.";
 const DQ_PMS_OPTIONS = ['Misterbooking','Sans interface PMS','Mews','Opera Cloud','Thais','Autre / à étudier'];
@@ -6545,6 +6548,7 @@ async function openQuoteBuilder(id){
   if(!crmProducts.length){
     try{ const r = await apiFetch('/wa/crmProduct/list'); crmProducts = r.ok ? await r.json() : []; }catch(e){}
   }
+  await dqLoadClausesIfNeeded();
   QUOTE_TAB = 'materiel';
   if(id){
     try{
@@ -6722,11 +6726,68 @@ function dqAddCustomLine(){
   QUOTE_DRAFT.custom.push({id:'c'+QUOTE_DRAFT.custom.length+'-'+Date.now(), label:'Prestation spécifique client', description:'', qty:1, unitPrice:null, recurring:false});
   renderQuoteBuilder();
 }
-function dqApplyClause(key){
+function dqApplyClause(id){
   captureCurrentTab();
-  const text = DQ_CLAUSES[key];
+  const clause = (CRM_CLAUSES||[]).find(c=>c.id===id);
+  if(!clause) return;
+  const text = clause.text;
   if(!QUOTE_DRAFT.mentionsText.includes(text)) QUOTE_DRAFT.mentionsText += (QUOTE_DRAFT.mentionsText?'\n\n':'')+text;
   renderQuoteBuilder();
+}
+
+// ── Bibliothèque de mentions (22/10/2026, "pouvoir en rajouter facilement") ──
+async function dqOpenClauseLibrary(){
+  captureCurrentTab();
+  await dqLoadClausesIfNeeded();
+  renderClauseLibraryModal();
+}
+function renderClauseLibraryModal(){
+  const rows = (CRM_CLAUSES||[]).map(c=>`
+    <div class="db-row" style="align-items:flex-start;gap:8px;border:1px solid var(--bdr2,#e2dfd9);border-radius:8px;padding:8px;margin-bottom:8px">
+      <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+        <input value="${esc(c.label)}" placeholder="Libellé du bouton" onchange="dqSaveClauseField('${c.id}','label',this.value)">
+        <textarea rows="2" onchange="dqSaveClauseField('${c.id}','text',this.value)">${esc(c.text)}</textarea>
+      </div>
+      <button class="btn btn-ghost btn-icon" onclick="dqDeleteClause('${c.id}')" title="Supprimer">✕</button>
+    </div>`).join('');
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop){closeModal();renderQuoteBuilder();}">
+    <div class="modal-box">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Bibliothèque de mentions</div><button class="btn btn-ghost btn-icon" onclick="closeModal();renderQuoteBuilder()" style="margin-left:auto">✕</button></div>
+      <div class="log-empty" style="font-style:normal;margin-bottom:10px">Boutons "+ …" proposés dans l'onglet Document, section "Mentions spécifiques au client" — modifiable ici pour tous les devis.</div>
+      <div id="dq-clause-list">${rows || '<div class="log-empty">Aucune mention — ajoutez-en une ci-dessous.</div>'}</div>
+      <button class="btn btn-ghost btn-sm" onclick="dqAddClause()">+ Nouvelle mention</button>
+      <div class="modal-footer"><button class="btn btn-primary" onclick="closeModal();renderQuoteBuilder()">Fermer</button></div>
+    </div>
+  </div>`;
+}
+async function dqSaveClauseField(id, field, value){
+  const clause = (CRM_CLAUSES||[]).find(c=>c.id===id); if(!clause) return;
+  clause[field] = value;
+  try{
+    const r = await apiFetch('/wa/crmQuoteClause/update', {method:'POST', body:JSON.stringify({id, [field]:value})});
+    if(!r.ok) throw new Error('http');
+    flash('Mention enregistrée ✓');
+  }catch(e){ flash('Erreur d\'enregistrement'); }
+}
+async function dqAddClause(){
+  try{
+    const r = await apiFetch('/wa/crmQuoteClause/create', {method:'POST', body:JSON.stringify({label:'Nouvelle mention', text:'Texte de la clause…'})});
+    if(!r.ok) throw new Error('http');
+    const saved = await r.json();
+    CRM_CLAUSES = CRM_CLAUSES || [];
+    CRM_CLAUSES.push(saved);
+    renderClauseLibraryModal();
+  }catch(e){ flash('Erreur de création'); }
+}
+async function dqDeleteClause(id){
+  if(!confirm('Supprimer cette mention ?')) return;
+  try{
+    const r = await apiFetch('/wa/crmQuoteClause/delete', {method:'POST', body:JSON.stringify({id})});
+    if(!r.ok) throw new Error('http');
+    CRM_CLAUSES = (CRM_CLAUSES||[]).filter(c=>c.id!==id);
+    renderClauseLibraryModal();
+  }catch(e){ flash('Erreur de suppression'); }
 }
 
 // ── Modèles de devis récurrents (réutilise les lignes "matériel" comme base) ──
@@ -7116,7 +7177,8 @@ function dqRenderDocumentTab(q, lines){
 
     <h4 style="margin-top:20px">Mentions spécifiques au client</h4>
     <div class="db-row" style="margin-bottom:9px;flex-wrap:wrap">
-      ${Object.keys(DQ_CLAUSES).map(k=>`<button class="sq-clause" type="button" onclick="dqApplyClause('${k}')">+ ${k==='coffre'?'Coffres conservés':k==='electric'?'Électricité client':k==='gateway'?'Réseau / gateways':'Déplacements'}</button>`).join('')}
+      ${(CRM_CLAUSES||[]).map(c=>`<button class="sq-clause" type="button" onclick="dqApplyClause('${c.id}')">+ ${esc(c.label)}</button>`).join('')}
+      <button class="sq-clause" type="button" style="border-style:dashed" onclick="dqOpenClauseLibrary()">⚙ Gérer les mentions</button>
     </div>
     <div id="dq-mentions" class="sq-edit" contenteditable="true" onblur="dqRerender()">${esc(q.mentionsText)}</div>
 

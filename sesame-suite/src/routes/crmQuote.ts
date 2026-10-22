@@ -471,6 +471,94 @@ crmQuoteRouter.post(
   })
 );
 
+// ── Bibliothèque de clauses (onglet Document, "Mentions spécifiques") ──
+// § demande client 22/10/2026 : remplace les 4 clauses figées en dur côté
+// client par une liste éditable, pour en ajouter facilement.
+
+function shapeClause(c: { id: string; label: string; text: string; order: number; createdAt: Date; updatedAt: Date }) {
+  return { id: c.id, label: c.label, text: c.text, order: c.order, createdAt: c.createdAt, updatedAt: c.updatedAt };
+}
+
+crmQuoteRouter.get(
+  "/crmQuoteClause/list",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (_req, res) => {
+    const rows = await prisma.crmQuoteClause.findMany({ orderBy: { order: "asc" } });
+    res.json(rows.map(shapeClause));
+  })
+);
+
+interface ClauseBody {
+  label: string;
+  text: string;
+}
+
+crmQuoteRouter.post(
+  "/crmQuoteClause/create",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const b = req.body as ClauseBody;
+    if (!b.label || !b.label.trim()) throw new HttpError(400, "Libellé requis");
+    if (!b.text || !b.text.trim()) throw new HttpError(400, "Texte requis");
+    const agg = await prisma.crmQuoteClause.aggregate({ _max: { order: true } });
+    const row = await prisma.crmQuoteClause.create({
+      data: { label: b.label.trim(), text: b.text.trim(), order: (agg._max.order ?? -1) + 1 },
+    });
+    res.status(201).json(shapeClause(row));
+  })
+);
+
+crmQuoteRouter.post(
+  "/crmQuoteClause/update",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const { id, ...b } = req.body as ClauseBody & { id: string };
+    if (!id) throw new HttpError(400, "id requis");
+    if (b.label !== undefined && !b.label.trim()) throw new HttpError(400, "Le libellé ne peut pas être vide");
+    if (b.text !== undefined && !b.text.trim()) throw new HttpError(400, "Le texte ne peut pas être vide");
+    const existing = await prisma.crmQuoteClause.findUnique({ where: { id } });
+    if (!existing) throw new HttpError(404, "Clause introuvable");
+    const row = await prisma.crmQuoteClause.update({
+      where: { id },
+      data: { label: b.label?.trim(), text: b.text?.trim() },
+    });
+    res.json(shapeClause(row));
+  })
+);
+
+crmQuoteRouter.post(
+  "/crmQuoteClause/delete",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const id = (req.body.id as string) || "";
+    const existing = await prisma.crmQuoteClause.findUnique({ where: { id } });
+    if (!existing) throw new HttpError(404, "Clause introuvable");
+    await prisma.crmQuoteClause.delete({ where: { id } });
+    res.json({ ok: true });
+  })
+);
+
+/** POST /wa/crmQuoteClause/reorder — body: {orderedIds:[...]}. */
+crmQuoteRouter.post(
+  "/crmQuoteClause/reorder",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const orderedIds = Array.isArray(req.body.orderedIds) ? (req.body.orderedIds as string[]) : [];
+    const owned = await prisma.crmQuoteClause.findMany({ select: { id: true } });
+    const ownedIds = new Set(owned.map((c) => c.id));
+    if (orderedIds.length !== ownedIds.size || orderedIds.some((id) => !ownedIds.has(id))) {
+      throw new HttpError(400, "Liste d'ordre invalide");
+    }
+    await prisma.$transaction(orderedIds.map((id, order) => prisma.crmQuoteClause.update({ where: { id }, data: { order } })));
+    res.json({ ok: true });
+  })
+);
+
 // ── Signature électronique simple ──
 // Volontairement pas une signature électronique qualifiée (eIDAS) — capture
 // nom saisi + tracé (canvas) + horodatage/IP/user-agent à titre de preuve
