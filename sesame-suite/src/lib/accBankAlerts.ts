@@ -43,6 +43,13 @@ export async function checkAndSendBankAlerts(entityId: string | null, createdIds
         libelle: tx.rawLabel,
         compte: tx.bankAccount.name,
         contrepartie: tx.counterpartyName || "",
+        // Alias explicite de `contrepartie` (nom du payeur/bénéficiaire
+        // fourni par la banque) — demande client 22/10/2026, "des
+        // variables sur la partie banque... avec le nom du client et le
+        // montant" : `contrepartie` existait déjà mais sans nom évident
+        // pour qui ne connaît pas le jargon bancaire. Repli sur le
+        // libellé brut si la banque ne fournit aucun nom de contrepartie.
+        nomClient: tx.counterpartyName || tx.rawLabel,
       },
     }).catch(() => {});
   }

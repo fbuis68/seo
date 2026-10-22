@@ -7721,7 +7721,32 @@ async function saveScoringConfig(){
 // l'identique côté back-office de chaque hôtel, voir admin.html)
 // ════════════════════════════════════════
 const CHANNEL_LABEL = {email:'Email', sms:'SMS', whatsapp:'WhatsApp', rcs:'RCS'};
-const TPL_CATEGORY_LABEL = {marketing:'Marketing', support:'Support', commercial:'Commercial', relance:'Relance'};
+const TPL_CATEGORY_LABEL = {marketing:'Marketing', support:'Support', commercial:'Commercial', relance:'Relance', compta:'Comptabilité'};
+
+// Variables disponibles par catégorie de modèle (demande client 22/10/2026,
+// "n'affiche que les variables de la categorie") — affichées dans l'éditeur
+// de modèle (cf. renderTplVarsHint ci-dessous) selon la catégorie choisie,
+// au lieu d'une liste unique mélangeant tous les usages. "Non catégorisé"
+// continue d'afficher tout (un modèle générique peut servir n'importe où).
+const TPL_CATEGORY_VARS = {
+  marketing: `Envoi depuis une fiche prospect / newsletter : {{nom}} {{secteur}} {{referent}} {{ville}} · tout envoi email : <code>{{lienDesabonnement}}</code> (lien de désabonnement — à insérer vous-même, jamais ajouté automatiquement hors campagne).`,
+  support: `Déclencheurs ticket support (Nouveau ticket / Client a répondu / Changement de statut) : {{numero}} {{sujet}} {{statut}} {{agent}} {{ancienStatut}} {{nouveauStatut}}.`,
+  commercial: `Envoi depuis une fiche prospect : {{nom}} {{secteur}} {{referent}} {{ville}} · envoi depuis "Utilisateurs CRM" (identifiants de connexion) : {{login}} {{password}} {{loginUrl}}.`,
+  relance: `Relance de facture (une facture) : {{numero}} {{tiers}} {{montant}} (reste dû) {{echeance}} — voir aussi la catégorie "Comptabilité" pour relancer plusieurs factures d'un même client en un seul envoi.`,
+  compta: `<b>Alerte mouvement bancaire</b> (règle "Nouveau mouvement bancaire") : {{nomClient}} (ou {{contrepartie}}) {{montant}} {{sens}} {{date}} {{libelle}} {{compte}}.<br>
+    <b>Relance de facture(s)</b> (une ou plusieurs factures en retard d'un même client, sélection multiple dans Comptabilité → Factures) : {{numero}} {{tiers}} {{montant}} {{echeance}} (facture unique) · {{nombreFactures}} {{montantTotal}} {{listeFactures}} (dès 2 factures sélectionnées pour le même client — liste une facture par ligne).`,
+};
+
+/** Filtre le pavé "Variables" de l'éditeur de modèle à la catégorie
+ * choisie — tout si "Non catégorisé" (comportement d'avant, modèle
+ * générique potentiellement utilisé n'importe où). */
+function renderTplVarsHint(){
+  const el = document.getElementById('tpl-vars-hint');
+  const sel = document.getElementById('tpl-category');
+  if(!el || !sel) return;
+  const cat = sel.value;
+  el.innerHTML = cat && TPL_CATEGORY_VARS[cat] ? ('Variables — '+TPL_CATEGORY_VARS[cat]) : ('Variables (toutes catégories — choisissez une catégorie ci-dessus pour filtrer) : '+Object.values(TPL_CATEGORY_VARS).join(' '));
+}
 let tplCategoryFilter='';
 let SMTP_CFG=null, SMS_CFG=null, WA_CFG=null, GRAPH_MAIL=null;
 let SENDER_IDENTITIES = [];
@@ -8158,7 +8183,7 @@ async function openTemplateModal(id){
         <div class="ff"><label>Clé (identifiant technique)</label><input id="tpl-key" value="${esc(t.key)}" placeholder="ex. prospect-relance" ${t.id?'disabled':''}></div>
       </div>
       <div class="ff" style="margin-top:8px"><label>Nom affiché</label><input id="tpl-name" value="${esc(t.name)}" placeholder="Relance prospect"></div>
-      <div class="ff" style="margin-top:8px"><label>Catégorie</label><select id="tpl-category">
+      <div class="ff" style="margin-top:8px"><label>Catégorie</label><select id="tpl-category" onchange="renderTplVarsHint()">
         <option value="" ${!t.category?'selected':''}>— Non catégorisé —</option>
         ${Object.keys(TPL_CATEGORY_LABEL).map(k=>`<option value="${k}" ${t.category===k?'selected':''}>${TPL_CATEGORY_LABEL[k]}</option>`).join('')}
       </select>
@@ -8196,7 +8221,7 @@ async function openTemplateModal(id){
           <textarea class="htmled-src" id="tpl-body" style="display:none" oninput="htmlEdSyncFromSrc('tpl-body')">${esc(t.bodyHtml||'')}</textarea>
         </div>
       </div>
-      <div style="font-size:11px;color:var(--mu);margin-top:6px" id="tpl-vars-hint">Variables — envoi depuis une fiche prospect : {{nom}} {{secteur}} {{referent}} {{ville}} · envoi depuis "Utilisateurs CRM" (identifiants de connexion) : {{login}} {{password}} {{loginUrl}} · déclencheurs ticket support (Nouveau ticket / Client a répondu / Changement de statut) : {{numero}} {{sujet}} {{statut}} {{agent}} {{ancienStatut}} {{nouveauStatut}} · tout envoi email : <code>{{lienDesabonnement}}</code> (lien de désabonnement du destinataire — à insérer vous-même dans le corps, jamais ajouté automatiquement hors campagne)</div>
+      <div style="font-size:11px;color:var(--mu);margin-top:6px" id="tpl-vars-hint"></div>
       <div class="ff" id="tpl-rcs-wrap" style="margin-top:8px"><label>Identifiant du modèle RCS (SMSPartner)</label><input id="tpl-rcs-token" value="${esc(t.rcsModelToken||'')}" placeholder="9f8c2b1a7d4e6f30a1b2c3d4e5f60718" maxlength="32">
         <div style="font-size:11px;color:var(--mu,#888);margin-top:4px">Le contenu (texte, carte enrichie, carrousel…) se crée et s'héberge sur <a href="https://my.smspartner.fr/dashboard/model/list" target="_blank" rel="noopener">my.smspartner.fr</a> (Modèles de message, type RCS) — collez ici son identifiant (colonne "Identifiant", ou panneau "Identifiant API" de la fiche du modèle). Le canal SMS doit être configuré avec le fournisseur DocPartner/SMSPartner pour que l'envoi RCS fonctionne (même compte, même clé API).</div>
       </div>
@@ -8239,6 +8264,7 @@ async function openTemplateModal(id){
   htmlEdInit('tpl-body', t.bodyHtml||'');
   renderTplSubjectVisibility();
   renderTplAttachmentsList();
+  renderTplVarsHint();
 }
 
 function renderTplSubjectVisibility(){
@@ -8678,7 +8704,7 @@ const TRIGGERS_CRM = [
   // Filtré via audienceFilter {direction, bankAccountId, minAmount}, cf.
   // renderRuleAudienceFields/saveRule ci-dessous (12/10/2026, demande
   // client — déplacé depuis un panneau dédié de l'onglet Banque).
-  {key:'bank.transaction.created', label:'Nouveau mouvement bancaire', timingModes:['immediate']},
+  {key:'bank.transaction.created', label:'Nouveau mouvement bancaire', timingModes:['immediate'], category:'compta'},
 ];
 let AUTO_RULES=[];
 
@@ -9706,18 +9732,18 @@ async function openAccRelanceModal(){
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box" style="max-width:480px">
       <div class="modal-head"><div style="font-size:16px;font-weight:500">Envoyer une relance</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
-      <div style="font-size:12px;color:var(--mu);margin-bottom:10px">${selectedInvoices.length} facture(s) sélectionnée(s). Variables disponibles dans le modèle : <code>{{numero}}</code>, <code>{{tiers}}</code>, <code>{{montant}}</code> (reste dû), <code>{{echeance}}</code>.</div>
+      <div style="font-size:12px;color:var(--mu);margin-bottom:10px">${selectedInvoices.length} facture(s) sélectionnée(s)${selectedInvoices.length>1?' — un seul email par client, regroupant toutes ses factures sélectionnées':''}. Variables disponibles dans le modèle : <code>{{numero}}</code>, <code>{{tiers}}</code>, <code>{{montant}}</code> (reste dû), <code>{{echeance}}</code> (facture unique, ou 1ʳᵉ facture du groupe) · <code>{{nombreFactures}}</code>, <code>{{montantTotal}}</code>, <code>{{listeFactures}}</code> (dès 2 factures sélectionnées pour le même client).</div>
       ${emailTpls.length?`
       <div class="ff"><label>Modèle email</label><select id="relance-templateKey">
         ${emailTpls.map(t=>`<option value="${esc(t.key)}">${esc(t.name)}${t.category?' — '+(TPL_CATEGORY_LABEL[t.category]||t.category):''}</option>`).join('')}
       </select></div>
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:10px"><input type="checkbox" id="relance-attach" checked>Joindre le document de chaque facture en pièce jointe</label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:10px"><input type="checkbox" id="relance-attach" checked>Joindre le(s) document(s) de facture en pièce jointe</label>
       <div id="relance-status" style="font-size:12px;margin-top:8px"></div>
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="accSubmitRelance()">Envoyer</button>
         <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
       </div>`:`
-      <div class="log-empty">Aucun modèle email — créez-en un dans Canaux → Modèles (catégorie "Relance" recommandée).</div>
+      <div class="log-empty">Aucun modèle email — créez-en un dans Canaux → Modèles (catégorie "Comptabilité" recommandée).</div>
       <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal()">Fermer</button></div>`}
     </div>
   </div>`;

@@ -19,7 +19,7 @@ import { fetchQontoOrganization, syncQontoBankAccount, QontoError, QontoCredenti
 import { testGoCardlessConnection, syncGoCardless, GoCardlessError, GoCardlessCredentials, estimateGoCardlessVat, getGoCardlessVatRate } from "../lib/gocardless";
 import { testScalewayConnection, syncScaleway, ScalewayError, ScalewayCredentials } from "../lib/scaleway";
 import { findCandidates, confirmMatch, unmatch, autoReconcileMany, ReconciliationError, invoiceTotal } from "../lib/accReconciliation";
-import { sendRelanceBatch, runRelanceRule } from "../lib/accRelance";
+import { sendRelanceGroupedByClient, runRelanceRule } from "../lib/accRelance";
 
 /**
  * Module comptabilité (§1-72 du cahier des charges) — routes REST. Toutes
@@ -798,9 +798,11 @@ interface RelanceBody {
 
 /**
  * POST /wa/acc/invoices/relance — envoie un email de relance manuel (modèle
- * email au choix) pour chaque facture sélectionnée — même logique d'envoi
- * que le balayage automatique des règles (cf. lib/accRelance.ts), partagée
- * pour ne jamais diverger sur ce qui constitue une facture "relançable".
+ * email au choix) pour les factures sélectionnées — regroupées par tiers
+ * (sendRelanceGroupedByClient) : un seul email par client/fournisseur
+ * couvrant toutes ses factures sélectionnées, au lieu d'un email par
+ * facture (demande client 22/10/2026). Le balayage automatique des règles
+ * (cf. lib/accRelance.ts runRelanceRule) reste un email par facture.
  */
 accountingRouter.post(
   "/acc/invoices/relance",
@@ -811,7 +813,7 @@ accountingRouter.post(
     if (!b.invoiceIds?.length) throw new HttpError(400, "invoiceIds requis");
     if (!b.templateKey) throw new HttpError(400, "templateKey requis");
 
-    const summary = await sendRelanceBatch(entityId, b.invoiceIds, b.templateKey, b.attachInvoice !== false);
+    const summary = await sendRelanceGroupedByClient(entityId, b.invoiceIds, b.templateKey, b.attachInvoice !== false);
     await recordAuditLog({
       entityId, userId: actorId(req), action: "invoices_relance_sent", targetType: "AccInvoice", targetId: b.invoiceIds.join(","),
       newValue: { templateKey: b.templateKey, successCount: summary.successCount, failureCount: summary.failureCount }, ip: req.ip,
