@@ -696,6 +696,7 @@ overflow:hidden
 #sesame-journey .eyebrow{font-size:10px;text-transform:uppercase;letter-spacing:1.6px;color:var(--muted)}
 #sesame-journey .sub{font-size:12px;color:var(--muted)}
 #sesame-journey .demo{font-size:11px;padding:4px 9px;border-radius:14px;background:var(--soft);color:var(--teal)}
+#sesame-journey .demo.is-real{background:color-mix(in srgb,var(--green) 16%,var(--panel));color:var(--green)}
 #sesame-journey .toolbar{margin:20px 0;display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
 #sesame-journey .period{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--muted)}
 #sesame-journey select{border:1px solid var(--line);border-radius:7px;padding:9px;background:var(--panel);color:var(--ink);max-width:100%}
@@ -1091,7 +1092,7 @@ overflow:hidden
 <div id="pan-dash" class="pan on">
 <div id="sesame-journey">
 <main>
-<div class="row"><div><div class="eyebrow" id="sj-hotel-name"></div><h1>Chaque étape crée de la valeur.</h1><p class="sub">Votre performance, tout au long du parcours digital client.</p></div><span class="demo">Démo · chiffres fictifs</span></div>
+<div class="row"><div><div class="eyebrow" id="sj-hotel-name"></div><h1>Chaque étape crée de la valeur.</h1><p class="sub">Votre performance, tout au long du parcours digital client.</p></div><span class="demo" id="sj-data-badge">Données réelles</span></div>
 <div class="toolbar"><span class="sub" id="sj-comparison"></span><div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap"><label class="period" for="sj-month">Période<select id="sj-month" class="cursor-interaction"><option value="2026-01">Janvier 2026</option><option value="2026-02">Février 2026</option><option value="2026-03">Mars 2026</option><option value="2026-04">Avril 2026</option><option value="2026-05">Mai 2026</option><option value="2026-06">Juin 2026</option><option value="2026-07">Juillet 2026</option><option value="2026-08">Août 2026</option><option value="2026-09">Septembre 2026</option><option value="2026-10" selected>Octobre 2026 · au 23/10</option></select></label><button class="btn" onclick="showPan('planning')"><i class="ti ti-calendar-event"></i>Planning d'interventions</button></div></div>
 <section class="summary" aria-label="Impact Sesame sur la période"><div><p class="sub">Valeur nette estimée</p><strong id="sj-net"></strong><p class="sub" id="sj-roi"></p></div><div><p class="sub">Temps libéré estimé</p><strong id="sj-time"></strong><p class="sub">Accueil, check-in &amp; ménage</p></div><div><p class="sub">Ventes boutique</p><strong id="sj-sales"></strong><p class="sub">CA encaissé via Sesame</p></div></section>
 <div class="row journey-title"><h2>Parcours digital client</h2><span class="sub">Sélectionnez une étape</span></div>
@@ -6888,90 +6889,175 @@ function row(label,val){
 }
 
 // ═══════════════════════════════════════════════ DASHBOARD — Accueil
-// "Parcours client & performance" (intégration maquette 22/10/2026).
-// Données entièrement simulées (cf. sjDemoMonth) — pas de branchement sur
-// les vraies réservations/KPI ici. Chaque étape (Boutique/Ménage/Fidélité)
-// est verrouillée visuellement — chiffres grisés + bandeau — quand le
-// module Sesame correspondant n'est pas souscrit par l'établissement
-// (CFG.checkinModules), pour montrer au client le bénéfice attendu sans
-// jamais faire passer une démo pour une mesure réelle. Arrivées/Check-in
-// restent toujours "actifs" : ce sont le socle du produit, non des modules
-// optionnels.
+// "Parcours client & performance" (intégration maquette 22/10/2026, données
+// réelles de l'entité en cours depuis le 23/10/2026).
+// Chaque métrique est calculée à partir des vraies données de l'établissement
+// actif (réservations, commandes, tâches ménage éco, fidélité — cf.
+// sjFetchRaw/sjRealMonth) SAUF pour les étapes dont le module Sesame
+// correspondant n'est pas souscrit (CFG.checkinModules.roomservice/eco/
+// rewards) : celles-ci affichent des chiffres d'exemple générés (cf.
+// sjDemoMonth, formule inchangée depuis la maquette d'origine) pour montrer
+// le bénéfice potentiel, jamais confondus avec une mesure réelle (bandeau +
+// badge "non souscrit"). Arrivées/Check-in sont le socle du produit, jamais
+// verrouillés, toujours réels.
 function renderDash(){
-  if(typeof SJ_RENDER==='function') SJ_RENDER();
+  if(typeof SJ_REFRESH==='function') SJ_REFRESH();
 }
 
-var SJ_RENDER = (function(){
+var SJ_REFRESH = (function(){
   var root = document.getElementById('sesame-journey');
   if(!root) return function(){};
   var $ = function(id){ return root.querySelector('#'+id); };
   var fmt = new Intl.NumberFormat('fr-FR',{ maximumFractionDigits:1 });
   var nf = function(v){ return fmt.format(v); };
   var euro = function(v){ return nf(Math.round(v))+' €'; };
-  var pct = function(n,d){ return nf(Math.round(n/d*100))+' %'; };
+  var pct = function(n,d){ return d>0 ? nf(Math.round(n/d*100))+' %' : '—'; };
   var MONTH_NAMES = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
-  // Mois de référence démo : octobre 2026, "aujourd'hui" fixé au 23/10 —
-  // indépendant de la vraie date, cohérent avec le calendrier proposé dans
-  // le sélecteur de période (janvier→octobre 2026 uniquement).
-  var DEMO_TODAY = '2026-10-23';
+  // ── Mois au format 'YYYY-MM', bornes calendaires utilitaires ──
+  function sjMonthStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+  function sjShiftMonth(monthStr, delta){
+    var parts=monthStr.split('-'); var d=new Date(Number(parts[0]), Number(parts[1])-1+delta, 1);
+    return sjMonthStr(d);
+  }
+  function sjMonthBounds(monthStr){
+    var start=monthStr+'-01';
+    var end=sjShiftMonth(monthStr,1)+'-01'; // borne exclusive
+    return { start:start, end:end };
+  }
+  function sjMonthLabel(monthStr, short){
+    var parts=monthStr.split('-'); var d=new Date(Number(parts[0]), Number(parts[1])-1, 1);
+    return short ? MONTH_NAMES[d.getMonth()].slice(0,3)+'.' : MONTH_NAMES[d.getMonth()]+' '+d.getFullYear();
+  }
+  // Liste des 12 derniers mois (le plus ancien d'abord), bornée au mois en
+  // cours (fuseau de l'établissement) — remplace le calendrier figé
+  // janvier→octobre 2026 de la maquette d'origine, désormais réel/continu.
+  function sjMonthList(){
+    var cur=hotelToday().slice(0,7);
+    var curParts=cur.split('-'); var curDate=new Date(Number(curParts[0]),Number(curParts[1])-1,1);
+    var list=[];
+    for(var i=11;i>=0;i--){ var d=new Date(curDate); d.setMonth(d.getMonth()-i); list.push(sjMonthStr(d)); }
+    return list;
+  }
 
-  function sjDemoMonth(m){
-    var f = m===9 ? .77 : 1;
-    var arrivals=Math.round((215+m*11+Math.sin(m)*16)*f);
+  // Générateur d'exemple (bénéfice potentiel) pour un module non souscrit —
+  // formule inchangée depuis la maquette, indépendante des vraies données :
+  // m = index entier arbitraire dérivé du mois sélectionné, sert uniquement
+  // à faire varier les chiffres d'exemple d'un mois à l'autre.
+  function sjDemoMonth(monthStr){
+    var parts=monthStr.split('-'); var m=(Number(parts[0])-2026)*12+(Number(parts[1])-1);
+    var arrivals=Math.round(215+m*11+Math.sin(m)*16);
     var ready=Math.round(arrivals*(.72+m*.015));
     var autonomous=Math.round(arrivals*(.70+m*.017));
-    var skipped=Math.round((24+m*4)*f);
-    var sales=Math.round((520+m*85)*f);
+    var skipped=Math.round(24+m*4);
+    var sales=Math.round(520+m*85);
     var orders=Math.round(sales/24);
     var members=Math.round(arrivals*(.12+m*.008));
     var repeat=Math.round(arrivals*(.10+m*.006));
-    var time=ready*.12+autonomous*.2+skipped*.5;
-    var margin=sales*.35;
-    var gross=time*25+margin+skipped*5;
-    return { arrivals:arrivals, ready:ready, autonomous:autonomous, skipped:skipped, sales:sales, orders:orders,
-      members:members, repeat:repeat, time:time, margin:margin, net:gross-600, roi:(gross-600)/600*100, water:skipped*30 };
+    return { arrivals:arrivals, ready:ready, autonomous:autonomous, skipped:skipped, sales:sales, orders:orders, members:members, repeat:repeat, water:skipped*30 };
   }
 
-  function sjMonthDays(monthIndex, monthlyStays, monthlyOnline){
-    var length = new Date(Date.UTC(2026, monthIndex+1, 0)).getUTCDate();
-    var dowWeight = [0.7,0.8,1,1.1,1.5,1.3,0.9];
-    var weights = Array.from({length:length},function(_,i){ return dowWeight[new Date(Date.UTC(2026,monthIndex,i+1)).getUTCDay()]; });
-    function allocate(total){
-      var sum = weights.reduce(function(a,b){return a+b;},0);
-      var counts = weights.map(function(w){ return Math.floor(total*w/sum); });
-      var remaining = total - counts.reduce(function(a,b){return a+b;},0);
-      for(var i=0;remaining>0;i++,remaining--) counts[i%length]++;
-      return counts;
+  // ── Données réelles — chargées une fois par ouverture du panneau Accueil
+  // (cf. refresh()), recalculées par mois à la demande (dataset borné à un
+  // établissement, pas besoin de requêtes serveur par mois). ──
+  var RAW = { bookings:[], orders:[], tasks:[], loyalty:[] };
+
+  async function sjFetchRaw(){
+    try{
+      var results = await Promise.all([
+        adminFetch('/wa/booking/list'),
+        adminFetch('/wa/roomservice/list'),
+        adminFetch('/wa/housekeepingTask/list'),
+        adminFetch('/wa/loyalty/list'),
+      ]);
+      RAW.bookings = results[0].ok ? await results[0].json() : [];
+      RAW.orders = results[1].ok ? await results[1].json() : [];
+      RAW.tasks = results[2].ok ? await results[2].json() : [];
+      RAW.loyalty = results[3].ok ? await results[3].json() : [];
+    }catch(e){
+      console.error('[Accueil] chargement des données réelles impossible', e);
     }
-    var stays = allocate(monthlyStays);
-    var online = stays.map(function(n){ return Math.floor(n*monthlyOnline/monthlyStays); });
-    var remaining = monthlyOnline - online.reduce(function(a,b){return a+b;},0);
-    for(var i=0; remaining>0; i=(i+1)%length){ if(online[i]<stays[i]){ online[i]++; remaining--; } }
-    return stays.map(function(count,i){
-      var date = new Date(Date.UTC(2026,monthIndex,i+1)).toISOString().slice(0,10);
-      return { date:date, expected:count, online:online[i], arrived: date>DEMO_TODAY ? null : date===DEMO_TODAY ? Math.floor(count*0.65) : count };
+  }
+
+  // "Déjà venu avant" : email vu dans une réservation antérieure (toutes
+  // périodes confondues) de ce même établissement.
+  var firstSeenCache = null;
+  function sjFirstSeenByEmail(){
+    if(firstSeenCache) return firstSeenCache;
+    var map = {};
+    RAW.bookings.slice().sort(function(a,b){ return (a.startDate||'').localeCompare(b.startDate||''); })
+      .forEach(function(b){
+        var key=(b.personEmail||'').toLowerCase();
+        if(key && !(key in map)) map[key]=(b.startDate||'').slice(0,10);
+      });
+    firstSeenCache = map;
+    return map;
+  }
+
+  // Calcule l'agrégat réel du mois donné pour l'entité active — même forme
+  // que sjDemoMonth, plus time/margin/net/roi dérivés des réglages réels de
+  // l'établissement (CFG.checkinModules.*.staffMinutesSaved, CFG.kpi,
+  // CFG.eauMenage) — mêmes barèmes que le panneau "Indicateurs réels"
+  // historique (kpiComputeForRange), pas une formule générique figée.
+  function sjRealMonth(monthStr){
+    var bounds = sjMonthBounds(monthStr);
+    var bookings = RAW.bookings.filter(function(b){
+      var d=(b.startDate||'').slice(0,10);
+      return d>=bounds.start && d<bounds.end && b.status!=='cancelled';
     });
-  }
+    var arrivals = bookings.length;
+    var ready = bookings.filter(function(b){ return b.checkinDone; }).length;
+    var autonomous = ready; // check-in en ligne terminé = parcours autonome (pas de distinction supplémentaire trackée)
 
-  function sjChannelMix(total){
-    var names=['Booking.com','Expedia','Airbnb','Autres OTA','Direct · hors OTA'];
-    var shares=[0.44,0.20,0.10,0.06,0.20];
-    var values=shares.map(function(s){ return Math.floor(total*s); });
-    values[4]+= total - values.reduce(function(a,b){return a+b;},0);
-    return names.map(function(name,i){ return {name:name, stays:values[i]}; });
-  }
+    var firstSeen = sjFirstSeenByEmail();
+    var repeat = bookings.filter(function(b){
+      var key=(b.personEmail||'').toLowerCase();
+      return key && firstSeen[key] && firstSeen[key] < (b.startDate||'').slice(0,10);
+    }).length;
 
-  function sjTodaySnapshot(){
-    return {
-      date: DEMO_TODAY, present:86, adults:74, children:12, arrivals:9,
-      tasks:[
-        {id:'payments', title:'Vérifier 4 paiements avant arrivée', detail:'Priorité haute · Réception · avant 15 h'},
-        {id:'online', title:'Relancer 6 enregistrements en ligne', detail:'Réception · arrivées du jour'},
-        {id:'late', title:'Préparer 3 arrivées tardives', detail:'Contrôler les accès et envoyer les consignes'},
-        {id:'sync', title:'Contrôler la synchronisation PMS', detail:'Vérifier chambres, dates et droits d’accès'},
-      ]
-    };
+    var orders = RAW.orders.filter(function(o){
+      var d=(o.createdAt||'').slice(0,10);
+      return d>=bounds.start && d<bounds.end && o.status!=='cancelled';
+    });
+    var sales = orders.reduce(function(s,o){ return s+(o.total||0); }, 0);
+    var margin = sales*.35; // hypothèse déclarée (cf. "Sources et hypothèses"), appliquée à un CA réel
+
+    // Ménage évité — même logique que kpiComputeForRange (housekeepingTask
+    // ecoAuto de type "menage"), séjours n'ayant jamais utilisé le
+    // check-in éco exclus (pas comptés comme "tout évité").
+    var skipped=0, totalNightsTracked=0;
+    bookings.forEach(function(b){
+      var start=new Date(b.startDate), end=new Date(b.endDate);
+      var nights=Math.round((end-start)/86400000);
+      if(nights<=0) return;
+      var bTasks = RAW.tasks.filter(function(t){ return t.bookingCode===b.code && t.ecoAuto && t.type==='menage'; });
+      if(!bTasks.length) return;
+      totalNightsTracked += nights;
+      skipped += Math.max(0, nights-bTasks.length);
+    });
+    var water = skipped*(CFG.eauMenage!=null?CFG.eauMenage:15);
+
+    var members = RAW.loyalty.filter(function(l){
+      var d=(l.joinedAt||'').slice(0,10);
+      return d>=bounds.start && d<bounds.end;
+    }).length;
+
+    var minutesPerCheckin = ['room','taxe','kyc'].reduce(function(s,k){
+      var m=CFG.checkinModules && CFG.checkinModules[k];
+      if(!m || m.active===false) return s;
+      var mins=(m.staffMinutesSaved!=null)?m.staffMinutesSaved:(STAFF_TIME_DEFAULTS[k]||0);
+      return s+mins;
+    }, 0);
+    var minPerClean = (CFG.kpi && CFG.kpi.minPerClean!=null) ? CFG.kpi.minPerClean : 45;
+    var hourlyRate = (CFG.kpi && CFG.kpi.hourlyRate!=null) ? CFG.kpi.hourlyRate : 25;
+    var timeCheckin = (ready*minutesPerCheckin)/60;
+    var timeMenage = (skipped*minPerClean)/60;
+    var time = timeCheckin+timeMenage;
+    var gross = time*hourlyRate + margin + skipped*5;
+
+    return { arrivals:arrivals, ready:ready, autonomous:autonomous, skipped:skipped, sales:sales, orders:orders.length,
+      members:members, repeat:repeat, time:time, timeCheckin:timeCheckin, timeMenage:timeMenage, margin:margin, net:gross-600, roi:(gross-600)/600*100, water:water,
+      _totalNightsTracked:totalNightsTracked, _ordersBySource:orders, _direct:bookings.filter(function(b){return !b.otaId;}).length, _ota:bookings.filter(function(b){return !!b.otaId;}).length };
   }
 
   // Verrouillage par module souscrit (EntityModuleConfig.checkinModules,
@@ -6988,6 +7074,40 @@ var SJ_RENDER = (function(){
     };
   }
 
+  // Combine réel + exemple par métrique (pas par étape entière) : le bandeau
+  // de synthèse en haut de page reste cohérent quel que soit l'onglet
+  // ouvert, en mélangeant les métriques réelles (toujours arrivées/check-in)
+  // et les métriques d'exemple pour les seuls modules non souscrits.
+  function sjBuildMonth(monthStr){
+    var locked = sjLockedStages();
+    var real = sjRealMonth(monthStr);
+    if(!locked.shop && !locked.house && !locked.loyalty) return real;
+    var demo = sjDemoMonth(monthStr);
+    var sales = locked.shop ? demo.sales : real.sales;
+    var skipped = locked.house ? demo.skipped : real.skipped;
+    var margin = locked.shop ? demo.sales*.35 : real.margin;
+    var minPerClean = (CFG.kpi && CFG.kpi.minPerClean!=null) ? CFG.kpi.minPerClean : 45;
+    var hourlyRate = (CFG.kpi && CFG.kpi.hourlyRate!=null) ? CFG.kpi.hourlyRate : 25;
+    var minutesPerCheckin = ['room','taxe','kyc'].reduce(function(s,k){
+      var m=CFG.checkinModules && CFG.checkinModules[k];
+      if(!m || m.active===false) return s;
+      var mins=(m.staffMinutesSaved!=null)?m.staffMinutesSaved:(STAFF_TIME_DEFAULTS[k]||0);
+      return s+mins;
+    }, 0);
+    var timeCheckin = (real.ready*minutesPerCheckin)/60;
+    var timeMenage = (skipped*minPerClean)/60;
+    var time = timeCheckin+timeMenage;
+    var gross = time*hourlyRate + margin + skipped*5;
+    return {
+      arrivals:real.arrivals, ready:real.ready, autonomous:real.autonomous,
+      skipped:skipped, water: locked.house?demo.water:real.water,
+      sales:sales, orders: locked.shop?demo.orders:real.orders, margin:margin,
+      members: locked.loyalty?demo.members:real.members, repeat: locked.loyalty?demo.repeat:real.repeat,
+      time:time, timeCheckin:timeCheckin, timeMenage:timeMenage, net:gross-600, roi:(gross-600)/600*100,
+      _totalNightsTracked:real._totalNightsTracked, _ordersBySource:real._ordersBySource, _direct:real._direct, _ota:real._ota
+    };
+  }
+
   var configs = {
     arrivals:{ name:'Arrivées', color:'teal', desc:'Piloter les arrivées, les canaux de réservation et l’activité du jour.', trend:'Arrivées par semaine', unit:'séjours', history:'Séjours attendus · évolution sur 6 mois' },
     checkin:{ name:'Check-in', color:'blue', desc:'Fluidifier l’accueil, sécuriser les identités et remettre les accès.', trend:'Check-in autonomes par semaine', unit:'check-in', history:'Temps libéré au check-in · heures sur 6 mois' },
@@ -6998,34 +7118,48 @@ var SJ_RENDER = (function(){
   var MODULE_LABEL = { shop:'Boutique', house:'Préférences éco (ménage)', loyalty:'Récompenses & points' };
 
   var stage = 'arrivals';
-  var month = 9;
+  var monthStr = hotelToday().slice(0,7);
   var selectedWeek = '';
   var completedTasks = new Set();
-  var today = sjTodaySnapshot();
 
-  function label(m,short){
-    var d = new Date(2026,m,1);
-    return short ? MONTH_NAMES[d.getMonth()].slice(0,3)+'.' : MONTH_NAMES[d.getMonth()]+' '+d.getFullYear();
-  }
+  function label(m,short){ return sjMonthLabel(m,short); }
   function split(total){
     var a=[.21,.27,.24,.28].map(function(v){ return Math.floor(total*v); });
     a[3]+= total - a.reduce(function(x,y){return x+y;},0);
     return a;
   }
+  function sjToday(){
+    var todayStr = hotelToday();
+    var arrivalsToday = RAW.bookings.filter(function(b){ return b.status!=='cancelled' && (b.startDate||'').slice(0,10)===todayStr; });
+    var departuresToday = RAW.bookings.filter(function(b){ return b.status!=='cancelled' && (b.endDate||'').slice(0,10)===todayStr; });
+    var present = RAW.bookings.filter(function(b){
+      if(b.status==='cancelled') return false;
+      var s=(b.startDate||'').slice(0,10), e=(b.endDate||'').slice(0,10);
+      return s<=todayStr && todayStr<=e;
+    }).length;
+    return {
+      date: todayStr,
+      arrivals: arrivalsToday.length,
+      present: present,
+      pendingOnline: arrivalsToday.filter(function(b){ return !b.checkinDone; }).length,
+      pendingCheckout: departuresToday.filter(function(b){ return b.status!=='completed'; }).length,
+    };
+  }
   function metrics(d){
+    var today = sjToday();
     switch(stage){
-      case'arrivals':return[['Séjours attendus',nf(d.arrivals),'Mois sélectionné'],['Enregistrements en ligne',pct(d.ready,d.arrivals),nf(d.ready)+' séjours enregistrés'],['Arrivées aujourd’hui',nf(today.arrivals),'23 octobre 2026 · séjours'],['Personnes présentes',nf(today.present),nf(today.adults)+' adultes · '+nf(today.children)+' enfants · aujourd’hui']];
-      case'checkin':return[['Check-in autonomes',pct(d.autonomous,d.arrivals),nf(d.autonomous)+' sur '+nf(d.arrivals)],['Identités vérifiées',pct(d.ready,d.arrivals),nf(d.ready)+' dossiers vérifiés'],['Temps libéré',nf(Math.round(d.autonomous*.2))+' h','12 min / check-in autonome'],['Temps valorisé',euro(d.autonomous*.2*25),'Base : 25 €/h chargé']];
-      case'shop':return[['CA boutique',euro(d.sales),'Ventes encaissées'],['Commandes',nf(d.orders),'Services & options'],['Panier moyen',euro(d.sales/d.orders),'CA / commandes'],['Marge estimée',euro(d.margin),'Hypothèse : 35 % du CA']];
-      case'house':return[['Ménages évités',nf(d.skipped),'Renoncements confirmés'],['Temps libéré',nf(d.skipped*.5)+' h','30 min / ménage'],['Temps valorisé',euro(d.skipped*.5*25),'Hors coûts variables'],['Eau économisée',nf(d.water)+' L','Estimation : 30 L / ménage']];
+      case'arrivals':return[['Séjours attendus',nf(d.arrivals),'Mois sélectionné'],['Enregistrements en ligne',pct(d.ready,d.arrivals),nf(d.ready)+' séjours enregistrés'],['Arrivées aujourd’hui',nf(today.arrivals),new Date(today.date+'T00:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'long'})+' · séjours'],['Personnes présentes',nf(today.present),'Séjours en cours · aujourd’hui']];
+      case'checkin':return[['Check-in autonomes',pct(d.autonomous,d.arrivals),nf(d.autonomous)+' sur '+nf(d.arrivals)],['Identités vérifiées',pct(d.ready,d.arrivals),nf(d.ready)+' dossiers vérifiés'],['Temps libéré',nf(Math.round(d.timeCheckin))+' h','Barèmes réels de l’établissement'],['Temps valorisé',euro(d.timeCheckin*((CFG.kpi&&CFG.kpi.hourlyRate!=null)?CFG.kpi.hourlyRate:25)),'Base : '+((CFG.kpi&&CFG.kpi.hourlyRate!=null)?CFG.kpi.hourlyRate:25)+' €/h chargé']];
+      case'shop':return[['CA boutique',euro(d.sales),'Ventes encaissées'],['Commandes',nf(d.orders),'Services & options'],['Panier moyen',d.orders>0?euro(d.sales/d.orders):'—','CA / commandes'],['Marge estimée',euro(d.margin),'Hypothèse : 35 % du CA']];
+      case'house':return[['Ménages évités',nf(d.skipped),'Renoncements confirmés'],['Temps libéré',nf(Math.round(d.skipped*((CFG.kpi&&CFG.kpi.minPerClean!=null)?CFG.kpi.minPerClean:45)/60))+' h',((CFG.kpi&&CFG.kpi.minPerClean!=null)?CFG.kpi.minPerClean:45)+' min / ménage'],['Coûts variables évités',euro(d.skipped*5),'Hors temps de travail'],['Eau économisée',nf(d.water)+' L',(CFG.eauMenage!=null?CFG.eauMenage:15)+' L / ménage évité']];
       default:return[['Nouvelles adhésions',nf(d.members),'Programme fidélité'],['Taux d’adhésion',pct(d.members,d.arrivals),'Adhésions / séjours'],['Clients récurrents',nf(d.repeat),'Déjà venus avant la période'],['Part récurrente',pct(d.repeat,d.arrivals),'Séjours clients déjà connus']];
     }
   }
   function plotValue(d,history){
     if(stage==='arrivals') return d.arrivals;
-    if(stage==='checkin') return history ? Math.round(d.autonomous*.2) : d.autonomous;
+    if(stage==='checkin') return history ? Math.round(d.timeCheckin) : d.autonomous;
     if(stage==='shop') return d.sales;
-    if(stage==='house') return history ? d.skipped*.5*25 : d.skipped*.5;
+    if(stage==='house') return history ? d.skipped*5 : d.skipped; // historique en € (coûts variables évités), détail en séjours évités
     return history ? d.repeat : d.members;
   }
   var NS='http://www.w3.org/2000/svg';
@@ -7076,39 +7210,55 @@ var SJ_RENDER = (function(){
     var cursor=0;
     var colors = stage==='checkin' ? ['var(--teal)','var(--blue)','var(--orange)'] : ['var(--active)','var(--blue)','var(--orange)'];
     var stops = items.map(function(item,i){
-      var start=cursor; cursor+=item[1]/total*100;
+      var start=cursor; cursor+=(total>0?item[1]/total*100:0);
       return colors[i]+' '+start+'% '+cursor+'%';
     });
     $('sj-mix').innerHTML = '<div class="donut-group"><div class="ring" role="img" aria-label="'+items.map(function(i){return i[0]+' '+nf(i[1]);}).join(', ')+'" style="background:conic-gradient('+stops.join(',')+')"><div class="ring-center">'+center+'<small>'+sub+'</small></div></div><div>'+items.map(function(item,i){ return '<div class="legend-row"><span class="swatch" style="background:'+colors[i]+'"></span>'+item[0]+'<b>'+nf(item[1])+'</b></div>'; }).join('')+'</div></div>';
   }
   function bars(items,unit){
-    var max=Math.max.apply(null,items.map(function(i){return i[1];}));
-    $('sj-mix').innerHTML = items.map(function(i){ return '<div class="list-row"><div class="row"><span>'+i[0]+'</span><span>'+nf(i[1])+' '+unit+'</span></div><div class="track"><span style="width:'+i[1]/max*100+'%"></span></div></div>'; }).join('');
+    var max=Math.max.apply(null,items.map(function(i){return i[1];}).concat([1]));
+    $('sj-mix').innerHTML = items.map(function(i){ return '<div class="list-row"><div class="row"><span>'+i[0]+'</span><span>'+nf(i[1])+' '+unit+'</span></div><div class="track"><span style="width:'+(i[1]/max*100)+'%"></span></div></div>'; }).join('');
   }
-  function mix(d){
+  var ORDER_SOURCE_LABEL = { checkin:'Pendant le check-in', roomservice:'Room-service', boutique_standalone:'Boutique autonome', bookingEngine:'Réservation en ligne' };
+  function mix(d, locked){
     if(stage==='arrivals'){
-      $('sj-mix-title').textContent='Séjours par OTA & canal direct';
-      $('sj-mix-sub').textContent=label(month)+' · séjours par canal d’origine';
-      bars(sjChannelMix(d.arrivals).map(function(c){ return [c.name,c.stays]; }),'séjours');
+      $('sj-mix-title').textContent='Séjours par canal';
+      $('sj-mix-sub').textContent=label(monthStr)+' · direct vs OTA (réel)';
+      bars([['Direct · hors OTA',d._direct||0],['OTA',d._ota||0]],'séjours');
     } else if(stage==='checkin'){
-      $('sj-mix-title').textContent='Usage par type de clé';
-      $('sj-mix-sub').textContent='Tentatives d’accès · NFC / code / QR code';
-      var total=d.arrivals*16, nfc=Math.round(total*.46), code=Math.round(total*.34);
-      ring([['NFC',nfc],['Code',code],['QR code',total-nfc-code]],total,nf(total),'tentatives');
+      $('sj-mix-title').textContent='Autonomie du check-in';
+      $('sj-mix-sub').textContent='Parcours autonome vs accueil accompagné (réel)';
+      var accompagne=Math.max(0,d.arrivals-d.autonomous);
+      ring([['Autonome',d.autonomous],['Accompagné',accompagne]],d.arrivals,pct(d.autonomous,d.arrivals),'autonomes');
     } else if(stage==='shop'){
-      $('sj-mix-title').textContent='Ventes par service';
-      $('sj-mix-sub').textContent='CA encaissé · catégories exclusives';
-      var parts=split(d.sales);
-      bars([['Petit-déjeuner',parts[0]],['Départ tardif',parts[1]],['Parking',parts[2]],['Autres services',parts[3]]],'€');
+      $('sj-mix-title').textContent='Ventes par origine';
+      if(locked){
+        $('sj-mix-sub').textContent='Exemple · catégories illustratives';
+        var parts=split(d.sales);
+        bars([['Petit-déjeuner',parts[0]],['Départ tardif',parts[1]],['Parking',parts[2]],['Autres services',parts[3]]],'€');
+      } else {
+        $('sj-mix-sub').textContent='Nombre de commandes par origine (réel)';
+        var bySource = {};
+        (d._ordersBySource||[]).forEach(function(o){ var k=o.source||'autre'; bySource[k]=(bySource[k]||0)+1; });
+        var rows = Object.keys(bySource).map(function(k){ return [ORDER_SOURCE_LABEL[k]||k, bySource[k]]; });
+        if(!rows.length) rows=[['Aucune commande',0]];
+        bars(rows,'commandes');
+      }
     } else if(stage==='house'){
       $('sj-mix-title').textContent='Choix de ménage';
-      $('sj-mix-sub').textContent='Prestations proposées pendant la période';
-      var tot=d.skipped*3;
-      ring([['Renoncés',d.skipped],['Maintenus',tot-d.skipped]],tot,pct(d.skipped,tot),'renoncements');
+      if(locked){
+        $('sj-mix-sub').textContent='Exemple · prestations proposées';
+        var tot=d.skipped*3;
+        ring([['Renoncés',d.skipped],['Maintenus',tot-d.skipped]],tot,pct(d.skipped,tot),'renoncements');
+      } else {
+        $('sj-mix-sub').textContent='Nuits suivies par le check-in éco (réel)';
+        var totReal=d._totalNightsTracked||0;
+        ring([['Renoncés',d.skipped],['Maintenus',Math.max(0,totReal-d.skipped)]],totReal,pct(d.skipped,totReal||1),'renoncements');
+      }
     } else {
       $('sj-mix-title').textContent='Clients nouveaux / récurrents';
-      $('sj-mix-sub').textContent='Séjours de la période · catégories exclusives';
-      ring([['Nouveaux',d.arrivals-d.repeat],['Récurrents',d.repeat]],d.arrivals,pct(d.repeat,d.arrivals),'récurrents');
+      $('sj-mix-sub').textContent='Séjours de la période · catégories exclusives'+(locked?' (exemple)':' (réel)');
+      ring([['Nouveaux',Math.max(0,d.arrivals-d.repeat)],['Récurrents',d.repeat]],d.arrivals,pct(d.repeat,d.arrivals),'récurrents');
     }
   }
   function actionItems(d){
@@ -7120,20 +7270,34 @@ var SJ_RENDER = (function(){
     }
   }
   function weekOptions(){
-    var first=new Date(Date.UTC(2026,month,1));
+    var bounds=sjMonthBounds(monthStr);
+    var first=new Date(bounds.start+'T00:00:00Z');
     first.setUTCDate(first.getUTCDate()-(first.getUTCDay()+6)%7);
-    var last=new Date(Date.UTC(2026,month+1,0));
+    var last=new Date(bounds.end+'T00:00:00Z'); last.setUTCDate(last.getUTCDate()-1);
     var weeks=[];
     for(var d=new Date(first); d<=last; d.setUTCDate(d.getUTCDate()+7)) weeks.push(d.toISOString().slice(0,10));
-    var currentMonday=new Date(today.date+'T00:00:00Z');
+    var todayStr=hotelToday();
+    var currentMonday=new Date(todayStr+'T00:00:00Z');
     currentMonday.setUTCDate(currentMonday.getUTCDate()-(currentMonday.getUTCDay()+6)%7);
-    if(weeks.indexOf(selectedWeek)===-1) selectedWeek = month===9 ? currentMonday.toISOString().slice(0,10) : weeks[0];
+    var currentMondayStr=currentMonday.toISOString().slice(0,10);
+    if(weeks.indexOf(selectedWeek)===-1) selectedWeek = weeks.indexOf(currentMondayStr)!==-1 ? currentMondayStr : weeks[weeks.length-1];
     $('sj-week-select').innerHTML = weeks.map(function(date){ return '<option value="'+date+'"'+(date===selectedWeek?' selected':'')+'>Semaine du '+new Intl.DateTimeFormat('fr-FR',{day:'2-digit',month:'2-digit',timeZone:'UTC'}).format(new Date(date+'T00:00:00Z'))+'</option>'; }).join('');
+  }
+  // Ligne réelle d'un jour donné — même sémantique que l'ancienne frise
+  // "Arrivées de la semaine" (expected/online/arrived), recalculée ici pour
+  // une date arbitraire plutôt que la seule semaine courante.
+  function sjDayRow(iso){
+    var todayStr=hotelToday();
+    var dayBookings = RAW.bookings.filter(function(b){ return (b.startDate||'').slice(0,10)===iso && b.status!=='cancelled'; });
+    return {
+      date: iso,
+      expected: dayBookings.length,
+      online: dayBookings.filter(function(b){ return b.checkinDone; }).length,
+      arrived: iso>todayStr ? null : dayBookings.filter(function(b){ return b.status==='checkin_done'||b.status==='completed'; }).length
+    };
   }
   function weeklyChart(){
     if(stage!=='arrivals') return;
-    var d=sjDemoMonth(month);
-    var rows=sjMonthDays(month,d.arrivals,d.ready);
     var svg=$('sj-week-chart');
     var width=svg.getBoundingClientRect().width;
     if(width<20) return;
@@ -7141,12 +7305,12 @@ var SJ_RENDER = (function(){
     var innerWidth=width-left-right, innerHeight=height-top-bottom;
     svg.setAttribute('viewBox','0 0 '+width+' '+height);
     svg.replaceChildren();
+    var bounds=sjMonthBounds(monthStr);
     var days=Array.from({length:7},function(_,i){
       var date=new Date(selectedWeek+'T00:00:00Z'); date.setUTCDate(date.getUTCDate()+i);
       var iso=date.toISOString().slice(0,10);
-      var found=null;
-      for(var j=0;j<rows.length;j++){ if(rows[j].date===iso){ found=rows[j]; break; } }
-      return found || { date:iso, expected:null, online:null, arrived:null };
+      if(iso<bounds.start || iso>=bounds.end) return { date:iso, expected:null, online:null, arrived:null };
+      return sjDayRow(iso);
     });
     svg.append(svgEl('title',{},days.map(function(day){ return day.date+' : '+(day.expected==null?'hors mois':day.expected)+' arrivées, '+(day.online==null?'hors mois':day.online)+' enregistrements en ligne, '+(day.arrived==null?'non disponible':day.arrived)+' déjà arrivés'; }).join('; ')));
     var maximum=Math.max.apply(null,[1].concat(days.map(function(day){ return day.expected||0; })));
@@ -7160,9 +7324,10 @@ var SJ_RENDER = (function(){
     svg.append(svgEl('text',{ x:left,y:12 },'séjours'));
     var series=[['expected','var(--blue)','Arrivées'],['online','var(--orange)','Enregistrements en ligne'],['arrived','var(--teal)','Déjà arrivés']];
     var step=innerWidth/7, barWidth=Math.min(24,step*0.25);
+    var todayStr=hotelToday();
     days.forEach(function(day,i){
       var center=left+step*(i+0.5);
-      if(day.date===today.date) svg.append(svgEl('rect',{ x:center-step/2+1,y:top,width:step-2,height:innerHeight,fill:'var(--soft)',rx:3 }));
+      if(day.date===todayStr) svg.append(svgEl('rect',{ x:center-step/2+1,y:top,width:step-2,height:innerHeight,fill:'var(--soft)',rx:3 }));
       series.forEach(function(s,j){
         var key=s[0],color=s[1],name=s[2];
         if(day[key]===null) return;
@@ -7177,28 +7342,37 @@ var SJ_RENDER = (function(){
     });
   }
   function renderDailyTasks(){
-    $('sj-actions').innerHTML = today.tasks.map(function(task){ return '<label class="daily-task"><input type="checkbox" data-task="'+task.id+'"'+(completedTasks.has(task.id)?' checked':'')+'><span><strong>'+task.title+'</strong><span class="sub">'+task.detail+'</span></span></label>'; }).join('')
-      + '<p class="sub" id="sj-tasks-count">'+completedTasks.size+' / '+today.tasks.length+' tâches terminées · état local démo</p>';
+    var today=sjToday();
+    var tasks=[];
+    if(today.pendingOnline>0) tasks.push({id:'online', title:'Relancer '+today.pendingOnline+' enregistrement(s) en ligne', detail:'Arrivées du jour non encore enregistrées'});
+    if(today.pendingCheckout>0) tasks.push({id:'checkout', title:'Clôturer '+today.pendingCheckout+' départ(s) du jour', detail:'Réservations à marquer terminées'});
+    if(!tasks.length){
+      $('sj-actions').innerHTML = '<p class="sub">Aucune tâche en attente aujourd’hui.</p>';
+      return;
+    }
+    $('sj-actions').innerHTML = tasks.map(function(task){ return '<label class="daily-task"><input type="checkbox" data-task="'+task.id+'"'+(completedTasks.has(task.id)?' checked':'')+'><span><strong>'+task.title+'</strong><span class="sub">'+task.detail+'</span></span></label>'; }).join('')
+      + '<p class="sub" id="sj-tasks-count">'+completedTasks.size+' / '+tasks.length+' tâche(s) cochée(s) · état local, non persisté</p>';
   }
   $('sj-actions').addEventListener('change', function(event){
     var id=event.target.dataset.task;
     if(!id) return;
     if(event.target.checked) completedTasks.add(id); else completedTasks.delete(id);
-    var cnt=$('sj-tasks-count'); if(cnt) cnt.textContent=completedTasks.size+' / '+today.tasks.length+' tâches terminées · état local démo';
+    var cnt=$('sj-tasks-count'); if(cnt) cnt.textContent=completedTasks.size+' / '+root.querySelectorAll('.daily-task').length+' tâche(s) cochée(s) · état local, non persisté';
   });
   $('sj-week-select').addEventListener('change', function(){ selectedWeek=$('sj-week-select').value; weeklyChart(); });
 
   function draw(){
-    var d=sjDemoMonth(month);
-    var hist=Array.from({length:6},function(_,i){ return month-5+i; });
-    chart('sj-trend',split(plotValue(d)),['S1','S2','S3',month===9?'S4*':'S4'],configs[stage].unit,'line');
+    var d=sjBuildMonth(monthStr);
+    chart('sj-trend',split(plotValue(d)),['S1','S2','S3','S4'],configs[stage].unit,'line');
     var unit = stage==='checkin' ? 'heures' : (stage==='house'||stage==='shop') ? '€' : stage==='loyalty' ? 'clients' : 'séjours';
     weeklyChart();
-    chart('sj-history',hist.map(function(m){ return plotValue(sjDemoMonth(m),true); }),hist.map(function(m){ return label(m,true); }),unit,'bar');
+    var hist=[]; for(var i=5;i>=0;i--) hist.push(sjShiftMonth(monthStr,-i));
+    chart('sj-history',hist.map(function(m){ return plotValue(sjBuildMonth(m),true); }),hist.map(function(m){ return label(m,true); }),unit,'bar');
   }
   function render(){
-    var d=sjDemoMonth(month), c=configs[stage];
+    var d=sjBuildMonth(monthStr), c=configs[stage];
     var locked = sjLockedStages();
+    var isCurrentMonth = monthStr===hotelToday().slice(0,7);
     var hn=$('sj-hotel-name'); if(hn) hn.textContent = (CFG&&CFG.hotelName) ? CFG.hotelName.toUpperCase() : '';
     $('sj-week-panel').hidden = stage!=='arrivals';
     if(stage==='arrivals') weekOptions();
@@ -7210,25 +7384,30 @@ var SJ_RENDER = (function(){
         ? '<div class="sj-lock-banner"><i class="ti ti-lock"></i> Module "<b>'+(MODULE_LABEL[stage]||c.name)+'</b>" non souscrit pour cet établissement — chiffres d’exemple illustrant le bénéfice potentiel.<button type="button" onclick="showPan(\'hotel\')">Activer ce module</button></div>'
         : '';
     }
+    var badge=$('sj-data-badge');
+    if(badge){
+      if(locked[stage]){ badge.textContent='Démo · chiffres fictifs'; badge.classList.remove('is-real'); }
+      else { badge.textContent='Données réelles · '+label(monthStr); badge.classList.add('is-real'); }
+    }
     $('sj-net').textContent=euro(d.net);
     $('sj-roi').textContent='ROI estimé : '+nf(Math.round(d.roi))+' % · coût : 600 €';
     $('sj-time').textContent=nf(Math.round(d.time))+' h';
     $('sj-sales').textContent=euro(d.sales);
-    $('sj-comparison').textContent = month===9 ? 'Octobre en cours · chiffres au 23 octobre' : 'Mois complet · '+label(month);
+    $('sj-comparison').textContent = isCurrentMonth ? 'Mois en cours · chiffres au '+new Date(hotelToday()+'T00:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'long'}) : 'Mois complet · '+label(monthStr);
     $('sj-heading').textContent=c.name;
     $('sj-description').textContent=c.desc;
-    $('sj-current').textContent=label(month)+(month===9?' · au 23/10':'');
+    $('sj-current').textContent=label(monthStr)+(isCurrentMonth?' · en cours':'');
     $('sj-kpis').innerHTML=metrics(d).map(function(i){ return '<div class="tile"><span class="label">'+i[0]+'</span><strong>'+i[1]+'</strong><p class="note">'+i[2]+'</p></div>'; }).join('');
     $('sj-trend-title').textContent=c.trend;
-    $('sj-trend-sub').textContent='S1 : 1–7 · S2 : 8–14 · S3 : 15–21 · '+(month===9?'S4* : 22–23':'S4 : 22–fin de mois');
+    $('sj-trend-sub').textContent='S1 : 1–7 · S2 : 8–14 · S3 : 15–21 · S4 : 22–fin de mois';
     $('sj-history-title').textContent=c.history;
     $('sj-action-title').textContent = stage==='house' ? 'Impact & pilotage' : 'Gestion & opportunités';
-    if(stage==='arrivals'){ $('sj-action-title').textContent='Tâches du jour · 23 octobre 2026'; renderDailyTasks(); }
+    if(stage==='arrivals'){ $('sj-action-title').textContent='Tâches du jour'; renderDailyTasks(); }
     else { $('sj-actions').innerHTML=actionItems(d).map(function(a){ return '<div class="task"><strong>'+a[0]+'</strong><p class="sub">'+a[1]+'</p></div>'; }).join(''); }
     $('sj-mini-arrivals').textContent=nf(d.arrivals)+' séjours';
     $('sj-mini-checkin').textContent=pct(d.autonomous,d.arrivals)+' autonomes';
     $('sj-mini-shop').textContent=euro(d.sales);
-    $('sj-mini-house').textContent=nf(d.skipped*.5)+' h libérées';
+    $('sj-mini-house').textContent=nf(Math.round(d.skipped*((CFG.kpi&&CFG.kpi.minPerClean!=null)?CFG.kpi.minPerClean:45)/60))+' h libérées';
     $('sj-mini-loyalty').textContent=nf(d.members)+' adhésions';
     root.querySelectorAll('[data-stage]').forEach(function(b){
       b.setAttribute('aria-selected', String(b.dataset.stage===stage));
@@ -7237,8 +7416,8 @@ var SJ_RENDER = (function(){
       if(mini) mini.innerHTML = (locked[b.dataset.stage] ? '<span class="lock-badge"><i class="ti ti-lock"></i> Non souscrit · exemple</span> ' : '') + mini.textContent;
     });
     $('sj-content').setAttribute('aria-labelledby','sj-tab-'+stage);
-    $('sj-status').textContent=c.name+' · '+label(month)+' · données simulées';
-    mix(d);
+    $('sj-status').textContent=c.name+' · '+label(monthStr)+(locked[stage]?' · chiffres d’exemple':' · données réelles');
+    mix(d, !!locked[stage]);
     draw();
   }
   root.querySelectorAll('[data-stage]').forEach(function(button){ button.addEventListener('click', function(){ stage=button.dataset.stage; render(); }); });
@@ -7257,12 +7436,25 @@ var SJ_RENDER = (function(){
     tabs[next].focus();
     tabs[next].click();
   });
-  $('sj-month').addEventListener('change', function(){ month=Number($('sj-month').value.slice(5))-1; render(); });
+  $('sj-month').addEventListener('change', function(){ monthStr=$('sj-month').value; selectedWeek=''; render(); });
   var resize=new ResizeObserver(draw);
   resize.observe($('sj-trend'));
   resize.observe($('sj-history'));
   resize.observe($('sj-week-chart'));
-  return render;
+
+  function populateMonthSelect(){
+    var sel=$('sj-month');
+    var list=sjMonthList();
+    var cur=hotelToday().slice(0,7);
+    sel.innerHTML = list.map(function(m){ return '<option value="'+m+'"'+(m===monthStr?' selected':'')+'>'+label(m)+(m===cur?' · en cours':'')+'</option>'; }).join('');
+  }
+
+  return async function refresh(){
+    await sjFetchRaw();
+    firstSeenCache = null;
+    populateMonthSelect();
+    render();
+  };
 })();
 
 // ── ARRIVÉES DE LA SEMAINE — nombre d'arrivées par jour (lun.→dim. de la

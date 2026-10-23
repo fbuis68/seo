@@ -34,7 +34,24 @@ loyaltyRouter.get(
         where: scope.groupId ? { groupId: scope.groupId } : { entityId: scope.entityId },
         orderBy: { totalPoints: "desc" },
       });
-      res.json(accounts.map((a) => ({ email: a.email, total: a.totalPoints })));
+      // joinedAt = date de la première transaction du compte — LoyaltyAccount
+      // n'a pas de createdAt propre, cette première transaction (le plus
+      // souvent le bonus de bienvenue) en tient lieu de proxy d'adhésion.
+      // Utilisé par le dashboard Accueil (étape Fidélité) pour compter les
+      // "nouvelles adhésions" d'un mois donné à partir de données réelles.
+      const joinDates = await prisma.loyaltyTransaction.groupBy({
+        by: ["accountId"],
+        where: { accountId: { in: accounts.map((a) => a.id) } },
+        _min: { createdAt: true },
+      });
+      const joinedAtByAccount = new Map(joinDates.map((j) => [j.accountId, j._min.createdAt]));
+      res.json(
+        accounts.map((a) => ({
+          email: a.email,
+          total: a.totalPoints,
+          joinedAt: joinedAtByAccount.get(a.id) || null,
+        }))
+      );
       return;
     }
 
