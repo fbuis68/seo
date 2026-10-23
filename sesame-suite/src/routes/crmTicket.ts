@@ -3,7 +3,7 @@ import { prisma } from "../db";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin, requireSesame } from "../middleware/requireAdmin";
 import { getSmtpConfig, sendEmailRaw } from "../lib/email";
-import { createTicketFromInboundEmail, appendInboundReply, sanitizeTicketAttachments } from "../lib/ticketInbound";
+import { createTicketFromInboundEmail, appendInboundReply, sanitizeTicketAttachments, ticketLink } from "../lib/ticketInbound";
 import { fireTrigger } from "../lib/automation";
 import { reindexTicketEmbedding } from "../lib/aiIndexing";
 import { MODULE_KEYS } from "./onboarding";
@@ -400,6 +400,7 @@ crmTicketRouter.post(
           sujet: updated.subject,
           statut: updated.status,
           agent: updated.agent ? updated.agent.name || updated.agent.email : "Non assigné",
+          lienTicket: ticketLink(updated.id),
         },
       }).catch((e) => console.error("[automation] crm.ticket_status_changed:", e));
     }
@@ -480,6 +481,7 @@ crmTicketRouter.post(
           sujet: t.subject,
           statut: b.status,
           agent: formatAgentName(t.agentId, agents),
+          lienTicket: ticketLink(t.id),
         },
       }).catch((e) => console.error("[automation] crm.ticket_status_changed:", e));
       if (b.status === "Résolu" || b.status === "Fermé") reindexTicketEmbedding(t.id);

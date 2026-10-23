@@ -980,7 +980,13 @@ async function init(){
     ORIGINE_OPTIONS = orig; ORIGINES = orig.map(o=>o.label);
   }
   catch(e){ flash('Erreur de chargement — rechargez la page'); clients = []; deals = []; COMMERCIALS = []; tickets = []; cashLines = []; SECTOR_OPTIONS = []; SECTEURS = []; ORIGINE_OPTIONS = []; ORIGINES = []; }
-  updateBadges();showList();
+  updateBadges();
+  // Lien direct depuis une notification "ticket support" (?ticket=<id>,
+  // cf. {{lienTicket}}/ticketLink() dans src/lib/ticketInbound.ts) — amène
+  // directement sur le ticket plutôt que la vue par défaut.
+  const deepLinkTicketId = new URLSearchParams(location.search).get('ticket');
+  if(deepLinkTicketId) showTicketDetail(deepLinkTicketId);
+  else showList();
   loadVersionBadge();
 }
 
@@ -8434,7 +8440,7 @@ const TPL_CATEGORY_LABEL = {marketing:'Marketing', support:'Support', commercial
 // continue d'afficher tout (un modèle générique peut servir n'importe où).
 const TPL_CATEGORY_VARS = {
   marketing: `Envoi depuis une fiche prospect / newsletter : {{nom}} {{secteur}} {{referent}} {{ville}} · tout envoi email : <code>{{lienDesabonnement}}</code> (lien de désabonnement — à insérer vous-même, jamais ajouté automatiquement hors campagne).`,
-  support: `Déclencheurs ticket support (Nouveau ticket / Client a répondu / Changement de statut) : {{numero}} {{sujet}} {{statut}} {{agent}} {{ancienStatut}} {{nouveauStatut}}.`,
+  support: `Déclencheurs ticket support (Nouveau ticket / Client a répondu / Changement de statut) : {{numero}} {{sujet}} {{statut}} {{agent}} {{ancienStatut}} {{nouveauStatut}} <code>{{lienTicket}}</code> (lien direct vers le ticket dans le CRM).`,
   commercial: `Envoi depuis une fiche prospect : {{nom}} {{secteur}} {{referent}} {{ville}} · envoi depuis "Utilisateurs CRM" (identifiants de connexion) : {{login}} {{password}} {{loginUrl}}.`,
   relance: `Relance de facture (une facture) : {{numero}} {{tiers}} {{montant}} (reste dû) {{echeance}} — voir aussi la catégorie "Comptabilité" pour relancer plusieurs factures d'un même client en un seul envoi.`,
   compta: `<b>Alerte mouvement bancaire</b> (règle "Nouveau mouvement bancaire") : {{nomClient}} (ou {{contrepartie}}) {{montant}} {{sens}} {{date}} {{libelle}} {{compte}}.<br>

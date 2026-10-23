@@ -2,6 +2,20 @@ import { CrmTicket } from "@prisma/client";
 import { prisma } from "../db";
 import { fireTrigger } from "./automation";
 import { nextSequenceValue } from "./sequence";
+import { config } from "../config";
+
+/**
+ * Lien direct vers un ticket dans le CRM back-office — variable
+ * {{lienTicket}} des modèles de message catégorie "support" (cf.
+ * TPL_CATEGORY_VARS dans crm.html), pour que la notification "Nouveau
+ * ticket support"/"Client a répondu"/"Changement de statut" amène
+ * directement sur le ticket plutôt que de laisser l'équipe le chercher
+ * dans la liste (§ demande client 23/10/2026). crm.html lit ?ticket=<id>
+ * au démarrage (cf. init()) et ouvre le détail du ticket correspondant.
+ */
+export function ticketLink(ticketId: string): string {
+  return (config.publicBaseUrl || "") + "/crm.html?ticket=" + ticketId;
+}
 
 /**
  * Logique de création/complétion de ticket à partir d'un email entrant —
@@ -217,6 +231,7 @@ export async function createTicketFromInboundEmail(input: {
       // Toujours "Non assigné" à la création (agentId n'est jamais renseigné
       // à ce stade) — pas de requête supplémentaire nécessaire.
       agent: "Non assigné",
+      lienTicket: ticketLink(ticket.id),
     },
   }).catch((e) => console.error("[automation] crm.ticket_created:", e));
 
@@ -268,6 +283,7 @@ export async function appendInboundReply(
       sujet: ticket.subject,
       statut: (data.status as string) || ticket.status,
       agent: await ticketAgentName(ticket.agentId),
+      lienTicket: ticketLink(ticket.id),
     },
   }).catch((e) => console.error("[automation] crm.ticket_client_replied:", e));
 
@@ -319,6 +335,7 @@ export async function sweepTicketAutoResolve(): Promise<void> {
           sujet: updated.subject,
           statut: "Résolu",
           agent: await ticketAgentName(updated.agentId),
+          lienTicket: ticketLink(updated.id),
         },
       }).catch((e) => console.error("[automation] crm.ticket_status_changed (auto-résolution):", e));
     } catch (e) {
