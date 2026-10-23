@@ -661,6 +661,132 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 @media (prefers-reduced-motion: reduce) {
   .sesame-splash *, .sesame-splash *::before, .sesame-splash *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* ════════ ACCUEIL — Parcours client & performance (#sesame-journey) ════════
+   Styles isolés : toutes les règles préfixées #sesame-journey, sans risque
+   de collision avec le reste de l'admin. Port de la maquette fournie
+   22/10/2026, aside propre à la maquette retiré (navigation déjà assurée
+   par le menu principal de l'admin). */
+#sesame-journey{
+--bg:light-dark(#f3f6f9,#111b27);
+--panel:light-dark(#fff,#1b2838);
+--ink:light-dark(#193044,#edf4fc);
+--muted:light-dark(#60758a,#a9bad0);
+--line:light-dark(#e2eaf1,#354357);
+--teal:light-dark(#078b8e,#61d4ce);
+--blue:light-dark(#4279db,#91b7ff);
+--orange:light-dark(#cf8724,#f1bc6f);
+--green:light-dark(#388d65,#80d7ad);
+--purple:light-dark(#8860c4,#c0a5ed);
+--soft:light-dark(#e8f6f4,#203e40);
+font:14px/1.5 Inter,Arial,sans-serif;
+background:var(--bg);
+color:var(--ink);
+border-radius:14px;
+overflow:hidden
+}
+#sesame-journey *{box-sizing:border-box}
+#sesame-journey button,#sesame-journey select{font:inherit}
+#sesame-journey main{padding:25px;min-width:0}
+#sesame-journey .row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+#sesame-journey h1{margin:2px 0 5px;font-size:25px;letter-spacing:-.7px;font-weight:500}
+#sesame-journey h2{font-size:18px;font-weight:500;margin:0}
+#sesame-journey h3{font-size:13px;font-weight:500;margin:0 0 5px}
+#sesame-journey p{margin:0}
+#sesame-journey .eyebrow{font-size:10px;text-transform:uppercase;letter-spacing:1.6px;color:var(--muted)}
+#sesame-journey .sub{font-size:12px;color:var(--muted)}
+#sesame-journey .demo{font-size:11px;padding:4px 9px;border-radius:14px;background:var(--soft);color:var(--teal)}
+#sesame-journey .toolbar{margin:20px 0;display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+#sesame-journey .period{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--muted)}
+#sesame-journey select{border:1px solid var(--line);border-radius:7px;padding:9px;background:var(--panel);color:var(--ink);max-width:100%}
+#sesame-journey .summary{display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:15px;padding:18px 20px;border-radius:11px;background:linear-gradient(110deg,light-dark(#143b48,#163847),light-dark(#0a7278,#175d65));color:#f0fafb;margin-bottom:24px}
+#sesame-journey .summary .sub{color:#c7e0e2}
+#sesame-journey .summary strong{display:block;font-size:25px;letter-spacing:-.5px;font-weight:500;margin:3px 0}
+#sesame-journey .summary>div+div{border-left:1px solid #557d84;padding-left:18px}
+#sesame-journey .journey-title{margin-bottom:13px}
+#sesame-journey .journey{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;margin-bottom:23px;position:relative}
+#sesame-journey .journey:before{content:'';height:2px;position:absolute;top:29px;left:9%;right:9%;background:var(--line)}
+#sesame-journey .step{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;background:transparent;border:0;border-radius:10px;padding:8px 3px 12px;color:var(--muted);min-width:0}
+#sesame-journey .step .circle{display:flex;align-items:center;justify-content:center;width:43px;height:43px;border-radius:50%;background:var(--panel);border:1px solid var(--line);color:var(--category);z-index:1}
+#sesame-journey .step svg{width:18px;height:18px}
+#sesame-journey .step .name{font-weight:500;font-size:12px;color:var(--ink)}
+#sesame-journey .step .phase{font-size:10px}
+#sesame-journey .step .step-stat{font-size:11px;white-space:normal}
+#sesame-journey .step[aria-selected=true]{background:color-mix(in srgb,var(--category) 10%,var(--panel))}
+#sesame-journey .step[aria-selected=true] .circle{background:var(--category);color:light-dark(#fff,#142130);border-color:transparent}
+#sesame-journey .step[aria-selected=true] .name{color:var(--category)}
+#sesame-journey .step.step-locked{opacity:.55}
+#sesame-journey .step .lock-badge{display:inline-flex;align-items:center;gap:3px;font-size:10px;color:var(--muted)}
+#sesame-journey button:focus-visible,#sesame-journey select:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+#sesame-journey .detail-top{margin-bottom:15px}
+#sesame-journey .detail-title{display:flex;gap:9px;align-items:center}
+#sesame-journey .detail-dot{height:9px;width:9px;border-radius:50%;background:var(--active)}
+#sesame-journey .sj-lock-banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--soft);border:1px solid var(--line);border-radius:9px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink)}
+#sesame-journey .sj-lock-banner b{font-weight:600}
+#sesame-journey .sj-lock-banner button{margin-left:auto;border:1px solid var(--active);color:var(--active);background:var(--panel);border-radius:7px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer}
+#sesame-journey #sj-content.sj-locked .kpis,#sesame-journey #sj-content.sj-locked .charts,#sesame-journey #sj-content.sj-locked .arrival-week{filter:grayscale(.85);opacity:.6}
+#sesame-journey .kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px;margin-bottom:15px}
+#sesame-journey .tile{padding:14px;background:var(--panel);border:1px solid var(--line);border-radius:9px;min-width:0}
+#sesame-journey .tile:first-child{background:color-mix(in srgb,var(--active) 9%,var(--panel))}
+#sesame-journey .tile strong{display:block;font-size:23px;font-weight:500;letter-spacing:-.5px;margin:5px 0;overflow-wrap:anywhere}
+#sesame-journey .tile .label{font-size:11px;color:var(--muted)}
+#sesame-journey .tile .note{font-size:10px;color:var(--muted)}
+#sesame-journey .charts{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:13px;margin-bottom:14px}
+#sesame-journey .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+#sesame-journey .chart{width:100%;height:205px;display:block;margin-top:10px}
+#sesame-journey .chart text{fill:var(--muted);font:11px Inter,Arial,sans-serif}
+#sesame-journey .chart .number{fill:var(--ink)}
+#sesame-journey .donut-group{display:grid;grid-template-columns:125px minmax(0,1fr);gap:14px;align-items:center;margin-top:24px}
+#sesame-journey .ring{width:125px;height:125px;border-radius:50%;position:relative}
+#sesame-journey .ring:after{content:'';position:absolute;inset:20px;background:var(--panel);border-radius:50%}
+#sesame-journey .ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:1;font-size:20px;font-weight:500}
+#sesame-journey .ring-center small{font-size:10px;font-weight:400;color:var(--muted)}
+#sesame-journey .legend-row{display:flex;align-items:center;gap:6px;font-size:11px;margin:10px 0;flex-wrap:wrap}
+#sesame-journey .legend-row b{font-weight:500;margin-left:auto}
+#sesame-journey .swatch{width:8px;height:8px;border-radius:2px;flex:none}
+#sesame-journey .list-row{margin:15px 0}
+#sesame-journey .list-row .row{font-size:12px;margin-bottom:7px}
+#sesame-journey .track{height:8px;background:var(--bg);border-radius:10px;overflow:hidden}
+#sesame-journey .track span{display:block;height:100%;background:var(--active);border-radius:10px}
+#sesame-journey .task{padding:10px 0;border-bottom:1px solid var(--line)}
+#sesame-journey .task:last-child{border:0}
+#sesame-journey .task strong{display:block;font-weight:500;font-size:12px}
+#sesame-journey .task .sub{font-size:11px}
+#sesame-journey details{margin-top:13px;font-size:11px;color:var(--muted)}
+#sesame-journey summary{color:var(--teal)}
+#sesame-journey details p{margin-top:8px}
+#sesame-journey footer{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:17px;font-size:10px;color:var(--muted)}
+#sesame-journey .arrival-week{margin-bottom:15px}
+#sesame-journey .arrival-week[hidden]{display:none}
+#sesame-journey .arrival-week .chart{height:225px}
+#sesame-journey .weekly-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;margin:8px 0}
+#sesame-journey .weekly-legend span{display:flex;gap:5px;align-items:center}
+#sesame-journey .weekly-legend i{width:9px;height:9px;border-radius:2px}
+#sesame-journey .daily-task{display:flex;gap:9px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--line);font-size:12px}
+#sesame-journey .daily-task strong{display:block;font-weight:500}
+#sesame-journey .daily-task .sub{display:block;font-size:11px}
+#sesame-journey .daily-task input{width:16px;height:16px;margin:3px 0 0;accent-color:var(--teal);flex-shrink:0}
+#sesame-journey .daily-task:has(input:checked) strong{text-decoration:line-through;color:var(--muted)}
+#sesame-journey #sj-tasks-count{margin-top:10px}
+@media(max-width:650px){
+  #sesame-journey main{padding:16px}
+  #sesame-journey .charts{grid-template-columns:1fr}
+  #sesame-journey .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #sesame-journey .step .phase{display:none}
+  #sesame-journey .step .name{font-size:11px}
+  #sesame-journey .summary{padding:13px;gap:10px}
+  #sesame-journey .summary strong{font-size:21px}
+  #sesame-journey .summary .sub{font-size:10px}
+  #sesame-journey .summary>div+div{padding-left:10px}
+}
+@media(max-width:390px){
+  #sesame-journey .journey:before{top:25px}
+  #sesame-journey .step .step-stat{font-size:10px}
+  #sesame-journey .summary{grid-template-columns:1fr}
+  #sesame-journey .summary>div+div{border-left:0;padding-left:0}
+  #sesame-journey .donut-group{grid-template-columns:110px minmax(0,1fr)}
+  #sesame-journey .ring{width:110px;height:110px}
+}
 </style>
 </head>
 <body>
@@ -963,232 +1089,34 @@ table.pgrid td,table.pgrid th{padding:0;vertical-align:top;border:1px solid var(
 
 <!-- ════════════════ DASHBOARD ════════════════ -->
 <div id="pan-dash" class="pan on">
-  <div class="ph"><h2>Accueil</h2><p>Vue d'ensemble : configuration active, gains pour l'hôtelier et impact pour le client</p></div>
-
-  <div class="g4" style="margin-bottom:16px">
-    <div class="stat"><div class="sv" style="color:var(--a)" id="db-hotel">—</div><div class="sl">Établissement</div></div>
-    <div class="stat"><div class="sv" style="color:var(--bu)" id="db-stars">—</div><div class="sl">Catégorie</div></div>
-    <div class="stat"><div class="sv" style="color:var(--go)" id="db-gains">—</div><div class="sl">Gains actifs</div></div>
-    <div class="stat">
-      <input type="number" id="db-rooms" min="1" max="999" oninput="onDashRoomsChange()"
-        style="font-family:'DM Serif Display',serif;font-size:26px;color:var(--am);background:none;border:none;padding:0;width:100%;outline:none">
-      <div class="sl">Chambres <span title="Modifiable pour la simulation — n'affecte pas les chambres réellement configurées" style="text-decoration:underline dotted;cursor:help">(éditable)</span></div>
-    </div>
-  </div>
-
-  <!-- ══════════ KPI — gains hôtelier & impact client (fusionné) ══════════ -->
-  <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;display:flex;align-items:center;gap:6px">
-    <i class="ti ti-chart-donut-3"></i>KPI — gains hôtelier &amp; impact client (estimation)
-  </div>
-  <div id="kpi-hero" style="border-radius:var(--r);overflow:hidden;margin-bottom:20px">
-    <div style="background:linear-gradient(135deg,#0A1628,#1A3A60);padding:24px;color:#fff;position:relative;overflow:hidden">
-      <div style="position:absolute;right:-40px;top:-40px;width:200px;height:200px;border-radius:50%;background:rgba(255,255,255,.03)"></div>
-      <div style="position:absolute;right:60px;bottom:-60px;width:150px;height:150px;border-radius:50%;background:rgba(58,155,213,.06)"></div>
-
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;opacity:.55;margin-bottom:14px;display:flex;align-items:center;gap:6px"><i class="ti ti-building-store"></i>Hôtelier — gains opérationnels</div>
-
-      <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
-        <!-- SVG Ring chart : temps total gagné /an (ménage + check-in auto) -->
-        <div style="position:relative;flex-shrink:0">
-          <svg id="kpiRing" width="140" height="140" viewBox="0 0 140 140">
-            <circle cx="70" cy="70" r="54" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="14"/>
-            <circle id="kpiRingFill" cx="70" cy="70" r="54" fill="none" stroke="#2ECC71" stroke-width="14"
-              stroke-dasharray="339" stroke-dashoffset="339" stroke-linecap="round"
-              transform="rotate(-90 70 70)" style="transition:stroke-dashoffset 1s ease"/>
-            <text x="70" y="64" text-anchor="middle" fill="#fff" font-size="22" font-weight="300" font-family="Fraunces,serif" id="kpiRingVal">0</text>
-            <text x="70" y="80" text-anchor="middle" fill="rgba(255,255,255,.5)" font-size="10">heures/an</text>
-          </svg>
-          <div style="text-align:center;font-size:10px;opacity:.55;margin-top:6px">temps total gagné / an</div>
-        </div>
-        <!-- Bonhomme : symbolise le temps homme gagné, rempli proportionnellement -->
-        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex-shrink:0" id="kpi-h-total-picto"></div>
-        <!-- KPI tiles -->
-        <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:12px;min-width:280px">
-          <div style="background:rgba(255,255,255,.07);border-radius:10px;padding:14px">
-            <div style="font-size:11px;opacity:.6;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Ménage — min / séjour</div>
-            <div style="font-family:Fraunces,serif;font-size:28px;font-weight:300;color:#7EC8E3" id="kpi-h-min">—</div>
-            <div style="font-size:11px;opacity:.5;margin-top:2px">ménage + serviettes évités</div>
-          </div>
-          <div style="background:rgba(255,255,255,.07);border-radius:10px;padding:14px">
-            <div style="font-size:11px;opacity:.6;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Check-in — min / séjour</div>
-            <div style="font-family:Fraunces,serif;font-size:28px;font-weight:300;color:#F5C84C" id="kpi-h-checkin">—</div>
-            <div style="font-size:11px;opacity:.5;margin-top:2px">traitement automatisé (KYC, taxe, paiement)</div>
-          </div>
-          <div style="background:rgba(46,204,113,.15);border-radius:10px;padding:14px">
-            <div style="font-size:11px;opacity:.7;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Économie / séjour</div>
-            <div style="font-family:Fraunces,serif;font-size:28px;font-weight:300;color:#6EE7B7" id="kpi-h-csej">—</div>
-            <div style="font-size:11px;opacity:.5;margin-top:2px" id="kpi-h-rate">@ — €/h</div>
-          </div>
-          <div style="background:rgba(46,204,113,.25);border-radius:10px;padding:14px">
-            <div style="font-size:11px;opacity:.7;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Total / an</div>
-            <div style="font-family:Fraunces,serif;font-size:28px;font-weight:300;color:#fff" id="kpi-h-can">—</div>
-            <div style="font-size:11px;opacity:.6;margin-top:2px" id="kpi-h-stays">— séjours estimés</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Détail temps gagné -->
-      <div style="margin-top:18px;padding-top:16px;border-top:1px solid rgba(255,255,255,.1)">
-        <div style="display:flex;justify-content:space-between;font-size:11px;opacity:.55;margin-bottom:6px">
-          <span>Répartition du temps gagné par an</span>
-          <button onclick="showPan('hotel')" style="background:none;border:none;color:rgba(255,255,255,.5);font-size:11px;cursor:pointer">⚙ Configurer</button>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div>
-            <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px">
-              <span style="opacity:.7">🧹 Ménage &amp; serviettes</span>
-              <span id="kpi-h-hrs-menage" style="color:#7EC8E3;font-weight:600">— h/an</span>
-            </div>
-            <div style="height:28px;background:rgba(255,255,255,.1);border-radius:5px">
-              <div id="kpi-bar-menage" style="height:100%;background:#7EC8E3;border-radius:5px;width:0%;transition:width 1s ease"></div>
-            </div>
-          </div>
-          <div>
-            <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px">
-              <span style="opacity:.7">📋 Check-in automatisé</span>
-              <span id="kpi-h-hrs-checkin" style="color:#F5C84C;font-weight:600">— h/an</span>
-            </div>
-            <div style="height:28px;background:rgba(255,255,255,.1);border-radius:5px">
-              <div id="kpi-bar-checkin" style="height:100%;background:#F5C84C;border-radius:5px;width:0%;transition:width 1s ease"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div style="background:linear-gradient(135deg,#0D3320,#1A5C36);padding:24px;color:#fff;position:relative;overflow:hidden">
-      <div style="position:absolute;right:-30px;top:-30px;width:160px;height:160px;border-radius:50%;background:rgba(255,255,255,.04)"></div>
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;opacity:.55;margin-bottom:14px;display:flex;align-items:center;gap:6px"><i class="ti ti-leaf"></i>Client — impact affiché dans l'app éco-séjour</div>
-      <div style="font-size:11px;opacity:.55;margin-bottom:14px">Impact environnemental moyen affiché au client (séjour type 3 nuits)</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-        <!-- Eau -->
-        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-          <div style="width:48px;height:48px;border-radius:12px;background:rgba(58,155,213,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-            <i class="ti ti-droplet-filled" style="font-size:24px;color:#7EC8E3"></i>
-          </div>
-          <div style="flex:1;min-width:80px">
-            <div style="font-family:Fraunces,serif;font-size:32px;font-weight:300;line-height:1;color:#7EC8E3" id="kpi-c-eau">— L</div>
-            <div style="font-size:12px;opacity:.7;margin-top:2px" id="kpi-c-eau-eq">eau économisée</div>
-          </div>
-          <div id="kpi-c-eau-picto" style="flex-shrink:0;display:flex;align-items:center;min-height:46px"></div>
-        </div>
-        <!-- CO2 -->
-        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-          <div style="width:48px;height:48px;border-radius:12px;background:rgba(46,204,113,.25);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-            <i class="ti ti-cloud" style="font-size:24px;color:#6EE7B7"></i>
-          </div>
-          <div style="flex:1;min-width:80px">
-            <div style="font-family:Fraunces,serif;font-size:32px;font-weight:300;line-height:1;color:#6EE7B7" id="kpi-c-co2">— kg</div>
-            <div style="font-size:12px;opacity:.7;margin-top:2px" id="kpi-c-co2-eq">CO₂ évité</div>
-          </div>
-          <div id="kpi-c-co2-picto" style="flex-shrink:0;display:flex;align-items:center;min-height:42px"></div>
-        </div>
-      </div>
-      <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.12);font-size:11px;opacity:.6">
-        Cet encart est identique à celui visible par le client à l'étape "Préférences éco" du parcours de check-in.
-      </div>
-    </div>
-  </div>
-
-  <!-- ══════════ ARRIVÉES DE LA SEMAINE ══════════ -->
-  <div class="ca" style="margin-bottom:20px">
-    <div class="ch"><i class="ti ti-calendar-stats"></i>Arrivées de la semaine
-      <button class="chact" onclick="renderWeeklyArrivals()"><i class="ti ti-refresh" style="font-size:12px"></i> Actualiser</button>
-    </div>
-    <div id="weeklyArrivalsChart"><div class="alt alt-b"><i class="ti ti-loader"></i><span>Chargement…</span></div></div>
-  </div>
-
-  <!-- ══════════ SIMULATEUR — curseurs pour visualiser les gains en rendez-vous ══════════ -->
-  <div class="ca" style="margin-bottom:20px">
-    <div class="ch"><i class="ti ti-adjustments"></i>Paramètres de simulation
-      <button class="chact" onclick="resetDashKpiSim()"><i class="ti ti-refresh" style="font-size:12px"></i> Réinitialiser</button>
-      <button class="chact" id="dashSimToggleBtn" onclick="toggleDashSimVisibility()" style="margin-left:14px"><i class="ti ti-eye-off" id="dashSimToggleIco" style="font-size:12px"></i> <span id="dashSimToggleLbl">Masquer</span></button>
-    </div>
-    <div id="dashSimBody">
-      <div class="alt alt-b" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
-        <span>Ajustez ces curseurs pour visualiser l'impact en direct, par exemple en rendez-vous commercial — rien n'est enregistré ici, les vrais réglages restent dans <a href="#" onclick="showPan('gains');return false" style="color:var(--a);font-weight:600">Gains par fidélité</a>.</span>
-      </div>
-      <div class="g4">
-        <div class="fi">
-          <label class="lb">Séjour moyen (jours)</label>
-          <select id="dashSimAvgStay" onchange="renderDashKpiSim()">
-            <option value="1">1 jour</option>
-            <option value="2">2 jours</option>
-            <option value="3">3 jours</option>
-            <option value="4">4 jours</option>
-            <option value="5">5 jours</option>
-            <option value="6">6 jours</option>
-            <option value="7">7 jours</option>
-          </select>
-          <div style="font-size:11px;color:var(--mu);margin-top:4px">Nb séjours/an = 365 ÷ séjour moyen × chambres × occupation</div>
-        </div>
-        <div class="fi">
-          <label class="lb">Taux d'occupation</label>
-          <div class="slcol">
-            <input type="range" id="dashSimOcc" min="0" max="100" step="1" oninput="renderDashKpiSim()">
-            <span class="slv" id="dashSimOccV">—%</span>
-          </div>
-        </div>
-        <div class="fi">
-          <label class="lb">Temps ménage gagné</label>
-          <div class="slcol">
-            <input type="range" id="dashSimMenage" min="15" max="120" step="5" oninput="renderDashKpiSim()">
-            <span class="slv" id="dashSimMenageV">— min</span>
-          </div>
-        </div>
-        <div class="fi">
-          <label class="lb">Temps check-in gagné</label>
-          <div class="slcol">
-            <input type="range" id="dashSimCheckin" min="0" max="60" step="1" oninput="renderDashKpiSim()">
-            <span class="slv" id="dashSimCheckinV">— min</span>
-          </div>
-        </div>
-        <div class="fi">
-          <label class="lb">Veilleur de nuit</label>
-          <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-            <label class="tg"><input type="checkbox" id="dashSimNightWatch" checked onchange="renderDashKpiSim()"><span class="tgl"></span></label>
-            <span id="dashSimNightWatchLbl" style="font-size:13px;font-weight:600">Présent</span>
-          </div>
-        </div>
-      </div>
-      <div class="fi" style="margin-top:14px;margin-bottom:0">
-        <label class="lb">Modules utilisés</label>
-        <div id="dashSimModules" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">
-          <button type="button" class="module-pill on" data-mod="checkin" onclick="toggleDashSimModule(this)">Check-in digital</button>
-          <button type="button" class="module-pill on" data-mod="menage" onclick="toggleDashSimModule(this)">Ménage éco</button>
-          <button type="button" class="module-pill on" data-mod="taxe" onclick="toggleDashSimModule(this)">Taxe de séjour</button>
-          <button type="button" class="module-pill on" data-mod="boutique" onclick="toggleDashSimModule(this)">Boutique &amp; room-service</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ══════════ KPI RÉELS — période sélectionnable ══════════ -->
-  <div class="ca" style="margin-bottom:20px">
-    <div class="ch"><i class="ti ti-chart-bar"></i>Indicateurs réels
-      <button class="chact" onclick="loadRealKpis(true)"><i class="ti ti-refresh" style="font-size:12px"></i> Actualiser</button>
-    </div>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
-      <div style="display:flex;gap:3px;background:var(--bdr);border-radius:var(--rs);padding:3px">
-        <div class="ptab" data-preset="7d" onclick="setKpiPreset('7d')">7 jours</div>
-        <div class="ptab" data-preset="month" onclick="setKpiPreset('month')">Ce mois-ci</div>
-        <div class="ptab" data-preset="lastmonth" onclick="setKpiPreset('lastmonth')">Mois dernier</div>
-        <div class="ptab on" data-preset="year" onclick="setKpiPreset('year')">Cette année</div>
-        <div class="ptab" data-preset="custom" onclick="setKpiPreset('custom')">Personnalisé</div>
-      </div>
-      <div id="kpi-custom-range" style="display:none;gap:8px;align-items:center">
-        <input type="date" id="kpi-from" onchange="onKpiCustomChange()" style="font-size:12px;padding:5px 8px">
-        <span style="color:var(--mu);font-size:12px">→</span>
-        <input type="date" id="kpi-to" onchange="onKpiCustomChange()" style="font-size:12px;padding:5px 8px">
-      </div>
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);margin-left:auto;cursor:pointer;white-space:nowrap">
-        <input type="checkbox" id="kpi-compare" checked onchange="renderRealKpis()"> Comparer à la période précédente
-      </label>
-    </div>
-    <div id="kpi-period-label" style="font-size:12px;color:var(--mu);margin-bottom:12px"></div>
-    <div id="kpi-real-grid" class="kpi-real-grid"><div class="alt alt-b"><i class="ti ti-loader"></i><span>Chargement…</span></div></div>
-  </div>
-
+<div id="sesame-journey">
+<main>
+<div class="row"><div><div class="eyebrow" id="sj-hotel-name"></div><h1>Chaque étape crée de la valeur.</h1><p class="sub">Votre performance, tout au long du parcours digital client.</p></div><span class="demo">Démo · chiffres fictifs</span></div>
+<div class="toolbar"><span class="sub" id="sj-comparison"></span><div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap"><label class="period" for="sj-month">Période<select id="sj-month" class="cursor-interaction"><option value="2026-01">Janvier 2026</option><option value="2026-02">Février 2026</option><option value="2026-03">Mars 2026</option><option value="2026-04">Avril 2026</option><option value="2026-05">Mai 2026</option><option value="2026-06">Juin 2026</option><option value="2026-07">Juillet 2026</option><option value="2026-08">Août 2026</option><option value="2026-09">Septembre 2026</option><option value="2026-10" selected>Octobre 2026 · au 23/10</option></select></label><button class="btn" onclick="showPan('planning')"><i class="ti ti-calendar-event"></i>Planning d'interventions</button></div></div>
+<section class="summary" aria-label="Impact Sesame sur la période"><div><p class="sub">Valeur nette estimée</p><strong id="sj-net"></strong><p class="sub" id="sj-roi"></p></div><div><p class="sub">Temps libéré estimé</p><strong id="sj-time"></strong><p class="sub">Accueil, check-in &amp; ménage</p></div><div><p class="sub">Ventes boutique</p><strong id="sj-sales"></strong><p class="sub">CA encaissé via Sesame</p></div></section>
+<div class="row journey-title"><h2>Parcours digital client</h2><span class="sub">Sélectionnez une étape</span></div>
+<div class="journey" role="tablist" aria-label="Étapes du parcours digital client">
+<button id="sj-tab-arrivals" type="button" class="step cursor-interaction" style="--category:var(--teal)" role="tab" aria-selected="true" aria-controls="sj-content" data-stage="arrivals"><span class="circle"><i class="ti ti-calendar-check"></i></span><span class="name">Arrivées</span><span class="phase">Avant le séjour</span><span class="step-stat" id="sj-mini-arrivals"></span></button>
+<button id="sj-tab-checkin" type="button" class="step cursor-interaction" style="--category:var(--blue)" role="tab" aria-selected="false" aria-controls="sj-content" data-stage="checkin"><span class="circle"><i class="ti ti-face-id"></i></span><span class="name">Check-in</span><span class="phase">À l'arrivée</span><span class="step-stat" id="sj-mini-checkin"></span></button>
+<button id="sj-tab-shop" type="button" class="step cursor-interaction" style="--category:var(--orange)" role="tab" aria-selected="false" aria-controls="sj-content" data-stage="shop"><span class="circle"><i class="ti ti-shopping-bag"></i></span><span class="name">Boutique</span><span class="phase">Pendant le séjour</span><span class="step-stat" id="sj-mini-shop"></span></button>
+<button id="sj-tab-house" type="button" class="step cursor-interaction" style="--category:var(--green)" role="tab" aria-selected="false" aria-controls="sj-content" data-stage="house"><span class="circle"><i class="ti ti-leaf"></i></span><span class="name">Ménage</span><span class="phase">Pendant le séjour</span><span class="step-stat" id="sj-mini-house"></span></button>
+<button id="sj-tab-loyalty" type="button" class="step cursor-interaction" style="--category:var(--purple)" role="tab" aria-selected="false" aria-controls="sj-content" data-stage="loyalty"><span class="circle"><i class="ti ti-heart"></i></span><span class="name">Fidélité</span><span class="phase">Après le séjour</span><span class="step-stat" id="sj-mini-loyalty"></span></button>
+</div>
+<section id="sj-content" role="tabpanel" aria-labelledby="sj-tab-arrivals" style="--active:var(--teal)">
+<div id="sj-lock-banner-slot"></div>
+<div class="row detail-top"><div><div class="detail-title"><span class="detail-dot"></span><h2 id="sj-heading"></h2></div><p class="sub" id="sj-description"></p></div><span class="sub" id="sj-current"></span></div><div class="kpis" id="sj-kpis"></div>
+<section class="panel arrival-week" id="sj-week-panel" hidden>
+  <div class="row"><div><h3>Arrivées de la semaine</h3><p class="sub">Comparaison quotidienne · séjours attendus, enregistrés en ligne et déjà arrivés</p></div><label class="period" for="sj-week-select">Semaine<select id="sj-week-select" class="cursor-interaction"></select></label></div>
+  <svg id="sj-week-chart" class="chart" role="img" aria-label="Arrivées hebdomadaires comparées aux enregistrements en ligne et arrivées réalisées"></svg>
+  <div class="weekly-legend"><span><i style="background:var(--blue)"></i>Arrivées</span><span><i style="background:var(--orange)"></i>Enregistrements en ligne</span><span><i style="background:var(--teal)"></i>Déjà arrivés</span></div>
+  <p class="sub">Jours futurs : arrivées réalisées non disponibles. Jours hors mois sélectionné : exclus. Données simulées.</p>
+</section>
+<div class="charts"><section class="panel"><h3 id="sj-trend-title"></h3><p class="sub" id="sj-trend-sub"></p><svg id="sj-trend" class="chart" role="img"></svg></section><section class="panel"><h3 id="sj-mix-title"></h3><p class="sub" id="sj-mix-sub"></p><div id="sj-mix"></div></section></div>
+<div class="charts"><section class="panel"><h3 id="sj-history-title"></h3><p class="sub">6 mois glissants · dernier mois = période sélectionnée</p><svg id="sj-history" class="chart" role="img"></svg></section><section class="panel"><h3 id="sj-action-title"></h3><div id="sj-actions"></div></section></div></section>
+<details><summary>Sources et hypothèses de calcul</summary><p>Maquette : données entièrement simulées. Production : PMS, événements Sesame, commandes et programme fidélité. ROI = (temps valorisé + marge boutique + coûts variables ménage évités − coût Sesame) / coût Sesame. Accueil : 0,12 h par dossier préparé ; check-in autonome : 0,20 h ; ménage évité : 0,50 h. Coût chargé : 25 €/h. Marge boutique : 35 % du CA, attribution additionnelle supposée pour cette démo. Coût Sesame complet : 600 €/mois. Temps libéré distinct des économies de trésorerie. Ménage : 5 € de consommables et eau par prestation évitée, hors main-d'œuvre. Eau : 30 L par ménage, blanchisserie exclue ; estimation sans compteur, déjà incluse dans coûts variables. Taxe de séjour et CA boutique non ajoutés directement aux gains. Fidélité : adhésions et retours distincts des gains monétaires, sans attribution causale à Sesame. Octobre : données au 23/10, sans projection ; coût mensuel intégral.</p></details>
+<footer><span id="sj-status" role="status" aria-live="polite"></span><span>Estimations de gains · montants constatés à connecter</span></footer>
+</main>
+</div>
 </div>
 
 <!-- ════════════════ CHARTE ════════════════ -->
@@ -6964,30 +6892,383 @@ function row(label,val){
   return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--bdr);font-size:13px"><span style="color:var(--mu)">'+label+'</span><span>'+val+'</span></div>';
 }
 
-// ═══════════════════════════════════════════════ DASHBOARD
+// ═══════════════════════════════════════════════ DASHBOARD — Accueil
+// "Parcours client & performance" (intégration maquette 22/10/2026).
+// Données entièrement simulées (cf. sjDemoMonth) — pas de branchement sur
+// les vraies réservations/KPI ici. Chaque étape (Boutique/Ménage/Fidélité)
+// est verrouillée visuellement — chiffres grisés + bandeau — quand le
+// module Sesame correspondant n'est pas souscrit par l'établissement
+// (CFG.checkinModules), pour montrer au client le bénéfice attendu sans
+// jamais faire passer une démo pour une mesure réelle. Arrivées/Check-in
+// restent toujours "actifs" : ce sont le socle du produit, non des modules
+// optionnels.
 function renderDash(){
-  var sd=document.getElementById('db-hotel');if(sd)sd.textContent=CFG.hotelName;
-  var ss=document.getElementById('db-stars');if(ss)ss.textContent=CFG.stars+'★';
-  var sg=document.getElementById('db-gains');
-  if(sg)sg.textContent=Object.keys(CFG.gains).filter(function(k){return CFG.gains[k].active;}).length;
-  var sr=document.getElementById('db-rooms');if(sr)sr.value=CFG.rooms.length;
-  var sum=document.getElementById('db-summary');
-  var sym=currencySymbol(CFG.currency||'EUR');
-  if(sum){
-    var gains=Object.keys(CFG.gains).filter(function(k){return CFG.gains[k].active;}).join(', ');
-    sum.innerHTML=row('Hôtel',CFG.hotelName)
-      +row('Catégorie',CFG.stars+' étoile(s)')
-      +row('Tarif actif',CFG.tarifs[CFG.stars-1].toFixed(2)+' '+sym+'/nuit')
-      +row('Devise',sym+' ('+( CFG.currency||'EUR')+')')
-      +row('Langue',CFG.lang||'fr')
-      +row('Gains',gains||'—')
-      +row('Chambres',CFG.rooms.length+' conf.');
-  }
-  // KPI dashboard
-  renderKpiDash();
-  loadRealKpis();
-  renderWeeklyArrivals();
+  if(typeof SJ_RENDER==='function') SJ_RENDER();
 }
+
+var SJ_RENDER = (function(){
+  var root = document.getElementById('sesame-journey');
+  if(!root) return function(){};
+  var $ = function(id){ return root.querySelector('#'+id); };
+  var fmt = new Intl.NumberFormat('fr-FR',{ maximumFractionDigits:1 });
+  var nf = function(v){ return fmt.format(v); };
+  var euro = function(v){ return nf(Math.round(v))+' €'; };
+  var pct = function(n,d){ return nf(Math.round(n/d*100))+' %'; };
+  var MONTH_NAMES = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+
+  // Mois de référence démo : octobre 2026, "aujourd'hui" fixé au 23/10 —
+  // indépendant de la vraie date, cohérent avec le calendrier proposé dans
+  // le sélecteur de période (janvier→octobre 2026 uniquement).
+  var DEMO_TODAY = '2026-10-23';
+
+  function sjDemoMonth(m){
+    var f = m===9 ? .77 : 1;
+    var arrivals=Math.round((215+m*11+Math.sin(m)*16)*f);
+    var ready=Math.round(arrivals*(.72+m*.015));
+    var autonomous=Math.round(arrivals*(.70+m*.017));
+    var skipped=Math.round((24+m*4)*f);
+    var sales=Math.round((520+m*85)*f);
+    var orders=Math.round(sales/24);
+    var members=Math.round(arrivals*(.12+m*.008));
+    var repeat=Math.round(arrivals*(.10+m*.006));
+    var time=ready*.12+autonomous*.2+skipped*.5;
+    var margin=sales*.35;
+    var gross=time*25+margin+skipped*5;
+    return { arrivals:arrivals, ready:ready, autonomous:autonomous, skipped:skipped, sales:sales, orders:orders,
+      members:members, repeat:repeat, time:time, margin:margin, net:gross-600, roi:(gross-600)/600*100, water:skipped*30 };
+  }
+
+  function sjMonthDays(monthIndex, monthlyStays, monthlyOnline){
+    var length = new Date(Date.UTC(2026, monthIndex+1, 0)).getUTCDate();
+    var dowWeight = [0.7,0.8,1,1.1,1.5,1.3,0.9];
+    var weights = Array.from({length:length},function(_,i){ return dowWeight[new Date(Date.UTC(2026,monthIndex,i+1)).getUTCDay()]; });
+    function allocate(total){
+      var sum = weights.reduce(function(a,b){return a+b;},0);
+      var counts = weights.map(function(w){ return Math.floor(total*w/sum); });
+      var remaining = total - counts.reduce(function(a,b){return a+b;},0);
+      for(var i=0;remaining>0;i++,remaining--) counts[i%length]++;
+      return counts;
+    }
+    var stays = allocate(monthlyStays);
+    var online = stays.map(function(n){ return Math.floor(n*monthlyOnline/monthlyStays); });
+    var remaining = monthlyOnline - online.reduce(function(a,b){return a+b;},0);
+    for(var i=0; remaining>0; i=(i+1)%length){ if(online[i]<stays[i]){ online[i]++; remaining--; } }
+    return stays.map(function(count,i){
+      var date = new Date(Date.UTC(2026,monthIndex,i+1)).toISOString().slice(0,10);
+      return { date:date, expected:count, online:online[i], arrived: date>DEMO_TODAY ? null : date===DEMO_TODAY ? Math.floor(count*0.65) : count };
+    });
+  }
+
+  function sjChannelMix(total){
+    var names=['Booking.com','Expedia','Airbnb','Autres OTA','Direct · hors OTA'];
+    var shares=[0.44,0.20,0.10,0.06,0.20];
+    var values=shares.map(function(s){ return Math.floor(total*s); });
+    values[4]+= total - values.reduce(function(a,b){return a+b;},0);
+    return names.map(function(name,i){ return {name:name, stays:values[i]}; });
+  }
+
+  function sjTodaySnapshot(){
+    return {
+      date: DEMO_TODAY, present:86, adults:74, children:12, arrivals:9,
+      tasks:[
+        {id:'payments', title:'Vérifier 4 paiements avant arrivée', detail:'Priorité haute · Réception · avant 15 h'},
+        {id:'online', title:'Relancer 6 enregistrements en ligne', detail:'Réception · arrivées du jour'},
+        {id:'late', title:'Préparer 3 arrivées tardives', detail:'Contrôler les accès et envoyer les consignes'},
+        {id:'sync', title:'Contrôler la synchronisation PMS', detail:'Vérifier chambres, dates et droits d’accès'},
+      ]
+    };
+  }
+
+  // Verrouillage par module souscrit (EntityModuleConfig.checkinModules,
+  // cf. MODULE_DEFS/renderModuleCards, panneau "Entité & Catégorie") —
+  // Arrivées/Check-in sont le socle du produit, jamais verrouillés.
+  function sjLockedStages(){
+    var cm = (CFG && CFG.checkinModules) || {};
+    return {
+      arrivals:false,
+      checkin:false,
+      shop: !(cm.roomservice && cm.roomservice.active),
+      house: !(cm.eco && cm.eco.active),
+      loyalty: !(cm.rewards && cm.rewards.active)
+    };
+  }
+
+  var configs = {
+    arrivals:{ name:'Arrivées', color:'teal', desc:'Piloter les arrivées, les canaux de réservation et l’activité du jour.', trend:'Arrivées par semaine', unit:'séjours', history:'Séjours attendus · évolution sur 6 mois' },
+    checkin:{ name:'Check-in', color:'blue', desc:'Fluidifier l’accueil, sécuriser les identités et remettre les accès.', trend:'Check-in autonomes par semaine', unit:'check-in', history:'Temps libéré au check-in · heures sur 6 mois' },
+    shop:{ name:'Boutique', color:'orange', desc:'Développer les ventes de services pendant le séjour.', trend:'Ventes boutique par semaine', unit:'€', history:'CA boutique · évolution sur 6 mois' },
+    house:{ name:'Ménage', color:'green', desc:'Réduire les interventions, valoriser le temps et économiser l’eau.', trend:'Temps ménage libéré par semaine', unit:'heures', history:'Temps ménage valorisé · euros sur 6 mois' },
+    loyalty:{ name:'Fidélité', color:'purple', desc:'Suivre les adhésions, les retours clients et les séjours récurrents.', trend:'Adhésions fidélité par semaine', unit:'adhésions', history:'Clients récurrents · évolution sur 6 mois' }
+  };
+  var MODULE_LABEL = { shop:'Boutique', house:'Préférences éco (ménage)', loyalty:'Récompenses & points' };
+
+  var stage = 'arrivals';
+  var month = 9;
+  var selectedWeek = '';
+  var completedTasks = new Set();
+  var today = sjTodaySnapshot();
+
+  function label(m,short){
+    var d = new Date(2026,m,1);
+    return short ? MONTH_NAMES[d.getMonth()].slice(0,3)+'.' : MONTH_NAMES[d.getMonth()]+' '+d.getFullYear();
+  }
+  function split(total){
+    var a=[.21,.27,.24,.28].map(function(v){ return Math.floor(total*v); });
+    a[3]+= total - a.reduce(function(x,y){return x+y;},0);
+    return a;
+  }
+  function metrics(d){
+    switch(stage){
+      case'arrivals':return[['Séjours attendus',nf(d.arrivals),'Mois sélectionné'],['Enregistrements en ligne',pct(d.ready,d.arrivals),nf(d.ready)+' séjours enregistrés'],['Arrivées aujourd’hui',nf(today.arrivals),'23 octobre 2026 · séjours'],['Personnes présentes',nf(today.present),nf(today.adults)+' adultes · '+nf(today.children)+' enfants · aujourd’hui']];
+      case'checkin':return[['Check-in autonomes',pct(d.autonomous,d.arrivals),nf(d.autonomous)+' sur '+nf(d.arrivals)],['Identités vérifiées',pct(d.ready,d.arrivals),nf(d.ready)+' dossiers vérifiés'],['Temps libéré',nf(Math.round(d.autonomous*.2))+' h','12 min / check-in autonome'],['Temps valorisé',euro(d.autonomous*.2*25),'Base : 25 €/h chargé']];
+      case'shop':return[['CA boutique',euro(d.sales),'Ventes encaissées'],['Commandes',nf(d.orders),'Services & options'],['Panier moyen',euro(d.sales/d.orders),'CA / commandes'],['Marge estimée',euro(d.margin),'Hypothèse : 35 % du CA']];
+      case'house':return[['Ménages évités',nf(d.skipped),'Renoncements confirmés'],['Temps libéré',nf(d.skipped*.5)+' h','30 min / ménage'],['Temps valorisé',euro(d.skipped*.5*25),'Hors coûts variables'],['Eau économisée',nf(d.water)+' L','Estimation : 30 L / ménage']];
+      default:return[['Nouvelles adhésions',nf(d.members),'Programme fidélité'],['Taux d’adhésion',pct(d.members,d.arrivals),'Adhésions / séjours'],['Clients récurrents',nf(d.repeat),'Déjà venus avant la période'],['Part récurrente',pct(d.repeat,d.arrivals),'Séjours clients déjà connus']];
+    }
+  }
+  function plotValue(d,history){
+    if(stage==='arrivals') return d.arrivals;
+    if(stage==='checkin') return history ? Math.round(d.autonomous*.2) : d.autonomous;
+    if(stage==='shop') return d.sales;
+    if(stage==='house') return history ? d.skipped*.5*25 : d.skipped*.5;
+    return history ? d.repeat : d.members;
+  }
+  var NS='http://www.w3.org/2000/svg';
+  function svgEl(tag,attrs,text){
+    var e=document.createElementNS(NS,tag);
+    Object.entries(attrs).forEach(function(kv){ e.setAttribute(kv[0],kv[1]); });
+    if(text!==undefined) e.textContent=text;
+    return e;
+  }
+  function chart(id,values,labels,unit,type){
+    var svg=$(id);
+    var w=svg.getBoundingClientRect().width;
+    if(w<20) return;
+    var h=205,l=47,r=12,t=29,b=32,pw=w-l-r,ph=h-t-b;
+    svg.setAttribute('viewBox','0 0 '+w+' '+h);
+    svg.replaceChildren();
+    svg.append(svgEl('title',{},values.map(function(v,i){ return labels[i]+' : '+nf(v)+' '+unit; }).join(' ; ')));
+    var max=Math.max.apply(null,values.concat([1]))*1.25;
+    var y=function(v){ return t+ph-v/max*ph; };
+    [0,.5,1].forEach(function(f){
+      var yy=y(max*f);
+      svg.append(svgEl('line',{ x1:l,y1:yy,x2:w-r,y2:yy,stroke:'var(--line)' }));
+      svg.append(svgEl('text',{ x:l-7,y:yy+4,'text-anchor':'end' },nf(Math.round(max*f))));
+    });
+    svg.append(svgEl('text',{ x:l,y:13 },unit));
+    var step=pw/values.length;
+    var points=values.map(function(v,i){ return [l+step*(i+.5), y(v)]; });
+    if(type==='line'){
+      var line=points.map(function(p,i){ return (i?'L':'M')+p.join(' '); }).join(' ');
+      svg.append(svgEl('path',{ d: line+' L'+points[points.length-1][0]+' '+(t+ph)+' L'+points[0][0]+' '+(t+ph)+' Z', fill:'var(--active)', opacity:.10 }));
+      svg.append(svgEl('path',{ d: line, fill:'none', stroke:'var(--active)', 'stroke-width':2.5, 'stroke-linejoin':'round' }));
+    }
+    values.forEach(function(v,i){
+      var x=points[i][0], yy=points[i][1];
+      if(type==='bar'){
+        var barW=Math.min(27,step*.55);
+        var bar=svgEl('rect',{ x:x-barW/2, y:yy, width:barW, height:t+ph-yy, rx:4, fill:'var(--active)', opacity: i===values.length-1?1:.6 });
+        bar.append(svgEl('title',{},labels[i]+' : '+nf(v)+' '+unit));
+        svg.append(bar);
+      } else {
+        svg.append(svgEl('circle',{ cx:x, cy:yy, r:4, fill:'var(--active)' }));
+      }
+      svg.append(svgEl('text',{ x:x,y:yy-9,'text-anchor':'middle',class:'number' },nf(v)));
+      svg.append(svgEl('text',{ x:x,y:h-10,'text-anchor':'middle' },labels[i]));
+    });
+  }
+  function ring(items,total,center,sub){
+    var cursor=0;
+    var colors = stage==='checkin' ? ['var(--teal)','var(--blue)','var(--orange)'] : ['var(--active)','var(--blue)','var(--orange)'];
+    var stops = items.map(function(item,i){
+      var start=cursor; cursor+=item[1]/total*100;
+      return colors[i]+' '+start+'% '+cursor+'%';
+    });
+    $('sj-mix').innerHTML = '<div class="donut-group"><div class="ring" role="img" aria-label="'+items.map(function(i){return i[0]+' '+nf(i[1]);}).join(', ')+'" style="background:conic-gradient('+stops.join(',')+')"><div class="ring-center">'+center+'<small>'+sub+'</small></div></div><div>'+items.map(function(item,i){ return '<div class="legend-row"><span class="swatch" style="background:'+colors[i]+'"></span>'+item[0]+'<b>'+nf(item[1])+'</b></div>'; }).join('')+'</div></div>';
+  }
+  function bars(items,unit){
+    var max=Math.max.apply(null,items.map(function(i){return i[1];}));
+    $('sj-mix').innerHTML = items.map(function(i){ return '<div class="list-row"><div class="row"><span>'+i[0]+'</span><span>'+nf(i[1])+' '+unit+'</span></div><div class="track"><span style="width:'+i[1]/max*100+'%"></span></div></div>'; }).join('');
+  }
+  function mix(d){
+    if(stage==='arrivals'){
+      $('sj-mix-title').textContent='Séjours par OTA & canal direct';
+      $('sj-mix-sub').textContent=label(month)+' · séjours par canal d’origine';
+      bars(sjChannelMix(d.arrivals).map(function(c){ return [c.name,c.stays]; }),'séjours');
+    } else if(stage==='checkin'){
+      $('sj-mix-title').textContent='Usage par type de clé';
+      $('sj-mix-sub').textContent='Tentatives d’accès · NFC / code / QR code';
+      var total=d.arrivals*16, nfc=Math.round(total*.46), code=Math.round(total*.34);
+      ring([['NFC',nfc],['Code',code],['QR code',total-nfc-code]],total,nf(total),'tentatives');
+    } else if(stage==='shop'){
+      $('sj-mix-title').textContent='Ventes par service';
+      $('sj-mix-sub').textContent='CA encaissé · catégories exclusives';
+      var parts=split(d.sales);
+      bars([['Petit-déjeuner',parts[0]],['Départ tardif',parts[1]],['Parking',parts[2]],['Autres services',parts[3]]],'€');
+    } else if(stage==='house'){
+      $('sj-mix-title').textContent='Choix de ménage';
+      $('sj-mix-sub').textContent='Prestations proposées pendant la période';
+      var tot=d.skipped*3;
+      ring([['Renoncés',d.skipped],['Maintenus',tot-d.skipped]],tot,pct(d.skipped,tot),'renoncements');
+    } else {
+      $('sj-mix-title').textContent='Clients nouveaux / récurrents';
+      $('sj-mix-sub').textContent='Séjours de la période · catégories exclusives';
+      ring([['Nouveaux',d.arrivals-d.repeat],['Récurrents',d.repeat]],d.arrivals,pct(d.repeat,d.arrivals),'récurrents');
+    }
+  }
+  function actionItems(d){
+    switch(stage){
+      case'checkin':return[['Accueil accompagné',nf(d.arrivals-d.autonomous)+' séjours hors parcours autonome'],['Identité à finaliser',nf(d.arrivals-d.ready)+' dossiers avant remise des accès'],['Paiement & taxe de séjour','État à contrôler avant activation des accès']];
+      case'shop':return[['Marge estimée',euro(d.margin)+' · attribution additionnelle à confirmer'],['Opportunités','Départ tardif et petit-déjeuner dans le parcours'],['Indicateur à suivre','Conversion des offres vues en commandes payées']];
+      case'house':return[['Coûts variables évités',euro(d.skipped*5)+' · hors temps de travail'],['Impact eau',nf(d.water)+' L estimés · nettoyage uniquement'],['Validation opérationnelle','Renoncements à confirmer dans le planning ménage']];
+      default:return[['Adhésions à activer',nf(d.members)+' nouveaux membres sur la période'],['Clients à reconnaître',nf(d.repeat)+' clients récurrents identifiés'],['Suivi commercial','Retours et réservations directes à rapprocher du PMS']];
+    }
+  }
+  function weekOptions(){
+    var first=new Date(Date.UTC(2026,month,1));
+    first.setUTCDate(first.getUTCDate()-(first.getUTCDay()+6)%7);
+    var last=new Date(Date.UTC(2026,month+1,0));
+    var weeks=[];
+    for(var d=new Date(first); d<=last; d.setUTCDate(d.getUTCDate()+7)) weeks.push(d.toISOString().slice(0,10));
+    var currentMonday=new Date(today.date+'T00:00:00Z');
+    currentMonday.setUTCDate(currentMonday.getUTCDate()-(currentMonday.getUTCDay()+6)%7);
+    if(weeks.indexOf(selectedWeek)===-1) selectedWeek = month===9 ? currentMonday.toISOString().slice(0,10) : weeks[0];
+    $('sj-week-select').innerHTML = weeks.map(function(date){ return '<option value="'+date+'"'+(date===selectedWeek?' selected':'')+'>Semaine du '+new Intl.DateTimeFormat('fr-FR',{day:'2-digit',month:'2-digit',timeZone:'UTC'}).format(new Date(date+'T00:00:00Z'))+'</option>'; }).join('');
+  }
+  function weeklyChart(){
+    if(stage!=='arrivals') return;
+    var d=sjDemoMonth(month);
+    var rows=sjMonthDays(month,d.arrivals,d.ready);
+    var svg=$('sj-week-chart');
+    var width=svg.getBoundingClientRect().width;
+    if(width<20) return;
+    var height=225,left=36,right=8,top=24,bottom=48;
+    var innerWidth=width-left-right, innerHeight=height-top-bottom;
+    svg.setAttribute('viewBox','0 0 '+width+' '+height);
+    svg.replaceChildren();
+    var days=Array.from({length:7},function(_,i){
+      var date=new Date(selectedWeek+'T00:00:00Z'); date.setUTCDate(date.getUTCDate()+i);
+      var iso=date.toISOString().slice(0,10);
+      var found=null;
+      for(var j=0;j<rows.length;j++){ if(rows[j].date===iso){ found=rows[j]; break; } }
+      return found || { date:iso, expected:null, online:null, arrived:null };
+    });
+    svg.append(svgEl('title',{},days.map(function(day){ return day.date+' : '+(day.expected==null?'hors mois':day.expected)+' arrivées, '+(day.online==null?'hors mois':day.online)+' enregistrements en ligne, '+(day.arrived==null?'non disponible':day.arrived)+' déjà arrivés'; }).join('; ')));
+    var maximum=Math.max.apply(null,[1].concat(days.map(function(day){ return day.expected||0; })));
+    var ceiling=Math.max(5,Math.ceil(maximum/5)*5);
+    var y=function(v){ return top+innerHeight-v/ceiling*innerHeight; };
+    [0,0.5,1].forEach(function(fraction){
+      var yy=y(ceiling*fraction);
+      svg.append(svgEl('line',{ x1:left,x2:width-right,y1:yy,y2:yy,stroke:'var(--line)' }));
+      svg.append(svgEl('text',{ x:left-7,y:yy+4,'text-anchor':'end' },nf(ceiling*fraction)));
+    });
+    svg.append(svgEl('text',{ x:left,y:12 },'séjours'));
+    var series=[['expected','var(--blue)','Arrivées'],['online','var(--orange)','Enregistrements en ligne'],['arrived','var(--teal)','Déjà arrivés']];
+    var step=innerWidth/7, barWidth=Math.min(24,step*0.25);
+    days.forEach(function(day,i){
+      var center=left+step*(i+0.5);
+      if(day.date===today.date) svg.append(svgEl('rect',{ x:center-step/2+1,y:top,width:step-2,height:innerHeight,fill:'var(--soft)',rx:3 }));
+      series.forEach(function(s,j){
+        var key=s[0],color=s[1],name=s[2];
+        if(day[key]===null) return;
+        var value=day[key], x=center+(j-1)*(barWidth+1)-barWidth/2;
+        var rect=svgEl('rect',{ x:x,y:y(value),width:barWidth,height:value/ceiling*innerHeight,fill:color,rx:Math.min(5,barWidth/2) });
+        rect.append(svgEl('title',{},day.date+' · '+name+' : '+value));
+        svg.append(rect);
+      });
+      var date=new Date(day.date+'T00:00:00Z');
+      svg.append(svgEl('text',{ x:center,y:height-26,'text-anchor':'middle' },['dim.','lun.','mar.','mer.','jeu.','ven.','sam.'][date.getUTCDay()]));
+      svg.append(svgEl('text',{ x:center,y:height-10,'text-anchor':'middle' },new Intl.DateTimeFormat('fr-FR',{day:'2-digit',month:'2-digit',timeZone:'UTC'}).format(date)));
+    });
+  }
+  function renderDailyTasks(){
+    $('sj-actions').innerHTML = today.tasks.map(function(task){ return '<label class="daily-task"><input type="checkbox" data-task="'+task.id+'"'+(completedTasks.has(task.id)?' checked':'')+'><span><strong>'+task.title+'</strong><span class="sub">'+task.detail+'</span></span></label>'; }).join('')
+      + '<p class="sub" id="sj-tasks-count">'+completedTasks.size+' / '+today.tasks.length+' tâches terminées · état local démo</p>';
+  }
+  $('sj-actions').addEventListener('change', function(event){
+    var id=event.target.dataset.task;
+    if(!id) return;
+    if(event.target.checked) completedTasks.add(id); else completedTasks.delete(id);
+    var cnt=$('sj-tasks-count'); if(cnt) cnt.textContent=completedTasks.size+' / '+today.tasks.length+' tâches terminées · état local démo';
+  });
+  $('sj-week-select').addEventListener('change', function(){ selectedWeek=$('sj-week-select').value; weeklyChart(); });
+
+  function draw(){
+    var d=sjDemoMonth(month);
+    var hist=Array.from({length:6},function(_,i){ return month-5+i; });
+    chart('sj-trend',split(plotValue(d)),['S1','S2','S3',month===9?'S4*':'S4'],configs[stage].unit,'line');
+    var unit = stage==='checkin' ? 'heures' : (stage==='house'||stage==='shop') ? '€' : stage==='loyalty' ? 'clients' : 'séjours';
+    weeklyChart();
+    chart('sj-history',hist.map(function(m){ return plotValue(sjDemoMonth(m),true); }),hist.map(function(m){ return label(m,true); }),unit,'bar');
+  }
+  function render(){
+    var d=sjDemoMonth(month), c=configs[stage];
+    var locked = sjLockedStages();
+    var hn=$('sj-hotel-name'); if(hn) hn.textContent = (CFG&&CFG.hotelName) ? CFG.hotelName.toUpperCase() : '';
+    $('sj-week-panel').hidden = stage!=='arrivals';
+    if(stage==='arrivals') weekOptions();
+    $('sj-content').style.setProperty('--active','var(--'+c.color+')');
+    $('sj-content').classList.toggle('sj-locked', !!locked[stage]);
+    var bannerSlot=$('sj-lock-banner-slot');
+    if(bannerSlot){
+      bannerSlot.innerHTML = locked[stage]
+        ? '<div class="sj-lock-banner"><i class="ti ti-lock"></i> Module "<b>'+(MODULE_LABEL[stage]||c.name)+'</b>" non souscrit pour cet établissement — chiffres d’exemple illustrant le bénéfice potentiel.<button type="button" onclick="showPan(\'hotel\')">Activer ce module</button></div>'
+        : '';
+    }
+    $('sj-net').textContent=euro(d.net);
+    $('sj-roi').textContent='ROI estimé : '+nf(Math.round(d.roi))+' % · coût : 600 €';
+    $('sj-time').textContent=nf(Math.round(d.time))+' h';
+    $('sj-sales').textContent=euro(d.sales);
+    $('sj-comparison').textContent = month===9 ? 'Octobre en cours · chiffres au 23 octobre' : 'Mois complet · '+label(month);
+    $('sj-heading').textContent=c.name;
+    $('sj-description').textContent=c.desc;
+    $('sj-current').textContent=label(month)+(month===9?' · au 23/10':'');
+    $('sj-kpis').innerHTML=metrics(d).map(function(i){ return '<div class="tile"><span class="label">'+i[0]+'</span><strong>'+i[1]+'</strong><p class="note">'+i[2]+'</p></div>'; }).join('');
+    $('sj-trend-title').textContent=c.trend;
+    $('sj-trend-sub').textContent='S1 : 1–7 · S2 : 8–14 · S3 : 15–21 · '+(month===9?'S4* : 22–23':'S4 : 22–fin de mois');
+    $('sj-history-title').textContent=c.history;
+    $('sj-action-title').textContent = stage==='house' ? 'Impact & pilotage' : 'Gestion & opportunités';
+    if(stage==='arrivals'){ $('sj-action-title').textContent='Tâches du jour · 23 octobre 2026'; renderDailyTasks(); }
+    else { $('sj-actions').innerHTML=actionItems(d).map(function(a){ return '<div class="task"><strong>'+a[0]+'</strong><p class="sub">'+a[1]+'</p></div>'; }).join(''); }
+    $('sj-mini-arrivals').textContent=nf(d.arrivals)+' séjours';
+    $('sj-mini-checkin').textContent=pct(d.autonomous,d.arrivals)+' autonomes';
+    $('sj-mini-shop').textContent=euro(d.sales);
+    $('sj-mini-house').textContent=nf(d.skipped*.5)+' h libérées';
+    $('sj-mini-loyalty').textContent=nf(d.members)+' adhésions';
+    root.querySelectorAll('[data-stage]').forEach(function(b){
+      b.setAttribute('aria-selected', String(b.dataset.stage===stage));
+      b.classList.toggle('step-locked', !!locked[b.dataset.stage]);
+      var mini=b.querySelector('.step-stat');
+      if(mini) mini.innerHTML = (locked[b.dataset.stage] ? '<span class="lock-badge"><i class="ti ti-lock"></i> Non souscrit · exemple</span> ' : '') + mini.textContent;
+    });
+    $('sj-content').setAttribute('aria-labelledby','sj-tab-'+stage);
+    $('sj-status').textContent=c.name+' · '+label(month)+' · données simulées';
+    mix(d);
+    draw();
+  }
+  root.querySelectorAll('[data-stage]').forEach(function(button){ button.addEventListener('click', function(){ stage=button.dataset.stage; render(); }); });
+  var tablist=root.querySelector('[role="tablist"]');
+  if(tablist) tablist.addEventListener('keydown', function(event){
+    var tabs=Array.prototype.slice.call(root.querySelectorAll('[data-stage]'));
+    var index=tabs.indexOf(document.activeElement);
+    if(index<0) return;
+    var next;
+    if(event.key==='ArrowRight') next=(index+1)%tabs.length;
+    if(event.key==='ArrowLeft') next=(index+tabs.length-1)%tabs.length;
+    if(event.key==='Home') next=0;
+    if(event.key==='End') next=tabs.length-1;
+    if(next===undefined) return;
+    event.preventDefault();
+    tabs[next].focus();
+    tabs[next].click();
+  });
+  $('sj-month').addEventListener('change', function(){ month=Number($('sj-month').value.slice(5))-1; render(); });
+  var resize=new ResizeObserver(draw);
+  resize.observe($('sj-trend'));
+  resize.observe($('sj-history'));
+  resize.observe($('sj-week-chart'));
+  return render;
+})();
 
 // ── ARRIVÉES DE LA SEMAINE — nombre d'arrivées par jour (lun.→dim. de la
 // semaine courante), et deux sous-compteurs : enregistrements en ligne
