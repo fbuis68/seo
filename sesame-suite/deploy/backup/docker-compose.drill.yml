@@ -1,0 +1,34 @@
+# Instance Postgres ISOLÉE dédiée aux exercices de restauration
+# (restore-drill.sh, P0-06 BACKUP-005) — jamais utilisée par l'application,
+# jamais sur le même réseau docker-compose que le service "postgres" de
+# production (fichier séparé, pas de "include:" du docker-compose.yml
+# principal). Port et volume distincts.
+#
+# Déploiement sur le serveur : depuis la racine du dépôt,
+#   docker compose -f deploy/backup/docker-compose.drill.yml up -d
+# une seule fois (service permanent, restore-drill.sh le réutilise à
+# chaque exercice en recréant/détruisant juste la base cible dedans).
+services:
+  postgres-drill:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DRILL_PGUSER:-sesame_drill}
+      POSTGRES_PASSWORD: ${DRILL_PGPASSWORD:?définir DRILL_PGPASSWORD dans l'environnement}
+      POSTGRES_DB: postgres
+    ports:
+      # Lié à l'hôte uniquement, jamais exposé publiquement — même règle
+      # que le service "postgres" de docker-compose.yml. Port distinct
+      # (5433) pour qu'une erreur de configuration ne puisse pas viser par
+      # erreur la base de production sur 5432.
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - sesame_pg_drill_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DRILL_PGUSER:-sesame_drill}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  sesame_pg_drill_data:

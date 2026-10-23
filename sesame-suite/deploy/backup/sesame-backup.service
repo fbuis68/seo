@@ -1,0 +1,14 @@
+[Unit]
+Description=Sesame Suite - sauvegarde chiffree de la base et des secrets
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Variables requises (PGUSER, PGDATABASE, BACKUP_ENCRYPTION_KEY, etc.) —
+# voir docs/backup-restore.md. Fichier non versionné, permissions 0600,
+# propriétaire root uniquement.
+EnvironmentFile=/etc/sesame-backup.env
+WorkingDirectory=/opt/sesame-suite
+ExecStart=/opt/sesame-suite/scripts/backup/run-backup.sh
+ExecStartPost=/opt/sesame-suite/scripts/backup/backup-secrets.sh /opt/sesame-suite/.env
