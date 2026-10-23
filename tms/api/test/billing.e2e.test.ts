@@ -1,13 +1,17 @@
 import { getApp, closeApp, http, signupAndLogin } from './helpers';
 import { SubscriptionService } from '../src/modules/billing/subscription.service';
 import { FakePaymentProvider } from '../src/modules/billing/providers/fake.provider';
+import { SystemMailer } from '../src/core/system-mail';
 
 let fake: FakePaymentProvider;
 let subs: SubscriptionService;
+let mailer: SystemMailer;
+const mailsTo = (email: string) => mailer.devOutbox.filter((m) => m.to === email).map((m) => m.subject);
 
 beforeAll(async () => {
   const app = await getApp();
   subs = app.get(SubscriptionService);
+  mailer = app.get(SystemMailer);
   fake = subs.provider as FakePaymentProvider;
 });
 afterAll(closeApp);
@@ -68,6 +72,8 @@ describe('Souscription en ligne', () => {
     expect(st.body.plan).toBe('equipe');
     expect(st.body.entitlements.features).toContain('bank');
     expect(st.body.signatureCredits.available).toBe(20);
+    expect(mailsTo(u.email)).toContain('Votre abonnement Equipe est confirmé');
+    expect(mailer.devOutbox.find((m) => m.to === u.email && /confirmé/.test(m.subject))!.text).toMatch(/89,00 € HT par mois[\s\S]*20 sessions par mois/);
     const again = await u.api.post('/api/v1/billing/checkout', { plan: 'solo', interval: 'month', addons: [] });
     expect(again.status).toBe(409);
   });
@@ -95,6 +101,7 @@ describe('Souscription en ligne', () => {
     expect(bad.status).toBe(409);
     const ok = await u.api.post('/api/v1/billing/change', { plan: 'centre', interval: 'month', addons: [], confirm: { direction: 'upgrade', newAmountCents: prev.body.newAmountCents } }).expect(201);
     expect(ok.body.plan).toBe('centre');
+    expect(mailsTo(u.email)).toEqual(expect.arrayContaining(['Votre abonnement Solo est confirmé', 'Changement d\'offre : Centre']));
     const st = await u.api.get('/api/v1/billing');
     const subId = [...fake.subscriptions.values()].find((s) => s.tenantId === u.tenantId)!.providerSubscriptionId;
     expect(st.body.hasPaymentMethod).toBe(true);

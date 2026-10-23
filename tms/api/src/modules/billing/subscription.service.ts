@@ -283,6 +283,7 @@ export class SubscriptionService {
       WHERE tenant_id=$1`,
       [tenantId, s.planCode, s.interval, status, this.provider.name, s.providerCustomerId, s.providerSubscriptionId, s.status,
         s.currentPeriodEnd, s.trialEnd, s.cancelAtPeriodEnd, String(config.graceDays), at]);
+    await this.notifyChange(tx, tenantId, cur, { plan: s.planCode, interval: s.interval, status, periodEnd: s.currentPeriodEnd, trialEnd: s.trialEnd });
     for (const code of Object.keys(ADDONS) as AddonCode[]) {
       if (!ADDONS[code].recurring) continue;
       const a = s.addons.find((x) => x.code === code);
@@ -294,6 +295,54 @@ export class SubscriptionService {
       const g = await one(tx, `SELECT grace_until FROM subscriptions WHERE tenant_id=$1`, [tenantId]);
       await this.jobs.enqueue(tx, 'billing.reevaluate', { tenantId }, { tenantId, runAt: g!.grace_until, dedupeKey: `grace:${tenantId}:${new Date(g!.grace_until).toISOString()}` });
     }
+  }
+
+  /**
+   * Email de confirmation au responsable du compte : début d'essai, abonnement activé,
+   * changement d'offre, paiement régularisé. Un échec d'envoi ne bloque jamais l'abonnement.
+   */
+  private async notifyChange(tx: Tx, tenantId: string, cur: any, next: { plan: string; interval: string; status: string; periodEnd?: Date | null; trialEnd?: Date | null }) {
+    const plan = (PLANS as any)[next.plan];
+    if (!plan) return;
+    const fmt = (d?: Date | null) => (d ? new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Paris' }) : null);
+    const price = `${((next.interval === 'year' ? plan.yearlyPriceCents : plan.monthlyPriceCents) / 100).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} € HT ${next.interval === 'year' ? 'par an' : 'par mois'}`;
+    let subject: string | null = null, intro = '';
+    if (next.status === 'trialing' && cur.status !== 'trialing') {
+      subject = `Votre essai ${plan.name} a démarré`;
+      intro = `Votre essai de l'offre ${plan.name} est actif${fmt(next.trialEnd) ? ` jusqu'au ${fmt(next.trialEnd)}` : ''}. Sans action de votre part, l'abonnement démarrera ensuite au tarif de ${price}.`;
+    } else if (next.status === 'active' && cur.status === 'trialing') {
+      subject = `Votre abonnement ${plan.name} est confirmé`;
+      intro = `Votre période d'essai est terminée : votre abonnement ${plan.name} est actif (${price}).`;
+    } else if (next.status === 'active' && cur.status === 'past_due') {
+      subject = 'Paiement régularisé';
+      intro = `Merci, le paiement de votre abonnement ${plan.name} est régularisé. Toutes les fonctions sont de nouveau disponibles.`;
+    } else if (next.status === 'active' && !['active', 'trialing', 'past_due'].includes(cur.status)) {
+      subject = `Votre abonnement ${plan.name} est confirmé`;
+      intro = `Merci pour votre confiance : votre abonnement ${plan.name} est actif (${price}).`;
+    } else if (next.status === 'active' && cur.status === 'active' && (cur.plan_code !== next.plan || cur.billing_interval !== next.interval)) {
+      const old = (PLANS as any)[cur.plan_code]?.name ?? cur.plan_code;
+      subject = `Changement d'offre : ${plan.name}`;
+      intro = `Votre abonnement passe de l'offre ${old} à l'offre ${plan.name} (${price}).`;
+    }
+    if (!subject) return;
+    const owners = (await tx.query(`SELECT u.email, u.full_name FROM memberships m JOIN users u ON u.id=m.user_id
+                                     WHERE m.tenant_id=$1 AND m.role='owner' AND (m.expires_at IS NULL OR m.expires_at > now())`, [tenantId])).rows;
+    const t = await one(tx, `SELECT legal_name FROM tenants WHERE id=$1`, [tenantId]);
+    const s = plan.limits;
+    const lines = [
+      `Espace : ${t?.legal_name ?? ''}`, `Offre : ${plan.name} — ${price}`,
+      next.status === 'active' && fmt(next.periodEnd) ? `Prochain renouvellement : ${fmt(next.periodEnd)}` : null,
+      `Inclus : ${s.managers} gestionnaire(s), ${s.sessionsPerMonth != null ? `${s.sessionsPerMonth} sessions par mois, ` : ''}${s.learnersPerYear.toLocaleString('fr-FR')} apprenants par an, ${Math.round(s.storageBytes / 1024 ** 3)} Go de stockage.`,
+    ].filter(Boolean).join('\n');
+    for (const o of owners) {
+      try {
+        await this.mailer.send({ to: o.email, subject,
+          text: `Bonjour ${o.full_name},\n\n${intro}\n\n${lines}\n\nVos factures et votre moyen de paiement : ${config.appUrl}/billing\n\nÀ bientôt,\nL'équipe ${config.smtpSystem.from.replace(/\s*<.*$/, '')}` });
+      } catch (err: any) {
+        console.error(`[abonnement] email de confirmation non envoyé à ${o.email} : ${err.message}`);
+      }
+    }
+    await this.audit.log(tx, { tenantId, action: 'billing.confirmation_sent', data: { subject, to: owners.length } });
   }
 
   /** Fin d'abonnement payant : retour Free si sous quotas, sinon lecture seule avec export. */
