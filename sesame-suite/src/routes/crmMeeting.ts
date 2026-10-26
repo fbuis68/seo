@@ -94,7 +94,14 @@ crmMeetingRouter.post(
 
     const organizerEmail = req.admin!.email;
     const organizerUserId = await resolveGraphUserId(organizerEmail);
-    const meeting = await createOnlineMeeting({ organizerUserId, subject: b.subject.trim(), startDateTime: start, endDateTime: end });
+    const meeting = await createOnlineMeeting({
+      organizerUserId,
+      subject: b.subject.trim(),
+      startDateTime: start,
+      endDateTime: end,
+      attendeeEmail: prospect.email || undefined,
+      attendeeName: prospect.nom,
+    });
 
     const row = await prisma.crmMeeting.create({
       data: {

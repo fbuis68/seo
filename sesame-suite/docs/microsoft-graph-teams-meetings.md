@@ -38,9 +38,31 @@ tenant Microsoft 365/Entra ID, rôle **Administrateur d'application** ou
    - **`User.Read.All`** — si pas déjà présente : nécessaire pour résoudre
      l'email du commercial connecté vers son identifiant Microsoft Graph
      (`GET /users/{email}`), requis par les trois permissions ci-dessus.
-5. **"Accorder un consentement admin pour [nom du tenant]"** — les 4
-   lignes (3 nouvelles + `User.Read.All`) doivent passer au statut vert
+   - **`Calendars.ReadWrite`** — la réunion est créée comme un événement de
+     calendrier (pas un onlineMeeting "nu") pour qu'elle apparaisse dans
+     Outlook de l'organisateur et que l'invité reçoive l'invitation par
+     email (découvert en test réel : un onlineMeeting seul ne fait ni l'un
+     ni l'autre).
+5. **"Accorder un consentement admin pour [nom du tenant]"** — les 5 lignes
+   (4 nouvelles + `User.Read.All`) doivent passer au statut vert
    **"Accordé"**.
+6. **Étape supplémentaire propre à Teams** : la permission API seule ne
+   suffit pas pour un appel app-only "pour le compte d'un utilisateur" sur
+   `/onlineMeetings` — il faut aussi une **Application Access Policy**,
+   réglée en PowerShell (pas dans le portail Azure) :
+   ```powershell
+   Install-Module -Name MicrosoftTeams -Force -AllowClobber -Scope CurrentUser
+   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser   # si l'exécution de scripts est bloquée
+   Import-Module MicrosoftTeams
+   Connect-MicrosoftTeams   # connexion avec un compte admin Teams/Global
+   New-CsApplicationAccessPolicy -Identity SesameMeetingsPolicy -AppIds "<GRAPH_CLIENT_ID>" -Description "Sesame Suite - reunions Teams"
+   Grant-CsApplicationAccessPolicy -PolicyName SesameMeetingsPolicy -Global
+   ```
+   Remplacez `<GRAPH_CLIENT_ID>` par l'Application (client) ID de l'app
+   (même valeur que `GRAPH_CLIENT_ID` dans `.env`). `-Global` applique la
+   policy à tout le tenant (plus simple) ; `-Identity <email>` à la place
+   de `-Global` limite à un seul utilisateur si préféré. Propagation
+   jusqu'à ~30 minutes après le `Grant-`.
 
 ⚠️ Sans ce consentement admin, les boutons "Planifier une réunion" et
 "Récupérer le compte-rendu" échoueront avec une erreur 401/403 explicite

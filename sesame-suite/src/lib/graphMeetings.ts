@@ -6,15 +6,27 @@ import { HttpError } from "./asyncHandler";
  * client) — même client Microsoft Graph "app-only" que lib/graph.ts (boîte
  * support), nouvelles permissions d'application requises côté Azure :
  * OnlineMeetings.ReadWrite.All, OnlineMeetingRecording.Read.All,
- * OnlineMeetingTranscript.Read.All (cf. docs/microsoft-graph-teams-meetings.md
- * pour la procédure de consentement admin).
+ * OnlineMeetingTranscript.Read.All, Calendars.ReadWrite (cf.
+ * docs/microsoft-graph-teams-meetings.md pour la procédure de consentement
+ * admin — ET l'Application Access Policy côté Teams PowerShell, requise en
+ * plus du consentement API pour tout appel app-only "pour le compte d'un
+ * utilisateur" sur /onlineMeetings).
  *
  * Point d'attention impératif (ne JAMAIS laisser croire le contraire côté
  * UI) : aucun appel ici ne peut forcer le démarrage automatique de
  * l'enregistrement — Microsoft gère ça via une politique de réunion Teams
  * réglée côté tenant (Teams Admin Center, hors de portée de l'API Graph
- * pour une réunion individuelle). `allowRecording` autorise seulement
- * l'enregistrement, il ne le déclenche pas.
+ * pour une réunion individuelle).
+ *
+ * La réunion est créée via un ÉVÉNEMENT DE CALENDRIER (POST .../events,
+ * isOnlineMeeting + onlineMeetingProvider), pas via POST .../onlineMeetings
+ * directement — seule façon d'obtenir à la fois : apparition dans le
+ * calendrier Outlook de l'organisateur ET invitation envoyée par email aux
+ * participants (un onlineMeeting "nu" ne fait ni l'un ni l'autre, découvert
+ * en test réel le 26/10/2026). L'id de l'onlineMeeting sous-jacent (requis
+ * pour transcripts/recordings) se résout ensuite par son joinUrl, méthode
+ * documentée par Microsoft pour corréler un événement calendrier à sa
+ * réunion Teams.
  */
 
 export interface GraphOnlineMeeting {
@@ -36,21 +48,36 @@ export async function createOnlineMeeting(params: {
   subject: string;
   startDateTime: Date;
   endDateTime: Date;
+  attendeeEmail?: string;
+  attendeeName?: string;
 }): Promise<GraphOnlineMeeting> {
-  const meeting = (await graphFetch(`/users/${encodeURIComponent(params.organizerUserId)}/onlineMeetings`, {
+  const event = (await graphFetch(`/users/${encodeURIComponent(params.organizerUserId)}/events`, {
     method: "POST",
     body: JSON.stringify({
       subject: params.subject,
-      startDateTime: params.startDateTime.toISOString(),
-      endDateTime: params.endDateTime.toISOString(),
-      // Autorise l'enregistrement — ne le démarre jamais automatiquement,
-      // cf. avertissement en tête de fichier.
-      allowRecording: true,
-      allowTranscription: true,
+      start: { dateTime: params.startDateTime.toISOString(), timeZone: "UTC" },
+      end: { dateTime: params.endDateTime.toISOString(), timeZone: "UTC" },
+      isOnlineMeeting: true,
+      onlineMeetingProvider: "teamsForBusiness",
+      attendees: params.attendeeEmail
+        ? [{ emailAddress: { address: params.attendeeEmail, name: params.attendeeName || params.attendeeEmail }, type: "required" }]
+        : [],
     }),
-  })) as { id?: string; joinWebUrl?: string };
-  if (!meeting.id || !meeting.joinWebUrl) throw new HttpError(502, "Réponse Microsoft Graph inattendue (réunion créée sans id ou sans lien de participation)");
-  return { id: meeting.id, joinWebUrl: meeting.joinWebUrl };
+  })) as { onlineMeeting?: { joinUrl?: string } };
+  const joinUrl = event.onlineMeeting?.joinUrl;
+  if (!joinUrl) throw new HttpError(502, "Réponse Microsoft Graph inattendue (événement créé sans lien de réunion Teams)");
+
+  // Corrélation événement → onlineMeeting réel (nécessaire pour
+  // transcripts/recordings ensuite, cf. en-tête de fichier) — méthode
+  // documentée par Microsoft, la réponse de création d'événement ne porte
+  // pas l'id de l'onlineMeeting directement.
+  const lookup = (await graphFetch(
+    `/users/${encodeURIComponent(params.organizerUserId)}/onlineMeetings?$filter=JoinWebUrl eq '${encodeURIComponent(joinUrl)}'`
+  )) as { value?: { id?: string }[] };
+  const meetingId = lookup.value?.[0]?.id;
+  if (!meetingId) throw new HttpError(502, "Réunion Teams créée mais introuvable via /onlineMeetings (délai de propagation Microsoft ?) — réessayez la planification.");
+
+  return { id: meetingId, joinWebUrl: joinUrl };
 }
 
 export interface GraphTranscript {
