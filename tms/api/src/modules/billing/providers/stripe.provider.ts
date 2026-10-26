@@ -57,7 +57,13 @@ export class StripeProvider implements PaymentProvider {
       'metadata[tenant_id]': req.tenantId, 'metadata[checkout_id]': req.checkoutId, 'metadata[kind]': req.kind,
       locale: 'fr', billing_address_collection: 'required', 'tax_id_collection[enabled]': 'true',
     };
-    if (req.customerId) p.customer = req.customerId; else p.customer_email = req.customerEmail;
+    if (req.customerId) {
+      p.customer = req.customerId;
+      // Client existant : adresse et raison sociale saisies au paiement reportées sur la fiche (calcul de TVA, factures).
+      p['customer_update[address]'] = 'auto'; p['customer_update[name]'] = 'auto';
+    } else p.customer_email = req.customerEmail;
+    // Stripe Tax : TVA calculée selon le pays et le n° de TVA du client (autoliquidation intra-UE). Prix catalogue HT.
+    if (this.env.STRIPE_AUTOMATIC_TAX !== 'false') p['automatic_tax[enabled]'] = 'true';
     if (req.kind === 'subscription') {
       p.mode = 'subscription';
       p['line_items[0][price]'] = this.planPrice(req.plan!, req.interval!);

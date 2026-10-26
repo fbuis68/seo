@@ -82,4 +82,8 @@ setenv DEMO_PAYMENTS false
 echo
 echo "Terminé. Sauvegarde de l'ancien fichier : $ENV_FILE.avant-stripe (à supprimer après vérification : contient des secrets)."
 echo "Appliquer : docker compose up -d --force-recreate api worker"
-echo "À faire dans le tableau de bord Stripe : Paramètres > Facturation > Portail client (activer) ; Emails clients (reçus et factures)."
+echo "À faire dans le tableau de bord Stripe :"
+echo "  - Paramètres > Taxes : adresse d'origine (siège) + immatriculation France (TVA 20 %), catégorie de produit « SaaS - business use » ;"
+echo "  - Paramètres > Facturation > Portail client : activer ; Paramètres > Emails clients : reçus et factures ;"
+echo "  - Paramètres > Facturation > Factures : mentions légales (SIREN, n° TVA, pénalités de retard, indemnité forfaitaire 40 €)."
+echo "Sans Stripe Tax activé, mettre STRIPE_AUTOMATIC_TAX=false dans .env (sinon la page de paiement est refusée)."
