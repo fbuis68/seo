@@ -33,7 +33,7 @@ Diagnostic serveur `GET /api/v1/start-readiness?sessionId=` (sans paramètre : l
 |---|---|
 | IMP 01 | Fichiers CSV (UTF-8 ou Windows-1252) et XLSX. Macros et formules jamais exécutées. Sauvegarde MCDF. Modèle Excel « Clients / Apprenants » téléchargeable ; assistant d'import intégré à l'étape « Données » (dépôt, association des colonnes modifiable avec exemples, simulation, publication, rapport, annulation). |
 | IMP 06 | Simulation obligatoire. |
-| IMP 07 | Doublons repérés par identifiant source, puis par clé métier. Rapport d'anomalies téléchargeable. |
+| IMP 07 | Doublons repérés par identifiant source, puis par clé métier. Résultat ligne à ligne en tableau (simulation et publication, `GET /api/v1/imports/:id/results`) : onglets Erreurs / Alertes / Importées / Toutes, chaque erreur référencée par fichier ou feuille, n° de ligne du tableur, colonne (lettre et en-tête), message et correction attendue. Même contenu en CSV téléchargeable. |
 | IMP 08 | Idempotence et annulation du lot. |
 | IMP 09 | Rapprochement : lignes reçues = créées + mises à jour + inchangées + rejetées + exclues ; totaux financiers vérifiés. |
 

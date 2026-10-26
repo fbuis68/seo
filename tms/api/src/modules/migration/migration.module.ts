@@ -62,6 +62,12 @@ export class MigrationController {
     return this.m.rows(c, id, parse(page.extend({ severity: z.enum(['ok', 'info', 'warning', 'fix', 'blocking']).optional(), entity: entity.optional() }), q));
   }
 
+  /** Résultat ligne à ligne : filtre erreurs / alertes / importées, référence ligne et colonne. */
+  @RequirePermission('imports.manage') @Get(':id/results')
+  results(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string, @Query() q: unknown) {
+    return this.m.results(c, id, parse(page.extend({ filter: z.enum(['all', 'errors', 'warnings', 'ok']).optional(), entity: entity.optional(), q: z.string().max(100).optional() }), q));
+  }
+
   @RequirePermission('imports.manage') @Get(':id/anomalies.csv')
   async anomalies(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string, @Res() res: any) {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');

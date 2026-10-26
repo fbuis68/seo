@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api, download, post } from '../api';
 import { useAction, useFetch } from '../hooks';
+import { ImportResults } from './ImportResults';
 
 export const ENTITY: Record<string, string> = {
   client: 'Clients', person: 'Apprenants / personnes', program: 'Formations', session: 'Sessions', enrollment: 'Inscriptions', attendance: 'Présences', invoice: 'Factures', payment: 'Règlements', document: 'Pièces',
@@ -149,7 +150,8 @@ export function ImportWizard({ simple, onPublished }: { simple?: boolean; onPubl
           <table><thead><tr><th>Objet</th>{RESULT.map((x) => <th key={x} className="num">{RESULT_LABEL[x]}</th>)}</tr></thead>
             <tbody>{Object.entries(sim.summary).map(([k, v]: any) => <tr key={k}><td>{ENTITY[k] ?? k}</td>{RESULT.map((x) => <td key={x} className="num">{v[x] ?? 0}</td>)}</tr>)}</tbody></table>
           {!sim.quota.fits && <div className="banner warn">{sim.quota.message} ({sim.quota.over.map((o: any) => `${o.quota} : ${o.projected}/${o.limit}`).join(', ')})</div>}
-          {sim.issues?.length > 0 && <details><summary>{sim.issues.length} alerte(s)</summary><ul className="small">{sim.issues.slice(0, 200).map((i: any, k: number) => <li key={k}><strong>{ENTITY[i.entity] ?? i.entity}</strong> {i.legacyId ? `#${i.legacyId}` : ''} : {i.message}</li>)}</ul></details>}
+          {software === 'mcdf' && sim.issues?.length > 0 && <details><summary>{sim.issues.length} alerte(s)</summary><ul className="small">{sim.issues.slice(0, 200).map((i: any, k: number) => <li key={k}><strong>{ENTITY[i.entity] ?? i.entity}</strong> {i.legacyId ? `#${i.legacyId}` : ''} : {i.message}</li>)}</ul></details>}
+          {software !== 'mcdf' && <ImportResults key={sim.computedAt} batchId={batch.id} />}
           <div className="toolbar" style={{ margin: 0 }}>
             <button className="btn ghost sm" onClick={() => download(`/api/v1/imports/${batch.id}/anomalies.csv`, 'anomalies.csv')}>Rapport des anomalies (ligne, colonne, correction)</button>
             <button className="btn" disabled={!sim.canCommit || act.busy} onClick={() => act.run(() => post(`/api/v1/imports/${batch.id}/commit`), (r) => { setReport(r); setSim(null); setFiles(null); setDetect(null); onPublished?.(); })}>Publier les données</button>
@@ -165,6 +167,7 @@ export function ImportWizard({ simple, onPublished }: { simple?: boolean; onPubl
           <table><thead><tr><th>Objet</th><th className="num">Lues</th><th className="num">Créées</th><th className="num">Mises à jour</th><th className="num">Inchangées</th><th className="num">Rejetées</th><th className="num">Exclues</th></tr></thead>
             <tbody>{Object.entries(report.perEntity ?? {}).map(([k, v]: any) => <tr key={k}><td>{ENTITY[k] ?? k}</td>{['read', 'created', 'updated', 'unchanged', 'rejected', 'excluded'].map((x) => <td key={x} className="num">{v[x] ?? 0}</td>)}</tr>)}</tbody></table>
           <p className="small muted" style={{ margin: 0 }}>{report.historicalNotice}</p>
+          {report.source?.software !== 'mcdf' && <><strong>Détail ligne par ligne</strong><ImportResults batchId={report.batchId} published /></>}
           <div className="toolbar" style={{ margin: 0 }}>
             <button className="btn ghost sm" onClick={() => confirm('Annuler ce lot ? Les données créées par cet import seront retirées (refusé si elles ont été utilisées depuis).') && act.run(() => post(`/api/v1/imports/${report.batchId}/rollback`), () => { reset(); onPublished?.(); })}>Annuler cet import</button>
             <button className="btn ghost sm" onClick={reset}>Importer un autre fichier</button>

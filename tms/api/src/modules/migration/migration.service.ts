@@ -38,6 +38,22 @@ const TABLE_OF: Record<EntityType, string> = {
  * il ne lit que des octets déposés par le client (vérifié par test de recette REC-23).
  * Simulation sans écriture métier → publication transactionnelle → compensation par journal.
  */
+/** Correction attendue, par type d'anomalie (affichée dans le tableau de résultat). */
+const FIX_HINT: Record<string, string> = {
+  required: 'Renseignez la cellule puis redéposez le fichier.',
+  column_missing: 'Associez la colonne à l’étape « Colonnes » ou ajoutez-la au fichier.',
+  invalid_format: 'Corrigez le format (date JJ/MM/AAAA, nombre, email…).',
+  invalid_siret: 'Vérifiez les 14 chiffres du SIRET (ou laissez vide).',
+  unknown_value: 'Utilisez une valeur proposée par le modèle (ex. entreprise / particulier, oui / non).',
+  duplicate_in_package: 'Deux lignes portent le même identifiant : supprimez ou renumérotez le doublon.',
+  reference_missing: 'Le code client (employeur) n’existe pas : ajoutez le client dans la feuille Clients ou corrigez le code.',
+  dependency_blocked: 'Corrigez d’abord la ligne référencée (rejetée).',
+  dependency_dropped: 'Corrigez d’abord la ligne référencée, ou importez-la aussi.',
+  email_shared: 'Vérifiez qu’il ne s’agit pas d’un doublon (fusion manuelle possible).',
+  linked_by_siret: 'Fiche existante réutilisée : vérifiez qu’il s’agit bien du même client.',
+  no_identity: 'Ajoutez une colonne d’identifiant pour pouvoir mettre à jour lors d’un prochain import.',
+};
+
 @Injectable()
 export class MigrationService {
   constructor(private db: Db, private storage: StorageService, private ent: EntitlementsService, private audit: AuditService) {}
@@ -419,10 +435,19 @@ export class MigrationService {
   /** Export des anomalies (CSV ; cellules neutralisées contre l'injection de formules). */
   async anomaliesCsv(ctx: RequestContext, id: string) {
     return this.db.tenantTx(ctx.tenantId, async (tx) => {
-      await this.batch(tx, id);
+      const b = await this.batch(tx, id);
       const rows = await many(tx, `SELECT file_path, line_no, entity_type, external_id, severity, issues, planned_action FROM import_rows WHERE batch_id=$1 AND severity <> 'ok' ORDER BY file_path, line_no`, [id]);
-      const lines = ['fichier;ligne;objet;identifiant;gravite;code;colonne;message;action'];
-      for (const r of rows) for (const i of r.issues) lines.push([r.file_path, r.line_no, r.entity_type, r.external_id, i.severity, i.code, i.field, i.message, r.planned_action].map(csvCell).join(';'));
+      const tables = new Map<string, string[]>((b.diagnostic?.tables ?? []).map((t: any) => [t.name, t.columns ?? []]));
+      const maps = new Map<string, Record<string, string>>((b.mapping?.files ?? []).map((f: FileMapping) => [f.path, f.columns]));
+      const letter = (i: number) => { let s = ''; for (let n = i + 1; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s; return s; };
+      const ACT: Record<string, string> = { create: 'créé', update: 'mis à jour', unchanged: 'inchangé', reject: 'rejeté', exclude: 'exclu' };
+      const lines = ['fichier;feuille;ligne;objet;identifiant;resultat;gravite;code;colonne;lettre;champ;message;correction'];
+      for (const r of rows) for (const i of r.issues) {
+        const [file, sheet] = String(r.file_path ?? '').split('#');
+        const col = i.field ? maps.get(r.file_path)?.[i.field] ?? '' : '';
+        const idx = col ? (tables.get(r.file_path) ?? []).indexOf(col) : -1;
+        lines.push([file, sheet ?? '', r.line_no, r.entity_type, r.external_id, ACT[r.planned_action] ?? r.planned_action, i.severity, i.code, col, idx >= 0 ? letter(idx) : '', i.field, i.message, FIX_HINT[i.code] ?? ''].map(csvCell).join(';'));
+      }
       return '﻿' + lines.join('\r\n');
     });
   }
@@ -640,6 +665,45 @@ export class MigrationService {
     return this.db.tenantTx(ctx.tenantId, (tx) => many(tx, `SELECT id, entity_type, file_path, line_no, external_id, data, severity, issues, planned_action, target_id FROM import_rows
       WHERE batch_id=$1 AND ($2::text IS NULL OR severity=$2) AND ($3::text IS NULL OR entity_type=$3) ORDER BY entity_type, file_path, line_no LIMIT $4 OFFSET $5`,
       [id, q.severity ?? null, q.entity ?? null, q.limit, q.offset]));
+  }
+
+  /**
+   * Résultat ligne à ligne (simulation ou publication) : chaque anomalie est référencée par fichier ou feuille,
+   * ligne du tableur (en-tête = ligne 1), colonne source et lettre de colonne, avec la correction attendue.
+   */
+  results(ctx: RequestContext, id: string, q: { filter?: 'all' | 'errors' | 'warnings' | 'ok'; entity?: string; q?: string; limit: number; offset: number }) {
+    return this.db.tenantTx(ctx.tenantId, async (tx) => {
+      const b = await this.batch(tx, id);
+      const where = { all: 'true', errors: `(planned_action='reject' OR severity='blocking')`, warnings: `severity IN ('warning','fix') AND planned_action <> 'reject'`, ok: `planned_action IN ('create','update','unchanged') AND severity IN ('ok','info')` }[q.filter ?? 'all'];
+      const rows = await many(tx, `SELECT entity_type, file_path, line_no, external_id, data, severity, issues, planned_action, target_id, count(*) OVER() total FROM import_rows
+        WHERE batch_id=$1 AND ${where} AND ($2::text IS NULL OR entity_type=$2) AND ($3::text IS NULL OR data::text ILIKE '%'||$3||'%')
+        ORDER BY (planned_action='reject') DESC, (severity IN ('blocking','warning','fix')) DESC, file_path, line_no LIMIT $4 OFFSET $5`,
+      [id, q.entity ?? null, q.q ?? null, q.limit, q.offset]);
+      const counts = (await one(tx, `SELECT count(*)::int total, count(*) FILTER (WHERE planned_action='reject' OR severity='blocking')::int errors,
+          count(*) FILTER (WHERE severity IN ('warning','fix') AND planned_action <> 'reject')::int warnings,
+          count(*) FILTER (WHERE planned_action IN ('create','update','unchanged') AND severity IN ('ok','info'))::int ok FROM import_rows WHERE batch_id=$1 AND ($2::text IS NULL OR entity_type=$2)`, [id, q.entity ?? null]))!;
+      const tables = new Map<string, string[]>((b.diagnostic?.tables ?? []).map((t: any) => [t.name, t.columns ?? []]));
+      const maps = new Map<string, Record<string, string>>((b.mapping?.files ?? []).map((f: FileMapping) => [f.path, f.columns]));
+      const letter = (i: number) => { let s = ''; for (let n = i + 1; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s; return s; };
+      const label = (e: string, d: any) => (e === 'person' || e === 'contact' ? [d.last_name, d.first_name].filter(Boolean).join(' ') : d.name ?? d.title ?? d.label) || d.email || null;
+      return {
+        batchId: id, status: b.status, counts,
+        rows: rows.map((r: any) => {
+          const [file, sheet] = String(r.file_path ?? '').split('#');
+          const cols = tables.get(r.file_path) ?? []; const map = maps.get(r.file_path) ?? {};
+          return {
+            entity: r.entity_type, file, sheet: sheet ?? null, line: r.line_no, externalId: r.external_id, label: label(r.entity_type, r.data ?? {}),
+            email: r.data?.email ?? null, action: r.planned_action, severity: r.severity, targetId: r.target_id,
+            issues: (r.issues ?? []).filter((i: any) => i.severity !== 'info' || r.planned_action === 'exclude').map((i: any) => {
+              const column = i.field ? map[i.field] ?? null : null;
+              const idx = column ? cols.indexOf(column) : -1;
+              return { severity: i.severity, code: i.code, field: i.field ?? null, column, columnLetter: idx >= 0 ? letter(idx) : null, value: i.field ? r.data?.[i.field] ?? null : null, message: i.message, fix: FIX_HINT[i.code] ?? null };
+            }),
+          };
+        }),
+        total: Number(rows[0]?.total ?? 0),
+      };
+    });
   }
 
   // ─── Reprise MCDF ─────────────────────────────────────────────────────────
