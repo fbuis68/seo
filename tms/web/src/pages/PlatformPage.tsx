@@ -66,12 +66,37 @@ export default function PlatformPage() {
             {list.data && !list.data.length && <tr><td colSpan={8} className="muted">Aucun organisme.</td></tr>}</tbody>
         </table>
       </div>
-      {sel && <TenantPanel id={sel} onClose={() => setSel(null)} onChange={() => { list.reload(); ov.reload(); }} />}
+      <UserPurge />
+      {sel && <TenantPanel id={sel} onClose={() => setSel(null)} onChange={() => { list.reload(); ov.reload(); }} onDeleted={() => { setSel(null); list.reload(); ov.reload(); }} />}
     </>
   );
 }
 
-function TenantPanel({ id, onClose, onChange }: { id: string; onClose: () => void; onChange: () => void }) {
+/** Suppression d'un compte utilisateur sans organisme (email de test à réutiliser). */
+function UserPurge() {
+  const [email, setEmail] = useState('');
+  const [msg, setMsg] = useState<{ ok?: string; err?: string }>({});
+  return (
+    <details className="panel" style={{ marginTop: 16 }}>
+      <summary><strong>Supprimer un compte utilisateur</strong> <span className="small muted">(sans organisme : ex. email de test à réutiliser)</span></summary>
+      <form className="toolbar" style={{ marginTop: 8 }} onSubmit={async (e) => {
+        e.preventDefault(); setMsg({});
+        if (!confirm(`Supprimer définitivement le compte ${email} ? Action irréversible.`)) return;
+        try { const r = await api('POST', '/api/v1/platform/users/delete', { email }); setMsg({ ok: `Compte ${r.email} supprimé.` }); setEmail(''); }
+        catch (err: any) { setMsg({ err: err.message }); }
+      }}>
+        <label>Email<input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+        <button className="btn sm danger">Supprimer le compte</button>
+      </form>
+      {msg.ok && <p className="success small">{msg.ok}</p>}
+      {msg.err && <p className="alert small">{msg.err}</p>}
+    </details>
+  );
+}
+
+function TenantPanel({ id, onClose, onChange, onDeleted }: { id: string; onClose: () => void; onChange: () => void; onDeleted: () => void }) {
+  const [confirmName, setConfirmName] = useState('');
+  const [delMsg, setDelMsg] = useState<string | null>(null);
   const d = useFetch<any>(`/api/v1/platform/tenants/${id}`, [id]);
   const [a, setA] = useState({ action: 'comp', plan: 'equipe', until: '', reason: '' });
   const [msg, setMsg] = useState<{ ok?: string; err?: string }>({});
@@ -127,6 +152,18 @@ function TenantPanel({ id, onClose, onChange }: { id: string; onClose: () => voi
         <div><strong className="small">Historique</strong>
           <ul className="small" style={{ paddingLeft: 18 }}>{t.events.map((e: any, i: number) => <li key={i}>{new Date(e.created_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })} · {ACTIONS[e.action] ?? e.action}
             {e.data?.plan ? ` · ${PLAN[e.data.plan] ?? e.data.plan}` : ''}{e.data?.reason ? ` · « ${e.data.reason} »` : ''}{e.actor ? ` · ${e.actor}` : ''}</li>)}</ul>
+        </div>
+        <div className="panel" style={{ display: 'grid', gap: 8, borderColor: 'var(--danger, #b42318)' }}>
+          <strong className="small">Supprimer définitivement l’organisme</strong>
+          <p className="small muted" style={{ margin: 0 }}>Efface toutes ses données et ses fichiers, ainsi que les comptes utilisateurs qui n’appartiennent à aucun autre organisme. Irréversible : réservé aux comptes de test et aux demandes d’effacement. Exportez d’abord si nécessaire.</p>
+          <label>Saisissez le nom exact « {t.legal_name} »<input value={confirmName} onChange={(e) => setConfirmName(e.target.value)} autoComplete="off" /></label>
+          <div><button className="btn sm danger" disabled={confirmName.trim() !== t.legal_name} onClick={async () => {
+            if (!confirm(`Supprimer définitivement « ${t.legal_name} » et toutes ses données ? Action irréversible.`)) return;
+            setDelMsg(null);
+            try { const r = await api('POST', `/api/v1/platform/tenants/${id}/delete`, { confirmName }); alert(`« ${r.legalName} » supprimé.${r.deletedUsers.length ? ` Comptes supprimés : ${r.deletedUsers.join(', ')}.` : ''}`); onDeleted(); }
+            catch (e: any) { setDelMsg(e.message); }
+          }}>Supprimer définitivement</button></div>
+          {delMsg && <p className="alert small" style={{ margin: 0 }}>{delMsg}</p>}
         </div>
         <p className="small muted">Les données des organismes (apprenants, factures, documents) ne sont pas visibles ici : seuls l’abonnement et des compteurs. Pour intervenir dans un compte, le client accorde un accès support temporaire depuis ses Réglages.</p>
       </div>}

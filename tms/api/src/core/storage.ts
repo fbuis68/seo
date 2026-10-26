@@ -31,4 +31,6 @@ export class StorageService {
   stream(key: string) { return createReadStream(this.path(key)); }
   async exists(key: string) { return stat(this.path(key)).then(() => true, () => false); }
   async remove(key: string) { await rm(this.path(key), { force: true }); }
+  /** Suppression de tout un espace (ex. organisme supprimé : préfixe = id de l'organisme). */
+  async removeTree(prefix: string) { await rm(this.path(prefix), { recursive: true, force: true }); }
 }

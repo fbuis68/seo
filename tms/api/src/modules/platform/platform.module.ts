@@ -6,6 +6,7 @@ import { Ctx, NoTenant, RequestContext } from '../../core/context';
 import { Db } from '../../core/db';
 import { AppError, badRequest, conflict, notFound } from '../../core/errors';
 import { JobsService } from '../../core/jobs.service';
+import { StorageService } from '../../core/storage';
 import { isoDate, parse } from '../../core/validation';
 import { ADDONS, PLANS, PlanCode } from '../billing/catalog';
 import { EntitlementsService } from '../billing/entitlements.service';
@@ -43,7 +44,7 @@ const TENANT_SQL = `
  */
 @Injectable()
 export class PlatformService implements OnModuleInit {
-  constructor(private db: Db, private audit: AuditService, private jobs: JobsService, private ent: EntitlementsService) {}
+  constructor(private db: Db, private audit: AuditService, private jobs: JobsService, private ent: EntitlementsService, private storage: StorageService) {}
 
   onModuleInit() {
     this.jobs.register('platform.comp_end', (p) => this.endComp(p.tenantId));
@@ -152,6 +153,77 @@ export class PlatformService implements OnModuleInit {
     return fit;
   }
 
+  /**
+   * Suppression définitive d'un organisme (comptes de test, demande d'effacement) : toutes ses
+   * données, ses fichiers et les comptes utilisateurs qui n'appartiennent à aucun autre organisme.
+   * Irréversible ; confirmation par saisie exacte du nom ; refusée si un abonnement Stripe est en cours.
+   */
+  async purgeTenant(ctx: RequestContext, id: string, confirmName: string) {
+    const removed = await this.db.tx(async (tx) => {
+      const t = (await tx.query(`SELECT t.*, s.provider, s.status, s.provider_subscription_id FROM tenants t LEFT JOIN subscriptions s ON s.tenant_id=t.id WHERE t.id=$1 FOR UPDATE OF t`, [id])).rows[0];
+      if (!t) throw notFound('Organisme');
+      if (confirmName.trim() !== t.legal_name) throw badRequest('confirm_mismatch', 'Le nom saisi ne correspond pas exactement au nom de l’organisme.', 'confirmName');
+      if (t.provider === 'stripe' && t.provider_subscription_id && ['active', 'trialing', 'past_due'].includes(t.status)) {
+        throw conflict('stripe_subscription_active', 'Abonnement Stripe en cours : résiliez-le d’abord dans Stripe (le webhook remettra l’organisme en Free), puis supprimez.');
+      }
+      const users = (await tx.query(`SELECT DISTINCT u.id, u.email FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.tenant_id=$1`, [id])).rows;
+      await tx.query(`SELECT set_config('app.tenant_id', $1, true), set_config('app.tenant_purge', 'on', true)`, [id]);
+      const tables: string[] = (await tx.query(`SELECT DISTINCT c.table_name FROM information_schema.columns c JOIN information_schema.tables t ON t.table_name=c.table_name AND t.table_schema=c.table_schema
+                                               WHERE c.table_schema='public' AND c.column_name='tenant_id' AND t.table_type='BASE TABLE' AND c.table_name <> 'tenants'`)).rows.map((r: any) => r.table_name);
+      const counts: Record<string, number> = {};
+      // Suppression par passes : l'ordre des dépendances (clés étrangères) se résout sans liste à maintenir.
+      let pending = tables;
+      for (let pass = 0; pending.length && pass < 30; pass++) {
+        const next: string[] = [];
+        for (const table of pending) {
+          await tx.query('SAVEPOINT purge');
+          try {
+            const r = await tx.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [id]);
+            counts[table] = (counts[table] ?? 0) + (r.rowCount ?? 0);
+            await tx.query('RELEASE SAVEPOINT purge');
+          } catch (err: any) {
+            await tx.query('ROLLBACK TO SAVEPOINT purge');
+            if (err.code !== '23503') throw err;
+            next.push(table);
+          }
+        }
+        if (next.length === pending.length) throw conflict('purge_blocked', `Suppression impossible : dépendances non résolues (${next.join(', ')}).`);
+        pending = next;
+      }
+      await tx.query(`DELETE FROM tenants WHERE id=$1`, [id]);
+      // Comptes sans autre organisme (jamais un compte éditeur).
+      const deletedUsers: string[] = [];
+      for (const u of users) {
+        if (config.platformAdmins.includes(String(u.email).toLowerCase())) continue;
+        if ((await tx.query(`SELECT 1 FROM memberships WHERE user_id=$1 LIMIT 1`, [u.id])).rowCount) continue;
+        await tx.query(`DELETE FROM invitations WHERE invited_by=$1`, [u.id]);
+        await tx.query(`DELETE FROM users WHERE id=$1`, [u.id]);
+        deletedUsers.push(u.email);
+      }
+      await tx.query(`SELECT set_config('app.tenant_id', '', true)`);
+      await this.audit.log(tx, { tenantId: null as any, actor: ctx.userId, action: 'platform.tenant_deleted', entityType: 'tenant', entityId: id,
+        data: { legalName: t.legal_name, by: ctx.email, deletedUsers, rows: Object.values(counts).reduce((a, n) => a + n, 0) } });
+      return { deleted: true, legalName: t.legal_name, deletedUsers, rows: counts };
+    });
+    await this.storage.removeTree(id).catch(() => undefined);
+    return removed;
+  }
+
+  /** Suppression d'un compte utilisateur sans organisme (ex. email de test réutilisable pour une nouvelle inscription). */
+  async purgeUser(ctx: RequestContext, email: string) {
+    return this.db.tx(async (tx) => {
+      const u = (await tx.query(`SELECT id, email FROM users WHERE lower(email)=lower($1)`, [email.trim()])).rows[0];
+      if (!u) throw notFound('Compte');
+      if (config.platformAdmins.includes(String(u.email).toLowerCase())) throw conflict('platform_admin', 'Compte éditeur : suppression refusée.');
+      const m = (await tx.query(`SELECT t.legal_name FROM memberships m JOIN tenants t ON t.id=m.tenant_id WHERE m.user_id=$1`, [u.id])).rows;
+      if (m.length) throw conflict('has_memberships', `Ce compte appartient encore à : ${m.map((x: any) => x.legal_name).join(', ')}. Supprimez d'abord ces organismes ou retirez-le de l'équipe.`);
+      await tx.query(`DELETE FROM invitations WHERE invited_by=$1`, [u.id]);
+      await tx.query(`DELETE FROM users WHERE id=$1`, [u.id]);
+      await this.audit.log(tx, { tenantId: null as any, actor: ctx.userId, action: 'platform.user_deleted', data: { email: u.email, by: ctx.email } });
+      return { deleted: true, email: u.email };
+    });
+  }
+
   /** Fin d'une offre offerte à durée limitée. */
   async endComp(tenantId: string) {
     await this.db.tx(async (tx) => {
@@ -179,6 +251,18 @@ export class PlatformController {
 
   @NoTenant() @Get('tenants/:id')
   detail(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string) { assertAdmin(c); return this.s.detail(id); }
+
+  @NoTenant() @Post('tenants/:id/delete')
+  purge(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string, @Body() b: unknown) {
+    assertAdmin(c);
+    return this.s.purgeTenant(c, id, parse(z.object({ confirmName: z.string().min(1).max(300) }), b).confirmName);
+  }
+
+  @NoTenant() @Post('users/delete')
+  purgeUser(@Ctx() c: RequestContext, @Body() b: unknown) {
+    assertAdmin(c);
+    return this.s.purgeUser(c, parse(z.object({ email: z.string().email().max(200) }), b).email);
+  }
 
   @NoTenant() @Post('tenants/:id/actions')
   act(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string, @Body() b: unknown) {

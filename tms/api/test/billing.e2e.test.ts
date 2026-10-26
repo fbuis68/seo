@@ -188,4 +188,25 @@ describe('Back-office éditeur', () => {
     const relog = await http().post('/api/v1/auth/login').send({ email: client.email, password: client.password }).expect(201);
     await http().get('/api/v1/billing/usage').set({ Authorization: `Bearer ${relog.body.token}`, 'X-Tenant-Id': client.tenantId }).expect(200);
   });
+
+  it('suppression définitive d’un organisme de test et de son compte ; email réutilisable', async () => {
+    const login = await http().post('/api/v1/auth/login').send({ email: 'editeur@example.test', password: 'motdepasse-solide-42' }).expect(201);
+    const A = { Authorization: `Bearer ${login.body.token}` };
+    const victim = await signupAndLogin({ legalName: 'OF À Supprimer', email: `asupprimer${Date.now()}@example.test` });
+    const prog = (await victim.api.post('/api/v1/programs', { title: 'Test', durationMinutes: 60, modality: 'onsite', priceHt: '100.00', vatRate: '20' }).expect(201)).body;
+    const cl = (await victim.api.post('/api/v1/clients', { kind: 'company', name: 'Client X', status: 'customer' }).expect(201)).body;
+    await victim.api.post('/api/v1/sessions', { programVersionId: prog.versions[0].id, kind: 'intra', clientId: cl.id, startsOn: '2027-01-10' }).expect(201);
+    // Nom de confirmation inexact : refus.
+    expect((await http().post(`/api/v1/platform/tenants/${victim.tenantId}/delete`).set(A).send({ confirmName: 'OF a supprimer' })).status).toBe(400);
+    // Réservé à l'éditeur.
+    expect((await http().post(`/api/v1/platform/tenants/${victim.tenantId}/delete`).set({ Authorization: `Bearer ${victim.token}` }).send({ confirmName: 'OF À Supprimer' })).status).toBe(404);
+    const r = (await http().post(`/api/v1/platform/tenants/${victim.tenantId}/delete`).set(A).send({ confirmName: 'OF À Supprimer' }).expect(201)).body;
+    expect(r.deletedUsers).toEqual([victim.email]);
+    expect((await http().get(`/api/v1/platform/tenants/${victim.tenantId}`).set(A)).status).toBe(404);
+    // Email réutilisable pour une nouvelle inscription.
+    await signupAndLogin({ legalName: 'OF Nouveau', email: victim.email });
+    // Compte éditeur jamais supprimable ; compte encore membre : refus explicite.
+    expect((await http().post('/api/v1/platform/users/delete').set(A).send({ email: 'editeur@example.test' })).status).toBe(409);
+    expect((await http().post('/api/v1/platform/users/delete').set(A).send({ email: victim.email })).status).toBe(409);
+  });
 });
