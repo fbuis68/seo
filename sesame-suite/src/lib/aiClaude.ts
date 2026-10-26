@@ -133,6 +133,48 @@ export async function transformSuggestionText(text: string, mode: "shorten" | "p
   return String(input.reply_text || "").trim();
 }
 
+export interface MeetingRecap {
+  summary: string; // prêt à être envoyé au client tel quel ou édité
+  actionItems: string[];
+}
+
+const MEETING_RECAP_TOOL: AnthropicTool = {
+  name: "submit_recap",
+  description: "Soumet le compte-rendu de la réunion.",
+  input_schema: {
+    type: "object",
+    properties: {
+      summary: {
+        type: "string",
+        description: "Résumé de la réunion en français, professionnel, prêt à être envoyé au client tel quel ou édité — points discutés, décisions prises, pas de minutage ni de liste de présence.",
+      },
+      action_items: {
+        type: "array",
+        items: { type: "string" },
+        description: "Points d'action concrets issus de la réunion, un par élément, formulés comme une tâche à faire (verbe à l'infinitif) — aucun si rien n'a été décidé.",
+      },
+    },
+    required: ["summary", "action_items"],
+  },
+};
+
+/**
+ * Résumé + points d'action d'une réunion Teams, à partir du transcript brut
+ * (texte, converti depuis le VTT Microsoft par lib/graphMeetings.ts). Ne
+ * connaît aucun autre ticket/client — pas de SAFETY_RULES ici, rien à
+ * cloisonner puisque la seule source est le transcript de CETTE réunion.
+ * N'envoie jamais rien au client lui-même : validation humaine obligatoire
+ * côté route (cf. routes/crmMeeting.ts), même principe que
+ * generateSuggestedReply.
+ */
+export async function generateMeetingSummary(transcriptText: string): Promise<MeetingRecap> {
+  const system = "Tu rédiges le compte-rendu d'une réunion commerciale entre Sesame Technology et un client/prospect, à partir de sa transcription automatique. Reste fidèle au contenu réel du transcript, n'invente aucune décision ni aucun chiffre qui n'y figure pas explicitement — une transcription automatique contient des erreurs de reconnaissance vocale, ignore les passages manifestement incohérents plutôt que de les interpréter.";
+  const userMsg = `Transcript de la réunion :\n\n${transcriptText}`;
+  const input = await callClaude({ system, messages: [{ role: "user", content: userMsg }], tool: MEETING_RECAP_TOOL, maxTokens: 2000 });
+  const actionItems = Array.isArray(input.action_items) ? (input.action_items as unknown[]).map((x) => String(x).trim()).filter(Boolean) : [];
+  return { summary: String(input.summary || "").trim(), actionItems };
+}
+
 const FAQ_TOOL: AnthropicTool = {
   name: "submit_faq",
   description: "Soumet la proposition de FAQ structurée.",

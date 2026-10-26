@@ -2092,6 +2092,67 @@ model CrmProspect {
   accCustomer AccCustomer?
   signatureRequests CrmSignatureRequest[]
   quotes     CrmQuote[]
+  meetings   CrmMeeting[]
+}
+
+// Réunion Teams planifiée depuis une fiche prospect (24/10/2026, demande
+// client) — créée via Microsoft Graph (POST /users/{organizerEmail}/
+// onlineMeetings, cf. lib/graphMeetings.ts) au nom du commercial connecté
+// (son AdminUser.email doit correspondre à une vraie boîte Microsoft 365 du
+// tenant — organisateur réel requis par l'API app-only). L'enregistrement
+// n'est jamais garanti démarrer automatiquement (dépend d'une politique de
+// réunion Teams côté tenant, hors de portée de cet appel) — l'app se
+// contente d'autoriser l'enregistrement à la création.
+// Transcript/enregistrement/résumé récupérés a posteriori via un bouton
+// manuel ("Récupérer le compte-rendu", POST /wa/crmMeeting/fetchRecap) —
+// pas de webhook : le transcript Microsoft met plusieurs minutes à être
+// prêt après la fin de la réunion, inadapté à une notification temps réel.
+model CrmMeeting {
+  id         String      @id @default(cuid())
+  prospectId String
+  prospect   CrmProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  subject       String
+  // Email du commercial organisateur (AdminUser.email au moment de la
+  // création) — PAS une FK vers AdminUser : un commercial supprimé plus
+  // tard ne doit jamais invalider l'historique de la réunion.
+  organizerEmail String
+  startDateTime DateTime
+  endDateTime   DateTime
+  joinUrl       String
+
+  // Identifiants Microsoft Graph nécessaires pour retrouver transcript et
+  // enregistrement après la réunion (GET /users/{graphOrganizerUserId}/
+  // onlineMeetings/{graphMeetingId}/transcripts|recordings) — graphMeetingId
+  // seul ne suffit pas, Graph exige aussi l'id utilisateur (pas l'email) du
+  // propriétaire de la boîte.
+  graphMeetingId       String
+  graphOrganizerUserId String
+
+  // scheduled : réunion créée, pas encore de compte-rendu récupéré.
+  // fetched : transcript/résumé récupérés avec succès au moins une fois.
+  // failed : dernière tentative de récupération en échec (ex : transcript
+  // pas encore prêt côté Microsoft, ou jamais activé pour cette réunion) —
+  // bouton "Récupérer" reste disponible, pas un état terminal.
+  status String @default("scheduled")
+
+  // Id Graph de l'enregistrement le plus récent trouvé (callRecording.id) —
+  // le contenu vidéo n'est jamais stocké en base, seulement proxyé à la
+  // demande via GET /wa/crmMeeting/:id/recording (jeton Graph jamais exposé
+  // au navigateur).
+  recordingGraphId String?
+  transcriptText   String? @db.Text
+  summaryText      String? @db.Text
+  // string[] — points d'action extraits par l'IA, matérialisables en tâches
+  // (CrmActivity type="Tâche commerciale") via POST /crmMeeting/materializeTasks,
+  // à la carte plutôt que tous créés automatiquement.
+  actionItems Json?
+
+  fetchedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([prospectId])
 }
 
 // Contacts multiples d'une fiche client/prospect (16/09/2026) — jusqu'ici

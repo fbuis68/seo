@@ -46,7 +46,7 @@ async function getGraphToken(): Promise<string> {
   return cachedToken.value;
 }
 
-async function graphFetch(path: string, init?: RequestInit): Promise<unknown> {
+export async function graphFetch(path: string, init?: RequestInit): Promise<unknown> {
   const token = await getGraphToken();
   const r = await fetch(`${GRAPH_BASE}${path}`, {
     ...init,
@@ -58,6 +58,25 @@ async function graphFetch(path: string, init?: RequestInit): Promise<unknown> {
   }
   if (r.status === 204) return null;
   return r.json();
+}
+
+/**
+ * Comme graphFetch, mais renvoie la Response brute sans la parser en JSON —
+ * pour un contenu texte (transcript au format VTT) ou binaire (vidéo d'un
+ * enregistrement) que seul l'appelant sait interpréter. Exporté pour
+ * lib/graphMeetings.ts (transcripts/enregistrements de réunion Teams).
+ */
+export async function graphFetchRaw(path: string, init?: RequestInit): Promise<Response> {
+  const token = await getGraphToken();
+  const r = await fetch(`${GRAPH_BASE}${path}`, {
+    ...init,
+    headers: { ...(init?.headers || {}), Authorization: `Bearer ${token}` },
+  });
+  if (!r.ok) {
+    const body = await r.text().catch(() => "");
+    throw new HttpError(502, `Microsoft Graph ${r.status} sur ${path} : ${body.slice(0, 300)}`);
+  }
+  return r;
 }
 
 export interface GraphAttachment {
