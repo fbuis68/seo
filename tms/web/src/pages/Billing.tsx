@@ -28,7 +28,12 @@ export default function Billing() {
   // Offre choisie sur le site au moment de l'inscription → présélection.
   useEffect(() => {
     const intent = me.memberships.find((m) => m.signup_intent)?.signup_intent;
-    if (intent && params.get('intent') && st.data?.status === 'free') {
+    // Essai sans carte en cours : offre de l'essai présélectionnée, prête à être souscrite.
+    if (st.data?.status === 'trialing' && !st.data.hasPaymentMethod) {
+      setPlan(st.data.plan); setInterval(st.data.interval ?? intent?.interval ?? 'month'); setTrial(false);
+      return;
+    }
+    if (intent && st.data?.status === 'free') {
       setPlan(intent.plan); setInterval(intent.interval); setTrial(!!intent.trial);
       setAddons(Object.fromEntries((intent.addons ?? []).map((a: any) => [a.code, a.quantity])));
     }
@@ -61,6 +66,14 @@ export default function Billing() {
           {s.pendingChange && <p className="muted">Changement programmé à l’échéance : {s.pendingChange.plan}</p>}
           {s.addons.length > 0 && <p>Options : {s.addons.map((a: any) => `${a.addon_code} × ${a.quantity}`).join(', ')}</p>}
           <p className="small">Signatures ({s.signatureCredits.period}) : {s.signatureCredits.available} disponibles / {s.signatureCredits.included} incluses{s.signatureCredits.purchased ? ` + ${s.signatureCredits.purchased} achetées` : ''}</p>
+          {!hasSub && s.plan !== 'free' && s.status === 'trialing' && (
+            <div className="banner" style={{ marginBottom: 8 }}>
+              Pour continuer après l’essai, enregistrez votre moyen de paiement : <strong>aucun débit avant le {date(s.trialEndsAt)}</strong>.
+              <div style={{ marginTop: 8 }}><button className="btn" disabled={act.busy} onClick={go}>S’abonner à l’offre {c.plans.find((p: any) => p.code === s.plan)?.name} (paiement sécurisé)</button></div>
+            </div>
+          )}
+          {!hasSub && s.status === 'free' && !plan && <p className="small">Choisissez une offre ci-dessous, puis « Payer en ligne » : vous serez redirigé vers la page de paiement sécurisée Stripe.</p>}
+          {act.error && (!plan || (s.status === 'trialing' && !hasSub)) && <p className="alert">{act.error}</p>}
           <div className="toolbar">
             {hasSub && !s.cancelAtPeriodEnd && <button className="btn ghost" disabled={act.busy} onClick={() => confirm('Résilier à l’échéance ? Vos données restent accessibles.') && act.run(() => post('/api/v1/billing/cancel'), () => st.reload())}>Résilier à l’échéance</button>}
             {hasSub && s.cancelAtPeriodEnd && <button className="btn ghost" onClick={() => act.run(() => post('/api/v1/billing/resume'), () => st.reload())}>Annuler la résiliation</button>}
