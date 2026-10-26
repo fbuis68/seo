@@ -7,10 +7,25 @@
 | Exigence | Réalisation |
 |---|---|
 | ONB 01 | 3 parcours (« Je démarre », « Je reprends Excel », « Je migre un logiciel ») et questions d'accueil : activité, pays, devise, sociétés, outil précédent, volume, objectif. |
-| ONB 02 | Assistant en 6 étapes (`/onboarding`) :<br>• sauvegarde automatique, avec contrôle de version entre appareils ;<br>• progression calculée sur les exigences satisfaites ;<br>• estimation du temps restant, révisable. |
+| ONB 02 | Assistant en 7 étapes (`/onboarding`) : Entreprise, Données, **Formation et planning**, Paramètres de facturation, Vérification, Première facture, Finalisation.<br>• sauvegarde automatique, avec contrôle de version entre appareils ;<br>• progression calculée sur les exigences satisfaites. |
 | ONB 03 | Rôles « Responsable facturation » (`accountant` : prépare, confirme, émet) et « Chargé de reprise » (`importer` : reprise, sans droit d'émission). Permission dédiée `invoices.issue`. Le support garde son accès temporaire et tracé. |
 | ONB 04 | Relances email à 24 h et 72 h d'inactivité :<br>• une seule par palier ;<br>• arrêtées dès « Prêt à facturer » ou à la clôture.<br>Bouton « Demander de l'aide » et aide « ? » sur chaque étape. |
 | ONB 05 | Suivi des reprises : source, volumes reçus, importés, rejetés et exclus. États « À compléter », « En cours », « En erreur », « À valider », « Validé », « Différé ». Étapes différables. |
+
+### Mise en route d'une formation (étape « Formation et planning »)
+
+Diagnostic serveur `GET /api/v1/start-readiness?sessionId=` (sans paramètre : la session la plus proche). Création rapide dans l'étape : formation, formateur, salle, session (créée puis planifiée), séance publiée, inscription d'un apprenant.
+
+| Domaine | Bloquant | Avertissement |
+|---|---|---|
+| Formation | Aucune formation au catalogue (intitulé, durée, modalité). | — |
+| Formateur | Aucun formateur actif. | — |
+| Lieu | Aucune salle ni site, si une formation est en présentiel ou mixte. | Formations 100 % distancielles : lien de visio exigé sur la séance. |
+| Session | Pas de session ; dates absentes ; intra sans client ; session restée en brouillon. | — |
+| Planning | Aucune séance ; séance incomplète ou en conflit (formateur, salle ou visio manquants, chevauchements, indisponibilité, fermeture, horaires, compétences, matériel, capacité de la salle, VGP échue) ; séance non publiée (invisible, émargement fermé). | Heures planifiées inférieures à la durée prévue. |
+| Apprenants | Aucun apprenant ; aucune inscription confirmée ; capacité dépassée. | Minimum de participants non atteint. |
+| Offre | Sessions actives (Free : 3) ou sessions du mois (Solo 10, Équipe 20, Centre 50) atteintes : changer d'offre. | Quota d'apprenants de l'année. |
+| Documents | — | Convocations non générées ; convention (intra) non générée. |
 
 ### Reprise (module existant)
 
@@ -38,6 +53,7 @@
   - REC 01 : parcours complet ;
   - REC 03 : émission protégée ;
   - ONB 04 : relances.
+- Tests `test/start-readiness.e2e.test.ts` : du compte vide à « prêt à démarrer », et cas 100 % distanciel.
 - Les tests existants couvrent REC 02 (reprise) et REC 04 (isolation, historique non réémis).
 
 ## Non livré

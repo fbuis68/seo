@@ -19,7 +19,7 @@ const PATHS = [
   { key: 'migrate', title: 'Je migre un logiciel', text: 'J’utilise un autre logiciel (MCDF, Dendreo, Digiforma…) et je reprends ses données.' },
 ];
 
-/** Assistant de mise en service : 6 étapes, sauvegarde automatique, progression réelle. */
+/** Assistant de mise en service : 7 étapes, sauvegarde automatique, progression réelle. */
 export default function Onboarding() {
   const { org } = useApp();
   const [st, setSt] = useState<any>(null);
@@ -70,6 +70,7 @@ export default function Onboarding() {
         {s.reason && <p className="alert small" style={{ margin: 0 }}>{s.reason}</p>}
         {s.key === 'company' && <CompanyStep st={st} setSt={setSt} canEdit={canEdit} />}
         {s.key === 'data' && <DataStep st={st} reload={load} />}
+        {s.key === 'training' && <TrainingStep st={st} reload={load} />}
         {s.key === 'billing' && <BillingStep st={st} setSt={setSt} />}
         {s.key === 'check' && <CheckStep checks={st.readiness.checks} reload={load} />}
         {s.key === 'first_invoice' && <FirstInvoiceStep st={st} reload={load} />}
@@ -142,6 +143,138 @@ function DataStep({ st, reload }: { st: any; reload: () => void }) {
           return <tr key={b.id}><td>{b.source}</td><td>{b.status}</td><td className="num">{t.read}</td><td className="num">{t.created}</td><td className="num">{t.rejected}</td><td className="num">{t.excluded}</td><td>{date(b.createdAt)}</td></tr>;
         })}</tbody>
       </table>}
+    </div>
+  );
+}
+
+const AREA: Record<string, string> = { catalog: 'Formation', trainer: 'Formateur', place: 'Lieu', session: 'Session', planning: 'Planning', learners: 'Apprenants', plan: 'Offre', documents: 'Documents' };
+const iso = (d: string, h: string) => new Date(`${d}T${h}`).toISOString();
+
+/** Mise en route d'une formation : tout ce qui bloque, avec création rapide de chaque prérequis. */
+function TrainingStep({ st, reload }: { st: any; reload: () => void }) {
+  const nav = useNavigate();
+  const act = useAction();
+  const programs = useFetch<any[]>('/api/v1/programs?limit=200');
+  const trainers = useFetch<any[]>('/api/v1/persons?role=trainer&limit=200');
+  const learners = useFetch<any[]>('/api/v1/persons?role=learner&limit=200');
+  const rooms = useFetch<any[]>('/api/v1/resources');
+  const clients = useFetch<any[]>('/api/v1/clients?limit=200');
+  const start = st.start;
+  const sid = start?.sessionId;
+  const session = useFetch<any>(sid ? `/api/v1/sessions/${sid}` : null, [sid]);
+  const places = (rooms.data ?? []).filter((r: any) => ['room', 'site'].includes(r.kind) && !r.archived_at);
+  const refresh = () => { reload(); programs.reload(); trainers.reload(); learners.reload(); rooms.reload(); session.reload(); };
+  const ok = (code: string) => start?.checks.find((c: any) => c.code === code)?.ok;
+  const today = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+  const [pg, setPg] = useState({ title: '', hours: '7', modality: 'onsite', priceHt: '', vatRate: '20' });
+  const [tr, setTr] = useState({ firstName: '', lastName: '', email: '' });
+  const [rm, setRm] = useState({ name: 'Salle 1', capacity: '12', address: '' });
+  const [se, setSe] = useState({ programId: '', kind: 'inter', clientId: '', startsOn: today, endsOn: today, capacity: '12' });
+  const [sl, setSl] = useState({ day: today, from: '09:00', to: '17:00', trainerId: '', roomId: '', videoUrl: '' });
+  const [le, setLe] = useState({ personId: '', firstName: '', lastName: '', email: '' });
+  const [open, setOpen] = useState<string | null>(null);
+  const show = (k: string, done: boolean) => !done || open === k;
+  const program = programs.data?.find((p: any) => p.id === (se.programId || programs.data?.[0]?.id));
+  const remote = start?.modality === 'remote';
+  const toggle = (k: string) => <button type="button" className="linklike" onClick={() => setOpen(open === k ? null : k)}>{open === k ? 'Fermer' : 'Ajouter'}</button>;
+  return (
+    <div style={{ display: 'grid', gap: 12 }}>
+      <p style={{ margin: 0 }}>Pour démarrer une formation il faut : une formation au catalogue, un formateur, une salle (sauf distanciel), une session datée et planifiée, des séances publiées au planning et des apprenants inscrits.</p>
+      {start && <table className="small"><tbody>{start.checks.map((c: any) => (
+        <tr key={c.code}><td>{c.ok ? '✓' : c.severity === 'blocking' ? '✕' : '!'}</td><td className="muted">{AREA[c.area]}</td><td>{c.message}</td>
+          <td>{!c.ok && c.screen && !c.screen.startsWith('/onboarding') && <button className="btn ghost sm" onClick={() => nav(c.screen)}>Corriger</button>}</td></tr>))}</tbody></table>}
+
+      <section className="panel" style={{ display: 'grid', gap: 8 }}>
+        <strong>1. Formation {ok('program') && toggle('program')}</strong>
+        {show('program', !!ok('program')) && <form className="grid2" onSubmit={(e) => { e.preventDefault(); act.run(() => post('/api/v1/programs', { title: pg.title, durationMinutes: Math.round(Number(pg.hours.replace(',', '.')) * 60), modality: pg.modality, priceHt: pg.priceHt || null, vatRate: pg.vatRate || null }), (p: any) => { setSe({ ...se, programId: p.id }); setOpen(null); refresh(); }); }}>
+          <label>Intitulé<input required minLength={2} value={pg.title} onChange={(e) => setPg({ ...pg, title: e.target.value })} placeholder="Ex. Habilitation électrique B0" /></label>
+          <label>Durée (heures)<input required inputMode="decimal" value={pg.hours} onChange={(e) => setPg({ ...pg, hours: e.target.value })} /></label>
+          <label>Modalité<select value={pg.modality} onChange={(e) => setPg({ ...pg, modality: e.target.value })}><option value="onsite">Présentiel</option><option value="remote">Distanciel</option><option value="blended">Mixte</option></select></label>
+          <label>Prix HT (facultatif)<input inputMode="decimal" value={pg.priceHt} onChange={(e) => setPg({ ...pg, priceHt: e.target.value })} /></label>
+          <div><button className="btn sm" disabled={act.busy}>Créer la formation</button></div>
+        </form>}
+      </section>
+
+      <section className="panel" style={{ display: 'grid', gap: 8 }}>
+        <strong>2. Formateur {ok('trainer') && toggle('trainer')}</strong>
+        {ok('trainer') && <span className="small muted">{trainers.data?.map((t: any) => `${t.first_name} ${t.last_name}`).join(', ')}</span>}
+        {show('trainer', !!ok('trainer')) && <form className="grid2" onSubmit={(e) => { e.preventDefault(); act.run(() => post('/api/v1/persons', { firstName: tr.firstName, lastName: tr.lastName, email: tr.email || null, roles: ['trainer'] }), (p: any) => { setSl({ ...sl, trainerId: p.id }); setTr({ firstName: '', lastName: '', email: '' }); setOpen(null); refresh(); }); }}>
+          <label>Prénom<input required value={tr.firstName} onChange={(e) => setTr({ ...tr, firstName: e.target.value })} /></label>
+          <label>Nom<input required value={tr.lastName} onChange={(e) => setTr({ ...tr, lastName: e.target.value })} /></label>
+          <label>Email (pour son planning)<input type="email" value={tr.email} onChange={(e) => setTr({ ...tr, email: e.target.value })} /></label>
+          <div><button className="btn sm" disabled={act.busy}>Créer le formateur</button></div>
+        </form>}
+      </section>
+
+      <section className="panel" style={{ display: 'grid', gap: 8 }}>
+        <strong>3. Salle {ok('place') && toggle('place')}</strong>
+        {ok('place') && <span className="small muted">{places.map((r: any) => r.name).join(', ')}</span>}
+        {show('place', !!ok('place')) && <form className="grid2" onSubmit={(e) => { e.preventDefault(); act.run(() => post('/api/v1/resources', { kind: 'room', name: rm.name, capacity: rm.capacity ? Number(rm.capacity) : null, address: rm.address || null }), (r: any) => { setSl({ ...sl, roomId: r.id }); setOpen(null); refresh(); }); }}>
+          <label>Nom<input required value={rm.name} onChange={(e) => setRm({ ...rm, name: e.target.value })} /></label>
+          <label>Capacité<input inputMode="numeric" value={rm.capacity} onChange={(e) => setRm({ ...rm, capacity: e.target.value })} /></label>
+          <label>Adresse<input value={rm.address} onChange={(e) => setRm({ ...rm, address: e.target.value })} /></label>
+          <div><button className="btn sm" disabled={act.busy}>Créer la salle</button></div>
+        </form>}
+      </section>
+
+      <section className="panel" style={{ display: 'grid', gap: 8 }}>
+        <strong>4. Session {sid && toggle('session')}</strong>
+        {sid && <span className="small">« {start.sessionTitle} » — <Link to={`/sessions/${sid}`}>ouvrir la fiche</Link>{session.data?.status === 'draft' && <> · <button className="linklike" disabled={act.busy} onClick={() => act.run(() => post(`/api/v1/sessions/${sid}/status`, { status: 'planned' }), refresh)}>passer en « planifiée »</button></>}</span>}
+        {show('session', !!sid) && <form className="grid2" onSubmit={(e) => { e.preventDefault(); if (!program) return act.setError('Créez d’abord une formation.'); act.run(async () => {
+          const s: any = await post('/api/v1/sessions', { programVersionId: program.current_version_id, kind: se.kind, clientId: se.kind === 'intra' ? se.clientId || null : null, startsOn: se.startsOn, endsOn: se.endsOn || se.startsOn, capacity: se.capacity ? Number(se.capacity) : null });
+          await post(`/api/v1/sessions/${s.id}/status`, { status: 'planned' });
+          return s;
+        }, (s: any) => { setSl({ ...sl, day: se.startsOn }); setOpen(null); refresh(); void s; }); }}>
+          <label>Formation<select required value={se.programId || program?.id || ''} onChange={(e) => setSe({ ...se, programId: e.target.value })}>{programs.data?.map((p: any) => <option key={p.id} value={p.id}>{p.title}</option>)}</select></label>
+          <label>Type<select value={se.kind} onChange={(e) => setSe({ ...se, kind: e.target.value })}><option value="inter">Inter-entreprises</option><option value="intra">Intra (un client)</option></select></label>
+          {se.kind === 'intra' && <label>Client<select required value={se.clientId} onChange={(e) => setSe({ ...se, clientId: e.target.value })}><option value="">—</option>{clients.data?.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
+          <label>Début<input type="date" required value={se.startsOn} onChange={(e) => setSe({ ...se, startsOn: e.target.value, endsOn: e.target.value > se.endsOn ? e.target.value : se.endsOn })} /></label>
+          <label>Fin<input type="date" required min={se.startsOn} value={se.endsOn} onChange={(e) => setSe({ ...se, endsOn: e.target.value })} /></label>
+          <label>Places<input inputMode="numeric" value={se.capacity} onChange={(e) => setSe({ ...se, capacity: e.target.value })} /></label>
+          <div><button className="btn sm" disabled={act.busy || !programs.data?.length}>Créer et planifier la session</button></div>
+        </form>}
+      </section>
+
+      {sid && <section className="panel" style={{ display: 'grid', gap: 8 }}>
+        <strong>5. Séances au planning {ok('slots') && toggle('slot')}</strong>
+        {ok('slots') && <span className="small"><Link to="/planning">Voir le planning</Link></span>}
+        {show('slot', !!ok('slots')) && <form className="grid2" onSubmit={(e) => { e.preventDefault(); act.run(() => post('/api/v1/planning/slots', {
+          sessionId: sid, startsAt: iso(sl.day, sl.from), endsAt: iso(sl.day, sl.to), status: 'published', modality: remote ? 'remote' : 'onsite',
+          trainerIds: [sl.trainerId || trainers.data?.[0]?.id].filter(Boolean), resourceIds: remote ? [] : [sl.roomId || places[0]?.id].filter(Boolean), videoUrl: remote ? sl.videoUrl || null : null,
+        }), () => { setOpen(null); refresh(); }); }}>
+          <label>Jour<input type="date" required value={sl.day} onChange={(e) => setSl({ ...sl, day: e.target.value })} /></label>
+          <label>De<input type="time" required value={sl.from} onChange={(e) => setSl({ ...sl, from: e.target.value })} /></label>
+          <label>À<input type="time" required value={sl.to} onChange={(e) => setSl({ ...sl, to: e.target.value })} /></label>
+          <label>Formateur<select required value={sl.trainerId || trainers.data?.[0]?.id || ''} onChange={(e) => setSl({ ...sl, trainerId: e.target.value })}>{trainers.data?.map((t: any) => <option key={t.id} value={t.id}>{t.first_name} {t.last_name}</option>)}</select></label>
+          {!remote && <label>Salle<select required value={sl.roomId || places[0]?.id || ''} onChange={(e) => setSl({ ...sl, roomId: e.target.value })}>{places.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}</select></label>}
+          {remote && <label>Lien de visio<input type="url" required value={sl.videoUrl} onChange={(e) => setSl({ ...sl, videoUrl: e.target.value })} /></label>}
+          <div><button className="btn sm" disabled={act.busy || !trainers.data?.length || (!remote && !places.length)}>Ajouter et publier la séance</button></div>
+        </form>}
+        <span className="small muted">Plusieurs jours ? Ajoutez une séance par demi-journée ou journée, ou utilisez le planning (duplication, série).</span>
+      </section>}
+
+      {sid && <section className="panel" style={{ display: 'grid', gap: 8 }}>
+        <strong>6. Apprenants inscrits {ok('enrollments') && toggle('enroll')}</strong>
+        {session.data?.enrollments?.length > 0 && <span className="small muted">{session.data.enrollments.filter((x: any) => x.status !== 'cancelled').map((x: any) => `${x.first_name ?? ''} ${x.last_name ?? ''}`.trim() || x.person_id).join(', ')}</span>}
+        {show('enroll', !!ok('enrollments')) && <form className="grid2" onSubmit={(e) => { e.preventDefault(); act.run(async () => {
+          let personId = le.personId;
+          if (!personId) personId = ((await post('/api/v1/persons', { firstName: le.firstName, lastName: le.lastName, email: le.email || null, roles: ['learner'] })) as any).id;
+          return post(`/api/v1/sessions/${sid}/enrollments`, { personId, status: 'confirmed', clientId: session.data?.client_id ?? null });
+        }, () => { setLe({ personId: '', firstName: '', lastName: '', email: '' }); refresh(); }); }}>
+          <label>Apprenant existant<select value={le.personId} onChange={(e) => setLe({ ...le, personId: e.target.value })}><option value="">— nouvel apprenant —</option>{learners.data?.map((p: any) => <option key={p.id} value={p.id}>{p.last_name} {p.first_name}</option>)}</select></label>
+          {!le.personId && <>
+            <label>Prénom<input required value={le.firstName} onChange={(e) => setLe({ ...le, firstName: e.target.value })} /></label>
+            <label>Nom<input required value={le.lastName} onChange={(e) => setLe({ ...le, lastName: e.target.value })} /></label>
+            <label>Email<input type="email" value={le.email} onChange={(e) => setLe({ ...le, email: e.target.value })} /></label>
+          </>}
+          <div><button className="btn sm" disabled={act.busy}>Inscrire (confirmé)</button></div>
+        </form>}
+        <span className="small muted">Une liste d’apprenants ? Importez-la à l’étape « Données », puis inscrivez-les depuis la fiche session.</span>
+      </section>}
+
+      {act.error && <p className="alert">{act.error}</p>}
+      {start?.ready && <p className="pill ok">Prêt à démarrer : la formation peut avoir lieu (émargement ouvert sur les séances publiées).</p>}
+      <div><button className="btn ghost sm" onClick={refresh}>Relancer le diagnostic</button></div>
     </div>
   );
 }

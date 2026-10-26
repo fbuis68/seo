@@ -10,10 +10,12 @@ import { SystemMailer } from '../../core/system-mail';
 import { parse } from '../../core/validation';
 import { BillingProfileData, EXEMPTION_TEXT, currentProfile, profileProblems, saveProfile, validIban } from './billing-profile';
 import { readiness } from './readiness';
+import { startReadiness } from './session-start';
 
 /** Étapes de l'assistant (ONB 02), dans l'ordre. */
 export const STEPS = [
-  { key: 'company', label: 'Entreprise' }, { key: 'data', label: 'Données' }, { key: 'billing', label: 'Paramètres de facturation' },
+  { key: 'company', label: 'Entreprise' }, { key: 'data', label: 'Données' }, { key: 'training', label: 'Formation et planning' },
+  { key: 'billing', label: 'Paramètres de facturation' },
   { key: 'check', label: 'Vérification' }, { key: 'first_invoice', label: 'Première facture' }, { key: 'finish', label: 'Finalisation' },
 ] as const;
 type StepKey = (typeof STEPS)[number]['key'];
@@ -86,6 +88,16 @@ export class OnboardingService implements OnModuleInit {
       ? [{ label: 'Au moins un client', ok: counts.clients > 0 }, { label: 'Au moins une formation au catalogue', ok: counts.programs > 0 }]
       : [{ label: 'Données reprises (lot publié)', ok: published.length > 0 }, { label: 'Au moins un client', ok: counts.clients > 0 }],
     { error: failing && !published.length ? 'Un dépôt a été refusé : voir le rapport de reprise.' : undefined, toValidate: !!pendingImport && pendingImport.status === 'simulated' });
+    // Mise en route d'une formation : programme, formateur, salle, session, planning publié, apprenants.
+    const start = await startReadiness(tx, ctx.tenantId);
+    const sc = (code: string) => start.checks.find((c) => c.code === code);
+    const okc = (code: string) => { const c = sc(code); return !c || c.ok || c.severity === 'warning'; };
+    set('training', [
+      { label: 'Une formation au catalogue', ok: okc('program') }, { label: 'Un formateur', ok: okc('trainer') },
+      { label: 'Une salle ou un site', ok: okc('place') }, { label: 'Une session datée et planifiée', ok: !!start.sessionId && okc('session_dates') && okc('session_status') && okc('session_client') },
+      { label: 'Des séances publiées au planning', ok: !!start.sessionId && okc('slots') && okc('slots_valid') && okc('slots_published') },
+      { label: 'Des apprenants inscrits', ok: !!start.sessionId && okc('enrollments') && okc('capacity') },
+    ], { error: start.checks.some((c) => !c.ok && c.area === 'plan' && c.severity === 'blocking') ? start.blocking.filter((c) => c.area === 'plan').map((c) => c.message).join(' ') : undefined });
     const pp = profile ? profileProblems(profile.data) : ['Profil non renseigné'];
     set('billing', [
       { label: 'Régime de TVA et conditions de paiement renseignés', ok: !pp.length },
@@ -122,11 +134,16 @@ export class OnboardingService implements OnModuleInit {
       status, progress, current, milestones,
       steps: STEPS.map((x) => ({ ...x, ...step[x.key] })),
       readiness: ready,
+      start,
       billing: { profile: profile ? { version: profile.version, data: profile.data, confirmedAt: profile.confirmed_at, problems: pp } : null, series, exemptionTexts: EXEMPTION_TEXT },
       imports: batches.map((b) => ({ id: b.id, source: b.source_software, instance: b.source_instance_id, status: b.status, createdAt: b.created_at, publishedAt: b.published_at,
         summary: b.per_entity ?? b.summary ?? null })),
       counts,
     };
+  }
+
+  startReadiness(ctx: RequestContext, sessionId?: string) {
+    return this.db.tenantTx(ctx.tenantId, (tx) => startReadiness(tx, ctx.tenantId, { sessionId }));
   }
 
   update(ctx: RequestContext, b: { version: number; path?: string; answers?: Record<string, unknown> }) {
@@ -295,6 +312,13 @@ export class OnboardingController {
   }
 
   @RequirePermission('invoices.issue') @Post('invoice-series/confirm') confirmSeries(@Ctx() c: RequestContext) { return this.s.confirmSeries(c); }
+
+  /** Diagnostic de démarrage d'une formation (session donnée ou la plus proche). */
+  @RequirePermission('sessions.read') @Get('start-readiness')
+  startReadiness(@Ctx() c: RequestContext, @Query('sessionId') sessionId?: string) {
+    if (sessionId && !/^[0-9a-f-]{36}$/i.test(sessionId)) throw badRequest('invalid_id', 'Identifiant invalide.');
+    return this.s.startReadiness(c, sessionId);
+  }
 
   @RequirePermission('finance.read') @Get('billing-readiness')
   readiness(@Ctx() c: RequestContext, @Query('invoiceId') invoiceId?: string) {

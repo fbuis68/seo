@@ -16,7 +16,7 @@ describe('Mise en service (onboarding)', () => {
     const u = await signupAndLogin({ legalName: 'OF Neuf', billingReady: false });
     let st = (await u.api.get('/api/v1/onboarding').expect(200)).body;
     expect(st.status).toBe('new');
-    expect(st.steps.map((s: any) => s.key)).toEqual(['company', 'data', 'billing', 'check', 'first_invoice', 'finish']);
+    expect(st.steps.map((s: any) => s.key)).toEqual(['company', 'data', 'training', 'billing', 'check', 'first_invoice', 'finish']);
     expect(st.current).toBe('company');
     expect(st.readiness.state).toBe('not_ready'); // aucun client
 
