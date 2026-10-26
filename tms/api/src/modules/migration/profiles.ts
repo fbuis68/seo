@@ -19,12 +19,14 @@ const COMMON: Record<EntityType, Partial<Record<string, string[]>>> = {
     external_id: ['id', 'id_client', 'id_entreprise', 'identifiant', 'code_client', 'reference'], name: ['nom', 'raison_sociale', 'entreprise', 'societe', 'client', 'nom_client', 'denomination'],
     kind: ['type', 'type_client', 'forme'], siret: ['siret', 'n_siret', 'numero_siret'], email: ['email', 'e_mail', 'mail', 'email_facturation'],
     address: ['adresse', 'adresse_1', 'rue'], postal_code: ['code_postal', 'cp'], city: ['ville', 'commune'], is_funder: ['financeur', 'opco', 'est_financeur'],
-    is_customer: ['client_facture', 'est_client'],
+    is_customer: ['client_facture', 'est_client'], phone: ['telephone', 'tel', 'telephone_standard'], vat_number: ['tva_intracommunautaire', 'n_tva', 'numero_tva'],
   },
   person: {
     external_id: ['id', 'id_apprenant', 'id_stagiaire', 'id_personne', 'id_participant', 'identifiant'], first_name: ['prenom', 'first_name'],
     last_name: ['nom', 'nom_de_famille', 'last_name'], email: ['email', 'e_mail', 'mail'], phone: ['telephone', 'tel', 'portable', 'mobile'],
-    role: ['role', 'type', 'profil'], client_ref: ['id_client', 'id_entreprise', 'entreprise_id', 'client_id'],
+    role: ['role', 'type', 'profil'], client_ref: ['id_client', 'id_entreprise', 'entreprise_id', 'client_id', 'id_employeur', 'code_client'],
+    civility: ['civilite', 'titre'], birth_date: ['date_de_naissance', 'naissance', 'ne_le'], mobile: ['portable', 'mobile', 'telephone_portable'],
+    job_title: ['fonction', 'poste', 'metier'], address: ['adresse', 'adresse_1', 'rue'], postal_code: ['code_postal', 'cp'], city: ['ville', 'commune'],
   },
   program: {
     external_id: ['id', 'id_programme', 'id_formation', 'identifiant'], code: ['code', 'reference', 'code_formation'],
@@ -135,7 +137,9 @@ export function detectProfiles(tables: { path: string; columns: string[] }[]) {
   return PROFILES.map((p) => {
     const files: FileMapping[] = [];
     for (const t of tables) {
-      const rule = p.rules.find((r) => r.file.test(t.path));
+      // Classeur à plusieurs onglets (« fichier.xlsx#Clients ») : l'onglet compte comme un fichier.
+      const sheet = t.path.includes('#') ? `${t.path.split('#').pop()}.xlsx` : null;
+      const rule = p.rules.find((r) => r.file.test(t.path) || (sheet !== null && r.file.test(sheet)));
       if (!rule) continue;
       const columns = autoMap(rule, t.columns);
       files.push({ path: t.path, entity: rule.entity, columns });

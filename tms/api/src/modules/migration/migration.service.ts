@@ -108,7 +108,7 @@ export class MigrationService {
       try { ok = !isZip(buf) && looksLikeDump(buf); } catch { ok = false; }
       if (ok) inventory = [{ path: safeName, size: buf.length, kind: 'table', ext: 'sql' }];
       else rejections = [{ code: 'not_a_dump', message: 'Fichier non reconnu : déposez la sauvegarde mysqldump de la base MCDF (.sql ou .sql.gz).' }];
-    } else if (isZip(buf)) {
+    } else if (isZip(buf) && !/\.xlsx$/i.test(safeName)) { // un .xlsx est un ZIP : c'est un classeur, pas une archive
       try { ({ entries: inventory, rejections } = await readZip(buf, undefined, false)); }
       catch (err: any) { rejections = [{ code: err.code ?? 'invalid_zip', message: err.message }]; }
     } else {
@@ -155,7 +155,7 @@ export class MigrationService {
     if (sha256(buf) !== b.package_sha256) throw new AppError(500, 'package_altered', 'Empreinte du paquet incohérente.');
     const files = new Map<string, Buffer>();
     if (b.source_software === 'mcdf') { files.set(b.options.filename ?? 'mcdf.sql', buf); return { files, tables: [] }; }
-    if (isZip(buf)) {
+    if (isZip(buf) && !/\.xlsx$/i.test(b.options.filename ?? '')) {
       const { entries, rejections } = await readZip(buf);
       if (rejections.length) throw badRequest(rejections[0].code, rejections[0].message);
       for (const e of entries) files.set(e.path, e.data!);
@@ -198,7 +198,7 @@ export class MigrationService {
     }
     const unknownTables = tables.filter((t) => !candidates[0]?.files?.some((f: FileMapping) => f.path === t.name)).map((t) => t.name);
     const diagnostic = {
-      ...b.diagnostic, candidates, tables: tables.map((t) => ({ name: t.name, columns: t.columns, rows: t.rows.length })), unknownTables,
+      ...b.diagnostic, candidates, tables: tables.map((t) => ({ name: t.name, columns: t.columns, rows: t.rows.length, samples: t.rows.slice(0, 3) })), unknownTables,
       verdict: !candidates[0] || candidates[0].confidence === 0 ? 'unrecognized' : candidates[0].status === 'provisional' ? 'provisional_profile' : 'recognized',
       message: !candidates[0] || candidates[0].confidence === 0
         ? 'Profil non reconnu : association manuelle possible pour les tables structurées lisibles. Aucun succès complet ne sera annoncé.'
@@ -494,11 +494,15 @@ export class MigrationService {
               await tx.query(`INSERT INTO clients(id, tenant_id, kind, status, is_funder, name, siren, siret, billing_email, billing_address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
                 [newId, ctx.tenantId, d.kind ?? 'company', d.is_customer || billedRefs.has(String(r.external_id)) ? 'customer' : 'prospect', !!d.is_funder, d.name,
                   d.siret ? String(d.siret).slice(0, 9) : null, d.siret, d.email, JSON.stringify({ line1: d.address ?? '', postal_code: d.postal_code ?? '', city: d.city ?? '' })]);
+              if (d.phone || d.vat_number) await tx.query(`UPDATE clients SET phone=$2, vat_number=$3 WHERE id=$1`, [newId, d.phone ?? null, d.vat_number ?? null]);
               break;
             case 'person': {
               await tx.query(`INSERT INTO persons(id, tenant_id, first_name, last_name, email, phone) VALUES ($1,$2,$3,$4,$5,$6)`, [newId, ctx.tenantId, d.first_name, d.last_name, d.email, d.phone]);
               await tx.query(`INSERT INTO person_roles(tenant_id, person_id, role) VALUES ($1,$2,$3)`, [ctx.tenantId, newId, d.role ?? 'learner']);
               const client = ref('client', d.client_ref);
+              const addr = Object.fromEntries(Object.entries({ line1: d.address, postal_code: d.postal_code, city: d.city }).filter(([, v]) => v));
+              await tx.query(`UPDATE persons SET civility=$2, birth_date=$3, mobile=$4, job_title=$5, address=$6, employer_client_id=$7 WHERE id=$1`,
+                [newId, d.civility ?? null, d.birth_date ?? null, d.mobile ?? null, d.job_title ?? null, JSON.stringify(addr), (d.role ?? 'learner') !== 'contact' ? client : null]);
               if (client && d.role === 'contact') await tx.query(`INSERT INTO client_contacts(tenant_id, client_id, person_id) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`, [ctx.tenantId, client, newId]);
               break;
             }

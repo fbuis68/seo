@@ -117,11 +117,9 @@ export class OnboardingService implements OnModuleInit {
     const reqs = Object.values(step).flatMap((x) => x.requirements);
     const progress = Math.round((reqs.filter((r) => r.ok).length / reqs.length) * 100);
     const current = STEPS.find((x) => !['done', 'deferred'].includes(step[x.key].state))?.key ?? 'finish';
-    // Estimation révisable : ~5 min par exigence restante des étapes obligatoires.
-    const remainingMinutes = reqs.filter((r) => !r.ok).length * 5;
     return {
       session: { path: s.path, answers, deferred, version: s.version, closedAt: s.closed_at, lastActivityAt: s.last_activity_at },
-      status, progress, current, remainingMinutes, milestones,
+      status, progress, current, milestones,
       steps: STEPS.map((x) => ({ ...x, ...step[x.key] })),
       readiness: ready,
       billing: { profile: profile ? { version: profile.version, data: profile.data, confirmedAt: profile.confirmed_at, problems: pp } : null, series, exemptionTexts: EXEMPTION_TEXT },

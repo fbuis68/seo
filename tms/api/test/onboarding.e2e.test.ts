@@ -122,4 +122,36 @@ describe('Mise en service (onboarding)', () => {
     await app.get(JobsService).runOnce(10, ['onboarding.remind']);
     expect(mailer.devOutbox.filter((m) => m.to === u.email && /mise en service/.test(m.subject)).length).toBe(1);
   });
+
+  it('Données : modèle Excel clients + apprenants → dépôt → colonnes reconnues → simulation → publication', async () => {
+    const u = await signupAndLogin({ legalName: 'OF Excel' });
+    const tpl = await http().get('/api/v1/imports/templates/clients-apprenants.xlsx').set(u.auth).buffer(true).parse((res: any, cb: any) => { const c: Buffer[] = []; res.on('data', (d: Buffer) => c.push(d)); res.on('end', () => cb(null, Buffer.concat(c))); }).expect(200);
+    expect(tpl.headers['content-type']).toMatch(/spreadsheetml/);
+    const b = (await u.api.post('/api/v1/imports', { sourceSoftware: 'generic', sourceInstanceId: 'fichier-excel' }).expect(201)).body;
+    const up = await http().put(`/api/v1/imports/${b.id}/package`).set(u.auth).set('Content-Type', 'application/octet-stream').set('X-Filename', 'mes-clients.xlsx').send(tpl.body);
+    expect(up.body.status).toBe('uploaded');
+    const det = (await u.api.post(`/api/v1/imports/${b.id}/detect`).expect(201)).body;
+    const gen = det.candidates.find((c: any) => c.profile === 'generic');
+    expect(gen.confidence).toBe(1);
+    expect(gen.files.map((f: any) => [f.path, f.entity])).toEqual([['mes-clients.xlsx#Clients', 'client'], ['mes-clients.xlsx#Apprenants', 'person']]);
+    const person = gen.files.find((f: any) => f.entity === 'person').columns;
+    expect(person).toMatchObject({ first_name: 'Prénom', last_name: 'Nom', client_ref: 'Code client', mobile: 'Portable', birth_date: 'Date de naissance', civility: 'Civilité' });
+    expect(det.tables[0].samples.length).toBeGreaterThan(0);
+    await u.api.post(`/api/v1/imports/${b.id}/mapping`, { profile: 'generic', files: gen.files }).expect(201);
+    const sim = (await u.api.post(`/api/v1/imports/${b.id}/simulate`, {}).expect(201)).body;
+    expect(sim.summary.client.create).toBe(3);
+    expect(sim.summary.person.create).toBe(3);
+    expect(sim.canCommit).toBe(true);
+    await u.api.post(`/api/v1/imports/${b.id}/commit`).expect(201);
+    const db: Db = app.get(Db);
+    const rows = await db.tenantTx(u.tenantId, async (tx): Promise<any[]> => (await tx.query(`SELECT p.first_name, p.civility, p.birth_date, c.name employer FROM persons p LEFT JOIN clients c ON c.id=p.employer_client_id ORDER BY p.last_name`)).rows);
+    expect(rows).toEqual([
+      { first_name: 'Lina', civility: 'Mme', birth_date: '1992-09-03', employer: null },
+      { first_name: 'Jean', civility: 'M.', birth_date: '1988-02-14', employer: 'ACME Industrie' },
+      { first_name: 'Sophie', civility: 'Mme', birth_date: null, employer: 'Martin Sophie' },
+    ]);
+    const st = (await u.api.get('/api/v1/onboarding')).body;
+    expect(st.counts.clients).toBe(3);
+    expect(st.remainingMinutes).toBeUndefined();
+  });
 });

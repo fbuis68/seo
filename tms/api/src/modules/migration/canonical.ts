@@ -12,11 +12,13 @@ export const CANONICAL: Record<EntityType, Record<string, FieldDef>> = {
   client: {
     external_id: { type: 'string' }, name: { type: 'string', required: true }, kind: { type: 'enum', values: ['company', 'person'] },
     siret: { type: 'siret' }, email: { type: 'email' }, address: { type: 'string' }, postal_code: { type: 'string' }, city: { type: 'string' },
-    is_funder: { type: 'bool' }, is_customer: { type: 'bool' },
+    is_funder: { type: 'bool' }, is_customer: { type: 'bool' }, phone: { type: 'string' }, vat_number: { type: 'string' },
   },
   person: {
     external_id: { type: 'string' }, first_name: { type: 'string', required: true }, last_name: { type: 'string', required: true },
     email: { type: 'email' }, phone: { type: 'string' }, role: { type: 'enum', values: ['learner', 'trainer', 'contact'] }, client_ref: { type: 'string' },
+    civility: { type: 'string' }, birth_date: { type: 'date' }, mobile: { type: 'string' }, job_title: { type: 'string' },
+    address: { type: 'string' }, postal_code: { type: 'string' }, city: { type: 'string' },
   },
   program: {
     external_id: { type: 'string' }, code: { type: 'string' }, title: { type: 'string', required: true }, duration_hours: { type: 'decimal' },

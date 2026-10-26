@@ -2,8 +2,9 @@ import { Body, Controller, Get, Headers, Module, Param, ParseUUIDPipe, Post, Put
 import { z } from 'zod';
 import { Ctx, RequestContext, RequireFeature, RequirePermission } from '../../core/context';
 import { isoDate, page, parse } from '../../core/validation';
-import { ENTITY_ORDER } from './canonical';
+import { CANONICAL, ENTITY_ORDER } from './canonical';
 import { MigrationService } from './migration.service';
+import { templateXlsx } from './template';
 
 const entity = z.enum(ENTITY_ORDER as unknown as [string, ...string[]]);
 
@@ -13,6 +14,16 @@ export class MigrationController {
 
   /** Procédures d'obtention des sauvegardes et état de compatibilité par logiciel. */
   @RequirePermission('imports.manage') @Get('profiles') profiles() { return this.m.profiles(); }
+  /** Champs cibles par objet (association manuelle des colonnes). */
+  @RequirePermission('imports.manage') @Get('fields') fields() { return CANONICAL; }
+  /** Modèle Excel de reprise (onglets Clients et Apprenants) ; ?vide=1 sans lignes d'exemple. */
+  @RequirePermission('imports.manage') @Get('templates/clients-apprenants.xlsx')
+  async template(@Query('vide') empty: string | undefined, @Res() res: any) {
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="modele-reprise-clients-apprenants.xlsx"');
+    res.end(await templateXlsx(empty !== '1'));
+  }
+
   @RequirePermission('imports.manage') @Get() list(@Ctx() c: RequestContext) { return this.m.list(c); }
   @RequirePermission('imports.manage') @Get(':id') get(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string) { return this.m.get(c, id); }
 

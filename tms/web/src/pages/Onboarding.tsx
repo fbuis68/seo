@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api, date, download, eur, get, patch, post } from '../api';
 import { can, useApp } from '../context';
 import { Help } from '../help';
+import { ImportWizard } from '../components/ImportWizard';
 import { useAction, useFetch } from '../hooks';
 
 const STATE: Record<string, [string, string]> = {
@@ -38,7 +39,6 @@ export default function Onboarding() {
       <div className="panel" style={{ display: 'grid', gap: 8 }}>
         <div className="toolbar" style={{ margin: 0, justifyContent: 'space-between' }}>
           <span><strong>{STATUS[st.status] ?? st.status}</strong> · {st.progress} % · diagnostic : <span className={`pill ${st.readiness.canIssue ? 'ok' : 'warn'}`}>{READY[st.readiness.state]}</span></span>
-          <span className="small muted">{st.remainingMinutes > 0 ? `Encore environ ${st.remainingMinutes} min (estimation)` : 'Toutes les exigences sont remplies'}</span>
         </div>
         <div className="meter"><span style={{ width: `${st.progress}%` }} /></div>
         <div className="small muted">
@@ -69,7 +69,7 @@ export default function Onboarding() {
         <ul className="small" style={{ margin: 0, paddingLeft: 18 }}>{s.requirements.map((r: any) => <li key={r.label} style={{ color: r.ok ? 'var(--ok, #1b7f4b)' : undefined }}>{r.ok ? '✓ ' : '○ '}{r.label}</li>)}</ul>
         {s.reason && <p className="alert small" style={{ margin: 0 }}>{s.reason}</p>}
         {s.key === 'company' && <CompanyStep st={st} setSt={setSt} canEdit={canEdit} />}
-        {s.key === 'data' && <DataStep st={st} />}
+        {s.key === 'data' && <DataStep st={st} reload={load} />}
         {s.key === 'billing' && <BillingStep st={st} setSt={setSt} />}
         {s.key === 'check' && <CheckStep checks={st.readiness.checks} reload={load} />}
         {s.key === 'first_invoice' && <FirstInvoiceStep st={st} reload={load} />}
@@ -126,12 +126,15 @@ function CompanyStep({ st, setSt, canEdit }: { st: any; setSt: (x: any) => void;
   );
 }
 
-function DataStep({ st }: { st: any }) {
+function DataStep({ st, reload }: { st: any; reload: () => void }) {
   const p = st.session.path;
+  const [show, setShow] = useState(p === 'excel');
   return (
     <div style={{ display: 'grid', gap: 12 }}>
-      {(!p || p === 'start') && <p>Créez vos premiers éléments : <Link to="/clients">un client</Link> (avec son adresse de facturation) et <Link to="/sessions">une formation</Link>. {st.counts.clients} client(s), {st.counts.programs} formation(s).</p>}
-      {(p === 'excel' || p === 'migrate') && <p>Déposez vos fichiers dans <Link to="/settings/reprise">Reprise des données</Link> : clients et contacts d’abord, puis formations et tarifs, puis factures ouvertes et règlements. Une simulation montre tout avant écriture ; l’historique peut venir plus tard.</p>}
+      <p style={{ margin: 0 }}>{st.counts.clients} client(s), {st.counts.programs} formation(s) dans votre espace.</p>
+      {(!p || p === 'start') && <p style={{ margin: 0 }}>Créez vos premiers éléments : <Link to="/clients">un client</Link> (avec son adresse de facturation) et <Link to="/sessions">une formation</Link>. Vous avez déjà des listes ? <button className="linklike" onClick={() => setShow(!show)}>Importer un fichier Excel</button>.</p>}
+      {p === 'migrate' && <p style={{ margin: 0 }}>Logiciel avec sauvegarde (MCDF, Dendreo, Digiforma…) : <Link to="/settings/reprise">Reprise des données</Link>. Clients et apprenants depuis Excel : <button className="linklike" onClick={() => setShow(!show)}>importer ici</button>.</p>}
+      {(show || p === 'excel') && <ImportWizard simple onPublished={reload} />}
       {st.imports.length > 0 && <table className="small">
         <thead><tr><th>Source</th><th>État</th><th className="num">Reçus</th><th className="num">Importés</th><th className="num">Rejetés</th><th className="num">Exclus</th><th>Date</th></tr></thead>
         <tbody>{st.imports.map((b: any) => {

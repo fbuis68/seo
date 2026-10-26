@@ -16,7 +16,7 @@
 
 | Exigence | Réalisation |
 |---|---|
-| IMP 01 | Fichiers CSV (UTF-8 ou Windows-1252) et XLSX. Macros et formules jamais exécutées. Sauvegarde MCDF. |
+| IMP 01 | Fichiers CSV (UTF-8 ou Windows-1252) et XLSX. Macros et formules jamais exécutées. Sauvegarde MCDF. Modèle Excel « Clients / Apprenants » téléchargeable ; assistant d'import intégré à l'étape « Données » (dépôt, association des colonnes modifiable avec exemples, simulation, publication, rapport, annulation). |
 | IMP 06 | Simulation obligatoire. |
 | IMP 07 | Doublons repérés par identifiant source, puis par clé métier. Rapport d'anomalies téléchargeable. |
 | IMP 08 | Idempotence et annulation du lot. |
@@ -48,7 +48,7 @@
   - export différentiel ;
   - console support enrichie ;
   - traitement de la reprise en tâche de fond avec barre de progression : aujourd'hui, la reprise est synchrone pour les fichiers, et la commande serveur sert pour les gros volumes ;
-  - modèles téléchargeables par objet.
+  - modèles téléchargeables pour les autres objets (formations, factures, règlements).
 - **Lot 3** : suggestions d'IA pour la correspondance des colonnes, automatisations.
 - **FAC 08** : états de transmission détaillés (« Transmission en cours », « Échec », nouvelle tentative) pour l'email. La facture électronique dispose déjà de ses statuts.
 - **Indicateurs (section « Mesure du succès »)** : les horodatages des jalons sont stockés (`onboarding_sessions`), mais le tableau de bord éditeur n'est pas encore fait.
