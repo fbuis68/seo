@@ -6,6 +6,7 @@ import { Db, Tx, lock, many, one } from '../../core/db';
 import { badRequest, conflict, notFound } from '../../core/errors';
 import { CrmService } from '../crm/crm.service';
 import { EINVOICE_PROVIDER, EInvoiceProvider } from './einvoice.provider';
+import { readiness } from '../onboarding/readiness';
 
 export interface LineInput { label: string; quantity: string; unitPriceHt: string; vatRate: string }
 
@@ -83,6 +84,8 @@ export class FinanceService {
                                  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
         [ctx.tenantId, b.kind, b.clientId, b.sessionId ?? null, b.dueDate ?? null, currency, t.totalHt, t.totalVat, t.totalTtc, b.creditedInvoiceId ?? null, b.deductDepositIds?.[0] ?? null]);
       for (const l of t.lines) await this.insertLine(tx, ctx.tenantId, inv!.id, l);
+      // Jalon « Première valeur obtenue » : premier brouillon réel.
+      await tx.query(`UPDATE onboarding_sessions SET first_draft_at = coalesce(first_draft_at, now()), last_activity_at = now() WHERE tenant_id=$1`, [ctx.tenantId]);
       return this.getInvoice(ctx, inv!.id, tx);
     };
     return outer ? run(outer) : this.db.tenantTx(ctx.tenantId, run);
@@ -114,6 +117,14 @@ export class FinanceService {
       if (inv.status === 'issued') return this.getInvoice(ctx, id, tx);
       const n = await one(tx, `SELECT count(*) n FROM invoice_lines WHERE invoice_id=$1`, [id]);
       if (!Number(n!.n)) throw badRequest('empty_invoice', 'Facture sans ligne.');
+      // Série verrouillée d'abord : le diagnostic lit le prochain numéro réel (émissions concurrentes).
+      await tx.query(`SELECT 1 FROM invoice_series WHERE tenant_id=$1 AND code=$2 AND NOT is_historical FOR UPDATE`, [ctx.tenantId, inv.kind === 'credit_note' ? 'AV' : 'FAC']);
+      // Diagnostic « prêt à émettre » côté serveur, juste avant attribution du numéro (FAC 06).
+      const ready = await readiness(tx, { permissions: ctx.permissions, invoiceId: id });
+      if (!ready.canIssue) {
+        const issueBlocks = ready.blocking.filter((c) => c.level !== 'transmit');
+        throw conflict('not_ready_to_issue', `Émission impossible : ${issueBlocks.map((c) => c.message).join(' ')}`, { checks: issueBlocks });
+      }
       if (inv.kind === 'credit_note') {
         await lock(tx, `credit:${inv.credited_invoice_id}`);
         const orig = await one(tx, `SELECT total_ttc, (SELECT coalesce(sum(total_ttc),0) FROM invoices WHERE credited_invoice_id=$1 AND status='issued') credited FROM invoices WHERE id=$1`, [inv.credited_invoice_id]);
@@ -130,6 +141,7 @@ export class FinanceService {
       const number = `${s.prefix}${String(t!.today).slice(0, 4)}-${String(s.n).padStart(5, '0')}`;
       await tx.query(`UPDATE invoices SET status='issued', series_code=$2, number=$3, issue_date=$4, due_date=coalesce(due_date, $4::date + 30) WHERE id=$1`,
         [id, series, number, t!.today]);
+      await tx.query(`UPDATE onboarding_sessions SET first_issue_at = coalesce(first_issue_at, now()), last_activity_at = now() WHERE tenant_id=$1`, [ctx.tenantId]);
       await this.audit.log(tx, { tenantId: ctx.tenantId, actor: ctx.userId, action: 'invoice.issued', entityType: 'invoice', entityId: id, data: { number, total_ttc: inv.total_ttc } });
       return this.getInvoice(ctx, id, tx);
     });

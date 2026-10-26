@@ -45,7 +45,7 @@ export class SessionBillingService {
     const warnings: string[] = [];
     const skipped: { enrollmentId: string | null; name: string; reason: string }[] = [];
     if (s.price == null) throw badRequest('price_required', 'Aucun prix : renseignez le prix HT du programme ou de la session.', 'priceHt');
-    const vatRate = s.vat_regime === 'exempt_261_4_4' ? '0' : String(s.vat_rate ?? '20');
+    const vatRate = ['exempt_261_4_4', 'franchise_293b'].includes(s.vat_regime) ? '0' : String(s.vat_rate ?? '20');
     const price = toCents(s.price);
     const period = `${fr(s.starts_on)}${s.ends_on && s.ends_on !== s.starts_on ? ` au ${fr(s.ends_on)}` : ''}`;
     const title = `Formation « ${s.program_title} »${period ? ` — ${period.includes('au') ? 'du' : 'le'} ${period}` : ''}`;

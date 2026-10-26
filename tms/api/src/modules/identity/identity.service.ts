@@ -57,6 +57,10 @@ export class IdentityService {
     await tx.query(`INSERT INTO subscriptions(tenant_id, plan_code, status) VALUES ($1,'free','free')`, [t!.id]);
     await tx.query(`SELECT set_config('app.tenant_id', $1, true)`, [t!.id]);
     await tx.query(`INSERT INTO invoice_series(tenant_id, code, prefix) VALUES ($1,'FAC','FAC-'),($1,'AV','AV-'),($1,'DEV','DEV-')`, [t!.id]);
+    // Assistant de mise en service et relances d'inactivité (24 h, 72 h).
+    await tx.query(`INSERT INTO onboarding_sessions(tenant_id) VALUES ($1) ON CONFLICT DO NOTHING`, [t!.id]);
+    const now = new Date();
+    for (const h of [24, 72]) await this.jobs.enqueue(tx, 'onboarding.remind', { tenantId: t!.id, level: h }, { tenantId: t!.id, runAt: new Date(now.getTime() + h * 3600e3), dedupeKey: `onb:${t!.id}:${h}:${now.toISOString().slice(0, 13)}` });
     return t!.id;
   }
 

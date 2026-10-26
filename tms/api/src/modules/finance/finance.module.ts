@@ -49,7 +49,7 @@ export class FinanceController {
   }
   @RequirePermission('finance.write') @Delete('invoices/:id') del(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string) { return this.f.deleteDraft(c, id); }
   /** Émission contrôlée : pas un simple changement de champ. */
-  @RequirePermission('finance.write') @Post('invoices/:id/issue') issue(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string) { return this.f.issue(c, id); }
+  @RequirePermission('invoices.issue') @Post('invoices/:id/issue') issue(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string) { return this.f.issue(c, id); }
   @RequirePermission('finance.write') @Post('invoices/:id/einvoice') einv(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string) { return this.f.transmitEInvoice(c, id); }
 
   @RequirePermission('finance.read') @Get('payments') payments(@Ctx() c: RequestContext, @Query() q: unknown) { return this.f.listPayments(c, parse(page, q)); }

@@ -3,6 +3,7 @@ import { join } from 'path';
 import { JobsService } from '../src/core/jobs.service';
 import { SystemMailer } from '../src/core/system-mail';
 import { closeApp, getApp, http, signupAndLogin } from './helpers';
+import { ADDR } from './helpers';
 import { makeZip } from './zip';
 
 let app: any;
@@ -73,6 +74,10 @@ describe('Reprise par fichiers de sauvegarde', () => {
     expect(docs[0].sha256).toHaveLength(64);
     // Aucun email déclenché ; la série locale n'a pas avancé.
     expect(mailer.devOutbox.length).toBe(mailsBefore);
+    // Client repris sans adresse : la première facture exige une adresse de facturation (diagnostic).
+    const c0 = (await u.api.get(`/api/v1/clients/${invoices[0].client_id}`)).body;
+    expect((await u.api.post(`/api/v1/invoices/${(await u.api.post('/api/v1/invoices', { clientId: invoices[0].client_id, lines: [{ label: 'y', quantity: '1', unitPriceHt: '1', vatRate: '20' }] })).body.id}/issue`)).body.code).toBe('not_ready_to_issue');
+    await u.api.patch(`/api/v1/clients/${c0.id}`, { version: c0.version, billingAddress: ADDR }).expect(200);
     const d = (await u.api.post('/api/v1/invoices', { clientId: invoices[0].client_id, lines: [{ label: 'x', quantity: '1', unitPriceHt: '10', vatRate: '20' }] }).expect(201)).body;
     expect((await u.api.post(`/api/v1/invoices/${d.id}/issue`).expect(201)).body.number).toMatch(/^FAC-\d{4}-00001$/);
     // Session passée marquée historique et hors quota annuel ; session future comptée.
@@ -139,6 +144,7 @@ describe('Reprise par fichiers de sauvegarde', () => {
     await u.api.post(`/api/v1/imports/${b.id}/simulate`, { partial: true }).expect(201);
     await u.api.post(`/api/v1/imports/${b.id}/commit`).expect(201);
     const client = (await u.api.get('/api/v1/clients')).body.find((c: any) => c.name === 'ACME Formation');
+    await u.api.patch(`/api/v1/clients/${client.id}`, { version: client.version, billingAddress: ADDR }).expect(200);
     const inv = (await u.api.post('/api/v1/invoices', { clientId: client.id, lines: [{ label: 'Nouvelle', quantity: '1', unitPriceHt: '50', vatRate: '20' }] }).expect(201)).body;
     await u.api.post(`/api/v1/invoices/${inv.id}/issue`).expect(201);
     const r = await u.api.post(`/api/v1/imports/${b.id}/rollback`);
@@ -165,7 +171,7 @@ describe('Reprise par fichiers de sauvegarde', () => {
 
   it('REC-18 : export natif puis réimport dans un espace vierge (montants et documents identiques)', async () => {
     const src = await signupAndLogin({ legalName: 'Source' });
-    const client = (await src.api.post('/api/v1/clients', { kind: 'company', name: 'Client Export' }).expect(201)).body;
+    const client = (await src.api.post('/api/v1/clients', { kind: 'company', billingAddress: ADDR, name: 'Client Export' }).expect(201)).body;
     const inv = (await src.api.post('/api/v1/invoices', { clientId: client.id, lines: [{ label: 'Formation', quantity: '3', unitPriceHt: '333.33', vatRate: '20' }] }).expect(201)).body;
     await src.api.post(`/api/v1/invoices/${inv.id}/issue`).expect(201);
     await src.api.post('/api/v1/documents/generate', { template: 'invoice', invoiceId: inv.id }).expect(201);

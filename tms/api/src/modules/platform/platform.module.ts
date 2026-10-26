@@ -30,7 +30,7 @@ const TENANT_SQL = `
          s.plan_code, s.status, s.billing_interval, s.provider, s.provider_customer_id, s.provider_subscription_id,
          s.current_period_end, s.trial_ends_at, s.grace_until, s.cancel_at_period_end, s.read_only_since,
          (${MRR_SQL})::int AS mrr_cents,
-         (SELECT count(*) FROM memberships m WHERE m.tenant_id = t.id AND m.role IN ('owner','manager') AND (m.expires_at IS NULL OR m.expires_at > now()))::int AS managers,
+         (SELECT count(*) FROM memberships m WHERE m.tenant_id = t.id AND m.role IN ('owner','manager','accountant','importer') AND (m.expires_at IS NULL OR m.expires_at > now()))::int AS managers,
          (SELECT count(*) FROM memberships m WHERE m.tenant_id = t.id AND (m.expires_at IS NULL OR m.expires_at > now()))::int AS users,
          (SELECT u.email FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.tenant_id = t.id AND m.role = 'owner' ORDER BY m.created_at LIMIT 1) AS owner_email,
          (SELECT max(a.created_at) FROM auth_sessions a JOIN memberships m ON m.user_id = a.user_id WHERE m.tenant_id = t.id) AS last_login

@@ -1,4 +1,4 @@
-import { closeApp, getApp, http, signupAndLogin } from './helpers';
+import { closeApp, getApp, http, signupAndLogin, ADDR } from './helpers';
 
 beforeAll(getApp);
 afterAll(closeApp);
@@ -21,16 +21,16 @@ describe('Quotas Free et règles métier', () => {
   it('REC-25 : bloque le 11e client facturé ; l’archivage ne libère pas de place ; la suppression oui', async () => {
     const u = await signupAndLogin();
     const ids: string[] = [];
-    for (let i = 0; i < 10; i++) ids.push((await u.api.post('/api/v1/clients', { kind: 'company', name: `Client ${i}`, status: 'customer' }).expect(201)).body.id);
-    const r = await u.api.post('/api/v1/clients', { kind: 'company', name: 'Client 11', status: 'customer' });
+    for (let i = 0; i < 10; i++) ids.push((await u.api.post('/api/v1/clients', { kind: 'company', billingAddress: ADDR, name: `Client ${i}`, status: 'customer' }).expect(201)).body.id);
+    const r = await u.api.post('/api/v1/clients', { kind: 'company', billingAddress: ADDR, name: 'Client 11', status: 'customer' });
     expect(r.status).toBe(402);
     expect(r.body.code).toBe('quota_exceeded');
     await u.api.post(`/api/v1/clients/${ids[0]}/archive`, { archived: true }).expect(201);
-    expect((await u.api.post('/api/v1/clients', { kind: 'company', name: 'Client 11', status: 'customer' })).status).toBe(402);
+    expect((await u.api.post('/api/v1/clients', { kind: 'company', billingAddress: ADDR, name: 'Client 11', status: 'customer' })).status).toBe(402);
     // Les prospects ne consomment pas le quota clients.
-    await u.api.post('/api/v1/clients', { kind: 'company', name: 'Prospect', status: 'prospect' }).expect(201);
+    await u.api.post('/api/v1/clients', { kind: 'company', billingAddress: ADDR, name: 'Prospect', status: 'prospect' }).expect(201);
     await u.api.del(`/api/v1/clients/${ids[1]}`).expect(200);
-    await u.api.post('/api/v1/clients', { kind: 'company', name: 'Client 11', status: 'customer' }).expect(201);
+    await u.api.post('/api/v1/clients', { kind: 'company', billingAddress: ADDR, name: 'Client 11', status: 'customer' }).expect(201);
   });
 
   it('REC-26 : 1 entreprise + 20 salariés = 1 client / 20 apprenants ; doublons non comptés ; 51e bloqué', async () => {
@@ -38,7 +38,7 @@ describe('Quotas Free et règles métier', () => {
     const prog = await program(u);
     const s1 = await session(u, prog.versions[0].id);
     const s2 = await session(u, prog.versions[0].id);
-    const company = (await u.api.post('/api/v1/clients', { kind: 'company', name: 'ACME', status: 'customer', siret: '73282932000074' }).expect(201)).body;
+    const company = (await u.api.post('/api/v1/clients', { kind: 'company', billingAddress: ADDR, name: 'ACME', status: 'customer', siret: '73282932000074' }).expect(201)).body;
     const people = [];
     for (let i = 0; i < 50; i++) people.push(await person(u, i));
     for (let i = 0; i < 20; i++) await u.api.post(`/api/v1/sessions/${s1.id}/enrollments`, { personId: people[i].id, clientId: company.id }).expect(201);
@@ -190,7 +190,7 @@ describe('Session découpée en parties, plusieurs formateurs, lieux et matérie
 describe('Finance', () => {
   it('REC-07 : émission concurrente → numéros uniques ; facture émise immuable ; avoir et paiement partiel', async () => {
     const u = await signupAndLogin();
-    const client = (await u.api.post('/api/v1/clients', { kind: 'company', name: 'Client F' }).expect(201)).body;
+    const client = (await u.api.post('/api/v1/clients', { kind: 'company', billingAddress: ADDR, name: 'Client F' }).expect(201)).body;
     const drafts = [];
     for (let i = 0; i < 6; i++) {
       drafts.push((await u.api.post('/api/v1/invoices', { clientId: client.id, lines: [{ label: 'Formation', quantity: '2', unitPriceHt: '450.005', vatRate: '20' }] }).expect(201)).body);
@@ -200,7 +200,7 @@ describe('Finance', () => {
     expect(drafts[0].total_ttc).toBe('1080.01');
     const issued = await Promise.all(drafts.map((d) => u.api.post(`/api/v1/invoices/${d.id}/issue`)));
     const numbers = issued.map((r) => r.body.number);
-    expect(issued.every((r) => r.status === 201)).toBe(true);
+    expect(issued.map((r) => r.status === 201 ? 201 : JSON.stringify(r.body))).toEqual(issued.map(() => 201));
     expect(new Set(numbers).size).toBe(6);
     const reissue = await u.api.post(`/api/v1/invoices/${drafts[0].id}/issue`).expect(201);
     expect(reissue.body.number).toBe(issued[0].body.number); // idempotent
@@ -226,7 +226,7 @@ describe('Isolation multi-organismes (REC-02)', () => {
   it('refuse tout accès aux données d’un autre organisme', async () => {
     const a = await signupAndLogin();
     const b = await signupAndLogin();
-    const client = (await a.api.post('/api/v1/clients', { kind: 'company', name: 'Secret A' }).expect(201)).body;
+    const client = (await a.api.post('/api/v1/clients', { kind: 'company', billingAddress: ADDR, name: 'Secret A' }).expect(201)).body;
     // B demande l'objet de A dans son propre contexte : RLS → introuvable.
     expect((await b.api.get(`/api/v1/clients/${client.id}`)).status).toBe(404);
     // B tente d'utiliser le tenant de A : pas d'adhésion → 403.
@@ -278,9 +278,9 @@ describe('Session ↔ émargement ↔ facturation', () => {
     const s = (await u.api.post('/api/v1/sessions', { programVersionId: prog.versions[0].id, kind: 'inter', startsOn: '2026-09-01', endsOn: '2026-09-01' }).expect(201)).body;
     const room = (await u.api.post('/api/v1/resources', { kind: 'room', name: 'Salle Volta', capacity: 10 }).expect(201)).body;
     const t = (await u.api.post('/api/v1/persons', { firstName: 'Ampère', lastName: 'Formateur', roles: ['trainer'] }).expect(201)).body;
-    const clientA = (await u.api.post('/api/v1/clients', { kind: 'company', name: 'Entreprise A', status: 'customer' }).expect(201)).body;
-    const clientB = (await u.api.post('/api/v1/clients', { kind: 'person', name: 'Particulier B', status: 'customer' }).expect(201)).body;
-    const opco = (await u.api.post('/api/v1/clients', { kind: 'company', name: 'OPCO Test', status: 'customer', isFunder: true }).expect(201)).body;
+    const clientA = (await u.api.post('/api/v1/clients', { kind: 'company', billingAddress: ADDR, name: 'Entreprise A', status: 'customer' }).expect(201)).body;
+    const clientB = (await u.api.post('/api/v1/clients', { kind: 'person', billingAddress: ADDR, name: 'Particulier B', status: 'customer' }).expect(201)).body;
+    const opco = (await u.api.post('/api/v1/clients', { kind: 'company', billingAddress: ADDR, name: 'OPCO Test', status: 'customer', isFunder: true }).expect(201)).body;
     const p = async (n: string) => (await u.api.post('/api/v1/persons', { firstName: n, lastName: 'Stagiaire', roles: ['learner'] }).expect(201)).body;
     const e1 = (await u.api.post(`/api/v1/sessions/${s.id}/enrollments`, { personId: (await p('Un')).id, clientId: clientA.id, status: 'confirmed', fundedAmount: '600.00', fundings: [{ funderClientId: opco.id, amount: '600.00' }] }).expect(201)).body;
     const e2 = (await u.api.post(`/api/v1/sessions/${s.id}/enrollments`, { personId: (await p('Deux')).id, clientId: clientA.id, status: 'confirmed' }).expect(201)).body;

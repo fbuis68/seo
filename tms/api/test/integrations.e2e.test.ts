@@ -4,7 +4,7 @@ import { SubscriptionService } from '../src/modules/billing/subscription.service
 import { FakeSignatureProvider, SIGNATURE_PROVIDER } from '../src/modules/signatures/signature.provider';
 import { BANK_PROVIDER, FakeBankProvider } from '../src/modules/bank/bank.provider';
 import { OpenDataService } from '../src/modules/opendata/opendata.service';
-import { closeApp, getApp, http, signupAndLogin } from './helpers';
+import { closeApp, getApp, http, signupAndLogin, ADDR } from './helpers';
 
 let app: any; let jobs: JobsService;
 beforeAll(async () => { app = await getApp(); jobs = app.get(JobsService); });
@@ -17,7 +17,7 @@ async function upgrade(u: any, plan = 'equipe', addons: any[] = []) {
 }
 async function sessionWithDoc(u: any) {
   const prog = (await u.api.post('/api/v1/programs', { title: 'Management', durationMinutes: 840, modality: 'blended', objectives: 'Animer une équipe', priceHt: '1500', vatRate: '20' }).expect(201)).body;
-  const client = (await u.api.post('/api/v1/clients', { kind: 'company', name: 'Client Intra', status: 'customer' }).expect(201)).body;
+  const client = (await u.api.post('/api/v1/clients', { kind: 'company', billingAddress: ADDR, name: 'Client Intra', status: 'customer' }).expect(201)).body;
   const s = (await u.api.post('/api/v1/sessions', { programVersionId: prog.versions[0].id, kind: 'intra', clientId: client.id, startsOn: '2026-11-20', endsOn: '2026-11-21' }).expect(201)).body;
   const doc = (await u.api.post('/api/v1/documents/generate', { template: 'convention', sessionId: s.id }).expect(201)).body;
   return { prog, client, s, doc };
@@ -105,7 +105,7 @@ describe('Tableaux de bord (métriques partagées)', () => {
     const usd = (await u.api.get(`/api/v1/analytics/metrics?metric=revenue_net_ht&from=${y}-01-01&to=${y}-12-31&granularity=year&currency=USD`).expect(200)).body;
     expect(usd.series[0].value).toBe('0');
     // Avoir sur un autre client uniquement → catégorie négative → barres.
-    const other = (await u.api.post('/api/v1/clients', { kind: 'company', name: 'Autre', status: 'customer' }).expect(201)).body;
+    const other = (await u.api.post('/api/v1/clients', { kind: 'company', billingAddress: ADDR, name: 'Autre', status: 'customer' }).expect(201)).body;
     const inv2 = (await u.api.post('/api/v1/invoices', { clientId: other.id, lines: [{ label: 'x', quantity: '1', unitPriceHt: '10', vatRate: '20' }] }).expect(201)).body;
     await u.api.post(`/api/v1/invoices/${inv2.id}/issue`).expect(201);
     const pie = (await u.api.get(`/api/v1/analytics/breakdown?metric=revenue_net_ht&dimension=client&from=${y}-01-01&to=${y}-12-31`).expect(200)).body;
@@ -170,7 +170,7 @@ describe('Banque connectée et rapprochement', () => {
     const conns = (await u.api.post('/api/v1/bank/connections/callback', { code: start2.searchParams.get('code'), state: start2.searchParams.get('state') }).expect(201)).body;
     const connId = conns[0].id;
     const providerConnId = [...prov.conns.keys()].pop()!;
-    const client = (await u.api.post('/api/v1/clients', { kind: 'company', name: 'Durand Conseil' }).expect(201)).body;
+    const client = (await u.api.post('/api/v1/clients', { kind: 'company', billingAddress: ADDR, name: 'Durand Conseil' }).expect(201)).body;
     const inv = (await u.api.post('/api/v1/invoices', { clientId: client.id, lines: [{ label: 'Formation', quantity: '1', unitPriceHt: '1000', vatRate: '20' }] }).expect(201)).body;
     const issued = (await u.api.post(`/api/v1/invoices/${inv.id}/issue`).expect(201)).body;
     prov.addTransaction(providerConnId, { id: 'T1', status: 'pending', amount: '1200.00', label: `VIR DURAND CONSEIL ${issued.number}` });
@@ -245,7 +245,7 @@ describe('OpenData', () => {
     const sources = (await u.api.get('/api/v1/opendata/sources')).body;
     expect(sources.find((s: any) => s.code === 'rncp_rs').state).toBe('stale');
     expect(sources.find((s: any) => s.code === 'mcf_droits_personnels').state).toBe('excluded');
-    const client = (await u.api.post('/api/v1/clients', { kind: 'company', name: 'acme' }).expect(201)).body;
+    const client = (await u.api.post('/api/v1/clients', { kind: 'company', billingAddress: ADDR, name: 'acme' }).expect(201)).body;
     const prop = (await u.api.post('/api/v1/opendata/enrichment-proposals', { clientId: client.id, record: { siret: '73282932000074', name: 'ACME SAS', city: 'Lyon' } }).expect(201)).body;
     expect(prop.changes.find((c: any) => c.field === 'name')).toMatchObject({ current: 'acme', proposed: 'ACME SAS' });
     await u.api.patch(`/api/v1/clients/${client.id}`, { version: 1, name: 'Acme modifié' }).expect(200);

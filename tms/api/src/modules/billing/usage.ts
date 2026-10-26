@@ -37,7 +37,7 @@ export const USAGE_QUERIES: Record<QuotaKey, (tx: Tx, tenantId: string, year: nu
   draftSessions: async (tx) => Number((await one(tx,
     `SELECT count(*) n FROM training_sessions WHERE status = 'draft'`))!.n),
   managers: async (tx, tenantId) => Number((await one(tx,
-    `SELECT count(*) n FROM memberships WHERE tenant_id=$1 AND role IN ('owner','manager')
+    `SELECT count(*) n FROM memberships WHERE tenant_id=$1 AND role IN ('owner','manager','accountant','importer')
        AND (expires_at IS NULL OR expires_at > now())`, [tenantId]))!.n),
   storageBytes: async (tx) => Number((await one(tx, `SELECT coalesce(sum(size_bytes),0) n FROM documents`))!.n),
   smtpMailboxes: async (tx) => Number((await one(tx,

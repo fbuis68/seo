@@ -56,7 +56,7 @@ export class IdentityController {
     const b = parse(z.object({
       legal_name: z.string().min(2).max(200).optional(), siret: z.string().regex(/^\d{14}$/).nullable().optional(),
       nda: z.string().max(20).nullable().optional(), timezone: z.string().max(64).optional(),
-      vat_regime: z.enum(['to_confirm', 'subject', 'exempt_261_4_4']).optional(), address: z.record(z.string(), z.string()).optional(),
+      vat_regime: z.enum(['to_confirm', 'subject', 'exempt_261_4_4', 'franchise_293b']).optional(), address: z.record(z.string(), z.string()).optional(),
     }), body);
     return this.identity.updateTenant(ctx.tenantId, ctx.userId, b);
   }
@@ -66,7 +66,7 @@ export class IdentityController {
 
   @RequirePermission('users.manage') @Post('invitations')
   invite(@Ctx() ctx: RequestContext, @Body() body: unknown) {
-    const b = parse(z.object({ email: z.string().email(), role: z.enum(['manager', 'trainer', 'learner']), personId: z.string().uuid().optional() }), body);
+    const b = parse(z.object({ email: z.string().email(), role: z.enum(['manager', 'accountant', 'importer', 'trainer', 'learner']), personId: z.string().uuid().optional() }), body);
     return this.identity.invite(ctx.tenantId, ctx.userId, b.email, b.role, b.personId);
   }
 

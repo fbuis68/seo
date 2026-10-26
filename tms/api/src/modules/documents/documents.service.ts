@@ -1,3 +1,4 @@
+import { EXEMPTION_TEXT, currentProfile } from '../onboarding/billing-profile';
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { AuditService } from '../../core/audit.service';
@@ -76,8 +77,10 @@ export class DocumentsService {
         if (!inv) throw notFound('Facture');
         const lines = await many(tx, `SELECT * FROM invoice_lines WHERE invoice_id=$1 ORDER BY position`, [inv.id]);
         const label = inv.kind === 'credit_note' ? 'Avoir' : inv.kind === 'deposit' ? "Facture d'acompte" : 'Facture';
+        const prof = (await currentProfile(tx))?.data ?? {};
+        const regime = prof.vatRegime ?? t!.vat_regime;
         blocks = [
-          { type: 'title', text: `${label} ${inv.number ?? '(brouillon — non émise)'}` },
+          { type: 'title', text: `${label} ${inv.number ?? '— APERÇU (brouillon sans numéro ni valeur, non émis)'}` },
           { type: 'text', text: org },
           { type: 'text', text: `Client : ${inv.client_name}${inv.client_siret ? ` — SIRET ${inv.client_siret}` : ''}` },
           { type: 'text', text: `Date d'émission : ${fmtDate(inv.issue_date)} — Échéance : ${fmtDate(inv.due_date)}` },
@@ -85,7 +88,16 @@ export class DocumentsService {
           { type: 'table', columns: [{ label: 'Désignation', width: 50 }, { label: 'Qté', width: 10, align: 'right' }, { label: 'PU HT', width: 15, align: 'right' }, { label: 'TVA', width: 10, align: 'right' }, { label: 'Total HT', width: 15, align: 'right' }],
             rows: lines.map((l) => [l.label, String(Number(l.quantity)), eur(l.unit_price_ht), `${Number(l.vat_rate)} %`, eur(l.total_ht)]) },
           { type: 'text', text: `Total HT : ${eur(inv.total_ht)}   TVA : ${eur(inv.total_vat)}   Total TTC : ${eur(inv.total_ttc)}`, bold: true },
-          ...(t!.vat_regime === 'exempt_261_4_4' ? [{ type: 'text' as const, text: 'Exonération de TVA — article 261-4-4° du CGI.' }] : []),
+          ...(regime && regime !== 'subject' && regime !== 'to_confirm' ? [{ type: 'text' as const, text: prof.exemptionReason || EXEMPTION_TEXT[regime] || '' }] : []),
+          ...(prof.vatNumber ? [{ type: 'text' as const, text: `N° TVA intracommunautaire : ${prof.vatNumber}`, size: 9 }] : []),
+          { type: 'spacer' },
+          { type: 'text', text: [
+            prof.paymentTermsDays != null ? `Paiement à ${prof.paymentTermsDays} jours${prof.paymentMethods?.length ? ` par ${prof.paymentMethods.join(', ')}` : ''}.` : null,
+            prof.latePenalty ? `Pénalités de retard : ${prof.latePenalty}.` : null,
+            inv.kind !== 'credit_note' ? `Indemnité forfaitaire pour frais de recouvrement : ${prof.fixedIndemnity ?? 40} € (clients professionnels).` : null,
+            prof.showBankDetails && prof.iban ? `Règlement par virement — IBAN ${prof.iban}${prof.bic ? ` — BIC ${prof.bic}` : ''}${prof.bankName ? ` (${prof.bankName})` : ''}.` : null,
+            prof.footer || null,
+          ].filter(Boolean).join('\n'), size: 9 },
         ];
         ownerType = 'invoice'; ownerId = inv.id; filename = `${(inv.number ?? 'brouillon')}.pdf`;
       } else {

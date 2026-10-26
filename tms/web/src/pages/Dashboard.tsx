@@ -23,9 +23,14 @@ export default function Dashboard() {
   const detail = useFetch(drill ? `/api/v1/analytics/drilldown?metric=revenue_net_ht&from=${drill}&to=${new Date(new Date(drill).getFullYear(), new Date(drill).getMonth() + 1, 0).toISOString().slice(0, 10)}` : null, [drill]);
   const months = (s: any[]) => s.map((p) => ({ label: new Date(p.period).toLocaleDateString('fr-FR', { month: 'short' }), value: Number(p.value) }));
   const c = dash.data?.cards;
+  const onb = useFetch<any>(can(org, 'org.manage') || can(org, 'invoices.issue') ? '/api/v1/onboarding' : null);
+  const o = onb.data;
   return (
     <>
       <h1>Bonjour <Help k="accueil" /></h1>
+      {o && !o.session.closedAt && !['ready', 'complete'].includes(o.status) && (
+        <div className="banner">Mise en service : <strong>{o.progress} %</strong> — prochaine étape « {o.steps.find((x: any) => x.key === o.current)?.label} ». <Link to="/onboarding">Continuer</Link></div>
+      )}
       {c && (
         <div className="cards">
           <div className="panel card"><div className="label">Sessions à venir</div><div className="value">{c.upcomingSessions}</div></div>

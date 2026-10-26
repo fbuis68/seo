@@ -30,7 +30,7 @@ export const http = () => request(app!.getHttpServer());
 
 let seq = 0;
 /** Inscription publique + vérification email + connexion : renvoie un client authentifié. */
-export async function signupAndLogin(opts: { plan?: string; legalName?: string; email?: string } = {}) {
+export async function signupAndLogin(opts: { plan?: string; legalName?: string; email?: string; billingReady?: boolean } = {}) {
   const email = opts.email ?? `user${Date.now()}_${++seq}@example.test`;
   if (opts.email) ++seq;
   const password = 'motdepasse-solide-42';
@@ -53,5 +53,15 @@ export async function signupAndLogin(opts: { plan?: string; legalName?: string; 
     put: (url: string, body?: unknown) => http().put(url).set(auth).send(body as any),
     del: (url: string) => http().delete(url).set(auth),
   };
+  // Par défaut : émetteur, profil fiscal et numérotation validés (prêt à facturer), comme après l'assistant.
+  if (opts.billingReady !== false) {
+    await api.patch('/api/v1/organization', { siret: '73282932000074', address: { line1: '1 rue de la Paix', postal_code: '75002', city: 'Paris' } });
+    const ob = (await api.put('/api/v1/billing-profile', { vatRegime: 'subject', paymentTermsDays: 30, latePenalty: '3 fois le taux d’intérêt légal' })).body;
+    await api.post('/api/v1/billing-profile/confirm', { version: ob.billing.profile.version });
+    await api.post('/api/v1/invoice-series/confirm', {});
+  }
   return { email, password, tenantId, token: login.body.token as string, auth, api };
 }
+
+/** Adresse de facturation de test (exigée pour émettre). */
+export const ADDR = { line1: '10 avenue des Tests', postal_code: '69001', city: 'Lyon' };

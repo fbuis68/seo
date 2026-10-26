@@ -5,6 +5,7 @@ import { AppCtx, Me, Org, can } from './context';
 import { Branding, applyBranding } from './branding';
 import Assistant from './pages/Assistant';
 import Billing from './pages/Billing';
+import Onboarding from './pages/Onboarding';
 import Clients from './pages/Clients';
 import Dashboard from './pages/Dashboard';
 import Imports from './pages/Imports';
@@ -69,7 +70,7 @@ function Shell() {
   const logout = () => post('/api/v1/auth/logout').finally(() => { session.set(null); location.href = '/login'; });
   const e = org.entitlements;
   const links: [string, string, boolean][] = [
-    ['/', 'Accueil', true], ['/planning', 'Planning', can(org, 'sessions.read') && org.role !== 'trainer'], ['/my-planning', 'Mon planning', ['trainer', 'learner'].includes(org.role)],
+    ['/', 'Accueil', true], ['/onboarding', 'Mise en service', can(org, 'org.manage') || can(org, 'invoices.issue')], ['/planning', 'Planning', can(org, 'sessions.read') && org.role !== 'trainer'], ['/my-planning', 'Mon planning', ['trainer', 'learner'].includes(org.role)],
     ['/sessions', 'Sessions', can(org, 'sessions.read')], ['/clients', 'Clients & apprenants', can(org, 'crm.read')],
     ['/invoices', 'Facturation', can(org, 'finance.read')], ['/assistant', 'Assistant IA', can(org, 'ai.use')],
     ['/billing', 'Mon abonnement', can(org, 'billing.manage')], ['/settings', 'Réglages', true], ['/aide', 'Aide', true], ['/platform', 'Back-office éditeur', !!me.isPlatformAdmin],
@@ -133,6 +134,7 @@ function Shell() {
             <Route path="/settings/reprise" element={<Imports />} />
             <Route path="/imports" element={<Navigate to="/settings/reprise" replace />} />
             <Route path="/billing" element={<Billing />} />
+            <Route path="/onboarding" element={<Onboarding />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/aide" element={<HelpPage />} />
             <Route path="/platform" element={<PlatformPage />} />

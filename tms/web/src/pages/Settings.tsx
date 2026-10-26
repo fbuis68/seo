@@ -43,7 +43,7 @@ export default function Settings() {
           <table><tbody>{members.data.map((m) => <tr key={m.id}><td>{m.full_name}</td><td>{m.email}</td><td>{m.role}</td></tr>)}</tbody></table>
           <form className="inline" onSubmit={(e) => { e.preventDefault(); act.run(() => post('/api/v1/invitations', inv), () => { setInv({ ...inv, email: '' }); alert('Invitation envoyée'); }); }}>
             <label>Email<input type="email" required value={inv.email} onChange={(e) => setInv({ ...inv, email: e.target.value })} /></label>
-            <label>Rôle<select value={inv.role} onChange={(e) => setInv({ ...inv, role: e.target.value })}><option value="manager">Gestionnaire</option><option value="trainer">Formateur</option><option value="learner">Apprenant</option></select></label>
+            <label>Rôle<select value={inv.role} onChange={(e) => setInv({ ...inv, role: e.target.value })}><option value="manager">Gestionnaire</option><option value="accountant">Responsable facturation</option><option value="importer">Chargé de reprise (sans émission)</option><option value="trainer">Formateur</option><option value="learner">Apprenant</option></select></label>
             <button className="btn sm">Inviter</button>
           </form>
         </div>
