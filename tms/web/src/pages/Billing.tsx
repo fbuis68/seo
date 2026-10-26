@@ -55,7 +55,7 @@ export default function Billing() {
         <div className="panel">
           <h2 style={{ marginTop: 0 }}>Offre {c.plans.find((p: any) => p.code === s.plan)?.name ?? s.plan} <span className="pill">{STATUS[s.status] ?? s.status}</span></h2>
           {s.interval && <p>Facturation {s.interval === 'year' ? 'annuelle' : 'mensuelle'} · prochaine échéance {date(s.currentPeriodEnd)}</p>}
-          {s.trialEndsAt && s.status === 'trialing' && <p>Essai jusqu’au {date(s.trialEndsAt)}</p>}
+          {s.trialEndsAt && s.status === 'trialing' && <p>Essai jusqu’au {date(s.trialEndsAt)}{!s.hasPaymentMethod && ' — sans carte bancaire. Choisissez votre abonnement ci-dessous pour continuer après l’essai : aucun débit avant sa fin.'}</p>}
           {s.graceUntil && <p className="alert">Délai de grâce jusqu’au {date(s.graceUntil)}</p>}
           {s.cancelAtPeriodEnd && <p className="muted">Résiliation programmée à l’échéance ; retour automatique en Free (ou lecture seule si le volume dépasse Free).</p>}
           {s.pendingChange && <p className="muted">Changement programmé à l’échéance : {s.pendingChange.plan}</p>}

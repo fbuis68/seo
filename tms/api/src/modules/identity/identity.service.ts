@@ -7,6 +7,8 @@ import { AppError, badRequest, conflict, forbidden, notFound } from '../../core/
 import { Role } from '../../core/permissions';
 import { SystemMailer } from '../../core/system-mail';
 import { EntitlementsService } from '../billing/entitlements.service';
+import { startNoCardTrial } from '../billing/trial';
+import { JobsService } from '../../core/jobs.service';
 
 export interface SignupInput {
   email: string; password: string; fullName: string;
@@ -21,7 +23,7 @@ const MAX_FAILED = 5;
 
 @Injectable()
 export class IdentityService {
-  constructor(private db: Db, private mailer: SystemMailer, private audit: AuditService, private entitlements: EntitlementsService) {}
+  constructor(private db: Db, private mailer: SystemMailer, private audit: AuditService, private entitlements: EntitlementsService, private jobs: JobsService) {}
 
   /** Création compte + organisme en Free (sans carte, sans durée), propriétaire unique, une seule fois. */
   async signup(input: SignupInput): Promise<{ userId: string; tenantId: string }> {
@@ -70,7 +72,11 @@ export class IdentityService {
       await tx.query(`UPDATE users SET email_verified_at = coalesce(email_verified_at, now()) WHERE id=$1`, [row.user_id]);
       const m = await one(tx, `SELECT t.id, t.signup_intent FROM memberships m JOIN tenants t ON t.id=m.tenant_id
                                WHERE m.user_id=$1 AND m.role='owner' ORDER BY t.created_at LIMIT 1`, [row.user_id]);
-      return { verified: true, tenantId: m?.id ?? null, intent: m?.signup_intent ?? null };
+      // Offre payante choisie sur le site avec essai : essai sans carte bancaire dès la confirmation.
+      const intent = m?.signup_intent;
+      const trialEndsAt = m && intent?.trial ? await startNoCardTrial(tx, this.jobs, this.mailer, m.id, intent.plan, intent.interval) : null;
+      if (trialEndsAt) await this.audit.log(tx, { tenantId: m!.id, actor: row.user_id, action: 'billing.trial_started', data: { plan: intent.plan, until: trialEndsAt, card: false } });
+      return { verified: true, tenantId: m?.id ?? null, intent: intent ?? null, trialEndsAt };
     });
   }
 

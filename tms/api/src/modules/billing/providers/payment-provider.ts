@@ -10,6 +10,8 @@ export interface CheckoutRequest {
   interval?: BillingInterval;
   addons: { code: AddonCode; quantity: number }[];
   trialDays?: number;
+  /** Fin d'un essai déjà en cours (sans carte) : aucun débit avant cette date. */
+  trialEnd?: Date;
   successUrl: string;
   cancelUrl: string;
   idempotencyKey: string;

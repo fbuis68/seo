@@ -28,14 +28,14 @@ export default function Login() {
 
 /** Confirmation d'email ; si une offre payante a été choisie sur le site, propose directement le paiement. */
 export function VerifyEmail() {
-  const [state, setState] = useState<{ ok?: boolean; err?: string; intent?: any }>({});
+  const [state, setState] = useState<{ ok?: boolean; err?: string; intent?: any; trialEndsAt?: string | null }>({});
   const done = useRef(false);
   useEffect(() => {
     if (done.current) return; // jeton à usage unique : un seul appel
     done.current = true;
     const token = new URLSearchParams(location.search).get('token') ?? '';
-    post<{ tenantId: string; intent: any }>('/api/v1/auth/verify-email', { token })
-      .then((r) => { const s = session.get(); if (s) session.set({ ...s, tenantId: r.tenantId }); setState({ ok: true, intent: r.intent }); })
+    post<{ tenantId: string; intent: any; trialEndsAt?: string | null }>('/api/v1/auth/verify-email', { token })
+      .then((r) => { const s = session.get(); if (s) session.set({ ...s, tenantId: r.tenantId }); setState({ ok: true, intent: r.intent, trialEndsAt: r.trialEndsAt }); })
       .catch((e) => setState({ err: e.message }));
   }, []);
   return (
@@ -43,9 +43,11 @@ export function VerifyEmail() {
       {state.err && <><h1>Lien invalide</h1><p className="alert">{state.err}</p></>}
       {state.ok && <>
         <h1>Email confirmé</h1>
-        <p>Votre espace est actif en offre <strong>Free</strong>.</p>
-        {state.intent && <p>Vous aviez choisi l’offre <strong>{state.intent.plan}</strong> : connectez-vous pour finaliser le paiement sécurisé depuis « Mon abonnement ».</p>}
-        <a className="btn" href={session.get()?.token ? (state.intent ? '/billing?intent=1' : '/') : '/login'}>Continuer</a>
+        {state.trialEndsAt
+          ? <p>Votre essai de l’offre <strong>{state.intent.plan}</strong> est actif jusqu’au {new Date(state.trialEndsAt).toLocaleDateString('fr-FR')}, sans carte bancaire. Vous choisirez votre abonnement quand vous le souhaitez depuis « Mon abonnement ».</p>
+          : <p>Votre espace est actif en offre <strong>Free</strong>.</p>}
+        {state.intent && !state.trialEndsAt && <p>Vous aviez choisi l’offre <strong>{state.intent.plan}</strong> : connectez-vous pour finaliser le paiement sécurisé depuis « Mon abonnement ».</p>}
+        <a className="btn" href={session.get()?.token ? (state.intent && !state.trialEndsAt ? '/billing?intent=1' : '/') : '/login'}>Continuer</a>
       </>}
       {!state.ok && !state.err && <p className="muted">Vérification…</p>}
     </div></div>

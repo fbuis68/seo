@@ -152,7 +152,7 @@ export function publicCatalog() {
     currency: 'EUR',
     pricesExcludeTax: true,
     annualRule: 'Annuel : prix de 10 mensualités, engagement 12 mois.',
-    trialDays: 14,
+    trialDays: 15,
     plans: Object.values(PLANS).map((p) => ({
       code: p.code, name: p.name, tagline: p.tagline, highlighted: !!p.highlighted,
       monthlyPriceCents: p.monthlyPriceCents, yearlyPriceCents: p.yearlyPriceCents,

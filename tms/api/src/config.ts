@@ -51,7 +51,7 @@ export const config = {
     provider: env('SIGNATURE_PROVIDER', 'fake'),
     fakeWebhookSecret: env('FAKE_SIGNATURE_WEBHOOK_SECRET', 'dev-signature-secret'),
   },
-  trialDays: Number(env('TRIAL_DAYS', '14')),
+  trialDays: Number(env('TRIAL_DAYS', '15')),
   graceDays: Number(env('PAYMENT_GRACE_DAYS', '7')),
   readOnlyExportDays: Number(env('READ_ONLY_EXPORT_DAYS', '30')),
   termsVersion: env('TERMS_VERSION', '2026-10-06'),

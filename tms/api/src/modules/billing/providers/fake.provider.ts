@@ -35,9 +35,9 @@ export class FakePaymentProvider implements PaymentProvider {
       const now = Date.now();
       const state: ProviderSubscriptionState = {
         providerSubscriptionId: subId, providerCustomerId: s.customerId ?? `fcus_${s.tenantId.slice(0, 8)}`,
-        tenantId: s.tenantId, status: s.trialDays ? 'trialing' : 'active', planCode: s.plan!, interval: s.interval!,
+        tenantId: s.tenantId, status: s.trialDays || s.trialEnd ? 'trialing' : 'active', planCode: s.plan!, interval: s.interval!,
         addons: s.addons, cancelAtPeriodEnd: false,
-        trialEnd: s.trialDays ? new Date(now + s.trialDays * 86400e3) : null,
+        trialEnd: s.trialEnd ? new Date(s.trialEnd) : s.trialDays ? new Date(now + s.trialDays * 86400e3) : null,
         currentPeriodEnd: new Date(now + (s.interval === 'year' ? 365 : 30) * 86400e3),
       };
       this.subscriptions.set(subId, state);

@@ -73,7 +73,8 @@ export class StripeProvider implements PaymentProvider {
         p[`line_items[${i + 1}][quantity]`] = String(a.quantity);
       });
       p['subscription_data[metadata][tenant_id]'] = req.tenantId;
-      if (req.trialDays) p['subscription_data[trial_period_days]'] = String(req.trialDays);
+      if (req.trialEnd && req.trialEnd.getTime() > Date.now() + 48 * 3600e3) p['subscription_data[trial_end]'] = String(Math.floor(req.trialEnd.getTime() / 1000));
+      else if (req.trialDays) p['subscription_data[trial_period_days]'] = String(req.trialDays);
     } else {
       p.mode = 'payment';
       p['line_items[0][price]'] = this.addonPrice('signature_pack');

@@ -112,6 +112,40 @@ describe('Souscription en ligne', () => {
     expect(after.body.plan).toBe('free');
   });
 
+  it('essai sans carte : démarre à la confirmation, abonnement possible pendant l’essai sans débit avant la fin, retour Free à l’expiration', async () => {
+    const email = `essai${Date.now()}@example.test`;
+    const r = await http().post('/api/v1/public/signup').set('X-Forwarded-For', '10.9.9.9').send({ email, password: 'motdepasse-solide-42', fullName: 'Essai Test',
+      organization: { legalName: 'OF Essai' }, acceptTerms: true, plan: 'equipe', interval: 'month', addons: [], trial: true }).expect(201);
+    const token = /token=([\w-]+)/.exec([...mailer.devOutbox].reverse().find((m) => m.to === email)!.text)![1];
+    const v = (await http().post('/api/v1/auth/verify-email').send({ token }).expect(201)).body;
+    expect(v.trialEndsAt).toBeTruthy();
+    expect(mailsTo(email)).toContain('Votre essai Equipe a démarré');
+    const login = await http().post('/api/v1/auth/login').send({ email, password: 'motdepasse-solide-42' }).expect(201);
+    const auth = { Authorization: `Bearer ${login.body.token}`, 'X-Tenant-Id': r.body.tenantId };
+    let st = (await http().get('/api/v1/billing').set(auth).expect(200)).body;
+    expect(st).toMatchObject({ status: 'trialing', plan: 'equipe', hasPaymentMethod: false });
+    expect(st.entitlements.planCode).toBe('equipe');
+    // Souscription pendant l'essai : fin d'essai reprise par le fournisseur (aucun débit avant).
+    const c = await http().post('/api/v1/billing/checkout').set(auth).send({ plan: 'equipe', interval: 'month', addons: [], trial: true }).expect(201);
+    const sess = [...(fake as any).sessions.values()].find((x: any) => x.tenantId === r.body.tenantId);
+    expect(new Date(sess.trialEnd).getTime()).toBe(new Date(st.trialEndsAt).getTime());
+    await payCheckout(c.body.url);
+    st = (await http().get('/api/v1/billing').set(auth).expect(200)).body;
+    expect(st).toMatchObject({ status: 'trialing', hasPaymentMethod: true });
+    expect(mailsTo(email)).toContain('Votre abonnement Equipe est enregistré');
+
+    // Autre organisme : essai expiré sans abonnement → Free + email.
+    const email2 = `essai2${Date.now()}@example.test`;
+    const r2 = await http().post('/api/v1/public/signup').set('X-Forwarded-For', '10.9.9.8').send({ email: email2, password: 'motdepasse-solide-42', fullName: 'Essai Deux',
+      organization: { legalName: 'OF Essai 2' }, acceptTerms: true, plan: 'solo', interval: 'month', addons: [], trial: true }).expect(201);
+    const token2 = /token=([\w-]+)/.exec([...mailer.devOutbox].reverse().find((m) => m.to === email2)!.text)![1];
+    await http().post('/api/v1/auth/verify-email').send({ token: token2 }).expect(201);
+    const db = (subs as any).db;
+    await db.query(`UPDATE subscriptions SET trial_ends_at = now() - interval '1 minute' WHERE tenant_id=$1`, [r2.body.tenantId]);
+    expect((await subs.reevaluate(r2.body.tenantId)).status).toBe('free');
+    expect(mailsTo(email2)).toContain('Votre essai est terminé');
+  });
+
   it('échec de paiement : past_due avec délai de grâce', async () => {
     const u = await signupAndLogin();
     const c = await u.api.post('/api/v1/billing/checkout', { plan: 'solo', interval: 'month', addons: [] }).expect(201);

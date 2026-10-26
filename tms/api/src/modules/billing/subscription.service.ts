@@ -6,6 +6,7 @@ import { Db, Tx, one } from '../../core/db';
 import { AppError, badRequest, conflict, paymentRequired } from '../../core/errors';
 import { JobsService } from '../../core/jobs.service';
 import { SystemMailer } from '../../core/system-mail';
+import { trialEnded, trialReminder } from './trial';
 import { ADDONS, AddonCode, BillingInterval, PAID_PLANS, PLANS, PlanCode, planPrice } from './catalog';
 import { CreditsService } from './credits.service';
 import { EntitlementsService } from './entitlements.service';
@@ -32,6 +33,7 @@ export class SubscriptionService {
     private mailer: SystemMailer,
   ) {
     this.jobs.register('billing.reevaluate', (p) => this.reevaluate(p.tenantId));
+    this.jobs.register('billing.trial_reminder', (p) => this.db.tenantTx(p.tenantId, (tx) => trialReminder(tx, this.mailer, p.tenantId)));
     this.jobs.register('billing.apply_pending_change', (p) => this.applyPendingChange(p.tenantId));
     this.jobs.register('billing.reconcile', () => this.reconcileAll());
   }
@@ -85,8 +87,10 @@ export class SubscriptionService {
       if (sub.provider_subscription_id && PAID_STATUSES.includes(sub.status)) {
         throw conflict('subscription_exists', 'Un abonnement est déjà actif : utilisez le changement d’offre.');
       }
-      const trial = !!choice.trial && !sub.trial_ends_at;
-      if (choice.trial && sub.trial_ends_at) throw badRequest('trial_used', "L'essai gratuit a déjà été utilisé.");
+      // Essai sans carte en cours : l'abonnement démarre à la fin de l'essai (aucun débit avant).
+      const localTrialEnd = sub.status === 'trialing' && !sub.provider_subscription_id && sub.trial_ends_at && new Date(sub.trial_ends_at) > new Date() ? new Date(sub.trial_ends_at) : undefined;
+      const trial = !localTrialEnd && !!choice.trial && !sub.trial_ends_at;
+      if (!localTrialEnd && choice.trial && sub.trial_ends_at) throw badRequest('trial_used', "L'essai gratuit a déjà été utilisé.");
       const day = new Date().toISOString().slice(0, 10);
       const key = stableHash({ tenantId, plan: choice.plan, interval: choice.interval, addons: choice.addons, trial, day });
       // Clic répété : même session de paiement, jamais deux abonnements.
@@ -95,7 +99,7 @@ export class SubscriptionService {
       const checkoutId = (await one(tx, `SELECT gen_random_uuid() id`))!.id;
       const res = await this.assertCheckoutAvailable().createCheckout({
         tenantId, checkoutId, customerEmail: actor.email, customerId: sub.provider_customer_id, kind: 'subscription',
-        plan: choice.plan, interval: choice.interval, addons: choice.addons, trialDays: trial ? config.trialDays : undefined,
+        plan: choice.plan, interval: choice.interval, addons: choice.addons, trialDays: trial ? config.trialDays : undefined, trialEnd: localTrialEnd,
         successUrl: `${config.appUrl}${returnPath}?checkout=success`, cancelUrl: `${config.appUrl}${returnPath}?checkout=cancelled`,
         idempotencyKey: key,
       });
@@ -307,7 +311,10 @@ export class SubscriptionService {
     const fmt = (d?: Date | null) => (d ? new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Paris' }) : null);
     const price = `${((next.interval === 'year' ? plan.yearlyPriceCents : plan.monthlyPriceCents) / 100).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} € HT ${next.interval === 'year' ? 'par an' : 'par mois'}`;
     let subject: string | null = null, intro = '';
-    if (next.status === 'trialing' && cur.status !== 'trialing') {
+    if (next.status === 'trialing' && cur.status === 'trialing' && cur.provider === 'trial') {
+      subject = `Votre abonnement ${plan.name} est enregistré`;
+      intro = `Merci : votre abonnement ${plan.name} (${price}) est enregistré. Aucun débit avant la fin de votre essai${fmt(next.trialEnd) ? `, le ${fmt(next.trialEnd)}` : ''}.`;
+    } else if (next.status === 'trialing' && cur.status !== 'trialing') {
       subject = `Votre essai ${plan.name} a démarré`;
       intro = `Votre essai de l'offre ${plan.name} est actif${fmt(next.trialEnd) ? ` jusqu'au ${fmt(next.trialEnd)}` : ''}. Sans action de votre part, l'abonnement démarrera ensuite au tarif de ${price}.`;
     } else if (next.status === 'active' && cur.status === 'trialing') {
@@ -366,6 +373,12 @@ export class SubscriptionService {
         await tx.query(`UPDATE subscriptions SET status=$2, plan_code='free', read_only_since = CASE WHEN $2='read_only' THEN now() END, updated_at=now() WHERE tenant_id=$1`,
           [tenantId, fit.fits ? 'free' : 'read_only']);
         await this.audit.log(tx, { tenantId, action: 'billing.grace_expired', data: { result: fit.fits ? 'free' : 'read_only' } });
+      } else if (sub.status === 'trialing' && !sub.provider_subscription_id && sub.trial_ends_at && new Date(sub.trial_ends_at) < new Date()) {
+        // Fin d'essai sans carte, sans abonnement souscrit.
+        const result = fit.fits ? 'free' : 'read_only';
+        await tx.query(`UPDATE subscriptions SET status=$2, plan_code='free', billing_interval=NULL, provider=NULL, read_only_since = CASE WHEN $2='read_only' THEN now() END, updated_at=now() WHERE tenant_id=$1`, [tenantId, result]);
+        await this.audit.log(tx, { tenantId, action: 'billing.trial_expired', data: { result, over: fit.over } });
+        await trialEnded(tx, this.mailer, tenantId, result);
       } else if (sub.status === 'read_only' && fit.fits) {
         await tx.query(`UPDATE subscriptions SET status='free', read_only_since=NULL, updated_at=now() WHERE tenant_id=$1`, [tenantId]);
         await this.audit.log(tx, { tenantId, action: 'billing.back_to_free' });

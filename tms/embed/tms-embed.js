@@ -86,7 +86,7 @@
     this.host = host;
     this.api = (host.getAttribute('data-api') || defaultApi).replace(/\/$/, '');
     this.show = (host.getAttribute('data-show') || 'pricing,modules,signup').split(',').map(function (s) { return s.trim(); });
-    this.state = { interval: host.getAttribute('data-interval') === 'year' ? 'year' : 'month', plan: host.getAttribute('data-plan') || null, addons: {}, trial: false };
+    this.state = { interval: host.getAttribute('data-interval') === 'year' ? 'year' : 'month', plan: host.getAttribute('data-plan') || null, addons: {}, trial: true };
     this.root = host.attachShadow ? host.attachShadow({ mode: 'open' }) : host;
     var theme = host.getAttribute('data-theme') || 'auto';
     if (theme === 'dark' || (theme === 'auto' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches)) host.setAttribute('data-dark', '');
@@ -165,7 +165,7 @@
 
   Widget.prototype.select = function (code) {
     this.state.plan = code;
-    if (code === 'free') { this.state.addons = {}; this.state.trial = false; }
+    if (code === 'free') { this.state.addons = {}; this.state.trial = false; } else this.state.trial = this.cat.trialDays > 0;
     this.emit('tms:plan-selected', { plan: code, interval: this.state.interval });
     this.render();
     var form = this.root.querySelector('#tms-signup');
@@ -216,7 +216,7 @@
       el('strong', { text: 'Options' })].concat(rows).concat([
       el('div', { class: 'total', 'aria-live': 'polite' }, [el('span', { text: 'Total estimé' }), el('span', { text: fmtEur(total, true) + (this.state.interval === 'year' ? ' HT / an' : ' HT / mois') })]),
       trialAvailable ? el('label', { class: 'check' }, [el('input', { type: 'checkbox', checked: this.state.trial, onchange: function (e) { self.state.trial = e.target.checked; } }),
-        el('span', { text: 'Démarrer par un essai de ' + this.cat.trialDays + ' jours (moyen de paiement demandé, signatures électroniques non incluses pendant l’essai)' })]) : null,
+        el('span', { text: 'Essai gratuit de ' + this.cat.trialDays + ' jours, sans carte bancaire (signatures électroniques non incluses pendant l’essai). Décochez pour payer dès maintenant.' })]) : null,
       el('p', { class: 'muted', text: 'Montant définitif calculé par notre serveur et affiché sur la page de paiement sécurisée. Packs de signatures disponibles ensuite depuis votre espace.' }),
     ]));
   };
@@ -227,7 +227,7 @@
     var status = el('div', { role: 'status', 'aria-live': 'polite' });
     var planLine = el('p', { class: 'full muted' }, [
       'Offre choisie : ', el('strong', { text: plan.name + (plan.code !== 'free' ? (this.state.interval === 'year' ? ' (annuel)' : ' (mensuel)') : '') }),
-      plan.code !== 'free' ? ' — votre espace est créé en Free, puis vous finalisez le paiement sécurisé après confirmation de votre email.' : ' — gratuit, sans carte et sans limite de durée.',
+      plan.code !== 'free' ? (cat.trialDays > 0 ? ' — votre essai gratuit de ' + cat.trialDays + ' jours démarre dès la confirmation de votre email, sans carte bancaire.' : ' — votre espace est créé en Free, puis vous finalisez le paiement sécurisé après confirmation de votre email.') : ' — gratuit, sans carte et sans limite de durée.',
     ]);
     var field = function (label, name, type, attrs) {
       return el('label', attrs && attrs.full ? { class: 'full' } : null, [label, el('input', Object.assign({ name: name, type: type, required: !(attrs && attrs.optional), autocomplete: attrs && attrs.ac }, attrs && attrs.input || {}))]);
