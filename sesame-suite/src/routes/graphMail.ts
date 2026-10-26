@@ -223,6 +223,15 @@ async function processTicketMessage(mailbox: string, messageId: string) {
 
   const msg = await getGraphMessage(mailbox, messageId);
   if (!msg.from || msg.from.toLowerCase() === mailbox.toLowerCase()) return; // évite toute boucle sur la boîte elle-même
+  // Réponse d'absence du bureau (ou accusé auto-généré) — jamais un vrai
+  // message d'un humain : ne crée ni ne rouvre aucun ticket. § demande
+  // client 24/10/2026 : un emailing groupé réveillait un ticket (ou en
+  // créait un nouveau) à chaque destinataire en congés, noyant le support
+  // sous des "Réponse automatique : ..." sans contenu exploitable.
+  if (msg.autoReply) {
+    console.info(`[graphMail] message ${messageId} ignoré (réponse automatique détectée, de ${msg.from})`);
+    return;
+  }
 
   const attachments = msg.attachments.map((a) => `data:${a.contentType};base64,${a.contentBytes}`);
   const tag = extractTicketTag(msg.subject);

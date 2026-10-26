@@ -73,6 +73,16 @@ export interface GraphMessage {
   fromName: string;
   bodyText: string;
   attachments: GraphAttachment[];
+  // Réponse automatique (absence du bureau, règle de transfert automatique,
+  // accusé de lecture...) — détectée via l'en-tête standard Auto-Submitted
+  // (RFC 3834, posé par la quasi-totalité des serveurs mail dont Exchange/
+  // Outlook) plutôt que par mots-clés dans le sujet (fragile, dépend de la
+  // langue du destinataire). Repli sur X-Autoreply/X-Autorespond (convention
+  // plus ancienne, encore utilisée par certains systèmes). Utilisé par
+  // routes/graphMail.ts pour ne jamais transformer une absence du bureau en
+  // ticket support (§ demande client 24/10/2026 : un emailing groupé
+  // déclenchait des tickets à chaque réponse d'absence d'un destinataire).
+  autoReply: boolean;
 }
 
 // Entités HTML nommées courantes dans un email (accents français inclus) —
@@ -127,12 +137,13 @@ function stripHtml(html: string): string {
  */
 export async function getGraphMessage(mailbox: string, messageId: string): Promise<GraphMessage> {
   const msg = (await graphFetch(
-    `/users/${encodeURIComponent(mailbox)}/messages/${encodeURIComponent(messageId)}?$select=subject,from,body,hasAttachments`
+    `/users/${encodeURIComponent(mailbox)}/messages/${encodeURIComponent(messageId)}?$select=subject,from,body,hasAttachments,internetMessageHeaders`
   )) as {
     subject?: string;
     from?: { emailAddress?: { address?: string; name?: string } };
     body?: { contentType?: string; content?: string };
     hasAttachments?: boolean;
+    internetMessageHeaders?: { name?: string; value?: string }[];
   };
 
   let attachments: GraphAttachment[] = [];
@@ -156,6 +167,16 @@ export async function getGraphMessage(mailbox: string, messageId: string): Promi
   const rawBody = msg.body?.content || "";
   const bodyText = msg.body?.contentType === "html" ? stripHtml(rawBody) : rawBody;
 
+  const headers = msg.internetMessageHeaders || [];
+  const headerValue = (name: string) => headers.find((h) => (h.name || "").toLowerCase() === name.toLowerCase())?.value || "";
+  // RFC 3834 : "auto-replied" est la valeur posée par Exchange/Outlook pour
+  // une réponse d'absence du bureau ; "auto-generated"/"auto-notified"
+  // couvrent accusés de lecture et notifications automatiques diverses —
+  // aucune de ces trois n'est une vraie réponse d'un humain au CRM.
+  const autoSubmitted = headerValue("Auto-Submitted").toLowerCase();
+  const legacyAutoReply = headerValue("X-Autoreply") || headerValue("X-Autorespond");
+  const autoReply = autoSubmitted.startsWith("auto-") || !!legacyAutoReply;
+
   return {
     id: messageId,
     subject: msg.subject || "(sans objet)",
@@ -163,6 +184,7 @@ export async function getGraphMessage(mailbox: string, messageId: string): Promi
     fromName: msg.from?.emailAddress?.name || "",
     bodyText,
     attachments,
+    autoReply,
   };
 }
 
