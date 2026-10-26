@@ -6448,8 +6448,9 @@ async function deleteDeal(id){
 // Document) — jamais à la création (§ demande client : "pas de création à
 // partir de l'affaire, on la rattachera ensuite").
 //
-// Constructeur en 4 onglets, identiques à la maquette : 1. Équipements /
-// 2. Logiciel / 3. Mise en place / 4. Document, avec panneau latéral de
+// Constructeur en 3 onglets (4 à l'origine, identiques à la maquette ;
+// "3. Mise en place" retirée le 23/10/2026, cf. plus bas) : 1. Équipements
+// / 2. Logiciel / 3. Document, avec panneau latéral de
 // totaux toujours visible (investissement initial HT/TTC, acompte,
 // abonnement mensuel, récurrent 12 mois). Catalogue réel (CrmProduct +
 // modules Sesame ONBOARDING_MODULES) à la place des dossiers d'exemple de
@@ -6462,11 +6463,16 @@ let QUOTE_TEMPLATES = null;
 let QUOTE_DRAFT = null;
 let QUOTE_TAB = 'materiel';
 let QUOTE_LIST_FILTER = {status:'', q:''};
+// Étape "3. Mise en place" retirée (23/10/2026, demande client "rendre ça
+// plus simple") — les lignes Service (visite, installation, formation,
+// déplacement, développement spécifique) ne viennent plus d'un calculateur
+// mais se saisissent directement dans le Document (cf. dqAddCustomLine,
+// bloc "Service" de dqRenderDocumentTab). Platform/SMS/Licence restent
+// dérivées de l'onglet Logiciel (cf. dqCalculatorLines).
 const QUOTE_TABS = [
   {key:'materiel', label:'1. Équipements'},
   {key:'logiciel', label:'2. Logiciel'},
-  {key:'service', label:'3. Mise en place'},
-  {key:'document', label:'4. Document'},
+  {key:'document', label:'3. Document'},
 ];
 const DQ_CAT_LABEL = {materiel:'Équipements', service:'Services', logiciel:'Modules', autre:'Lignes libres'};
 // Bibliothèque de clauses (22/10/2026, demande client "pouvoir en rajouter
@@ -6581,9 +6587,16 @@ async function openQuoteBuilder(id){
  * hardware/accessories/mods/custom — symétrique de dqCollectManualLines(). */
 function dqFromServer(q){
   const lines = q.lines || [];
-  const hardware = lines.filter(l=>l.category==='materiel' && l.group!=='accessory').map(l=>({...l}));
-  const accessories = lines.filter(l=>l.category==='materiel' && l.group==='accessory').map(l=>({...l}));
-  const customLines = lines.filter(l=>l.category==='autre').map(l=>({...l}));
+  // Lignes libres identifiées par préfixe d'id ('c...', cf. dqAddCustomLine)
+  // plutôt que par category==='autre' — depuis la suppression de l'étape 3,
+  // une ligne libre peut porter n'importe quelle catégorie (matériel/
+  // service/logiciel/autre selon le bloc où elle a été ajoutée dans le
+  // Document) ; les lignes hardware/accessoires/modules gardent leurs
+  // propres préfixes ('h'/'a'/'mod-'), aucun risque de collision.
+  const isCustomId = id => !!id && id.charAt(0)==='c';
+  const hardware = lines.filter(l=>l.category==='materiel' && l.group!=='accessory' && !isCustomId(l.id)).map(l=>({...l}));
+  const accessories = lines.filter(l=>l.category==='materiel' && l.group==='accessory' && !isCustomId(l.id)).map(l=>({...l}));
+  const customLines = lines.filter(l=>isCustomId(l.id)).map(l=>({...l}));
   const checkedModules = lines.filter(l=>l.category==='logiciel' && l.moduleKey);
   const mods = (QUOTE_CATALOG.modules||[]).map(m=>{
     const checked = checkedModules.find(l=>l.moduleKey===m.k);
@@ -6604,36 +6617,41 @@ function dqFromServer(q){
  * (licence/plateforme/SMS/mise en place…), recalculées à la volée depuis
  * `config` à chaque affichage (cf. dqComputeTotals), jamais dupliquées en base. */
 function dqCollectManualLines(q){
+  // Applique config.overrides (édition directe depuis le Document, cf.
+  // captureDocumentTab) aux lignes manuelles aussi — même principe que
+  // dqCalculatorLines pour les lignes dérivées, et que storedWithOverrides
+  // côté serveur (crmQuote.ts expandQuoteLines). Sans ça, un libellé/prix/
+  // quantité modifié directement dans le Document pour une ligne matériel/
+  // accessoire/libre réapparaissait tel quel au rendu suivant (l'édition
+  // n'était enregistrée que dans overrides, jamais relue).
+  const ov = q.config.overrides||{};
+  const applyOv = x => ov[x.id] ? {...x, ...ov[x.id]} : x;
   const out = [];
-  q.hardware.forEach(x=>out.push({...x, category:'materiel', group:'main', recurring:false}));
-  q.accessories.forEach(x=>out.push({...x, category:'materiel', group:'accessory', recurring:false}));
-  q.mods.filter(m=>m.on).forEach(m=>out.push({id:'mod-'+m.k, moduleKey:m.k, label:m.name, description:m.desc||'', qty:1, unitPrice:m.p, recurring:m.cycle!=='once', category:'logiciel'}));
-  q.custom.forEach(x=>out.push({...x, category:'autre'}));
+  q.hardware.forEach(x=>out.push(applyOv({...x, category:'materiel', group:'main', recurring:false})));
+  q.accessories.forEach(x=>out.push(applyOv({...x, category:'materiel', group:'accessory', recurring:false})));
+  q.mods.filter(m=>m.on).forEach(m=>out.push(applyOv({id:'mod-'+m.k, moduleKey:m.k, label:m.name, description:m.desc||'', qty:1, unitPrice:m.p, recurring:m.cycle!=='once', category:'logiciel'})));
+  // category propre à chaque ligne libre (matériel/service/logiciel/autre
+  // selon le bloc où elle a été ajoutée, cf. dqAddCustomLine) — plus
+  // systématiquement 'autre' depuis la suppression de l'étape 3.
+  q.custom.forEach(x=>out.push(applyOv({...x, category:x.category||'autre'})));
   return out;
 }
 
 function dqNum(v){ return Math.max(0, Number(v)||0); }
 
-/** Lignes dérivées des calculateurs Logiciel + Mise en place (licence,
- * plateforme, SMS, visite, installation, formation, déplacement,
- * développement spécifique, recettage) — même logique que collect() dans
- * la maquette, avec les overrides du Document appliqués par-dessus. */
+/** Lignes dérivées du calculateur Logiciel (licence, plateforme, SMS) —
+ * seules lignes encore calculées automatiquement depuis la suppression de
+ * l'étape "3. Mise en place" (visite/installation/formation/déplacement/
+ * développement spécifique sont désormais des lignes libres saisies
+ * directement dans le Document, cf. dqAddCustomLine) ; overrides du
+ * Document appliqués par-dessus, même logique que expandQuoteLines() côté
+ * serveur (crmQuote.ts), à garder synchronisée. */
 function dqCalculatorLines(q){
   const c = q.config;
-  const count = q.hardware.reduce((a,x)=>a+dqNum(x.qty),0);
-  let installDays = dqNum(c.installDays);
-  if(c.timeMode==='auto') installDays = Math.ceil(count*dqNum(c.minutesPerAccess)/(dqNum(c.hoursPerDay)*60||1)*2)/2;
   const rows = [];
   const add=(id,label,qty,unitPrice,category,recurring)=>{ if(qty>0) rows.push({id,label,qty,unitPrice,category:category||'service',recurring:!!recurring}); };
-  add('setup','Paramétrage des contrôles d’accès', count, dqNum(c.setupPerAccess));
   add('platform','Paramétrage plateforme', 1, dqNum(c.platformSetup));
   add('sms','SMS prépayés', dqNum(c.smsQty), dqNum(c.smsUnitPrice));
-  add('visit','Visite technique avant chantier', 1, dqNum(c.visitFee));
-  add('install','Installation, tests d’ouverture et recettage · journée-technicien', installDays, dqNum(c.dayRate));
-  add('training','Formation de 2 administrateurs', 1, dqNum(c.trainingFee));
-  add('travel','Forfait déplacement', 1, dqNum(c.travelFee));
-  add('dev','Développement spécifique · journée', dqNum(c.devDays), dqNum(c.devRate));
-  add('test','Recettage logiciel · journée', dqNum(c.testDays), dqNum(c.devRate));
   add('license','Licence clés, support'+(c.pmsInterface==='Misterbooking'?' et interface Misterbooking':''), 1, dqNum(c.license), 'logiciel', true);
   return rows.map(r=>({...r, ...(c.overrides[r.id]||{})}));
 }
@@ -6702,7 +6720,6 @@ function captureCurrentTab(){
   captureQuoteHead();
   if(QUOTE_TAB==='materiel'){ captureHardwareRows(QUOTE_DRAFT.hardware,'dq-hw'); captureHardwareRows(QUOTE_DRAFT.accessories,'dq-acc'); }
   else if(QUOTE_TAB==='logiciel') captureConfigTab(['license','pmsInterface','platformSetup','smsQty','smsUnitPrice','subscriptionStart']);
-  else if(QUOTE_TAB==='service') captureConfigTab(['timeMode','minutesPerAccess','hoursPerDay','installDays','dayRate','setupPerAccess','visitFee','trainingFee','travelFee','devDays','testDays','devRate','specificScope']);
   else if(QUOTE_TAB==='document') captureDocumentTab();
 }
 
@@ -6727,9 +6744,11 @@ function dqAddAccessory(id){
   renderQuoteBuilder();
 }
 function dqRemoveRow(arrName, idx){ captureCurrentTab(); QUOTE_DRAFT[arrName].splice(idx,1); renderQuoteBuilder(); }
-function dqAddCustomLine(){
+const DQ_CUSTOM_LINE_LABEL = {materiel:'Article', service:'Prestation de service', logiciel:'Ligne logicielle', autre:'Prestation spécifique client'};
+function dqAddCustomLine(category){
   captureCurrentTab();
-  QUOTE_DRAFT.custom.push({id:'c'+QUOTE_DRAFT.custom.length+'-'+Date.now(), label:'Prestation spécifique client', description:'', qty:1, unitPrice:null, recurring:false});
+  const cat = category||'autre';
+  QUOTE_DRAFT.custom.push({id:'c'+QUOTE_DRAFT.custom.length+'-'+Date.now(), label:DQ_CUSTOM_LINE_LABEL[cat]||DQ_CUSTOM_LINE_LABEL.autre, description:'', qty:1, unitPrice:null, recurring:false, category:cat});
   renderQuoteBuilder();
 }
 function dqApplyClause(id){
@@ -6986,7 +7005,6 @@ function renderQuoteBuilder(){
   let panelHtml;
   if(QUOTE_TAB==='materiel') panelHtml = dqRenderHardwareTab(q);
   else if(QUOTE_TAB==='logiciel') panelHtml = dqRenderSoftwareTab(q);
-  else if(QUOTE_TAB==='service') panelHtml = dqRenderServiceTab(q);
   else panelHtml = dqRenderDocumentTab(q, lines);
 
   document.getElementById('main').innerHTML = `
@@ -7112,42 +7130,6 @@ function dqRenderSoftwareTab(q){
     </div>`;
 }
 
-function dqRenderServiceTab(q){
-  const c = q.config;
-  const count = q.hardware.reduce((a,x)=>a+dqNum(x.qty),0);
-  const timeDetail = c.timeMode==='auto'
-    ? count+' accès × '+c.minutesPerAccess+' min / '+c.hoursPerDay+' h, arrondi à la demi-journée. Hypothèse à valider ; visite et formation chiffrées séparément.'
-    : 'Journées-technicien saisies manuellement. Installation : '+fmtEUR(dqNum(c.installDays)*dqNum(c.dayRate))+' HT.';
-  return `
-    <h3>Temps &amp; prestations</h3>
-    <p class="sq-summary">Journées-technicien et forfaits modifiables.</p>
-    <div class="sq-fields">
-      <label>Mode de chiffrage<select id="dq-timeMode" onchange="dqRerender()">
-        <option value="fixed" ${c.timeMode==='fixed'?'selected':''}>Saisie manuelle</option>
-        <option value="auto" ${c.timeMode==='auto'?'selected':''}>Estimation par accès</option>
-      </select></label>
-      <label>Minutes par accès<input type="number" id="dq-minutesPerAccess" min="0" value="${c.minutesPerAccess}" onchange="dqRerender()"></label>
-      <label>Heures productives / journée<input type="number" id="dq-hoursPerDay" min="1" value="${c.hoursPerDay}" onchange="dqRerender()"></label>
-    </div>
-    <div class="sq-fields" style="margin-top:12px">
-      <label>Journées-technicien facturées<input type="number" id="dq-installDays" min="0" step="0.5" value="${c.installDays}" ${c.timeMode==='auto'?'disabled':''} onchange="dqRerender()"></label>
-      <label>Prix / journée · HT<input type="number" id="dq-dayRate" min="0" value="${c.dayRate}" onchange="dqRerender()"></label>
-      <label>Paramétrage / accès · HT<input type="number" id="dq-setupPerAccess" min="0" value="${c.setupPerAccess}" onchange="dqRerender()"></label>
-    </div>
-    <p class="sq-note">${esc(timeDetail)}</p>
-    <div class="sq-fields">
-      <label>Visite technique · forfait HT<input type="number" id="dq-visitFee" min="0" value="${c.visitFee}" onchange="dqRerender()"></label>
-      <label>Formation · forfait HT<input type="number" id="dq-trainingFee" min="0" value="${c.trainingFee}" onchange="dqRerender()"></label>
-      <label>Déplacement · forfait HT<input type="number" id="dq-travelFee" min="0" value="${c.travelFee}" onchange="dqRerender()"></label>
-    </div>
-    <h3 style="margin-top:23px">Développement spécifique</h3>
-    <div class="sq-fields">
-      <label>Développement · jours<input type="number" id="dq-devDays" min="0" step="0.5" value="${c.devDays}" onchange="dqRerender()"></label>
-      <label>Recettage logiciel · jours<input type="number" id="dq-testDays" min="0" step="0.5" value="${c.testDays}" onchange="dqRerender()"></label>
-      <label>TJM développement / tests · HT<input type="number" id="dq-devRate" min="0" value="${c.devRate}" onchange="dqRerender()"></label>
-    </div>
-    <label style="margin-top:12px;display:block">Périmètre spécifique<textarea id="dq-specificScope" placeholder="Décrire demande client, livrables et critères de recette" onchange="dqRerender()">${esc(c.specificScope)}</textarea></label>`;
-}
 
 function dqRenderDocumentTab(q, lines){
   // Séparation Matériel (équipements + accessoires) / Service / Licence
@@ -7162,27 +7144,31 @@ function dqRenderDocumentTab(q, lines){
     {cat:'logiciel', label:'Licence', color:'#7a5cf0'},
     {cat:'autre', label:'Lignes libres', color:'#5a8a2e'},
   ];
+  // Blocs toujours affichés, même vides (étape "3. Mise en place"
+  // supprimée le 23/10/2026 — le bloc Service, notamment, part désormais
+  // systématiquement vide et se remplit uniquement via "+ Ligne" ici) —
+  // chaque bloc porte son propre bouton d'ajout, catégorie pré-remplie.
   const groupHtml = (cat, label, color) => {
     const rows = lines.filter(l=>(l.category||'materiel')===cat);
-    if(!rows.length) return '';
     const subtotal = rows.reduce((s,l)=>s+(l.unitPrice==null?0:l.qty*l.unitPrice),0);
     const hasUnpriced = rows.some(l=>l.unitPrice==null);
     return `<div style="border-left:3px solid ${color};padding-left:12px;margin-bottom:16px">`
-      + `<h4 style="margin-top:0">${label} · HT</h4>` + rows.map(l=>`
+      + `<div class="db-row-between" style="margin-top:0"><h4 style="margin:0">${label} · HT</h4><button type="button" class="btn btn-ghost btn-sm" onclick="dqAddCustomLine('${cat}')">+ Ligne</button></div>`
+      + (rows.length ? rows.map(l=>`
       <div class="sq-docline">
         <input id="dl-name-${l.id}" value="${esc(l.label)}" onchange="dqRerender()">
         <input id="dl-qty-${l.id}" type="number" min="0" step="0.5" value="${l.qty}" onchange="dqRerender()">
         <input id="dl-price-${l.id}" type="number" min="0" step="0.01" placeholder="À saisir" value="${l.unitPrice??''}" onchange="dqRerender()">
         <output>${l.unitPrice==null?'À chiffrer':fmtEUR(l.qty*l.unitPrice)+(l.recurring?'/mois':'')}</output>
-      </div>`).join('')
-      + `<div class="quote-total-row" style="font-weight:600;border-top:0.5px solid var(--div);margin-top:4px;padding-top:4px"><span>Sous-total ${label}</span><span>${hasUnpriced?'Partiel — ':''}${fmtEUR(subtotal)}</span></div>`
+      </div>`).join('') : `<p class="sq-note" style="margin:4px 0">Aucune ligne.</p>`)
+      + (rows.length ? `<div class="quote-total-row" style="font-weight:600;border-top:0.5px solid var(--div);margin-top:4px;padding-top:4px"><span>Sous-total ${label}</span><span>${hasUnpriced?'Partiel — ':''}${fmtEUR(subtotal)}</span></div>` : '')
       + `</div>`;
   };
   const totals = dqComputeTotals(lines, q.config, q.discountPct, q.vatPct, q.depositPct);
   const clientNom = q.prospectId ? (clients.find(c=>c.id===q.prospectId)||{}).nom||'' : '';
   return `
-    <div class="db-row-between"><h3>Document client éditable</h3><button type="button" class="btn btn-ghost btn-sm" onclick="dqAddCustomLine()">+ Ligne libre</button></div>
-    <small style="color:var(--mu)">Libellés et prix modifiables directement.</small>
+    <h3>Document client éditable</h3>
+    <small style="color:var(--mu)">Libellés et prix modifiables directement, ligne par ligne, dans chaque bloc ci-dessous.</small>
     <div class="sq-dochead">
       <div class="sq-logo">SESAME TECHNOLOGY</div>
       <div class="db-row-between"><strong>${esc(clientNom)}</strong><span>${esc(q.number||'Brouillon')} · ${new Date().toLocaleDateString('fr-FR')}</span></div>

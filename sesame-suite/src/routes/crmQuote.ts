@@ -84,24 +84,22 @@ function num(v: unknown): number {
  * total affiché au client serait incomplet (ne compterait que le matériel/
  * logiciel/lignes libres, pas la main d'œuvre).
  */
-function expandQuoteLines(storedLines: QuoteLine[], hardwareLines: QuoteLine[], config: QuoteConfig): QuoteLine[] {
-  const count = hardwareLines.reduce((a, x) => a + num(x.qty), 0);
-  let installDays = num(config.installDays);
-  if (config.timeMode === "auto") installDays = Math.ceil(((count * num(config.minutesPerAccess)) / (num(config.hoursPerDay) * 60 || 1)) * 2) / 2;
+// Étape "3. Mise en place" retirée côté CRM (23/10/2026, demande client) —
+// setup/visite/installation/formation/déplacement/développement spécifique
+// ne sont plus dérivées d'un calculateur (hardwareLines/config.installDays
+// etc. ne sont donc plus utilisés) : ce sont désormais de simples lignes
+// manuelles (category="service"), saisies directement dans le Document et
+// envoyées telles quelles dans storedLines — même logique que
+// public/crm.html dqCalculatorLines(), qui doit rester en phase avec cette
+// fonction (pas de build partagé entre les deux).
+function expandQuoteLines(storedLines: QuoteLine[], _hardwareLines: QuoteLine[], config: QuoteConfig): QuoteLine[] {
   const overrides = config.overrides || {};
   const rows: QuoteLine[] = [];
   const add = (id: string, label: string, qty: number, unitPrice: number, recurring = false) => {
     if (qty > 0) rows.push({ id, label, qty, unitPrice, recurring, category: recurring ? "logiciel" : "service", ...(overrides[id] || {}) });
   };
-  add("setup", "Paramétrage des contrôles d’accès", count, num(config.setupPerAccess));
   add("platform", "Paramétrage plateforme", 1, num(config.platformSetup));
   add("sms", "SMS prépayés", num(config.smsQty), num(config.smsUnitPrice));
-  add("visit", "Visite technique avant chantier", 1, num(config.visitFee));
-  add("install", "Installation, tests d’ouverture et recettage · journée-technicien", installDays, num(config.dayRate));
-  add("training", "Formation de 2 administrateurs", 1, num(config.trainingFee));
-  add("travel", "Forfait déplacement", 1, num(config.travelFee));
-  add("dev", "Développement spécifique · journée", num(config.devDays), num(config.devRate));
-  add("test", "Recettage logiciel · journée", num(config.testDays), num(config.devRate));
   add("license", "Licence clés, support" + (config.pmsInterface === "Misterbooking" ? " et interface Misterbooking" : ""), 1, num(config.license), true);
   const storedWithOverrides = storedLines.map((l) => ({ ...l, ...(l.id ? overrides[l.id] : undefined) }));
   return [...storedWithOverrides, ...rows];
