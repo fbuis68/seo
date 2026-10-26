@@ -46,8 +46,8 @@ export function VerifyEmail() {
         {state.trialEndsAt
           ? <p>Votre essai de l’offre <strong>{state.intent.plan}</strong> est actif jusqu’au {new Date(state.trialEndsAt).toLocaleDateString('fr-FR')}, sans carte bancaire. Vous choisirez votre abonnement quand vous le souhaitez depuis « Mon abonnement ».</p>
           : <p>Votre espace est actif en offre <strong>Free</strong>.</p>}
-        {state.intent && !state.trialEndsAt && <p>Vous aviez choisi l’offre <strong>{state.intent.plan}</strong> : connectez-vous pour finaliser le paiement sécurisé depuis « Mon abonnement ».</p>}
-        <a className="btn" href={session.get()?.token ? (state.intent && !state.trialEndsAt ? '/billing?intent=1' : '/') : '/login'}>Continuer</a>
+        {state.intent && !state.trialEndsAt && <p>Vous aviez choisi l’offre <strong>{state.intent.plan}</strong> : « Continuer » ouvre le paiement sécurisé pour l’activer.</p>}
+        <a className="btn" href={session.get()?.token ? (state.intent && !state.trialEndsAt ? '/billing?intent=1&pay=1' : '/') : '/login'}>Continuer</a>
       </>}
       {!state.ok && !state.err && <p className="muted">Vérification…</p>}
     </div></div>

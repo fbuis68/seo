@@ -227,7 +227,7 @@
     var status = el('div', { role: 'status', 'aria-live': 'polite' });
     var planLine = el('p', { class: 'full muted' }, [
       'Offre choisie : ', el('strong', { text: plan.name + (plan.code !== 'free' ? (this.state.interval === 'year' ? ' (annuel)' : ' (mensuel)') : '') }),
-      plan.code !== 'free' ? (cat.trialDays > 0 ? ' — votre essai gratuit de ' + cat.trialDays + ' jours démarre dès la confirmation de votre email, sans carte bancaire.' : ' — votre espace est créé en Free, puis vous finalisez le paiement sécurisé après confirmation de votre email.') : ' — gratuit, sans carte et sans limite de durée.',
+      plan.code !== 'free' ? (cat.trialDays > 0 ? ' — avec l’essai coché : ' + cat.trialDays + ' jours gratuits sans carte dès la confirmation de votre email ; sans essai : paiement sécurisé juste après la confirmation.' : ' — votre espace est créé en Free, puis vous finalisez le paiement sécurisé après confirmation de votre email.') : ' — gratuit, sans carte et sans limite de durée.',
     ]);
     var field = function (label, name, type, attrs) {
       return el('label', attrs && attrs.full ? { class: 'full' } : null, [label, el('input', Object.assign({ name: name, type: type, required: !(attrs && attrs.optional), autocomplete: attrs && attrs.ac }, attrs && attrs.input || {}))]);

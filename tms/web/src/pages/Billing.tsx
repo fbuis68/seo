@@ -36,6 +36,11 @@ export default function Billing() {
     if (intent && st.data?.status === 'free') {
       setPlan(intent.plan); setInterval(intent.interval); setTrial(!!intent.trial);
       setAddons(Object.fromEntries((intent.addons ?? []).map((a: any) => [a.code, a.quantity])));
+      // Arrivée depuis la confirmation d'email : ouverture directe du paiement sécurisé (une seule fois).
+      if (params.get('pay') === '1' && !sessionStorage.getItem('tms.autopay')) {
+        try { sessionStorage.setItem('tms.autopay', '1'); } catch { /* stockage indisponible */ }
+        act.run(async () => { const r = await post('/api/v1/billing/checkout', { plan: intent.plan, interval: intent.interval, addons: intent.addons ?? [], trial: false }); location.href = r.url; });
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [st.data?.status]);
@@ -70,6 +75,12 @@ export default function Billing() {
             <div className="banner" style={{ marginBottom: 8 }}>
               Pour continuer après l’essai, enregistrez votre moyen de paiement : <strong>aucun débit avant le {date(s.trialEndsAt)}</strong>.
               <div style={{ marginTop: 8 }}><button className="btn" disabled={act.busy} onClick={go}>S’abonner à l’offre {c.plans.find((p: any) => p.code === s.plan)?.name} (paiement sécurisé)</button></div>
+            </div>
+          )}
+          {!hasSub && s.status === 'free' && plan && me.memberships.find((m) => m.signup_intent)?.signup_intent?.plan === plan && (
+            <div className="banner" style={{ marginBottom: 8 }}>
+              Vous avez choisi l’offre <strong>{c.plans.find((p: any) => p.code === plan)?.name}</strong> sur notre site : enregistrez votre carte pour l’activer.
+              <div style={{ marginTop: 8 }}><button className="btn" disabled={act.busy} onClick={go}>Payer et activer l’offre (paiement sécurisé)</button></div>
             </div>
           )}
           {!hasSub && s.status === 'free' && !plan && <p className="small">Choisissez une offre ci-dessous, puis « Payer en ligne » : vous serez redirigé vers la page de paiement sécurisée Stripe.</p>}
