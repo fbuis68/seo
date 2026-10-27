@@ -96,7 +96,16 @@ export interface GraphCalendarMeeting {
   endDateTime: string; // ISO UTC
   joinUrl: string;
   attendeeEmails: string[];
+  // Emails trouvés dans le corps de l'événement (pas dans les participants
+  // Teams) — cas réel observé 27/10/2026 : un outil de prise de RDV externe
+  // crée l'événement avec le commercial comme SEUL participant Teams et les
+  // coordonnées du client (nom, email, tél.) en texte libre dans le corps
+  // ("Rendez Vous Sesame - <nom client>", organisateur "Sesame Technology").
+  // Sans ce champ, ces réunions ne matchaient jamais aucun prospect.
+  bodyEmails: string[];
 }
+
+const EMAIL_REGEX = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
 
 /** Liste les événements de calendrier Teams (isOnlineMeeting) d'un
  * organisateur sur une période donnée — utilisé pour la synchronisation
@@ -105,7 +114,7 @@ export interface GraphCalendarMeeting {
  * isOnlineMeeting (support inégal selon les tenants) : filtré ici. */
 export async function listCalendarMeetings(organizerUserId: string, startISO: string, endISO: string): Promise<GraphCalendarMeeting[]> {
   const res = (await graphFetch(
-    `/users/${encodeURIComponent(organizerUserId)}/calendarView?startDateTime=${encodeURIComponent(startISO)}&endDateTime=${encodeURIComponent(endISO)}&$select=subject,start,end,isOnlineMeeting,onlineMeeting,attendees&$top=250`
+    `/users/${encodeURIComponent(organizerUserId)}/calendarView?startDateTime=${encodeURIComponent(startISO)}&endDateTime=${encodeURIComponent(endISO)}&$select=subject,start,end,isOnlineMeeting,onlineMeeting,attendees,body&$top=250`
   )) as {
     value?: {
       subject?: string;
@@ -114,6 +123,7 @@ export async function listCalendarMeetings(organizerUserId: string, startISO: st
       isOnlineMeeting?: boolean;
       onlineMeeting?: { joinUrl?: string };
       attendees?: { emailAddress?: { address?: string } }[];
+      body?: { content?: string };
     }[];
   };
   const asUtcIso = (dt?: string) => (dt ? new Date(dt.endsWith("Z") ? dt : dt + "Z").toISOString() : "");
@@ -125,6 +135,7 @@ export async function listCalendarMeetings(organizerUserId: string, startISO: st
       endDateTime: asUtcIso(e.end?.dateTime),
       joinUrl: e.onlineMeeting!.joinUrl!,
       attendeeEmails: (e.attendees || []).map((a) => (a.emailAddress?.address || "").toLowerCase()).filter(Boolean),
+      bodyEmails: [...(e.body?.content || "").matchAll(EMAIL_REGEX)].map((m) => m[0].toLowerCase()),
     }));
 }
 

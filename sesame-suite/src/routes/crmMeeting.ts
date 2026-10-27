@@ -341,7 +341,10 @@ crmMeetingRouter.post(
 
       for (const ev of events) {
         if (knownJoinUrls.has(ev.joinUrl)) continue;
-        const matchedProspectId = ev.attendeeEmails.map((e) => emailToProspectId.get(e)).find(Boolean);
+        // D'abord les vrais participants Teams, puis — à défaut — les emails
+        // trouvés dans le corps de l'événement (outils de prise de RDV
+        // externes qui n'invitent que le commercial, cf. lib/graphMeetings.ts).
+        const matchedProspectId = [...ev.attendeeEmails, ...ev.bodyEmails].map((e) => emailToProspectId.get(e)).find(Boolean);
         // teams.live.com = Teams "grand public" (compte personnel), jamais
         // résolvable via /onlineMeetings côté tenant — pas une erreur, juste
         // hors périmètre. Si elle matchait quand même un prospect, on le
@@ -355,7 +358,7 @@ crmMeetingRouter.post(
         }
         if (!matchedProspectId) {
           if (unmatchedSample.length < UNMATCHED_SAMPLE_LIMIT) {
-            unmatchedSample.push({ subject: ev.subject, startDateTime: ev.startDateTime, attendeeEmails: ev.attendeeEmails });
+            unmatchedSample.push({ subject: ev.subject, startDateTime: ev.startDateTime, attendeeEmails: [...new Set([...ev.attendeeEmails, ...ev.bodyEmails])] });
           }
           continue;
         }
