@@ -5,7 +5,33 @@ import { Db, Tx, many, one } from '../../core/db';
 import { badRequest, conflict, notFound } from '../../core/errors';
 import { EntitlementsService } from '../billing/entitlements.service';
 
-export interface PersonInput { firstName: string; lastName: string; email?: string | null; phone?: string | null; roles: ('learner' | 'trainer' | 'contact' | 'tutor' | 'staff')[]; skills?: string[] }
+export interface PersonInput { firstName: string; lastName: string; email?: string | null; phone?: string | null; roles: ('learner' | 'trainer' | 'contact' | 'tutor' | 'staff')[]; skills?: string[]; [k: string]: any }
+
+/** Champs modifiables (API → colonne). `undefined` : inchangé ; `null` ou '' : effacé. */
+const PERSON_COLS: Record<string, string> = {
+  firstName: 'first_name', lastName: 'last_name', email: 'email', email2: 'email2', phone: 'phone', mobile: 'mobile', civility: 'civility',
+  birthDate: 'birth_date', birthPlace: 'birth_place', nationality: 'nationality', jobTitle: 'job_title', code: 'code', maidenName: 'maiden_name',
+  address: 'address', employerClientId: 'employer_client_id', skills: 'skills',
+};
+const CLIENT_COLS: Record<string, string> = {
+  name: 'name', kind: 'kind', siret: 'siret', siren: 'siren', billingEmail: 'billing_email', billingAddress: 'billing_address', isFunder: 'is_funder',
+  phone: 'phone', website: 'website', vatNumber: 'vat_number', ape: 'ape', code: 'code', paymentMethod: 'payment_method',
+};
+const JSON_COLS = new Set(['address', 'billing_address']);
+const NOT_NULL = new Set(['first_name', 'last_name', 'name', 'kind', 'is_funder', 'address', 'billing_address', 'skills']);
+function setClause(map: Record<string, string>, patch: Record<string, any>, vals: unknown[]) {
+  const sets: string[] = [];
+  for (const [k, col] of Object.entries(map)) {
+    if (patch[k] === undefined) continue;
+    let v = patch[k];
+    if (typeof v === 'string') { v = v.trim(); if (v === '') v = null; }
+    if (v === null && NOT_NULL.has(col)) continue;
+    if (col === 'email' && v) v = String(v).toLowerCase();
+    vals.push(JSON_COLS.has(col) ? JSON.stringify(v ?? {}) : v);
+    sets.push(`${col}=$${vals.length}`);
+  }
+  return sets;
+}
 export interface ClientInput {
   kind: 'company' | 'person'; name: string; status?: 'prospect' | 'customer'; isFunder?: boolean;
   siren?: string | null; siret?: string | null; personId?: string | null; billingEmail?: string | null; billingAddress?: Record<string, string>;
@@ -33,13 +59,14 @@ export class CrmService {
   constructor(private db: Db, private ent: EntitlementsService, private audit: AuditService) {}
 
   // ─── Personnes (apprenants, formateurs, contacts) ─────────────────────────
-  async listPersons(ctx: RequestContext, q: { role?: string; q?: string; limit: number; offset: number }) {
+  async listPersons(ctx: RequestContext, q: { role?: string; q?: string; archived?: boolean; limit: number; offset: number }) {
     return this.db.tenantTx(ctx.tenantId, (tx) => many(tx, `
-      SELECT p.*, coalesce(array_agg(r.role) FILTER (WHERE r.role IS NOT NULL), '{}') roles
+      SELECT p.*, coalesce(array_agg(r.role) FILTER (WHERE r.role IS NOT NULL), '{}') roles, (SELECT name FROM clients c WHERE c.id=p.employer_client_id) employer_name
         FROM persons p LEFT JOIN person_roles r ON r.person_id = p.id
        WHERE ($1::text IS NULL OR EXISTS (SELECT 1 FROM person_roles x WHERE x.person_id=p.id AND x.role=$1))
          AND ($2::text IS NULL OR (p.first_name || ' ' || p.last_name || ' ' || coalesce(p.email,'')) ILIKE '%' || $2 || '%')
-       GROUP BY p.id ORDER BY p.last_name, p.first_name LIMIT $3 OFFSET $4`, [q.role ?? null, q.q ?? null, q.limit, q.offset]));
+         AND (($5::boolean AND p.archived_at IS NOT NULL) OR (NOT $5::boolean AND p.archived_at IS NULL))
+       GROUP BY p.id ORDER BY p.last_name, p.first_name LIMIT $3 OFFSET $4`, [q.role ?? null, q.q ?? null, q.limit, q.offset, !!q.archived]));
   }
 
   async createPerson(ctx: RequestContext, input: PersonInput, tx?: Tx) {
@@ -47,6 +74,10 @@ export class CrmService {
       const p = await one(t, `INSERT INTO persons(tenant_id, first_name, last_name, email, phone, skills) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
         [ctx.tenantId, input.firstName.trim(), input.lastName.trim(), input.email?.trim().toLowerCase() || null, input.phone || null, input.skills ?? []]);
       for (const r of new Set(input.roles)) await t.query(`INSERT INTO person_roles(tenant_id, person_id, role) VALUES ($1,$2,$3)`, [ctx.tenantId, p!.id, r]);
+      // Champs complémentaires saisis à la création (civilité, naissance, adresse, employeur…).
+      const { firstName: _f, lastName: _l, email: _e, phone: _p, skills: _s, roles: _r, ...more } = input;
+      const xv: unknown[] = [p!.id]; const xs = setClause(PERSON_COLS, more, xv);
+      if (xs.length) Object.assign(p!, await one(t, `UPDATE persons SET ${xs.join(', ')} WHERE id=$1 RETURNING *`, xv));
       // Homonymes / emails partagés : signalés, jamais fusionnés automatiquement.
       const similar = await many(t, `SELECT id FROM persons WHERE id <> $1 AND ((email IS NOT NULL AND email = $2) OR (lower(first_name)=lower($3) AND lower(last_name)=lower($4)))`,
         [p!.id, p!.email, p!.first_name, p!.last_name]);
@@ -57,10 +88,9 @@ export class CrmService {
 
   async updatePerson(ctx: RequestContext, id: string, version: number, patch: Partial<PersonInput>) {
     return this.db.tenantTx(ctx.tenantId, async (tx) => {
-      const p = await one(tx, `UPDATE persons SET first_name=coalesce($3,first_name), last_name=coalesce($4,last_name),
-                                 email=CASE WHEN $5::boolean THEN $6 ELSE email END, phone=CASE WHEN $7::boolean THEN $8 ELSE phone END,
-                                 version=version+1 WHERE id=$1 AND version=$2 RETURNING *`,
-        [id, version, patch.firstName ?? null, patch.lastName ?? null, patch.email !== undefined, patch.email ?? null, patch.phone !== undefined, patch.phone ?? null]);
+      const vals: unknown[] = [id, version];
+      const sets = setClause(PERSON_COLS, patch, vals);
+      const p = await one(tx, `UPDATE persons SET ${[...sets, 'version=version+1'].join(', ')} WHERE id=$1 AND version=$2 RETURNING *`, vals);
       if (!p) throw conflict('version_conflict', 'Fiche modifiée entre-temps : rechargez avant de modifier.');
       if (patch.roles) {
         await tx.query(`DELETE FROM person_roles WHERE person_id=$1 AND role <> ALL($2)`, [id, patch.roles]);
@@ -100,6 +130,9 @@ export class CrmService {
                               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
         [ctx.tenantId, input.kind, status, !!input.isFunder, input.name.trim(), siren, input.siret ?? null, input.personId ?? null,
           input.billingEmail ?? null, JSON.stringify(input.billingAddress ?? {})]);
+      const { name: _n, kind: _k, siret: _si, siren: _sn, billingEmail: _b, billingAddress: _a, isFunder: _fu, status: _st, personId: _pi, ...more } = input as any;
+      const xv: unknown[] = [c!.id]; const xs = setClause(CLIENT_COLS, more, xv);
+      if (xs.length) Object.assign(c!, await one(t, `UPDATE clients SET ${xs.join(', ')} WHERE id=$1 RETURNING *`, xv));
       // SIRET identique : candidat à fusion signalé (aucune fusion automatique).
       const dup = input.siret ? await many(t, `SELECT id, name FROM clients WHERE siret=$1 AND id<>$2 AND deleted_at IS NULL AND merged_into_id IS NULL`, [input.siret, c!.id]) : [];
       await this.audit.log(t, { tenantId: ctx.tenantId, actor: ctx.userId, action: 'client.created', entityType: 'client', entityId: c!.id, data: { status } });
@@ -108,14 +141,22 @@ export class CrmService {
     return tx ? run(tx) : this.db.tenantTx(ctx.tenantId, run);
   }
 
+  async archivePerson(ctx: RequestContext, id: string, archived: boolean) {
+    return this.db.tenantTx(ctx.tenantId, async (tx) => {
+      const p = await one(tx, `UPDATE persons SET archived_at = CASE WHEN $2 THEN coalesce(archived_at, now()) ELSE NULL END, version=version+1 WHERE id=$1 RETURNING *`, [id, archived]);
+      if (!p) throw notFound('Personne');
+      await this.audit.log(tx, { tenantId: ctx.tenantId, actor: ctx.userId, action: archived ? 'person.archived' : 'person.restored', entityType: 'person', entityId: id });
+      return p;
+    });
+  }
+
   async updateClient(ctx: RequestContext, id: string, version: number, patch: Partial<ClientInput>) {
     if (patch.siret && !isValidSiret(patch.siret)) throw badRequest('invalid_siret', 'SIRET invalide', 'siret');
     return this.db.tenantTx(ctx.tenantId, async (tx) => {
-      const c = await one(tx, `UPDATE clients SET name=coalesce($3,name), siret=coalesce($4,siret), siren=coalesce($5,siren),
-                                 billing_email=coalesce($6,billing_email), billing_address=coalesce($7,billing_address), is_funder=coalesce($8,is_funder),
-                                 version=version+1 WHERE id=$1 AND version=$2 AND deleted_at IS NULL RETURNING *`,
-        [id, version, patch.name ?? null, patch.siret ?? null, patch.siren ?? null, patch.billingEmail ?? null,
-          patch.billingAddress ? JSON.stringify(patch.billingAddress) : null, patch.isFunder ?? null]);
+      if (patch.siret && !patch.siren) patch = { ...patch, siren: patch.siret.slice(0, 9) };
+      const vals: unknown[] = [id, version];
+      const sets = setClause(CLIENT_COLS, patch, vals);
+      const c = await one(tx, `UPDATE clients SET ${[...sets, 'version=version+1'].join(', ')} WHERE id=$1 AND version=$2 AND deleted_at IS NULL RETURNING *`, vals);
       if (!c) throw conflict('version_conflict', 'Fiche modifiée entre-temps : rechargez avant de modifier.');
       await this.audit.log(tx, { tenantId: ctx.tenantId, actor: ctx.userId, action: 'client.updated', entityType: 'client', entityId: id });
       return c;

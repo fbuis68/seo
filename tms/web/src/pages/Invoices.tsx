@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { date, download, eur, post } from '../api';
+import { api, date, download, eur, get, post } from '../api';
 import { can, useApp } from '../context';
 import { useAction, useFetch } from '../hooks';
 import { Help } from '../help';
@@ -11,6 +11,7 @@ export default function Invoices() {
   const act = useAction();
   const [f, setF] = useState({ clientId: '', kind: 'invoice', label: '', quantity: '1', unit: '', vat: '20', credited: '' });
   const [pay, setPay] = useState<{ inv: any; amount: string; date: string } | null>(null);
+  const [draft, setDraft] = useState<any>(null); // brouillon en cours de modification
   const reload = () => inv.reload();
   const pdf = (i: any) => act.run(() => post('/api/v1/documents/generate', { template: 'invoice', invoiceId: i.id }), (d: any) => download(`/api/v1/documents/${d.id}/download`, d.filename));
   return (
@@ -41,11 +42,40 @@ export default function Invoices() {
               <td className="num">{i.balance != null ? eur(i.balance, i.currency) : '—'}</td>
               <td>
                 {i.status === 'draft' && can(org, 'finance.write') && <button className="btn sm" onClick={() => confirm('Émettre la facture ? Elle ne sera plus modifiable (correction par avoir).') && act.run(() => post(`/api/v1/invoices/${i.id}/issue`), reload)}>Émettre</button>}{' '}
+                {i.status === 'draft' && can(org, 'finance.write') && <>
+                  <button className="btn ghost sm" onClick={() => act.run(() => get(`/api/v1/invoices/${i.id}`), (x: any) => setDraft({ id: i.id, dueDate: x.due_date?.slice(0, 10) ?? '', lines: x.lines.map((l: any) => ({ label: l.label, quantity: String(Number(l.quantity)), unitPriceHt: String(Number(l.unit_price_ht)), vatRate: String(Number(l.vat_rate)) })) }))}>Modifier</button>{' '}
+                  <button className="btn ghost sm" onClick={() => confirm('Supprimer ce brouillon ?') && act.run(() => api('DELETE', `/api/v1/invoices/${i.id}`), reload)}>Supprimer</button>{' '}
+                </>}
                 <button className="btn ghost sm" onClick={() => pdf(i)}>PDF</button>{' '}
                 {i.status === 'issued' && Number(i.balance) > 0 && can(org, 'finance.write') && <button className="btn ghost sm" onClick={() => setPay({ inv: i, amount: i.balance, date: new Date().toISOString().slice(0, 10) })}>Règlement</button>}
               </td>
             </tr>))}</tbody></table>
       </div>
+      {draft && (
+        <div className="pl-modal" role="dialog" aria-modal="true" aria-label="Modifier le brouillon" onClick={() => setDraft(null)}>
+          <form className="panel stack" style={{ maxWidth: 820 }} onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); act.run(() => api('PATCH', `/api/v1/invoices/${draft.id}`, {
+            dueDate: draft.dueDate || null, lines: draft.lines.map((l: any) => ({ label: l.label, quantity: l.quantity.replace(',', '.'), unitPriceHt: l.unitPriceHt.replace(',', '.'), vatRate: l.vatRate.replace(',', '.') })),
+          }), () => { setDraft(null); reload(); }); }}>
+            <h2 style={{ margin: 0 }}>Modifier le brouillon</h2>
+            <table className="small"><thead><tr><th>Désignation</th><th className="num">Qté</th><th className="num">PU HT</th><th className="num">TVA %</th><th /></tr></thead>
+              <tbody>{draft.lines.map((l: any, k: number) => {
+                const up = (f: string, v: string) => setDraft({ ...draft, lines: draft.lines.map((x: any, j: number) => (j === k ? { ...x, [f]: v } : x)) });
+                return <tr key={k}><td><input required aria-label="Désignation" value={l.label} onChange={(e) => up('label', e.target.value)} /></td>
+                  <td><input required size={5} aria-label="Quantité" value={l.quantity} onChange={(e) => up('quantity', e.target.value)} /></td>
+                  <td><input required size={8} aria-label="Prix unitaire HT" value={l.unitPriceHt} onChange={(e) => up('unitPriceHt', e.target.value)} /></td>
+                  <td><input required size={4} aria-label="TVA" value={l.vatRate} onChange={(e) => up('vatRate', e.target.value)} /></td>
+                  <td>{draft.lines.length > 1 && <button type="button" className="btn ghost sm" onClick={() => setDraft({ ...draft, lines: draft.lines.filter((_: any, j: number) => j !== k) })}>Retirer</button>}</td></tr>;
+              })}</tbody></table>
+            <div className="toolbar" style={{ margin: 0 }}>
+              <button type="button" className="btn ghost sm" onClick={() => setDraft({ ...draft, lines: [...draft.lines, { label: '', quantity: '1', unitPriceHt: '', vatRate: draft.lines[0]?.vatRate ?? '20' }] })}>Ajouter une ligne</button>
+              <label>Échéance<input type="date" value={draft.dueDate} onChange={(e) => setDraft({ ...draft, dueDate: e.target.value })} /></label>
+            </div>
+            {act.error && <p className="alert">{act.error}</p>}
+            <div className="toolbar" style={{ margin: 0 }}><button className="btn" disabled={act.busy}>Enregistrer</button><button type="button" className="btn ghost" onClick={() => setDraft(null)}>Fermer</button></div>
+            <p className="small muted" style={{ margin: 0 }}>Une facture émise n’est plus modifiable : corrigez-la par un avoir.</p>
+          </form>
+        </div>
+      )}
       {pay && (
         <form className="panel inline" style={{ marginTop: 12 }} onSubmit={(e) => { e.preventDefault(); act.run(() => post('/api/v1/payments', { clientId: pay.inv.client_id, amount: Number(pay.amount.replace(',', '.')).toFixed(2), receivedOn: pay.date, allocations: [{ invoiceId: pay.inv.id, amount: Number(pay.amount.replace(',', '.')).toFixed(2) }] }), () => { setPay(null); reload(); }); }}>
           <strong>Règlement {pay.inv.number}</strong>

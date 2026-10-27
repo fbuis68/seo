@@ -7,6 +7,8 @@ import Assistant from './pages/Assistant';
 import Billing from './pages/Billing';
 import Onboarding from './pages/Onboarding';
 import Clients from './pages/Clients';
+import Persons from './pages/Persons';
+import Programs from './pages/Programs';
 import Dashboard from './pages/Dashboard';
 import Imports from './pages/Imports';
 import Invoices from './pages/Invoices';
@@ -73,7 +75,7 @@ function Shell() {
   const e = org.entitlements;
   const links: [string, string, boolean][] = [
     ['/', 'Accueil', true], ['/onboarding', 'Mise en service', can(org, 'org.manage') || can(org, 'invoices.issue')], ['/planning', 'Planning', can(org, 'sessions.read') && org.role !== 'trainer'], ['/my-planning', 'Mon planning', ['trainer', 'learner'].includes(org.role)],
-    ['/sessions', 'Sessions', can(org, 'sessions.read')], ['/clients', 'Clients & apprenants', can(org, 'crm.read')],
+    ['/sessions', 'Sessions', can(org, 'sessions.read')], ['/formations', 'Formations', can(org, 'catalog.read')], ['/clients', 'Clients', can(org, 'crm.read')], ['/personnes', 'Apprenants & formateurs', can(org, 'crm.read')],
     ['/invoices', 'Facturation', can(org, 'finance.read')], ['/assistant', 'Assistant IA', can(org, 'ai.use')],
     ['/billing', 'Mon abonnement', can(org, 'billing.manage')], ['/settings', 'Réglages', true], ['/aide', 'Aide', true], ['/platform', 'Back-office éditeur', !!me.isPlatformAdmin],
   ];
@@ -131,6 +133,8 @@ function Shell() {
             <Route path="/planning" element={<PlanningPage />} />
             <Route path="/my-planning" element={<MyPlanning tz={(org as any).timezone ?? 'Europe/Paris'} />} />
             <Route path="/clients" element={<Clients />} />
+            <Route path="/personnes" element={<Persons />} />
+            <Route path="/formations" element={<Programs />} />
             <Route path="/invoices" element={<Invoices />} />
             <Route path="/assistant" element={<Assistant />} />
             <Route path="/settings/reprise" element={<Imports />} />

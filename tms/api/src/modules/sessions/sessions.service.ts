@@ -170,13 +170,18 @@ export class SessionsService {
       const cols: [string, unknown][] = [['title', b.title], ['capacity', b.capacity], ['starts_on', b.startsOn], ['ends_on', b.endsOn], ['location', b.location],
         ['reference', b.reference], ['min_participants', b.minParticipants], ['site_id', b.siteId], ['responsible', b.responsible], ['target_minutes', b.targetMinutes],
         ['required_skills', b.requiredSkills], ['required_equipment', b.requiredEquipment], ['color', b.color], ['internal_notes', b.internalNotes],
-        ['price_ht', b.priceHt], ['price_basis', b.priceBasis]];
+        ['price_ht', b.priceHt], ['price_basis', b.priceBasis], ['kind', b.kind], ['client_id', b.clientId], ['timezone', b.timezone], ['program_version_id', b.programVersionId]];
+      if (b.programVersionId) {
+        const cur = await one(tx, `SELECT status, program_version_id FROM training_sessions WHERE id=$1`, [id]);
+        if (cur && cur.program_version_id !== b.programVersionId && cur.status !== 'draft') throw conflict('program_locked', 'La formation d’une session ne se change qu’en brouillon (documents et conventions déjà liés).');
+      }
       const set = cols.filter(([, v]) => v !== undefined);
       const before = (await one(tx, `SELECT starts_on FROM training_sessions WHERE id=$1`, [id])) ?? {};
       const s = await one(tx, `UPDATE training_sessions SET ${[...set.map(([c], i) => `${c}=$${i + 3}`), 'version=version+1'].join(', ')}
                                WHERE id=$1 AND version=$2 AND status NOT IN ('archived','cancelled') RETURNING *`,
         [id, version, ...set.map(([, v]) => v)]);
       if (!s) throw conflict('version_conflict', 'Session modifiée entre-temps ou close.');
+      if (s.kind === 'intra' && !s.client_id) throw badRequest('client_required', 'Session intra : client obligatoire.', 'clientId');
       // Déplacement d'une session planifiée vers un autre mois : quota mensuel du mois d'arrivée.
       if (b.startsOn && s.status !== 'draft' && !s.is_historical && String(b.startsOn).slice(0, 7) !== String(before.starts_on ?? '').slice(0, 7)) {
         await this.ent.assertSessionsPerMonth(tx, ctx.tenantId, b.startsOn, s.id);

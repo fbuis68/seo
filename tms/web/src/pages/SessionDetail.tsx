@@ -7,6 +7,7 @@ import Planning from '../components/Planning';
 import SessionBilling, { ClosureBox } from '../components/SessionBilling';
 import { SESSION_STATUS } from './Sessions';
 import { Help } from '../help';
+import { RecordForm } from '../components/RecordForm';
 
 const SLOT_STATUS: Record<string, string> = { draft: 'Brouillon', pending: 'À valider', published: 'Publié', done: 'Réalisé', cancelled: 'Annulé' };
 const NEXT: Record<string, string[]> = { draft: ['planned'], planned: ['confirmed', 'draft'], confirmed: ['in_progress', 'planned'], in_progress: ['completed'], completed: ['archived'] };
@@ -27,6 +28,8 @@ export default function SessionDetail() {
   const [sign, setSign] = useState<{ docId: string; name: string; email: string } | null>(null);
   const [closing, setClosing] = useState(false);
   const [attInfo, setAttInfo] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const programs = useFetch<any[]>(can(org, 'catalog.read') ? '/api/v1/programs?limit=200' : null);
   if (s.error) return <p className="alert">{s.error.message}</p>;
   if (!s.data) return <p className="muted">Chargement…</p>;
   const d = s.data;
@@ -41,6 +44,7 @@ export default function SessionDetail() {
       {d.missing?.length > 0 && <div className="banner warn"><strong>À compléter :</strong> {d.missing.join(' · ')}</div>}
       {can(org, 'sessions.write') && (
         <div className="toolbar">
+          {!['archived', 'cancelled'].includes(d.status) && <button className="btn sm" onClick={() => setEditing(true)}>Modifier la session</button>}
           {(NEXT[d.status] ?? []).map((n) => <button key={n} className="btn ghost sm" onClick={() => n === 'completed' ? setClosing(true) : act.run(() => post(`/api/v1/sessions/${id}/status`, { status: n }), reload)}>→ {SESSION_STATUS[n]}</button>)}
           {!['completed', 'archived', 'cancelled'].includes(d.status) && <button className="btn danger sm" onClick={() => { const reason = prompt('Motif d’annulation ?'); if (reason) act.run(() => post(`/api/v1/sessions/${id}/status`, { status: 'cancelled', reason }), reload); }}>Annuler</button>}
           <button className="btn ghost sm" onClick={() => act.run(() => post('/api/v1/documents/generate', { template: 'convention', sessionId: id }), reload)}>Générer la convention</button>
@@ -113,6 +117,22 @@ export default function SessionDetail() {
         {attInfo && <p className="success small" role="status">{attInfo}</p>}
       </div>
       <SessionBilling sessionId={id!} onChange={reload} />
+      {editing && <RecordForm title="Modifier la session" onClose={() => setEditing(false)}
+        initial={{ title: d.title, kind: d.kind, clientId: d.client_id ?? '', startsOn: d.starts_on?.slice(0, 10) ?? '', endsOn: d.ends_on?.slice(0, 10) ?? '', capacity: d.capacity ?? '', location: d.location ?? '', programVersionId: d.program_version_id, internalNotes: d.internal_notes ?? '' }}
+        fields={[
+          { key: 'title', label: 'Intitulé', required: true, full: true },
+          { key: 'programVersionId', label: 'Formation (modifiable en brouillon)', type: 'select', required: true, full: true, options: [[d.program_version_id, `${d.program_title} v${d.program_version}`], ...(d.status === 'draft' ? (programs.data ?? []).filter((p) => p.current_version_id !== d.program_version_id).map((p) => [p.current_version_id, `${p.title} v${p.current_version}`] as [string, string]) : [])] },
+          { key: 'kind', label: 'Type', type: 'select', required: true, options: [['inter', 'Inter-entreprises'], ['intra', 'Intra (un client)']] },
+          { key: 'clientId', label: 'Client (intra)', type: 'select', options: (clients.data ?? []).map((c) => [c.id, c.name] as [string, string]) },
+          { key: 'startsOn', label: 'Début', type: 'date' }, { key: 'endsOn', label: 'Fin', type: 'date' },
+          { key: 'capacity', label: 'Places', type: 'number' }, { key: 'location', label: 'Lieu (texte libre)' },
+          { key: 'internalNotes', label: 'Notes internes', type: 'textarea' },
+        ]}
+        onSave={(v) => api('PATCH', `/api/v1/sessions/${d.id}`, {
+          version: d.version, title: v.title, kind: v.kind, clientId: v.clientId || null, startsOn: v.startsOn || null, endsOn: v.endsOn || v.startsOn || null,
+          capacity: v.capacity === '' || v.capacity == null ? null : Number(v.capacity), location: v.location || null, internalNotes: v.internalNotes || null,
+          ...(v.programVersionId !== d.program_version_id ? { programVersionId: v.programVersionId } : {}),
+        }).then(reload)} />}
     </>
   );
 }

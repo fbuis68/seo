@@ -23,7 +23,7 @@ const RESULT_LABEL: Record<string, string> = { read: 'Lues', create: 'Créées',
  * Reprise par fichier : dépôt → détection → association des colonnes (modifiable) → simulation
  * (aucune écriture) → publication → rapport. `simple` : clients et apprenants depuis Excel/CSV.
  */
-export function ImportWizard({ simple, onPublished, resumeId, onResumed }: { simple?: boolean; onPublished?: () => void; resumeId?: string | null; onResumed?: () => void }) {
+export function ImportWizard({ simple, onPublished, resumeId, onResumed, defaultEntity = 'client' }: { simple?: boolean; onPublished?: () => void; resumeId?: string | null; onResumed?: () => void; defaultEntity?: 'client' | 'person' }) {
   const profiles = useFetch<any[]>('/api/v1/imports/profiles');
   const fields = useFetch<Record<string, Record<string, { required?: boolean }>>>('/api/v1/imports/fields');
   const act = useAction();
@@ -50,7 +50,7 @@ export function ImportWizard({ simple, onPublished, resumeId, onResumed }: { sim
       setDetect(d);
       const best = d.candidates?.[0];
       setProfile(best?.profile ?? 'generic');
-      if (!d.mcdf) setFiles(best?.files?.length ? best.files : (d.tables ?? []).map((t: any) => ({ path: t.name, entity: 'client', columns: {} })));
+      if (!d.mcdf) setFiles(best?.files?.length ? best.files : (d.tables ?? []).map((t: any) => ({ path: t.name, entity: defaultEntity, columns: {} })));
     }
   });
   // Reprise d'un lot existant (bouton « Relancer ») : état, détection, colonnes associées et simulation déjà faite.
@@ -66,7 +66,7 @@ export function ImportWizard({ simple, onPublished, resumeId, onResumed }: { sim
       if (!d.mcdf) {
         const best = d.candidates?.[0];
         setProfile(b.profile_code ?? best?.profile ?? 'generic');
-        setFiles(b.mapping?.files?.length ? b.mapping.files : best?.files?.length ? best.files : (d.tables ?? []).map((t: any) => ({ path: t.name, entity: 'client', columns: {} })));
+        setFiles(b.mapping?.files?.length ? b.mapping.files : best?.files?.length ? best.files : (d.tables ?? []).map((t: any) => ({ path: t.name, entity: defaultEntity, columns: {} })));
       }
       if (b.status === 'simulated' && b.simulation) setSim({ batchId: b.id, ...b.simulation });
     }).finally(() => onResumed?.());

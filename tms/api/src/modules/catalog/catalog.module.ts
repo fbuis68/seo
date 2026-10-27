@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Injectable, Module, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Injectable, Module, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { z } from 'zod';
 import { AuditService } from '../../core/audit.service';
 import { Ctx, RequestContext, RequirePermission } from '../../core/context';
@@ -63,6 +63,38 @@ export class CatalogService {
       [tenantId, programId, version, b.objectives, b.prerequisites, b.audience, b.durationMinutes, b.modality, b.evaluation, b.priceHt ?? null, b.vatRate ?? null]);
   }
 
+  /**
+   * Modification d'une formation : fiche (intitulé, code, publication) ; contenu (durée, modalité, prix…) modifié en place
+   * si la version courante n'est utilisée par aucune session, sinon nouvelle version (les sessions existantes gardent l'ancienne).
+   */
+  update(ctx: RequestContext, id: string, b: any) {
+    return this.db.tenantTx(ctx.tenantId, async (tx) => {
+      const p = await one(tx, `UPDATE programs SET title=coalesce($2,title), code=CASE WHEN $3::boolean THEN $4 ELSE code END, is_public=coalesce($5,is_public),
+                                 rncp_code=CASE WHEN $6::boolean THEN $7 ELSE rncp_code END, rs_code=CASE WHEN $8::boolean THEN $9 ELSE rs_code END,
+                                 archived_at=CASE WHEN $10::boolean IS NULL THEN archived_at WHEN $10 THEN coalesce(archived_at, now()) ELSE NULL END
+                               WHERE id=$1 RETURNING *`,
+        [id, b.title ?? null, b.code !== undefined, b.code || null, b.isPublic ?? null, b.rncpCode !== undefined, b.rncpCode || null, b.rsCode !== undefined, b.rsCode || null, b.archived ?? null]);
+      if (!p) throw notFound('Programme');
+      const keys = ['objectives', 'prerequisites', 'audience', 'durationMinutes', 'modality', 'evaluation', 'priceHt', 'vatRate'];
+      let newVersion = false;
+      if (keys.some((k) => b[k] !== undefined)) {
+        const cur = (await one(tx, `SELECT * FROM program_versions WHERE program_id=$1 ORDER BY version DESC LIMIT 1`, [id]))!;
+        const used = cur.locked_at || (await one(tx, `SELECT 1 FROM training_sessions WHERE program_version_id=$1 LIMIT 1`, [cur.id]));
+        const v = {
+          objectives: b.objectives ?? cur.objectives, prerequisites: b.prerequisites ?? cur.prerequisites, audience: b.audience ?? cur.audience,
+          durationMinutes: b.durationMinutes ?? cur.duration_minutes, modality: b.modality ?? cur.modality, evaluation: b.evaluation ?? cur.evaluation,
+          priceHt: b.priceHt !== undefined ? b.priceHt : cur.price_ht, vatRate: b.vatRate !== undefined ? b.vatRate : cur.vat_rate,
+        };
+        if (used) { await this.insertVersion(tx, ctx.tenantId, id, cur.version + 1, v as any); newVersion = true; }
+        else await tx.query(`UPDATE program_versions SET objectives=$2, prerequisites=$3, audience=$4, duration_minutes=$5, modality=$6, evaluation=$7, price_ht=$8, vat_rate=$9 WHERE id=$1`,
+          [cur.id, v.objectives, v.prerequisites, v.audience, v.durationMinutes, v.modality, v.evaluation, v.priceHt, v.vatRate]);
+      }
+      await this.audit.log(tx, { tenantId: ctx.tenantId, actor: ctx.userId, action: 'program.updated', entityType: 'program', entityId: id, data: { fields: Object.keys(b), newVersion } });
+      p.versions = await many(tx, `SELECT * FROM program_versions WHERE program_id=$1 ORDER BY version DESC`, [id]);
+      return { ...p, newVersion };
+    });
+  }
+
   /** Catalogue public minimal : programmes publiés volontairement (pour le site de l'organisme). */
   publicPrograms(tenantId: string) {
     return this.db.tenantTx(tenantId, (tx) => many(tx, `
@@ -78,6 +110,14 @@ export class CatalogController {
   @RequirePermission('catalog.read') @Get() list(@Ctx() c: RequestContext, @Query() q: unknown) { return this.s.list(c, parse(page, q)); }
   @RequirePermission('catalog.read') @Get(':id') get(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string) { return this.s.get(c, id); }
   @RequirePermission('catalog.write') @Post() create(@Ctx() c: RequestContext, @Body() b: unknown) { return this.s.create(c, parse(programSchema, b)); }
+  @RequirePermission('catalog.write') @Patch(':id')
+  update(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string, @Body() b: unknown) {
+    return this.s.update(c, id, parse(versionSchema.partial().extend({
+      title: z.string().min(2).max(200).optional(), code: z.string().max(40).nullable().optional(), isPublic: z.boolean().optional(),
+      rncpCode: z.string().max(20).nullable().optional(), rsCode: z.string().max(20).nullable().optional(), archived: z.boolean().optional(),
+      objectives: z.string().max(5000).optional(), prerequisites: z.string().max(5000).optional(), audience: z.string().max(2000).optional(), evaluation: z.string().max(5000).optional(),
+    }), b));
+  }
   @RequirePermission('catalog.write') @Post(':id/versions')
   version(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string, @Body() b: unknown) { return this.s.newVersion(c, id, parse(versionSchema, b)); }
 }
