@@ -3,7 +3,16 @@ import { prisma } from "../db";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin, requireSesame } from "../middleware/requireAdmin";
 import { graphConfigured } from "../lib/graph";
-import { resolveGraphUserId, createOnlineMeeting, listTranscripts, getTranscriptText, listRecordings, getRecordingStream } from "../lib/graphMeetings";
+import {
+  resolveGraphUserId,
+  createOnlineMeeting,
+  listTranscripts,
+  getTranscriptText,
+  listRecordings,
+  getRecordingStream,
+  listCalendarMeetings,
+  resolveOnlineMeetingId,
+} from "../lib/graphMeetings";
 import { generateMeetingSummary } from "../lib/aiClaude";
 import { getSmtpConfig, sendEmailRaw } from "../lib/email";
 
@@ -236,5 +245,97 @@ crmMeetingRouter.post(
     const html = b.body.replace(/\n/g, "<br>");
     await sendEmailRaw(null, b.to.trim(), b.subject?.trim() || `Compte-rendu : ${row.subject}`, html, smtp?.fromName || undefined, {});
     res.json({ ok: true });
+  })
+);
+
+/**
+ * POST /wa/crmMeeting/syncHistory — rattache rétroactivement aux fiches
+ * prospects les réunions Teams déjà planifiées/tenues (24/10/2026 puis
+ * demande complémentaire 27/10/2026) : parcourt le calendrier de chaque
+ * commercial (AdminUser role="sesame" actif) sur 90 jours en arrière à 180
+ * jours en avant, matche par email de participant (fiche OU contact), crée
+ * un CrmMeeting pour chaque réunion non encore connue (dédupliquée par
+ * joinUrl, globalement unique côté Teams). Le transcript/enregistrement des
+ * réunions anciennes peut avoir expiré côté Microsoft (rétention limitée,
+ * souvent 60-90 jours) — seule la réunion elle-même est garantie récupérable,
+ * "Récupérer le compte-rendu" reste ensuite une action manuelle par fiche.
+ */
+crmMeetingRouter.post(
+  "/crmMeeting/syncHistory",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    if (!graphConfigured()) throw new HttpError(503, "Microsoft Graph non configuré — voir docs/microsoft-graph-teams-meetings.md");
+
+    const admins = await prisma.adminUser.findMany({ where: { role: "sesame", active: true }, select: { email: true } });
+    const [prospects, contacts, existing] = await Promise.all([
+      prisma.crmProspect.findMany({ where: { email: { not: null } }, select: { id: true, email: true } }),
+      prisma.crmContact.findMany({ where: { email: { not: null } }, select: { prospectId: true, email: true } }),
+      prisma.crmMeeting.findMany({ select: { joinUrl: true } }),
+    ]);
+
+    const emailToProspectId = new Map<string, string>();
+    for (const p of prospects) if (p.email) emailToProspectId.set(p.email.toLowerCase(), p.id);
+    for (const c of contacts) if (c.email) emailToProspectId.set(c.email.toLowerCase(), c.prospectId);
+    const knownJoinUrls = new Set(existing.map((m) => m.joinUrl));
+
+    const now = Date.now();
+    const startISO = new Date(now - 90 * 24 * 60 * 60 * 1000).toISOString();
+    const endISO = new Date(now + 180 * 24 * 60 * 60 * 1000).toISOString();
+
+    let scanned = 0;
+    let created = 0;
+    const errors: string[] = [];
+
+    for (const admin of admins) {
+      let organizerUserId: string;
+      try {
+        organizerUserId = await resolveGraphUserId(admin.email);
+      } catch (e) {
+        errors.push(`${admin.email} : ${e instanceof Error ? e.message : "erreur Graph"}`);
+        continue;
+      }
+
+      let events;
+      try {
+        events = await listCalendarMeetings(organizerUserId, startISO, endISO);
+      } catch (e) {
+        errors.push(`${admin.email} : échec lecture calendrier (${e instanceof Error ? e.message : "erreur Graph"})`);
+        continue;
+      }
+      scanned += events.length;
+
+      for (const ev of events) {
+        if (knownJoinUrls.has(ev.joinUrl)) continue;
+        const matchedProspectId = ev.attendeeEmails.map((e) => emailToProspectId.get(e)).find(Boolean);
+        if (!matchedProspectId) continue;
+
+        let meetingId: string | null = null;
+        try {
+          meetingId = await resolveOnlineMeetingId(organizerUserId, ev.joinUrl);
+        } catch (e) {
+          errors.push(`${ev.subject} : échec résolution réunion (${e instanceof Error ? e.message : "erreur Graph"})`);
+          continue;
+        }
+        if (!meetingId) continue;
+
+        await prisma.crmMeeting.create({
+          data: {
+            prospectId: matchedProspectId,
+            subject: ev.subject,
+            organizerEmail: admin.email,
+            startDateTime: new Date(ev.startDateTime),
+            endDateTime: new Date(ev.endDateTime),
+            joinUrl: ev.joinUrl,
+            graphMeetingId: meetingId,
+            graphOrganizerUserId: organizerUserId,
+          },
+        });
+        knownJoinUrls.add(ev.joinUrl);
+        created++;
+      }
+    }
+
+    res.json({ created, scanned, organizers: admins.length, errors });
   })
 );

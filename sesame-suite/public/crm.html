@@ -3171,6 +3171,20 @@ async function openMeetingRecording(id){
   }catch(e){ flash(e.message||'Erreur de récupération de l\'enregistrement'); }
 }
 
+async function syncMeetingHistory(){
+  const btn = document.getElementById('mtg-sync-btn');
+  const out = document.getElementById('mtg-sync-result');
+  if(btn){ btn.disabled = true; btn.textContent = 'Synchronisation en cours…'; }
+  try{
+    const r = await apiFetch('/wa/crmMeeting/syncHistory', {method:'POST'});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    if(out) out.textContent = `${data.created} réunion(s) rattachée(s) · ${data.scanned} réunion(s) parcourue(s) sur ${data.organizers} compte(s) commercial(aux)` + (data.errors.length?` · ${data.errors.length} erreur(s) : ${data.errors.join(' / ')}`:'');
+    flash('Synchronisation terminée ✓');
+  }catch(e){ if(out) out.textContent=''; flash(e.message||'Erreur de synchronisation'); }
+  if(btn){ btn.disabled = false; btn.textContent = "Synchroniser l'historique"; }
+}
+
 async function meetingFetchRecap(id, prospectId){
   const btn = document.getElementById('mtg-fetch-'+id);
   if(btn){ btn.disabled = true; btn.textContent = 'Récupération en cours…'; }
@@ -8800,6 +8814,14 @@ function renderCanauxPanel(){
     </div>
   </div>
   ${renderGraphMailCard()}
+  <div class="card">
+    <div class="card-head"><div class="ch-ico">◷</div><span class="ch-title">Réunions Teams — synchronisation historique</span></div>
+    <div style="font-size:12px;color:var(--mu,#888);margin-bottom:10px">Parcourt les calendriers des commerciaux (90 derniers jours + rendez-vous à venir) et rattache automatiquement aux fiches prospects les réunions Teams dont un participant correspond à un email enregistré (fiche ou contact). Le transcript/enregistrement des réunions anciennes peut avoir expiré côté Microsoft (rétention limitée) — seule la liste est alors récupérée.</div>
+    <div class="modal-footer" style="border-top:none;padding-top:0">
+      <button class="btn btn-primary btn-sm" id="mtg-sync-btn" onclick="syncMeetingHistory()">Synchroniser l'historique</button>
+    </div>
+    <div id="mtg-sync-result" style="font-size:12px;color:var(--mu,#888);margin-top:6px"></div>
+  </div>
   <div class="two-col">
     <div class="card">
       <div class="card-head"><div class="ch-ico">✆</div><span class="ch-title">SMS</span></div>

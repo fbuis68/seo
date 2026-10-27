@@ -67,17 +67,60 @@ export async function createOnlineMeeting(params: {
   const joinUrl = event.onlineMeeting?.joinUrl;
   if (!joinUrl) throw new HttpError(502, "Réponse Microsoft Graph inattendue (événement créé sans lien de réunion Teams)");
 
-  // Corrélation événement → onlineMeeting réel (nécessaire pour
-  // transcripts/recordings ensuite, cf. en-tête de fichier) — méthode
-  // documentée par Microsoft, la réponse de création d'événement ne porte
-  // pas l'id de l'onlineMeeting directement.
-  const lookup = (await graphFetch(
-    `/users/${encodeURIComponent(params.organizerUserId)}/onlineMeetings?$filter=JoinWebUrl eq '${encodeURIComponent(joinUrl)}'`
-  )) as { value?: { id?: string }[] };
-  const meetingId = lookup.value?.[0]?.id;
+  const meetingId = await resolveOnlineMeetingId(params.organizerUserId, joinUrl);
   if (!meetingId) throw new HttpError(502, "Réunion Teams créée mais introuvable via /onlineMeetings (délai de propagation Microsoft ?) — réessayez la planification.");
 
   return { id: meetingId, joinWebUrl: joinUrl };
+}
+
+/** Corrélation événement calendrier → onlineMeeting réel (nécessaire pour
+ * transcripts/recordings, cf. en-tête de fichier) — méthode documentée par
+ * Microsoft, aucune réponse de création/lecture d'événement ne porte l'id de
+ * l'onlineMeeting directement. Réutilisé par createOnlineMeeting ET par la
+ * synchronisation d'historique (routes/crmMeeting.ts syncHistory). */
+export async function resolveOnlineMeetingId(organizerUserId: string, joinUrl: string): Promise<string | null> {
+  const lookup = (await graphFetch(
+    `/users/${encodeURIComponent(organizerUserId)}/onlineMeetings?$filter=JoinWebUrl eq '${encodeURIComponent(joinUrl)}'`
+  )) as { value?: { id?: string }[] };
+  return lookup.value?.[0]?.id || null;
+}
+
+export interface GraphCalendarMeeting {
+  subject: string;
+  startDateTime: string; // ISO UTC
+  endDateTime: string; // ISO UTC
+  joinUrl: string;
+  attendeeEmails: string[];
+}
+
+/** Liste les événements de calendrier Teams (isOnlineMeeting) d'un
+ * organisateur sur une période donnée — utilisé pour la synchronisation
+ * d'historique (rattacher rétroactivement des réunions déjà tenues aux
+ * fiches prospects, cf. syncHistory). Pas de $filter côté serveur sur
+ * isOnlineMeeting (support inégal selon les tenants) : filtré ici. */
+export async function listCalendarMeetings(organizerUserId: string, startISO: string, endISO: string): Promise<GraphCalendarMeeting[]> {
+  const res = (await graphFetch(
+    `/users/${encodeURIComponent(organizerUserId)}/calendarView?startDateTime=${encodeURIComponent(startISO)}&endDateTime=${encodeURIComponent(endISO)}&$select=subject,start,end,isOnlineMeeting,onlineMeeting,attendees&$top=250`
+  )) as {
+    value?: {
+      subject?: string;
+      start?: { dateTime?: string };
+      end?: { dateTime?: string };
+      isOnlineMeeting?: boolean;
+      onlineMeeting?: { joinUrl?: string };
+      attendees?: { emailAddress?: { address?: string } }[];
+    }[];
+  };
+  const asUtcIso = (dt?: string) => (dt ? new Date(dt.endsWith("Z") ? dt : dt + "Z").toISOString() : "");
+  return (res.value || [])
+    .filter((e) => e.isOnlineMeeting && e.onlineMeeting?.joinUrl)
+    .map((e) => ({
+      subject: e.subject || "(sans objet)",
+      startDateTime: asUtcIso(e.start?.dateTime),
+      endDateTime: asUtcIso(e.end?.dateTime),
+      joinUrl: e.onlineMeeting!.joinUrl!,
+      attendeeEmails: (e.attendees || []).map((a) => (a.emailAddress?.address || "").toLowerCase()).filter(Boolean),
+    }));
 }
 
 export interface GraphTranscript {
