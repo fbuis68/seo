@@ -3196,6 +3196,11 @@ async function syncMeetingHistory(){
           data.personalLinkSample.map(p=>esc(p.subject)+' — '+fmtMeetingDate(p.startDateTime)+' — '+esc(p.prospectName||'(prospect)')).join('<br>') +
           `</div>`;
       }
+      if((data.droppedSample||[]).length){
+        txt += `<div style="margin-top:8px;color:#a32d2d"><strong>Email client trouvé mais aucun lien Teams exploitable (format non reconnu) :</strong><br>` +
+          data.droppedSample.map(d=>esc(d.subject)+' — '+fmtMeetingDate(d.startDateTime)+' — '+esc(d.prospectName||'(prospect)')+' — isOnlineMeeting='+d.isOnlineMeeting+'<br><span style="font-size:11px;color:var(--mu,#888)">'+esc(d.bodySnippet)+'</span>').join('<br><br>') +
+          `</div>`;
+      }
       if((data.unmatchedSample||[]).length){
         txt += `<div style="margin-top:8px;max-height:220px;overflow-y:auto"><strong>Aucun participant reconnu (échantillon) :</strong><br>` +
           data.unmatchedSample.map(u=>esc(u.subject)+' — '+fmtMeetingDate(u.startDateTime)+' — '+(u.attendeeEmails.length?esc(u.attendeeEmails.join(', ')):'<em>aucun participant renseigné</em>')).join('<br>') +

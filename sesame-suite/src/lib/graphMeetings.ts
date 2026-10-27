@@ -105,6 +105,14 @@ export interface GraphCalendarMeeting {
   bodyEmails: string[];
 }
 
+export interface DroppedCalendarEvent {
+  subject: string;
+  startDateTime: string;
+  isOnlineMeeting: boolean;
+  bodyEmails: string[];
+  bodySnippet: string;
+}
+
 const EMAIL_REGEX = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
 // Lien Teams brut dans le corps HTML de l'événement — repli pour les
 // événements créés par un outil externe (ex : outil de prise de RDV en ligne)
@@ -121,7 +129,11 @@ const decodeHtmlEntities = (s: string) => s.replace(/&amp;/g, "&").replace(/&quo
  * d'historique (rattacher rétroactivement des réunions déjà tenues aux
  * fiches prospects, cf. syncHistory). Pas de $filter côté serveur sur
  * isOnlineMeeting (support inégal selon les tenants) : filtré ici. */
-export async function listCalendarMeetings(organizerUserId: string, startISO: string, endISO: string): Promise<GraphCalendarMeeting[]> {
+export async function listCalendarMeetings(
+  organizerUserId: string,
+  startISO: string,
+  endISO: string
+): Promise<{ meetings: GraphCalendarMeeting[]; dropped: DroppedCalendarEvent[] }> {
   const res = (await graphFetch(
     `/users/${encodeURIComponent(organizerUserId)}/calendarView?startDateTime=${encodeURIComponent(startISO)}&endDateTime=${encodeURIComponent(endISO)}&$select=subject,start,end,isOnlineMeeting,onlineMeeting,attendees,body&$top=250`
   )) as {
@@ -136,12 +148,25 @@ export async function listCalendarMeetings(organizerUserId: string, startISO: st
     }[];
   };
   const asUtcIso = (dt?: string) => (dt ? new Date(dt.endsWith("Z") ? dt : dt + "Z").toISOString() : "");
-  const out: GraphCalendarMeeting[] = [];
+  const meetings: GraphCalendarMeeting[] = [];
+  const dropped: DroppedCalendarEvent[] = [];
   for (const e of res.value || []) {
     const bodyContent = e.body?.content || "";
     const joinUrl = e.onlineMeeting?.joinUrl || (bodyContent.match(TEAMS_LINK_REGEX) ? decodeHtmlEntities(bodyContent.match(TEAMS_LINK_REGEX)![0]) : null);
-    if (!joinUrl) continue;
-    out.push({
+    if (!joinUrl) {
+      // Événement sans aucun lien Teams exploitable (ni onlineMeeting, ni
+      // dans le corps) — gardé pour diagnostic (routes/crmMeeting.ts
+      // syncHistory, "droppedSample") plutôt que de disparaître sans trace.
+      dropped.push({
+        subject: e.subject || "(sans objet)",
+        startDateTime: asUtcIso(e.start?.dateTime),
+        isOnlineMeeting: !!e.isOnlineMeeting,
+        bodyEmails: [...bodyContent.matchAll(EMAIL_REGEX)].map((m) => m[0].toLowerCase()),
+        bodySnippet: bodyContent.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300),
+      });
+      continue;
+    }
+    meetings.push({
       subject: e.subject || "(sans objet)",
       startDateTime: asUtcIso(e.start?.dateTime),
       endDateTime: asUtcIso(e.end?.dateTime),
@@ -150,7 +175,7 @@ export async function listCalendarMeetings(organizerUserId: string, startISO: st
       bodyEmails: [...bodyContent.matchAll(EMAIL_REGEX)].map((m) => m[0].toLowerCase()),
     });
   }
-  return out;
+  return { meetings, dropped };
 }
 
 export interface GraphTranscript {

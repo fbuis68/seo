@@ -320,6 +320,11 @@ crmMeetingRouter.post(
     // 27/10/2026 : une réunion matchée mais filtrée par le garde-fou
     // teams.live.com n'apparaissait ni en "rattachée" ni en "non reconnue").
     const personalLinkSample: { subject: string; startDateTime: string; prospectName: string }[] = [];
+    // Événements sans AUCUN lien Teams exploitable (ni onlineMeeting Graph,
+    // ni lien brut dans le corps) mais dont le corps contient quand même un
+    // email de prospect/contact CRM — signale un format de lien Teams non
+    // reconnu plutôt que de laisser la réunion disparaître sans trace.
+    const droppedSample: { subject: string; startDateTime: string; isOnlineMeeting: boolean; prospectName: string; bodySnippet: string }[] = [];
 
     for (const mailboxEmail of mailboxes) {
       let organizerUserId: string;
@@ -330,14 +335,21 @@ crmMeetingRouter.post(
         continue;
       }
 
-      let events;
+      let events, dropped;
       try {
-        events = await listCalendarMeetings(organizerUserId, startISO, endISO);
+        ({ meetings: events, dropped } = await listCalendarMeetings(organizerUserId, startISO, endISO));
       } catch (e) {
         pushError(`${mailboxEmail} : échec lecture calendrier (${e instanceof Error ? e.message : "erreur Graph"})`);
         continue;
       }
       scanned += events.length;
+
+      for (const d of dropped) {
+        const matchedProspectId = d.bodyEmails.map((e) => emailToProspectId.get(e)).find(Boolean);
+        if (matchedProspectId && droppedSample.length < 20) {
+          droppedSample.push({ subject: d.subject, startDateTime: d.startDateTime, isOnlineMeeting: d.isOnlineMeeting, prospectName: prospectNameById.get(matchedProspectId) || "", bodySnippet: d.bodySnippet });
+        }
+      }
 
       for (const ev of events) {
         if (knownJoinUrls.has(ev.joinUrl)) continue;
@@ -394,6 +406,6 @@ crmMeetingRouter.post(
     }
 
     const errors = [...errorCounts.entries()].map(([msg, count]) => (count > 1 ? `${msg} (×${count})` : msg));
-    res.json({ created, scanned, skipped, organizers: mailboxes.length, errors, unmatchedSample, createdSample, personalLinkSample });
+    res.json({ created, scanned, skipped, organizers: mailboxes.length, errors, unmatchedSample, createdSample, personalLinkSample, droppedSample });
   })
 );
