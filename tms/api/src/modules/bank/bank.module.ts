@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Module, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { z } from 'zod';
 import { Ctx, RequestContext, RequireFeature, RequirePermission } from '../../core/context';
-import { money, page, parse } from '../../core/validation';
+import { money, page, parse, qbool } from '../../core/validation';
 import { FinanceModule } from '../finance/finance.module';
 import { BANK_PROVIDER, FakeBankProvider } from './bank.provider';
 import { BankService } from './bank.service';
@@ -18,7 +18,7 @@ export class BankController {
   @RequirePermission('bank.connect') @Post('connections/:id/disconnect') disconnect(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string) { return this.b.disconnect(c, id); }
 
   @RequirePermission('bank.read') @Get('transactions')
-  txs(@Ctx() c: RequestContext, @Query() q: unknown) { return this.b.transactions(c, parse(page.extend({ status: z.enum(['pending', 'booked', 'reversed']).optional(), unreconciled: z.coerce.boolean().optional() }), q)); }
+  txs(@Ctx() c: RequestContext, @Query() q: unknown) { return this.b.transactions(c, parse(page.extend({ status: z.enum(['pending', 'booked', 'reversed']).optional(), unreconciled: qbool.optional() }), q)); }
   @RequirePermission('bank.reconcile') @Get('suggestions') suggestions(@Ctx() c: RequestContext) { return this.b.suggestions(c); }
   @RequirePermission('bank.reconcile') @Post('reconciliations')
   reconcile(@Ctx() c: RequestContext, @Body() body: unknown) {

@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Module, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { z } from 'zod';
 import { Ctx, RequestContext, RequirePermission } from '../../core/context';
-import { isoDate, money, page, parse } from '../../core/validation';
+import { isoDate, money, page, parse, qbool } from '../../core/validation';
 import { PlanningService } from './planning.service';
 import { SessionsService } from './sessions.service';
 import { PlanningAdmin } from './planning/admin';
@@ -100,7 +100,7 @@ export class SessionsController {
   // ─── Ressources : lieux, salles, matériel ───────────────────────────────
   @RequirePermission('sessions.read') @Get('resources')
   resources(@Ctx() c: RequestContext, @Query() q: unknown) {
-    return this.planning.listResources(c, parse(z.object({ kind: z.enum(['site', 'room', 'equipment']).optional(), archived: z.coerce.boolean().optional() }), q));
+    return this.planning.listResources(c, parse(z.object({ kind: z.enum(['site', 'room', 'equipment']).optional(), archived: qbool.optional() }), q));
   }
   @RequirePermission('sessions.write') @Post('resources')
   createResource(@Ctx() c: RequestContext, @Body() b: unknown) { return this.planning.createResource(c, parse(resourceSchema, b)); }

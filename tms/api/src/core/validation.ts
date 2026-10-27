@@ -30,3 +30,6 @@ export const page = z.object({
   offset: z.coerce.number().int().min(0).default(0),
   q: z.string().max(200).optional(),
 });
+
+/** Booléen de paramètre d'URL : « true »/« 1 » → vrai, « false »/« 0 » → faux (z.coerce.boolean lit « false » comme vrai). */
+export const qbool = z.union([z.boolean(), z.enum(['true', 'false', '1', '0', ''])]).transform((v) => v === true || v === 'true' || v === '1');

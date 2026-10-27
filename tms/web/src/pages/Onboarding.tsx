@@ -5,6 +5,7 @@ import { can, useApp } from '../context';
 import { Help } from '../help';
 import { ImportBatches } from '../components/ImportBatches';
 import { ImportWizard } from '../components/ImportWizard';
+import { QuickImport } from '../components/QuickImport';
 import { useAction, useFetch } from '../hooks';
 
 const STATE: Record<string, [string, string]> = {
@@ -139,12 +140,20 @@ function DataStep({ st, reload }: { st: any; reload: () => void }) {
   const p = st.session.path;
   const [show, setShow] = useState(p === 'excel');
   const [resume, setResume] = useState<string | null>(null);
+  const [what, setWhat] = useState<'client' | 'person'>('client');
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <p style={{ margin: 0 }}>{st.counts.clients} client(s), {st.counts.programs} formation(s) dans votre espace.</p>
       {(!p || p === 'start') && <p style={{ margin: 0 }}>Créez vos premiers éléments : <Link to="/clients">un client</Link> (avec son adresse de facturation) et <Link to="/sessions">une formation</Link>. Vous avez déjà des listes ? <button className="linklike" onClick={() => setShow(!show)}>Importer un fichier Excel</button>.</p>}
       {p === 'migrate' && <p style={{ margin: 0 }}>Logiciel avec sauvegarde (MCDF, Dendreo, Digiforma…) : <Link to="/settings/reprise">Reprise des données</Link>. Clients et apprenants depuis Excel : <button className="linklike" onClick={() => setShow(!show)}>importer ici</button>.</p>}
-      {(show || p === 'excel') && <ImportWizard simple resumeId={resume} onResumed={() => setResume(null)} onPublished={reload} />}
+      {(show || p === 'excel') && <>
+        <div className="toolbar" role="tablist" style={{ margin: 0 }}>
+          <button role="tab" aria-selected={what === 'client'} className={`btn sm ${what === 'client' ? '' : 'ghost'}`} onClick={() => setWhat('client')}>1. Importer les clients</button>
+          <button role="tab" aria-selected={what === 'person'} className={`btn sm ${what === 'person' ? '' : 'ghost'}`} onClick={() => setWhat('person')}>2. Importer les apprenants</button>
+        </div>
+        <QuickImport key={what} entity={what} onDone={reload} />
+        {resume && <ImportWizard simple resumeId={resume} onResumed={() => setResume(null)} onPublished={reload} />}
+      </>}
       <ImportBatches reloadKey={st.imports.length} onChange={reload} onResume={(id) => { setResume(id); setShow(true); }} />
     </div>
   );

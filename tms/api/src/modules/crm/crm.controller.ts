@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { z } from 'zod';
 import { AllowReadOnly, Ctx, RequestContext, RequirePermission } from '../../core/context';
-import { page, parse } from '../../core/validation';
+import { page, parse, qbool } from '../../core/validation';
 import { CrmService } from './crm.service';
 
 const personSchema = z.object({
@@ -47,7 +47,7 @@ export class CrmController {
 
   @RequirePermission('crm.read') @Get('clients')
   clients(@Ctx() ctx: RequestContext, @Query() q: unknown) {
-    const p = parse(page.extend({ status: z.enum(['prospect', 'customer']).optional(), archived: z.coerce.boolean().optional() }), q);
+    const p = parse(page.extend({ status: z.enum(['prospect', 'customer']).optional(), archived: qbool.optional() }), q);
     return this.crm.listClients(ctx, p);
   }
   @RequirePermission('crm.read') @Get('clients/:id')

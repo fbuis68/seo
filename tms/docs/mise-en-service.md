@@ -68,3 +68,25 @@ Diagnostic serveur `GET /api/v1/start-readiness?sessionId=` (sans paramètre : l
 - **Lot 3** : suggestions d'IA pour la correspondance des colonnes, automatisations.
 - **FAC 08** : états de transmission détaillés (« Transmission en cours », « Échec », nouvelle tentative) pour l'email. La facture électronique dispose déjà de ses statuts.
 - **Indicateurs (section « Mesure du succès »)** : les horodatages des jalons sont stockés (`onboarding_sessions`), mais le tableau de bord éditeur n'est pas encore fait.
+
+## Import rapide clients / apprenants (parcours repris de Serv-Izy)
+
+- Où : boutons « Importer (Excel / CSV) » des écrans Clients et Apprenants & formateurs, et Mise en service › Données (« 1. Importer les clients », puis « 2. Importer les apprenants »).
+- Parcours :
+  1. déposer un fichier ;
+  2. vérifier la correspondance colonne par colonne (en-tête, exemple, champ proposé, modifiable) ;
+  3. l'aperçu se recalcule à chaque changement, avec un statut par ligne (OK, à vérifier, erreur, doublon) et la liste des lignes à vérifier ;
+  4. importer en un clic, depuis une barre qui reste visible.
+- Reconnaissance des colonnes :
+  - nom complet découpé (« Mme MARTIN Jeanne ») ;
+  - colonnes d'adresse concaténées ;
+  - zéros initiaux restaurés (téléphone, code postal) ;
+  - civilités normalisées.
+- Doublons :
+  - clients : même SIRET ou même nom ;
+  - personnes : même email, ou même nom avec la même date de naissance ;
+  - identifiant déjà importé ;
+  - ligne en double dans le fichier.
+  - Un homonyme est seulement signalé.
+- Publication par un lot de reprise classique : journal, rapport ligne à ligne et annulation (« Annuler l'import ») restent disponibles.
+- API : `POST /api/v1/imports/quick/{client|person}/{preview|commit}`. Le corps contient le fichier ; en-têtes `X-Filename` et `X-Mapping` (JSON, une entrée par colonne).

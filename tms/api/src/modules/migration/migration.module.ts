@@ -1,16 +1,41 @@
 import { Body, Controller, Get, Headers, Module, Param, ParseUUIDPipe, Post, Put, Query, Req, Res } from '@nestjs/common';
 import { z } from 'zod';
 import { Ctx, RequestContext, RequireFeature, RequirePermission } from '../../core/context';
+import { AppError } from '../../core/errors';
 import { isoDate, page, parse } from '../../core/validation';
 import { CANONICAL, ENTITY_ORDER } from './canonical';
 import { MigrationService } from './migration.service';
 import { templateXlsx } from './template';
+import { QuickImportService } from './quick';
+
+/** Lecture du corps brut, bornée. */
+function readBody(req: NodeJS.ReadableStream & { body?: unknown }, max: number): Promise<Buffer> {
+  if (Buffer.isBuffer((req as any).body)) return Promise.resolve((req as any).body);
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []; let n = 0;
+    req.on('data', (c: Buffer) => { n += c.length; if (n > max) { reject(new AppError(413, 'file_too_large', 'Fichier trop volumineux (10 Mo maximum).')); (req as any).destroy?.(); return; } chunks.push(c); });
+    req.on('end', () => resolve(Buffer.concat(chunks))); req.on('error', reject);
+  });
+}
 
 const entity = z.enum(ENTITY_ORDER as unknown as [string, ...string[]]);
 
 @Controller('api/v1/imports')
 export class MigrationController {
-  constructor(private m: MigrationService) {}
+  constructor(private m: MigrationService, private quick: QuickImportService) {}
+
+  /** Import rapide (clients ou apprenants) : corps = fichier ; en-têtes X-Filename, X-Mapping (JSON, une entrée par colonne). */
+  @RequireFeature('migration.self') @RequirePermission('imports.manage') @Post('quick/:entity/:step')
+  async quickImport(@Ctx() c: RequestContext, @Param('entity') ent: string, @Param('step') step: string, @Req() req: any,
+    @Headers('x-filename') filename?: string, @Headers('x-mapping') mapping?: string, @Query() q?: any) {
+    const e = parse(z.enum(['client', 'person']), ent);
+    const st = parse(z.enum(['preview', 'commit']), step);
+    const o = parse(z.object({ sheet: z.string().max(300).optional(), role: z.enum(['learner', 'trainer', 'contact']).optional() }), q ?? {});
+    const buf = await readBody(req, 10 * 1024 * 1024);
+    const name = decodeURIComponent(filename ?? 'fichier.csv');
+    const opts = { mapping: mapping ? decodeURIComponent(mapping) : undefined, sheet: o.sheet, role: o.role };
+    return st === 'preview' ? this.quick.preview(c, buf, name, e, opts) : this.quick.commit(c, buf, name, e, opts);
+  }
 
   /** Procédures d'obtention des sauvegardes et état de compatibilité par logiciel. */
   @RequirePermission('imports.manage') @Get('profiles') profiles() { return this.m.profiles(); }
@@ -83,5 +108,5 @@ export class MigrationController {
   @RequirePermission('imports.manage') @Get(':id/report') report(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string) { return this.m.report(c, id); }
 }
 
-@Module({ controllers: [MigrationController], providers: [MigrationService] })
+@Module({ controllers: [MigrationController], providers: [MigrationService, QuickImportService] })
 export class MigrationModule {}

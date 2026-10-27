@@ -71,7 +71,7 @@ export default function Persons() {
           else { const r: any = await post('/api/v1/persons', body); if (r.possibleDuplicates?.length) alert('Attention : homonyme ou email déjà utilisé (aucune fusion automatique).'); }
           list.reload();
         }} />}
-      {imp && <ImportModal title="Importer des apprenants" entity="person" onClose={() => setImp(false)} onDone={list.reload} />}
+      {imp && <ImportModal title={`Importer des ${role === 'trainer' ? 'formateurs' : role === 'contact' ? 'contacts' : 'apprenants'}`} entity="person" role={(role || 'learner') as any} onClose={() => setImp(false)} onDone={list.reload} />}
     </>
   );
 }

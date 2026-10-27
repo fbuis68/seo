@@ -42,3 +42,14 @@ describe('Modification de tous les enregistrements', () => {
     expect(s2).toMatchObject({ kind: 'intra', client_id: c.id, title: 'CACES ACME', program_version_id: r.versions[0].id });
   });
 });
+
+describe('Paramètres booléens d’URL', () => {
+  it('archived=false liste les fiches actives (et non les archivées)', async () => {
+    const u = await signupAndLogin({ legalName: 'OF Bool' });
+    const c = (await u.api.post('/api/v1/clients', { kind: 'company', name: 'Actif' }).expect(201)).body;
+    const a = (await u.api.post('/api/v1/clients', { kind: 'company', name: 'Ancien' }).expect(201)).body;
+    await u.api.post(`/api/v1/clients/${a.id}/archive`, { archived: true }).expect(201);
+    expect((await u.api.get('/api/v1/clients?archived=false')).body.map((x: any) => x.id)).toEqual([c.id]);
+    expect((await u.api.get('/api/v1/clients?archived=true')).body.map((x: any) => x.id)).toEqual([a.id]);
+  });
+});

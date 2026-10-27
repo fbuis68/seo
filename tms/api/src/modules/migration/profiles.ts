@@ -14,7 +14,7 @@ export interface Profile {
 
 export const normHeader = (h: string) => h.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 
-const COMMON: Record<EntityType, Partial<Record<string, string[]>>> = {
+export const COMMON: Record<EntityType, Partial<Record<string, string[]>>> = {
   client: {
     external_id: ['id', 'id_client', 'id_entreprise', 'identifiant', 'code_client', 'reference'], name: ['nom', 'raison_sociale', 'entreprise', 'societe', 'client', 'nom_client', 'denomination'],
     kind: ['type', 'type_client', 'forme'], siret: ['siret', 'n_siret', 'numero_siret'], email: ['email', 'e_mail', 'mail', 'email_facturation'],

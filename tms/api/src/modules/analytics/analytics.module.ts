@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { Ctx, RequestContext, RequirePermission } from '../../core/context';
 import { forbidden, paymentRequired } from '../../core/errors';
 import { csvCell } from '../../core/csv';
-import { isoDate, parse } from '../../core/validation';
+import { isoDate, parse, qbool } from '../../core/validation';
 import { AnalyticsService } from './analytics.service';
 import { METRICS, MetricKey } from './metrics';
 
@@ -11,7 +11,7 @@ const metricQuery = z.object({
   metric: z.enum(Object.keys(METRICS) as [MetricKey, ...MetricKey[]]),
   from: isoDate, to: isoDate, granularity: z.enum(['day', 'month', 'quarter', 'year']).default('month'),
   currency: z.string().length(3).optional(), programId: z.string().uuid().optional(), clientId: z.string().uuid().optional(),
-  compare: z.coerce.boolean().optional(), unit: z.enum(['participants', 'enrollments']).optional(),
+  compare: qbool.optional(), unit: z.enum(['participants', 'enrollments']).optional(),
 });
 
 @Controller('api/v1/analytics')
