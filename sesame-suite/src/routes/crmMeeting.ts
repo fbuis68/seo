@@ -2,7 +2,7 @@ import { Router } from "express";
 import { prisma } from "../db";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin, requireSesame } from "../middleware/requireAdmin";
-import { graphConfigured } from "../lib/graph";
+import { graphConfigured, graphFetch } from "../lib/graph";
 import {
   resolveGraphUserId,
   createOnlineMeeting,
@@ -414,5 +414,30 @@ crmMeetingRouter.post(
 
     const errors = [...errorCounts.entries()].map(([msg, count]) => (count > 1 ? `${msg} (×${count})` : msg));
     res.json({ created, scanned, skipped, organizers: mailboxes.length, errors, unmatchedSample, createdSample, personalLinkSample, droppedSample });
+  })
+);
+
+/**
+ * GET /wa/crmMeeting/debugEvent?mailbox=&date=YYYY-MM-DD — diagnostic
+ * temporaire (27/10/2026) : renvoie le JSON Graph BRUT (tous champs) des
+ * événements d'une boîte sur une journée donnée, pour comprendre pourquoi un
+ * événement précis échappe à syncHistory (ex : isOnlineMeeting/onlineMeeting
+ * absents alors qu'Outlook affiche un lien Teams). À retirer une fois le cas
+ * élucidé — pas destiné à un usage courant.
+ */
+crmMeetingRouter.get(
+  "/crmMeeting/debugEvent",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const mailbox = (req.query.mailbox as string) || "";
+    const date = (req.query.date as string) || "";
+    if (!mailbox || !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new HttpError(400, "mailbox et date (YYYY-MM-DD) requis");
+    const startISO = `${date}T00:00:00Z`;
+    const endISO = `${date}T23:59:59Z`;
+    const raw = await graphFetch(
+      `/users/${encodeURIComponent(mailbox)}/calendarView?startDateTime=${encodeURIComponent(startISO)}&endDateTime=${encodeURIComponent(endISO)}&$select=subject,start,end,isOnlineMeeting,onlineMeeting,onlineMeetingProvider,location,attendees,body,bodyPreview`
+    );
+    res.json(raw);
   })
 );
