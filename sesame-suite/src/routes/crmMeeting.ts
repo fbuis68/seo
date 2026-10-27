@@ -308,6 +308,7 @@ crmMeetingRouter.post(
     // inexpliquée (demande client 27/10/2026, "ne ramène rien").
     const unmatchedSample: { subject: string; startDateTime: string; attendeeEmails: string[] }[] = [];
     const UNMATCHED_SAMPLE_LIMIT = 20;
+    const createdSample: { subject: string; startDateTime: string; prospectId: string }[] = [];
 
     for (const mailboxEmail of mailboxes) {
       let organizerUserId: string;
@@ -366,11 +367,21 @@ crmMeetingRouter.post(
           },
         });
         knownJoinUrls.add(ev.joinUrl);
+        createdSample.push({ subject: ev.subject, startDateTime: ev.startDateTime, prospectId: matchedProspectId });
         created++;
       }
     }
 
+    const prospectNames = new Map((await prisma.crmProspect.findMany({ where: { id: { in: createdSample.map((c) => c.prospectId) } }, select: { id: true, nom: true } })).map((p) => [p.id, p.nom]));
     const errors = [...errorCounts.entries()].map(([msg, count]) => (count > 1 ? `${msg} (×${count})` : msg));
-    res.json({ created, scanned, skipped, organizers: mailboxes.length, errors, unmatchedSample });
+    res.json({
+      created,
+      scanned,
+      skipped,
+      organizers: mailboxes.length,
+      errors,
+      unmatchedSample,
+      createdSample: createdSample.map((c) => ({ ...c, prospectName: prospectNames.get(c.prospectId) || "" })),
+    });
   })
 );

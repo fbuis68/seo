@@ -3183,6 +3183,11 @@ async function syncMeetingHistory(){
     if(!r.ok) throw new Error(data.error||'http '+r.status);
     if(out){
       let txt = `${data.created} réunion(s) rattachée(s) · ${data.scanned} réunion(s) parcourue(s) sur ${data.organizers} compte(s) commercial(aux)` + (data.skipped?` · ${data.skipped} ignorée(s) (perso/doublon)`:'') + (data.errors.length?` · ${data.errors.length} erreur(s) : ${data.errors.join(' / ')}`:'');
+      if((data.createdSample||[]).length){
+        txt += `<div style="margin-top:8px;color:var(--good,#2a8a4a)"><strong>Rattachées :</strong><br>` +
+          data.createdSample.map(c=>esc(c.subject)+' — '+fmtMeetingDate(c.startDateTime)+' — '+esc(c.prospectName||'(prospect)')).join('<br>') +
+          `</div>`;
+      }
       if((data.unmatchedSample||[]).length){
         txt += `<div style="margin-top:8px"><strong>Aucun participant reconnu (échantillon) :</strong><br>` +
           data.unmatchedSample.map(u=>esc(u.subject)+' — '+fmtMeetingDate(u.startDateTime)+' — '+(u.attendeeEmails.length?esc(u.attendeeEmails.join(', ')):'<em>aucun participant renseigné</em>')).join('<br>') +
