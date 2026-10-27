@@ -106,6 +106,15 @@ export interface GraphCalendarMeeting {
 }
 
 const EMAIL_REGEX = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
+// Lien Teams brut dans le corps HTML de l'événement — repli pour les
+// événements créés par un outil externe (ex : outil de prise de RDV en ligne)
+// qui pose un vrai lien Teams dans le corps/la localisation sans renseigner
+// isOnlineMeeting/onlineMeeting côté Graph (cas réel 27/10/2026 : le bouton
+// "Rejoindre" et le lien apparaissaient dans Outlook, mais isOnlineMeeting
+// restait false pour l'app Graph — l'événement disparaissait silencieusement
+// du filtre ci-dessous, sans jamais atteindre le matching participant/corps).
+const TEAMS_LINK_REGEX = /https:\/\/teams\.(?:microsoft\.com\/l\/meetup-join|live\.com\/meet)\/[^\s"'<>]+/i;
+const decodeHtmlEntities = (s: string) => s.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
 
 /** Liste les événements de calendrier Teams (isOnlineMeeting) d'un
  * organisateur sur une période donnée — utilisé pour la synchronisation
@@ -127,16 +136,21 @@ export async function listCalendarMeetings(organizerUserId: string, startISO: st
     }[];
   };
   const asUtcIso = (dt?: string) => (dt ? new Date(dt.endsWith("Z") ? dt : dt + "Z").toISOString() : "");
-  return (res.value || [])
-    .filter((e) => e.isOnlineMeeting && e.onlineMeeting?.joinUrl)
-    .map((e) => ({
+  const out: GraphCalendarMeeting[] = [];
+  for (const e of res.value || []) {
+    const bodyContent = e.body?.content || "";
+    const joinUrl = e.onlineMeeting?.joinUrl || (bodyContent.match(TEAMS_LINK_REGEX) ? decodeHtmlEntities(bodyContent.match(TEAMS_LINK_REGEX)![0]) : null);
+    if (!joinUrl) continue;
+    out.push({
       subject: e.subject || "(sans objet)",
       startDateTime: asUtcIso(e.start?.dateTime),
       endDateTime: asUtcIso(e.end?.dateTime),
-      joinUrl: e.onlineMeeting!.joinUrl!,
+      joinUrl,
       attendeeEmails: (e.attendees || []).map((a) => (a.emailAddress?.address || "").toLowerCase()).filter(Boolean),
-      bodyEmails: [...(e.body?.content || "").matchAll(EMAIL_REGEX)].map((m) => m[0].toLowerCase()),
-    }));
+      bodyEmails: [...bodyContent.matchAll(EMAIL_REGEX)].map((m) => m[0].toLowerCase()),
+    });
+  }
+  return out;
 }
 
 export interface GraphTranscript {
