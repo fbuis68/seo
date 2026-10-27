@@ -15,6 +15,7 @@ import { OpenDataModule } from './opendata/opendata.module';
 import { QualityModule } from './quality.module';
 import { SessionsModule } from './sessions/sessions.module';
 import { SignaturesModule } from './signatures/signatures.module';
+import { SupportModule } from './support/support.module';
 
 /**
  * Registre des modules métier montés dans l'application (monolithe modulaire).
@@ -23,5 +24,5 @@ import { SignaturesModule } from './signatures/signatures.module';
  */
 export const MODULE_IMPORTS: any[] = [
   CrmModule, CatalogModule, SessionsModule, QualityModule, FinanceModule, DocumentsModule, SignaturesModule,
-  AnalyticsModule, ExportsModule, MigrationModule, OpenDataModule, MailModule, BankModule, AiModule, BrandingModule, PlatformModule, OnboardingModule,
+  AnalyticsModule, ExportsModule, MigrationModule, OpenDataModule, MailModule, BankModule, AiModule, BrandingModule, PlatformModule, OnboardingModule, SupportModule,
 ];

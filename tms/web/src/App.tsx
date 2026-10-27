@@ -17,6 +17,7 @@ import HelpPage from './pages/HelpPage';
 import PlatformPage from './pages/PlatformPage';
 import PlanningPage from './pages/PlanningPage';
 import { MyPlanning } from './planning/tabs';
+import { ReportProblem } from './components/ReportProblem';
 import Login, { ForgotPassword, ResetPassword, VerifyEmail } from './pages/Login';
 import SessionDetail from './pages/SessionDetail';
 import Sessions from './pages/Sessions';
@@ -148,6 +149,7 @@ function Shell() {
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </main>
+        <ReportProblem />
       </div>
     </AppCtx.Provider>
   );

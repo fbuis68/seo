@@ -3,6 +3,7 @@ import { api, eur } from '../api';
 import { useFetch } from '../hooks';
 import { BarChart } from '../components/Charts';
 import { Help } from '../help';
+import { PlatformTickets } from '../components/PlatformTickets';
 import { QUOTA_LABELS, fmtQuota } from './Billing';
 
 const STATUS: Record<string, [string, string]> = {
@@ -44,6 +45,7 @@ export default function PlatformPage() {
               <tbody>{[...o.months].reverse().map((m: any) => <tr key={m.month}><td>{m.month.slice(5)}/{m.month.slice(0, 4)}</td><td className="num">{m.signups}</td><td className="num">{m.upgrades}</td><td className="num">{m.churn}</td></tr>)}</tbody></table></div>
         </div>
       </>}
+      <PlatformTickets />
       <h2>Organismes</h2>
       <div className="toolbar">
         <input type="search" aria-label="Rechercher" placeholder="Nom, SIRET, email d’un utilisateur…" value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} style={{ minWidth: 280 }} />
