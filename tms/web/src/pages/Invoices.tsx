@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api, date, download, eur, get, post } from '../api';
 import { can, useApp } from '../context';
 import { useAction, useFetch } from '../hooks';
@@ -13,6 +14,13 @@ export default function Invoices() {
   const [pay, setPay] = useState<{ inv: any; amount: string; date: string } | null>(null);
   const [draft, setDraft] = useState<any>(null); // brouillon en cours de modification
   const reload = () => inv.reload();
+  const loc = useLocation(); const nav = useNavigate();
+  const openDraft = (id: string) => act.run(() => get(`/api/v1/invoices/${id}`), (x: any) => x.status === 'draft'
+    ? setDraft({ id, dueDate: x.due_date?.slice(0, 10) ?? '', lines: x.lines.map((l: any) => ({ label: l.label, quantity: String(Number(l.quantity)), unitPriceHt: String(Number(l.unit_price_ht)), vatRate: String(Number(l.vat_rate)) })) })
+    : act.setError('Facture déjà émise : corrigez-la par un avoir.'));
+  // Lien direct (bouton « Corriger » du diagnostic) : ?edit=<id> ouvre le brouillon.
+  useEffect(() => { const id = new URLSearchParams(loc.search).get('edit'); if (id) openDraft(id); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [loc.key]);
+  const closeDraft = () => { setDraft(null); if (loc.search) nav('/invoices', { replace: true }); };
   const pdf = (i: any) => act.run(() => post('/api/v1/documents/generate', { template: 'invoice', invoiceId: i.id }), (d: any) => download(`/api/v1/documents/${d.id}/download`, d.filename));
   return (
     <>
@@ -43,7 +51,7 @@ export default function Invoices() {
               <td>
                 {i.status === 'draft' && can(org, 'finance.write') && <button className="btn sm" onClick={() => confirm('Émettre la facture ? Elle ne sera plus modifiable (correction par avoir).') && act.run(() => post(`/api/v1/invoices/${i.id}/issue`), reload)}>Émettre</button>}{' '}
                 {i.status === 'draft' && can(org, 'finance.write') && <>
-                  <button className="btn ghost sm" onClick={() => act.run(() => get(`/api/v1/invoices/${i.id}`), (x: any) => setDraft({ id: i.id, dueDate: x.due_date?.slice(0, 10) ?? '', lines: x.lines.map((l: any) => ({ label: l.label, quantity: String(Number(l.quantity)), unitPriceHt: String(Number(l.unit_price_ht)), vatRate: String(Number(l.vat_rate)) })) }))}>Modifier</button>{' '}
+                  <button className="btn ghost sm" onClick={() => openDraft(i.id)}>Modifier</button>{' '}
                   <button className="btn ghost sm" onClick={() => confirm('Supprimer ce brouillon ?') && act.run(() => api('DELETE', `/api/v1/invoices/${i.id}`), reload)}>Supprimer</button>{' '}
                 </>}
                 <button className="btn ghost sm" onClick={() => pdf(i)}>PDF</button>{' '}
@@ -52,10 +60,10 @@ export default function Invoices() {
             </tr>))}</tbody></table>
       </div>
       {draft && (
-        <div className="pl-modal" role="dialog" aria-modal="true" aria-label="Modifier le brouillon" onClick={() => setDraft(null)}>
+        <div className="pl-modal" role="dialog" aria-modal="true" aria-label="Modifier le brouillon" onClick={closeDraft}>
           <form className="panel stack" style={{ maxWidth: 820 }} onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); act.run(() => api('PATCH', `/api/v1/invoices/${draft.id}`, {
             dueDate: draft.dueDate || null, lines: draft.lines.map((l: any) => ({ label: l.label, quantity: l.quantity.replace(',', '.'), unitPriceHt: l.unitPriceHt.replace(',', '.'), vatRate: l.vatRate.replace(',', '.') })),
-          }), () => { setDraft(null); reload(); }); }}>
+          }), () => { closeDraft(); reload(); }); }}>
             <h2 style={{ margin: 0 }}>Modifier le brouillon</h2>
             <table className="small"><thead><tr><th>Désignation</th><th className="num">Qté</th><th className="num">PU HT</th><th className="num">TVA %</th><th /></tr></thead>
               <tbody>{draft.lines.map((l: any, k: number) => {
@@ -71,7 +79,7 @@ export default function Invoices() {
               <label>Échéance<input type="date" value={draft.dueDate} onChange={(e) => setDraft({ ...draft, dueDate: e.target.value })} /></label>
             </div>
             {act.error && <p className="alert">{act.error}</p>}
-            <div className="toolbar" style={{ margin: 0 }}><button className="btn" disabled={act.busy}>Enregistrer</button><button type="button" className="btn ghost" onClick={() => setDraft(null)}>Fermer</button></div>
+            <div className="toolbar" style={{ margin: 0 }}><button className="btn" disabled={act.busy}>Enregistrer</button><button type="button" className="btn ghost" onClick={closeDraft}>Fermer</button></div>
             <p className="small muted" style={{ margin: 0 }}>Une facture émise n’est plus modifiable : corrigez-la par un avoir.</p>
           </form>
         </div>

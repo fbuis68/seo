@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api, get, patch, post } from '../api';
 import { can, useApp } from '../context';
 import { useAction, useFetch } from '../hooks';
@@ -32,6 +33,16 @@ export default function Clients() {
   const [imp, setImp] = useState(false);
   const [sirene, setSirene] = useState<any[]>([]);
   const [lookup, setLookup] = useState('');
+  // Lien direct (bouton « Corriger » du diagnostic) : ?edit=<id> ouvre la fiche, ?new=1 la création.
+  const loc = useLocation(); const nav = useNavigate();
+  useEffect(() => {
+    const p = new URLSearchParams(loc.search);
+    const id = p.get('edit');
+    if (id) act.run(() => get(`/api/v1/clients/${id}`), (c: any) => setEdit(c));
+    else if (p.get('new')) setEdit({ kind: 'company' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loc.key]);
+  const closeEdit = () => { setEdit(null); if (loc.search) nav('/clients', { replace: true }); };
   const searchSirene = () => act.run(() => get(`/api/v1/opendata/search?source=sirene&q=${encodeURIComponent(lookup)}`), (r: any) => setSirene(r.results));
   return (
     <>
@@ -62,7 +73,7 @@ export default function Clients() {
               </>}</td></tr>)}</tbody></table>
         <p className="small muted">L’archivage masque la fiche sans libérer de place dans le quota Free des clients facturés.</p>
       </div>
-      {edit && <RecordForm title={edit.id ? `Modifier — ${edit.name}` : 'Nouveau client'} fields={CLIENT_FIELDS} initial={edit.id ? toForm(edit) : { kind: 'company', ...edit }} onClose={() => setEdit(null)}
+      {edit && <RecordForm title={edit.id ? `Modifier — ${edit.name}` : 'Nouveau client'} fields={CLIENT_FIELDS} initial={edit.id ? toForm(edit) : { kind: 'company', ...edit }} onClose={closeEdit}
         onSave={async (v) => { edit.id ? await patch(`/api/v1/clients/${edit.id}`, { ...toApi(v), version: edit.version }) : await post('/api/v1/clients', { ...toApi(v), status: 'prospect' }); clients.reload(); }} />}
       {imp && <ImportModal title="Importer des clients" entity="client" onClose={() => setImp(false)} onDone={clients.reload} />}
     </>

@@ -63,16 +63,16 @@ export async function readiness(tx: Tx, o: { permissions?: Set<string>; invoiceI
                                FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.id=$1`, [o.invoiceId]);
     if (invoice) {
       const lines = await many(tx, `SELECT * FROM invoice_lines WHERE invoice_id=$1`, [invoice.id]);
-      add({ code: 'client_identity', level: 'prepare', severity: 'blocking', ok: !!invoice.client_name && !invoice.client_deleted, message: `Client : ${invoice.client_name ?? '—'}.`, screen: `/clients` });
-      add({ code: 'client_address', level: 'issue', severity: 'blocking', ok: addr(invoice.billing_address), message: addr(invoice.billing_address) ? 'Adresse de facturation du client.' : `Adresse de facturation du client « ${invoice.client_name} » incomplète.`, screen: `/clients` });
-      add({ code: 'lines', level: 'prepare', severity: 'blocking', ok: lines.length > 0, message: lines.length ? `${lines.length} ligne(s).` : 'Au moins une ligne facturable.' });
+      add({ code: 'client_identity', level: 'prepare', severity: 'blocking', ok: !!invoice.client_name && !invoice.client_deleted, message: `Client : ${invoice.client_name ?? '—'}.`, screen: `/clients?edit=${invoice.client_id}` });
+      add({ code: 'client_address', level: 'issue', severity: 'blocking', ok: addr(invoice.billing_address), message: addr(invoice.billing_address) ? 'Adresse de facturation du client.' : `Adresse de facturation du client « ${invoice.client_name} » incomplète.`, screen: `/clients?edit=${invoice.client_id}` });
+      add({ code: 'lines', level: 'prepare', severity: 'blocking', ok: lines.length > 0, message: lines.length ? `${lines.length} ligne(s).` : 'Au moins une ligne facturable.', screen: `/invoices?edit=${invoice.id}` });
       const regime = profile?.data?.vatRegime;
       const badVat = regime && regime !== 'subject' ? lines.filter((l: any) => Number(l.vat_rate) !== 0) : [];
       add({ code: 'vat_consistency', level: 'issue', severity: 'blocking', ok: !badVat.length,
-        message: badVat.length ? `${badVat.length} ligne(s) avec TVA alors que le régime est « ${EXEMPTION_TEXT[regime!] ?? regime} ».` : 'Taux de TVA cohérents avec le régime.' });
+        message: badVat.length ? `${badVat.length} ligne(s) avec TVA alors que le régime est « ${EXEMPTION_TEXT[regime!] ?? regime} ».` : 'Taux de TVA cohérents avec le régime.', screen: `/invoices?edit=${invoice.id}` });
       const sum = lines.reduce((a: bigint, l: any) => a + toCents(l.total_ht), 0n);
       add({ code: 'amounts', level: 'issue', severity: 'blocking', ok: sum === toCents(invoice.total_ht) && (invoice.kind === 'credit_note' || toCents(invoice.total_ttc) >= 0n),
-        message: sum === toCents(invoice.total_ht) ? 'Montants cohérents.' : 'Total HT différent de la somme des lignes : rouvrir le brouillon pour recalculer.' });
+        message: sum === toCents(invoice.total_ht) ? 'Montants cohérents.' : 'Total HT différent de la somme des lignes : rouvrir le brouillon pour recalculer.', screen: `/invoices?edit=${invoice.id}` });
       // Doublon : même client, même session, même montant, déjà émise et non annulée par avoir.
       const dup = invoice.kind === 'invoice' ? await one(tx, `SELECT number FROM invoices i WHERE i.id<>$1 AND i.status='issued' AND i.kind='invoice' AND i.client_id=$2
           AND i.session_id IS NOT DISTINCT FROM $3 AND i.total_ttc=$4 AND $3::uuid IS NOT NULL
@@ -81,11 +81,11 @@ export async function readiness(tx: Tx, o: { permissions?: Set<string>; invoiceI
       add({ code: 'duplicate', level: 'issue', severity: 'blocking', ok: !dup, message: dup ? `Facturation en double : la facture ${dup.number} porte déjà ce montant pour ce client et cette session.` : 'Pas de double facturation détectée.' });
       // Transmission (FAC 08).
       add({ code: 'transmit_channel', level: 'transmit', severity: 'blocking', ok: !!invoice.billing_email || !!profile?.data?.einvoiceRequired,
-        message: invoice.billing_email ? `Envoi possible à ${invoice.billing_email}.` : 'Email de facturation du client absent : téléchargez la facture ou complétez l’email.', screen: '/clients' });
+        message: invoice.billing_email ? `Envoi possible à ${invoice.billing_email}.` : 'Email de facturation du client absent : téléchargez la facture ou complétez l’email.', screen: `/clients?edit=${invoice.client_id}` });
     } else add({ code: 'invoice', level: 'prepare', severity: 'blocking', ok: false, message: 'Facture introuvable.' });
   } else {
     const client = await one(tx, `SELECT count(*)::int n FROM clients WHERE deleted_at IS NULL`);
-    add({ code: 'has_client', level: 'prepare', severity: 'blocking', ok: client!.n > 0, message: client!.n ? `${client!.n} client(s).` : 'Créez ou importez au moins un client.', screen: '/clients' });
+    add({ code: 'has_client', level: 'prepare', severity: 'blocking', ok: client!.n > 0, message: client!.n ? `${client!.n} client(s).` : 'Créez ou importez au moins un client.', screen: '/clients?new=1' });
   }
   if (profile?.data?.einvoiceRequired) {
     const ok = !!(await one(tx, `SELECT 1 FROM invoices WHERE einvoice_status IN ('accepted','transmitted','received','paid') LIMIT 1`));

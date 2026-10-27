@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api, date, download, eur, get, patch, post } from '../api';
 import { can, useApp } from '../context';
 import { Help } from '../help';
@@ -25,7 +25,14 @@ export default function Onboarding() {
   const { org } = useApp();
   const [st, setSt] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [step, setStep] = useState<string | null>(new URLSearchParams(location.search).get('step'));
+  const loc = useLocation();
+  const [step, setStep] = useState<string | null>(new URLSearchParams(loc.search).get('step'));
+  // « Corriger » vers une autre étape (?step=…) depuis cette même page : on suit l'adresse et on recharge l'état.
+  useEffect(() => {
+    const k = new URLSearchParams(loc.search).get('step');
+    if (k) { setStep(k); load(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loc.key]);
   const load = () => get('/api/v1/onboarding').then(setSt, (e) => setErr(e.message));
   useEffect(() => { load(); }, []);
   if (err) return <p className="alert">{err}</p>;
@@ -178,7 +185,7 @@ function TrainingStep({ st, reload }: { st: any; reload: () => void }) {
       <p style={{ margin: 0 }}>Pour démarrer une formation il faut : une formation au catalogue, un formateur, une salle (sauf distanciel), une session datée et planifiée, des séances publiées au planning et des apprenants inscrits.</p>
       {start && <table className="small"><tbody>{start.checks.map((c: any) => (
         <tr key={c.code}><td>{c.ok ? '✓' : c.severity === 'blocking' ? '✕' : '!'}</td><td className="muted">{AREA[c.area]}</td><td>{c.message}</td>
-          <td>{!c.ok && c.screen && !c.screen.startsWith('/onboarding') && <button className="btn ghost sm" onClick={() => nav(c.screen)}>Corriger</button>}</td></tr>))}</tbody></table>}
+          <td>{!c.ok && c.screen && c.screen !== '/onboarding?step=training' && <button className="btn ghost sm" onClick={() => nav(c.screen)}>Corriger</button>}</td></tr>))}</tbody></table>}
 
       <section className="panel" style={{ display: 'grid', gap: 8 }}>
         <strong>1. Formation {ok('program') && toggle('program')}</strong>
