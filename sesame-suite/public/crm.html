@@ -3188,8 +3188,13 @@ async function syncMeetingHistory(){
           data.createdSample.map(c=>esc(c.subject)+' — '+fmtMeetingDate(c.startDateTime)+' — '+esc(c.prospectName||'(prospect)')).join('<br>') +
           `</div>`;
       }
+      if((data.personalLinkSample||[]).length){
+        txt += `<div style="margin-top:8px;color:#b06a00"><strong>Reconnues mais lien Teams personnel (non importables — demander au commercial d'utiliser son compte Teams professionnel) :</strong><br>` +
+          data.personalLinkSample.map(p=>esc(p.subject)+' — '+fmtMeetingDate(p.startDateTime)+' — '+esc(p.prospectName||'(prospect)')).join('<br>') +
+          `</div>`;
+      }
       if((data.unmatchedSample||[]).length){
-        txt += `<div style="margin-top:8px"><strong>Aucun participant reconnu (échantillon) :</strong><br>` +
+        txt += `<div style="margin-top:8px;max-height:220px;overflow-y:auto"><strong>Aucun participant reconnu (échantillon) :</strong><br>` +
           data.unmatchedSample.map(u=>esc(u.subject)+' — '+fmtMeetingDate(u.startDateTime)+' — '+(u.attendeeEmails.length?esc(u.attendeeEmails.join(', ')):'<em>aucun participant renseigné</em>')).join('<br>') +
           `</div>`;
       }

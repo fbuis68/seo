@@ -278,13 +278,17 @@ crmMeetingRouter.post(
     // adresse secondaire doit remonter au même titre que depuis le login.
     const mailboxes = admins.flatMap((a) => [a.email, ...a.altEmails]);
     const [prospects, contacts, existing] = await Promise.all([
-      prisma.crmProspect.findMany({ where: { email: { not: null } }, select: { id: true, email: true } }),
+      prisma.crmProspect.findMany({ where: { email: { not: null } }, select: { id: true, email: true, nom: true } }),
       prisma.crmContact.findMany({ where: { email: { not: null } }, select: { prospectId: true, email: true } }),
       prisma.crmMeeting.findMany({ select: { joinUrl: true } }),
     ]);
 
     const emailToProspectId = new Map<string, string>();
-    for (const p of prospects) if (p.email) emailToProspectId.set(p.email.toLowerCase(), p.id);
+    const prospectNameById = new Map<string, string>();
+    for (const p of prospects) {
+      prospectNameById.set(p.id, p.nom);
+      if (p.email) emailToProspectId.set(p.email.toLowerCase(), p.id);
+    }
     for (const c of contacts) if (c.email) emailToProspectId.set(c.email.toLowerCase(), c.prospectId);
     const knownJoinUrls = new Set(existing.map((m) => m.joinUrl));
 
@@ -307,8 +311,15 @@ crmMeetingRouter.post(
     // écart d'adresse email plutôt que de laisser l'absence de résultat
     // inexpliquée (demande client 27/10/2026, "ne ramène rien").
     const unmatchedSample: { subject: string; startDateTime: string; attendeeEmails: string[] }[] = [];
-    const UNMATCHED_SAMPLE_LIMIT = 20;
-    const createdSample: { subject: string; startDateTime: string; prospectId: string }[] = [];
+    const UNMATCHED_SAMPLE_LIMIT = 100;
+    const createdSample: { subject: string; startDateTime: string; prospectName: string }[] = [];
+    // Réunion dont un participant matche bien un prospect/contact CRM, mais
+    // créée depuis un Teams "grand public" (teams.live.com) — jamais
+    // résolvable via /onlineMeetings côté tenant, donc jamais importable,
+    // mais NE DOIT PAS disparaître silencieusement du rapport (bug constaté
+    // 27/10/2026 : une réunion matchée mais filtrée par le garde-fou
+    // teams.live.com n'apparaissait ni en "rattachée" ni en "non reconnue").
+    const personalLinkSample: { subject: string; startDateTime: string; prospectName: string }[] = [];
 
     for (const mailboxEmail of mailboxes) {
       let organizerUserId: string;
@@ -330,11 +341,18 @@ crmMeetingRouter.post(
 
       for (const ev of events) {
         if (knownJoinUrls.has(ev.joinUrl)) continue;
+        const matchedProspectId = ev.attendeeEmails.map((e) => emailToProspectId.get(e)).find(Boolean);
         // teams.live.com = Teams "grand public" (compte personnel), jamais
         // résolvable via /onlineMeetings côté tenant — pas une erreur, juste
-        // hors périmètre.
-        if (/teams\.live\.com/i.test(ev.joinUrl)) { skipped++; continue; }
-        const matchedProspectId = ev.attendeeEmails.map((e) => emailToProspectId.get(e)).find(Boolean);
+        // hors périmètre. Si elle matchait quand même un prospect, on le
+        // signale (personalLinkSample) plutôt que de la faire disparaître.
+        if (/teams\.live\.com/i.test(ev.joinUrl)) {
+          skipped++;
+          if (matchedProspectId && personalLinkSample.length < 20) {
+            personalLinkSample.push({ subject: ev.subject, startDateTime: ev.startDateTime, prospectName: prospectNameById.get(matchedProspectId) || "" });
+          }
+          continue;
+        }
         if (!matchedProspectId) {
           if (unmatchedSample.length < UNMATCHED_SAMPLE_LIMIT) {
             unmatchedSample.push({ subject: ev.subject, startDateTime: ev.startDateTime, attendeeEmails: ev.attendeeEmails });
@@ -367,21 +385,12 @@ crmMeetingRouter.post(
           },
         });
         knownJoinUrls.add(ev.joinUrl);
-        createdSample.push({ subject: ev.subject, startDateTime: ev.startDateTime, prospectId: matchedProspectId });
+        createdSample.push({ subject: ev.subject, startDateTime: ev.startDateTime, prospectName: prospectNameById.get(matchedProspectId) || "" });
         created++;
       }
     }
 
-    const prospectNames = new Map((await prisma.crmProspect.findMany({ where: { id: { in: createdSample.map((c) => c.prospectId) } }, select: { id: true, nom: true } })).map((p) => [p.id, p.nom]));
     const errors = [...errorCounts.entries()].map(([msg, count]) => (count > 1 ? `${msg} (×${count})` : msg));
-    res.json({
-      created,
-      scanned,
-      skipped,
-      organizers: mailboxes.length,
-      errors,
-      unmatchedSample,
-      createdSample: createdSample.map((c) => ({ ...c, prospectName: prospectNames.get(c.prospectId) || "" })),
-    });
+    res.json({ created, scanned, skipped, organizers: mailboxes.length, errors, unmatchedSample, createdSample, personalLinkSample });
   })
 );
