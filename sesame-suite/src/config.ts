@@ -42,6 +42,10 @@ export const config = {
   // d'échouer silencieusement (mêmes conventions que graphTenantId etc.).
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
   anthropicModel: process.env.ANTHROPIC_MODEL || "claude-sonnet-5",
+  // Requis uniquement si la clé API est créée au niveau organisation
+  // (pas rattachée à un workspace précis côté Console) — sinon l'API
+  // rejette tout appel avec une erreur 400 explicite demandant ce header.
+  anthropicWorkspaceId: process.env.ANTHROPIC_WORKSPACE_ID || "",
   openaiApiKey: process.env.OPENAI_API_KEY || "",
   openaiEmbeddingModel: process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small",
 };

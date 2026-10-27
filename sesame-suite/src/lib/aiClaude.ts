@@ -29,6 +29,7 @@ async function callClaude(params: { system: string; messages: { role: "user" | "
       "x-api-key": config.anthropicApiKey,
       "anthropic-version": "2023-06-01",
       "Content-Type": "application/json",
+      ...(config.anthropicWorkspaceId ? { "anthropic-workspace-id": config.anthropicWorkspaceId } : {}),
     },
     body: JSON.stringify({
       model: config.anthropicModel,
