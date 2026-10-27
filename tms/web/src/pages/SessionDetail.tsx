@@ -8,6 +8,7 @@ import SessionBilling, { ClosureBox } from '../components/SessionBilling';
 import { SESSION_STATUS } from './Sessions';
 import { Help } from '../help';
 import { RecordForm } from '../components/RecordForm';
+import { AlertList, useFixAnchor } from '../components/FixLink';
 
 const SLOT_STATUS: Record<string, string> = { draft: 'Brouillon', pending: 'À valider', published: 'Publié', done: 'Réalisé', cancelled: 'Annulé' };
 const NEXT: Record<string, string[]> = { draft: ['planned'], planned: ['confirmed', 'draft'], confirmed: ['in_progress', 'planned'], in_progress: ['completed'], completed: ['archived'] };
@@ -30,6 +31,7 @@ export default function SessionDetail() {
   const [attInfo, setAttInfo] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const programs = useFetch<any[]>(can(org, 'catalog.read') ? '/api/v1/programs?limit=200' : null);
+  useFixAnchor(!!s.data);
   if (s.error) return <p className="alert">{s.error.message}</p>;
   if (!s.data) return <p className="muted">Chargement…</p>;
   const d = s.data;
@@ -41,13 +43,13 @@ export default function SessionDetail() {
     <>
       <h1>{d.title} <span className="pill">{SESSION_STATUS[d.status]}</span> <Help k="session.fiche" /></h1>
       <p className="muted">{d.program_title} v{d.program_version} · {date(d.starts_on)} → {date(d.ends_on)} · {d.kind === 'intra' ? 'Intra' : 'Inter'}{d.capacity ? ` · ${d.capacity} places` : ''}</p>
-      {d.missing?.length > 0 && <div className="banner warn"><strong>À compléter :</strong> {d.missing.join(' · ')}</div>}
+      {d.todo?.length > 0 && <div className="banner warn"><strong>À compléter :</strong><AlertList items={d.todo} /></div>}
       {can(org, 'sessions.write') && (
         <div className="toolbar">
-          {!['archived', 'cancelled'].includes(d.status) && <button className="btn sm" onClick={() => setEditing(true)}>Modifier la session</button>}
+          {!['archived', 'cancelled'].includes(d.status) && <button id="session-edit" data-fix-click className="btn sm" onClick={() => setEditing(true)}>Modifier la session</button>}
           {(NEXT[d.status] ?? []).map((n) => <button key={n} className="btn ghost sm" onClick={() => n === 'completed' ? setClosing(true) : act.run(() => post(`/api/v1/sessions/${id}/status`, { status: n }), reload)}>→ {SESSION_STATUS[n]}</button>)}
           {!['completed', 'archived', 'cancelled'].includes(d.status) && <button className="btn danger sm" onClick={() => { const reason = prompt('Motif d’annulation ?'); if (reason) act.run(() => post(`/api/v1/sessions/${id}/status`, { status: 'cancelled', reason }), reload); }}>Annuler</button>}
-          <button className="btn ghost sm" onClick={() => act.run(() => post('/api/v1/documents/generate', { template: 'convention', sessionId: id }), reload)}>Générer la convention</button>
+          <button id="session-convention" className="btn ghost sm" onClick={() => act.run(() => post('/api/v1/documents/generate', { template: 'convention', sessionId: id }), reload)}>Générer la convention</button>
           <button className="btn ghost sm" onClick={() => act.run(() => post('/api/v1/documents/generate', { template: 'attendance_sheet', sessionId: id }), reload)}>Feuille d’émargement</button>
         </div>
       )}
@@ -55,10 +57,11 @@ export default function SessionDetail() {
       {closing && <ClosureBox sessionId={id!} onDone={() => { setClosing(false); reload(); }} onCancel={() => setClosing(false)} />}
 
       {can(org, 'sessions.write') && <PlanningSettings d={d} resources={resources.data ?? []} onSaved={reload} onError={act.setError} />}
+      <div id="session-planning" />
       <Planning session={d} canWrite={can(org, 'sessions.write')} trainers={trainers.data ?? []} resources={resources.data ?? []} onChange={reload} onError={act.setError} />
 
       <div className="grid2">
-        <div className="panel">
+        <div className="panel" id="session-documents">
           <strong>Documents</strong> <Help k="session.documents" />
           <table><tbody>{docs.data?.map((doc) => <tr key={doc.id}><td>{doc.filename}</td><td>{date(doc.created_at)}</td><td>
             <button className="btn ghost sm" onClick={() => download(`/api/v1/documents/${doc.id}/download`, doc.filename)}>Télécharger</button>{' '}
@@ -75,7 +78,7 @@ export default function SessionDetail() {
         </div>
       </div>
 
-      <h2>Inscrits et présences <Help k="session.inscrits" /></h2>
+      <h2 id="session-enrollments">Inscrits et présences <Help k="session.inscrits" /></h2>
       <div className="panel">
         <table><thead><tr><th>Apprenant</th><th>Statut</th>{can(org, 'sessions.write') && <th>Client payeur</th>}{active.map((sl: any) => <th key={sl.id}>{fmtDayT(sl.starts_at, d.timezone)}
               <div className="small" style={{ fontWeight: 400 }}><span className={`pill ${sl.status === 'done' ? 'ok' : ''}`}>{SLOT_STATUS[sl.status]}</span> {sl.attendance_count}/{sl.expected} émargé(s)</div>
@@ -87,7 +90,7 @@ export default function SessionDetail() {
               }, (r: any) => { if (r?.slotDone) setAttInfo('Émargement complet : séance marquée Réalisé.'); reload(); })}>Compléter : présents</button>}</th>)}<th /></tr></thead>
           <tbody>{d.enrollments.map((e: any) => (
             <tr key={e.id}><td>{e.last_name} {e.first_name}{e.group_label && <span className="small muted"> · groupe {e.group_label}</span>}</td><td>{e.status}</td>
-              {can(org, 'sessions.write') && <td><select aria-label={`Client payeur de ${e.last_name}`} value={e.client_id ?? ''} onChange={(ev) => act.run(() => api('PATCH', `/api/v1/enrollments/${e.id}`, { clientId: ev.target.value || null }), reload)}>
+              {can(org, 'sessions.write') && <td><select id={`enr-${e.id}-client`} aria-label={`Client payeur de ${e.last_name}`} value={e.client_id ?? ''} onChange={(ev) => act.run(() => api('PATCH', `/api/v1/enrollments/${e.id}`, { clientId: ev.target.value || null }), reload)}>
                 <option value="">—</option>{clients.data?.filter((c: any) => !c.archived_at).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></td>}
               {active.map((sl: any) => { const a = att(e.id, sl.id); return (
                 <td key={sl.id}>{can(org, 'attendance.write') && e.status !== 'cancelled'
@@ -116,7 +119,7 @@ export default function SessionDetail() {
         {enrollInfo && <p className="banner warn small">{enrollInfo}</p>}
         {attInfo && <p className="success small" role="status">{attInfo}</p>}
       </div>
-      <SessionBilling sessionId={id!} onChange={reload} />
+      <div id="session-billing"><SessionBilling sessionId={id!} onChange={reload} /></div>
       {editing && <RecordForm title="Modifier la session" onClose={() => setEditing(false)}
         initial={{ title: d.title, kind: d.kind, clientId: d.client_id ?? '', startsOn: d.starts_on?.slice(0, 10) ?? '', endsOn: d.ends_on?.slice(0, 10) ?? '', capacity: d.capacity ?? '', location: d.location ?? '', programVersionId: d.program_version_id, internalNotes: d.internal_notes ?? '' }}
         fields={[
@@ -158,8 +161,8 @@ function PlanningSettings({ d, resources, onSaved, onError }: { d: any; resource
         <label>Site<select value={f.siteId} onChange={(e) => setF({ ...f, siteId: e.target.value })}><option value="">—</option>{resources.filter((r) => r.kind === 'site').map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</select></label>
         <label>Responsable<input value={f.responsible} onChange={(e) => setF({ ...f, responsible: e.target.value })} /></label>
         <label>Durée cible (h)<input size={5} value={f.targetHours} placeholder={String(d.duration_minutes / 60)} onChange={(e) => setF({ ...f, targetHours: e.target.value })} /></label>
-        <label>Prix HT (sinon programme)<input size={8} value={f.priceHt} placeholder={d.price_ht ?? 'programme'} onChange={(e) => setF({ ...f, priceHt: e.target.value.replace(/[^\d.,]/g, '') })} /></label>
-        <label>Base de prix<select value={f.priceBasis} onChange={(e) => setF({ ...f, priceBasis: e.target.value })}><option value="">{d.kind === 'intra' ? 'forfait (intra)' : 'par apprenant (inter)'}</option><option value="per_learner">par apprenant</option><option value="per_session">forfait de session</option></select></label>
+        <label>Prix HT (sinon programme)<input id="session-price" size={8} value={f.priceHt} placeholder={d.price_ht ?? 'programme'} onChange={(e) => setF({ ...f, priceHt: e.target.value.replace(/[^\d.,]/g, '') })} /></label>
+        <label>Base de prix<select id="session-price-basis" value={f.priceBasis} onChange={(e) => setF({ ...f, priceBasis: e.target.value })}><option value="">{d.kind === 'intra' ? 'forfait (intra)' : 'par apprenant (inter)'}</option><option value="per_learner">par apprenant</option><option value="per_session">forfait de session</option></select></label>
         <label>Compétences exigées<input value={f.skills} onChange={(e) => setF({ ...f, skills: e.target.value })} placeholder="CACES R489" /></label>
         <label>Équipements requis<input value={f.equipment} onChange={(e) => setF({ ...f, equipment: e.target.value })} placeholder="vidéoprojecteur" /></label>
         <label className="row"><input type="checkbox" checked={f.useColor} onChange={(e) => setF({ ...f, useColor: e.target.checked })} />Couleur<input type="color" value={f.color} onChange={(e) => setF({ ...f, color: e.target.value, useColor: true })} /></label>

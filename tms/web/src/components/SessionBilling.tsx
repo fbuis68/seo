@@ -4,6 +4,7 @@ import { eur, post } from '../api';
 import { can, useApp } from '../context';
 import { useFetch } from '../hooks';
 import { Help } from '../help';
+import { FixLink } from './FixLink';
 
 export const BILLING_STATE: Record<string, [string, string]> = {
   not_billed: ['Non facturée', 'warn'], partial: ['Facturation partielle', 'warn'], drafts: ['Brouillons à émettre', 'warn'],
@@ -35,15 +36,15 @@ export default function SessionBilling({ sessionId, onChange }: { sessionId: str
         {x && <span className={`pill ${BILLING_STATE[x.state]?.[1] ?? ''}`}>{BILLING_STATE[x.state]?.[0] ?? x.state}</span>}
       </div>
       {b.error && <p className="alert">{b.error.message}</p>}
-      {x?.state === 'not_configured' && <p className="banner warn small">{x.message}</p>}
+      {x?.state === 'not_configured' && <p className="banner warn small">{x.message} <FixLink fix={x.fix} /></p>}
       {x && x.state !== 'not_configured' && <>
         <div className="toolbar">
           <label className="row small"><input type="radio" name="basis" checked={basis === 'flat'} onChange={() => setBasis('flat')} />Forfait (prix {x.priceBasis === 'per_session' ? 'de la session' : 'par apprenant'} : {eur(x.price)} HT)</label>
           <label className="row small"><input type="radio" name="basis" checked={basis === 'hours'} onChange={() => setBasis('hours')} disabled={x.priceBasis === 'per_session'} />Au prorata des heures émargées</label>
           {basis === 'hours' && <label className="row small"><input type="checkbox" checked={absenceToClient} onChange={(e) => setAbsence(e.target.checked)} />Absences non prises en charge refacturées au client</label>}
         </div>
-        {x.warnings.map((w: string, i: number) => <p key={i} className="small" style={{ color: 'var(--warn)', margin: '4px 0' }}>{w}</p>)}
-        {x.skipped.length > 0 && <div className="banner warn small"><strong>Non facturable en l’état :</strong><ul style={{ margin: '4px 0 0' }}>{x.skipped.map((s: any, i: number) => <li key={i}>{s.name} : {s.reason}</li>)}</ul></div>}
+        {(x.warningItems ?? x.warnings.map((m: string) => ({ message: m }))).map((w: any, i: number) => <p key={i} className="small" style={{ color: 'var(--warn)', margin: '4px 0' }}>{w.message} <FixLink fix={w.fix} /></p>)}
+        {x.skipped.length > 0 && <div className="banner warn small"><strong>Non facturable en l’état :</strong><ul style={{ margin: '4px 0 0' }}>{x.skipped.map((s: any, i: number) => <li key={i}>{s.name} : {s.reason} <FixLink fix={s.fix} /></li>)}</ul></div>}
         {x.invoices.length > 0 ? <>
           <p className="small muted">Aperçu des brouillons à créer (une facture par client ou financeur, TVA {Number(x.vatRate)} %) :</p>
           <table><thead><tr><th>Payeur</th><th>Lignes</th><th className="num">Total HT</th></tr></thead>

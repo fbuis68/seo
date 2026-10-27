@@ -4,6 +4,7 @@ import { can, useApp } from '../context';
 import { useAction, useFetch } from '../hooks';
 import { WeeklyEditor } from '../planning/tabs';
 import { Help } from '../help';
+import { useFixAnchor } from '../components/FixLink';
 
 const KINDS: [string, string, string][] = [
   ['site', 'Lieux de formation', 'Site, centre, adresse d’intervention (partageable entre sessions simultanées).'],
@@ -19,6 +20,7 @@ export default function Resources() {
   const [edit, setEdit] = useState<any>(null);
   const [f, setF] = useState(empty);
   const write = can(org, 'sessions.write');
+  useFixAnchor(!!list.data);
   const nul = (v: string) => (v.trim() ? v.trim() : null);
 
   const submit = (e: React.FormEvent) => { e.preventDefault(); act.run(() => post('/api/v1/resources', {
@@ -73,7 +75,7 @@ export default function Resources() {
               {!!rows.length && <table>
                 <thead><tr><th>Nom</th><th>Catégorie</th>{kind === 'equipment' ? <><th>N° série</th><th>Vérification (VGP)</th></> : <th>{kind === 'site' ? 'Adresse' : 'Lieu'}</th>}{kind !== 'equipment' && <th className="num">Capacité</th>}<th /></tr></thead>
                 <tbody>{rows.map((r) => (
-                  <tr key={r.id}>
+                  <tr key={r.id} id={`res-${r.id}`}>
                     <td>{r.name}{r.notes && <div className="small muted">{r.notes}</div>}
                       <div className="small muted">{[r.site_id && `site : ${sites.find((x) => x.id === r.site_id)?.name ?? '—'}`, r.equipment?.length && r.equipment.join(', '),
                         r.accessible != null && (r.accessible ? 'accessible PMR' : 'non accessible PMR'), (r.setup_minutes || r.teardown_minutes) && `tampons ${r.setup_minutes}+${r.teardown_minutes} min`, r.opening_hours && 'horaires d’ouverture'].filter(Boolean).join(' · ')}</div>

@@ -88,7 +88,7 @@ export class PlanningAdmin {
     });
   }
   private impacted(tx: any, ownerType: string, ownerId: string, startsAt: string | Date, endsAt: string | Date) {
-    return many(tx, `SELECT sl.id, sl.starts_at, sl.ends_at, ts.title AS session_title FROM slots sl JOIN training_sessions ts ON ts.id = sl.session_id
+    return many(tx, `SELECT sl.id, sl.session_id, sl.starts_at, sl.ends_at, ts.title AS session_title FROM slots sl JOIN training_sessions ts ON ts.id = sl.session_id
                       WHERE sl.status NOT IN ('cancelled','done') AND sl.starts_at < $4 AND sl.ends_at > $3
                         AND (($1 = 'person' AND EXISTS (SELECT 1 FROM slot_trainers st WHERE st.slot_id = sl.id AND st.person_id = $2))
                           OR ($1 = 'resource' AND EXISTS (SELECT 1 FROM slot_resources sr WHERE sr.slot_id = sl.id AND sr.resource_id = $2)))
@@ -123,7 +123,7 @@ export class PlanningAdmin {
       if (b.siteId && !(await one(tx, `SELECT 1 FROM resources WHERE id = $1 AND kind = 'site'`, [b.siteId]))) throw badRequest('invalid_site', 'Site inconnu.', 'siteId');
       const c = await one(tx, `INSERT INTO closures(tenant_id, site_id, starts_on, ends_on, label) VALUES ($1,$2,$3,$4,$5) RETURNING *`, [ctx.tenantId, b.siteId ?? null, b.startsOn, b.endsOn, b.label]);
       // Politique de report explicite : séances concernées listées, à déplacer ou annuler par le planificateur.
-      const impacted = await many(tx, `SELECT sl.id, sl.starts_at, sl.ends_at, ts.title AS session_title FROM slots sl JOIN training_sessions ts ON ts.id = sl.session_id
+      const impacted = await many(tx, `SELECT sl.id, sl.session_id, sl.starts_at, sl.ends_at, ts.title AS session_title FROM slots sl JOIN training_sessions ts ON ts.id = sl.session_id
                                         WHERE sl.status NOT IN ('cancelled','done') AND (sl.starts_at AT TIME ZONE ts.timezone)::date BETWEEN $1 AND $2
                                           AND ($3::uuid IS NULL OR slot_site(sl.id) = $3) ORDER BY sl.starts_at`, [b.startsOn, b.endsOn, b.siteId ?? null]);
       return { ...c, impacted };

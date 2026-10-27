@@ -4,6 +4,7 @@ import { useAction, useFetch } from '../hooks';
 import { HistoryList, HmInput, Issues } from './SlotPanel';
 import { STATUS, at, fmtH, parts } from './lib';
 import { Help } from '../help';
+import { FixLink } from '../components/FixLink';
 
 const fmtDT = (d: string, tz: string) => new Date(d).toLocaleString('fr-FR', { timeZone: tz, dateStyle: 'short', timeStyle: 'short' });
 const RULES: Record<string, string> = {
@@ -132,7 +133,7 @@ export function AvailabilityTab({ lookups, tz, perms }: { lookups: any; tz: stri
           <div><button className="btn sm">Enregistrer</button> <span className="small muted">{perms.write ? 'Validée immédiatement.' : 'Soumise à validation du responsable.'}</span></div>
         </form>}
         {impacted && impacted.length > 0 && <div className="banner warn small"><strong>{impacted.length} séance(s) concernée(s)</strong>, à réaffecter ou déplacer :
-          <ul>{impacted.map((s) => <li key={s.id}>{s.session_title} · {fmtDT(s.starts_at, tz)}</li>)}</ul></div>}
+          <ul>{impacted.map((s) => <li key={s.id}>{s.session_title} · {fmtDT(s.starts_at, tz)} <FixLink fix={{ label: 'Ouvrir la séance', to: `/planning?slot=${s.id}` }} /></li>)}</ul></div>}
         {act.error && <p className="alert">{act.error}</p>}
         {perms.write && (pending.data?.length ?? 0) > 0 && <>
           <h2>Demandes à valider</h2>
@@ -188,7 +189,7 @@ export function ClosuresTab({ lookups, perms }: { lookups: any; perms: any }) {
         <label>Site<select value={f.siteId} onChange={(e) => setF({ ...f, siteId: e.target.value })}><option value="">Tout le centre</option>{lookups.resources.filter((r: any) => r.kind === 'site').map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}</select></label>
         <button className="btn sm">Ajouter</button>
       </form>}
-      {impacted && <p className={impacted.length ? 'banner warn small' : 'small success'}>{impacted.length ? `${impacted.length} séance(s) tombent sur cette fermeture : à déplacer ou annuler.` : 'Aucune séance concernée.'}</p>}
+      {impacted && (impacted.length ? <div className="banner warn small">{impacted.length} séance(s) tombent sur cette fermeture : à déplacer ou annuler.<ul>{impacted.map((x: any) => <li key={x.id}>{x.session_title} · {new Date(x.starts_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })} <FixLink fix={{ label: 'Ouvrir la séance', to: `/planning?slot=${x.id}` }} /></li>)}</ul></div> : <p className="small success">Aucune séance concernée.</p>)}
       {act.error && <p className="alert">{act.error}</p>}
     </div>
   );

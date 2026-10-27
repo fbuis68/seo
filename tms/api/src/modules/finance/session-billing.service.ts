@@ -43,7 +43,9 @@ export class SessionBillingService {
        WHERE s.id = $1`, [sessionId]);
     if (!s) throw notFound('Session');
     const warnings: string[] = [];
-    const skipped: { enrollmentId: string | null; name: string; reason: string }[] = [];
+    const skipped: { enrollmentId: string | null; name: string; reason: string; fix?: { label: string; anchor: string } }[] = [];
+    // Cible de correction de chaque avertissement (même ordre que `warnings`).
+    const warningFixes: ({ label: string; anchor: string } | null)[] = [];
     if (s.price == null) throw badRequest('price_required', 'Aucun prix : renseignez le prix HT du programme ou de la session.', 'priceHt');
     const vatRate = ['exempt_261_4_4', 'franchise_293b'].includes(s.vat_regime) ? '0' : String(s.vat_rate ?? '20');
     const price = toCents(s.price);
@@ -61,19 +63,19 @@ export class SessionBillingService {
     if (s.basis_kind === 'per_session') {
       // Forfait intra : client de la session, moins les prises en charge des financeurs.
       if (!s.client_id) throw badRequest('client_required', 'Session intra sans client : renseignez le client.');
-      if (o.basis === 'hours') warnings.push('Forfait de session : facturé au forfait, la base « heures réalisées » ne s’applique qu’aux prix par apprenant.');
+      if (o.basis === 'hours') { warnings.push('Forfait de session : facturé au forfait, la base « heures réalisées » ne s’applique qu’aux prix par apprenant.'); warningFixes.push({ label: 'Changer la base de prix', anchor: 'session-price-basis' }); }
       let funded = 0n;
       for (const e of enrollments) for (const f of e.fundings) {
         const c = toCents(f.amount); funded += c;
         lines.push({ key: `${e.id}:funder:${f.funderId}`, enrollmentId: e.id, role: 'funder', payerId: f.funderId, label: `Prise en charge — ${title} — ${e.name}`, cents: c });
       }
       const rest = price - funded;
-      if (rest < 0n) warnings.push('Prises en charge supérieures au prix de la session : vérifiez les financements.');
+      if (rest < 0n) { warnings.push('Prises en charge supérieures au prix de la session : vérifiez les financements.'); warningFixes.push({ label: 'Voir les inscriptions', anchor: 'session-enrollments' }); }
       if (rest > 0n) lines.push({ key: `session:client:${s.client_id}`, enrollmentId: null, role: 'client', payerId: s.client_id, label: `${title} — formation intra`, cents: rest });
     } else {
       for (const e of enrollments) {
         const hours = o.basis === 'hours';
-        if (hours && !e.planned) { skipped.push({ enrollmentId: e.id, name: e.name, reason: 'aucune heure prévue (séances non planifiées)' }); continue; }
+        if (hours && !e.planned) { skipped.push({ enrollmentId: e.id, name: e.name, reason: 'aucune heure prévue (séances non planifiées)', fix: { label: 'Planifier les séances', anchor: 'session-planning' } }); continue; }
         const ratio = (c: bigint) => hours ? prorata(c, Math.min(e.attended, e.planned), e.planned) : c;
         const detail = hours ? ` — ${fmtH(Math.min(e.attended, e.planned))} réalisées sur ${fmtH(e.planned)}` : '';
         let fundedFull = 0n; let fundedDue = 0n;
@@ -85,14 +87,14 @@ export class SessionBillingService {
         // Reste à charge du client : prorata, ou (option) heures d'absence non prises en charge refacturées au client.
         const rest = hours && o.absenceToClient ? price - fundedDue : ratio(price - fundedFull);
         if (rest <= 0n) continue;
-        if (!e.client_id) { skipped.push({ enrollmentId: e.id, name: e.name, reason: `reste à charge ${fromCents(rest)} € HT sans client payeur : désignez le client de l’inscription` }); continue; }
+        if (!e.client_id) { skipped.push({ enrollmentId: e.id, name: e.name, reason: `reste à charge ${fromCents(rest)} € HT sans client payeur : désignez le client de l’inscription`, fix: { label: 'Désigner le client', anchor: `enr-${e.id}-client` } }); continue; }
         lines.push({ key: `${e.id}:client:${e.client_id}`, enrollmentId: e.id, role: 'client', payerId: e.client_id, label: `${title} — ${e.name}${detail}${hours && o.absenceToClient && fundedFull ? ' (absences non prises en charge incluses)' : ''}`, cents: rest, attended: e.attended, planned: e.planned });
       }
-      if (o.basis === 'hours' && enrollments.some((e) => e.attended === 0)) warnings.push('Certains apprenants n’ont aucune présence saisie : leur ligne est à 0 et n’est pas créée.');
+      if (o.basis === 'hours' && enrollments.some((e) => e.attended === 0)) { warnings.push('Certains apprenants n’ont aucune présence saisie : leur ligne est à 0 et n’est pas créée.'); warningFixes.push({ label: 'Saisir les présences', anchor: 'session-enrollments' }); }
     }
     const billed = await many(tx, LIVE_ITEMS, [sessionId]);
     const billedKeys = new Set(billed.map((b) => b.enrollment_id ? `${b.enrollment_id}:${b.role}:${b.payer_client_id}` : `session:${b.role}:${b.payer_client_id}`));
-    return { s, vatRate, lines, billed, billedKeys, warnings, skipped };
+    return { s, vatRate, lines, billed, billedKeys, warnings, warningFixes, skipped };
   }
 
   /** État : non facturée, partielle, brouillons à émettre, facturée, réglée. */
@@ -118,11 +120,14 @@ export class SessionBillingService {
     return this.db.tenantTx(ctx.tenantId, async (tx) => {
       let c;
       try { c = await this.compute(tx, sessionId, o); }
-      catch (e: any) { if (e.code === 'price_required' || e.code === 'client_required') return { state: 'not_configured', message: e.message, invoices: [], billed: [], warnings: [], skipped: [] }; throw e; }
+      catch (e: any) {
+        if (e.code === 'price_required' || e.code === 'client_required') return { state: 'not_configured', message: e.message, fix: e.code === 'price_required' ? { label: 'Renseigner le prix', anchor: 'session-price' } : { label: 'Choisir le client', anchor: 'session-edit' }, invoices: [], billed: [], warnings: [], warningItems: [], skipped: [] };
+        throw e;
+      }
       const names = new Map((await many(tx, `SELECT id, name FROM clients WHERE id = ANY($1::uuid[])`, [c.lines.map((l) => l.payerId)])).map((r) => [r.id, r.name]));
       return {
         state: this.state(c.lines, c.billed, c.billedKeys, c.skipped.length), basis: o.basis, vatRate: c.vatRate, price: c.s.price,
-        priceBasis: c.s.basis_kind, invoices: this.group(c, names), warnings: c.warnings, skipped: c.skipped,
+        priceBasis: c.s.basis_kind, invoices: this.group(c, names), warnings: c.warnings, warningItems: c.warnings.map((m, i) => ({ message: m, fix: c.warningFixes[i] ?? null })), skipped: c.skipped,
         billed: c.billed.map((b) => ({ id: b.id, invoiceId: b.invoice_id, invoiceNumber: b.invoice_number, invoiceStatus: b.invoice_status, balance: b.balance, payer: b.payer_name, role: b.role, amountHt: b.amount_ht, basis: b.basis })),
       };
     });

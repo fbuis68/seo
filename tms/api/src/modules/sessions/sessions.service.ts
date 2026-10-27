@@ -91,7 +91,9 @@ export class SessionsService {
       s.enrollments = await many(t, `SELECT e.id, e.status, e.person_id, e.starts_on, e.ends_on, e.group_label, p.first_name, p.last_name ${trainer ? '' : ', p.email, e.client_id, c.name client_name'}
                                        FROM enrollments e JOIN persons p ON p.id=e.person_id LEFT JOIN clients c ON c.id=e.client_id
                                       WHERE e.session_id=$1 ORDER BY p.last_name`, [id]);
-      s.missing = trainer ? [] : await this.missingPieces(t, s);
+      // `todo` : messages avec lien de correction ; `missing` : mêmes messages en texte (compatibilité).
+      s.todo = trainer ? [] : await this.missingPieces(t, s);
+      s.missing = s.todo.map((x: any) => x.message);
       return s;
     };
     return tx ? run(tx) : this.db.tenantTx(ctx.tenantId, run);
@@ -99,47 +101,50 @@ export class SessionsService {
 
   /** Assistant : pièces manquantes, sans bloquer les étapes. */
   private async missingPieces(tx: Tx, s: any) {
-    const missing: string[] = [];
+    // Chaque élément porte sa cible de correction (ancre de la fiche session ou écran).
+    const todo: { message: string; fix: { label: string; anchor?: string; to?: string } | null }[] = [];
+    const add = (message: string, fix: { label: string; anchor?: string; to?: string } | null) => todo.push({ message, fix });
+    const plan = { label: 'Ouvrir le planning', anchor: 'session-planning' };
     const slots = s.slots.filter((x: any) => x.status !== 'cancelled'); // séances annulées : hors durées et réservations
-    if (!slots.length) missing.push('Aucun créneau planifié');
+    if (!slots.length) add('Aucun créneau planifié', { label: 'Ajouter une séance', anchor: 'session-add-slot' });
     const noTrainer = slots.filter((x: any) => !x.trainers.length).length;
-    if (noTrainer) missing.push(`${noTrainer} créneau(x) sans formateur`);
+    if (noTrainer) add(`${noTrainer} créneau(x) sans formateur`, { label: 'Affecter un formateur', anchor: 'session-planning' });
     const scheduled = slots.reduce((a: number, x: any) => a + x.pedagogical_minutes, 0);
     if (slots.length && scheduled !== s.target) {
-      missing.push(`Planning : ${fmtH(scheduled)} planifiées pour ${fmtH(s.target)} prévues au programme (${scheduled < s.target ? 'incomplet' : 'dépassement'})`);
+      add(`Planning : ${fmtH(scheduled)} planifiées pour ${fmtH(s.target)} prévues au programme (${scheduled < s.target ? 'incomplet' : 'dépassement'})`, plan);
     }
     const unpublished = slots.filter((x: any) => ['draft', 'pending'].includes(x.status)).length;
-    if (unpublished) missing.push(`${unpublished} séance(s) non publiée(s)`);
+    if (unpublished) add(`${unpublished} séance(s) non publiée(s)`, { label: 'Publier', to: '/planning?tab=publish' });
     const toResolve = slots.reduce((a: number, x: any) => a + x.to_resolve, 0);
-    if (toResolve) missing.push(`${toResolve} participation(s) à résoudre (collision ou capacité)`);
+    if (toResolve) add(`${toResolve} participation(s) à résoudre (collision ou capacité)`, { label: 'Voir les conflits', to: '/planning?tab=conflicts' });
     if (s.parts.length) {
       const planned = s.parts.reduce((a: number, x: any) => a + x.planned_minutes, 0);
-      if (planned !== s.target) missing.push(`Découpage : ${fmtH(planned)} réparties en parties pour ${fmtH(s.target)} au programme`);
-      for (const pt of s.parts) if (pt.scheduled_minutes < pt.planned_minutes) missing.push(`Partie « ${pt.title} » : ${fmtH(pt.scheduled_minutes)} planifiées sur ${fmtH(pt.planned_minutes)}`);
+      if (planned !== s.target) add(`Découpage : ${fmtH(planned)} réparties en parties pour ${fmtH(s.target)} au programme`, plan);
+      for (const pt of s.parts) if (pt.scheduled_minutes < pt.planned_minutes) add(`Partie « ${pt.title} » : ${fmtH(pt.scheduled_minutes)} planifiées sur ${fmtH(pt.planned_minutes)}`, plan);
       const orphan = slots.filter((x: any) => !x.part_id).length;
-      if (orphan) missing.push(`${orphan} créneau(x) non rattaché(s) à une partie`);
+      if (orphan) add(`${orphan} créneau(x) non rattaché(s) à une partie`, plan);
     }
     // Matériel (ex. engins CACES) : vérification périodique échue à la date du créneau.
     const day = (d: string | Date) => new Intl.DateTimeFormat('en-CA', { timeZone: s.timezone }).format(new Date(d)); // AAAA-MM-JJ
-    const overdue = new Map<string, string>();
+    const overdue = new Map<string, { message: string; fix: { label: string; to: string } }>();
     for (const sl of slots) for (const r of sl.resources) {
       if (r.kind === 'equipment' && r.inspection_due_on && String(r.inspection_due_on).slice(0, 10) < day(sl.starts_at) && !overdue.has(r.id)) {
-        overdue.set(r.id, `${r.name} : vérification périodique échue le ${String(r.inspection_due_on).slice(0, 10)} (utilisé le ${day(sl.starts_at)})`);
+        overdue.set(r.id, { message: `${r.name} : vérification périodique échue le ${String(r.inspection_due_on).slice(0, 10)} (utilisé le ${day(sl.starts_at)})`, fix: { label: 'Mettre à jour la vérification', to: `/settings/lieux#fix=res-${r.id}` } });
       }
     }
-    missing.push(...overdue.values());
+    todo.push(...overdue.values());
     // Émargement : présences attendues non saisies sur les séances terminées.
     const closure = await closureCheck(tx, s.id);
     const att = closure.issues.find((i) => i.code === 'attendance_missing');
-    if (att) missing.push(att.message);
-    if (['completed', 'archived'].includes(s.status) && !(await one(tx, `SELECT 1 FROM invoices WHERE session_id=$1`, [s.id]))) missing.push('Session terminée non facturée');
+    if (att) add(att.message, { label: 'Saisir les présences', anchor: 'session-enrollments' });
+    if (['completed', 'archived'].includes(s.status) && !(await one(tx, `SELECT 1 FROM invoices WHERE session_id=$1`, [s.id]))) add('Session terminée non facturée', { label: 'Facturer', anchor: 'session-billing' });
     const docs = await many(tx, `SELECT kind, owner_id FROM documents WHERE owner_type='enrollment' AND owner_id = ANY($1)`, [s.enrollments.map((e: any) => e.id)]);
     const active = s.enrollments.filter((e: any) => e.status !== 'cancelled');
     const without = (kind: string) => active.filter((e: any) => !docs.some((d) => d.owner_id === e.id && d.kind === kind)).length;
-    if (active.length && without('convocation')) missing.push(`${without('convocation')} convocation(s) non générée(s)`);
-    if (s.kind === 'intra' && !(await one(tx, `SELECT 1 FROM documents WHERE owner_type='session' AND owner_id=$1 AND kind='convention'`, [s.id]))) missing.push('Convention non générée');
-    if (['completed'].includes(s.status) && active.length && without('attestation')) missing.push(`${without('attestation')} attestation(s) manquante(s)`);
-    return missing;
+    if (active.length && without('convocation')) add(`${without('convocation')} convocation(s) non générée(s)`, { label: 'Générer les convocations', anchor: 'session-enrollments' });
+    if (s.kind === 'intra' && !(await one(tx, `SELECT 1 FROM documents WHERE owner_type='session' AND owner_id=$1 AND kind='convention'`, [s.id]))) add('Convention non générée', { label: 'Générer la convention', anchor: 'session-convention' });
+    if (['completed'].includes(s.status) && active.length && without('attestation')) add(`${without('attestation')} attestation(s) manquante(s)`, { label: 'Générer les attestations', anchor: 'session-enrollments' });
+    return todo;
   }
 
   create(ctx: RequestContext, b: SessionInput, tx?: Tx) {

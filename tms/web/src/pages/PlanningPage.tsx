@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, get, post } from '../api';
 import { can, useApp } from '../context';
 import { useFetch } from '../hooks';
+import { useLocation } from 'react-router-dom';
 import { ColorBy, GROUP_LABEL, GroupBy, MODALITY, STATUS, View, Zoom, addDays, at, daysBetween, dayLabel, fmtH, legendOf, loadPrefs, longDay, monthLabel, parts, rangeOf, savePrefs, step, today } from '../planning/lib';
 import SlotPanel, { DerogationBox, Draft, Issues } from '../planning/SlotPanel';
 import { AvailabilityTab, ClosuresTab, ConflictsTab, ImportExportTab, IndicatorsTab, JournalTab, PublishTab, SettingsTab } from '../planning/tabs';
@@ -44,7 +45,7 @@ export default function PlanningPage() {
   useEffect(() => savePrefs(KEY, { ...prefs, date: undefined }), [prefs]);
   const set = (p: Partial<Prefs>) => setPrefs((x) => ({ ...x, ...p }));
   const setFilter = (p: Partial<Filters>) => setPrefs((x) => ({ ...x, filters: { ...x.filters, ...p } }));
-  const [tab, setTab] = useState('planning');
+  const [tab, setTab] = useState(new URLSearchParams(location.search).get('tab') ?? 'planning');
   const narrow = useNarrow();
   const view: View = narrow && ['day', 'week', 'month'].includes(prefs.view) ? 'list' : prefs.view;
   const lookups = useFetch<any>('/api/v1/planning/lookups');
@@ -76,7 +77,15 @@ export default function PlanningPage() {
   useEffect(load, [load]);
   const unav = useFetch<any[]>(['day', 'timeline'].includes(view) ? `/api/v1/planning/availabilities?status=approved&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` : null, [from, to, view]);
   const closures = useFetch<any[]>('/api/v1/planning/closures');
-  const [panel, setPanel] = useState<{ slotId?: string; draft?: Draft } | null>(null);
+  const [panel, setPanel] = useState<{ slotId?: string; draft?: Draft } | null>(() => { const id = new URLSearchParams(location.search).get('slot'); return id ? ({ slotId: id } as any) : null; });
+  // Lien « Ouvrir la séance » (?slot=…) ou onglet (?tab=…) depuis un message d'alerte, y compris sur cette même page.
+  const loc = useLocation();
+  useEffect(() => {
+    const q = new URLSearchParams(loc.search);
+    const id = q.get('slot'); const t = q.get('tab');
+    if (id) { setTab('planning'); setPanel({ slotId: id }); } else if (t) setTab(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loc.key]);
   const [proposal, setProposal] = useState<{ s: any; change: any } | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
 

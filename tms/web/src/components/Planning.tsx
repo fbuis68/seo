@@ -214,7 +214,7 @@ export default function Planning({ session: d, canWrite, trainers, resources, on
           // Garde formateurs et ressources pour enchaîner les créneaux suivants.
           if (r) setSlot({ ...slot, start: slot.end, end: slot.end < '13:00' ? '17:00' : slot.end });
         }); }}>
-          <strong className="small">Ajouter un créneau</strong>
+          <strong className="small" id="session-add-slot" tabIndex={-1}>Ajouter un créneau</strong>
           <div className="slot-line">
             <label>Jour<input type="date" required value={slot.day} onChange={(e) => setSlot({ ...slot, day: e.target.value })} /></label>
             <label>Début<HmInput required value={slot.start} onChange={(v) => setSlot({ ...slot, start: v })} /></label>
