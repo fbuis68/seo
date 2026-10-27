@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { api, download, post } from '../api';
+import { useEffect, useState } from 'react';
+import { api, download, get, post } from '../api';
 import { useAction, useFetch } from '../hooks';
 import { ImportResults } from './ImportResults';
 
@@ -23,7 +23,7 @@ const RESULT_LABEL: Record<string, string> = { read: 'Lues', create: 'Créées',
  * Reprise par fichier : dépôt → détection → association des colonnes (modifiable) → simulation
  * (aucune écriture) → publication → rapport. `simple` : clients et apprenants depuis Excel/CSV.
  */
-export function ImportWizard({ simple, onPublished }: { simple?: boolean; onPublished?: () => void }) {
+export function ImportWizard({ simple, onPublished, resumeId, onResumed }: { simple?: boolean; onPublished?: () => void; resumeId?: string | null; onResumed?: () => void }) {
   const profiles = useFetch<any[]>('/api/v1/imports/profiles');
   const fields = useFetch<Record<string, Record<string, { required?: boolean }>>>('/api/v1/imports/fields');
   const act = useAction();
@@ -53,6 +53,25 @@ export function ImportWizard({ simple, onPublished }: { simple?: boolean; onPubl
       if (!d.mcdf) setFiles(best?.files?.length ? best.files : (d.tables ?? []).map((t: any) => ({ path: t.name, entity: 'client', columns: {} })));
     }
   });
+  // Reprise d'un lot existant (bouton « Relancer ») : état, détection, colonnes associées et simulation déjà faite.
+  useEffect(() => {
+    if (!resumeId) return;
+    act.run(async () => {
+      reset();
+      const b: any = await get(`/api/v1/imports/${resumeId}`);
+      setSoftware(b.source_software); setInstance(b.source_instance_id);
+      setBatch(b);
+      const d: any = await post(`/api/v1/imports/${b.id}/detect`);
+      setDetect(d);
+      if (!d.mcdf) {
+        const best = d.candidates?.[0];
+        setProfile(b.profile_code ?? best?.profile ?? 'generic');
+        setFiles(b.mapping?.files?.length ? b.mapping.files : best?.files?.length ? best.files : (d.tables ?? []).map((t: any) => ({ path: t.name, entity: 'client', columns: {} })));
+      }
+      if (b.status === 'simulated' && b.simulation) setSim({ batchId: b.id, ...b.simulation });
+    }).finally(() => onResumed?.());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeId]);
   const abandon = () => batch && act.run(() => post(`/api/v1/imports/${batch.id}/cancel`), reset);
   const simulate = () => act.run(async () => {
     const body = detect?.mcdf ? { profile: 'mcdf', entityIds: entities } : { profile, files: (files ?? []).filter((f) => f.entity) };

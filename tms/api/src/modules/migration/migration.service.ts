@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream';
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { AuditService } from '../../core/audit.service';
@@ -69,7 +70,7 @@ export class MigrationService {
   }
 
   list(ctx: RequestContext) {
-    return this.db.tenantTx(ctx.tenantId, (tx) => many(tx, `SELECT id, source_software, source_instance_id, profile_code, profile_version, status, package_sha256, package_size, created_at, published_at FROM import_batches ORDER BY created_at DESC LIMIT 50`));
+    return this.db.tenantTx(ctx.tenantId, (tx) => many(tx, `SELECT id, source_software, source_instance_id, profile_code, profile_version, status, package_sha256, package_size, created_at, published_at, options->>'filename' filename, coalesce(report->'perEntity', simulation->'summary') summary FROM import_batches ORDER BY created_at DESC LIMIT 50`));
   }
   get(ctx: RequestContext, id: string) {
     return this.db.tenantTx(ctx.tenantId, async (tx) => {
@@ -96,6 +97,43 @@ export class MigrationService {
       await tx.query(`UPDATE import_batches SET status='cancelled' WHERE id=$1`, [id]);
       return { cancelled: true };
     });
+  }
+
+  /**
+   * Suppression d'un lot : lignes de travail, fichiers et paquet stocké. Un lot publié doit d'abord être annulé
+   * (retrait des données importées) ; les données métier ne sont jamais supprimées ici.
+   */
+  async remove(ctx: RequestContext, id: string) {
+    await this.db.tenantTx(ctx.tenantId, async (tx) => {
+      const b = await this.batch(tx, id, true);
+      if (b.status === 'published') throw conflict('batch_published', 'Lot publié : annulez-le d’abord (les données importées seront retirées), puis supprimez-le.');
+      if (b.status === 'committing') throw conflict('batch_committing', 'Publication en cours : attendez la fin avant de supprimer le lot.');
+      for (const t of ['import_rows', 'import_files', 'import_changes']) await tx.query(`DELETE FROM ${t} WHERE batch_id=$1`, [id]);
+      await tx.query(`DELETE FROM import_batches WHERE id=$1`, [id]);
+      await this.audit.log(tx, { tenantId: ctx.tenantId, actor: ctx.userId, action: 'import.deleted', entityType: 'import', entityId: id, data: { status: b.status, source: b.source_software } });
+    });
+    await this.storage.removeTree(this.storage.key(ctx.tenantId, 'imports', id)).catch(() => undefined);
+    return { deleted: true };
+  }
+
+  /**
+   * Relance : un lot en cours est simplement repris ; sinon nouveau lot à partir du même fichier stocké,
+   * avec la même association de colonnes (à revoir avant la simulation).
+   */
+  async relaunch(ctx: RequestContext, id: string) {
+    const b = await this.db.tenantTx(ctx.tenantId, (tx) => this.batch(tx, id));
+    if (['uploaded', 'detected', 'mapped', 'simulated'].includes(b.status)) return { batchId: id, resumed: true };
+    if (!b.package_sha256 || b.status === 'rejected') throw conflict('no_package', 'Aucun fichier exploitable dans ce lot : déposez un nouveau fichier.');
+    const buf = await this.storage.get(this.storage.key(ctx.tenantId, 'imports', `${id}/${b.package_sha256}`)).catch(() => null);
+    if (!buf) throw conflict('package_missing', 'Le fichier de ce lot n’est plus disponible : déposez-le à nouveau.');
+    const nb = await this.create(ctx, { sourceSoftware: b.source_software, sourceInstanceId: b.source_instance_id });
+    const up: any = await this.upload(ctx, nb!.id, Readable.from(buf), b.options?.filename ?? 'paquet');
+    if (up.status !== 'rejected' && b.source_software !== 'mcdf' && b.mapping?.files?.length) {
+      await this.detect(ctx, nb!.id);
+      await this.confirmProfile(ctx, nb!.id, { profile: b.profile_code ?? 'generic', files: b.mapping.files });
+    }
+    await this.db.tenantTx(ctx.tenantId, (tx) => this.audit.log(tx, { tenantId: ctx.tenantId, actor: ctx.userId, action: 'import.relaunched', entityType: 'import', entityId: nb!.id, data: { from: id } }));
+    return { batchId: nb!.id, resumed: false, relaunchedFrom: id };
   }
 
   /** Dépôt du paquet (flux) : taille bornée par l'offre, empreinte SHA-256, inventaire sécurisé. */
@@ -199,7 +237,7 @@ export class MigrationService {
         verdict: mcdf.recognized ? 'recognized' : 'unrecognized', message: mcdf.recognized ? undefined : 'Ce fichier ne ressemble pas à une base MCDF (tables actor, convention, schedule absentes).',
       };
       return this.db.tenantTx(ctx.tenantId, async (tx) => {
-        await tx.query(`UPDATE import_batches SET status='detected', diagnostic=$2, profile_confidence=$3 WHERE id=$1`, [id, JSON.stringify(diagnostic), mcdf.recognized ? 1 : 0]);
+        await tx.query(`UPDATE import_batches SET status=CASE WHEN status='uploaded' THEN 'detected' ELSE status END, diagnostic=$2, profile_confidence=$3 WHERE id=$1`, [id, JSON.stringify(diagnostic), mcdf.recognized ? 1 : 0]);
         return { batchId: id, ...diagnostic };
       });
     }
@@ -222,7 +260,7 @@ export class MigrationService {
     };
     return this.db.tenantTx(ctx.tenantId, async (tx) => {
       for (const t of tables) await tx.query(`UPDATE import_files SET columns=$3, row_count=$4 WHERE batch_id=$1 AND path=$2`, [id, t.name.split('#')[0], t.columns, t.rows.length]);
-      await tx.query(`UPDATE import_batches SET status='detected', diagnostic=$2, profile_confidence=$3 WHERE id=$1`, [id, JSON.stringify(diagnostic), candidates[0]?.confidence ?? 0]);
+      await tx.query(`UPDATE import_batches SET status=CASE WHEN status='uploaded' THEN 'detected' ELSE status END, diagnostic=$2, profile_confidence=$3 WHERE id=$1`, [id, JSON.stringify(diagnostic), candidates[0]?.confidence ?? 0]);
       return { batchId: id, ...diagnostic };
     });
   }

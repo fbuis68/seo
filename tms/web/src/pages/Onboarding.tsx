@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api, date, download, eur, get, patch, post } from '../api';
 import { can, useApp } from '../context';
 import { Help } from '../help';
+import { ImportBatches } from '../components/ImportBatches';
 import { ImportWizard } from '../components/ImportWizard';
 import { useAction, useFetch } from '../hooks';
 
@@ -130,19 +131,14 @@ function CompanyStep({ st, setSt, canEdit }: { st: any; setSt: (x: any) => void;
 function DataStep({ st, reload }: { st: any; reload: () => void }) {
   const p = st.session.path;
   const [show, setShow] = useState(p === 'excel');
+  const [resume, setResume] = useState<string | null>(null);
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <p style={{ margin: 0 }}>{st.counts.clients} client(s), {st.counts.programs} formation(s) dans votre espace.</p>
       {(!p || p === 'start') && <p style={{ margin: 0 }}>Créez vos premiers éléments : <Link to="/clients">un client</Link> (avec son adresse de facturation) et <Link to="/sessions">une formation</Link>. Vous avez déjà des listes ? <button className="linklike" onClick={() => setShow(!show)}>Importer un fichier Excel</button>.</p>}
       {p === 'migrate' && <p style={{ margin: 0 }}>Logiciel avec sauvegarde (MCDF, Dendreo, Digiforma…) : <Link to="/settings/reprise">Reprise des données</Link>. Clients et apprenants depuis Excel : <button className="linklike" onClick={() => setShow(!show)}>importer ici</button>.</p>}
-      {(show || p === 'excel') && <ImportWizard simple onPublished={reload} />}
-      {st.imports.length > 0 && <table className="small">
-        <thead><tr><th>Source</th><th>État</th><th className="num">Reçus</th><th className="num">Importés</th><th className="num">Rejetés</th><th className="num">Exclus</th><th>Date</th></tr></thead>
-        <tbody>{st.imports.map((b: any) => {
-          const t = Object.values(b.summary ?? {}).reduce((acc: any, e: any) => { acc.read += e.read ?? 0; acc.created += (e.created ?? e.create ?? 0) + (e.updated ?? e.update ?? 0); acc.rejected += e.rejected ?? e.reject ?? 0; acc.excluded += e.excluded ?? e.exclude ?? 0; return acc; }, { read: 0, created: 0, rejected: 0, excluded: 0 }) as any;
-          return <tr key={b.id}><td>{b.source}</td><td>{b.status}</td><td className="num">{t.read}</td><td className="num">{t.created}</td><td className="num">{t.rejected}</td><td className="num">{t.excluded}</td><td>{date(b.createdAt)}</td></tr>;
-        })}</tbody>
-      </table>}
+      {(show || p === 'excel') && <ImportWizard simple resumeId={resume} onResumed={() => setResume(null)} onPublished={reload} />}
+      <ImportBatches reloadKey={st.imports.length} onChange={reload} onResume={(id) => { setResume(id); setShow(true); }} />
     </div>
   );
 }

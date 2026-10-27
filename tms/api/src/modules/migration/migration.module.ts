@@ -78,6 +78,8 @@ export class MigrationController {
   @RequirePermission('imports.manage') @Post(':id/commit') commit(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string) { return this.m.commit(c, id); }
   @RequirePermission('imports.manage') @Post(':id/rollback') rollback(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string) { return this.m.rollback(c, id); }
   @RequirePermission('imports.manage') @Post(':id/cancel') cancel(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string) { return this.m.cancel(c, id); }
+  @RequirePermission('imports.manage') @Post(':id/delete') remove(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string) { return this.m.remove(c, id); }
+  @RequireFeature('migration.self') @RequirePermission('imports.manage') @Post(':id/relaunch') relaunch(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string) { return this.m.relaunch(c, id); }
   @RequirePermission('imports.manage') @Get(':id/report') report(@Ctx() c: RequestContext, @Param('id', ParseUUIDPipe) id: string) { return this.m.report(c, id); }
 }
 
