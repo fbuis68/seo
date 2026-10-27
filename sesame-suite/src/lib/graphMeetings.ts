@@ -50,7 +50,14 @@ export async function createOnlineMeeting(params: {
   endDateTime: Date;
   attendeeEmail?: string;
   attendeeName?: string;
+  ccEmails?: string[]; // invités en copie (type "optional" côté Graph) — pas le contact principal
 }): Promise<GraphOnlineMeeting> {
+  const attendees = [
+    ...(params.attendeeEmail
+      ? [{ emailAddress: { address: params.attendeeEmail, name: params.attendeeName || params.attendeeEmail }, type: "required" }]
+      : []),
+    ...(params.ccEmails || []).map((email) => ({ emailAddress: { address: email, name: email }, type: "optional" })),
+  ];
   const event = (await graphFetch(`/users/${encodeURIComponent(params.organizerUserId)}/events`, {
     method: "POST",
     body: JSON.stringify({
@@ -59,9 +66,7 @@ export async function createOnlineMeeting(params: {
       end: { dateTime: params.endDateTime.toISOString(), timeZone: "UTC" },
       isOnlineMeeting: true,
       onlineMeetingProvider: "teamsForBusiness",
-      attendees: params.attendeeEmail
-        ? [{ emailAddress: { address: params.attendeeEmail, name: params.attendeeName || params.attendeeEmail }, type: "required" }]
-        : [],
+      attendees,
     }),
   })) as { onlineMeeting?: { joinUrl?: string } };
   const joinUrl = event.onlineMeeting?.joinUrl;

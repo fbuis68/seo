@@ -77,6 +77,7 @@ interface CreateBody {
   subject: string;
   startDateTime: string;
   endDateTime: string;
+  ccEmails?: string[];
 }
 
 /**
@@ -101,6 +102,8 @@ crmMeetingRouter.post(
     const prospect = await prisma.crmProspect.findUnique({ where: { id: b.prospectId } });
     if (!prospect) throw new HttpError(404, "Prospect introuvable");
 
+    const ccEmails = Array.isArray(b.ccEmails) ? b.ccEmails.map((e) => (e || "").trim()).filter(Boolean) : [];
+
     const organizerEmail = req.admin!.email;
     const organizerUserId = await resolveGraphUserId(organizerEmail);
     const meeting = await createOnlineMeeting({
@@ -110,6 +113,7 @@ crmMeetingRouter.post(
       endDateTime: end,
       attendeeEmail: prospect.email || undefined,
       attendeeName: prospect.nom,
+      ccEmails,
     });
 
     const row = await prisma.crmMeeting.create({
