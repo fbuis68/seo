@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Ip, Patch, Post } from '@nestjs/common';
 import { z } from 'zod';
 import { AllowReadOnly, AllowUnverified, Ctx, NoTenant, Public, RequestContext, RequirePermission } from '../../core/context';
 import { parse } from '../../core/validation';
@@ -14,6 +14,22 @@ export class IdentityController {
   login(@Body() body: unknown, @Headers('user-agent') ua?: string) {
     const b = parse(z.object({ email: z.string().email(), password: z.string().min(1) }), body);
     return this.identity.login(b.email, b.password, ua);
+  }
+
+  /** Mot de passe oublié : toujours la même réponse, que le compte existe ou non. */
+  @Public() @Post('auth/forgot-password')
+  async forgot(@Body() body: unknown, @Ip() ip?: string) {
+    await this.identity.forgotPassword(parse(z.object({ email: z.string().email().max(200) }), body).email, ip);
+    return { sent: true };
+  }
+
+  @Public() @Post('auth/reset-password/check')
+  checkReset(@Body() body: unknown) { return this.identity.checkResetToken(parse(z.object({ token: z.string().min(10).max(200) }), body).token); }
+
+  @Public() @Post('auth/reset-password')
+  reset(@Body() body: unknown) {
+    const b = parse(z.object({ token: z.string().min(10).max(200), password: passwordSchema }), body);
+    return this.identity.resetPassword(b.token, b.password);
   }
 
   @Public() @Post('auth/verify-email')

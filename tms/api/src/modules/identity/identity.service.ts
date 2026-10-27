@@ -92,6 +92,50 @@ export class IdentityService {
     await this.mailer.send({ to: u.email, subject: 'Confirmez votre adresse email', text: `${config.appUrl}/verify-email?token=${token}` });
   }
 
+  /**
+   * Mot de passe oublié : réponse identique que le compte existe ou non (pas d'énumération des comptes).
+   * Lien à usage unique valable 1 heure ; 3 demandes maximum par heure et par compte ; un nouveau lien annule les précédents.
+   */
+  async forgotPassword(email: string, ip?: string) {
+    const [u] = await this.db.query(`SELECT id, email, full_name FROM users WHERE lower(email)=lower($1)`, [email.trim()]);
+    if (!u) return;
+    const [{ n }] = await this.db.query(`SELECT count(*)::int n FROM password_resets WHERE user_id=$1 AND created_at > now() - interval '1 hour'`, [u.id]);
+    if (n >= 3) return;
+    const token = randomToken();
+    await this.db.query(`UPDATE password_resets SET used_at=now() WHERE user_id=$1 AND used_at IS NULL`, [u.id]);
+    await this.db.query(`INSERT INTO password_resets(token_hash, user_id, expires_at, requested_ip) VALUES ($1,$2, now() + interval '1 hour', $3)`, [sha256(token), u.id, ip?.slice(0, 64) ?? null]);
+    // Envoi non attendu : même temps de réponse que pour un email inconnu.
+    void this.mailer.send({
+      to: u.email, subject: 'Réinitialisation de votre mot de passe',
+      text: `Bonjour ${u.full_name},\n\nVous avez demandé à réinitialiser votre mot de passe. Choisissez-en un nouveau avec ce lien :\n${config.appUrl}/reset-password?token=${token}\n\nCe lien est valable 1 heure et ne sert qu'une fois.\nVous n'êtes pas à l'origine de cette demande ? Ignorez ce message : votre mot de passe actuel reste valable.`,
+    }).catch(() => undefined);
+  }
+
+  /** Vérifie un lien de réinitialisation sans le consommer (affichage de la page). */
+  async checkResetToken(token: string) {
+    const [r] = await this.db.query(`SELECT r.expires_at, r.used_at, u.email FROM password_resets r JOIN users u ON u.id=r.user_id WHERE r.token_hash=$1`, [sha256(token)]);
+    if (!r || r.used_at || r.expires_at < new Date()) throw badRequest('invalid_token', 'Lien invalide ou expiré : refaites une demande « Mot de passe oublié ».');
+    return { email: r.email.replace(/^(.).*?(@.*)$/, '$1•••$2') };
+  }
+
+  /** Nouveau mot de passe : lien consommé, toutes les sessions fermées, verrouillage levé, email confirmé, avis envoyé. */
+  async resetPassword(token: string, password: string) {
+    const hash = await hashPassword(password);
+    const u = await this.db.tx(async (tx) => {
+      const r = await one(tx, `SELECT * FROM password_resets WHERE token_hash=$1 FOR UPDATE`, [sha256(token)]);
+      if (!r || r.used_at || r.expires_at < new Date()) throw badRequest('invalid_token', 'Lien invalide ou expiré : refaites une demande « Mot de passe oublié ».');
+      await tx.query(`UPDATE password_resets SET used_at=now() WHERE user_id=$1 AND used_at IS NULL`, [r.user_id]);
+      const user = await one(tx, `UPDATE users SET password_hash=$2, failed_logins=0, locked_until=NULL, email_verified_at=coalesce(email_verified_at, now()) WHERE id=$1 RETURNING id, email, full_name`, [r.user_id, hash]);
+      await tx.query(`UPDATE auth_sessions SET revoked_at=now() WHERE user_id=$1 AND revoked_at IS NULL`, [r.user_id]);
+      return user!;
+    });
+    await this.mailer.send({
+      to: u.email, subject: 'Votre mot de passe a été modifié',
+      text: `Bonjour ${u.full_name},\n\nLe mot de passe de votre compte vient d'être modifié ; vos sessions ouvertes ont été fermées.\nSi vous n'êtes pas à l'origine de ce changement, faites immédiatement une demande « Mot de passe oublié » et contactez le support.`,
+    }).catch(() => undefined);
+    return { ok: true, email: u.email };
+  }
+
   /** Connexion avec protection force brute (verrouillage progressif). */
   async login(email: string, password: string, userAgent?: string) {
     const [u] = await this.db.query(`SELECT * FROM users WHERE lower(email)=lower($1)`, [email]);

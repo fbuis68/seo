@@ -15,7 +15,7 @@ import HelpPage from './pages/HelpPage';
 import PlatformPage from './pages/PlatformPage';
 import PlanningPage from './pages/PlanningPage';
 import { MyPlanning } from './planning/tabs';
-import Login, { VerifyEmail } from './pages/Login';
+import Login, { ForgotPassword, ResetPassword, VerifyEmail } from './pages/Login';
 import SessionDetail from './pages/SessionDetail';
 import Sessions from './pages/Sessions';
 import Settings from './pages/Settings';
@@ -24,6 +24,8 @@ export default function App() {
   const loc = useLocation();
   if (loc.pathname === '/login') return <Login />;
   if (loc.pathname === '/verify-email') return <VerifyEmail />;
+  if (loc.pathname === '/forgot-password') return <ForgotPassword />;
+  if (loc.pathname === '/reset-password') return <ResetPassword />;
   if (!session.get()?.token) return <Navigate to="/login" replace />;
   return <Shell />;
 }
