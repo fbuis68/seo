@@ -105,10 +105,28 @@ interface TreasuryInvoiceRow {
   amountHt: number | null;
   amountTtc: number | null;
   amountPaid: number | null;
+  installments: { amount: number; dueDate: Date | null; paid: boolean }[];
 }
 
 function remainingDue(inv: TreasuryInvoiceRow): number {
   return Math.max(0, invoiceTotal(inv) - (inv.amountPaid || 0));
+}
+
+/**
+ * Entrées de trésorerie d'une facture : une par tranche (découpage de
+ * règlement, §AccInvoiceInstallment) si elle en a, sinon une seule entrée
+ * pour le solde restant dû de la facture entière — jamais les deux à la
+ * fois, sous peine de compter la même créance/dette deux fois (demande
+ * client 27/10/2026). Les tranches déjà cochées "payées" n'apparaissent
+ * pas ; une tranche sans date ("à déterminer") est traitée comme une
+ * facture sans échéance (isolée, pas placée sur le calendrier).
+ */
+function dueEntries(inv: TreasuryInvoiceRow): { dueDate: Date | null; amount: number }[] {
+  if (inv.installments.length) {
+    return inv.installments.filter((i) => !i.paid && i.amount > 0.01).map((i) => ({ dueDate: i.dueDate, amount: i.amount }));
+  }
+  const remaining = remainingDue(inv);
+  return remaining > 0.01 ? [{ dueDate: inv.dueDate, amount: remaining }] : [];
 }
 
 /**
@@ -139,7 +157,7 @@ export async function computeTreasuryOverview(
         documentType: { notIn: NON_ACCOUNTING_DOC_TYPES },
         status: { in: UNPAID_STATUSES },
       },
-      select: { dueDate: true, amountHt: true, amountTtc: true, amountPaid: true },
+      select: { dueDate: true, amountHt: true, amountTtc: true, amountPaid: true, installments: { select: { amount: true, dueDate: true, paid: true } } },
     }),
     prisma.accInvoice.findMany({
       where: {
@@ -148,7 +166,7 @@ export async function computeTreasuryOverview(
         documentType: { notIn: NON_ACCOUNTING_DOC_TYPES },
         status: { in: UNPAID_STATUSES },
       },
-      select: { dueDate: true, amountHt: true, amountTtc: true, amountPaid: true },
+      select: { dueDate: true, amountHt: true, amountTtc: true, amountPaid: true, installments: { select: { amount: true, dueDate: true, paid: true } } },
     }),
   ]);
 
@@ -166,18 +184,18 @@ export async function computeTreasuryOverview(
   const futureSale: { dueDate: Date; amount: number }[] = [];
 
   for (const inv of purchaseInvoices) {
-    const remaining = remainingDue(inv);
-    if (remaining <= 0.01) continue;
-    if (!inv.dueDate) { dettesSansEcheanceCount++; dettesSansEcheanceTotal += remaining; continue; }
-    if (inv.dueDate < today) { dettesRetardCount++; dettesRetardTotal += remaining; }
-    else futurePurchase.push({ dueDate: inv.dueDate, amount: remaining });
+    for (const entry of dueEntries(inv)) {
+      if (!entry.dueDate) { dettesSansEcheanceCount++; dettesSansEcheanceTotal += entry.amount; continue; }
+      if (entry.dueDate < today) { dettesRetardCount++; dettesRetardTotal += entry.amount; }
+      else futurePurchase.push({ dueDate: entry.dueDate, amount: entry.amount });
+    }
   }
   for (const inv of saleInvoices) {
-    const remaining = remainingDue(inv);
-    if (remaining <= 0.01) continue;
-    if (!inv.dueDate) { creancesSansEcheanceCount++; creancesSansEcheanceTotal += remaining; continue; }
-    if (inv.dueDate < today) { creancesRetardCount++; creancesRetardTotal += remaining; }
-    else futureSale.push({ dueDate: inv.dueDate, amount: remaining });
+    for (const entry of dueEntries(inv)) {
+      if (!entry.dueDate) { creancesSansEcheanceCount++; creancesSansEcheanceTotal += entry.amount; continue; }
+      if (entry.dueDate < today) { creancesRetardCount++; creancesRetardTotal += entry.amount; }
+      else futureSale.push({ dueDate: entry.dueDate, amount: entry.amount });
+    }
   }
 
   // Décaissements/encaissements ponctuels hors facturation (12/10/2026,
