@@ -3083,7 +3083,7 @@ function renderMeetingsCard(prospectId){
           <button class="btn btn-sm btn-ghost" onclick="navigator.clipboard&&navigator.clipboard.writeText('${esc(m.joinUrl)}');flash('Lien copié')">Copier le lien</button>
           <a class="btn btn-sm btn-ghost" href="${esc(m.joinUrl)}" target="_blank" rel="noopener">Ouvrir dans Teams</a>
           <button class="btn btn-sm btn-ghost" id="mtg-fetch-${m.id}" onclick="meetingFetchRecap('${m.id}','${prospectId}')">${m.status==='fetched'?'Actualiser le compte-rendu':'Récupérer le compte-rendu'}</button>
-          ${m.hasRecording?`<a class="btn btn-sm btn-ghost" href="/wa/crmMeeting/${m.id}/recording" target="_blank" rel="noopener">▶ Enregistrement</a>`:''}
+          ${m.hasRecording?`<button type="button" class="btn btn-sm btn-ghost" onclick="openMeetingRecording('${m.id}')">▶ Enregistrement</button>`:''}
         </div>
         ${m.status==='fetched'?`
         <div style="margin-top:8px;background:var(--bg,#f7f7f5);border-radius:8px;padding:10px 12px">
@@ -3157,6 +3157,18 @@ async function submitScheduleMeeting(prospectId){
     flash(e.message||'Erreur de création de la réunion');
     btn.disabled = false; btn.textContent = 'Créer la réunion';
   }
+}
+
+/** La route recording exige le Bearer admin (cf. apiFetch) — un simple <a
+ * href> ne l'envoie pas, d'où ce fetch manuel + ouverture via blob URL. */
+async function openMeetingRecording(id){
+  try{
+    const r = await apiFetch('/wa/crmMeeting/'+id+'/recording');
+    if(!r.ok){ flash('Enregistrement indisponible'); return; }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  }catch(e){ flash(e.message||'Erreur de récupération de l\'enregistrement'); }
 }
 
 async function meetingFetchRecap(id, prospectId){
