@@ -3181,7 +3181,7 @@ async function syncMeetingHistory(){
     const r = await apiFetch('/wa/crmMeeting/syncHistory', {method:'POST'});
     const data = await r.json();
     if(!r.ok) throw new Error(data.error||'http '+r.status);
-    if(out) out.textContent = `${data.created} réunion(s) rattachée(s) · ${data.scanned} réunion(s) parcourue(s) sur ${data.organizers} compte(s) commercial(aux)` + (data.errors.length?` · ${data.errors.length} erreur(s) : ${data.errors.join(' / ')}`:'');
+    if(out) out.textContent = `${data.created} réunion(s) rattachée(s) · ${data.scanned} réunion(s) parcourue(s) sur ${data.organizers} compte(s) commercial(aux)` + (data.skipped?` · ${data.skipped} ignorée(s) (perso/doublon)`:'') + (data.errors.length?` · ${data.errors.length} erreur(s) : ${data.errors.join(' / ')}`:'');
     flash('Synchronisation terminée ✓');
   }catch(e){ if(out) out.textContent=''; flash(e.message||'Erreur de synchronisation'); }
   if(btn){ btn.disabled = false; btn.textContent = "Synchroniser l'historique"; }

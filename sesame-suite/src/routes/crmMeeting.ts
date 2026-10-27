@@ -289,14 +289,21 @@ crmMeetingRouter.post(
 
     let scanned = 0;
     let created = 0;
-    const errors: string[] = [];
+    let skipped = 0; // réunions personnelles (teams.live.com) ou déjà tentées dans ce run — jamais résolvables, pas remontées en erreur
+    const errorCounts = new Map<string, number>();
+    const pushError = (msg: string) => errorCounts.set(msg, (errorCounts.get(msg) || 0) + 1);
+    // Une réunion récurrente produit une instance par occurrence dans calendarView,
+    // toutes avec le MÊME joinUrl — on ne tente la résolution Graph qu'une fois par
+    // joinUrl et par run, pour ne pas spammer l'API (et les erreurs) N fois pour le
+    // même résultat.
+    const attemptedJoinUrls = new Set<string>();
 
     for (const admin of admins) {
       let organizerUserId: string;
       try {
         organizerUserId = await resolveGraphUserId(admin.email);
       } catch (e) {
-        errors.push(`${admin.email} : ${e instanceof Error ? e.message : "erreur Graph"}`);
+        pushError(`${admin.email} : ${e instanceof Error ? e.message : "erreur Graph"}`);
         continue;
       }
 
@@ -304,21 +311,28 @@ crmMeetingRouter.post(
       try {
         events = await listCalendarMeetings(organizerUserId, startISO, endISO);
       } catch (e) {
-        errors.push(`${admin.email} : échec lecture calendrier (${e instanceof Error ? e.message : "erreur Graph"})`);
+        pushError(`${admin.email} : échec lecture calendrier (${e instanceof Error ? e.message : "erreur Graph"})`);
         continue;
       }
       scanned += events.length;
 
       for (const ev of events) {
         if (knownJoinUrls.has(ev.joinUrl)) continue;
+        // teams.live.com = Teams "grand public" (compte personnel), jamais
+        // résolvable via /onlineMeetings côté tenant — pas une erreur, juste
+        // hors périmètre.
+        if (/teams\.live\.com/i.test(ev.joinUrl)) { skipped++; continue; }
         const matchedProspectId = ev.attendeeEmails.map((e) => emailToProspectId.get(e)).find(Boolean);
         if (!matchedProspectId) continue;
+
+        if (attemptedJoinUrls.has(ev.joinUrl)) { skipped++; continue; }
+        attemptedJoinUrls.add(ev.joinUrl);
 
         let meetingId: string | null = null;
         try {
           meetingId = await resolveOnlineMeetingId(organizerUserId, ev.joinUrl);
         } catch (e) {
-          errors.push(`${ev.subject} : échec résolution réunion (${e instanceof Error ? e.message : "erreur Graph"})`);
+          pushError(`${ev.subject} : échec résolution réunion (${e instanceof Error ? e.message : "erreur Graph"})`);
           continue;
         }
         if (!meetingId) continue;
@@ -340,6 +354,7 @@ crmMeetingRouter.post(
       }
     }
 
-    res.json({ created, scanned, organizers: admins.length, errors });
+    const errors = [...errorCounts.entries()].map(([msg, count]) => (count > 1 ? `${msg} (×${count})` : msg));
+    res.json({ created, scanned, skipped, organizers: admins.length, errors });
   })
 );
