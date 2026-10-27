@@ -92,7 +92,7 @@ function CompanyStep({ st, setSt, canEdit }: { st: any; setSt: (x: any) => void;
   useEffect(() => { if (org.data) setO({ legal_name: org.data.legal_name, siret: org.data.siret ?? '', ...(org.data.address ?? {}) }); }, [org.data]);
   // Sauvegarde automatique de chaque modification valide (contrôle de version : autre appareil).
   const save = (path?: string, answers?: any) => patch('/api/v1/onboarding', { version: st.session.version, path, answers }).then(setSt, (e: any) => setMsg(e.message));
-  const saveOrg = () => o && patch('/api/v1/organization', { legal_name: o.legal_name, siret: o.siret || null, address: { line1: o.line1 ?? '', line2: o.line2 ?? '', postal_code: o.postal_code ?? '', city: o.city ?? '', country: o.country ?? 'FR' } })
+  const saveOrg = () => o && patch('/api/v1/organization', { legal_name: o.legal_name, siret: /^\d{14}$/.test(o.siret ?? '') ? o.siret : undefined, address: { line1: o.line1 ?? '', line2: o.line2 ?? '', postal_code: o.postal_code ?? '', city: o.city ?? '', country: o.country ?? 'FR' } })
     .then(() => get('/api/v1/onboarding').then(setSt), (e: any) => setMsg(e.message));
   const field = (k: string, label: string, props: any = {}) => <label>{label}<input value={a[k] ?? ''} disabled={!canEdit} onChange={(e) => setA({ ...a, [k]: e.target.value })} onBlur={() => save(undefined, { [k]: props.type === 'number' ? Number(a[k]) || undefined : a[k] || undefined })} {...props} /></label>;
   return (
@@ -114,7 +114,7 @@ function CompanyStep({ st, setSt, canEdit }: { st: any; setSt: (x: any) => void;
         <legend>Émetteur des factures</legend>
         <div className="grid2">
           <label>Raison sociale<input value={o.legal_name ?? ''} onChange={(e) => setO({ ...o, legal_name: e.target.value })} onBlur={saveOrg} disabled={!canEdit} /></label>
-          <label>SIRET (14 chiffres)<input value={o.siret ?? ''} inputMode="numeric" maxLength={14} onChange={(e) => setO({ ...o, siret: e.target.value.replace(/\D/g, '') })} onBlur={saveOrg} disabled={!canEdit} /></label>
+          <label>SIRET * (14 chiffres){o.siret && o.siret.length !== 14 && <span className="small" style={{ color: 'var(--err, #b91c1c)' }}> — {o.siret.length}/14</span>}<input required value={o.siret ?? ''} inputMode="numeric" maxLength={14} onChange={(e) => setO({ ...o, siret: e.target.value.replace(/\D/g, '') })} onBlur={saveOrg} disabled={!canEdit} /></label>
           <label>Adresse<input value={o.line1 ?? ''} onChange={(e) => setO({ ...o, line1: e.target.value })} onBlur={saveOrg} disabled={!canEdit} /></label>
           <label>Complément<input value={o.line2 ?? ''} onChange={(e) => setO({ ...o, line2: e.target.value })} onBlur={saveOrg} disabled={!canEdit} /></label>
           <label>Code postal<input value={o.postal_code ?? ''} onChange={(e) => setO({ ...o, postal_code: e.target.value })} onBlur={saveOrg} disabled={!canEdit} /></label>

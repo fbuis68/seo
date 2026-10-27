@@ -12,6 +12,13 @@
  * Aucun montant n'est transmis au serveur : il recalcule tout à partir de l'offre choisie.
  */
 (function () {
+  /** Clé de contrôle SIRET (Luhn ; exception La Poste). */
+  function siretOk(s) {
+    if (s.indexOf('356000000') === 0) return s.split('').reduce(function (a, c) { return a + Number(c); }, 0) % 5 === 0;
+    var sum = 0;
+    for (var i = 0; i < 14; i++) { var d = Number(s[13 - i]); if (i % 2 === 1) { d *= 2; if (d > 9) d -= 9; } sum += d; }
+    return sum % 10 === 0;
+  }
   'use strict';
   if (window.__tmsEmbedLoaded) return;
   window.__tmsEmbedLoaded = true;
@@ -237,7 +244,7 @@
       field('Nom et prénom', 'fullName', 'text', { ac: 'name', input: { minlength: '2', maxlength: '120' } }),
       field('Email professionnel', 'email', 'email', { ac: 'email' }),
       field('Organisme de formation', 'legalName', 'text', { ac: 'organization', input: { minlength: '2', maxlength: '200' } }),
-      field('SIRET (facultatif)', 'siret', 'text', { optional: true, input: { inputmode: 'numeric', pattern: '\\d{14}', maxlength: '14' } }),
+      field('SIRET de l’organisme', 'siret', 'text', { input: { inputmode: 'numeric', maxlength: '17', autocomplete: 'off', placeholder: '14 chiffres' } }),
       field('Mot de passe (10 caractères min.)', 'password', 'password', { full: true, ac: 'new-password', input: { minlength: '10' } }),
       el('div', { class: 'hp', 'aria-hidden': 'true' }, [el('label', null, ['Site web', el('input', { name: 'website', type: 'text', tabindex: '-1', autocomplete: 'off' })])]),
       this.renderAddons(),
@@ -258,7 +265,10 @@
       if (!f.fullName.value.trim() || f.fullName.value.trim().length < 2) errors.push('Indiquez votre nom.');
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.value)) errors.push('Email invalide.');
       if (f.legalName.value.trim().length < 2) errors.push('Indiquez le nom de votre organisme.');
-      if (f.siret.value && !/^\d{14}$/.test(f.siret.value.replace(/\s/g, ''))) errors.push('Le SIRET comporte 14 chiffres.');
+      var siret = f.siret.value.replace(/[\s.]/g, '');
+      if (!siret) errors.push('Le SIRET est obligatoire.');
+      else if (!/^\d{14}$/.test(siret)) errors.push('Le SIRET comporte 14 chiffres.');
+      else if (!siretOk(siret)) errors.push('SIRET invalide : vérifiez les chiffres.');
       if (f.password.value.length < 10) errors.push('Mot de passe : 10 caractères minimum.');
       if (!f.acceptTerms.checked) errors.push('Acceptez les conditions pour continuer.');
       if (errors.length) { status.className = 'msg err'; status.textContent = errors.join(' '); return; }
@@ -266,7 +276,7 @@
       var addons = Object.keys(self.state.addons).map(function (k) { return { code: k, quantity: self.state.addons[k] }; });
       var body = {
         fullName: f.fullName.value.trim(), email: f.email.value.trim(), password: f.password.value,
-        organization: { legalName: f.legalName.value.trim(), siret: f.siret.value.replace(/\s/g, '') || undefined },
+        organization: { legalName: f.legalName.value.trim(), siret: siret },
         acceptTerms: true, plan: plan.code, interval: self.state.interval, addons: plan.code === 'free' ? [] : addons,
         trial: plan.code !== 'free' && self.state.trial, website: f.website.value,
         source: (self.host.getAttribute('data-source') || 'website-embed').slice(0, 60),

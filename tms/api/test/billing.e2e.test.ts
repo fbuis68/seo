@@ -31,13 +31,13 @@ describe('Souscription en ligne', () => {
   });
 
   it('refuse une inscription sans acceptation des CGV', async () => {
-    const res = await http().post('/api/v1/public/signup').send({ email: 'x@example.test', password: 'motdepasse-solide', fullName: 'X Y', organization: { legalName: 'OF' } });
+    const res = await http().post('/api/v1/public/signup').send({ email: 'x@example.test', password: 'motdepasse-solide', fullName: 'X Y', organization: { legalName: 'OF', siret: '73282932000074' } });
     expect(res.status).toBe(400);
   });
 
   it('crée un organisme Free sans carte, puis interdit l’accès avant vérification email', async () => {
     const res = await http().post('/api/v1/public/signup').send({
-      email: 'nonverifie@example.test', password: 'motdepasse-solide', fullName: 'A B', organization: { legalName: 'OF A' }, acceptTerms: true, plan: 'solo',
+      email: 'nonverifie@example.test', password: 'motdepasse-solide', fullName: 'A B', organization: { legalName: 'OF A', siret: '73282932000074' }, acceptTerms: true, plan: 'solo',
     }).expect(201);
     expect(res.body.plan).toBe('free');
     const login = await http().post('/api/v1/auth/login').send({ email: 'nonverifie@example.test', password: 'motdepasse-solide' }).expect(201);
@@ -115,7 +115,7 @@ describe('Souscription en ligne', () => {
   it('essai sans carte : démarre à la confirmation, abonnement possible pendant l’essai sans débit avant la fin, retour Free à l’expiration', async () => {
     const email = `essai${Date.now()}@example.test`;
     const r = await http().post('/api/v1/public/signup').set('X-Forwarded-For', '10.9.9.9').send({ email, password: 'motdepasse-solide-42', fullName: 'Essai Test',
-      organization: { legalName: 'OF Essai' }, acceptTerms: true, plan: 'equipe', interval: 'month', addons: [], trial: true }).expect(201);
+      organization: { legalName: 'OF Essai', siret: '73282932000074' }, acceptTerms: true, plan: 'equipe', interval: 'month', addons: [], trial: true }).expect(201);
     const token = /token=([\w-]+)/.exec([...mailer.devOutbox].reverse().find((m) => m.to === email)!.text)![1];
     const v = (await http().post('/api/v1/auth/verify-email').send({ token }).expect(201)).body;
     expect(v.trialEndsAt).toBeTruthy();
@@ -137,7 +137,7 @@ describe('Souscription en ligne', () => {
     // Autre organisme : essai expiré sans abonnement → Free + email.
     const email2 = `essai2${Date.now()}@example.test`;
     const r2 = await http().post('/api/v1/public/signup').set('X-Forwarded-For', '10.9.9.8').send({ email: email2, password: 'motdepasse-solide-42', fullName: 'Essai Deux',
-      organization: { legalName: 'OF Essai 2' }, acceptTerms: true, plan: 'solo', interval: 'month', addons: [], trial: true }).expect(201);
+      organization: { legalName: 'OF Essai 2', siret: '73282932000074' }, acceptTerms: true, plan: 'solo', interval: 'month', addons: [], trial: true }).expect(201);
     const token2 = /token=([\w-]+)/.exec([...mailer.devOutbox].reverse().find((m) => m.to === email2)!.text)![1];
     await http().post('/api/v1/auth/verify-email').send({ token: token2 }).expect(201);
     const db = (subs as any).db;

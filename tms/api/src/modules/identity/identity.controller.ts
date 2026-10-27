@@ -1,8 +1,14 @@
 import { Body, Controller, Get, Headers, Ip, Patch, Post } from '@nestjs/common';
 import { z } from 'zod';
 import { AllowReadOnly, AllowUnverified, Ctx, NoTenant, Public, RequestContext, RequirePermission } from '../../core/context';
-import { parse } from '../../core/validation';
+import { parse, siretRequired } from '../../core/validation';
+import { AppError } from '../../core/errors';
+import { RateLimiter } from '../billing/rate-limit';
 import { IdentityService } from './identity.service';
+
+/** Demandes publiques par email (mot de passe oublié, nouveau lien) : 20 par heure et par IP. */
+const emailLimiter = new RateLimiter(20, 60 * 60 * 1000);
+const limit = (ip?: string) => { if (!emailLimiter.allow(ip ?? 'unknown')) throw new AppError(429, 'rate_limited', 'Trop de demandes, réessayez plus tard.'); };
 
 export const passwordSchema = z.string().min(10, 'Mot de passe : 10 caractères minimum').max(200);
 
@@ -19,6 +25,7 @@ export class IdentityController {
   /** Mot de passe oublié : toujours la même réponse, que le compte existe ou non. */
   @Public() @Post('auth/forgot-password')
   async forgot(@Body() body: unknown, @Ip() ip?: string) {
+    limit(ip);
     await this.identity.forgotPassword(parse(z.object({ email: z.string().email().max(200) }), body).email, ip);
     return { sent: true };
   }
@@ -37,6 +44,13 @@ export class IdentityController {
     return this.identity.verifyEmail(parse(z.object({ token: z.string().min(10) }), body).token);
   }
 
+  @Public() @Post('auth/verify-email/resend')
+  async resendPublic(@Body() body: unknown, @Ip() ip?: string) {
+    limit(ip);
+    await this.identity.resendVerificationByEmail(parse(z.object({ email: z.string().email().max(200) }), body).email);
+    return { sent: true };
+  }
+
   @NoTenant() @Post('auth/resend-verification')
   resend(@Ctx() ctx: RequestContext) { return this.identity.resendVerification(ctx.userId).then(() => ({ sent: true })); }
 
@@ -52,7 +66,7 @@ export class IdentityController {
   /** Un compte existant peut créer un organisme supplémentaire (Free). */
   @NoTenant() @Post('tenants')
   async createTenant(@Ctx() ctx: RequestContext, @Body() body: unknown) {
-    const b = parse(z.object({ legalName: z.string().min(2).max(200), siret: z.string().regex(/^\d{14}$/).optional() }), body);
+    const b = parse(z.object({ legalName: z.string().min(2).max(200), siret: siretRequired }), body);
     const id = await this.identity.createAdditionalTenant(ctx.userId, b);
     return { tenantId: id };
   }
@@ -70,7 +84,7 @@ export class IdentityController {
   @RequirePermission('org.manage') @Patch('organization')
   updateOrg(@Ctx() ctx: RequestContext, @Body() body: unknown) {
     const b = parse(z.object({
-      legal_name: z.string().min(2).max(200).optional(), siret: z.string().regex(/^\d{14}$/).nullable().optional(),
+      legal_name: z.string().min(2).max(200).optional(), siret: siretRequired.optional(), // obligatoire : ne peut pas être effacé
       nda: z.string().max(20).nullable().optional(), timezone: z.string().max(64).optional(),
       vat_regime: z.enum(['to_confirm', 'subject', 'exempt_261_4_4', 'franchise_293b']).optional(), address: z.record(z.string(), z.string()).optional(),
     }), body);

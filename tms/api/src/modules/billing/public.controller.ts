@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { config } from '../../config';
 import { Public } from '../../core/context';
 import { AppError } from '../../core/errors';
-import { parse } from '../../core/validation';
+import { parse, siretRequired } from '../../core/validation';
 import { IdentityService } from '../identity/identity.service';
 import { passwordSchema } from '../identity/identity.controller';
 import { ADDONS, AddonCode, publicCatalog } from './catalog';
@@ -16,7 +16,7 @@ export const signupSchema = z.object({
   fullName: z.string().min(2).max(120),
   organization: z.object({
     legalName: z.string().min(2).max(200),
-    siret: z.string().regex(/^\d{14}$/, 'SIRET à 14 chiffres').optional().or(z.literal('').transform(() => undefined)),
+    siret: siretRequired,
   }),
   acceptTerms: z.literal(true, { message: 'Acceptation des CGV et de la politique de confidentialité requise' }),
   plan: z.enum(['free', 'solo', 'equipe', 'centre']).default('free'),

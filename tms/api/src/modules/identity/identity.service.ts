@@ -12,7 +12,7 @@ import { JobsService } from '../../core/jobs.service';
 
 export interface SignupInput {
   email: string; password: string; fullName: string;
-  organization: { legalName: string; siret?: string; timezone?: string };
+  organization: { legalName: string; siret: string; timezone?: string };
   acceptTerms: true;
   source?: string;
   intent?: { plan: string; interval: string; addons: { code: string; quantity: number }[]; trial?: boolean } | null;
@@ -70,12 +70,22 @@ export class IdentityService {
 
   async verifyEmail(token: string) {
     return this.db.tx(async (tx) => {
-      const row = await one(tx, `SELECT * FROM email_verifications WHERE token_hash=$1 FOR UPDATE`, [sha256(token)]);
-      if (!row || row.used_at || row.expires_at < new Date()) throw badRequest('invalid_token', 'Lien invalide ou expiré.');
+      const row = await one(tx, `SELECT v.*, u.email_verified_at FROM email_verifications v JOIN users u ON u.id=v.user_id WHERE v.token_hash=$1 FOR UPDATE OF v`, [sha256(token)]);
+      if (!row) throw badRequest('invalid_token', 'Lien invalide : utilisez le dernier email reçu ou demandez un nouveau lien.');
+      const owner = () => one(tx, `SELECT t.id, t.signup_intent FROM memberships m JOIN tenants t ON t.id=m.tenant_id
+                                   WHERE m.user_id=$1 AND m.role='owner' ORDER BY t.created_at LIMIT 1`, [row.user_id]);
+      // Lien déjà utilisé (double clic, analyse antivirus de la messagerie qui ouvre le lien) ou adresse déjà confirmée :
+      // succès sans rien refaire, plutôt qu'une erreur trompeuse.
+      if (row.email_verified_at) {
+        const m = await owner();
+        const sub = m ? await one(tx, `SELECT status, plan_code, trial_ends_at FROM subscriptions WHERE tenant_id=$1`, [m.id]) : null;
+        return { verified: true, already: true, tenantId: m?.id ?? null, intent: m?.signup_intent ?? null,
+          trialEndsAt: sub?.status === 'trialing' && sub.trial_ends_at ? new Date(sub.trial_ends_at).toISOString() : null };
+      }
+      if (row.used_at || row.expires_at < new Date()) throw new AppError(400, 'expired_token', 'Ce lien a expiré : demandez un nouveau lien ci-dessous.');
       await tx.query(`UPDATE email_verifications SET used_at=now() WHERE token_hash=$1`, [sha256(token)]);
       await tx.query(`UPDATE users SET email_verified_at = coalesce(email_verified_at, now()) WHERE id=$1`, [row.user_id]);
-      const m = await one(tx, `SELECT t.id, t.signup_intent FROM memberships m JOIN tenants t ON t.id=m.tenant_id
-                               WHERE m.user_id=$1 AND m.role='owner' ORDER BY t.created_at LIMIT 1`, [row.user_id]);
+      const m = await owner();
       // Offre payante choisie sur le site avec essai : essai sans carte bancaire dès la confirmation.
       const intent = m?.signup_intent;
       const trialEndsAt = m && intent?.trial ? await startNoCardTrial(tx, this.jobs, this.mailer, m.id, intent.plan, intent.interval) : null;
@@ -84,12 +94,22 @@ export class IdentityService {
     });
   }
 
+  /** Nouveau lien d'activation sans être connecté (lien expiré) : réponse identique que le compte existe ou non. */
+  async resendVerificationByEmail(email: string) {
+    const [u] = await this.db.query(`SELECT id, email_verified_at FROM users WHERE lower(email)=lower($1)`, [email.trim()]);
+    if (!u || u.email_verified_at) return;
+    const [{ n }] = await this.db.query(`SELECT count(*)::int n FROM email_verifications WHERE user_id=$1 AND expires_at > now() + interval '47 hours'`, [u.id]);
+    if (n >= 3) return; // 3 liens maximum par heure
+    void this.resendVerification(u.id).catch(() => undefined);
+  }
+
   async resendVerification(userId: string) {
     const token = randomToken();
     const [u] = await this.db.query(`SELECT email, full_name, email_verified_at FROM users WHERE id=$1`, [userId]);
     if (u.email_verified_at) return;
     await this.db.query(`INSERT INTO email_verifications(token_hash, user_id, expires_at) VALUES ($1,$2, now() + interval '48 hours')`, [sha256(token), userId]);
-    await this.mailer.send({ to: u.email, subject: 'Confirmez votre adresse email', text: `${config.appUrl}/verify-email?token=${token}` });
+    await this.mailer.send({ to: u.email, subject: 'Confirmez votre adresse email',
+      text: `Bonjour ${u.full_name},\n\nVoici votre nouveau lien pour activer votre espace :\n${config.appUrl}/verify-email?token=${token}\n\nCe lien expire dans 48 heures. Les liens précédents restent valables jusqu'à leur expiration.` });
   }
 
   /**

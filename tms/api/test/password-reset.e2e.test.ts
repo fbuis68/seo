@@ -45,3 +45,32 @@ describe('Mot de passe oublié', () => {
     expect(box.filter((x: any) => x.to === u.email && /Réinitialisation/.test(x.subject)).length - before).toBe(3);
   });
 });
+
+describe('Activation du compte', () => {
+  it('lien rejoué (double clic, antivirus) : succès « déjà confirmé » ; lien expiré : nouveau lien par email', async () => {
+    const email = `actif${Date.now()}@example.test`;
+    await http().post('/api/v1/public/signup').set('X-Forwarded-For', '10.88.0.1').send({ email, password: 'motdepasse-solide-42', fullName: 'Ana Activ',
+      organization: { legalName: 'OF Activation', siret: '73282932000074' }, acceptTerms: true, plan: 'solo', interval: 'month', addons: [] }).expect(201);
+    const box = (app.get(SystemMailer) as any).devOutbox;
+    const token = /token=([\w-]+)/.exec([...box].reverse().find((m: any) => m.to === email).text)![1];
+    const v1 = (await http().post('/api/v1/auth/verify-email').send({ token }).expect(201)).body;
+    expect(v1.intent.plan).toBe('solo');
+    const v2 = (await http().post('/api/v1/auth/verify-email').send({ token }).expect(201)).body;
+    expect(v2).toMatchObject({ verified: true, already: true, tenantId: v1.tenantId });
+    expect((await http().post('/api/v1/auth/verify-email').send({ token: 'inexistant-0123456789' })).body.code).toBe('invalid_token');
+
+    // Compte non activé dont le lien a expiré.
+    const email2 = `expire${Date.now()}@example.test`;
+    await http().post('/api/v1/public/signup').set('X-Forwarded-For', '10.88.0.2').send({ email: email2, password: 'motdepasse-solide-42', fullName: 'Eli Expire',
+      organization: { legalName: 'OF Expire', siret: '73282932000074' }, acceptTerms: true, plan: 'free', interval: 'month', addons: [] }).expect(201);
+    const old = /token=([\w-]+)/.exec([...box].reverse().find((m: any) => m.to === email2).text)![1];
+    const { Db } = await import('../src/core/db');
+    await app.get(Db).query(`UPDATE email_verifications SET expires_at = now() - interval '1 minute' WHERE user_id = (SELECT id FROM users WHERE email=$1)`, [email2]);
+    expect((await http().post('/api/v1/auth/verify-email').send({ token: old })).body.code).toBe('expired_token');
+    expect((await http().post('/api/v1/auth/verify-email/resend').send({ email: email2 }).expect(201)).body).toEqual({ sent: true });
+    expect((await http().post('/api/v1/auth/verify-email/resend').send({ email: 'inconnu@nulle.part' }).expect(201)).body).toEqual({ sent: true });
+    const fresh = /token=([\w-]+)/.exec([...box].reverse().find((m: any) => m.to === email2).text)![1];
+    expect(fresh).not.toBe(old);
+    await http().post('/api/v1/auth/verify-email').send({ token: fresh }).expect(201);
+  });
+});

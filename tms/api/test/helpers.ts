@@ -35,7 +35,7 @@ export async function signupAndLogin(opts: { plan?: string; legalName?: string; 
   if (opts.email) ++seq;
   const password = 'motdepasse-solide-42';
   const res = await http().post('/api/v1/public/signup').send({
-    email, password, fullName: 'Camille Martin', organization: { legalName: opts.legalName ?? `OF ${seq}` },
+    email, password, fullName: 'Camille Martin', organization: { legalName: opts.legalName ?? `OF ${seq}`, siret: '73282932000074' },
     acceptTerms: true, plan: opts.plan ?? 'free', interval: 'month', addons: [],
   }).set('X-Forwarded-For', `10.0.${seq}.1`);
   if (res.status !== 201) throw new Error(`signup ${res.status} ${JSON.stringify(res.body)}`);

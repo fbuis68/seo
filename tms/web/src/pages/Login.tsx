@@ -9,7 +9,7 @@ export default function Login() {
     try {
       const r = await post<{ token: string }>('/api/v1/auth/login', { email, password });
       session.set({ token: r.token });
-      location.href = '/';
+      location.href = safeNext(new URLSearchParams(location.search).get('next'));
     } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
   };
   return (
@@ -28,28 +28,48 @@ export default function Login() {
   );
 }
 
-/** Confirmation d'email ; si une offre payante a été choisie sur le site, propose directement le paiement. */
+/** Retour après connexion : chemin interne uniquement (pas de redirection vers un autre site). */
+const safeNext = (n: string | null) => (n && n.startsWith('/') && !n.startsWith('//') && !n.startsWith('/\\') ? n : '/');
+
+/** Confirmation d'email ; offre payante choisie sur le site : propose directement le paiement. Rejouable sans erreur. */
 export function VerifyEmail() {
-  const [state, setState] = useState<{ ok?: boolean; err?: string; intent?: any; trialEndsAt?: string | null }>({});
+  const [state, setState] = useState<{ ok?: boolean; err?: string; code?: string; intent?: any; trialEndsAt?: string | null; already?: boolean }>({});
+  const [email, setEmail] = useState(''); const [sent, setSent] = useState(false);
   const done = useRef(false);
   useEffect(() => {
-    if (done.current) return; // jeton à usage unique : un seul appel
+    if (done.current) return; // un seul appel
     done.current = true;
     const token = new URLSearchParams(location.search).get('token') ?? '';
-    post<{ tenantId: string; intent: any; trialEndsAt?: string | null }>('/api/v1/auth/verify-email', { token })
-      .then((r) => { const s = session.get(); if (s) session.set({ ...s, tenantId: r.tenantId }); setState({ ok: true, intent: r.intent, trialEndsAt: r.trialEndsAt }); })
-      .catch((e) => setState({ err: e.message }));
+    post<{ tenantId: string; intent: any; trialEndsAt?: string | null; already?: boolean }>('/api/v1/auth/verify-email', { token })
+      .then((r) => { const s = session.get(); if (s && r.tenantId) session.set({ ...s, tenantId: r.tenantId }); setState({ ok: true, intent: r.intent, trialEndsAt: r.trialEndsAt, already: r.already }); })
+      .catch((e) => setState({ err: e.message, code: e.code }));
   }, []);
+  const plan = state.intent?.plan ? String(state.intent.plan).replace(/^./, (c: string) => c.toUpperCase()) : null;
+  const toPay = !!state.intent && state.intent.plan !== 'free' && !state.trialEndsAt;
+  const target = toPay ? '/billing?intent=1&pay=1' : '/';
+  const href = session.get()?.token ? target : `/login?next=${encodeURIComponent(target)}`;
   return (
-    <div className="center"><div className="panel" style={{ maxWidth: 440 }}>
-      {state.err && <><h1>Lien invalide</h1><p className="alert">{state.err}</p></>}
+    <div className="center"><div className="panel stack" style={{ maxWidth: 460 }}>
+      {state.err && <>
+        <h1>{state.code === 'expired_token' ? 'Lien expiré' : 'Lien invalide'}</h1>
+        <p className="alert">{state.err}</p>
+        {sent ? <p>Si un compte en attente d’activation existe pour <strong>{email}</strong>, un nouveau lien vient d’être envoyé (valable 48 heures).</p>
+          : <form className="stack" onSubmit={(e) => { e.preventDefault(); post('/api/v1/auth/verify-email/resend', { email }).then(() => setSent(true), (er) => setState({ ...state, err: er.message })); }}>
+            <label>Email du compte<input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+            <button className="btn">Recevoir un nouveau lien</button>
+          </form>}
+        <a className="small" href="/login">Déjà activé ? Se connecter</a>
+      </>}
       {state.ok && <>
-        <h1>Email confirmé</h1>
+        <h1>{state.already ? 'Adresse déjà confirmée' : 'Email confirmé'}</h1>
         {state.trialEndsAt
-          ? <p>Votre essai de l’offre <strong>{state.intent.plan}</strong> est actif jusqu’au {new Date(state.trialEndsAt).toLocaleDateString('fr-FR')}, sans carte bancaire. Vous choisirez votre abonnement quand vous le souhaitez depuis « Mon abonnement ».</p>
-          : <p>Votre espace est actif en offre <strong>Free</strong>.</p>}
-        {state.intent && !state.trialEndsAt && <p>Vous aviez choisi l’offre <strong>{state.intent.plan}</strong> : « Continuer » ouvre le paiement sécurisé pour l’activer.</p>}
-        <a className="btn" href={session.get()?.token ? (state.intent && !state.trialEndsAt ? '/billing?intent=1&pay=1' : '/') : '/login'}>Continuer</a>
+          ? <p>Votre essai de l’offre <strong>{plan}</strong> est actif jusqu’au {new Date(state.trialEndsAt).toLocaleDateString('fr-FR')}, sans carte bancaire. Vous choisirez votre abonnement quand vous le souhaitez depuis « Mon abonnement ».</p>
+          : toPay
+            ? <><p>Dernière étape : le <strong>paiement sécurisé</strong> de l’offre <strong>{plan}</strong>. Elle est activée dès le paiement validé.</p>
+                <p className="small muted">En attendant, votre espace est utilisable avec les limites de l’offre gratuite.</p></>
+            : <p>Votre espace est actif en offre <strong>Free</strong>.</p>}
+        {!session.get()?.token && <p className="small muted">Connectez-vous avec l’email et le mot de passe choisis à l’inscription{toPay ? ' : le paiement s’ouvrira ensuite' : ''}.</p>}
+        <a className="btn" href={href}>{toPay ? 'Payer et activer l’offre' : session.get()?.token ? 'Continuer' : 'Se connecter'}</a>
       </>}
       {!state.ok && !state.err && <p className="muted">Vérification…</p>}
     </div></div>

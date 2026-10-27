@@ -26,10 +26,10 @@ export default function Settings() {
       <h1>Réglages</h1>
       {act.error && <p className="alert">{act.error}</p>}
       {o && can(org, 'org.manage') && (
-        <form className="panel inline" onSubmit={(e) => { e.preventDefault(); act.run(() => patch('/api/v1/organization', { legal_name: o.legal_name, siret: o.siret || null, nda: o.nda || null, vat_regime: o.vat_regime }), () => { reload(); alert('Enregistré'); }); }}>
+        <form className="panel inline" onSubmit={(e) => { e.preventDefault(); act.run(() => patch('/api/v1/organization', { legal_name: o.legal_name, siret: (o.siret ?? '').replace(/[\s.]/g, ''), nda: o.nda || null, vat_regime: o.vat_regime }), () => { reload(); alert('Enregistré'); }); }}>
           <strong style={{ width: '100%' }}>Organisme</strong>
           <label>Raison sociale<input value={o.legal_name} onChange={(e) => setOrgForm({ ...o, legal_name: e.target.value })} /></label>
-          <label>SIRET<input value={o.siret ?? ''} onChange={(e) => setOrgForm({ ...o, siret: e.target.value })} /></label>
+          <label>SIRET *<input required inputMode="numeric" pattern="[0-9 .]{14,17}" title="14 chiffres" value={o.siret ?? ''} onChange={(e) => setOrgForm({ ...o, siret: e.target.value })} /></label>
           <label>N° déclaration d’activité<input value={o.nda ?? ''} onChange={(e) => setOrgForm({ ...o, nda: e.target.value })} /></label>
           <label>Régime TVA<select value={o.vat_regime} onChange={(e) => setOrgForm({ ...o, vat_regime: e.target.value })}><option value="to_confirm">À confirmer</option><option value="subject">Assujetti</option><option value="exempt_261_4_4">Exonéré (art. 261-4-4° CGI)</option></select></label>
           <button className="btn">Enregistrer</button>
