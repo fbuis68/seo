@@ -325,6 +325,11 @@ crmMeetingRouter.post(
     // email de prospect/contact CRM — signale un format de lien Teams non
     // reconnu plutôt que de laisser la réunion disparaître sans trace.
     const droppedSample: { subject: string; startDateTime: string; isOnlineMeeting: boolean; prospectName: string; bodySnippet: string }[] = [];
+    // Un même événement (ex : réunion interne partagée) apparaît sur PLUSIEURS
+    // calendriers commerciaux scannés — sans dédup, les doublons saturaient le
+    // plafond de l'échantillon avant d'atteindre des cas réellement différents
+    // (constaté 27/10/2026 : 20 entrées, presque toutes des doublons).
+    const seenDropped = new Set<string>();
 
     for (const mailboxEmail of mailboxes) {
       let organizerUserId: string;
@@ -346,7 +351,9 @@ crmMeetingRouter.post(
 
       for (const d of dropped) {
         const matchedProspectId = d.bodyEmails.map((e) => emailToProspectId.get(e)).find(Boolean);
-        if (matchedProspectId && droppedSample.length < 20) {
+        const dedupeKey = d.subject + "|" + d.startDateTime;
+        if (matchedProspectId && droppedSample.length < 40 && !seenDropped.has(dedupeKey)) {
+          seenDropped.add(dedupeKey);
           droppedSample.push({ subject: d.subject, startDateTime: d.startDateTime, isOnlineMeeting: d.isOnlineMeeting, prospectName: prospectNameById.get(matchedProspectId) || "", bodySnippet: d.bodySnippet });
         }
       }
