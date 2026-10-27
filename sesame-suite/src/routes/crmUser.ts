@@ -16,8 +16,18 @@ export const crmUserRouter = Router();
 
 const CRM_ROLES = ["admin", "commercial"];
 
-function shapeCrmUser(u: { id: string; email: string; name: string | null; crmRole: string; active: boolean; createdAt: Date }) {
-  return { id: u.id, email: u.email, name: u.name || "", crmRole: u.crmRole, active: u.active, createdAt: u.createdAt };
+function shapeCrmUser(u: { id: string; email: string; name: string | null; crmRole: string; active: boolean; altEmails: string[]; createdAt: Date }) {
+  return { id: u.id, email: u.email, name: u.name || "", crmRole: u.crmRole, active: u.active, altEmails: u.altEmails, createdAt: u.createdAt };
+}
+
+function parseAltEmails(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  for (const e of raw) {
+    const v = String(e || "").trim().toLowerCase();
+    if (v) seen.add(v);
+  }
+  return [...seen];
 }
 
 crmUserRouter.get(
@@ -36,6 +46,7 @@ interface CreateBody {
   name?: string;
   crmRole?: string;
   password?: string;
+  altEmails?: string[];
 }
 
 crmUserRouter.post(
@@ -59,7 +70,7 @@ crmUserRouter.post(
     const password = b.password || randomPassword();
     const passwordHash = await bcrypt.hash(password, 10);
     const row = await prisma.adminUser.create({
-      data: { entityId: sesameHq.id, email, name: b.name?.trim() || null, role: "sesame", crmRole, passwordHash },
+      data: { entityId: sesameHq.id, email, name: b.name?.trim() || null, role: "sesame", crmRole, passwordHash, altEmails: parseAltEmails(b.altEmails) },
     });
     // Le mot de passe généré n'est retourné qu'une fois, en clair — jamais relu ensuite.
     res.status(201).json({ ...shapeCrmUser(row), password });
@@ -71,6 +82,7 @@ interface UpdateBody {
   name?: string;
   crmRole?: string;
   active?: boolean;
+  altEmails?: string[];
 }
 
 crmUserRouter.post(
@@ -93,6 +105,7 @@ crmUserRouter.post(
         name: b.name !== undefined ? b.name.trim() || null : undefined,
         crmRole,
         active: b.active,
+        altEmails: b.altEmails !== undefined ? parseAltEmails(b.altEmails) : undefined,
       },
     });
     res.json(shapeCrmUser(row));

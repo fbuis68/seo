@@ -1,0 +1,1 @@
+ALTER TABLE "AdminUser" ADD COLUMN "altEmails" TEXT[] NOT NULL DEFAULT '{}';

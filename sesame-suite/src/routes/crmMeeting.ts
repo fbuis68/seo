@@ -271,7 +271,12 @@ crmMeetingRouter.post(
   asyncHandler(async (req, res) => {
     if (!graphConfigured()) throw new HttpError(503, "Microsoft Graph non configuré — voir docs/microsoft-graph-teams-meetings.md");
 
-    const admins = await prisma.adminUser.findMany({ where: { role: "sesame", active: true }, select: { email: true } });
+    const admins = await prisma.adminUser.findMany({ where: { role: "sesame", active: true }, select: { email: true, altEmails: true } });
+    // Chaque boîte (login + emails secondaires éventuels, cf. profil
+    // commercial > "Emails secondaires de rattachement") est scannée comme un
+    // organisateur Graph indépendant — une réunion organisée depuis une
+    // adresse secondaire doit remonter au même titre que depuis le login.
+    const mailboxes = admins.flatMap((a) => [a.email, ...a.altEmails]);
     const [prospects, contacts, existing] = await Promise.all([
       prisma.crmProspect.findMany({ where: { email: { not: null } }, select: { id: true, email: true } }),
       prisma.crmContact.findMany({ where: { email: { not: null } }, select: { prospectId: true, email: true } }),
@@ -304,12 +309,12 @@ crmMeetingRouter.post(
     const unmatchedSample: { subject: string; startDateTime: string; attendeeEmails: string[] }[] = [];
     const UNMATCHED_SAMPLE_LIMIT = 20;
 
-    for (const admin of admins) {
+    for (const mailboxEmail of mailboxes) {
       let organizerUserId: string;
       try {
-        organizerUserId = await resolveGraphUserId(admin.email);
+        organizerUserId = await resolveGraphUserId(mailboxEmail);
       } catch (e) {
-        pushError(`${admin.email} : ${e instanceof Error ? e.message : "erreur Graph"}`);
+        pushError(`${mailboxEmail} : ${e instanceof Error ? e.message : "erreur Graph"}`);
         continue;
       }
 
@@ -317,7 +322,7 @@ crmMeetingRouter.post(
       try {
         events = await listCalendarMeetings(organizerUserId, startISO, endISO);
       } catch (e) {
-        pushError(`${admin.email} : échec lecture calendrier (${e instanceof Error ? e.message : "erreur Graph"})`);
+        pushError(`${mailboxEmail} : échec lecture calendrier (${e instanceof Error ? e.message : "erreur Graph"})`);
         continue;
       }
       scanned += events.length;
@@ -352,7 +357,7 @@ crmMeetingRouter.post(
           data: {
             prospectId: matchedProspectId,
             subject: ev.subject,
-            organizerEmail: admin.email,
+            organizerEmail: mailboxEmail,
             startDateTime: new Date(ev.startDateTime),
             endDateTime: new Date(ev.endDateTime),
             joinUrl: ev.joinUrl,
@@ -366,6 +371,6 @@ crmMeetingRouter.post(
     }
 
     const errors = [...errorCounts.entries()].map(([msg, count]) => (count > 1 ? `${msg} (×${count})` : msg));
-    res.json({ created, scanned, skipped, organizers: admins.length, errors, unmatchedSample });
+    res.json({ created, scanned, skipped, organizers: mailboxes.length, errors, unmatchedSample });
   })
 );

@@ -7626,7 +7626,7 @@ function renderCrmUsers(){
 }
 
 function openCrmUserModal(id){
-  const u = id ? crmUsersList.find(x=>x.id===id) : {id:null,email:'',name:'',crmRole:'commercial',active:true};
+  const u = id ? crmUsersList.find(x=>x.id===id) : {id:null,email:'',name:'',crmRole:'commercial',active:true,altEmails:[]};
   if(!u) return;
   document.getElementById('modal-ct').innerHTML = `
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
@@ -7637,6 +7637,7 @@ function openCrmUserModal(id){
         <div class="ff"><label>Nom</label><input id="u-name" value="${esc(u.name)}" placeholder="Prénom Nom"></div>
         <div class="ff"><label>Rôle</label><select id="u-role"><option value="commercial" ${u.crmRole==='commercial'?'selected':''}>Commercial</option><option value="admin" ${u.crmRole==='admin'?'selected':''}>Admin CRM</option></select></div>
         ${id?`<div class="ff"><label>Statut</label><select id="u-active"><option value="1" ${u.active?'selected':''}>Actif</option><option value="0" ${!u.active?'selected':''}>Désactivé</option></select></div>`:''}
+        <div class="ff" style="grid-column:1/-1"><label>Emails secondaires de rattachement</label><input id="u-alt-emails" value="${esc((u.altEmails||[]).join(', '))}" placeholder="autre.boite@sesame.technology, perso@gmail.com"><div style="font-size:11px;color:var(--mu,#888);margin-top:3px">Réunions/tickets reçus sur ces adresses rattachés à ce commercial (séparées par virgule).</div></div>
         ${!id?`<div class="ff"><label>Mot de passe (optionnel — sinon généré)</label><div style="display:flex;gap:6px"><input type="text" id="u-password" placeholder="10 car. min., 1 chiffre, 1 caractère spécial" style="flex:1"><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('u-password').value=crmGenPassword()">Générer</button></div></div>`:''}
       </div>
       <div class="modal-footer">
@@ -7651,11 +7652,12 @@ function openCrmUserModal(id){
 
 async function saveCrmUser(id){
   const g=i=>(document.getElementById(i)||{value:''}).value;
+  const altEmails = g('u-alt-emails').split(',').map(s=>s.trim()).filter(Boolean);
   try{
     var r, saved, data;
     if(id){
       const activeEl = document.getElementById('u-active');
-      const body = {id:id, name:g('u-name').trim(), crmRole:g('u-role')};
+      const body = {id:id, name:g('u-name').trim(), crmRole:g('u-role'), altEmails};
       if(activeEl) body.active = activeEl.value==='1';
       r = await apiFetch('/wa/crmUser/update', {method:'POST', body:JSON.stringify(body)});
       if(!r.ok) throw new Error('http '+r.status);
@@ -7667,7 +7669,7 @@ async function saveCrmUser(id){
       if(!email){ flash('Email requis'); return; }
       const upw = g('u-password');
       if(upw){ const perr=crmPasswordPolicyError(upw); if(perr){ flash(perr); return; } }
-      const cbody = {email:email, name:g('u-name').trim(), crmRole:g('u-role')};
+      const cbody = {email:email, name:g('u-name').trim(), crmRole:g('u-role'), altEmails};
       if(upw) cbody.password = upw;
       r = await apiFetch('/wa/crmUser/create', {method:'POST', body:JSON.stringify(cbody)});
       data = await r.json();

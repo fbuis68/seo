@@ -131,6 +131,12 @@ model AdminUser {
   // complet au CRM interne (dont la gestion des utilisateurs CRM eux-mêmes,
   // cf. requireCrmAdmin) ; "commercial" = accès standard.
   crmRole      String  @default("commercial")
+  // Adresses email secondaires du commercial (27/10/2026, demande client) —
+  // ex : une boîte M365 distincte de son login CRM, utilisée pour organiser
+  // certaines réunions Teams ou échanger avec des clients. Sert à rattacher
+  // ces réunions/tickets au bon commercial même quand ils ne passent pas par
+  // son adresse de login (cf. routes/crmMeeting.ts syncHistory).
+  altEmails    String[] @default([])
   active       Boolean @default(true) // désactivation (départ, etc.) sans perdre l'historique — pas de suppression physique
   // Portée du rôle pour un compte hôtel (role="hotel"|"housekeeping") : par
   // défaut limité à son propre établissement (entityId). Si true ET que cet
