@@ -3181,7 +3181,15 @@ async function syncMeetingHistory(){
     const r = await apiFetch('/wa/crmMeeting/syncHistory', {method:'POST'});
     const data = await r.json();
     if(!r.ok) throw new Error(data.error||'http '+r.status);
-    if(out) out.textContent = `${data.created} réunion(s) rattachée(s) · ${data.scanned} réunion(s) parcourue(s) sur ${data.organizers} compte(s) commercial(aux)` + (data.skipped?` · ${data.skipped} ignorée(s) (perso/doublon)`:'') + (data.errors.length?` · ${data.errors.length} erreur(s) : ${data.errors.join(' / ')}`:'');
+    if(out){
+      let txt = `${data.created} réunion(s) rattachée(s) · ${data.scanned} réunion(s) parcourue(s) sur ${data.organizers} compte(s) commercial(aux)` + (data.skipped?` · ${data.skipped} ignorée(s) (perso/doublon)`:'') + (data.errors.length?` · ${data.errors.length} erreur(s) : ${data.errors.join(' / ')}`:'');
+      if((data.unmatchedSample||[]).length){
+        txt += `<div style="margin-top:8px"><strong>Aucun participant reconnu (échantillon) :</strong><br>` +
+          data.unmatchedSample.map(u=>esc(u.subject)+' — '+fmtMeetingDate(u.startDateTime)+' — '+(u.attendeeEmails.length?esc(u.attendeeEmails.join(', ')):'<em>aucun participant renseigné</em>')).join('<br>') +
+          `</div>`;
+      }
+      out.innerHTML = txt;
+    }
     flash('Synchronisation terminée ✓');
   }catch(e){ if(out) out.textContent=''; flash(e.message||'Erreur de synchronisation'); }
   if(btn){ btn.disabled = false; btn.textContent = "Synchroniser l'historique"; }

@@ -297,6 +297,12 @@ crmMeetingRouter.post(
     // joinUrl et par run, pour ne pas spammer l'API (et les erreurs) N fois pour le
     // même résultat.
     const attemptedJoinUrls = new Set<string>();
+    // Échantillon des réunions "enterprise" (pas perso, pas déjà connues) dont
+    // aucun participant ne matche un email CRM — sert à diagnostiquer un
+    // écart d'adresse email plutôt que de laisser l'absence de résultat
+    // inexpliquée (demande client 27/10/2026, "ne ramène rien").
+    const unmatchedSample: { subject: string; startDateTime: string; attendeeEmails: string[] }[] = [];
+    const UNMATCHED_SAMPLE_LIMIT = 20;
 
     for (const admin of admins) {
       let organizerUserId: string;
@@ -323,7 +329,12 @@ crmMeetingRouter.post(
         // hors périmètre.
         if (/teams\.live\.com/i.test(ev.joinUrl)) { skipped++; continue; }
         const matchedProspectId = ev.attendeeEmails.map((e) => emailToProspectId.get(e)).find(Boolean);
-        if (!matchedProspectId) continue;
+        if (!matchedProspectId) {
+          if (unmatchedSample.length < UNMATCHED_SAMPLE_LIMIT) {
+            unmatchedSample.push({ subject: ev.subject, startDateTime: ev.startDateTime, attendeeEmails: ev.attendeeEmails });
+          }
+          continue;
+        }
 
         if (attemptedJoinUrls.has(ev.joinUrl)) { skipped++; continue; }
         attemptedJoinUrls.add(ev.joinUrl);
@@ -355,6 +366,6 @@ crmMeetingRouter.post(
     }
 
     const errors = [...errorCounts.entries()].map(([msg, count]) => (count > 1 ? `${msg} (×${count})` : msg));
-    res.json({ created, scanned, skipped, organizers: admins.length, errors });
+    res.json({ created, scanned, skipped, organizers: admins.length, errors, unmatchedSample });
   })
 );
