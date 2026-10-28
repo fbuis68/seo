@@ -335,7 +335,12 @@ tr.erow td{background:var(--al)}
    (page principale, pas une fenêtre). */
 .modal-box{scrollbar-width:none;-ms-overflow-style:none}
 .modal-box::-webkit-scrollbar{display:none}
-.modal-head{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+/* En-tête épinglé en haut de la modale (28/10/2026, demande client) : sur
+   une fiche longue (facture/document avec aperçu PDF + formulaire), le
+   bouton ✕ pouvait défiler hors champ — d'autant que la souris au-dessus
+   de l'aperçu PDF intégré capte le scroll (il défile lui-même au lieu de
+   faire défiler la modale), rendant le ✕ difficile à retrouver. */
+.modal-head{display:flex;align-items:center;gap:10px;margin-bottom:16px;position:sticky;top:0;background:var(--card);z-index:2;padding-top:2px;margin-top:-2px}
 .modal-head input.name-inp{font-size:16px;font-weight:500;border:none;padding:0;flex:1;background:transparent;outline:none;color:var(--tx);font-family:inherit}
 .modal-head input.name-inp:focus{border-bottom:1px solid var(--bdr2)}
 .modal-section{font-size:11px;font-weight:500;color:var(--mu);letter-spacing:.05em;text-transform:uppercase;margin:14px 0 8px}
