@@ -3763,7 +3763,7 @@ Accès au salon Premium</textarea>
       <table class="tbl" id="crm-table">
         <thead><tr>
           <th style="width:30px"><input type="checkbox" id="crm-select-all" onchange="crmToggleSelectAll(this)"></th>
-          <th>Client</th><th>Contact</th><th>Statut</th><th>Points</th><th>Séjours</th><th>Dernier séjour</th><th>Actions</th>
+          <th>Client</th><th>Contact</th><th>Adresse</th><th>Statut</th><th>Points</th><th>Séjours</th><th>Dernier séjour</th><th>Actions</th>
         </tr></thead>
         <tbody id="crm-tbody"></tbody>
       </table>
@@ -13254,6 +13254,7 @@ async function fetchCrmClients(){
       CRM_CLIENTS_CACHE = (data.clients||[]).map(function(c){
         return {
           key: c.email, email: c.email, nom: c.lastname, prenom: c.firstname, phone: c.phone,
+          address: c.address||'', zip: c.zip||'', city: c.city||'',
           points: c.points, sejours: c.stays, lastStayDate: c.lastStay, tier: c.tier, tags: c.tags||[],
           interests: c.interests||[], sharingPhoto: c.sharingPhoto||'', hotels: c.hotels||null
         };
@@ -13298,7 +13299,7 @@ function renderCrmTable(){
   var filtered = clients.filter(function(c){
     if(fTier && c.tier!==fTier) return false;
     if(q){
-      var hay=(c.nom+' '+c.prenom+' '+c.email+' '+c.phone).toLowerCase();
+      var hay=(c.nom+' '+c.prenom+' '+c.email+' '+c.phone+' '+(c.address||'')+' '+(c.zip||'')+' '+(c.city||'')).toLowerCase();
       if(!hay.includes(q)) return false;
     }
     return true;
@@ -13316,11 +13317,12 @@ function renderCrmTable(){
   if(!clients.length){ tbody.innerHTML=''; empty.style.display='block'; return; }
   empty.style.display='none';
 
-  if(!filtered.length){ tbody.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--mu);padding:16px">Aucun résultat</td></tr>'; return; }
+  if(!filtered.length){ tbody.innerHTML='<tr><td colspan="9" style="text-align:center;color:var(--mu);padding:16px">Aucun résultat</td></tr>'; return; }
 
   tbody.innerHTML = filtered.map(function(c){
     var name = (c.prenom||c.nom) ? ((c.prenom||'')+' '+(c.nom||'')).trim() : '<span style="color:var(--mu)">Client anonyme</span>';
     var contact = [c.email, c.phone].filter(Boolean).join('<br>') || '<span style="color:var(--mu)">—</span>';
+    var addrLine = [c.address, [c.zip, c.city].filter(Boolean).join(' ')].filter(Boolean).join('<br>') || '<span style="color:var(--mu)">—</span>';
     var lastStay = c.lastStayDate ? new Date(c.lastStayDate).toLocaleDateString('fr-FR') : '—';
     var hotelsLine = (c.hotels&&c.hotels.length) ? '<br><span style="font-size:10px;color:var(--mu)">'+c.hotels.map(esc).join(', ')+'</span>' : '';
     var checked = CRM_SELECTION.has(c.key) ? 'checked' : '';
@@ -13328,6 +13330,7 @@ function renderCrmTable(){
       +'<td><input type="checkbox" class="crm-row-check" data-key="'+esc(c.key)+'" '+checked+' onchange="crmToggleSelect(\''+esc(c.key)+'\',this.checked)"></td>'
       +'<td style="font-weight:600;font-size:13px">'+name+'</td>'
       +'<td style="font-size:12px">'+contact+'</td>'
+      +'<td style="font-size:12px">'+addrLine+'</td>'
       +'<td><span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:'+crmTierBg(c.tier)+';color:'+crmTierColor(c.tier)+'">'+c.tier+'</span></td>'
       +'<td><strong style="color:var(--am)">'+c.points+'</strong> pts</td>'
       +'<td>'+c.sejours+'</td>'
@@ -13544,9 +13547,9 @@ async function crmOpenClient(key){
 // ── Export CSV ──
 function crmExportCsv(){
   var clients = crmLoadClients();
-  var rows = [['Nom','Prénom','Email','Téléphone','Statut','Points','Séjours','Dernier séjour']];
+  var rows = [['Nom','Prénom','Email','Téléphone','Adresse','Code postal','Ville','Statut','Points','Séjours','Dernier séjour']];
   clients.forEach(function(c){
-    rows.push([c.nom||'', c.prenom||'', c.email||'', c.phone||'', c.tier, c.points, c.sejours,
+    rows.push([c.nom||'', c.prenom||'', c.email||'', c.phone||'', c.address||'', c.zip||'', c.city||'', c.tier, c.points, c.sejours,
       c.lastStayDate?new Date(c.lastStayDate).toLocaleDateString('fr-FR'):'']);
   });
   var csv = rows.map(function(r){

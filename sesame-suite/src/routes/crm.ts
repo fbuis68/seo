@@ -82,7 +82,18 @@ crmRouter.get(
 
     const byEmail = new Map<
       string,
-      { email: string; firstname: string; lastname: string; phone: string; stays: number; lastStay: string; hotels: Set<string> }
+      {
+        email: string;
+        firstname: string;
+        lastname: string;
+        phone: string;
+        address: string;
+        zip: string;
+        city: string;
+        stays: number;
+        lastStay: string;
+        hotels: Set<string>;
+      }
     >();
     for (const b of bookings) {
       const key = b.personEmail.toLowerCase();
@@ -92,12 +103,24 @@ crmRouter.get(
         existing.stays += 1;
         if (hotelName) existing.hotels.add(hotelName);
         if (b.startDate.toISOString() > existing.lastStay) existing.lastStay = b.startDate.toISOString();
+        // L'adresse saisie au check-in (lib/booking.ts /booking/updateContact)
+        // peut manquer sur une réservation future pas encore enregistrée
+        // alors qu'elle est connue sur un séjour passé — complète la fiche
+        // avec la première trouvée plutôt que de se limiter à la réservation
+        // la plus récente (demande client 28/10/2026 : "veillez à ce
+        // qu'elles soient mises à jour après le checkin").
+        if (!existing.address && b.personAddress) existing.address = b.personAddress;
+        if (!existing.zip && b.personZip) existing.zip = b.personZip;
+        if (!existing.city && b.personCity) existing.city = b.personCity;
       } else {
         byEmail.set(key, {
           email: b.personEmail,
           firstname: b.personFirstname,
           lastname: b.personLastname,
           phone: b.personPhone || "",
+          address: b.personAddress || "",
+          zip: b.personZip || "",
+          city: b.personCity || "",
           stays: 1,
           lastStay: b.startDate.toISOString(),
           hotels: new Set(hotelName ? [hotelName] : []),
@@ -113,6 +136,9 @@ crmRouter.get(
         firstname: c.firstname,
         lastname: c.lastname,
         phone: c.phone,
+        address: c.address,
+        zip: c.zip,
+        city: c.city,
         stays: c.stays,
         lastStay: c.lastStay.slice(0, 10),
         points,
