@@ -90,6 +90,9 @@ function render(){
   renderIdentityStep();
 }
 
+var IDENTITY = {};
+var BANK_DATA = {};
+
 function renderIdentityStep(){
   document.getElementById('formCard').innerHTML =
     '<h1 style="font-size:15px">Vos coordonnées</h1>'
@@ -98,11 +101,11 @@ function renderIdentityStep(){
     + '<label>Nom *</label><input type="text" id="s-lastname" value="'+esc(DOC.signerLastname||'')+'">'
     + '<label>Email *</label><input type="email" id="s-email" value="'+esc(DOC.signerEmail||'')+'">'
     + '<label>Téléphone portable *</label><input type="tel" id="s-phone" placeholder="06 12 34 56 78" value="'+esc(DOC.signerPhone||'')+'">'
-    + '<button type="button" class="btn" id="s-continue-btn" onclick="requestOtp()">Continuer</button>'
+    + '<button type="button" class="btn" id="s-continue-btn" onclick="submitIdentityStep()">Continuer</button>'
     + '<div class="err" id="s-err"></div>';
 }
 
-async function requestOtp(){
+function submitIdentityStep(){
   var errEl = document.getElementById('s-err');
   errEl.style.display = 'none';
   var firstname = document.getElementById('s-firstname').value.trim();
@@ -112,17 +115,69 @@ async function requestOtp(){
   if(!firstname || !lastname || !email || !phone){
     errEl.textContent = 'Tous les champs sont requis.'; errEl.style.display = 'block'; return;
   }
-  var btn = document.getElementById('s-continue-btn');
-  btn.disabled = true; btn.textContent = 'Envoi du code…';
+  IDENTITY = {firstname:firstname, lastname:lastname, email:email, phone:phone};
+  if(DOC.requiresBankMandate) renderBankStep(); else requestOtp();
+}
+
+/** Étape dédiée au mandat de prélèvement SEPA (DOC.requiresBankMandate) —
+ * uniquement sur les documents qui en ont besoin (routes/crmSignature.ts,
+ * createSepaMandate). L'IBAN saisi ici n'est jamais stocké tel quel : il
+ * part directement vers GoCardless à la confirmation du code SMS. */
+function renderBankStep(){
+  document.getElementById('formCard').innerHTML =
+    '<h1 style="font-size:15px">Entreprise &amp; mandat de prélèvement</h1>'
+    + '<div class="sub">Ces informations complètent le contrat et le mandat SEPA joint — vérifiez-les avant de continuer.</div>'
+    + '<label>Raison sociale *</label><input type="text" id="b-company" value="'+esc(BANK_DATA.companyName||'')+'">'
+    + '<label>SIRET</label><input type="text" id="b-siret" value="'+esc(BANK_DATA.siret||'')+'">'
+    + '<label>Adresse</label><input type="text" id="b-address" value="'+esc(BANK_DATA.address||'')+'">'
+    + '<label>Code postal</label><input type="text" id="b-zip" value="'+esc(BANK_DATA.postalCode||'')+'">'
+    + '<label>Ville</label><input type="text" id="b-city" value="'+esc(BANK_DATA.city||'')+'">'
+    + '<label>Titulaire du compte *</label><input type="text" id="b-holder" value="'+esc(BANK_DATA.accountHolderName||(IDENTITY.firstname+' '+IDENTITY.lastname))+'">'
+    + '<label>Banque</label><input type="text" id="b-bank" value="'+esc(BANK_DATA.bankName||'')+'">'
+    + '<label>BIC</label><input type="text" id="b-bic" value="'+esc(BANK_DATA.bic||'')+'">'
+    + '<label>IBAN *</label><input type="text" id="b-iban" value="'+esc(BANK_DATA.iban||'')+'" placeholder="FR76 XXXX XXXX XXXX XXXX XXXX XXX">'
+    + '<button type="button" class="btn" id="b-continue-btn" onclick="submitBankStep()">Continuer</button>'
+    + '<button type="button" class="btn-ghost" onclick="renderIdentityStep()">Retour</button>'
+    + '<div class="err" id="s-err"></div>';
+}
+
+function submitBankStep(){
+  var errEl = document.getElementById('s-err');
+  errEl.style.display = 'none';
+  var g = function(id){ return document.getElementById(id).value.trim(); };
+  var data = {
+    companyName: g('b-company'), siret: g('b-siret'), address: g('b-address'),
+    postalCode: g('b-zip'), city: g('b-city'), accountHolderName: g('b-holder'),
+    bankName: g('b-bank'), bic: g('b-bic'), iban: g('b-iban'),
+  };
+  if(!data.companyName || !data.accountHolderName || !data.iban){
+    errEl.textContent = 'Raison sociale, titulaire du compte et IBAN sont requis.'; errEl.style.display = 'block'; return;
+  }
+  BANK_DATA = data;
+  requestOtp();
+}
+
+async function requestOtp(){
+  var errEl = document.getElementById('s-err');
+  var btn = document.getElementById('s-continue-btn') || document.getElementById('b-continue-btn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Envoi du code…'; }
   try{
     var r = await fetch('/wa/crmSignature/public/'+encodeURIComponent(TOKEN)+'/requestOtp', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({firstname:firstname, lastname:lastname, email:email, phone:phone})
+      body: JSON.stringify(IDENTITY)
     });
     var data = await r.json();
-    if(!r.ok){ errEl.textContent = data.error||'Erreur lors de l\'envoi du code.'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Continuer'; return; }
-  }catch(e){ errEl.textContent = 'Erreur de connexion au serveur.'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Continuer'; return; }
-  renderOtpStep(phone);
+    if(!r.ok){
+      if(errEl){ errEl.textContent = data.error||'Erreur lors de l\'envoi du code.'; errEl.style.display='block'; }
+      if(btn){ btn.disabled=false; btn.textContent='Continuer'; }
+      return;
+    }
+  }catch(e){
+    if(errEl){ errEl.textContent = 'Erreur de connexion au serveur.'; errEl.style.display='block'; }
+    if(btn){ btn.disabled=false; btn.textContent='Continuer'; }
+    return;
+  }
+  renderOtpStep(IDENTITY.phone);
 }
 
 function renderOtpStep(phone){
@@ -131,7 +186,7 @@ function renderOtpStep(phone){
     + '<div class="sub">Un code à 6 chiffres a été envoyé par SMS au '+esc(phone)+'.</div>'
     + '<label>Code reçu par SMS</label><input type="text" id="s-otp" class="otp-input" maxlength="6" inputmode="numeric" placeholder="______">'
     + '<button type="button" class="btn" id="s-confirm-btn" onclick="verifyOtp()">Confirmer la signature</button>'
-    + '<button type="button" class="btn-ghost" onclick="renderIdentityStep()">Modifier mes coordonnées</button>'
+    + '<button type="button" class="btn-ghost" onclick="'+(DOC.requiresBankMandate?'renderBankStep()':'renderIdentityStep()')+'">Modifier mes '+(DOC.requiresBankMandate?'coordonnées bancaires':'coordonnées')+'</button>'
     + '<div class="err" id="s-err"></div>';
   document.getElementById('s-otp').focus();
 }
@@ -144,9 +199,10 @@ async function verifyOtp(){
   var btn = document.getElementById('s-confirm-btn');
   btn.disabled = true; btn.textContent = 'Vérification…';
   try{
+    var body = Object.assign({code:code}, DOC.requiresBankMandate ? BANK_DATA : {});
     var r = await fetch('/wa/crmSignature/public/'+encodeURIComponent(TOKEN)+'/verifyOtp', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({code:code})
+      body: JSON.stringify(body)
     });
     var data = await r.json();
     if(!r.ok){ errEl.textContent = data.error||'Code incorrect.'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Confirmer la signature'; return; }

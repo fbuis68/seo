@@ -2440,6 +2440,22 @@ model CrmSignatureRequest {
   sentAt   DateTime?
   viewedAt DateTime?
 
+  // Mandat de prélèvement SEPA (27/10/2026, demande client) — quand actif,
+  // la page publique de signature demande en plus l'identité de
+  // l'entreprise et les coordonnées bancaires du signataire, crée le
+  // mandat côté GoCardless (lib/gocardlessMandate.ts) au moment de la
+  // signature, et ajoute une page récapitulative au PDF stocké. L'IBAN/BIC
+  // ne sont JAMAIS persistés en base (ni ici ni ailleurs) — seulement
+  // transmis à GoCardless et imprimés dans le PDF final, exactement comme
+  // un mandat papier scanné.
+  requiresBankMandate Boolean @default(false)
+  // Champs d'identité entreprise saisis par le signataire (raison sociale,
+  // SIRET, adresse...) — aucune donnée bancaire ici.
+  formData             Json?
+  gocardlessCustomerId String?
+  gocardlessMandateId  String?
+  mandateReference     String? // RUM — généré au moment de la signature
+
   createdByAdminId String?
   createdBy        AdminUser? @relation("SignatureRequestCreatedBy", fields: [createdByAdminId], references: [id], onDelete: SetNull)
 

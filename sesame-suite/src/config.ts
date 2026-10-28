@@ -48,4 +48,9 @@ export const config = {
   anthropicWorkspaceId: process.env.ANTHROPIC_WORKSPACE_ID || "",
   openaiApiKey: process.env.OPENAI_API_KEY || "",
   openaiEmbeddingModel: process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small",
+  // Identifiant Créancier SEPA (ICS) de Sesame Technology France — imprimé
+  // sur chaque mandat de prélèvement généré (lib/signaturePdf.ts). Donnée
+  // légale : volontairement JAMAIS codée en dur (risque de coquille de
+  // transcription), à vérifier/renseigner une fois dans .env.
+  gocardlessIcs: process.env.GOCARDLESS_ICS || "",
 };

@@ -3816,8 +3816,8 @@ function sigRowHtml(s){
   return `<div class="log-item" style="cursor:pointer" onclick="sigOpenPreview('${s.id}')">
     <div class="log-dot" style="background:${color}"></div>
     <div class="log-body">
-      <div class="log-text">${esc(s.title)} <span style="color:#aaa;font-size:11px">${esc(SIG_TYPE_LABEL[s.documentType]||s.documentType)}</span></div>
-      <div class="log-meta">${esc(s.signerFirstname)} ${esc(s.signerLastname)} · ${esc(s.signerEmail)} · ${dates}</div>
+      <div class="log-text">${esc(s.title)} <span style="color:#aaa;font-size:11px">${esc(SIG_TYPE_LABEL[s.documentType]||s.documentType)}</span>${s.requiresBankMandate?' <span class="badge" style="background:#eef3ff;color:#2a5ba6;font-weight:600;font-size:10px">Mandat SEPA</span>':''}</div>
+      <div class="log-meta">${esc(s.signerFirstname)} ${esc(s.signerLastname)} · ${esc(s.signerEmail)} · ${dates}${s.mandateReference?' · RUM '+esc(s.mandateReference):''}</div>
     </div>
     <span class="badge" style="background:${color}22;color:${color};font-weight:600">${esc(SIG_STATUS_LABEL[s.status]||s.status)}</span>
     <div style="display:flex;gap:6px;margin-left:10px">${actions.join('')}</div>
@@ -3844,6 +3844,7 @@ function sigOpenCreate(){
       </div>
       <div class="ff"><label>Titre</label><input type="text" id="sig-title" placeholder="Ex : Contrat d'abonnement — ${esc(c.nom||'')}"></div>
       <div class="ff"><label>Document (PDF)</label><input type="file" id="sig-file" accept="application/pdf"></div>
+      <div class="ff"><label style="display:flex;align-items:center;gap:8px;font-size:13px;color:inherit"><input type="checkbox" id="sig-bank-mandate" style="width:auto;margin:0"> Demander aussi au signataire ses coordonnées bancaires (mandat de prélèvement SEPA, création automatique du mandat GoCardless)</label></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="ff"><label>Prénom signataire</label><input type="text" id="sig-firstname" value="${esc(guessFirst)}"></div>
         <div class="ff"><label>Nom signataire</label><input type="text" id="sig-lastname" value="${esc(guessLast)}"></div>
@@ -3886,10 +3887,11 @@ async function sigCreate(){
   btn.disabled = true; btn.textContent = 'Envoi…';
   try{
     const dataUrl = await sigReadFileAsDataUrl(file);
+    const requiresBankMandate = document.getElementById('sig-bank-mandate').checked;
     const r = await apiFetch('/wa/crmSignature/create', {method:'POST', body: JSON.stringify({
       prospectId: (SIG_CURRENT_PROSPECT&&SIG_CURRENT_PROSPECT.id)||'',
       documentType, title, fileName: file.name, fileMimeType: file.type || 'application/pdf',
-      fileContentBase64: dataUrl, signerFirstname, signerLastname, signerEmail, signerPhone
+      fileContentBase64: dataUrl, signerFirstname, signerLastname, signerEmail, signerPhone, requiresBankMandate
     })});
     const data = await r.json();
     if(!r.ok){ errEl.textContent = data.error||'Erreur lors de la création'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Créer'; return; }

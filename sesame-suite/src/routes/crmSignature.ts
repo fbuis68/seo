@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { Prisma } from "@prisma/client";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "../db";
@@ -7,6 +8,8 @@ import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin, requireSesame } from "../middleware/requireAdmin";
 import { sendEmailRaw } from "../lib/email";
 import { sendChannelRaw } from "../lib/sms";
+import { createSepaMandate, generateMandateReference } from "../lib/gocardlessMandate";
+import { appendMandateSummaryPage } from "../lib/signaturePdf";
 
 /**
  * Gestionnaire de signature électronique générique (§ demande client
@@ -40,6 +43,8 @@ function shapeRequest(r: {
   sentAt: Date | null;
   viewedAt: Date | null;
   createdAt: Date;
+  requiresBankMandate: boolean;
+  mandateReference: string | null;
 }) {
   return {
     id: r.id,
@@ -57,6 +62,8 @@ function shapeRequest(r: {
     sentAt: r.sentAt,
     viewedAt: r.viewedAt,
     createdAt: r.createdAt,
+    requiresBankMandate: r.requiresBankMandate,
+    mandateReference: r.mandateReference,
   };
 }
 
@@ -88,6 +95,7 @@ interface CreateBody {
   signerLastname?: string;
   signerEmail?: string;
   signerPhone?: string;
+  requiresBankMandate?: boolean;
 }
 
 crmSignatureRouter.post(
@@ -130,6 +138,7 @@ crmSignatureRouter.post(
         signerPhone: (b.signerPhone || "").trim() || null,
         signToken: crypto.randomBytes(24).toString("hex"),
         createdByAdminId: req.admin!.adminId,
+        requiresBankMandate: !!b.requiresBankMandate,
       },
     });
     res.status(201).json(shapeRequest(row));
@@ -232,6 +241,7 @@ crmSignatureRouter.get(
       signerPhone: row.signerPhone,
       status: row.status,
       signedAt: row.signedAt,
+      requiresBankMandate: row.requiresBankMandate,
     });
   })
 );
@@ -283,11 +293,28 @@ crmSignatureRouter.post(
   })
 );
 
-interface VerifyOtpBody {
+interface BankMandateFields {
+  companyName?: string;
+  siret?: string;
+  address?: string;
+  postalCode?: string;
+  city?: string;
+  phone?: string;
+  accountHolderName?: string;
+  bankName?: string;
+  bic?: string;
+  iban?: string;
+}
+
+interface VerifyOtpBody extends BankMandateFields {
   code?: string;
 }
 
-/** POST /wa/crmSignature/public/:token/verifyOtp — vérifie le code et signe. */
+/** POST /wa/crmSignature/public/:token/verifyOtp — vérifie le code, crée le
+ * mandat SEPA GoCardless si requis, puis signe. Si le mandat échoue (ex :
+ * IBAN invalide), le document n'est PAS marqué signé et le code OTP reste
+ * valide (ni consommé ni invalidé) — le signataire corrige et resoumet
+ * sans redemander de SMS. */
 crmSignatureRouter.post(
   "/crmSignature/public/:token/verifyOtp",
   asyncHandler(async (req, res) => {
@@ -298,11 +325,64 @@ crmSignatureRouter.post(
     if (row.otpExpiresAt < new Date()) throw new HttpError(400, "Code expiré — redemandez un code");
     if (row.otpAttempts >= OTP_MAX_ATTEMPTS) throw new HttpError(429, "Trop de tentatives — redemandez un nouveau code");
 
-    const code = ((req.body as VerifyOtpBody).code || "").trim();
+    const b = req.body as VerifyOtpBody;
+    const code = (b.code || "").trim();
     const ok = code ? await bcrypt.compare(code, row.otpCodeHash) : false;
     if (!ok) {
       await prisma.crmSignatureRequest.update({ where: { id: row.id }, data: { otpAttempts: { increment: 1 } } });
       throw new HttpError(400, "Code incorrect");
+    }
+
+    let fileContentBase64 = row.fileContentBase64;
+    let formData: Record<string, unknown> | undefined;
+    let gocardlessCustomerId: string | undefined;
+    let gocardlessMandateId: string | undefined;
+    let mandateReference: string | undefined;
+
+    if (row.requiresBankMandate) {
+      const companyName = (b.companyName || "").trim();
+      const accountHolderName = (b.accountHolderName || "").trim();
+      const iban = (b.iban || "").trim();
+      if (!companyName) throw new HttpError(400, "Raison sociale requise");
+      if (!accountHolderName) throw new HttpError(400, "Titulaire du compte requis");
+      if (!iban) throw new HttpError(400, "IBAN requis");
+      if (!config.gocardlessIcs) throw new HttpError(503, "ICS Sesame non configuré côté serveur (GOCARDLESS_ICS) — contactez l'équipe Sesame");
+
+      mandateReference = generateMandateReference(companyName);
+      const mandate = await createSepaMandate({
+        companyName,
+        contactEmail: row.signerEmail,
+        addressLine1: b.address,
+        postalCode: b.postalCode,
+        city: b.city,
+        accountHolderName,
+        iban,
+        reference: mandateReference,
+      });
+      gocardlessCustomerId = mandate.gocardlessCustomerId;
+      gocardlessMandateId = mandate.gocardlessMandateId;
+
+      fileContentBase64 = await appendMandateSummaryPage(row.fileContentBase64, {
+        companyName,
+        siret: b.siret,
+        contactName: `${row.signerFirstname} ${row.signerLastname}`,
+        address: b.address,
+        postalCode: b.postalCode,
+        city: b.city,
+        phone: b.phone,
+        email: row.signerEmail,
+        accountHolderName,
+        bankName: b.bankName,
+        bic: b.bic,
+        iban,
+        mandateReference,
+        signedAt: new Date(),
+        signerIp: req.ip || "inconnue",
+        creditorIcs: config.gocardlessIcs,
+      });
+
+      // Jamais l'IBAN/BIC — seulement l'identité entreprise (cf. schema.prisma).
+      formData = { companyName, siret: b.siret, address: b.address, postalCode: b.postalCode, city: b.city, phone: b.phone };
     }
 
     const updated = await prisma.crmSignatureRequest.update({
@@ -314,6 +394,11 @@ crmSignatureRouter.post(
         signerUserAgent: req.headers["user-agent"] || null,
         otpCodeHash: null,
         otpExpiresAt: null,
+        fileContentBase64,
+        formData: (formData as Prisma.InputJsonValue) || undefined,
+        gocardlessCustomerId,
+        gocardlessMandateId,
+        mandateReference,
       },
     });
     res.json({ ok: true, signedAt: updated.signedAt });
