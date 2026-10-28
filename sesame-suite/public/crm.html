@@ -2656,6 +2656,7 @@ function showFiche(id){
   loadComptaCard(c);
   loadSignatureCard(c);
   loadMeetingsCard(c);
+  loadSignalsCard(c);
 }
 
 function riskScore(c){let s=0;if(c.danger==='Élevé !!')s+=5;else if(c.danger==='Modéré')s+=3;if(c.contrat==='non')s+=2;if(!c.webApp&&!c.mobileV2)s+=1;if(!c.nfc&&!c.qr&&!c.mobile&&!c.code)s+=1;return Math.min(s,10);}
@@ -2861,6 +2862,11 @@ function renderFiche(c){
 
   <div class="card" id="meetings-card">
     <div class="card-head"><div class="ch-ico">◷</div><span class="ch-title">Réunions Teams</span></div>
+    <div class="log-empty">Chargement…</div>
+  </div>
+
+  <div class="card" id="signals-card">
+    <div class="card-head"><div class="ch-ico">⚡</div><span class="ch-title">Signaux commerciaux</span></div>
     <div class="log-empty">Chargement…</div>
   </div>
 
@@ -3477,6 +3483,133 @@ async function deleteContact(prospectId, id){
     CRM_CONTACTS = CRM_CONTACTS.filter(c=>c.id!==id);
     renderContactsCard(prospectId);
     flash('Contact supprimé');
+  }catch(e){ flash('Erreur de suppression'); }
+}
+
+// ════════════════════════════════════════
+// SIGNAUX COMMERCIAUX (Sesame AI Sales Agent, 28/10/2026) — actualité trouvée
+// par l'Agent Market Intelligence (recherche web automatique, nocturne, cf.
+// lib/marketIntelligenceScheduler.ts) + ajout manuel (ex. post LinkedIn vu
+// par le commercial via Sales Navigator — pas d'API LinkedIn pour lire
+// l'activité d'un tiers, cf. décision du 28/10). Même convention de carte
+// asynchrone que les sections contacts/réunions ci-dessus.
+// ════════════════════════════════════════
+let CRM_SIGNALS = [];
+
+const SIGNAL_TYPE_LABELS = {
+  actualite: 'Actualité', linkedin_post: 'Post LinkedIn', ouverture: 'Ouverture',
+  renovation: 'Rénovation', recrutement: 'Recrutement', changement_pms: 'Changement de PMS',
+  agrandissement: 'Agrandissement', autre: 'Autre',
+};
+const SIGNAL_STATUS_TAG = {
+  fact: ['t-green','Vérifié'], hypothesis: ['t-purple','Hypothèse'],
+  missing_data: ['t-amber','Donnée manquante'], to_verify: ['t-gray','À vérifier'],
+};
+
+async function loadSignalsCard(c){
+  const el = document.getElementById('signals-card');
+  if(!el) return;
+  try{
+    const r = await apiFetch('/wa/crmSalesSignal/list?prospectId='+encodeURIComponent(c.id));
+    CRM_SIGNALS = r.ok ? await r.json() : [];
+  }catch(e){ CRM_SIGNALS = []; }
+  renderSignalsCard(c.id);
+}
+
+function renderSignalsCard(prospectId){
+  const el = document.getElementById('signals-card');
+  if(!el) return;
+  const rows = CRM_SIGNALS.map(function(s){
+    const tag = SIGNAL_STATUS_TAG[s.status] || SIGNAL_STATUS_TAG.to_verify;
+    const date = s.publishedAt ? new Date(s.publishedAt).toLocaleDateString('fr-FR') : new Date(s.createdAt).toLocaleDateString('fr-FR');
+    return `<div class="log-item">
+      <div class="log-dot ld-b"></div>
+      <div class="log-body">
+        <div class="log-text"><strong>${esc(SIGNAL_TYPE_LABELS[s.signalType]||s.signalType)}</strong> <span class="tag ${tag[0]}" style="font-size:10px;margin-left:6px">${tag[1]}</span></div>
+        <div class="log-meta">${esc(s.source)} · ${date} — <a href="${esc(s.url)}" target="_blank" rel="noopener">source ↗</a></div>
+        ${s.hypothesis?'<div style="font-size:12px;margin-top:3px">'+esc(s.hypothesis)+'</div>':''}
+        <div class="log-acts">
+          ${s.status!=='fact'?'<button class="btn btn-sm btn-ghost" onclick="signalSetStatus(\''+s.id+'\',\'fact\')">Marquer vérifié</button>':''}
+          <button class="btn btn-sm btn-ghost" style="color:#a32d2d" onclick="signalDelete('${s.id}')">Supprimer</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  el.innerHTML = `
+    <div class="card-head"><div class="ch-ico">⚡</div><span class="ch-title">Signaux commerciaux</span>
+      ${CRM_SIGNALS.length?`<span style="font-size:12px;color:#aaa;margin-left:8px">${CRM_SIGNALS.length} signal${CRM_SIGNALS.length>1?'s':''}</span>`:''}
+      <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="openAddSignalModal('${prospectId}')">+ Ajouter un signal</button>
+    </div>
+    ${rows || "<div class=\"log-empty\">Aucun signal pour cette fiche — l'Agent Market Intelligence scanne chaque nuit les prospects avec un commercial assigné, ou ajoutez-en un manuellement (ex. post LinkedIn repéré via Sales Navigator).</div>"}`;
+  ficheCollapsible('signals-card');
+}
+
+function openAddSignalModal(prospectId){
+  document.getElementById('modal-ct-2').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal2()" style="z-index:400">
+    <div class="modal-box" style="max-width:520px">
+      <div class="modal-head">
+        <div style="font-size:16px;font-weight:600">Ajouter un signal</div>
+        <button class="btn btn-ghost btn-icon" onclick="closeModal2()">✕</button>
+      </div>
+      <div style="padding:0 20px 20px" class="form-grid">
+        <div class="ff">
+          <label>Type de signal</label>
+          <select id="sig2-type">${Object.keys(SIGNAL_TYPE_LABELS).map(function(k){ return '<option value="'+k+'">'+SIGNAL_TYPE_LABELS[k]+'</option>'; }).join('')}</select>
+        </div>
+        <div class="ff">
+          <label>Lien source (obligatoire) *</label>
+          <input id="sig2-url" placeholder="https://www.linkedin.com/posts/… ou lien d'actualité">
+        </div>
+        <div class="ff">
+          <label>Origine</label>
+          <input id="sig2-source" placeholder="ex. LinkedIn (Sales Navigator), presse locale…">
+        </div>
+        <div class="ff">
+          <label>Note / hypothèse commerciale</label>
+          <textarea id="sig2-hypothesis" rows="3" placeholder="Ce que ce signal suggère pour la prospection"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="submitAddSignal('${prospectId}')">Ajouter</button>
+        <button class="btn btn-ghost" onclick="closeModal2()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function submitAddSignal(prospectId){
+  const g = id => (document.getElementById(id)||{value:''}).value.trim();
+  const url = g('sig2-url');
+  if(!url){ flash('Le lien source est obligatoire'); return; }
+  try{
+    const r = await apiFetch('/wa/crmSalesSignal/create', {method:'POST', body:JSON.stringify({
+      prospectId, url, signalType:g('sig2-type'), source:g('sig2-source'), hypothesis:g('sig2-hypothesis'),
+    })});
+    if(!r.ok) throw new Error('http '+r.status);
+    closeModal2();
+    flash('Signal ajouté');
+    loadSignalsCard({id:prospectId});
+  }catch(e){ flash("Erreur lors de l'ajout du signal"); }
+}
+
+async function signalSetStatus(id, status){
+  try{
+    const r = await apiFetch('/wa/crmSalesSignal/updateStatus', {method:'POST', body:JSON.stringify({id, status})});
+    if(!r.ok) throw new Error('http '+r.status);
+    const c = clients.find(x=>x.id===curId);
+    if(c) loadSignalsCard(c);
+  }catch(e){ flash('Erreur de mise à jour'); }
+}
+
+async function signalDelete(id){
+  if(!confirm('Supprimer ce signal ?')) return;
+  try{
+    const r = await apiFetch('/wa/crmSalesSignal/delete', {method:'POST', body:JSON.stringify({id})});
+    if(!r.ok) throw new Error('http '+r.status);
+    CRM_SIGNALS = CRM_SIGNALS.filter(s=>s.id!==id);
+    renderSignalsCard(curId);
+    flash('Signal supprimé');
   }catch(e){ flash('Erreur de suppression'); }
 }
 

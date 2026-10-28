@@ -38,6 +38,7 @@ import { crmProductRouter } from "./routes/crmProduct";
 import { crmContactRouter } from "./routes/crmContact";
 import { crmTicketRouter } from "./routes/crmTicket";
 import { crmMeetingRouter } from "./routes/crmMeeting";
+import { crmSalesSignalRouter } from "./routes/crmSalesSignal";
 import { questionnaireRouter } from "./routes/questionnaire";
 import { crmScoringRouter } from "./routes/crmScoring";
 import { crmCashLineRouter } from "./routes/crmCashLine";
@@ -123,6 +124,7 @@ export function createApp() {
   app.use("/wa", crmContactRouter);
   app.use("/wa", crmTicketRouter);
   app.use("/wa", crmMeetingRouter);
+  app.use("/wa", crmSalesSignalRouter);
   app.use("/wa", graphMailRouter);
   app.use("/wa", questionnaireRouter);
   app.use("/wa", crmScoringRouter);

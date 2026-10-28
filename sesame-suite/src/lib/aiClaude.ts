@@ -233,3 +233,65 @@ export async function generateFaqDraft(params: { subject: string; threadText: st
     tags: Array.isArray(input.tags) ? (input.tags as string[]).filter(Boolean) : [],
   };
 }
+
+export interface CompanyNewsItem {
+  title: string;
+  url: string;
+  publishedAt?: string;
+  summary: string;
+}
+
+/**
+ * Agent "Market Intelligence" (Sesame AI Sales Agent, 28/10/2026) — recherche
+ * de l'actualité RÉCENTE et VÉRIFIABLE sur une entreprise via l'outil de
+ * recherche web hébergé d'Anthropic (web_search_20250305), pas une requête
+ * ouverte à callClaude() : ce flux ne force PAS tool_choice sur un outil
+ * personnalisé (incompatible avec l'usage de l'outil web_search, qui doit
+ * rester libre pour que le modèle l'invoque avant de répondre) — le résultat
+ * final est donc extrait du dernier bloc texte de la réponse plutôt que d'un
+ * tool_use. Chaque URL retournée vient d'un résultat de recherche réel —
+ * jamais inventée par le modèle (exigence §2 du brief : "ne jamais présenter
+ * une donnée supposée comme vérifiée"). Nécessite que la recherche web soit
+ * activée pour l'organisation dans la Console Anthropic.
+ */
+export async function findCompanyNews(companyName: string, secteur?: string): Promise<CompanyNewsItem[]> {
+  if (!config.anthropicApiKey) return [];
+  const system = `Tu es un analyste qui recherche de l'actualité récente (3 derniers mois si possible) et vérifiable sur UNE entreprise précise, pour un commercial B2B. Utilise l'outil de recherche web disponible. Ne retiens que des résultats qui parlent RÉELLEMENT de cette entreprise (attention aux homonymes) — ignore les annuaires/pages publicitaires sans contenu informatif. Termine ta réponse par UNIQUEMENT un bloc JSON (aucun texte avant ou après), au format exact : {"items":[{"title":"...","url":"...","publishedAt":"AAAA-MM-JJ ou null","summary":"1-2 phrases en français"}]}. Maximum 3 items, liste vide si rien de pertinent. N'invente jamais une url : chaque url doit provenir d'un résultat de recherche réel obtenu via l'outil.`;
+  const query = secteur ? `${companyName} (secteur : ${secteur})` : companyName;
+  const r = await fetch(ANTHROPIC_URL, {
+    method: "POST",
+    headers: {
+      "x-api-key": config.anthropicApiKey,
+      "anthropic-version": "2023-06-01",
+      "Content-Type": "application/json",
+      ...(config.anthropicWorkspaceId ? { "anthropic-workspace-id": config.anthropicWorkspaceId } : {}),
+    },
+    body: JSON.stringify({
+      model: config.anthropicModel,
+      max_tokens: 1200,
+      system,
+      messages: [{ role: "user", content: `Entreprise à rechercher : ${query}` }],
+      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
+    }),
+  });
+  if (!r.ok) {
+    const body = await r.text().catch(() => "");
+    throw new HttpError(502, `Échec recherche web Claude (${r.status}) : ${body.slice(0, 300)}`);
+  }
+  const data = (await r.json()) as { content?: { type: string; text?: string }[] };
+  const fullText = (data.content || [])
+    .filter((c) => c.type === "text")
+    .map((c) => c.text || "")
+    .join("\n");
+  const match = fullText.match(/\{[\s\S]*\}/);
+  if (!match) return [];
+  let parsed: { items?: CompanyNewsItem[] };
+  try {
+    parsed = JSON.parse(match[0]);
+  } catch {
+    return [];
+  }
+  return (parsed.items || [])
+    .filter((it) => it && typeof it.url === "string" && it.url.trim() && typeof it.title === "string" && it.title.trim())
+    .slice(0, 3);
+}

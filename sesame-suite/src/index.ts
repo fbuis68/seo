@@ -9,6 +9,7 @@ import { startQontoScheduler } from "./lib/qontoScheduler";
 import { startGoCardlessScheduler } from "./lib/gocardlessScheduler";
 import { startScalewayScheduler } from "./lib/scalewayScheduler";
 import { startAccRelanceScheduler } from "./lib/accRelanceScheduler";
+import { startMarketIntelligenceScheduler } from "./lib/marketIntelligenceScheduler";
 import { VERSION } from "./lib/version";
 
 const INSECURE_DEFAULTS: Record<string, string> = {
@@ -55,4 +56,5 @@ app.listen(config.port, () => {
   startGoCardlessScheduler();
   startScalewayScheduler();
   startAccRelanceScheduler();
+  startMarketIntelligenceScheduler();
 });

@@ -2112,6 +2112,11 @@ model CrmProspect {
   detectedProject     String?
   detectedProjectDate DateTime?
   enrichmentFields    Json?
+  // Dernier scan de l'Agent Market Intelligence (actualité, cf.
+  // lib/marketIntelligenceScheduler.ts) — null = jamais scanné. Sert à
+  // étaler les passages (le plus ancien scanné d'abord) et à éviter de
+  // rescanner une fiche trop souvent (coût de la recherche web à l'usage).
+  lastSignalScanAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
