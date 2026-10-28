@@ -18,7 +18,12 @@
   .wrap{max-width:980px;margin:0 auto;padding:24px 20px 60px;display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
   .col-doc{flex:1 1 480px;min-width:0}
   .col-form{flex:0 0 340px;min-width:280px;position:sticky;top:20px}
-  @media (max-width:760px){ .col-form{position:static} }
+  /* position:sticky dans un conteneur flex se réduit à hauteur 0 sur
+     Safari iOS (bug connu) — sur petit écran, repli sur une largeur pleine
+     en flux normal plutôt que sticky, qui ne sert de toute façon à rien
+     une fois les colonnes empilées. Formulaire invisible constaté sur
+     téléphone 28/10/2026. */
+  @media (max-width:760px){ .col-form{position:static;flex:1 1 100%;width:100%;min-width:0} .pdfwrap embed{height:48vh} }
   .card{background:var(--card);border:0.5px solid var(--bdr);border-radius:12px;padding:20px;margin-bottom:16px}
   h1{font-size:16px;margin:0 0 4px}
   .sub{color:var(--mu);font-size:12px;margin-bottom:14px}
