@@ -400,6 +400,22 @@ crmSignatureRouter.post(
         mandateReference,
       },
     });
+
+    // Copie du document signé au signataire — best-effort : la signature
+    // reste acquise (déjà en base ci-dessus) même si l'envoi échoue, pas de
+    // throw ici (demande client 28/10/2026, "le client ne reçoit pas de
+    // copie de son mandat signé" — jusque-là rien n'était envoyé du tout).
+    try {
+      const docLabel = row.documentType === "contract" ? "contrat" : row.documentType === "quote" ? "devis" : "PV de réception";
+      const html = `<p>Bonjour ${row.signerFirstname},</p>
+<p>Voici une copie du ${docLabel} « ${row.title} » que vous venez de signer électroniquement${row.requiresBankMandate ? `, avec le mandat de prélèvement SEPA joint (référence ${mandateReference})` : ""}.</p>`;
+      await sendEmailRaw(null, row.signerEmail, `Document signé — ${row.title}`, html, undefined, {
+        namedAttachments: [{ fileName: row.fileName, dataUrl: `data:${row.fileMimeType};base64,${fileContentBase64}` }],
+      });
+    } catch (e) {
+      console.error(`[crmSignature] échec envoi copie signée à ${row.signerEmail}:`, e);
+    }
+
     res.json({ ok: true, signedAt: updated.signedAt });
   })
 );
