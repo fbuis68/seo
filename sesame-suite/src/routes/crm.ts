@@ -136,9 +136,11 @@ crmRouter.get(
         firstname: c.firstname,
         lastname: c.lastname,
         phone: c.phone,
-        address: c.address,
-        zip: c.zip,
-        city: c.city,
+        // L'édition manuelle depuis la fiche client (ClientPrefs) prime
+        // toujours sur celle auto-remplie au check-in.
+        address: pref?.address || c.address,
+        zip: pref?.zip || c.zip,
+        city: pref?.city || c.city,
         stays: c.stays,
         lastStay: c.lastStay.slice(0, 10),
         points,
@@ -224,13 +226,14 @@ crmRouter.get(
             newsletterOptIn: prefs.newsletterOptIn,
           }
         : null,
-      address: bookingWithAddress
-        ? {
-            address: bookingWithAddress.personAddress || "",
-            zip: bookingWithAddress.personZip || "",
-            city: bookingWithAddress.personCity || "",
-          }
-        : null,
+      // L'édition manuelle (ClientPrefs) prime sur celle auto-remplie au
+      // check-in, même logique que GET /crm/clients ci-dessus.
+      address:
+        prefs?.address || prefs?.zip || prefs?.city
+          ? { address: prefs?.address || "", zip: prefs?.zip || "", city: prefs?.city || "" }
+          : bookingWithAddress
+            ? { address: bookingWithAddress.personAddress || "", zip: bookingWithAddress.personZip || "", city: bookingWithAddress.personCity || "" }
+            : null,
       cguAcceptedAt: bookingWithCgu ? bookingWithCgu.cguAcceptedAt!.toISOString() : null,
       bookings: bookings.map((b) => ({
         code: b.code,

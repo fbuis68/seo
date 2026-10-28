@@ -28,6 +28,9 @@ clientPrefsRouter.get(
             tags: prefs.tags || [],
             newsletterOptIn: prefs.newsletterOptIn,
             newsletterPointsAwarded: prefs.newsletterPointsAwarded,
+            address: prefs.address || "",
+            zip: prefs.zip || "",
+            city: prefs.city || "",
           }
         : {
             email,
@@ -37,6 +40,9 @@ clientPrefsRouter.get(
             tags: [],
             newsletterOptIn: false,
             newsletterPointsAwarded: false,
+            address: "",
+            zip: "",
+            city: "",
           }
     );
   })
@@ -53,6 +59,9 @@ clientPrefsRouter.post(
       servFreq?: number;
       menageNote?: string;
       tags?: string[];
+      address?: string;
+      zip?: string;
+      city?: string;
     };
     const email = (b.email || "").trim().toLowerCase();
     if (!email) throw new HttpError(400, "email requis");
@@ -64,6 +73,9 @@ clientPrefsRouter.post(
         servFreq: b.servFreq,
         menageNote: b.menageNote,
         tags: b.tags,
+        address: b.address !== undefined ? b.address.trim() || null : undefined,
+        zip: b.zip !== undefined ? b.zip.trim() || null : undefined,
+        city: b.city !== undefined ? b.city.trim() || null : undefined,
       },
       create: {
         entityId: entity.id,
@@ -72,6 +84,9 @@ clientPrefsRouter.post(
         servFreq: b.servFreq,
         menageNote: b.menageNote,
         tags: b.tags || [],
+        address: b.address?.trim() || null,
+        zip: b.zip?.trim() || null,
+        city: b.city?.trim() || null,
       },
     });
 
@@ -81,6 +96,9 @@ clientPrefsRouter.post(
       servFreq: prefs.servFreq,
       menageNote: prefs.menageNote || "",
       tags: prefs.tags || [],
+      address: prefs.address || "",
+      zip: prefs.zip || "",
+      city: prefs.city || "",
     });
   })
 );

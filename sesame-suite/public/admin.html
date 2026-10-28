@@ -13426,6 +13426,23 @@ async function crmMergeConfirm(){
 }
 
 // ── Fiche client détaillée ──
+async function crmSaveClientAddress(email){
+  var btn = document.getElementById('crm-save-address-btn');
+  var address = document.getElementById('crm-edit-address').value.trim();
+  var zip = document.getElementById('crm-edit-zip').value.trim();
+  var city = document.getElementById('crm-edit-city').value.trim();
+  if(btn){ btn.disabled = true; }
+  try{
+    var r = await adminFetch('/wa/clientPrefs/update', {method:'POST', body: JSON.stringify({email: email, address: address, zip: zip, city: city})});
+    if(!r.ok){ toast('Erreur lors de l\'enregistrement'); if(btn) btn.disabled=false; return; }
+    toast('Adresse enregistrée ✓');
+    // Reflète dans le cache (tableau + export CSV) sans tout recharger.
+    var c = CRM_CLIENTS_CACHE.find(function(x){ return x.email===email; });
+    if(c){ c.address = address; c.zip = zip; c.city = city; renderCrmTable(); }
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+  if(btn){ btn.disabled = false; }
+}
+
 async function crmOpenClient(key){
   var clients = crmLoadClients();
   var c = clients.find(function(x){return x.key===key;});
@@ -13454,12 +13471,20 @@ async function crmOpenClient(key){
   h += '<div class="fi"><label class="lb">Téléphone</label><input type="text" value="'+esc(c.phone||'—')+'" readonly></div>';
   h += '</div>';
 
-  // Adresse/CGU/newsletter — saisis par le client à l'étape "Mes
-  // coordonnées" du check-in (cf. checkin.html contactStepNext).
-  if(detail.address || detail.cguAcceptedAt || detail.prefs){
-    var addr = detail.address;
-    var addrLine = addr ? [addr.address, [addr.zip,addr.city].filter(Boolean).join(' ')].filter(Boolean).join(', ') : '';
-    h += '<div class="fi" style="margin-bottom:14px"><label class="lb">Adresse</label><input type="text" value="'+esc(addrLine||'—')+'" readonly></div>';
+  // Adresse — éditable (28/10/2026, demande client) : auto-remplie au
+  // check-in (Booking.personAddress/Zip/City) si le client l'a saisie, mais
+  // toujours corrigeable/complétable à la main depuis ici (sauvegardée dans
+  // ClientPrefs, prioritaire sur celle du check-in — cf. routes/crm.ts).
+  var addr = detail.address || {};
+  h += '<div class="g3" style="margin-bottom:6px">';
+  h += '<div class="fi" style="grid-column:span 1"><label class="lb">Adresse</label><input type="text" id="crm-edit-address" value="'+esc(addr.address||'')+'" placeholder="N° et rue"></div>';
+  h += '<div class="fi"><label class="lb">Code postal</label><input type="text" id="crm-edit-zip" value="'+esc(addr.zip||'')+'"></div>';
+  h += '<div class="fi"><label class="lb">Ville</label><input type="text" id="crm-edit-city" value="'+esc(addr.city||'')+'"></div>';
+  h += '</div>';
+  h += '<div style="display:flex;justify-content:flex-end;margin-bottom:14px"><button class="btn btn-s" onclick="crmSaveClientAddress(\''+esc(c.email)+'\')" id="crm-save-address-btn"><i class="ti ti-device-floppy"></i> Enregistrer l\'adresse</button></div>';
+
+  // CGU/newsletter — lecture seule, renseignées par le client lui-même.
+  if(detail.cguAcceptedAt || detail.prefs){
     h += '<div class="g2" style="margin-bottom:14px">';
     h += '<div class="fi"><label class="lb">Conditions générales</label><input type="text" value="'+(detail.cguAcceptedAt?('Acceptées le '+new Date(detail.cguAcceptedAt).toLocaleDateString('fr-FR')):'Non renseigné')+'" readonly></div>';
     h += '<div class="fi"><label class="lb">Newsletter</label><input type="text" value="'+(detail.prefs&&detail.prefs.newsletterOptIn?'Abonné':'Non abonné')+'" readonly></div>';
