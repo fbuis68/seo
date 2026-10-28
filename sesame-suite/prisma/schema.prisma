@@ -26,39 +26,39 @@ model Entity {
   groupId String?
   group   Group?  @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
-  config              EntityModuleConfig?
-  rooms               Room[]
-  bookings            Booking[]
-  accessActivityLogs  AccessActivityLog[]
-  products            Product[]
-  orders              Order[]
-  taxeRecords         TaxeSejourRecord[]
-  clientPrefs         ClientPrefs[]
-  loyaltyAccounts     LoyaltyAccount[]
-  livretSections      LivretSection[]
-  housekeepingTasks   HousekeepingTask[]
-  housekeepingStaff   HousekeepingStaff[]
-  adminUsers          AdminUser[]
-  adminProfiles       AdminProfile[]
-  campaigns           Campaign[]
-  subscriptions       Subscription[]
-  bookingSource       BookingSourceConfig?
-  lockerSource        LockerSourceConfig?
-  paymentConfig       PaymentConfig?
-  crmProspects        CrmProspect[]
-  smtpConfig          SmtpConfig?
-  messageTemplates    MessageTemplate[]
+  config                EntityModuleConfig?
+  rooms                 Room[]
+  bookings              Booking[]
+  accessActivityLogs    AccessActivityLog[]
+  products              Product[]
+  orders                Order[]
+  taxeRecords           TaxeSejourRecord[]
+  clientPrefs           ClientPrefs[]
+  loyaltyAccounts       LoyaltyAccount[]
+  livretSections        LivretSection[]
+  housekeepingTasks     HousekeepingTask[]
+  housekeepingStaff     HousekeepingStaff[]
+  adminUsers            AdminUser[]
+  adminProfiles         AdminProfile[]
+  campaigns             Campaign[]
+  subscriptions         Subscription[]
+  bookingSource         BookingSourceConfig?
+  lockerSource          LockerSourceConfig?
+  paymentConfig         PaymentConfig?
+  crmProspects          CrmProspect[]
+  smtpConfig            SmtpConfig?
+  messageTemplates      MessageTemplate[]
   emailSenderIdentities EmailSenderIdentity[]
-  channelConfigs      ChannelConfig[]
-  automationRules     AutomationRule[]
-  vendors             Vendor[]
-  vendorCommissions   VendorCommission[]
-  walletConfig        WalletConfig?
-  questionnaires      Questionnaire[]
-  passes              Pass[]
-  bookingEngineConfig BookingEngineConfig?
-  nayaxConfig         NayaxConfig?
-  nayaxAccessSessions NayaxAccessSession[]
+  channelConfigs        ChannelConfig[]
+  automationRules       AutomationRule[]
+  vendors               Vendor[]
+  vendorCommissions     VendorCommission[]
+  walletConfig          WalletConfig?
+  questionnaires        Questionnaire[]
+  passes                Pass[]
+  bookingEngineConfig   BookingEngineConfig?
+  nayaxConfig           NayaxConfig?
+  nayaxAccessSessions   NayaxAccessSession[]
 
   accSettings            AccSettings?
   accSuppliers           AccSupplier[]
@@ -122,22 +122,22 @@ model AdminUser {
   entityId String
   entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  email        String  @unique
+  email        String   @unique
   passwordHash String
   name         String?
-  role         String  @default("hotel") // sesame | hotel | housekeeping (app tablette menage.html, cf. housekeepingScope.ts)
+  role         String   @default("hotel") // sesame | hotel | housekeeping (app tablette menage.html, cf. housekeepingScope.ts)
   // Rôle fonctionnel au sein de l'équipe Sesame — uniquement pertinent pour
   // role="sesame" (un compte hôtel n'a pas de crmRole). "admin" = accès
   // complet au CRM interne (dont la gestion des utilisateurs CRM eux-mêmes,
   // cf. requireCrmAdmin) ; "commercial" = accès standard.
-  crmRole      String  @default("commercial")
+  crmRole      String   @default("commercial")
   // Adresses email secondaires du commercial (27/10/2026, demande client) —
   // ex : une boîte M365 distincte de son login CRM, utilisée pour organiser
   // certaines réunions Teams ou échanger avec des clients. Sert à rattacher
   // ces réunions/tickets au bon commercial même quand ils ne passent pas par
   // son adresse de login (cf. routes/crmMeeting.ts syncHistory).
   altEmails    String[] @default([])
-  active       Boolean @default(true) // désactivation (départ, etc.) sans perdre l'historique — pas de suppression physique
+  active       Boolean  @default(true) // désactivation (départ, etc.) sans perdre l'historique — pas de suppression physique
   // Portée du rôle pour un compte hôtel (role="hotel"|"housekeeping") : par
   // défaut limité à son propre établissement (entityId). Si true ET que cet
   // établissement appartient à un groupe (Entity.groupId), le rôle
@@ -145,7 +145,7 @@ model AdminUser {
   // autorise alors ce compte à cibler n'importe quel ?entityCode= du même
   // groupe (bascule multi-établissements, comme un compte "sesame" mais
   // restreint au groupe). Sans effet pour role="sesame" (déjà global).
-  groupScoped  Boolean @default(false)
+  groupScoped  Boolean  @default(false)
 
   // Profil de droits personnalisé (panneau "Utilisateurs" > "Profils",
   // compte role="hotel" uniquement) — quand renseigné, les menus absents de
@@ -160,11 +160,11 @@ model AdminUser {
 
   // "Commercial" assigné — uniquement pertinent pour les comptes role="sesame"
   // (l'équipe interne), cf. GET /wa/commercial/list.
-  crmProspectsAsCommercial CrmProspect[]  @relation("ProspectCommercial")
-  crmDealsAsCommercial     CrmDeal[]      @relation("DealCommercial")
-  crmTicketsAsAgent        CrmTicket[]    @relation("TicketAgent")
-  aiSuggestionsCreated     AiSuggestion[] @relation("AiSuggestionCreatedBy")
-  faqEntriesCreated        Faq[]          @relation("FaqCreatedBy")
+  crmProspectsAsCommercial    CrmProspect[]         @relation("ProspectCommercial")
+  crmDealsAsCommercial        CrmDeal[]             @relation("DealCommercial")
+  crmTicketsAsAgent           CrmTicket[]           @relation("TicketAgent")
+  aiSuggestionsCreated        AiSuggestion[]        @relation("AiSuggestionCreatedBy")
+  faqEntriesCreated           Faq[]                 @relation("FaqCreatedBy")
   crmSignatureRequestsCreated CrmSignatureRequest[] @relation("SignatureRequestCreatedBy")
 
   createdAt DateTime @default(now())
@@ -220,31 +220,31 @@ model EntityModuleConfig {
   entityId String @unique
   entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  hotelName   String
-  hotelSlogan String?
-  hotelAddr   String?
-  hotelEmail  String?
+  hotelName    String
+  hotelSlogan  String?
+  hotelAddr    String?
+  hotelEmail   String?
   // Numéro de contact de l'établissement (accueil), distinct du téléphone du
   // client sur une réservation — utilisé notamment comme variable {{telephoneHotel}}
   // dans les modèles de message (cf. lib/templateVars.ts).
-  hotelPhone  String?
+  hotelPhone   String?
   // Lien vers les conditions générales (CGU/CGV) affiché à l'étape "Mes
   // coordonnées" du check-in (public/checkin.html) — le client doit cocher
   // une case d'acceptation pour continuer que ce lien soit renseigné ou non
   // (null : texte affiché sans lien cliquable).
-  termsUrl    String?
+  termsUrl     String?
   // Horaires standards affichés sur les réservations (§ demande client
   // 21/10/2026) — "HH:MM", pas un DateTime : identiques pour tout
   // l'établissement, pas une heure propre à chaque réservation.
   checkinTime  String? @default("15:00")
   checkoutTime String? @default("11:00")
-  stars       Int     @default(3)
+  stars        Int     @default(3)
   // Secteur d'activité de l'entité (24/09/2026) — Hôtellerie par défaut
   // (seul secteur géré jusqu'ici), permet de distinguer les autres types
   // d'établissements provisionnés (Bureau, Sport...) sur leur fiche. Ne
   // pilote pour l'instant AUCUNE adaptation du vocabulaire ailleurs dans
   // l'app (§ à traiter séparément si besoin) — champ informatif/de tri.
-  secteur     String  @default("hotellerie")
+  secteur      String  @default("hotellerie")
 
   colors     Json // {primary, primaryLight, accent, headerBg, headerText, bg, cardBg, border, text, btnNav}
   radius     Int     @default(14)
@@ -371,25 +371,25 @@ model Booking {
   entityId String
   entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  code             String
-  personEmail      String
-  personFirstname  String
-  personLastname   String
-  personPhone      String?
-  startDate        DateTime
-  endDate          DateTime
-  roomId           String?
-  room             Room?     @relation(fields: [roomId], references: [id])
-  facilityCode     String? // dénormalisé — code chambre au moment de la réservation
-  facilityName     String?
-  status           String    @default("confirmed") // confirmed | checkin_done | completed | cancelled
+  code                  String
+  personEmail           String
+  personFirstname       String
+  personLastname        String
+  personPhone           String?
+  startDate             DateTime
+  endDate               DateTime
+  roomId                String?
+  room                  Room?     @relation(fields: [roomId], references: [id])
+  facilityCode          String? // dénormalisé — code chambre au moment de la réservation
+  facilityName          String?
+  status                String    @default("confirmed") // confirmed | checkin_done | completed | cancelled
   // Champ à part entière issu de la source externe (ex : "typeCode/typeId/
   // type" de l'API Sesame Technology) — n'est PAS dérivé de Room.category :
   // Sesame distingue le type de réservation du type de chambre occupée.
   // Importé via fieldMapping.bookingType, modifiable depuis le panneau
   // Réservations, répercuté à la source externe via
   // BookingSourceConfig.updateBookingTypeParam (cf. pushBookingUpdate).
-  bookingType      String?
+  bookingType           String?
   // Identifiant RÉEL du BookingType choisi côté source externe (ex :
   // BookingType.id de l'API Sesame Technology, GET /ws/bookingType/listAll)
   // — distinct de bookingType ci-dessus (son libellé/code, simple texte).
@@ -404,25 +404,25 @@ model Booking {
   // client 21/10/2026). Renseigné uniquement à la création manuelle
   // (panneau Réservations), quand un connecteur Sesame Technology est
   // configuré — cf. GET /wa/bookingSource/bookingTypes.
-  bookingTypeId    String?
-  otaId            String?
-  checkinDone      Boolean   @default(false)
+  bookingTypeId         String?
+  otaId                 String?
+  checkinDone           Boolean   @default(false)
   // Marque le début (pas la fin) du check-in en ligne côté client — posé une
   // seule fois, au moment où il sélectionne sa réservation dans l'appli
   // check-in (cf. POST /wa/booking/checkinStart, appelé par checkin.html
   // selectBooking()), jamais réécrit ensuite. Distinct de checkinDone (le
   // formulaire est bien terminé) : sert d'étape "Connecté" dans la frise du
   // parcours client (panneau Réservations, écran de détail).
-  checkinStartedAt DateTime?
-  selectedRoomCode String? // chambre choisie à l'étape 2 (peut différer de facilityCode)
+  checkinStartedAt      DateTime?
+  selectedRoomCode      String? // chambre choisie à l'étape 2 (peut différer de facilityCode)
   // Horaire d'arrivée/départ spécifique à CETTE réservation — null = repli
   // sur EntityModuleConfig.checkinTime/checkoutTime (horaire standard de
   // l'établissement). Édité depuis le formulaire "Modifier la réservation"
   // (demande client 21/10/2026 : le réglage global modifiait TOUTES les
   // réservations au lieu de la seule réservation en cours).
-  checkinTime  String?
-  checkoutTime String?
-  importedFrom     String? // nom de la source si créée par le connecteur externe (cf. BookingSourceConfig), sinon null
+  checkinTime           String?
+  checkoutTime          String?
+  importedFrom          String? // nom de la source si créée par le connecteur externe (cf. BookingSourceConfig), sinon null
   // Empreinte bancaire (BookingEngineConfig.cardOnFileMode) — référence
   // Stripe de la carte enregistrée SANS être débitée à la réservation, pour
   // un débit manuel ultérieur si besoin (ex: dégât, non-restitution) depuis
@@ -436,7 +436,7 @@ model Booking {
   // qu'une commande obtient un casier (cf. reserveLockersForOrder dans
   // roomservice.ts /roomservice/create), retiré si la commande
   // correspondante est ensuite annulée (/roomservice/update).
-  lockerAccess     Json?
+  lockerAccess          Json?
 
   // Identifiant "Pass" côté source externe (ex : API Sesame Technology,
   // champ "personId" de /wa/booking/list — confirmé le 03/09/2026 via
@@ -516,13 +516,13 @@ model Booking {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  occupants   Occupant[]
-  taxeRecords TaxeSejourRecord[]
-  kycRecords  KycRecord[]
-  orders      Order[]
-  passes      Pass[]
+  occupants           Occupant[]
+  taxeRecords         TaxeSejourRecord[]
+  kycRecords          KycRecord[]
+  orders              Order[]
+  passes              Pass[]
   guestSharingProfile GuestSharingProfile?
-  autologinCodes AutologinCode[]
+  autologinCodes      AutologinCode[]
 
   @@unique([entityId, code])
   @@index([personEmail])
@@ -1047,9 +1047,9 @@ model BookingSourceConfig {
   // renseignés (ex : copiés depuis un modèle de connecteur). Non vérifié en
   // conditions réelles (schéma Mews orders/add d'après sa documentation
   // publique uniquement) — à tester avant mise en production.
-  orderPushEnabled    Boolean @default(false)
-  orderEndpointPath   String? // ex: "/api/connector/v1/orders/add" — concaténé à baseUrl
-  orderEndpointMethod String? @default("POST")
+  orderPushEnabled        Boolean @default(false)
+  orderEndpointPath       String? // ex: "/api/connector/v1/orders/add" — concaténé à baseUrl
+  orderEndpointMethod     String? @default("POST")
   // Paramètres FIXES envoyés avec chaque commande, en plus de
   // ServiceId/AccountId/ProductOrders calculés par commande — ex : les
   // identifiants Mews (ClientToken/AccessToken/Client), toujours en JSON
@@ -1061,7 +1061,7 @@ model BookingSourceConfig {
   // boutique/room-service sont facturées — un seul Service fixe pour tout
   // le catalogue, les PRODUITS (pas les services) distinguant chaque
   // article (cf. Product.pmsProductCode).
-  orderServiceIdValue String?
+  orderServiceIdValue     String?
   // Connecteur de push INDÉPENDANT de celui des réservations ci-dessus
   // (baseUrl/authType/...) — permet d'importer les réservations depuis un
   // système (ex : API Sesame Technology) et de pousser les commandes vers
@@ -1214,8 +1214,8 @@ model WalletConfig {
   entityId String @unique
   entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  enabled  Boolean @default(false)
-  hotelId  String?
+  enabled     Boolean @default(false)
+  hotelId     String?
   // Jeton API — n'est plus saisi à la main une fois pour toutes : EldoWallet
   // le fait expirer (confirmé par le client 13/10/2026, POST /auth/login
   // "Login a user and return authentication token", body {username,
@@ -1225,17 +1225,17 @@ model WalletConfig {
   // à la main pour un compte sans identifiant/mot de passe renseignés —
   // dans ce cas, redevient aussi fragile qu'avant (pas de rafraîchissement
   // automatique possible sans identifiants).
-  apiToken String?
+  apiToken    String?
   apiUsername String?
   apiPassword String?
-  lang     String  @default("fr") // header x-lang envoyé à l'API EldoWallet
+  lang        String  @default("fr") // header x-lang envoyé à l'API EldoWallet
   // URL de base de l'API EldoWallet — EldoWallet fournit un environnement
   // "beta" séparé (api-v2.beta.eldowallet.fr) avec ses propres identifiants
   // hôtel/token, distinct de la production (api-v2.eldowallet.fr) : un token
   // beta appelé sur l'URL de prod (ou l'inverse) échoue en "Non autorisé"
   // sans que rien ne l'indique — confirmé le 05/09/2026. Vide = production
   // (comportement par défaut inchangé, cf. lib/eldoWallet.ts).
-  apiBase  String?
+  apiBase     String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1304,7 +1304,7 @@ model BookingEngineConfig {
   // débit manuel ultérieur si besoin (ex: dégât, non-restitution) — jamais
   // débitée automatiquement par Sesame Suite. Exclusif avec requirePayment/
   // Stripe Checkout : quand actif, c'est le seul mode de paiement proposé.
-  cardOnFileMode    Boolean @default(false)
+  cardOnFileMode Boolean @default(false)
 
   // Libellé et texte d'intro de l'écran de recherche (booking.html) —
   // vides par défaut (repli sur "Réserver un séjour" / "Choisissez vos
@@ -1312,8 +1312,8 @@ model BookingEngineConfig {
   // hôtelier (ex. magasin/casier à accès réservable) a besoin de son
   // propre vocabulaire — demande client 16/10/2026, "pouvoir définir le
   // libellé et texte de la page".
-  pageTitle String?
-  pageIntro String?
+  pageTitle           String?
+  pageIntro           String?
   confirmationTitle   String?
   confirmationMessage String?
 
@@ -1457,8 +1457,8 @@ model Product {
   // physique avec plusieurs conditionnements — ex : Comté 0.5kg / 1kg —
   // devient une ligne Product par conditionnement, cf. lib/lockerSource.ts)
   // pour permettre une resynchronisation sans doublon.
-  importedFrom String?
-  externalId   String?
+  importedFrom   String?
+  externalId     String?
   // Code produit côté PMS (ex : ProductId Mews) — correspondance utilisée
   // pour transmettre une commande boutique/room-service au PMS (cf.
   // lib/bookingSource.ts pushOrderToPms, BookingSourceConfig.orderPushEnabled).
@@ -1469,23 +1469,23 @@ model Product {
   // Quantité actuellement disponible en casier au dernier sync — null =
   // pas de suivi de stock (produit boutique classique, toujours affiché).
   // 0 = en rupture, masqué côté boutique client (cf. /product/public).
-  stockQty     Int?
+  stockQty       Int?
   // Casiers physiques actuellement associés à ce conditionnement au dernier
   // sync ([{numberOnModule, lockerPrice, state}]) — indicatif seulement, la
   // réservation réelle revérifie toujours la disponibilité en direct auprès
   // de la source au moment de la commande (cf. reserveLockersForOrder).
-  lockerLayout Json?
+  lockerLayout   Json?
   // Taux de TVA transmis par la source, répercuté vers la réservation de
   // casier (paramètre VAT de /order/bookLockers) — sans rapport avec la
   // fiscalité interne de l'hôtel.
-  vatRate      Float?
+  vatRate        Float?
   // Forcer l'affichage "disponible" malgré stockQty=0 — réglable PAR
   // PRODUIT depuis la fiche (contrairement à LockerSourceConfig.showOutOfStock
   // qui est global à tout le connecteur). Utile en environnement de
   // démo/sandbox sans casiers physiquement garnis. N'affecte que l'affichage
   // côté boutique client — jamais la réservation à la commande, qui
   // revérifie toujours le stock réel en direct (cf. reserveLockersForOrder).
-  forceInStock Boolean @default(false)
+  forceInStock   Boolean @default(false)
 
   createdAt DateTime @default(now())
 
@@ -1702,9 +1702,9 @@ model ClientPrefs {
   // check-in (Booking.personAddress/Zip/City, cf. routes/crm.ts) : permet
   // de corriger/compléter quand aucune réservation n'a renseigné l'adresse,
   // ou que celle saisie était fausse.
-  address String?
-  zip     String?
-  city    String?
+  address    String?
+  zip        String?
+  city       String?
 
   // Désabonnement newsletter/campagnes marketing (distinct des emails
   // transactionnels de séjour, qui continuent d'être envoyés normalement) —
@@ -2097,16 +2097,125 @@ model CrmProspect {
   hotLeadTaskCreatedAt DateTime?
   scoreEvents          CrmScoreEvent[]
 
+  // Sesame AI Sales Agent (28/10/2026, Sprint 1) — distinct du score
+  // d'engagement ci-dessus (ouvertures/clics) : qualification B2B (fit
+  // marché/signal/urgence/budget, cf. SalesScore) affichée séparément,
+  // jamais fusionnée avec `score` (décision prise avec le client).
+  salesSignals        SalesSignal[]
+  salesScores         SalesScore[]
+  // Projet détecté (ouverture, rénovation, changement de PMS...) et sa date
+  // prévisionnelle — pms (champ existant ci-dessus) couvre déjà le PMS
+  // utilisé. Traçabilité fine par champ (source + date de vérification)
+  // pour toute donnée d'enrichissement SANS colonne dédiée : map
+  // {champ: {value, source, verifiedAt}}, jamais présentée comme vérifiée
+  // si elle ne l'est pas (§2 du brief).
+  detectedProject     String?
+  detectedProjectDate DateTime?
+  enrichmentFields    Json?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  activities CrmActivity[]
-  tickets    CrmTicket[]
-  contacts   CrmContact[]
-  accCustomer AccCustomer?
+  activities        CrmActivity[]
+  tickets           CrmTicket[]
+  contacts          CrmContact[]
+  accCustomer       AccCustomer?
   signatureRequests CrmSignatureRequest[]
-  quotes     CrmQuote[]
-  meetings   CrmMeeting[]
+  quotes            CrmQuote[]
+  meetings          CrmMeeting[]
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Sesame AI Sales Agent (28/10/2026, Sprint 1 — fondations données) —
+// signal d'achat détecté (ouverture, rénovation, recrutement, changement de
+// PMS, agrandissement...), avant ou après rapprochement avec une fiche
+// CrmProspect existante. `url` est volontairement OBLIGATOIRE (critère
+// d'acceptation Phase 1 du brief : "chaque prospect prioritaire doit être
+// justifié par des sources consultables") — pour un signal issu d'un
+// import CSV/Excel (source MVP retenue, pas de connecteur API externe),
+// cette colonne porte une référence traçable au fichier/à la ligne
+// d'origine plutôt qu'une URL web, mais n'est jamais vide.
+// ─────────────────────────────────────────────────────────────────────────
+model SalesSignal {
+  id String @id @default(cuid())
+
+  prospectId String?
+  prospect   CrmProspect? @relation(fields: [prospectId], references: [id], onDelete: SetNull)
+
+  companyName String // nom brut de l'entreprise, avant rapprochement éventuel avec prospectId
+  source      String // ex: "Import CSV audit_clients_2026.xlsx", "Site institutionnel", "Annuaire X"
+  url         String // lien web vérifiable, ou référence fichier/ligne pour un import CSV/Excel — jamais vide
+  signalType  String // ex: ouverture | renovation | recrutement | changement_pms | agrandissement | autre
+  publishedAt DateTime?
+  verifiedAt  DateTime?
+  confidence  Float     @default(0.5) // 0-1
+  hypothesis  String?   @db.Text // hypothèse commerciale associée au signal — jamais présentée comme un fait
+  // fact (confirmé) | hypothesis (suggéré par le signal, pas vérifié) |
+  // missing_data (donnée nécessaire absente) | to_verify (à vérifier avant
+  // utilisation en prospection) — cf. §2 et §4 du brief.
+  status      String    @default("to_verify")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([prospectId])
+  @@index([status])
+}
+
+// Scoring qualificatif B2B (0-100, 7 critères pondérés du brief §3) —
+// distinct de CrmProspect.score (engagement comportemental, ouverture/clic).
+// Historisé (une ligne par recalcul, pas d'écrasement) pour garder la trace
+// de l'évolution et pour l'audit (§7 conformité du brief) — la ligne la
+// plus récente (computedAt) fait foi pour l'affichage courant.
+model SalesScore {
+  id String @id @default(cuid())
+
+  prospectId String
+  prospect   CrmProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  marketFit           Int @default(0) // 0-20 — adéquation marché/produit
+  recentSignal        Int @default(0) // 0-25 — signal d'achat récent
+  economicPotential   Int @default(0) // 0-15 — potentiel économique
+  decisionMakerAccess Int @default(0) // 0-10 — accessibilité du décideur
+  urgency             Int @default(0) // 0-15 — urgence du besoin
+  technicalFit        Int @default(0) // 0-10 — compatibilité technique
+  dataReliability     Int @default(0) // 0-5  — fiabilité des données
+  total               Int @default(0) // somme dénormalisée des 7 critères ci-dessus
+
+  // hot_lead (85-100) | qualified_lead (70-84) | nurturing (50-69) |
+  // low_priority (0-49) — cf. brief §3.
+  classification String @default("low_priority")
+  // Justification textuelle par critère — {marketFit: "texte", ...} —
+  // obligatoire côté agent (jamais un score sans explication, §3 du brief :
+  // "éviter les scores artificiellement élevés... expliquer les critères").
+  justification  Json?
+
+  computedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@index([prospectId])
+}
+
+// Journal de décision des agents IA (28/10/2026, Sprint 1) — traçabilité
+// exigée par le §7 conformité du brief ("journal d'audit"). IDs en texte
+// libre (pas de FK) : une entrée de journal doit survivre à la suppression
+// du prospect/signal qu'elle concernait, même principe que
+// CrmMeeting.organizerEmail (valeur probante, jamais invalidée après coup).
+model AgentDecisionLog {
+  id String @id @default(cuid())
+
+  agentName     String // ex: market_intelligence | enrichment | scoring | copywriter...
+  prospectId    String?
+  signalId      String?
+  inputSummary  String  @db.Text
+  outputSummary String  @db.Text
+  model         String? // ex: "claude-sonnet-5"
+  costUsd       Float?
+
+  createdAt DateTime @default(now())
+
+  @@index([agentName])
+  @@index([prospectId])
 }
 
 // Réunion Teams planifiée depuis une fiche prospect (24/10/2026, demande
@@ -2126,14 +2235,14 @@ model CrmMeeting {
   prospectId String
   prospect   CrmProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
 
-  subject       String
+  subject        String
   // Email du commercial organisateur (AdminUser.email au moment de la
   // création) — PAS une FK vers AdminUser : un commercial supprimé plus
   // tard ne doit jamais invalider l'historique de la réunion.
   organizerEmail String
-  startDateTime DateTime
-  endDateTime   DateTime
-  joinUrl       String
+  startDateTime  DateTime
+  endDateTime    DateTime
+  joinUrl        String
 
   // Identifiants Microsoft Graph nécessaires pour retrouver transcript et
   // enregistrement après la réunion (GET /users/{graphOrganizerUserId}/
@@ -2160,7 +2269,7 @@ model CrmMeeting {
   // string[] — points d'action extraits par l'IA, matérialisables en tâches
   // (CrmActivity type="Tâche commerciale") via POST /crmMeeting/materializeTasks,
   // à la carte plutôt que tous créés automatiquement.
-  actionItems Json?
+  actionItems      Json?
 
   fetchedAt DateTime?
   createdAt DateTime  @default(now())
@@ -2357,16 +2466,16 @@ model CrmQuote {
   mentionsText String?
   termsText    String?
 
-  discountPct Float @default(0)
+  discountPct Float     @default(0)
   // TVA et acompte à la signature (22/10/2026, maquette devis Sesame) — la
   // maquette distingue "montant initial HT/TTC" et un acompte en % demandé
   // à la commande ; vatPct a une valeur par défaut de 20 (taux normal FR)
   // plutôt que 0, pour ne pas afficher un HT=TTC trompeur sur un devis
   // nouvellement créé si l'utilisateur oublie de le renseigner.
-  vatPct     Float     @default(20)
-  depositPct Float     @default(0)
-  notes      String? // ancien champ libre (pré-refonte) — conservé pour compat des devis existants, plus affiché par le nouvel écran
-  sentAt     DateTime?
+  vatPct      Float     @default(20)
+  depositPct  Float     @default(0)
+  notes       String? // ancien champ libre (pré-refonte) — conservé pour compat des devis existants, plus affiché par le nouvel écran
+  sentAt      DateTime?
 
   // Signature électronique simple (18/08/2026) — signToken donne accès à la
   // page publique de signature (public/devis-signature.html), sans compte
@@ -2457,7 +2566,7 @@ model CrmSignatureRequest {
   // GoCardless et imprimés dans le PDF final, exactement comme un mandat
   // papier scanné — SAUF le temps d'une création différée, cf.
   // pendingBankDataEncrypted ci-dessous.
-  requiresBankMandate Boolean @default(false)
+  requiresBankMandate       Boolean @default(false)
   // Choix admin à la création (28/10/2026, demande client — contournement
   // pendant que GoCardless prod renvoyait "Forbidden request") : true
   // (défaut) = créer le mandat GoCardless tout de suite à la signature ;
@@ -2466,7 +2575,7 @@ model CrmSignatureRequest {
   // Bascule aussi automatiquement en différé si la création immédiate
   // échoue (ex : panne GoCardless) — la signature elle-même n'est jamais
   // bloquée par un souci côté GoCardless.
-  autoCreateMandate Boolean @default(true)
+  autoCreateMandate         Boolean @default(true)
   // Snapshot du PDF original uploadé par l'admin, AVANT toute page
   // récapitulative ajoutée — nécessaire pour pouvoir régénérer proprement
   // le PDF final (sans dupliquer la page) quand le mandat est créé après
@@ -2476,13 +2585,13 @@ model CrmSignatureRequest {
   // présentes UNIQUEMENT entre la signature et la création réussie du
   // mandat GoCardless (autoCreateMandate=false, ou échec de la tentative
   // immédiate). Effacées (null) dès que gocardlessMandateId est renseigné.
-  pendingBankDataEncrypted String? @db.Text
+  pendingBankDataEncrypted  String? @db.Text
   // Champs d'identité entreprise saisis par le signataire (raison sociale,
   // SIRET, adresse...) — aucune donnée bancaire ici.
-  formData             Json?
-  gocardlessCustomerId String?
-  gocardlessMandateId  String?
-  mandateReference     String? // RUM — généré par GoCardless à la création du mandat
+  formData                  Json?
+  gocardlessCustomerId      String?
+  gocardlessMandateId       String?
+  mandateReference          String? // RUM — généré par GoCardless à la création du mandat
 
   createdByAdminId String?
   createdBy        AdminUser? @relation("SignatureRequestCreatedBy", fields: [createdByAdminId], references: [id], onDelete: SetNull)
@@ -2518,6 +2627,16 @@ model CrmProduct {
   stockable   Boolean @default(false)
   stockQty    Int? // réservé à la future gestion de stock — non utilisé pour l'instant
   active      Boolean @default(true)
+
+  // Référentiel produit pour Sesame AI Sales Agent (28/10/2026, Sprint 1) —
+  // alimente l'Agent Copywriter (lib/salesAgent/) pour qu'il ne décrive
+  // jamais une fonctionnalité/intégration inventée : seuls les éléments
+  // saisis ici manuellement par l'équipe sont utilisables dans un message
+  // généré, jamais une extrapolation de l'IA.
+  targetSectors String[] @default([]) // ex: ["hotellerie","residentiel","sport",...] — cf. CrmSectorOption
+  benefits      String[] @default([]) // bénéfices mis en avant, un par ligne
+  useCases      String[] @default([]) // cas d'usage concrets, un par ligne
+  integrations  String[] @default([]) // intégrations RÉELLEMENT disponibles (PMS, etc.) — jamais une intégration en cours/envisagée
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3474,13 +3593,13 @@ model AccCustomer {
   // dans la fiche client" malgré la présence des données côté AccCustomer).
   // Rapproché automatiquement par email au premier accès (cf.
   // GET /wa/crmProspect/:id/accounting, crmProspect.ts), jamais bloquant.
-  crmProspectId String?     @unique
+  crmProspectId String?      @unique
   crmProspect   CrmProspect? @relation(fields: [crmProspectId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  invoices          AccInvoice[]
+  invoices           AccInvoice[]
   gocardlessPayments AccGoCardlessPayment[]
 
   @@index([entityId, siret])
@@ -3563,12 +3682,12 @@ model AccInvoice {
   // sur une facture d'achat REÇUE) ; recipient* = destinataire (le client
   // sur une facture de vente ÉMISE par nous) — deux blocs distincts d'un
   // même document, jamais interchangeables (cf. lib/accExtraction.ts).
-  issuerName    String?
-  issuerSiren   String?
-  issuerSiret   String?
-  issuerVat     String?
-  issuerIban    String?
-  issuerBic     String?
+  issuerName     String?
+  issuerSiren    String?
+  issuerSiret    String?
+  issuerVat      String?
+  issuerIban     String?
+  issuerBic      String?
   recipientName  String?
   recipientSiren String?
   recipientSiret String?
@@ -3599,7 +3718,7 @@ model AccInvoice {
   // édité directement ailleurs.
   amountPaid Float @default(0)
 
-  bankMatches AccBankMatch[]
+  bankMatches     AccBankMatch[]
   relanceSentLogs AccRelanceSent[]
 
   proposedAccountId         String?
@@ -3624,8 +3743,8 @@ model AccInvoice {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  lines    AccInvoiceLine[]
-  vatLines AccInvoiceVatLine[]
+  lines        AccInvoiceLine[]
+  vatLines     AccInvoiceVatLine[]
   installments AccInvoiceInstallment[]
 
   @@index([entityId, status])
@@ -3710,8 +3829,8 @@ model AccAccount {
   updatedAt DateTime @updatedAt
 
   entryLines       AccEntryLine[]
-  invoicesProposed AccInvoice[]   @relation("InvoiceProposedAccount")
-  suppliersDefault AccSupplier[]  @relation("SupplierDefaultAccount")
+  invoicesProposed AccInvoice[]     @relation("InvoiceProposedAccount")
+  suppliersDefault AccSupplier[]    @relation("SupplierDefaultAccount")
   rules            AccRule[]
   bankAccounts     AccBankAccount[]
 
@@ -3763,8 +3882,8 @@ model AccEntry {
   validatedAt DateTime?
   validatedBy String?
 
-  lines   AccEntryLine[]
-  invoice AccInvoice?
+  lines           AccEntryLine[]
+  invoice         AccInvoice?
   bankTransaction AccBankTransaction? @relation("BankTransactionEntry")
 
   @@index([entityId, journalId, status])
@@ -3867,12 +3986,12 @@ model AccBankAccount {
   entityId String?
   entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  bank    String // nom de la banque (ex: "Qonto", "BNP Paribas")
-  name    String // nom du compte tel que choisi par l'utilisateur
-  iban    String?
-  bic     String?
-  currency String @default("EUR")
-  type    String? // courant | épargne | professionnel | autre — libre
+  bank     String // nom de la banque (ex: "Qonto", "BNP Paribas")
+  name     String // nom du compte tel que choisi par l'utilisateur
+  iban     String?
+  bic      String?
+  currency String  @default("EUR")
+  type     String? // courant | épargne | professionnel | autre — libre
 
   // Compte du plan comptable obligatoirement rattaché (ex: 512000) — un
   // compte bancaire ne peut pas exister sans lien comptable (cahier des
@@ -3885,7 +4004,7 @@ model AccBankAccount {
   // provider technique éventuel (ex: nom de l'agrégateur) pour rester
   // générique. "manual"/"csv"/"camt053"/"mt940"/"cfonb" n'ont pas de sync
   // automatique — les autres sont préparés pour une phase ultérieure.
-  provider          String @default("csv")
+  provider          String  @default("csv")
   providerAccountId String? // identifiant côté fournisseur (API), null pour un compte alimenté par import fichier
 
   lastSyncAt        DateTime?
@@ -3912,7 +4031,7 @@ model AccBankAccount {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  transactions AccBankTransaction[]
+  transactions   AccBankTransaction[]
   recurringRules AccRecurringRule[]
 
   @@index([entityId])
@@ -3953,16 +4072,16 @@ model AccBankTransaction {
   counterpartyIban String?
   counterpartyBic  String?
 
-  transactionRef  String? // référence transaction fournie par la banque
-  endToEndId      String? // EndToEndId SEPA
-  sepaMandateRef  String? // mandat SEPA
-  creditorRef     String? // référence créancier SEPA
-  paymentType     String? // ex: VIR, PRLV, CB, CHQ — tel que fourni par la source
-  bankCategory    String? // catégorie éventuelle fournie par la banque elle-même (distincte de la classification maison, phase 2)
+  transactionRef String? // référence transaction fournie par la banque
+  endToEndId     String? // EndToEndId SEPA
+  sepaMandateRef String? // mandat SEPA
+  creditorRef    String? // référence créancier SEPA
+  paymentType    String? // ex: VIR, PRLV, CB, CHQ — tel que fourni par la source
+  bankCategory   String? // catégorie éventuelle fournie par la banque elle-même (distincte de la classification maison, phase 2)
   // Labels analytiques Qonto (noms résolus, cf. lib/qonto.ts fetchQontoLabels)
   // — vide pour tout import hors Qonto (CSV/CAMT.053/MT940/CFONB n'ont pas
   // cette notion). Sert au filtre "label analytique" de l'onglet Banque.
-  qontoLabels     String[] @default([])
+  qontoLabels    String[] @default([])
 
   // Classification maison (phase 2) — reglement_client | reglement_
   // fournisseur | prelevement_fournisseur | salaire | charge_sociale |
@@ -3991,7 +4110,7 @@ model AccBankTransaction {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  matches AccBankMatch[]
+  matches          AccBankMatch[]
   gocardlessPayout AccGoCardlessPayout?
 
   // Écriture générée DIRECTEMENT depuis cette transaction, sans passer par
@@ -4033,7 +4152,7 @@ model AccRecurringRule {
   // une transaction bancaire — ex. abonnement facturé mais pas encore
   // réglé/importé en banque. Jamais les deux à la fois : l'un ou l'autre
   // sert de gabarit pour label/contrepartie/montant par défaut à la création.
-  sourceInvoiceId String?
+  sourceInvoiceId     String?
 
   direction        String // DEBIT | CREDIT — même convention que AccBankTransaction.direction
   label            String
@@ -4104,10 +4223,10 @@ model AccBankMatch {
   // lib/accReconciliation.ts) — conservé même pour un match manuel (score
   // du meilleur candidat automatique à ce moment, ou null si l'utilisateur
   // a choisi une facture qui n'était pas proposée).
-  score Float?
+  score           Float?
   // auto (créé automatiquement, score >= seuil) | manual (confirmé par un
   // utilisateur, y compris un score proposé mais sous le seuil auto).
-  type String
+  type            String
 
   createdAt DateTime @default(now())
   createdBy String? // adminId, null si auto
@@ -4170,7 +4289,7 @@ model AccGoCardlessPayout {
   entityId String?
   entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  gocardlessId String @unique // "PO..."
+  gocardlessId String    @unique // "PO..."
   amount       Float
   currency     String
   arrivalDate  DateTime?
@@ -4198,7 +4317,7 @@ model AccGoCardlessPayment {
   entityId String?
   entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  gocardlessId String  @unique // "PM..."
+  gocardlessId String       @unique // "PM..."
   customerId   String?
   customer     AccCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
   mandateId    String? // "MD..." — référence brute, pas de table Mandate dédiée (non nécessaire au-delà de la résolution du client)
@@ -4235,7 +4354,7 @@ model AccRelanceRule {
 
   // invoiceDate | dueDate — date de référence à partir de laquelle
   // offsetDays est compté.
-  basis String
+  basis      String
   // Décalage en jours par rapport à basis — positif = après (relance de
   // retard), négatif = avant (rappel préventif avant échéance). 0 = le jour
   // même de basis.
@@ -4287,13 +4406,13 @@ model QontoConfig {
 
   // Identifiant "login" Qonto (ex : "mon-organisation-1234"), fourni avec la
   // clé secrète dans le dashboard Qonto (Intégrations > API).
-  login String
+  login     String
   // Clé secrète Qonto — jamais renvoyée au client (cf. shapeQontoConfig côté
   // route, même convention que PaymentConfig.secretKey).
   secretKey String
   // true = environnement sandbox Qonto (thirdparty-sandbox.qonto.com),
   // false = production (thirdparty.qonto.com).
-  sandbox Boolean @default(false)
+  sandbox   Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

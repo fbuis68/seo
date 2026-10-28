@@ -681,6 +681,16 @@ async function main() {
     console.log(`CRM : ${CRM_SEED_PROSPECTS.length} prospects/clients seedés ✓`);
   }
 
+  // ── Taxonomie marché Sesame AI Sales Agent (28/10/2026, Sprint 1) ──
+  // Liste partagée (CrmSectorOption n'a pas d'entityId), peuplée une fois
+  // par label manquant — jamais réécrasée si l'équipe l'a déjà renommée.
+  const MARKET_SECTORS = ["Hôtellerie", "Résidentiel & coliving", "Sport & loisirs", "Stockage & consignes", "Bureaux, santé & transport"];
+  for (let i = 0; i < MARKET_SECTORS.length; i++) {
+    const label = MARKET_SECTORS[i];
+    const existing = await prisma.crmSectorOption.findUnique({ where: { label } });
+    if (!existing) await prisma.crmSectorOption.create({ data: { label, order: i } });
+  }
+
   console.log("Seed terminé ✓");
 }
 
