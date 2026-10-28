@@ -186,9 +186,32 @@ function renderOtpStep(phone){
     + '<div class="sub">Un code à 6 chiffres a été envoyé par SMS au '+esc(phone)+'.</div>'
     + '<label>Code reçu par SMS</label><input type="text" id="s-otp" class="otp-input" maxlength="6" inputmode="numeric" placeholder="______">'
     + '<button type="button" class="btn" id="s-confirm-btn" onclick="verifyOtp()">Confirmer la signature</button>'
+    + '<button type="button" class="btn-ghost" id="s-resend-btn" onclick="resendOtp()">Renvoyer le code</button>'
     + '<button type="button" class="btn-ghost" onclick="'+(DOC.requiresBankMandate?'renderBankStep()':'renderIdentityStep()')+'">Modifier mes '+(DOC.requiresBankMandate?'coordonnées bancaires':'coordonnées')+'</button>'
     + '<div class="err" id="s-err"></div>';
   document.getElementById('s-otp').focus();
+}
+
+/** Renvoie un code sans repasser par les étapes précédentes — utile quand
+ * le signataire a laissé le code expirer (10 min, cf. OTP_TTL_MINUTES côté
+ * serveur) : requestOtp() envoie toujours un code FRAIS, son message
+ * d'erreur serveur "Code expiré — redemandez un code" renvoie justement ici. */
+async function resendOtp(){
+  var errEl = document.getElementById('s-err');
+  errEl.style.display = 'none';
+  var btn = document.getElementById('s-resend-btn');
+  btn.disabled = true; btn.textContent = 'Envoi…';
+  try{
+    var r = await fetch('/wa/crmSignature/public/'+encodeURIComponent(TOKEN)+'/requestOtp', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(IDENTITY)
+    });
+    var data = await r.json();
+    if(!r.ok){ errEl.textContent = data.error||'Erreur lors de l\'envoi du code.'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Renvoyer le code'; return; }
+  }catch(e){ errEl.textContent = 'Erreur de connexion au serveur.'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Renvoyer le code'; return; }
+  renderOtpStep(IDENTITY.phone);
+  errEl = document.getElementById('s-err');
+  errEl.textContent = 'Nouveau code envoyé.'; errEl.style.color = '#1a6b47'; errEl.style.display = 'block';
 }
 
 async function verifyOtp(){
