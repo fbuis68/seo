@@ -4280,8 +4280,22 @@ const IMP_FIELD_ALIASES = {
   nomContact: ['nom'],
   email: ['email','e-mail','mail'],
   tel: ['téléphone','telephone',"numéro de téléphone",'numero de telephone','tel'],
+  commercial: ['conseiller','commercial','vendeur','référent commercial','attribué à','assigné à','assigne a'],
 };
 function impNorm(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim(); }
+
+/**
+ * Décode un fichier texte (CSV) en devinant son encodage : la plupart des
+ * exports CSV "Excel" (salons, partenaires) sont en Windows-1252, pas UTF-8 —
+ * un décodage UTF-8 direct produit des "�" sur tous les accents. On tente
+ * UTF-8 strict (fatal:true) d'abord ; s'il échoue, on retombe sur
+ * windows-1252 qui accepte n'importe quel octet (jamais d'erreur, donc pas
+ * de 3e fallback nécessaire).
+ */
+function impDecodeText(buf){
+  try{ return new TextDecoder('utf-8', {fatal:true}).decode(buf); }
+  catch(e){ return new TextDecoder('windows-1252').decode(buf); }
+}
 
 function openImportModal(){
   IMP_FILE_ROWS=[]; IMP_HEADERS=[]; IMP_MAPPING={}; IMP_ROWS=[]; IMP_ORIGINE=''; IMP_SECTEUR_DEFAULT='';
@@ -4305,10 +4319,13 @@ function openImportModal(){
 function impHandleFile(input){
   const file = input.files && input.files[0];
   if(!file) return;
+  const isCsv = /\.csv$/i.test(file.name||'');
   const reader = new FileReader();
   reader.onload = function(e){
     try{
-      const wb = XLSX.read(e.target.result, {type:'array'});
+      const wb = isCsv
+        ? XLSX.read(impDecodeText(e.target.result), {type:'string'})
+        : XLSX.read(e.target.result, {type:'array'});
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
       if(!rows.length){ flash('Fichier vide ou illisible'); return; }
@@ -4331,6 +4348,7 @@ function impHandleFile(input){
 const IMP_FIELD_LABELS = {
   nom: 'Société / établissement *', secteur: 'Secteur', ville: 'Ville', adresse: 'Adresse',
   pays: 'Pays', prenom: 'Prénom (contact)', nomContact: 'Nom (contact)', email: 'Email', tel: 'Téléphone',
+  commercial: 'Conseiller / commercial (rapprochement auto)',
 };
 function impRenderMapping(){
   const opts = h => '<option value="">— Ignorer —</option>'+IMP_HEADERS.map(function(hh){ return '<option value="'+esc(hh)+'" '+(h===hh?'selected':'')+'>'+esc(hh)+'</option>'; }).join('');
@@ -4406,6 +4424,7 @@ function impBuildPreview(){
       referent: [prenom,nomContact].filter(Boolean).join(' '),
       email: mapping.email ? String(raw[mapping.email]||'').trim() : '',
       tel: mapping.tel ? String(raw[mapping.tel]||'').trim() : '',
+      commercialRaw: mapping.commercial ? String(raw[mapping.commercial]||'').trim() : '',
       note: noteLines.join('\n'),
       _addr: 'pending',
     };
@@ -4435,7 +4454,7 @@ function renderImportPreview(doLookup){
         <div style="max-height:44vh;overflow:auto;border:1px solid var(--bdr);border-radius:8px">
           <table style="width:100%;font-size:12px;border-collapse:collapse">
             <thead><tr style="text-align:left;background:var(--bg)">
-              <th style="padding:6px 8px">Société</th><th style="padding:6px 8px">Contact</th><th style="padding:6px 8px">Email</th><th style="padding:6px 8px">Téléphone</th><th style="padding:6px 8px">Secteur</th><th style="padding:6px 8px">Ville</th><th style="padding:6px 8px">Pays</th><th style="padding:6px 8px">Adresse</th><th style="padding:6px 8px">Autres infos</th>
+              <th style="padding:6px 8px">Société</th><th style="padding:6px 8px">Contact</th><th style="padding:6px 8px">Email</th><th style="padding:6px 8px">Téléphone</th><th style="padding:6px 8px">Secteur</th><th style="padding:6px 8px">Ville</th><th style="padding:6px 8px">Pays</th><th style="padding:6px 8px">Adresse</th><th style="padding:6px 8px">Commercial</th><th style="padding:6px 8px">Autres infos</th>
             </tr></thead>
             <tbody id="imp-preview-body">
               ${rows.map(function(r){ return impPreviewRowHtml(r); }).join('')}
@@ -4460,6 +4479,7 @@ function impPreviewRowHtml(r){
     + '<td style="padding:6px 8px">'+esc(r.ville)+'</td>'
     + '<td style="padding:6px 8px">'+esc(r.pays)+'</td>'
     + '<td style="padding:6px 8px">'+esc(r.adresse)+' '+impStatusBadge(r)+'</td>'
+    + '<td style="padding:6px 8px">'+esc(r.commercialRaw)+'</td>'
     + '<td style="padding:6px 8px;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(r.note)+'">'+esc(r.note.replace(/\n/g,' · '))+'</td>'
     + '</tr>';
 }
@@ -4537,13 +4557,14 @@ async function impSubmit(){
       nom: r.nom, origine: IMP_ORIGINE || undefined, secteur: r.secteur || undefined,
       adresse: r.adresse || undefined, ville: r.ville || undefined, pays: r.pays || undefined,
       referent: r.referent || undefined, email: r.email || undefined, tel: r.tel || undefined, note: r.note || undefined,
+      commercialRaw: r.commercialRaw || undefined,
     };
   });
   try{
     const resp = await apiFetch('/wa/crmProspect/importBulk', {method:'POST', body:JSON.stringify({rows})});
     if(!resp.ok) throw new Error('http '+resp.status);
     const result = await resp.json();
-    flash(result.created+' suspect(s) importé(s)'+(result.errors.length?(' — '+result.errors.length+' erreur(s)'):''));
+    flash(result.created+' suspect(s) importé(s)'+(result.matched?(' — '+result.matched+' rapproché(s) à un commercial'):'')+(result.errors.length?(' — '+result.errors.length+' erreur(s)'):''));
     closeModal2();
     clients = await loadData();
     renderList();

@@ -389,6 +389,42 @@ interface ImportRow {
   email?: string;
   tel?: string;
   note?: string;
+  commercialRaw?: string;
+}
+
+function normalizeNameForMatch(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .trim();
+}
+
+/**
+ * Rapproche un texte libre de conseiller/commercial (colonne mappée à l'import,
+ * ex. "F. Buis", "Buis", "fbuis@sesame-technology.com") avec un AdminUser
+ * "sesame" actif — d'abord par email (si le texte en contient un), sinon par
+ * sous-chaîne sur le nom (mot d'au moins 3 lettres du nom retrouvé dans le
+ * texte importé). Best effort : pas de correspondance → commercialId laissé
+ * vide, l'admin l'affecte à la main depuis la fiche.
+ */
+function matchCommercial(
+  raw: string | undefined,
+  commercials: { id: string; name: string | null; email: string }[]
+): string | undefined {
+  if (!raw || !raw.trim()) return undefined;
+  const norm = normalizeNameForMatch(raw);
+  const byEmail = commercials.find((c) => {
+    const email = normalizeNameForMatch(c.email);
+    return norm.includes(email) || email.includes(norm);
+  });
+  if (byEmail) return byEmail.id;
+  const byName = commercials.find((c) => {
+    if (!c.name) return false;
+    const words = normalizeNameForMatch(c.name).split(/\s+/).filter((w) => w.length >= 3);
+    return words.some((w) => norm.includes(w));
+  });
+  return byName?.id;
 }
 
 /**
@@ -407,7 +443,12 @@ crmProspectRouter.post(
   asyncHandler(async (req, res) => {
     const rows = (req.body.rows as ImportRow[]) || [];
     if (!Array.isArray(rows) || !rows.length) throw new HttpError(400, "Aucune ligne à importer");
+    const commercials = await prisma.adminUser.findMany({
+      where: { role: "sesame", active: true },
+      select: { id: true, name: true, email: true },
+    });
     let created = 0;
+    let matched = 0;
     const errors: { index: number; reason: string }[] = [];
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
@@ -415,6 +456,8 @@ crmProspectRouter.post(
         errors.push({ index: i, reason: "nom manquant" });
         continue;
       }
+      const commercialId = matchCommercial(r.commercialRaw, commercials);
+      if (commercialId) matched++;
       try {
         await prisma.crmProspect.create({
           data: {
@@ -431,6 +474,7 @@ crmProspectRouter.post(
             email: r.email || undefined,
             tel: r.tel || undefined,
             note: r.note || undefined,
+            commercialId: commercialId || undefined,
           },
         });
         created++;
@@ -438,7 +482,7 @@ crmProspectRouter.post(
         errors.push({ index: i, reason: e instanceof Error ? e.message : "erreur inconnue" });
       }
     }
-    res.status(201).json({ created, errors });
+    res.status(201).json({ created, matched, errors });
   })
 );
 
