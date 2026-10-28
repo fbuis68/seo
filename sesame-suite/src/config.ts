@@ -53,4 +53,8 @@ export const config = {
   // légale : volontairement JAMAIS codée en dur (risque de coquille de
   // transcription), à vérifier/renseigner une fois dans .env.
   gocardlessIcs: process.env.GOCARDLESS_ICS || "",
+  // Chiffrement des coordonnées bancaires gardées temporairement quand la
+  // création du mandat GoCardless est différée (cf. lib/encryption.ts,
+  // routes/crmSignature.ts) — jamais réutilisé ailleurs.
+  bankDataEncryptionKey: process.env.BANK_DATA_ENCRYPTION_KEY || "",
 };

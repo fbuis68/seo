@@ -10,6 +10,9 @@ import { sendEmailRaw } from "../lib/email";
 import { sendChannelRaw } from "../lib/sms";
 import { createSepaMandate } from "../lib/gocardlessMandate";
 import { appendMandateSummaryPage } from "../lib/signaturePdf";
+import { encryptSecret, decryptSecret } from "../lib/encryption";
+
+const PENDING_MANDATE_REFERENCE_LABEL = "(mandat en attente de création)";
 
 /**
  * Gestionnaire de signature électronique générique (§ demande client
@@ -45,6 +48,8 @@ function shapeRequest(r: {
   createdAt: Date;
   requiresBankMandate: boolean;
   mandateReference: string | null;
+  gocardlessMandateId: string | null;
+  pendingBankDataEncrypted: string | null;
 }) {
   return {
     id: r.id,
@@ -64,6 +69,9 @@ function shapeRequest(r: {
     createdAt: r.createdAt,
     requiresBankMandate: r.requiresBankMandate,
     mandateReference: r.mandateReference,
+    // Mandat collecté mais pas (encore) créé côté GoCardless — bouton
+    // "Créer le mandat" affiché côté CRM (cf. POST .../createMandate).
+    mandatePending: r.requiresBankMandate && r.status === "signed" && !r.gocardlessMandateId && !!r.pendingBankDataEncrypted,
   };
 }
 
@@ -96,6 +104,7 @@ interface CreateBody {
   signerEmail?: string;
   signerPhone?: string;
   requiresBankMandate?: boolean;
+  autoCreateMandate?: boolean;
 }
 
 crmSignatureRouter.post(
@@ -139,6 +148,11 @@ crmSignatureRouter.post(
         signToken: crypto.randomBytes(24).toString("hex"),
         createdByAdminId: req.admin!.adminId,
         requiresBankMandate: !!b.requiresBankMandate,
+        // Snapshot du PDF original — base propre pour régénérer le PDF
+        // final si le mandat est créé après coup (cf. shapeRequest
+        // mandatePending, createMandate ci-dessous).
+        originalFileContentBase64: b.requiresBankMandate ? base64 : undefined,
+        autoCreateMandate: b.autoCreateMandate !== undefined ? !!b.autoCreateMandate : true,
       },
     });
     res.status(201).json(shapeRequest(row));
@@ -184,6 +198,84 @@ crmSignatureRouter.post(
     if (existing.status === "signed") throw new HttpError(400, "Un document déjà signé ne peut pas être annulé");
     const row = await prisma.crmSignatureRequest.update({ where: { id: existing.id }, data: { status: "cancelled" } });
     res.json(shapeRequest(row));
+  })
+);
+
+/**
+ * POST /wa/crmSignature/:id/createMandate — (re)tente la création du
+ * mandat GoCardless pour une demande déjà signée dont les coordonnées
+ * bancaires ont été collectées mais le mandat pas encore créé (28/10/2026,
+ * cf. CrmSignatureRequest.pendingBankDataEncrypted). Déchiffre, appelle
+ * GoCardless, régénère le PDF final depuis l'original (jamais en
+ * ré-ajoutant une page sur un PDF déjà modifié) et efface les coordonnées
+ * chiffrées dès que le mandat est créé avec succès.
+ */
+crmSignatureRouter.post(
+  "/crmSignature/:id/createMandate",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const row = await prisma.crmSignatureRequest.findUnique({ where: { id: req.params.id } });
+    if (!row) throw new HttpError(404, "Demande introuvable");
+    if (!row.requiresBankMandate) throw new HttpError(400, "Cette demande ne comporte pas de mandat bancaire");
+    if (row.status !== "signed") throw new HttpError(400, "Le document doit être signé avant de créer le mandat");
+    if (row.gocardlessMandateId) throw new HttpError(400, "Le mandat a déjà été créé");
+    if (!row.pendingBankDataEncrypted) throw new HttpError(400, "Aucune coordonnée bancaire en attente pour cette demande");
+    if (!config.gocardlessIcs) throw new HttpError(503, "ICS Sesame non configuré côté serveur (GOCARDLESS_ICS)");
+
+    const data = JSON.parse(decryptSecret(row.pendingBankDataEncrypted)) as {
+      companyName: string;
+      siret?: string;
+      address?: string;
+      postalCode?: string;
+      city?: string;
+      phone?: string;
+      accountHolderName: string;
+      bankName?: string;
+      bic?: string;
+      iban: string;
+    };
+
+    const mandate = await createSepaMandate({
+      companyName: data.companyName,
+      contactEmail: row.signerEmail,
+      addressLine1: data.address,
+      postalCode: data.postalCode,
+      city: data.city,
+      accountHolderName: data.accountHolderName,
+      iban: data.iban,
+    });
+
+    const fileContentBase64 = await appendMandateSummaryPage(row.originalFileContentBase64 || row.fileContentBase64, {
+      companyName: data.companyName,
+      siret: data.siret,
+      contactName: `${row.signerFirstname} ${row.signerLastname}`,
+      address: data.address,
+      postalCode: data.postalCode,
+      city: data.city,
+      phone: data.phone,
+      email: row.signerEmail,
+      accountHolderName: data.accountHolderName,
+      bankName: data.bankName,
+      bic: data.bic,
+      iban: data.iban,
+      mandateReference: mandate.reference,
+      signedAt: row.signedAt || new Date(),
+      signerIp: row.signerIp || "inconnue",
+      creditorIcs: config.gocardlessIcs,
+    });
+
+    const updated = await prisma.crmSignatureRequest.update({
+      where: { id: row.id },
+      data: {
+        gocardlessCustomerId: mandate.gocardlessCustomerId,
+        gocardlessMandateId: mandate.gocardlessMandateId,
+        mandateReference: mandate.reference,
+        fileContentBase64,
+        pendingBankDataEncrypted: null, // effacé dès que le mandat est créé — plus besoin de l'IBAN
+      },
+    });
+    res.json(shapeRequest(updated));
   })
 );
 
@@ -338,6 +430,7 @@ crmSignatureRouter.post(
     let gocardlessCustomerId: string | undefined;
     let gocardlessMandateId: string | undefined;
     let mandateReference: string | undefined;
+    let pendingBankDataEncrypted: string | null | undefined;
 
     if (row.requiresBankMandate) {
       const companyName = (b.companyName || "").trim();
@@ -348,20 +441,42 @@ crmSignatureRouter.post(
       if (!iban) throw new HttpError(400, "IBAN requis");
       if (!config.gocardlessIcs) throw new HttpError(503, "ICS Sesame non configuré côté serveur (GOCARDLESS_ICS) — contactez l'équipe Sesame");
 
-      const mandate = await createSepaMandate({
-        companyName,
-        contactEmail: row.signerEmail,
-        addressLine1: b.address,
-        postalCode: b.postalCode,
-        city: b.city,
-        accountHolderName,
-        iban,
-      });
-      gocardlessCustomerId = mandate.gocardlessCustomerId;
-      gocardlessMandateId = mandate.gocardlessMandateId;
-      mandateReference = mandate.reference; // généré par GoCardless, cf. lib/gocardlessMandate.ts
+      // Création immédiate du mandat — UNIQUEMENT si demandée à la création
+      // (autoCreateMandate). Un échec (ex : panne/blocage GoCardless, déjà
+      // vu en réel) ne bloque JAMAIS la signature elle-même : on bascule en
+      // mode différé (28/10/2026, demande client) plutôt que de faire
+      // attendre le signataire sur un problème qui n'est pas le sien.
+      let mandateCreated = false;
+      if (row.autoCreateMandate) {
+        try {
+          const mandate = await createSepaMandate({
+            companyName,
+            contactEmail: row.signerEmail,
+            addressLine1: b.address,
+            postalCode: b.postalCode,
+            city: b.city,
+            accountHolderName,
+            iban,
+          });
+          gocardlessCustomerId = mandate.gocardlessCustomerId;
+          gocardlessMandateId = mandate.gocardlessMandateId;
+          mandateReference = mandate.reference;
+          mandateCreated = true;
+        } catch (e) {
+          console.error(`[crmSignature] création mandat GoCardless différée (échec immédiat) pour ${row.id}:`, e);
+        }
+      }
 
-      fileContentBase64 = await appendMandateSummaryPage(row.fileContentBase64, {
+      if (!mandateCreated) {
+        // Coordonnées bancaires gardées chiffrées le temps que quelqu'un
+        // (bouton CRM "Créer le mandat") relance la création — jamais en
+        // clair en base (cf. lib/encryption.ts).
+        pendingBankDataEncrypted = encryptSecret(
+          JSON.stringify({ companyName, siret: b.siret, address: b.address, postalCode: b.postalCode, city: b.city, phone: b.phone, accountHolderName, bankName: b.bankName, bic: b.bic, iban })
+        );
+      }
+
+      fileContentBase64 = await appendMandateSummaryPage(row.originalFileContentBase64 || row.fileContentBase64, {
         companyName,
         siret: b.siret,
         contactName: `${row.signerFirstname} ${row.signerLastname}`,
@@ -374,7 +489,7 @@ crmSignatureRouter.post(
         bankName: b.bankName,
         bic: b.bic,
         iban,
-        mandateReference,
+        mandateReference: mandateReference || PENDING_MANDATE_REFERENCE_LABEL,
         signedAt: new Date(),
         signerIp: req.ip || "inconnue",
         creditorIcs: config.gocardlessIcs,
@@ -393,6 +508,7 @@ crmSignatureRouter.post(
         signerUserAgent: req.headers["user-agent"] || null,
         otpCodeHash: null,
         otpExpiresAt: null,
+        pendingBankDataEncrypted,
         fileContentBase64,
         formData: (formData as Prisma.InputJsonValue) || undefined,
         gocardlessCustomerId,
@@ -407,8 +523,13 @@ crmSignatureRouter.post(
     // copie de son mandat signé" — jusque-là rien n'était envoyé du tout).
     try {
       const docLabel = row.documentType === "contract" ? "contrat" : row.documentType === "quote" ? "devis" : "PV de réception";
+      const mandateNote = row.requiresBankMandate
+        ? mandateReference
+          ? `, avec le mandat de prélèvement SEPA joint (référence ${mandateReference})`
+          : ", le mandat de prélèvement SEPA joint est en cours de finalisation — vous recevrez sa référence définitive séparément"
+        : "";
       const html = `<p>Bonjour ${row.signerFirstname},</p>
-<p>Voici une copie du ${docLabel} « ${row.title} » que vous venez de signer électroniquement${row.requiresBankMandate ? `, avec le mandat de prélèvement SEPA joint (référence ${mandateReference})` : ""}.</p>`;
+<p>Voici une copie du ${docLabel} « ${row.title} » que vous venez de signer électroniquement${mandateNote}.</p>`;
       await sendEmailRaw(null, row.signerEmail, `Document signé — ${row.title}`, html, undefined, {
         namedAttachments: [{ fileName: row.fileName, dataUrl: `data:${row.fileMimeType};base64,${fileContentBase64}` }],
       });

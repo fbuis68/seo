@@ -3811,12 +3811,13 @@ function sigRowHtml(s){
     : 'Créé le '+new Date(s.createdAt).toLocaleDateString('fr-FR');
   const actions = [];
   if(s.status==='draft' || s.status==='sent' || s.status==='viewed') actions.push(`<button class="btn btn-sm btn-amber" onclick="event.stopPropagation();sigSend('${s.id}')">${s.status==='draft'?'Envoyer':'Renvoyer'}</button>`);
+  if(s.mandatePending) actions.push(`<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();sigCreateMandate('${s.id}')">Créer le mandat GoCardless</button>`);
   if(s.status!=='signed' && s.status!=='cancelled') actions.push(`<button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();sigCancel('${s.id}')">Annuler</button>`);
   if(s.status==='draft') actions.push(`<button class="btn btn-sm btn-ghost" style="color:#a32d2d" onclick="event.stopPropagation();sigDelete('${s.id}')">Supprimer</button>`);
   return `<div class="log-item" style="cursor:pointer" onclick="sigOpenPreview('${s.id}')">
     <div class="log-dot" style="background:${color}"></div>
     <div class="log-body">
-      <div class="log-text">${esc(s.title)} <span style="color:#aaa;font-size:11px">${esc(SIG_TYPE_LABEL[s.documentType]||s.documentType)}</span>${s.requiresBankMandate?' <span class="badge" style="background:#eef3ff;color:#2a5ba6;font-weight:600;font-size:10px">Mandat SEPA</span>':''}</div>
+      <div class="log-text">${esc(s.title)} <span style="color:#aaa;font-size:11px">${esc(SIG_TYPE_LABEL[s.documentType]||s.documentType)}</span>${s.requiresBankMandate?' <span class="badge" style="background:#eef3ff;color:#2a5ba6;font-weight:600;font-size:10px">Mandat SEPA</span>':''}${s.mandatePending?' <span class="badge" style="background:#fff3e0;color:#b06a00;font-weight:600;font-size:10px">Mandat en attente</span>':''}</div>
       <div class="log-meta">${esc(s.signerFirstname)} ${esc(s.signerLastname)} · ${esc(s.signerEmail)} · ${dates}${s.mandateReference?' · RUM '+esc(s.mandateReference):''}</div>
     </div>
     <span class="badge" style="background:${color}22;color:${color};font-weight:600">${esc(SIG_STATUS_LABEL[s.status]||s.status)}</span>
@@ -3844,7 +3845,8 @@ function sigOpenCreate(){
       </div>
       <div class="ff"><label>Titre</label><input type="text" id="sig-title" placeholder="Ex : Contrat d'abonnement — ${esc(c.nom||'')}"></div>
       <div class="ff"><label>Document (PDF)</label><input type="file" id="sig-file" accept="application/pdf"></div>
-      <div class="ff"><label style="display:flex;align-items:center;gap:8px;font-size:13px;color:inherit"><input type="checkbox" id="sig-bank-mandate" style="width:auto;margin:0"> Demander aussi au signataire ses coordonnées bancaires (mandat de prélèvement SEPA, création automatique du mandat GoCardless)</label></div>
+      <div class="ff"><label style="display:flex;align-items:center;gap:8px;font-size:13px;color:inherit"><input type="checkbox" id="sig-bank-mandate" style="width:auto;margin:0" onchange="document.getElementById('sig-auto-mandate-row').style.display=this.checked?'block':'none'"> Demander aussi au signataire ses coordonnées bancaires (mandat de prélèvement SEPA)</label></div>
+      <div class="ff" id="sig-auto-mandate-row" style="display:none;margin-left:22px"><label style="display:flex;align-items:center;gap:8px;font-size:13px;color:inherit"><input type="checkbox" id="sig-auto-create-mandate" checked style="width:auto;margin:0"> Créer automatiquement le mandat GoCardless à la signature</label><div style="font-size:11px;color:var(--mu,#888);margin-top:3px">Décoché : les coordonnées sont collectées (chiffrées) et le PDF signé tout de même, le mandat sera créé plus tard via le bouton "Créer le mandat" — utile si GoCardless est temporairement indisponible.</div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="ff"><label>Prénom signataire</label><input type="text" id="sig-firstname" value="${esc(guessFirst)}"></div>
         <div class="ff"><label>Nom signataire</label><input type="text" id="sig-lastname" value="${esc(guessLast)}"></div>
@@ -3888,10 +3890,11 @@ async function sigCreate(){
   try{
     const dataUrl = await sigReadFileAsDataUrl(file);
     const requiresBankMandate = document.getElementById('sig-bank-mandate').checked;
+    const autoCreateMandate = document.getElementById('sig-auto-create-mandate').checked;
     const r = await apiFetch('/wa/crmSignature/create', {method:'POST', body: JSON.stringify({
       prospectId: (SIG_CURRENT_PROSPECT&&SIG_CURRENT_PROSPECT.id)||'',
       documentType, title, fileName: file.name, fileMimeType: file.type || 'application/pdf',
-      fileContentBase64: dataUrl, signerFirstname, signerLastname, signerEmail, signerPhone, requiresBankMandate
+      fileContentBase64: dataUrl, signerFirstname, signerLastname, signerEmail, signerPhone, requiresBankMandate, autoCreateMandate
     })});
     const data = await r.json();
     if(!r.ok){ errEl.textContent = data.error||'Erreur lors de la création'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Créer'; return; }
@@ -3918,6 +3921,17 @@ async function sigCancel(id){
     const data = await r.json().catch(()=>({}));
     if(!r.ok){ flash(data.error||'Erreur'); return; }
     flash('Demande annulée');
+    loadSignatureCard(SIG_CURRENT_PROSPECT);
+  }catch(e){ flash('Erreur de connexion au serveur'); }
+}
+
+async function sigCreateMandate(id){
+  if(!confirm('Créer le mandat de prélèvement SEPA sur GoCardless à partir des coordonnées déjà collectées ?')) return;
+  try{
+    const r = await apiFetch('/wa/crmSignature/'+id+'/createMandate', {method:'POST'});
+    const data = await r.json().catch(()=>({}));
+    if(!r.ok){ flash(data.error||'Erreur lors de la création du mandat'); return; }
+    flash('Mandat GoCardless créé ✓ (RUM '+(data.mandateReference||'')+')');
     loadSignatureCard(SIG_CURRENT_PROSPECT);
   }catch(e){ flash('Erreur de connexion au serveur'); }
 }
