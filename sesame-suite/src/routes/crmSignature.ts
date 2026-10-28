@@ -8,7 +8,7 @@ import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin, requireSesame } from "../middleware/requireAdmin";
 import { sendEmailRaw } from "../lib/email";
 import { sendChannelRaw } from "../lib/sms";
-import { createSepaMandate, generateMandateReference } from "../lib/gocardlessMandate";
+import { createSepaMandate } from "../lib/gocardlessMandate";
 import { appendMandateSummaryPage } from "../lib/signaturePdf";
 
 /**
@@ -348,7 +348,6 @@ crmSignatureRouter.post(
       if (!iban) throw new HttpError(400, "IBAN requis");
       if (!config.gocardlessIcs) throw new HttpError(503, "ICS Sesame non configuré côté serveur (GOCARDLESS_ICS) — contactez l'équipe Sesame");
 
-      mandateReference = generateMandateReference(companyName);
       const mandate = await createSepaMandate({
         companyName,
         contactEmail: row.signerEmail,
@@ -357,10 +356,10 @@ crmSignatureRouter.post(
         city: b.city,
         accountHolderName,
         iban,
-        reference: mandateReference,
       });
       gocardlessCustomerId = mandate.gocardlessCustomerId;
       gocardlessMandateId = mandate.gocardlessMandateId;
+      mandateReference = mandate.reference; // généré par GoCardless, cf. lib/gocardlessMandate.ts
 
       fileContentBase64 = await appendMandateSummaryPage(row.fileContentBase64, {
         companyName,

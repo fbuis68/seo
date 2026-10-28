@@ -34,7 +34,6 @@ export interface SepaMandateInput {
   city?: string;
   accountHolderName: string;
   iban: string; // jamais persisté — transmis puis oublié
-  reference: string; // RUM, max 35 caractères
 }
 
 export interface SepaMandateResult {
@@ -71,33 +70,24 @@ export async function createSepaMandate(input: SepaMandateInput): Promise<SepaMa
       links: { customer: customer.id! },
     });
 
+    // Pas de `reference` imposée ici : certains identifiants créancier
+    // GoCardless (can_specify_mandate_reference=false) rejettent toute
+    // référence custom ("Custom mandate references are not enabled for
+    // your scheme identifier", vu en test réel 28/10/2026) — on laisse
+    // GoCardless générer la sienne et on la reprend telle quelle.
     const mandate = await client.mandates.create({
       links: { customer_bank_account: bankAccount.id! },
       scheme: "sepa_core",
-      reference: input.reference,
     });
+    if (!mandate.reference) throw new GoCardlessError("Mandat créé côté GoCardless sans référence retournée — cas inattendu");
 
     return {
       gocardlessCustomerId: customer.id!,
       gocardlessBankAccountId: bankAccount.id!,
       gocardlessMandateId: mandate.id!,
-      reference: input.reference,
+      reference: mandate.reference,
     };
   } catch (e) {
     throw new GoCardlessError(`Échec de création du mandat SEPA GoCardless : ${describeGoCardlessError(e)}`);
   }
-}
-
-/** RUM (Référence Unique de Mandat) — max 35 caractères imposé par le
- * format SEPA (cf. mandat papier). Dérivé du nom d'entreprise (slugifié) +
- * horodatage compact, assez court pour laisser de la marge au préfixe. */
-export function generateMandateReference(companyName: string): string {
-  const slug = companyName
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-zA-Z0-9]/g, "")
-    .toUpperCase()
-    .slice(0, 20);
-  const stamp = new Date().toISOString().replace(/[-:T.]/g, "").slice(0, 12); // YYYYMMDDHHmm
-  return `${slug || "CLIENT"}${stamp}`.slice(0, 35);
 }
