@@ -21,7 +21,11 @@ import { ApiError } from "gocardless-nodejs";
 function describeGoCardlessError(e: unknown): string {
   if (e instanceof ApiError) {
     const details = (e.errors || []).map((err) => [err.field, err.message].filter(Boolean).join(" : ")).filter(Boolean);
-    return details.length ? details.join(" / ") : e.message || "erreur GoCardless";
+    const base = details.length ? details.join(" / ") : e.message || "erreur GoCardless";
+    // Le message brut ("Forbidden request") est parfois trop pauvre pour
+    // diagnostiquer — errorType/code/documentationUrl donnent le vrai motif
+    // (ex: restriction de fonctionnalité du compte créancier).
+    return `${base} [errorType=${e.errorType || "?"} code=${e.code || "?"} doc=${e.documentationUrl || "?"}]`;
   }
   return e instanceof Error ? e.message : "erreur GoCardless inconnue";
 }
