@@ -7,6 +7,7 @@ import { ONBOARDING_MODULES } from "./onboarding";
 import { nextSequenceValue } from "../lib/sequence";
 import { sendMessage } from "../lib/messaging";
 import { getSmtpConfig } from "../lib/email";
+import { getRecordingStream } from "../lib/graphMeetings";
 
 /**
  * Devis — écran CRM à part entière (refonte du 22/10/2026, reprend
@@ -790,6 +791,28 @@ crmQuoteRouter.get(
     const config = (quote.config as QuoteConfig) || {};
     const hardwareLines = storedLines.filter((l) => l.category === "materiel" && l.group !== "accessory");
     const lines = expandQuoteLines(storedLines, hardwareLines, config);
+
+    // Espace client (29/10/2026, demande "créer un vrai espace client à
+    // onglets") : en plus du devis, on expose les documents de la
+    // bibliothèque attachés à CE devis (sans le contenu base64, cf. routes
+    // de téléchargement dédiées ci-dessous) et les réunions Teams du
+    // prospect dont le compte-rendu (et/ou l'enregistrement) a déjà été
+    // récupéré — jamais celles encore "scheduled", rien à montrer dessus.
+    const [documents, meetings] = await Promise.all([
+      quote.attachedDocumentIds.length
+        ? prisma.crmDocument.findMany({
+            where: { id: { in: quote.attachedDocumentIds }, active: true },
+            select: { id: true, title: true, description: true, fileName: true, fileMimeType: true },
+            orderBy: { order: "asc" },
+          })
+        : Promise.resolve([]),
+      prisma.crmMeeting.findMany({
+        where: { prospectId: quote.prospectId, OR: [{ summaryText: { not: null } }, { recordingGraphId: { not: null } }] },
+        select: { id: true, subject: true, startDateTime: true, summaryText: true, recordingGraphId: true },
+        orderBy: { startDateTime: "desc" },
+      }),
+    ]);
+
     res.json({
       number: quote.number,
       title: quote.title,
@@ -806,7 +829,73 @@ crmQuoteRouter.get(
       alreadySigned: !!quote.signature,
       signedAt: quote.signature?.signedAt || null,
       signerName: quote.signature?.signerName || null,
+      documents,
+      meetings: meetings.map((m) => ({
+        id: m.id,
+        subject: m.subject,
+        startDateTime: m.startDateTime,
+        summaryText: m.summaryText,
+        hasRecording: !!m.recordingGraphId,
+      })),
     });
+  })
+);
+
+/**
+ * GET /wa/crmQuote/publicDocument/:docId?token=... — téléchargement d'un
+ * document de la bibliothèque, depuis l'espace client public (même jeton
+ * que /crmQuote/public). Vérifie que docId fait bien partie des documents
+ * attachés à CE devis précis — jamais un accès libre à toute la
+ * bibliothèque via un id devinable.
+ */
+crmQuoteRouter.get(
+  "/crmQuote/publicDocument/:docId",
+  asyncHandler(async (req, res) => {
+    const token = (req.query.token as string) || "";
+    if (!token) throw new HttpError(400, "Lien invalide");
+    const quote = await prisma.crmQuote.findUnique({ where: { signToken: token }, select: { attachedDocumentIds: true } });
+    if (!quote || !quote.attachedDocumentIds.includes(req.params.docId)) throw new HttpError(404, "Document introuvable");
+    const doc = await prisma.crmDocument.findUnique({ where: { id: req.params.docId } });
+    if (!doc || !doc.active) throw new HttpError(404, "Document introuvable");
+    res.setHeader("Content-Type", doc.fileMimeType);
+    res.setHeader("Content-Disposition", `inline; filename="${doc.fileName.replace(/"/g, "")}"`);
+    res.send(Buffer.from(doc.fileContentBase64, "base64"));
+  })
+);
+
+/**
+ * GET /wa/crmQuote/publicRecording/:meetingId?token=... — proxy du flux
+ * vidéo d'un enregistrement Teams, depuis l'espace client public. Vérifie
+ * que la réunion appartient bien au MÊME prospect que ce devis (même
+ * garde-fou que publicDocument ci-dessus).
+ */
+crmQuoteRouter.get(
+  "/crmQuote/publicRecording/:meetingId",
+  asyncHandler(async (req, res) => {
+    const token = (req.query.token as string) || "";
+    if (!token) throw new HttpError(400, "Lien invalide");
+    const quote = await prisma.crmQuote.findUnique({ where: { signToken: token }, select: { prospectId: true } });
+    if (!quote) throw new HttpError(404, "Lien invalide");
+    const row = await prisma.crmMeeting.findUnique({ where: { id: req.params.meetingId } });
+    if (!row || row.prospectId !== quote.prospectId || !row.recordingGraphId) throw new HttpError(404, "Aucun enregistrement disponible");
+    const upstream = await getRecordingStream(row.graphOrganizerUserId, row.graphMeetingId, row.recordingGraphId);
+    res.setHeader("Content-Type", upstream.headers.get("content-type") || "video/mp4");
+    const contentLength = upstream.headers.get("content-length");
+    if (contentLength) res.setHeader("Content-Length", contentLength);
+    if (!upstream.body) {
+      res.status(502).end();
+      return;
+    }
+    const reader = upstream.body.getReader();
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        res.write(value);
+      }
+    } finally {
+      res.end();
+    }
   })
 );
 

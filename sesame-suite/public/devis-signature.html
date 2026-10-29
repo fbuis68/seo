@@ -44,6 +44,24 @@
   .err{color:#a32d2d;font-size:12px;margin-top:8px;display:none}
   .ok-box{text-align:center;padding:30px 10px}
   .ok-icon{font-size:36px;color:#1a6b47;margin-bottom:10px}
+  .tabs{display:flex;gap:4px;margin-top:18px;border-bottom:1px solid var(--bdr);overflow-x:auto}
+  .tab-btn{font-family:inherit;font-size:13px;font-weight:600;padding:10px 16px;border:none;background:transparent;color:var(--mu);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+  .tab-btn.active{color:var(--a);border-bottom-color:var(--a)}
+  .tab-panel{display:none}
+  .tab-panel.active{display:block}
+  .doc-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid #f0eee9}
+  .doc-item:last-child{border-bottom:none}
+  .doc-left{display:flex;gap:12px;align-items:flex-start;min-width:0}
+  .doc-ico{font-size:20px;flex-shrink:0}
+  .doc-title{font-weight:600;font-size:13px}
+  .doc-desc{color:var(--mu);font-size:12px;margin-top:2px}
+  .doc-dl{text-decoration:none;flex-shrink:0}
+  .meeting-item{padding:16px 0;border-bottom:1px solid #f0eee9}
+  .meeting-item:last-child{border-bottom:none}
+  .meeting-date{color:var(--mu);font-size:11px;text-transform:uppercase;letter-spacing:.3px}
+  .meeting-subject{font-weight:700;font-size:14px;margin:2px 0 8px}
+  .meeting-summary{font-size:13px;white-space:pre-wrap;color:#333;background:var(--bg);padding:12px 14px;border-radius:8px}
+  video{width:100%;border-radius:8px;margin-top:10px;display:block;background:#000}
 </style>
 </head>
 <body>
@@ -129,41 +147,98 @@ function quoteSummaryHtml(){
   `;
 }
 
-function render(){
+// Icône selon le type de fichier — purement cosmétique, pas de dépendance.
+function docIconFor(mime){
+  if(/pdf/i.test(mime)) return '📄';
+  if(/image/i.test(mime)) return '🖼';
+  if(/presentation|powerpoint/i.test(mime)) return '📊';
+  return '📎';
+}
+function fmtDateTime(iso){
+  return new Date(iso).toLocaleString('fr-FR',{dateStyle:'long',timeStyle:'short'});
+}
+function documentsTabHtml(){
+  return QUOTE.documents.map(d=>`
+    <div class="doc-item">
+      <div class="doc-left">
+        <div class="doc-ico">${docIconFor(d.fileMimeType)}</div>
+        <div>
+          <div class="doc-title">${esc(d.title)}</div>
+          ${d.description?`<div class="doc-desc">${esc(d.description)}</div>`:''}
+        </div>
+      </div>
+      <a class="btn btn-ghost doc-dl" style="width:auto" href="/wa/crmQuote/publicDocument/${encodeURIComponent(d.id)}?token=${encodeURIComponent(TOKEN)}" target="_blank" rel="noopener">Télécharger</a>
+    </div>`).join('');
+}
+function meetingsTabHtml(){
+  return QUOTE.meetings.map(m=>`
+    <div class="meeting-item">
+      <div class="meeting-date">${fmtDateTime(m.startDateTime)}</div>
+      <div class="meeting-subject">${esc(m.subject)}</div>
+      ${m.summaryText?`<div class="meeting-summary">${esc(m.summaryText)}</div>`:''}
+      ${m.hasRecording?`<video controls preload="none" src="/wa/crmQuote/publicRecording/${encodeURIComponent(m.id)}?token=${encodeURIComponent(TOKEN)}"></video>`:''}
+    </div>`).join('');
+}
+
+function signatureSectionHtml(){
   if(QUOTE.alreadySigned){
     const d = QUOTE.signedAt ? new Date(QUOTE.signedAt).toLocaleString('fr-FR') : '';
-    document.getElementById('app').innerHTML = `
-    <div class="card">
-      ${quoteSummaryHtml()}
+    return `<div class="card">
       <div class="ok-box">
         <div class="ok-icon">✓</div>
         <div><strong>Ce devis a déjà été signé</strong></div>
         <div class="sub">${esc(QUOTE.signerName||'')}${d?' — '+d:''}</div>
       </div>
     </div>`;
-    return;
   }
-  document.getElementById('app').innerHTML = `
-    <div class="card">${quoteSummaryHtml()}</div>
-    <div class="card">
-      <h1 style="font-size:15px">Signature</h1>
-      <div class="disclaimer">Signature électronique simple : nous enregistrons votre nom saisi, votre tracé, ainsi que la date et l'heure, à titre de preuve de votre consentement. Il ne s'agit pas d'une signature électronique qualifiée (eIDAS) certifiée par un tiers de confiance.</div>
-      <label>Nom complet du signataire</label>
-      <input type="text" id="signerName" placeholder="Prénom Nom">
-      <label>Email (optionnel)</label>
-      <input type="email" id="signerEmail" placeholder="vous@exemple.com">
-      <label>Votre signature (dessinez ci-dessous)</label>
-      <div class="sig-box"><canvas id="sigCanvas"></canvas></div>
-      <div class="sig-actions"><span></span><button type="button" class="btn-ghost" onclick="clearSignature()">Effacer</button></div>
-      <div class="consent">
-        <input type="checkbox" id="consent">
-        <label for="consent" style="margin:0">Je reconnais avoir pris connaissance de ce devis et de ses conditions, et je l'accepte.</label>
-      </div>
-      <button class="btn" id="submitBtn" onclick="submitSignature()">Signer et accepter</button>
-      <div class="err" id="err"></div>
+  return `<div class="card">
+    <h1 style="font-size:15px">Signature</h1>
+    <div class="disclaimer">Signature électronique simple : nous enregistrons votre nom saisi, votre tracé, ainsi que la date et l'heure, à titre de preuve de votre consentement. Il ne s'agit pas d'une signature électronique qualifiée (eIDAS) certifiée par un tiers de confiance.</div>
+    <label>Nom complet du signataire</label>
+    <input type="text" id="signerName" placeholder="Prénom Nom">
+    <label>Email (optionnel)</label>
+    <input type="email" id="signerEmail" placeholder="vous@exemple.com">
+    <label>Votre signature (dessinez ci-dessous)</label>
+    <div class="sig-box"><canvas id="sigCanvas"></canvas></div>
+    <div class="sig-actions"><span></span><button type="button" class="btn-ghost" onclick="clearSignature()">Effacer</button></div>
+    <div class="consent">
+      <input type="checkbox" id="consent">
+      <label for="consent" style="margin:0">Je reconnais avoir pris connaissance de ce devis et de ses conditions, et je l'accepte.</label>
     </div>
-  `;
-  setupCanvas();
+    <button class="btn" id="submitBtn" onclick="submitSignature()">Signer et accepter</button>
+    <div class="err" id="err"></div>
+  </div>`;
+}
+
+function switchTab(key){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===key));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active', p.dataset.panel===key));
+}
+
+// Espace client à onglets (29/10/2026) : l'onglet Devis est toujours
+// présent ; Documents/Comptes-rendus n'apparaissent que s'il y a vraiment
+// quelque chose à montrer (devis sans document attaché ni réunion =
+// aucun onglet superflu, juste le devis comme avant).
+function render(){
+  const tabs = [{key:'devis', label:'Devis'}];
+  if(QUOTE.documents.length) tabs.push({key:'documents', label:'Documents'});
+  if(QUOTE.meetings.length) tabs.push({key:'meetings', label:'Comptes-rendus'});
+
+  const tabNav = tabs.length>1
+    ? `<div class="tabs">${tabs.map((t,i)=>`<button class="tab-btn${i===0?' active':''}" data-tab="${t.key}" onclick="switchTab('${t.key}')">${esc(t.label)}</button>`).join('')}</div>`
+    : '';
+
+  const devisPanel = `<div class="tab-panel active" data-panel="devis">
+    <div class="card">${quoteSummaryHtml()}</div>
+    ${signatureSectionHtml()}
+  </div>`;
+  const documentsPanel = QUOTE.documents.length
+    ? `<div class="tab-panel" data-panel="documents"><div class="card"><h1 style="font-size:15px">Documents</h1>${documentsTabHtml()}</div></div>` : '';
+  const meetingsPanel = QUOTE.meetings.length
+    ? `<div class="tab-panel" data-panel="meetings"><div class="card"><h1 style="font-size:15px">Comptes-rendus de réunion</h1>${meetingsTabHtml()}</div></div>` : '';
+
+  document.getElementById('app').innerHTML = tabNav + devisPanel + documentsPanel + meetingsPanel;
+  if(!QUOTE.alreadySigned) setupCanvas();
 }
 
 let ctx, drawing=false, hasDrawn=false;
@@ -222,14 +297,10 @@ async function submitSignature(){
     const data = await r.json();
     if(!r.ok){ errEl.textContent = data.error || 'Erreur lors de la signature.'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Signer et accepter'; return; }
   }catch(e){ errEl.textContent = 'Erreur de connexion au serveur.'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Signer et accepter'; return; }
-  document.getElementById('app').innerHTML = `
-    <div class="card">
-      <div class="ok-box">
-        <div class="ok-icon">✓</div>
-        <div><strong>Devis signé avec succès</strong></div>
-        <div class="sub">Merci ${esc(signerName)}, votre acceptation a bien été enregistrée.</div>
-      </div>
-    </div>`;
+  QUOTE.alreadySigned = true;
+  QUOTE.signerName = signerName;
+  QUOTE.signedAt = new Date().toISOString();
+  render();
 }
 
 init();
