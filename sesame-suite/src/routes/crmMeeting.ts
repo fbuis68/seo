@@ -292,6 +292,12 @@ crmMeetingRouter.post(
     }
     for (const c of contacts) if (c.email) emailToProspectId.set(c.email.toLowerCase(), c.prospectId);
     const knownJoinUrls = new Set(existing.map((m) => m.joinUrl));
+    // Un commercial Sesame invité/organisateur sur la réunion (ex : outil de
+    // prise de RDV type Bookings) peut aussi avoir sa propre fiche CRM — sans
+    // cette exclusion, son email matche sa propre fiche avant même de
+    // regarder le corps de l'événement pour le vrai client (cas constaté
+    // 29/10/2026 : réunion "Charlène Soobben" attachée au commercial lui-même).
+    const mailboxEmailSet = new Set(mailboxes.map((m) => m.toLowerCase()));
 
     const now = Date.now();
     const startISO = new Date(now - 90 * 24 * 60 * 60 * 1000).toISOString();
@@ -366,7 +372,7 @@ crmMeetingRouter.post(
       scanned += events.length;
 
       for (const d of dropped) {
-        const matchedProspectId = d.bodyEmails.map((e) => emailToProspectId.get(e)).find(Boolean);
+        const matchedProspectId = d.bodyEmails.filter((e) => !mailboxEmailSet.has(e)).map((e) => emailToProspectId.get(e)).find(Boolean);
         const dedupeKey = d.subject + "|" + d.startDateTime;
         if (matchedProspectId && droppedSample.length < 40 && !seenDropped.has(dedupeKey)) {
           seenDropped.add(dedupeKey);
@@ -379,7 +385,7 @@ crmMeetingRouter.post(
         // D'abord les vrais participants Teams, puis — à défaut — les emails
         // trouvés dans le corps de l'événement (outils de prise de RDV
         // externes qui n'invitent que le commercial, cf. lib/graphMeetings.ts).
-        const matchedProspectId = [...ev.attendeeEmails, ...ev.bodyEmails].map((e) => emailToProspectId.get(e)).find(Boolean);
+        const matchedProspectId = [...ev.attendeeEmails, ...ev.bodyEmails].filter((e) => !mailboxEmailSet.has(e)).map((e) => emailToProspectId.get(e)).find(Boolean);
         // teams.live.com = Teams "grand public" (compte personnel), jamais
         // résolvable via /onlineMeetings côté tenant — pas une erreur, juste
         // hors périmètre. Si elle matchait quand même un prospect, on le
