@@ -390,6 +390,7 @@ interface ImportRow {
   tel?: string;
   note?: string;
   commercialRaw?: string;
+  commercialId?: string; // commercial par défaut choisi pour tout le lot — prime sur commercialRaw
 }
 
 function normalizeNameForMatch(s: string): string {
@@ -456,7 +457,7 @@ crmProspectRouter.post(
         errors.push({ index: i, reason: "nom manquant" });
         continue;
       }
-      const commercialId = matchCommercial(r.commercialRaw, commercials);
+      const commercialId = r.commercialId || matchCommercial(r.commercialRaw, commercials);
       if (commercialId) matched++;
       try {
         await prisma.crmProspect.create({

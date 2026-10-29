@@ -4399,7 +4399,7 @@ async function lmDelete(kind,id,label){
 // ne quitte le poste de l'admin que sous forme de lignes déjà mappées,
 // envoyées à /wa/crmProspect/importBulk (toujours type="Suspect").
 // ════════════════════════════════════════
-let IMP_FILE_ROWS = [], IMP_HEADERS = [], IMP_MAPPING = {}, IMP_ROWS = [], IMP_ORIGINE = '', IMP_SECTEUR_DEFAULT = '';
+let IMP_FILE_ROWS = [], IMP_HEADERS = [], IMP_MAPPING = {}, IMP_ROWS = [], IMP_ORIGINE = '', IMP_SECTEUR_DEFAULT = '', IMP_COMMERCIAL_DEFAULT = '';
 
 // Alias reconnus par en-tête (insensible à la casse/accents) pour préremplir
 // automatiquement le mapping — l'admin peut toujours corriger avant l'aperçu.
@@ -4431,7 +4431,7 @@ function impDecodeText(buf){
 }
 
 function openImportModal(){
-  IMP_FILE_ROWS=[]; IMP_HEADERS=[]; IMP_MAPPING={}; IMP_ROWS=[]; IMP_ORIGINE=''; IMP_SECTEUR_DEFAULT='';
+  IMP_FILE_ROWS=[]; IMP_HEADERS=[]; IMP_MAPPING={}; IMP_ROWS=[]; IMP_ORIGINE=''; IMP_SECTEUR_DEFAULT=''; IMP_COMMERCIAL_DEFAULT='';
   document.getElementById('modal-ct-2').innerHTML=`
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal2()" style="z-index:400">
     <div class="modal-box" style="max-width:640px">
@@ -4510,8 +4510,15 @@ function impRenderMapping(){
               ${SECTEURS.map(function(s){ return '<option value="'+esc(s)+'" '+(IMP_SECTEUR_DEFAULT===s?'selected':'')+'>'+esc(s)+'</option>'; }).join('')}
             </select>
           </div>
+          <div class="ff">
+            <label>Commercial par défaut (optionnel)</label>
+            <select id="imp-commercial-default">
+              <option value="">— Utiliser le rapprochement automatique par nom —</option>
+              ${COMMERCIALS.map(function(c){ return '<option value="'+esc(c.id)+'" '+(IMP_COMMERCIAL_DEFAULT===c.id?'selected':'')+'>'+esc(c.name)+'</option>'; }).join('')}
+            </select>
+          </div>
         </div>
-        <div style="font-size:11px;color:var(--mu);margin-top:-4px">Un secteur par défaut s'applique à <b>tous</b> les contacts importés, quelle que soit la colonne "Secteur" mappée ci-dessus.</div>
+        <div style="font-size:11px;color:var(--mu);margin-top:-4px">Un secteur par défaut s'applique à <b>tous</b> les contacts importés, quelle que soit la colonne "Secteur" mappée ci-dessus. Idem pour le commercial par défaut : prime sur la colonne "Conseiller / commercial" et sur le rapprochement automatique par nom.</div>
         <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer">
           <input type="checkbox" id="imp-lookup" checked style="accent-color:var(--am)">
           <span style="font-size:13px">Rechercher l'adresse manquante via l'annuaire public des entreprises (data.gouv.fr) — best effort, ne remplace pas une vérification manuelle</span>
@@ -4532,6 +4539,7 @@ function impBuildPreview(){
   IMP_MAPPING = mapping;
   IMP_ORIGINE = g('imp-origine').trim();
   IMP_SECTEUR_DEFAULT = g('imp-secteur-default');
+  IMP_COMMERCIAL_DEFAULT = g('imp-commercial-default');
   const doLookup = document.getElementById('imp-lookup').checked;
   const mappedHeaders = new Set(Object.values(mapping).filter(Boolean));
   const extraHeaders = IMP_HEADERS.filter(function(h){ return !mappedHeaders.has(h); });
@@ -4558,6 +4566,10 @@ function impBuildPreview(){
       email: mapping.email ? String(raw[mapping.email]||'').trim() : '',
       tel: mapping.tel ? String(raw[mapping.tel]||'').trim() : '',
       commercialRaw: mapping.commercial ? String(raw[mapping.commercial]||'').trim() : '',
+      // Commercial par défaut (choisi une fois pour tout le lot) prime sur la
+      // colonne mappée ET sur le rapprochement automatique par nom côté
+      // serveur — même principe que le secteur par défaut ci-dessus.
+      commercialId: IMP_COMMERCIAL_DEFAULT || '',
       note: noteLines.join('\n'),
       _addr: 'pending',
     };
@@ -4612,7 +4624,7 @@ function impPreviewRowHtml(r){
     + '<td style="padding:6px 8px">'+esc(r.ville)+'</td>'
     + '<td style="padding:6px 8px">'+esc(r.pays)+'</td>'
     + '<td style="padding:6px 8px">'+esc(r.adresse)+' '+impStatusBadge(r)+'</td>'
-    + '<td style="padding:6px 8px">'+esc(r.commercialRaw)+'</td>'
+    + '<td style="padding:6px 8px">'+esc(r.commercialId ? ((COMMERCIALS.find(function(c){return c.id===r.commercialId;})||{}).name||'') : r.commercialRaw)+'</td>'
     + '<td style="padding:6px 8px;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(r.note)+'">'+esc(r.note.replace(/\n/g,' · '))+'</td>'
     + '</tr>';
 }
@@ -4630,9 +4642,13 @@ function impRefreshPreviewRow(i){
  * adresse. N'accepte le résultat que si la ville trouvée correspond à celle
  * du fichier (quand elle est renseignée) : une société très commune (ex.
  * "Le Relais") peut exister sous ce nom dans plusieurs villes, mieux vaut ne
- * rien remplir que remplir une mauvaise adresse. Séquentiel avec une pause
- * entre chaque appel — API publique gratuite sans clé, pas de raison de la
- * marteler avec 50+ requêtes simultanées.
+ * rien remplir que remplir une mauvaise adresse. Récupère aussi le dirigeant
+ * (champ `dirigeants` de la même API, déjà utilisé par entrepriseAutocomplete
+ * pour la fiche manuelle) pour préremplir le contact quand la ligne
+ * importée n'en a pas — jamais d'écrasement d'un contact déjà renseigné
+ * dans le fichier. Séquentiel avec une pause entre chaque appel — API
+ * publique gratuite sans clé, pas de raison de la marteler avec 50+
+ * requêtes simultanées.
  */
 async function impLookupAddresses(){
   const btn = document.getElementById('imp-submit-btn');
@@ -4661,6 +4677,13 @@ async function impLookupAddresses(){
           if(siege.libelle_commune) r.ville = siege.ville || r.ville || siege.libelle_commune;
           if(siege.libelle_commune && !r.ville) r.ville = siege.libelle_commune;
           if(!r.pays) r.pays = 'France';
+          if(!r.referent){
+            const dirigeants = match.dirigeants||[];
+            const dirigeant = dirigeants.find(function(d){return d.type_dirigeant==='personne physique';}) || dirigeants[0];
+            if(dirigeant && dirigeant.type_dirigeant!=='personne morale'){
+              r.referent = [dirigeant.prenoms, dirigeant.nom].filter(Boolean).join(' ');
+            }
+          }
           r._addr = street ? 'found' : 'none';
         } else {
           r._addr = 'none';
@@ -4690,7 +4713,7 @@ async function impSubmit(){
       nom: r.nom, origine: IMP_ORIGINE || undefined, secteur: r.secteur || undefined,
       adresse: r.adresse || undefined, ville: r.ville || undefined, pays: r.pays || undefined,
       referent: r.referent || undefined, email: r.email || undefined, tel: r.tel || undefined, note: r.note || undefined,
-      commercialRaw: r.commercialRaw || undefined,
+      commercialRaw: r.commercialRaw || undefined, commercialId: r.commercialId || undefined,
     };
   });
   try{
