@@ -393,12 +393,25 @@ crmQuoteRouter.post(
 // — un modèle porte déjà tous les libellés/descriptions/prix, il ne reste
 // qu'à ajuster les quantités à la marge lors de la création d'un devis.
 
-function shapeTemplate(t: { id: string; name: string; lines: unknown; notes: string | null; createdAt: Date; updatedAt: Date }) {
+function shapeTemplate(t: {
+  id: string;
+  name: string;
+  lines: unknown;
+  notes: string | null;
+  secteur: string | null;
+  introText: string | null;
+  mentionsText: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
   return {
     id: t.id,
     name: t.name,
     lines: (t.lines as QuoteLine[]) || [],
     notes: t.notes || "",
+    secteur: t.secteur || "",
+    introText: t.introText || "",
+    mentionsText: t.mentionsText || "",
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
   };
@@ -418,6 +431,9 @@ interface TemplateBody {
   name: string;
   lines?: QuoteLine[];
   notes?: string;
+  secteur?: string;
+  introText?: string;
+  mentionsText?: string;
 }
 
 crmQuoteRouter.post(
@@ -428,7 +444,14 @@ crmQuoteRouter.post(
     const b = req.body as TemplateBody;
     if (!b.name || !b.name.trim()) throw new HttpError(400, "Nom du modèle requis");
     const row = await prisma.crmQuoteTemplate.create({
-      data: { name: b.name.trim(), lines: (b.lines || []) as object[], notes: b.notes },
+      data: {
+        name: b.name.trim(),
+        lines: (b.lines || []) as object[],
+        notes: b.notes,
+        secteur: b.secteur || undefined,
+        introText: b.introText || undefined,
+        mentionsText: b.mentionsText || undefined,
+      },
     });
     res.status(201).json(shapeTemplate(row));
   })
@@ -450,6 +473,9 @@ crmQuoteRouter.post(
         name: b.name?.trim(),
         lines: b.lines === undefined ? undefined : (b.lines as object[]),
         notes: b.notes,
+        secteur: b.secteur === undefined ? undefined : b.secteur || null,
+        introText: b.introText === undefined ? undefined : b.introText || null,
+        mentionsText: b.mentionsText === undefined ? undefined : b.mentionsText || null,
       },
     });
     res.json(shapeTemplate(row));
@@ -554,6 +580,54 @@ crmQuoteRouter.post(
     }
     await prisma.$transaction(orderedIds.map((id, order) => prisma.crmQuoteClause.update({ where: { id }, data: { order } })));
     res.json({ ok: true });
+  })
+);
+
+// ── Pages d'intro du devis imprimable (29/10/2026) — gestion des pages du
+// deck pptx client converties en images (titre/secteurs/ordre/actif), cf.
+// printQuote() côté client et le commentaire du modèle CrmQuotePreamblePage.
+// Pas de route de création : le jeu de pages initial est seedé une fois
+// (prisma/seed.ts) à partir des fichiers statiques déjà déposés dans
+// public/quote-preamble/ — seuls titre/secteurs/ordre/actif sont éditables
+// ici, pas l'ajout d'un nouveau deck (hors scope de cette demande).
+crmQuoteRouter.get(
+  "/crmQuotePreamblePage/list",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (_req, res) => {
+    const rows = await prisma.crmQuotePreamblePage.findMany({ orderBy: { order: "asc" } });
+    res.json(rows);
+  })
+);
+
+interface PreamblePageUpdateBody {
+  id: string;
+  title?: string;
+  secteurs?: string[];
+  active?: boolean;
+  order?: number;
+}
+
+crmQuoteRouter.post(
+  "/crmQuotePreamblePage/update",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const b = req.body as PreamblePageUpdateBody;
+    if (!b.id) throw new HttpError(400, "id requis");
+    if (b.title !== undefined && !b.title.trim()) throw new HttpError(400, "Le titre ne peut pas être vide");
+    const existing = await prisma.crmQuotePreamblePage.findUnique({ where: { id: b.id } });
+    if (!existing) throw new HttpError(404, "Page introuvable");
+    const row = await prisma.crmQuotePreamblePage.update({
+      where: { id: b.id },
+      data: {
+        title: b.title?.trim(),
+        secteurs: Array.isArray(b.secteurs) ? b.secteurs : undefined,
+        active: typeof b.active === "boolean" ? b.active : undefined,
+        order: typeof b.order === "number" ? b.order : undefined,
+      },
+    });
+    res.json(row);
   })
 );
 

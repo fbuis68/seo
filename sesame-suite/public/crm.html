@@ -6957,6 +6957,24 @@ async function dqLoadClausesIfNeeded(){
   try{ const r = await apiFetch('/wa/crmQuoteClause/list'); CRM_CLAUSES = r.ok ? await r.json() : []; }
   catch(e){ CRM_CLAUSES = []; }
 }
+
+// Pages d'intro du devis imprimable (29/10/2026) — deck pptx client converti
+// en images, cf. printQuote() pour l'insertion effective et le modèle
+// CrmQuotePreamblePage pour la logique de filtrage par secteur.
+let QUOTE_PREAMBLE_PAGES = null;
+async function dqLoadPreamblePagesIfNeeded(){
+  if(QUOTE_PREAMBLE_PAGES) return;
+  try{ const r = await apiFetch('/wa/crmQuotePreamblePage/list'); QUOTE_PREAMBLE_PAGES = r.ok ? await r.json() : []; }
+  catch(e){ QUOTE_PREAMBLE_PAGES = []; }
+}
+/** Pages effectivement retenues pour un secteur donné — universelles
+ * (secteurs:[]) + celles explicitement affectées à ce secteur, triées par
+ * ordre, actives seulement. */
+function dqPreamblePagesForSecteur(secteur){
+  return (QUOTE_PREAMBLE_PAGES||[])
+    .filter(p=>p.active && (!p.secteurs.length || (secteur && p.secteurs.includes(secteur))))
+    .sort((a,b)=>a.order-b.order);
+}
 const DQ_DEFAULT_INTRO = "Nous vous proposons une solution de gestion des accès adaptée à votre établissement, avec fourniture des équipements et accompagnement à la mise en service.";
 const DQ_DEFAULT_TERMS = "Validité : 30 jours. Solde à la livraison. Intervention sous réserve de validation technique et des prérequis chantier. CGV Sesame Technology à joindre dans leur version validée.";
 const DQ_PMS_OPTIONS = ['Misterbooking','Sans interface PMS','Mews','Opera Cloud','Thais','Autre / à étudier'];
@@ -7329,6 +7347,16 @@ async function dqLoadTemplatesIfNeeded(){
   try{ const r = await apiFetch('/wa/crmQuoteTemplate/list'); QUOTE_TEMPLATES = r.ok ? await r.json() : []; }
   catch(e){ QUOTE_TEMPLATES = []; }
 }
+/** Trie "Partir d'un modèle" pour mettre en avant les modèles du même
+ * secteur que le prospect sélectionné (★ recommandé) — jamais appliqué
+ * automatiquement, juste remonté en tête de liste (29/10/2026, "modèles
+ * de devis par secteur"). */
+function dqSortedTemplates(q){
+  const prospect = q.prospectId ? clients.find(c=>c.id===q.prospectId) : null;
+  const secteur = prospect ? prospect.secteur : '';
+  return (QUOTE_TEMPLATES||[]).map(t=>({...t, _match: !!(secteur && t.secteur===secteur)}))
+    .sort((a,b)=> (b._match-a._match) || a.name.localeCompare(b.name));
+}
 function dqApplyTemplate(selectEl){
   const id = selectEl.value; selectEl.value='';
   if(!id) return;
@@ -7336,20 +7364,128 @@ function dqApplyTemplate(selectEl){
   if((QUOTE_DRAFT.hardware.length||QUOTE_DRAFT.accessories.length) && !confirm('Remplacer les équipements actuels par ceux du modèle "'+tpl.name+'" ?')) return;
   QUOTE_DRAFT.hardware = (tpl.lines||[]).filter(l=>(l.category||'materiel')==='materiel' && l.group!=='accessory').map((l,i)=>({...l, id:'h'+i+'-'+Date.now()}));
   QUOTE_DRAFT.accessories = (tpl.lines||[]).filter(l=>l.category==='materiel' && l.group==='accessory').map((l,i)=>({...l, id:'a'+i+'-'+Date.now()}));
+  if(tpl.introText) QUOTE_DRAFT.introText = tpl.introText;
+  if(tpl.mentionsText) QUOTE_DRAFT.mentionsText = tpl.mentionsText;
   renderQuoteBuilder();
 }
-async function dqSaveAsTemplate(){
+function dqSaveAsTemplate(){
   captureCurrentTab();
   if(!QUOTE_DRAFT.hardware.length && !QUOTE_DRAFT.accessories.length){ flash('Ajoutez au moins un équipement avant d’enregistrer un modèle'); return; }
-  const name = prompt('Nom du modèle (ex : "Contrôle d’accès standard hôtel")');
-  if(!name || !name.trim()) return;
+  document.getElementById('modal-ct-2').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal2()" style="z-index:400">
+    <div class="modal-box" style="max-width:480px">
+      <div class="modal-head">
+        <div style="font-size:16px;font-weight:600">Enregistrer comme modèle</div>
+        <button class="btn btn-ghost btn-icon" onclick="closeModal2()">✕</button>
+      </div>
+      <div style="padding:0 20px 20px" class="form-grid">
+        <div class="ff"><label>Nom du modèle *</label><input id="dqt-name" placeholder="Ex : Contrôle d'accès standard hôtel"></div>
+        <div class="ff"><label>Secteur associé (optionnel)</label>
+          <select id="dqt-secteur"><option value="">— Générique, tous secteurs —</option>${SECTEURS.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('')}</select>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="dqt-with-text" checked style="accent-color:var(--am)">
+          <span style="font-size:13px">Inclure l'intro et les mentions actuelles du devis dans le modèle</span>
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="dqSubmitSaveAsTemplate()">Enregistrer</button>
+        <button class="btn btn-ghost" onclick="closeModal2()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+async function dqSubmitSaveAsTemplate(){
+  const name = (document.getElementById('dqt-name')||{value:''}).value.trim();
+  if(!name){ flash('Le nom est requis'); return; }
+  const secteur = (document.getElementById('dqt-secteur')||{value:''}).value;
+  const withText = (document.getElementById('dqt-with-text')||{checked:false}).checked;
   try{
     const lines = dqCollectManualLines(QUOTE_DRAFT).filter(l=>l.category==='materiel');
-    const r = await apiFetch('/wa/crmQuoteTemplate/create', {method:'POST', body:JSON.stringify({name:name.trim(), lines})});
+    const body = {name, lines, secteur: secteur||undefined,
+      introText: withText ? (QUOTE_DRAFT.introText||undefined) : undefined,
+      mentionsText: withText ? (QUOTE_DRAFT.mentionsText||undefined) : undefined};
+    const r = await apiFetch('/wa/crmQuoteTemplate/create', {method:'POST', body:JSON.stringify(body)});
     if(!r.ok) throw new Error('http');
     QUOTE_TEMPLATES = QUOTE_TEMPLATES||[]; QUOTE_TEMPLATES.push(await r.json());
+    closeModal2();
     flash('Modèle enregistré ✓');
   }catch(e){ flash('Erreur d’enregistrement du modèle'); }
+}
+
+// ── Pages d'intro du devis imprimable (29/10/2026) — gestion titre/secteurs/
+// actif/ordre des pages du deck pptx. Pas d'ajout/suppression de page ici
+// (jeu initial seedé côté serveur) — juste le réglage de QUELLES pages
+// sortent pour quel secteur, à affiner à la main (le deck d'origine n'a pas
+// de contenu réellement différencié par secteur, cf. schema.prisma). ──
+async function dqOpenPreambleManager(){
+  captureCurrentTab();
+  QUOTE_PREAMBLE_PAGES = null;
+  await dqLoadPreamblePagesIfNeeded();
+  renderPreambleManagerModal();
+}
+function renderPreambleManagerModal(){
+  const rows = (QUOTE_PREAMBLE_PAGES||[]).slice().sort((a,b)=>a.order-b.order).map((p,i,arr)=>`
+    <div class="db-row" style="align-items:flex-start;gap:10px;border:1px solid var(--bdr2,#e2dfd9);border-radius:8px;padding:8px;margin-bottom:8px;opacity:${p.active?1:.5}">
+      <img src="${esc(p.file)}" style="width:72px;border-radius:4px;border:1px solid var(--bdr2,#e2dfd9);flex-shrink:0">
+      <div style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0">
+        <input value="${esc(p.title)}" onchange="dqSavePreambleField('${p.id}','title',this.value)" style="width:100%;box-sizing:border-box;font-family:inherit;font-size:12px;font-weight:600;padding:6px 10px;border:0.5px solid var(--bdr2,#e2dfd9);border-radius:7px;background:var(--card,#fff);color:var(--tx,#1a1a1a)">
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${SECTEURS.map(s=>`<label style="display:flex;align-items:center;gap:4px;font-size:11px;border:1px solid var(--bdr2,#e2dfd9);border-radius:12px;padding:2px 8px;cursor:pointer"><input type="checkbox" ${p.secteurs.includes(s)?'checked':''} onchange="dqTogglePreambleSecteur('${p.id}','${esc(s)}',this.checked)">${esc(s)}</label>`).join('')}
+        </div>
+        <div style="font-size:10px;color:var(--mu)">${p.secteurs.length?'Limitée à ces secteurs':'Universelle — montrée pour tous les secteurs'}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+        <button class="btn btn-ghost btn-icon" title="Monter" ${i===0?'disabled':''} onclick="dqMovePreamblePage('${p.id}',-1)">↑</button>
+        <button class="btn btn-ghost btn-icon" title="Descendre" ${i===arr.length-1?'disabled':''} onclick="dqMovePreamblePage('${p.id}',1)">↓</button>
+        <label style="display:flex;align-items:center;gap:4px;font-size:10px;cursor:pointer"><input type="checkbox" ${p.active?'checked':''} onchange="dqSavePreambleField('${p.id}','active',this.checked)">Active</label>
+      </div>
+    </div>`).join('');
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop){closeModal();renderQuoteBuilder();}">
+    <div class="modal-box" style="max-width:640px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Pages d'intro du devis imprimable</div><button class="btn btn-ghost btn-icon" onclick="closeModal();renderQuoteBuilder()" style="margin-left:auto">✕</button></div>
+      <div class="log-empty" style="font-style:normal;margin-bottom:10px">Insérées avant le document lors de l'impression (sommaire généré automatiquement). Sans secteur coché = page universelle, montrée pour tous ; cochez un ou plusieurs secteurs pour la réserver à ceux-ci.</div>
+      <div style="max-height:52vh;overflow-y:auto">${rows || '<div class="log-empty">Aucune page.</div>'}</div>
+      <div class="modal-footer"><button class="btn btn-primary" onclick="closeModal();renderQuoteBuilder()">Fermer</button></div>
+    </div>
+  </div>`;
+}
+async function dqSavePreambleField(id, field, value){
+  const p = (QUOTE_PREAMBLE_PAGES||[]).find(x=>x.id===id); if(!p) return;
+  p[field] = value;
+  try{
+    const r = await apiFetch('/wa/crmQuotePreamblePage/update', {method:'POST', body:JSON.stringify({id, [field]:value})});
+    if(!r.ok) throw new Error('http');
+  }catch(e){ flash('Erreur d\'enregistrement'); }
+  renderPreambleManagerModal();
+}
+async function dqTogglePreambleSecteur(id, secteur, checked){
+  const p = (QUOTE_PREAMBLE_PAGES||[]).find(x=>x.id===id); if(!p) return;
+  const set = new Set(p.secteurs);
+  if(checked) set.add(secteur); else set.delete(secteur);
+  p.secteurs = [...set];
+  try{
+    const r = await apiFetch('/wa/crmQuotePreamblePage/update', {method:'POST', body:JSON.stringify({id, secteurs:p.secteurs})});
+    if(!r.ok) throw new Error('http');
+  }catch(e){ flash('Erreur d\'enregistrement'); }
+  renderPreambleManagerModal();
+}
+async function dqMovePreamblePage(id, dir){
+  const sorted = (QUOTE_PREAMBLE_PAGES||[]).slice().sort((a,b)=>a.order-b.order);
+  const idx = sorted.findIndex(p=>p.id===id);
+  const swapIdx = idx+dir;
+  if(idx<0 || swapIdx<0 || swapIdx>=sorted.length) return;
+  const a = sorted[idx], b = sorted[swapIdx];
+  const aOrder = a.order, bOrder = b.order;
+  a.order = bOrder; b.order = aOrder;
+  try{
+    await Promise.all([
+      apiFetch('/wa/crmQuotePreamblePage/update', {method:'POST', body:JSON.stringify({id:a.id, order:a.order})}),
+      apiFetch('/wa/crmQuotePreamblePage/update', {method:'POST', body:JSON.stringify({id:b.id, order:b.order})}),
+    ]);
+  }catch(e){ flash('Erreur d\'enregistrement'); }
+  renderPreambleManagerModal();
 }
 
 // ── Sauvegarde / cycle de vie ──
@@ -7455,32 +7591,84 @@ async function sendQuoteEmail(){
   renderQuoteBuilder();
 }
 
-function printQuote(){
+const DQ_BRAND_RED = '#a32d2d';
+const DQ_CAT_DOT = {materiel:'#0c76d9', service:'#c9860a', logiciel:'#7a5cf0', autre:'#5a8a2e'};
+
+/**
+ * Document imprimable (29/10/2026, "plus visuel" + pages d'intro pptx) —
+ * ouvre la fenêtre de popup EN PREMIER, de façon synchrone dans le handler
+ * de clic (sinon le navigateur bloque la popup une fois qu'un await est
+ * passé), puis remplit son contenu une fois les pages d'intro chargées.
+ * Reprend la charte du deck de présentation client (rouge Sesame, pied de
+ * page coordonnées) pour que le devis s'enchaîne visuellement avec les
+ * pages qui le précèdent plutôt que de rompre le style.
+ */
+async function printQuote(){
+  const w = window.open('', '_blank');
+  if(!w){ flash('Autorisez les popups pour imprimer le devis'); return; }
+  w.document.open();
+
   const q = QUOTE_DRAFT;
   const lines = dqAllLines(q);
   const totals = dqComputeTotals(lines, q.config, q.discountPct, q.vatPct, q.depositPct);
-  const rowsHtml = lines.filter(l=>!l.recurring).map(l=>`
-    <tr><td>${esc(l.label)}${l.description?`<div style="color:#888;font-size:11px;font-style:italic;margin-top:2px">${esc(l.description)}</div>`:''}</td>
+  const prospect = q.prospectId ? clients.find(c=>c.id===q.prospectId) : null;
+  const clientNom = prospect ? prospect.nom||'' : '';
+  const secteur = prospect ? prospect.secteur||'' : '';
+
+  await dqLoadPreamblePagesIfNeeded();
+  const preamble = dqPreamblePagesForSecteur(secteur);
+
+  const rowLine = l => `<tr><td><span class="catdot" style="background:${DQ_CAT_DOT[l.category||'materiel']||'#999'}"></span>${esc(l.label)}${l.description?`<div style="color:#888;font-size:11px;font-style:italic;margin-top:2px;margin-left:14px">${esc(l.description)}</div>`:''}</td>
     <td style="text-align:center">${l.qty}</td><td style="text-align:right">${l.unitPrice==null?'À chiffrer':fmtEUR(l.unitPrice)}</td>
-    <td style="text-align:right">${l.unitPrice==null?'—':fmtEUR(l.qty*l.unitPrice)}</td></tr>`).join('');
-  const rowsHtmlM = lines.filter(l=>l.recurring).map(l=>`
-    <tr><td>${esc(l.label)}</td><td style="text-align:center">${l.qty}</td>
-    <td style="text-align:right">${l.unitPrice==null?'À chiffrer':fmtEUR(l.unitPrice)}</td>
-    <td style="text-align:right">${l.unitPrice==null?'—':fmtEUR(l.qty*l.unitPrice)}</td></tr>`).join('');
+    <td style="text-align:right">${l.unitPrice==null?'—':fmtEUR(l.qty*l.unitPrice)}</td></tr>`;
+  const rowsHtml = lines.filter(l=>!l.recurring).map(rowLine).join('');
+  const rowsHtmlM = lines.filter(l=>l.recurring).map(rowLine).join('');
+
+  const preambleHtml = preamble.map(p=>`<div class="pp" id="pp-${p.id}"><img src="${esc(p.file)}" alt="${esc(p.title)}"></div>`).join('');
+  const sommaireHtml = preamble.length ? `<div class="sommaire-page">
+      <h1>Sommaire</h1>
+      <ol>${preamble.map((p,i)=>`<li><a href="#pp-${p.id}">${esc(p.title)}</a><span class="dots"></span><span>${i+1}</span></li>`).join('')}
+      <li><a href="#devis-section"><strong>Proposition commerciale</strong></a><span class="dots"></span><span>${preamble.length+1}</span></li></ol>
+    </div>` : '';
+
+  const footer = '<div class="pagefoot">SESAME-TECHNOLOGY.FR · 01 47 82 90 56 · SESAME TECHNOLOGY FRANCE, 1-3 BD CHARLES DE GAULLE, 92700 COLOMBES</div>';
+
   const html = '<!doctype html><html><head><meta charset="utf-8"><title>'+esc(q.number||'Devis')+'</title>'
-    +'<style>body{font-family:Arial,sans-serif;color:#1a1a1a;max-width:720px;margin:40px auto;padding:0 20px}'
-    +'h1{font-size:20px;margin-bottom:2px}.sub{color:#888;font-size:12px;margin-bottom:24px}'
-    +'.hd{display:flex;justify-content:space-between;margin-bottom:28px}'
-    +'table{width:100%;border-collapse:collapse;margin:16px 0}'
-    +'th{text-align:left;font-size:11px;text-transform:uppercase;color:#888;border-bottom:1px solid #ddd;padding:6px 4px}'
-    +'td{padding:8px 4px;border-bottom:1px solid #f0f0f0;font-size:13px}'
-    +'.totals{margin-top:12px;margin-left:auto;width:280px}.totals div{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}'
-    +'.totals .grand{font-weight:700;font-size:15px;border-top:1px solid #333;margin-top:6px;padding-top:8px}'
-    +'.notes{margin-top:28px;font-size:12px;color:#555;white-space:pre-wrap}@media print{body{margin:0 auto}}</style></head><body>'
-    +'<div class="hd"><div><h1>Sesame Technology</h1><div class="sub">Devis commercial</div></div>'
-    +'<div style="text-align:right"><div><strong>'+esc(q.number||'Brouillon')+'</strong></div><div class="sub">'+new Date().toLocaleDateString('fr-FR')+'</div></div></div>'
-    +'<div><strong>Client :</strong> '+esc(q.prospectId ? (clients.find(c=>c.id===q.prospectId)||{}).nom||'' : '')+'</div>'
-    +'<div><strong>Objet :</strong> '+esc(q.title)+'</div>'
+    +'<style>'
+    +'@page{margin:16mm 14mm}'
+    +'body{font-family:Arial,sans-serif;color:#1a1a1a;margin:0}'
+    +'.wrap{max-width:720px;margin:0 auto;padding:30px 20px}'
+    +'.pp{page-break-after:always;break-after:page;text-align:center;padding-top:6vh}'
+    +'.pp img{max-width:100%;max-height:85vh;border-radius:4px;box-shadow:0 2px 10px rgba(0,0,0,.12)}'
+    +'.sommaire-page{page-break-after:always;break-after:page;max-width:600px;margin:10vh auto 0;padding:0 20px}'
+    +'.sommaire-page h1{color:'+DQ_BRAND_RED+';font-size:26px;letter-spacing:1px;text-transform:uppercase;border-bottom:3px solid '+DQ_BRAND_RED+';padding-bottom:10px;margin-bottom:24px}'
+    +'.sommaire-page ol{list-style:none;margin:0;padding:0;counter-reset:som}'
+    +'.sommaire-page li{display:flex;align-items:baseline;gap:6px;padding:7px 0;font-size:14px}'
+    +'.sommaire-page a{color:#1a1a1a;text-decoration:none}'
+    +'.sommaire-page .dots{flex:1;border-bottom:1px dotted #bbb;margin-bottom:4px}'
+    +'.hd{display:flex;justify-content:space-between;align-items:center;background:'+DQ_BRAND_RED+';color:#fff;padding:18px 24px;margin:-30px -20px 24px}'
+    +'.hd h1{font-size:19px;margin:0;letter-spacing:.5px}.hd .sub{opacity:.85;font-size:11px;margin-top:2px}'
+    +'.hd .right{text-align:right}.hd .right strong{font-size:15px}'
+    +'.client-box{background:#f6f3ef;border-radius:8px;padding:12px 16px;margin-bottom:18px;font-size:13px}'
+    +'.client-box div+div{margin-top:3px}'
+    +'h3{color:'+DQ_BRAND_RED+';font-size:14px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid '+DQ_BRAND_RED+';padding-bottom:4px;margin:26px 0 4px}'
+    +'table{width:100%;border-collapse:collapse;margin:10px 0}'
+    +'th{text-align:left;font-size:10px;text-transform:uppercase;color:#888;border-bottom:1px solid #ddd;padding:6px 4px}'
+    +'td{padding:8px 4px;border-bottom:1px solid #f0f0f0;font-size:13px;vertical-align:top}'
+    +'.catdot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:7px}'
+    +'.totals{margin-top:12px;margin-left:auto;width:290px;background:#f6f3ef;border-radius:8px;padding:10px 16px}'
+    +'.totals div{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}'
+    +'.totals .grand{font-weight:700;font-size:15px;border-top:1px solid #ccc;margin-top:4px;padding-top:8px;color:'+DQ_BRAND_RED+'}'
+    +'.notes{margin-top:8px;font-size:12px;color:#555;white-space:pre-wrap}'
+    +'.pagefoot{text-align:center;font-size:9px;color:#aaa;letter-spacing:.3px;margin-top:34px;padding-top:10px;border-top:1px solid #eee}'
+    +'@media print{.pp{page-break-after:always}}'
+    +'</style></head><body>'
+    +sommaireHtml
+    +preambleHtml
+    +'<div class="wrap" id="devis-section">'
+    +'<div class="hd"><div><h1>SESAME TECHNOLOGY</h1><div class="sub">Proposition commerciale</div></div>'
+    +'<div class="right"><div><strong>'+esc(q.number||'Brouillon')+'</strong></div><div class="sub">'+new Date().toLocaleDateString('fr-FR')+'</div></div></div>'
+    +'<div class="client-box"><div><strong>Client :</strong> '+esc(clientNom)+'</div><div><strong>Objet :</strong> '+esc(q.title)+'</div></div>'
     +(q.introText?'<p>'+esc(q.introText)+'</p>':'')
     +'<h3>Investissement initial</h3><table><thead><tr><th>Prestation</th><th style="text-align:center">Qté</th><th style="text-align:right">Prix unitaire</th><th style="text-align:right">Total</th></tr></thead><tbody>'+rowsHtml+'</tbody></table>'
     +(rowsHtmlM?'<h3>Abonnement mensuel</h3><table><thead><tr><th>Prestation</th><th style="text-align:center">Qté</th><th style="text-align:right">Prix unitaire</th><th style="text-align:right">Total</th></tr></thead><tbody>'+rowsHtmlM+'</tbody></table>':'')
@@ -7494,11 +7682,11 @@ function printQuote(){
     +(q.mentionsText?'<h3>Mentions spécifiques</h3><div class="notes">'+esc(q.mentionsText).replace(/\n/g,'<br>')+'</div>':'')
     +(q.termsText?'<h3>Conditions commerciales</h3><div class="notes">'+esc(q.termsText).replace(/\n/g,'<br>')+'</div>':'')
     +'<h3>Bon pour accord</h3><div class="notes">Date, nom, qualité et signature du client :</div>'
-    +'</body></html>';
-  const w = window.open('', '_blank');
-  if(!w){ flash('Autorisez les popups pour imprimer le devis'); return; }
+    +footer
+    +'</div></body></html>';
+
   w.document.write(html); w.document.close(); w.focus();
-  setTimeout(function(){ w.print(); }, 300);
+  setTimeout(function(){ w.print(); }, 400);
 }
 
 // ── Rendu principal ──
@@ -7534,7 +7722,7 @@ function renderQuoteBuilder(){
       ${q._new?`<div class="ff" style="max-width:280px;margin-top:8px"><label>Partir d'un modèle (équipements, optionnel)</label>
         <select onchange="dqApplyTemplate(this)" onfocus="dqLoadTemplatesIfNeeded().then(()=>renderQuoteBuilder())">
           <option value="">— Choisir un modèle —</option>
-          ${(QUOTE_TEMPLATES||[]).map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')}
+          ${dqSortedTemplates(q).map(t=>`<option value="${t.id}">${esc(t.name)}${t.secteur?' — '+esc(t.secteur)+(t._match?' ★ recommandé':''):''}</option>`).join('')}
         </select></div>`:''}
     </div>
 
@@ -7674,7 +7862,9 @@ function dqRenderDocumentTab(q, lines){
       + `</div>`;
   };
   const totals = dqComputeTotals(lines, q.config, q.discountPct, q.vatPct, q.depositPct);
-  const clientNom = q.prospectId ? (clients.find(c=>c.id===q.prospectId)||{}).nom||'' : '';
+  const prospectForDoc = q.prospectId ? clients.find(c=>c.id===q.prospectId) : null;
+  const clientNom = prospectForDoc ? prospectForDoc.nom||'' : '';
+  const clientSecteur = prospectForDoc ? prospectForDoc.secteur||'' : '';
   return `
     <h3>Document client éditable</h3>
     <small style="color:var(--mu)">Libellés et prix modifiables directement, ligne par ligne, dans chaque bloc ci-dessous.</small>
@@ -7684,6 +7874,10 @@ function dqRenderDocumentTab(q, lines){
       <div>${esc(q.title)}</div>
     </div>
     <label>Introduction client<div id="dq-intro" class="sq-edit" contenteditable="true" onblur="dqRerender()">${esc(q.introText)}</div></label>
+    <div class="db-row-between" style="margin:14px 0 4px"><h4 style="margin:0">Pages d'intro du devis imprimable (présentation Sesame)</h4>
+      <button class="sq-clause" type="button" style="border-style:dashed" onclick="dqOpenPreambleManager()">⚙ Gérer les pages</button>
+    </div>
+    <small style="color:var(--mu)">Insérées automatiquement avant le document lors de l'impression, avec un sommaire — pages universelles + celles propres au secteur du client (${esc(clientSecteur||'non renseigné')}).</small>
     ${DOC_BLOCKS.map(b=>groupHtml(b.cat,b.label,b.color)).join('')}
     <hr class="quote-sep">
     <div class="quote-total-row grand"><strong>Initial HT après remise</strong><strong>${fmtEUR(totals.totalHT)}</strong></div>

@@ -691,6 +691,45 @@ async function main() {
     if (!existing) await prisma.crmSectorOption.create({ data: { label, order: i } });
   }
 
+  // Pages d'intro du devis imprimable (deck pptx client, 29/10/2026) —
+  // identifiées par `file` (idempotent, jamais réécrasées si un admin a déjà
+  // modifié titre/secteurs/ordre depuis le panneau de gestion). Toutes
+  // universelles (secteurs:[]) au départ — le deck d'origine est très
+  // majoritairement générique/hôtelier, l'affectation par secteur se fait à
+  // la main ensuite, pas de déduction automatique de pertinence.
+  const QUOTE_PREAMBLE_PAGES: { file: string; title: string }[] = [
+    { file: "/quote-preamble/page-01.jpg", title: "Couverture" },
+    { file: "/quote-preamble/page-02.jpg", title: "Qui sommes-nous" },
+    { file: "/quote-preamble/page-03.jpg", title: "Ils nous font confiance" },
+    { file: "/quote-preamble/page-04.jpg", title: "Nos partenaires" },
+    { file: "/quote-preamble/page-05.jpg", title: "Parcours client" },
+    { file: "/quote-preamble/page-06.jpg", title: "Nos produits" },
+    { file: "/quote-preamble/page-07.jpg", title: "Sesame Oneway" },
+    { file: "/quote-preamble/page-08.jpg", title: "Sesame Platine" },
+    { file: "/quote-preamble/page-09.jpg", title: "Sesame Digit" },
+    { file: "/quote-preamble/page-10.jpg", title: "On s'installe partout" },
+    { file: "/quote-preamble/page-11.jpg", title: "Nos services" },
+    { file: "/quote-preamble/page-12.jpg", title: "Le back-office" },
+    { file: "/quote-preamble/page-13.jpg", title: "Clé digitale : QR code" },
+    { file: "/quote-preamble/page-14.jpg", title: "Clé digitale : code" },
+    { file: "/quote-preamble/page-15.jpg", title: "Mobile check-in intelligent" },
+    { file: "/quote-preamble/page-16.jpg", title: "Communication avec vos clients" },
+    { file: "/quote-preamble/page-17.jpg", title: "Boutique en ligne" },
+    { file: "/quote-preamble/page-18.jpg", title: "Livret digital" },
+    { file: "/quote-preamble/page-19.jpg", title: "Gestion des demandes clients" },
+    { file: "/quote-preamble/page-20.jpg", title: "Sesame Wallet" },
+    { file: "/quote-preamble/page-21.jpg", title: "Sesame Eco" },
+    { file: "/quote-preamble/page-22.jpg", title: "Gestion des demandes clients — en détail" },
+    { file: "/quote-preamble/page-23.jpg", title: "Sesame Wallet — en détail" },
+    { file: "/quote-preamble/page-24.jpg", title: "Casier Frais (partenariat)" },
+    { file: "/quote-preamble/page-26.jpg", title: "Merci" },
+  ];
+  for (let i = 0; i < QUOTE_PREAMBLE_PAGES.length; i++) {
+    const p = QUOTE_PREAMBLE_PAGES[i];
+    const existing = await prisma.crmQuotePreamblePage.findFirst({ where: { file: p.file } });
+    if (!existing) await prisma.crmQuotePreamblePage.create({ data: { file: p.file, title: p.title, order: i } });
+  }
+
   console.log("Seed terminé ✓");
 }
 

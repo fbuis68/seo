@@ -2658,8 +2658,48 @@ model CrmQuoteTemplate {
   lines Json    @default("[]") // même forme que CrmQuote.lines
   notes String?
 
+  // Secteur associé (29/10/2026, "modèles de devis par secteur") — null =
+  // modèle générique, proposé pour tous. Sert uniquement à trier/mettre en
+  // avant ce modèle en premier dans le sélecteur quand le prospect du devis
+  // a ce même secteur (cf. dqApplyTemplate) — jamais appliqué sans action
+  // explicite de l'admin, pour ne jamais écraser un devis en cours sans
+  // confirmation.
+  secteur      String?
+  // Texte d'intro / mentions par défaut du modèle — appliqués en même temps
+  // que les lignes matériel quand on choisit ce modèle (avant, seules les
+  // lignes étaient reprises).
+  introText    String? @db.Text
+  mentionsText String? @db.Text
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Pages d'intro du devis imprimable (29/10/2026, demande client) — reprises
+// d'un deck de présentation (pptx) fourni par le client, converties en
+// images (le deck n'a pas de texte réellement éditable : titres/visuels
+// gravés dans l'image à l'export). Insérées avant le contenu du devis dans
+// printQuote(), avec un sommaire généré à partir de `title` + `order`.
+// `secteurs` vide = page universelle (montrée pour tous les secteurs) ;
+// sinon limitée aux secteurs listés — permet de constituer, à terme, un jeu
+// de pages différent par secteur (cf. demande du 29/10) sans dépendre d'un
+// contenu réellement différencié par secteur dans le deck actuel (très
+// majoritairement générique/hôtelier) : à affiner manuellement ici au fil
+// de l'eau par un admin Sesame, pas une déduction automatique.
+// ─────────────────────────────────────────────────────────────────────────
+model CrmQuotePreamblePage {
+  id       String   @id @default(cuid())
+  order    Int      @default(0)
+  title    String
+  file     String // chemin public, ex: "/quote-preamble/page-07.jpg"
+  secteurs String[] @default([])
+  active   Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([order])
 }
 
 // Bibliothèque de clauses réutilisables pour l'onglet Document du devis
