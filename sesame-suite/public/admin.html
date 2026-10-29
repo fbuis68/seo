@@ -10338,6 +10338,7 @@ function emlCloseTemplateModal(){
 }
 
 async function emlSaveTemplate(id){
+  var category = document.getElementById('eml-tpl-category').value;
   var body = {
     channel: document.getElementById('eml-tpl-channel').value,
     key: document.getElementById('eml-tpl-key').value.trim().toLowerCase(),
@@ -10346,8 +10347,17 @@ async function emlSaveTemplate(id){
     bodyHtml: document.getElementById('eml-tpl-body').value,
     whatsappContentSid: document.getElementById('eml-tpl-sid').value.trim(),
     rcsModelToken: document.getElementById('eml-tpl-rcs-token') ? document.getElementById('eml-tpl-rcs-token').value.trim() : '',
-    category: document.getElementById('eml-tpl-category').value,
+    category: category,
     senderIdentityId: document.getElementById('eml-tpl-sender') ? (document.getElementById('eml-tpl-sender').value || null) : null,
+    // Catégorie "Devis" = portée CRM globale uniquement (le devis part de
+    // Sesame vers un prospect, jamais d'un établissement) — sans ce scope,
+    // le modèle se sauvait sous l'entité hôtel actuellement affichée dans
+    // ce panneau et routes/crmQuote.ts (qui interroge toujours entityId:
+    // null) ne le retrouvait jamais ("Aucun modèle email 'devis-envoi'"
+    // alors qu'un modèle existait bel et bien, juste sous le mauvais
+    // entityId) — bug corrigé le 29/10/2026. Même mécanisme que
+    // public/crm.html (cf. saveTemplate(), scope:'crm' systématique).
+    scope: category==='devis' ? 'crm' : undefined,
   };
   if(!body.key || !body.name || (body.channel!=='rcs' && !body.bodyHtml) || (body.channel==='email' && !body.subject) || (body.channel==='whatsapp' && !body.whatsappContentSid) || (body.channel==='rcs' && !body.rcsModelToken)){ toast('Tous les champs sont requis'); return; }
   try{
