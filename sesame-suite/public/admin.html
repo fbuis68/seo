@@ -1770,7 +1770,7 @@ overflow:hidden
     <button class="btn btn-s" onclick="rmImportLockers()"><i class="ti ti-building-warehouse"></i> Importer les casiers</button>
     <button class="btn btn-s" onclick="rmBulkHideCasiers()"><i class="ti ti-eye-off"></i> Masquer les casiers au client</button>
     <button class="btn btn-s" onclick="showPan('plan')"><i class="ti ti-map"></i> Vue plan</button>
-    <button class="btn btn-s" onclick="window.open('sesame_menage.html')"><i class="ti ti-device-mobile"></i> App ménage</button>
+    <button class="btn btn-s" onclick="window.open('menage.html')"><i class="ti ti-device-mobile"></i> App ménage</button>
     <div style="flex:1"></div>
     <!-- Filtre / recherche -->
     <input type="text" id="rmSearch" placeholder="Rechercher un accès…"
@@ -9846,28 +9846,31 @@ async function sidDelete(id){
 }
 
 /**
- * Verrouille les cartes SMS et WhatsApp du panneau "Canaux" si le module
- * "sms" n'est pas souscrit — l'email (SMTP), lui, reste toujours
- * accessible sans souscription formelle. Contrairement au reste de l'app
- * (gate au niveau du lien de nav, cf. MODULE_GATE_MAP/refreshNavState),
- * ici seules deux cartes À L'INTÉRIEUR d'un panneau par ailleurs
- * accessible sont concernées — mécanique dédiée, réutilise juste
- * showModuleLockedModal('sms') pour le contenu de la modale de déblocage.
+ * Verrouille la carte SMS si le module "sms" n'est pas souscrit, et la
+ * carte WhatsApp si le module "whatsapp" ne l'est pas — deux modules
+ * distincts depuis le 29/10/2026 (auparavant un seul "sms" combiné,
+ * cf. ONBOARDING_MODULES côté serveur). L'email (SMTP), lui, reste
+ * toujours accessible sans souscription formelle. Contrairement au reste
+ * de l'app (gate au niveau du lien de nav, cf.
+ * MODULE_GATE_MAP/refreshNavState), ici chaque carte À L'INTÉRIEUR d'un
+ * panneau par ailleurs accessible est verrouillée indépendamment —
+ * mécanique dédiée, réutilise juste showModuleLockedModal() pour le
+ * contenu de la modale de déblocage.
  */
 function applyChannelModuleLock(){
-  var locked = !!(MY_MODULES && MY_MODULES.indexOf('sms')===-1);
-  ['chan-sms-card','chan-wa-card'].forEach(function(id){
-    var card = document.getElementById(id);
+  [{id:'chan-sms-card', key:'sms', title:'Module SMS'}, {id:'chan-wa-card', key:'whatsapp', title:'Module WhatsApp'}].forEach(function(cfg){
+    var card = document.getElementById(cfg.id);
     if(!card) return;
+    var locked = !!(MY_MODULES && MY_MODULES.indexOf(cfg.key)===-1);
     var overlay = card.querySelector('.card-lock-overlay');
     if(locked){
       if(!overlay){
         overlay = document.createElement('div');
         overlay.className = 'card-lock-overlay';
         overlay.innerHTML = '<div class="clo-ico"><i class="ti ti-lock"></i></div>'
-          + '<div class="clo-title">Module SMS &amp; WhatsApp</div>'
-          + '<div class="clo-desc">'+esc(HELP_TEXT.sms||'')+'</div>'
-          + '<button class="btn btn-p btn-s" style="margin-top:6px" onclick="showModuleLockedModal(\'sms\')"><i class="ti ti-lock-open"></i> Débloquer</button>';
+          + '<div class="clo-title">'+esc(cfg.title)+'</div>'
+          + '<div class="clo-desc">'+esc(HELP_TEXT[cfg.key]||'')+'</div>'
+          + '<button class="btn btn-p btn-s" style="margin-top:6px" onclick="showModuleLockedModal(\''+cfg.key+'\')"><i class="ti ti-lock-open"></i> Débloquer</button>';
         card.appendChild(overlay);
       }
     } else if(overlay){
@@ -13775,8 +13778,10 @@ var SUB_MODULES = [
   {k:'roomservice', label:'Boutique',                 required:false, defaultPrice:12},
   {k:'crm',         label:'CRM & Marketing',          required:false, defaultPrice:25},
   {k:'wallet',      label:'Wallet',                   required:false, defaultPrice:15},
-  {k:'sms',         label:'SMS & WhatsApp',           required:false, defaultPrice:12},
+  {k:'sms',         label:'SMS',                       required:false, defaultPrice:30},
+  {k:'whatsapp',    label:'WhatsApp',                  required:false, defaultPrice:30},
   {k:'bookingEngine', label:'Réservation en ligne',   required:false, defaultPrice:20},
+  {k:'menage',      label:'Ménage',                    required:false, defaultPrice:30},
 ];
 
 var SUB_CACHE = [];
@@ -17809,13 +17814,15 @@ var MODULE_GATE_MAP = {
   orders: 'roomservice',
   wallet: 'wallet',
   bookingEngine: 'bookingEngine',
-  // "sms" n'est PAS un data-pan de la nav — le panneau "Canaux" reste
-  // toujours accessible (l'email n'est pas concerné par ce module), seules
-  // les cartes SMS et WhatsApp qu'il contient sont verrouillées
-  // individuellement (cf. applyChannelModuleLock). Cette entrée sert
-  // uniquement à réutiliser showModuleLockedModal('sms') depuis leur bouton
-  // de déblocage, sans dupliquer sa logique.
+  // "sms"/"whatsapp" ne sont PAS des data-pan de la nav — le panneau
+  // "Canaux" reste toujours accessible (l'email n'est pas concerné par ces
+  // modules), seules les cartes SMS et WhatsApp qu'il contient sont
+  // verrouillées individuellement, chacune pour son propre module (cf.
+  // applyChannelModuleLock). Ces entrées servent uniquement à réutiliser
+  // showModuleLockedModal('sms'|'whatsapp') depuis leur bouton de
+  // déblocage respectif, sans dupliquer la logique de la modale.
   sms: 'sms',
+  whatsapp: 'whatsapp',
 };
 
 var HELP_TEXT = {
@@ -17843,8 +17850,10 @@ var HELP_TEXT = {
   automation: "Programmez des messages automatiques déclenchés par un événement ou une récurrence, sans intervention manuelle.",
   preview: "Prévisualisez exactement ce que vos clients voient sur leur mobile, avant de publier vos changements.",
   wallet: "Générez un pass Apple Wallet / Google Wallet pour chaque réservation — le client l'ajoute à son téléphone et y retrouve ses dates de séjour, sa chambre et son code-barres d'accès.",
-  sms: "Envoyez des SMS et des messages WhatsApp à vos clients (confirmations, rappels, modèles automatisés) via Twilio, Infobip ou SMSPartner.",
+  sms: "Envoyez des SMS à vos clients (confirmations, rappels, modèles automatisés) via Twilio, Infobip ou SMSPartner.",
+  whatsapp: "Envoyez des messages WhatsApp à vos clients (confirmations, rappels, modèles automatisés) via Twilio ou Infobip.",
   bookingEngine: "Une page publique où un visiteur choisit ses dates, voit les chambres disponibles et paie directement en ligne (chambre + taxe de séjour) — nécessite le module Paiement en ligne configuré et activé.",
+  menage: "Suivez les statuts de chambre et affectez les tâches de ménage à votre équipe depuis l'app dédiée (menage.html), sur tablette ou mobile.",
 };
 
 var MY_MODULES = null; // null = pas de restriction (établissement sans souscription formelle) ; sinon string[]

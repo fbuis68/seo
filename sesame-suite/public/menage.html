@@ -691,6 +691,21 @@ async function mgBoot(token, entityCode, hotelName){
   document.getElementById('app').style.display='flex';
   if(hotelName) document.getElementById('hn').textContent = hotelName;
 
+  // Module "Ménage" (29/10/2026) — même convention "soft gate" que
+  // admin.html : modules===null (pas de souscription formelle enregistrée,
+  // ex. établissement provisionné manuellement) ne bloque JAMAIS rien ;
+  // seul un modules explicite n'incluant pas "menage" verrouille l'app.
+  try{
+    var rs = await mgApiFetch('/wa/subscription/mine');
+    if(rs.ok){
+      var subData = await rs.json();
+      if(Array.isArray(subData.modules) && subData.modules.indexOf('menage')===-1){
+        mgShowModuleLocked();
+        return;
+      }
+    }
+  }catch(e){ /* best effort — un souci réseau ne doit pas bloquer l'accès */ }
+
   try{
     var r = await mgApiFetch('/wa/entityModuleConfig/list');
     if(r.status===401 || r.status===403){ mgLogout(); return; }
@@ -718,6 +733,17 @@ async function mgBoot(token, entityCode, hotelName){
   MG_POLL = setInterval(function(){
     if(!document.getElementById('sheetBg').classList.contains('show')) mgLoadTasks();
   }, 30000);
+}
+
+/** Verrouille l'app si le module "Ménage" n'est pas souscrit (cf. mgBoot). */
+function mgShowModuleLocked(){
+  document.getElementById('app').innerHTML =
+    '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:30px;text-align:center;gap:14px">'
+    + '<i class="ti ti-lock" style="font-size:40px;color:#F39C12"></i>'
+    + '<div style="font-size:17px;font-weight:700">Module Ménage non activé</div>'
+    + '<div style="font-size:13px;color:#777;max-width:340px">Cet établissement n\'a pas souscrit au module Ménage. Contactez votre interlocuteur Sesame pour l\'activer.</div>'
+    + '<button class="btn" onclick="mgLogout()" style="margin-top:6px">Se déconnecter</button>'
+    + '</div>';
 }
 
 // ═══════════════════════════════════════════════ DONNÉES

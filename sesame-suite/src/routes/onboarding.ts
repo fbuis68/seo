@@ -28,8 +28,19 @@ export const ONBOARDING_MODULES = [
   { k: "roomservice", ico: "ti-bell", label: "Room Service", desc: "Commande de produits depuis la chambre", required: false, price: 12 },
   { k: "crm", ico: "ti-address-book", label: "CRM & Marketing", desc: "Base clients, campagnes Email/SMS/WhatsApp", required: false, price: 25 },
   { k: "wallet", ico: "ti-wallet", label: "Wallet", desc: "Pass Apple Wallet / Google Wallet pour chaque réservation (EldoWallet)", required: false, price: 15 },
-  { k: "sms", ico: "ti-message", label: "SMS & WhatsApp", desc: "Envoi de SMS et de messages WhatsApp aux clients (Twilio, Infobip, SMSPartner…)", required: false, price: 12 },
+  // SMS et WhatsApp scindés en deux modules distincts (29/10/2026, demande
+  // client) — auparavant un seul module "sms" combiné à 12€. Les abonnés
+  // existants sur ce module combiné gardent les deux canaux sans
+  // changement de prix (cf. scripts/backfill-whatsapp-menage-modules.ts) —
+  // seuls les nouveaux les choisissent séparément à l'inscription.
+  { k: "sms", ico: "ti-message", label: "SMS", desc: "Envoi de SMS aux clients (Twilio, Infobip, SMSPartner…)", required: false, price: 30 },
+  { k: "whatsapp", ico: "ti-brand-whatsapp", label: "WhatsApp", desc: "Envoi de messages WhatsApp aux clients (Twilio, Infobip…)", required: false, price: 30 },
   { k: "bookingEngine", ico: "ti-calendar-plus", label: "Réservation en ligne", desc: "Page publique de réservation : chambres disponibles, coordonnées client et paiement en ligne (chambre + taxe de séjour)", required: false, price: 20 },
+  // Module "Ménage" (29/10/2026) — app staff dédiée (menage.html), pas
+  // gardiée avant ce module. Les établissements déjà actifs sont
+  // "grand-périsés" (accès conservé sans surcoût, cf. script de backfill
+  // ci-dessus) — seuls les nouveaux établissements le paient dès le départ.
+  { k: "menage", ico: "ti-broom", label: "Ménage", desc: "Suivi des tâches de ménage par chambre, statuts et affectation du personnel (app dédiée menage.html)", required: false, price: 30 },
 ] as const;
 
 export const MODULE_KEYS = new Set(ONBOARDING_MODULES.map((m) => m.k));
