@@ -2491,6 +2491,13 @@ model CrmQuote {
   signToken String?            @unique
   signature CrmQuoteSignature?
 
+  // Documents de la bibliothèque (CrmDocument) choisis pour être joints à
+  // l'envoi de CE devis (29/10/2026) — ids simples, pas de relation Prisma
+  // formelle (un document peut être retiré de la bibliothèque sans casser
+  // les devis qui le référençaient déjà ; cf. crmQuote.ts sendEmail, qui
+  // ignore silencieusement un id devenu introuvable).
+  attachedDocumentIds String[] @default([])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -2676,25 +2683,30 @@ model CrmQuoteTemplate {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Pages d'intro du devis imprimable (29/10/2026, demande client) — reprises
-// d'un deck de présentation (pptx) fourni par le client, converties en
-// images (le deck n'a pas de texte réellement éditable : titres/visuels
-// gravés dans l'image à l'export). Insérées avant le contenu du devis dans
-// printQuote(), avec un sommaire généré à partir de `title` + `order`.
-// `secteurs` vide = page universelle (montrée pour tous les secteurs) ;
-// sinon limitée aux secteurs listés — permet de constituer, à terme, un jeu
-// de pages différent par secteur (cf. demande du 29/10) sans dépendre d'un
-// contenu réellement différencié par secteur dans le deck actuel (très
-// majoritairement générique/hôtelier) : à affiner manuellement ici au fil
-// de l'eau par un admin Sesame, pas une déduction automatique.
+// Bibliothèque documentaire (29/10/2026, demande client) — remplace la
+// précédente approche "pages insérées automatiquement dans le devis
+// imprimable" : un document (ex. présentation Sesame, fiche produit, CGV…)
+// est désormais un objet autonome, géré à part (panneau "Bibliothèque
+// documentaire", hors du devis), que l'on choisit ou non de joindre en
+// pièce jointe à l'envoi d'un devis précis (cf. CrmQuote.attachedDocumentIds
+// + extraAttachments dans lib/messaging.ts). Stocké en base en base64,
+// même convention que CrmSignatureRequest.fileContentBase64 — pas de
+// fichier sur disque, pour rester gérable depuis l'admin sans accès serveur.
+// `secteurs` vide = document universel (proposé pour tous) ; sinon mis en
+// avant uniquement pour les secteurs listés — simple aide au tri, jamais un
+// filtrage strict (l'admin reste libre de joindre n'importe quel document à
+// n'importe quel devis).
 // ─────────────────────────────────────────────────────────────────────────
-model CrmQuotePreamblePage {
-  id       String   @id @default(cuid())
-  order    Int      @default(0)
-  title    String
-  file     String // chemin public, ex: "/quote-preamble/page-07.jpg"
-  secteurs String[] @default([])
-  active   Boolean  @default(true)
+model CrmDocument {
+  id                String   @id @default(cuid())
+  title             String
+  description       String?  @db.Text
+  fileName          String
+  fileMimeType      String
+  fileContentBase64 String   @db.Text
+  secteurs          String[] @default([])
+  active            Boolean  @default(true)
+  order             Int      @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

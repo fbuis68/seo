@@ -595,6 +595,7 @@ svg.tr-chart{display:block;width:100%;height:auto;min-width:640px}
   <div class="nav-item" id="n-questionnaires" onclick="showQuestionnaires()"><div class="nav-ico">▤</div> Questionnaires</div>
   <div class="nav-item" id="n-scoring" onclick="showScoringPanel()"><div class="nav-ico">⚡</div> Scoring</div>
   <div class="nav-item" id="n-produits" onclick="showCrmProducts()"><div class="nav-ico">◫</div> Produits</div>
+  <div class="nav-item" id="n-documents" onclick="showDocumentLibrary()"><div class="nav-ico">▦</div> Bibliothèque documentaire</div>
   <div class="nav-item" id="n-crmusers" onclick="showCrmUsers()" style="display:none"><div class="nav-ico">◉</div> Utilisateurs CRM</div>
 </div>
 
@@ -6958,22 +6959,46 @@ async function dqLoadClausesIfNeeded(){
   catch(e){ CRM_CLAUSES = []; }
 }
 
-// Pages d'intro du devis imprimable (29/10/2026) — deck pptx client converti
-// en images, cf. printQuote() pour l'insertion effective et le modèle
-// CrmQuotePreamblePage pour la logique de filtrage par secteur.
-let QUOTE_PREAMBLE_PAGES = null;
-async function dqLoadPreamblePagesIfNeeded(){
-  if(QUOTE_PREAMBLE_PAGES) return;
-  try{ const r = await apiFetch('/wa/crmQuotePreamblePage/list'); QUOTE_PREAMBLE_PAGES = r.ok ? await r.json() : []; }
-  catch(e){ QUOTE_PREAMBLE_PAGES = []; }
+// Bibliothèque documentaire (29/10/2026) — documents gérés à part (panneau
+// "Bibliothèque documentaire", hors devis), choisis au cas par cas pour
+// être joints à l'envoi d'un devis précis (cf. attachedDocumentIds,
+// section "Documents à joindre" de l'onglet Document).
+let CRM_DOCUMENTS = null;
+async function dqLoadDocumentLibraryIfNeeded(){
+  if(CRM_DOCUMENTS) return;
+  try{ const r = await apiFetch('/wa/crmDocument/list'); CRM_DOCUMENTS = r.ok ? await r.json() : []; }
+  catch(e){ CRM_DOCUMENTS = []; }
 }
-/** Pages effectivement retenues pour un secteur donné — universelles
- * (secteurs:[]) + celles explicitement affectées à ce secteur, triées par
- * ordre, actives seulement. */
-function dqPreamblePagesForSecteur(secteur){
-  return (QUOTE_PREAMBLE_PAGES||[])
-    .filter(p=>p.active && (!p.secteurs.length || (secteur && p.secteurs.includes(secteur))))
-    .sort((a,b)=>a.order-b.order);
+/** Section "Documents à joindre" de l'onglet Document — cases à cocher sur
+ * la bibliothèque (cf. showDocumentLibrary()), état stocké directement dans
+ * QUOTE_DRAFT.attachedDocumentIds, envoyé à l'email du devis (cf.
+ * routes/crmQuote.ts sendEmail → extraAttachments). Chargement paresseux au
+ * premier rendu de l'onglet, même principe que "Partir d'un modèle". */
+function dqDocumentLibrarySectionHtml(q, clientSecteur){
+  if(CRM_DOCUMENTS===null){
+    dqLoadDocumentLibraryIfNeeded().then(()=>{ if(QUOTE_TAB==='document') renderQuoteBuilder(); });
+    return `<div class="db-row-between" style="margin:14px 0 4px"><h4 style="margin:0">Documents à joindre à l'envoi</h4></div><small style="color:var(--mu)">Chargement…</small>`;
+  }
+  const docs = (CRM_DOCUMENTS||[]).filter(d=>d.active);
+  const rows = docs.map(d=>{
+    const checked = (q.attachedDocumentIds||[]).includes(d.id);
+    const matches = clientSecteur && d.secteurs.includes(clientSecteur);
+    return `<label style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;cursor:pointer">
+      <input type="checkbox" ${checked?'checked':''} style="margin-top:2px" onchange="dqToggleAttachedDocument('${d.id}',this.checked)">
+      <span><strong>${esc(d.title)}</strong>${matches?' <span class="tag t-green" style="font-size:10px">recommandé '+esc(clientSecteur)+'</span>':''}${d.description?'<div style="font-size:11px;color:var(--mu)">'+esc(d.description)+'</div>':''}</span>
+    </label>`;
+  }).join('');
+  return `<div class="db-row-between" style="margin:14px 0 4px"><h4 style="margin:0">Documents à joindre à l'envoi</h4>
+      <button class="sq-clause" type="button" style="border-style:dashed" onclick="showDocumentLibrary()">⚙ Gérer la bibliothèque</button>
+    </div>
+    <small style="color:var(--mu)">Joints à l'email lors de l'envoi du devis — rien n'est ajouté automatiquement.</small>
+    <div style="margin-top:6px">${rows || '<div class="log-empty">Aucun document dans la bibliothèque.</div>'}</div>`;
+}
+function dqToggleAttachedDocument(id, checked){
+  const q = QUOTE_DRAFT;
+  const set = new Set(q.attachedDocumentIds||[]);
+  if(checked) set.add(id); else set.delete(id);
+  q.attachedDocumentIds = [...set];
 }
 const DQ_DEFAULT_INTRO = "Nous vous proposons une solution de gestion des accès adaptée à votre établissement, avec fourniture des équipements et accompagnement à la mise en service.";
 const DQ_DEFAULT_TERMS = "Validité : 30 jours. Solde à la livraison. Intervention sous réserve de validation technique et des prérequis chantier. CGV Sesame Technology à joindre dans leur version validée.";
@@ -7067,6 +7092,7 @@ async function openQuoteBuilder(id){
       custom:[], config:dqDefaultConfig(),
       introText:DQ_DEFAULT_INTRO, mentionsText:'', termsText:DQ_DEFAULT_TERMS,
       discountPct:0, vatPct:20, depositPct:65, _new:true,
+      attachedDocumentIds: [],
     };
   }
   bc([{label:'Devis', fn:'showDevisList()'}, {label: QUOTE_DRAFT._new?'Nouveau devis':QUOTE_DRAFT.number}]);
@@ -7100,6 +7126,7 @@ function dqFromServer(q){
     hardware, accessories, mods, custom:customLines, config,
     introText:q.introText||DQ_DEFAULT_INTRO, mentionsText:q.mentionsText||'', termsText:q.termsText||DQ_DEFAULT_TERMS,
     discountPct:q.discountPct, vatPct:q.vatPct, depositPct:q.depositPct, _new:false,
+    attachedDocumentIds: q.attachedDocumentIds||[],
   };
 }
 
@@ -7413,80 +7440,6 @@ async function dqSubmitSaveAsTemplate(){
   }catch(e){ flash('Erreur d’enregistrement du modèle'); }
 }
 
-// ── Pages d'intro du devis imprimable (29/10/2026) — gestion titre/secteurs/
-// actif/ordre des pages du deck pptx. Pas d'ajout/suppression de page ici
-// (jeu initial seedé côté serveur) — juste le réglage de QUELLES pages
-// sortent pour quel secteur, à affiner à la main (le deck d'origine n'a pas
-// de contenu réellement différencié par secteur, cf. schema.prisma). ──
-async function dqOpenPreambleManager(){
-  captureCurrentTab();
-  QUOTE_PREAMBLE_PAGES = null;
-  await dqLoadPreamblePagesIfNeeded();
-  renderPreambleManagerModal();
-}
-function renderPreambleManagerModal(){
-  const rows = (QUOTE_PREAMBLE_PAGES||[]).slice().sort((a,b)=>a.order-b.order).map((p,i,arr)=>`
-    <div class="db-row" style="align-items:flex-start;gap:10px;border:1px solid var(--bdr2,#e2dfd9);border-radius:8px;padding:8px;margin-bottom:8px;opacity:${p.active?1:.5}">
-      <img src="${esc(p.file)}" style="width:72px;border-radius:4px;border:1px solid var(--bdr2,#e2dfd9);flex-shrink:0">
-      <div style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0">
-        <input value="${esc(p.title)}" onchange="dqSavePreambleField('${p.id}','title',this.value)" style="width:100%;box-sizing:border-box;font-family:inherit;font-size:12px;font-weight:600;padding:6px 10px;border:0.5px solid var(--bdr2,#e2dfd9);border-radius:7px;background:var(--card,#fff);color:var(--tx,#1a1a1a)">
-        <div style="display:flex;flex-wrap:wrap;gap:6px">
-          ${SECTEURS.map(s=>`<label style="display:flex;align-items:center;gap:4px;font-size:11px;border:1px solid var(--bdr2,#e2dfd9);border-radius:12px;padding:2px 8px;cursor:pointer"><input type="checkbox" ${p.secteurs.includes(s)?'checked':''} onchange="dqTogglePreambleSecteur('${p.id}','${esc(s)}',this.checked)">${esc(s)}</label>`).join('')}
-        </div>
-        <div style="font-size:10px;color:var(--mu)">${p.secteurs.length?'Limitée à ces secteurs':'Universelle — montrée pour tous les secteurs'}</div>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
-        <button class="btn btn-ghost btn-icon" title="Monter" ${i===0?'disabled':''} onclick="dqMovePreamblePage('${p.id}',-1)">↑</button>
-        <button class="btn btn-ghost btn-icon" title="Descendre" ${i===arr.length-1?'disabled':''} onclick="dqMovePreamblePage('${p.id}',1)">↓</button>
-        <label style="display:flex;align-items:center;gap:4px;font-size:10px;cursor:pointer"><input type="checkbox" ${p.active?'checked':''} onchange="dqSavePreambleField('${p.id}','active',this.checked)">Active</label>
-      </div>
-    </div>`).join('');
-  document.getElementById('modal-ct').innerHTML = `
-  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop){closeModal();renderQuoteBuilder();}">
-    <div class="modal-box" style="max-width:640px">
-      <div class="modal-head"><div style="font-size:16px;font-weight:500">Pages d'intro du devis imprimable</div><button class="btn btn-ghost btn-icon" onclick="closeModal();renderQuoteBuilder()" style="margin-left:auto">✕</button></div>
-      <div class="log-empty" style="font-style:normal;margin-bottom:10px">Insérées avant le document lors de l'impression (sommaire généré automatiquement). Sans secteur coché = page universelle, montrée pour tous ; cochez un ou plusieurs secteurs pour la réserver à ceux-ci.</div>
-      <div style="max-height:52vh;overflow-y:auto">${rows || '<div class="log-empty">Aucune page.</div>'}</div>
-      <div class="modal-footer"><button class="btn btn-primary" onclick="closeModal();renderQuoteBuilder()">Fermer</button></div>
-    </div>
-  </div>`;
-}
-async function dqSavePreambleField(id, field, value){
-  const p = (QUOTE_PREAMBLE_PAGES||[]).find(x=>x.id===id); if(!p) return;
-  p[field] = value;
-  try{
-    const r = await apiFetch('/wa/crmQuotePreamblePage/update', {method:'POST', body:JSON.stringify({id, [field]:value})});
-    if(!r.ok) throw new Error('http');
-  }catch(e){ flash('Erreur d\'enregistrement'); }
-  renderPreambleManagerModal();
-}
-async function dqTogglePreambleSecteur(id, secteur, checked){
-  const p = (QUOTE_PREAMBLE_PAGES||[]).find(x=>x.id===id); if(!p) return;
-  const set = new Set(p.secteurs);
-  if(checked) set.add(secteur); else set.delete(secteur);
-  p.secteurs = [...set];
-  try{
-    const r = await apiFetch('/wa/crmQuotePreamblePage/update', {method:'POST', body:JSON.stringify({id, secteurs:p.secteurs})});
-    if(!r.ok) throw new Error('http');
-  }catch(e){ flash('Erreur d\'enregistrement'); }
-  renderPreambleManagerModal();
-}
-async function dqMovePreamblePage(id, dir){
-  const sorted = (QUOTE_PREAMBLE_PAGES||[]).slice().sort((a,b)=>a.order-b.order);
-  const idx = sorted.findIndex(p=>p.id===id);
-  const swapIdx = idx+dir;
-  if(idx<0 || swapIdx<0 || swapIdx>=sorted.length) return;
-  const a = sorted[idx], b = sorted[swapIdx];
-  const aOrder = a.order, bOrder = b.order;
-  a.order = bOrder; b.order = aOrder;
-  try{
-    await Promise.all([
-      apiFetch('/wa/crmQuotePreamblePage/update', {method:'POST', body:JSON.stringify({id:a.id, order:a.order})}),
-      apiFetch('/wa/crmQuotePreamblePage/update', {method:'POST', body:JSON.stringify({id:b.id, order:b.order})}),
-    ]);
-  }catch(e){ flash('Erreur d\'enregistrement'); }
-  renderPreambleManagerModal();
-}
 
 // ── Sauvegarde / cycle de vie ──
 function dqPayload(){
@@ -7498,7 +7451,7 @@ function dqPayload(){
     config: q.config,
     introText: q.introText, mentionsText: q.mentionsText, termsText: q.termsText,
     discountPct: +q.discountPct||0, vatPct: +q.vatPct||0, depositPct: +q.depositPct||0,
-    status: q.status,
+    status: q.status, attachedDocumentIds: q.attachedDocumentIds||[],
   };
 }
 async function saveQuote(){
@@ -7595,41 +7548,25 @@ const DQ_BRAND_RED = '#a32d2d';
 const DQ_CAT_DOT = {materiel:'#0c76d9', service:'#c9860a', logiciel:'#7a5cf0', autre:'#5a8a2e'};
 
 /**
- * Document imprimable (29/10/2026, "plus visuel" + pages d'intro pptx) —
- * ouvre la fenêtre de popup EN PREMIER, de façon synchrone dans le handler
- * de clic (sinon le navigateur bloque la popup une fois qu'un await est
- * passé), puis remplit son contenu une fois les pages d'intro chargées.
- * Reprend la charte du deck de présentation client (rouge Sesame, pied de
- * page coordonnées) pour que le devis s'enchaîne visuellement avec les
- * pages qui le précèdent plutôt que de rompre le style.
+ * Document imprimable (29/10/2026, "plus visuel") — charte Sesame (rouge,
+ * bandeau, pied de page coordonnées), sections colorées par catégorie de
+ * ligne. La présentation Sesame (pptx) n'est plus insérée automatiquement
+ * ici (revert du 29/10) — c'est désormais un document de la bibliothèque,
+ * joint ou non à l'email d'envoi au choix (cf. "Documents à joindre",
+ * onglet Document), jamais mélangé au devis imprimé lui-même.
  */
-async function printQuote(){
-  const w = window.open('', '_blank');
-  if(!w){ flash('Autorisez les popups pour imprimer le devis'); return; }
-  w.document.open();
-
+function printQuote(){
   const q = QUOTE_DRAFT;
   const lines = dqAllLines(q);
   const totals = dqComputeTotals(lines, q.config, q.discountPct, q.vatPct, q.depositPct);
   const prospect = q.prospectId ? clients.find(c=>c.id===q.prospectId) : null;
   const clientNom = prospect ? prospect.nom||'' : '';
-  const secteur = prospect ? prospect.secteur||'' : '';
-
-  await dqLoadPreamblePagesIfNeeded();
-  const preamble = dqPreamblePagesForSecteur(secteur);
 
   const rowLine = l => `<tr><td><span class="catdot" style="background:${DQ_CAT_DOT[l.category||'materiel']||'#999'}"></span>${esc(l.label)}${l.description?`<div style="color:#888;font-size:11px;font-style:italic;margin-top:2px;margin-left:14px">${esc(l.description)}</div>`:''}</td>
     <td style="text-align:center">${l.qty}</td><td style="text-align:right">${l.unitPrice==null?'À chiffrer':fmtEUR(l.unitPrice)}</td>
     <td style="text-align:right">${l.unitPrice==null?'—':fmtEUR(l.qty*l.unitPrice)}</td></tr>`;
   const rowsHtml = lines.filter(l=>!l.recurring).map(rowLine).join('');
   const rowsHtmlM = lines.filter(l=>l.recurring).map(rowLine).join('');
-
-  const preambleHtml = preamble.map(p=>`<div class="pp" id="pp-${p.id}"><img src="${esc(p.file)}" alt="${esc(p.title)}"></div>`).join('');
-  const sommaireHtml = preamble.length ? `<div class="sommaire-page">
-      <h1>Sommaire</h1>
-      <ol>${preamble.map((p,i)=>`<li><a href="#pp-${p.id}">${esc(p.title)}</a><span class="dots"></span><span>${i+1}</span></li>`).join('')}
-      <li><a href="#devis-section"><strong>Proposition commerciale</strong></a><span class="dots"></span><span>${preamble.length+1}</span></li></ol>
-    </div>` : '';
 
   const footer = '<div class="pagefoot">SESAME-TECHNOLOGY.FR · 01 47 82 90 56 · SESAME TECHNOLOGY FRANCE, 1-3 BD CHARLES DE GAULLE, 92700 COLOMBES</div>';
 
@@ -7638,14 +7575,6 @@ async function printQuote(){
     +'@page{margin:16mm 14mm}'
     +'body{font-family:Arial,sans-serif;color:#1a1a1a;margin:0}'
     +'.wrap{max-width:720px;margin:0 auto;padding:30px 20px}'
-    +'.pp{page-break-after:always;break-after:page;text-align:center;padding-top:6vh}'
-    +'.pp img{max-width:100%;max-height:85vh;border-radius:4px;box-shadow:0 2px 10px rgba(0,0,0,.12)}'
-    +'.sommaire-page{page-break-after:always;break-after:page;max-width:600px;margin:10vh auto 0;padding:0 20px}'
-    +'.sommaire-page h1{color:'+DQ_BRAND_RED+';font-size:26px;letter-spacing:1px;text-transform:uppercase;border-bottom:3px solid '+DQ_BRAND_RED+';padding-bottom:10px;margin-bottom:24px}'
-    +'.sommaire-page ol{list-style:none;margin:0;padding:0;counter-reset:som}'
-    +'.sommaire-page li{display:flex;align-items:baseline;gap:6px;padding:7px 0;font-size:14px}'
-    +'.sommaire-page a{color:#1a1a1a;text-decoration:none}'
-    +'.sommaire-page .dots{flex:1;border-bottom:1px dotted #bbb;margin-bottom:4px}'
     +'.hd{display:flex;justify-content:space-between;align-items:center;background:'+DQ_BRAND_RED+';color:#fff;padding:18px 24px;margin:-30px -20px 24px}'
     +'.hd h1{font-size:19px;margin:0;letter-spacing:.5px}.hd .sub{opacity:.85;font-size:11px;margin-top:2px}'
     +'.hd .right{text-align:right}.hd .right strong{font-size:15px}'
@@ -7661,11 +7590,8 @@ async function printQuote(){
     +'.totals .grand{font-weight:700;font-size:15px;border-top:1px solid #ccc;margin-top:4px;padding-top:8px;color:'+DQ_BRAND_RED+'}'
     +'.notes{margin-top:8px;font-size:12px;color:#555;white-space:pre-wrap}'
     +'.pagefoot{text-align:center;font-size:9px;color:#aaa;letter-spacing:.3px;margin-top:34px;padding-top:10px;border-top:1px solid #eee}'
-    +'@media print{.pp{page-break-after:always}}'
     +'</style></head><body>'
-    +sommaireHtml
-    +preambleHtml
-    +'<div class="wrap" id="devis-section">'
+    +'<div class="wrap">'
     +'<div class="hd"><div><h1>SESAME TECHNOLOGY</h1><div class="sub">Proposition commerciale</div></div>'
     +'<div class="right"><div><strong>'+esc(q.number||'Brouillon')+'</strong></div><div class="sub">'+new Date().toLocaleDateString('fr-FR')+'</div></div></div>'
     +'<div class="client-box"><div><strong>Client :</strong> '+esc(clientNom)+'</div><div><strong>Objet :</strong> '+esc(q.title)+'</div></div>'
@@ -7684,9 +7610,10 @@ async function printQuote(){
     +'<h3>Bon pour accord</h3><div class="notes">Date, nom, qualité et signature du client :</div>'
     +footer
     +'</div></body></html>';
-
+  const w = window.open('', '_blank');
+  if(!w){ flash('Autorisez les popups pour imprimer le devis'); return; }
   w.document.write(html); w.document.close(); w.focus();
-  setTimeout(function(){ w.print(); }, 400);
+  setTimeout(function(){ w.print(); }, 300);
 }
 
 // ── Rendu principal ──
@@ -7874,10 +7801,7 @@ function dqRenderDocumentTab(q, lines){
       <div>${esc(q.title)}</div>
     </div>
     <label>Introduction client<div id="dq-intro" class="sq-edit" contenteditable="true" onblur="dqRerender()">${esc(q.introText)}</div></label>
-    <div class="db-row-between" style="margin:14px 0 4px"><h4 style="margin:0">Pages d'intro du devis imprimable (présentation Sesame)</h4>
-      <button class="sq-clause" type="button" style="border-style:dashed" onclick="dqOpenPreambleManager()">⚙ Gérer les pages</button>
-    </div>
-    <small style="color:var(--mu)">Insérées automatiquement avant le document lors de l'impression, avec un sommaire — pages universelles + celles propres au secteur du client (${esc(clientSecteur||'non renseigné')}).</small>
+    ${dqDocumentLibrarySectionHtml(q, clientSecteur)}
     ${DOC_BLOCKS.map(b=>groupHtml(b.cat,b.label,b.color)).join('')}
     <hr class="quote-sep">
     <div class="quote-total-row grand"><strong>Initial HT après remise</strong><strong>${fmtEUR(totals.totalHT)}</strong></div>
@@ -7923,6 +7847,142 @@ function dqRenderDocumentTab(q, lines){
 
 
 // ════════════════════════════════════════
+// BIBLIOTHÈQUE DOCUMENTAIRE (29/10/2026) — documents gérés à part (panneau
+// dédié, hors devis), choisis au cas par cas pour être joints à l'envoi
+// d'un devis précis (cf. dqDocumentLibrarySectionHtml dans l'onglet
+// Document). Stockage base64 en base, même convention que les PDF de
+// signature électronique (crmSignature.ts).
+async function showDocumentLibrary(){
+  view='documents'; setNav('n-documents'); bc([{label:'Bibliothèque documentaire'}]);
+  tba('<button class="btn btn-primary btn-sm" onclick="docOpenModal(null)">+ Ajouter un document</button>');
+  document.getElementById('main').innerHTML='<div class="card">Chargement…</div>';
+  CRM_DOCUMENTS = null;
+  await dqLoadDocumentLibraryIfNeeded();
+  renderDocumentLibrary();
+}
+function renderDocumentLibrary(){
+  const docs = (CRM_DOCUMENTS||[]).slice().sort((a,b)=>a.order-b.order);
+  const rows = docs.map((d,i)=>`
+    <div class="card" style="margin-bottom:10px;opacity:${d.active?1:.5}">
+      <div class="db-row-between">
+        <div><strong>${esc(d.title)}</strong> <span style="font-size:11px;color:var(--mu)">${esc(d.fileName)}</span></div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-sm" title="Monter" ${i===0?'disabled':''} onclick="docMove('${d.id}',-1)">↑</button>
+          <button class="btn btn-ghost btn-sm" title="Descendre" ${i===docs.length-1?'disabled':''} onclick="docMove('${d.id}',1)">↓</button>
+          <button class="btn btn-ghost btn-sm" onclick="docOpenModal('${d.id}')">Modifier</button>
+          <button class="btn btn-ghost btn-sm" style="color:#a32d2d" onclick="docDelete('${d.id}')">Supprimer</button>
+        </div>
+      </div>
+      ${d.description?'<div style="font-size:12px;color:var(--mu);margin-top:4px">'+esc(d.description)+'</div>':''}
+      <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+        ${d.secteurs.length?d.secteurs.map(s=>'<span class="tag t-gray" style="font-size:10px">'+esc(s)+'</span>').join(''):'<span class="tag t-gray" style="font-size:10px">Tous secteurs</span>'}
+        <label style="margin-left:auto;display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer"><input type="checkbox" ${d.active?'checked':''} onchange="docSaveField('${d.id}','active',this.checked)">Actif</label>
+      </div>
+    </div>`).join('');
+  document.getElementById('main').innerHTML = `
+    <div class="log-empty" style="font-style:normal;margin-bottom:10px">Documents disponibles pour joindre à l'envoi d'un devis (onglet Document du constructeur de devis → "Documents à joindre"). Jamais ajoutés automatiquement.</div>
+    ${rows || '<div class="card"><div class="log-empty">Aucun document — ajoutez-en un.</div></div>'}`;
+}
+function docOpenModal(id){
+  const d = id ? (CRM_DOCUMENTS||[]).find(x=>x.id===id) : null;
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:480px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:600">${d?'Modifier le document':'Ajouter un document'}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()">✕</button></div>
+      <div style="padding:0 20px 20px" class="form-grid">
+        <div class="ff"><label>Titre *</label><input id="doc-title" value="${d?esc(d.title):''}"></div>
+        <div class="ff"><label>Description (optionnel)</label><textarea id="doc-desc" rows="2">${d?esc(d.description):''}</textarea></div>
+        ${d?'':'<div class="ff"><label>Fichier (PDF recommandé) *</label><input type="file" id="doc-file" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.png"></div>'}
+        <div class="ff"><label>Secteurs recommandés (optionnel, vide = universel)</label>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">${SECTEURS.map(s=>`<label style="display:flex;align-items:center;gap:4px;font-size:11px;border:1px solid var(--bdr2,#e2dfd9);border-radius:12px;padding:2px 8px;cursor:pointer"><input type="checkbox" class="doc-secteur" value="${esc(s)}" ${d&&d.secteurs.includes(s)?'checked':''}>${esc(s)}</label>`).join('')}</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="${d?`docSubmitEdit('${d.id}')`:'docSubmitCreate()'}">${d?'Enregistrer':'Ajouter'}</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>`;
+}
+function docReadFileAsDataUrl(file){
+  return new Promise(function(resolve,reject){
+    const r = new FileReader();
+    r.onload = function(){ resolve(r.result); };
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+async function docSubmitCreate(){
+  const title = (document.getElementById('doc-title')||{value:''}).value.trim();
+  if(!title){ flash('Titre requis'); return; }
+  const fileInput = document.getElementById('doc-file');
+  const file = fileInput && fileInput.files[0];
+  if(!file){ flash('Fichier requis'); return; }
+  const secteurs = [...document.querySelectorAll('.doc-secteur:checked')].map(c=>c.value);
+  const description = (document.getElementById('doc-desc')||{value:''}).value.trim();
+  try{
+    const dataUrl = await docReadFileAsDataUrl(file);
+    const r = await apiFetch('/wa/crmDocument/create', {method:'POST', body:JSON.stringify({
+      title, description, fileName:file.name, fileMimeType:file.type||'application/octet-stream', fileContentBase64:dataUrl, secteurs,
+    })});
+    if(!r.ok) throw new Error('http');
+    CRM_DOCUMENTS = CRM_DOCUMENTS||[]; CRM_DOCUMENTS.push(await r.json());
+    closeModal();
+    flash('Document ajouté ✓');
+    renderDocumentLibrary();
+  }catch(e){ flash("Erreur d'ajout du document"); }
+}
+async function docSubmitEdit(id){
+  const title = (document.getElementById('doc-title')||{value:''}).value.trim();
+  if(!title){ flash('Titre requis'); return; }
+  const description = (document.getElementById('doc-desc')||{value:''}).value.trim();
+  const secteurs = [...document.querySelectorAll('.doc-secteur:checked')].map(c=>c.value);
+  try{
+    const r = await apiFetch('/wa/crmDocument/update', {method:'POST', body:JSON.stringify({id, title, description, secteurs})});
+    if(!r.ok) throw new Error('http');
+    const updated = await r.json();
+    CRM_DOCUMENTS = (CRM_DOCUMENTS||[]).map(d=>d.id===id?updated:d);
+    closeModal();
+    flash('Document enregistré ✓');
+    renderDocumentLibrary();
+  }catch(e){ flash("Erreur d'enregistrement"); }
+}
+async function docSaveField(id, field, value){
+  try{
+    const r = await apiFetch('/wa/crmDocument/update', {method:'POST', body:JSON.stringify({id, [field]:value})});
+    if(!r.ok) throw new Error('http');
+    const updated = await r.json();
+    CRM_DOCUMENTS = (CRM_DOCUMENTS||[]).map(d=>d.id===id?updated:d);
+  }catch(e){ flash('Erreur d\'enregistrement'); }
+  renderDocumentLibrary();
+}
+async function docMove(id, dir){
+  const sorted = (CRM_DOCUMENTS||[]).slice().sort((a,b)=>a.order-b.order);
+  const idx = sorted.findIndex(d=>d.id===id);
+  const swapIdx = idx+dir;
+  if(idx<0 || swapIdx<0 || swapIdx>=sorted.length) return;
+  const a = sorted[idx], b = sorted[swapIdx];
+  const ao = a.order, bo = b.order;
+  a.order = bo; b.order = ao;
+  try{
+    await Promise.all([
+      apiFetch('/wa/crmDocument/update', {method:'POST', body:JSON.stringify({id:a.id, order:a.order})}),
+      apiFetch('/wa/crmDocument/update', {method:'POST', body:JSON.stringify({id:b.id, order:b.order})}),
+    ]);
+  }catch(e){ flash('Erreur d\'enregistrement'); }
+  renderDocumentLibrary();
+}
+async function docDelete(id){
+  if(!confirm('Supprimer ce document de la bibliothèque ?')) return;
+  try{
+    const r = await apiFetch('/wa/crmDocument/delete', {method:'POST', body:JSON.stringify({id})});
+    if(!r.ok) throw new Error('http');
+    CRM_DOCUMENTS = (CRM_DOCUMENTS||[]).filter(d=>d.id!==id);
+    renderDocumentLibrary();
+    flash('Document supprimé');
+  }catch(e){ flash('Erreur de suppression'); }
+}
+
 // PRODUITS — catalogue interne Sesame (18/08/2026), stockable ou non, pour
 // pré-remplir les lignes de devis (cf. constructeur de devis, sections
 // AFFAIRES ci-dessus). stockable prépare une future gestion de stock, non

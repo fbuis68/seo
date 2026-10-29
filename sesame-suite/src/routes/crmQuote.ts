@@ -125,6 +125,7 @@ function shapeQuote(q: {
   notes: string | null;
   sentAt: Date | null;
   signToken: string | null;
+  attachedDocumentIds: string[];
   createdAt: Date;
   updatedAt: Date;
 }) {
@@ -157,6 +158,7 @@ function shapeQuote(q: {
     notes: q.notes || "",
     sentAt: q.sentAt,
     signToken: q.signToken,
+    attachedDocumentIds: q.attachedDocumentIds,
     createdAt: q.createdAt,
     updatedAt: q.updatedAt,
   };
@@ -250,6 +252,7 @@ interface QuoteBody {
   vatPct?: number;
   depositPct?: number;
   status?: string;
+  attachedDocumentIds?: string[];
 }
 
 crmQuoteRouter.post(
@@ -276,6 +279,7 @@ crmQuoteRouter.post(
         discountPct: b.discountPct ?? 0,
         vatPct: b.vatPct ?? 20,
         depositPct: b.depositPct ?? 0,
+        attachedDocumentIds: Array.isArray(b.attachedDocumentIds) ? b.attachedDocumentIds : [],
       },
       include: QUOTE_INCLUDE,
     });
@@ -306,6 +310,7 @@ crmQuoteRouter.post(
         depositPct: b.depositPct,
         status: b.status,
         sentAt: b.status === "envoyé" && existing.status !== "envoyé" ? new Date() : undefined,
+        attachedDocumentIds: Array.isArray(b.attachedDocumentIds) ? b.attachedDocumentIds : undefined,
       },
       include: QUOTE_INCLUDE,
     });
@@ -583,51 +588,129 @@ crmQuoteRouter.post(
   })
 );
 
-// ── Pages d'intro du devis imprimable (29/10/2026) — gestion des pages du
-// deck pptx client converties en images (titre/secteurs/ordre/actif), cf.
-// printQuote() côté client et le commentaire du modèle CrmQuotePreamblePage.
-// Pas de route de création : le jeu de pages initial est seedé une fois
-// (prisma/seed.ts) à partir des fichiers statiques déjà déposés dans
-// public/quote-preamble/ — seuls titre/secteurs/ordre/actif sont éditables
-// ici, pas l'ajout d'un nouveau deck (hors scope de cette demande).
+// ── Bibliothèque documentaire (29/10/2026) — documents gérés à part (pas
+// insérés automatiquement dans le devis), choisis au cas par cas pour être
+// joints à l'envoi d'un devis précis (cf. CrmQuote.attachedDocumentIds,
+// POST /crmQuote/sendEmail ci-dessous). Liste renvoyée SANS le contenu
+// base64 (lourd, inutile pour l'affichage/la sélection côté client) — cf.
+// /crmDocument/get pour le contenu complet d'un document précis.
+function shapeDocumentMeta(d: {
+  id: string;
+  title: string;
+  description: string | null;
+  fileName: string;
+  fileMimeType: string;
+  secteurs: string[];
+  active: boolean;
+  order: number;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    id: d.id,
+    title: d.title,
+    description: d.description || "",
+    fileName: d.fileName,
+    fileMimeType: d.fileMimeType,
+    secteurs: d.secteurs,
+    active: d.active,
+    order: d.order,
+    createdAt: d.createdAt,
+    updatedAt: d.updatedAt,
+  };
+}
+
 crmQuoteRouter.get(
-  "/crmQuotePreamblePage/list",
+  "/crmDocument/list",
   requireAdmin,
   requireSesame,
   asyncHandler(async (_req, res) => {
-    const rows = await prisma.crmQuotePreamblePage.findMany({ orderBy: { order: "asc" } });
-    res.json(rows);
+    const rows = await prisma.crmDocument.findMany({
+      orderBy: { order: "asc" },
+      select: { id: true, title: true, description: true, fileName: true, fileMimeType: true, secteurs: true, active: true, order: true, createdAt: true, updatedAt: true },
+    });
+    res.json(rows.map(shapeDocumentMeta));
   })
 );
 
-interface PreamblePageUpdateBody {
+interface DocumentCreateBody {
+  title: string;
+  description?: string;
+  fileName: string;
+  fileMimeType: string;
+  fileContentBase64: string; // data URL complète ou base64 nu, nettoyé ci-dessous
+  secteurs?: string[];
+}
+
+crmQuoteRouter.post(
+  "/crmDocument/create",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const b = req.body as DocumentCreateBody;
+    if (!b.title || !b.title.trim()) throw new HttpError(400, "Titre requis");
+    const raw = (b.fileContentBase64 || "").trim();
+    if (!raw) throw new HttpError(400, "Fichier requis");
+    const base64 = raw.includes(",") ? raw.slice(raw.indexOf(",") + 1) : raw;
+    const agg = await prisma.crmDocument.aggregate({ _max: { order: true } });
+    const row = await prisma.crmDocument.create({
+      data: {
+        title: b.title.trim(),
+        description: b.description?.trim() || undefined,
+        fileName: b.fileName || b.title.trim(),
+        fileMimeType: b.fileMimeType || "application/octet-stream",
+        fileContentBase64: base64,
+        secteurs: Array.isArray(b.secteurs) ? b.secteurs : [],
+        order: (agg._max.order ?? -1) + 1,
+      },
+    });
+    res.status(201).json(shapeDocumentMeta(row));
+  })
+);
+
+interface DocumentUpdateBody {
   id: string;
   title?: string;
+  description?: string;
   secteurs?: string[];
   active?: boolean;
   order?: number;
 }
 
 crmQuoteRouter.post(
-  "/crmQuotePreamblePage/update",
+  "/crmDocument/update",
   requireAdmin,
   requireSesame,
   asyncHandler(async (req, res) => {
-    const b = req.body as PreamblePageUpdateBody;
+    const b = req.body as DocumentUpdateBody;
     if (!b.id) throw new HttpError(400, "id requis");
     if (b.title !== undefined && !b.title.trim()) throw new HttpError(400, "Le titre ne peut pas être vide");
-    const existing = await prisma.crmQuotePreamblePage.findUnique({ where: { id: b.id } });
-    if (!existing) throw new HttpError(404, "Page introuvable");
-    const row = await prisma.crmQuotePreamblePage.update({
+    const existing = await prisma.crmDocument.findUnique({ where: { id: b.id } });
+    if (!existing) throw new HttpError(404, "Document introuvable");
+    const row = await prisma.crmDocument.update({
       where: { id: b.id },
       data: {
         title: b.title?.trim(),
+        description: b.description === undefined ? undefined : b.description.trim() || null,
         secteurs: Array.isArray(b.secteurs) ? b.secteurs : undefined,
         active: typeof b.active === "boolean" ? b.active : undefined,
         order: typeof b.order === "number" ? b.order : undefined,
       },
     });
-    res.json(row);
+    res.json(shapeDocumentMeta(row));
+  })
+);
+
+crmQuoteRouter.post(
+  "/crmDocument/delete",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const id = (req.body.id as string) || "";
+    const existing = await prisma.crmDocument.findUnique({ where: { id } });
+    if (!existing) throw new HttpError(404, "Document introuvable");
+    await prisma.crmDocument.delete({ where: { id } });
+    res.json({ ok: true });
   })
 );
 
@@ -758,6 +841,19 @@ crmQuoteRouter.post(
     const totals = quoteTotals(lines, existing.discountPct, existing.vatPct, existing.depositPct);
     const signUrl = `${req.protocol}://${req.get("host")}/devis-signature.html?token=${signToken}`;
 
+    // Documents de la bibliothèque choisis pour cet envoi (cf.
+    // attachedDocumentIds) — un id devenu introuvable (document supprimé
+    // depuis) est silencieusement ignoré plutôt que de bloquer l'envoi du
+    // devis pour une pièce jointe non essentielle.
+    const extraAttachments = existing.attachedDocumentIds.length
+      ? (
+          await prisma.crmDocument.findMany({
+            where: { id: { in: existing.attachedDocumentIds } },
+            select: { fileName: true, fileMimeType: true, fileContentBase64: true },
+          })
+        ).map((d) => ({ fileName: d.fileName, dataUrl: `data:${d.fileMimeType};base64,${d.fileContentBase64}` }))
+      : [];
+
     try {
       await sendMessage({
         entityId: null,
@@ -765,6 +861,7 @@ crmQuoteRouter.post(
         templateKey: "devis-envoi",
         to: prospect.email,
         trackOpenProspectId: prospect.id,
+        extraAttachments,
         variables: {
           numeroDevis: existing.number,
           nomClient: prospect.nom,
