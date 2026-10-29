@@ -1627,10 +1627,17 @@ function renderList(){
   const data=filtered();
   const sectAll=[...new Set([...SECTEURS,...clients.map(c=>c.secteur)].filter(Boolean))].sort();
   const origAll=[...new Set([...ORIGINES,...clients.map(c=>c.origine)].filter(Boolean))].sort();
+  // Carte "Clients" : comptait TOUTES les fiches (suspects/prospects/clients
+  // confondus) — faussé depuis les imports en masse de suspects (29/10/2026).
+  // Compte désormais uniquement type==='Client', avec le détail des autres
+  // types en sous-ligne pour ne pas perdre la vue d'ensemble.
+  const nClientsOnly=clients.filter(c=>c.type==='Client').length;
+  const nProspects=clients.filter(c=>c.type==='Prospect').length;
+  const nSuspects=clients.filter(c=>c.type==='Suspect').length;
   const stats=`<div class="stats-row">
-    <div class="stat-card"><div class="stat-lbl">Clients</div><div class="stat-val">${clients.length}</div></div>
-    <div class="stat-card"><div class="stat-lbl">Risque élevé</div><div class="stat-val" style="color:#a32d2d">${clients.filter(c=>c.danger==='Élevé !!').length}</div></div>
-    <div class="stat-card"><div class="stat-lbl">Sans contrat</div><div class="stat-val" style="color:#854f0b">${clients.filter(c=>c.contrat==='non').length}</div></div>
+    <div class="stat-card"><div class="stat-lbl">Clients</div><div class="stat-val">${nClientsOnly}</div><div style="font-size:10px;color:var(--mu);margin-top:2px">+ ${nProspects} prospect${nProspects>1?'s':''} · ${nSuspects} suspect${nSuspects>1?'s':''}</div></div>
+    <div class="stat-card"><div class="stat-lbl">Risque élevé</div><div class="stat-val" style="color:#a32d2d">${clients.filter(c=>c.type==='Client' && c.danger==='Élevé !!').length}</div></div>
+    <div class="stat-card"><div class="stat-lbl">Sans contrat</div><div class="stat-val" style="color:#854f0b">${clients.filter(c=>c.type==='Client' && c.contrat==='non').length}</div></div>
     <div class="stat-card"><div class="stat-lbl">Activités totales</div><div class="stat-val" style="color:#3c3489">${clients.reduce((s,c)=>(s+(c.journal||[]).length),0)}</div></div>
   </div>`;
   const toolbar=`<div class="list-toolbar">
