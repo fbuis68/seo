@@ -456,9 +456,13 @@ input[type=checkbox]{accent-color:var(--a);cursor:pointer;width:14px;height:14px
 .sq-clause:hover{background:var(--hover)}
 .sq-dochead{background:var(--bg);border-radius:8px;padding:10px 12px;margin:10px 0;font-size:12px}
 .sq-dochead .sq-logo{font-weight:700;font-size:13px;margin-bottom:4px}
-.sq-docline{display:grid;grid-template-columns:1fr 60px 90px 90px;gap:6px;align-items:center;padding:4px 0;border-bottom:0.5px solid var(--div)}
+.sq-docline{display:grid;grid-template-columns:1fr 60px 90px 90px 22px;gap:6px;align-items:center;padding:4px 0;border-bottom:0.5px solid var(--div)}
 .sq-docline input{font-family:inherit;font-size:12px;padding:0 6px;height:28px;border:0.5px solid var(--bdr2);border-radius:6px;background:var(--card);color:var(--tx)}
 .sq-docline output{font-size:12px;text-align:right}
+.sq-docline-del{background:none;border:0;color:#a32d2d;font-size:15px;line-height:1;cursor:pointer;padding:0;width:22px;height:22px;border-radius:4px}
+.sq-docline-del:hover{background:#a32d2d20}
+.sq-docline-del:disabled{color:var(--mu);cursor:default;opacity:.4}
+.sq-docline-del:disabled:hover{background:none}
 @media (max-width:860px){.db-layout{grid-template-columns:1fr}.db-aside{position:static}}
 
 /* ── RESPONSIVE ── */
@@ -7199,6 +7203,41 @@ function dqAddAccessory(id){
   renderQuoteBuilder();
 }
 function dqRemoveRow(arrName, idx){ captureCurrentTab(); QUOTE_DRAFT[arrName].splice(idx,1); renderQuoteBuilder(); }
+
+/**
+ * Suppression d'une ligne depuis l'onglet Document (29/10/2026, demande
+ * client) — gère toutes les origines possibles d'une ligne (cf.
+ * dqAllLines) : matériel/accessoire → retirée du tableau correspondant ;
+ * module logiciel coché → décoché (q.mods[].on=false) ; ligne libre →
+ * retirée de q.custom ; ligne calculée (paramétrage plateforme, SMS) →
+ * son champ de config remis à 0, seul moyen de la faire disparaître
+ * puisqu'elle n'existe pas en tant qu'entrée de tableau. La licence reste
+ * volontairement non supprimable (toujours qty:1 en dur dans
+ * dqCalculatorLines — prestation obligatoire).
+ */
+function dqDeleteDocLine(id){
+  if(id==='license') return;
+  if(!confirm('Supprimer cette ligne ?')) return;
+  captureCurrentTab();
+  const q = QUOTE_DRAFT;
+  if(id==='platform') q.config.platformSetup = 0;
+  else if(id==='sms') q.config.smsQty = 0;
+  else if(id.indexOf('mod-')===0){ const m=q.mods.find(x=>'mod-'+x.k===id); if(m) m.on=false; }
+  else {
+    let idx = q.hardware.findIndex(x=>x.id===id);
+    if(idx>=0) q.hardware.splice(idx,1);
+    else {
+      idx = q.accessories.findIndex(x=>x.id===id);
+      if(idx>=0) q.accessories.splice(idx,1);
+      else {
+        idx = q.custom.findIndex(x=>x.id===id);
+        if(idx>=0) q.custom.splice(idx,1);
+      }
+    }
+  }
+  if(q.config.overrides) delete q.config.overrides[id];
+  renderQuoteBuilder();
+}
 const DQ_CUSTOM_LINE_LABEL = {materiel:'Article', service:'Prestation de service', logiciel:'Ligne logicielle', autre:'Prestation spécifique client'};
 function dqAddCustomLine(category){
   captureCurrentTab();
@@ -7615,6 +7654,7 @@ function dqRenderDocumentTab(q, lines){
         <input id="dl-qty-${l.id}" type="number" min="0" step="0.5" value="${l.qty}" onchange="dqRerender()">
         <input id="dl-price-${l.id}" type="number" min="0" step="0.01" placeholder="À saisir" value="${l.unitPrice??''}" onchange="dqRerender()">
         <output>${l.unitPrice==null?'À chiffrer':fmtEUR(l.qty*l.unitPrice)+(l.recurring?'/mois':'')}</output>
+        <button type="button" class="sq-docline-del" title="${l.id==='license'?'Ligne obligatoire':'Supprimer cette ligne'}" ${l.id==='license'?'disabled':''} onclick="dqDeleteDocLine('${l.id}')">✕</button>
       </div>`).join('') : `<p class="sq-note" style="margin:4px 0">Aucune ligne.</p>`)
       + (rows.length ? `<div class="quote-total-row" style="font-weight:600;border-top:0.5px solid var(--div);margin-top:4px;padding-top:4px"><span>Sous-total ${label}</span><span>${hasUnpriced?'Partiel — ':''}${fmtEUR(subtotal)}</span></div>` : '')
       + `</div>`;
