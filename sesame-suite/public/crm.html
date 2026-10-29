@@ -4525,7 +4525,7 @@ function impRenderMapping(){
         <div style="font-size:11px;color:var(--mu);margin-top:-4px">Un secteur par défaut s'applique à <b>tous</b> les contacts importés, quelle que soit la colonne "Secteur" mappée ci-dessus. Idem pour le commercial par défaut : prime sur la colonne "Conseiller / commercial" et sur le rapprochement automatique par nom.</div>
         <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer">
           <input type="checkbox" id="imp-lookup" checked style="accent-color:var(--am)">
-          <span style="font-size:13px">Rechercher l'adresse manquante via l'annuaire public des entreprises (data.gouv.fr) — best effort, ne remplace pas une vérification manuelle</span>
+          <span style="font-size:13px">Rechercher l'adresse et le dirigeant manquants via l'annuaire public des entreprises (data.gouv.fr) — best effort, ne remplace pas une vérification manuelle</span>
         </label>
       </div>
       <div class="modal-footer">
@@ -4659,7 +4659,13 @@ async function impLookupAddresses(){
   if(btn) btn.disabled = true;
   for(let i=0;i<IMP_ROWS.length;i++){
     const r = IMP_ROWS[i];
-    if(r.adresse && r.ville){ r._addr='ok'; impRefreshPreviewRow(i); continue; }
+    // Adresse et dirigeant sont deux enrichissements indépendants — une
+    // ligne dont l'adresse vient déjà du fichier (cas fréquent, ex.
+    // CAMPINGS.csv) doit quand même appeler l'API si son contact est vide,
+    // sinon le dirigeant n'est jamais récupéré (bug du 28/10, corrigé).
+    const needsAddr = !(r.adresse && r.ville);
+    const needsReferent = !r.referent;
+    if(!needsAddr && !needsReferent){ r._addr='ok'; impRefreshPreviewRow(i); continue; }
     if(!r.nom){ continue; }
     r._addr='searching'; impRefreshPreviewRow(i);
     const prog = document.getElementById('imp-progress');
@@ -4676,19 +4682,20 @@ async function impLookupAddresses(){
         });
         if(match){
           const siege = match.siege||{};
-          const street = [siege.numero_voie, siege.type_voie, siege.libelle_voie].filter(Boolean).join(' ');
-          if(street) r.adresse = street;
-          if(siege.libelle_commune) r.ville = siege.ville || r.ville || siege.libelle_commune;
-          if(siege.libelle_commune && !r.ville) r.ville = siege.libelle_commune;
-          if(!r.pays) r.pays = 'France';
-          if(!r.referent){
+          if(needsAddr){
+            const street = [siege.numero_voie, siege.type_voie, siege.libelle_voie].filter(Boolean).join(' ');
+            if(street) r.adresse = street;
+            if(siege.libelle_commune && !r.ville) r.ville = siege.libelle_commune;
+            if(!r.pays) r.pays = 'France';
+          }
+          if(needsReferent){
             const dirigeants = match.dirigeants||[];
             const dirigeant = dirigeants.find(function(d){return d.type_dirigeant==='personne physique';}) || dirigeants[0];
             if(dirigeant && dirigeant.type_dirigeant!=='personne morale'){
               r.referent = [dirigeant.prenoms, dirigeant.nom].filter(Boolean).join(' ');
             }
           }
-          r._addr = street ? 'found' : 'none';
+          r._addr = (r.adresse && r.ville) ? 'found' : 'none';
         } else {
           r._addr = 'none';
         }
