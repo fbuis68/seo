@@ -8,20 +8,22 @@
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/favicon-192.png">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <style>
-  :root{--bg:#f5f4f0;--card:#fff;--bdr:#e2dfd9;--tx:#1a1a1a;--mu:#888;--a:#a32d2d;--a-tint:#fbeeee}
+  :root{--bg:#f5f4f0;--card:#fff;--bdr:#e2dfd9;--tx:#1a1a1a;--mu:#888;--a:#8b1040;--a-tint:#fbeeee;
+    --c-materiel:#0c76d9;--c-service:#c9860a;--c-logiciel:#7a5cf0;--c-autre:#5a8a2e}
   *{box-sizing:border-box}
   body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--tx);font-size:14px}
-  .band{background:var(--a);color:#fff;padding:18px 20px;text-align:center}
-  .band .logo{font-size:19px;font-weight:700;letter-spacing:.5px;margin:0}
-  .band .logo em{font-style:normal;opacity:.78;font-weight:400;margin-left:4px}
+  .band{background:#fff;padding:16px 20px;text-align:center;border-bottom:3px solid var(--a)}
+  .band img{height:34px;display:inline-block}
   .wrap{max-width:880px;margin:0 auto;padding:32px 24px 60px}
   .card{background:var(--card);border:0.5px solid var(--bdr);border-radius:12px;padding:28px;margin-top:18px}
   h1{font-size:19px;margin:0 0 6px;padding-bottom:10px;border-bottom:2px solid var(--a)}
   .sub{color:var(--mu);font-size:12px;margin:10px 0 18px}
-  table{width:100%;border-collapse:collapse;margin:14px 0}
-  thead tr{background:var(--a-tint)}
-  th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--a);border-bottom:1px solid var(--bdr);padding:8px 6px}
-  td{padding:9px 6px;border-bottom:1px solid #f0eee9;font-size:13px;vertical-align:top}
+  .blk{border-left:3px solid var(--c);padding-left:14px;margin-bottom:18px}
+  .blk-hd{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:var(--c);margin-bottom:4px}
+  table{width:100%;border-collapse:collapse;margin:0}
+  th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--mu);border-bottom:1px solid var(--bdr);padding:6px 6px}
+  td{padding:8px 6px;border-bottom:1px solid #f0eee9;font-size:13px;vertical-align:top}
+  .blk-sub{display:flex;justify-content:space-between;font-weight:600;font-size:12px;padding:6px 6px 0;color:var(--tx)}
   .desc{color:var(--mu);font-size:11px;font-style:italic;margin-top:2px}
   .totals{margin-top:10px;margin-left:auto;width:100%;max-width:320px;background:var(--bg);border-radius:8px;padding:12px 16px}
   .totals div{display:flex;justify-content:space-between;padding:3px 0;font-size:13px}
@@ -45,7 +47,7 @@
 </style>
 </head>
 <body>
-<div class="band"><div class="logo">SESAME <em>TECHNOLOGY</em></div></div>
+<div class="band"><img src="/icons/sesame-logo.jpg" alt="Sesame Technology"></div>
 <div class="wrap">
   <div id="app"><div class="card">Chargement…</div></div>
 </div>
@@ -73,14 +75,37 @@ function renderError(msg){
   document.getElementById('app').innerHTML = '<div class="card"><h1>Lien de signature</h1><div class="sub">'+esc(msg)+'</div></div>';
 }
 
-function quoteRowsHtml(){
-  return QUOTE.lines.map(l=>`
-    <tr>
-      <td>${esc(l.label)}${l.recurring?' <span style="color:#888;font-size:11px">(mensuel)</span>':' <span style="color:#888;font-size:11px">(ponctuel)</span>'}${l.description?`<div class="desc">${esc(l.description)}</div>`:''}</td>
+// Mêmes 4 rubriques, mêmes couleurs que l'onglet Document du constructeur
+// de devis (public/crm.html, DOC_BLOCKS) — pour que le client retrouve la
+// même présentation entre la saisie interne et ce qu'il signe.
+const DOC_BLOCKS = [
+  {cat:'materiel', label:'Matériel', c:'var(--c-materiel)'},
+  {cat:'service', label:'Service', c:'var(--c-service)'},
+  {cat:'logiciel', label:'Licence', c:'var(--c-logiciel)'},
+  {cat:'autre', label:'Lignes libres', c:'var(--c-autre)'},
+];
+function quoteRowHtml(l){
+  return `<tr>
+      <td>${esc(l.label)}${l.description?`<div class="desc">${esc(l.description)}</div>`:''}</td>
       <td style="text-align:center">${l.qty}</td>
       <td style="text-align:right">${l.unitPrice==null?'À chiffrer':fmtEUR(l.unitPrice)}</td>
-      <td style="text-align:right">${l.unitPrice==null?'—':fmtEUR((+l.qty||0)*l.unitPrice)}</td>
-    </tr>`).join('');
+      <td style="text-align:right">${l.unitPrice==null?'—':fmtEUR((+l.qty||0)*l.unitPrice)+(l.recurring?'/mois':'')}</td>
+    </tr>`;
+}
+function quoteBlocksHtml(){
+  return DOC_BLOCKS.map(b=>{
+    const rows = QUOTE.lines.filter(l=>(l.category||'materiel')===b.cat);
+    if(!rows.length) return '';
+    const subtotal = rows.reduce((s,l)=>s+(l.unitPrice==null?0:(+l.qty||0)*l.unitPrice),0);
+    return `<div class="blk" style="--c:${b.c}">
+      <div class="blk-hd">${esc(b.label)}</div>
+      <table>
+        <thead><tr><th>Prestation</th><th style="text-align:center">Qté</th><th style="text-align:right">Prix unitaire</th><th style="text-align:right">Total</th></tr></thead>
+        <tbody>${rows.map(quoteRowHtml).join('')}</tbody>
+      </table>
+      <div class="blk-sub"><span>Sous-total ${esc(b.label)}</span><span>${fmtEUR(subtotal)}</span></div>
+    </div>`;
+  }).join('');
 }
 
 function quoteSummaryHtml(){
@@ -89,10 +114,7 @@ function quoteSummaryHtml(){
     <h1>Devis ${esc(QUOTE.number)}</h1>
     <div class="sub">${esc(QUOTE.prospectNom)}${QUOTE.title?' — '+esc(QUOTE.title):''}</div>
     ${QUOTE.introText?`<p style="font-size:13px;color:var(--tx)">${esc(QUOTE.introText)}</p>`:''}
-    <table>
-      <thead><tr><th>Prestation</th><th style="text-align:center">Qté</th><th style="text-align:right">Prix unitaire</th><th style="text-align:right">Total</th></tr></thead>
-      <tbody>${quoteRowsHtml()}</tbody>
-    </table>
+    ${quoteBlocksHtml()}
     <div class="totals">
       <div><span>Mensuel récurrent</span><span>${fmtEUR(t.mrrNet)}</span></div>
       <div><span>Frais ponctuels</span><span>${fmtEUR(t.oneoffNet)}</span></div>
