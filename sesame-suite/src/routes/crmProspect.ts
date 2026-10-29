@@ -114,6 +114,8 @@ function shapeProspect(p: {
   commercialId: string | null;
   score: number;
   hotLeadTaskCreatedAt: Date | null;
+  detectedProject: string | null;
+  detectedProjectDate: Date | null;
   createdAt: Date;
   updatedAt: Date;
   entity?: { code: string; config: { lang: string; currency: string; timezone: string } | null } | null;
@@ -197,6 +199,8 @@ function shapeProspect(p: {
     commercialId: p.commercialId,
     score: p.score,
     hotLeadTaskCreatedAt: p.hotLeadTaskCreatedAt,
+    detectedProject: p.detectedProject,
+    detectedProjectDate: p.detectedProjectDate,
     commercialName: p.commercial ? p.commercial.name || p.commercial.email : "",
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,

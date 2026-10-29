@@ -596,6 +596,7 @@ svg.tr-chart{display:block;width:100%;height:auto;min-width:640px}
   <div class="nav-item" id="n-scoring" onclick="showScoringPanel()"><div class="nav-ico">⚡</div> Scoring</div>
   <div class="nav-item" id="n-produits" onclick="showCrmProducts()"><div class="nav-ico">◫</div> Produits</div>
   <div class="nav-item" id="n-documents" onclick="showDocumentLibrary()"><div class="nav-ico">▦</div> Bibliothèque documentaire</div>
+  <div class="nav-item" id="n-agentlog" onclick="showAgentDecisionLog()"><div class="nav-ico">☰</div> Journal Agent IA</div>
   <div class="nav-item" id="n-crmusers" onclick="showCrmUsers()" style="display:none"><div class="nav-ico">◉</div> Utilisateurs CRM</div>
 </div>
 
@@ -3517,6 +3518,18 @@ const SIGNAL_STATUS_TAG = {
   fact: ['t-green','Vérifié'], hypothesis: ['t-purple','Hypothèse'],
   missing_data: ['t-amber','Donnée manquante'], to_verify: ['t-gray','À vérifier'],
 };
+// Même règle que syncDetectedProject() côté serveur (routes/crmSalesSignal.ts)
+// — évite un aller-retour réseau juste pour rafraîchir la bannière "Projet
+// détecté" après passage d'un signal à "fact" (le serveur a déjà fait la
+// mise à jour en base, on ne fait que refléter la même règle côté client).
+function applyDetectedProjectFromSignal(c, signal){
+  if(!c || !signal || signal.status!=='fact') return;
+  const candidate = signal.publishedAt ? new Date(signal.publishedAt) : (signal.verifiedAt ? new Date(signal.verifiedAt) : new Date());
+  if(c.detectedProjectDate && new Date(c.detectedProjectDate) >= candidate) return;
+  const label = SIGNAL_TYPE_LABELS[signal.signalType] || signal.signalType;
+  c.detectedProject = signal.hypothesis ? label+' — '+signal.hypothesis : label;
+  c.detectedProjectDate = candidate.toISOString();
+}
 
 async function loadSignalsCard(c){
   const el = document.getElementById('signals-card');
@@ -3547,11 +3560,19 @@ function renderSignalsCard(prospectId){
       </div>
     </div>`;
   }).join('');
+  const c = clients.find(x=>x.id===prospectId);
+  const projectBanner = c && c.detectedProject
+    ? `<div style="display:flex;align-items:center;gap:8px;background:#fbeeee;border-left:3px solid #8b1040;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px">
+        <span style="font-weight:600;color:#8b1040">Projet détecté :</span> ${esc(c.detectedProject)}
+        ${c.detectedProjectDate?`<span style="color:#888;margin-left:auto;font-size:11px">${new Date(c.detectedProjectDate).toLocaleDateString('fr-FR')}</span>`:''}
+      </div>`
+    : '';
   el.innerHTML = `
     <div class="card-head"><div class="ch-ico">⚡</div><span class="ch-title">Signaux commerciaux</span>
       ${CRM_SIGNALS.length?`<span style="font-size:12px;color:#aaa;margin-left:8px">${CRM_SIGNALS.length} signal${CRM_SIGNALS.length>1?'s':''}</span>`:''}
       <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="openAddSignalModal('${prospectId}')">+ Ajouter un signal</button>
     </div>
+    ${projectBanner}
     ${rows || "<div class=\"log-empty\">Aucun signal pour cette fiche — l'Agent Market Intelligence scanne chaque nuit les prospects avec un commercial assigné, ou ajoutez-en un manuellement (ex. post LinkedIn repéré via Sales Navigator).</div>"}`;
   ficheCollapsible('signals-card');
 }
@@ -3599,6 +3620,8 @@ async function submitAddSignal(prospectId){
       prospectId, url, signalType:g('sig2-type'), source:g('sig2-source'), hypothesis:g('sig2-hypothesis'),
     })});
     if(!r.ok) throw new Error('http '+r.status);
+    const signal = await r.json();
+    applyDetectedProjectFromSignal(clients.find(x=>x.id===prospectId), signal);
     closeModal2();
     flash('Signal ajouté');
     loadSignalsCard({id:prospectId});
@@ -3609,7 +3632,9 @@ async function signalSetStatus(id, status){
   try{
     const r = await apiFetch('/wa/crmSalesSignal/updateStatus', {method:'POST', body:JSON.stringify({id, status})});
     if(!r.ok) throw new Error('http '+r.status);
+    const signal = await r.json();
     const c = clients.find(x=>x.id===curId);
+    applyDetectedProjectFromSignal(c, signal);
     if(c) loadSignalsCard(c);
   }catch(e){ flash('Erreur de mise à jour'); }
 }
@@ -7882,6 +7907,49 @@ function renderDocumentLibrary(){
   document.getElementById('main').innerHTML = `
     <div class="log-empty" style="font-style:normal;margin-bottom:10px">Documents disponibles pour joindre à l'envoi d'un devis (onglet Document du constructeur de devis → "Documents à joindre"). Jamais ajoutés automatiquement.</div>
     ${rows || '<div class="card"><div class="log-empty">Aucun document — ajoutez-en un.</div></div>'}`;
+}
+// Journal d'audit des agents IA (§7 conformité brief Sesame AI Sales Agent)
+// — lecture seule, jamais d'édition : une entrée doit rester consultable
+// telle qu'écrite par l'agent.
+const AGENT_NAME_LABELS = { market_intelligence: 'Market Intelligence', enrichment: 'Enrichissement', scoring: 'Scoring', copywriter: 'Copywriter' };
+let AGENT_LOG_FILTER = '';
+async function showAgentDecisionLog(){
+  view='agentlog'; setNav('n-agentlog'); bc([{label:'Journal Agent IA'}]);
+  tba('');
+  document.getElementById('main').innerHTML='<div class="card">Chargement…</div>';
+  await loadAgentDecisionLog();
+}
+async function loadAgentDecisionLog(){
+  let rows = [];
+  try{
+    const r = await apiFetch('/wa/agentDecisionLog/list'+(AGENT_LOG_FILTER?'?agentName='+encodeURIComponent(AGENT_LOG_FILTER):''));
+    rows = r.ok ? await r.json() : [];
+  }catch(e){}
+  renderAgentDecisionLog(rows);
+}
+function renderAgentDecisionLog(rows){
+  const agentOptions = Object.keys(AGENT_NAME_LABELS).map(k=>`<option value="${k}" ${AGENT_LOG_FILTER===k?'selected':''}>${esc(AGENT_NAME_LABELS[k])}</option>`).join('');
+  const items = rows.map(r=>`
+    <div class="card" style="margin-bottom:10px">
+      <div class="db-row-between">
+        <div><span class="tag t-gray" style="font-size:10px">${esc(AGENT_NAME_LABELS[r.agentName]||r.agentName)}</span>
+          ${r.prospectName?` · <strong>${esc(r.prospectName)}</strong>`:''}
+          ${r.model?` · <span style="font-size:11px;color:var(--mu)">${esc(r.model)}</span>`:''}
+        </div>
+        <div style="font-size:11px;color:var(--mu)">${new Date(r.createdAt).toLocaleString('fr-FR')}</div>
+      </div>
+      <div style="font-size:12px;margin-top:8px"><strong>Entrée :</strong> ${esc(r.inputSummary)}</div>
+      <div style="font-size:12px;margin-top:4px;white-space:pre-wrap"><strong>Sortie :</strong> ${esc(r.outputSummary)}</div>
+    </div>`).join('');
+  document.getElementById('main').innerHTML = `
+    <div class="card" style="margin-bottom:10px;display:flex;align-items:center;gap:10px">
+      <label style="margin:0;font-size:12px;color:var(--mu)">Agent</label>
+      <select id="agentlog-filter" onchange="AGENT_LOG_FILTER=this.value;loadAgentDecisionLog()" style="width:auto">
+        <option value="">Tous</option>${agentOptions}
+      </select>
+      <span style="font-size:11px;color:var(--mu);margin-left:auto">${rows.length} entrée${rows.length>1?'s':''} (100 plus récentes)</span>
+    </div>
+    ${items || '<div class="card"><div class="log-empty">Aucune entrée pour l\'instant.</div></div>'}`;
 }
 function docOpenModal(id){
   const d = id ? (CRM_DOCUMENTS||[]).find(x=>x.id===id) : null;

@@ -13,6 +13,45 @@ import { requireAdmin, requireSesame } from "../middleware/requireAdmin";
  */
 export const crmSalesSignalRouter = Router();
 
+// Mêmes libellés que SIGNAL_TYPE_LABELS côté client (public/crm.html) — pour
+// que le texte de detectedProject corresponde exactement à ce que l'écran
+// affiche déjà pour ce signal.
+const SIGNAL_TYPE_LABELS: Record<string, string> = {
+  actualite: "Actualité",
+  linkedin_post: "Post LinkedIn",
+  ouverture: "Ouverture",
+  renovation: "Rénovation",
+  recrutement: "Recrutement",
+  changement_pms: "Changement de PMS",
+  agrandissement: "Agrandissement",
+  autre: "Autre",
+};
+
+/**
+ * Projet détecté (CrmProspect.detectedProject/detectedProjectDate) —
+ * dérivé du signal d'achat le plus pertinent une fois VÉRIFIÉ (status
+ * "fact"), jamais d'un simple "to_verify"/"hypothesis" (§2 du brief :
+ * "ne jamais présenter une donnée non vérifiée comme un fait"). Le signal
+ * le plus RÉCENT (date de publication, sinon de vérification) l'emporte —
+ * un projet détecté plus tôt mais plus ancien ne doit pas rester affiché
+ * si un signal plus récent vient le contredire ou le préciser.
+ */
+async function syncDetectedProject(signal: { prospectId: string | null; status: string; signalType: string; hypothesis: string | null; publishedAt: Date | null; verifiedAt: Date | null }) {
+  if (!signal.prospectId || signal.status !== "fact") return;
+  const candidateDate = signal.publishedAt || signal.verifiedAt || new Date();
+  const prospect = await prisma.crmProspect.findUnique({ where: { id: signal.prospectId }, select: { detectedProjectDate: true } });
+  if (!prospect) return;
+  if (prospect.detectedProjectDate && prospect.detectedProjectDate >= candidateDate) return;
+  const label = SIGNAL_TYPE_LABELS[signal.signalType] || signal.signalType;
+  await prisma.crmProspect.update({
+    where: { id: signal.prospectId },
+    data: {
+      detectedProject: signal.hypothesis ? `${label} — ${signal.hypothesis}` : label,
+      detectedProjectDate: candidateDate,
+    },
+  });
+}
+
 crmSalesSignalRouter.get(
   "/crmSalesSignal/list",
   requireAdmin,
@@ -64,6 +103,7 @@ crmSalesSignalRouter.post(
         verifiedAt: status === "fact" ? new Date() : undefined,
       },
     });
+    await syncDetectedProject(row);
     res.status(201).json(row);
   })
 );
@@ -79,6 +119,7 @@ crmSalesSignalRouter.post(
       where: { id },
       data: { status, verifiedAt: status === "fact" ? new Date() : undefined },
     });
+    await syncDetectedProject(row);
     res.json(row);
   })
 );
