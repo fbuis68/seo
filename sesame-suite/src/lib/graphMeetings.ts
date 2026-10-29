@@ -150,28 +150,55 @@ const decodeHtmlEntities = (s: string) => s.replace(/&amp;/g, "&").replace(/&quo
  * d'historique (rattacher rétroactivement des réunions déjà tenues aux
  * fiches prospects, cf. syncHistory). Pas de $filter côté serveur sur
  * isOnlineMeeting (support inégal selon les tenants) : filtré ici. */
+type GraphCalendarEvent = {
+  subject?: string;
+  start?: { dateTime?: string };
+  end?: { dateTime?: string };
+  isOnlineMeeting?: boolean;
+  onlineMeeting?: { joinUrl?: string };
+  attendees?: { emailAddress?: { address?: string } }[];
+  body?: { content?: string };
+};
+
+/**
+ * Pagine via @odata.nextLink (29/10/2026) — une boîte partagée très
+ * sollicitée (ex : mailbox d'un outil de prise de RDV externe) dépasse
+ * largement 250 événements sur une fenêtre de 270 jours (-90/+180) ; sans
+ * suivre la pagination, tout ce qui est au-delà de la 1ère page disparaissait
+ * silencieusement — aucune erreur, aucun échantillon, juste absent (cas
+ * réel confirmé 29/10/2026 : réunion introuvable nulle part dans le rapport
+ * alors que la fiche prospect avait le bon email). nextLink est une URL
+ * ABSOLUE Microsoft — on retire le préfixe GRAPH_BASE pour la repasser à
+ * graphFetch (qui attend un chemin relatif), garde-fou à 20 pages
+ * (5000 événements) pour ne jamais boucler indéfiniment sur une réponse
+ * malformée.
+ */
+async function fetchAllCalendarPages(firstPath: string): Promise<GraphCalendarEvent[]> {
+  const events: GraphCalendarEvent[] = [];
+  let path: string | null = firstPath;
+  let pages = 0;
+  while (path && pages < 20) {
+    pages++;
+    const res = (await graphFetch(path)) as { value?: GraphCalendarEvent[]; "@odata.nextLink"?: string };
+    events.push(...(res.value || []));
+    const nextLink = res["@odata.nextLink"];
+    path = nextLink ? nextLink.replace("https://graph.microsoft.com/v1.0", "") : null;
+  }
+  return events;
+}
+
 export async function listCalendarMeetings(
   organizerUserId: string,
   startISO: string,
   endISO: string
 ): Promise<{ meetings: GraphCalendarMeeting[]; dropped: DroppedCalendarEvent[] }> {
-  const res = (await graphFetch(
+  const allEvents = await fetchAllCalendarPages(
     `/users/${encodeURIComponent(organizerUserId)}/calendarView?startDateTime=${encodeURIComponent(startISO)}&endDateTime=${encodeURIComponent(endISO)}&$select=subject,start,end,isOnlineMeeting,onlineMeeting,attendees,body&$top=250`
-  )) as {
-    value?: {
-      subject?: string;
-      start?: { dateTime?: string };
-      end?: { dateTime?: string };
-      isOnlineMeeting?: boolean;
-      onlineMeeting?: { joinUrl?: string };
-      attendees?: { emailAddress?: { address?: string } }[];
-      body?: { content?: string };
-    }[];
-  };
+  );
   const asUtcIso = (dt?: string) => (dt ? new Date(dt.endsWith("Z") ? dt : dt + "Z").toISOString() : "");
   const meetings: GraphCalendarMeeting[] = [];
   const dropped: DroppedCalendarEvent[] = [];
-  for (const e of res.value || []) {
+  for (const e of allEvents) {
     const bodyContent = e.body?.content || "";
     const joinUrl = e.onlineMeeting?.joinUrl || (bodyContent.match(TEAMS_LINK_REGEX) ? decodeHtmlEntities(bodyContent.match(TEAMS_LINK_REGEX)![0]) : null);
     if (!joinUrl) {
