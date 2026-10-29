@@ -2670,6 +2670,7 @@ function showFiche(id){
   loadSignatureCard(c);
   loadMeetingsCard(c);
   loadSignalsCard(c);
+  loadSalesScoreCard(c);
 }
 
 function riskScore(c){let s=0;if(c.danger==='Élevé !!')s+=5;else if(c.danger==='Modéré')s+=3;if(c.contrat==='non')s+=2;if(!c.webApp&&!c.mobileV2)s+=1;if(!c.nfc&&!c.qr&&!c.mobile&&!c.code)s+=1;return Math.min(s,10);}
@@ -2880,6 +2881,11 @@ function renderFiche(c){
 
   <div class="card" id="signals-card">
     <div class="card-head"><div class="ch-ico">⚡</div><span class="ch-title">Signaux commerciaux</span></div>
+    <div class="log-empty">Chargement…</div>
+  </div>
+
+  <div class="card" id="salesscore-card">
+    <div class="card-head"><div class="ch-ico">◉</div><span class="ch-title">Score qualificatif B2B (IA)</span></div>
     <div class="log-empty">Chargement…</div>
   </div>
 
@@ -3691,6 +3697,89 @@ async function loadScoringCard(c){
     </div>
     ${rowsHtml}`;
   ficheCollapsible('scoring-card');
+}
+
+// Score qualificatif B2B (Sesame AI Sales Agent, §3 du brief) — distinct du
+// score d'engagement ci-dessus. Calculé à la demande uniquement (coût d'un
+// appel Claude), jamais en tâche de fond pour une fiche individuelle.
+const SALES_SCORE_CRITERIA = [
+  {key:'marketFit', label:'Adéquation marché', max:20},
+  {key:'recentSignal', label:'Signal récent', max:25},
+  {key:'economicPotential', label:'Potentiel économique', max:15},
+  {key:'decisionMakerAccess', label:'Accès décideur', max:10},
+  {key:'urgency', label:'Urgence', max:15},
+  {key:'technicalFit', label:'Compatibilité technique', max:10},
+  {key:'dataReliability', label:'Fiabilité des données', max:5},
+];
+const SALES_SCORE_CLASS_TAG = {
+  hot_lead: ['t-red','Hot lead'], qualified_lead: ['t-amber','Qualifié'],
+  nurturing: ['t-blue','À maturer'], low_priority: ['t-gray','Priorité basse'],
+};
+let SALES_SCORE_HISTORY = [];
+async function loadSalesScoreCard(c){
+  const el = document.getElementById('salesscore-card');
+  if(!el) return;
+  try{
+    const r = await apiFetch('/wa/crmSalesScore/list?prospectId='+encodeURIComponent(c.id));
+    SALES_SCORE_HISTORY = r.ok ? await r.json() : [];
+  }catch(e){ SALES_SCORE_HISTORY = []; }
+  renderSalesScoreCard(c.id);
+}
+function renderSalesScoreCard(prospectId){
+  const el = document.getElementById('salesscore-card');
+  if(!el) return;
+  const latest = SALES_SCORE_HISTORY[0];
+  const tag = latest ? (SALES_SCORE_CLASS_TAG[latest.classification]||SALES_SCORE_CLASS_TAG.low_priority) : null;
+  const criteriaHtml = latest ? SALES_SCORE_CRITERIA.map(cr=>{
+    const val = latest[cr.key]||0;
+    const pct = Math.round(val/cr.max*100);
+    const just = (latest.justification||{})[cr.key]||'';
+    return `<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
+        <span>${esc(cr.label)}</span><span style="color:var(--mu)">${val}/${cr.max}</span>
+      </div>
+      <div style="height:6px;border-radius:4px;background:var(--bg,#f0eee9);overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:#8b1040;border-radius:4px"></div>
+      </div>
+      ${just?`<div style="font-size:11px;color:var(--mu);margin-top:3px">${esc(just)}</div>`:''}
+    </div>`;
+  }).join('') : '';
+  const historyHtml = SALES_SCORE_HISTORY.length>1 ? `
+    <div style="margin-top:10px;font-size:11px;color:var(--mu)">
+      <div style="font-weight:600;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px">Historique</div>
+      ${SALES_SCORE_HISTORY.slice(1,6).map(h=>`<div>${new Date(h.computedAt).toLocaleDateString('fr-FR')} — ${h.total}/100 (${(SALES_SCORE_CLASS_TAG[h.classification]||['',''])[1]})</div>`).join('')}
+    </div>` : '';
+  el.innerHTML = `
+    <div class="card-head"><div class="ch-ico">◉</div><span class="ch-title">Score qualificatif B2B (IA)</span>
+      <button class="btn btn-primary btn-sm" id="salesscore-btn" style="margin-left:auto" onclick="computeSalesScoreNow('${prospectId}')">${latest?'Recalculer (IA)':'Calculer (IA)'}</button>
+    </div>
+    ${latest ? `
+    <div class="hero-row" style="margin-bottom:10px">
+      <div class="score-box" style="margin-left:0">
+        <div class="score-lbl">Total</div>
+        <div class="score-num" style="color:#8b1040">${latest.total}</div>
+        <div class="score-sub"><span class="tag ${tag[0]}" style="font-size:10px">${tag[1]}</span> · calculé le ${new Date(latest.computedAt).toLocaleDateString('fr-FR')}</div>
+      </div>
+    </div>
+    ${criteriaHtml}
+    ${historyHtml}
+    ` : '<div class="log-empty">Pas encore calculé pour cette fiche.</div>'}`;
+  ficheCollapsible('salesscore-card');
+}
+async function computeSalesScoreNow(prospectId){
+  const btn = document.getElementById('salesscore-btn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Calcul en cours…'; }
+  try{
+    const r = await apiFetch('/wa/crmSalesScore/compute', {method:'POST', body:JSON.stringify({prospectId})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    SALES_SCORE_HISTORY.unshift(data);
+    renderSalesScoreCard(prospectId);
+    flash('Score recalculé ✓');
+  }catch(e){
+    flash(e.message||'Erreur de calcul du score');
+    if(btn){ btn.disabled = false; btn.textContent = SALES_SCORE_HISTORY.length?'Recalculer (IA)':'Calculer (IA)'; }
+  }
 }
 
 // ════════════════════════════════════════

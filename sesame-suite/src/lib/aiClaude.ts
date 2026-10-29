@@ -234,6 +234,118 @@ export async function generateFaqDraft(params: { subject: string; threadText: st
   };
 }
 
+export interface SalesScoreCriteria {
+  marketFit: number;
+  recentSignal: number;
+  economicPotential: number;
+  decisionMakerAccess: number;
+  urgency: number;
+  technicalFit: number;
+  dataReliability: number;
+  justification: Record<string, string>;
+}
+
+const SALES_SCORE_TOOL: AnthropicTool = {
+  name: "submit_score",
+  description: "Soumet la notation qualificative B2B du prospect.",
+  input_schema: {
+    type: "object",
+    properties: {
+      market_fit: { type: "integer", minimum: 0, maximum: 20, description: "Adéquation marché/produit (0-20) : le secteur/profil correspond-il à la cible Sesame (hôtellerie, contrôle d'accès connecté) ?" },
+      recent_signal: { type: "integer", minimum: 0, maximum: 25, description: "Signal d'achat récent et VÉRIFIÉ (0-25) : 0 si aucun signal vérifié listé ci-dessous, sinon selon pertinence/fraîcheur réelle des signaux fournis." },
+      economic_potential: { type: "integer", minimum: 0, maximum: 15, description: "Potentiel économique (0-15) : taille/effectif, nombre d'accès estimé, budget probable, d'après les faits fournis." },
+      decision_maker_access: { type: "integer", minimum: 0, maximum: 10, description: "Accessibilité du décideur (0-10) : contact direct déjà identifié, échanges/réunions déjà engagés." },
+      urgency: { type: "integer", minimum: 0, maximum: 15, description: "Urgence du besoin (0-15) : projet détecté avec échéance proche, demande explicite récente — 0 si aucun projet détecté." },
+      technical_fit: { type: "integer", minimum: 0, maximum: 10, description: "Compatibilité technique (0-10) : infrastructure/PMS compatible connue, pas de contre-indication connue — valeur moyenne si inconnu." },
+      data_reliability: { type: "integer", minimum: 0, maximum: 5, description: "Fiabilité des données disponibles (0-5) : 5 si les informations fournies sont complètes et vérifiées, 0-1 si quasiment aucune donnée fiable n'est fournie." },
+      justification: {
+        type: "object",
+        description: "Une phrase de justification par critère, citant un fait concret fourni ci-dessous — jamais une phrase générique, et dire explicitement quand une donnée manque plutôt que de l'ignorer.",
+        properties: {
+          market_fit: { type: "string" },
+          recent_signal: { type: "string" },
+          economic_potential: { type: "string" },
+          decision_maker_access: { type: "string" },
+          urgency: { type: "string" },
+          technical_fit: { type: "string" },
+          data_reliability: { type: "string" },
+        },
+        required: ["market_fit", "recent_signal", "economic_potential", "decision_maker_access", "urgency", "technical_fit", "data_reliability"],
+      },
+    },
+    required: ["market_fit", "recent_signal", "economic_potential", "decision_maker_access", "urgency", "technical_fit", "data_reliability", "justification"],
+  },
+};
+
+export interface SalesScoreFacts {
+  prospectName: string;
+  secteur?: string;
+  ville?: string;
+  pays?: string;
+  effectifSalarie?: string;
+  nbAcces?: number;
+  contrat?: string;
+  detectedProject?: string | null;
+  engagementScore: number;
+  hasAssignedCommercial: boolean;
+  verifiedSignals: { label: string; hypothesis?: string; publishedAt?: string }[];
+  recentMeetingSummaries: string[];
+}
+
+/**
+ * Agent "Scoring" (Sesame AI Sales Agent, §3 du brief) — qualification B2B
+ * 0-100 sur 7 critères pondérés, DISTINCTE du score d'engagement
+ * comportemental existant (CrmProspect.score, ouvertures/clics). Ne reçoit
+ * QUE des faits déjà en base (signaux "fact" uniquement, jamais
+ * to_verify/hypothesis — cf. routes/crmSalesScore.ts) : le modèle ne doit
+ * jamais surnoter par défaut quand une donnée manque (§3 : "éviter les
+ * scores artificiellement élevés"), d'où la consigne explicite ci-dessous
+ * et une justification obligatoire par critère.
+ */
+export async function computeSalesScore(facts: SalesScoreFacts): Promise<SalesScoreCriteria> {
+  const system = `Tu notes la qualification commerciale B2B d'un prospect pour Sesame Technology (contrôle d'accès connecté pour l'hôtellerie/l'hébergement). Utilise UNIQUEMENT les faits listés dans le message — n'invente aucune information absente. Si une donnée nécessaire à un critère manque, mets ce critère à une valeur BASSE et dis-le explicitement dans sa justification plutôt que de supposer une valeur moyenne ou haute par défaut.`;
+  const lines = [
+    `Entreprise : ${facts.prospectName}`,
+    `Secteur : ${facts.secteur || "non renseigné"}`,
+    facts.ville || facts.pays ? `Localisation : ${[facts.ville, facts.pays].filter(Boolean).join(", ")}` : "Localisation : non renseignée",
+    `Effectif : ${facts.effectifSalarie || "non renseigné"}`,
+    facts.nbAcces ? `Nombre d'accès estimé : ${facts.nbAcces}` : "Nombre d'accès estimé : non renseigné",
+    `Contrat existant : ${facts.contrat || "aucun"}`,
+    `Commercial assigné : ${facts.hasAssignedCommercial ? "oui" : "non"}`,
+    `Score d'engagement comportemental (ouvertures/clics email, 0=aucun) : ${facts.engagementScore}`,
+    `Projet détecté : ${facts.detectedProject || "aucun"}`,
+    facts.verifiedSignals.length
+      ? `Signaux d'achat VÉRIFIÉS (status "fact" uniquement) :\n${facts.verifiedSignals.map((s) => `- ${s.label}${s.publishedAt ? ` (${s.publishedAt})` : ""}${s.hypothesis ? ` — ${s.hypothesis}` : ""}`).join("\n")}`
+      : "Signaux d'achat vérifiés : aucun",
+    facts.recentMeetingSummaries.length
+      ? `Résumés de réunions récentes :\n${facts.recentMeetingSummaries.map((s, i) => `[${i + 1}] ${s}`).join("\n")}`
+      : "Réunions enregistrées : aucune",
+  ].join("\n");
+
+  const input = await callClaude({ system, messages: [{ role: "user", content: lines }], tool: SALES_SCORE_TOOL, maxTokens: 1500 });
+  const clamp = (v: unknown, max: number) => Math.max(0, Math.min(max, Math.round(Number(v) || 0)));
+  const justRaw = (input.justification as Record<string, unknown>) || {};
+  const just = (k: string) => String(justRaw[k] || "").trim() || "Aucune justification fournie.";
+  return {
+    marketFit: clamp(input.market_fit, 20),
+    recentSignal: clamp(input.recent_signal, 25),
+    economicPotential: clamp(input.economic_potential, 15),
+    decisionMakerAccess: clamp(input.decision_maker_access, 10),
+    urgency: clamp(input.urgency, 15),
+    technicalFit: clamp(input.technical_fit, 10),
+    dataReliability: clamp(input.data_reliability, 5),
+    justification: {
+      marketFit: just("market_fit"),
+      recentSignal: just("recent_signal"),
+      economicPotential: just("economic_potential"),
+      decisionMakerAccess: just("decision_maker_access"),
+      urgency: just("urgency"),
+      technicalFit: just("technical_fit"),
+      dataReliability: just("data_reliability"),
+    },
+  };
+}
+
 export interface CompanyNewsItem {
   title: string;
   url: string;
