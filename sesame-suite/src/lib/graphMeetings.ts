@@ -90,6 +90,27 @@ export async function resolveOnlineMeetingId(organizerUserId: string, joinUrl: s
   return lookup.value?.[0]?.id || null;
 }
 
+/**
+ * Extrait l'id Azure AD (Oid) du VRAI organisateur depuis le joinUrl Teams
+ * (paramètre `context`, JSON encodé en query string : {"Tid":...,"Oid":...})
+ * — cf. syncHistory (routes/crmMeeting.ts) : une réunion peut apparaître sur
+ * le calendrier d'un commercial Sesame qui n'en est PAS l'organisateur (ex :
+ * invité/CC), auquel cas interroger /onlineMeetings sur SA boîte échoue avec
+ * "3004: Specified meeting is not found" — Graph n'autorise cette résolution
+ * que depuis la boîte de l'organisateur réel, jamais un simple participant.
+ * Cas réel confirmé le 29/10/2026 (Oid du lien ≠ id de la boîte scannée).
+ */
+export function extractOidFromJoinUrl(joinUrl: string): string | null {
+  try {
+    const context = new URL(joinUrl).searchParams.get("context");
+    if (!context) return null;
+    const parsed = JSON.parse(context) as { Oid?: string };
+    return parsed.Oid || null;
+  } catch {
+    return null;
+  }
+}
+
 export interface GraphCalendarMeeting {
   subject: string;
   startDateTime: string; // ISO UTC

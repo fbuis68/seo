@@ -12,6 +12,7 @@ import {
   getRecordingStream,
   listCalendarMeetings,
   resolveOnlineMeetingId,
+  extractOidFromJoinUrl,
 } from "../lib/graphMeetings";
 import { generateMeetingSummary } from "../lib/aiClaude";
 import { getSmtpConfig, sendEmailRaw } from "../lib/email";
@@ -331,14 +332,29 @@ crmMeetingRouter.post(
     // (constaté 27/10/2026 : 20 entrées, presque toutes des doublons).
     const seenDropped = new Set<string>();
 
+    // Pré-résolution de TOUTES les boîtes scannées avant de parcourir les
+    // événements (29/10/2026) — une réunion peut apparaître sur le calendrier
+    // d'un commercial Sesame qui n'en est pas l'organisateur réel (invité/CC
+    // sur l'invite) ; Graph refuse alors de résoudre l'onlineMeeting depuis
+    // cette boîte ("3004: Specified meeting is not found") même si la
+    // réunion existe bien côté tenant. Avoir TOUS les ids à l'avance permet
+    // de retenter avec le vrai organisateur (Oid du joinUrl) s'il s'agit
+    // justement d'un autre commercial déjà scanné — cf. extractOidFromJoinUrl.
+    const organizerIdByMailbox = new Map<string, string>();
+    const mailboxEmailByOrganizerId = new Map<string, string>();
     for (const mailboxEmail of mailboxes) {
-      let organizerUserId: string;
       try {
-        organizerUserId = await resolveGraphUserId(mailboxEmail);
+        const organizerUserId = await resolveGraphUserId(mailboxEmail);
+        organizerIdByMailbox.set(mailboxEmail, organizerUserId);
+        mailboxEmailByOrganizerId.set(organizerUserId, mailboxEmail);
       } catch (e) {
         pushError(`${mailboxEmail} : ${e instanceof Error ? e.message : "erreur Graph"}`);
-        continue;
       }
+    }
+
+    for (const mailboxEmail of mailboxes) {
+      const organizerUserId = organizerIdByMailbox.get(mailboxEmail);
+      if (!organizerUserId) continue; // déjà signalé en erreur ci-dessus
 
       let events, dropped;
       try {
@@ -386,11 +402,33 @@ crmMeetingRouter.post(
         attemptedJoinUrls.add(ev.joinUrl);
 
         let meetingId: string | null = null;
+        // Organisateur effectivement utilisé pour la résolution — peut
+        // différer de organizerUserId/mailboxEmail si on retombe sur le vrai
+        // organisateur (Oid du joinUrl) ci-dessous.
+        let resolvedOrganizerUserId = organizerUserId;
+        let resolvedMailboxEmail = mailboxEmail;
         try {
           meetingId = await resolveOnlineMeetingId(organizerUserId, ev.joinUrl);
         } catch (e) {
-          pushError(`${ev.subject} : échec résolution réunion (${e instanceof Error ? e.message : "erreur Graph"})`);
-          continue;
+          // La boîte scannée n'est pas l'organisateur réel (ex : invité/CC) —
+          // Graph refuse la résolution depuis une boîte non-organisatrice.
+          // Si le vrai organisateur (Oid du lien) est un AUTRE commercial
+          // Sesame déjà résolu ci-dessus, on retente depuis sa boîte.
+          const trueOrganizerId = extractOidFromJoinUrl(ev.joinUrl);
+          const trueMailbox = trueOrganizerId ? mailboxEmailByOrganizerId.get(trueOrganizerId) : undefined;
+          if (trueOrganizerId && trueMailbox && trueOrganizerId !== organizerUserId) {
+            try {
+              meetingId = await resolveOnlineMeetingId(trueOrganizerId, ev.joinUrl);
+              resolvedOrganizerUserId = trueOrganizerId;
+              resolvedMailboxEmail = trueMailbox;
+            } catch (e2) {
+              pushError(`${ev.subject} : échec résolution réunion (${e2 instanceof Error ? e2.message : "erreur Graph"})`);
+              continue;
+            }
+          } else {
+            pushError(`${ev.subject} : échec résolution réunion (${e instanceof Error ? e.message : "erreur Graph"})`);
+            continue;
+          }
         }
         if (!meetingId) continue;
 
@@ -398,12 +436,12 @@ crmMeetingRouter.post(
           data: {
             prospectId: matchedProspectId,
             subject: ev.subject,
-            organizerEmail: mailboxEmail,
+            organizerEmail: resolvedMailboxEmail,
             startDateTime: new Date(ev.startDateTime),
             endDateTime: new Date(ev.endDateTime),
             joinUrl: ev.joinUrl,
             graphMeetingId: meetingId,
-            graphOrganizerUserId: organizerUserId,
+            graphOrganizerUserId: resolvedOrganizerUserId,
           },
         });
         knownJoinUrls.add(ev.joinUrl);
