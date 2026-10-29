@@ -6,6 +6,7 @@ import { requireAdmin, requireSesame } from "../middleware/requireAdmin";
 import { ONBOARDING_MODULES } from "./onboarding";
 import { nextSequenceValue } from "../lib/sequence";
 import { sendMessage } from "../lib/messaging";
+import { getSmtpConfig } from "../lib/email";
 
 /**
  * Devis — écran CRM à part entière (refonte du 22/10/2026, reprend
@@ -826,7 +827,7 @@ crmQuoteRouter.post(
     const id = (req.body.id as string) || "";
     const existing = await prisma.crmQuote.findUnique({
       where: { id },
-      include: { prospect: { select: { id: true, nom: true, email: true } } },
+      include: { prospect: { select: { id: true, nom: true, email: true, commercial: { select: { name: true, email: true } } } } },
     });
     if (!existing) throw new HttpError(404, "Devis introuvable");
     if (existing.status === "accepté") throw new HttpError(400, "Ce devis est déjà signé");
@@ -840,6 +841,19 @@ crmQuoteRouter.post(
     const lines = expandQuoteLines(storedLines, hardwareLines, config);
     const totals = quoteTotals(lines, existing.discountPct, existing.vatPct, existing.depositPct);
     const signUrl = `${req.protocol}://${req.get("host")}/devis-signature.html?token=${signToken}`;
+
+    // Signature humaine de l'email — commercial assigné au prospect si
+    // renseigné (CrmProspect.commercial), sinon repli sur l'adresse support
+    // CRM générique (SmtpConfig.supportFromEmail, portée globale) plutôt que
+    // de laisser un {{commercialNom}}/{{commercialEmail}} vide dans le
+    // corps du modèle (29/10/2026, modèle email fourni par le client).
+    let commercialNom = prospect.commercial?.name || "";
+    let commercialEmail = prospect.commercial?.email || "";
+    if (!commercialNom || !commercialEmail) {
+      const smtp = await getSmtpConfig(null);
+      commercialNom = commercialNom || "L'équipe Sesame Technology";
+      commercialEmail = commercialEmail || smtp?.supportFromEmail || smtp?.fromEmail || "";
+    }
 
     // Documents de la bibliothèque choisis pour cet envoi (cf.
     // attachedDocumentIds) — un id devenu introuvable (document supprimé
@@ -869,6 +883,8 @@ crmQuoteRouter.post(
           montantMensuel: totals.mrrNet.toFixed(2).replace(".", ",") + " €",
           montantTotalTTC: totals.totalTTC.toFixed(2).replace(".", ",") + " €",
           lienSignature: signUrl,
+          commercialNom,
+          commercialEmail,
         },
       });
     } catch (e) {
