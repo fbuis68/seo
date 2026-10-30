@@ -7489,12 +7489,12 @@ function dqMeetingsSectionHtml(q){
           <input type="checkbox" ${vidChecked?'checked':''} ${m.hasRecording?'':'disabled'} onchange="dqToggleMeetingOption('${m.id}','Video',this.checked)">Lien de la vidéo
         </label>
       </div>`:''}
-      ${checked&&sumChecked?`<textarea style="margin:6px 0 0 24px;width:calc(100% - 24px);font-size:12px" rows="4" onblur="dqSaveMeetingSummary('${m.id}',this.value)">${esc(m.summaryText||'')}</textarea>`:''}
+      ${checked&&sumChecked?`<textarea style="display:block;margin:6px 0 4px 24px;width:calc(100% - 24px);box-sizing:border-box;font-size:12px" rows="4" onblur="dqSaveMeetingSummary('${m.id}',this.value)">${esc(m.summaryText||'')}</textarea>`:''}
     </div>`;
   }).join('');
   return `<div class="db-row-between" style="margin:14px 0 4px"><h4 style="margin:0">Réunions à inclure</h4></div>
     <small style="color:var(--mu)">Cochez une réunion, puis choisissez résumé et/ou lien vidéo — affichés sur l'espace client (onglet Comptes-rendus), rien n'est ajouté automatiquement.</small>
-    <div style="margin-top:6px">${rows || '<div class="log-empty">Aucune réunion avec compte-rendu récupéré pour ce client — depuis sa fiche, carte "Réunions Teams", cliquez "Récupérer le compte-rendu" après la réunion.</div>'}</div>`;
+    <div style="margin:6px 0 18px">${rows || '<div class="log-empty">Aucune réunion avec compte-rendu récupéré pour ce client — depuis sa fiche, carte "Réunions Teams", cliquez "Récupérer le compte-rendu" après la réunion.</div>'}</div>`;
 }
 function dqToggleAttachedMeeting(id, checked){
   const q = QUOTE_DRAFT;
