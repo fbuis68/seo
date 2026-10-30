@@ -16,8 +16,8 @@ export const crmUserRouter = Router();
 
 const CRM_ROLES = ["admin", "commercial"];
 
-function shapeCrmUser(u: { id: string; email: string; name: string | null; crmRole: string; active: boolean; altEmails: string[]; createdAt: Date }) {
-  return { id: u.id, email: u.email, name: u.name || "", crmRole: u.crmRole, active: u.active, altEmails: u.altEmails, createdAt: u.createdAt };
+function shapeCrmUser(u: { id: string; email: string; name: string | null; crmRole: string; active: boolean; altEmails: string[]; bookingUrl: string | null; createdAt: Date }) {
+  return { id: u.id, email: u.email, name: u.name || "", crmRole: u.crmRole, active: u.active, altEmails: u.altEmails, bookingUrl: u.bookingUrl || "", createdAt: u.createdAt };
 }
 
 function parseAltEmails(raw: unknown): string[] {
@@ -47,6 +47,7 @@ interface CreateBody {
   crmRole?: string;
   password?: string;
   altEmails?: string[];
+  bookingUrl?: string;
 }
 
 crmUserRouter.post(
@@ -70,7 +71,7 @@ crmUserRouter.post(
     const password = b.password || randomPassword();
     const passwordHash = await bcrypt.hash(password, 10);
     const row = await prisma.adminUser.create({
-      data: { entityId: sesameHq.id, email, name: b.name?.trim() || null, role: "sesame", crmRole, passwordHash, altEmails: parseAltEmails(b.altEmails) },
+      data: { entityId: sesameHq.id, email, name: b.name?.trim() || null, role: "sesame", crmRole, passwordHash, altEmails: parseAltEmails(b.altEmails), bookingUrl: b.bookingUrl?.trim() || null },
     });
     // Le mot de passe généré n'est retourné qu'une fois, en clair — jamais relu ensuite.
     res.status(201).json({ ...shapeCrmUser(row), password });
@@ -83,6 +84,7 @@ interface UpdateBody {
   crmRole?: string;
   active?: boolean;
   altEmails?: string[];
+  bookingUrl?: string;
 }
 
 crmUserRouter.post(
@@ -106,6 +108,7 @@ crmUserRouter.post(
         crmRole,
         active: b.active,
         altEmails: b.altEmails !== undefined ? parseAltEmails(b.altEmails) : undefined,
+        bookingUrl: b.bookingUrl !== undefined ? b.bookingUrl.trim() || null : undefined,
       },
     });
     res.json(shapeCrmUser(row));

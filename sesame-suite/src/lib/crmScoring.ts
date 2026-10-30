@@ -20,7 +20,9 @@ export type ScoreEventType =
   | "two_modules_viewed"
   | "doc_request"
   | "demo_request"
-  | "inbound_email";
+  | "inbound_email"
+  | "quote_tab_viewed"
+  | "quote_document_opened";
 
 const MODULE_EVENT_TYPES: ScoreEventType[] = ["module_click", "module_page_visit"];
 
@@ -50,6 +52,10 @@ function pointsFor(eventType: ScoreEventType, config: CrmScoringConfig): number 
       return config.pointsDemoRequest;
     case "inbound_email":
       return config.pointsInboundEmail;
+    case "quote_tab_viewed":
+      return config.pointsQuoteTabViewed;
+    case "quote_document_opened":
+      return config.pointsQuoteDocumentOpened;
   }
 }
 

@@ -204,6 +204,24 @@ function enhanceVimeoThumbs(){
 function fmtDateTime(iso){
   return new Date(iso).toLocaleString('fr-FR',{dateStyle:'long',timeStyle:'short'});
 }
+// Suivi des onglets/documents consultés (30/10/2026, demande client) —
+// alimente le score d'intérêt du prospect (cf. lib/crmScoring.ts), sans
+// authentification (le visiteur n'a pas de session CRM) : POST sécurisé
+// par le seul fait de connaître ce token, mêmes garanties que les autres
+// routes publicXxx. Best-effort, ne bloque jamais l'affichage/le clic si
+// l'appel échoue.
+function trackQuoteEvent(eventType, module){
+  fetch('/wa/crmQuote/trackEvent', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ token: TOKEN, eventType, module })
+  }).catch(()=>{});
+}
+// Id plutôt que titre dans l'attribut onclick (évite tout souci
+// d'échappement de guillemets si un titre de document en contient).
+function trackQuoteDocument(docId){
+  const d = (QUOTE.documents||[]).find(x=>x.id===docId);
+  trackQuoteEvent('quote_document_opened', d?d.title:docId);
+}
 function documentsTabHtml(){
   return QUOTE.documents.map(d=>`
     <div class="doc-item">
@@ -214,12 +232,16 @@ function documentsTabHtml(){
           ${d.description?`<div class="doc-desc">${esc(d.description)}</div>`:''}
         </div>
       </div>
-      <a class="btn btn-ghost doc-dl" style="width:auto" href="/wa/crmQuote/publicDocument/${encodeURIComponent(d.id)}?token=${encodeURIComponent(TOKEN)}" target="_blank" rel="noopener">${d.fileMimeType?'Télécharger':'Ouvrir'}</a>
+      <a class="btn btn-ghost doc-dl" style="width:auto" href="/wa/crmQuote/publicDocument/${encodeURIComponent(d.id)}?token=${encodeURIComponent(TOKEN)}" target="_blank" rel="noopener" onclick="trackQuoteDocument('${d.id}')">${d.fileMimeType?'Télécharger':'Ouvrir'}</a>
     </div>`).join('');
 }
 function bookingTabHtml(){
-  const BOOKING_URL = 'https://bookings.cloud.microsoft/book/SesameTechnology@sesame-technology.com/?ismsaljsauthenabled';
-  return `<p style="font-size:13px;color:var(--tx)">Besoin d'échanger sur ce devis ou de planifier la suite ? Prenez rendez-vous directement avec votre interlocuteur Sesame Technology.</p>
+  // Lien du commercial en charge du dossier s'il en a un de renseigné (cf.
+  // AdminUser.bookingUrl), repli sur le lien générique Sesame Technology —
+  // 30/10/2026, demande client "filtre le commercial en charge du dossier".
+  const BOOKING_URL = QUOTE.commercialBookingUrl || 'https://bookings.cloud.microsoft/book/SesameTechnology@sesame-technology.com/?ismsaljsauthenabled';
+  const withCommercial = QUOTE.commercialBookingUrl && QUOTE.commercialName;
+  return `<p style="font-size:13px;color:var(--tx)">Besoin d'échanger sur ce devis ou de planifier la suite ? Prenez rendez-vous directement avec ${withCommercial?'<strong>'+esc(QUOTE.commercialName)+'</strong>':'votre interlocuteur Sesame Technology'}.</p>
     <a class="btn" style="display:inline-block;width:auto;text-decoration:none" href="${BOOKING_URL}" target="_blank" rel="noopener">Ouvrir la prise de rendez-vous ↗</a>
     <iframe class="booking-frame" src="${BOOKING_URL}" title="Prise de rendez-vous Sesame Technology" loading="lazy"></iframe>`;
 }
@@ -263,9 +285,11 @@ function signatureSectionHtml(){
   </div>`;
 }
 
+const TAB_TRACK_LABEL = {devis:'Devis', documents:'Documents', meetings:'Comptes-rendus', booking:'Prendre rendez-vous'};
 function switchTab(key){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===key));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active', p.dataset.panel===key));
+  trackQuoteEvent('quote_tab_viewed', TAB_TRACK_LABEL[key]||key);
 }
 
 // Espace client à onglets (29/10/2026) : l'onglet Devis est toujours

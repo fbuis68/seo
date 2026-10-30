@@ -8,6 +8,7 @@ import { nextSequenceValue } from "../lib/sequence";
 import { sendMessage } from "../lib/messaging";
 import { getSmtpConfig } from "../lib/email";
 import { getRecordingStream } from "../lib/graphMeetings";
+import { recordScoreEvent, ScoreEventType } from "../lib/crmScoring";
 
 /**
  * Devis — écran CRM à part entière (refonte du 22/10/2026, reprend
@@ -816,7 +817,7 @@ crmQuoteRouter.get(
     if (!token) throw new HttpError(400, "Lien invalide");
     const quote = await prisma.crmQuote.findUnique({
       where: { signToken: token },
-      include: { prospect: { select: { nom: true } }, signature: true },
+      include: { prospect: { select: { nom: true, commercial: { select: { name: true, bookingUrl: true } } } }, signature: true },
     });
     if (!quote) throw new HttpError(404, "Lien de signature invalide ou expiré");
     const storedLines = (quote.lines as unknown as QuoteLine[]) || [];
@@ -882,6 +883,11 @@ crmQuoteRouter.get(
       termsText: quote.termsText || "",
       totals: quoteTotals(lines, quote.discountPct, quote.vatPct, quote.depositPct),
       prospectNom: quote.prospect.nom,
+      // Prise de RDV filtrée sur le commercial en charge du dossier
+      // (30/10/2026) — lien personnel s'il en a un de renseigné (cf.
+      // AdminUser.bookingUrl), repli sur null = lien générique côté front.
+      commercialName: quote.prospect.commercial?.name || "",
+      commercialBookingUrl: quote.prospect.commercial?.bookingUrl || null,
       alreadySigned: !!quote.signature,
       signedAt: quote.signature?.signedAt || null,
       signerName: quote.signature?.signerName || null,
@@ -899,6 +905,35 @@ crmQuoteRouter.get(
         hasRecording: quote.attachedMeetingVideoIds.includes(m.id) && !!m.recordingGraphId,
       })),
     });
+  })
+);
+
+const QUOTE_TRACK_EVENT_TYPES = new Set<ScoreEventType>(["quote_tab_viewed", "quote_document_opened"]);
+
+/**
+ * POST /wa/crmQuote/trackEvent?token=... — sans authentification admin (le
+ * visiteur de l'espace client n'a pas de session CRM), sécurisé par le seul
+ * fait de connaître un signToken valide (même modèle que les autres routes
+ * publicXxx ci-dessus). Alimente le score d'intérêt (30/10/2026, demande
+ * client "tracking des onglets et documents ouverts... ajuster le score
+ * d'intérêt") — deux types seulement, volontairement fermés : impossible
+ * d'injecter un autre type de score depuis le navigateur du visiteur.
+ */
+crmQuoteRouter.post(
+  "/crmQuote/trackEvent",
+  asyncHandler(async (req, res) => {
+    const token = (req.body.token as string) || "";
+    const eventType = req.body.eventType as string;
+    const module = (req.body.module as string) || undefined;
+    if (!token) throw new HttpError(400, "Lien invalide");
+    if (!QUOTE_TRACK_EVENT_TYPES.has(eventType as ScoreEventType)) throw new HttpError(400, "eventType invalide");
+    const quote = await prisma.crmQuote.findUnique({ where: { signToken: token }, select: { prospectId: true } });
+    if (!quote) {
+      res.json({ ok: true, matched: false });
+      return;
+    }
+    await recordScoreEvent(quote.prospectId, eventType as ScoreEventType, module, "internal");
+    res.json({ ok: true, matched: true });
   })
 );
 

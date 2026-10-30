@@ -137,6 +137,14 @@ model AdminUser {
   // ces réunions/tickets au bon commercial même quand ils ne passent pas par
   // son adresse de login (cf. routes/crmMeeting.ts syncHistory).
   altEmails    String[] @default([])
+  // Lien de prise de RDV PERSONNEL du commercial (page "Book with me" /
+  // page Bookings dédiée à son nom) — 30/10/2026, demande client "filtrer
+  // le commercial en charge du dossier" sur l'onglet RDV de l'espace
+  // client. Microsoft Bookings ne permet pas de pré-sélectionner un
+  // collaborateur par simple paramètre d'url fiable sur la page Bookings
+  // partagée : chaque commercial colle donc ICI son propre lien personnel.
+  // Vide = repli sur le lien générique Sesame Technology.
+  bookingUrl   String?
   active       Boolean  @default(true) // désactivation (départ, etc.) sans perdre l'historique — pas de suppression physique
   // Portée du rôle pour un compte hôtel (role="hotel"|"housekeeping") : par
   // défaut limité à son propre établissement (entityId). Si true ET que cet
@@ -2862,6 +2870,12 @@ model CrmScoringConfig {
   // CrmProspect.inboundReplyCount, déjà affiché en badge sur la fiche
   // (✉ N), désormais alimenté par lib/ticketInbound.ts.
   pointsInboundEmail     Int @default(3)
+  // Consultation de l'espace client devis (30/10/2026, demande client
+  // "tracking des onglets et documents ouverts dans la fiche") — signal
+  // plus faible qu'un clic module (barème par défaut volontairement bas),
+  // mais révélateur d'un intérêt actif pour le devis en cours.
+  pointsQuoteTabViewed     Int @default(1)
+  pointsQuoteDocumentOpened Int @default(3)
 
   updatedAt DateTime @updatedAt
 }
