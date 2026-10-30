@@ -7483,6 +7483,7 @@ function dqMeetingsSectionHtml(q){
           <input type="checkbox" ${vidChecked?'checked':''} ${m.hasRecording?'':'disabled'} onchange="dqToggleMeetingOption('${m.id}','Video',this.checked)">Lien de la vidéo
         </label>
       </div>`:''}
+      ${checked&&sumChecked?`<textarea style="margin:6px 0 0 24px;width:calc(100% - 24px);font-size:12px" rows="4" onblur="dqSaveMeetingSummary('${m.id}',this.value)">${esc(m.summaryText||'')}</textarea>`:''}
     </div>`;
   }).join('');
   return `<div class="db-row-between" style="margin:14px 0 4px"><h4 style="margin:0">Réunions à inclure</h4></div>
@@ -7516,6 +7517,23 @@ function dqToggleMeetingOption(id, kind, checked){
   const set = new Set(q[field]||[]);
   if(checked) set.add(id); else set.delete(id);
   q[field] = [...set];
+}
+/** Retouche du résumé directement depuis l'onglet Document du devis
+ * (30/10/2026, demande client) — même route que l'édition sur la fiche
+ * client (crmMeeting/updateSummary), juste un second point d'entrée plus
+ * pratique pendant la composition du devis. Pas de re-render complet au
+ * blur (perdrait le focus) : juste la mise à jour du cache + confirmation. */
+async function dqSaveMeetingSummary(id, value){
+  const q = QUOTE_DRAFT;
+  const cache = CRM_QUOTE_MEETINGS_CACHE[q.prospectId]||[];
+  const m = cache.find(x=>x.id===id);
+  if(m && m.summaryText===value) return;
+  try{
+    const r = await apiFetch('/wa/crmMeeting/updateSummary', {method:'POST', body:JSON.stringify({id, summaryText:value})});
+    if(!r.ok) throw new Error('http '+r.status);
+    if(m) m.summaryText = value;
+    flash('Résumé enregistré ✓');
+  }catch(e){ flash('Erreur d\'enregistrement du résumé'); }
 }
 const DQ_DEFAULT_INTRO = "Nous vous proposons une solution de gestion des accès adaptée à votre établissement, avec fourniture des équipements et accompagnement à la mise en service.";
 const DQ_DEFAULT_TERMS = "Validité : 30 jours. Solde à la livraison. Intervention sous réserve de validation technique et des prérequis chantier. CGV Sesame Technology à joindre dans leur version validée.";
