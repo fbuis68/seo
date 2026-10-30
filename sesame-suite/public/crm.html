@@ -7393,12 +7393,27 @@ async function dqLoadDocumentLibraryIfNeeded(){
  * QUOTE_DRAFT.attachedDocumentIds, envoyé à l'email du devis (cf.
  * routes/crmQuote.ts sendEmail → extraAttachments). Chargement paresseux au
  * premier rendu de l'onglet, même principe que "Partir d'un modèle". */
+// Filtre secteur de la section "Documents à joindre" (30/10/2026, demande
+// client) — par défaut sur le secteur du PROSPECT du devis ouvert, pour
+// retomber tout de suite sur les documents pertinents ; "Tous" pour
+// repasser à la liste complète. Réinitialisé au secteur du client à chaque
+// changement de devis/prospect (pas conservé d'un devis à l'autre).
+let DQ_DOC_FILTER_SECTEUR = undefined;
+let DQ_DOC_FILTER_PROSPECT_ID = null;
+function dqSetDocFilterSecteur(v){ DQ_DOC_FILTER_SECTEUR = v; renderQuoteBuilder(); }
 function dqDocumentLibrarySectionHtml(q, clientSecteur){
   if(CRM_DOCUMENTS===null){
     dqLoadDocumentLibraryIfNeeded().then(()=>{ if(QUOTE_TAB==='document') renderQuoteBuilder(); });
     return `<div class="db-row-between" style="margin:14px 0 4px"><h4 style="margin:0">Documents à joindre à l'envoi</h4></div><small style="color:var(--mu)">Chargement…</small>`;
   }
-  const docs = (CRM_DOCUMENTS||[]).filter(d=>d.active);
+  if(DQ_DOC_FILTER_PROSPECT_ID !== q.prospectId){
+    DQ_DOC_FILTER_PROSPECT_ID = q.prospectId;
+    DQ_DOC_FILTER_SECTEUR = clientSecteur || '';
+  }
+  const allActive = (CRM_DOCUMENTS||[]).filter(d=>d.active);
+  // Universel (secteurs vide) toujours visible, quel que soit le filtre —
+  // même règle que le badge "recommandé" ci-dessous.
+  const docs = allActive.filter(d=> !DQ_DOC_FILTER_SECTEUR || !d.secteurs.length || d.secteurs.includes(DQ_DOC_FILTER_SECTEUR));
   const rows = docs.map(d=>{
     const checked = (q.attachedDocumentIds||[]).includes(d.id);
     const matches = clientSecteur && d.secteurs.includes(clientSecteur);
@@ -7407,11 +7422,19 @@ function dqDocumentLibrarySectionHtml(q, clientSecteur){
       <span><strong>${esc(d.title)}</strong>${matches?' <span class="tag t-green" style="font-size:10px">recommandé '+esc(clientSecteur)+'</span>':''}${d.description?'<div style="font-size:11px;color:var(--mu)">'+esc(d.description)+'</div>':''}</span>
     </label>`;
   }).join('');
-  return `<div class="db-row-between" style="margin:14px 0 4px"><h4 style="margin:0">Documents à joindre à l'envoi</h4>
-      <button class="sq-clause" type="button" style="border-style:dashed" onclick="showDocumentLibrary()">⚙ Gérer la bibliothèque</button>
+  const secteursPresent = [...new Set(allActive.flatMap(d=>d.secteurs))].sort();
+  const filterSelect = `<select style="width:auto;font-size:12px" onchange="dqSetDocFilterSecteur(this.value)">
+      <option value="">Tous secteurs</option>
+      ${secteursPresent.map(s=>`<option value="${esc(s)}" ${DQ_DOC_FILTER_SECTEUR===s?'selected':''}>${esc(s)}</option>`).join('')}
+    </select>`;
+  return `<div class="db-row-between" style="margin:14px 0 4px;flex-wrap:wrap;gap:6px"><h4 style="margin:0">Documents à joindre à l'envoi</h4>
+      <div style="display:flex;gap:6px;align-items:center;margin-left:auto">
+        ${filterSelect}
+        <button class="sq-clause" type="button" style="border-style:dashed" onclick="showDocumentLibrary()">⚙ Gérer la bibliothèque</button>
+      </div>
     </div>
-    <small style="color:var(--mu)">Joints à l'email lors de l'envoi du devis — rien n'est ajouté automatiquement.</small>
-    <div style="margin-top:6px">${rows || '<div class="log-empty">Aucun document dans la bibliothèque.</div>'}</div>`;
+    <small style="color:var(--mu)">Joints à l'email lors de l'envoi du devis — rien n'est ajouté automatiquement. Filtre pré-réglé sur le secteur du client (${esc(clientSecteur||'non renseigné')}).</small>
+    <div style="margin-top:6px">${rows || '<div class="log-empty">Aucun document pour ce filtre.</div>'}</div>`;
 }
 function dqToggleAttachedDocument(id, checked){
   const q = QUOTE_DRAFT;
