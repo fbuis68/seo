@@ -1036,7 +1036,15 @@ crmQuoteRouter.post(
     if (!existing) throw new HttpError(404, "Devis introuvable");
     if (existing.status === "accepté") throw new HttpError(400, "Ce devis est déjà signé");
     const prospect = existing.prospect;
-    if (!prospect.email) throw new HttpError(400, "Le client n'a pas d'adresse email enregistrée");
+    // Transmission à un signataire précis (30/10/2026, demande client) —
+    // le contact qui doit réellement signer n'est pas toujours l'email
+    // générique de la fiche prospect (ex. un décideur distinct). Repli sur
+    // prospect.email si aucun override fourni, comportement inchangé.
+    const overrideEmail = (req.body.toEmail as string | undefined)?.trim();
+    const overrideName = (req.body.toName as string | undefined)?.trim();
+    const toEmail = overrideEmail || prospect.email;
+    const toName = overrideName || prospect.nom;
+    if (!toEmail) throw new HttpError(400, "Le client n'a pas d'adresse email enregistrée");
 
     const signToken = existing.signToken || crypto.randomBytes(24).toString("hex");
     const storedLines = (existing.lines as unknown as QuoteLine[]) || [];
@@ -1082,12 +1090,12 @@ crmQuoteRouter.post(
         entityId: null,
         channel: "email",
         templateKey: "devis-envoi",
-        to: prospect.email,
+        to: toEmail,
         trackOpenProspectId: prospect.id,
         extraAttachments,
         variables: {
           numeroDevis: existing.number,
-          nomClient: prospect.nom,
+          nomClient: toName,
           montantInitial: totals.oneoffNet.toFixed(2).replace(".", ",") + " €",
           montantMensuel: totals.mrrNet.toFixed(2).replace(".", ",") + " €",
           montantTotalTTC: totals.totalTTC.toFixed(2).replace(".", ",") + " €",
