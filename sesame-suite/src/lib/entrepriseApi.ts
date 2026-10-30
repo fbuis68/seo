@@ -71,3 +71,59 @@ export async function lookupEntrepriseBySiret(siret: string): Promise<Entreprise
     country: "FR",
   };
 }
+
+/**
+ * Recherche par dénomination (Market Hunter, P1-05 "enrichir SIREN/adresse/
+ * taille") — contrairement à lookupEntrepriseBySiret, pas de numéro exact à
+ * vérifier : on ne retient le premier résultat QUE si son nom se rapproche
+ * suffisamment du nom recherché (normalisation accents/casse/espaces), pour
+ * éviter d'attribuer le SIREN d'une entreprise homonyme à un candidat
+ * découvert par recherche web. Retourne aussi l'effectif salarié (tranche
+ * INSEE) quand disponible, utile à la qualification (taille dans la cible).
+ */
+function normalizeCompanyName(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+export interface EntrepriseNameLookupResult extends EntrepriseLookupResult {
+  effectifSalarie: string | null;
+}
+
+export async function lookupEntrepriseByName(name: string, ville?: string): Promise<EntrepriseNameLookupResult | null> {
+  const clean = name.trim();
+  if (!clean) return null;
+
+  let data: { results?: (EntrepriseApiResult & { tranche_effectif_salarie?: string })[] };
+  try {
+    const r = await fetch(`https://recherche-entreprises.api.gouv.fr/search?q=${encodeURIComponent(clean)}${ville ? `&q_ville=${encodeURIComponent(ville)}` : ""}&limit=5`);
+    if (!r.ok) return null;
+    data = (await r.json()) as typeof data;
+  } catch {
+    return null;
+  }
+
+  const target = normalizeCompanyName(clean);
+  const match = (data.results || []).find((e) => {
+    const candidate = normalizeCompanyName(e.nom_complet || e.nom_raison_sociale || "");
+    return candidate && (candidate.includes(target) || target.includes(candidate));
+  });
+  if (!match) return null;
+
+  const siege = match.siege || {};
+  const street = [siege.numero_voie, siege.type_voie, siege.libelle_voie].filter(Boolean).join(" ") || null;
+  return {
+    name: match.nom_complet || match.nom_raison_sociale || "",
+    siret: siege.siret || null,
+    siren: match.siren || null,
+    addressLine: street,
+    postalCode: siege.code_postal || null,
+    city: siege.libelle_commune || null,
+    country: "FR",
+    effectifSalarie: match.tranche_effectif_salarie || null,
+  };
+}

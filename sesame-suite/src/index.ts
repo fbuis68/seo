@@ -10,6 +10,7 @@ import { startGoCardlessScheduler } from "./lib/gocardlessScheduler";
 import { startScalewayScheduler } from "./lib/scalewayScheduler";
 import { startAccRelanceScheduler } from "./lib/accRelanceScheduler";
 import { startMarketIntelligenceScheduler } from "./lib/marketIntelligenceScheduler";
+import { startMarketHunterScheduler } from "./lib/marketHunterScheduler";
 import { VERSION } from "./lib/version";
 
 const INSECURE_DEFAULTS: Record<string, string> = {
@@ -57,4 +58,5 @@ app.listen(config.port, () => {
   startScalewayScheduler();
   startAccRelanceScheduler();
   startMarketIntelligenceScheduler();
+  startMarketHunterScheduler();
 });

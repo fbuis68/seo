@@ -407,3 +407,86 @@ export async function findCompanyNews(companyName: string, secteur?: string): Pr
     .filter((it) => it && typeof it.url === "string" && it.url.trim() && typeof it.title === "string" && it.title.trim())
     .slice(0, 3);
 }
+
+export interface MarketHunterCandidate {
+  name: string;
+  ville: string | null;
+  siteWeb: string | null;
+  tailleHint: string | null;
+  signalType: string;
+  signalSummary: string;
+  signalUrl: string;
+  signalDate: string | null;
+  confidence: number;
+  decisionMakerName: string | null;
+  decisionMakerTitle: string | null;
+}
+
+/**
+ * Agent "Market Hunter" (cahier des charges Sesame AI Autonomous
+ * Prospecting, 30/10/2026, P1-01 à P1-06) — découvre des entreprises
+ * FRANÇAISES distinctes correspondant à l'ICP d'un marché cible, avec un
+ * signal d'achat justifié par une source consultable (pas de simple liste
+ * d'annuaire sans contenu). Même convention que findCompanyNews : outil
+ * web_search_20250305 libre (pas de tool_choice forcé), résultat final
+ * extrait du dernier bloc texte de la réponse. Chaque entreprise retenue
+ * DOIT venir d'un résultat de recherche réel — jamais inventée (§2 du
+ * brief Sales Agent, même règle reconduite ici).
+ */
+export async function huntMarket(params: { marcheLabel: string; icp: string; excludeNames: string[]; limit: number }): Promise<MarketHunterCandidate[]> {
+  if (!config.anthropicApiKey) return [];
+  const excludeBlock = params.excludeNames.length
+    ? `Entreprises déjà connues (NE PAS les reproposer) :\n${params.excludeNames.slice(0, 80).join(", ")}`
+    : "Aucune entreprise déjà connue à exclure.";
+  const system = `Tu es un analyste qui identifie des entreprises françaises RÉELLES et DISTINCTES correspondant précisément au profil cible ci-dessous, pour un commercial B2B (Sesame Technology, contrôle d'accès connecté/hôtellerie). Utilise l'outil de recherche web. Ne retiens une entreprise QUE si tu peux citer un signal d'achat concret et récent (ouverture, rénovation, agrandissement, recrutement lié, changement de prestataire...) appuyé par une source réellement consultable — jamais une supposition, jamais une entreprise simplement listée dans un annuaire sans actualité associée. Ignore toute entreprise de la liste d'exclusion ci-dessous (même sous un nom légèrement différent). Termine ta réponse par UNIQUEMENT un bloc JSON (aucun texte avant ou après), au format exact : {"items":[{"name":"...","ville":"... ou null","site_web":"https://... ou null","taille_hint":"ex: '80 chambres' ou '3 courts' ou null si inconnu","signal_type":"ouverture|renovation|recrutement|agrandissement|autre","signal_summary":"1-2 phrases en français","signal_url":"url réelle de la source","signal_date":"AAAA-MM-JJ ou null","confidence":0.0-1.0,"decision_maker_name":"nom trouvé ou null","decision_maker_title":"fonction trouvée ou null"}]}. Maximum ${params.limit} items, liste vide si rien de pertinent et vérifiable. N'invente jamais un nom d'entreprise ni une url : chaque entrée doit provenir d'un résultat de recherche réel obtenu via l'outil.`;
+  const userMsg = `Profil cible (marché "${params.marcheLabel}") : ${params.icp}\nTerritoire : France\n\n${excludeBlock}`;
+  const r = await fetch(ANTHROPIC_URL, {
+    method: "POST",
+    headers: {
+      "x-api-key": config.anthropicApiKey,
+      "anthropic-version": "2023-06-01",
+      "Content-Type": "application/json",
+      ...(config.anthropicWorkspaceId ? { "anthropic-workspace-id": config.anthropicWorkspaceId } : {}),
+    },
+    body: JSON.stringify({
+      model: config.anthropicModel,
+      max_tokens: 2500,
+      system,
+      messages: [{ role: "user", content: userMsg }],
+      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 6 }],
+    }),
+  });
+  if (!r.ok) {
+    const body = await r.text().catch(() => "");
+    throw new HttpError(502, `Échec recherche web Market Hunter (${r.status}) : ${body.slice(0, 300)}`);
+  }
+  const data = (await r.json()) as { content?: { type: string; text?: string }[] };
+  const fullText = (data.content || [])
+    .filter((c) => c.type === "text")
+    .map((c) => c.text || "")
+    .join("\n");
+  const match = fullText.match(/\{[\s\S]*\}/);
+  if (!match) return [];
+  let parsed: { items?: Record<string, unknown>[] };
+  try {
+    parsed = JSON.parse(match[0]);
+  } catch {
+    return [];
+  }
+  return (parsed.items || [])
+    .map((it) => ({
+      name: String(it.name || "").trim(),
+      ville: it.ville ? String(it.ville).trim() : null,
+      siteWeb: it.site_web ? String(it.site_web).trim() : null,
+      tailleHint: it.taille_hint ? String(it.taille_hint).trim() : null,
+      signalType: String(it.signal_type || "autre").trim(),
+      signalSummary: String(it.signal_summary || "").trim(),
+      signalUrl: String(it.signal_url || "").trim(),
+      signalDate: it.signal_date ? String(it.signal_date).trim() : null,
+      confidence: typeof it.confidence === "number" ? Math.max(0, Math.min(1, it.confidence)) : 0.5,
+      decisionMakerName: it.decision_maker_name ? String(it.decision_maker_name).trim() : null,
+      decisionMakerTitle: it.decision_maker_title ? String(it.decision_maker_title).trim() : null,
+    }))
+    .filter((c) => c.name && c.signalUrl && c.signalSummary)
+    .slice(0, params.limit);
+}

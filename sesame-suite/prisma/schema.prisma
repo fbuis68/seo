@@ -2209,6 +2209,78 @@ model SalesScore {
   @@index([prospectId])
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Sesame AI Autonomous Prospecting (30/10/2026, cahier des charges "Market
+// Hunter") — fondations P0 + moteur de découverte P1. Singleton de
+// configuration (id fixe "singleton", même convention que
+// CrmScoringConfig) : marchés ciblés fixés en dur dans marketHunter.ts
+// (hôtel/padel/résidence, cf. brief §1), seuls les quotas et l'arrêt
+// d'urgence sont éditables ici — pas de table "marchés" séparée, aucun
+// besoin d'en ajouter un quatrième sans redévelopper le moteur de toute
+// façon.
+model ProspectingConfig {
+  id String @id @default("singleton")
+
+  territoire String @default("France")
+
+  quotaHotel      Int @default(30) // prospects/semaine
+  quotaPadel      Int @default(12)
+  quotaResidence  Int @default(8)
+
+  // Coupe-circuit global (P0-10, "arrêt d'urgence") — vérifié au tout début
+  // de chaque passage du scheduler (lib/marketHunterScheduler.ts) : aucune
+  // recherche web ni écriture CRM tant qu'actif, sans toucher au code.
+  emergencyStopped Boolean @default(false)
+
+  updatedAt DateTime @updatedAt
+}
+
+// Liste d'exclusion (P0-09, "oppositions et clients existants exclus") —
+// vérifiée avant toute création de prospect par l'agent Market Hunter
+// (siren ou nom normalisé) et avant tout envoi futur (email, phase P2 non
+// construite ici). Distincte de CrmProspect.emailOptOut (désabonnement
+// d'une fiche déjà cliente existante) : une suppression peut viser une
+// entreprise qui n'a jamais eu de fiche CRM.
+model Suppression {
+  id String @id @default(cuid())
+
+  email       String?
+  siren       String?
+  companyName String?
+  motif       String
+  // "total" (plus jamais sollicité, quel que soit le canal) | "email" (email
+  // uniquement) — cf. brief modèle de données §7 "suppression.périmètre".
+  perimetre   String  @default("total")
+
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([siren])
+}
+
+// Un passage du Market Hunter pour un marché donné (P1-12, "rapport
+// hebdomadaire") — une ligne par (marché, exécution du scheduler), jamais
+// agrégée : le rapport hebdo recalcule les totaux à partir de ces lignes
+// plutôt que de maintenir un compteur séparé.
+model DiscoveryJob {
+  id String @id @default(cuid())
+
+  marche String // hotel | padel | residence
+
+  status       String    @default("pending") // pending | running | done | error
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  foundCount      Int    @default(0) // candidats retournés par la recherche web
+  qualifiedCount  Int    @default(0) // score >= 70 → créés dans le CRM
+  excludedCount   Int    @default(0) // doublons, clients existants, exclusions, score < 70
+  errorMessage String?   @db.Text
+
+  createdAt DateTime @default(now())
+
+  @@index([marche])
+  @@index([createdAt])
+}
+
 // Journal de décision des agents IA (28/10/2026, Sprint 1) — traçabilité
 // exigée par le §7 conformité du brief ("journal d'audit"). IDs en texte
 // libre (pas de FK) : une entrée de journal doit survivre à la suppression

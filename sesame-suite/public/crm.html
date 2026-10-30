@@ -610,6 +610,7 @@ svg.tr-chart{display:block;width:100%;height:auto;min-width:640px}
   <div class="nav-item" id="n-produits" onclick="showCrmProducts()"><div class="nav-ico">◫</div> Produits</div>
   <div class="nav-item" id="n-documents" onclick="showDocumentLibrary()"><div class="nav-ico">▦</div> Bibliothèque documentaire</div>
   <div class="nav-item" id="n-agentlog" onclick="showAgentDecisionLog()"><div class="nav-ico">☰</div> Journal Agent IA</div>
+  <div class="nav-item" id="n-prospecting" onclick="showProspectingHunter()"><div class="nav-ico">◎</div> Prospection IA</div>
   <div class="nav-item" id="n-crmusers" onclick="showCrmUsers()" style="display:none"><div class="nav-ico">◉</div> Utilisateurs CRM</div>
 </div>
 
@@ -8439,7 +8440,7 @@ function renderDocumentLibrary(){
 // Journal d'audit des agents IA (§7 conformité brief Sesame AI Sales Agent)
 // — lecture seule, jamais d'édition : une entrée doit rester consultable
 // telle qu'écrite par l'agent.
-const AGENT_NAME_LABELS = { market_intelligence: 'Market Intelligence', enrichment: 'Enrichissement', scoring: 'Scoring', copywriter: 'Copywriter' };
+const AGENT_NAME_LABELS = { market_intelligence: 'Market Intelligence', market_hunter: 'Market Hunter', enrichment: 'Enrichissement', scoring: 'Scoring', copywriter: 'Copywriter' };
 let AGENT_LOG_FILTER = '';
 async function showAgentDecisionLog(){
   view='agentlog'; setNav('n-agentlog'); bc([{label:'Journal Agent IA'}]);
@@ -8498,6 +8499,143 @@ function renderAgentDecisionLog(rows){
       <span style="font-size:11px;color:var(--mu);margin-left:auto">${rows.length} entrée${rows.length>1?'s':''} (100 plus récentes)</span>
     </div>
     ${items || '<div class="card"><div class="log-empty">Aucune entrée pour l\'instant.</div></div>'}`;
+}
+// ─────────────────────────────────────────────────────────────────────────
+// Prospection IA — Market Hunter (cahier des charges Sesame AI Autonomous
+// Prospecting, 30/10/2026, fondations P0 + moteur de découverte P1).
+// Config/quotas/arrêt d'urgence/suppressions (P0) + suivi hebdomadaire des
+// prospects qualifiés créés automatiquement en CRM (P1) — l'agent tourne
+// seul en tâche de fond (lib/marketHunterScheduler.ts), cet écran sert à
+// le piloter/surveiller, jamais à déclencher une action commerciale externe
+// (aucun envoi — ça reste hors scope P0/P1, cf. P2 non construit).
+const PROSPECTING_MARCHE_LABELS = { hotel: 'Hôtellerie', padel: 'Padel / sport', residence: 'Résidence' };
+async function showProspectingHunter(){
+  view='prospecting'; setNav('n-prospecting'); bc([{label:'Prospection IA'}]);
+  tba('');
+  document.getElementById('main').innerHTML='<div class="card">Chargement…</div>';
+  await loadProspectingHunter();
+}
+async function loadProspectingHunter(){
+  let cfg=null, report=null, suppressions=[], jobs=[];
+  try{
+    const [rc, rr, rs, rj] = await Promise.all([
+      apiFetch('/wa/prospectingConfig'),
+      apiFetch('/wa/discoveryJob/weeklyReport'),
+      apiFetch('/wa/suppression/list'),
+      apiFetch('/wa/discoveryJob/list'),
+    ]);
+    cfg = rc.ok ? await rc.json() : null;
+    report = rr.ok ? await rr.json() : null;
+    suppressions = rs.ok ? await rs.json() : [];
+    jobs = rj.ok ? await rj.json() : [];
+  }catch(e){}
+  renderProspectingHunter(cfg, report, suppressions, jobs);
+}
+function renderProspectingHunter(cfg, report, suppressions, jobs){
+  if(!cfg || !report){ document.getElementById('main').innerHTML='<div class="card"><div class="log-empty">Erreur de chargement.</div></div>'; return; }
+  const byMarket = report.byMarket||[];
+  const quotaRows = byMarket.map(m=>`
+    <tr>
+      <td>${esc(m.label)}</td>
+      <td><input type="number" min="0" style="width:70px" id="pq-${m.marche}" value="${cfg['quota'+m.marche.charAt(0).toUpperCase()+m.marche.slice(1)]}"></td>
+      <td>${m.qualified}</td>
+      <td>${m.remaining}</td>
+      <td>${m.found}</td>
+      <td>${m.excluded}</td>
+      <td>${m.atQuota?'<span class="tag t-green" style="font-size:10px">Quota atteint</span>':'<span class="tag t-gray" style="font-size:10px">En cours</span>'}</td>
+    </tr>`).join('');
+  const jobRows = jobs.map(j=>`
+    <tr>
+      <td>${esc(PROSPECTING_MARCHE_LABELS[j.marche]||j.marche)}</td>
+      <td>${j.status==='done'?'<span class="tag t-green" style="font-size:10px">Terminé</span>':j.status==='error'?'<span class="tag t-red" style="font-size:10px">Erreur</span>':j.status==='running'?'<span class="tag t-amber" style="font-size:10px">En cours</span>':'<span class="tag t-gray" style="font-size:10px">En attente</span>'}</td>
+      <td>${j.foundCount}</td>
+      <td>${j.qualifiedCount}</td>
+      <td>${j.excludedCount}</td>
+      <td style="font-size:11px;color:var(--mu)">${new Date(j.createdAt).toLocaleString('fr-FR')}</td>
+      <td style="font-size:11px;color:var(--mu)">${j.errorMessage?esc(j.errorMessage):''}</td>
+    </tr>`).join('');
+  const suppRows = suppressions.map(s=>`
+    <tr>
+      <td>${s.companyName?esc(s.companyName):'—'}</td>
+      <td>${s.email?esc(s.email):'—'}</td>
+      <td>${s.siren?esc(s.siren):'—'}</td>
+      <td style="font-size:11px">${esc(s.motif)}</td>
+      <td><button class="btn btn-sm btn-ghost" onclick="suppressionDelete('${s.id}')">Retirer</button></td>
+    </tr>`).join('');
+  document.getElementById('main').innerHTML = `
+    <div class="card" style="margin-bottom:10px">
+      <div class="db-row-between" style="margin-bottom:10px">
+        <div style="font-size:15px;font-weight:600">Configuration — Agent Market Hunter</div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:${cfg.emergencyStopped?'#c0392b':'var(--mu)'}">
+          <input type="checkbox" id="pq-emergency" ${cfg.emergencyStopped?'checked':''}> Arrêt d'urgence (stoppe toute recherche)
+        </label>
+      </div>
+      <div style="font-size:12px;color:var(--mu);margin-bottom:10px">Territoire : France (fixe) · Autonomie : Supervisée — aucun envoi externe, cette brique ne fait que rechercher et qualifier des prospects en CRM.</div>
+      <table class="tbl"><thead><tr><th>Marché</th><th>Quota/semaine</th><th>Qualifiés (semaine)</th><th>Restant</th><th>Candidats trouvés</th><th>Exclus/doublons</th><th>Statut</th></tr></thead>
+      <tbody>${quotaRows}</tbody></table>
+      <div style="margin-top:10px;display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" onclick="prospectingSaveConfig()">Enregistrer</button>
+        <button class="btn btn-ghost btn-sm" onclick="prospectingRunNow()">Lancer un scan maintenant</button>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:10px">
+      <div style="font-size:15px;font-weight:600;margin-bottom:10px">Derniers passages</div>
+      ${jobs.length?`<table class="tbl"><thead><tr><th>Marché</th><th>Statut</th><th>Trouvés</th><th>Qualifiés</th><th>Exclus</th><th>Date</th><th>Erreur</th></tr></thead><tbody>${jobRows}</tbody></table>`:'<div class="log-empty">Aucun passage pour l\'instant.</div>'}
+    </div>
+    <div class="card">
+      <div style="font-size:15px;font-weight:600;margin-bottom:10px">Liste d'exclusion (oppositions, clients à ne jamais solliciter)</div>
+      <div class="form-grid" style="margin-bottom:10px">
+        <div class="ff"><label>Nom entreprise</label><input id="supp-company"></div>
+        <div class="ff"><label>Email</label><input id="supp-email" type="email"></div>
+        <div class="ff"><label>SIREN</label><input id="supp-siren"></div>
+        <div class="ff" style="grid-column:1/-1"><label>Motif *</label><input id="supp-motif" placeholder="Opposition explicite, client existant..."></div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="suppressionSubmitCreate()">Ajouter à la liste d'exclusion</button>
+      ${suppressions.length?`<table class="tbl" style="margin-top:14px"><thead><tr><th>Entreprise</th><th>Email</th><th>SIREN</th><th>Motif</th><th></th></tr></thead><tbody>${suppRows}</tbody></table>`:''}
+    </div>`;
+}
+async function prospectingSaveConfig(){
+  const body = { emergencyStopped: document.getElementById('pq-emergency').checked };
+  Object.keys(PROSPECTING_MARCHE_LABELS).forEach(m=>{
+    const el = document.getElementById('pq-'+m);
+    if(el) body['quota'+m.charAt(0).toUpperCase()+m.slice(1)] = parseInt(el.value||'0',10);
+  });
+  try{
+    const r = await apiFetch('/wa/prospectingConfig/update', {method:'POST', body:JSON.stringify(body)});
+    if(!r.ok) throw new Error('http');
+    flash('Configuration enregistrée ✓');
+    loadProspectingHunter();
+  }catch(e){ flash('Erreur d\'enregistrement'); }
+}
+async function prospectingRunNow(){
+  try{
+    const r = await apiFetch('/wa/discoveryJob/runNow', {method:'POST'});
+    if(!r.ok) throw new Error('http');
+    flash('Scan lancé en arrière-plan — actualisez dans quelques instants');
+  }catch(e){ flash('Erreur de lancement'); }
+}
+async function suppressionSubmitCreate(){
+  const motif = (document.getElementById('supp-motif')||{value:''}).value.trim();
+  if(!motif){ flash('Motif requis'); return; }
+  const body = {
+    companyName: (document.getElementById('supp-company')||{value:''}).value.trim()||undefined,
+    email: (document.getElementById('supp-email')||{value:''}).value.trim()||undefined,
+    siren: (document.getElementById('supp-siren')||{value:''}).value.trim()||undefined,
+    motif,
+  };
+  try{
+    const r = await apiFetch('/wa/suppression/create', {method:'POST', body:JSON.stringify(body)});
+    if(!r.ok) throw new Error('http');
+    flash('Ajouté à la liste d\'exclusion ✓');
+    loadProspectingHunter();
+  }catch(e){ flash("Erreur d'ajout"); }
+}
+async function suppressionDelete(id){
+  try{
+    const r = await apiFetch('/wa/suppression/delete', {method:'POST', body:JSON.stringify({id})});
+    if(!r.ok) throw new Error('http');
+    loadProspectingHunter();
+  }catch(e){ flash('Erreur de suppression'); }
 }
 function docSourceModeHtml(mode){
   // Choix à la création uniquement (pas d'édition fichier/lien après coup,
