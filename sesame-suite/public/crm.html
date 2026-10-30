@@ -1282,6 +1282,7 @@ function renderPipeChart(){
 // les mêmes données, pas un système de tâches séparé.
 // ════════════════════════════════════════
 let PLANNER_COLLAPSED_DONE = new Set(); // prospectId dont "Tâches terminées" est repliée (replié par défaut)
+let PLANNER_HIDE_EMPTY = false; // masque les colonnes sans tâche À FAIRE (demande client 30/10/2026)
 let PLANNER_ADD_OPEN = new Set(); // prospectId dont le formulaire "+ Ajouter une tâche" est ouvert
 
 function showPlanner(){
@@ -1343,6 +1344,10 @@ function plannerColumnHtml(c, tasks){
   </div>`;
 }
 
+function plannerToggleHideEmpty(checked){
+  PLANNER_HIDE_EMPTY = checked;
+  document.getElementById('main').innerHTML = renderPlannerBoard();
+}
 function renderPlannerBoard(){
   const all = buildAllTasks();
   const byProspect = new Map();
@@ -1350,14 +1355,20 @@ function renderPlannerBoard(){
     if(!byProspect.has(t.prospectId)) byProspect.set(t.prospectId, []);
     byProspect.get(t.prospectId).push(t);
   });
-  const columns = [...byProspect.keys()]
+  let columns = [...byProspect.keys()]
     .map(pid=>clients.find(c=>c.id===pid))
     .filter(Boolean)
     .sort((a,b)=>a.nom.localeCompare(b.nom));
+  if(PLANNER_HIDE_EMPTY) columns = columns.filter(c=>byProspect.get(c.id).some(t=>!t.done));
+  const toolbar = `<div style="margin-bottom:10px;display:flex;align-items:center;gap:8px">
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);cursor:pointer;margin:0">
+      <input type="checkbox" ${PLANNER_HIDE_EMPTY?'checked':''} onchange="plannerToggleHideEmpty(this.checked)">Masquer les clients sans tâche à faire
+    </label>
+  </div>`;
   if(!columns.length){
-    return '<div style="padding:40px;text-align:center;color:#999;font-size:13px">Aucune tâche pour le moment.</div>';
+    return toolbar+'<div style="padding:40px;text-align:center;color:#999;font-size:13px">Aucune tâche pour le moment.</div>';
   }
-  return `<div class="planner-board">${columns.map(c=>plannerColumnHtml(c, byProspect.get(c.id).sort((a,b)=>new Date(a.activityDate||a.createdAt)-new Date(b.activityDate||b.createdAt)))).join('')}</div>`;
+  return toolbar+`<div class="planner-board">${columns.map(c=>plannerColumnHtml(c, byProspect.get(c.id).sort((a,b)=>new Date(a.activityDate||a.createdAt)-new Date(b.activityDate||b.createdAt)))).join('')}</div>`;
 }
 
 function plannerToggleDoneSection(prospectId){

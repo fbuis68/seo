@@ -51,11 +51,13 @@
   .tab-panel.active{display:block}
   .doc-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid #f0eee9}
   .doc-item:last-child{border-bottom:none}
-  .doc-left{display:flex;gap:12px;align-items:flex-start;min-width:0}
-  .doc-ico{font-size:20px;flex-shrink:0}
+  .doc-left{display:flex;gap:12px;align-items:center;min-width:0}
+  .doc-thumb{width:56px;height:56px;border-radius:9px;flex-shrink:0;object-fit:cover;background:var(--a-tint);color:var(--a);display:flex;align-items:center;justify-content:center;font-size:22px;position:relative}
+  .doc-thumb.is-video::after{content:'▶';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.28);color:#fff;font-size:18px}
   .doc-title{font-weight:600;font-size:13px}
   .doc-desc{color:var(--mu);font-size:12px;margin-top:2px}
   .doc-dl{text-decoration:none;flex-shrink:0}
+  .booking-frame{width:100%;height:720px;border:1px solid var(--bdr);border-radius:8px;margin-top:12px}
   .meeting-item{padding:16px 0;border-bottom:1px solid #f0eee9}
   .meeting-item:last-child{border-bottom:none}
   .meeting-date{color:var(--mu);font-size:11px;text-transform:uppercase;letter-spacing:.3px}
@@ -147,13 +149,53 @@ function quoteSummaryHtml(){
   `;
 }
 
-// Icône selon le type de fichier — purement cosmétique, pas de dépendance.
-function docIconFor(mime){
-  if(!mime) return '🔗';
-  if(/pdf/i.test(mime)) return '📄';
-  if(/image/i.test(mime)) return '🖼';
-  if(/presentation|powerpoint/i.test(mime)) return '📊';
-  return '📎';
+// Vignettes des documents (30/10/2026, demande client "vignette sympa" +
+// "vignette vidéo sur les liens URL") — un lien YouTube/Vimeo affiche sa
+// vraie miniature vidéo (YouTube : URL statique prévisible, pas d'appel
+// réseau ; Vimeo : nécessite son endpoint oEmbed public, chargé en async
+// après le premier rendu, cf. plannerEnhanceVimeoThumbs — pas d'API key
+// requise dans les deux cas). Un fichier image se prévisualise lui-même
+// (via publicDocument) ; les autres types gardent une pastille colorée.
+function youtubeId(url){
+  const m = String(url||'').match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{6,})/);
+  return m ? m[1] : null;
+}
+function vimeoId(url){
+  const m = String(url||'').match(/vimeo\.com\/(?:video\/)?(\d+)/);
+  return m ? m[1] : null;
+}
+function docThumbHtml(d){
+  if(d.url){
+    const yt = youtubeId(d.url);
+    if(yt) return `<img class="doc-thumb is-video" src="https://img.youtube.com/vi/${yt}/mqdefault.jpg" alt="">`;
+    const vm = vimeoId(d.url);
+    if(vm) return `<div class="doc-thumb is-video" id="vimeo-thumb-${d.id}" data-vimeo-url="${esc(d.url)}">🔗</div>`;
+    return `<div class="doc-thumb">🔗</div>`;
+  }
+  const mime = d.fileMimeType||'';
+  if(/^image\//i.test(mime)) return `<img class="doc-thumb" src="/wa/crmQuote/publicDocument/${encodeURIComponent(d.id)}?token=${encodeURIComponent(TOKEN)}" alt="">`;
+  if(/pdf/i.test(mime)) return `<div class="doc-thumb">📄</div>`;
+  if(/presentation|powerpoint/i.test(mime)) return `<div class="doc-thumb">📊</div>`;
+  if(/word|document/i.test(mime)) return `<div class="doc-thumb">📝</div>`;
+  return `<div class="doc-thumb">📎</div>`;
+}
+// Vimeo n'expose pas d'URL de miniature statique (contrairement à YouTube)
+// — son endpoint oEmbed public renvoie thumbnail_url, chargé après coup
+// pour ne jamais bloquer le premier rendu sur un appel réseau tiers.
+function enhanceVimeoThumbs(){
+  document.querySelectorAll('[data-vimeo-url]').forEach(async el=>{
+    try{
+      const r = await fetch('https://vimeo.com/api/oembed.json?url='+encodeURIComponent(el.dataset.vimeoUrl));
+      if(!r.ok) return;
+      const data = await r.json();
+      if(data.thumbnail_url){
+        const img = document.createElement('img');
+        img.className = 'doc-thumb is-video';
+        img.src = data.thumbnail_url;
+        el.replaceWith(img);
+      }
+    }catch(e){ /* vignette générique conservée */ }
+  });
 }
 function fmtDateTime(iso){
   return new Date(iso).toLocaleString('fr-FR',{dateStyle:'long',timeStyle:'short'});
@@ -162,7 +204,7 @@ function documentsTabHtml(){
   return QUOTE.documents.map(d=>`
     <div class="doc-item">
       <div class="doc-left">
-        <div class="doc-ico">${docIconFor(d.fileMimeType)}</div>
+        ${docThumbHtml(d)}
         <div>
           <div class="doc-title">${esc(d.title)}</div>
           ${d.description?`<div class="doc-desc">${esc(d.description)}</div>`:''}
@@ -170,6 +212,12 @@ function documentsTabHtml(){
       </div>
       <a class="btn btn-ghost doc-dl" style="width:auto" href="/wa/crmQuote/publicDocument/${encodeURIComponent(d.id)}?token=${encodeURIComponent(TOKEN)}" target="_blank" rel="noopener">${d.fileMimeType?'Télécharger':'Ouvrir'}</a>
     </div>`).join('');
+}
+function bookingTabHtml(){
+  const BOOKING_URL = 'https://bookings.cloud.microsoft/book/SesameTechnology@sesame-technology.com/?ismsaljsauthenabled';
+  return `<p style="font-size:13px;color:var(--tx)">Besoin d'échanger sur ce devis ou de planifier la suite ? Prenez rendez-vous directement avec votre interlocuteur Sesame Technology.</p>
+    <a class="btn" style="display:inline-block;width:auto;text-decoration:none" href="${BOOKING_URL}" target="_blank" rel="noopener">Ouvrir la prise de rendez-vous ↗</a>
+    <iframe class="booking-frame" src="${BOOKING_URL}" title="Prise de rendez-vous Sesame Technology" loading="lazy"></iframe>`;
 }
 function meetingsTabHtml(){
   return QUOTE.meetings.map(m=>`
@@ -204,7 +252,7 @@ function signatureSectionHtml(){
     <div class="sig-actions"><span></span><button type="button" class="btn-ghost" onclick="clearSignature()">Effacer</button></div>
     <div class="consent">
       <input type="checkbox" id="consent">
-      <label for="consent" style="margin:0">Je reconnais avoir pris connaissance de ce devis et de ses conditions, et je l'accepte.</label>
+      <label for="consent" style="margin:0">Je reconnais avoir pris connaissance de ce devis et des <a href="https://sesame-technology.fr/conditions-generales" target="_blank" rel="noopener" style="color:var(--a)">conditions générales</a>, et je les accepte.</label>
     </div>
     <button class="btn" id="submitBtn" onclick="submitSignature()">Signer et accepter</button>
     <div class="err" id="err"></div>
@@ -224,6 +272,7 @@ function render(){
   const tabs = [{key:'devis', label:'Devis'}];
   if(QUOTE.documents.length) tabs.push({key:'documents', label:'Documents'});
   if(QUOTE.meetings.length) tabs.push({key:'meetings', label:'Comptes-rendus'});
+  tabs.push({key:'booking', label:'Prendre rendez-vous'});
 
   const tabNav = tabs.length>1
     ? `<div class="tabs">${tabs.map((t,i)=>`<button class="tab-btn${i===0?' active':''}" data-tab="${t.key}" onclick="switchTab('${t.key}')">${esc(t.label)}</button>`).join('')}</div>`
@@ -237,9 +286,11 @@ function render(){
     ? `<div class="tab-panel" data-panel="documents"><div class="card"><h1 style="font-size:15px">Documents</h1>${documentsTabHtml()}</div></div>` : '';
   const meetingsPanel = QUOTE.meetings.length
     ? `<div class="tab-panel" data-panel="meetings"><div class="card"><h1 style="font-size:15px">Comptes-rendus de réunion</h1>${meetingsTabHtml()}</div></div>` : '';
+  const bookingPanel = `<div class="tab-panel" data-panel="booking"><div class="card"><h1 style="font-size:15px">Prendre rendez-vous</h1>${bookingTabHtml()}</div></div>`;
 
-  document.getElementById('app').innerHTML = tabNav + devisPanel + documentsPanel + meetingsPanel;
+  document.getElementById('app').innerHTML = tabNav + devisPanel + documentsPanel + meetingsPanel + bookingPanel;
   if(!QUOTE.alreadySigned) setupCanvas();
+  enhanceVimeoThumbs();
 }
 
 let ctx, drawing=false, hasDrawn=false;
