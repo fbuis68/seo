@@ -31,6 +31,8 @@ function shapeProduct(p: {
   stockable: boolean;
   stockQty: number | null;
   active: boolean;
+  documentId: string | null;
+  document?: { id: string; title: string } | null;
   createdAt: Date;
   updatedAt: Date;
 }) {
@@ -45,6 +47,8 @@ function shapeProduct(p: {
     stockable: p.stockable,
     stockQty: p.stockQty,
     active: p.active,
+    documentId: p.documentId,
+    documentTitle: p.document?.title || "",
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
   };
@@ -55,7 +59,7 @@ crmProductRouter.get(
   requireAdmin,
   requireSesame,
   asyncHandler(async (_req, res) => {
-    const rows = await prisma.crmProduct.findMany({ orderBy: { label: "asc" } });
+    const rows = await prisma.crmProduct.findMany({ orderBy: { label: "asc" }, include: { document: { select: { id: true, title: true } } } });
     res.json(rows.map(shapeProduct));
   })
 );
@@ -69,6 +73,7 @@ interface ProductBody {
   category?: string;
   stockable?: boolean;
   active?: boolean;
+  documentId?: string | null;
 }
 
 crmProductRouter.post(
@@ -88,7 +93,9 @@ crmProductRouter.post(
         recurring: !!b.recurring,
         category: b.category || "materiel",
         stockable: !!b.stockable,
+        documentId: b.documentId || null,
       },
+      include: { document: { select: { id: true, title: true } } },
     });
     res.status(201).json(shapeProduct(row));
   })
@@ -116,7 +123,9 @@ crmProductRouter.post(
         category: b.category,
         stockable: b.stockable,
         active: b.active,
+        documentId: b.documentId === undefined ? undefined : b.documentId || null,
       },
+      include: { document: { select: { id: true, title: true } } },
     });
     res.json(shapeProduct(row));
   })

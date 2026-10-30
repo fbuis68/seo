@@ -42,6 +42,11 @@ interface QuoteLine {
   // "Accessoires & connectivité" (accessory), mêmes deux sections que la
   // maquette, purement indicatif/affichage.
   group?: "main" | "accessory";
+  // Produit catalogue (CrmProduct) d'origine d'une ligne Équipements/
+  // Accessoires (cf. dqAddHardware/dqAddAccessory, public/crm.html) — sert
+  // à résoudre CrmProduct.documentId côté espace client (GET
+  // /crmQuote/public), jamais utilisé pour le calcul.
+  productId?: string;
 }
 
 // Valeurs brutes des calculateurs des onglets Logiciel + Mise en place —
@@ -819,6 +824,26 @@ crmQuoteRouter.get(
     const hardwareLines = storedLines.filter((l) => l.category === "materiel" && l.group !== "accessory");
     const lines = expandQuoteLines(storedLines, hardwareLines, config);
 
+    // Document/lien rattaché au PRODUIT d'origine d'une ligne Équipements/
+    // Accessoires (30/10/2026, demande client "sur chaque produit pouvoir
+    // rattacher un document ou une url qui pourra s'afficher sur le
+    // devis") — cf. CrmProduct.documentId, résolu ici une fois pour toutes
+    // les lignes plutôt qu'une requête par ligne.
+    const productIds = [...new Set(lines.map((l) => l.productId).filter((id): id is string => !!id))];
+    const productDocsById = productIds.length
+      ? new Map(
+          (
+            await prisma.crmProduct.findMany({
+              where: { id: { in: productIds }, documentId: { not: null } },
+              select: { id: true, document: { select: { id: true, title: true, fileMimeType: true, url: true } } },
+            })
+          )
+            .filter((p) => p.document && (p.document.url || p.document.fileMimeType))
+            .map((p) => [p.id, p.document!] as const)
+        )
+      : new Map();
+    const linesWithDocs = lines.map((l) => ({ ...l, productDocument: l.productId ? productDocsById.get(l.productId) || null : null }));
+
     // Espace client (29/10/2026, demande "créer un vrai espace client à
     // onglets") : en plus du devis, on expose les documents de la
     // bibliothèque attachés à CE devis (sans le contenu base64, cf. routes
@@ -848,7 +873,7 @@ crmQuoteRouter.get(
       number: quote.number,
       title: quote.title,
       status: quote.status,
-      lines,
+      lines: linesWithDocs,
       discountPct: quote.discountPct,
       vatPct: quote.vatPct,
       depositPct: quote.depositPct,
@@ -889,8 +914,20 @@ crmQuoteRouter.get(
   asyncHandler(async (req, res) => {
     const token = (req.query.token as string) || "";
     if (!token) throw new HttpError(400, "Lien invalide");
-    const quote = await prisma.crmQuote.findUnique({ where: { signToken: token }, select: { attachedDocumentIds: true } });
-    if (!quote || !quote.attachedDocumentIds.includes(req.params.docId)) throw new HttpError(404, "Document introuvable");
+    const quote = await prisma.crmQuote.findUnique({ where: { signToken: token }, select: { attachedDocumentIds: true, lines: true } });
+    if (!quote) throw new HttpError(404, "Document introuvable");
+    let authorized = quote.attachedDocumentIds.includes(req.params.docId);
+    if (!authorized) {
+      // Document rattaché à un PRODUIT d'une ligne du devis (cf.
+      // CrmProduct.documentId) plutôt qu'à la liste attachedDocumentIds —
+      // même garde-fou, juste une seconde source d'autorisation possible.
+      const productIds = [...new Set(((quote.lines as unknown as QuoteLine[]) || []).map((l) => l.productId).filter((id): id is string => !!id))];
+      if (productIds.length) {
+        const match = await prisma.crmProduct.findFirst({ where: { id: { in: productIds }, documentId: req.params.docId } });
+        authorized = !!match;
+      }
+    }
+    if (!authorized) throw new HttpError(404, "Document introuvable");
     const doc = await prisma.crmDocument.findUnique({ where: { id: req.params.docId } });
     if (!doc || !doc.active) throw new HttpError(404, "Document introuvable");
     // Document "lien URL" (cf. CrmDocument.url) — pas de contenu binaire en

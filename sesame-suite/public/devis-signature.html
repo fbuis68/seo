@@ -105,8 +105,12 @@ const DOC_BLOCKS = [
   {cat:'autre', label:'Lignes libres', c:'var(--c-autre)'},
 ];
 function quoteRowHtml(l){
+  // Document/lien rattaché au produit d'origine de la ligne (30/10/2026,
+  // "sur chaque produit pouvoir rattacher un document ou une url"), résolu
+  // côté serveur (GET /crmQuote/public) — null si le produit n'en a pas.
+  const pd = l.productDocument;
   return `<tr>
-      <td>${esc(l.label)}${l.description?`<div class="desc">${esc(l.description)}</div>`:''}</td>
+      <td>${esc(l.label)}${l.description?`<div class="desc">${esc(l.description)}</div>`:''}${pd?`<div style="margin-top:3px"><a href="/wa/crmQuote/publicDocument/${encodeURIComponent(pd.id)}?token=${encodeURIComponent(TOKEN)}" target="_blank" rel="noopener" style="font-size:11px;color:var(--a);text-decoration:none">${pd.fileMimeType?'📎':'🔗'} ${esc(pd.title)}</a></div>`:''}</td>
       <td style="text-align:center">${l.qty}</td>
       <td style="text-align:right">${l.unitPrice==null?'À chiffrer':fmtEUR(l.unitPrice)}</td>
       <td style="text-align:right">${l.unitPrice==null?'—':fmtEUR((+l.qty||0)*l.unitPrice)+(l.recurring?'/mois':'')}</td>

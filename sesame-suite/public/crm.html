@@ -8617,8 +8617,9 @@ function renderCrmProducts(){
 const CRM_PRODUCT_CATEGORY_LABEL = {materiel:'Équipements', accessoire:'Accessoires', logiciel:'Logiciel', service:'Mise en place', autre:'Autre'};
 
 function openProductModal(id){
-  const p = id ? crmProducts.find(x=>x.id===id) : {id:null,sku:'',label:'',description:'',unitPrice:0,recurring:false,category:'materiel',stockable:false,active:true};
+  const p = id ? crmProducts.find(x=>x.id===id) : {id:null,sku:'',label:'',description:'',unitPrice:0,recurring:false,category:'materiel',stockable:false,active:true,documentId:null};
   if(!p) return;
+  if(CRM_DOCUMENTS===null){ dqLoadDocumentLibraryIfNeeded().then(()=>openProductModal(id)); return; }
   document.getElementById('modal-ct').innerHTML = `
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box" style="max-width:520px">
@@ -8631,6 +8632,13 @@ function openProductModal(id){
         <div class="ff"><label>Catégorie (onglet devis)</label><select id="p-category">${Object.entries(CRM_PRODUCT_CATEGORY_LABEL).map(([k,l])=>`<option value="${k}" ${(p.category||'materiel')===k?'selected':''}>${l}</option>`).join('')}</select></div>
       </div>
       <div class="ff" style="margin-top:8px"><label>Description (sous-texte affiché sur le devis)</label><textarea id="p-desc">${esc(p.description)}</textarea></div>
+      <div class="ff" style="margin-top:8px"><label>Document/lien rattaché (affiché sur le devis client)</label>
+        <select id="p-document">
+          <option value="">Aucun</option>
+          ${(CRM_DOCUMENTS||[]).filter(d=>d.active).map(d=>`<option value="${d.id}" ${p.documentId===d.id?'selected':''}>${esc(d.title)}${d.url?' 🔗':''}</option>`).join('')}
+        </select>
+        <small style="color:var(--mu)">Fiche technique, notice, vidéo de présentation… tiré de la <a href="#" onclick="showDocumentLibrary();return false;">bibliothèque documentaire</a>.</small>
+      </div>
       <div class="feat-checks" style="margin-top:10px">
         <label><input type="checkbox" id="p-stockable" ${p.stockable?'checked':''}> Stockable</label>
         ${id?`<label><input type="checkbox" id="p-active" ${p.active?'checked':''}> Actif</label>`:''}
@@ -8650,6 +8658,7 @@ async function saveProduct(id){
     label: g('p-label').trim(), sku: g('p-sku').trim(), unitPrice: +g('p-price')||0,
     recurring: g('p-recurring')==='1', category: g('p-category')||'materiel', description: g('p-desc'),
     stockable: (document.getElementById('p-stockable')||{checked:false}).checked,
+    documentId: g('p-document')||null,
   };
   if(id){ const activeEl=document.getElementById('p-active'); if(activeEl) body.active = activeEl.checked; }
   if(!body.label){ flash('Le libellé est obligatoire'); return; }

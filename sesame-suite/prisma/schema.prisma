@@ -2651,6 +2651,15 @@ model CrmProduct {
   stockQty    Int? // réservé à la future gestion de stock — non utilisé pour l'instant
   active      Boolean @default(true)
 
+  // Document ou lien externe (CrmDocument, cf. bibliothèque documentaire —
+  // un CrmDocument peut déjà être un fichier OU une simple url, pas besoin
+  // d'un second mécanisme) rattaché à CE produit, affiché sur le devis pour
+  // chaque ligne qui en est issue (30/10/2026, demande client). SetNull :
+  // supprimer le document de la bibliothèque ne doit jamais faire échouer
+  // la suppression, juste retirer la pièce jointe des devis concernés.
+  documentId String?
+  document   CrmDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+
   // Référentiel produit pour Sesame AI Sales Agent (28/10/2026, Sprint 1) —
   // alimente l'Agent Copywriter (lib/salesAgent/) pour qu'il ne décrive
   // jamais une fonctionnalité/intégration inventée : seuls les éléments
@@ -2726,6 +2735,10 @@ model CrmDocument {
   secteurs String[] @default([])
   active   Boolean  @default(true)
   order    Int      @default(0)
+
+  // Produits du catalogue (CrmProduct) auxquels ce document est rattaché —
+  // cf. CrmProduct.documentId.
+  products CrmProduct[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
