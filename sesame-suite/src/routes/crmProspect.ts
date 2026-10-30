@@ -34,7 +34,17 @@ function normalizeAffiliations(list: unknown): string[] {
   return out;
 }
 
-function shapeActivity(a: { id: string; dealId?: string | null; type: string; text: string; authorName: string | null; activityDate: Date | null; done: boolean; createdAt: Date }) {
+function shapeActivity(a: {
+  id: string;
+  dealId?: string | null;
+  type: string;
+  text: string;
+  authorName: string | null;
+  activityDate: Date | null;
+  done: boolean;
+  createdAt: Date;
+  checklistItems?: { id: string; text: string; done: boolean; order: number }[];
+}) {
   return {
     id: a.id,
     dealId: a.dealId || null,
@@ -44,6 +54,7 @@ function shapeActivity(a: { id: string; dealId?: string | null; type: string; te
     activityDate: a.activityDate,
     done: a.done,
     createdAt: a.createdAt,
+    checklistItems: (a.checklistItems || []).map((it) => ({ id: it.id, text: it.text, done: it.done })),
   };
 }
 
@@ -217,7 +228,7 @@ function shapeProspect(p: {
 
 const PROSPECT_INCLUDE = {
   entity: { select: { code: true, config: { select: { lang: true, currency: true, timezone: true } } } },
-  activities: { orderBy: { createdAt: "asc" as const } },
+  activities: { orderBy: { createdAt: "asc" as const }, include: { checklistItems: { orderBy: { order: "asc" as const } } } },
   commercial: { select: { id: true, name: true, email: true } },
   contacts: { select: { email: true, phone: true } },
 };
@@ -955,6 +966,83 @@ crmProspectRouter.post(
     const existing = await prisma.crmActivity.findUnique({ where: { id } });
     if (!existing) throw new HttpError(404, "Activité introuvable");
     await prisma.crmActivity.delete({ where: { id } });
+    res.json({ ok: true });
+  })
+);
+
+/**
+ * POST /crmProspect/activity/update — édition partielle (vue Planner,
+ * 30/10/2026) : texte, échéance, personne assignée et/ou statut fait/à
+ * faire (contrairement à markDone, qui ne va que dans un sens). Seuls les
+ * champs fournis sont modifiés.
+ */
+crmProspectRouter.post(
+  "/crmProspect/activity/update",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const id = (req.body.id as string) || "";
+    const existing = await prisma.crmActivity.findUnique({ where: { id } });
+    if (!existing) throw new HttpError(404, "Activité introuvable");
+    const b = req.body as { text?: string; activityDate?: string | null; authorName?: string; done?: boolean };
+    const activity = await prisma.crmActivity.update({
+      where: { id },
+      data: {
+        ...(b.text !== undefined ? { text: b.text.trim() } : {}),
+        ...(b.activityDate !== undefined ? { activityDate: b.activityDate ? new Date(b.activityDate) : null } : {}),
+        ...(b.authorName !== undefined ? { authorName: b.authorName } : {}),
+        ...(b.done !== undefined ? { done: b.done } : {}),
+      },
+      include: { checklistItems: { orderBy: { order: "asc" } } },
+    });
+    res.json(shapeActivity(activity));
+  })
+);
+
+/**
+ * Sous-tâches cochables d'une activité (vue Planner, format Microsoft
+ * Planner demandé par le client 30/10/2026) — CRUD minimal, pas de
+ * réordonnancement par glisser-déposer (order = ordre de création).
+ */
+crmProspectRouter.post(
+  "/crmProspect/activity/checklistItem/create",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const activityId = (req.body.activityId as string) || "";
+    const text = ((req.body.text as string) || "").trim();
+    if (!text) throw new HttpError(400, "Texte requis");
+    const activity = await prisma.crmActivity.findUnique({ where: { id: activityId } });
+    if (!activity) throw new HttpError(404, "Tâche introuvable");
+    const count = await prisma.crmActivityChecklistItem.count({ where: { activityId } });
+    const item = await prisma.crmActivityChecklistItem.create({ data: { activityId, text, order: count } });
+    res.status(201).json(item);
+  })
+);
+
+crmProspectRouter.post(
+  "/crmProspect/activity/checklistItem/toggle",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const id = (req.body.id as string) || "";
+    const done = !!req.body.done;
+    const existing = await prisma.crmActivityChecklistItem.findUnique({ where: { id } });
+    if (!existing) throw new HttpError(404, "Sous-tâche introuvable");
+    const item = await prisma.crmActivityChecklistItem.update({ where: { id }, data: { done } });
+    res.json(item);
+  })
+);
+
+crmProspectRouter.post(
+  "/crmProspect/activity/checklistItem/delete",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const id = (req.body.id as string) || "";
+    const existing = await prisma.crmActivityChecklistItem.findUnique({ where: { id } });
+    if (!existing) throw new HttpError(404, "Sous-tâche introuvable");
+    await prisma.crmActivityChecklistItem.delete({ where: { id } });
     res.json({ ok: true });
   })
 );

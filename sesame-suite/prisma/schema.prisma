@@ -2753,9 +2753,28 @@ model CrmActivity {
   activityDate DateTime?
   done         Boolean   @default(false)
 
+  // Sous-tâches cochables (vue Planner, 30/10/2026, "mode planner" façon
+  // Microsoft Planner demandé par le client) — optionnel, la plupart des
+  // activités n'en ont aucune (ex. un simple appel loggé).
+  checklistItems CrmActivityChecklistItem[]
+
   createdAt DateTime @default(now())
 
   @@index([dealId])
+}
+
+model CrmActivityChecklistItem {
+  id         String      @id @default(cuid())
+  activityId String
+  activity   CrmActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  text  String
+  done  Boolean @default(false)
+  order Int     @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([activityId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────

@@ -276,6 +276,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,san
 
 /* ── LIST VIEW ── */
 .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.home-row{display:grid;grid-template-columns:2fr 1fr;gap:12px;align-items:start;margin-bottom:12px}
+.home-row>.card{margin-top:0}
+@media (max-width:900px){.home-row{grid-template-columns:1fr}}
+.pipe-bar-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.pipe-bar-lbl{width:92px;flex-shrink:0;font-size:11px;color:var(--mu,#888);text-align:right}
+.pipe-bar-track{flex:1;height:16px;background:var(--bg,#f0eee9);border-radius:4px;overflow:hidden}
+.pipe-bar-fill{height:100%;border-radius:4px}
+.pipe-bar-val{width:64px;flex-shrink:0;font-size:11px;font-variant-numeric:tabular-nums;color:var(--tx,#1a1a1a)}
+.planner-board{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;align-items:flex-start}
+.planner-col{flex:0 0 260px;background:var(--card,#fff);border:0.5px solid var(--bdr,#e2dfd9);border-radius:10px;padding:12px}
+.planner-col-hd{margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--bdr,#e2dfd9)}
+.planner-card{background:var(--bg,#f7f7f5);border-radius:8px;padding:10px;margin-bottom:8px}
+.planner-card:hover{background:#efede8}
 .stat-card{background:var(--card);border-radius:10px;padding:.65rem .9rem;border:0.5px solid var(--bdr)}
 .stat-lbl{font-size:11px;color:var(--mu);margin-bottom:2px}
 .stat-val{font-size:20px;font-weight:500}
@@ -605,6 +618,7 @@ svg.tr-chart{display:block;width:100%;height:auto;min-width:640px}
   <div class="sidebar" id="sidebar" onclick="if(event.target.closest('.nav-item,.vt'))closeSidebar()">
     <div class="nav-lbl">Navigation</div>
     <div class="nav-item" id="n-home" onclick="showHome()"><div class="nav-ico">⌂</div> Home</div>
+    <div class="nav-item" id="n-planner" onclick="showPlanner()"><div class="nav-ico">▦</div> Planner</div>
     <div class="nav-item" id="n-list" onclick="showList()"><div class="nav-ico">≡</div> Client/Prospect</div>
     <div class="nav-item" id="n-affaires" onclick="showAffaires()"><div class="nav-ico">◆</div> Affaires</div>
     <div class="nav-item" id="n-devis" onclick="showDevisList()"><div class="nav-ico">✎</div> Devis</div>
@@ -1116,16 +1130,15 @@ function renderHomeTasksCard(){
           <td>
             <span style="cursor:pointer" onclick="${t.dealId?`openDealModal('${t.dealId}')`:`showFiche('${t.prospectId}')`}">${t.text}</span>
             ${overdue?' <span class="tag t-red" style="font-size:9px;padding:1px 7px">RETARD</span>':''}
+            <div style="font-size:11px;color:var(--mu,#888);margin-top:2px">
+              <a href="#" onclick="event.preventDefault();showFiche('${t.prospectId}')">${esc(t.prospectName)}</a>${t.dealTitle?' · <a href="#" onclick="event.preventDefault();openDealModal(\''+t.dealId+'\')">'+esc(t.dealTitle)+'</a>':''}${t.authorName?' · '+esc(t.authorName):''}
+            </div>
           </td>
-          <td style="white-space:nowrap">${t.activityDate?new Date(t.activityDate).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'}):'—'}</td>
-          <td style="white-space:nowrap">
-            <a href="#" onclick="event.preventDefault();showFiche('${t.prospectId}')">${esc(t.prospectName)}</a>${t.dealTitle?' · <a href="#" onclick="event.preventDefault();openDealModal(\''+t.dealId+'\')">'+esc(t.dealTitle)+'</a>':''}
-          </td>
-          <td style="white-space:nowrap">${t.authorName?esc(t.authorName):'—'}</td>
-          <td>${!t.done?`<button class="btn btn-sm btn-ghost" onclick="homeMarkTaskDone('${t.prospectId}','${t.id}')">✓ Fait</button>`:'<span class="tag t-green" style="font-size:10px;padding:1px 7px">Fait</span>'}</td>
+          <td style="white-space:nowrap">${t.activityDate?new Date(t.activityDate).toLocaleDateString('fr-FR',{day:'numeric',month:'short'}):'—'}</td>
+          <td>${!t.done?`<button class="btn btn-sm btn-ghost" onclick="homeMarkTaskDone('${t.prospectId}','${t.id}')">✓</button>`:'<span class="tag t-green" style="font-size:10px;padding:1px 7px">Fait</span>'}</td>
         </tr>`;
       }).join('');
-  return `<div class="card" id="home-tasks-card">
+  return `<div class="card" id="home-tasks-card" style="font-size:12px">
     <div class="card-head" style="flex-wrap:wrap;gap:8px">
       <div class="ch-ico">☑</div><span class="ch-title">Tâches à réaliser</span>
       <span style="font-size:12px;color:#aaa">${rows.length}</span>
@@ -1147,15 +1160,13 @@ function renderHomeTasksCard(){
       </div>
     </div>
     ${selBar}
-    <div class="tbl-wrap"><table>
+    <div class="tbl-wrap" style="max-height:440px;overflow-y:auto"><table>
       <thead><tr>
-        <th style="width:26px"><input type="checkbox" class="crm-sel-cb" ${allSelected?'checked':''} onchange="homeTaskToggleSelectAllVisible(this.checked, ${esc(visibleIdsJs)})"></th>
-        <th style="width:90px">Type</th>
+        <th style="width:24px"><input type="checkbox" class="crm-sel-cb" ${allSelected?'checked':''} onchange="homeTaskToggleSelectAllVisible(this.checked, ${esc(visibleIdsJs)})"></th>
+        <th style="width:70px">Type</th>
         <th>Tâche</th>
-        <th style="width:95px">Échéance</th>
-        <th style="width:200px">Client / Affaire</th>
-        <th style="width:110px">Personne</th>
-        <th style="width:90px">Statut</th>
+        <th style="width:70px">Échéance</th>
+        <th style="width:48px">Statut</th>
       </tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table></div>
@@ -1199,7 +1210,7 @@ async function homeTaskBulkMarkDone(){
 function showHome(){
   view='home';editingId=null;setNav('n-home');bc([{label:'Home'}]);tba('');
   document.getElementById('main').innerHTML = clients.length
-    ? renderPipelineKpis()+renderHomeTasksCard()+renderInsights()
+    ? renderPipelineKpis()+`<div class="home-row">${renderHomeTasksCard()}${renderPipeChart()}</div>`+renderInsights()
     : '<div style="padding:40px;text-align:center;color:#999;font-size:13px">Aucune fiche client pour le moment.</div>';
 }
 
@@ -1226,6 +1237,267 @@ function renderPipelineKpis(){
     <div class="stat-card"><div class="stat-lbl">Valeur pondérée (ponctuel)</div><div class="stat-val" style="color:#3c3489">${fmtEUR(weightedValue)}</div></div>
     <div class="stat-card"><div class="stat-lbl">Taux de conversion</div><div class="stat-val" style="color:${conversionRate>=50?'#1A6B47':'#854f0b'}">${conversionRate}%</div></div>
   </div>`;
+}
+
+// Graphique "Pipe commercial actuel" (demande client 30/10/2026, à côté des
+// tâches sur Home) — barres horizontales par étape du pipe (DEAL_STAGES),
+// valeur = montant mensuel récurrent (même convention que la KPI "Valeur du
+// pipe (mensuel)" ci-dessus). Couleur = statut (en cours/gagné/perdu), pas
+// une couleur par étape — cf. skill dataviz, le statut est une dimension
+// sémantique distincte de l'identité catégorielle.
+function pipeStageColor(stage){
+  if(stage==='Gagné') return '#1A6B47';
+  if(stage==='Perdu') return '#9a9690';
+  return '#8b1040';
+}
+function renderPipeChart(){
+  const byStage = DEAL_STAGES.map(stage=>{
+    const rows = deals.filter(d=>d.stage===stage);
+    return {stage, count:rows.length, amount:rows.reduce((s,d)=>s+(d.amount||0),0)};
+  });
+  const max = Math.max(1, ...byStage.map(s=>s.amount));
+  const bars = byStage.map(s=>`
+    <div class="pipe-bar-row">
+      <div class="pipe-bar-lbl" title="${esc(s.stage)}">${esc(s.stage)}</div>
+      <div class="pipe-bar-track"><div class="pipe-bar-fill" style="width:${Math.max(2,Math.round(s.amount/max*100))}%;background:${pipeStageColor(s.stage)}"></div></div>
+      <div class="pipe-bar-val">${fmtEUR(s.amount)}<span style="color:var(--mu,#888)"> · ${s.count}</span></div>
+    </div>`).join('');
+  return `<div class="card">
+    <div class="card-head"><div class="ch-ico">◫</div><span class="ch-title">Pipe commercial actuel</span></div>
+    <div style="font-size:11px;color:var(--mu,#888);margin-bottom:10px;display:flex;gap:12px;flex-wrap:wrap">
+      <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#8b1040;margin-right:4px"></span>En cours</span>
+      <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#1A6B47;margin-right:4px"></span>Gagné</span>
+      <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#9a9690;margin-right:4px"></span>Perdu</span>
+    </div>
+    ${bars}
+  </div>`;
+}
+
+// ════════════════════════════════════════
+// PLANNER — tableau kanban par client (demande client 30/10/2026, "mode
+// planner" façon Microsoft Planner, cf. capture fournie) : une colonne par
+// client ayant au moins une tâche, cartes avec sous-tâches cochables,
+// échéance, personne assignée. Réutilise le MÊME journal d'activité
+// (CrmActivity) que Home/la fiche client — ce n'est qu'une autre vue sur
+// les mêmes données, pas un système de tâches séparé.
+// ════════════════════════════════════════
+let PLANNER_COLLAPSED_DONE = new Set(); // prospectId dont "Tâches terminées" est repliée (replié par défaut)
+let PLANNER_ADD_OPEN = new Set(); // prospectId dont le formulaire "+ Ajouter une tâche" est ouvert
+
+function showPlanner(){
+  view='planner';setNav('n-planner');bc([{label:'Planner'}]);tba('');
+  document.getElementById('main').innerHTML = renderPlannerBoard();
+}
+
+function plannerAvatar(name){
+  if(!name) return '';
+  const color = pmsColor(name);
+  const initials = name.replace(/[^A-Za-zÀ-ÿ0-9 ]/g,'').split(/\s+/).filter(Boolean).map(w=>w[0]).join('').toUpperCase().slice(0,2) || '?';
+  return `<span title="${esc(name)}" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${color};color:#fff;font-size:10px;font-weight:600;flex-shrink:0">${initials}</span>`;
+}
+
+function plannerCardHtml(t){
+  const items = t.checklistItems||[];
+  const doneCount = items.filter(i=>i.done).length;
+  const overdue = !t.done && t.activityDate && new Date(t.activityDate) < new Date(new Date().toDateString());
+  return `<div class="planner-card" id="pc-${t.id}">
+    <div style="display:flex;align-items:flex-start;gap:8px">
+      <input type="checkbox" ${t.done?'checked':''} style="margin-top:2px;flex-shrink:0" onchange="plannerToggleTaskDone('${t.id}',this.checked)">
+      <div style="flex:1;min-width:0;cursor:pointer" onclick="plannerOpenCard('${t.id}')">
+        <div style="font-size:13px;${t.done?'text-decoration:line-through;color:var(--mu,#888)':''}">${esc(t.text)}</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap">
+          ${items.length?`<span style="font-size:11px;color:var(--mu,#888);display:flex;align-items:center;gap:3px">☑ ${doneCount}/${items.length}</span>`:''}
+          ${t.activityDate&&!t.done?`<span class="tag ${overdue?'t-red':'t-gray'}" style="font-size:10px;padding:1px 7px">${new Date(t.activityDate).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'})}</span>`:''}
+          ${t.authorName?plannerAvatar(t.authorName):''}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function plannerColumnHtml(c, tasks){
+  const open = tasks.filter(t=>!t.done);
+  const done = tasks.filter(t=>t.done);
+  const isExpanded = PLANNER_COLLAPSED_DONE.has(c.id); // le Set contient les colonnes DÉPLIÉES (repliées par défaut)
+  const addOpen = PLANNER_ADD_OPEN.has(c.id);
+  return `<div class="planner-col">
+    <div class="planner-col-hd">
+      <div style="font-weight:600;font-size:13px;cursor:pointer" onclick="showFiche('${c.id}')">${esc(c.nom)}${c.referent?' <span style="font-weight:400;color:var(--mu,#888);font-size:11px">('+esc(c.referent)+')</span>':''}</div>
+    </div>
+    <button class="btn btn-ghost btn-sm" style="width:100%;text-align:left;margin-bottom:8px" onclick="plannerToggleAddForm('${c.id}')">+ Ajouter une tâche</button>
+    ${addOpen?`<div style="margin-bottom:8px;display:flex;flex-direction:column;gap:6px">
+      <input id="padd-text-${c.id}" placeholder="Titre de la tâche" style="font-size:12px;padding:6px 8px">
+      <input id="padd-date-${c.id}" type="date" style="font-size:12px;padding:6px 8px">
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-primary btn-sm" onclick="plannerSubmitAddTask('${c.id}')">Ajouter</button>
+        <button class="btn btn-ghost btn-sm" onclick="plannerToggleAddForm('${c.id}')">Annuler</button>
+      </div>
+    </div>`:''}
+    <div>${open.map(plannerCardHtml).join('') || '<div class="log-empty" style="font-size:11px">Aucune tâche à faire.</div>'}</div>
+    ${done.length?`<div style="margin-top:8px">
+      <div style="font-size:11px;color:var(--mu,#888);cursor:pointer;display:flex;align-items:center;gap:4px" onclick="plannerToggleDoneSection('${c.id}')">
+        <span>${isExpanded?'▾':'▸'}</span> Tâches terminées <span style="margin-left:auto">${done.length}</span>
+      </div>
+      ${isExpanded?`<div style="margin-top:6px">${done.map(plannerCardHtml).join('')}</div>`:''}
+    </div>`:''}
+  </div>`;
+}
+
+function renderPlannerBoard(){
+  const all = buildAllTasks();
+  const byProspect = new Map();
+  all.forEach(t=>{
+    if(!byProspect.has(t.prospectId)) byProspect.set(t.prospectId, []);
+    byProspect.get(t.prospectId).push(t);
+  });
+  const columns = [...byProspect.keys()]
+    .map(pid=>clients.find(c=>c.id===pid))
+    .filter(Boolean)
+    .sort((a,b)=>a.nom.localeCompare(b.nom));
+  if(!columns.length){
+    return '<div style="padding:40px;text-align:center;color:#999;font-size:13px">Aucune tâche pour le moment.</div>';
+  }
+  return `<div class="planner-board">${columns.map(c=>plannerColumnHtml(c, byProspect.get(c.id).sort((a,b)=>new Date(a.activityDate||a.createdAt)-new Date(b.activityDate||b.createdAt)))).join('')}</div>`;
+}
+
+function plannerToggleDoneSection(prospectId){
+  if(PLANNER_COLLAPSED_DONE.has(prospectId)) PLANNER_COLLAPSED_DONE.delete(prospectId); else PLANNER_COLLAPSED_DONE.add(prospectId);
+  document.getElementById('main').innerHTML = renderPlannerBoard();
+}
+function plannerToggleAddForm(prospectId){
+  if(PLANNER_ADD_OPEN.has(prospectId)) PLANNER_ADD_OPEN.delete(prospectId); else PLANNER_ADD_OPEN.add(prospectId);
+  document.getElementById('main').innerHTML = renderPlannerBoard();
+}
+async function plannerSubmitAddTask(prospectId){
+  const text = (document.getElementById('padd-text-'+prospectId).value||'').trim();
+  const date = document.getElementById('padd-date-'+prospectId).value;
+  if(!text){ flash('Titre requis'); return; }
+  try{
+    const r = await apiFetch('/wa/crmProspect/activity/create', {method:'POST', body:JSON.stringify({
+      prospectId, type:'Tâche commerciale', text, activityDate: date||undefined,
+    })});
+    if(!r.ok) throw new Error('http '+r.status);
+    const entry = await r.json();
+    const c = clients.find(x=>x.id===prospectId);
+    if(c){ if(!c.journal) c.journal=[]; c.journal.push(entry); }
+    PLANNER_ADD_OPEN.delete(prospectId);
+    document.getElementById('main').innerHTML = renderPlannerBoard();
+    flash('Tâche ajoutée');
+  }catch(e){ flash('Erreur lors de la création'); }
+}
+async function plannerToggleTaskDone(taskId, checked){
+  const all = buildAllTasks();
+  const t = all.find(x=>x.id===taskId); if(!t) return;
+  try{
+    const r = await apiFetch('/wa/crmProspect/activity/update', {method:'POST', body:JSON.stringify({id:taskId, done:checked})});
+    if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash('Erreur'); return; }
+  const c = clients.find(x=>x.id===t.prospectId);
+  const j = c && (c.journal||[]).find(j=>j.id===taskId);
+  if(j) j.done = checked;
+  document.getElementById('main').innerHTML = renderPlannerBoard();
+}
+
+function plannerOpenCard(taskId){
+  const all = buildAllTasks();
+  const t = all.find(x=>x.id===taskId); if(!t) return;
+  const items = t.checklistItems||[];
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:480px">
+      <div class="modal-head"><div style="font-size:16px;font-weight:600">Tâche</div><button class="btn btn-ghost btn-icon" onclick="closeModal()">✕</button></div>
+      <div style="padding:0 20px 20px" class="form-grid">
+        <div class="ff" style="grid-column:1/-1"><label>Titre</label><textarea id="pcard-text" rows="2" onblur="plannerSaveField('${taskId}','text',this.value)">${esc(t.text)}</textarea></div>
+        <div class="ff"><label>Échéance</label><input type="date" id="pcard-date" value="${t.activityDate?new Date(t.activityDate).toISOString().slice(0,10):''}" onchange="plannerSaveField('${taskId}','activityDate',this.value)"></div>
+        <div class="ff"><label>Assigné à</label><input id="pcard-author" value="${esc(t.authorName||'')}" onblur="plannerSaveField('${taskId}','authorName',this.value)"></div>
+        <div class="ff" style="grid-column:1/-1">
+          <label>Sous-tâches</label>
+          <div id="pcard-checklist">${plannerChecklistHtml(taskId, items)}</div>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            <input id="pcard-newitem" placeholder="Nouvelle sous-tâche" style="flex:1" onkeydown="if(event.key==='Enter')plannerAddChecklistItem('${taskId}')">
+            <button class="btn btn-ghost btn-sm" onclick="plannerAddChecklistItem('${taskId}')">+ Ajouter</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" style="color:#a32d2d" onclick="plannerDeleteTask('${taskId}')">Supprimer</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Fermer</button>
+      </div>
+    </div>
+  </div>`;
+}
+function plannerChecklistHtml(taskId, items){
+  return items.map(it=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:4px 0">
+      <input type="checkbox" ${it.done?'checked':''} onchange="plannerToggleChecklistItem('${taskId}','${it.id}',this.checked)">
+      <span style="flex:1;font-size:13px;${it.done?'text-decoration:line-through;color:var(--mu,#888)':''}">${esc(it.text)}</span>
+      <button class="btn btn-ghost btn-sm" style="color:#a32d2d;padding:2px 6px" onclick="plannerDeleteChecklistItem('${taskId}','${it.id}')">✕</button>
+    </div>`).join('') || '<div class="log-empty" style="font-size:11px">Aucune sous-tâche.</div>';
+}
+async function plannerSaveField(taskId, field, value){
+  const all = buildAllTasks();
+  const t = all.find(x=>x.id===taskId); if(!t) return;
+  const body = {id:taskId};
+  body[field] = field==='activityDate' ? (value||null) : value;
+  try{
+    const r = await apiFetch('/wa/crmProspect/activity/update', {method:'POST', body:JSON.stringify(body)});
+    if(!r.ok) throw new Error('http '+r.status);
+    const entry = await r.json();
+    const c = clients.find(x=>x.id===t.prospectId);
+    const idx = c && (c.journal||[]).findIndex(j=>j.id===taskId);
+    if(c && idx>-1) c.journal[idx] = entry;
+  }catch(e){ flash('Erreur de sauvegarde'); }
+}
+async function plannerAddChecklistItem(taskId){
+  const input = document.getElementById('pcard-newitem');
+  const text = (input.value||'').trim();
+  if(!text) return;
+  try{
+    const r = await apiFetch('/wa/crmProspect/activity/checklistItem/create', {method:'POST', body:JSON.stringify({activityId:taskId, text})});
+    if(!r.ok) throw new Error('http '+r.status);
+    const item = await r.json();
+    const all = buildAllTasks();
+    const t = all.find(x=>x.id===taskId);
+    const c = clients.find(x=>x.id===t.prospectId);
+    const j = c && (c.journal||[]).find(j=>j.id===taskId);
+    if(j){ if(!j.checklistItems) j.checklistItems=[]; j.checklistItems.push({id:item.id, text:item.text, done:item.done}); }
+    input.value='';
+    document.getElementById('pcard-checklist').innerHTML = plannerChecklistHtml(taskId, j?j.checklistItems:[]);
+  }catch(e){ flash('Erreur lors de l\'ajout'); }
+}
+async function plannerToggleChecklistItem(taskId, itemId, checked){
+  try{
+    const r = await apiFetch('/wa/crmProspect/activity/checklistItem/toggle', {method:'POST', body:JSON.stringify({id:itemId, done:checked})});
+    if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash('Erreur'); return; }
+  const all = buildAllTasks();
+  const t = all.find(x=>x.id===taskId);
+  const c = clients.find(x=>x.id===t.prospectId);
+  const j = c && (c.journal||[]).find(j=>j.id===taskId);
+  if(j){ const it = (j.checklistItems||[]).find(i=>i.id===itemId); if(it) it.done=checked; }
+}
+async function plannerDeleteChecklistItem(taskId, itemId){
+  try{
+    const r = await apiFetch('/wa/crmProspect/activity/checklistItem/delete', {method:'POST', body:JSON.stringify({id:itemId})});
+    if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash('Erreur de suppression'); return; }
+  const all = buildAllTasks();
+  const t = all.find(x=>x.id===taskId);
+  const c = clients.find(x=>x.id===t.prospectId);
+  const j = c && (c.journal||[]).find(j=>j.id===taskId);
+  if(j){ j.checklistItems = (j.checklistItems||[]).filter(i=>i.id!==itemId); }
+  document.getElementById('pcard-checklist').innerHTML = plannerChecklistHtml(taskId, j?j.checklistItems:[]);
+}
+async function plannerDeleteTask(taskId){
+  if(!confirm('Supprimer cette tâche ?')) return;
+  try{
+    const r = await apiFetch('/wa/crmProspect/activity/delete', {method:'POST', body:JSON.stringify({id:taskId})});
+    if(!r.ok) throw new Error('http '+r.status);
+  }catch(e){ flash('Erreur de suppression'); return; }
+  clients.forEach(c=>{ if(c.journal) c.journal = c.journal.filter(j=>j.id!==taskId); });
+  closeModal();
+  document.getElementById('main').innerHTML = renderPlannerBoard();
+  flash('Tâche supprimée');
 }
 
 // ════════════════════════════════════════
