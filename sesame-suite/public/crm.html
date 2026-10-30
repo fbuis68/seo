@@ -1251,9 +1251,14 @@ function pipeStageColor(stage){
   return '#8b1040';
 }
 function renderPipeChart(){
+  // Même convention que l'écran "Affaires" (kanban par étape, cf.
+  // renderAffaires) — montant PONCTUEL (montantPonctuel), pas le MRR
+  // (amount) : les deux écrans doivent afficher les mêmes chiffres par
+  // étape (30/10/2026, "mettre les bons chiffres issus de la gestion des
+  // affaires").
   const byStage = DEAL_STAGES.map(stage=>{
     const rows = deals.filter(d=>d.stage===stage);
-    return {stage, count:rows.length, amount:rows.reduce((s,d)=>s+(d.amount||0),0)};
+    return {stage, count:rows.length, amount:rows.reduce((s,d)=>s+(+d.montantPonctuel||0),0)};
   });
   const max = Math.max(1, ...byStage.map(s=>s.amount));
   const bars = byStage.map(s=>`
