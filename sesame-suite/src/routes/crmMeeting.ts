@@ -196,6 +196,27 @@ crmMeetingRouter.post(
 );
 
 /**
+ * POST /wa/crmMeeting/updateSummary — retouche manuelle du résumé IA avant
+ * envoi au client (30/10/2026, demande client) — le résumé généré par
+ * l'agent n'est qu'une proposition, jamais figée ; sauvegarde ici pour que
+ * la correction survive au-delà d'un seul envoi email (contrairement à
+ * l'édition temporaire du champ de la modale d'envoi).
+ */
+crmMeetingRouter.post(
+  "/crmMeeting/updateSummary",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const id = (req.body.id as string) || "";
+    const summaryText = (req.body.summaryText as string) || "";
+    const existing = await prisma.crmMeeting.findUnique({ where: { id } });
+    if (!existing) throw new HttpError(404, "Réunion introuvable");
+    const row = await prisma.crmMeeting.update({ where: { id }, data: { summaryText: summaryText.trim() } });
+    res.json(shapeMeeting(row));
+  })
+);
+
+/**
  * GET /wa/crmMeeting/:id/recording — proxy du flux vidéo Microsoft Graph,
  * jamais de jeton Graph exposé au navigateur ni de contenu stocké en base.
  */

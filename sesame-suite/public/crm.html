@@ -3401,9 +3401,12 @@ function renderMeetingsCard(prospectId){
         </div>
         ${m.status==='fetched'?`
         <div style="margin-top:8px;background:var(--bg,#f7f7f5);border-radius:8px;padding:10px 12px">
-          <div style="font-size:11px;font-weight:600;color:var(--mu,#888);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Résumé</div>
-          <div style="font-size:13px;white-space:pre-wrap">${esc(m.summaryText||'')}</div>
-          <button class="btn btn-sm btn-primary" style="margin-top:8px" onclick="openSendMeetingSummaryModal('${m.id}')">✉ Envoyer au client</button>
+          <div style="font-size:11px;font-weight:600;color:var(--mu,#888);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Résumé <span style="font-weight:400;text-transform:none;letter-spacing:0">— retouchable avant envoi</span></div>
+          <textarea id="mtg-summary-${m.id}" rows="4" style="font-size:13px;width:100%;resize:vertical" onblur="meetingSaveSummary('${m.id}',this.value)">${esc(m.summaryText||'')}</textarea>
+          <div class="log-acts" style="margin-top:6px">
+            <button class="btn btn-sm btn-primary" onclick="openSendMeetingSummaryModal('${m.id}')">✉ Envoyer au client</button>
+            <span id="mtg-summary-saved-${m.id}" style="font-size:11px;color:var(--mu,#888);display:none">Enregistré ✓</span>
+          </div>
           ${(m.actionItems||[]).length?`
           <div style="font-size:11px;font-weight:600;color:var(--mu,#888);text-transform:uppercase;letter-spacing:.05em;margin-top:12px;margin-bottom:4px">Points d'action</div>
           ${actions}
@@ -3539,6 +3542,24 @@ async function meetingFetchRecap(id, prospectId){
     flash('Compte-rendu récupéré ✓');
   }catch(e){ flash(e.message||'Erreur de récupération du compte-rendu'); }
   renderMeetingsCard(prospectId);
+}
+
+/** Sauvegarde auto au blur du champ résumé (30/10/2026, demande client
+ * "pouvoir le retoucher avant envoi") — persiste la correction manuelle,
+ * contrairement à l'édition temporaire dans la modale "Envoyer au client"
+ * qui ne modifiait jusqu'ici que ce seul envoi. */
+async function meetingSaveSummary(id, value){
+  const m = CRM_MEETINGS.find(x=>x.id===id);
+  if(m && m.summaryText===value) return; // rien de changé, pas d'appel inutile
+  try{
+    const r = await apiFetch('/wa/crmMeeting/updateSummary', {method:'POST', body:JSON.stringify({id, summaryText:value})});
+    if(!r.ok) throw new Error('http '+r.status);
+    const data = await r.json();
+    const idx = CRM_MEETINGS.findIndex(x=>x.id===id);
+    if(idx!==-1) CRM_MEETINGS[idx] = data;
+    const tag = document.getElementById('mtg-summary-saved-'+id);
+    if(tag){ tag.style.display='inline'; setTimeout(()=>{ tag.style.display='none'; }, 2000); }
+  }catch(e){ flash('Erreur d\'enregistrement du résumé'); }
 }
 
 async function meetingMaterializeTasks(id, prospectId){
