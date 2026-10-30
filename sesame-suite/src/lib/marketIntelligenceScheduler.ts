@@ -54,35 +54,44 @@ async function scanOneProspect(p: { id: string; nom: string; secteur: string | n
  * passage une entreprise dont le nom pose systématiquement problème, ex.
  * ambigu — cf. même principe que syncMeetingHistory).
  */
-export function startMarketIntelligenceScheduler() {
-  setInterval(async () => {
-    if (!config.anthropicApiKey) return; // pas de clé configurée — rien à scanner
-    let prospects: { id: string; nom: string; secteur: string | null }[];
+async function runScan() {
+  if (!config.anthropicApiKey) return; // pas de clé configurée — rien à scanner
+  let prospects: { id: string; nom: string; secteur: string | null }[];
+  try {
+    const rescanBefore = new Date(Date.now() - RESCAN_AFTER_DAYS * 24 * 60 * 60_000);
+    prospects = await prisma.crmProspect.findMany({
+      where: {
+        commercialId: { not: null },
+        OR: [{ lastSignalScanAt: null }, { lastSignalScanAt: { lt: rescanBefore } }],
+      },
+      orderBy: [{ lastSignalScanAt: "asc" }],
+      take: BATCH_SIZE,
+      select: { id: true, nom: true, secteur: true },
+    });
+  } catch (e) {
+    console.error("[marketIntelligenceScheduler] sélection échouée:", e);
+    return;
+  }
+  for (const p of prospects) {
     try {
-      const rescanBefore = new Date(Date.now() - RESCAN_AFTER_DAYS * 24 * 60 * 60_000);
-      prospects = await prisma.crmProspect.findMany({
-        where: {
-          commercialId: { not: null },
-          OR: [{ lastSignalScanAt: null }, { lastSignalScanAt: { lt: rescanBefore } }],
-        },
-        orderBy: [{ lastSignalScanAt: "asc" }],
-        take: BATCH_SIZE,
-        select: { id: true, nom: true, secteur: true },
-      });
+      await scanOneProspect(p);
     } catch (e) {
-      console.error("[marketIntelligenceScheduler] sélection échouée:", e);
-      return;
+      console.error(`[marketIntelligenceScheduler] prospect ${p.id} échoué:`, e);
+    } finally {
+      await prisma.crmProspect.update({ where: { id: p.id }, data: { lastSignalScanAt: new Date() } }).catch(() => {});
     }
-    for (const p of prospects) {
-      try {
-        await scanOneProspect(p);
-      } catch (e) {
-        console.error(`[marketIntelligenceScheduler] prospect ${p.id} échoué:`, e);
-      } finally {
-        await prisma.crmProspect.update({ where: { id: p.id }, data: { lastSignalScanAt: new Date() } }).catch(() => {});
-      }
-    }
-    if (prospects.length) console.log(`[marketIntelligenceScheduler] ${prospects.length} prospect(s) scanné(s)`);
+  }
+  if (prospects.length) console.log(`[marketIntelligenceScheduler] ${prospects.length} prospect(s) scanné(s)`);
+}
+
+export function startMarketIntelligenceScheduler() {
+  // setInterval n'exécute JAMAIS au démarrage, seulement après le premier
+  // délai complet (24h) — un serveur qui vient d'être déployé n'aurait donc
+  // aucune entrée avant le lendemain (cas constaté 30/10/2026, "journal
+  // vide, est-ce normal ?"). Un premier passage immédiat comble ce trou.
+  runScan().catch((e) => console.error("[marketIntelligenceScheduler] premier passage échoué:", e));
+  setInterval(() => {
+    runScan().catch((e) => console.error("[marketIntelligenceScheduler] passage échoué:", e));
   }, CHECK_INTERVAL_MS);
-  console.log("[marketIntelligenceScheduler] démarré (vérification toutes les 24h)");
+  console.log("[marketIntelligenceScheduler] démarré (premier passage immédiat, puis toutes les 24h)");
 }
