@@ -110,13 +110,28 @@ const DOC_BLOCKS = [
   {cat:'logiciel', label:'Licence', c:'var(--c-logiciel)'},
   {cat:'autre', label:'Lignes libres', c:'var(--c-autre)'},
 ];
+// Ouvre le document/lien produit en fenêtre popup dimensionnée (30/10/2026,
+// "faire une fenêtre popup et un onglet qui s'ouvre") — garde quand même
+// target="_blank"/href sur l'ancre (clic molette, ouvrir dans un nouvel
+// onglet, lecteurs d'écran) : preventDefault seulement sur le clic simple,
+// qui prend alors la forme popup plutôt qu'un onglet plein.
+function openProductDoc(event, url){
+  event.preventDefault();
+  window.open(url, '_blank', 'noopener,width=960,height=760');
+}
 function quoteRowHtml(l){
   // Document/lien rattaché au produit d'origine de la ligne (30/10/2026,
   // "sur chaque produit pouvoir rattacher un document ou une url"), résolu
-  // côté serveur (GET /crmQuote/public) — null si le produit n'en a pas.
+  // côté serveur (GET /crmQuote/public) — null si le produit n'en a pas. Le
+  // lien est porté directement par le libellé (demande client), plus une
+  // ligne séparée en dessous.
   const pd = l.productDocument;
+  const docUrl = pd ? '/wa/crmQuote/publicDocument/'+encodeURIComponent(pd.id)+'?token='+encodeURIComponent(TOKEN) : null;
+  const labelHtml = pd
+    ? `<a href="${docUrl}" target="_blank" rel="noopener" onclick="openProductDoc(event,'${docUrl}')" title="${esc(pd.title)}" style="color:var(--tx);text-decoration:none;border-bottom:1px dashed var(--a)">${esc(l.label)} <span style="color:var(--a)">${pd.fileMimeType?'📎':'🔗'}</span></a>`
+    : esc(l.label);
   return `<tr>
-      <td>${esc(l.label)}${l.description?`<div class="desc">${esc(l.description)}</div>`:''}${pd?`<div style="margin-top:3px"><a href="/wa/crmQuote/publicDocument/${encodeURIComponent(pd.id)}?token=${encodeURIComponent(TOKEN)}" target="_blank" rel="noopener" style="font-size:11px;color:var(--a);text-decoration:none">${pd.fileMimeType?'📎':'🔗'} ${esc(pd.title)}</a></div>`:''}</td>
+      <td>${labelHtml}${l.description?`<div class="desc">${esc(l.description)}</div>`:''}</td>
       <td style="text-align:center">${l.qty}</td>
       <td style="text-align:right">${l.unitPrice==null?'À chiffrer':fmtEUR(l.unitPrice)}</td>
       <td style="text-align:right">${l.unitPrice==null?'—':fmtEUR((+l.qty||0)*l.unitPrice)+(l.recurring?'/mois':'')}</td>
