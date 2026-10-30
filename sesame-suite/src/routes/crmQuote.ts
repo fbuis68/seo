@@ -878,13 +878,30 @@ crmQuoteRouter.get(
       // affichés à titre indicatif côté espace client, jamais chiffrés.
       prisma.crmProduct.findMany({
         where: { category: "logiciel", active: true },
-        select: { id: true, sku: true, label: true, description: true, unitPrice: true, recurring: true, secteurs: true },
+        select: {
+          id: true,
+          sku: true,
+          label: true,
+          description: true,
+          unitPrice: true,
+          recurring: true,
+          secteurs: true,
+          documentId: true,
+          document: { select: { id: true, title: true, fileMimeType: true, url: true } },
+        },
       }),
     ]);
     const selectedModuleKeys = new Set(lines.filter((l) => l.category === "logiciel" && l.moduleKey).map((l) => l.moduleKey));
     const promotedLicenses = promotableProducts
       .filter((p) => (!p.secteurs.length || (quote.prospect.secteur && p.secteurs.includes(quote.prospect.secteur))) && !(p.sku && selectedModuleKeys.has(p.sku)))
-      .map((p) => ({ id: p.id, label: p.label, description: p.description || "", unitPrice: p.unitPrice, recurring: p.recurring }));
+      .map((p) => ({
+        id: p.id,
+        label: p.label,
+        description: p.description || "",
+        unitPrice: p.unitPrice,
+        recurring: p.recurring,
+        productDocument: p.document && (p.document.url || p.document.fileMimeType) ? p.document : null,
+      }));
 
     res.json({
       number: quote.number,
@@ -966,7 +983,10 @@ crmQuoteRouter.get(
   asyncHandler(async (req, res) => {
     const token = (req.query.token as string) || "";
     if (!token) throw new HttpError(400, "Lien invalide");
-    const quote = await prisma.crmQuote.findUnique({ where: { signToken: token }, select: { attachedDocumentIds: true, lines: true } });
+    const quote = await prisma.crmQuote.findUnique({
+      where: { signToken: token },
+      select: { attachedDocumentIds: true, lines: true, prospect: { select: { secteur: true } } },
+    });
     if (!quote) throw new HttpError(404, "Document introuvable");
     let authorized = quote.attachedDocumentIds.includes(req.params.docId);
     if (!authorized) {
@@ -978,6 +998,16 @@ crmQuoteRouter.get(
         const match = await prisma.crmProduct.findFirst({ where: { id: { in: productIds }, documentId: req.params.docId } });
         authorized = !!match;
       }
+    }
+    if (!authorized) {
+      // Document rattaché à une licence "à promouvoir" (cf. promotedLicenses
+      // ci-dessus, même règle de secteur) — troisième source possible,
+      // toujours sans accès libre à toute la bibliothèque.
+      const match = await prisma.crmProduct.findFirst({
+        where: { documentId: req.params.docId, category: "logiciel", active: true },
+        select: { secteurs: true },
+      });
+      if (match && (!match.secteurs.length || (quote.prospect.secteur && match.secteurs.includes(quote.prospect.secteur)))) authorized = true;
     }
     if (!authorized) throw new HttpError(404, "Document introuvable");
     const doc = await prisma.crmDocument.findUnique({ where: { id: req.params.docId } });
@@ -1168,12 +1198,25 @@ crmQuoteRouter.post(
   asyncHandler(async (req, res) => {
     const token = (req.body.token as string) || "";
     if (!token) throw new HttpError(400, "Lien invalide");
-    const quote = await prisma.crmQuote.findUnique({ where: { signToken: token }, select: { id: true } });
+    const quote = await prisma.crmQuote.findUnique({ where: { signToken: token }, select: { id: true, prospectId: true } });
     if (!quote) throw new HttpError(404, "Lien de signature invalide ou expiré");
     const toEmail = ((req.body.toEmail as string) || "").trim();
     const toName = ((req.body.toName as string) || "").trim();
     if (!toEmail) throw new HttpError(400, "Email requis");
     await sendQuoteEmailCore(quote.id, `${req.protocol}://${req.get("host")}`, toEmail, toName);
+
+    // Enregistre le signataire comme contact de la fiche (30/10/2026,
+    // demande client) — jamais de doublon si un contact avec cet email
+    // existe déjà sur ce prospect (comparaison insensible à la casse).
+    const existingContact = await prisma.crmContact.findFirst({
+      where: { prospectId: quote.prospectId, email: { equals: toEmail, mode: "insensitive" } },
+    });
+    if (!existingContact) {
+      await prisma.crmContact.create({
+        data: { prospectId: quote.prospectId, name: toName || toEmail, email: toEmail, fonction: "Signataire devis" },
+      });
+    }
+
     res.json({ ok: true });
   })
 );

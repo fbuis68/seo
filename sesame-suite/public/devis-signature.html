@@ -193,13 +193,20 @@ function promotedLicensesHtml(){
   if(!items.length) return '';
   return `<div class="promo-box">
     <div class="promo-hd">À découvrir aussi</div>
-    ${items.map(p=>`<div class="promo-item">
+    ${items.map(p=>{
+      const pd = p.productDocument;
+      const docUrl = pd ? '/wa/crmQuote/publicDocument/'+encodeURIComponent(pd.id)+'?token='+encodeURIComponent(TOKEN) : null;
+      const lblHtml = pd
+        ? `<a href="${docUrl}" target="_blank" rel="noopener" onclick="openProductDoc(event,'${docUrl}')" title="${esc(pd.title)}" style="color:var(--tx);text-decoration:none;border-bottom:1px dashed var(--a)">${esc(p.label)} <span style="color:var(--a)">${pd.fileMimeType?'📎':'🔗'}</span></a>`
+        : esc(p.label);
+      return `<div class="promo-item">
       <div>
-        <div class="promo-item-lbl">${esc(p.label)}</div>
+        <div class="promo-item-lbl">${lblHtml}</div>
         ${p.description?`<div class="desc">${esc(p.description)}</div>`:''}
       </div>
       <div class="promo-item-price">${fmtEUR(p.unitPrice)}${p.recurring?'/mois':''}</div>
-    </div>`).join('')}
+    </div>`;
+    }).join('')}
     <div style="font-size:11px;color:var(--mu);margin-top:8px">Non inclus dans ce devis — parlez-en à votre interlocuteur Sesame Technology pour en savoir plus.</div>
   </div>`;
 }
