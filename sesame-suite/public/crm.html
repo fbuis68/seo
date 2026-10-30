@@ -8455,6 +8455,26 @@ async function loadAgentDecisionLog(){
   }catch(e){}
   renderAgentDecisionLog(rows);
 }
+/** Sortie de l'agent Market Intelligence = JSON brut (tableau d'actualités,
+ * cf. lib/marketIntelligenceScheduler.ts) — illisible tel quel (demande
+ * client 30/10/2026, "les sorties ne sont pas très lisibles"). Parsé en
+ * liste de cartouches titre/date/résumé ; tout autre agent garde le texte
+ * brut tel qu'écrit (déjà lisible, pas du JSON pur).
+ */
+function agentOutputHtml(r){
+  if(r.agentName==='market_intelligence'){
+    let items=null;
+    try{ items = JSON.parse(r.outputSummary); }catch(e){}
+    if(Array.isArray(items) && items.length){
+      return items.map(it=>`<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--bdr,#eee)">
+        <a href="${esc(it.url||'#')}" target="_blank" rel="noopener" style="font-weight:600;font-size:12px;color:var(--a,#8b1040)">${esc(it.title||'(sans titre)')}</a>
+        ${it.publishedAt?` <span style="color:var(--mu);font-size:11px">— ${esc(it.publishedAt)}</span>`:''}
+        ${it.summary?`<div style="font-size:12px;margin-top:2px">${esc(it.summary)}</div>`:''}
+      </div>`).join('');
+    }
+  }
+  return `<div style="white-space:pre-wrap">${esc(r.outputSummary)}</div>`;
+}
 function renderAgentDecisionLog(rows){
   const agentOptions = Object.keys(AGENT_NAME_LABELS).map(k=>`<option value="${k}" ${AGENT_LOG_FILTER===k?'selected':''}>${esc(AGENT_NAME_LABELS[k])}</option>`).join('');
   const items = rows.map(r=>`
@@ -8467,7 +8487,7 @@ function renderAgentDecisionLog(rows){
         <div style="font-size:11px;color:var(--mu)">${new Date(r.createdAt).toLocaleString('fr-FR')}</div>
       </div>
       <div style="font-size:12px;margin-top:8px"><strong>Entrée :</strong> ${esc(r.inputSummary)}</div>
-      <div style="font-size:12px;margin-top:4px;white-space:pre-wrap"><strong>Sortie :</strong> ${esc(r.outputSummary)}</div>
+      <div style="font-size:12px;margin-top:4px"><strong>Sortie :</strong>${agentOutputHtml(r)}</div>
     </div>`).join('');
   document.getElementById('main').innerHTML = `
     <div class="card" style="margin-bottom:10px;display:flex;align-items:center;gap:10px">
