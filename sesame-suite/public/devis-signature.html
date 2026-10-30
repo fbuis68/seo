@@ -161,15 +161,14 @@ function quoteBlocksHtml(){
 
 function quoteSummaryHtml(){
   const t = QUOTE.totals;
+  // Totaux réduits à l'essentiel (30/10/2026, demande client "ne garde que
+  // le montant HT... et le montant de la licence") — montant HT global et
+  // mensuel récurrent (licence) uniquement, plus de TVA/TTC/remise/acompte
+  // affichés ici.
   const stats = [
-    {lbl:'Mensuel récurrent', val:fmtEUR(t.mrrNet)},
-    {lbl:'Frais ponctuels', val:fmtEUR(t.oneoffNet)},
-    QUOTE.discountPct ? {lbl:'Remise appliquée', val:QUOTE.discountPct+'%'} : null,
-    {lbl:'Total HT', val:fmtEUR(t.totalHT)},
-    {lbl:'TVA ('+(QUOTE.vatPct||0)+'%)', val:fmtEUR(t.totalTTC-t.totalHT)},
-    {lbl:'Total TTC', val:fmtEUR(t.totalTTC), grand:true},
-    QUOTE.depositPct ? {lbl:'Acompte ('+QUOTE.depositPct+'%)', val:fmtEUR(t.depositAmount)} : null,
-  ].filter(Boolean);
+    {lbl:'Montant HT', val:fmtEUR(t.totalHT), grand:true},
+    {lbl:'Licence (mensuel)', val:fmtEUR(t.mrrNet)},
+  ];
   return `
     <h1>Devis ${esc(QUOTE.number)}</h1>
     <div class="sub">${esc(QUOTE.prospectNom)}${QUOTE.title?' — '+esc(QUOTE.title):''}</div>
