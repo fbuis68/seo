@@ -41,6 +41,7 @@ import { crmMeetingRouter } from "./routes/crmMeeting";
 import { crmSalesSignalRouter } from "./routes/crmSalesSignal";
 import { agentDecisionLogRouter } from "./routes/agentDecisionLog";
 import { discoveryJobRouter } from "./routes/discoveryJob";
+import { outreachRouter } from "./routes/outreach";
 import { crmSalesScoreRouter } from "./routes/crmSalesScore";
 import { questionnaireRouter } from "./routes/questionnaire";
 import { crmScoringRouter } from "./routes/crmScoring";
@@ -130,6 +131,7 @@ export function createApp() {
   app.use("/wa", crmSalesSignalRouter);
   app.use("/wa", agentDecisionLogRouter);
   app.use("/wa", discoveryJobRouter);
+  app.use("/wa", outreachRouter);
   app.use("/wa", crmSalesScoreRouter);
   app.use("/wa", graphMailRouter);
   app.use("/wa", questionnaireRouter);

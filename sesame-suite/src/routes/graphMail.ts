@@ -10,6 +10,8 @@ import { extractTicketTag, findTicketByTag, createTicketFromInboundEmail, append
 import { ACCEPTED_MIME_TYPES } from "../lib/accDocument";
 import { processUploadedDocument, PipelineError } from "../lib/accPipeline";
 import { recordAuditLog } from "../lib/accAudit";
+import { processInboundReply } from "../lib/outreach";
+import { handlePositiveReply, matchAndConfirm } from "../lib/meetingProposal";
 
 /**
  * Import automatique d'emails via un abonnement webhook Microsoft Graph
@@ -40,10 +42,15 @@ import { recordAuditLog } from "../lib/accAudit";
  */
 export const graphMailRouter = Router();
 
-type GraphMailPurpose = "tickets" | "accounting" | "accounting_sale";
+// "prospecting" (30/10/2026, Sesame AI Autonomous Prospecting P2-07) —
+// boîte unique d'envoi ET de réception des emails de prospection, pour que
+// toute la conversation (premier email, relances, réponses, confirmation
+// de créneau) reste dans un seul fil consultable plutôt que dispersée sur
+// les boîtes individuelles des commerciaux.
+type GraphMailPurpose = "tickets" | "accounting" | "accounting_sale" | "prospecting";
 
 function parsePurpose(v: unknown): GraphMailPurpose {
-  if (v === "accounting" || v === "accounting_sale") return v;
+  if (v === "accounting" || v === "accounting_sale" || v === "prospecting") return v;
   return "tickets";
 }
 
@@ -89,9 +96,9 @@ graphMailRouter.post(
 
     const purpose = parsePurpose(req.body?.purpose);
     let mailbox: string | undefined;
-    if (purpose === "accounting" || purpose === "accounting_sale") {
+    if (purpose === "accounting" || purpose === "accounting_sale" || purpose === "prospecting") {
       mailbox = (req.body?.mailbox as string || "").trim();
-      if (!mailbox || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mailbox)) throw new HttpError(400, "Adresse email de la boîte comptabilité invalide ou manquante");
+      if (!mailbox || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mailbox)) throw new HttpError(400, "Adresse email de la boîte invalide ou manquante");
     } else {
       const smtp = await getSmtpConfig(null);
       mailbox = smtp?.supportFromEmail || smtp?.fromEmail || undefined;
@@ -208,6 +215,8 @@ async function processNotifications(items: GraphNotificationItem[]) {
     try {
       if (sub.purpose === "accounting" || sub.purpose === "accounting_sale") {
         await processAccountingMessage(sub.mailbox, messageId, sub.purpose === "accounting_sale" ? "sale" : "purchase");
+      } else if (sub.purpose === "prospecting") {
+        await processProspectingMessage(sub.mailbox, messageId);
       } else {
         await processTicketMessage(sub.mailbox, messageId);
       }
@@ -248,6 +257,36 @@ async function processTicketMessage(mailbox: string, messageId: string) {
       attachments,
       graphMessageId: msg.id,
     });
+  }
+}
+
+/**
+ * Boîte de prospection (Sesame AI Autonomous Prospecting, P2-07/08, P3-06)
+ * — associe la réponse à un prospect et la classe (lib/outreach.ts), puis,
+ * si l'intérêt est positif, relaie vers le flux rendez-vous (P3) : soit la
+ * confirmation d'un créneau déjà proposé, soit une toute nouvelle
+ * proposition de créneaux. Toute réponse qu'on ne peut rattacher à aucun
+ * prospect connu est ignorée (log), jamais traitée au hasard.
+ */
+async function processProspectingMessage(mailbox: string, messageId: string) {
+  const msg = await getGraphMessage(mailbox, messageId);
+  if (!msg.from || msg.from.toLowerCase() === mailbox.toLowerCase()) return;
+  if (msg.autoReply) {
+    console.info(`[graphMail] message prospection ${messageId} ignoré (réponse automatique de ${msg.from})`);
+    return;
+  }
+
+  const reply = await processInboundReply({ fromEmail: msg.from, subject: msg.subject, bodyText: msg.bodyText, graphMessageId: msg.id, receivedAt: new Date() });
+  if (!reply) return;
+
+  if (reply.classification === "positif") {
+    const confirmed = await matchAndConfirm(reply.prospectId, msg.bodyText).catch((e) => {
+      console.error(`[graphMail] confirmation de créneau échouée pour ${reply.prospectId}:`, e);
+      return false;
+    });
+    if (!confirmed) {
+      await handlePositiveReply(reply).catch((e) => console.error(`[graphMail] proposition de créneaux échouée pour ${reply.prospectId}:`, e));
+    }
   }
 }
 

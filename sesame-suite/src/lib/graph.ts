@@ -207,6 +207,30 @@ export async function getGraphMessage(mailbox: string, messageId: string): Promi
   };
 }
 
+/**
+ * Envoi d'email via Microsoft 365 (Sesame AI Autonomous Prospecting, P2-05
+ * "envoyer via Microsoft 365") — POST /users/{mailbox}/sendMail, même
+ * client app-only que le reste de ce fichier. Contrairement à
+ * lib/email.ts (SMTP, campagnes de masse existantes), cette voie est
+ * EXIGÉE par le cahier des charges pour la prospection supervisée : la
+ * boîte d'envoi doit être la même que celle surveillée pour les réponses
+ * (cf. routes/graphMail.ts, purpose="prospecting"), pour que la conversation
+ * reste dans un seul fil consultable par l'équipe commerciale.
+ */
+export async function sendGraphMail(mailbox: string, params: { to: string; subject: string; html: string }): Promise<void> {
+  await graphFetch(`/users/${encodeURIComponent(mailbox)}/sendMail`, {
+    method: "POST",
+    body: JSON.stringify({
+      message: {
+        subject: params.subject,
+        body: { contentType: "HTML", content: params.html },
+        toRecipients: [{ emailAddress: { address: params.to } }],
+      },
+      saveToSentItems: true,
+    }),
+  });
+}
+
 export interface GraphSubscriptionResult {
   id: string;
   expirationDateTime: string;

@@ -490,3 +490,153 @@ export async function huntMarket(params: { marcheLabel: string; icp: string; exc
     .filter((c) => c.name && c.signalUrl && c.signalSummary)
     .slice(0, params.limit);
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// P2 "Prospection commerciale supervisée" — ces fonctions ne font QUE
+// rédiger/classer du texte, jamais envoyer ni écrire en CRM (séparation
+// moteur IA / moteur d'exécution, brief §2) : tout ça vit dans
+// lib/outreach.ts et routes/outreach.ts.
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface OutreachEmailDraft {
+  subject: string;
+  bodyHtml: string;
+}
+
+const OUTREACH_EMAIL_TOOL: AnthropicTool = {
+  name: "submit_email",
+  description: "Soumet l'email de prospection rédigé.",
+  input_schema: {
+    type: "object",
+    properties: {
+      subject: { type: "string", description: "Objet de l'email, court et concret, jamais générique ('Proposition commerciale' interdit)." },
+      body_html: { type: "string", description: "Corps de l'email en HTML simple (paragraphes <p>, pas de mise en page complexe), français professionnel, signé 'L'équipe Sesame Technology' en fin de message." },
+    },
+    required: ["subject", "body_html"],
+  },
+};
+
+/**
+ * Agent "Account Campaign" (P2-01/02/06) — un email de premier contact
+ * (sequenceStep=0) OU une relance (1-3, texte COURT qui référence l'email
+ * précédent sans répéter tout l'argumentaire). Toujours lié au signal
+ * fourni (jamais générique) — SAFETY_RULES réutilisé même si le contexte
+ * est différent (pas de cloisonnement entre clients ici, mais même exigence
+ * de ne jamais inventer un fait non fourni).
+ */
+export async function generateOutreachEmail(params: {
+  prospectName: string;
+  marketArgument: string;
+  ville?: string;
+  decisionMakerName?: string;
+  decisionMakerTitle?: string;
+  signalSummary?: string;
+  sequenceStep: number;
+  previousSubject?: string;
+}): Promise<OutreachEmailDraft> {
+  const isRelance = params.sequenceStep > 0;
+  const system = isRelance
+    ? `Tu rédiges une RELANCE commerciale courte (3-4 phrases maximum) pour Sesame Technology, en français, professionnelle et jamais insistante — fait référence brièvement au premier email sans tout répéter, propose simplement un échange. N'invente aucune information non fournie dans le message.`
+    : `Tu rédiges un email de prospection B2B pour Sesame Technology (contrôle d'accès connecté), en français, personnalisé, court (5-6 phrases maximum), professionnel et jamais générique. Utilise UNIQUEMENT les faits fournis — n'invente ni chiffre ni détail sur l'entreprise. L'email doit se terminer par une proposition claire d'échange (pas d'engagement, juste un appel à la discussion).`;
+  const lines = [
+    `Entreprise : ${params.prospectName}`,
+    params.ville ? `Ville : ${params.ville}` : "",
+    params.decisionMakerName ? `Destinataire : ${params.decisionMakerName}${params.decisionMakerTitle ? ` (${params.decisionMakerTitle})` : ""}` : "Destinataire : pas de nom identifié — s'adresser à la fonction/l'entreprise, formule neutre.",
+    `Argumentaire du marché concerné : ${params.marketArgument}`,
+    params.signalSummary ? `Signal d'achat détecté (à mentionner brièvement, sans sur-interpréter) : ${params.signalSummary}` : "",
+    isRelance && params.previousSubject ? `Objet du premier email déjà envoyé : "${params.previousSubject}"` : "",
+  ].filter(Boolean).join("\n");
+
+  const input = await callClaude({ system, messages: [{ role: "user", content: lines }], tool: OUTREACH_EMAIL_TOOL, maxTokens: 1200 });
+  return { subject: String(input.subject || "").trim(), bodyHtml: String(input.body_html || "").trim() };
+}
+
+export interface OutreachClassification {
+  classification: "positif" | "negatif" | "question" | "absence" | "opposition" | "to_classify";
+  extractedNeed: string | null;
+}
+
+const CLASSIFY_REPLY_TOOL: AnthropicTool = {
+  name: "submit_classification",
+  description: "Soumet la classification de la réponse reçue.",
+  input_schema: {
+    type: "object",
+    properties: {
+      classification: {
+        type: "string",
+        enum: ["positif", "negatif", "question", "absence", "opposition"],
+        description: "positif = intérêt exprimé pour échanger/être recontacté. negatif = refus poli, pas intéressé actuellement. question = demande de précision, pas encore une décision. absence = réponse automatique (congés, absence du bureau) — PAS un vrai message humain. opposition = demande explicite d'arrêt des sollicitations/désabonnement.",
+      },
+      extracted_need: { type: ["string", "null"], description: "Si classification=positif : 1 phrase résumant le besoin exprimé ou le contexte donné par le prospect, sinon null. N'invente rien de non écrit." },
+    },
+    required: ["classification", "extracted_need"],
+  },
+};
+
+/**
+ * Agent de classification des réponses (P2-08) — jamais d'ambiguïté
+ * silencieuse : toute réponse qui ne rentre pas clairement dans une
+ * catégorie doit être classée "question" (traitement par défaut le plus
+ * sûr, cf. recette P2 "réponses ambiguës systématiquement soumises au
+ * commercial" — routes/outreach.ts n'automatise jamais rien sur "question").
+ */
+export async function classifyOutreachReply(bodyText: string): Promise<OutreachClassification> {
+  const system = `Tu classes la réponse d'un prospect B2B à un email de prospection commerciale. En cas de doute entre deux catégories, choisis TOUJOURS "question" (jamais positif ni négatif par excès de confiance) — une mauvaise classification automatique a des conséquences commerciales réelles.`;
+  const input = await callClaude({ system, messages: [{ role: "user", content: `Réponse reçue :\n${bodyText}` }], tool: CLASSIFY_REPLY_TOOL, maxTokens: 500 });
+  const c = String(input.classification || "question");
+  const valid = new Set(["positif", "negatif", "question", "absence", "opposition"]);
+  return {
+    classification: (valid.has(c) ? c : "question") as OutreachClassification["classification"],
+    extractedNeed: input.extracted_need ? String(input.extracted_need).trim() : null,
+  };
+}
+
+const MATCH_SLOT_TOOL: AnthropicTool = {
+  name: "submit_match",
+  description: "Indique quel créneau proposé a été confirmé par le prospect, le cas échéant.",
+  input_schema: {
+    type: "object",
+    properties: {
+      slot_index: { type: "integer", minimum: 0, maximum: 3, description: "1, 2 ou 3 si le prospect confirme CLAIREMENT et SANS AMBIGUÏTÉ l'un des trois créneaux proposés. 0 si aucune confirmation claire (demande d'un autre horaire, réponse vague, question) — ne jamais deviner." },
+    },
+    required: ["slot_index"],
+  },
+};
+
+/**
+ * P3-06 "reconnaître confirmation du prospect" — ne confirme JAMAIS un
+ * créneau sur une réponse ambiguë (0 = aucun créneau créé, laissé au
+ * commercial, cf. routes/outreach.ts).
+ */
+export async function matchProposedSlot(bodyText: string, slots: string[]): Promise<number> {
+  const system = `Tu identifies si un prospect confirme explicitement l'un des créneaux de rendez-vous proposés. Ne confirme jamais par supposition — si le texte n'indique pas clairement lequel des trois créneaux est retenu, réponds 0.`;
+  const lines = `Créneaux proposés :\n1) ${slots[0]}\n2) ${slots[1]}\n3) ${slots[2]}\n\nRéponse du prospect :\n${bodyText}`;
+  const input = await callClaude({ system, messages: [{ role: "user", content: lines }], tool: MATCH_SLOT_TOOL, maxTokens: 300 });
+  const n = Number(input.slot_index);
+  return n >= 1 && n <= 3 ? n : 0;
+}
+
+const MEETING_BRIEF_TOOL: AnthropicTool = {
+  name: "submit_brief",
+  description: "Soumet le brief commercial avant rendez-vous.",
+  input_schema: {
+    type: "object",
+    properties: {
+      brief_text: { type: "string", description: "Brief court (5-8 lignes) pour le commercial avant le rendez-vous : contexte/besoin exprimé, signal à l'origine du contact, 2-3 questions à poser. Français, direct, aucune donnée inventée." },
+    },
+    required: ["brief_text"],
+  },
+};
+
+/** P3-10 — généré une fois le RDV confirmé, jamais envoyé au prospect (usage interne commercial uniquement). */
+export async function generateMeetingBrief(params: { prospectName: string; marketArgument: string; signalSummary?: string; extractedNeed?: string | null }): Promise<string> {
+  const system = `Tu prépares un brief interne pour un commercial Sesame Technology avant un rendez-vous avec un prospect. Utilise uniquement les faits fournis.`;
+  const lines = [
+    `Entreprise : ${params.prospectName}`,
+    `Contexte marché : ${params.marketArgument}`,
+    params.signalSummary ? `Signal d'achat à l'origine du contact : ${params.signalSummary}` : "",
+    params.extractedNeed ? `Besoin exprimé par le prospect : ${params.extractedNeed}` : "Besoin exprimé : non précisé dans l'échange.",
+  ].filter(Boolean).join("\n");
+  const input = await callClaude({ system, messages: [{ role: "user", content: lines }], tool: MEETING_BRIEF_TOOL, maxTokens: 500 });
+  return String(input.brief_text || "").trim();
+}

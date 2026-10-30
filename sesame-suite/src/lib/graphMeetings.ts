@@ -226,6 +226,35 @@ export async function listCalendarMeetings(
   return { meetings, dropped };
 }
 
+/**
+ * Disponibilités réelles du commercial (Sesame AI Autonomous Prospecting,
+ * P3-03 "consulter disponibilités commerciales... créneaux réels Outlook")
+ * — POST /users/{mailbox}/calendar/getSchedule, qui accepte un email
+ * directement (pas besoin de résoudre l'id utilisateur comme pour
+ * /onlineMeetings). Retourne les intervalles OCCUPÉS seulement — à
+ * lib/meetingProposal.ts de construire les créneaux libres autour.
+ */
+export interface BusyInterval {
+  start: Date;
+  end: Date;
+}
+
+export async function getFreeBusy(mailbox: string, startISO: string, endISO: string): Promise<BusyInterval[]> {
+  const result = (await graphFetch(`/users/${encodeURIComponent(mailbox)}/calendar/getSchedule`, {
+    method: "POST",
+    body: JSON.stringify({
+      schedules: [mailbox],
+      startTime: { dateTime: startISO, timeZone: "UTC" },
+      endTime: { dateTime: endISO, timeZone: "UTC" },
+      availabilityViewInterval: 30,
+    }),
+  })) as { value?: { scheduleItems?: { status?: string; start?: { dateTime?: string }; end?: { dateTime?: string } }[] }[] };
+  const items = result.value?.[0]?.scheduleItems || [];
+  return items
+    .filter((i) => i.status && i.status !== "free" && i.start?.dateTime && i.end?.dateTime)
+    .map((i) => ({ start: new Date(i.start!.dateTime! + "Z"), end: new Date(i.end!.dateTime! + "Z") }));
+}
+
 export interface GraphTranscript {
   id: string;
   createdDateTime: string;

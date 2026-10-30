@@ -8440,7 +8440,7 @@ function renderDocumentLibrary(){
 // Journal d'audit des agents IA (§7 conformité brief Sesame AI Sales Agent)
 // — lecture seule, jamais d'édition : une entrée doit rester consultable
 // telle qu'écrite par l'agent.
-const AGENT_NAME_LABELS = { market_intelligence: 'Market Intelligence', market_hunter: 'Market Hunter', enrichment: 'Enrichissement', scoring: 'Scoring', copywriter: 'Copywriter' };
+const AGENT_NAME_LABELS = { market_intelligence: 'Market Intelligence', market_hunter: 'Market Hunter', outreach: 'Prospection (emails)', meeting_proposal: 'Proposition RDV', enrichment: 'Enrichissement', scoring: 'Scoring', copywriter: 'Copywriter' };
 let AGENT_LOG_FILTER = '';
 async function showAgentDecisionLog(){
   view='agentlog'; setNav('n-agentlog'); bc([{label:'Journal Agent IA'}]);
@@ -8516,22 +8516,37 @@ async function showProspectingHunter(){
   await loadProspectingHunter();
 }
 async function loadProspectingHunter(){
-  let cfg=null, report=null, suppressions=[], jobs=[];
+  let cfg=null, report=null, suppressions=[], jobs=[], outreachCfg=null, outreachMail=null, drafts=[], replies=[], proposals=[];
   try{
-    const [rc, rr, rs, rj] = await Promise.all([
+    const [rc, rr, rs, rj, roc, rom, rd, rrep, rp] = await Promise.all([
       apiFetch('/wa/prospectingConfig'),
       apiFetch('/wa/discoveryJob/weeklyReport'),
       apiFetch('/wa/suppression/list'),
       apiFetch('/wa/discoveryJob/list'),
+      apiFetch('/wa/outreachConfig'),
+      apiFetch('/wa/graphMail/status?purpose=prospecting'),
+      apiFetch('/wa/outreachDraft/list'),
+      apiFetch('/wa/outreachReply/list'),
+      apiFetch('/wa/meetingProposal/list'),
     ]);
     cfg = rc.ok ? await rc.json() : null;
     report = rr.ok ? await rr.json() : null;
     suppressions = rs.ok ? await rs.json() : [];
     jobs = rj.ok ? await rj.json() : [];
+    outreachCfg = roc.ok ? await roc.json() : null;
+    outreachMail = rom.ok ? await rom.json() : null;
+    drafts = rd.ok ? await rd.json() : [];
+    replies = rrep.ok ? await rrep.json() : [];
+    proposals = rp.ok ? await rp.json() : [];
   }catch(e){}
-  renderProspectingHunter(cfg, report, suppressions, jobs);
+  renderProspectingHunter(cfg, report, suppressions, jobs, outreachCfg, outreachMail, drafts, replies, proposals);
 }
-function renderProspectingHunter(cfg, report, suppressions, jobs){
+const OUTREACH_STATUS_LABEL = {draft:'Brouillon', pending_approval:'À valider', approved:'Validé — prêt à envoyer', sent:'Envoyé', rejected:'Rejeté', canceled:'Annulé'};
+const OUTREACH_STATUS_TAG = {draft:'t-gray', pending_approval:'t-amber', approved:'t-blue', sent:'t-green', rejected:'t-red', canceled:'t-gray'};
+const REPLY_CLASS_LABEL = {positif:'Positif', negatif:'Négatif', question:'Question', absence:'Absence (auto)', opposition:'Opposition', to_classify:'Non classé'};
+const REPLY_CLASS_TAG = {positif:'t-green', negatif:'t-red', question:'t-amber', absence:'t-gray', opposition:'t-red', to_classify:'t-gray'};
+const PROPOSAL_STATUS_LABEL = {pending_approval:'À valider', approved:'Validé — prêt à envoyer', sent:'Envoyé — en attente de réponse', confirmed:'Confirmé (RDV créé)', expired:'Expiré', canceled:'Annulé'};
+function renderProspectingHunter(cfg, report, suppressions, jobs, outreachCfg, outreachMail, drafts, replies, proposals){
   if(!cfg || !report){ document.getElementById('main').innerHTML='<div class="card"><div class="log-empty">Erreur de chargement.</div></div>'; return; }
   const byMarket = report.byMarket||[];
   const quotaRows = byMarket.map(m=>`
@@ -8562,6 +8577,37 @@ function renderProspectingHunter(cfg, report, suppressions, jobs){
       <td style="font-size:11px">${esc(s.motif)}</td>
       <td><button class="btn btn-sm btn-ghost" onclick="suppressionDelete('${s.id}')">Retirer</button></td>
     </tr>`).join('');
+
+  const mg = outreachMail || {configured:false,status:'inactive',mailbox:'',expiresAt:null,lastError:''};
+  const mgBody = !mg.configured
+    ? `<div class="log-empty">App Azure AD non configurée côté serveur.</div>`
+    : `<div style="max-width:520px">
+        <div class="ff"><label>Boîte d'envoi/réception prospection</label><input id="outreach-mailbox" value="${esc(mg.mailbox)}" placeholder="prospection@sesame-technology.com" ${mg.status==='active'?'disabled':''}></div>
+        <div class="log-item" style="border:none;padding:10px 0 12px">
+          <div class="log-dot ${GRAPH_STATUS_DOT[mg.status]||'ld-b'}"></div>
+          <div class="log-body"><div><strong>${GRAPH_STATUS_LABEL[mg.status]||mg.status}</strong></div>
+          ${mg.lastError?`<div style="font-size:12px;color:#c0392b;margin-top:4px">${esc(mg.lastError)}</div>`:''}</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          ${mg.status==='active'?`<button class="btn btn-ghost btn-sm" onclick="outreachGraphMailToggle('deactivate')">Désactiver</button>`:`<button class="btn btn-primary btn-sm" onclick="outreachGraphMailToggle('activate')">Activer</button>`}
+        </div>
+      </div>`;
+
+  const oc = outreachCfg || {relanceDelaysDays:[4,10,20], maxRelances:3};
+  const pendingDrafts = (drafts||[]).filter(d=>d.status==='pending_approval'||d.status==='approved');
+  const draftCards = pendingDrafts.map(outreachDraftCardHtml).join('') || '<div class="log-empty">Aucun email en attente.</div>';
+  const historyDrafts = (drafts||[]).filter(d=>d.status==='sent'||d.status==='rejected'||d.status==='canceled');
+  const replyRows = (replies||[]).slice(0,50).map(r=>`
+    <tr>
+      <td>${esc(r.prospect?.nom||'')}</td>
+      <td><span class="tag ${REPLY_CLASS_TAG[r.classification]||'t-gray'}" style="font-size:10px">${REPLY_CLASS_LABEL[r.classification]||r.classification}</span></td>
+      <td style="font-size:11px">${esc(r.fromEmail)}</td>
+      <td style="font-size:11px">${esc(r.subject)}</td>
+      <td style="font-size:11px">${r.extractedNeed?esc(r.extractedNeed):''}</td>
+      <td style="font-size:11px;color:var(--mu)">${new Date(r.receivedAt).toLocaleString('fr-FR')}</td>
+    </tr>`).join('');
+  const proposalCards = (proposals||[]).filter(p=>p.status!=='expired'&&p.status!=='canceled').map(meetingProposalCardHtml).join('') || '<div class="log-empty">Aucune proposition de rendez-vous.</div>';
+
   document.getElementById('main').innerHTML = `
     <div class="card" style="margin-bottom:10px">
       <div class="db-row-between" style="margin-bottom:10px">
@@ -8582,6 +8628,46 @@ function renderProspectingHunter(cfg, report, suppressions, jobs){
       <div style="font-size:15px;font-weight:600;margin-bottom:10px">Derniers passages</div>
       ${jobs.length?`<table class="tbl"><thead><tr><th>Marché</th><th>Statut</th><th>Trouvés</th><th>Qualifiés</th><th>Exclus</th><th>Date</th><th>Erreur</th></tr></thead><tbody>${jobRows}</tbody></table>`:'<div class="log-empty">Aucun passage pour l\'instant.</div>'}
     </div>
+
+    <div class="card" style="margin-bottom:10px">
+      <div style="font-size:15px;font-weight:600;margin-bottom:10px">Boîte Microsoft 365 — envoi &amp; réception prospection (P2)</div>
+      <div style="font-size:12px;color:var(--mu);margin-bottom:10px">Un seul email généré et envoyé pour chaque premier contact/relance — jamais envoyé sans validation ci-dessous. Les réponses reçues sur cette boîte sont classées automatiquement et déclenchent, si l'intérêt est positif, une proposition de rendez-vous.</div>
+      ${mgBody}
+    </div>
+
+    <div class="card" style="margin-bottom:10px">
+      <div class="db-row-between" style="margin-bottom:10px">
+        <div style="font-size:15px;font-weight:600">Relances automatiques (P2-06)</div>
+        <button class="btn btn-ghost btn-sm" onclick="prospectingRunOutreachNow()">Générer maintenant</button>
+      </div>
+      <div class="form-grid">
+        <div class="ff"><label>Relance 1 (jours après le 1er email)</label><input type="number" min="1" id="oc-delay-0" value="${(oc.relanceDelaysDays||[4,10,20])[0]||4}"></div>
+        <div class="ff"><label>Relance 2 (jours après)</label><input type="number" min="1" id="oc-delay-1" value="${(oc.relanceDelaysDays||[4,10,20])[1]||10}"></div>
+        <div class="ff"><label>Relance 3 (jours après)</label><input type="number" min="1" id="oc-delay-2" value="${(oc.relanceDelaysDays||[4,10,20])[2]||20}"></div>
+        <div class="ff"><label>Nombre max de relances</label><input type="number" min="0" max="3" id="oc-max" value="${oc.maxRelances}"></div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="outreachSaveConfig()">Enregistrer</button>
+    </div>
+
+    <div class="card" style="margin-bottom:10px">
+      <div style="font-size:15px;font-weight:600;margin-bottom:10px">Emails en attente de validation (${pendingDrafts.length})</div>
+      ${draftCards}
+      ${historyDrafts.length?`<details style="margin-top:10px"><summary style="cursor:pointer;font-size:12px;color:var(--mu)">Historique (${historyDrafts.length})</summary>
+        <table class="tbl" style="margin-top:8px"><thead><tr><th>Prospect</th><th>Étape</th><th>Objet</th><th>Statut</th><th>Date</th></tr></thead><tbody>
+        ${historyDrafts.map(d=>`<tr><td>${esc(d.prospect?.nom||'')}</td><td>${d.sequenceStep===0?'1er email':'Relance '+d.sequenceStep}</td><td style="font-size:11px">${esc(d.subject)}</td><td><span class="tag ${OUTREACH_STATUS_TAG[d.status]||'t-gray'}" style="font-size:10px">${OUTREACH_STATUS_LABEL[d.status]||d.status}</span></td><td style="font-size:11px;color:var(--mu)">${new Date(d.sentAt||d.updatedAt).toLocaleString('fr-FR')}</td></tr>`).join('')}
+        </tbody></table></details>`:''}
+    </div>
+
+    <div class="card" style="margin-bottom:10px">
+      <div style="font-size:15px;font-weight:600;margin-bottom:10px">Réponses reçues (${(replies||[]).length})</div>
+      ${replies.length?`<table class="tbl"><thead><tr><th>Prospect</th><th>Classification</th><th>Expéditeur</th><th>Objet</th><th>Besoin exprimé</th><th>Reçu le</th></tr></thead><tbody>${replyRows}</tbody></table>`:'<div class="log-empty">Aucune réponse reçue pour l\'instant.</div>'}
+    </div>
+
+    <div class="card" style="margin-bottom:10px">
+      <div style="font-size:15px;font-weight:600;margin-bottom:10px">Propositions de rendez-vous (P3)</div>
+      ${proposalCards}
+    </div>
+
     <div class="card">
       <div style="font-size:15px;font-weight:600;margin-bottom:10px">Liste d'exclusion (oppositions, clients à ne jamais solliciter)</div>
       <div class="form-grid" style="margin-bottom:10px">
@@ -8636,6 +8722,131 @@ async function suppressionDelete(id){
     if(!r.ok) throw new Error('http');
     loadProspectingHunter();
   }catch(e){ flash('Erreur de suppression'); }
+}
+async function outreachGraphMailToggle(action){
+  const mailbox = (document.getElementById('outreach-mailbox')||{value:''}).value.trim();
+  if(action==='activate' && !mailbox){ flash('Adresse email requise'); return; }
+  try{
+    const r = await apiFetch('/wa/graphMail/'+action, {method:'POST', body:JSON.stringify({purpose:'prospecting', mailbox})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'Erreur');
+    flash(action==='activate'?'Boîte de prospection activée ✓':'Boîte désactivée');
+  }catch(e){ flash(e.message||'Échec'); }
+  loadProspectingHunter();
+}
+async function outreachSaveConfig(){
+  const body = {
+    relanceDelaysDays: [0,1,2].map(i=>parseInt((document.getElementById('oc-delay-'+i)||{value:''}).value||'0',10)).filter(n=>n>0),
+    maxRelances: parseInt((document.getElementById('oc-max')||{value:'3'}).value||'3',10),
+  };
+  try{
+    const r = await apiFetch('/wa/outreachConfig/update', {method:'POST', body:JSON.stringify(body)});
+    if(!r.ok) throw new Error('http');
+    flash('Configuration des relances enregistrée ✓');
+    loadProspectingHunter();
+  }catch(e){ flash('Erreur d\'enregistrement'); }
+}
+async function prospectingRunOutreachNow(){
+  try{
+    const r = await apiFetch('/wa/outreach/runNow', {method:'POST'});
+    if(!r.ok) throw new Error('http');
+    flash('Génération lancée en arrière-plan — actualisez dans quelques instants');
+  }catch(e){ flash('Erreur de lancement'); }
+}
+const OUTREACH_STEP_LABEL = {0:'1er email', 1:'Relance 1', 2:'Relance 2', 3:'Relance 3'};
+function outreachDraftCardHtml(d){
+  const canEdit = d.status==='pending_approval' || d.status==='approved';
+  return `<div class="card" style="margin-bottom:10px;border:1px solid var(--bdr2,#e2dfd9)">
+    <div class="db-row-between" style="margin-bottom:8px">
+      <div><strong>${esc(d.prospect?.nom||'')}</strong> ${d.prospect?.secteur?`<span class="tag t-gray" style="font-size:10px">${esc(d.prospect.secteur)}</span>`:''} <span class="tag t-gray" style="font-size:10px">${OUTREACH_STEP_LABEL[d.sequenceStep]||('Étape '+d.sequenceStep)}</span></div>
+      <span class="tag ${OUTREACH_STATUS_TAG[d.status]||'t-gray'}" style="font-size:10px">${OUTREACH_STATUS_LABEL[d.status]||d.status}</span>
+    </div>
+    <div style="font-size:11px;color:var(--mu);margin-bottom:6px">Destinataire : ${d.recipientEmail?esc(d.recipientEmail):'<em>inconnu — ajoutez un contact avec email sur la fiche</em>'}</div>
+    <div class="ff"><label>Objet</label><input id="od-subject-${d.id}" value="${esc(d.subject)}" ${canEdit?'':'disabled'}></div>
+    <div class="ff"><label>Message</label><textarea id="od-body-${d.id}" rows="7" style="resize:vertical" ${canEdit?'':'disabled'}>${esc(d.bodyHtml)}</textarea></div>
+    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+      ${canEdit?`<button class="btn btn-ghost btn-sm" onclick="outreachDraftSaveEdit('${d.id}')">Enregistrer les modifications</button>`:''}
+      ${d.status==='pending_approval'?`<button class="btn btn-primary btn-sm" onclick="outreachDraftApprove('${d.id}')">Valider</button>`:''}
+      ${d.status==='approved'?`<button class="btn btn-primary btn-sm" onclick="outreachDraftSend('${d.id}')" ${d.recipientEmail?'':'disabled title="Aucun destinataire connu"'}>Envoyer</button>`:''}
+      ${canEdit?`<button class="btn btn-ghost btn-sm" onclick="outreachDraftReject('${d.id}')">Rejeter</button>`:''}
+    </div>
+  </div>`;
+}
+async function outreachDraftSaveEdit(id){
+  const subject = (document.getElementById('od-subject-'+id)||{value:''}).value.trim();
+  const bodyHtml = (document.getElementById('od-body-'+id)||{value:''}).value;
+  try{
+    const r = await apiFetch('/wa/outreachDraft/update', {method:'POST', body:JSON.stringify({id, subject, bodyHtml})});
+    if(!r.ok) throw new Error('http');
+    flash('Enregistré ✓ (revalidation nécessaire si déjà validé)');
+    loadProspectingHunter();
+  }catch(e){ flash('Erreur d\'enregistrement'); }
+}
+async function outreachDraftApprove(id){
+  try{ const r = await apiFetch('/wa/outreachDraft/approve', {method:'POST', body:JSON.stringify({id})}); if(!r.ok) throw new Error('http'); flash('Email validé — prêt à envoyer ✓'); loadProspectingHunter(); }
+  catch(e){ flash('Erreur de validation'); }
+}
+async function outreachDraftReject(id){
+  if(!confirm('Rejeter cet email ?')) return;
+  try{ await apiFetch('/wa/outreachDraft/reject', {method:'POST', body:JSON.stringify({id})}); flash('Email rejeté'); loadProspectingHunter(); }
+  catch(e){ flash('Erreur'); }
+}
+async function outreachDraftSend(id){
+  if(!confirm('Envoyer cet email maintenant ?')) return;
+  try{
+    const r = await apiFetch('/wa/outreachDraft/send', {method:'POST', body:JSON.stringify({id})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'Erreur');
+    flash('Email envoyé ✓');
+    loadProspectingHunter();
+  }catch(e){ flash(e.message||'Échec de l\'envoi'); }
+}
+function meetingProposalCardHtml(p){
+  const fmt = d=>new Date(d).toLocaleString('fr-FR',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+  return `<div class="card" style="margin-bottom:10px;border:1px solid var(--bdr2,#e2dfd9)">
+    <div class="db-row-between" style="margin-bottom:8px">
+      <div><strong>${esc(p.prospect?.nom||'')}</strong> ${p.prospect?.secteur?`<span class="tag t-gray" style="font-size:10px">${esc(p.prospect.secteur)}</span>`:''}</div>
+      <span class="tag ${p.status==='confirmed'?'t-green':p.status==='sent'?'t-blue':'t-amber'}" style="font-size:10px">${PROPOSAL_STATUS_LABEL[p.status]||p.status}</span>
+    </div>
+    ${p.briefText?`<div style="font-size:12px;background:var(--bg2,#f7f6f3);border-radius:8px;padding:8px;margin-bottom:8px;white-space:pre-wrap">${esc(p.briefText)}</div>`:''}
+    <div style="font-size:12px;margin-bottom:8px">
+      <div>1) ${fmt(p.slot1)}</div><div>2) ${fmt(p.slot2)}</div><div>3) ${fmt(p.slot3)}</div>
+      ${p.confirmedSlot?`<div style="margin-top:4px;color:#1a7a3a;font-weight:600">Confirmé : ${fmt(p.confirmedSlot)}</div>`:''}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      ${p.status==='pending_approval'?`<button class="btn btn-primary btn-sm" onclick="meetingProposalApprove('${p.id}')">Valider</button>`:''}
+      ${p.status==='approved'?`<button class="btn btn-primary btn-sm" onclick="meetingProposalSend('${p.id}')">Envoyer les 3 créneaux</button>`:''}
+      ${p.status==='sent'?`
+        <select id="mp-slot-${p.id}" style="width:auto">
+          <option value="1">Créneau 1</option><option value="2">Créneau 2</option><option value="3">Créneau 3</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="meetingProposalConfirmManual('${p.id}')">Confirmer manuellement (réponse reçue par tél./email ambigu)</button>`:''}
+    </div>
+  </div>`;
+}
+async function meetingProposalApprove(id){
+  try{ const r = await apiFetch('/wa/meetingProposal/approve', {method:'POST', body:JSON.stringify({id})}); if(!r.ok) throw new Error('http'); flash('Proposition validée ✓'); loadProspectingHunter(); }
+  catch(e){ flash('Erreur de validation'); }
+}
+async function meetingProposalSend(id){
+  try{
+    const r = await apiFetch('/wa/meetingProposal/send', {method:'POST', body:JSON.stringify({id})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'Erreur');
+    flash('Proposition envoyée au prospect ✓');
+    loadProspectingHunter();
+  }catch(e){ flash(e.message||'Échec de l\'envoi'); }
+}
+async function meetingProposalConfirmManual(id){
+  const slotIndex = parseInt((document.getElementById('mp-slot-'+id)||{value:'1'}).value,10);
+  if(!confirm('Confirmer ce créneau et créer la réunion Teams maintenant ?')) return;
+  try{
+    const r = await apiFetch('/wa/meetingProposal/confirmManual', {method:'POST', body:JSON.stringify({id, slotIndex})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'Erreur');
+    flash('Réunion Teams créée ✓');
+    loadProspectingHunter();
+  }catch(e){ flash(e.message||'Échec de la confirmation'); }
 }
 function docSourceModeHtml(mode){
   // Choix à la création uniquement (pas d'édition fichier/lien après coup,

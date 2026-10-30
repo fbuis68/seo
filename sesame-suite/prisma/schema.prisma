@@ -2136,6 +2136,9 @@ model CrmProspect {
   signatureRequests CrmSignatureRequest[]
   quotes            CrmQuote[]
   meetings          CrmMeeting[]
+  outreachDrafts    OutreachDraft[]
+  outreachReplies   OutreachReply[]
+  meetingProposals  MeetingProposal[]
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -2312,6 +2315,127 @@ model AgentDecisionLog {
 // réunion Teams côté tenant, hors de portée de cet appel) — l'app se
 // contente d'autoriser l'enregistrement à la création.
 // Transcript/enregistrement/résumé récupérés a posteriori via un bouton
+// ─────────────────────────────────────────────────────────────────────────
+// Sesame AI Autonomous Prospecting — P2 "Prospection commerciale
+// supervisée" (30/10/2026). contactId/signalId en texte libre, pas de FK
+// (même convention qu'AgentDecisionLog) — un brouillon doit rester lisible
+// même si le contact ou le signal source est supprimé entretemps.
+model OutreachConfig {
+  id String @id @default("singleton")
+
+  // J+4, J+10, J+20 par défaut (brief §5, P2-06 "configurables") — index 0
+  // = délai avant la 1ère relance (sequenceStep 1), etc.
+  relanceDelaysDays Int[] @default([4, 10, 20])
+  maxRelances       Int   @default(3)
+
+  updatedAt DateTime @updatedAt
+}
+
+model OutreachDraft {
+  id String @id @default(cuid())
+
+  prospectId String
+  prospect   CrmProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  contactId String? // CrmContact ciblé (décideur), texte libre
+  signalId  String? // SalesSignal source ayant motivé cet email, texte libre
+
+  sequenceStep Int @default(0) // 0 = premier email, 1-3 = relances J+4/J+10/J+20
+
+  subject  String
+  bodyHtml String @db.Text
+
+  // draft (généré, pas encore soumis) | pending_approval | approved
+  // (texte figé — toute modification après ce stade repasse en
+  // pending_approval, cf. routes/outreach.ts) | sent | rejected | canceled
+  // (séquence stoppée avant envoi — opposition/négatif détecté entretemps).
+  status String @default("pending_approval")
+
+  approvedById   String?
+  approvedByName String?
+  approvedAt     DateTime?
+
+  recipientEmail String?
+  sentAt         DateTime?
+  // Clé anti-double-envoi (brief §5 "clé d'idempotence unique") — générée à
+  // l'approbation, vérifiée avant tout envoi réel.
+  idempotencyKey String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([prospectId])
+  @@index([status])
+}
+
+model OutreachReply {
+  id String @id @default(cuid())
+
+  prospectId String
+  prospect   CrmProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  draftId String? // OutreachDraft auquel cette réponse fait suite, texte libre
+
+  fromEmail String
+  subject   String
+  bodyText  String @db.Text
+
+  // positif | negatif | question | absence | opposition | to_classify
+  // (brief P2-08) — "question" et tout cas ambigu restent "to_classify" /
+  // sans action automatique : toujours soumis au commercial (recette P2).
+  classification String  @default("to_classify")
+  extractedNeed  String? @db.Text // besoin exprimé extrait si classification=positif (P3-02)
+
+  // Évite de reproposer un rendez-vous deux fois pour la même réponse
+  // positive (cf. lib/meetingProposal.ts).
+  processedForMeeting Boolean @default(false)
+
+  graphMessageId String?  @unique
+  receivedAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  @@index([prospectId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// P3 "Conversion en rendez-vous" — propose 3 créneaux réels (Outlook du
+// commercial assigné), confirmés uniquement sur réponse explicite du
+// prospect (jamais de RDV sans confirmation, brief §6 "Aucun rendez-vous
+// sans confirmation prospect"). meetingId renseigné une fois la réunion
+// Teams réellement créée (cf. lib/meetingProposal.ts) — sert aussi de
+// verrou anti-double-réservation.
+model MeetingProposal {
+  id String @id @default(cuid())
+
+  prospectId String
+  prospect   CrmProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  replyId         String? // OutreachReply ayant déclenché la proposition, texte libre
+  commercialId    String?
+  commercialEmail String?
+
+  slot1 DateTime
+  slot2 DateTime
+  slot3 DateTime
+
+  briefText String? @db.Text // brief commercial généré avant le RDV (P3-10)
+
+  // pending_approval | approved | sent | confirmed | expired | canceled
+  status        String    @default("pending_approval")
+  confirmedSlot DateTime?
+  meetingId     String? // CrmMeeting.id une fois la réunion Teams créée
+
+  approvedById String?
+  approvedAt   DateTime?
+  sentAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([prospectId])
+  @@index([status])
+}
+
 // manuel ("Récupérer le compte-rendu", POST /wa/crmMeeting/fetchRecap) —
 // pas de webhook : le transcript Microsoft met plusieurs minutes à être
 // prêt après la fin de la réunion, inadapté à une notification temps réel.
