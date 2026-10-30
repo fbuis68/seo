@@ -2659,6 +2659,13 @@ model CrmProduct {
   stockQty    Int? // réservé à la future gestion de stock — non utilisé pour l'instant
   active      Boolean @default(true)
 
+  // Secteurs ciblés (30/10/2026, demande client) — surtout utile pour les
+  // produits "logiciel" (Licence) : permet de PROMOUVOIR un module sur
+  // l'espace client d'un devis même si le client ne l'a pas sélectionné
+  // (cf. GET /crmQuote/public, section "à découvrir"), filtré par secteur
+  // du prospect. Vide = universel, même convention que CrmDocument.secteurs.
+  secteurs String[] @default([])
+
   // Document ou lien externe (CrmDocument, cf. bibliothèque documentaire —
   // un CrmDocument peut déjà être un fichier OU une simple url, pas besoin
   // d'un second mécanisme) rattaché à CE produit, affiché sur le devis pour

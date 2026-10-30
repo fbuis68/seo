@@ -1,0 +1,1 @@
+ALTER TABLE "CrmProduct" ADD COLUMN "secteurs" TEXT[] NOT NULL DEFAULT '{}';

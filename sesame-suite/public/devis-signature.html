@@ -35,6 +35,12 @@
   .stat-card.grand{background:var(--a-tint)}
   .stat-card.grand .stat-val{color:var(--a)}
   .notes{margin-top:14px;font-size:12.5px;color:#55504c;white-space:pre-wrap;background:var(--bg);padding:12px 16px;border-radius:12px;line-height:1.6}
+  .promo-box{margin-top:14px;background:var(--a-tint);border-radius:12px;padding:14px 16px}
+  .promo-hd{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--a);margin-bottom:8px}
+  .promo-item{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:8px 0;border-top:1px solid rgba(139,16,64,.12)}
+  .promo-item:first-of-type{border-top:none;padding-top:0}
+  .promo-item-lbl{font-weight:600;font-size:13px}
+  .promo-item-price{font-size:12.5px;font-weight:600;color:var(--a);white-space:nowrap;flex-shrink:0}
   .notes strong{color:var(--a);text-transform:uppercase;font-size:10.5px;letter-spacing:.4px;display:block;margin-bottom:4px}
   label{font-size:12.5px;color:var(--mu);font-weight:600;display:block;margin-bottom:6px}
   input[type=text],input[type=email]{width:100%;font-family:inherit;font-size:14px;padding:10px 14px;border:1px solid var(--bdr);border-radius:10px;margin-bottom:12px;background:var(--bg)}
@@ -172,9 +178,31 @@ function quoteSummaryHtml(){
     <div class="stat-grid">
       ${stats.map(s=>`<div class="stat-card${s.grand?' grand':''}"><div class="stat-lbl">${esc(s.lbl)}</div><div class="stat-val">${s.val}</div></div>`).join('')}
     </div>
+    ${promotedLicensesHtml()}
     ${QUOTE.mentionsText?`<div class="notes"><strong>Mentions spécifiques</strong>${esc(QUOTE.mentionsText)}</div>`:''}
     ${QUOTE.termsText?`<div class="notes"><strong>Conditions commerciales</strong>${esc(QUOTE.termsText)}</div>`:''}
   `;
+}
+
+// Licences "à découvrir" (30/10/2026, demande client) — produits Licence
+// non sélectionnés sur ce devis mais ciblés sur le secteur du client,
+// filtrés et fournis tout faits par le serveur (GET /crmQuote/public, cf.
+// CrmProduct.secteurs) : purement indicatif, jamais compté dans les
+// totaux — distingué visuellement du reste du devis (fond teinté).
+function promotedLicensesHtml(){
+  const items = QUOTE.promotedLicenses||[];
+  if(!items.length) return '';
+  return `<div class="promo-box">
+    <div class="promo-hd">À découvrir aussi</div>
+    ${items.map(p=>`<div class="promo-item">
+      <div>
+        <div class="promo-item-lbl">${esc(p.label)}</div>
+        ${p.description?`<div class="desc">${esc(p.description)}</div>`:''}
+      </div>
+      <div class="promo-item-price">${fmtEUR(p.unitPrice)}${p.recurring?'/mois':''}</div>
+    </div>`).join('')}
+    <div style="font-size:11px;color:var(--mu);margin-top:8px">Non inclus dans ce devis — parlez-en à votre interlocuteur Sesame Technology pour en savoir plus.</div>
+  </div>`;
 }
 
 // Vignettes des documents (30/10/2026, demande client "vignette sympa" +

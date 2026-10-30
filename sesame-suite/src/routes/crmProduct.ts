@@ -33,6 +33,7 @@ function shapeProduct(p: {
   active: boolean;
   documentId: string | null;
   document?: { id: string; title: string } | null;
+  secteurs: string[];
   createdAt: Date;
   updatedAt: Date;
 }) {
@@ -49,6 +50,7 @@ function shapeProduct(p: {
     active: p.active,
     documentId: p.documentId,
     documentTitle: p.document?.title || "",
+    secteurs: p.secteurs,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
   };
@@ -74,6 +76,7 @@ interface ProductBody {
   stockable?: boolean;
   active?: boolean;
   documentId?: string | null;
+  secteurs?: string[];
 }
 
 crmProductRouter.post(
@@ -94,6 +97,7 @@ crmProductRouter.post(
         category: b.category || "materiel",
         stockable: !!b.stockable,
         documentId: b.documentId || null,
+        secteurs: Array.isArray(b.secteurs) ? b.secteurs : [],
       },
       include: { document: { select: { id: true, title: true } } },
     });
@@ -124,6 +128,7 @@ crmProductRouter.post(
         stockable: b.stockable,
         active: b.active,
         documentId: b.documentId === undefined ? undefined : b.documentId || null,
+        secteurs: Array.isArray(b.secteurs) ? b.secteurs : undefined,
       },
       include: { document: { select: { id: true, title: true } } },
     });

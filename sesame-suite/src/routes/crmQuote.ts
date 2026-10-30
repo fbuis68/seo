@@ -48,6 +48,10 @@ interface QuoteLine {
   // à résoudre CrmProduct.documentId côté espace client (GET
   // /crmQuote/public), jamais utilisé pour le calcul.
   productId?: string;
+  // Clé du module logiciel coché (cf. QUOTE_DRAFT.mods, public/crm.html) —
+  // sert à exclure des licences "à promouvoir" celles déjà sélectionnées
+  // sur ce devis (cf. selectedModuleKeys, GET /crmQuote/public).
+  moduleKey?: string;
 }
 
 // Valeurs brutes des calculateurs des onglets Logiciel + Mise en place —
@@ -817,7 +821,7 @@ crmQuoteRouter.get(
     if (!token) throw new HttpError(400, "Lien invalide");
     const quote = await prisma.crmQuote.findUnique({
       where: { signToken: token },
-      include: { prospect: { select: { nom: true, commercial: { select: { name: true, bookingUrl: true } } } }, signature: true },
+      include: { prospect: { select: { nom: true, secteur: true, commercial: { select: { name: true, bookingUrl: true } } } }, signature: true },
     });
     if (!quote) throw new HttpError(404, "Lien de signature invalide ou expiré");
     const storedLines = (quote.lines as unknown as QuoteLine[]) || [];
@@ -853,7 +857,7 @@ crmQuoteRouter.get(
     // onglet Document du constructeur) — plus d'exposition automatique de
     // toutes les réunions du prospect, le commercial choisit lesquelles
     // montrer au client.
-    const [documents, meetings] = await Promise.all([
+    const [documents, meetings, promotableProducts] = await Promise.all([
       quote.attachedDocumentIds.length
         ? prisma.crmDocument.findMany({
             where: { id: { in: quote.attachedDocumentIds }, active: true },
@@ -868,7 +872,19 @@ crmQuoteRouter.get(
             orderBy: { startDateTime: "desc" },
           })
         : Promise.resolve([]),
+      // Licences à promouvoir (30/10/2026, demande client) — produits
+      // catégorie "logiciel" NON sélectionnés sur CE devis mais ciblés sur
+      // le secteur du prospect (cf. CrmProduct.secteurs, vide = universel),
+      // affichés à titre indicatif côté espace client, jamais chiffrés.
+      prisma.crmProduct.findMany({
+        where: { category: "logiciel", active: true },
+        select: { id: true, sku: true, label: true, description: true, unitPrice: true, recurring: true, secteurs: true },
+      }),
     ]);
+    const selectedModuleKeys = new Set(lines.filter((l) => l.category === "logiciel" && l.moduleKey).map((l) => l.moduleKey));
+    const promotedLicenses = promotableProducts
+      .filter((p) => (!p.secteurs.length || (quote.prospect.secteur && p.secteurs.includes(quote.prospect.secteur))) && !(p.sku && selectedModuleKeys.has(p.sku)))
+      .map((p) => ({ id: p.id, label: p.label, description: p.description || "", unitPrice: p.unitPrice, recurring: p.recurring }));
 
     res.json({
       number: quote.number,
@@ -892,6 +908,7 @@ crmQuoteRouter.get(
       signedAt: quote.signature?.signedAt || null,
       signerName: quote.signature?.signerName || null,
       documents,
+      promotedLicenses,
       // Résumé et lien vidéo = deux options indépendantes À L'INTÉRIEUR
       // d'une réunion déjà attachée (30/10/2026, "mettre le lien de la
       // vidéo et/ou le résumé") — null/false quand non cochés, pour que
