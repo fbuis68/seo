@@ -7398,6 +7398,48 @@ function dqToggleAttachedDocument(id, checked){
   if(checked) set.add(id); else set.delete(id);
   q.attachedDocumentIds = [...set];
 }
+
+/** Section "Réunions à inclure" de l'onglet Document (30/10/2026, demande
+ * client "rajouter en option le lien de la vidéo Teams et le résumé
+ * transcript") — même principe que la bibliothèque documentaire : rien
+ * n'apparaît sur l'espace client tant que ce n'est pas coché ici. Liste
+ * uniquement les réunions dont le compte-rendu a déjà été récupéré
+ * (status='fetched') — une réunion encore "scheduled" n'a ni lien de
+ * compte-rendu ni résumé à proposer. Cache par prospectId (pas global,
+ * contrairement à CRM_DOCUMENTS : les réunions sont propres à chaque
+ * client), chargement paresseux au premier rendu de l'onglet. */
+let CRM_QUOTE_MEETINGS_CACHE = {};
+async function dqLoadMeetingsIfNeeded(prospectId){
+  if(CRM_QUOTE_MEETINGS_CACHE[prospectId]) return;
+  try{ const r = await apiFetch('/wa/crmMeeting/list?prospectId='+encodeURIComponent(prospectId)); CRM_QUOTE_MEETINGS_CACHE[prospectId] = r.ok ? await r.json() : []; }
+  catch(e){ CRM_QUOTE_MEETINGS_CACHE[prospectId] = []; }
+}
+function dqMeetingsSectionHtml(q){
+  if(!q.prospectId) return '';
+  const cache = CRM_QUOTE_MEETINGS_CACHE[q.prospectId];
+  if(cache===undefined){
+    dqLoadMeetingsIfNeeded(q.prospectId).then(()=>{ if(QUOTE_TAB==='document') renderQuoteBuilder(); });
+    return `<div class="db-row-between" style="margin:14px 0 4px"><h4 style="margin:0">Réunions à inclure</h4></div><small style="color:var(--mu)">Chargement…</small>`;
+  }
+  const eligible = (cache||[]).filter(m=>m.status==='fetched' && (m.summaryText||m.hasRecording));
+  if(!eligible.length) return '';
+  const rows = eligible.map(m=>{
+    const checked = (q.attachedMeetingIds||[]).includes(m.id);
+    return `<label style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;cursor:pointer">
+      <input type="checkbox" ${checked?'checked':''} style="margin-top:2px" onchange="dqToggleAttachedMeeting('${m.id}',this.checked)">
+      <span><strong>${esc(m.subject)}</strong> <span style="color:var(--mu);font-size:11px">${fmtMeetingDate(m.startDateTime)}</span>${m.hasRecording?' <span class="tag t-gray" style="font-size:10px">Enregistrement</span>':''}</span>
+    </label>`;
+  }).join('');
+  return `<div class="db-row-between" style="margin:14px 0 4px"><h4 style="margin:0">Réunions à inclure</h4></div>
+    <small style="color:var(--mu)">Lien de la réunion et résumé du compte-rendu affichés sur l'espace client (onglet Comptes-rendus), si cochés — rien n'est ajouté automatiquement.</small>
+    <div style="margin-top:6px">${rows}</div>`;
+}
+function dqToggleAttachedMeeting(id, checked){
+  const q = QUOTE_DRAFT;
+  const set = new Set(q.attachedMeetingIds||[]);
+  if(checked) set.add(id); else set.delete(id);
+  q.attachedMeetingIds = [...set];
+}
 const DQ_DEFAULT_INTRO = "Nous vous proposons une solution de gestion des accès adaptée à votre établissement, avec fourniture des équipements et accompagnement à la mise en service.";
 const DQ_DEFAULT_TERMS = "Validité : 30 jours. Solde à la livraison. Intervention sous réserve de validation technique et des prérequis chantier. CGV Sesame Technology à joindre dans leur version validée.";
 const DQ_PMS_OPTIONS = ['Misterbooking','Sans interface PMS','Mews','Opera Cloud','Thais','Autre / à étudier'];
@@ -7490,7 +7532,7 @@ async function openQuoteBuilder(id){
       custom:[], config:dqDefaultConfig(),
       introText:DQ_DEFAULT_INTRO, mentionsText:'', termsText:DQ_DEFAULT_TERMS,
       discountPct:0, vatPct:20, depositPct:65, _new:true,
-      attachedDocumentIds: [],
+      attachedDocumentIds: [], attachedMeetingIds: [],
     };
   }
   bc([{label:'Devis', fn:'showDevisList()'}, {label: QUOTE_DRAFT._new?'Nouveau devis':QUOTE_DRAFT.number}]);
@@ -7524,7 +7566,7 @@ function dqFromServer(q){
     hardware, accessories, mods, custom:customLines, config,
     introText:q.introText||DQ_DEFAULT_INTRO, mentionsText:q.mentionsText||'', termsText:q.termsText||DQ_DEFAULT_TERMS,
     discountPct:q.discountPct, vatPct:q.vatPct, depositPct:q.depositPct, _new:false,
-    attachedDocumentIds: q.attachedDocumentIds||[],
+    attachedDocumentIds: q.attachedDocumentIds||[], attachedMeetingIds: q.attachedMeetingIds||[],
   };
 }
 
@@ -7849,7 +7891,7 @@ function dqPayload(){
     config: q.config,
     introText: q.introText, mentionsText: q.mentionsText, termsText: q.termsText,
     discountPct: +q.discountPct||0, vatPct: +q.vatPct||0, depositPct: +q.depositPct||0,
-    status: q.status, attachedDocumentIds: q.attachedDocumentIds||[],
+    status: q.status, attachedDocumentIds: q.attachedDocumentIds||[], attachedMeetingIds: q.attachedMeetingIds||[],
   };
 }
 async function saveQuote(){
@@ -8200,6 +8242,7 @@ function dqRenderDocumentTab(q, lines){
     </div>
     <label>Introduction client<div id="dq-intro" class="sq-edit" contenteditable="true" onblur="dqRerender()">${esc(q.introText)}</div></label>
     ${dqDocumentLibrarySectionHtml(q, clientSecteur)}
+    ${dqMeetingsSectionHtml(q)}
     ${DOC_BLOCKS.map(b=>groupHtml(b.cat,b.label,b.color)).join('')}
     <hr class="quote-sep">
     <div class="quote-total-row grand"><strong>Initial HT après remise</strong><strong>${fmtEUR(totals.totalHT)}</strong></div>

@@ -128,6 +128,7 @@ function shapeQuote(q: {
   sentAt: Date | null;
   signToken: string | null;
   attachedDocumentIds: string[];
+  attachedMeetingIds: string[];
   createdAt: Date;
   updatedAt: Date;
 }) {
@@ -161,6 +162,7 @@ function shapeQuote(q: {
     sentAt: q.sentAt,
     signToken: q.signToken,
     attachedDocumentIds: q.attachedDocumentIds,
+    attachedMeetingIds: q.attachedMeetingIds,
     createdAt: q.createdAt,
     updatedAt: q.updatedAt,
   };
@@ -255,6 +257,7 @@ interface QuoteBody {
   depositPct?: number;
   status?: string;
   attachedDocumentIds?: string[];
+  attachedMeetingIds?: string[];
 }
 
 crmQuoteRouter.post(
@@ -282,6 +285,7 @@ crmQuoteRouter.post(
         vatPct: b.vatPct ?? 20,
         depositPct: b.depositPct ?? 0,
         attachedDocumentIds: Array.isArray(b.attachedDocumentIds) ? b.attachedDocumentIds : [],
+        attachedMeetingIds: Array.isArray(b.attachedMeetingIds) ? b.attachedMeetingIds : [],
       },
       include: QUOTE_INCLUDE,
     });
@@ -313,6 +317,7 @@ crmQuoteRouter.post(
         status: b.status,
         sentAt: b.status === "envoyé" && existing.status !== "envoyé" ? new Date() : undefined,
         attachedDocumentIds: Array.isArray(b.attachedDocumentIds) ? b.attachedDocumentIds : undefined,
+        attachedMeetingIds: Array.isArray(b.attachedMeetingIds) ? b.attachedMeetingIds : undefined,
       },
       include: QUOTE_INCLUDE,
     });
@@ -807,9 +812,11 @@ crmQuoteRouter.get(
     // Espace client (29/10/2026, demande "créer un vrai espace client à
     // onglets") : en plus du devis, on expose les documents de la
     // bibliothèque attachés à CE devis (sans le contenu base64, cf. routes
-    // de téléchargement dédiées ci-dessous) et les réunions Teams du
-    // prospect dont le compte-rendu (et/ou l'enregistrement) a déjà été
-    // récupéré — jamais celles encore "scheduled", rien à montrer dessus.
+    // de téléchargement dédiées ci-dessous) et les réunions Teams choisies
+    // pour CE devis (30/10/2026, "en option" — cf. attachedMeetingIds,
+    // onglet Document du constructeur) — plus d'exposition automatique de
+    // toutes les réunions du prospect, le commercial choisit lesquelles
+    // montrer au client.
     const [documents, meetings] = await Promise.all([
       quote.attachedDocumentIds.length
         ? prisma.crmDocument.findMany({
@@ -818,11 +825,13 @@ crmQuoteRouter.get(
             orderBy: { order: "asc" },
           })
         : Promise.resolve([]),
-      prisma.crmMeeting.findMany({
-        where: { prospectId: quote.prospectId, OR: [{ summaryText: { not: null } }, { recordingGraphId: { not: null } }] },
-        select: { id: true, subject: true, startDateTime: true, summaryText: true, recordingGraphId: true },
-        orderBy: { startDateTime: "desc" },
-      }),
+      quote.attachedMeetingIds.length
+        ? prisma.crmMeeting.findMany({
+            where: { id: { in: quote.attachedMeetingIds }, prospectId: quote.prospectId },
+            select: { id: true, subject: true, startDateTime: true, summaryText: true, recordingGraphId: true },
+            orderBy: { startDateTime: "desc" },
+          })
+        : Promise.resolve([]),
     ]);
 
     res.json({
