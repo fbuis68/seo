@@ -35,12 +35,16 @@ async function scanOneProspect(p: { id: string; nom: string; secteur: string | n
       },
     });
   }
+  // Journal réservé aux passages avec un résultat réel (30/10/2026, demande
+  // client "s'il n'y a rien ne pas faire de log") — un scan sans actualité
+  // pertinente est le cas normal/majoritaire, pas un événement à tracer.
+  if (!items.length) return;
   await prisma.agentDecisionLog.create({
     data: {
       agentName: "market_intelligence",
       prospectId: p.id,
       inputSummary: `Recherche actualité : ${p.nom}${p.secteur ? " (" + p.secteur + ")" : ""}`,
-      outputSummary: items.length ? JSON.stringify(items) : "Aucun résultat pertinent trouvé",
+      outputSummary: JSON.stringify(items),
       model: config.anthropicModel,
     },
   });
