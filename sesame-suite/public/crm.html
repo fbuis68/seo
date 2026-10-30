@@ -1098,8 +1098,9 @@ function renderHomeTasksCard(){
   });
   rows.sort((a,b)=> new Date(a.activityDate||a.createdAt) - new Date(b.activityDate||b.createdAt));
   const authors = homeTaskFilterOptions(all);
-  const visibleIdsJs = JSON.stringify(rows.map(r=>r.id));
-  const allSelected = rows.length>0 && rows.every(t=>HOME_TASK_SELECTED_IDS.has(t.id));
+  const selectableRows = rows.filter(r=>!r.done);
+  const visibleIdsJs = JSON.stringify(selectableRows.map(r=>r.id));
+  const allSelected = selectableRows.length>0 && selectableRows.every(t=>HOME_TASK_SELECTED_IDS.has(t.id));
   const selBar = HOME_TASK_SELECTED_IDS.size ? `<div class="list-toolbar" style="margin-top:-6px;margin-bottom:10px;padding:8px 12px;background:var(--pl,#fdedf0);border-radius:8px">
     <span style="font-size:13px;font-weight:600">${HOME_TASK_SELECTED_IDS.size} sélectionnée${HOME_TASK_SELECTED_IDS.size>1?'s':''}</span>
     <button class="btn btn-sm" style="margin-left:10px" onclick="homeTaskBulkMarkDone()">✓ Marquer fait (en masse)</button>
@@ -1110,7 +1111,7 @@ function renderHomeTasksCard(){
     : rows.map(t=>{
         const overdue = !t.done && t.activityDate && new Date(t.activityDate) < today;
         return `<tr id="htr-${t.id}">
-          <td><input type="checkbox" class="crm-sel-cb" ${HOME_TASK_SELECTED_IDS.has(t.id)?'checked':''} onchange="homeTaskToggleSelect('${t.id}',this.checked)"></td>
+          <td><input type="checkbox" class="crm-sel-cb" ${HOME_TASK_SELECTED_IDS.has(t.id)?'checked':''} ${t.done?'disabled title="Déjà faite"':''} onchange="homeTaskToggleSelect('${t.id}',this.checked)"></td>
           <td><span class="tag t-gray" style="font-size:10px;padding:1px 7px">${t.type||'Note'}</span></td>
           <td>
             <span style="cursor:pointer" onclick="${t.dealId?`openDealModal('${t.dealId}')`:`showFiche('${t.prospectId}')`}">${t.text}</span>
@@ -1179,7 +1180,7 @@ async function homeTaskBulkMarkDone(){
   if(!ids.length) return;
   const all = buildAllTasks();
   const tasks = ids.map(id=>all.find(t=>t.id===id)).filter(t=>t && !t.done);
-  if(!tasks.length){ HOME_TASK_SELECTED_IDS.clear(); return; }
+  if(!tasks.length){ HOME_TASK_SELECTED_IDS.clear(); flash('Les tâches sélectionnées sont déjà faites'); const el=document.getElementById('home-tasks-card'); if(el) el.outerHTML=renderHomeTasksCard(); return; }
   try{
     const results = await Promise.all(tasks.map(t=>apiFetch('/wa/crmProspect/activity/markDone', {method:'POST', body:JSON.stringify({id:t.id})})));
     if(results.some(r=>!r.ok)) throw new Error('http');
