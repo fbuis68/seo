@@ -146,6 +146,18 @@ input:focus,select:focus{border-color:var(--accent)}
 @media (max-width:480px){
   .step-panel .brow{ left:0; margin-left:0; }
 }
+/* Format tablette (iPad, 30/10/2026, demande client "adapter le format de
+   présentation pour un iPad") — l'app était cadrée à 480px partout (pensée
+   mobile pur), donc flottait en colonne étroite au milieu d'un grand écran
+   vide sur iPad. Élargi à 680px (lisible, pas une ligne de texte étirée sur
+   toute la largeur) pour .app/.bnav/.step-panel .brow ensemble — les trois
+   doivent rester synchronisés, notamment le margin-left négatif (moitié de
+   max-width) qui centre .step-panel .brow en position fixed. */
+@media (min-width:600px){
+  .app{max-width:680px}
+  .bnav{max-width:680px}
+  .step-panel .brow{max-width:680px;margin-left:-340px}
+}
 
 /* ── LANGUAGE SWITCHER ── */
 .lang-switch{display:flex;gap:4px;margin-right:2px;flex-shrink:0}
