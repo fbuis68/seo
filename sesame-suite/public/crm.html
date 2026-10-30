@@ -8096,59 +8096,6 @@ async function sendQuoteEmail(){
   renderQuoteBuilder();
 }
 
-/**
- * Transmission du devis à un SIGNATAIRE précis (30/10/2026, demande
- * client) — distinct de "Envoyer par email" qui vise toujours l'email
- * générique de la fiche prospect : ici on choisit un contact de la fiche
- * (CrmContact, potentiellement différent de prospect.email) ou on saisit
- * un destinataire ponctuel, sans toucher à l'email de référence du client.
- */
-async function openTransmitToSignerModal(){
-  const q = QUOTE_DRAFT; if(!q || !q.id || !q.prospectId) return;
-  let contacts = [];
-  try{ const r = await apiFetch('/wa/crmContact/list?prospectId='+encodeURIComponent(q.prospectId)); contacts = r.ok ? await r.json() : []; }catch(e){}
-  const c = clients.find(x=>x.id===q.prospectId);
-  const options = [
-    c&&c.email ? {label:(c.referent?c.referent+' — ':'')+c.email+' (fiche)', name:c.referent||c.nom, email:c.email} : null,
-    ...contacts.filter(ct=>ct.email).map(ct=>({label:(ct.name||ct.email)+' — '+ct.email+(ct.fonction?' ('+ct.fonction+')':''), name:ct.name||'', email:ct.email})),
-  ].filter(Boolean);
-  document.getElementById('modal-ct').innerHTML = `
-  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
-    <div class="modal-box" style="max-width:480px">
-      <div class="modal-head"><div style="font-size:16px;font-weight:600">Transmettre ce devis au signataire</div><button class="btn btn-ghost btn-icon" onclick="closeModal()">✕</button></div>
-      <div style="padding:0 20px 20px" class="form-grid">
-        ${options.length?`<div class="ff" style="grid-column:1/-1"><label>Destinataire</label>
-          <select id="ts-pick" onchange="document.getElementById('ts-name').value=this.selectedOptions[0].dataset.name||'';document.getElementById('ts-email').value=this.selectedOptions[0].dataset.email||''">
-            ${options.map((o,i)=>`<option value="${i}" data-name="${esc(o.name)}" data-email="${esc(o.email)}">${esc(o.label)}</option>`).join('')}
-            <option value="-1">Autre destinataire…</option>
-          </select>
-        </div>`:''}
-        <div class="ff"><label>Nom</label><input id="ts-name" value="${esc(options[0]?options[0].name:'')}"></div>
-        <div class="ff"><label>Email *</label><input type="email" id="ts-email" value="${esc(options[0]?options[0].email:'')}"></div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-primary" onclick="submitTransmitToSigner()">Transmettre</button>
-        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
-      </div>
-    </div>
-  </div>`;
-}
-async function submitTransmitToSigner(){
-  const q = QUOTE_DRAFT; if(!q || !q.id) return;
-  const toName = (document.getElementById('ts-name')||{value:''}).value.trim();
-  const toEmail = (document.getElementById('ts-email')||{value:''}).value.trim();
-  if(!toEmail){ flash('Email requis'); return; }
-  try{
-    const r = await apiFetch('/wa/crmQuote/sendEmail', {method:'POST', body:JSON.stringify({id:q.id, toEmail, toName})});
-    const data = await r.json();
-    if(!r.ok){ flash(data.error||'Erreur lors de l’envoi'); return; }
-    QUOTE_DRAFT = dqFromServer(data);
-    closeModal();
-    flash('Devis transmis à '+toEmail+' ✓');
-  }catch(e){ flash('Erreur de connexion au serveur'); return; }
-  renderQuoteBuilder();
-}
-
 const DQ_BRAND_RED = '#a32d2d';
 const DQ_CAT_DOT = {materiel:'#0c76d9', service:'#c9860a', logiciel:'#7a5cf0', autre:'#5a8a2e'};
 
@@ -8445,7 +8392,6 @@ function dqRenderDocumentTab(q, lines){
     <div style="font-size:11px;color:var(--mu);font-style:italic;margin-bottom:8px">⚠ Signature électronique simple (nom saisi + tracé + horodatage) — pas une signature qualifiée eIDAS certifiée par un tiers de confiance.</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
       <button class="btn btn-primary btn-sm" onclick="sendQuoteEmail()">✉ Envoyer le devis par email</button>
-      <button class="btn btn-ghost btn-sm" onclick="openTransmitToSignerModal()">📤 Transmettre ce devis au signataire</button>
       ${q.signToken?`<button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText('${esc(location.origin+'/devis-signature.html?token='+q.signToken)}');flash('Lien copié')">Copier le lien de signature</button>`:`<button class="btn btn-ghost btn-sm" onclick="requestQuoteSignature()">✎ Générer le lien sans l'envoyer</button>`}
     </div>` : ''}
     ${q.status==='accepté'?`<div class="tag t-green" style="margin-top:8px;display:inline-flex">✓ Devis signé électroniquement.</div>`:''}

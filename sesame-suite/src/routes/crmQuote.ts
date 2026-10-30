@@ -1023,104 +1023,141 @@ crmQuoteRouter.get(
  * Modèles si absent, comme tout autre modèle du CRM (pas de contenu codé en
  * dur ici, pour rester cohérent avec le reste du CRM).
  */
+/**
+ * Cœur partagé de l'envoi du devis par email — utilisé par la route admin
+ * (POST /crmQuote/sendEmail) ET par la route publique de transmission
+ * depuis l'espace client lui-même (POST /crmQuote/publicTransmit,
+ * 30/10/2026, "le bouton transmettre au signataire doit se situer sur le
+ * portail client" — le destinataire initial, pas forcément le vrai
+ * décideur, doit pouvoir relayer le devis SANS repasser par le commercial).
+ * Même lien de signature (signToken existant, jamais régénéré ici) —
+ * transmettre n'est qu'un renvoi du même lien à quelqu'un d'autre.
+ */
+async function sendQuoteEmailCore(quoteId: string, baseUrl: string, overrideEmail?: string, overrideName?: string) {
+  const existing = await prisma.crmQuote.findUnique({
+    where: { id: quoteId },
+    include: { prospect: { select: { id: true, nom: true, email: true, commercial: { select: { name: true, email: true } } } } },
+  });
+  if (!existing) throw new HttpError(404, "Devis introuvable");
+  if (existing.status === "accepté") throw new HttpError(400, "Ce devis est déjà signé");
+  const prospect = existing.prospect;
+  const toEmail = overrideEmail || prospect.email;
+  const toName = overrideName || prospect.nom;
+  if (!toEmail) throw new HttpError(400, "Aucune adresse email de destinataire");
+
+  const signToken = existing.signToken || crypto.randomBytes(24).toString("hex");
+  const storedLines = (existing.lines as unknown as QuoteLine[]) || [];
+  const config = (existing.config as QuoteConfig) || {};
+  const hardwareLines = storedLines.filter((l) => l.category === "materiel" && l.group !== "accessory");
+  const lines = expandQuoteLines(storedLines, hardwareLines, config);
+  const totals = quoteTotals(lines, existing.discountPct, existing.vatPct, existing.depositPct);
+  const signUrl = `${baseUrl}/devis-signature.html?token=${signToken}`;
+
+  // Signature humaine de l'email — commercial assigné au prospect si
+  // renseigné (CrmProspect.commercial), sinon repli sur l'adresse support
+  // CRM générique (SmtpConfig.supportFromEmail, portée globale) plutôt que
+  // de laisser un {{commercialNom}}/{{commercialEmail}} vide dans le
+  // corps du modèle (29/10/2026, modèle email fourni par le client).
+  let commercialNom = prospect.commercial?.name || "";
+  let commercialEmail = prospect.commercial?.email || "";
+  if (!commercialNom || !commercialEmail) {
+    const smtp = await getSmtpConfig(null);
+    commercialNom = commercialNom || "L'équipe Sesame Technology";
+    commercialEmail = commercialEmail || smtp?.supportFromEmail || smtp?.fromEmail || "";
+  }
+
+  // Documents de la bibliothèque choisis pour cet envoi (cf.
+  // attachedDocumentIds) — un id devenu introuvable (document supprimé
+  // depuis) est silencieusement ignoré plutôt que de bloquer l'envoi du
+  // devis pour une pièce jointe non essentielle.
+  const extraAttachments = existing.attachedDocumentIds.length
+    ? (
+        await prisma.crmDocument.findMany({
+          where: { id: { in: existing.attachedDocumentIds } },
+          select: { fileName: true, fileMimeType: true, fileContentBase64: true },
+        })
+      )
+        // Un document "lien URL" (cf. CrmDocument.url) n'a pas de contenu
+        // binaire à joindre à l'email — il reste consultable via l'onglet
+        // Documents de l'espace client, simplement pas en pièce jointe ici.
+        .filter((d) => d.fileContentBase64)
+        .map((d) => ({ fileName: d.fileName!, dataUrl: `data:${d.fileMimeType};base64,${d.fileContentBase64}` }))
+    : [];
+
+  try {
+    await sendMessage({
+      entityId: null,
+      channel: "email",
+      templateKey: "devis-envoi",
+      to: toEmail,
+      trackOpenProspectId: prospect.id,
+      extraAttachments,
+      variables: {
+        numeroDevis: existing.number,
+        nomClient: toName,
+        montantInitial: totals.oneoffNet.toFixed(2).replace(".", ",") + " €",
+        montantMensuel: totals.mrrNet.toFixed(2).replace(".", ",") + " €",
+        montantTotalTTC: totals.totalTTC.toFixed(2).replace(".", ",") + " €",
+        lienSignature: signUrl,
+        commercialNom,
+        commercialEmail,
+      },
+    });
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 404) {
+      throw new HttpError(404, 'Aucun modèle email "devis-envoi" (catégorie Devis) — créez-le dans Messages > Modèles avant d\'envoyer.');
+    }
+    throw e;
+  }
+
+  return prisma.crmQuote.update({
+    where: { id: quoteId },
+    data: {
+      signToken,
+      status: existing.status === "brouillon" ? "envoyé" : undefined,
+      sentAt: existing.sentAt ?? new Date(),
+    },
+    include: QUOTE_INCLUDE,
+  });
+}
+
 crmQuoteRouter.post(
   "/crmQuote/sendEmail",
   requireAdmin,
   requireSesame,
   asyncHandler(async (req, res) => {
     const id = (req.body.id as string) || "";
-    const existing = await prisma.crmQuote.findUnique({
-      where: { id },
-      include: { prospect: { select: { id: true, nom: true, email: true, commercial: { select: { name: true, email: true } } } } },
-    });
-    if (!existing) throw new HttpError(404, "Devis introuvable");
-    if (existing.status === "accepté") throw new HttpError(400, "Ce devis est déjà signé");
-    const prospect = existing.prospect;
-    // Transmission à un signataire précis (30/10/2026, demande client) —
-    // le contact qui doit réellement signer n'est pas toujours l'email
-    // générique de la fiche prospect (ex. un décideur distinct). Repli sur
-    // prospect.email si aucun override fourni, comportement inchangé.
-    const overrideEmail = (req.body.toEmail as string | undefined)?.trim();
-    const overrideName = (req.body.toName as string | undefined)?.trim();
-    const toEmail = overrideEmail || prospect.email;
-    const toName = overrideName || prospect.nom;
-    if (!toEmail) throw new HttpError(400, "Le client n'a pas d'adresse email enregistrée");
-
-    const signToken = existing.signToken || crypto.randomBytes(24).toString("hex");
-    const storedLines = (existing.lines as unknown as QuoteLine[]) || [];
-    const config = (existing.config as QuoteConfig) || {};
-    const hardwareLines = storedLines.filter((l) => l.category === "materiel" && l.group !== "accessory");
-    const lines = expandQuoteLines(storedLines, hardwareLines, config);
-    const totals = quoteTotals(lines, existing.discountPct, existing.vatPct, existing.depositPct);
-    const signUrl = `${req.protocol}://${req.get("host")}/devis-signature.html?token=${signToken}`;
-
-    // Signature humaine de l'email — commercial assigné au prospect si
-    // renseigné (CrmProspect.commercial), sinon repli sur l'adresse support
-    // CRM générique (SmtpConfig.supportFromEmail, portée globale) plutôt que
-    // de laisser un {{commercialNom}}/{{commercialEmail}} vide dans le
-    // corps du modèle (29/10/2026, modèle email fourni par le client).
-    let commercialNom = prospect.commercial?.name || "";
-    let commercialEmail = prospect.commercial?.email || "";
-    if (!commercialNom || !commercialEmail) {
-      const smtp = await getSmtpConfig(null);
-      commercialNom = commercialNom || "L'équipe Sesame Technology";
-      commercialEmail = commercialEmail || smtp?.supportFromEmail || smtp?.fromEmail || "";
-    }
-
-    // Documents de la bibliothèque choisis pour cet envoi (cf.
-    // attachedDocumentIds) — un id devenu introuvable (document supprimé
-    // depuis) est silencieusement ignoré plutôt que de bloquer l'envoi du
-    // devis pour une pièce jointe non essentielle.
-    const extraAttachments = existing.attachedDocumentIds.length
-      ? (
-          await prisma.crmDocument.findMany({
-            where: { id: { in: existing.attachedDocumentIds } },
-            select: { fileName: true, fileMimeType: true, fileContentBase64: true },
-          })
-        )
-          // Un document "lien URL" (cf. CrmDocument.url) n'a pas de contenu
-          // binaire à joindre à l'email — il reste consultable via l'onglet
-          // Documents de l'espace client, simplement pas en pièce jointe ici.
-          .filter((d) => d.fileContentBase64)
-          .map((d) => ({ fileName: d.fileName!, dataUrl: `data:${d.fileMimeType};base64,${d.fileContentBase64}` }))
-      : [];
-
-    try {
-      await sendMessage({
-        entityId: null,
-        channel: "email",
-        templateKey: "devis-envoi",
-        to: toEmail,
-        trackOpenProspectId: prospect.id,
-        extraAttachments,
-        variables: {
-          numeroDevis: existing.number,
-          nomClient: toName,
-          montantInitial: totals.oneoffNet.toFixed(2).replace(".", ",") + " €",
-          montantMensuel: totals.mrrNet.toFixed(2).replace(".", ",") + " €",
-          montantTotalTTC: totals.totalTTC.toFixed(2).replace(".", ",") + " €",
-          lienSignature: signUrl,
-          commercialNom,
-          commercialEmail,
-        },
-      });
-    } catch (e) {
-      if (e instanceof HttpError && e.status === 404) {
-        throw new HttpError(404, 'Aucun modèle email "devis-envoi" (catégorie Devis) — créez-le dans Messages > Modèles avant d\'envoyer.');
-      }
-      throw e;
-    }
-
-    const row = await prisma.crmQuote.update({
-      where: { id },
-      data: {
-        signToken,
-        status: existing.status === "brouillon" ? "envoyé" : undefined,
-        sentAt: existing.sentAt ?? new Date(),
-      },
-      include: QUOTE_INCLUDE,
-    });
+    if (!id) throw new HttpError(400, "id requis");
+    // Transmission à un signataire précis (30/10/2026, demande client) — le
+    // contact qui doit réellement signer n'est pas toujours l'email
+    // générique de la fiche prospect. Repli sur prospect.email/nom si
+    // aucun override fourni, comportement inchangé.
+    const row = await sendQuoteEmailCore(id, `${req.protocol}://${req.get("host")}`, (req.body.toEmail as string)?.trim(), (req.body.toName as string)?.trim());
     res.json(shapeQuote(row));
+  })
+);
+
+/**
+ * POST /wa/crmQuote/publicTransmit?... — sans authentification admin,
+ * appelée depuis l'espace client (devis-signature.html) lui-même : le
+ * bouton "Transmettre ce devis au signataire" y vit, pas dans le CRM (cf.
+ * commentaire sendQuoteEmailCore ci-dessus). Sécurisée par le seul fait de
+ * connaître un signToken valide, même modèle que les autres routes
+ * publicXxx — un devis déjà signé refuse la transmission (plus rien à
+ * signer).
+ */
+crmQuoteRouter.post(
+  "/crmQuote/publicTransmit",
+  asyncHandler(async (req, res) => {
+    const token = (req.body.token as string) || "";
+    if (!token) throw new HttpError(400, "Lien invalide");
+    const quote = await prisma.crmQuote.findUnique({ where: { signToken: token }, select: { id: true } });
+    if (!quote) throw new HttpError(404, "Lien de signature invalide ou expiré");
+    const toEmail = ((req.body.toEmail as string) || "").trim();
+    const toName = ((req.body.toName as string) || "").trim();
+    if (!toEmail) throw new HttpError(400, "Email requis");
+    await sendQuoteEmailCore(quote.id, `${req.protocol}://${req.get("host")}`, toEmail, toName);
+    res.json({ ok: true });
   })
 );
 

@@ -264,6 +264,51 @@ function meetingsTabHtml(){
     </div>`).join('');
 }
 
+/**
+ * Transmission du devis à un autre signataire, DEPUIS L'ESPACE CLIENT
+ * lui-même (30/10/2026, "le bouton transmettre au signataire doit se
+ * situer sur le portail client") — la personne qui ouvre ce lien n'est pas
+ * forcément celle qui doit signer (ex. assistante, contact générique) ;
+ * elle peut relayer le devis sans repasser par le commercial Sesame.
+ * Formulaire replié par défaut derrière un simple lien, pour ne pas
+ * distraire de l'action principale (signer).
+ */
+function transmitSectionHtml(){
+  return `<div class="card">
+    <div id="transmit-closed">
+      <a href="#" onclick="event.preventDefault();document.getElementById('transmit-closed').style.display='none';document.getElementById('transmit-open').style.display='block'" style="color:var(--a);font-size:13px;font-weight:600;text-decoration:none">↪ Ce n'est pas à vous de signer ? Transmettez ce devis</a>
+    </div>
+    <div id="transmit-open" style="display:none">
+      <h1 style="font-size:15px">Transmettre ce devis</h1>
+      <p style="font-size:13px;color:var(--mu);margin:0 0 16px">Le destinataire recevra le même lien, avec le devis complet et le résumé des échanges déjà disponibles.</p>
+      <label>Nom</label>
+      <input type="text" id="transmitName" placeholder="Prénom Nom">
+      <label>Email *</label>
+      <input type="email" id="transmitEmail" placeholder="collegue@exemple.com">
+      <button class="btn" id="transmitBtn" onclick="submitTransmit()">Transmettre le devis</button>
+      <div class="err" id="transmitErr"></div>
+    </div>
+  </div>`;
+}
+async function submitTransmit(){
+  const errEl = document.getElementById('transmitErr');
+  errEl.style.display='none';
+  const toName = document.getElementById('transmitName').value.trim();
+  const toEmail = document.getElementById('transmitEmail').value.trim();
+  if(!toEmail){ errEl.textContent='Indiquez un email.'; errEl.style.display='block'; return; }
+  const btn = document.getElementById('transmitBtn');
+  btn.disabled = true; btn.textContent = 'Envoi en cours…';
+  try{
+    const r = await fetch('/wa/crmQuote/publicTransmit', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ token: TOKEN, toEmail, toName })
+    });
+    const data = await r.json();
+    if(!r.ok){ errEl.textContent = data.error || 'Erreur lors de la transmission.'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Transmettre le devis'; return; }
+  }catch(e){ errEl.textContent = 'Erreur de connexion au serveur.'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Transmettre le devis'; return; }
+  document.getElementById('transmit-open').innerHTML = `<div class="ok-box" style="padding:10px 0"><div style="color:#1a6b47;font-weight:600">✓ Devis transmis à ${esc(toEmail)}</div></div>`;
+}
+
 function signatureSectionHtml(){
   if(QUOTE.alreadySigned){
     const d = QUOTE.signedAt ? new Date(QUOTE.signedAt).toLocaleString('fr-FR') : '';
@@ -317,6 +362,7 @@ function render(){
 
   const devisPanel = `<div class="tab-panel active" data-panel="devis">
     <div class="card">${quoteSummaryHtml()}</div>
+    ${QUOTE.alreadySigned?'':transmitSectionHtml()}
     ${signatureSectionHtml()}
   </div>`;
   const documentsPanel = QUOTE.documents.length
