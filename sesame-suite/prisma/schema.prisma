@@ -2698,15 +2698,23 @@ model CrmQuoteTemplate {
 // n'importe quel devis).
 // ─────────────────────────────────────────────────────────────────────────
 model CrmDocument {
-  id                String   @id @default(cuid())
-  title             String
-  description       String?  @db.Text
-  fileName          String
-  fileMimeType      String
-  fileContentBase64 String   @db.Text
-  secteurs          String[] @default([])
-  active            Boolean  @default(true)
-  order             Int      @default(0)
+  id          String  @id @default(cuid())
+  title       String
+  description String? @db.Text
+
+  // Un document de la bibliothèque est SOIT un fichier uploadé (base64, cf.
+  // CrmSignatureRequest.fileContentBase64, même convention), SOIT un simple
+  // lien externe (url) — jamais les deux, jamais aucun des deux (validé
+  // côté route). Tous nullables pour permettre l'un ou l'autre
+  // (30/10/2026, demande client "insérer des éléments de type url").
+  fileName          String?
+  fileMimeType      String?
+  fileContentBase64 String? @db.Text
+  url               String?
+
+  secteurs String[] @default([])
+  active   Boolean  @default(true)
+  order    Int      @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

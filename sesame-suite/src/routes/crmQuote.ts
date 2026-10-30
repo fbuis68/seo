@@ -600,8 +600,9 @@ function shapeDocumentMeta(d: {
   id: string;
   title: string;
   description: string | null;
-  fileName: string;
-  fileMimeType: string;
+  fileName: string | null;
+  fileMimeType: string | null;
+  url: string | null;
   secteurs: string[];
   active: boolean;
   order: number;
@@ -614,6 +615,7 @@ function shapeDocumentMeta(d: {
     description: d.description || "",
     fileName: d.fileName,
     fileMimeType: d.fileMimeType,
+    url: d.url,
     secteurs: d.secteurs,
     active: d.active,
     order: d.order,
@@ -629,7 +631,7 @@ crmQuoteRouter.get(
   asyncHandler(async (_req, res) => {
     const rows = await prisma.crmDocument.findMany({
       orderBy: { order: "asc" },
-      select: { id: true, title: true, description: true, fileName: true, fileMimeType: true, secteurs: true, active: true, order: true, createdAt: true, updatedAt: true },
+      select: { id: true, title: true, description: true, fileName: true, fileMimeType: true, url: true, secteurs: true, active: true, order: true, createdAt: true, updatedAt: true },
     });
     res.json(rows.map(shapeDocumentMeta));
   })
@@ -638,9 +640,10 @@ crmQuoteRouter.get(
 interface DocumentCreateBody {
   title: string;
   description?: string;
-  fileName: string;
-  fileMimeType: string;
-  fileContentBase64: string; // data URL complète ou base64 nu, nettoyé ci-dessous
+  fileName?: string;
+  fileMimeType?: string;
+  fileContentBase64?: string; // data URL complète ou base64 nu, nettoyé ci-dessous
+  url?: string;
   secteurs?: string[];
 }
 
@@ -652,19 +655,28 @@ crmQuoteRouter.post(
     const b = req.body as DocumentCreateBody;
     if (!b.title || !b.title.trim()) throw new HttpError(400, "Titre requis");
     const raw = (b.fileContentBase64 || "").trim();
-    if (!raw) throw new HttpError(400, "Fichier requis");
-    const base64 = raw.includes(",") ? raw.slice(raw.indexOf(",") + 1) : raw;
+    const url = (b.url || "").trim();
+    if (!raw && !url) throw new HttpError(400, "Fichier ou lien URL requis");
+    if (raw && url) throw new HttpError(400, "Choisissez soit un fichier, soit un lien URL, pas les deux");
     const agg = await prisma.crmDocument.aggregate({ _max: { order: true } });
     const row = await prisma.crmDocument.create({
-      data: {
-        title: b.title.trim(),
-        description: b.description?.trim() || undefined,
-        fileName: b.fileName || b.title.trim(),
-        fileMimeType: b.fileMimeType || "application/octet-stream",
-        fileContentBase64: base64,
-        secteurs: Array.isArray(b.secteurs) ? b.secteurs : [],
-        order: (agg._max.order ?? -1) + 1,
-      },
+      data: raw
+        ? {
+            title: b.title.trim(),
+            description: b.description?.trim() || undefined,
+            fileName: b.fileName || b.title.trim(),
+            fileMimeType: b.fileMimeType || "application/octet-stream",
+            fileContentBase64: raw.includes(",") ? raw.slice(raw.indexOf(",") + 1) : raw,
+            secteurs: Array.isArray(b.secteurs) ? b.secteurs : [],
+            order: (agg._max.order ?? -1) + 1,
+          }
+        : {
+            title: b.title.trim(),
+            description: b.description?.trim() || undefined,
+            url,
+            secteurs: Array.isArray(b.secteurs) ? b.secteurs : [],
+            order: (agg._max.order ?? -1) + 1,
+          },
     });
     res.status(201).json(shapeDocumentMeta(row));
   })
@@ -802,7 +814,7 @@ crmQuoteRouter.get(
       quote.attachedDocumentIds.length
         ? prisma.crmDocument.findMany({
             where: { id: { in: quote.attachedDocumentIds }, active: true },
-            select: { id: true, title: true, description: true, fileName: true, fileMimeType: true },
+            select: { id: true, title: true, description: true, fileName: true, fileMimeType: true, url: true },
             orderBy: { order: "asc" },
           })
         : Promise.resolve([]),
@@ -857,6 +869,13 @@ crmQuoteRouter.get(
     if (!quote || !quote.attachedDocumentIds.includes(req.params.docId)) throw new HttpError(404, "Document introuvable");
     const doc = await prisma.crmDocument.findUnique({ where: { id: req.params.docId } });
     if (!doc || !doc.active) throw new HttpError(404, "Document introuvable");
+    // Document "lien URL" (cf. CrmDocument.url) — pas de contenu binaire en
+    // base, on redirige simplement vers la source externe.
+    if (doc.url) {
+      res.redirect(302, doc.url);
+      return;
+    }
+    if (!doc.fileContentBase64 || !doc.fileMimeType || !doc.fileName) throw new HttpError(404, "Document introuvable");
     res.setHeader("Content-Type", doc.fileMimeType);
     res.setHeader("Content-Disposition", `inline; filename="${doc.fileName.replace(/"/g, "")}"`);
     res.send(Buffer.from(doc.fileContentBase64, "base64"));
@@ -954,7 +973,12 @@ crmQuoteRouter.post(
             where: { id: { in: existing.attachedDocumentIds } },
             select: { fileName: true, fileMimeType: true, fileContentBase64: true },
           })
-        ).map((d) => ({ fileName: d.fileName, dataUrl: `data:${d.fileMimeType};base64,${d.fileContentBase64}` }))
+        )
+          // Un document "lien URL" (cf. CrmDocument.url) n'a pas de contenu
+          // binaire à joindre à l'email — il reste consultable via l'onglet
+          // Documents de l'espace client, simplement pas en pièce jointe ici.
+          .filter((d) => d.fileContentBase64)
+          .map((d) => ({ fileName: d.fileName!, dataUrl: `data:${d.fileMimeType};base64,${d.fileContentBase64}` }))
       : [];
 
     try {

@@ -149,6 +149,7 @@ function quoteSummaryHtml(){
 
 // Icône selon le type de fichier — purement cosmétique, pas de dépendance.
 function docIconFor(mime){
+  if(!mime) return '🔗';
   if(/pdf/i.test(mime)) return '📄';
   if(/image/i.test(mime)) return '🖼';
   if(/presentation|powerpoint/i.test(mime)) return '📊';
@@ -167,7 +168,7 @@ function documentsTabHtml(){
           ${d.description?`<div class="doc-desc">${esc(d.description)}</div>`:''}
         </div>
       </div>
-      <a class="btn btn-ghost doc-dl" style="width:auto" href="/wa/crmQuote/publicDocument/${encodeURIComponent(d.id)}?token=${encodeURIComponent(TOKEN)}" target="_blank" rel="noopener">Télécharger</a>
+      <a class="btn btn-ghost doc-dl" style="width:auto" href="/wa/crmQuote/publicDocument/${encodeURIComponent(d.id)}?token=${encodeURIComponent(TOKEN)}" target="_blank" rel="noopener">${d.fileMimeType?'Télécharger':'Ouvrir'}</a>
     </div>`).join('');
 }
 function meetingsTabHtml(){

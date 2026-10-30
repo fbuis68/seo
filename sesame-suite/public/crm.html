@@ -8252,7 +8252,7 @@ function renderDocumentLibrary(){
   const rows = docs.map((d,i)=>`
     <div class="card" style="margin-bottom:10px;opacity:${d.active?1:.5}">
       <div class="db-row-between">
-        <div><strong>${esc(d.title)}</strong> <span style="font-size:11px;color:var(--mu)">${esc(d.fileName)}</span></div>
+        <div><strong>${esc(d.title)}</strong> ${d.url?`<a href="${esc(d.url)}" target="_blank" rel="noopener" style="font-size:11px">🔗 ${esc(d.url)}</a>`:`<span style="font-size:11px;color:var(--mu)">${esc(d.fileName)}</span>`}</div>
         <div style="display:flex;gap:6px">
           <button class="btn btn-ghost btn-sm" title="Monter" ${i===0?'disabled':''} onclick="docMove('${d.id}',-1)">↑</button>
           <button class="btn btn-ghost btn-sm" title="Descendre" ${i===docs.length-1?'disabled':''} onclick="docMove('${d.id}',1)">↓</button>
@@ -8313,17 +8313,41 @@ function renderAgentDecisionLog(rows){
     </div>
     ${items || '<div class="card"><div class="log-empty">Aucune entrée pour l\'instant.</div></div>'}`;
 }
+function docSourceModeHtml(mode){
+  // Choix à la création uniquement (pas d'édition fichier/lien après coup,
+  // même principe que le reste de la bibliothèque) — bascule l'affichage
+  // sans recharger le modal, cf. docSetSourceMode().
+  return `<div class="ff" style="grid-column:1/-1">
+    <label>Source *</label>
+    <div style="display:flex;gap:16px;font-size:13px">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="doc-mode" value="file" ${mode==='file'?'checked':''} onchange="docSetSourceMode('file')">Fichier</label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="doc-mode" value="url" ${mode==='url'?'checked':''} onchange="docSetSourceMode('url')">Lien URL</label>
+    </div>
+  </div>
+  <div class="ff" id="doc-mode-file" style="grid-column:1/-1;${mode==='file'?'':'display:none'}">
+    <label>Fichier (PDF recommandé) *</label><input type="file" id="doc-file" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.png">
+  </div>
+  <div class="ff" style="grid-column:1/-1;${mode==='url'?'':'display:none'}" id="doc-mode-url">
+    <label>Lien URL *</label><input id="doc-url" type="url" placeholder="https://...">
+  </div>`;
+}
+function docSetSourceMode(mode){
+  const fileBlock = document.getElementById('doc-mode-file');
+  const urlBlock = document.getElementById('doc-mode-url');
+  if(fileBlock) fileBlock.style.display = mode==='file' ? '' : 'none';
+  if(urlBlock) urlBlock.style.display = mode==='url' ? '' : 'none';
+}
 function docOpenModal(id){
   const d = id ? (CRM_DOCUMENTS||[]).find(x=>x.id===id) : null;
   document.getElementById('modal-ct').innerHTML = `
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
-    <div class="modal-box" style="max-width:480px">
+    <div class="modal-box" style="max-width:620px;width:92vw">
       <div class="modal-head"><div style="font-size:16px;font-weight:600">${d?'Modifier le document':'Ajouter un document'}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()">✕</button></div>
       <div style="padding:0 20px 20px" class="form-grid">
-        <div class="ff"><label>Titre *</label><input id="doc-title" value="${d?esc(d.title):''}"></div>
-        <div class="ff"><label>Description (optionnel)</label><textarea id="doc-desc" rows="2">${d?esc(d.description):''}</textarea></div>
-        ${d?'':'<div class="ff"><label>Fichier (PDF recommandé) *</label><input type="file" id="doc-file" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.png"></div>'}
-        <div class="ff"><label>Secteurs recommandés (optionnel, vide = universel)</label>
+        <div class="ff" style="grid-column:1/-1"><label>Titre *</label><input id="doc-title" value="${d?esc(d.title):''}"></div>
+        <div class="ff" style="grid-column:1/-1"><label>Description (optionnel)</label><textarea id="doc-desc" rows="6" style="resize:vertical;min-height:90px">${d?esc(d.description):''}</textarea></div>
+        ${d?(d.url?`<div class="ff" style="grid-column:1/-1"><label>Lien URL</label><div style="font-size:12px;word-break:break-all">🔗 <a href="${esc(d.url)}" target="_blank" rel="noopener">${esc(d.url)}</a></div></div>`:''):docSourceModeHtml('file')}
+        <div class="ff" style="grid-column:1/-1"><label>Secteurs recommandés (optionnel, vide = universel)</label>
           <div style="display:flex;flex-wrap:wrap;gap:6px">${SECTEURS.map(s=>`<label style="display:flex;align-items:center;gap:4px;font-size:11px;border:1px solid var(--bdr2,#e2dfd9);border-radius:12px;padding:2px 8px;cursor:pointer"><input type="checkbox" class="doc-secteur" value="${esc(s)}" ${d&&d.secteurs.includes(s)?'checked':''}>${esc(s)}</label>`).join('')}</div>
         </div>
       </div>
@@ -8345,16 +8369,23 @@ function docReadFileAsDataUrl(file){
 async function docSubmitCreate(){
   const title = (document.getElementById('doc-title')||{value:''}).value.trim();
   if(!title){ flash('Titre requis'); return; }
-  const fileInput = document.getElementById('doc-file');
-  const file = fileInput && fileInput.files[0];
-  if(!file){ flash('Fichier requis'); return; }
+  const mode = (document.querySelector('input[name="doc-mode"]:checked')||{value:'file'}).value;
   const secteurs = [...document.querySelectorAll('.doc-secteur:checked')].map(c=>c.value);
   const description = (document.getElementById('doc-desc')||{value:''}).value.trim();
-  try{
+  let body = { title, description, secteurs };
+  if(mode==='url'){
+    const url = (document.getElementById('doc-url')||{value:''}).value.trim();
+    if(!url){ flash('Lien URL requis'); return; }
+    body.url = url;
+  }else{
+    const fileInput = document.getElementById('doc-file');
+    const file = fileInput && fileInput.files[0];
+    if(!file){ flash('Fichier requis'); return; }
     const dataUrl = await docReadFileAsDataUrl(file);
-    const r = await apiFetch('/wa/crmDocument/create', {method:'POST', body:JSON.stringify({
-      title, description, fileName:file.name, fileMimeType:file.type||'application/octet-stream', fileContentBase64:dataUrl, secteurs,
-    })});
+    body.fileName = file.name; body.fileMimeType = file.type||'application/octet-stream'; body.fileContentBase64 = dataUrl;
+  }
+  try{
+    const r = await apiFetch('/wa/crmDocument/create', {method:'POST', body:JSON.stringify(body)});
     if(!r.ok) throw new Error('http');
     CRM_DOCUMENTS = CRM_DOCUMENTS||[]; CRM_DOCUMENTS.push(await r.json());
     closeModal();

@@ -1,0 +1,4 @@
+ALTER TABLE "CrmDocument" ALTER COLUMN "fileName" DROP NOT NULL;
+ALTER TABLE "CrmDocument" ALTER COLUMN "fileMimeType" DROP NOT NULL;
+ALTER TABLE "CrmDocument" ALTER COLUMN "fileContentBase64" DROP NOT NULL;
+ALTER TABLE "CrmDocument" ADD COLUMN "url" TEXT;
