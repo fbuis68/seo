@@ -129,6 +129,8 @@ function shapeQuote(q: {
   signToken: string | null;
   attachedDocumentIds: string[];
   attachedMeetingIds: string[];
+  attachedMeetingSummaryIds: string[];
+  attachedMeetingVideoIds: string[];
   createdAt: Date;
   updatedAt: Date;
 }) {
@@ -163,6 +165,8 @@ function shapeQuote(q: {
     signToken: q.signToken,
     attachedDocumentIds: q.attachedDocumentIds,
     attachedMeetingIds: q.attachedMeetingIds,
+    attachedMeetingSummaryIds: q.attachedMeetingSummaryIds,
+    attachedMeetingVideoIds: q.attachedMeetingVideoIds,
     createdAt: q.createdAt,
     updatedAt: q.updatedAt,
   };
@@ -258,6 +262,8 @@ interface QuoteBody {
   status?: string;
   attachedDocumentIds?: string[];
   attachedMeetingIds?: string[];
+  attachedMeetingSummaryIds?: string[];
+  attachedMeetingVideoIds?: string[];
 }
 
 crmQuoteRouter.post(
@@ -286,6 +292,8 @@ crmQuoteRouter.post(
         depositPct: b.depositPct ?? 0,
         attachedDocumentIds: Array.isArray(b.attachedDocumentIds) ? b.attachedDocumentIds : [],
         attachedMeetingIds: Array.isArray(b.attachedMeetingIds) ? b.attachedMeetingIds : [],
+        attachedMeetingSummaryIds: Array.isArray(b.attachedMeetingSummaryIds) ? b.attachedMeetingSummaryIds : [],
+        attachedMeetingVideoIds: Array.isArray(b.attachedMeetingVideoIds) ? b.attachedMeetingVideoIds : [],
       },
       include: QUOTE_INCLUDE,
     });
@@ -318,6 +326,8 @@ crmQuoteRouter.post(
         sentAt: b.status === "envoyé" && existing.status !== "envoyé" ? new Date() : undefined,
         attachedDocumentIds: Array.isArray(b.attachedDocumentIds) ? b.attachedDocumentIds : undefined,
         attachedMeetingIds: Array.isArray(b.attachedMeetingIds) ? b.attachedMeetingIds : undefined,
+        attachedMeetingSummaryIds: Array.isArray(b.attachedMeetingSummaryIds) ? b.attachedMeetingSummaryIds : undefined,
+        attachedMeetingVideoIds: Array.isArray(b.attachedMeetingVideoIds) ? b.attachedMeetingVideoIds : undefined,
       },
       include: QUOTE_INCLUDE,
     });
@@ -851,12 +861,17 @@ crmQuoteRouter.get(
       signedAt: quote.signature?.signedAt || null,
       signerName: quote.signature?.signerName || null,
       documents,
+      // Résumé et lien vidéo = deux options indépendantes À L'INTÉRIEUR
+      // d'une réunion déjà attachée (30/10/2026, "mettre le lien de la
+      // vidéo et/ou le résumé") — null/false quand non cochés, pour que
+      // l'affichage côté espace client (déjà conditionné sur ces champs)
+      // n'ait rien de plus à savoir.
       meetings: meetings.map((m) => ({
         id: m.id,
         subject: m.subject,
         startDateTime: m.startDateTime,
-        summaryText: m.summaryText,
-        hasRecording: !!m.recordingGraphId,
+        summaryText: quote.attachedMeetingSummaryIds.includes(m.id) ? m.summaryText : null,
+        hasRecording: quote.attachedMeetingVideoIds.includes(m.id) && !!m.recordingGraphId,
       })),
     });
   })

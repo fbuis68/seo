@@ -7424,20 +7424,54 @@ function dqMeetingsSectionHtml(q){
   const eligible = (cache||[]).filter(m=>m.status==='fetched' && (m.summaryText||m.hasRecording));
   const rows = eligible.map(m=>{
     const checked = (q.attachedMeetingIds||[]).includes(m.id);
-    return `<label style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;cursor:pointer">
-      <input type="checkbox" ${checked?'checked':''} style="margin-top:2px" onchange="dqToggleAttachedMeeting('${m.id}',this.checked)">
-      <span><strong>${esc(m.subject)}</strong> <span style="color:var(--mu);font-size:11px">${fmtMeetingDate(m.startDateTime)}</span>${m.hasRecording?' <span class="tag t-gray" style="font-size:10px">Enregistrement</span>':''}</span>
-    </label>`;
+    const sumChecked = (q.attachedMeetingSummaryIds||[]).includes(m.id);
+    const vidChecked = (q.attachedMeetingVideoIds||[]).includes(m.id);
+    return `<div style="padding:6px 0">
+      <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer">
+        <input type="checkbox" ${checked?'checked':''} style="margin-top:2px" onchange="dqToggleAttachedMeeting('${m.id}',this.checked)">
+        <span><strong>${esc(m.subject)}</strong> <span style="color:var(--mu);font-size:11px">${fmtMeetingDate(m.startDateTime)}</span></span>
+      </label>
+      ${checked?`<div style="display:flex;gap:16px;margin:4px 0 0 24px;font-size:12px">
+        <label style="display:flex;align-items:center;gap:5px;cursor:${m.summaryText?'pointer':'not-allowed'};color:${m.summaryText?'inherit':'var(--mu)'}">
+          <input type="checkbox" ${sumChecked?'checked':''} ${m.summaryText?'':'disabled'} onchange="dqToggleMeetingOption('${m.id}','Summary',this.checked)">Résumé du compte-rendu
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:${m.hasRecording?'pointer':'not-allowed'};color:${m.hasRecording?'inherit':'var(--mu)'}">
+          <input type="checkbox" ${vidChecked?'checked':''} ${m.hasRecording?'':'disabled'} onchange="dqToggleMeetingOption('${m.id}','Video',this.checked)">Lien de la vidéo
+        </label>
+      </div>`:''}
+    </div>`;
   }).join('');
   return `<div class="db-row-between" style="margin:14px 0 4px"><h4 style="margin:0">Réunions à inclure</h4></div>
-    <small style="color:var(--mu)">Lien de la réunion et résumé du compte-rendu affichés sur l'espace client (onglet Comptes-rendus), si cochés — rien n'est ajouté automatiquement.</small>
+    <small style="color:var(--mu)">Cochez une réunion, puis choisissez résumé et/ou lien vidéo — affichés sur l'espace client (onglet Comptes-rendus), rien n'est ajouté automatiquement.</small>
     <div style="margin-top:6px">${rows || '<div class="log-empty">Aucune réunion avec compte-rendu récupéré pour ce client — depuis sa fiche, carte "Réunions Teams", cliquez "Récupérer le compte-rendu" après la réunion.</div>'}</div>`;
 }
 function dqToggleAttachedMeeting(id, checked){
   const q = QUOTE_DRAFT;
+  const m = (CRM_QUOTE_MEETINGS_CACHE[q.prospectId]||[]).find(x=>x.id===id);
   const set = new Set(q.attachedMeetingIds||[]);
-  if(checked) set.add(id); else set.delete(id);
+  const sumSet = new Set(q.attachedMeetingSummaryIds||[]);
+  const vidSet = new Set(q.attachedMeetingVideoIds||[]);
+  if(checked){
+    set.add(id);
+    // Par défaut, les deux options s'activent dès l'attache (seulement
+    // celles que la réunion a réellement) — l'utilisateur peut ensuite
+    // décocher l'une des deux individuellement.
+    if(m && m.summaryText) sumSet.add(id);
+    if(m && m.hasRecording) vidSet.add(id);
+  }else{
+    set.delete(id); sumSet.delete(id); vidSet.delete(id);
+  }
   q.attachedMeetingIds = [...set];
+  q.attachedMeetingSummaryIds = [...sumSet];
+  q.attachedMeetingVideoIds = [...vidSet];
+  renderQuoteBuilder();
+}
+function dqToggleMeetingOption(id, kind, checked){
+  const q = QUOTE_DRAFT;
+  const field = 'attachedMeeting'+kind+'Ids';
+  const set = new Set(q[field]||[]);
+  if(checked) set.add(id); else set.delete(id);
+  q[field] = [...set];
 }
 const DQ_DEFAULT_INTRO = "Nous vous proposons une solution de gestion des accès adaptée à votre établissement, avec fourniture des équipements et accompagnement à la mise en service.";
 const DQ_DEFAULT_TERMS = "Validité : 30 jours. Solde à la livraison. Intervention sous réserve de validation technique et des prérequis chantier. CGV Sesame Technology à joindre dans leur version validée.";
@@ -7531,7 +7565,7 @@ async function openQuoteBuilder(id){
       custom:[], config:dqDefaultConfig(),
       introText:DQ_DEFAULT_INTRO, mentionsText:'', termsText:DQ_DEFAULT_TERMS,
       discountPct:0, vatPct:20, depositPct:65, _new:true,
-      attachedDocumentIds: [], attachedMeetingIds: [],
+      attachedDocumentIds: [], attachedMeetingIds: [], attachedMeetingSummaryIds: [], attachedMeetingVideoIds: [],
     };
   }
   bc([{label:'Devis', fn:'showDevisList()'}, {label: QUOTE_DRAFT._new?'Nouveau devis':QUOTE_DRAFT.number}]);
@@ -7566,6 +7600,8 @@ function dqFromServer(q){
     introText:q.introText||DQ_DEFAULT_INTRO, mentionsText:q.mentionsText||'', termsText:q.termsText||DQ_DEFAULT_TERMS,
     discountPct:q.discountPct, vatPct:q.vatPct, depositPct:q.depositPct, _new:false,
     attachedDocumentIds: q.attachedDocumentIds||[], attachedMeetingIds: q.attachedMeetingIds||[],
+    attachedMeetingSummaryIds: q.attachedMeetingSummaryIds||[], attachedMeetingVideoIds: q.attachedMeetingVideoIds||[],
+    signToken: q.signToken||null,
   };
 }
 
@@ -7891,6 +7927,7 @@ function dqPayload(){
     introText: q.introText, mentionsText: q.mentionsText, termsText: q.termsText,
     discountPct: +q.discountPct||0, vatPct: +q.vatPct||0, depositPct: +q.depositPct||0,
     status: q.status, attachedDocumentIds: q.attachedDocumentIds||[], attachedMeetingIds: q.attachedMeetingIds||[],
+    attachedMeetingSummaryIds: q.attachedMeetingSummaryIds||[], attachedMeetingVideoIds: q.attachedMeetingVideoIds||[],
   };
 }
 async function saveQuote(){
@@ -7969,6 +8006,14 @@ async function requestQuoteSignature(){
     QUOTE_DRAFT = dqFromServer(data);
   }catch(e){ flash('Erreur de connexion au serveur'); return; }
   renderQuoteBuilder();
+  // Copie directe au clipboard dès la génération (30/10/2026, demande
+  // client "doit générer un copier que l'on peut utiliser pour
+  // vérification") — évite un second clic sur "Copier le lien" juste après.
+  if(QUOTE_DRAFT.signToken){
+    const link = location.origin+'/devis-signature.html?token='+QUOTE_DRAFT.signToken;
+    try{ await navigator.clipboard.writeText(link); flash('Lien généré et copié ✓'); }
+    catch(e){ flash('Lien généré ✓ (copie manuelle : bouton ci-dessous)'); }
+  }
 }
 async function sendQuoteEmail(){
   const q = QUOTE_DRAFT; if(!q || !q.id) return;
