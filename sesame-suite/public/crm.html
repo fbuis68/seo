@@ -5204,7 +5204,8 @@ function renderModal(mc){
       <div class="modal-head">
         <div class="avatar" style="width:36px;height:36px;font-size:12px">${ini(mc.nom||'?')}</div>
         <input class="name-inp" id="m-nom" value="${esc(mc.nom)}" placeholder="Nom du client">
-        <button class="btn btn-ghost btn-icon" id="m-extra-toggle-btn" onclick="toggleModalExtra(this)" style="margin-left:auto;margin-right:6px;font-size:11px;white-space:nowrap" title="Afficher tous les champs">▾ Voir plus de champs</button>
+        <button class="btn btn-s" onclick="openEntrepriseSearch()" style="margin-left:auto;font-size:11px;white-space:nowrap" title="Retrouver automatiquement SIRET/SIREN/adresse/dirigeant à partir du nom de l'entreprise">🔍 Rechercher les coordonnées</button>
+        <button class="btn btn-ghost btn-icon" id="m-extra-toggle-btn" onclick="toggleModalExtra(this)" style="margin-right:6px;font-size:11px;white-space:nowrap" title="Afficher tous les champs">▾ Voir plus de champs</button>
         <button class="btn btn-ghost btn-icon" onclick="closeModal()">✕</button>
       </div>
 
@@ -5351,6 +5352,22 @@ function toggleModalExtra(btn){
   const hidden = els.length && els[0].style.display==='none';
   els.forEach(e=>{ e.style.display = hidden ? '' : 'none'; });
   btn.innerHTML = hidden ? '▴ Vue simplifiée' : '▾ Voir plus de champs';
+}
+// Bouton explicite "Rechercher les coordonnées" (02/11/2026, demande client —
+// la recherche SIRET/adresse/dirigeant existait déjà mais restait cachée
+// derrière "Voir plus de champs", pas assez visible) : déplie la section
+// "Identité légale" si besoin (même logique que toggleModalExtra, bouton
+// tenu synchronisé) puis amène le focus directement sur le champ de
+// recherche plutôt que de laisser l'utilisateur le retrouver lui-même.
+function openEntrepriseSearch(){
+  const els = document.querySelectorAll('.m-extra');
+  if(els.length && els[0].style.display==='none'){
+    els.forEach(e=>{ e.style.display=''; });
+    const toggleBtn = document.getElementById('m-extra-toggle-btn');
+    if(toggleBtn) toggleBtn.innerHTML = '▴ Vue simplifiée';
+  }
+  const inp = document.getElementById('m-entreprise-search');
+  if(inp){ inp.scrollIntoView({behavior:'smooth', block:'center'}); inp.focus(); }
 }
 
 async function saveModal(id,isNew){
