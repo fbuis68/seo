@@ -8596,10 +8596,15 @@ async function showProspectingHunter(){
   document.getElementById('main').innerHTML='<div class="card">Chargement…</div>';
   await loadProspectingHunter();
 }
+let PP_FILTER_SECTEUR='', PP_FILTER_FROM='', PP_FILTER_TO='';
 async function loadProspectingHunter(){
-  let cfg=null, report=null, suppressions=[], jobs=[], outreachCfg=null, outreachMail=null, drafts=[], replies=[], proposals=[];
+  let cfg=null, report=null, suppressions=[], jobs=[], outreachCfg=null, outreachMail=null, drafts=[], replies=[], proposals=[], discovered=[];
   try{
-    const [rc, rr, rs, rj, roc, rom, rd, rrep, rp] = await Promise.all([
+    const dpQs = '?'+['secteur','dateFrom','dateTo'].map(k=>{
+      const v = {secteur:PP_FILTER_SECTEUR,dateFrom:PP_FILTER_FROM,dateTo:PP_FILTER_TO}[k];
+      return v ? k+'='+encodeURIComponent(v) : '';
+    }).filter(Boolean).join('&');
+    const [rc, rr, rs, rj, roc, rom, rd, rrep, rp, rdp] = await Promise.all([
       apiFetch('/wa/prospectingConfig'),
       apiFetch('/wa/discoveryJob/weeklyReport'),
       apiFetch('/wa/suppression/list'),
@@ -8609,6 +8614,7 @@ async function loadProspectingHunter(){
       apiFetch('/wa/outreachDraft/list'),
       apiFetch('/wa/outreachReply/list'),
       apiFetch('/wa/meetingProposal/list'),
+      apiFetch('/wa/discoveryJob/prospects'+dpQs),
     ]);
     cfg = rc.ok ? await rc.json() : null;
     report = rr.ok ? await rr.json() : null;
@@ -8619,15 +8625,22 @@ async function loadProspectingHunter(){
     drafts = rd.ok ? await rd.json() : [];
     replies = rrep.ok ? await rrep.json() : [];
     proposals = rp.ok ? await rp.json() : [];
+    discovered = rdp.ok ? await rdp.json() : [];
   }catch(e){}
-  renderProspectingHunter(cfg, report, suppressions, jobs, outreachCfg, outreachMail, drafts, replies, proposals);
+  renderProspectingHunter(cfg, report, suppressions, jobs, outreachCfg, outreachMail, drafts, replies, proposals, discovered);
+}
+function prospectingApplyFilters(){
+  PP_FILTER_SECTEUR = (document.getElementById('pp-f-secteur')||{value:''}).value;
+  PP_FILTER_FROM = (document.getElementById('pp-f-from')||{value:''}).value;
+  PP_FILTER_TO = (document.getElementById('pp-f-to')||{value:''}).value;
+  loadProspectingHunter();
 }
 const OUTREACH_STATUS_LABEL = {draft:'Brouillon', pending_approval:'À valider', approved:'Validé — prêt à envoyer', sent:'Envoyé', rejected:'Rejeté', canceled:'Annulé'};
 const OUTREACH_STATUS_TAG = {draft:'t-gray', pending_approval:'t-amber', approved:'t-blue', sent:'t-green', rejected:'t-red', canceled:'t-gray'};
 const REPLY_CLASS_LABEL = {positif:'Positif', negatif:'Négatif', question:'Question', absence:'Absence (auto)', opposition:'Opposition', to_classify:'Non classé'};
 const REPLY_CLASS_TAG = {positif:'t-green', negatif:'t-red', question:'t-amber', absence:'t-gray', opposition:'t-red', to_classify:'t-gray'};
 const PROPOSAL_STATUS_LABEL = {pending_approval:'À valider', approved:'Validé — prêt à envoyer', sent:'Envoyé — en attente de réponse', confirmed:'Confirmé (RDV créé)', expired:'Expiré', canceled:'Annulé'};
-function renderProspectingHunter(cfg, report, suppressions, jobs, outreachCfg, outreachMail, drafts, replies, proposals){
+function renderProspectingHunter(cfg, report, suppressions, jobs, outreachCfg, outreachMail, drafts, replies, proposals, discovered){
   if(!cfg || !report){ document.getElementById('main').innerHTML='<div class="card"><div class="log-empty">Erreur de chargement.</div></div>'; return; }
   const byMarket = report.byMarket||[];
   const quotaRows = byMarket.map(m=>`
@@ -8708,6 +8721,28 @@ function renderProspectingHunter(cfg, report, suppressions, jobs, outreachCfg, o
     <div class="card" style="margin-bottom:10px">
       <div style="font-size:15px;font-weight:600;margin-bottom:10px">Derniers passages</div>
       ${jobs.length?`<table class="tbl"><thead><tr><th>Marché</th><th>Statut</th><th>Trouvés</th><th>Qualifiés</th><th>Exclus</th><th>Date</th><th>Erreur</th></tr></thead><tbody>${jobRows}</tbody></table>`:'<div class="log-empty">Aucun passage pour l\'instant.</div>'}
+    </div>
+
+    <div class="card" style="margin-bottom:10px">
+      <div style="font-size:15px;font-weight:600;margin-bottom:10px">Prospects découverts (${(discovered||[]).length})</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
+        <div class="ff" style="margin:0"><label>Secteur</label><select id="pp-f-secteur" onchange="prospectingApplyFilters()">
+          <option value="">Tous</option>${Object.values(PROSPECTING_MARCHE_LABELS).map(l=>`<option value="${esc(l)}" ${PP_FILTER_SECTEUR===l?'selected':''}>${esc(l)}</option>`).join('')}
+        </select></div>
+        <div class="ff" style="margin:0"><label>Projet/rénovation détecté à partir du</label><input type="date" id="pp-f-from" value="${PP_FILTER_FROM}" onchange="prospectingApplyFilters()"></div>
+        <div class="ff" style="margin:0"><label>jusqu'au</label><input type="date" id="pp-f-to" value="${PP_FILTER_TO}" onchange="prospectingApplyFilters()"></div>
+        ${(PP_FILTER_SECTEUR||PP_FILTER_FROM||PP_FILTER_TO)?`<button class="btn btn-ghost btn-sm" onclick="PP_FILTER_SECTEUR='';PP_FILTER_FROM='';PP_FILTER_TO='';loadProspectingHunter()">Réinitialiser</button>`:''}
+      </div>
+      ${(discovered||[]).length?`<table class="tbl"><thead><tr><th>Entreprise</th><th>Secteur</th><th>Ville</th><th>Projet détecté</th><th>Date</th><th>Score</th></tr></thead><tbody>
+        ${discovered.map(p=>`<tr style="cursor:pointer" onclick="showFiche('${p.id}')">
+          <td><strong>${esc(p.nom)}</strong></td>
+          <td>${p.secteur?esc(p.secteur):'—'}</td>
+          <td>${p.ville?esc(p.ville):'—'}</td>
+          <td style="font-size:11px">${p.detectedProject?esc(p.detectedProject):'—'}</td>
+          <td style="font-size:11px;color:var(--mu)">${p.detectedProjectDate?new Date(p.detectedProjectDate).toLocaleDateString('fr-FR'):'—'}</td>
+          <td>${p.score!=null?`<span class="tag ${p.classification==='hot_lead'?'t-red':p.classification==='qualified_lead'?'t-green':'t-gray'}" style="font-size:10px">${p.score}/100</span>`:'—'}</td>
+        </tr>`).join('')}
+      </tbody></table>`:'<div class="log-empty">Aucun prospect découvert pour ces filtres.</div>'}
     </div>
 
     <div class="card" style="margin-bottom:10px">

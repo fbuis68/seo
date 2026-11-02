@@ -154,6 +154,57 @@ discoveryJobRouter.get(
   })
 );
 
+/**
+ * Liste filtrable des prospects qualifiés par le Market Hunter (demande
+ * client 02/11/2026, "filtrer par secteur, date du projet/rénovation/
+ * construction") — secteur = CrmProspect.secteur (Hôtellerie/Padel/
+ * Résidence, cf. MARCHE_DEFS), plage de dates = detectedProjectDate (date
+ * du signal à l'origine, ex. rénovation/ouverture détectée).
+ */
+discoveryJobRouter.get(
+  "/discoveryJob/prospects",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const secteur = (req.query.secteur as string) || undefined;
+    const dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined;
+    const dateTo = req.query.dateTo ? new Date(req.query.dateTo as string) : undefined;
+
+    const rows = await prisma.crmProspect.findMany({
+      where: {
+        origine: "Market Hunter IA",
+        secteur: secteur || undefined,
+        detectedProjectDate: dateFrom || dateTo ? { gte: dateFrom, lte: dateTo } : undefined,
+      },
+      orderBy: [{ detectedProjectDate: "desc" }, { createdAt: "desc" }],
+      take: 200,
+      select: {
+        id: true,
+        nom: true,
+        secteur: true,
+        ville: true,
+        detectedProject: true,
+        detectedProjectDate: true,
+        createdAt: true,
+        salesScores: { orderBy: { computedAt: "desc" }, take: 1, select: { total: true, classification: true } },
+      },
+    });
+    res.json(
+      rows.map((p) => ({
+        id: p.id,
+        nom: p.nom,
+        secteur: p.secteur,
+        ville: p.ville,
+        detectedProject: p.detectedProject,
+        detectedProjectDate: p.detectedProjectDate,
+        createdAt: p.createdAt,
+        score: p.salesScores[0]?.total ?? null,
+        classification: p.salesScores[0]?.classification ?? null,
+      }))
+    );
+  })
+);
+
 discoveryJobRouter.post(
   "/discoveryJob/runNow",
   requireAdmin,
