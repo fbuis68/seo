@@ -264,6 +264,20 @@ crmProspectRouter.post(
 );
 
 crmProspectRouter.post(
+  "/crmProspect/uploadLogo",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const { id, dataUrl } = req.body as { id: string; dataUrl: string };
+    if (!id) throw new HttpError(400, "id requis");
+    if (!dataUrl || !/^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,/.test(dataUrl)) throw new HttpError(400, "Image invalide (PNG/JPEG/GIF/WEBP/SVG attendu)");
+    if (dataUrl.length > 1_500_000) throw new HttpError(400, "Image trop volumineuse (1 Mo max)");
+    const row = await prisma.crmProspect.update({ where: { id }, data: { logo: dataUrl }, include: PROSPECT_INCLUDE });
+    res.json(shapeProspect(row));
+  })
+);
+
+crmProspectRouter.post(
   "/crmProspect/clearLogo",
   requireAdmin,
   requireSesame,
