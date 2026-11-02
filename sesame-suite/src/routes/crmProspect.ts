@@ -6,7 +6,7 @@ import { fireTrigger } from "../lib/automation";
 import { config } from "../config";
 import { invoiceTotal } from "../lib/accReconciliation";
 import { estimateGoCardlessVat, getGoCardlessVatRate } from "../lib/gocardless";
-import { fetchCompanyLogo } from "../lib/companyLogo";
+import { fetchCompanyLogo, fetchBrandColor } from "../lib/companyLogo";
 
 /**
  * CRM commercial interne de Sesame — pipeline prospects/clients (à ne pas
@@ -98,6 +98,7 @@ function shapeProspect(p: {
   site: string | null;
   linkedinUrl: string | null;
   logo: string | null;
+  brandColor: string | null;
   emailOptOut: boolean;
   emailOptOutAt: Date | null;
   nfc: number;
@@ -184,6 +185,7 @@ function shapeProspect(p: {
     site: p.site || "",
     linkedinUrl: p.linkedinUrl || "",
     logo: p.logo || null,
+    brandColor: p.brandColor || null,
     emailOptOut: p.emailOptOut,
     emailOptOutAt: p.emailOptOutAt,
     nfc: p.nfc,
@@ -258,7 +260,10 @@ crmProspectRouter.post(
     if (!prospect.site?.trim()) throw new HttpError(400, "Renseignez d'abord le site web du client (champ Site)");
     const logo = await fetchCompanyLogo(prospect.site);
     if (!logo) throw new HttpError(404, "Aucun logo trouvé pour ce site web");
-    const row = await prisma.crmProspect.update({ where: { id }, data: { logo }, include: PROSPECT_INCLUDE });
+    // Couleur de marque récupérée en même temps, mais jamais bloquante : un
+    // site sans balise theme-color ne doit pas empêcher d'enregistrer le logo.
+    const brandColor = await fetchBrandColor(prospect.site).catch(() => null);
+    const row = await prisma.crmProspect.update({ where: { id }, data: { logo, brandColor }, include: PROSPECT_INCLUDE });
     res.json(shapeProspect(row));
   })
 );

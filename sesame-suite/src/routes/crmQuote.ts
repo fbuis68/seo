@@ -821,7 +821,7 @@ crmQuoteRouter.get(
     if (!token) throw new HttpError(400, "Lien invalide");
     const quote = await prisma.crmQuote.findUnique({
       where: { signToken: token },
-      include: { prospect: { select: { nom: true, secteur: true, commercial: { select: { name: true, bookingUrl: true } } } }, signature: true },
+      include: { prospect: { select: { nom: true, secteur: true, logo: true, brandColor: true, commercial: { select: { name: true, bookingUrl: true } } } }, signature: true },
     });
     if (!quote) throw new HttpError(404, "Lien de signature invalide ou expiré");
     const storedLines = (quote.lines as unknown as QuoteLine[]) || [];
@@ -916,6 +916,12 @@ crmQuoteRouter.get(
       termsText: quote.termsText || "",
       totals: quoteTotals(lines, quote.discountPct, quote.vatPct, quote.depositPct),
       prospectNom: quote.prospect.nom,
+      // Logo + couleur de marque du client (02/11/2026, "reprendre la
+      // charte graphique du site client" sur l'espace devis) — récupérés
+      // au préalable depuis la fiche CRM (cf. routes/crmProspect.ts
+      // fetchLogo), jamais recalculés à la volée ici.
+      prospectLogo: quote.prospect.logo || null,
+      prospectBrandColor: quote.prospect.brandColor || null,
       // Prise de RDV filtrée sur le commercial en charge du dossier
       // (30/10/2026) — lien personnel s'il en a un de renseigné (cf.
       // AdminUser.bookingUrl), repli sur null = lien générique côté front.

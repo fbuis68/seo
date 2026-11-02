@@ -13,8 +13,9 @@
     --shadow:0 1px 2px rgba(20,15,10,.04),0 6px 20px -8px rgba(20,15,10,.08)}
   *{box-sizing:border-box}
   body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--tx);font-size:14.5px;line-height:1.5}
-  .band{background:#fff;padding:10px 20px;text-align:center;border-bottom:1px solid var(--bdr)}
-  .band img{height:26px;display:inline-block}
+  .band{background:#fff;padding:10px 20px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
+  .band img{height:26px;display:block}
+  .band-sep{color:var(--mu);font-size:13px}
   .wrap{max-width:720px;margin:0 auto;padding:16px 20px 40px}
   .card{background:var(--card);border:1px solid var(--bdr);box-shadow:var(--shadow);border-radius:16px;padding:24px;margin-top:14px}
   h1{font-size:18px;margin:0 0 3px;font-weight:700;letter-spacing:-.2px}
@@ -79,7 +80,11 @@
 </style>
 </head>
 <body>
-<div class="band"><img src="/icons/sesame-logo.jpg" alt="Sesame Technology"></div>
+<div class="band" id="band">
+  <img src="/icons/sesame-logo.jpg" alt="Sesame Technology">
+  <span class="band-sep" id="band-sep" style="display:none">×</span>
+  <img id="client-logo" style="display:none" alt="">
+</div>
 <div class="wrap">
   <div id="app"><div class="card">Chargement…</div></div>
 </div>
@@ -99,8 +104,29 @@ async function init(){
     const data = await r.json();
     if(!r.ok){ renderError(data.error || 'Lien invalide ou expiré.'); return; }
     QUOTE = data;
+    applyClientBranding();
     render();
   }catch(e){ renderError('Erreur de connexion au serveur.'); }
+}
+
+// Logo + charte graphique du client (02/11/2026, demande client) — logo
+// récupéré au préalable sur la fiche CRM, couleur de marque lue dans les
+// balises theme-color du site client (cf. lib/companyLogo.ts) : couvre
+// la majorité des sites modernes, pas une extraction universelle. Jamais
+// bloquant si absent — l'espace garde l'identité Sesame par défaut.
+function applyClientBranding(){
+  if(QUOTE.prospectLogo){
+    const img = document.getElementById('client-logo');
+    img.src = QUOTE.prospectLogo;
+    img.alt = QUOTE.prospectNom || '';
+    img.style.display = 'block';
+    document.getElementById('band-sep').style.display = 'inline';
+  }
+  if(QUOTE.prospectBrandColor){
+    const root = document.documentElement.style;
+    root.setProperty('--a', QUOTE.prospectBrandColor);
+    try{ root.setProperty('--a-tint', 'color-mix(in srgb, '+QUOTE.prospectBrandColor+' 12%, white)'); }catch(e){}
+  }
 }
 
 function renderError(msg){
