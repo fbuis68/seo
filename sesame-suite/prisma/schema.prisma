@@ -2040,6 +2040,12 @@ model CrmProspect {
   // approuvés) et le scraping viole les CGU du site : simple lien ouvert
   // manuellement par le commercial, pas de récupération automatique.
   linkedinUrl            String?
+  // Logo récupéré automatiquement (02/11/2026, demande client) depuis le
+  // site web de l'entreprise (champ `site` ci-dessus, requis) via l'API
+  // publique Clearbit Logo — stocké en data URI (même convention que
+  // CrmDocument.fileContentBase64) plutôt qu'un simple lien externe, pour
+  // ne jamais dépendre de la disponibilité du service tiers à l'affichage.
+  logo                   String?   @db.Text
   nfc                    Int       @default(0) // % d'usage — les 4 se totalisent à 100% par fiche
   qr                     Int       @default(0)
   mobile                 Int       @default(0)

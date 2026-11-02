@@ -6,6 +6,7 @@ import { fireTrigger } from "../lib/automation";
 import { config } from "../config";
 import { invoiceTotal } from "../lib/accReconciliation";
 import { estimateGoCardlessVat, getGoCardlessVatRate } from "../lib/gocardless";
+import { fetchCompanyLogo } from "../lib/companyLogo";
 
 /**
  * CRM commercial interne de Sesame — pipeline prospects/clients (à ne pas
@@ -96,6 +97,7 @@ function shapeProspect(p: {
   tel: string | null;
   site: string | null;
   linkedinUrl: string | null;
+  logo: string | null;
   emailOptOut: boolean;
   emailOptOutAt: Date | null;
   nfc: number;
@@ -181,6 +183,7 @@ function shapeProspect(p: {
     tel: p.tel || "",
     site: p.site || "",
     linkedinUrl: p.linkedinUrl || "",
+    logo: p.logo || null,
     emailOptOut: p.emailOptOut,
     emailOptOutAt: p.emailOptOutAt,
     nfc: p.nfc,
@@ -240,6 +243,35 @@ crmProspectRouter.get(
   asyncHandler(async (_req, res) => {
     const rows = await prisma.crmProspect.findMany({ include: PROSPECT_INCLUDE, orderBy: { nom: "asc" } });
     res.json(rows.map(shapeProspect));
+  })
+);
+
+crmProspectRouter.post(
+  "/crmProspect/fetchLogo",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const id = (req.body.id as string) || "";
+    if (!id) throw new HttpError(400, "id requis");
+    const prospect = await prisma.crmProspect.findUnique({ where: { id }, select: { site: true } });
+    if (!prospect) throw new HttpError(404, "Fiche introuvable");
+    if (!prospect.site?.trim()) throw new HttpError(400, "Renseignez d'abord le site web du client (champ Site)");
+    const logo = await fetchCompanyLogo(prospect.site);
+    if (!logo) throw new HttpError(404, "Aucun logo trouvé pour ce site web");
+    const row = await prisma.crmProspect.update({ where: { id }, data: { logo }, include: PROSPECT_INCLUDE });
+    res.json(shapeProspect(row));
+  })
+);
+
+crmProspectRouter.post(
+  "/crmProspect/clearLogo",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const id = (req.body.id as string) || "";
+    if (!id) throw new HttpError(400, "id requis");
+    const row = await prisma.crmProspect.update({ where: { id }, data: { logo: null }, include: PROSPECT_INCLUDE });
+    res.json(shapeProspect(row));
   })
 );
 

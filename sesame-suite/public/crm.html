@@ -1029,6 +1029,14 @@ async function loadVersionBadge(){
   }catch(e){ el.textContent=''; }
 }
 function ini(n){return(n||'?').split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase().slice(0,2)||'?';}
+// Logo client récupéré automatiquement (02/11/2026, demande client) — affiché
+// à la place des initiales dès que CrmProspect.logo est renseigné (data URI,
+// cf. routes/crmProspect.ts fetchLogo), jamais d'image de repli générique.
+function avatarHtml(c, size, fontSize){
+  fontSize = fontSize || Math.round(size*0.4);
+  if(c && c.logo) return `<div class="avatar" style="width:${size}px;height:${size}px;background:#fff;padding:2px;box-sizing:border-box"><img src="${c.logo}" style="width:100%;height:100%;object-fit:contain;border-radius:50%" alt=""></div>`;
+  return `<div class="avatar" style="width:${size}px;height:${size}px;font-size:${fontSize}px">${ini(c&&c.nom)}</div>`;
+}
 function today(){const d=new Date();return d.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});}
 
 // ── NAV ──
@@ -1976,7 +1984,7 @@ function renderList(){
       const lastAct=(c.journal||[]).slice(-1)[0];
       return`<div class="gc" onclick="showFiche('${c.id}')">
         <div class="gc-head">
-          <div class="avatar" style="width:36px;height:36px;font-size:12px">${ini(c.nom)}</div>
+          ${avatarHtml(c,36,12)}
           <div class="gc-info"><div class="gc-name">${esc(c.nom)}</div><div class="gc-sub">${esc(c.groupe||c.secteur||'—')}</div></div>
           ${c.commercialName?`<span class="commercial-chip" title="Commercial : ${esc(c.commercialName)}">${ini(c.commercialName)}</span>`:''}
           <button type="button" class="btn btn-ghost btn-icon" style="flex-shrink:0" title="Envoyer un message (email, SMS, WhatsApp)" onclick="event.stopPropagation();openSendEmailModal('${c.id}')"><i class="ti ti-send"></i></button>
@@ -1997,7 +2005,7 @@ function renderList(){
     const rows=data.map(c=>{
       if(editingId===c.id)return`<tr class="erow">
         <td><input type="checkbox" class="crm-sel-cb" ${SELECTED_IDS.has(c.id)?'checked':''} onchange="crmToggleSelect('${c.id}',this.checked)"></td>
-        <td><div class="avatar" style="width:26px;height:26px;font-size:10px">${ini(c.nom)}</div></td>
+        <td>${avatarHtml(c,26,10)}</td>
         <td><div class="nom-cell">${esc(c.nom)}</div><div class="sub-cell">${esc(c.groupe||'—')}</div></td>
         <td><select class="esel" onchange="ef('${c.id}','secteur',this.value)">${SECTEURS.map(s=>`<option value="${s}" ${c.secteur===s?'selected':''}>${s}</option>`).join('')}</select></td>
         <td><input class="ei" value="${esc(c.ville)}" onchange="ef('${c.id}','ville',this.value)"></td>
@@ -2011,7 +2019,7 @@ function renderList(){
       </tr>`;
       return`<tr>
         <td><input type="checkbox" class="crm-sel-cb" ${SELECTED_IDS.has(c.id)?'checked':''} onchange="crmToggleSelect('${c.id}',this.checked)"></td>
-        <td><div class="avatar" style="width:26px;height:26px;font-size:10px;cursor:pointer" onclick="showFiche('${c.id}')">${ini(c.nom)}</div></td>
+        <td><div style="cursor:pointer;display:inline-block" onclick="showFiche('${c.id}')">${avatarHtml(c,26,10)}</div></td>
         <td><div class="nom-cell" onclick="showFiche('${c.id}')">${typeBadge(c.type)} ${esc(c.nom)} ${scoreBadge(c)} ${inboundBadge(c)} ${supportBadge(c)} ${c.commercialName?`<span class="commercial-chip" title="Commercial : ${esc(c.commercialName)}">${ini(c.commercialName)}</span>`:''}</div><div class="sub-cell">${esc(c.groupe||'—')}</div></td>
         <td style="font-size:12px;color:#666">${c.secteur||'—'}</td>
         <td style="font-size:12px">${c.ville||'—'}</td>
@@ -2945,6 +2953,25 @@ async function renderMapView(data){
 // ════════════════════════════════════════
 // FICHE VIEW
 // ════════════════════════════════════════
+async function ficheFetchLogo(id){
+  try{
+    const r = await apiFetch('/wa/crmProspect/fetchLogo', {method:'POST', body:JSON.stringify({id})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'Erreur');
+    clients = clients.map(c=>c.id===id?data:c);
+    flash('Logo récupéré ✓');
+    showFiche(id);
+  }catch(e){ flash(e.message||'Aucun logo trouvé'); }
+}
+async function ficheClearLogo(id){
+  try{
+    const r = await apiFetch('/wa/crmProspect/clearLogo', {method:'POST', body:JSON.stringify({id})});
+    if(!r.ok) throw new Error('http');
+    const data = await r.json();
+    clients = clients.map(c=>c.id===id?data:c);
+    showFiche(id);
+  }catch(e){ flash('Erreur'); }
+}
 function showFiche(id){
   const c=clients.find(c=>c.id===id);if(!c)return;
   curId=id;view='fiche';setNav('n-fiche');
@@ -3051,7 +3078,12 @@ function renderFiche(c){
   document.getElementById('main').innerHTML=`
   <div class="card">
     <div class="hero-row">
-      <div class="avatar" style="width:48px;height:48px">${ini(c.nom)}</div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+        ${avatarHtml(c,48,16)}
+        ${c.logo
+          ? `<button class="btn btn-ghost btn-sm" style="font-size:9px;padding:1px 5px" onclick="ficheClearLogo('${c.id}')" title="Retirer le logo">✕ Logo</button>`
+          : `<button class="btn btn-ghost btn-sm" style="font-size:9px;padding:1px 5px" onclick="ficheFetchLogo('${c.id}')" title="Récupérer le logo depuis le site web">🔍 Logo</button>`}
+      </div>
       <div style="flex:1">
         <div class="hero-name">${esc(c.nom)}</div>
         <div class="tags-row">
@@ -5202,7 +5234,7 @@ function renderModal(mc){
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box">
       <div class="modal-head">
-        <div class="avatar" style="width:36px;height:36px;font-size:12px">${ini(mc.nom||'?')}</div>
+        ${avatarHtml(mc,36,12)}
         <input class="name-inp" id="m-nom" value="${esc(mc.nom)}" placeholder="Nom du client">
         <button class="btn btn-s" onclick="openEntrepriseSearch()" style="margin-left:auto;font-size:11px;white-space:nowrap" title="Retrouver automatiquement SIRET/SIREN/adresse/dirigeant à partir du nom de l'entreprise">🔍 Rechercher les coordonnées</button>
         <button class="btn btn-ghost btn-icon" id="m-extra-toggle-btn" onclick="toggleModalExtra(this)" style="margin-right:6px;font-size:11px;white-space:nowrap" title="Afficher tous les champs">▾ Voir plus de champs</button>
