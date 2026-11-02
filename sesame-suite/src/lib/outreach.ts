@@ -15,7 +15,7 @@ import { sendGraphMail } from "./graph";
 
 export const MARCHE_ARGUMENTS: Record<string, string> = {
   Hôtellerie: "Sesame propose un accueil autonome 24/7 (badge, QR, code, application) pour les hôtels indépendants — particulièrement utile lors d'une ouverture ou d'une rénovation, pour s'affranchir de la contrainte de réception physique continue tout en gardant une expérience client fluide.",
-  Padel: "Sesame équipe les clubs de padel d'un accès autonome aux terrains en dehors des horaires de présence humaine (badge/QR/code), permettant une amplitude d'ouverture élargie sans personnel supplémentaire.",
+  Padel: "Sesame équipe les clubs de padel d'un accès autonome aux terrains en dehors des horaires de présence humaine (badge/QR/code), permettant une amplitude d'ouverture élargie sans personnel supplémentaire. Un court non équipé reste souvent éclairé en continu faute de pouvoir couper automatiquement l'éclairage à chaque créneau — une charge électrique significative sur l'année. Sesame pilote l'éclairage en même temps que l'accès : la lumière s'allume à l'arrivée du joueur et s'éteint à la fin du créneau, sans intervention humaine, ce qui réduit directement la facture électrique en plus de sécuriser l'accès — un ROI double (accès + énergie).",
   Résidence: "Sesame simplifie la gestion multisite des résidences étudiantes, coliving ou résidences services : accès autonome pour les résidents, pilotage centralisé pour un gestionnaire qui gère plusieurs sites.",
 };
 const DEFAULT_ARGUMENT = "Sesame Technology propose des solutions de contrôle d'accès connecté (badge, QR, code, application) adaptées à l'hôtellerie et aux secteurs à accueil autonome.";
