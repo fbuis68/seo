@@ -77,6 +77,18 @@
   .meeting-subject{font-weight:700;font-size:14.5px;margin:3px 0 10px}
   .meeting-summary{font-size:13.5px;white-space:pre-wrap;color:#333;background:var(--bg);padding:16px 18px;border-radius:12px;line-height:1.6}
   video{width:100%;border-radius:12px;margin-top:12px;display:block;background:#000}
+  .roi-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;margin-top:16px}
+  .roi-field{display:block;margin-top:18px}
+  .roi-field:first-child{margin-top:0}
+  .roi-field-row{display:flex;justify-content:space-between;font-size:12.5px;color:var(--mu);font-weight:600}
+  .roi-field-row output{color:var(--tx);font-weight:700;font-variant-numeric:tabular-nums}
+  .roi-grid input[type=range]{width:100%;accent-color:var(--a);margin-top:10px;min-height:28px}
+  .roi-result{background:var(--a-tint);border-radius:12px;padding:18px}
+  .roi-result .stat-val{font-size:32px;color:var(--a)}
+  .roi-pair{display:flex;justify-content:space-between;font-size:13px;margin-top:10px}
+  .roi-pair strong{font-weight:700;font-variant-numeric:tabular-nums}
+  .roi-payback{font-size:22px;font-weight:700;color:var(--tx)}
+  @media(max-width:600px){.roi-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -414,7 +426,68 @@ function signatureSectionHtml(){
   </div>`;
 }
 
-const TAB_TRACK_LABEL = {devis:'Devis', documents:'Documents', meetings:'Comptes-rendus', booking:'Prendre rendez-vous'};
+const TAB_TRACK_LABEL = {devis:'Devis', roi:'Rentabilité', documents:'Documents', meetings:'Comptes-rendus', booking:'Prendre rendez-vous'};
+// Simulateur de rentabilité (02/11/2026, intégration pack présentation
+// client) — investissement et licence repris des VRAIS totaux du devis
+// (QUOTE.totals, déjà calculés côté serveur), jamais de valeurs figées.
+// Formule reprise à l'identique du pack fourni : temps libéré = arrivées ×
+// minutes gagnées × jours ÷ 60 ; gain mensuel = temps libéré × coût
+// horaire − licence ; retour = investissement ÷ gain mensuel positif.
+function roiUpdate(){
+  const g = id => Number((document.getElementById(id)||{value:0}).value);
+  const dec = n => (n||0).toLocaleString('fr-FR',{maximumFractionDigits:1});
+  const arrivals = g('roi-arrivals'), minutes = g('roi-minutes'), hourly = g('roi-hourly'), days = g('roi-days');
+  const investment = (QUOTE.totals && QUOTE.totals.totalHT) || 0;
+  const license = (QUOTE.totals && QUOTE.totals.mrrNet) || 0;
+  const hours = arrivals*minutes*days/60;
+  const monthly = hours*hourly - license;
+  const annual = monthly*12;
+  const payback = monthly>0 ? investment/monthly : null;
+  document.getElementById('roi-arrivals-v').textContent = arrivals;
+  document.getElementById('roi-minutes-v').textContent = minutes+' min';
+  document.getElementById('roi-hourly-v').textContent = fmtEUR(hourly);
+  document.getElementById('roi-days-v').textContent = days;
+  document.getElementById('roi-net').textContent = fmtEUR(monthly);
+  document.getElementById('roi-hours').textContent = dec(hours)+' h';
+  document.getElementById('roi-annual').textContent = fmtEUR(annual);
+  document.getElementById('roi-payback').textContent = payback===null ? 'Non atteint' : dec(payback)+' mois';
+}
+function roiTabHtml(){
+  const investment = (QUOTE.totals && QUOTE.totals.totalHT) || 0;
+  const license = (QUOTE.totals && QUOTE.totals.mrrNet) || 0;
+  return `<div class="sub" style="margin-bottom:4px">Trois paramètres, une estimation immédiate du temps libéré par Sesame.</div>
+  <div class="roi-grid">
+    <div>
+      <label class="roi-field"><span class="roi-field-row">Arrivées moyennes / jour <output id="roi-arrivals-v">30</output></span>
+        <input type="range" id="roi-arrivals" min="0" max="150" step="1" value="30" oninput="roiUpdate()"></label>
+      <label class="roi-field"><span class="roi-field-row">Minutes gagnées / arrivée <output id="roi-minutes-v">5 min</output></span>
+        <input type="range" id="roi-minutes" min="0" max="20" step="1" value="5" oninput="roiUpdate()"></label>
+      <label class="roi-field"><span class="roi-field-row">Coût horaire chargé <output id="roi-hourly-v">25 €</output></span>
+        <input type="range" id="roi-hourly" min="10" max="70" step="1" value="25" oninput="roiUpdate()"></label>
+      <label class="roi-field"><span class="roi-field-row">Jours d'activité / mois <output id="roi-days-v">22</output></span>
+        <input type="range" id="roi-days" min="1" max="31" step="1" value="22" oninput="roiUpdate()"></label>
+      <div class="stat-grid" style="margin-top:18px">
+        <div class="stat-card"><div class="stat-lbl">Investissement initial HT</div><div class="stat-val">${fmtEUR(investment)}</div></div>
+        <div class="stat-card"><div class="stat-lbl">Licence mensuelle HT</div><div class="stat-val">${fmtEUR(license)}</div></div>
+      </div>
+    </div>
+    <div class="roi-result">
+      <div class="stat-lbl">Temps valorisé, licence déduite</div>
+      <div class="stat-val" id="roi-net">—</div>
+      <div class="sub">de gain potentiel par mois</div>
+      <hr style="border:0;border-top:1px solid rgba(139,16,64,.15);margin:14px 0">
+      <div class="roi-pair"><span>Temps libéré / mois</span><strong id="roi-hours">—</strong></div>
+      <div class="roi-pair"><span>Gain potentiel / an</span><strong id="roi-annual">—</strong></div>
+      <hr style="border:0;border-top:1px solid rgba(139,16,64,.15);margin:14px 0">
+      <div class="sub">Retour sur investissement estimé</div>
+      <div class="roi-payback" id="roi-payback">—</div>
+    </div>
+  </div>
+  <details style="margin-top:16px">
+    <summary style="cursor:pointer;font-size:12.5px;color:var(--mu);font-weight:600">Hypothèses de calcul</summary>
+    <p class="sub" style="margin-top:8px;line-height:1.6">Temps libéré = arrivées × minutes gagnées × jours d'activité ÷ 60. Gain mensuel = temps libéré × coût horaire chargé − licence mensuelle. Retour sur investissement = investissement initial ÷ gain mensuel positif (« Non atteint » si le gain est nul ou négatif). Estimation indicative — temps libéré valorisé, sans garantie d'économie de trésorerie, hors financement, maintenance additionnelle et fiscalité.</p>
+  </details>`;
+}
 function switchTab(key){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===key));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active', p.dataset.panel===key));
@@ -426,7 +499,7 @@ function switchTab(key){
 // quelque chose à montrer (devis sans document attaché ni réunion =
 // aucun onglet superflu, juste le devis comme avant).
 function render(){
-  const tabs = [{key:'devis', label:'Devis'}];
+  const tabs = [{key:'devis', label:'Devis'}, {key:'roi', label:'Rentabilité'}];
   if(QUOTE.documents.length) tabs.push({key:'documents', label:'Documents'});
   if(QUOTE.meetings.length) tabs.push({key:'meetings', label:'Comptes-rendus'});
   tabs.push({key:'booking', label:'Prendre rendez-vous'});
@@ -440,15 +513,17 @@ function render(){
     ${QUOTE.alreadySigned?'':transmitSectionHtml()}
     ${signatureSectionHtml()}
   </div>`;
+  const roiPanel = `<div class="tab-panel" data-panel="roi"><div class="card"><h1 style="font-size:15px">Rentabilité</h1>${roiTabHtml()}</div></div>`;
   const documentsPanel = QUOTE.documents.length
     ? `<div class="tab-panel" data-panel="documents"><div class="card"><h1 style="font-size:15px">Documents</h1>${documentsTabHtml()}</div></div>` : '';
   const meetingsPanel = QUOTE.meetings.length
     ? `<div class="tab-panel" data-panel="meetings"><div class="card"><h1 style="font-size:15px">Comptes-rendus de réunion</h1>${meetingsTabHtml()}</div></div>` : '';
   const bookingPanel = `<div class="tab-panel" data-panel="booking"><div class="card"><h1 style="font-size:15px">Prendre rendez-vous</h1>${bookingTabHtml()}</div></div>`;
 
-  document.getElementById('app').innerHTML = tabNav + devisPanel + documentsPanel + meetingsPanel + bookingPanel;
+  document.getElementById('app').innerHTML = tabNav + devisPanel + roiPanel + documentsPanel + meetingsPanel + bookingPanel;
   if(!QUOTE.alreadySigned) setupCanvas();
   enhanceVimeoThumbs();
+  roiUpdate();
 }
 
 let ctx, drawing=false, hasDrawn=false;
