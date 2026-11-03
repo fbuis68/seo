@@ -65,12 +65,21 @@
        conteneur (fenêtre large, colonne étroite, mobile...).  */
     .workspace { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
     .panel { padding: 14px; border: 1px solid var(--sesame-roi-border); border-radius: calc(var(--sesame-roi-radius) - 4px); background: var(--sesame-roi-surface); }
-    fieldset { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; padding: 0; border: 0; }
+    /* 04/11/2026 — "veiller à ce que la barre d'options ne soit pas sur deux
+       lignes en responsive" : repeat(auto-fit,...) et flex-wrap laissent
+       la rangée retomber sur 2 lignes dès que le conteneur devient trop
+       étroit pour 4 pastilles + le champ de taux d'occupation (téléphone).
+       nowrap + overflow-x:auto garde une seule ligne toujours, quitte à
+       défiler horizontalement sur mobile — seul moyen fiable, cf. même
+       leçon déjà tirée sur .hero/.details (note plus bas). */
+    fieldset { display: flex; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; gap: 6px; margin: 0 0 14px; padding: 2px 2px 6px; border: 0; scrollbar-width: thin; }
     legend { width: 100%; margin-bottom: 6px; color: var(--sesame-roi-muted); font-size: 11px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; }
-    .choice { display: flex; align-items: center; gap: 6px; padding: 7px 11px; border: 1px solid var(--sesame-roi-border); border-radius: 999px; cursor: pointer; white-space: nowrap; }
+    .choice { display: flex; align-items: center; gap: 6px; padding: 7px 11px; border: 1px solid var(--sesame-roi-border); border-radius: 999px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
     .choice:has(input:checked) { border-color: var(--sesame-roi-accent); background: color-mix(in srgb, var(--sesame-roi-accent) 9%, var(--sesame-roi-surface)); }
     .choice b { font-size: 12px; font-weight: 700; }
     input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--sesame-roi-accent); flex-shrink: 0; }
+    .choice-field { display: flex; align-items: center; gap: 6px; padding: 6px 11px; border: 1px dashed var(--sesame-roi-border); border-radius: 999px; font-size: 12px; font-weight: 700; color: var(--sesame-roi-muted); white-space: nowrap; flex-shrink: 0; }
+    .choice-field input { width: 40px; padding: 4px 5px; border: 1px solid var(--sesame-roi-border); border-radius: 6px; background: var(--sesame-roi-surface); color: var(--sesame-roi-text); font: inherit; text-align: center; }
     .help, .assumptions { color: var(--sesame-roi-muted); }
     .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 12px; align-items: end; }
     .field { display: grid; gap: 5px; font-size: 12.5px; font-weight: 800; }
@@ -146,18 +155,16 @@
             <form class="panel" novalidate>
               <fieldset>
                 <legend>Options incluses</legend>
-                <label class="choice" title="Ouvertures et droits digitalisés"><input name="includeAccess" type="checkbox"><b>Contrôles d’accès</b></label>
                 <label class="choice" title="Arrivée digitale, ménage et serviettes"><input name="includeEco" type="checkbox"><b>Check-in Éco Responsable</b></label>
                 <label class="choice" title="6 min/séjour accepté"><input name="identity" type="checkbox"><b>Contrôle d’identité</b></label>
                 <label class="choice" title="4 min/séjour accepté"><input name="tax" type="checkbox"><b>Taxe de séjour</b></label>
-                <label class="choice" title="4 min/séjour accepté"><input name="shop" type="checkbox"><b>Boutique</b></label>
                 <label class="choice" title="33 min/séjour accepté + impact environnemental"><input name="cleaning" type="checkbox"><b>Ménage</b></label>
+                <label class="choice-field" title="Contrôle d’accès toujours inclus — cœur du produit">Occupation accès<input name="accessOccupancyPercent" type="number" min="0" max="100" step="1">%</label>
               </fieldset>
               <div class="fields">
                 <label class="field">Nombre d’accès / chambres<input name="roomCount" type="number" readonly aria-readonly="true"></label>
-                <label class="field">Taux d’occupation accès (%)<input name="accessOccupancyPercent" type="number" min="0" max="100" step="1"></label>
                 <input type="hidden" name="accessCount"><input type="hidden" name="ecoRoomCount">
-                <p class="help">Hypothèses : 2 utilisations/jour, 5 min gagnées (accès) · 80 % d’occupation, 25 % d’acceptation, séjour moyen 3 nuits (éco).</p>
+                <p class="help">Contrôle d’accès toujours inclus. Hypothèses : 2 utilisations/jour, 5 min gagnées (accès) · 80 % d’occupation, 25 % d’acceptation, séjour moyen 3 nuits (éco).</p>
               </div>
             </form>
             <section class="results" aria-live="polite">
@@ -188,7 +195,6 @@
       if (!this.form) return;
       const config = this.config;
       const value = (name, attribute, fallback) => config[name] ?? this.getAttribute(attribute) ?? fallback;
-      this.form.elements.includeAccess.checked = boolean(value('includeAccess', 'include-access', true), true);
       this.form.elements.includeEco.checked = boolean(value('includeEco', 'include-eco', false), false);
       // Un seul champ affiché (non modifiable) pour le nombre d’accès/chambres
       // — demande client 03/11/2026, il apparaissait deux fois (accessCount
@@ -203,7 +209,6 @@
       const options = config.ecoOptions || {};
       this.form.elements.identity.checked = boolean(options.identity, true);
       this.form.elements.tax.checked = boolean(options.tax, true);
-      this.form.elements.shop.checked = boolean(options.shop, true);
       this.form.elements.cleaning.checked = boolean(options.cleaning, true);
       this.calculate();
     }
@@ -215,13 +220,15 @@
         accessOccupancyPercent: number(fields.accessOccupancyPercent.value, 70),
         usesPerDay: 2,
         minutesPerUse: 5,
-        includeAccess: fields.includeAccess.checked,
+        // Contrôle d'accès retiré des options cochables (04/11/2026,
+        // demande client) — toujours inclus, cœur du produit, plus la peine
+        // de le proposer en bascule. "Boutique" retirée aussi (pas offerte).
+        includeAccess: true,
         includeEco: fields.includeEco.checked,
         ecoRoomCount: number(fields.ecoRoomCount.value, 50),
         ecoOptions: {
           identity: fields.identity.checked,
           tax: fields.tax.checked,
-          shop: fields.shop.checked,
           cleaning: fields.cleaning.checked
         }
       };
