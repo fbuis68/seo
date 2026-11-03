@@ -916,6 +916,7 @@ crmQuoteRouter.get(
       termsText: quote.termsText || "",
       totals: quoteTotals(lines, quote.discountPct, quote.vatPct, quote.depositPct),
       prospectNom: quote.prospect.nom,
+      prospectSecteur: quote.prospect.secteur || null,
       // Logo + couleur de marque du client (02/11/2026, "reprendre la
       // charte graphique du site client" sur l'espace devis) — récupérés
       // au préalable depuis la fiche CRM (cf. routes/crmProspect.ts

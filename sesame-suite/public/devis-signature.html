@@ -427,6 +427,16 @@ function signatureSectionHtml(){
 }
 
 const TAB_TRACK_LABEL = {devis:'Devis', roi:'Rentabilité', documents:'Documents', meetings:'Comptes-rendus', booking:'Prendre rendez-vous'};
+// Onglet Rentabilité réservé aux clients "logement" (02/11/2026, demande
+// client) — liste de secteurs à EXCLURE plutôt qu'à autoriser : le secteur
+// reste une liste libre/éditable (CrmSectorOption, cf. crm.html), de
+// nouveaux types de logement (camping, chambre d'hôtes...) doivent donc
+// rester inclus par défaut sans mise à jour de cette liste. Reprend
+// SECTEURS_NON_HOTEL (public/crm.html, déjà établi) + "Padel" (secteur créé
+// par l'agent Market Hunter, non couvert par le "Sport" générique de cette
+// liste). Secteur vide/non renseigné = onglet affiché (fiche par défaut
+// "Hôtellerie" à la création, cf. crm.html openNewModal()).
+const ROI_EXCLUDED_SECTEURS = ['Garde meuble','Sport','Agence gestion patrimoine','Bureaux','Padel'];
 // Modules complémentaires (02/11/2026, demande client) — chacun ajoute un
 // temps gagné supplémentaire par arrivée aux minutes réglées au curseur,
 // plutôt qu'un nouveau paramètre séparé : ce sont des étapes d'accueil
@@ -516,7 +526,9 @@ function switchTab(key){
 // quelque chose à montrer (devis sans document attaché ni réunion =
 // aucun onglet superflu, juste le devis comme avant).
 function render(){
-  const tabs = [{key:'devis', label:'Devis'}, {key:'roi', label:'Rentabilité'}];
+  const showRoi = !ROI_EXCLUDED_SECTEURS.includes(QUOTE.prospectSecteur);
+  const tabs = [{key:'devis', label:'Devis'}];
+  if(showRoi) tabs.push({key:'roi', label:'Rentabilité'});
   if(QUOTE.documents.length) tabs.push({key:'documents', label:'Documents'});
   if(QUOTE.meetings.length) tabs.push({key:'meetings', label:'Comptes-rendus'});
   tabs.push({key:'booking', label:'Prendre rendez-vous'});
@@ -530,7 +542,7 @@ function render(){
     ${QUOTE.alreadySigned?'':transmitSectionHtml()}
     ${signatureSectionHtml()}
   </div>`;
-  const roiPanel = `<div class="tab-panel" data-panel="roi"><div class="card"><h1 style="font-size:15px">Rentabilité</h1>${roiTabHtml()}</div></div>`;
+  const roiPanel = showRoi ? `<div class="tab-panel" data-panel="roi"><div class="card"><h1 style="font-size:15px">Rentabilité</h1>${roiTabHtml()}</div></div>` : '';
   const documentsPanel = QUOTE.documents.length
     ? `<div class="tab-panel" data-panel="documents"><div class="card"><h1 style="font-size:15px">Documents</h1>${documentsTabHtml()}</div></div>` : '';
   const meetingsPanel = QUOTE.meetings.length
@@ -540,7 +552,7 @@ function render(){
   document.getElementById('app').innerHTML = tabNav + devisPanel + roiPanel + documentsPanel + meetingsPanel + bookingPanel;
   if(!QUOTE.alreadySigned) setupCanvas();
   enhanceVimeoThumbs();
-  roiUpdate();
+  if(showRoi) roiUpdate();
 }
 
 let ctx, drawing=false, hasDrawn=false;
