@@ -8300,6 +8300,19 @@ function renderQuoteBuilder(){
   const lines = dqAllLines(q);
   const totals = dqComputeTotals(lines, q.config, q.discountPct, q.vatPct, q.depositPct);
   const unpriced = lines.filter(l=>l.unitPrice==null).length;
+  // Marge (02/11/2026, demande client "pouvoir mettre le coût d'achat pour
+  // avoir un calcul de marge sur le devis") — UNIQUEMENT dans ce panneau
+  // interne (db-aside), jamais dans dqRenderDocumentTab ni printQuote (les
+  // deux aperçus envoyables/imprimables au client) ni dans l'API publique
+  // /crmQuote/public (CrmProduct.costPrice n'y est jamais sélectionné).
+  // Calculée uniquement sur les lignes liées à un produit du catalogue
+  // (productId) — seules lignes dont le coût d'achat est connu.
+  const marginLines = lines.filter(l=>l.productId);
+  const costFor = pid => { const p = crmProducts.find(x=>x.id===pid); return p ? (p.costPrice||0) : 0; };
+  const marginRevenue = marginLines.reduce((s,l)=>s+(l.unitPrice==null?0:(l.qty||0)*l.unitPrice),0);
+  const marginCost = marginLines.reduce((s,l)=>s+(l.qty||0)*costFor(l.productId),0);
+  const marginAmount = marginRevenue - marginCost;
+  const marginPct = marginRevenue>0 ? (marginAmount/marginRevenue*100) : 0;
 
   let panelHtml;
   if(QUOTE_TAB==='materiel') panelHtml = dqRenderHardwareTab(q);
@@ -8353,6 +8366,10 @@ function renderQuoteBuilder(){
         <small style="color:var(--mu)">${esc(q.config.subscriptionStart)}</small>
         <div class="quote-total-row"><span>Récurrent sur 12 mois HT</span><span>${fmtEUR(totals.mrrNet*12)}</span></div>
         <hr class="quote-sep">
+        ${marginLines.length?`<small class="db-aside-lbl">MARGE (INTERNE — jamais sur le devis client)</small>
+        <div class="quote-total-row"><span>Coût d'achat</span><span>${fmtEUR(marginCost)}</span></div>
+        <div class="quote-total-row grand"><strong>Marge</strong><strong style="color:${marginAmount<0?'#a32d2d':'inherit'}">${fmtEUR(marginAmount)} (${marginPct.toFixed(0)} %)</strong></div>
+        <hr class="quote-sep">`:''}
         <p style="font-size:12px;color:var(--mu)">${q.hardware.reduce((a,x)=>a+dqNum(x.qty),0)} accès · ${dqNum(q.config.installDays)} journée(s)-technicien de pose</p>
         ${unpriced?`<p style="font-size:12px;color:#a67c00">${unpriced} tarif(s) à compléter · totaux partiels.</p>`:''}
         <button type="button" class="btn btn-primary btn-sm" style="width:100%;margin-top:6px" onclick="switchQuoteTab('document')">Personnaliser le document →</button>
@@ -9212,7 +9229,7 @@ function renderCrmProducts(){
 const CRM_PRODUCT_CATEGORY_LABEL = {materiel:'Équipements', accessoire:'Accessoires', logiciel:'Logiciel', service:'Mise en place', autre:'Autre'};
 
 function openProductModal(id){
-  const p = id ? crmProducts.find(x=>x.id===id) : {id:null,sku:'',label:'',description:'',unitPrice:0,recurring:false,category:'materiel',stockable:false,active:true,documentId:null,secteurs:[]};
+  const p = id ? crmProducts.find(x=>x.id===id) : {id:null,sku:'',label:'',description:'',unitPrice:0,costPrice:null,recurring:false,category:'materiel',stockable:false,active:true,documentId:null,secteurs:[]};
   if(!p) return;
   if(CRM_DOCUMENTS===null){ dqLoadDocumentLibraryIfNeeded().then(()=>openProductModal(id)); return; }
   document.getElementById('modal-ct').innerHTML = `
@@ -9223,6 +9240,9 @@ function openProductModal(id){
         <div class="ff"><label>Libellé</label><input id="p-label" value="${esc(p.label)}" placeholder="Ex : Contrôle d'accès Sesame Oneway"></div>
         <div class="ff"><label>SKU (optionnel)</label><input id="p-sku" value="${esc(p.sku)}"></div>
         <div class="ff"><label>Prix unitaire (€ HT)</label><input type="number" id="p-price" value="${p.unitPrice||0}" min="0" step="0.01"></div>
+        <div class="ff"><label>Coût d'achat (€ HT, interne)</label><input type="number" id="p-cost" value="${p.costPrice??''}" min="0" step="0.01" placeholder="—">
+          <small style="color:var(--mu)">Sert au calcul de marge du devis (panneau interne) — jamais affiché au client.</small>
+        </div>
         <div class="ff"><label>Facturation</label><select id="p-recurring"><option value="0" ${!p.recurring?'selected':''}>Ponctuel</option><option value="1" ${p.recurring?'selected':''}>Mensuel</option></select></div>
         <div class="ff"><label>Catégorie (onglet devis)</label><select id="p-category">${Object.entries(CRM_PRODUCT_CATEGORY_LABEL).map(([k,l])=>`<option value="${k}" ${(p.category||'materiel')===k?'selected':''}>${l}</option>`).join('')}</select></div>
       </div>
@@ -9255,6 +9275,7 @@ async function saveProduct(id){
   const g=i=>(document.getElementById(i)||{value:''}).value;
   const body = {
     label: g('p-label').trim(), sku: g('p-sku').trim(), unitPrice: +g('p-price')||0,
+    costPrice: g('p-cost')===''?null:(+g('p-cost')||0),
     recurring: g('p-recurring')==='1', category: g('p-category')||'materiel', description: g('p-desc'),
     stockable: (document.getElementById('p-stockable')||{checked:false}).checked,
     documentId: g('p-document')||null,

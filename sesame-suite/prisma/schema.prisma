@@ -2855,6 +2855,12 @@ model CrmProduct {
   label       String
   description String? // sous-texte verbeux réutilisé sur les lignes de devis
   unitPrice   Float   @default(0)
+  // Coût d'achat (02/11/2026, demande client "pouvoir mettre le coût
+  // d'achat pour avoir un calcul de marge sur le devis") — JAMAIS exposé
+  // côté public : absent du select de GET /crmQuote/public et de tout
+  // payload envoyé à l'espace client (devis-signature.html), affiché
+  // uniquement dans le panneau interne du constructeur de devis (crm.html).
+  costPrice   Float?
   recurring   Boolean @default(false) // mensuel (true) ou ponctuel (false)
   // Catégorie d'onglet du constructeur de devis (22/10/2026, maquette devis
   // Sesame) — materiel (Équipements) | logiciel (Logiciel/abonnement) |

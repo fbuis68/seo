@@ -26,6 +26,7 @@ function shapeProduct(p: {
   label: string;
   description: string | null;
   unitPrice: number;
+  costPrice: number | null;
   recurring: boolean;
   category: string;
   stockable: boolean;
@@ -43,6 +44,7 @@ function shapeProduct(p: {
     label: p.label,
     description: p.description || "",
     unitPrice: p.unitPrice,
+    costPrice: p.costPrice,
     recurring: p.recurring,
     category: p.category,
     stockable: p.stockable,
@@ -71,6 +73,7 @@ interface ProductBody {
   label: string;
   description?: string;
   unitPrice?: number;
+  costPrice?: number | null;
   recurring?: boolean;
   category?: string;
   stockable?: boolean;
@@ -93,6 +96,7 @@ crmProductRouter.post(
         label: b.label.trim(),
         description: b.description,
         unitPrice: b.unitPrice ?? 0,
+        costPrice: b.costPrice ?? null,
         recurring: !!b.recurring,
         category: b.category || "materiel",
         stockable: !!b.stockable,
@@ -123,6 +127,7 @@ crmProductRouter.post(
         label: b.label?.trim(),
         description: b.description,
         unitPrice: b.unitPrice,
+        costPrice: b.costPrice === undefined ? undefined : b.costPrice,
         recurring: b.recurring,
         category: b.category,
         stockable: b.stockable,

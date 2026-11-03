@@ -1,0 +1,1 @@
+ALTER TABLE "CrmProduct" ADD COLUMN "costPrice" DOUBLE PRECISION;
