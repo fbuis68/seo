@@ -65,17 +65,16 @@
        conteneur (fenêtre large, colonne étroite, mobile...).  */
     .workspace { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
     .panel { padding: 14px; border: 1px solid var(--sesame-roi-border); border-radius: calc(var(--sesame-roi-radius) - 4px); background: var(--sesame-roi-surface); }
-    fieldset { display: grid; gap: 7px; margin: 0 0 14px; padding: 0; border: 0; }
-    legend { margin-bottom: 6px; color: var(--sesame-roi-muted); font-size: 11px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; }
-    .choice { display: grid; grid-template-columns: auto 1fr; gap: 9px; align-items: start; padding: 9px; border: 1px solid var(--sesame-roi-border); border-radius: 10px; cursor: pointer; }
+    fieldset { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; padding: 0; border: 0; }
+    legend { width: 100%; margin-bottom: 6px; color: var(--sesame-roi-muted); font-size: 11px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; }
+    .choice { display: flex; align-items: center; gap: 6px; padding: 7px 11px; border: 1px solid var(--sesame-roi-border); border-radius: 999px; cursor: pointer; white-space: nowrap; }
     .choice:has(input:checked) { border-color: var(--sesame-roi-accent); background: color-mix(in srgb, var(--sesame-roi-accent) 9%, var(--sesame-roi-surface)); }
-    .choice b { font-size: 12.5px; }
-    .choice small { font-size: 11px; }
-    input[type="checkbox"] { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--sesame-roi-accent); }
-    .choice span { display: grid; gap: 1px; }
-    .choice small, .help, .assumptions { color: var(--sesame-roi-muted); }
-    .fields { display: grid; gap: 10px; margin-top: 10px; }
+    .choice b { font-size: 12px; font-weight: 700; }
+    input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--sesame-roi-accent); flex-shrink: 0; }
+    .help, .assumptions { color: var(--sesame-roi-muted); }
+    .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 12px; align-items: end; }
     .field { display: grid; gap: 5px; font-size: 12.5px; font-weight: 800; }
+    .help { grid-column: 1 / -1; }
     input[type="number"] { width: 100%; padding: 10px; border: 1px solid var(--sesame-roi-border); border-radius: 9px; background: var(--sesame-roi-surface); color: var(--sesame-roi-text); font: inherit; }
     input[readonly] { background: var(--sesame-roi-background); color: var(--sesame-roi-muted); cursor: not-allowed; }
     .help { margin: 0; font-size: 11px; line-height: 1.4; }
@@ -147,12 +146,12 @@
             <form class="panel" novalidate>
               <fieldset>
                 <legend>Options incluses</legend>
-                <label class="choice"><input name="includeAccess" type="checkbox"><span><b>Contrôles d’accès</b><small>Ouvertures et droits digitalisés</small></span></label>
-                <label class="choice"><input name="includeEco" type="checkbox"><span><b>Check-in Éco Responsable</b><small>Arrivée digitale, ménage et serviettes</small></span></label>
-                <label class="choice"><input name="identity" type="checkbox"><span><b>Contrôle d’identité</b><small>6 min/séjour accepté</small></span></label>
-                <label class="choice"><input name="tax" type="checkbox"><span><b>Taxe de séjour</b><small>4 min/séjour accepté</small></span></label>
-                <label class="choice"><input name="shop" type="checkbox"><span><b>Boutique</b><small>4 min/séjour accepté</small></span></label>
-                <label class="choice"><input name="cleaning" type="checkbox"><span><b>Ménage</b><small>33 min/séjour accepté + impact environnemental</small></span></label>
+                <label class="choice" title="Ouvertures et droits digitalisés"><input name="includeAccess" type="checkbox"><b>Contrôles d’accès</b></label>
+                <label class="choice" title="Arrivée digitale, ménage et serviettes"><input name="includeEco" type="checkbox"><b>Check-in Éco Responsable</b></label>
+                <label class="choice" title="6 min/séjour accepté"><input name="identity" type="checkbox"><b>Contrôle d’identité</b></label>
+                <label class="choice" title="4 min/séjour accepté"><input name="tax" type="checkbox"><b>Taxe de séjour</b></label>
+                <label class="choice" title="4 min/séjour accepté"><input name="shop" type="checkbox"><b>Boutique</b></label>
+                <label class="choice" title="33 min/séjour accepté + impact environnemental"><input name="cleaning" type="checkbox"><b>Ménage</b></label>
               </fieldset>
               <div class="fields">
                 <label class="field">Nombre d’accès / chambres<input name="roomCount" type="number" readonly aria-readonly="true"></label>
