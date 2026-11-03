@@ -47,12 +47,22 @@
       display: block;
       color: var(--sesame-roi-text);
       font-family: var(--sesame-roi-font);
+      /* Repère pour "fait en sorte que le formulaire soit responsive"
+         (03/11/2026) : le composant est intégré dans une colonne étroite
+         (public/devis-signature.html, .wrap max-width 720px + .card padding
+         24px, ~632px dispo) alors que le bloc Media original ci-dessous ne
+         réagissait qu'à la largeur de LA FENÊTRE du navigateur, pas à
+         l'espace réellement disponible — un écran de bureau large gardait
+         donc la mise en page "3 colonnes" même écrasée dans un espace
+         étroit (d'où le texte tassé/coupé constaté). container-type fait
+         réagir les @container ci-dessous à la largeur RÉELLE du composant. */
+      container-type: inline-size;
     }
     * { box-sizing: border-box; }
-    .shell { padding: clamp(18px, 3vw, 32px); border: 1px solid var(--sesame-roi-border); border-radius: var(--sesame-roi-radius); background: var(--sesame-roi-background); }
+    .shell { padding: clamp(18px, 3cqi, 32px); border: 1px solid var(--sesame-roi-border); border-radius: var(--sesame-roi-radius); background: var(--sesame-roi-background); }
     .heading { margin-bottom: 22px; }
     .eyebrow { margin: 0 0 6px; color: var(--sesame-roi-primary); font-size: 12px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
-    h2 { margin: 0; font-size: clamp(25px, 4vw, 38px); line-height: 1.05; }
+    h2 { margin: 0; font-size: clamp(22px, 6cqi, 38px); line-height: 1.1; }
     .intro { max-width: 760px; margin: 10px 0 0; color: var(--sesame-roi-muted); line-height: 1.55; }
     .workspace { display: grid; grid-template-columns: minmax(250px, .72fr) minmax(0, 1.28fr); gap: 20px; }
     .panel { padding: 18px; border: 1px solid var(--sesame-roi-border); border-radius: calc(var(--sesame-roi-radius) - 4px); background: var(--sesame-roi-surface); }
@@ -71,7 +81,7 @@
     .results { display: grid; gap: 16px; }
     .hero { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
     .metric { min-width: 0; padding: 16px; border: 1px solid var(--sesame-roi-border); border-radius: 14px; background: var(--sesame-roi-surface); }
-    .metric strong { display: block; margin-top: 5px; color: var(--sesame-roi-primary); font-size: clamp(24px, 4vw, 36px); line-height: 1; }
+    .metric strong { display: block; margin-top: 5px; color: var(--sesame-roi-primary); font-size: clamp(20px, 7cqi, 36px); line-height: 1; }
     .metric small { color: var(--sesame-roi-muted); font-weight: 800; }
     .details { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
     .detail { display: flex; justify-content: space-between; gap: 12px; padding: 12px 14px; border-radius: 11px; background: color-mix(in srgb, var(--sesame-roi-accent) 7%, var(--sesame-roi-surface)); }
@@ -80,6 +90,20 @@
     .empty { padding: 28px; text-align: center; color: var(--sesame-roi-muted); }
     .error { padding: 16px; border: 1px solid #b42318; border-radius: 12px; color: #b42318; background: #fff4f2; }
     [hidden] { display: none !important; }
+    /* @container (largeur réelle du composant) remplace l'ancien @media
+       (largeur de la fenêtre) — seul moyen fiable de rester responsive une
+       fois intégré dans une colonne étroite (cf. note sur :host ci-dessus).
+       @media gardé juste après comme repli pour un navigateur trop ancien
+       pour @container (dégradé silencieux, jamais pire que l'existant). */
+    @container (max-width: 760px) {
+      .workspace { grid-template-columns: 1fr; }
+    }
+    @container (max-width: 560px) {
+      .hero, .details { grid-template-columns: 1fr; }
+    }
+    @container (min-width: 561px) and (max-width: 760px) {
+      .hero { grid-template-columns: repeat(2, 1fr); }
+    }
     @media (max-width: 760px) {
       .workspace, .hero, .details { grid-template-columns: 1fr; }
     }
