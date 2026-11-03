@@ -82,6 +82,10 @@
   .meeting-subject{font-weight:700;font-size:14.5px;margin:3px 0 10px}
   .meeting-summary{font-size:13.5px;white-space:pre-wrap;color:#333;background:var(--bg);padding:16px 18px;border-radius:12px;line-height:1.6}
   video{width:100%;border-radius:12px;margin-top:12px;display:block;background:#000}
+  .roi-field{display:block;margin-top:4px}
+  .roi-field-row{display:flex;justify-content:space-between;font-size:12.5px;color:var(--mu);font-weight:600}
+  .roi-field-row output{color:var(--tx);font-weight:700;font-variant-numeric:tabular-nums}
+  .roi-field input[type=range]{width:100%;accent-color:var(--a);margin-top:10px;min-height:28px}
 </style>
 </head>
 <body>
@@ -447,9 +451,55 @@ function roiRoomCount(){
 function roiTabHtml(){
   const n = roiRoomCount();
   const countAttrs = n ? ` access-count="${n}" eco-room-count="${n}"` : '';
+  const investment = (QUOTE.totals && QUOTE.totals.totalHT) || 0;
+  const license = (QUOTE.totals && QUOTE.totals.mrrNet) || 0;
   return `<sesame-roi-calculator include-access="true" include-eco="true"${countAttrs}
     style="--sesame-roi-primary:var(--a);--sesame-roi-accent:#1a6b47;--sesame-roi-background:var(--bg);--sesame-roi-surface:var(--card);--sesame-roi-border:var(--bdr);--sesame-roi-text:var(--tx);--sesame-roi-muted:var(--mu);--sesame-roi-radius:14px;--sesame-roi-font:inherit">
-  </sesame-roi-calculator>`;
+  </sesame-roi-calculator>
+  <div class="card" style="margin-top:14px">
+    <div class="blk-hd" style="color:var(--a)">Valorisation en €</div>
+    <div class="sub" style="margin-bottom:10px">Temps gagné estimé ci-dessus, valorisé à votre coût horaire chargé.</div>
+    <label class="roi-field"><span class="roi-field-row">Coût horaire chargé <output id="roi-eur-hourly-v">25 €</output></span>
+      <input type="range" id="roi-eur-hourly" min="10" max="70" step="1" value="25" oninput="roiEurUpdate()"></label>
+    <div class="stat-grid" style="margin-top:14px">
+      <div class="stat-card"><div class="stat-lbl">Investissement initial HT</div><div class="stat-val">${fmtEUR(investment)}</div></div>
+      <div class="stat-card"><div class="stat-lbl">Licence mensuelle HT</div><div class="stat-val">${fmtEUR(license)}</div></div>
+      <div class="stat-card grand"><div class="stat-lbl">Gain potentiel / mois</div><div class="stat-val" id="roi-eur-monthly">—</div></div>
+      <div class="stat-card"><div class="stat-lbl">Gain potentiel / an</div><div class="stat-val" id="roi-eur-annual">—</div></div>
+    </div>
+    <div class="sub" style="margin-top:10px">Retour sur investissement estimé : <strong id="roi-eur-payback" style="color:var(--tx)">—</strong></div>
+    <p class="sub" style="margin-top:10px;line-height:1.6">Gain mensuel = temps gagné (calculateur ci-dessus) × coût horaire chargé − licence mensuelle. Retour = investissement initial ÷ gain mensuel positif (« Non atteint » si nul ou négatif). Estimation indicative, hors financement/maintenance/fiscalité.</p>
+  </div>`;
+}
+// Valorisation € (02/11/2026, demande client "garder ROI en €") — le
+// calculateur officiel ne produit QUE du temps (cf. roi-engine.js, aucun
+// gain monétaire en mode accès+éco) : ce bloc réutilise son résultat réel
+// (monthlyHours, écouté via l'événement sesame-roi-change du widget,
+// jamais recalculé indépendamment) et y applique un coût horaire pour
+// obtenir un gain en euros et un retour sur investissement.
+let ROI_LAST_RESULT = null;
+function roiOnWidgetChange(e){
+  ROI_LAST_RESULT = (e.detail && e.detail.result) || null;
+  roiEurUpdate();
+}
+function roiEurUpdate(){
+  const hourlyEl = document.getElementById('roi-eur-hourly');
+  if(!hourlyEl) return;
+  const hourly = Number(hourlyEl.value)||0;
+  document.getElementById('roi-eur-hourly-v').textContent = fmtEUR(hourly);
+  const investment = (QUOTE.totals && QUOTE.totals.totalHT) || 0;
+  const license = (QUOTE.totals && QUOTE.totals.mrrNet) || 0;
+  const monthlyEl = document.getElementById('roi-eur-monthly'), annualEl = document.getElementById('roi-eur-annual'), paybackEl = document.getElementById('roi-eur-payback');
+  if(!monthlyEl) return;
+  if(!ROI_LAST_RESULT){ monthlyEl.textContent='—'; annualEl.textContent='—'; paybackEl.textContent='—'; return; }
+  const monthlyHours = ROI_LAST_RESULT.monthlyHours||0;
+  const monthly = monthlyHours*hourly - license;
+  const annual = monthly*12;
+  const payback = monthly>0 ? investment/monthly : null;
+  const dec = n => (n||0).toLocaleString('fr-FR',{maximumFractionDigits:1});
+  monthlyEl.textContent = fmtEUR(monthly);
+  annualEl.textContent = fmtEUR(annual);
+  paybackEl.textContent = payback===null ? 'Non atteint' : dec(payback)+' mois';
 }
 function switchTab(key){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===key));
@@ -488,6 +538,12 @@ function render(){
   document.getElementById('app').innerHTML = tabNav + devisPanel + roiPanel + documentsPanel + meetingsPanel + bookingPanel;
   if(!QUOTE.alreadySigned) setupCanvas();
   enhanceVimeoThumbs();
+  if(showRoi){
+    ROI_LAST_RESULT = null;
+    const roiEl = document.querySelector('sesame-roi-calculator');
+    if(roiEl) roiEl.addEventListener('sesame-roi-change', roiOnWidgetChange);
+    roiEurUpdate();
+  }
 }
 
 let ctx, drawing=false, hasDrawn=false;
