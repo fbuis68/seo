@@ -427,6 +427,15 @@ function signatureSectionHtml(){
 }
 
 const TAB_TRACK_LABEL = {devis:'Devis', roi:'Rentabilité', documents:'Documents', meetings:'Comptes-rendus', booking:'Prendre rendez-vous'};
+// Modules complémentaires (02/11/2026, demande client) — chacun ajoute un
+// temps gagné supplémentaire par arrivée aux minutes réglées au curseur,
+// plutôt qu'un nouveau paramètre séparé : ce sont des étapes d'accueil
+// automatisées en plus (même logique que "minutes gagnées / arrivée").
+const ROI_OPTIONS = [
+  {id:'roi-opt-identite', label:"Pièce d'identité (vérification automatisée)", minutes:2},
+  {id:'roi-opt-taxe', label:'Taxe de séjour (calcul et collecte automatisés)', minutes:1},
+  {id:'roi-opt-eco', label:'Module éco-responsable (consignes automatisées)', minutes:1},
+];
 // Simulateur de rentabilité (02/11/2026, intégration pack présentation
 // client) — investissement et licence repris des VRAIS totaux du devis
 // (QUOTE.totals, déjà calculés côté serveur), jamais de valeurs figées.
@@ -437,14 +446,16 @@ function roiUpdate(){
   const g = id => Number((document.getElementById(id)||{value:0}).value);
   const dec = n => (n||0).toLocaleString('fr-FR',{maximumFractionDigits:1});
   const arrivals = g('roi-arrivals'), minutes = g('roi-minutes'), hourly = g('roi-hourly'), days = g('roi-days');
+  const optionMinutes = ROI_OPTIONS.reduce((s,o)=>{ const el=document.getElementById(o.id); return s+(el&&el.checked?o.minutes:0); },0);
+  const effectiveMinutes = minutes+optionMinutes;
   const investment = (QUOTE.totals && QUOTE.totals.totalHT) || 0;
   const license = (QUOTE.totals && QUOTE.totals.mrrNet) || 0;
-  const hours = arrivals*minutes*days/60;
+  const hours = arrivals*effectiveMinutes*days/60;
   const monthly = hours*hourly - license;
   const annual = monthly*12;
   const payback = monthly>0 ? investment/monthly : null;
   document.getElementById('roi-arrivals-v').textContent = arrivals;
-  document.getElementById('roi-minutes-v').textContent = minutes+' min';
+  document.getElementById('roi-minutes-v').textContent = optionMinutes>0 ? minutes+' + '+optionMinutes+' min' : minutes+' min';
   document.getElementById('roi-hourly-v').textContent = fmtEUR(hourly);
   document.getElementById('roi-days-v').textContent = days;
   document.getElementById('roi-net').textContent = fmtEUR(monthly);
@@ -466,6 +477,12 @@ function roiTabHtml(){
         <input type="range" id="roi-hourly" min="10" max="70" step="1" value="25" oninput="roiUpdate()"></label>
       <label class="roi-field"><span class="roi-field-row">Jours d'activité / mois <output id="roi-days-v">22</output></span>
         <input type="range" id="roi-days" min="1" max="31" step="1" value="22" oninput="roiUpdate()"></label>
+      <div class="roi-field" style="margin-top:22px">
+        <span class="roi-field-row" style="margin-bottom:4px">Modules complémentaires (temps gagné en plus)</span>
+        ${ROI_OPTIONS.map(o=>`<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:10px;cursor:pointer">
+          <input type="checkbox" id="${o.id}" onchange="roiUpdate()">${esc(o.label)} <span class="sub" style="margin-left:auto;flex-shrink:0">+${o.minutes} min</span>
+        </label>`).join('')}
+      </div>
       <div class="stat-grid" style="margin-top:18px">
         <div class="stat-card"><div class="stat-lbl">Investissement initial HT</div><div class="stat-val">${fmtEUR(investment)}</div></div>
         <div class="stat-card"><div class="stat-lbl">Licence mensuelle HT</div><div class="stat-val">${fmtEUR(license)}</div></div>
