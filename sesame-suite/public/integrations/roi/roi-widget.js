@@ -49,11 +49,11 @@
       font-family: var(--sesame-roi-font);
     }
     * { box-sizing: border-box; }
-    .shell { padding: clamp(18px, 3vw, 32px); border: 1px solid var(--sesame-roi-border); border-radius: var(--sesame-roi-radius); background: var(--sesame-roi-background); }
-    .heading { margin-bottom: 22px; }
-    .eyebrow { margin: 0 0 6px; color: var(--sesame-roi-primary); font-size: 12px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
-    h2 { margin: 0; font-size: clamp(22px, 5vw, 38px); line-height: 1.1; }
-    .intro { max-width: 760px; margin: 10px 0 0; color: var(--sesame-roi-muted); line-height: 1.55; }
+    .shell { padding: clamp(14px, 2.5vw, 24px); border: 1px solid var(--sesame-roi-border); border-radius: var(--sesame-roi-radius); background: var(--sesame-roi-background); }
+    .heading { margin-bottom: 14px; }
+    .eyebrow { margin: 0 0 4px; color: var(--sesame-roi-primary); font-size: 11px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+    h2 { margin: 0; font-size: clamp(19px, 3.5vw, 26px); line-height: 1.1; }
+    .intro { max-width: 760px; margin: 6px 0 0; color: var(--sesame-roi-muted); line-height: 1.4; font-size: 12.5px; }
     /* 03/11/2026 — "toujours pas terrible" : les paliers @container/@media
        précédents se cassaient parce que .hero/.details sont imbriqués DANS
        .workspace, qui se réduit lui-même déjà en 1 colonne ; un seuil basé
@@ -63,30 +63,33 @@
        réellement reçue par CHAQUE grille, sans seuil à deviner ni ordre
        d'imbrication à suivre — standard et robuste quel que soit le
        conteneur (fenêtre large, colonne étroite, mobile...).  */
-    .workspace { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
-    .panel { padding: 18px; border: 1px solid var(--sesame-roi-border); border-radius: calc(var(--sesame-roi-radius) - 4px); background: var(--sesame-roi-surface); }
-    fieldset { display: grid; gap: 10px; margin: 0 0 18px; padding: 0; border: 0; }
-    legend { margin-bottom: 10px; color: var(--sesame-roi-muted); font-size: 12px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; }
-    .choice { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; padding: 12px; border: 1px solid var(--sesame-roi-border); border-radius: 12px; cursor: pointer; }
+    .workspace { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+    .panel { padding: 14px; border: 1px solid var(--sesame-roi-border); border-radius: calc(var(--sesame-roi-radius) - 4px); background: var(--sesame-roi-surface); }
+    fieldset { display: grid; gap: 7px; margin: 0 0 14px; padding: 0; border: 0; }
+    legend { margin-bottom: 6px; color: var(--sesame-roi-muted); font-size: 11px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; }
+    .choice { display: grid; grid-template-columns: auto 1fr; gap: 9px; align-items: start; padding: 9px; border: 1px solid var(--sesame-roi-border); border-radius: 10px; cursor: pointer; }
     .choice:has(input:checked) { border-color: var(--sesame-roi-accent); background: color-mix(in srgb, var(--sesame-roi-accent) 9%, var(--sesame-roi-surface)); }
-    input[type="checkbox"] { width: 19px; height: 19px; margin: 1px 0 0; accent-color: var(--sesame-roi-accent); }
-    .choice span { display: grid; gap: 2px; }
+    .choice b { font-size: 12.5px; }
+    .choice small { font-size: 11px; }
+    input[type="checkbox"] { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--sesame-roi-accent); }
+    .choice span { display: grid; gap: 1px; }
     .choice small, .help, .assumptions { color: var(--sesame-roi-muted); }
-    .fields { display: grid; gap: 12px; margin-top: 14px; }
-    .field { display: grid; gap: 6px; font-size: 13px; font-weight: 800; }
-    input[type="number"] { width: 100%; padding: 12px; border: 1px solid var(--sesame-roi-border); border-radius: 10px; background: var(--sesame-roi-surface); color: var(--sesame-roi-text); font: inherit; }
-    .eco-options { display: grid; gap: 8px; margin-top: 12px; }
-    .eco-options .choice { padding: 10px; }
-    .results { display: grid; gap: 16px; }
-    .hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
-    .metric { min-width: 0; padding: 16px; border: 1px solid var(--sesame-roi-border); border-radius: 14px; background: var(--sesame-roi-surface); }
-    .metric strong { display: block; margin-top: 5px; color: var(--sesame-roi-primary); font-size: clamp(20px, 5vw, 36px); line-height: 1; }
-    .metric small { color: var(--sesame-roi-muted); font-weight: 800; }
-    .details { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
-    .detail { display: flex; justify-content: space-between; gap: 12px; padding: 12px 14px; border-radius: 11px; background: color-mix(in srgb, var(--sesame-roi-accent) 7%, var(--sesame-roi-surface)); }
+    .fields { display: grid; gap: 10px; margin-top: 10px; }
+    .field { display: grid; gap: 5px; font-size: 12.5px; font-weight: 800; }
+    input[type="number"] { width: 100%; padding: 10px; border: 1px solid var(--sesame-roi-border); border-radius: 9px; background: var(--sesame-roi-surface); color: var(--sesame-roi-text); font: inherit; }
+    input[readonly] { background: var(--sesame-roi-background); color: var(--sesame-roi-muted); cursor: not-allowed; }
+    .help { margin: 0; font-size: 11px; line-height: 1.4; }
+    .results { display: grid; gap: 10px; }
+    .hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+    .metric { min-width: 0; padding: 10px; border: 1px solid var(--sesame-roi-border); border-radius: 12px; background: var(--sesame-roi-surface); }
+    .metric small { font-size: 11px; color: var(--sesame-roi-muted); font-weight: 800; }
+    .metric strong { display: block; margin-top: 3px; color: var(--sesame-roi-primary); font-size: clamp(17px, 4vw, 26px); line-height: 1; }
+    .metric span { font-size: 11px; color: var(--sesame-roi-muted); }
+    .details { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+    .detail { display: flex; justify-content: space-between; gap: 10px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--sesame-roi-accent) 7%, var(--sesame-roi-surface)); font-size: 12.5px; }
     .detail b { color: var(--sesame-roi-accent); }
-    .assumptions { margin: 0; padding: 14px; border-left: 4px solid var(--sesame-roi-primary); border-radius: 8px; background: var(--sesame-roi-surface); font-size: 13px; line-height: 1.55; }
-    .empty { padding: 28px; text-align: center; color: var(--sesame-roi-muted); }
+    .assumptions { margin: 0; padding: 10px 12px; border-left: 3px solid var(--sesame-roi-primary); border-radius: 8px; background: var(--sesame-roi-surface); font-size: 11.5px; line-height: 1.45; }
+    .empty { padding: 20px; text-align: center; color: var(--sesame-roi-muted); }
     .error { padding: 16px; border: 1px solid #b42318; border-radius: 12px; color: #b42318; background: #fff4f2; }
     [hidden] { display: none !important; }
   `;
@@ -139,29 +142,23 @@
           <header class="heading">
             <p class="eyebrow">Simulation indicative</p>
             <h2>Calculateur ROI Sesame</h2>
-            <p class="intro">Estime temps opérationnel, jours-homme, équivalent temps plein et impact environnemental selon périmètre choisi.</p>
           </header>
           <div class="workspace">
             <form class="panel" novalidate>
               <fieldset>
-                <legend>Gammes incluses</legend>
+                <legend>Options incluses</legend>
                 <label class="choice"><input name="includeAccess" type="checkbox"><span><b>Contrôles d’accès</b><small>Ouvertures et droits digitalisés</small></span></label>
                 <label class="choice"><input name="includeEco" type="checkbox"><span><b>Check-in Éco Responsable</b><small>Arrivée digitale, ménage et serviettes</small></span></label>
+                <label class="choice"><input name="identity" type="checkbox"><span><b>Contrôle d’identité</b><small>6 min/séjour accepté</small></span></label>
+                <label class="choice"><input name="tax" type="checkbox"><span><b>Taxe de séjour</b><small>4 min/séjour accepté</small></span></label>
+                <label class="choice"><input name="shop" type="checkbox"><span><b>Boutique</b><small>4 min/séjour accepté</small></span></label>
+                <label class="choice"><input name="cleaning" type="checkbox"><span><b>Ménage</b><small>33 min/séjour accepté + impact environnemental</small></span></label>
               </fieldset>
-              <div class="fields" data-access-fields>
-                <label class="field">Nombre de points d’accès<input name="accessCount" type="number" min="0" max="5000" step="1"></label>
+              <div class="fields">
+                <label class="field">Nombre d’accès / chambres<input name="roomCount" type="number" readonly aria-readonly="true"></label>
                 <label class="field">Taux d’occupation accès (%)<input name="accessOccupancyPercent" type="number" min="0" max="100" step="1"></label>
-                <p class="help">Hypothèse actuelle : 2 utilisations/jour, 5 minutes gagnées.</p>
-              </div>
-              <div class="fields" data-eco-fields>
-                <label class="field">Nombre de chambres<input name="ecoRoomCount" type="number" min="0" max="5000" step="1"></label>
-                <div class="eco-options">
-                  <label class="choice"><input name="identity" type="checkbox"><span><b>Contrôle d’identité</b><small>6 min/séjour accepté</small></span></label>
-                  <label class="choice"><input name="tax" type="checkbox"><span><b>Taxe de séjour</b><small>4 min/séjour accepté</small></span></label>
-                  <label class="choice"><input name="shop" type="checkbox"><span><b>Boutique</b><small>4 min/séjour accepté</small></span></label>
-                  <label class="choice"><input name="cleaning" type="checkbox"><span><b>Ménage</b><small>33 min/séjour accepté + impact environnemental</small></span></label>
-                </div>
-                <p class="help">Hypothèses actuelles : 80 % d’occupation, 25 % d’acceptation, séjour moyen 3 nuits.</p>
+                <input type="hidden" name="accessCount"><input type="hidden" name="ecoRoomCount">
+                <p class="help">Hypothèses : 2 utilisations/jour, 5 min gagnées (accès) · 80 % d’occupation, 25 % d’acceptation, séjour moyen 3 nuits (éco).</p>
               </div>
             </form>
             <section class="results" aria-live="polite">
@@ -171,12 +168,12 @@
                 <div class="metric"><small>Équivalent temps plein</small><strong data-output="fte">0,00</strong><span>ETP</span></div>
               </div>
               <div class="details">
-                <div class="detail"><span>Opérations estimées</span><b data-output="annualOperations">0</b></div>
+                <div class="detail"><span>Opérations</span><b data-output="annualOperations">0</b></div>
+                <div class="detail"><span>Temps mensuel</span><b><span data-output="monthlyHours">0</span> h/mois</b></div>
                 <div class="detail"><span>Temps accès</span><b><span data-output="automationAnnualHours">0</span> h/an</b></div>
                 <div class="detail"><span>Temps Éco</span><b><span data-output="ecoAnnualHours">0</span> h/an</b></div>
                 <div class="detail"><span>Eau économisée</span><b data-output="waterSavedLiters">—</b></div>
                 <div class="detail"><span>CO₂e évité</span><b data-output="co2SavedKg">—</b></div>
-                <div class="detail"><span>Temps mensuel</span><b><span data-output="monthlyHours">0</span> h/mois</b></div>
               </div>
               <p class="assumptions" data-note></p>
               <p class="empty" data-empty hidden>Sélectionnez au moins une gamme.</p>
@@ -194,9 +191,16 @@
       const value = (name, attribute, fallback) => config[name] ?? this.getAttribute(attribute) ?? fallback;
       this.form.elements.includeAccess.checked = boolean(value('includeAccess', 'include-access', true), true);
       this.form.elements.includeEco.checked = boolean(value('includeEco', 'include-eco', false), false);
-      this.form.elements.accessCount.value = number(value('accessCount', 'access-count', 50), 50);
+      // Un seul champ affiché (non modifiable) pour le nombre d’accès/chambres
+      // — demande client 03/11/2026, il apparaissait deux fois (accessCount
+      // ET ecoRoomCount, mêmes champs numériques séparés). Les deux entrées
+      // cachées restent alimentées avec la même valeur pour le moteur de
+      // calcul, qui continue d’attendre ces deux noms distincts.
+      const room = number(value('accessCount', 'access-count', value('ecoRoomCount', 'eco-room-count', 50)), 50);
+      this.form.elements.roomCount.value = room;
+      this.form.elements.accessCount.value = room;
+      this.form.elements.ecoRoomCount.value = room;
       this.form.elements.accessOccupancyPercent.value = number(value('accessOccupancyPercent', 'access-occupancy', 70), 70);
-      this.form.elements.ecoRoomCount.value = number(value('ecoRoomCount', 'eco-room-count', 50), 50);
       const options = config.ecoOptions || {};
       this.form.elements.identity.checked = boolean(options.identity, true);
       this.form.elements.tax.checked = boolean(options.tax, true);
@@ -229,8 +233,6 @@
       const inputs = this.getInputs();
       const result = this.engine.calculate(inputs);
       this.result = result;
-      this.shadowRoot.querySelector('[data-access-fields]').hidden = !inputs.includeAccess;
-      this.shadowRoot.querySelector('[data-eco-fields]').hidden = !inputs.includeEco;
       const output = (name, value) => { this.shadowRoot.querySelector(`[data-output="${name}"]`).textContent = value; };
       output('annualHours', format(result.annualHours));
       output('staffDays', format(result.staffDays));
