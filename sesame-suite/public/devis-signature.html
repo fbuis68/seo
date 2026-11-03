@@ -7,6 +7,11 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/favicon-192.png">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<!-- Calculateur ROI officiel Sesame (02/11/2026, remplace l'ancien simulateur
+     maison) — Web Component Shadow DOM, charge /roi-engine.js lui-même
+     (chemin relatif codé en dur dans le fichier vendor : '../../roi-engine.js'
+     depuis /integrations/roi/roi-widget.js, d'où ce chemin précis). -->
+<script src="/integrations/roi/roi-widget.js"></script>
 <style>
   :root{--bg:#f6f6f4;--card:#fff;--bdr:#eae8e3;--tx:#1a1a1a;--mu:#8a8680;--a:#8b1040;--a-tint:#fbeeee;
     --c-materiel:#0c76d9;--c-service:#c9860a;--c-logiciel:#7a5cf0;--c-autre:#5a8a2e;
@@ -77,18 +82,6 @@
   .meeting-subject{font-weight:700;font-size:14.5px;margin:3px 0 10px}
   .meeting-summary{font-size:13.5px;white-space:pre-wrap;color:#333;background:var(--bg);padding:16px 18px;border-radius:12px;line-height:1.6}
   video{width:100%;border-radius:12px;margin-top:12px;display:block;background:#000}
-  .roi-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;margin-top:16px}
-  .roi-field{display:block;margin-top:18px}
-  .roi-field:first-child{margin-top:0}
-  .roi-field-row{display:flex;justify-content:space-between;font-size:12.5px;color:var(--mu);font-weight:600}
-  .roi-field-row output{color:var(--tx);font-weight:700;font-variant-numeric:tabular-nums}
-  .roi-grid input[type=range]{width:100%;accent-color:var(--a);margin-top:10px;min-height:28px}
-  .roi-result{background:var(--a-tint);border-radius:12px;padding:18px}
-  .roi-result .stat-val{font-size:32px;color:var(--a)}
-  .roi-pair{display:flex;justify-content:space-between;font-size:13px;margin-top:10px}
-  .roi-pair strong{font-weight:700;font-variant-numeric:tabular-nums}
-  .roi-payback{font-size:22px;font-weight:700;color:var(--tx)}
-  @media(max-width:600px){.roi-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -437,83 +430,26 @@ const TAB_TRACK_LABEL = {devis:'Devis', roi:'Rentabilité', documents:'Documents
 // liste). Secteur vide/non renseigné = onglet affiché (fiche par défaut
 // "Hôtellerie" à la création, cf. crm.html openNewModal()).
 const ROI_EXCLUDED_SECTEURS = ['Garde meuble','Sport','Agence gestion patrimoine','Bureaux','Padel'];
-// Modules complémentaires (02/11/2026, demande client) — chacun ajoute un
-// temps gagné supplémentaire par arrivée aux minutes réglées au curseur,
-// plutôt qu'un nouveau paramètre séparé : ce sont des étapes d'accueil
-// automatisées en plus (même logique que "minutes gagnées / arrivée").
-const ROI_OPTIONS = [
-  {id:'roi-opt-identite', label:"Pièce d'identité (vérification automatisée)", minutes:2},
-  {id:'roi-opt-taxe', label:'Taxe de séjour (calcul et collecte automatisés)', minutes:1},
-  {id:'roi-opt-eco', label:'Module éco-responsable (consignes automatisées)', minutes:1},
-];
-// Simulateur de rentabilité (02/11/2026, intégration pack présentation
-// client) — investissement et licence repris des VRAIS totaux du devis
-// (QUOTE.totals, déjà calculés côté serveur), jamais de valeurs figées.
-// Formule reprise à l'identique du pack fourni : temps libéré = arrivées ×
-// minutes gagnées × jours ÷ 60 ; gain mensuel = temps libéré × coût
-// horaire − licence ; retour = investissement ÷ gain mensuel positif.
-function roiUpdate(){
-  const g = id => Number((document.getElementById(id)||{value:0}).value);
-  const dec = n => (n||0).toLocaleString('fr-FR',{maximumFractionDigits:1});
-  const arrivals = g('roi-arrivals'), minutes = g('roi-minutes'), hourly = g('roi-hourly'), days = g('roi-days');
-  const optionMinutes = ROI_OPTIONS.reduce((s,o)=>{ const el=document.getElementById(o.id); return s+(el&&el.checked?o.minutes:0); },0);
-  const effectiveMinutes = minutes+optionMinutes;
-  const investment = (QUOTE.totals && QUOTE.totals.totalHT) || 0;
-  const license = (QUOTE.totals && QUOTE.totals.mrrNet) || 0;
-  const hours = arrivals*effectiveMinutes*days/60;
-  const monthly = hours*hourly - license;
-  const annual = monthly*12;
-  const payback = monthly>0 ? investment/monthly : null;
-  document.getElementById('roi-arrivals-v').textContent = arrivals;
-  document.getElementById('roi-minutes-v').textContent = optionMinutes>0 ? minutes+' + '+optionMinutes+' min' : minutes+' min';
-  document.getElementById('roi-hourly-v').textContent = fmtEUR(hourly);
-  document.getElementById('roi-days-v').textContent = days;
-  document.getElementById('roi-net').textContent = fmtEUR(monthly);
-  document.getElementById('roi-hours').textContent = dec(hours)+' h';
-  document.getElementById('roi-annual').textContent = fmtEUR(annual);
-  document.getElementById('roi-payback').textContent = payback===null ? 'Non atteint' : dec(payback)+' mois';
+// Calculateur ROI officiel Sesame (02/11/2026, remplace le simulateur
+// maison précédent) — Web Component <sesame-roi-calculator> (public/
+// integrations/roi/roi-widget.js + public/roi-engine.js), couvre déjà
+// pièce d'identité/taxe de séjour/boutique/ménage via ses propres cases à
+// cocher "Check-in Éco Responsable". Nombre de points d'accès ET de
+// chambres initialisés par défaut sur le nombre réel de l'équipement
+// principal de CE devis (somme des quantités des lignes "Équipements",
+// hors "Accessoires" — même règle que le compteur "accès" déjà affiché
+// côté constructeur, cf. public/crm.html db-aside) ; 50 (valeur par
+// défaut du widget) si le devis n'a encore aucune ligne équipement.
+function roiRoomCount(){
+  const n = (QUOTE.lines||[]).filter(l=>l.category==='materiel' && l.group!=='accessory').reduce((s,l)=>s+(l.qty||0),0);
+  return n>0 ? n : null;
 }
 function roiTabHtml(){
-  const investment = (QUOTE.totals && QUOTE.totals.totalHT) || 0;
-  const license = (QUOTE.totals && QUOTE.totals.mrrNet) || 0;
-  return `<div class="sub" style="margin-bottom:4px">Trois paramètres, une estimation immédiate du temps libéré par Sesame.</div>
-  <div class="roi-grid">
-    <div>
-      <label class="roi-field"><span class="roi-field-row">Arrivées moyennes / jour <output id="roi-arrivals-v">30</output></span>
-        <input type="range" id="roi-arrivals" min="0" max="150" step="1" value="30" oninput="roiUpdate()"></label>
-      <label class="roi-field"><span class="roi-field-row">Minutes gagnées / arrivée <output id="roi-minutes-v">5 min</output></span>
-        <input type="range" id="roi-minutes" min="0" max="20" step="1" value="5" oninput="roiUpdate()"></label>
-      <label class="roi-field"><span class="roi-field-row">Coût horaire chargé <output id="roi-hourly-v">25 €</output></span>
-        <input type="range" id="roi-hourly" min="10" max="70" step="1" value="25" oninput="roiUpdate()"></label>
-      <label class="roi-field"><span class="roi-field-row">Jours d'activité / mois <output id="roi-days-v">22</output></span>
-        <input type="range" id="roi-days" min="1" max="31" step="1" value="22" oninput="roiUpdate()"></label>
-      <div class="roi-field" style="margin-top:22px">
-        <span class="roi-field-row" style="margin-bottom:4px">Modules complémentaires (temps gagné en plus)</span>
-        ${ROI_OPTIONS.map(o=>`<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:10px;cursor:pointer">
-          <input type="checkbox" id="${o.id}" onchange="roiUpdate()">${esc(o.label)} <span class="sub" style="margin-left:auto;flex-shrink:0">+${o.minutes} min</span>
-        </label>`).join('')}
-      </div>
-      <div class="stat-grid" style="margin-top:18px">
-        <div class="stat-card"><div class="stat-lbl">Investissement initial HT</div><div class="stat-val">${fmtEUR(investment)}</div></div>
-        <div class="stat-card"><div class="stat-lbl">Licence mensuelle HT</div><div class="stat-val">${fmtEUR(license)}</div></div>
-      </div>
-    </div>
-    <div class="roi-result">
-      <div class="stat-lbl">Temps valorisé, licence déduite</div>
-      <div class="stat-val" id="roi-net">—</div>
-      <div class="sub">de gain potentiel par mois</div>
-      <hr style="border:0;border-top:1px solid rgba(139,16,64,.15);margin:14px 0">
-      <div class="roi-pair"><span>Temps libéré / mois</span><strong id="roi-hours">—</strong></div>
-      <div class="roi-pair"><span>Gain potentiel / an</span><strong id="roi-annual">—</strong></div>
-      <hr style="border:0;border-top:1px solid rgba(139,16,64,.15);margin:14px 0">
-      <div class="sub">Retour sur investissement estimé</div>
-      <div class="roi-payback" id="roi-payback">—</div>
-    </div>
-  </div>
-  <details style="margin-top:16px">
-    <summary style="cursor:pointer;font-size:12.5px;color:var(--mu);font-weight:600">Hypothèses de calcul</summary>
-    <p class="sub" style="margin-top:8px;line-height:1.6">Temps libéré = arrivées × minutes gagnées × jours d'activité ÷ 60. Gain mensuel = temps libéré × coût horaire chargé − licence mensuelle. Retour sur investissement = investissement initial ÷ gain mensuel positif (« Non atteint » si le gain est nul ou négatif). Estimation indicative — temps libéré valorisé, sans garantie d'économie de trésorerie, hors financement, maintenance additionnelle et fiscalité.</p>
-  </details>`;
+  const n = roiRoomCount();
+  const countAttrs = n ? ` access-count="${n}" eco-room-count="${n}"` : '';
+  return `<sesame-roi-calculator include-access="true" include-eco="true"${countAttrs}
+    style="--sesame-roi-primary:var(--a);--sesame-roi-accent:#1a6b47;--sesame-roi-background:var(--bg);--sesame-roi-surface:var(--card);--sesame-roi-border:var(--bdr);--sesame-roi-text:var(--tx);--sesame-roi-muted:var(--mu);--sesame-roi-radius:14px;--sesame-roi-font:inherit">
+  </sesame-roi-calculator>`;
 }
 function switchTab(key){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===key));
@@ -552,7 +488,6 @@ function render(){
   document.getElementById('app').innerHTML = tabNav + devisPanel + roiPanel + documentsPanel + meetingsPanel + bookingPanel;
   if(!QUOTE.alreadySigned) setupCanvas();
   enhanceVimeoThumbs();
-  if(showRoi) roiUpdate();
 }
 
 let ctx, drawing=false, hasDrawn=false;
