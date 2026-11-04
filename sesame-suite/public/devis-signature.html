@@ -29,11 +29,21 @@
   .blk{margin-bottom:20px}
   .blk-hd{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--c);margin-bottom:12px}
   .blk-hd::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--c);flex-shrink:0}
-  table{width:100%;border-collapse:collapse;margin:0}
+  /* 04/11/2026, "rapproche les colonnes les unes à côté des autres" : table
+     en width:100% forçait "Prestation" à manger tout l'espace du devis
+     (jusqu'à 960px de large) et repoussait Qté/Prix unitaire/Total loin à
+     droite, avec un grand vide au milieu de chaque ligne. Table en
+     width:auto = chaque colonne se limite à la largeur de son contenu
+     (+ un peu de confort via white-space:nowrap sur les 3 colonnes
+     chiffrées), les 4 colonnes se suivent directement ; le vide résiduel
+     part à droite du tableau plutôt qu'au milieu d'une ligne. */
+  table{width:auto;max-width:100%;border-collapse:collapse;margin:0}
   th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--mu);font-weight:600;border-bottom:1px solid var(--bdr);padding:0 10px 8px}
   td{padding:9px 10px;border-bottom:1px solid #f2f1ee;font-size:13.5px;vertical-align:top}
+  th:not(:first-child),td:not(:first-child){white-space:nowrap}
+  td:first-child{max-width:360px}
   tbody tr:last-child td{border-bottom:none}
-  .blk-sub{display:flex;justify-content:space-between;font-weight:600;font-size:12.5px;padding:8px 10px 0;color:var(--tx)}
+  .blk-sub{display:flex;justify-content:space-between;gap:24px;max-width:360px;font-weight:600;font-size:12.5px;padding:8px 10px 0;color:var(--tx)}
   .desc{color:var(--mu);font-size:12px;margin-top:3px;line-height:1.4}
   .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:14px}
   .stat-card{background:var(--bg);border-radius:12px;padding:12px 16px}
