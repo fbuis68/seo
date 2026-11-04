@@ -40,6 +40,26 @@
     maximumFractionDigits: digits
   }).format(Number(value) || 0);
 
+  // Pictogrammes "équivalent temps plein" (04/11/2026) — un bonhomme plein
+  // par unité entière, un bonhomme partiellement rempli (clip-path CSS)
+  // pour la fraction. Plafonné à 6 silhouettes pleines pour rester lisible
+  // sur des ETP élevés (parc important) — pas de case "+N" au-delà, 6
+  // pleines suffisent à transmettre "beaucoup" sans encombrer la carte.
+  function fteIconsHtml(value) {
+    const v = Math.max(0, Number(value) || 0);
+    const floor = Math.min(6, Math.floor(v));
+    const frac = Math.floor(v) < 6 ? v - Math.floor(v) : 0;
+    let html = '';
+    for (let i = 0; i < floor; i++) html += '<svg class="fte-ic" viewBox="0 0 24 32"><use href="#fte-person" fill="var(--sesame-roi-primary)"/></svg>';
+    if (frac > 0.02) {
+      const pct = Math.round(frac * 100);
+      html += `<span class="fte-partial" style="--frac:${pct}%"><svg viewBox="0 0 24 32"><use href="#fte-person" fill="var(--sesame-roi-border)"/></svg><svg viewBox="0 0 24 32" class="fte-fill"><use href="#fte-person" fill="var(--sesame-roi-primary)"/></svg></span>`;
+    } else if (!floor) {
+      html = '<svg class="fte-ic" viewBox="0 0 24 32"><use href="#fte-person" fill="var(--sesame-roi-border)"/></svg>';
+    }
+    return html;
+  }
+
   const styles = `
     :host {
       --sesame-roi-primary: #a40b3d;
@@ -101,6 +121,13 @@
     .metric small { font-size: 11px; color: var(--sesame-roi-muted); font-weight: 800; }
     .metric strong { display: block; margin-top: 3px; color: var(--sesame-roi-primary); font-size: clamp(17px, 4vw, 26px); line-height: 1; }
     .metric span { font-size: 11px; color: var(--sesame-roi-muted); }
+    .fte-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+    .fte-icons { display: flex; gap: 2px; flex-shrink: 0; }
+    .fte-ic { width: 15px; height: 20px; display: block; }
+    .fte-partial { position: relative; width: 15px; height: 20px; display: inline-block; }
+    .fte-partial svg { position: absolute; inset: 0; width: 15px; height: 20px; }
+    .fte-partial .fte-fill { clip-path: inset(0 calc(100% - var(--frac)) 0 0); }
+    .metric-fte strong { margin-top: 0; }
     .details { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
     .detail { display: flex; justify-content: space-between; gap: 10px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--sesame-roi-accent) 7%, var(--sesame-roi-surface)); font-size: 12.5px; }
     .detail b { color: var(--sesame-roi-accent); }
@@ -155,6 +182,12 @@
       this.shadowRoot.innerHTML = `
         <style>${styles}</style>
         <section class="shell">
+          <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+            <symbol id="fte-person" viewBox="0 0 24 32">
+              <circle cx="12" cy="7" r="6"/>
+              <path d="M2 30 C2 19 6 15 12 15 C18 15 22 19 22 30 Z"/>
+            </symbol>
+          </svg>
           <header class="heading">
             <p class="eyebrow">Simulation indicative</p>
             <h2>Calculateur ROI Sesame</h2>
@@ -179,7 +212,7 @@
               <div class="hero">
                 <div class="metric"><small>Temps gagné</small><strong data-output="annualHours">0</strong><span>h/an</span></div>
                 <div class="metric"><small>Jours-homme</small><strong data-output="staffDays">0</strong><span>jours/an</span></div>
-                <div class="metric"><small>Équivalent temps plein</small><strong data-output="fte">0,00</strong><span>ETP</span></div>
+                <div class="metric metric-fte"><small>Équivalent temps plein</small><div class="fte-row"><div class="fte-icons" data-fte-icons aria-hidden="true"></div><div><strong data-output="fte">0,00</strong><span>ETP</span></div></div></div>
               </div>
               <div class="details">
                 <div class="detail"><span>Opérations</span><b data-output="annualOperations">0</b></div>
@@ -251,6 +284,8 @@
       output('annualHours', format(result.annualHours));
       output('staffDays', format(result.staffDays));
       output('fte', format(result.fte, 2));
+      const fteHolder = this.shadowRoot.querySelector('[data-fte-icons]');
+      if (fteHolder) fteHolder.innerHTML = fteIconsHtml(result.fte);
       output('annualOperations', format(result.annualOperations));
       output('automationAnnualHours', format(result.automationAnnualHours));
       output('ecoAnnualHours', format(result.ecoAnnualHours));
