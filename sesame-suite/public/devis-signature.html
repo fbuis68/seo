@@ -287,10 +287,20 @@ function docThumbHtml(d){
     return `<div class="doc-thumb">🔗</div>`;
   }
   const mime = d.fileMimeType||'';
+  // 04/11/2026, "icône sur les autres types de documents" — ordre important :
+  // les mimetypes Office modernes (.xlsx/.pptx) contiennent tous deux la
+  // chaîne "officedocument", donc tableur/présentation doivent être testés
+  // AVANT la règle word/document générique, sinon un Excel ressortait avec
+  // l'icône Word (📝) par erreur.
   if(/^image\//i.test(mime)) return `<img class="doc-thumb" src="/wa/crmQuote/publicDocument/${encodeURIComponent(d.id)}?token=${encodeURIComponent(TOKEN)}" alt="">`;
   if(/pdf/i.test(mime)) return `<div class="doc-thumb">📄</div>`;
-  if(/presentation|powerpoint/i.test(mime)) return `<div class="doc-thumb">📊</div>`;
+  if(/spreadsheet|excel|csv/i.test(mime)) return `<div class="doc-thumb">📊</div>`;
+  if(/presentation|powerpoint/i.test(mime)) return `<div class="doc-thumb">📽️</div>`;
+  if(/zip|compressed|rar|7z-compressed|x-tar|gzip/i.test(mime)) return `<div class="doc-thumb">🗜️</div>`;
+  if(/^video\//i.test(mime)) return `<div class="doc-thumb">🎬</div>`;
+  if(/^audio\//i.test(mime)) return `<div class="doc-thumb">🎵</div>`;
   if(/word|document/i.test(mime)) return `<div class="doc-thumb">📝</div>`;
+  if(/^text\//i.test(mime)) return `<div class="doc-thumb">📃</div>`;
   return `<div class="doc-thumb">📎</div>`;
 }
 // Vimeo n'expose pas d'URL de miniature statique (contrairement à YouTube)
