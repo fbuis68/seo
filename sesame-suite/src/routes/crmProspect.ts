@@ -7,6 +7,8 @@ import { config } from "../config";
 import { invoiceTotal } from "../lib/accReconciliation";
 import { estimateGoCardlessVat, getGoCardlessVatRate } from "../lib/gocardless";
 import { fetchCompanyLogo, fetchBrandColor } from "../lib/companyLogo";
+import { graphConfigured } from "../lib/graph";
+import { createTaskEvent, updateTaskEvent, deleteTaskEvent } from "../lib/graphTasks";
 
 /**
  * CRM commercial interne de Sesame — pipeline prospects/clients (à ne pas
@@ -44,6 +46,8 @@ function shapeActivity(a: {
   activityDate: Date | null;
   done: boolean;
   createdAt: Date;
+  assigneeId?: string | null;
+  assignee?: { id: string; name: string | null; email: string } | null;
   checklistItems?: { id: string; text: string; done: boolean; order: number }[];
 }) {
   return {
@@ -55,9 +59,13 @@ function shapeActivity(a: {
     activityDate: a.activityDate,
     done: a.done,
     createdAt: a.createdAt,
+    assigneeId: a.assigneeId || null,
+    assigneeName: a.assignee ? a.assignee.name || a.assignee.email : "",
     checklistItems: (a.checklistItems || []).map((it) => ({ id: it.id, text: it.text, done: it.done })),
   };
 }
+
+const ACTIVITY_ASSIGNEE_SELECT = { assignee: { select: { id: true, name: true, email: true } } } as const;
 
 function shapeProspect(p: {
   id: string;
@@ -233,7 +241,7 @@ function shapeProspect(p: {
 
 const PROSPECT_INCLUDE = {
   entity: { select: { code: true, config: { select: { lang: true, currency: true, timezone: true } } } },
-  activities: { orderBy: { createdAt: "asc" as const }, include: { checklistItems: { orderBy: { order: "asc" as const } } } },
+  activities: { orderBy: { createdAt: "asc" as const }, include: { checklistItems: { orderBy: { order: "asc" as const } }, ...ACTIVITY_ASSIGNEE_SELECT } },
   commercial: { select: { id: true, name: true, email: true } },
   contacts: { select: { email: true, phone: true } },
 };
@@ -961,12 +969,100 @@ crmProspectRouter.post(
 
 // ── Journal d'activité ──
 
+interface ActivityOutlookState {
+  id: string;
+  prospectId: string;
+  dealId: string | null;
+  text: string;
+  activityDate: Date | null;
+  assigneeId: string | null;
+  outlookEventId: string | null;
+  done: boolean;
+}
+
+/** Sujet + corps de l'événement Outlook — nom du client (et affaire si
+ * rattachée) pour que la tâche reste identifiable depuis le calendrier
+ * sans revenir dans le CRM. */
+async function taskEventContent(a: ActivityOutlookState): Promise<{ subject: string; bodyHtml: string }> {
+  const [prospect, deal] = await Promise.all([
+    prisma.crmProspect.findUnique({ where: { id: a.prospectId }, select: { nom: true } }),
+    a.dealId ? prisma.crmDeal.findUnique({ where: { id: a.dealId }, select: { title: true } }) : null,
+  ]);
+  const clientLabel = prospect?.nom || "";
+  return {
+    subject: clientLabel ? `${a.text} — ${clientLabel}` : a.text,
+    bodyHtml: `<p>Tâche CRM Sesame${clientLabel ? ` — client : <strong>${clientLabel}</strong>` : ""}${deal ? ` — affaire : <strong>${deal.title}</strong>` : ""}</p>`,
+  };
+}
+
+/**
+ * Réconcilie l'événement Outlook d'une tâche avec son état avant/après
+ * modification (création, édition, fait/à faire, changement d'assigné) —
+ * toujours best-effort : jamais d'exception remontée à l'appelant, une
+ * tâche CRM doit pouvoir vivre même si Graph est indisponible ou mal
+ * configuré (§ requireCalendars.ReadWrite déjà requis pour les réunions
+ * Teams, cf. lib/graphMeetings.ts — rien de nouveau à consentir).
+ */
+async function reconcileOutlookEvent(before: ActivityOutlookState, after: ActivityOutlookState): Promise<void> {
+  if (!graphConfigured()) return;
+  try {
+    let outlookEventId = before.outlookEventId;
+    // Fait, désassigné ou échéance effacée, ou changement d'assigné : on
+    // supprime l'event existant (celui de l'ANCIEN assigné, le cas
+    // échéant) avant toute autre chose.
+    if (outlookEventId && (after.done || !after.assigneeId || !after.activityDate || after.assigneeId !== before.assigneeId)) {
+      if (before.assigneeId) {
+        const prevAssignee = await prisma.adminUser.findUnique({ where: { id: before.assigneeId }, select: { email: true } });
+        if (prevAssignee) await deleteTaskEvent(prevAssignee.email, outlookEventId);
+      }
+      await prisma.crmActivity.update({ where: { id: after.id }, data: { outlookEventId: null } });
+      outlookEventId = null;
+    }
+    if (after.done || !after.assigneeId || !after.activityDate) return;
+    const assignee = await prisma.adminUser.findUnique({ where: { id: after.assigneeId }, select: { email: true } });
+    if (!assignee) return;
+    const { subject, bodyHtml } = await taskEventContent(after);
+    if (outlookEventId && before.assigneeId === after.assigneeId) {
+      await updateTaskEvent(assignee.email, outlookEventId, { subject, date: after.activityDate, bodyHtml });
+    } else {
+      const newEventId = await createTaskEvent(assignee.email, { subject, date: after.activityDate, bodyHtml });
+      await prisma.crmActivity.update({ where: { id: after.id }, data: { outlookEventId: newEventId } });
+    }
+  } catch (e) {
+    console.error("Synchro Outlook (tâche CRM) échouée :", e);
+  }
+}
+
+function toOutlookState(a: {
+  id: string;
+  prospectId: string;
+  dealId: string | null;
+  text: string;
+  activityDate: Date | null;
+  assigneeId: string | null;
+  outlookEventId: string | null;
+  done: boolean;
+}): ActivityOutlookState {
+  return { id: a.id, prospectId: a.prospectId, dealId: a.dealId, text: a.text, activityDate: a.activityDate, assigneeId: a.assigneeId, outlookEventId: a.outlookEventId, done: a.done };
+}
+
+const EMPTY_OUTLOOK_STATE = (id: string, prospectId: string, dealId: string | null, text: string): ActivityOutlookState => ({
+  id,
+  prospectId,
+  dealId,
+  text,
+  activityDate: null,
+  assigneeId: null,
+  outlookEventId: null,
+  done: false,
+});
+
 crmProspectRouter.post(
   "/crmProspect/activity/create",
   requireAdmin,
   requireSesame,
   asyncHandler(async (req, res) => {
-    const b = req.body as { prospectId?: string; dealId?: string; type?: string; text: string; authorName?: string; activityDate?: string };
+    const b = req.body as { prospectId?: string; dealId?: string; type?: string; text: string; authorName?: string; activityDate?: string; assigneeId?: string | null };
     if (!b.text || !b.text.trim()) throw new HttpError(400, "Description de l'activité requise");
     let prospectId = b.prospectId || "";
     // dealId optionnel (demande client 15/10/2026 : journal d'activité
@@ -989,8 +1085,11 @@ crmProspectRouter.post(
         text: b.text.trim(),
         authorName: b.authorName,
         activityDate: b.activityDate ? new Date(b.activityDate) : new Date(),
+        assigneeId: b.assigneeId || null,
       },
+      include: ACTIVITY_ASSIGNEE_SELECT,
     });
+    reconcileOutlookEvent(EMPTY_OUTLOOK_STATE(activity.id, prospectId, activity.dealId, activity.text), toOutlookState(activity));
     res.status(201).json(shapeActivity(activity));
   })
 );
@@ -1003,7 +1102,8 @@ crmProspectRouter.post(
     const id = (req.body.id as string) || "";
     const existing = await prisma.crmActivity.findUnique({ where: { id } });
     if (!existing) throw new HttpError(404, "Activité introuvable");
-    const activity = await prisma.crmActivity.update({ where: { id }, data: { done: true } });
+    const activity = await prisma.crmActivity.update({ where: { id }, data: { done: true }, include: ACTIVITY_ASSIGNEE_SELECT });
+    reconcileOutlookEvent(toOutlookState(existing), toOutlookState(activity));
     res.json(shapeActivity(activity));
   })
 );
@@ -1017,14 +1117,20 @@ crmProspectRouter.post(
     const existing = await prisma.crmActivity.findUnique({ where: { id } });
     if (!existing) throw new HttpError(404, "Activité introuvable");
     await prisma.crmActivity.delete({ where: { id } });
+    if (existing.outlookEventId && existing.assigneeId && graphConfigured()) {
+      prisma.adminUser
+        .findUnique({ where: { id: existing.assigneeId }, select: { email: true } })
+        .then((u) => (u ? deleteTaskEvent(u.email, existing.outlookEventId!) : null))
+        .catch((e) => console.error("Synchro Outlook (suppression tâche) échouée :", e));
+    }
     res.json({ ok: true });
   })
 );
 
 /**
  * POST /crmProspect/activity/update — édition partielle (vue Planner,
- * 30/10/2026) : texte, échéance, personne assignée et/ou statut fait/à
- * faire (contrairement à markDone, qui ne va que dans un sens). Seuls les
+ * 30/10/2026) : texte, échéance, assigné et/ou statut fait/à faire
+ * (contrairement à markDone, qui ne va que dans un sens). Seuls les
  * champs fournis sont modifiés.
  */
 crmProspectRouter.post(
@@ -1035,17 +1141,19 @@ crmProspectRouter.post(
     const id = (req.body.id as string) || "";
     const existing = await prisma.crmActivity.findUnique({ where: { id } });
     if (!existing) throw new HttpError(404, "Activité introuvable");
-    const b = req.body as { text?: string; activityDate?: string | null; authorName?: string; done?: boolean };
+    const b = req.body as { text?: string; activityDate?: string | null; authorName?: string; assigneeId?: string | null; done?: boolean };
     const activity = await prisma.crmActivity.update({
       where: { id },
       data: {
         ...(b.text !== undefined ? { text: b.text.trim() } : {}),
         ...(b.activityDate !== undefined ? { activityDate: b.activityDate ? new Date(b.activityDate) : null } : {}),
         ...(b.authorName !== undefined ? { authorName: b.authorName } : {}),
+        ...(b.assigneeId !== undefined ? { assigneeId: b.assigneeId || null } : {}),
         ...(b.done !== undefined ? { done: b.done } : {}),
       },
-      include: { checklistItems: { orderBy: { order: "asc" } } },
+      include: { checklistItems: { orderBy: { order: "asc" } }, ...ACTIVITY_ASSIGNEE_SELECT },
     });
+    reconcileOutlookEvent(toOutlookState(existing), toOutlookState(activity));
     res.json(shapeActivity(activity));
   })
 );

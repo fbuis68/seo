@@ -1065,6 +1065,18 @@ function qf(f,v){srch='';fDanger='';fSecteurs=new Set();fOrigines=new Set();fCon
 // 15/10/2026). Une activité "Email" ajoutée manuellement (ex : "Envoyer
 // devis par email") reste visible, seul ce préfixe précis est filtré.
 const AUTO_EMAIL_LOG_RE = /^(Email envoyé|Questionnaire envoyé)/;
+// Sélecteur "Assigné à" réutilisé par les 3 points de création/édition de
+// tâche (04/11/2026, demande client "écriture des tâches dans Outlook...
+// dans le calendrier de chaque utilisateur") — un vrai compte Sesame
+// (COMMERCIALS, déjà chargé pour les affaires/tickets), pas du texte
+// libre : c'est cet id qui détermine DANS QUEL calendrier Outlook la
+// tâche est écrite côté serveur (cf. routes/crmProspect.ts).
+function commercialOptionsHtml(selected){
+  return `<option value="">— Assigné à —</option>${COMMERCIALS.map(c=>`<option value="${esc(c.id)}" ${selected===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}`;
+}
+function commercialSelectHtml(id, selected){
+  return `<select id="${id}">${commercialOptionsHtml(selected)}</select>`;
+}
 function buildAllTasks(){
   const out=[];
   clients.forEach(c=>{
@@ -1140,7 +1152,7 @@ function renderHomeTasksCard(){
             <span style="cursor:pointer" onclick="${t.dealId?`openDealModal('${t.dealId}')`:`showFiche('${t.prospectId}')`}">${t.text}</span>
             ${overdue?' <span class="tag t-red" style="font-size:9px;padding:1px 7px">RETARD</span>':''}
             <div style="font-size:11px;color:var(--mu,#888);margin-top:2px">
-              <a href="#" onclick="event.preventDefault();showFiche('${t.prospectId}')">${esc(t.prospectName)}</a>${t.dealTitle?' · <a href="#" onclick="event.preventDefault();openDealModal(\''+t.dealId+'\')">'+esc(t.dealTitle)+'</a>':''}${t.authorName?' · '+esc(t.authorName):''}
+              <a href="#" onclick="event.preventDefault();showFiche('${t.prospectId}')">${esc(t.prospectName)}</a>${t.dealTitle?' · <a href="#" onclick="event.preventDefault();openDealModal(\''+t.dealId+'\')">'+esc(t.dealTitle)+'</a>':''}${(t.assigneeName||t.authorName)?' · '+esc(t.assigneeName||t.authorName):''}
             </div>
           </td>
           <td style="white-space:nowrap">${t.activityDate?new Date(t.activityDate).toLocaleDateString('fr-FR',{day:'numeric',month:'short'}):'—'}</td>
@@ -1330,7 +1342,7 @@ function plannerCardHtml(t){
         <div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap">
           ${items.length?`<span style="font-size:11px;color:var(--mu,#888);display:flex;align-items:center;gap:3px">☑ ${doneCount}/${items.length}</span>`:''}
           ${t.activityDate&&!t.done?`<span class="tag ${overdue?'t-red':'t-gray'}" style="font-size:10px;padding:1px 7px">${new Date(t.activityDate).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'})}</span>`:''}
-          ${t.authorName?plannerAvatar(t.authorName):''}
+          ${(t.assigneeName||t.authorName)?plannerAvatar(t.assigneeName||t.authorName):''}
         </div>
       </div>
     </div>
@@ -1350,6 +1362,7 @@ function plannerColumnHtml(c, tasks){
     ${addOpen?`<div style="margin-bottom:8px;display:flex;flex-direction:column;gap:6px">
       <input id="padd-text-${c.id}" placeholder="Titre de la tâche" style="font-size:12px;padding:6px 8px">
       <input id="padd-date-${c.id}" type="date" style="font-size:12px;padding:6px 8px">
+      ${commercialSelectHtml('padd-assignee-'+c.id, null)}
       <div style="display:flex;gap:6px">
         <button class="btn btn-primary btn-sm" onclick="plannerSubmitAddTask('${c.id}')">Ajouter</button>
         <button class="btn btn-ghost btn-sm" onclick="plannerToggleAddForm('${c.id}')">Annuler</button>
@@ -1393,6 +1406,7 @@ function renderPlannerBoard(){
     </div>
     <div class="ff" style="margin:0;flex:2;min-width:220px"><label>Titre de la tâche</label><input id="pnew-text" placeholder="Titre"></div>
     <div class="ff" style="margin:0"><label>Échéance</label><input type="date" id="pnew-date"></div>
+    <div class="ff" style="margin:0">${commercialSelectHtml('pnew-assignee', null)}</div>
     <button class="btn btn-primary btn-sm" onclick="plannerSubmitNewTask()">Ajouter</button>
     <button class="btn btn-ghost btn-sm" onclick="plannerToggleNewTaskForm()">Annuler</button>
   </div>`:''}`;
@@ -1414,13 +1428,14 @@ async function plannerSubmitNewTask(){
   const name = (document.getElementById('pnew-client')||{value:''}).value.trim();
   const text = (document.getElementById('pnew-text')||{value:''}).value.trim();
   const date = (document.getElementById('pnew-date')||{value:''}).value;
+  const assigneeId = (document.getElementById('pnew-assignee')||{value:''}).value;
   if(!name){ flash('Client requis'); return; }
   const c = clients.find(c=>c.nom.toLowerCase()===name.toLowerCase());
   if(!c){ flash('Client introuvable — choisissez-le dans la liste'); return; }
   if(!text){ flash('Titre requis'); return; }
   try{
     const r = await apiFetch('/wa/crmProspect/activity/create', {method:'POST', body:JSON.stringify({
-      prospectId:c.id, type:'Tâche commerciale', text, activityDate: date||undefined,
+      prospectId:c.id, type:'Tâche commerciale', text, activityDate: date||undefined, assigneeId: assigneeId||undefined,
     })});
     if(!r.ok) throw new Error('http '+r.status);
     const entry = await r.json();
@@ -1438,10 +1453,11 @@ function plannerToggleAddForm(prospectId){
 async function plannerSubmitAddTask(prospectId){
   const text = (document.getElementById('padd-text-'+prospectId).value||'').trim();
   const date = document.getElementById('padd-date-'+prospectId).value;
+  const assigneeId = (document.getElementById('padd-assignee-'+prospectId)||{value:''}).value;
   if(!text){ flash('Titre requis'); return; }
   try{
     const r = await apiFetch('/wa/crmProspect/activity/create', {method:'POST', body:JSON.stringify({
-      prospectId, type:'Tâche commerciale', text, activityDate: date||undefined,
+      prospectId, type:'Tâche commerciale', text, activityDate: date||undefined, assigneeId: assigneeId||undefined,
     })});
     if(!r.ok) throw new Error('http '+r.status);
     const entry = await r.json();
@@ -1476,7 +1492,7 @@ function plannerOpenCard(taskId){
       <div style="padding:0 20px 20px" class="form-grid">
         <div class="ff" style="grid-column:1/-1"><label>Titre</label><textarea id="pcard-text" rows="2" onblur="plannerSaveField('${taskId}','text',this.value)">${esc(t.text)}</textarea></div>
         <div class="ff"><label>Échéance</label><input type="date" id="pcard-date" value="${t.activityDate?new Date(t.activityDate).toISOString().slice(0,10):''}" onchange="plannerSaveField('${taskId}','activityDate',this.value)"></div>
-        <div class="ff"><label>Assigné à</label><input id="pcard-author" value="${esc(t.authorName||'')}" onblur="plannerSaveField('${taskId}','authorName',this.value)"></div>
+        <div class="ff"><label>Assigné à</label><select id="pcard-assignee" onchange="plannerSaveField('${taskId}','assigneeId',this.value)">${commercialOptionsHtml(t.assigneeId)}</select></div>
         <div class="ff" style="grid-column:1/-1">
           <label>Sous-tâches</label>
           <div id="pcard-checklist">${plannerChecklistHtml(taskId, items)}</div>
