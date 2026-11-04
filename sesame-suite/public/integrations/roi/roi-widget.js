@@ -2,10 +2,18 @@
   'use strict';
 
   const VERSION = '1.0.0';
+  // 04/11/2026 — "désactiver une option ne change pas le résultat" :
+  // roi-widget.js est chargé via un simple <script src>, sans paramètre de
+  // version, et roi-engine.js est ensuite injecté dynamiquement à un
+  // chemin fixe — les deux restent tels quels en cache navigateur d'une
+  // visite à l'autre tant que l'URL ne change pas. Un ASSET_VERSION bumpé
+  // à chaque modification de l'un des deux fichiers force un rechargement
+  // réel au lieu de servir une copie en cache obsolète.
+  const ASSET_VERSION = '2';
   const scriptUrl = document.currentScript && document.currentScript.src
     ? document.currentScript.src
     : 'https://sesame-technology.fr/integrations/roi/roi-widget.js';
-  const engineUrl = new URL('../../roi-engine.js', scriptUrl).href;
+  const engineUrl = new URL('../../roi-engine.js', scriptUrl).href + '?v=' + ASSET_VERSION;
   let enginePromise;
 
   function ensureEngine() {
