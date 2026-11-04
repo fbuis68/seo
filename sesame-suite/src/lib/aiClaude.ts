@@ -34,7 +34,7 @@ async function callClaude(params: { system: string; messages: { role: "user" | "
     body: JSON.stringify({
       model: config.anthropicModel,
       max_tokens: params.maxTokens || 1500,
-      system: params.system,
+      system: [{ type: "text", text: params.system, cache_control: { type: "ephemeral" } }],
       messages: params.messages,
       tools: [params.tool],
       tool_choice: { type: "tool", name: params.tool.name },
@@ -381,7 +381,7 @@ export async function findCompanyNews(companyName: string, secteur?: string): Pr
     body: JSON.stringify({
       model: config.anthropicModel,
       max_tokens: 1200,
-      system,
+      system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: `Entreprise à rechercher : ${query}` }],
       tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
     }),
@@ -451,7 +451,7 @@ export async function huntMarket(params: { marcheLabel: string; icp: string; exc
     body: JSON.stringify({
       model: config.anthropicModel,
       max_tokens: 2500,
-      system,
+      system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: userMsg }],
       tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 6 }],
     }),
