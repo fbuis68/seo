@@ -7515,6 +7515,13 @@ async function dqLoadDocumentLibraryIfNeeded(){
 // changement de devis/prospect (pas conservé d'un devis à l'autre).
 let DQ_DOC_FILTER_SECTEUR = undefined;
 let DQ_DOC_FILTER_PROSPECT_ID = null;
+// Liste déroulante à cocher (04/11/2026, demande client) — la liste des
+// documents restait toujours dépliée dans l'onglet Document, prenant de la
+// place même repliée sur aucun document ; repliée par défaut désormais,
+// state séparé du filtre secteur (qui lui doit survivre à l'ouverture/
+// fermeture, cf. DQ_DOC_FILTER_SECTEUR ci-dessus).
+let DQ_DOC_PICKER_OPEN = false;
+function dqToggleDocPicker(){ DQ_DOC_PICKER_OPEN = !DQ_DOC_PICKER_OPEN; renderQuoteBuilder(); }
 function dqSetDocFilterSecteur(v){ DQ_DOC_FILTER_SECTEUR = v; renderQuoteBuilder(); }
 function dqDocumentLibrarySectionHtml(q, clientSecteur){
   if(CRM_DOCUMENTS===null){
@@ -7542,14 +7549,21 @@ function dqDocumentLibrarySectionHtml(q, clientSecteur){
       <option value="">Tous secteurs</option>
       ${secteursPresent.map(s=>`<option value="${esc(s)}" ${DQ_DOC_FILTER_SECTEUR===s?'selected':''}>${esc(s)}</option>`).join('')}
     </select>`;
+  const selectedCount = (q.attachedDocumentIds||[]).length;
+  const summaryLabel = selectedCount
+    ? `📎 ${selectedCount} document${selectedCount>1?'s':''} sélectionné${selectedCount>1?'s':''}`
+    : '📎 Aucun document sélectionné';
   return `<div class="db-row-between" style="margin:14px 0 4px;flex-wrap:wrap;gap:6px"><h4 style="margin:0">Documents à joindre à l'envoi</h4>
-      <div style="display:flex;gap:6px;align-items:center;margin-left:auto">
+      <button class="sq-clause" type="button" onclick="dqToggleDocPicker()" style="margin-left:auto">${summaryLabel} ${DQ_DOC_PICKER_OPEN?'▴':'▾'}</button>
+    </div>
+    ${DQ_DOC_PICKER_OPEN?`<div style="border:1px solid var(--bdr2,#e2dfd9);border-radius:10px;padding:10px;margin-top:2px">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
         ${filterSelect}
         <button class="sq-clause" type="button" style="border-style:dashed" onclick="showDocumentLibrary()">⚙ Gérer la bibliothèque</button>
       </div>
-    </div>
-    <small style="color:var(--mu)">Joints à l'email lors de l'envoi du devis — rien n'est ajouté automatiquement. Filtre pré-réglé sur le secteur du client (${esc(clientSecteur||'non renseigné')}).</small>
-    <div style="margin-top:6px">${rows || '<div class="log-empty">Aucun document pour ce filtre.</div>'}</div>`;
+      <small style="color:var(--mu)">Joints à l'email lors de l'envoi du devis — rien n'est ajouté automatiquement. Filtre pré-réglé sur le secteur du client (${esc(clientSecteur||'non renseigné')}).</small>
+      <div style="margin-top:6px;max-height:260px;overflow-y:auto">${rows || '<div class="log-empty">Aucun document pour ce filtre.</div>'}</div>
+    </div>`:''}`;
 }
 function dqToggleAttachedDocument(id, checked){
   const q = QUOTE_DRAFT;
