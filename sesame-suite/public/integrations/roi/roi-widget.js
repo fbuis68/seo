@@ -9,7 +9,7 @@
   // visite à l'autre tant que l'URL ne change pas. Un ASSET_VERSION bumpé
   // à chaque modification de l'un des deux fichiers force un rechargement
   // réel au lieu de servir une copie en cache obsolète.
-  const ASSET_VERSION = '2';
+  const ASSET_VERSION = '3';
   const scriptUrl = document.currentScript && document.currentScript.src
     ? document.currentScript.src
     : 'https://sesame-technology.fr/integrations/roi/roi-widget.js';
@@ -91,16 +91,28 @@
        réellement reçue par CHAQUE grille, sans seuil à deviner ni ordre
        d'imbrication à suivre — standard et robuste quel que soit le
        conteneur (fenêtre large, colonne étroite, mobile...).  */
-    .workspace { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+    /* 04/11/2026 — "la présentation a des problèmes" : la barre d'options
+       vivait DANS .panel, qui ne reçoit que la moitié de la largeur du
+       widget (repartie 50/50 avec .results) — 4 pastilles + le champ de
+       taux d'occupation n'y tiennent pas, d'où une troncature moche
+       (pastille coupée en plein mot) malgré le défilement horizontal.
+       Le fieldset sort donc de .panel pour occuper toute la largeur du
+       widget (pleine largeur du <form>), seul le reste (champ nombre
+       d'accès + résultats) garde la répartition 2 colonnes. */
+    .workspace { display: block; min-width: 0; }
+    form { min-width: 0; }
     .panel { padding: 14px; border: 1px solid var(--sesame-roi-border); border-radius: calc(var(--sesame-roi-radius) - 4px); background: var(--sesame-roi-surface); }
-    /* 04/11/2026 — "veiller à ce que la barre d'options ne soit pas sur deux
-       lignes en responsive" : repeat(auto-fit,...) et flex-wrap laissent
-       la rangée retomber sur 2 lignes dès que le conteneur devient trop
-       étroit pour 4 pastilles + le champ de taux d'occupation (téléphone).
-       nowrap + overflow-x:auto garde une seule ligne toujours, quitte à
-       défiler horizontalement sur mobile — seul moyen fiable, cf. même
-       leçon déjà tirée sur .hero/.details (note plus bas). */
-    fieldset { display: flex; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; gap: 6px; margin: 0 0 14px; padding: 2px 2px 6px; border: 0; scrollbar-width: thin; }
+    .form-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-top: 14px; }
+    /* nowrap + overflow-x:auto reste le filet de sécurité en mobile très
+       étroit (cf. "pas deux lignes en responsive") — mais pleine largeur,
+       la rangée tient désormais sur une ligne sans défiler dès le format
+       bureau. min-width:0 explicite car <fieldset> a par défaut
+       min-inline-size:min-content dans la feuille de style navigateur —
+       sans ce reset, un contenu flex nowrap trop large fait exploser la
+       largeur du fieldset (et donc de toute la page) au lieu de défiler
+       dans sa propre boîte (04/11/2026, régression repérée en testant à
+       400px de large). */
+    fieldset { display: flex; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; gap: 6px; margin: 0; padding: 2px 2px 6px; border: 0; min-width: 0; scrollbar-width: thin; }
     legend { width: 100%; margin-bottom: 6px; color: var(--sesame-roi-muted); font-size: 11px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; }
     .choice { display: flex; align-items: center; gap: 6px; padding: 7px 11px; border: 1px solid var(--sesame-roi-border); border-radius: 999px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
     .choice:has(input:checked) { border-color: var(--sesame-roi-accent); background: color-mix(in srgb, var(--sesame-roi-accent) 9%, var(--sesame-roi-surface)); }
@@ -193,7 +205,7 @@
             <h2>Calculateur ROI Sesame</h2>
           </header>
           <div class="workspace">
-            <form class="panel" novalidate>
+            <form novalidate>
               <fieldset>
                 <legend>Options incluses</legend>
                 <label class="choice" title="Arrivée digitale, ménage et serviettes"><input name="includeEco" type="checkbox"><b>Check-in Éco Responsable</b></label>
@@ -202,29 +214,33 @@
                 <label class="choice" title="33 min/séjour accepté + impact environnemental"><input name="cleaning" type="checkbox"><b>Ménage</b></label>
                 <label class="choice-field" title="Contrôle d’accès toujours inclus — cœur du produit">Occupation accès<input name="accessOccupancyPercent" type="number" min="0" max="100" step="1">%</label>
               </fieldset>
-              <div class="fields">
-                <label class="field">Nombre d’accès / chambres<input name="roomCount" type="number" readonly aria-readonly="true"></label>
-                <input type="hidden" name="accessCount"><input type="hidden" name="ecoRoomCount">
-                <p class="help">Contrôle d’accès toujours inclus. Hypothèses : 2 utilisations/jour, 5 min gagnées (accès) · 80 % d’occupation, 25 % d’acceptation, séjour moyen 3 nuits (éco).</p>
+              <div class="form-body">
+                <div class="panel">
+                  <div class="fields">
+                    <label class="field">Nombre d’accès / chambres<input name="roomCount" type="number" readonly aria-readonly="true"></label>
+                    <input type="hidden" name="accessCount"><input type="hidden" name="ecoRoomCount">
+                    <p class="help">Contrôle d’accès toujours inclus. Hypothèses : 2 utilisations/jour, 5 min gagnées (accès) · 80 % d’occupation, 25 % d’acceptation, séjour moyen 3 nuits (éco).</p>
+                  </div>
+                </div>
+                <section class="results" aria-live="polite">
+                  <div class="hero">
+                    <div class="metric"><small>Temps gagné</small><strong data-output="annualHours">0</strong><span>h/an</span></div>
+                    <div class="metric"><small>Jours-homme</small><strong data-output="staffDays">0</strong><span>jours/an</span></div>
+                    <div class="metric metric-fte"><small>Équivalent temps plein</small><div class="fte-row"><div class="fte-icons" data-fte-icons aria-hidden="true"></div><div><strong data-output="fte">0,00</strong><span>ETP</span></div></div></div>
+                  </div>
+                  <div class="details">
+                    <div class="detail"><span>Opérations</span><b data-output="annualOperations">0</b></div>
+                    <div class="detail"><span>Temps mensuel</span><b><span data-output="monthlyHours">0</span> h/mois</b></div>
+                    <div class="detail"><span>Temps accès</span><b><span data-output="automationAnnualHours">0</span> h/an</b></div>
+                    <div class="detail"><span>Temps Éco</span><b><span data-output="ecoAnnualHours">0</span> h/an</b></div>
+                    <div class="detail"><span>Eau économisée</span><b data-output="waterSavedLiters">—</b></div>
+                    <div class="detail"><span>CO₂e évité</span><b data-output="co2SavedKg">—</b></div>
+                  </div>
+                  <p class="assumptions" data-note></p>
+                  <p class="empty" data-empty hidden>Sélectionnez au moins une gamme.</p>
+                </section>
               </div>
             </form>
-            <section class="results" aria-live="polite">
-              <div class="hero">
-                <div class="metric"><small>Temps gagné</small><strong data-output="annualHours">0</strong><span>h/an</span></div>
-                <div class="metric"><small>Jours-homme</small><strong data-output="staffDays">0</strong><span>jours/an</span></div>
-                <div class="metric metric-fte"><small>Équivalent temps plein</small><div class="fte-row"><div class="fte-icons" data-fte-icons aria-hidden="true"></div><div><strong data-output="fte">0,00</strong><span>ETP</span></div></div></div>
-              </div>
-              <div class="details">
-                <div class="detail"><span>Opérations</span><b data-output="annualOperations">0</b></div>
-                <div class="detail"><span>Temps mensuel</span><b><span data-output="monthlyHours">0</span> h/mois</b></div>
-                <div class="detail"><span>Temps accès</span><b><span data-output="automationAnnualHours">0</span> h/an</b></div>
-                <div class="detail"><span>Temps Éco</span><b><span data-output="ecoAnnualHours">0</span> h/an</b></div>
-                <div class="detail"><span>Eau économisée</span><b data-output="waterSavedLiters">—</b></div>
-                <div class="detail"><span>CO₂e évité</span><b data-output="co2SavedKg">—</b></div>
-              </div>
-              <p class="assumptions" data-note></p>
-              <p class="empty" data-empty hidden>Sélectionnez au moins une gamme.</p>
-            </section>
           </div>
         </section>`;
       this.form = this.shadowRoot.querySelector('form');
