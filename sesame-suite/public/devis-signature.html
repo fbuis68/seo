@@ -11,7 +11,7 @@
      maison) — Web Component Shadow DOM, charge /roi-engine.js lui-même
      (chemin relatif codé en dur dans le fichier vendor : '../../roi-engine.js'
      depuis /integrations/roi/roi-widget.js, d'où ce chemin précis). -->
-<script src="/integrations/roi/roi-widget.js?v=4"></script>
+<script src="/integrations/roi/roi-widget.js?v=5"></script>
 <style>
   :root{--bg:#f6f6f4;--card:#fff;--bdr:#eae8e3;--tx:#1a1a1a;--mu:#8a8680;--a:#8b1040;--a-tint:#fbeeee;
     --c-materiel:#0c76d9;--c-service:#c9860a;--c-logiciel:#7a5cf0;--c-autre:#5a8a2e;
@@ -26,6 +26,10 @@
   .card{background:var(--card);border:1px solid var(--bdr);box-shadow:var(--shadow);border-radius:16px;padding:24px;margin-top:14px}
   h1{font-size:18px;margin:0 0 3px;font-weight:700;letter-spacing:-.2px}
   .sub{color:var(--mu);font-size:13px;margin:0 0 16px}
+  /* 04/11/2026, "centre le devis à droite" — tableau + sous-totaux + totaux
+     ramenés en bloc compact sur le côté droit de la carte plutôt que collés
+     à gauche sur toute la largeur. */
+  .devis-dock{max-width:580px;margin-left:auto}
   .blk{margin-bottom:20px}
   .blk-hd{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--c);margin-bottom:12px}
   .blk-hd::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--c);flex-shrink:0}
@@ -219,9 +223,11 @@ function quoteSummaryHtml(){
     <h1>Devis ${esc(QUOTE.number)}</h1>
     <div class="sub">${esc(QUOTE.prospectNom)}${QUOTE.title?' — '+esc(QUOTE.title):''}</div>
     ${QUOTE.introText?`<p style="font-size:13.5px;color:var(--tx);line-height:1.6;margin:0 0 14px">${esc(QUOTE.introText)}</p>`:''}
-    ${quoteBlocksHtml()}
-    <div class="stat-grid">
-      ${stats.map(s=>`<div class="stat-card${s.grand?' grand':''}"><div class="stat-lbl">${esc(s.lbl)}</div><div class="stat-val">${s.val}</div></div>`).join('')}
+    <div class="devis-dock">
+      ${quoteBlocksHtml()}
+      <div class="stat-grid">
+        ${stats.map(s=>`<div class="stat-card${s.grand?' grand':''}"><div class="stat-lbl">${esc(s.lbl)}</div><div class="stat-val">${s.val}</div></div>`).join('')}
+      </div>
     </div>
     ${promotedLicensesHtml()}
     ${QUOTE.mentionsText?`<div class="notes"><strong>Mentions spécifiques</strong>${esc(QUOTE.mentionsText)}</div>`:''}
@@ -502,7 +508,7 @@ function roiEurUpdate(){
   const license = (QUOTE.totals && QUOTE.totals.mrrNet) || 0;
   const monthlyEl = document.getElementById('roi-eur-monthly'), annualEl = document.getElementById('roi-eur-annual'), paybackEl = document.getElementById('roi-eur-payback');
   if(!monthlyEl) return;
-  if(!ROI_LAST_RESULT){ monthlyEl.textContent='—'; annualEl.textContent='—'; paybackEl.textContent='—'; return; }
+  if(!ROI_LAST_RESULT){ monthlyEl.textContent='—'; annualEl.textContent='—'; paybackEl.textContent='—'; roiChartUpdate(investment, null); return; }
   const monthlyHours = ROI_LAST_RESULT.monthlyHours||0;
   const monthly = monthlyHours*hourly - license;
   const annual = monthly*12;
@@ -511,6 +517,80 @@ function roiEurUpdate(){
   monthlyEl.textContent = fmtEUR(monthly);
   annualEl.textContent = fmtEUR(annual);
   paybackEl.textContent = payback===null ? 'Non atteint' : dec(payback)+' mois';
+  roiChartUpdate(investment, monthly);
+}
+// Graphique en bâtonnets "rentabilité cumulée / mois" (04/11/2026, remplace
+// l'encart "Nombre d'accès / chambres" dans le calculateur ROI) — injecté
+// dans le slot exposé par le widget (data-chart-slot, cf.
+// integrations/roi/roi-widget.js) : argent = page hôte uniquement (même
+// principe que roiEurUpdate ci-dessus), le widget ne calcule que du temps.
+// Rendu en deux temps : le squelette (titre/légende/axe) une seule fois,
+// puis juste les bâtonnets à chaque recalcul — évite de redessiner tout le
+// DOM à chaque frappe sur le curseur de taux horaire.
+let ROI_CHART_BUILT = false;
+function roiChartSlot(){
+  const el = document.querySelector('sesame-roi-calculator');
+  return el && el.shadowRoot ? el.shadowRoot.querySelector('[data-chart-slot]') : null;
+}
+function roiChartBuild(slot){
+  slot.innerHTML = `<style>
+    .rc-hd{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
+    .rc-title{font-size:11px;font-weight:800;color:var(--sesame-roi-text)}
+    .rc-legend{display:flex;gap:10px;font-size:10px;color:var(--sesame-roi-muted);font-weight:700}
+    .rc-legend span{display:inline-flex;align-items:center;gap:4px}
+    .rc-legend i{width:8px;height:8px;border-radius:3px;display:inline-block}
+    .rc-chart{position:relative;height:110px}
+    .rc-zero{position:absolute;left:0;right:0;top:50%;border-top:1px dashed var(--sesame-roi-border)}
+    .rc-bars{position:absolute;inset:0;display:flex;align-items:stretch;gap:2px}
+    .rc-col{flex:1;position:relative;height:100%}
+    .rc-bar{position:absolute;left:0;right:0;border-radius:3px}
+    .rc-bar.neg{background:#c9860a}
+    .rc-bar.pos{background:var(--sesame-roi-accent)}
+    .rc-val{position:absolute;left:50%;transform:translateX(-50%);top:-12px;font-size:7.5px;font-weight:800;color:var(--sesame-roi-accent);white-space:nowrap}
+    .rc-axis{display:flex;gap:2px;margin-top:4px}
+    .rc-axis span{flex:1;text-align:center;font-size:8px;color:var(--sesame-roi-muted);font-weight:700}
+    .rc-foot{margin-top:8px;font-size:10.5px;color:var(--sesame-roi-muted);line-height:1.4}
+    .rc-foot b{color:var(--sesame-roi-text)}
+  </style>
+  <div class="rc-hd">
+    <div class="rc-title">Rentabilité cumulée / mois</div>
+    <div class="rc-legend"><span><i style="background:#c9860a"></i>avant seuil</span><span><i style="background:var(--sesame-roi-accent)"></i>après seuil</span></div>
+  </div>
+  <div class="rc-chart"><div class="rc-zero"></div><div class="rc-bars" data-rc-bars></div></div>
+  <div class="rc-axis" data-rc-axis></div>
+  <div class="rc-foot" data-rc-foot></div>`;
+  const axis = slot.querySelector('[data-rc-axis]');
+  for(let m=1;m<=12;m++){ const s=document.createElement('span'); s.textContent=m; axis.appendChild(s); }
+  ROI_CHART_BUILT = true;
+}
+function roiChartUpdate(investment, monthly){
+  const slot = roiChartSlot();
+  if(!slot) return;
+  if(!ROI_CHART_BUILT) roiChartBuild(slot);
+  const bars = slot.querySelector('[data-rc-bars]'), foot = slot.querySelector('[data-rc-foot]');
+  bars.innerHTML = '';
+  if(monthly===null || !investment){
+    foot.textContent = 'Projection disponible une fois le calculateur ci-dessus renseigné.';
+    return;
+  }
+  const cumul = []; for(let m=1;m<=12;m++) cumul.push(monthly*m - investment);
+  const maxAbs = Math.max(...cumul.map(Math.abs), 1);
+  let crossMonth = null;
+  cumul.forEach((v,i)=>{
+    const m = i+1, isPos = v>=0;
+    if(isPos && crossMonth===null) crossMonth = m;
+    const col = document.createElement('div'); col.className = 'rc-col';
+    const bar = document.createElement('div'); bar.className = 'rc-bar ' + (isPos?'pos':'neg');
+    const pct = Math.min(48, Math.abs(v)/maxAbs*48);
+    bar.style.height = pct + '%';
+    if(isPos) bar.style.bottom = '50%'; else bar.style.top = '50%';
+    bar.title = 'Mois ' + m + ' : ' + (v>=0?'+':'') + fmtEUR(v);
+    if(m===crossMonth){ const lbl=document.createElement('div'); lbl.className='rc-val'; lbl.textContent='+'+fmtEUR(v); bar.appendChild(lbl); }
+    col.appendChild(bar); bars.appendChild(col);
+  });
+  foot.innerHTML = crossMonth
+    ? `Seuil de rentabilité atteint au <b>mois ${crossMonth}</b> — investissement ${fmtEUR(investment)} récupéré.`
+    : monthly>0 ? `Gain positif mais seuil non atteint sous 12 mois.` : `Pas de gain net au taux horaire actuel.`;
 }
 function switchTab(key){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===key));

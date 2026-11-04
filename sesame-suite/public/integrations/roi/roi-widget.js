@@ -9,7 +9,7 @@
   // visite à l'autre tant que l'URL ne change pas. Un ASSET_VERSION bumpé
   // à chaque modification de l'un des deux fichiers force un rechargement
   // réel au lieu de servir une copie en cache obsolète.
-  const ASSET_VERSION = '3';
+  const ASSET_VERSION = '4';
   const scriptUrl = document.currentScript && document.currentScript.src
     ? document.currentScript.src
     : 'https://sesame-technology.fr/integrations/roi/roi-widget.js';
@@ -124,6 +124,14 @@
     .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 12px; align-items: end; }
     .field { display: grid; gap: 5px; font-size: 12.5px; font-weight: 800; }
     .help { grid-column: 1 / -1; }
+    /* 04/11/2026 — remplace l'encart "Nombre d'accès / chambres" (champ en
+       lecture seule, peu utile visuellement) : slot vide rempli par la page
+       hôte (devis-signature.html) avec un graphique de rentabilité/mois en
+       €, calcul qui vit côté page hôte (investissement/licence/taux horaire
+       — le widget ne connaît que le temps, jamais l'argent, cf.
+       roiEurUpdate()). Hauteur mini fixe pour éviter un saut de mise en page
+       à l'injection. */
+    .chart-slot { grid-column: 1 / -1; min-height: 150px; }
     input[type="number"] { width: 100%; padding: 10px; border: 1px solid var(--sesame-roi-border); border-radius: 9px; background: var(--sesame-roi-surface); color: var(--sesame-roi-text); font: inherit; }
     input[readonly] { background: var(--sesame-roi-background); color: var(--sesame-roi-muted); cursor: not-allowed; }
     .help { margin: 0; font-size: 11px; line-height: 1.4; }
@@ -217,8 +225,10 @@
               <div class="form-body">
                 <div class="panel">
                   <div class="fields">
-                    <label class="field">Nombre d’accès / chambres<input name="roomCount" type="number" readonly aria-readonly="true"></label>
-                    <input type="hidden" name="accessCount"><input type="hidden" name="ecoRoomCount">
+                    <input type="hidden" name="roomCount"><input type="hidden" name="accessCount"><input type="hidden" name="ecoRoomCount">
+                    <div class="chart-slot" data-chart-slot>
+                      <p class="help" style="margin:0">Rentabilité par mois affichée une fois le devis chargé.</p>
+                    </div>
                     <p class="help">Contrôle d’accès toujours inclus. Hypothèses : 2 utilisations/jour, 5 min gagnées (accès) · 80 % d’occupation, 25 % d’acceptation, séjour moyen 3 nuits (éco).</p>
                   </div>
                 </div>
