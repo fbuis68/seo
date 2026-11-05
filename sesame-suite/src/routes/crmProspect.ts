@@ -1033,32 +1033,50 @@ async function taskEventContent(a: ActivityOutlookState): Promise<{ subject: str
  * Teams, cf. lib/graphMeetings.ts — rien de nouveau à consentir).
  */
 async function reconcileOutlookEvent(before: ActivityOutlookState, after: ActivityOutlookState): Promise<void> {
-  if (!graphConfigured()) return;
+  // 05/11/2026 — "je ne vois pas de synchronisation" : la fonction ne
+  // loggait QUE les échecs, jamais une tentative ni un succès, donc un
+  // silence dans les logs ne prouvait rien (ça peut vouloir dire "a
+  // marché", "jamais appelée" ou "Graph pas configuré" — impossible à
+  // distinguer). Trace désormais explicite à chaque étape.
+  if (!graphConfigured()) {
+    console.log(`[tâches→Outlook] ${after.id} : Microsoft Graph non configuré (GRAPH_TENANT_ID/CLIENT_ID/CLIENT_SECRET), synchro ignorée`);
+    return;
+  }
   try {
     let outlookEventId = before.outlookEventId;
-    // Fait, désassigné ou échéance effacée, ou changement d'assigné : on
-    // supprime l'event existant (celui de l'ANCIEN assigné, le cas
-    // échéant) avant toute autre chose.
     if (outlookEventId && (after.done || !after.assigneeId || !after.activityDate || after.assigneeId !== before.assigneeId)) {
       if (before.assigneeId) {
         const prevAssignee = await prisma.adminUser.findUnique({ where: { id: before.assigneeId }, select: { email: true } });
-        if (prevAssignee) await deleteTaskEvent(prevAssignee.email, outlookEventId);
+        if (prevAssignee) {
+          await deleteTaskEvent(prevAssignee.email, outlookEventId);
+          console.log(`[tâches→Outlook] ${after.id} : event ${outlookEventId} supprimé chez ${prevAssignee.email}`);
+        } else {
+          console.log(`[tâches→Outlook] ${after.id} : ancien assigné ${before.assigneeId} introuvable, event ${outlookEventId} non supprimé côté Outlook`);
+        }
       }
       await prisma.crmActivity.update({ where: { id: after.id }, data: { outlookEventId: null } });
       outlookEventId = null;
     }
-    if (after.done || !after.assigneeId || !after.activityDate) return;
+    if (after.done || !after.assigneeId || !after.activityDate) {
+      console.log(`[tâches→Outlook] ${after.id} : rien à créer (done=${after.done}, assigneeId=${after.assigneeId}, activityDate=${after.activityDate})`);
+      return;
+    }
     const assignee = await prisma.adminUser.findUnique({ where: { id: after.assigneeId }, select: { email: true } });
-    if (!assignee) return;
+    if (!assignee) {
+      console.log(`[tâches→Outlook] ${after.id} : assigneeId ${after.assigneeId} introuvable en base (AdminUser supprimé ?), synchro ignorée`);
+      return;
+    }
     const { subject, bodyHtml } = await taskEventContent(after);
     if (outlookEventId && before.assigneeId === after.assigneeId) {
       await updateTaskEvent(assignee.email, outlookEventId, { subject, date: after.activityDate, bodyHtml });
+      console.log(`[tâches→Outlook] ${after.id} : event ${outlookEventId} mis à jour chez ${assignee.email}`);
     } else {
       const newEventId = await createTaskEvent(assignee.email, { subject, date: after.activityDate, bodyHtml });
       await prisma.crmActivity.update({ where: { id: after.id }, data: { outlookEventId: newEventId } });
+      console.log(`[tâches→Outlook] ${after.id} : event ${newEventId} créé chez ${assignee.email}`);
     }
   } catch (e) {
-    console.error("Synchro Outlook (tâche CRM) échouée :", e);
+    console.error(`[tâches→Outlook] ${after.id} : synchro échouée —`, e);
   }
 }
 
