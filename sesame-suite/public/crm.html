@@ -3044,6 +3044,22 @@ async function ficheClearLogo(id){
     showFiche(id);
   }catch(e){ flash('Erreur'); }
 }
+// Crédit SMS restant du compte DocPartner/SMSPartner DU CLIENT (04/11/2026)
+// — jamais auto-chargé à l'ouverture de la fiche (appel API externe,
+// vérifié à la demande via ce bouton plutôt qu'à chaque ouverture).
+async function ficheCheckSmsCredit(id){
+  const el = document.getElementById('sms-credit-'+id);
+  if(!el) return;
+  el.innerHTML = '<span style="color:var(--mu,#888);font-size:11px">Vérification…</span>';
+  try{
+    const r = await apiFetch('/wa/crmProspect/smsCredit', {method:'POST', body:JSON.stringify({id})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'Indisponible');
+    el.innerHTML = '<strong>'+Number(data.credit).toLocaleString('fr-FR')+'</strong> SMS <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:1px 5px;margin-left:4px" onclick="ficheCheckSmsCredit(\''+id+'\')" title="Rafraîchir">↻</button>';
+  }catch(e){
+    el.innerHTML = '<span style="color:#a32d2d;font-size:11px">'+esc(e.message||'Indisponible')+'</span> <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:1px 5px" onclick="ficheCheckSmsCredit(\''+id+'\')">Réessayer</button>';
+  }
+}
 function showFiche(id){
   const c=clients.find(c=>c.id===id);if(!c)return;
   curId=id;view='fiche';setNav('n-fiche');
@@ -3186,6 +3202,7 @@ function renderFiche(c){
       <div class="field"><div class="fl"><span class="fl-ico">◆</span> Commercial</div><div class="fv">${c.commercialName||'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">€</span> MRR</div><div class="fv">${c.mrr?fmtEUR(c.mrr)+'/mois':'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">E</span> Établissement Sesame</div><div class="fv">${c.entityCode||'—'}</div></div>
+      <div class="field"><div class="fl"><span class="fl-ico">✆</span> Crédit SMS</div><div class="fv" id="sms-credit-${c.id}">${c.entityCode?`<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="ficheCheckSmsCredit('${c.id}')">Vérifier</button>`:'—'}</div></div>
       <div class="field fiche-extra" style="display:none"><div class="fl"><span class="fl-ico">D</span> Dénomination sociale</div><div class="fv">${c.denominationSociale?esc(c.denominationSociale):'—'}</div></div>
       <div class="field fiche-extra" style="display:none"><div class="fl"><span class="fl-ico">S</span> SIRET</div><div class="fv">${c.siret?esc(c.siret)+(c.siren?' <span style="color:var(--mu,#888);font-size:11px">(SIREN '+esc(c.siren)+')</span>':''):'—'}</div></div>
       <div class="field fiche-extra" style="display:none"><div class="fl"><span class="fl-ico">J</span> Forme juridique</div><div class="fv">${c.formeJuridique?esc(c.formeJuridique):'—'}</div></div>

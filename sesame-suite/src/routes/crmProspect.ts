@@ -9,6 +9,7 @@ import { estimateGoCardlessVat, getGoCardlessVatRate } from "../lib/gocardless";
 import { fetchCompanyLogo, fetchBrandColor } from "../lib/companyLogo";
 import { graphConfigured } from "../lib/graph";
 import { createTaskEvent, updateTaskEvent, deleteTaskEvent } from "../lib/graphTasks";
+import { getChannelConfig, fetchSmsPartnerCredit } from "../lib/sms";
 
 /**
  * CRM commercial interne de Sesame — pipeline prospects/clients (à ne pas
@@ -299,6 +300,34 @@ crmProspectRouter.post(
     if (!id) throw new HttpError(400, "id requis");
     const row = await prisma.crmProspect.update({ where: { id }, data: { logo: null }, include: PROSPECT_INCLUDE });
     res.json(shapeProspect(row));
+  })
+);
+
+/**
+ * Crédit SMS restant du compte DocPartner/SMSPartner DU CLIENT (04/11/2026,
+ * "récupérer le crédit restant SMS... rapatrier sur la fiche client") —
+ * jamais persisté (nombre volatile, vérifié à la demande) : résolu depuis
+ * l'Entity réellement onboardée du client (CrmProspect.entityId) et son
+ * ChannelConfig canal "sms", pas depuis le panneau Canaux interne de
+ * Sesame (entityId=null, compte SMSPartner distinct).
+ */
+crmProspectRouter.post(
+  "/crmProspect/smsCredit",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const id = (req.body.id as string) || "";
+    if (!id) throw new HttpError(400, "id requis");
+    const prospect = await prisma.crmProspect.findUnique({ where: { id }, select: { entityId: true } });
+    if (!prospect) throw new HttpError(404, "Fiche introuvable");
+    if (!prospect.entityId) throw new HttpError(400, "Ce client n'a pas encore d'établissement rattaché (pas encore onboardé)");
+    const cfg = await getChannelConfig(prospect.entityId, "sms");
+    if (!cfg || cfg.provider !== "smspartner" || !cfg.apiKey) {
+      throw new HttpError(400, "Ce client n'utilise pas DocPartner/SMSPartner pour ses SMS (ou clé API non renseignée)");
+    }
+    const result = await fetchSmsPartnerCredit(cfg.apiKey);
+    if (result.credit === null) throw new HttpError(502, result.error || "Crédit SMS indisponible");
+    res.json({ credit: result.credit });
   })
 );
 

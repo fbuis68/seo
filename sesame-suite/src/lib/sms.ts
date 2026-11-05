@@ -245,6 +245,57 @@ async function sendViaSmsPartner(cfg: { apiKey: string | null; fromNumber: strin
   }
 }
 
+export interface SmsPartnerCreditResult {
+  credit: number | null; // null si injoignable ou réponse non reconnue — jamais un chiffre inventé
+  error?: string;
+}
+
+/**
+ * Crédit SMS restant du compte DocPartner/SMSPartner d'UN CLIENT (04/11/2026,
+ * demande client "récupérer le crédit restant SMS... et le rapatrier sur la
+ * fiche client") — même convention d'authentification que sendViaSmsPartner
+ * ci-dessus (POST + apiKey dans le corps JSON), mais endpoint /credits dont
+ * le nom de champ de réponse n'a PAS pu être confirmé depuis cet
+ * environnement (doc.smspartner.fr hors de la liste des hôtes réseau
+ * autorisés ici, et api.smspartner.fr bloqué lui aussi en sortie — aucun
+ * test réel possible). Plusieurs noms de champ plausibles sont donc
+ * essayés par ordre de vraisemblance plutôt que de parier sur un seul ;
+ * si aucun ne correspond, la réponse brute part en log serveur pour
+ * ajuster vite cette liste au lieu d'afficher un chiffre inventé à
+ * l'utilisateur (cf. credit:null ci-dessus, jamais 0 par défaut).
+ */
+export async function fetchSmsPartnerCredit(apiKey: string): Promise<SmsPartnerCreditResult> {
+  if (!apiKey) return { credit: null, error: "Clé API DocPartner manquante" };
+  let res: Response;
+  try {
+    res = await fetch(`${SMSPARTNER_API_BASE}/credits`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ apiKey }),
+    });
+  } catch (err) {
+    return { credit: null, error: "Échec de connexion à l'API DocPartner : " + String(err instanceof Error ? err.message : err) };
+  }
+  const text = await res.text();
+  let j: Record<string, unknown> = {};
+  try {
+    j = JSON.parse(text);
+  } catch {
+    // corps non-JSON, géré ci-dessous (aucun candidat ne correspondra)
+  }
+  if (!res.ok) {
+    console.error("[sms] Échec DocPartner /credits — réponse complète :", text);
+    return { credit: null, error: `HTTP ${res.status}` };
+  }
+  const candidates = ["credit", "credits", "credit_sms", "creditSms", "sms_credit", "balance", "solde"];
+  for (const key of candidates) {
+    const v = j[key];
+    if (typeof v === "number") return { credit: v };
+  }
+  console.error("[sms] Réponse DocPartner /credits non reconnue (champ attendu absent) :", text);
+  return { credit: null, error: "Réponse DocPartner non reconnue — voir logs serveur" };
+}
+
 /**
  * RCS via DocPartner/SMSPartner.fr (POST /v1/rcs/send, 15/10/2026, doc
  * officielle fournie par le client) — distinct de sendViaSmsPartner
