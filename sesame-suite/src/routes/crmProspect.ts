@@ -584,7 +584,13 @@ function matchCommercial(
   if (byEmail) return byEmail.id;
   const byName = commercials.find((c) => {
     if (!c.name) return false;
-    const words = normalizeNameForMatch(c.name).split(/\s+/).filter((w) => w.length >= 3);
+    // 05/11/2026, "le commercial s'est pas alimenté" — split sur espace ET
+    // tiret (un nom français composé type "Jean-Thierry" ne matchait rien :
+    // scindé en un seul mot "jean-thierry" avec le tiret, jamais substring
+    // du "Scanné par" brut "JEAN THIERRY LODS", qui n'a pas de tiret).
+    const words = normalizeNameForMatch(c.name)
+      .split(/[\s-]+/)
+      .filter((w) => w.length >= 3);
     return words.some((w) => norm.includes(w));
   });
   return byName?.id;
