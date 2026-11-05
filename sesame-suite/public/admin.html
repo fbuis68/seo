@@ -5079,6 +5079,54 @@ async function adminLogin(){
     errEl.style.display='block';
   }
 }
+
+/**
+ * Lien d'autologin "agent support → back-office client" (05/11/2026, cf.
+ * POST /wa/login/adminAutologin) — reconnecte l'agent sesame lui-même (pas
+ * une identité fabriquée) et bascule directement sur l'établissement du
+ * client visé. Le jeton est retiré de l'URL immédiatement, avant même de
+ * savoir si l'échange réussit : il ne doit jamais rester dans
+ * l'historique ni un signet (usage unique côté serveur de toute façon,
+ * mais il resterait visible/partageable tant qu'il n'a pas expiré).
+ */
+async function adminAutologinExchange(token){
+  try{
+    var clean = new URL(location.href);
+    clean.searchParams.delete('adminAutologinToken');
+    history.replaceState(null, '', clean.pathname + clean.search + clean.hash);
+  }catch(e){}
+  try{
+    var r = await fetch(API_BASE+'/wa/login/adminAutologin', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({token:token})});
+    var data = await r.json().catch(function(){return {};});
+    if(!r.ok){
+      renderLoginBox();
+      var errEl = document.getElementById('login-err');
+      if(errEl){ errEl.textContent = data.error || 'Lien expiré ou déjà utilisé — reconnectez-vous.'; errEl.style.display='block'; }
+      return;
+    }
+    ADMIN_TOKEN = data.token;
+    ADMIN_ROLE  = data.admin.role;
+    ADMIN_CRMROLE = data.admin.crmRole || null;
+    MENU_RIGHTS = data.admin.menuRights || null;
+    HOME_ENTITY_CODE = data.admin.entityCode;
+    GROUP_SCOPED = !!data.admin.groupScoped;
+    GROUP_ID = data.admin.groupId || null;
+    sessionStorage.setItem('SESAME_ADMIN_TOKEN', ADMIN_TOKEN);
+    sessionStorage.setItem('SESAME_ADMIN_ROLE', ADMIN_ROLE);
+    if(ADMIN_CRMROLE) sessionStorage.setItem('SESAME_ADMIN_CRMROLE', ADMIN_CRMROLE); else sessionStorage.removeItem('SESAME_ADMIN_CRMROLE');
+    if(MENU_RIGHTS) sessionStorage.setItem('SESAME_MENU_RIGHTS', JSON.stringify(MENU_RIGHTS)); else sessionStorage.removeItem('SESAME_MENU_RIGHTS');
+    sessionStorage.setItem('SESAME_HOME_ENTITY', HOME_ENTITY_CODE);
+    sessionStorage.setItem('SESAME_GROUP_SCOPED', GROUP_SCOPED ? '1' : '0');
+    if(GROUP_ID) sessionStorage.setItem('SESAME_GROUP_ID', GROUP_ID); else sessionStorage.removeItem('SESAME_GROUP_ID');
+    setActiveEntity(data.activeEntityCode || HOME_ENTITY_CODE);
+    document.getElementById('loginGate').style.display='none';
+    await bootAdminApp();
+  }catch(e){
+    renderLoginBox();
+    var errEl2 = document.getElementById('login-err');
+    if(errEl2){ errEl2.textContent='Erreur de connexion au serveur'; errEl2.style.display='block'; }
+  }
+}
 function adminLogout(){
   sessionStorage.removeItem('SESAME_ADMIN_TOKEN');
   sessionStorage.removeItem('SESAME_ADMIN_ROLE');
@@ -11307,7 +11355,10 @@ window.addEventListener('DOMContentLoaded',function(){
   var splashMinDelay = new Promise(function(resolve){ setTimeout(resolve, 3900); });
   var appReady;
 
-  if(ADMIN_TOKEN){
+  var autologinToken = new URLSearchParams(location.search).get('adminAutologinToken');
+  if(autologinToken){
+    appReady = adminAutologinExchange(autologinToken);
+  } else if(ADMIN_TOKEN){
     document.getElementById('loginGate').style.display='none';
     appReady = bootAdminApp();
   } else {

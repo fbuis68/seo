@@ -175,6 +175,7 @@ model AdminUser {
   faqEntriesCreated           Faq[]                 @relation("FaqCreatedBy")
   crmSignatureRequestsCreated CrmSignatureRequest[] @relation("SignatureRequestCreatedBy")
   crmActivitiesAssigned       CrmActivity[]         @relation("ActivityAssignee")
+  adminAutologinCodes         AdminAutologinCode[]
 
   createdAt DateTime @default(now())
 }
@@ -559,6 +560,36 @@ model AutologinCode {
   email     String?
   expiresAt DateTime
   createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+// Lien d'autologin "agent support → back-office client" (05/11/2026,
+// demande client "lien d'autologin sur un prospect reçu") — un agent
+// Sesame (compte "sesame", déjà habilité à cibler N'IMPORTE QUEL
+// entityCode une fois connecté, cf. resolveEntity()) génère depuis la
+// fiche CrmProspect un lien qui le connecte DIRECTEMENT à admin.html, déjà
+// basculé sur l'établissement du client — sans ressaisir ses propres
+// identifiants, même dans un nouvel onglet/navigateur sans session en
+// cours. Le token reconnecte l'agent LUI-MÊME (adminUserId, son propre
+// compte sesame) — PAS une identité fabriquée pour le client — seul le
+// contexte d'établissement affiché change (targetEntityCode), donc les
+// actions restent attribuées au vrai compte de l'agent (requireAdmin),
+// exactement comme s'il avait changé d'établissement depuis le panneau
+// "Entités" après une connexion normale.
+// Usage unique et expiration courte (contrairement à AutologinCode
+// ci-dessus, multi-usage et valide plusieurs jours) : ce lien contourne la
+// saisie du mot de passe d'un compte à privilèges élevés, la fenêtre
+// d'exposition doit rester minimale.
+model AdminAutologinCode {
+  id               String    @id @default(cuid())
+  code             String    @unique
+  adminUserId      String
+  adminUser        AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  targetEntityCode String
+  used             Boolean   @default(false)
+  expiresAt        DateTime
+  createdAt        DateTime  @default(now())
 
   @@index([expiresAt])
 }

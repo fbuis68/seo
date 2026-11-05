@@ -3047,6 +3047,20 @@ async function ficheClearLogo(id){
 // Crédit SMS restant du compte DocPartner/SMSPartner DU CLIENT (04/11/2026)
 // — jamais auto-chargé à l'ouverture de la fiche (appel API externe,
 // vérifié à la demande via ce bouton plutôt qu'à chaque ouverture).
+// Lien d'autologin "agent support → back-office client" (05/11/2026) —
+// onglet ouvert SYNCHRONE au clic (window.open('', '_blank') avant le
+// await) sinon le navigateur bloque l'ouverture comme pop-up non sollicité
+// une fois la réponse réseau revenue ; on redirige cet onglet déjà ouvert
+// une fois l'URL connue.
+async function ficheOpenAdminAutologin(id){
+  var tab = window.open('', '_blank');
+  try{
+    const r = await apiFetch('/wa/crmProspect/adminAutologinLink', {method:'POST', body:JSON.stringify({id})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'Erreur');
+    if(tab) tab.location = data.url; else window.open(data.url, '_blank');
+  }catch(e){ if(tab) tab.close(); flash(e.message||"Impossible d'ouvrir le back-office client"); }
+}
 async function ficheCheckSmsCredit(id){
   const el = document.getElementById('sms-credit-'+id);
   if(!el) return;
@@ -3203,6 +3217,7 @@ function renderFiche(c){
       <div class="field"><div class="fl"><span class="fl-ico">€</span> MRR</div><div class="fv">${c.mrr?fmtEUR(c.mrr)+'/mois':'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">E</span> Établissement Sesame</div><div class="fv">${c.entityCode||'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">✆</span> Crédit SMS</div><div class="fv" id="sms-credit-${c.id}">${c.entityCode?`<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="ficheCheckSmsCredit('${c.id}')">Vérifier</button>`:'—'}</div></div>
+      <div class="field"><div class="fl"><span class="fl-ico">🔑</span> Back-office client</div><div class="fv" id="admin-autologin-${c.id}">${c.entityCode?`<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="ficheOpenAdminAutologin('${c.id}')">Ouvrir (autologin)</button>`:'—'}</div></div>
       <div class="field fiche-extra" style="display:none"><div class="fl"><span class="fl-ico">D</span> Dénomination sociale</div><div class="fv">${c.denominationSociale?esc(c.denominationSociale):'—'}</div></div>
       <div class="field fiche-extra" style="display:none"><div class="fl"><span class="fl-ico">S</span> SIRET</div><div class="fv">${c.siret?esc(c.siret)+(c.siren?' <span style="color:var(--mu,#888);font-size:11px">(SIREN '+esc(c.siren)+')</span>':''):'—'}</div></div>
       <div class="field fiche-extra" style="display:none"><div class="fl"><span class="fl-ico">J</span> Forme juridique</div><div class="fv">${c.formeJuridique?esc(c.formeJuridique):'—'}</div></div>

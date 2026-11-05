@@ -10,6 +10,7 @@ import { fetchCompanyLogo, fetchBrandColor } from "../lib/companyLogo";
 import { graphConfigured } from "../lib/graph";
 import { createTaskEvent, updateTaskEvent, deleteTaskEvent } from "../lib/graphTasks";
 import { getChannelConfig, fetchSmsPartnerCredit } from "../lib/sms";
+import { randomBytes } from "crypto";
 
 /**
  * CRM commercial interne de Sesame — pipeline prospects/clients (à ne pas
@@ -328,6 +329,38 @@ crmProspectRouter.post(
     const result = await fetchSmsPartnerCredit(cfg.apiKey);
     if (result.credit === null) throw new HttpError(502, result.error || "Crédit SMS indisponible");
     res.json({ credit: result.credit });
+  })
+);
+
+/**
+ * Génère un lien d'autologin "agent support → back-office client"
+ * (05/11/2026) — reconnecte L'AGENT LUI-MÊME (son propre compte sesame,
+ * req.admin.adminId), jamais une identité fabriquée pour le client ; seul
+ * le contexte d'établissement affiché bascule côté admin.html. Usage
+ * unique, 10 minutes de validité (cf. AdminAutologinCode, bien plus court
+ * que AutologinCode côté espace client — ce lien contourne la saisie du
+ * mot de passe d'un compte à privilèges élevés).
+ */
+crmProspectRouter.post(
+  "/crmProspect/adminAutologinLink",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const id = (req.body.id as string) || "";
+    if (!id) throw new HttpError(400, "id requis");
+    const prospect = await prisma.crmProspect.findUnique({ where: { id }, select: { entityId: true, entity: { select: { code: true } } } });
+    if (!prospect) throw new HttpError(404, "Fiche introuvable");
+    if (!prospect.entityId || !prospect.entity) throw new HttpError(400, "Ce client n'a pas encore d'établissement rattaché (pas encore onboardé)");
+    const code = randomBytes(9).toString("base64url");
+    await prisma.adminAutologinCode.create({
+      data: {
+        code,
+        adminUserId: req.admin!.adminId,
+        targetEntityCode: prospect.entity.code,
+        expiresAt: new Date(Date.now() + 10 * 60_000),
+      },
+    });
+    res.json({ url: `${config.publicBaseUrl}/admin.html?adminAutologinToken=${code}` });
   })
 );
 

@@ -71,6 +71,67 @@ loginRouter.post(
   })
 );
 
+/**
+ * POST /wa/login/adminAutologin — body: { token }
+ *
+ * Échange un code AdminAutologinCode (cf. routes/crmProspect.ts
+ * "adminAutologinLink") contre un vrai token de session, EXACTEMENT comme
+ * /login/login reconnecterait l'agent lui-même (même forme de réponse,
+ * réutilisée telle quelle côté admin.html) — seul activeEntityCode
+ * s'ajoute, pour que le front bascule directement sur l'établissement
+ * client visé au lieu du contexte "maison" par défaut de l'agent.
+ * Usage unique : marqué consommé avant même de vérifier le reste, pour
+ * qu'un double-clic ou un lien rejoué échoue plutôt que de rouvrir l'accès.
+ */
+loginRouter.post(
+  "/login/adminAutologin",
+  authRateLimit,
+  asyncHandler(async (req, res) => {
+    const raw = (req.body.token as string) || "";
+    if (!raw) throw new HttpError(400, "Lien invalide");
+
+    const record = await prisma.adminAutologinCode.findUnique({ where: { code: raw } });
+    if (!record || record.used || record.expiresAt < new Date()) {
+      throw new HttpError(401, "Ce lien a expiré, a déjà été utilisé, ou n'est plus valide.");
+    }
+    const claimed = await prisma.adminAutologinCode.updateMany({ where: { id: record.id, used: false }, data: { used: true } });
+    if (claimed.count === 0) throw new HttpError(401, "Ce lien a déjà été utilisé.");
+
+    const admin = await prisma.adminUser.findUnique({
+      where: { id: record.adminUserId },
+      include: { entity: { include: { config: true } }, profile: { select: { menuRights: true } } },
+    });
+    if (!admin || !admin.active || admin.role !== "sesame") throw new HttpError(401, "Compte introuvable ou désactivé.");
+
+    const token = signAdminToken({
+      entityId: admin.entityId,
+      entityCode: admin.entity.code,
+      adminId: admin.id,
+      email: admin.email,
+      role: admin.role as AdminRole,
+      crmRole: admin.crmRole,
+      groupScoped: admin.groupScoped,
+      groupId: admin.groupScoped ? admin.entity.groupId : null,
+    });
+    console.log(`[admin-autologin] ${admin.email} connecté sur ${record.targetEntityCode} via lien support`);
+    res.json({
+      token,
+      activeEntityCode: record.targetEntityCode,
+      admin: {
+        email: admin.email,
+        name: admin.name || "",
+        role: admin.role,
+        crmRole: admin.crmRole,
+        entityCode: admin.entity.code,
+        hotelName: admin.entity.config?.hotelName || admin.entity.name,
+        groupScoped: admin.groupScoped,
+        groupId: admin.groupScoped ? admin.entity.groupId : null,
+        menuRights: admin.profile ? (admin.profile.menuRights as Record<string, boolean>) : null,
+      },
+    });
+  })
+);
+
 function escHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
 }
