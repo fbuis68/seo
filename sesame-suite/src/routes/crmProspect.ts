@@ -537,7 +537,13 @@ interface ImportRow {
   // explicitement par l'admin, qui devient une VRAIE entrée de journal
   // datée (type "Salon") plutôt qu'un simple champ texte statique.
   activityText?: string;
-  activityDate?: string; // même date pour tout le lot (champ "Date de la prise de contact" du formulaire d'import)
+  activityDate?: string; // date du scan (par ligne) si mappée, sinon date globale du lot
+  // 05/11/2026, analyse d'un export scanner de badges (EquipHotel Paris
+  // 2026) — champs directement couverts par des colonnes CrmProspect déjà
+  // existantes, reconnus par cet import si mappés côté crm.html.
+  pms?: string;
+  rating?: number | null;
+  detectedProject?: string;
 }
 
 // Note manuelle 0-5 (cf. CrmProspect.rating) — undefined = champ non envoyé,
@@ -631,6 +637,9 @@ crmProspectRouter.post(
             email: r.email || undefined,
             tel: r.tel || undefined,
             note: r.note || undefined,
+            pms: r.pms || undefined,
+            rating: clampRating(r.rating),
+            detectedProject: r.detectedProject || undefined,
             commercialId: commercialId || undefined,
           },
         });

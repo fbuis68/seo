@@ -5012,22 +5012,61 @@ let IMP_FILE_ROWS = [], IMP_HEADERS = [], IMP_MAPPING = {}, IMP_ROWS = [], IMP_O
 // automatiquement le mapping — l'admin peut toujours corriger avant l'aperçu.
 const IMP_FIELD_ALIASES = {
   nom: ['société','societe','entreprise','company','nom entreprise','établissement'],
-  secteur: ["secteur d'activité",'secteur'],
+  // Alias longs ajoutés le 05/11/2026 (export badges "EquipHotel Paris
+  // 2026", app de scan tiers) — questions complètes telles que générées
+  // par l'app, en plus des alias courts déjà reconnus ci-dessus.
+  secteur: ["secteur d'activité",'secteur',"quel est le principal secteur d'activité de votre société ?"],
   ville: ['ville','city'],
-  adresse: ['adresse','adresse postale'],
-  pays: ['pays','country'],
+  adresse: ['adresse','adresse postale','adresse ligne 1'],
+  pays: ['pays','country','pays/région','pays/region'],
   prenom: ['prénom','prenom','firstname'],
   nomContact: ['nom'],
   email: ['email','e-mail','mail'],
   tel: ['téléphone','telephone',"numéro de téléphone",'numero de telephone','tel'],
-  commercial: ['conseiller','commercial','vendeur','référent commercial','attribué à','assigné à','assigne a'],
+  commercial: ['conseiller','commercial','vendeur','référent commercial','attribué à','assigné à','assigne a','scanné par','scanne par'],
   // 05/11/2026, "import d'activité suite à des commentaires pris sur un
   // salon" — distincte des colonnes non mappées (dumpées telles quelles
   // dans le champ note statique de la fiche) : une colonne "Commentaire"
   // choisie explicitement, qui devient une vraie entrée de journal datée.
   commentaire: ['commentaire','commentaires','notes','remarque','remarques','observation','observations'],
+  // 05/11/2026, analyse du fichier "EquipHotel Paris 2026" (export
+  // scanner de badges) — champs supplémentaires reconnus par cet export
+  // précis, réutilisables pour d'autres exports similaires.
+  pms: ['pms'],
+  rating: ['notation','note','note /5','note sur 5','rating'],
+  codePostal: ['code postal','cp'],
+  adresseComplement: ['adresse ligne 2','adresse ligne 3',"complément d'adresse",'complement adresse'],
+  // Date PAR LIGNE (contrairement au champ "Date de la prise de contact"
+  // du formulaire, qui s'applique à tout le lot) — utilisée en priorité
+  // sur cette dernière quand mappée, cf. impBuildPreview.
+  dateScan: ['date','date de scan','horodatage','scan date'],
+  // Texte libre uniquement (cf. CrmProspect.detectedProject) — jamais la
+  // date de projet elle-même (CrmProspect.detectedProjectDate), dont le
+  // contenu réel observé dans cet export ("Other - 3 mois") n'est pas une
+  // date exploitable sans deviner : on ne tente pas de la parser.
+  detectedProject: ['date projet','projet','projet détecté','quel projet'],
 };
 function impNorm(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim(); }
+
+// Date FR "02 novembre 2026 09:59" (horodatage d'un scan de badge) → date
+// seule (AAAA-MM-JJ) pour l'échéance d'activité — l'heure du scan n'a pas
+// d'usage ici. Retourne '' si non reconnue plutôt que de deviner.
+const IMP_FR_MONTHS = {janvier:0,fevrier:1,mars:2,avril:3,mai:4,juin:5,juillet:6,aout:7,septembre:8,octobre:9,novembre:10,decembre:11};
+function impParseFrDateTime(s){
+  const m = String(s||'').trim().match(/^(\d{1,2})\s+([a-zéèêûîô]+)\s+(\d{4})/i);
+  if(!m) return '';
+  const mon = IMP_FR_MONTHS[impNorm(m[2])];
+  if(mon===undefined) return '';
+  const d = new Date(+m[3], mon, +m[1]);
+  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0,10);
+}
+// "FRA" → "France" best-effort (codes ISO3 courants uniquement, jamais
+// deviné) — un pays non reconnu reste tel quel.
+const IMP_COUNTRY_CODES = {fra:'France', fr:'France', bel:'Belgique', che:'Suisse', lux:'Luxembourg'};
+function impNormalizeCountry(s){
+  const v = String(s||'').trim();
+  return IMP_COUNTRY_CODES[impNorm(v)] || v;
+}
 
 /**
  * Décode un fichier texte (CSV) en devinant son encodage : la plupart des
@@ -5095,6 +5134,10 @@ const IMP_FIELD_LABELS = {
   pays: 'Pays', prenom: 'Prénom (contact)', nomContact: 'Nom (contact)', email: 'Email', tel: 'Téléphone',
   commercial: 'Conseiller / commercial (rapprochement auto)',
   commentaire: "Commentaire (créé comme activité datée sur chaque fiche)",
+  pms: 'PMS', rating: 'Note 0-5 (créée sur la fiche)',
+  codePostal: 'Code postal (fusionné dans la ville)', adresseComplement: "Complément d'adresse (fusionné)",
+  dateScan: 'Date du scan (par ligne — prime sur la date globale ci-dessous)',
+  detectedProject: 'Projet détecté (texte libre)',
 };
 function impRenderMapping(){
   const opts = h => '<option value="">— Ignorer —</option>'+IMP_HEADERS.map(function(hh){ return '<option value="'+esc(hh)+'" '+(h===hh?'selected':'')+'>'+esc(hh)+'</option>'; }).join('');
@@ -5171,6 +5214,18 @@ function impBuildPreview(){
       const v = String(raw[h]==null?'':raw[h]).trim();
       return v ? (h+' : '+v) : '';
     }).filter(Boolean);
+    // Code postal/complément d'adresse : pas de champ dédié côté fiche —
+    // fusionnés au plus proche usage courant (CP devant la ville, comme sur
+    // une enveloppe) plutôt qu'une colonne de plus à gérer partout ensuite.
+    const codePostal = mapping.codePostal ? String(raw[mapping.codePostal]||'').trim() : '';
+    const villeRaw = mapping.ville ? String(raw[mapping.ville]||'').trim() : '';
+    const adresseComplement = mapping.adresseComplement ? String(raw[mapping.adresseComplement]||'').trim() : '';
+    const ratingRaw = mapping.rating ? String(raw[mapping.rating]||'').trim() : '';
+    const ratingNum = ratingRaw!=='' && !isNaN(+ratingRaw) ? Math.max(0,Math.min(5,Math.round(+ratingRaw))) : null;
+    // Date par ligne (scan individuel) prioritaire sur la date globale du
+    // lot — si la colonne mappée ne donne rien d'exploitable (format
+    // inattendu), repli sur la date globale sans bloquer la ligne.
+    const dateScanRaw = mapping.dateScan ? impParseFrDateTime(raw[mapping.dateScan]) : '';
     return {
       nom: nom,
       // Un secteur par défaut (choisi une fois pour tout le lot) prime sur la
@@ -5178,9 +5233,9 @@ function impBuildPreview(){
       // "Hôtellerie") sur un import dont la colonne "Secteur d'activité"
       // contient des valeurs trop variées ou hors-sujet pour ce lot.
       secteur: IMP_SECTEUR_DEFAULT || (mapping.secteur ? String(raw[mapping.secteur]||'').trim() : ''),
-      ville: mapping.ville ? String(raw[mapping.ville]||'').trim() : '',
-      adresse: mapping.adresse ? String(raw[mapping.adresse]||'').trim() : '',
-      pays: mapping.pays ? String(raw[mapping.pays]||'').trim() : '',
+      ville: codePostal ? (codePostal+' '+villeRaw).trim() : villeRaw,
+      adresse: [mapping.adresse ? String(raw[mapping.adresse]||'').trim() : '', adresseComplement].filter(Boolean).join(', '),
+      pays: mapping.pays ? impNormalizeCountry(raw[mapping.pays]) : '',
       referent: [prenom,nomContact].filter(Boolean).join(' '),
       email: mapping.email ? String(raw[mapping.email]||'').trim() : '',
       tel: mapping.tel ? String(raw[mapping.tel]||'').trim() : '',
@@ -5191,6 +5246,10 @@ function impBuildPreview(){
       commercialId: IMP_COMMERCIAL_DEFAULT || '',
       note: noteLines.join('\n'),
       activityText: mapping.commentaire ? String(raw[mapping.commentaire]||'').trim() : '',
+      activityDateRow: dateScanRaw,
+      pms: mapping.pms ? String(raw[mapping.pms]||'').trim() : '',
+      rating: ratingNum,
+      detectedProject: mapping.detectedProject ? String(raw[mapping.detectedProject]||'').trim() : '',
       _addr: 'pending',
     };
   }).filter(function(r){ return r.nom; });
@@ -5341,7 +5400,8 @@ async function impSubmit(){
       adresse: r.adresse || undefined, ville: r.ville || undefined, pays: r.pays || undefined,
       referent: r.referent || undefined, email: r.email || undefined, tel: r.tel || undefined, note: r.note || undefined,
       commercialRaw: r.commercialRaw || undefined, commercialId: r.commercialId || undefined,
-      activityText: r.activityText || undefined, activityDate: IMP_ACTIVITY_DATE || undefined,
+      activityText: r.activityText || undefined, activityDate: r.activityDateRow || IMP_ACTIVITY_DATE || undefined,
+      pms: r.pms || undefined, rating: r.rating, detectedProject: r.detectedProject || undefined,
     };
   });
   try{
