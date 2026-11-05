@@ -527,6 +527,13 @@ interface ImportRow {
   note?: string;
   commercialRaw?: string;
   commercialId?: string; // commercial par défaut choisi pour tout le lot — prime sur commercialRaw
+  // 05/11/2026, "import d'activité suite à des commentaires pris sur un
+  // salon" — distinct de `note` ci-dessus (colonnes non mappées, dumpées
+  // telles quelles sur la fiche) : une colonne "Commentaire" choisie
+  // explicitement par l'admin, qui devient une VRAIE entrée de journal
+  // datée (type "Salon") plutôt qu'un simple champ texte statique.
+  activityText?: string;
+  activityDate?: string; // même date pour tout le lot (champ "Date de la prise de contact" du formulaire d'import)
 }
 
 function normalizeNameForMatch(s: string): string {
@@ -596,7 +603,7 @@ crmProspectRouter.post(
       const commercialId = r.commercialId || matchCommercial(r.commercialRaw, commercials);
       if (commercialId) matched++;
       try {
-        await prisma.crmProspect.create({
+        const prospect = await prisma.crmProspect.create({
           data: {
             nom: r.nom.trim(),
             type: "Suspect",
@@ -615,6 +622,24 @@ crmProspectRouter.post(
           },
         });
         created++;
+        // Commentaire pris sur le salon → vraie entrée de journal datée
+        // (type "Salon"), pas juste le champ note statique ci-dessus —
+        // jamais bloquant pour l'import lui-même si ça échoue (le suspect
+        // est déjà créé à ce stade).
+        if (r.activityText && r.activityText.trim()) {
+          const author = commercialId ? commercials.find((c) => c.id === commercialId)?.name || undefined : undefined;
+          await prisma.crmActivity
+            .create({
+              data: {
+                prospectId: prospect.id,
+                type: "Salon",
+                text: r.activityText.trim(),
+                authorName: author,
+                activityDate: r.activityDate ? new Date(r.activityDate) : new Date(),
+              },
+            })
+            .catch((e) => console.error(`[import] activité salon non créée pour ${prospect.id} :`, e));
+        }
       } catch (e) {
         errors.push({ index: i, reason: e instanceof Error ? e.message : "erreur inconnue" });
       }
