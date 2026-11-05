@@ -130,6 +130,7 @@ function shapeProspect(p: {
   espEvenement: boolean;
   messagerie: string;
   note: string | null;
+  rating: number | null;
   mrr: number | null;
   signe: number | null;
   previsionnel: number | null;
@@ -217,6 +218,7 @@ function shapeProspect(p: {
     espEvenement: p.espEvenement,
     messagerie: p.messagerie,
     note: p.note || "",
+    rating: p.rating,
     mrr: p.mrr,
     signe: p.signe,
     previsionnel: p.previsionnel,
@@ -419,6 +421,7 @@ interface ProspectBody {
   espEvenement?: boolean;
   messagerie?: string;
   note?: string;
+  rating?: number | null;
   mrr?: number | null;
   signe?: number | null;
   previsionnel?: number | null;
@@ -494,6 +497,7 @@ crmProspectRouter.post(
         espEvenement: !!b.espEvenement,
         messagerie: b.messagerie || "Noreply",
         note: b.note,
+        rating: clampRating(b.rating),
         mrr: b.mrr ?? null,
         signe: b.signe ?? null,
         previsionnel: b.previsionnel ?? null,
@@ -534,6 +538,15 @@ interface ImportRow {
   // datée (type "Salon") plutôt qu'un simple champ texte statique.
   activityText?: string;
   activityDate?: string; // même date pour tout le lot (champ "Date de la prise de contact" du formulaire d'import)
+}
+
+// Note manuelle 0-5 (cf. CrmProspect.rating) — undefined = champ non envoyé,
+// ne touche pas la valeur existante (comportement Prisma standard) ; null =
+// effacement explicite ("retirer la note") ; sinon arrondi et borné 0-5.
+function clampRating(v: number | null | undefined): number | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null) return null;
+  return Math.max(0, Math.min(5, Math.round(v)));
 }
 
 function normalizeNameForMatch(s: string): string {
@@ -722,6 +735,7 @@ crmProspectRouter.post(
         espEvenement: b.espEvenement,
         messagerie: b.messagerie,
         note: b.note,
+        rating: clampRating(b.rating),
         mrr: b.mrr,
         signe: b.signe,
         previsionnel: b.previsionnel,

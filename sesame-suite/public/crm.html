@@ -941,7 +941,7 @@ let SELECTED_IDS = new Set();
 // même principe) — sert à la suppression groupée et à la fusion de
 // tickets (cf. renderTicketsList, ticketBulkDelete, openTicketMergeModal).
 let TICKET_SELECTED_IDS = new Set();
-let srch='', fDanger='', fSecteurs=new Set(), fOrigines=new Set(), fContrat='', fType='', fNoEmail=false, fNoPhone=false, editingId=null, toastT=null;
+let srch='', fDanger='', fSecteurs=new Set(), fOrigines=new Set(), fContrat='', fType='', fNoEmail=false, fNoPhone=false, fRating='', editingId=null, toastT=null;
 let deals=[], COMMERCIALS=[], tickets=[], cashLines=[], SECTOR_OPTIONS=[], ORIGINE_OPTIONS=[];
 let cashSettings = {revenuMode:'detail',revenuMontant:0,revenuFrequence:'mensuel',revenuMois:null,depenseMode:'detail',depenseMontant:0,depenseFrequence:'mensuel',depenseMois:null};
 let cashYear = new Date().getFullYear();
@@ -1676,10 +1676,38 @@ function filtered(){
     if(fType&&c.type!==fType)return false;
     if(fNoEmail&&((c.email&&c.email.trim())||c.hasContactEmail))return false;
     if(fNoPhone&&((c.tel&&c.tel.trim())||c.hasContactPhone))return false;
+    if(fRating!==''&&(c.rating==null?-1:c.rating)!==Number(fRating))return false;
     return true;
   }).sort((a,b)=>{let av=a[sortC]||'',bv=b[sortC]||'';if(typeof av==='string')av=av.toLowerCase();if(typeof bv==='string')bv=bv.toLowerCase();return av<bv?-sortD:av>bv?sortD:0;});
 }
 
+// Note manuelle 0-5 (05/11/2026, demande client) — appréciation subjective
+// du commercial, saisie en cliquant une étoile (1 clic = cette valeur ;
+// recliquer la même étoile l'efface, cf. ficheSetRating). Distincte du
+// score d'engagement auto-calculé (scoreBadge ci-dessous).
+function ratingStarsHtml(value, editableId){
+  const v = value||0;
+  let html = '<span class="rating-stars" style="display:inline-flex;gap:1px">';
+  for(let i=1;i<=5;i++){
+    const filled = i<=v;
+    html += editableId
+      ? `<span onclick="event.stopPropagation();ficheSetRating('${editableId}',${i})" style="cursor:pointer;color:${filled?'#e3a008':'#d8d4cc'};font-size:16px" title="${i}/5">${filled?'★':'☆'}</span>`
+      : `<span style="color:${filled?'#e3a008':'#d8d4cc'}">${filled?'★':'☆'}</span>`;
+  }
+  html += '</span>';
+  return html;
+}
+async function ficheSetRating(id, value){
+  const c = clients.find(x=>x.id===id);
+  const next = (c && c.rating===value) ? null : value; // recliquer la même étoile efface la note
+  try{
+    const r = await apiFetch('/wa/crmProspect/update', {method:'POST', body:JSON.stringify({id, rating:next})});
+    if(!r.ok) throw new Error('http '+r.status);
+    const data = await r.json();
+    clients = clients.map(x=>x.id===id?data:x);
+    showFiche(id);
+  }catch(e){ flash('Erreur de sauvegarde'); }
+}
 function dBadge(d){if(d==='Élevé !!')return'<span class="badge bd">⚠ Élevé</span>';if(d==='Bon client')return'<span class="badge bg">✓ Bon client</span>';if(d==='Modéré')return'<span class="badge bw">Modéré</span>';return'<span class="badge bn">—</span>';}
 function pBadge(p){const c=['bn','bi','bw','bg'];return p?`<span class="badge ${c[p]||'bn'}">${p}/3</span>`:'<span class="badge bn">—</span>';}
 function cPill(v){const m={oui:'bg',non:'bd','en cours':'bw'};return`<span class="tpill ${m[v]||'bn'}">${v||'—'}</span>`;}
@@ -2015,6 +2043,7 @@ function renderList(){
     </div>
     <select class="lsel" onchange="fContrat=this.value;renderList()"><option value="">Tous contrats</option><option value="oui" ${fContrat==='oui'?'selected':''}>oui</option><option value="non" ${fContrat==='non'?'selected':''}>non</option><option value="en cours" ${fContrat==='en cours'?'selected':''}>en cours</option></select>
     <select class="lsel" onchange="fType=this.value;renderList()"><option value="">Tous types</option>${TYPES.map(t=>`<option value="${t}" ${fType===t?'selected':''}>${t}</option>`).join('')}</select>
+    <select class="lsel" onchange="fRating=this.value;renderList()"><option value="">Toutes notes</option>${[5,4,3,2,1,0].map(n=>`<option value="${n}" ${fRating===String(n)?'selected':''}>${'★'.repeat(n)}${'☆'.repeat(5-n)}</option>`).join('')}<option value="-1" ${fRating==='-1'?'selected':''}>Non notée</option></select>
     <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--mu);white-space:nowrap"><input type="checkbox" ${fNoEmail?'checked':''} onchange="fNoEmail=this.checked;renderList()"> Sans email</label>
     <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--mu);white-space:nowrap"><input type="checkbox" ${fNoPhone?'checked':''} onchange="fNoPhone=this.checked;renderList()"> Sans téléphone</label>
     <span class="count-lbl">${data.length} résultat${data.length>1?'s':''}</span>
@@ -3201,6 +3230,7 @@ function renderFiche(c){
           ${inboundBadge(c)}
           ${supportBadge(c)}
         </div>
+        <div style="margin-top:6px;display:flex;align-items:center;gap:6px">${ratingStarsHtml(c.rating,c.id)}<span style="font-size:11px;color:var(--mu,#888)">${c.rating?c.rating+'/5':'Non notée'}</span></div>
       </div>
       <div class="score-box">
         <div class="score-lbl">Score de risque</div>

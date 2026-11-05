@@ -2104,6 +2104,14 @@ model CrmProspect {
   espEvenement           Boolean   @default(false) // Espace client : évènements/offres de l'établissement
   messagerie             String    @default("Noreply") // Noreply | Client
   note                   String?
+  // Note manuelle 0-5 (05/11/2026, demande client) — appréciation
+  // subjective du commercial sur la fiche (qualité perçue du contact,
+  // potentiel...), saisie à la main. Distincte de `score` ci-dessous
+  // (engagement comportemental auto-calculé, ouvertures/clics) et de
+  // `danger` (niveau de risque) : aucun calcul derrière, jamais écrasée
+  // par une automatisation. null = pas encore notée (distinct de 0,
+  // "notée à 0").
+  rating                 Int?
 
   // Désabonnement newsletter/campagnes CRM (distinct des échanges
   // transactionnels/commerciaux ponctuels, qui restent possibles) — posé via
