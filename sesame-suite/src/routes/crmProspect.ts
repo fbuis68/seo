@@ -147,6 +147,7 @@ function shapeProspect(p: {
   commercial?: { id: string; name: string | null; email: string } | null;
   activities?: Parameters<typeof shapeActivity>[0][];
   contacts?: { email: string | null; phone: string | null }[];
+  clientUploads?: { id: string; fileName: string; fileMimeType: string; createdAt: Date }[];
 }) {
   return {
     id: p.id,
@@ -240,6 +241,9 @@ function shapeProspect(p: {
     // "sans email" une fiche parfaitement joignable via un CrmContact.
     hasContactEmail: (p.contacts || []).some((c) => !!c.email?.trim()),
     hasContactPhone: (p.contacts || []).some((c) => !!c.phone?.trim()),
+    // Documents déposés PAR LE CLIENT depuis l'espace public (06/11/2026) —
+    // jamais le contenu base64 ici, téléchargement via route dédiée.
+    clientUploads: (p.clientUploads || []).map((u) => ({ id: u.id, fileName: u.fileName, fileMimeType: u.fileMimeType, createdAt: u.createdAt })),
   };
 }
 
@@ -248,6 +252,7 @@ const PROSPECT_INCLUDE = {
   activities: { orderBy: { createdAt: "asc" as const }, include: { checklistItems: { orderBy: { order: "asc" as const } }, ...ACTIVITY_ASSIGNEE_SELECT } },
   commercial: { select: { id: true, name: true, email: true } },
   contacts: { select: { email: true, phone: true } },
+  clientUploads: { orderBy: { createdAt: "desc" as const }, select: { id: true, fileName: true, fileMimeType: true, createdAt: true } },
 };
 
 crmProspectRouter.get(
@@ -303,6 +308,24 @@ crmProspectRouter.post(
     if (!id) throw new HttpError(400, "id requis");
     const row = await prisma.crmProspect.update({ where: { id }, data: { logo: null }, include: PROSPECT_INCLUDE });
     res.json(shapeProspect(row));
+  })
+);
+
+/**
+ * GET /crmProspect/clientUpload/:id — téléchargement (admin) d'un document
+ * déposé par le client depuis l'espace public (06/11/2026, cf.
+ * CrmClientUpload / POST /crmQuote/publicUpload).
+ */
+crmProspectRouter.get(
+  "/crmProspect/clientUpload/:id",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const upload = await prisma.crmClientUpload.findUnique({ where: { id: req.params.id } });
+    if (!upload) throw new HttpError(404, "Document introuvable");
+    res.setHeader("Content-Type", upload.fileMimeType);
+    res.setHeader("Content-Disposition", `inline; filename="${upload.fileName.replace(/"/g, "")}"`);
+    res.send(Buffer.from(upload.fileContentBase64, "base64"));
   })
 );
 

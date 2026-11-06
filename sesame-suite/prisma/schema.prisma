@@ -2190,6 +2190,7 @@ model CrmProspect {
   outreachDrafts    OutreachDraft[]
   outreachReplies   OutreachReply[]
   meetingProposals  MeetingProposal[]
+  clientUploads     CrmClientUpload[]
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -2764,6 +2765,8 @@ model CrmQuote {
   attachedMeetingSummaryIds String[] @default([])
   attachedMeetingVideoIds   String[] @default([])
 
+  clientUploads CrmClientUpload[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -3012,6 +3015,29 @@ model CrmDocument {
   updatedAt DateTime @updatedAt
 
   @@index([order])
+}
+
+// Document déposé PAR LE CLIENT depuis l'espace devis public (06/11/2026,
+// demande client "permettre au prospect/client de déposer ses propres
+// documents") — distinct de CrmDocument ci-dessus (bibliothèque gérée par
+// Sesame, réutilisable sur plusieurs devis via `secteurs`/`active`/`order`) :
+// ici un dépôt ponctuel, propre à UN devis/client, sans notion de
+// réutilisation. Stocké en base64, même convention que CrmDocument.
+model CrmClientUpload {
+  id         String      @id @default(cuid())
+  prospectId String
+  prospect   CrmProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  quoteId    String?
+  quote      CrmQuote?   @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+
+  fileName          String
+  fileMimeType      String
+  fileContentBase64 String @db.Text
+
+  createdAt DateTime @default(now())
+
+  @@index([prospectId])
+  @@index([quoteId])
 }
 
 // Bibliothèque de clauses réutilisables pour l'onglet Document du devis

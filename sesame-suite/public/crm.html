@@ -3348,6 +3348,8 @@ function renderFiche(c){
     <div class="log-empty">Chargement…</div>
   </div>
 
+  ${clientUploadsCardHtml(c)}
+
   <div class="card" id="journal-card">
     <div class="card-head">
       <div class="ch-ico">◈</div>
@@ -3418,6 +3420,41 @@ function ticketsCardHtml(c){
  * n'importe quel questionnaire (portée CRM) reçus par ce contact, chargée à
  * part (async, cf. loadQuestionnaireSendsCard) car ce n'est plus une donnée
  * statique de la fiche comme l'ancien mécanisme figé. */
+// Documents déposés PAR LE CLIENT depuis l'espace public (06/11/2026,
+// CrmClientUpload) — déjà inclus dans la fiche (c.clientUploads), rendu
+// synchrone, pas de fetch séparé comme pour questionnaireSendsCardHtml.
+function clientUploadsCardHtml(c){
+  const uploads = c.clientUploads||[];
+  if(!uploads.length) return '';
+  const rows = uploads.map(u=>`
+    <div class="log-item">
+      <div class="log-dot ld-b"></div>
+      <div class="log-body">
+        <a href="#" onclick="openClientUpload('${u.id}');return false" class="log-text">📎 ${esc(u.fileName)}</a>
+        <div style="font-size:11px;color:#aaa;margin-top:2px">${new Date(u.createdAt).toLocaleString('fr-FR')}</div>
+      </div>
+    </div>`).join('');
+  return `<div class="card" id="client-uploads-card">
+    <div class="card-head">
+      <div class="ch-ico">📎</div>
+      <span class="ch-title">Documents déposés par le client</span>
+      <span style="font-size:12px;color:#aaa;margin-left:8px">${uploads.length} document${uploads.length>1?'s':''}</span>
+    </div>
+    <div>${rows}</div>
+  </div>`;
+}
+
+/** Même raison que openMeetingRecording ci-dessus : route Bearer admin,
+ * pas de <a href> direct. */
+async function openClientUpload(id){
+  try{
+    const r = await apiFetch('/crmProspect/clientUpload/'+id);
+    if(!r.ok){ flash('Document indisponible'); return; }
+    const blob = await r.blob();
+    window.open(URL.createObjectURL(blob), '_blank');
+  }catch(e){ flash(e.message||'Erreur de récupération du document'); }
+}
+
 function questionnaireSendsCardHtml(c){
   return `<div class="card" id="questionnaire-sends-card" data-prospect-id="${esc(c.id)}" style="display:none"></div>`;
 }

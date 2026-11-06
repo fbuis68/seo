@@ -343,7 +343,7 @@ function trackQuoteDocument(docId){
   trackQuoteEvent('quote_document_opened', d?d.title:docId);
 }
 function documentsTabHtml(){
-  return QUOTE.documents.map(d=>`
+  const libraryHtml = QUOTE.documents.map(d=>`
     <div class="doc-item">
       <div class="doc-left">
         ${docThumbHtml(d)}
@@ -353,6 +353,101 @@ function documentsTabHtml(){
         </div>
       </div>
       <a class="btn btn-ghost doc-dl" style="width:auto" href="/wa/crmQuote/publicDocument/${encodeURIComponent(d.id)}?token=${encodeURIComponent(TOKEN)}" target="_blank" rel="noopener" onclick="trackQuoteDocument('${d.id}')">${d.fileMimeType?'Télécharger':'Ouvrir'}</a>
+    </div>`).join('');
+  return `${libraryHtml}${libraryHtml && (QUOTE.clientUploads||[]).length ? '<div style="height:8px"></div>' : ''}${clientUploadSectionHtml()}`;
+}
+
+// Dépôt par le client de ses propres documents depuis l'espace public
+// (06/11/2026, "permettre au prospect/client de deposer ses propres
+// documents") — nouveau modèle CrmClientUpload, distinct de la
+// bibliothèque CrmDocument ci-dessus (pas de réutilisation entre devis).
+const CLIENT_UPLOAD_MAX_BYTES = 7 * 1024 * 1024;
+function clientUploadThumbHtml(u){
+  const mime = u.fileMimeType||'';
+  if(/^image\//i.test(mime)) return `<img class="doc-thumb" src="/wa/crmQuote/publicClientUpload/${encodeURIComponent(u.id)}?token=${encodeURIComponent(TOKEN)}" alt="">`;
+  if(/pdf/i.test(mime)) return `<div class="doc-thumb">📄</div>`;
+  if(/spreadsheet|excel|csv/i.test(mime)) return `<div class="doc-thumb">📊</div>`;
+  if(/presentation|powerpoint/i.test(mime)) return `<div class="doc-thumb">📽️</div>`;
+  if(/word|document/i.test(mime)) return `<div class="doc-thumb">📝</div>`;
+  return `<div class="doc-thumb">📎</div>`;
+}
+function clientUploadSectionHtml(){
+  const uploads = QUOTE.clientUploads||[];
+  const listHtml = uploads.length
+    ? uploads.map(u=>`
+      <div class="doc-item">
+        <div class="doc-left">
+          ${clientUploadThumbHtml(u)}
+          <div>
+            <div class="doc-title">${esc(u.fileName)}</div>
+            <div class="doc-desc">Envoyé le ${new Date(u.createdAt).toLocaleDateString('fr-FR')}</div>
+          </div>
+        </div>
+        <a class="btn btn-ghost doc-dl" style="width:auto" href="/wa/crmQuote/publicClientUpload/${encodeURIComponent(u.id)}?token=${encodeURIComponent(TOKEN)}" target="_blank" rel="noopener">Télécharger</a>
+      </div>`).join('')
+    : '<p style="font-size:12px;color:var(--mu)">Aucun document envoyé pour le moment.</p>';
+  return `<div style="margin-top:8px;padding-top:16px;border-top:1px solid #f2f1ee">
+    <h2 style="font-size:13.5px;margin:0 0 10px">Vos documents envoyés</h2>
+    <div id="client-upload-list">${listHtml}</div>
+    <div style="margin-top:14px">
+      <label class="btn btn-ghost" style="width:auto;display:inline-block;cursor:pointer">
+        Envoyer un document
+        <input type="file" id="client-upload-input" style="display:none" onchange="handleClientUploadFile(event)">
+      </label>
+      <span id="client-upload-err" style="display:none;color:#c0392b;font-size:12px;margin-left:10px"></span>
+      <span id="client-upload-progress" style="display:none;color:var(--mu);font-size:12px;margin-left:10px">Envoi en cours…</span>
+    </div>
+  </div>`;
+}
+function handleClientUploadFile(evt){
+  const errEl = document.getElementById('client-upload-err');
+  const file = evt.target.files && evt.target.files[0];
+  if(errEl) errEl.style.display='none';
+  if(!file) return;
+  if(file.size > CLIENT_UPLOAD_MAX_BYTES){
+    if(errEl){ errEl.textContent = 'Fichier trop volumineux (7 Mo max)'; errEl.style.display='block'; }
+    evt.target.value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(){
+    submitClientUpload(file.name, file.type, reader.result);
+  };
+  reader.onerror = function(){
+    if(errEl){ errEl.textContent = 'Lecture du fichier impossible'; errEl.style.display='block'; }
+  };
+  reader.readAsDataURL(file);
+}
+async function submitClientUpload(fileName, fileMimeType, dataUrl){
+  const errEl = document.getElementById('client-upload-err');
+  const progEl = document.getElementById('client-upload-progress');
+  if(progEl) progEl.style.display='';
+  try{
+    const r = await fetch('/wa/crmQuote/publicUpload', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ token: TOKEN, fileName, fileMimeType, dataUrl })
+    });
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'Erreur d\'envoi');
+    if(!QUOTE.clientUploads) QUOTE.clientUploads = [];
+    QUOTE.clientUploads.unshift({ id: data.id, fileName: data.fileName, fileMimeType: data.fileMimeType, createdAt: data.createdAt });
+    render();
+    switchTab('documents');
+    trackQuoteEvent('quote_document_opened', 'Dépôt client : '+fileName);
+  }catch(e){
+    if(errEl){ errEl.textContent = e.message||'Erreur d\'envoi'; errEl.style.display='block'; }
+  }finally{
+    if(progEl) progEl.style.display='none';
+  }
+}
+function questionnairesTabHtml(){
+  return (QUOTE.questionnaires||[]).map(q=>`
+    <div style="margin-bottom:18px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="font-weight:600;font-size:13.5px">${esc(q.name)}</span>
+        <span class="tag" style="font-size:11px;padding:2px 8px;border-radius:20px;background:${q.completed?'#e3f3e8':'#fff4e0'};color:${q.completed?'#2e7d4f':'#a06a00'}">${q.completed?'Complété':'À compléter'}</span>
+      </div>
+      <iframe class="booking-frame" style="height:600px" src="/questionnaire.html?token=${encodeURIComponent(q.token)}" title="${esc(q.name)}" loading="lazy"></iframe>
     </div>`).join('');
 }
 function bookingTabHtml(){
@@ -450,7 +545,7 @@ function signatureSectionHtml(){
   </div>`;
 }
 
-const TAB_TRACK_LABEL = {devis:'Devis', roi:'Rentabilité', documents:'Documents', meetings:'Comptes-rendus', booking:'Prendre rendez-vous'};
+const TAB_TRACK_LABEL = {devis:'Devis', roi:'Rentabilité', documents:'Documents', meetings:'Comptes-rendus', questionnaires:'Questionnaires', booking:'Prendre rendez-vous'};
 // Onglet Rentabilité réservé aux clients "logement" (02/11/2026, demande
 // client) — liste de secteurs à EXCLURE plutôt qu'à autoriser : le secteur
 // reste une liste libre/éditable (CrmSectorOption, cf. crm.html), de
@@ -609,15 +704,21 @@ function switchTab(key){
 }
 
 // Espace client à onglets (29/10/2026) : l'onglet Devis est toujours
-// présent ; Documents/Comptes-rendus n'apparaissent que s'il y a vraiment
-// quelque chose à montrer (devis sans document attaché ni réunion =
-// aucun onglet superflu, juste le devis comme avant).
+// présent ; Comptes-rendus/Questionnaires n'apparaissent que s'il y a
+// vraiment quelque chose à montrer. Documents est toujours présent depuis
+// le 06/11/2026 (le client doit pouvoir y déposer ses propres documents
+// même sans document de bibliothèque attaché au devis).
 function render(){
   const showRoi = !ROI_EXCLUDED_SECTEURS.includes(QUOTE.prospectSecteur);
   const tabs = [{key:'devis', label:'Devis'}];
   if(showRoi) tabs.push({key:'roi', label:'Rentabilité'});
-  if(QUOTE.documents.length) tabs.push({key:'documents', label:'Documents'});
+  // Onglet Documents toujours visible (06/11/2026, "permettre au
+  // prospect/client de deposer ses propres documents") — même sans
+  // document de bibliothèque attaché, le client doit pouvoir y déposer
+  // les siens.
+  tabs.push({key:'documents', label:'Documents'});
   if(QUOTE.meetings.length) tabs.push({key:'meetings', label:'Comptes-rendus'});
+  if((QUOTE.questionnaires||[]).length) tabs.push({key:'questionnaires', label:'Questionnaires'});
   tabs.push({key:'booking', label:'Prendre rendez-vous'});
 
   const tabNav = tabs.length>1
@@ -630,13 +731,14 @@ function render(){
     ${signatureSectionHtml()}
   </div>`;
   const roiPanel = showRoi ? `<div class="tab-panel" data-panel="roi"><div class="card"><h1 style="font-size:15px">Rentabilité</h1>${roiTabHtml()}</div></div>` : '';
-  const documentsPanel = QUOTE.documents.length
-    ? `<div class="tab-panel" data-panel="documents"><div class="card"><h1 style="font-size:15px">Documents</h1>${documentsTabHtml()}</div></div>` : '';
+  const documentsPanel = `<div class="tab-panel" data-panel="documents"><div class="card"><h1 style="font-size:15px">Documents</h1>${documentsTabHtml()}</div></div>`;
   const meetingsPanel = QUOTE.meetings.length
     ? `<div class="tab-panel" data-panel="meetings"><div class="card"><h1 style="font-size:15px">Comptes-rendus de réunion</h1>${meetingsTabHtml()}</div></div>` : '';
+  const questionnairesPanel = (QUOTE.questionnaires||[]).length
+    ? `<div class="tab-panel" data-panel="questionnaires"><div class="card"><h1 style="font-size:15px">Questionnaires</h1>${questionnairesTabHtml()}</div></div>` : '';
   const bookingPanel = `<div class="tab-panel" data-panel="booking"><div class="card"><h1 style="font-size:15px">Prendre rendez-vous</h1>${bookingTabHtml()}</div></div>`;
 
-  document.getElementById('app').innerHTML = tabNav + devisPanel + roiPanel + documentsPanel + meetingsPanel + bookingPanel;
+  document.getElementById('app').innerHTML = tabNav + devisPanel + roiPanel + documentsPanel + meetingsPanel + questionnairesPanel + bookingPanel;
   if(!QUOTE.alreadySigned) setupCanvas();
   enhanceVimeoThumbs();
   if(showRoi){

@@ -857,7 +857,7 @@ crmQuoteRouter.get(
     // onglet Document du constructeur) — plus d'exposition automatique de
     // toutes les réunions du prospect, le commercial choisit lesquelles
     // montrer au client.
-    const [documents, meetings, promotableProducts] = await Promise.all([
+    const [documents, meetings, promotableProducts, clientUploads, questionnaireSends] = await Promise.all([
       quote.attachedDocumentIds.length
         ? prisma.crmDocument.findMany({
             where: { id: { in: quote.attachedDocumentIds }, active: true },
@@ -889,6 +889,24 @@ crmQuoteRouter.get(
           documentId: true,
           document: { select: { id: true, title: true, fileMimeType: true, url: true } },
         },
+      }),
+      // Documents déposés PAR LE CLIENT (06/11/2026) — jamais le contenu
+      // base64 ici (cf. route de téléchargement dédiée ci-dessous), même
+      // principe que `documents` au-dessus.
+      prisma.crmClientUpload.findMany({
+        where: { prospectId: quote.prospectId },
+        select: { id: true, fileName: true, fileMimeType: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+      }),
+      // Questionnaires adressés à ce prospect (06/11/2026, "intégrer les
+      // questionnaires dans un autre onglet") — réutilise le token déjà
+      // généré par QuestionnaireSend (pas celui du devis) : rendu via une
+      // iframe sur /questionnaire.html, même principe que l'onglet "Prendre
+      // rendez-vous" (iframe Microsoft Bookings).
+      prisma.questionnaireSend.findMany({
+        where: { targetType: "crmProspect", targetId: quote.prospectId },
+        select: { token: true, completedAt: true, questionnaire: { select: { name: true } } },
+        orderBy: { createdAt: "desc" },
       }),
     ]);
     const selectedModuleKeys = new Set(lines.filter((l) => l.category === "logiciel" && l.moduleKey).map((l) => l.moduleKey));
@@ -945,6 +963,8 @@ crmQuoteRouter.get(
         summaryText: quote.attachedMeetingSummaryIds.includes(m.id) ? m.summaryText : null,
         hasRecording: quote.attachedMeetingVideoIds.includes(m.id) && !!m.recordingGraphId,
       })),
+      clientUploads,
+      questionnaires: questionnaireSends.map((s) => ({ token: s.token, name: s.questionnaire.name, completed: !!s.completedAt })),
     });
   })
 );
@@ -1029,6 +1049,62 @@ crmQuoteRouter.get(
     res.setHeader("Content-Type", doc.fileMimeType);
     res.setHeader("Content-Disposition", `inline; filename="${doc.fileName.replace(/"/g, "")}"`);
     res.send(Buffer.from(doc.fileContentBase64, "base64"));
+  })
+);
+
+// Même limite que le upload de fichier côté questionnaire (cf.
+// routes/questionnaire.ts MAX_FILE_DATA_URL_LENGTH) — dataUrl base64, donc
+// ~33% plus long que le fichier réel (06/11/2026, dépôt client).
+const MAX_CLIENT_UPLOAD_DATA_URL_LENGTH = 10_000_000;
+
+/**
+ * POST /wa/crmQuote/publicUpload — le prospect/client dépose son propre
+ * document depuis l'espace public (06/11/2026, "permettre au
+ * prospect/client de deposer ses propres documents"). Même garde-fou
+ * jeton que les autres routes publicXxx ci-dessus ; journalisé en
+ * CrmActivity pour que le commercial voie le dépôt dans le journal.
+ */
+crmQuoteRouter.post(
+  "/crmQuote/publicUpload",
+  asyncHandler(async (req, res) => {
+    const b = req.body as { token?: string; fileName?: string; fileMimeType?: string; dataUrl?: string };
+    const token = b.token || "";
+    if (!token) throw new HttpError(400, "Lien invalide");
+    const quote = await prisma.crmQuote.findUnique({ where: { signToken: token }, select: { id: true, prospectId: true } });
+    if (!quote) throw new HttpError(404, "Lien invalide");
+    const dataUrl = typeof b.dataUrl === "string" ? b.dataUrl : "";
+    if (!dataUrl || !/^data:[^;]+;base64,/.test(dataUrl)) throw new HttpError(400, "Fichier invalide");
+    if (dataUrl.length > MAX_CLIENT_UPLOAD_DATA_URL_LENGTH) throw new HttpError(400, "Fichier trop volumineux (7 Mo max)");
+    const fileName = (b.fileName || "document").slice(0, 200);
+    const fileMimeType = (b.fileMimeType || "application/octet-stream").slice(0, 150);
+    const fileContentBase64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+    const upload = await prisma.crmClientUpload.create({
+      data: { prospectId: quote.prospectId, quoteId: quote.id, fileName, fileMimeType, fileContentBase64 },
+    });
+    await prisma.crmActivity.create({
+      data: { prospectId: quote.prospectId, type: "Note interne", text: `Document déposé par le client : ${fileName}` },
+    });
+    res.status(201).json({ id: upload.id, fileName: upload.fileName, fileMimeType: upload.fileMimeType, createdAt: upload.createdAt });
+  })
+);
+
+/**
+ * GET /wa/crmQuote/publicClientUpload/:id?token=... — téléchargement d'un
+ * document déposé par le client, même garde-fou que publicDocument
+ * ci-dessus (06/11/2026).
+ */
+crmQuoteRouter.get(
+  "/crmQuote/publicClientUpload/:id",
+  asyncHandler(async (req, res) => {
+    const token = (req.query.token as string) || "";
+    if (!token) throw new HttpError(400, "Lien invalide");
+    const quote = await prisma.crmQuote.findUnique({ where: { signToken: token }, select: { prospectId: true } });
+    if (!quote) throw new HttpError(404, "Lien invalide");
+    const upload = await prisma.crmClientUpload.findUnique({ where: { id: req.params.id } });
+    if (!upload || upload.prospectId !== quote.prospectId) throw new HttpError(404, "Document introuvable");
+    res.setHeader("Content-Type", upload.fileMimeType);
+    res.setHeader("Content-Disposition", `inline; filename="${upload.fileName.replace(/"/g, "")}"`);
+    res.send(Buffer.from(upload.fileContentBase64, "base64"));
   })
 );
 
