@@ -7808,6 +7808,44 @@ function dqMeetingsSectionHtml(q){
     <small style="color:var(--mu)">Cochez une réunion, puis choisissez résumé et/ou lien vidéo — affichés sur l'espace client (onglet Comptes-rendus), rien n'est ajouté automatiquement.</small>
     <div style="margin:6px 0 18px">${rows || '<div class="log-empty">Aucune réunion avec compte-rendu récupéré pour ce client — depuis sa fiche, carte "Réunions Teams", cliquez "Récupérer le compte-rendu" après la réunion.</div>'}</div>`;
 }
+/** Section "Questionnaires à inclure" de l'onglet Document (06/11/2026,
+ * "rajouter un questionnaire sur un devis... qui puisse apparaitre sur son
+ * espace") — même principe que les deux sections ci-dessus : coché ici,
+ * sinon rien n'apparaît sur l'espace client. Cocher déclenche la création
+ * du QuestionnaireSend (scope prospect) côté serveur à l'enregistrement du
+ * devis (cf. ensureQuestionnaireSends, routes/crmQuote.ts) — réutilise
+ * l'envoi existant si ce questionnaire a déjà été adressé à ce prospect
+ * par ailleurs (pas de doublon de token). Liste globale (pas par
+ * prospect), même cache que le reste de l'écran "Questionnaires".
+ */
+async function dqLoadQuestionnairesIfNeeded(){
+  if(QN_CRM_LIST_CACHE) return;
+  try{ const r = await apiFetch('/wa/questionnaire/list?scope=crm'); QN_CRM_LIST_CACHE = r.ok ? await r.json() : []; }
+  catch(e){ QN_CRM_LIST_CACHE = []; }
+}
+function dqQuestionnairesSectionHtml(q){
+  if(QN_CRM_LIST_CACHE===null){
+    dqLoadQuestionnairesIfNeeded().then(()=>{ if(QUOTE_TAB==='document') renderQuoteBuilder(); });
+    return `<div class="db-row-between" style="margin:14px 0 4px"><h4 style="margin:0">Questionnaires à inclure</h4></div><small style="color:var(--mu)">Chargement…</small>`;
+  }
+  const active = (QN_CRM_LIST_CACHE||[]).filter(n=>n.active);
+  const rows = active.map(n=>{
+    const checked = (q.attachedQuestionnaireIds||[]).includes(n.id);
+    return `<label style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;cursor:pointer">
+      <input type="checkbox" ${checked?'checked':''} style="margin-top:2px" onchange="dqToggleAttachedQuestionnaire('${n.id}',this.checked)">
+      <span><strong>${esc(n.name)}</strong>${n.description?'<div style="font-size:11px;color:var(--mu)">'+esc(n.description)+'</div>':''}</span>
+    </label>`;
+  }).join('');
+  return `<div class="db-row-between" style="margin:14px 0 4px"><h4 style="margin:0">Questionnaires à inclure</h4></div>
+    <small style="color:var(--mu)">Cochez un questionnaire pour qu'il apparaisse sur l'espace client (onglet Questionnaires) — enregistré avec le devis.</small>
+    <div style="margin:6px 0 18px">${rows || '<div class="log-empty">Aucun questionnaire — créez-en un depuis le menu "Questionnaires".</div>'}</div>`;
+}
+function dqToggleAttachedQuestionnaire(id, checked){
+  const q = QUOTE_DRAFT;
+  const set = new Set(q.attachedQuestionnaireIds||[]);
+  if(checked) set.add(id); else set.delete(id);
+  q.attachedQuestionnaireIds = [...set];
+}
 function dqToggleAttachedMeeting(id, checked){
   const q = QUOTE_DRAFT;
   const m = (CRM_QUOTE_MEETINGS_CACHE[q.prospectId]||[]).find(x=>x.id===id);
@@ -7945,7 +7983,7 @@ async function openQuoteBuilder(id){
       custom:[], config:dqDefaultConfig(),
       introText:DQ_DEFAULT_INTRO, mentionsText:'', termsText:DQ_DEFAULT_TERMS,
       discountPct:0, vatPct:20, depositPct:65, _new:true,
-      attachedDocumentIds: [], attachedMeetingIds: [], attachedMeetingSummaryIds: [], attachedMeetingVideoIds: [],
+      attachedDocumentIds: [], attachedMeetingIds: [], attachedMeetingSummaryIds: [], attachedMeetingVideoIds: [], attachedQuestionnaireIds: [],
     };
   }
   bc([{label:'Devis', fn:'showDevisList()'}, {label: QUOTE_DRAFT._new?'Nouveau devis':QUOTE_DRAFT.number}]);
@@ -7981,6 +8019,7 @@ function dqFromServer(q){
     discountPct:q.discountPct, vatPct:q.vatPct, depositPct:q.depositPct, _new:false,
     attachedDocumentIds: q.attachedDocumentIds||[], attachedMeetingIds: q.attachedMeetingIds||[],
     attachedMeetingSummaryIds: q.attachedMeetingSummaryIds||[], attachedMeetingVideoIds: q.attachedMeetingVideoIds||[],
+    attachedQuestionnaireIds: q.attachedQuestionnaireIds||[],
     signToken: q.signToken||null,
   };
 }
@@ -8308,6 +8347,7 @@ function dqPayload(){
     discountPct: +q.discountPct||0, vatPct: +q.vatPct||0, depositPct: +q.depositPct||0,
     status: q.status, attachedDocumentIds: q.attachedDocumentIds||[], attachedMeetingIds: q.attachedMeetingIds||[],
     attachedMeetingSummaryIds: q.attachedMeetingSummaryIds||[], attachedMeetingVideoIds: q.attachedMeetingVideoIds||[],
+    attachedQuestionnaireIds: q.attachedQuestionnaireIds||[],
   };
 }
 async function saveQuote(){
@@ -8699,6 +8739,7 @@ function dqRenderDocumentTab(q, lines){
     <label>Introduction client<div id="dq-intro" class="sq-edit" contenteditable="true" onblur="dqRerender()">${esc(q.introText)}</div></label>
     ${dqDocumentLibrarySectionHtml(q, clientSecteur)}
     ${dqMeetingsSectionHtml(q)}
+    ${dqQuestionnairesSectionHtml(q)}
     ${DOC_BLOCKS.map(b=>groupHtml(b.cat,b.label,b.color)).join('')}
     <hr class="quote-sep">
     <div class="quote-total-row grand"><strong>Initial HT après remise</strong><strong>${fmtEUR(totals.totalHT)}</strong></div>

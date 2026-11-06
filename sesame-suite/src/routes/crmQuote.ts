@@ -8,6 +8,7 @@ import { nextSequenceValue } from "../lib/sequence";
 import { sendMessage } from "../lib/messaging";
 import { getSmtpConfig } from "../lib/email";
 import { getRecordingStream } from "../lib/graphMeetings";
+import { getOrCreateQuestionnaireSend } from "../lib/questionnaire";
 import { recordScoreEvent, ScoreEventType } from "../lib/crmScoring";
 
 /**
@@ -141,6 +142,7 @@ function shapeQuote(q: {
   attachedMeetingIds: string[];
   attachedMeetingSummaryIds: string[];
   attachedMeetingVideoIds: string[];
+  attachedQuestionnaireIds: string[];
   createdAt: Date;
   updatedAt: Date;
 }) {
@@ -177,6 +179,7 @@ function shapeQuote(q: {
     attachedMeetingIds: q.attachedMeetingIds,
     attachedMeetingSummaryIds: q.attachedMeetingSummaryIds,
     attachedMeetingVideoIds: q.attachedMeetingVideoIds,
+    attachedQuestionnaireIds: q.attachedQuestionnaireIds,
     createdAt: q.createdAt,
     updatedAt: q.updatedAt,
   };
@@ -274,6 +277,22 @@ interface QuoteBody {
   attachedMeetingIds?: string[];
   attachedMeetingSummaryIds?: string[];
   attachedMeetingVideoIds?: string[];
+  attachedQuestionnaireIds?: string[];
+}
+
+/**
+ * Crée le QuestionnaireSend (scope crmProspect) pour chaque questionnaire
+ * nouvellement coché sur ce devis, s'il n'existe pas déjà — même jeton
+ * réutilisé si un envoi existe déjà pour (questionnaire, prospect), cf.
+ * getOrCreateQuestionnaireSend (06/11/2026, "rajouter un questionnaire sur
+ * un devis... qui puisse apparaitre sur son espace"). Best-effort : un id
+ * de questionnaire invalide/supprimé est ignoré plutôt que de faire
+ * échouer tout l'enregistrement du devis.
+ */
+async function ensureQuestionnaireSends(prospectId: string, questionnaireIds: string[]) {
+  for (const questionnaireId of questionnaireIds) {
+    await getOrCreateQuestionnaireSend(questionnaireId, "crmProspect", prospectId).catch(() => null);
+  }
 }
 
 crmQuoteRouter.post(
@@ -304,9 +323,13 @@ crmQuoteRouter.post(
         attachedMeetingIds: Array.isArray(b.attachedMeetingIds) ? b.attachedMeetingIds : [],
         attachedMeetingSummaryIds: Array.isArray(b.attachedMeetingSummaryIds) ? b.attachedMeetingSummaryIds : [],
         attachedMeetingVideoIds: Array.isArray(b.attachedMeetingVideoIds) ? b.attachedMeetingVideoIds : [],
+        attachedQuestionnaireIds: Array.isArray(b.attachedQuestionnaireIds) ? b.attachedQuestionnaireIds : [],
       },
       include: QUOTE_INCLUDE,
     });
+    if (Array.isArray(b.attachedQuestionnaireIds) && b.attachedQuestionnaireIds.length) {
+      await ensureQuestionnaireSends(b.prospectId, b.attachedQuestionnaireIds);
+    }
     res.status(201).json(shapeQuote(row));
   })
 );
@@ -338,9 +361,13 @@ crmQuoteRouter.post(
         attachedMeetingIds: Array.isArray(b.attachedMeetingIds) ? b.attachedMeetingIds : undefined,
         attachedMeetingSummaryIds: Array.isArray(b.attachedMeetingSummaryIds) ? b.attachedMeetingSummaryIds : undefined,
         attachedMeetingVideoIds: Array.isArray(b.attachedMeetingVideoIds) ? b.attachedMeetingVideoIds : undefined,
+        attachedQuestionnaireIds: Array.isArray(b.attachedQuestionnaireIds) ? b.attachedQuestionnaireIds : undefined,
       },
       include: QUOTE_INCLUDE,
     });
+    if (Array.isArray(b.attachedQuestionnaireIds) && b.attachedQuestionnaireIds.length) {
+      await ensureQuestionnaireSends(existing.prospectId, b.attachedQuestionnaireIds);
+    }
     res.json(shapeQuote(row));
   })
 );
@@ -898,16 +925,22 @@ crmQuoteRouter.get(
         select: { id: true, fileName: true, fileMimeType: true, createdAt: true },
         orderBy: { createdAt: "desc" },
       }),
-      // Questionnaires adressés à ce prospect (06/11/2026, "intégrer les
-      // questionnaires dans un autre onglet") — réutilise le token déjà
+      // Questionnaires choisis pour CE devis (06/11/2026, puis restreint le
+      // 06/11/2026 "rajouter un questionnaire sur un devis... qui puisse
+      // apparaitre sur son espace" — cf. attachedQuestionnaireIds, même
+      // principe qu'attachedDocumentIds/attachedMeetingIds : l'envoi
+      // QuestionnaireSend reste rattaché au PROSPECT, mais ne s'affiche ici
+      // que si ce devis précis le référence). Réutilise le token déjà
       // généré par QuestionnaireSend (pas celui du devis) : rendu via une
       // iframe sur /questionnaire.html, même principe que l'onglet "Prendre
       // rendez-vous" (iframe Microsoft Bookings).
-      prisma.questionnaireSend.findMany({
-        where: { targetType: "crmProspect", targetId: quote.prospectId },
-        select: { token: true, completedAt: true, questionnaire: { select: { name: true } } },
-        orderBy: { createdAt: "desc" },
-      }),
+      quote.attachedQuestionnaireIds.length
+        ? prisma.questionnaireSend.findMany({
+            where: { targetType: "crmProspect", targetId: quote.prospectId, questionnaireId: { in: quote.attachedQuestionnaireIds } },
+            select: { token: true, completedAt: true, questionnaire: { select: { name: true } } },
+            orderBy: { createdAt: "desc" },
+          })
+        : Promise.resolve([]),
     ]);
     const selectedModuleKeys = new Set(lines.filter((l) => l.category === "logiciel" && l.moduleKey).map((l) => l.moduleKey));
     const promotedLicenses = promotableProducts

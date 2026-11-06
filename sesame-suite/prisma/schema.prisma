@@ -2765,6 +2765,16 @@ model CrmQuote {
   attachedMeetingSummaryIds String[] @default([])
   attachedMeetingVideoIds   String[] @default([])
 
+  // Questionnaires (Questionnaire) choisis pour apparaître sur l'espace
+  // client de CE devis (06/11/2026, "rajouter un questionnaire sur un
+  // devis... qui puisse apparaitre sur son espace") — même principe
+  // qu'attachedDocumentIds/attachedMeetingIds : liste d'ids simples, pas de
+  // relation Prisma formelle. L'envoi (QuestionnaireSend) reste rattaché au
+  // PROSPECT (cf. model QuestionnaireSend), cette liste ne fait que
+  // restreindre quels envois apparaissent sur CE devis précis plutôt que
+  // sur tous les devis du même prospect.
+  attachedQuestionnaireIds String[] @default([])
+
   clientUploads CrmClientUpload[]
 
   createdAt DateTime @default(now())
