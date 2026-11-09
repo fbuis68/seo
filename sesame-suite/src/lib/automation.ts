@@ -77,6 +77,13 @@ export const TRIGGERS: TriggerDef[] = [
   // (12/10/2026, demande client : déplacé depuis un panneau dédié dans
   // l'onglet Banque vers les règles d'automatisation génériques).
   { key: "bank.transaction.created", label: "Nouveau mouvement bancaire", scope: "crm", timingModes: ["immediate"] },
+  // Recipient event=null au point de déclenchement (pas de prospect/contact
+  // formel associé à une vérification de crédit SMS côté plateforme) —
+  // résolu côté appelant (lib/smsCreditScheduler.ts) vers le CrmProspect lié
+  // à l'entité concernée, comme pour crm.ticket_status_changed ci-dessus.
+  // Filtré via audienceFilter {maxCredit} (09/11/2026, "alerter le client
+  // quand les credits atteignent un certain niveau") — cf. matchesAudienceFilter.
+  { key: "crm.sms_credit_low", label: "Crédit SMS bas", scope: "crm", timingModes: ["immediate"] },
 ];
 
 export function getTrigger(key: string) {
@@ -91,26 +98,33 @@ interface FireContext {
   variables: Record<string, string>;
   /**
    * Données structurées de l'événement, filtrées contre
-   * AutomationRule.audienceFilter AVANT l'envoi — seul "bank.transaction.
-   * created" l'utilise pour l'instant (direction/bankAccountId/minAmount,
-   * cf. matchesBankFilter). Absent pour tout autre déclencheur, qui n'a
-   * donc aucun filtre au-delà de son ciblage habituel (timing/destinataire).
+   * AutomationRule.audienceFilter AVANT l'envoi — utilisé par "bank.
+   * transaction.created" (direction/bankAccountId/minAmount) et
+   * "crm.sms_credit_low" (maxCredit), cf. matchesAudienceFilter. Absent pour
+   * tout autre déclencheur, qui n'a donc aucun filtre au-delà de son
+   * ciblage habituel (timing/destinataire).
    */
   matchData?: Record<string, unknown>;
 }
 
 /**
- * Filtre {direction, bankAccountId, minAmount} (tous optionnels, null/absent
- * = pas de restriction sur ce critère) saisi sur une règle "bank.
- * transaction.created" contre les données réelles du mouvement — même
- * principe que l'AudienceFilter de crm.newsletter plus bas, mais appliqué à
- * un déclencheur IMMÉDIAT plutôt qu'à un balayage périodique.
+ * Filtre générique contre matchData (tous les champs optionnels,
+ * null/absent = pas de restriction sur ce critère) : {direction,
+ * bankAccountId, minAmount} pour "bank.transaction.created", {maxCredit}
+ * pour "crm.sms_credit_low" (09/11/2026) — même principe que l'AudienceFilter
+ * de crm.newsletter plus bas, mais appliqué à un déclencheur IMMÉDIAT plutôt
+ * qu'à un balayage périodique. Un seul filtre générique plutôt qu'un par
+ * déclencheur : les clés propres à un trigger sont simplement absentes du
+ * matchData/audienceFilter des autres, donc sans effet pour eux.
  */
-function matchesBankFilter(filter: unknown, matchData: Record<string, unknown>): boolean {
-  const f = (filter || {}) as { direction?: string; bankAccountId?: string; minAmount?: number };
+function matchesAudienceFilter(filter: unknown, matchData: Record<string, unknown>): boolean {
+  const f = (filter || {}) as { direction?: string; bankAccountId?: string; minAmount?: number; maxCredit?: number };
   if (f.direction && f.direction !== matchData.direction) return false;
   if (f.bankAccountId && f.bankAccountId !== matchData.bankAccountId) return false;
   if (f.minAmount != null && Number(matchData.amount ?? 0) < Number(f.minAmount)) return false;
+  // Sens inverse des deux filtres ci-dessus : on ne GARDE la règle que si le
+  // crédit est bien PASSÉ SOUS le seuil réglé (jamais au-dessus).
+  if (f.maxCredit != null && matchData.credit != null && Number(matchData.credit) > Number(f.maxCredit)) return false;
   return true;
 }
 
@@ -172,7 +186,7 @@ export async function fireTrigger(triggerKey: string, ctx: FireContext): Promise
   }
 
   for (const rule of rules) {
-    if (ctx.matchData && !matchesBankFilter(rule.audienceFilter, ctx.matchData)) continue;
+    if (ctx.matchData && !matchesAudienceFilter(rule.audienceFilter, ctx.matchData)) continue;
     const to = resolveRecipient(rule, ctx.recipient.email, ctx.recipient.phone);
     if (!to) {
       // Cas fréquent et jusqu'ici invisible : la fiche à l'origine de l'événement

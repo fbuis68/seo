@@ -10891,8 +10891,8 @@ function renderCanauxPanel(){
       </div>
       <div id="sms-fields-smspartner" style="${sms.provider==='smspartner'?'':'display:none'}">
         <div class="ff" style="margin-top:8px"><label>Clé API</label><input type="password" id="sms-apikey" value="${esc(sms.apiKey)}" placeholder="${sms.apiKey?'':'••••••••'}"></div>
-        <div class="ff" style="margin-top:8px"><label>Identifiant sous-compte (optionnel)</label><input id="sms-subaccount" value="${esc(sms.baseUrl)}" placeholder="Laissez vide si compte DocPartner dédié à ce client"></div>
-        <div style="font-size:11px;color:var(--mu,#888);margin-top:4px">Si Sesame distribue ce client comme sous-compte d'un compte DocPartner/SMSPartner maître — à renseigner UNIQUEMENT une fois le nom exact du champ attendu par leur API confirmé (09/11/2026, en attente) ; laissez vide tant que ce n'est pas le cas.</div>
+        <div class="ff" style="margin-top:8px"><label>Token sous-compte (optionnel)</label><input id="sms-subaccount" value="${esc(sms.baseUrl)}" placeholder="Laissez vide si compte DocPartner dédié à ce client"></div>
+        <div style="font-size:11px;color:var(--mu,#888);margin-top:4px">Si Sesame distribue ce client comme sous-compte d'un compte DocPartner/SMSPartner maître — token du sous-compte (champ "tokenSubaccount" côté API), utilisé pour remonter le crédit restant propre à CE client plutôt que celui du compte maître.</div>
       </div>
       <div id="sms-fields-infobip" style="${sms.provider==='infobip'?'':'display:none'}">
         <div class="ff" style="margin-top:8px"><label>Clé API</label><input type="password" id="sms-apikey-ib" value="${esc(sms.apiKey)}" placeholder="${sms.apiKey?'':'••••••••'}"></div>
@@ -11697,6 +11697,10 @@ const TRIGGERS_CRM = [
   // renderRuleAudienceFields/saveRule ci-dessous (12/10/2026, demande
   // client — déplacé depuis un panneau dédié de l'onglet Banque).
   {key:'bank.transaction.created', label:'Nouveau mouvement bancaire', timingModes:['immediate'], category:'compta'},
+  // Filtré via audienceFilter {maxCredit}, cf. renderRuleAudienceFields/
+  // saveRule ci-dessous (09/11/2026, "alerter le client quand les credits
+  // atteignent un certain niveau").
+  {key:'crm.sms_credit_low', label:'Crédit SMS bas', timingModes:['immediate']},
 ];
 let AUTO_RULES=[];
 
@@ -11951,6 +11955,15 @@ function renderRuleAudienceFields(triggerKey){
     renderRuleBankFilterFields(r.audienceFilter||{});
     return;
   }
+  if(triggerKey==='crm.sms_credit_low'){
+    const af = r.audienceFilter || {};
+    el.innerHTML = `<div class="modal-section">Seuil d'alerte</div>
+      <div class="form-grid">
+        <div class="ff"><label>Crédit restant (SMS)</label><input type="number" id="rule-sms-maxCredit" value="${af.maxCredit!=null?af.maxCredit:''}" min="0" step="1" placeholder="Ex : 50"></div>
+      </div>
+      <small style="color:var(--mu)">Alerte envoyée dès que le crédit SMS restant du client passe à ce niveau ou en-dessous — se réarme automatiquement si le crédit redescend après être remonté au-dessus.</small>`;
+    return;
+  }
   el.innerHTML='';
 }
 
@@ -12036,6 +12049,9 @@ async function saveRule(id){
       bankAccountId: g('rule-bank-account')||null,
       minAmount: g('rule-bank-minAmount')===''?null:Number(g('rule-bank-minAmount')),
     };
+  }
+  if(triggerKey==='crm.sms_credit_low'){
+    body.audienceFilter = { maxCredit: g('rule-sms-maxCredit')===''?null:Number(g('rule-sms-maxCredit')) };
   }
   if(!body.name){flash('Le nom est requis');return;}
   if(!body.templateKey){flash('Sélectionnez un modèle pour ce canal');return;}

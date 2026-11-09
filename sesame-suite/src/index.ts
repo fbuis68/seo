@@ -12,6 +12,7 @@ import { startAccRelanceScheduler } from "./lib/accRelanceScheduler";
 import { startMarketIntelligenceScheduler } from "./lib/marketIntelligenceScheduler";
 import { startMarketHunterScheduler } from "./lib/marketHunterScheduler";
 import { startOutreachScheduler } from "./lib/outreachScheduler";
+import { startSmsCreditScheduler } from "./lib/smsCreditScheduler";
 import { VERSION } from "./lib/version";
 
 const INSECURE_DEFAULTS: Record<string, string> = {
@@ -61,4 +62,5 @@ app.listen(config.port, () => {
   startMarketIntelligenceScheduler();
   startMarketHunterScheduler();
   startOutreachScheduler();
+  startSmsCreditScheduler();
 });

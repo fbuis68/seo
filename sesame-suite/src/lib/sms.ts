@@ -267,21 +267,19 @@ export interface SmsPartnerCreditResult {
 export async function fetchSmsPartnerCredit(apiKey: string, subAccountId?: string | null): Promise<SmsPartnerCreditResult> {
   if (!apiKey) return { credit: null, error: "Clé API DocPartner manquante" };
   // Identifiant de sous-compte (09/11/2026, ChannelConfig.baseUrl réutilisé
-  // — cf. routes/messaging.ts) — PAS ENCORE envoyé à l'API : son nom de
-  // champ exact chez DocPartner/SMSPartner n'a pas pu être confirmé depuis
-  // cet environnement (doc.smspartner.fr bloqué en sortie). Le crédit
-  // retourné reste donc celui du compte entier tant que ceci n'est pas
-  // branché — jamais un paramètre deviné qui ferait silencieusement
-  // remonter le crédit du mauvais (sous-)compte sans qu'on le sache.
-  if (subAccountId) {
-    console.warn("[fetchSmsPartnerCredit] subAccountId configuré (" + subAccountId + ") mais pas encore transmis à l'API — champ SMSPartner à confirmer avant branchement.");
-  }
+  // — cf. routes/messaging.ts) — nom de champ "tokenSubaccount" confirmé par
+  // un extrait réel de l'intégration officielle DocPartner/SMSPartner
+  // (endpoint /subaccount/credit/add, fourni par le client le 09/11/2026) ;
+  // supposé identique sur /credits (même convention d'API), à vérifier au
+  // premier test réel avec un sous-compte renseigné.
+  const payload: Record<string, unknown> = { apiKey };
+  if (subAccountId) payload.tokenSubaccount = subAccountId;
   let res: Response;
   try {
     res = await fetch(`${SMSPARTNER_API_BASE}/credits`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ apiKey }),
+      body: JSON.stringify(payload),
     });
   } catch (err) {
     return { credit: null, error: "Échec de connexion à l'API DocPartner : " + String(err instanceof Error ? err.message : err) };
