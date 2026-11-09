@@ -253,34 +253,30 @@ export interface SmsPartnerCreditResult {
 /**
  * Crédit SMS restant du compte DocPartner/SMSPartner d'UN CLIENT (04/11/2026,
  * demande client "récupérer le crédit restant SMS... et le rapatrier sur la
- * fiche client") — même convention d'authentification que sendViaSmsPartner
- * ci-dessus (POST + apiKey dans le corps JSON), mais endpoint /credits dont
- * le nom de champ de réponse n'a PAS pu être confirmé depuis cet
- * environnement (doc.smspartner.fr hors de la liste des hôtes réseau
- * autorisés ici, et api.smspartner.fr bloqué lui aussi en sortie — aucun
- * test réel possible). Plusieurs noms de champ plausibles sont donc
- * essayés par ordre de vraisemblance plutôt que de parier sur un seul ;
- * si aucun ne correspond, la réponse brute part en log serveur pour
- * ajuster vite cette liste au lieu d'afficher un chiffre inventé à
- * l'utilisateur (cf. credit:null ci-dessus, jamais 0 par défaut).
+ * fiche client") — endpoint GET /v1/me?apiKey=... confirmé le 09/11/2026 par
+ * un extrait réel de l'intégration officielle DocPartner/SMSPartner
+ * (corrige le POST /credits initial, qui renvoyait du 404 : mauvais
+ * endpoint, jamais vérifiable depuis cet environnement où doc.smspartner.fr
+ * et api.smspartner.fr sont bloqués en sortie). Le nom du champ crédit dans
+ * la réponse de /me n'est en revanche toujours pas confirmé — plusieurs
+ * candidats plausibles essayés par ordre de vraisemblance ; si aucun ne
+ * correspond, la réponse brute part en log serveur pour ajuster vite cette
+ * liste plutôt que d'afficher un chiffre inventé (cf. credit:null,
+ * jamais 0 par défaut).
  */
 export async function fetchSmsPartnerCredit(apiKey: string, subAccountId?: string | null): Promise<SmsPartnerCreditResult> {
   if (!apiKey) return { credit: null, error: "Clé API DocPartner manquante" };
+  const params = new URLSearchParams({ apiKey });
   // Identifiant de sous-compte (09/11/2026, ChannelConfig.baseUrl réutilisé
   // — cf. routes/messaging.ts) — nom de champ "tokenSubaccount" confirmé par
-  // un extrait réel de l'intégration officielle DocPartner/SMSPartner
-  // (endpoint /subaccount/credit/add, fourni par le client le 09/11/2026) ;
-  // supposé identique sur /credits (même convention d'API), à vérifier au
+  // un autre extrait de l'intégration officielle (endpoint
+  // /subaccount/credit/add) ; son usage sur /me (qui renvoie "mon propre
+  // compte") n'est PAS confirmé — passé ici en best-effort, à vérifier au
   // premier test réel avec un sous-compte renseigné.
-  const payload: Record<string, unknown> = { apiKey };
-  if (subAccountId) payload.tokenSubaccount = subAccountId;
+  if (subAccountId) params.set("tokenSubaccount", subAccountId);
   let res: Response;
   try {
-    res = await fetch(`${SMSPARTNER_API_BASE}/credits`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    res = await fetch(`${SMSPARTNER_API_BASE}/me?${params.toString()}`, { method: "GET" });
   } catch (err) {
     return { credit: null, error: "Échec de connexion à l'API DocPartner : " + String(err instanceof Error ? err.message : err) };
   }
@@ -291,9 +287,10 @@ export async function fetchSmsPartnerCredit(apiKey: string, subAccountId?: strin
   } catch {
     // corps non-JSON, géré ci-dessous (aucun candidat ne correspondra)
   }
-  if (!res.ok) {
-    console.error("[sms] Échec DocPartner /credits — réponse complète :", text);
-    return { credit: null, error: `HTTP ${res.status}` };
+  console.log("[sms] DocPartner GET /me — réponse brute :", text);
+  if (!res.ok || j.success === false) {
+    console.error("[sms] Échec DocPartner /me — réponse complète :", text);
+    return { credit: null, error: (j.message as string) || `HTTP ${res.status}` };
   }
   const candidates = ["credit", "credits", "credit_sms", "creditSms", "sms_credit", "balance", "solde"];
   for (const key of candidates) {
