@@ -94,7 +94,7 @@ interface RuleBody {
   questionnaireId?: string | null;
 }
 
-const TIMING_MODES = ["immediate", "offset", "recurring"];
+const TIMING_MODES = ["immediate", "offset", "delay", "recurring"];
 const OFFSET_UNITS = ["minutes", "hours", "days", "months"];
 const CHANNELS = ["email", "sms", "whatsapp"];
 const RECIPIENT_MODES = ["event", "custom"];
@@ -107,7 +107,7 @@ function validateRuleBody(b: RuleBody) {
   if (!trigger.timingModes.includes(b.timingMode as (typeof trigger.timingModes)[number])) {
     throw new HttpError(400, `Le déclencheur "${trigger.label}" ne supporte pas le mode "${b.timingMode}"`);
   }
-  if (b.timingMode === "offset") {
+  if (b.timingMode === "offset" || b.timingMode === "delay") {
     // Le signe porte le sens avant/après (ex. "J-5" = -5, "M+1" = +1) —
     // seule une valeur non nulle a un sens ici.
     if (!b.offsetValue) throw new HttpError(400, "Une durée non nulle est requise pour ce mode (ex. J-5, H-10, M+1)");

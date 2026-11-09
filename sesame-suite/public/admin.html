@@ -10480,16 +10480,22 @@ async function emlRunBulkImport(){
 
 // ═══════════════════════════════════════════════ AUTOMATISATIONS (déclencheurs métier hôtel)
 var TRIGGERS_HOTEL = [
-  {key:'booking.created', label:'Réservation créée', timingModes:['immediate']},
-  {key:'checkin.completed', label:'Check-in effectué', timingModes:['immediate']},
-  {key:'order.created', label:'Commande créée (room service / boutique)', timingModes:['immediate']},
-  {key:'order.delivered', label:'Commande livrée', timingModes:['immediate']},
-  {key:'order.cancelled', label:'Commande annulée', timingModes:['immediate']},
+  {key:'booking.created', label:'Réservation créée', timingModes:['immediate','delay']},
+  {key:'checkin.completed', label:'Check-in effectué', timingModes:['immediate','delay']},
+  {key:'order.created', label:'Commande créée (room service / boutique)', timingModes:['immediate','delay']},
+  {key:'order.delivered', label:'Commande livrée', timingModes:['immediate','delay']},
+  {key:'order.cancelled', label:'Commande annulée', timingModes:['immediate','delay']},
   {key:'stay.start', label:'Début de séjour', timingModes:['offset']},
   {key:'stay.end', label:'Fin de séjour', timingModes:['offset']},
-  {key:'housekeeping.completed', label:'Ménage terminé', timingModes:['immediate']},
-  {key:'questionnaire.completed', label:'Questionnaire complété', timingModes:['immediate']},
+  {key:'housekeeping.completed', label:'Ménage terminé', timingModes:['immediate','delay']},
+  {key:'questionnaire.completed', label:'Questionnaire complété', timingModes:['immediate','delay']},
 ];
+// Ex. "délai" (09/11/2026, "prevois l'envoi a des criteres temporelles ex
+// à J-8H ou J+3 jours") : au lieu d'envoyer tout de suite, programme
+// l'envoi décalé après l'événement — mêmes champs Sens/Délai/Unité que
+// "offset" (cf. autoRenderTimingSubfields), un délai AVANT n'a de sens que
+// pour "Début/Fin de séjour" ci-dessus (date déjà connue).
+var TIMING_MODE_LABEL = {immediate:'Immédiat', offset:'Décalage (date précise)', delay:"Délai après l'événement", recurring:'Récurrent'};
 var AUTO_RULES = [];
 var AUTO_RULE_EDITING = null;
 var QN_LIST = []; // questionnaires (portée hôtel) — cf. panneau Questionnaires
@@ -10663,20 +10669,45 @@ function autoRenderSenderField(){
   el.innerHTML = '<div class="fi"><label class="lb">Nom d\'expéditeur (optionnel — remplace celui du canal Email pour cette règle)</label><input type="text" id="auto-senderName" value="'+esc(r.senderName||'')+'" placeholder="Ex. Réception Hôtel Churchill"></div>';
 }
 
+function autoCurrentTimingMode(){
+  var sel = document.getElementById('auto-timingModeSel');
+  if(sel) return sel.value;
+  var r = AUTO_RULE_EDITING || {};
+  var triggerKey = (document.getElementById('auto-trigger')||{value:r.trigger}).value;
+  var trig = TRIGGERS_HOTEL.find(function(t){return t.key===triggerKey;});
+  return trig ? trig.timingModes[0] : 'immediate';
+}
+
 function autoRenderTimingFields(){
   var r = AUTO_RULE_EDITING || {};
   var triggerKey = (document.getElementById('auto-trigger')||{value:r.trigger}).value;
   var trig = TRIGGERS_HOTEL.find(function(t){return t.key===triggerKey;});
-  var mode = trig ? trig.timingModes[0] : 'immediate';
+  var modes = trig ? trig.timingModes : ['immediate'];
   var el = document.getElementById('auto-timing-fields');
+  if(!el) return;
+  var current = modes.indexOf(r.timingMode)>-1 ? r.timingMode : modes[0];
+  var modeSelHtml = modes.length>1
+    ? '<div class="fi"><label class="lb">Quand envoyer</label><select id="auto-timingModeSel" onchange="autoRenderTimingSubfields()">'+modes.map(function(m){return '<option value="'+m+'" '+(m===current?'selected':'')+'>'+(TIMING_MODE_LABEL[m]||m)+'</option>';}).join('')+'</select></div>'
+    : '';
+  el.innerHTML = modeSelHtml + '<div id="auto-timing-subfields"></div>';
+  autoRenderTimingSubfields();
+}
+
+function autoRenderTimingSubfields(){
+  var r = AUTO_RULE_EDITING || {};
+  var mode = autoCurrentTimingMode();
+  var el = document.getElementById('auto-timing-subfields');
   if(!el) return;
   if(mode==='immediate'){
     el.innerHTML = '<input type="hidden" id="auto-timingMode" value="immediate">';
-  } else if(mode==='offset'){
-    var v = r.timingMode==='offset' ? (r.offsetValue||1) : Math.abs(r.offsetValue||1);
+  } else if(mode==='offset' || mode==='delay'){
+    var v = r.timingMode===mode ? (r.offsetValue||1) : Math.abs(r.offsetValue||1);
     var mag = Math.abs(v)||1;
     var sign = (r.timingMode==='before'||v<0) ? 'before' : 'after';
-    el.innerHTML = '<input type="hidden" id="auto-timingMode" value="offset">'
+    var hint = mode==='delay'
+      ? "Ex. J+3 = 3 jours après l'événement · H+8 = 8 heures après (un délai \"avant\" n'a de sens ici que si l'échéance est déjà connue)."
+      : 'Ex. J-5 = 5 jours avant · H-10 = 10 heures avant · M+1 = 1 mois après';
+    el.innerHTML = '<input type="hidden" id="auto-timingMode" value="'+mode+'">'
       + '<div class="g2">'
       + '<div class="fi"><label class="lb">Sens</label><select id="auto-offsetSign">'
       + '<option value="before" '+(sign==='before'?'selected':'')+'>Avant</option>'
@@ -10690,7 +10721,7 @@ function autoRenderTimingFields(){
       + '<option value="days" '+(!r.offsetUnit||r.offsetUnit==='days'?'selected':'')+'>Jours</option>'
       + '<option value="months" '+(r.offsetUnit==='months'?'selected':'')+'>Mois</option>'
       + '</select></div>'
-      + '<div style="font-size:11px;color:var(--mu);margin-top:4px">Ex. J-5 = 5 jours avant · H-10 = 10 heures avant · M+1 = 1 mois après</div>';
+      + '<div style="font-size:11px;color:var(--mu);margin-top:4px">'+hint+'</div>';
   }
 }
 

@@ -26,30 +26,40 @@ export interface TriggerDef {
   key: string;
   label: string;
   scope: "hotel" | "crm";
-  timingModes: Array<"immediate" | "offset" | "recurring">;
+  timingModes: Array<"immediate" | "offset" | "delay" | "recurring">;
   dateField?: "startDate" | "endDate" | "trialEnd"; // requis pour "offset"
   targetModel?: "booking" | "subscription"; // source balayée pour "offset" — défaut "booking"
 }
 
+// "delay" (09/11/2026, "prevois l'envoi a des criteres temporelles ex à
+// J-8H ou J+3 jours") — disponible sur tout déclencheur par ailleurs
+// "immediate" : au lieu d'envoyer tout de suite, programme l'envoi décalé
+// (offsetValue/offsetUnit signés, même convention que "offset" — ex. J+3 =
+// 3 jours après l'événement) via AutomationPendingSend, balayé par
+// sweepPendingSends() (cf. runAutomationSweep). Un offset NÉGATIF ("avant")
+// n'a de sens que si on connaît déjà une échéance future au moment de
+// l'événement — pour un décalage avant une date précise (arrivée, fin
+// d'essai…), préférer "stay.start"/"stay.end"/"crm.subscription_trial_ending"
+// ci-dessous (déclencheur "offset" dédié, qui scrute cette date).
 export const TRIGGERS: TriggerDef[] = [
-  { key: "booking.created", label: "Réservation créée", scope: "hotel", timingModes: ["immediate"] },
-  { key: "checkin.completed", label: "Check-in effectué", scope: "hotel", timingModes: ["immediate"] },
-  { key: "order.created", label: "Commande créée (room service / boutique)", scope: "hotel", timingModes: ["immediate"] },
-  { key: "order.delivered", label: "Commande livrée", scope: "hotel", timingModes: ["immediate"] },
-  { key: "order.cancelled", label: "Commande annulée", scope: "hotel", timingModes: ["immediate"] },
+  { key: "booking.created", label: "Réservation créée", scope: "hotel", timingModes: ["immediate", "delay"] },
+  { key: "checkin.completed", label: "Check-in effectué", scope: "hotel", timingModes: ["immediate", "delay"] },
+  { key: "order.created", label: "Commande créée (room service / boutique)", scope: "hotel", timingModes: ["immediate", "delay"] },
+  { key: "order.delivered", label: "Commande livrée", scope: "hotel", timingModes: ["immediate", "delay"] },
+  { key: "order.cancelled", label: "Commande annulée", scope: "hotel", timingModes: ["immediate", "delay"] },
   { key: "stay.start", label: "Début de séjour", scope: "hotel", timingModes: ["offset"], dateField: "startDate" },
   { key: "stay.end", label: "Fin de séjour", scope: "hotel", timingModes: ["offset"], dateField: "endDate" },
-  { key: "housekeeping.completed", label: "Ménage terminé", scope: "hotel", timingModes: ["immediate"] },
-  { key: "crm.prospect_created", label: "Nouveau prospect CRM", scope: "crm", timingModes: ["immediate"] },
+  { key: "housekeeping.completed", label: "Ménage terminé", scope: "hotel", timingModes: ["immediate", "delay"] },
+  { key: "crm.prospect_created", label: "Nouveau prospect CRM", scope: "crm", timingModes: ["immediate", "delay"] },
   // Sous-ensemble de crm.prospect_created : uniquement les prospects créés
   // via le formulaire de contact public du site web (cf. routes/contact.ts,
   // qui déclenche les deux triggers) — permet une automatisation dédiée à
   // ces leads sans devoir filtrer les prospects créés manuellement dans le
   // CRM, via le wizard d'inscription, une affaire, etc.
-  { key: "crm.prospect_created_web", label: "Nouveau prospect du site web", scope: "crm", timingModes: ["immediate"] },
-  { key: "crm.contract_signed", label: "Contrat signé", scope: "crm", timingModes: ["immediate"] },
-  { key: "crm.subscription_activated", label: "Souscription activée", scope: "crm", timingModes: ["immediate"] },
-  { key: "crm.subscription_cancelled", label: "Souscription annulée", scope: "crm", timingModes: ["immediate"] },
+  { key: "crm.prospect_created_web", label: "Nouveau prospect du site web", scope: "crm", timingModes: ["immediate", "delay"] },
+  { key: "crm.contract_signed", label: "Contrat signé", scope: "crm", timingModes: ["immediate", "delay"] },
+  { key: "crm.subscription_activated", label: "Souscription activée", scope: "crm", timingModes: ["immediate", "delay"] },
+  { key: "crm.subscription_cancelled", label: "Souscription annulée", scope: "crm", timingModes: ["immediate", "delay"] },
   {
     key: "crm.subscription_trial_ending",
     label: "Fin d'essai souscription",
@@ -59,31 +69,31 @@ export const TRIGGERS: TriggerDef[] = [
     targetModel: "subscription",
   },
   { key: "crm.newsletter", label: "Newsletter récurrente", scope: "crm", timingModes: ["recurring"] },
-  { key: "crm.ticket_created", label: "Nouveau ticket support", scope: "crm", timingModes: ["immediate"] },
-  { key: "crm.ticket_client_replied", label: "Client a répondu à un ticket", scope: "crm", timingModes: ["immediate"] },
+  { key: "crm.ticket_created", label: "Nouveau ticket support", scope: "crm", timingModes: ["immediate", "delay"] },
+  { key: "crm.ticket_client_replied", label: "Client a répondu à un ticket", scope: "crm", timingModes: ["immediate", "delay"] },
   // Se déclenche à chaque changement manuel de statut (POST /wa/crmTicket/update),
   // quel que soit le couple ancien/nouveau statut — {{ancienStatut}}/{{nouveauStatut}}
   // permettent au modèle de message d'afficher la transition. Contrairement aux
   // deux déclencheurs ci-dessus (recipient event=null, pensés pour notifier l'équipe
   // via recipientMode="custom"), celui-ci porte l'email du contact du ticket comme
   // destinataire par défaut : le cas d'usage principal est d'informer le client.
-  { key: "crm.ticket_status_changed", label: "Changement de statut de ticket", scope: "crm", timingModes: ["immediate"] },
-  { key: "questionnaire.completed", label: "Questionnaire complété", scope: "hotel", timingModes: ["immediate"] },
-  { key: "crm.questionnaire_completed", label: "Questionnaire complété", scope: "crm", timingModes: ["immediate"] },
+  { key: "crm.ticket_status_changed", label: "Changement de statut de ticket", scope: "crm", timingModes: ["immediate", "delay"] },
+  { key: "questionnaire.completed", label: "Questionnaire complété", scope: "hotel", timingModes: ["immediate", "delay"] },
+  { key: "crm.questionnaire_completed", label: "Questionnaire complété", scope: "crm", timingModes: ["immediate", "delay"] },
   // Recipient event=null (comme crm.ticket_created) : un mouvement bancaire
   // n'a pas de client/prospect associé, toujours recipientMode="custom".
   // Filtré via AutomationRule.audienceFilter ({direction, bankAccountId,
   // minAmount}, tous optionnels) — cf. matchesBankFilter ci-dessous
   // (12/10/2026, demande client : déplacé depuis un panneau dédié dans
   // l'onglet Banque vers les règles d'automatisation génériques).
-  { key: "bank.transaction.created", label: "Nouveau mouvement bancaire", scope: "crm", timingModes: ["immediate"] },
+  { key: "bank.transaction.created", label: "Nouveau mouvement bancaire", scope: "crm", timingModes: ["immediate", "delay"] },
   // Recipient event=null au point de déclenchement (pas de prospect/contact
   // formel associé à une vérification de crédit SMS côté plateforme) —
   // résolu côté appelant (lib/smsCreditScheduler.ts) vers le CrmProspect lié
   // à l'entité concernée, comme pour crm.ticket_status_changed ci-dessus.
   // Filtré via audienceFilter {maxCredit} (09/11/2026, "alerter le client
   // quand les credits atteignent un certain niveau") — cf. matchesAudienceFilter.
-  { key: "crm.sms_credit_low", label: "Crédit SMS bas", scope: "crm", timingModes: ["immediate"] },
+  { key: "crm.sms_credit_low", label: "Crédit SMS bas", scope: "crm", timingModes: ["immediate", "delay"] },
 ];
 
 export function getTrigger(key: string) {
@@ -178,7 +188,7 @@ export async function fireTrigger(triggerKey: string, ctx: FireContext): Promise
   let rules;
   try {
     rules = await prisma.automationRule.findMany({
-      where: { entityId: ctx.entityId, trigger: triggerKey, enabled: true, timingMode: "immediate" },
+      where: { entityId: ctx.entityId, trigger: triggerKey, enabled: true, timingMode: { in: ["immediate", "delay"] } },
     });
   } catch (err) {
     console.error(`[automation] lecture des règles échouée pour "${triggerKey}":`, err);
@@ -203,6 +213,42 @@ export async function fireTrigger(triggerKey: string, ctx: FireContext): Promise
       );
       continue;
     }
+
+    if (rule.timingMode === "delay") {
+      // Programme l'envoi au lieu de l'envoyer tout de suite (cf.
+      // AutomationPendingSend ci-dessus/sweepPendingSends ci-dessous) — même
+      // garde-fou de dédoublonnage (AutomationRuleLog) que le chemin
+      // immédiat, créé ici dès la PROGRAMMATION pour ne jamais planifier
+      // deux fois le même envoi si fireTrigger était appelé deux fois pour
+      // le même événement.
+      try {
+        const already = await prisma.automationRuleLog.findUnique({
+          where: { ruleId_targetType_targetId: { ruleId: rule.id, targetType: ctx.targetType, targetId: ctx.targetId } },
+        });
+        if (already) continue;
+        const dueAt = applyOffset(new Date(), rule.offsetValue ?? 0, rule.offsetUnit);
+        await prisma.automationPendingSend.create({
+          data: {
+            ruleId: rule.id,
+            entityId: ctx.entityId,
+            targetType: ctx.targetType,
+            targetId: ctx.targetId,
+            channel: rule.channel,
+            templateKey: rule.templateKey,
+            recipientTo: to,
+            variables: ctx.variables as object,
+            senderName: rule.senderName,
+            dueAt,
+          },
+        });
+        await prisma.automationRuleLog.create({ data: { ruleId: rule.id, targetType: ctx.targetType, targetId: ctx.targetId } });
+      } catch (err) {
+        console.error(`[automation] échec de planification de la règle "${rule.name}" (${triggerKey}):`, err);
+        await recordRuleError(rule.id, err);
+      }
+      continue;
+    }
+
     try {
       const already = await prisma.automationRuleLog.findUnique({
         where: { ruleId_targetType_targetId: { ruleId: rule.id, targetType: ctx.targetType, targetId: ctx.targetId } },
@@ -222,6 +268,50 @@ export async function fireTrigger(triggerKey: string, ctx: FireContext): Promise
     } catch (err) {
       console.error(`[automation] échec de la règle "${rule.name}" (${triggerKey}):`, err);
       await recordRuleError(rule.id, err);
+    }
+  }
+}
+
+/**
+ * Balaye les envois programmés dont l'échéance est arrivée (timingMode=
+ * "delay", cf. fireTrigger ci-dessus) — appelé depuis runAutomationSweep(),
+ * même cadence que le reste (15 min, suffisant pour une granularité J±X
+ * heures/jours). Un envoi réussi est supprimé de la file (one-shot) ; un
+ * échec reste en file pour être retenté au prochain balayage plutôt que
+ * perdu silencieusement.
+ */
+async function sweepPendingSends() {
+  let due;
+  try {
+    due = await prisma.automationPendingSend.findMany({
+      where: { dueAt: { lte: new Date() } },
+      include: { rule: { select: { id: true, name: true, questionnaireId: true } } },
+    });
+  } catch (err) {
+    console.error("[automation] lecture des envois différés échouée:", err);
+    return;
+  }
+  for (const send of due) {
+    try {
+      const variables = await attachQuestionnaireLink(
+        send.rule.questionnaireId,
+        send.targetType,
+        send.targetId,
+        send.variables as Record<string, string>
+      );
+      await sendMessage({
+        entityId: send.entityId,
+        channel: send.channel as Channel,
+        templateKey: send.templateKey,
+        to: send.recipientTo,
+        variables,
+        fromNameOverride: send.senderName || undefined,
+      });
+      await prisma.automationPendingSend.delete({ where: { id: send.id } });
+      await recordRuleSuccess(send.ruleId);
+    } catch (err) {
+      console.error(`[automation] échec de l'envoi différé pour la règle "${send.rule.name}":`, err);
+      await recordRuleError(send.ruleId, err);
     }
   }
 }
@@ -518,6 +608,7 @@ async function sweepRecurringRule(rule: {
 /** Appelé périodiquement par automationScheduler.ts. */
 export async function runAutomationSweep() {
   await sweepTicketAutoResolve().catch((e) => console.error("[automation] sweepTicketAutoResolve échoué:", e));
+  await sweepPendingSends().catch((e) => console.error("[automation] sweepPendingSends échoué:", e));
 
   let rules;
   try {

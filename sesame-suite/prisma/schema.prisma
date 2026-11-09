@@ -3729,9 +3729,9 @@ model AutomationRule {
   trigger String // clé du catalogue TRIGGERS (src/lib/automation.ts), ex: "booking.created"
   enabled Boolean @default(true)
 
-  timingMode  String  @default("immediate") // immediate | before | after | recurring
-  offsetValue Int? // ex: 1 (timingMode="before"|"after")
-  offsetUnit  String? // minutes | hours | days
+  timingMode  String  @default("immediate") // immediate | offset | delay | recurring | before | after (avant|après : ancien système, conservé pour compat)
+  offsetValue Int? // signé — négatif = avant, positif = après (timingMode="offset"|"delay")
+  offsetUnit  String? // minutes | hours | days | months
   recurrence  String? // daily | weekly | monthly (timingMode="recurring")
   atTime      String? // "HH:mm" (timingMode="recurring")
   dayOfWeek   Int? // 0(dim)-6, recurrence="weekly"
@@ -3775,7 +3775,43 @@ model AutomationRule {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  logs AutomationRuleLog[]
+  logs         AutomationRuleLog[]
+  pendingSends AutomationPendingSend[]
+}
+
+// File d'attente des envois à critère temporel (09/11/2026, "prevois
+// l'envoi a des criteres temporelles ex à J-8H ou J+3 jours") —
+// timingMode="delay" sur AutomationRule : un événement IMMÉDIAT
+// (réservation créée, prospect créé…) programme ici un envoi décalé
+// (offsetValue/offsetUnit signés, même convention que timingMode="offset")
+// au lieu de l'envoyer tout de suite ; balayé périodiquement par
+// sweepPendingSends() (lib/automation.ts, cf. runAutomationSweep). Une ligne
+// = un envoi en attente ; supprimée une fois réellement envoyée, conservée
+// en cas d'échec pour réessayer au balayage suivant.
+model AutomationPendingSend {
+  id     String         @id @default(cuid())
+  ruleId String
+  rule   AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  entityId String?
+
+  // Cible de l'événement d'origine (ex: targetType="booking", targetId=
+  // l'id de la réservation) — conservée pour régénérer le lien de
+  // questionnaire au moment de l'envoi réel (cf. attachQuestionnaireLink),
+  // comme le fait déjà le chemin immédiat.
+  targetType String
+  targetId   String
+
+  channel     String
+  templateKey String
+  recipientTo String
+  variables   Json
+  senderName  String?
+
+  dueAt     DateTime
+  createdAt DateTime @default(now())
+
+  @@index([dueAt])
 }
 
 model AutomationRuleLog {

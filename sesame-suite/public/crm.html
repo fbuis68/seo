@@ -11680,27 +11680,27 @@ async function sendClientEmail(id){
 // filtre positif ici. Pas de restriction (tous les modèles du canal
 // restent proposés) pour les déclencheurs sans "category".
 const TRIGGERS_CRM = [
-  {key:'crm.prospect_created', label:'Nouveau prospect CRM', timingModes:['immediate']},
-  {key:'crm.prospect_created_web', label:'Nouveau prospect du site web', timingModes:['immediate']},
-  {key:'crm.contract_signed', label:'Contrat signé', timingModes:['immediate']},
-  {key:'crm.subscription_activated', label:'Souscription activée', timingModes:['immediate']},
-  {key:'crm.subscription_cancelled', label:'Souscription annulée', timingModes:['immediate']},
+  {key:'crm.prospect_created', label:'Nouveau prospect CRM', timingModes:['immediate','delay']},
+  {key:'crm.prospect_created_web', label:'Nouveau prospect du site web', timingModes:['immediate','delay']},
+  {key:'crm.contract_signed', label:'Contrat signé', timingModes:['immediate','delay']},
+  {key:'crm.subscription_activated', label:'Souscription activée', timingModes:['immediate','delay']},
+  {key:'crm.subscription_cancelled', label:'Souscription annulée', timingModes:['immediate','delay']},
   {key:'crm.subscription_trial_ending', label:"Fin d'essai souscription", timingModes:['offset']},
   {key:'crm.newsletter', label:'Newsletter récurrente', timingModes:['recurring'], category:'marketing'},
-  {key:'crm.ticket_created', label:'Nouveau ticket support', timingModes:['immediate'], category:'support'},
-  {key:'crm.ticket_client_replied', label:'Client a répondu à un ticket', timingModes:['immediate'], category:'support'},
-  {key:'crm.ticket_status_changed', label:'Changement de statut de ticket', timingModes:['immediate'], category:'support'},
-  {key:'crm.questionnaire_completed', label:'Questionnaire complété', timingModes:['immediate']},
+  {key:'crm.ticket_created', label:'Nouveau ticket support', timingModes:['immediate','delay'], category:'support'},
+  {key:'crm.ticket_client_replied', label:'Client a répondu à un ticket', timingModes:['immediate','delay'], category:'support'},
+  {key:'crm.ticket_status_changed', label:'Changement de statut de ticket', timingModes:['immediate','delay'], category:'support'},
+  {key:'crm.questionnaire_completed', label:'Questionnaire complété', timingModes:['immediate','delay']},
   // Pas de client/prospect associé à un mouvement bancaire — toujours
   // recipientMode="custom" (cf. même logique que crm.ticket_created).
   // Filtré via audienceFilter {direction, bankAccountId, minAmount}, cf.
   // renderRuleAudienceFields/saveRule ci-dessous (12/10/2026, demande
   // client — déplacé depuis un panneau dédié de l'onglet Banque).
-  {key:'bank.transaction.created', label:'Nouveau mouvement bancaire', timingModes:['immediate'], category:'compta'},
+  {key:'bank.transaction.created', label:'Nouveau mouvement bancaire', timingModes:['immediate','delay'], category:'compta'},
   // Filtré via audienceFilter {maxCredit}, cf. renderRuleAudienceFields/
   // saveRule ci-dessous (09/11/2026, "alerter le client quand les credits
   // atteignent un certain niveau").
-  {key:'crm.sms_credit_low', label:'Crédit SMS bas', timingModes:['immediate']},
+  {key:'crm.sms_credit_low', label:'Crédit SMS bas', timingModes:['immediate','delay']},
 ];
 let AUTO_RULES=[];
 
@@ -11886,20 +11886,52 @@ function renderRuleSenderField(){
   el.innerHTML = `<div class="ff" style="margin-top:8px"><label>Nom d'expéditeur (optionnel — remplace celui du canal Email pour cette règle)</label><input id="rule-senderName" value="${esc(r.senderName||'')}" placeholder="Ex. Réception Hôtel Churchill"></div>`;
 }
 
+const TIMING_MODE_LABEL = {immediate:'Immédiat', offset:'Décalage (date précise)', delay:"Délai après l'événement", recurring:'Récurrent'};
+
+/** Quand un déclencheur supporte plusieurs modes (ex. "immediate" +
+ * "delay", 09/11/2026 "prevois l'envoi a des criteres temporelles") — un
+ * sélecteur apparaît pour choisir lequel, plutôt que de ne retenir que le
+ * premier de la liste comme avant. */
+function ruleCurrentTimingMode(){
+  const sel = document.getElementById('rule-timingModeSel');
+  if(sel) return sel.value;
+  const r = window._ruleEditing || {};
+  const triggerKey = (document.getElementById('rule-trigger')||{value:r.trigger}).value;
+  const trig = TRIGGERS_CRM.find(t=>t.key===triggerKey);
+  return trig ? trig.timingModes[0] : 'immediate';
+}
+
 function renderRuleTimingFields(){
   const r = window._ruleEditing || {};
   const triggerKey = (document.getElementById('rule-trigger')||{value:r.trigger}).value;
   const trig = TRIGGERS_CRM.find(t=>t.key===triggerKey);
-  const mode = trig ? trig.timingModes[0] : 'immediate';
+  const modes = trig ? trig.timingModes : ['immediate'];
   const el = document.getElementById('rule-timing-fields');
+  if(!el)return;
+  const current = modes.includes(r.timingMode) ? r.timingMode : modes[0];
+  const modeSelHtml = modes.length>1
+    ? `<div class="ff"><label>Quand envoyer</label><select id="rule-timingModeSel" onchange="renderRuleTimingSubfields()">${modes.map(m=>`<option value="${m}" ${m===current?'selected':''}>${TIMING_MODE_LABEL[m]||m}</option>`).join('')}</select></div>`
+    : '';
+  el.innerHTML = modeSelHtml + '<div id="rule-timing-subfields"></div>';
+  renderRuleTimingSubfields();
+  renderRuleAudienceFields(triggerKey);
+}
+
+function renderRuleTimingSubfields(){
+  const r = window._ruleEditing || {};
+  const mode = ruleCurrentTimingMode();
+  const el = document.getElementById('rule-timing-subfields');
   if(!el)return;
   if(mode==='immediate'){
     el.innerHTML = '<input type="hidden" id="rule-timingMode" value="immediate">';
-  } else if(mode==='offset'){
-    const v=r.timingMode==='offset'?(r.offsetValue||1):Math.abs(r.offsetValue||1);
+  } else if(mode==='offset' || mode==='delay'){
+    const v=r.timingMode===mode?(r.offsetValue||1):Math.abs(r.offsetValue||1);
     const mag=Math.abs(v)||1;
     const sign=(r.timingMode==='before'||v<0)?'before':'after';
-    el.innerHTML = `<input type="hidden" id="rule-timingMode" value="offset">
+    const hint = mode==='delay'
+      ? "Ex. J+3 = 3 jours après l'événement · H+8 = 8 heures après (un délai \"avant\" n'a de sens ici que si l'échéance est déjà connue)."
+      : 'Ex. J-5 = 5 jours avant · H-10 = 10 heures avant · M+1 = 1 mois après';
+    el.innerHTML = `<input type="hidden" id="rule-timingMode" value="${mode}">
       <div class="form-grid" style="margin-top:8px">
         <div class="ff"><label>Sens</label><select id="rule-offsetSign"><option value="before" ${sign==='before'?'selected':''}>Avant</option><option value="after" ${sign==='after'?'selected':''}>Après</option></select></div>
         <div class="ff"><label>Délai</label><input type="number" id="rule-offsetValue" value="${mag}" min="1"></div>
@@ -11910,7 +11942,7 @@ function renderRuleTimingFields(){
           <option value="months" ${r.offsetUnit==='months'?'selected':''}>Mois</option>
         </select></div>
       </div>
-      <div style="font-size:11px;color:#999;margin-top:4px">Ex. J-5 = 5 jours avant · H-10 = 10 heures avant · M+1 = 1 mois après</div>`;
+      <div style="font-size:11px;color:#999;margin-top:4px">${hint}</div>`;
   } else if(mode==='recurring'){
     el.innerHTML = `<input type="hidden" id="rule-timingMode" value="recurring">
       <div class="form-grid" style="margin-top:8px">
@@ -11920,7 +11952,6 @@ function renderRuleTimingFields(){
       <div id="rule-recurrence-detail"></div>`;
     renderRuleRecurrenceDetail();
   }
-  renderRuleAudienceFields(triggerKey);
 }
 
 function renderRuleRecurrenceDetail(){
