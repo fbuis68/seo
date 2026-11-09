@@ -90,6 +90,15 @@ messagingRouter.post(
         provider,
         apiKey: b.apiKey.trim(),
         fromNumber: (b.fromNumber || "").trim(),
+        // Identifiant de sous-compte DocPartner/SMSPartner (09/11/2026,
+        // "besoin d'identifier le sous compte... credits par sous compte"),
+        // optionnel — réutilise baseUrl comme Infobip/Meta ci-dessus plutôt
+        // qu'une nouvelle colonne. PAS ENCORE transmis à l'API SMSPartner
+        // (cf. lib/sms.ts fetchSmsPartnerCredit) : le nom exact du champ
+        // attendu par leur API n'a pas pu être confirmé (doc.smspartner.fr
+        // bloqué en sortie depuis cet environnement) — stocké ici en
+        // attendant, jamais deviné côté appel réseau.
+        baseUrl: (b.baseUrl || "").trim(),
       });
       res.json(shapeChannelConfig(row));
       return;

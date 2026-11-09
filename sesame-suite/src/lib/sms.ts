@@ -264,8 +264,18 @@ export interface SmsPartnerCreditResult {
  * ajuster vite cette liste au lieu d'afficher un chiffre inventé à
  * l'utilisateur (cf. credit:null ci-dessus, jamais 0 par défaut).
  */
-export async function fetchSmsPartnerCredit(apiKey: string): Promise<SmsPartnerCreditResult> {
+export async function fetchSmsPartnerCredit(apiKey: string, subAccountId?: string | null): Promise<SmsPartnerCreditResult> {
   if (!apiKey) return { credit: null, error: "Clé API DocPartner manquante" };
+  // Identifiant de sous-compte (09/11/2026, ChannelConfig.baseUrl réutilisé
+  // — cf. routes/messaging.ts) — PAS ENCORE envoyé à l'API : son nom de
+  // champ exact chez DocPartner/SMSPartner n'a pas pu être confirmé depuis
+  // cet environnement (doc.smspartner.fr bloqué en sortie). Le crédit
+  // retourné reste donc celui du compte entier tant que ceci n'est pas
+  // branché — jamais un paramètre deviné qui ferait silencieusement
+  // remonter le crédit du mauvais (sous-)compte sans qu'on le sache.
+  if (subAccountId) {
+    console.warn("[fetchSmsPartnerCredit] subAccountId configuré (" + subAccountId + ") mais pas encore transmis à l'API — champ SMSPartner à confirmer avant branchement.");
+  }
   let res: Response;
   try {
     res = await fetch(`${SMSPARTNER_API_BASE}/credits`, {

@@ -10891,6 +10891,8 @@ function renderCanauxPanel(){
       </div>
       <div id="sms-fields-smspartner" style="${sms.provider==='smspartner'?'':'display:none'}">
         <div class="ff" style="margin-top:8px"><label>Clé API</label><input type="password" id="sms-apikey" value="${esc(sms.apiKey)}" placeholder="${sms.apiKey?'':'••••••••'}"></div>
+        <div class="ff" style="margin-top:8px"><label>Identifiant sous-compte (optionnel)</label><input id="sms-subaccount" value="${esc(sms.baseUrl)}" placeholder="Laissez vide si compte DocPartner dédié à ce client"></div>
+        <div style="font-size:11px;color:var(--mu,#888);margin-top:4px">Si Sesame distribue ce client comme sous-compte d'un compte DocPartner/SMSPartner maître — à renseigner UNIQUEMENT une fois le nom exact du champ attendu par leur API confirmé (09/11/2026, en attente) ; laissez vide tant que ce n'est pas le cas.</div>
       </div>
       <div id="sms-fields-infobip" style="${sms.provider==='infobip'?'':'display:none'}">
         <div class="ff" style="margin-top:8px"><label>Clé API</label><input type="password" id="sms-apikey-ib" value="${esc(sms.apiKey)}" placeholder="${sms.apiKey?'':'••••••••'}"></div>
@@ -11057,6 +11059,7 @@ async function saveChannelConfig(channel){
     body.baseUrl = g(p+'-baseurl').trim();
   } else if(provider==='smspartner'){
     body.apiKey = g('sms-apikey').trim();
+    body.baseUrl = g('sms-subaccount').trim();
   } else if(provider==='meta'){
     body.apiKey = g(p+'-token-meta').trim();
     body.baseUrl = g(p+'-wabaid-meta').trim();

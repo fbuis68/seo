@@ -351,7 +351,7 @@ crmProspectRouter.post(
     if (!cfg || cfg.provider !== "smspartner" || !cfg.apiKey) {
       throw new HttpError(400, "Ce client n'utilise pas DocPartner/SMSPartner pour ses SMS (ou clé API non renseignée)");
     }
-    const result = await fetchSmsPartnerCredit(cfg.apiKey);
+    const result = await fetchSmsPartnerCredit(cfg.apiKey, cfg.baseUrl);
     if (result.credit === null) throw new HttpError(502, result.error || "Crédit SMS indisponible");
     res.json({ credit: result.credit });
   })
