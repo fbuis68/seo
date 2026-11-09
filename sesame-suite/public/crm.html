@@ -3137,6 +3137,41 @@ async function ficheCheckSmsCredit(id){
     el.innerHTML = '<span style="color:#a32d2d;font-size:11px">'+esc(e.message||'Indisponible')+'</span> <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:1px 5px" onclick="ficheCheckSmsCredit(\''+id+'\')">Réessayer</button>';
   }
 }
+/** Rattache cette fiche CRM à un établissement Sesame existant, après coup
+ * (09/11/2026, "faire un lien apres coup" — fiches créées manuellement
+ * jamais passées par le wizard d'inscription). */
+function ficheOpenLinkEntity(id){
+  const el = document.getElementById('entity-link-'+id);
+  if(!el) return;
+  el.innerHTML = `<input id="entity-link-code-${id}" placeholder="Code établissement" style="font-size:11px;padding:2px 6px;width:140px" onkeydown="if(event.key==='Enter')ficheSubmitLinkEntity('${id}')">
+    <button class="btn btn-primary btn-sm" style="font-size:10px;padding:2px 6px" onclick="ficheSubmitLinkEntity('${id}')">OK</button>
+    <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px" onclick="showFiche('${id}')">Annuler</button>`;
+  const input = document.getElementById('entity-link-code-'+id);
+  if(input) input.focus();
+}
+async function ficheSubmitLinkEntity(id){
+  const input = document.getElementById('entity-link-code-'+id);
+  const entityCode = input ? input.value.trim() : '';
+  if(!entityCode){ flash('Code établissement requis'); return; }
+  try{
+    const r = await apiFetch('/wa/crmProspect/linkEntity', {method:'POST', body:JSON.stringify({id, entityCode})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'Erreur');
+    clients = clients.map(c=>c.id===id?data:c);
+    flash('Établissement rattaché ✓');
+    showFiche(id);
+  }catch(e){ flash(e.message||'Erreur de rattachement'); }
+}
+async function ficheUnlinkEntity(id){
+  if(!confirm('Détacher cette fiche de son établissement ?')) return;
+  try{
+    const r = await apiFetch('/wa/crmProspect/unlinkEntity', {method:'POST', body:JSON.stringify({id})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'Erreur');
+    clients = clients.map(c=>c.id===id?data:c);
+    showFiche(id);
+  }catch(e){ flash(e.message||'Erreur'); }
+}
 function showFiche(id){
   const c=clients.find(c=>c.id===id);if(!c)return;
   curId=id;view='fiche';setNav('n-fiche');
@@ -3279,7 +3314,7 @@ function renderFiche(c){
       <div class="field"><div class="fl"><span class="fl-ico">in</span> LinkedIn</div><div class="fv">${c.linkedinUrl&&/^https?:\/\//i.test(c.linkedinUrl)?`<a href="${esc(c.linkedinUrl)}" target="_blank" rel="noopener">Voir le profil ↗</a>`:'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">◆</span> Commercial</div><div class="fv">${c.commercialName||'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">€</span> MRR</div><div class="fv">${c.mrr?fmtEUR(c.mrr)+'/mois':'—'}</div></div>
-      <div class="field"><div class="fl"><span class="fl-ico">E</span> Établissement Sesame</div><div class="fv">${c.entityCode||'—'}</div></div>
+      <div class="field"><div class="fl"><span class="fl-ico">E</span> Établissement Sesame</div><div class="fv" id="entity-link-${c.id}">${c.entityCode?`${esc(c.entityCode)} <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:1px 5px;margin-left:4px" onclick="ficheUnlinkEntity('${c.id}')" title="Détacher">✕</button>`:`<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="ficheOpenLinkEntity('${c.id}')">Rattacher un établissement</button>`}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">✆</span> Crédit SMS</div><div class="fv" id="sms-credit-${c.id}">${c.entityCode?`<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="ficheCheckSmsCredit('${c.id}')">Vérifier</button>`:'—'}</div></div>
       <div class="field"><div class="fl"><span class="fl-ico">🔑</span> Back-office client</div><div class="fv" id="admin-autologin-${c.id}">${c.entityCode?`<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="ficheOpenAdminAutologin('${c.id}')">Ouvrir (autologin)</button>`:'—'}</div></div>
       <div class="field fiche-extra" style="display:none"><div class="fl"><span class="fl-ico">D</span> Dénomination sociale</div><div class="fv">${c.denominationSociale?esc(c.denominationSociale):'—'}</div></div>

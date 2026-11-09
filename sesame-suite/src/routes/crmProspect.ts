@@ -389,6 +389,54 @@ crmProspectRouter.post(
   })
 );
 
+/**
+ * Rattache une fiche CRM à un établissement Sesame EXISTANT après coup
+ * (09/11/2026, "faire un lien apres coup") — pour les fiches créées
+ * manuellement dans le CRM (jamais passées par le wizard d'inscription, qui
+ * crée Entity+CrmProspect ensemble, cf. routes/entity.ts) ou dont le
+ * rattachement automatique a échoué. Un établissement ne peut être rattaché
+ * qu'à UNE seule fiche à la fois — pas de contrainte @unique en base sur
+ * CrmProspect.entityId (plusieurs anciennes fiches pourraient déjà le
+ * partager par erreur), donc vérifié ici plutôt que de créer silencieusement
+ * un doublon.
+ */
+crmProspectRouter.post(
+  "/crmProspect/linkEntity",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const id = (req.body.id as string) || "";
+    const entityCode = ((req.body.entityCode as string) || "").trim();
+    if (!id) throw new HttpError(400, "id requis");
+    if (!entityCode) throw new HttpError(400, "Code établissement requis");
+    const prospect = await prisma.crmProspect.findUnique({ where: { id } });
+    if (!prospect) throw new HttpError(404, "Fiche introuvable");
+    const entity = await prisma.entity.findUnique({ where: { code: entityCode } });
+    if (!entity) throw new HttpError(404, "Aucun établissement avec ce code");
+    const alreadyLinked = await prisma.crmProspect.findFirst({ where: { entityId: entity.id, id: { not: id } }, select: { id: true, nom: true } });
+    if (alreadyLinked) throw new HttpError(409, `Cet établissement est déjà rattaché à la fiche "${alreadyLinked.nom}"`);
+    const row = await prisma.crmProspect.update({ where: { id }, data: { entityId: entity.id }, include: PROSPECT_INCLUDE });
+    res.json(shapeProspect(row));
+  })
+);
+
+/** Détache une fiche CRM de son établissement (correction d'un rattachement
+ * erroné) — l'établissement lui-même n'est jamais touché, seul le lien côté
+ * fiche CRM est retiré. */
+crmProspectRouter.post(
+  "/crmProspect/unlinkEntity",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const id = (req.body.id as string) || "";
+    if (!id) throw new HttpError(400, "id requis");
+    const prospect = await prisma.crmProspect.findUnique({ where: { id } });
+    if (!prospect) throw new HttpError(404, "Fiche introuvable");
+    const row = await prisma.crmProspect.update({ where: { id }, data: { entityId: null }, include: PROSPECT_INCLUDE });
+    res.json(shapeProspect(row));
+  })
+);
+
 interface ProspectBody {
   nom: string;
   type?: string;
