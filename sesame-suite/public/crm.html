@@ -8552,9 +8552,9 @@ function printQuote(){
     +'<h3>Investissement initial</h3><table><thead><tr><th>Prestation</th><th style="text-align:center">Qté</th><th style="text-align:right">Prix unitaire</th><th style="text-align:right">Total</th></tr></thead><tbody>'+rowsHtml+'</tbody></table>'
     +(rowsHtmlM?'<h3>Abonnement mensuel</h3><table><thead><tr><th>Prestation</th><th style="text-align:center">Qté</th><th style="text-align:right">Prix unitaire</th><th style="text-align:right">Total</th></tr></thead><tbody>'+rowsHtmlM+'</tbody></table>':'')
     +'<div class="totals">'
-    +'<div><span>Initial HT après remise</span><span>'+fmtEUR(totals.totalHT)+'</span></div>'
-    +'<div><span>TVA ('+(q.vatPct||0)+' %)</span><span>'+fmtEUR(totals.totalTTC-totals.totalHT)+'</span></div>'
-    +'<div class="grand"><span>Initial TTC</span><span>'+fmtEUR(totals.totalTTC)+'</span></div>'
+    +'<div class="grand"><span>Initial HT</span><span>'+fmtEUR(totals.totalHT)+'</span></div>'
+    +'<div style="color:#999;font-size:11px"><span>TVA ('+(q.vatPct||0)+' %)</span><span>'+fmtEUR(totals.totalTTC-totals.totalHT)+'</span></div>'
+    +'<div style="color:#999;font-size:11px"><span>Initial TTC</span><span>'+fmtEUR(totals.totalTTC)+'</span></div>'
     +'<div><span>Abonnement HT / mois</span><span>'+fmtEUR(totals.mrrNet)+'</span></div>'
     +(q.depositPct?'<div><span>Acompte ('+q.depositPct+' % TTC)</span><span>'+fmtEUR(totals.depositAmount)+'</span></div>':'')
     +'</div>'
@@ -8776,9 +8776,9 @@ function dqRenderDocumentTab(q, lines){
     ${dqQuestionnairesSectionHtml(q)}
     ${DOC_BLOCKS.map(b=>groupHtml(b.cat,b.label,b.color)).join('')}
     <hr class="quote-sep">
-    <div class="quote-total-row grand"><strong>Initial HT après remise</strong><strong>${fmtEUR(totals.totalHT)}</strong></div>
-    <div class="quote-total-row"><span>TVA ${q.vatPct||0} %</span><span>${fmtEUR(totals.totalTTC-totals.totalHT)}</span></div>
-    <div class="quote-total-row grand"><strong>Initial TTC</strong><strong>${fmtEUR(totals.totalTTC)}</strong></div>
+    <div class="quote-total-row grand"><strong>Initial HT</strong><strong>${fmtEUR(totals.totalHT)}</strong></div>
+    <div class="quote-total-row" style="color:var(--mu);font-size:11px"><span>TVA ${q.vatPct||0} %</span><span>${fmtEUR(totals.totalTTC-totals.totalHT)}</span></div>
+    <div class="quote-total-row" style="color:var(--mu);font-size:11px"><span>Initial TTC</span><span>${fmtEUR(totals.totalTTC)}</span></div>
     <div class="quote-total-row"><span>Abonnement HT / mois</span><span>${fmtEUR(totals.mrrNet)}</span></div>
     <small style="color:var(--mu)">${esc(q.config.subscriptionStart)} · durée d’engagement à définir</small>
 
