@@ -673,6 +673,19 @@ function apiFetch(url, opts){
   return fetch(API_BASE+url, opts);
 }
 
+/** adminId du compte connecté, lu directement dans le JWT (déjà signé
+ * côté serveur, jamais reconstruit côté client) — pas de nouvelle route
+ * juste pour ça. Recalculé à chaque appel plutôt que mis en cache dans une
+ * variable : reste exact après un changement de compte (autologin support,
+ * reconnexion) sans dépendre d'un rafraîchissement explicite. */
+function meAdminId(){
+  if(!ADMIN_TOKEN) return null;
+  try{
+    const payload = ADMIN_TOKEN.split('.')[1];
+    return JSON.parse(atob(payload.replace(/-/g,'+').replace(/_/g,'/'))).adminId || null;
+  }catch(e){ return null; }
+}
+
 /** Cf. togglePwVisibility (admin.html) : bouton "œil" pour afficher le mot de passe saisi. */
 function togglePwVisibility(id, btn){
   var input = document.getElementById(id);
@@ -1310,6 +1323,7 @@ function renderPipeChart(){
 let PLANNER_COLLAPSED_DONE = new Set(); // prospectId dont "Tâches terminées" est repliée (replié par défaut)
 let PLANNER_HIDE_EMPTY = false; // masque les colonnes sans tâche À FAIRE (demande client 30/10/2026)
 let PLANNER_HIDE_PROSPECT = false; // masque les colonnes des fiches type="Prospect" (09/11/2026, demande client "ne pas afficher les taches prospect")
+let PLANNER_ONLY_MINE = false; // n'affiche que les tâches assignées au compte connecté (09/11/2026, "n'afficher que les taches nous appartenant")
 let PLANNER_ADD_OPEN = new Set(); // prospectId dont le formulaire "+ Ajouter une tâche" est ouvert
 // Les colonnes du planner ne sont générées QUE pour les clients ayant déjà
 // au moins une tâche (cf. renderPlannerBoard, byProspect dérivé de
@@ -1387,10 +1401,16 @@ function plannerToggleHideProspect(checked){
   PLANNER_HIDE_PROSPECT = checked;
   document.getElementById('main').innerHTML = renderPlannerBoard();
 }
+function plannerToggleOnlyMine(checked){
+  PLANNER_ONLY_MINE = checked;
+  document.getElementById('main').innerHTML = renderPlannerBoard();
+}
 function renderPlannerBoard(){
   const all = buildAllTasks();
+  const myId = meAdminId();
+  const visible = PLANNER_ONLY_MINE ? all.filter(t=>t.assigneeId===myId) : all;
   const byProspect = new Map();
-  all.forEach(t=>{
+  visible.forEach(t=>{
     if(!byProspect.has(t.prospectId)) byProspect.set(t.prospectId, []);
     byProspect.get(t.prospectId).push(t);
   });
@@ -1406,6 +1426,9 @@ function renderPlannerBoard(){
     </label>
     <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);cursor:pointer;margin:0">
       <input type="checkbox" ${PLANNER_HIDE_PROSPECT?'checked':''} onchange="plannerToggleHideProspect(this.checked)">Masquer les tâches Prospect
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);cursor:pointer;margin:0">
+      <input type="checkbox" ${PLANNER_ONLY_MINE?'checked':''} onchange="plannerToggleOnlyMine(this.checked)">Mes tâches uniquement
     </label>
     <button class="btn btn-primary btn-sm" onclick="plannerToggleNewTaskForm()">+ Nouvelle tâche</button>
   </div>
