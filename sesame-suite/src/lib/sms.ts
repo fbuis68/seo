@@ -292,12 +292,27 @@ export async function fetchSmsPartnerCredit(apiKey: string, subAccountId?: strin
     console.error("[sms] Échec DocPartner /me — réponse complète :", text);
     return { credit: null, error: (j.message as string) || `HTTP ${res.status}` };
   }
+  // Champ réel confirmé le 09/11/2026 (test réel du client) :
+  // {"credits":{"creditSms":1673, "creditSmsLowCost":…, "creditSmsECO":…,
+  // "solde":"82.010", "balance":"82.010", …}} — imbriqué sous "credits",
+  // creditSms = crédit SMS "classique" restant (ce qu'on affiche sur la
+  // fiche client ; solde/balance sont un montant en euros, pas un nombre
+  // de SMS, donc pas retenus ici malgré leur nom proche).
+  const nested = j.credits as Record<string, unknown> | undefined;
+  if (nested && typeof nested.creditSms === "number") return { credit: nested.creditSms };
+  const nestedCandidates = ["creditSms", "credit", "credits", "credit_sms", "sms_credit"];
+  if (nested) {
+    for (const key of nestedCandidates) {
+      const v = nested[key];
+      if (typeof v === "number") return { credit: v };
+    }
+  }
   const candidates = ["credit", "credits", "credit_sms", "creditSms", "sms_credit", "balance", "solde"];
   for (const key of candidates) {
     const v = j[key];
     if (typeof v === "number") return { credit: v };
   }
-  console.error("[sms] Réponse DocPartner /credits non reconnue (champ attendu absent) :", text);
+  console.error("[sms] Réponse DocPartner /me non reconnue (champ attendu absent) :", text);
   return { credit: null, error: "Réponse DocPartner non reconnue — voir logs serveur" };
 }
 
