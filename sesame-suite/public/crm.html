@@ -1309,6 +1309,7 @@ function renderPipeChart(){
 // ════════════════════════════════════════
 let PLANNER_COLLAPSED_DONE = new Set(); // prospectId dont "Tâches terminées" est repliée (replié par défaut)
 let PLANNER_HIDE_EMPTY = false; // masque les colonnes sans tâche À FAIRE (demande client 30/10/2026)
+let PLANNER_HIDE_PROSPECT = false; // masque les colonnes des fiches type="Prospect" (09/11/2026, demande client "ne pas afficher les taches prospect")
 let PLANNER_ADD_OPEN = new Set(); // prospectId dont le formulaire "+ Ajouter une tâche" est ouvert
 // Les colonnes du planner ne sont générées QUE pour les clients ayant déjà
 // au moins une tâche (cf. renderPlannerBoard, byProspect dérivé de
@@ -1382,6 +1383,10 @@ function plannerToggleHideEmpty(checked){
   PLANNER_HIDE_EMPTY = checked;
   document.getElementById('main').innerHTML = renderPlannerBoard();
 }
+function plannerToggleHideProspect(checked){
+  PLANNER_HIDE_PROSPECT = checked;
+  document.getElementById('main').innerHTML = renderPlannerBoard();
+}
 function renderPlannerBoard(){
   const all = buildAllTasks();
   const byProspect = new Map();
@@ -1394,9 +1399,13 @@ function renderPlannerBoard(){
     .filter(Boolean)
     .sort((a,b)=>a.nom.localeCompare(b.nom));
   if(PLANNER_HIDE_EMPTY) columns = columns.filter(c=>byProspect.get(c.id).some(t=>!t.done));
+  if(PLANNER_HIDE_PROSPECT) columns = columns.filter(c=>c.type!=='Prospect');
   const toolbar = `<div style="margin-bottom:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
     <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);cursor:pointer;margin:0">
       <input type="checkbox" ${PLANNER_HIDE_EMPTY?'checked':''} onchange="plannerToggleHideEmpty(this.checked)">Masquer les clients sans tâche à faire
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);cursor:pointer;margin:0">
+      <input type="checkbox" ${PLANNER_HIDE_PROSPECT?'checked':''} onchange="plannerToggleHideProspect(this.checked)">Masquer les tâches Prospect
     </label>
     <button class="btn btn-primary btn-sm" onclick="plannerToggleNewTaskForm()">+ Nouvelle tâche</button>
   </div>
