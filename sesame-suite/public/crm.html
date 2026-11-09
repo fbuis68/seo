@@ -7541,6 +7541,7 @@ function renderDealModal(){
         <div style="font-size:16px;font-weight:500">${md._new?'Nouvelle affaire':esc(md.title)}</div>
         <button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button>
       </div>
+      ${md._fromQuoteNumber?`<div style="padding:0 20px;font-size:12px;color:var(--mu)">Pré-rempli depuis le devis ${esc(md._fromQuoteNumber)} — vérifiez les montants avant d'enregistrer.</div>`:''}
       <div class="form-grid">
         <div class="ff"><label>Titre</label><input id="d-title" value="${esc(md.title)}" placeholder="Ex : Upsell module CRM"></div>
         <div class="ff"><label>Client</label>
@@ -7649,8 +7650,23 @@ async function saveDeal(id,isNew){
     var saved = await r.json();
   }catch(e){ flash('Erreur d\'enregistrement'); return; }
   if(isNew){ deals.push(saved); } else { const ex=deals.find(d=>d.id===id); if(ex) Object.assign(ex, saved); }
-  closeModal(); flash('Affaire enregistrée');
+  // Affaire créée depuis un devis (cf. dqCreateDealFromQuote) : rattache
+  // automatiquement ce devis à l'affaire qu'on vient de créer, plutôt que
+  // de laisser l'utilisateur refaire "Lier à une affaire existante" juste
+  // après — c'était tout le but du bouton.
+  let fromQuoteAttached = false;
+  if(isNew && md._fromQuoteId){
+    try{
+      const ar = await apiFetch('/wa/crmQuote/attachDeal', {method:'POST', body:JSON.stringify({id:md._fromQuoteId, dealId:saved.id})});
+      if(ar.ok){
+        const updatedQuote = await ar.json();
+        if(QUOTE_DRAFT && QUOTE_DRAFT.id===md._fromQuoteId){ QUOTE_DRAFT = dqFromServer(updatedQuote); fromQuoteAttached = true; }
+      }
+    }catch(e){ /* l'affaire est créée malgré tout — rattachement à refaire à la main si besoin */ }
+  }
+  closeModal(); flash(fromQuoteAttached?'Affaire créée et devis rattaché ✓':'Affaire enregistrée');
   if(view==='affaires') renderAffaires();
+  if(fromQuoteAttached && view==='devis-builder'){ renderQuoteBuilder(); return; }
   // Toujours réafficher la fiche courante (pas seulement si elle correspond
   // au client de l'affaire) : une réattribution à un autre client doit aussi
   // faire disparaître l'affaire de la fiche qu'on est en train de regarder.
@@ -8465,6 +8481,36 @@ async function dqDetachDeal(){
   renderQuoteBuilder();
 }
 
+/** "Créer une affaire depuis ce devis" (09/11/2026, "pouvoir creer une
+ * affaire à partir du devis en reprenant les elements disponible") —
+ * ouvre le MÊME modal Affaire que "+ Nouvelle affaire", pré-rempli avec
+ * les éléments déjà disponibles sur ce devis : client, montant ponctuel
+ * (= investissement initial HT) et valeur mensuelle (= abonnement HT du
+ * devis), titre repris du devis. saveDeal() se charge ensuite de
+ * rattacher automatiquement ce devis à l'affaire une fois créée (cf.
+ * DEAL_DRAFT._fromQuoteId ci-dessous) — sens inverse du rattachement a
+ * posteriori existant (dqOpenAttachDeal), toujours pas de création
+ * automatique dans l'autre sens (affaire → devis).
+ */
+function dqCreateDealFromQuote(){
+  const q = QUOTE_DRAFT;
+  if(!q.id){ flash('Enregistrez d\'abord le devis'); return; }
+  if(!q.prospectId){ flash('Sélectionnez un client'); return; }
+  const lines = dqAllLines(q);
+  const totals = dqComputeTotals(lines, q.config, q.discountPct, q.vatPct, q.depositPct);
+  const prospect = clients.find(c=>c.id===q.prospectId);
+  DEAL_DRAFT = {
+    id:null, prospectId:q.prospectId, commercialId:(prospect&&prospect.commercialId)||'',
+    title: q.title || ('Devis '+q.number), stage:'Devis envoyé',
+    amount: totals.mrrNet||0, probability:20, closeDate:'', lostReason:'',
+    montantPonctuel: totals.totalHT||0, moisEncaissement:null, anneeEncaissement:new Date().getFullYear(),
+    quotes:[], _new:true, _fromQuoteId:q.id, _fromQuoteNumber:q.number
+  };
+  DEAL_NEW_PROSPECT_MODE = false;
+  DEAL_NEW_PROSPECT_DRAFT = {nom:'', email:'', tel:''};
+  renderDealModal();
+}
+
 // ── Signature / envoi ──
 async function requestQuoteSignature(){
   const q = QUOTE_DRAFT; if(!q || !q.id) return;
@@ -8804,7 +8850,10 @@ function dqRenderDocumentTab(q, lines){
 
     <h4 style="margin-top:16px">Affaire liée</h4>
     ${q.dealId?`<div class="db-row" style="align-items:center;gap:8px"><span class="tpill bn">${esc(q.dealTitle||'')}</span><button class="btn btn-ghost btn-sm" onclick="dqDetachDeal()">Détacher</button></div>`
-      :`<button class="btn btn-ghost btn-sm" ${q.id?'':'disabled title="Enregistrez d\'abord le devis"'} onclick="dqOpenAttachDeal()">Lier à une affaire existante</button>`}
+      :`<div class="db-row" style="gap:8px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" ${q.id?'':'disabled title="Enregistrez d\'abord le devis"'} onclick="dqOpenAttachDeal()">Lier à une affaire existante</button>
+          <button class="btn btn-ghost btn-sm" ${q.id?'':'disabled title="Enregistrez d\'abord le devis"'} onclick="dqCreateDealFromQuote()">+ Créer une affaire depuis ce devis</button>
+        </div>`}
 
     ${!q._new && q.status!=='accepté' ? `
     <h4 style="margin-top:16px">Signature électronique</h4>
