@@ -1440,7 +1440,7 @@ function renderPlannerBoard(){
     .filter(Boolean)
     .sort((a,b)=>a.nom.localeCompare(b.nom));
   if(PLANNER_HIDE_EMPTY) columns = columns.filter(c=>byProspect.get(c.id).some(t=>!t.done));
-  if(PLANNER_HIDE_PROSPECT) columns = columns.filter(c=>c.type!=='Prospect');
+  if(PLANNER_HIDE_PROSPECT) columns = columns.filter(c=>c.type!=='Prospect'&&c.type!=='Suspect');
   if(PLANNER_SHOW_SELECTED_ONLY) columns = columns.filter(c=>PLANNER_SELECTED_IDS.has(c.id));
   const toolbar = `<div style="margin-bottom:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
     <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);cursor:pointer;margin:0">
