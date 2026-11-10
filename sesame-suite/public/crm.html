@@ -1326,6 +1326,12 @@ let PLANNER_COLLAPSED_DONE = new Set(); // prospectId dont "Tâches terminées" 
 let PLANNER_HIDE_EMPTY = false; // masque les colonnes sans tâche À FAIRE (demande client 30/10/2026)
 let PLANNER_HIDE_PROSPECT = false; // masque les colonnes des fiches type="Prospect" (09/11/2026, demande client "ne pas afficher les taches prospect")
 let PLANNER_ONLY_MINE = false; // n'affiche que les tâches assignées au compte connecté (09/11/2026, "n'afficher que les taches nous appartenant")
+// Sélection multiple de clients par case à cocher (10/11/2026, "pouvoir
+// faire une selection des clients multi par tick box") — sert à restreindre
+// le board à quelques clients précis (ex: préparer une relance groupée)
+// sans jouer avec les filtres génériques ci-dessus.
+let PLANNER_SELECTED_IDS = new Set();
+let PLANNER_SHOW_SELECTED_ONLY = false;
 let PLANNER_ADD_OPEN = new Set(); // prospectId dont le formulaire "+ Ajouter une tâche" est ouvert
 // Les colonnes du planner ne sont générées QUE pour les clients ayant déjà
 // au moins une tâche (cf. renderPlannerBoard, byProspect dérivé de
@@ -1372,7 +1378,8 @@ function plannerColumnHtml(c, tasks){
   const isExpanded = PLANNER_COLLAPSED_DONE.has(c.id); // le Set contient les colonnes DÉPLIÉES (repliées par défaut)
   const addOpen = PLANNER_ADD_OPEN.has(c.id);
   return `<div class="planner-col">
-    <div class="planner-col-hd">
+    <div class="planner-col-hd" style="display:flex;align-items:flex-start;gap:6px">
+      <input type="checkbox" style="margin-top:2px;flex-shrink:0" ${PLANNER_SELECTED_IDS.has(c.id)?'checked':''} onchange="plannerToggleSelect('${c.id}',this.checked)" title="Sélectionner ce client">
       <div style="font-weight:600;font-size:13px;cursor:pointer" onclick="showFiche('${c.id}')">${esc(c.nom)}${c.referent?' <span style="font-weight:400;color:var(--mu,#888);font-size:11px">('+esc(c.referent)+')</span>':''}</div>
     </div>
     <button class="btn btn-ghost btn-sm" style="width:100%;text-align:left;margin-bottom:8px" onclick="plannerToggleAddForm('${c.id}')">+ Ajouter une tâche</button>
@@ -1407,6 +1414,18 @@ function plannerToggleOnlyMine(checked){
   PLANNER_ONLY_MINE = checked;
   document.getElementById('main').innerHTML = renderPlannerBoard();
 }
+function plannerToggleSelect(id, checked){
+  if(checked) PLANNER_SELECTED_IDS.add(id); else PLANNER_SELECTED_IDS.delete(id);
+  document.getElementById('main').innerHTML = renderPlannerBoard();
+}
+function plannerClearSelection(){
+  PLANNER_SELECTED_IDS.clear();
+  document.getElementById('main').innerHTML = renderPlannerBoard();
+}
+function plannerToggleShowSelectedOnly(checked){
+  PLANNER_SHOW_SELECTED_ONLY = checked;
+  document.getElementById('main').innerHTML = renderPlannerBoard();
+}
 function renderPlannerBoard(){
   const all = buildAllTasks();
   const myId = meAdminId();
@@ -1422,6 +1441,7 @@ function renderPlannerBoard(){
     .sort((a,b)=>a.nom.localeCompare(b.nom));
   if(PLANNER_HIDE_EMPTY) columns = columns.filter(c=>byProspect.get(c.id).some(t=>!t.done));
   if(PLANNER_HIDE_PROSPECT) columns = columns.filter(c=>c.type!=='Prospect');
+  if(PLANNER_SHOW_SELECTED_ONLY) columns = columns.filter(c=>PLANNER_SELECTED_IDS.has(c.id));
   const toolbar = `<div style="margin-bottom:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
     <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);cursor:pointer;margin:0">
       <input type="checkbox" ${PLANNER_HIDE_EMPTY?'checked':''} onchange="plannerToggleHideEmpty(this.checked)">Masquer les clients sans tâche à faire
@@ -1432,6 +1452,13 @@ function renderPlannerBoard(){
     <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);cursor:pointer;margin:0">
       <input type="checkbox" ${PLANNER_ONLY_MINE?'checked':''} onchange="plannerToggleOnlyMine(this.checked)">Mes tâches uniquement
     </label>
+    ${PLANNER_SELECTED_IDS.size?`<span style="font-size:12px;color:var(--mu);display:flex;align-items:center;gap:8px">
+      <strong>${PLANNER_SELECTED_IDS.size}</strong> sélectionné${PLANNER_SELECTED_IDS.size>1?'s':''}
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0">
+        <input type="checkbox" ${PLANNER_SHOW_SELECTED_ONLY?'checked':''} onchange="plannerToggleShowSelectedOnly(this.checked)">Afficher uniquement la sélection
+      </label>
+      <button class="btn btn-ghost btn-sm" onclick="plannerClearSelection()">Désélectionner tout</button>
+    </span>`:''}
     <button class="btn btn-primary btn-sm" onclick="plannerToggleNewTaskForm()">+ Nouvelle tâche</button>
   </div>
   ${PLANNER_NEW_OPEN?`<div class="card" style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
