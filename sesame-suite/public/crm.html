@@ -956,7 +956,7 @@ let SELECTED_IDS = new Set();
 // même principe) — sert à la suppression groupée et à la fusion de
 // tickets (cf. renderTicketsList, ticketBulkDelete, openTicketMergeModal).
 let TICKET_SELECTED_IDS = new Set();
-let srch='', fDanger='', fSecteurs=new Set(), fOrigines=new Set(), fContrat='', fType='', fNoEmail=false, fNoPhone=false, fRating='', editingId=null, toastT=null;
+let srch='', fDanger='', fSecteurs=new Set(), fOrigines=new Set(), fContrat='', fType='', fNoEmail=false, fNoPhone=false, fRating='', fCommercial='', editingId=null, toastT=null;
 let deals=[], COMMERCIALS=[], tickets=[], cashLines=[], SECTOR_OPTIONS=[], ORIGINE_OPTIONS=[];
 let cashSettings = {revenuMode:'detail',revenuMontant:0,revenuFrequence:'mensuel',revenuMois:null,depenseMode:'detail',depenseMontant:0,depenseFrequence:'mensuel',depenseMois:null};
 let cashYear = new Date().getFullYear();
@@ -1061,7 +1061,7 @@ function bc(parts){document.getElementById('bc').innerHTML=parts.map((p,i)=>i<pa
 function tba(html){document.getElementById('tb-actions').innerHTML=html;}
 
 // ── QUICK FILTER ──
-function qf(f,v){srch='';fDanger='';fSecteurs=new Set();fOrigines=new Set();fContrat='';fType='';fNoEmail=false;fNoPhone=false;if(f==='danger')fDanger=v;else if(f==='contrat')fContrat=v;showList();}
+function qf(f,v){srch='';fDanger='';fSecteurs=new Set();fOrigines=new Set();fContrat='';fType='';fNoEmail=false;fNoPhone=false;fCommercial='';if(f==='danger')fDanger=v;else if(f==='contrat')fContrat=v;showList();}
 
 // ════════════════════════════════════════
 // HOME — vue d'ensemble (indicateurs seuls, sans la liste des fiches)
@@ -1711,6 +1711,8 @@ function filtered(){
     if(fNoEmail&&((c.email&&c.email.trim())||c.hasContactEmail))return false;
     if(fNoPhone&&((c.tel&&c.tel.trim())||c.hasContactPhone))return false;
     if(fRating!==''&&(c.rating==null?-1:c.rating)!==Number(fRating))return false;
+    if(fCommercial==='__none__'&&c.commercialId)return false;
+    if(fCommercial&&fCommercial!=='__none__'&&c.commercialId!==fCommercial)return false;
     return true;
   }).sort((a,b)=>{let av=a[sortC]||'',bv=b[sortC]||'';if(typeof av==='string')av=av.toLowerCase();if(typeof bv==='string')bv=bv.toLowerCase();return av<bv?-sortD:av>bv?sortD:0;});
 }
@@ -2078,6 +2080,7 @@ function renderList(){
     <select class="lsel" onchange="fContrat=this.value;renderList()"><option value="">Tous contrats</option><option value="oui" ${fContrat==='oui'?'selected':''}>oui</option><option value="non" ${fContrat==='non'?'selected':''}>non</option><option value="en cours" ${fContrat==='en cours'?'selected':''}>en cours</option></select>
     <select class="lsel" onchange="fType=this.value;renderList()"><option value="">Tous types</option>${TYPES.map(t=>`<option value="${t}" ${fType===t?'selected':''}>${t}</option>`).join('')}</select>
     <select class="lsel" onchange="fRating=this.value;renderList()"><option value="">Toutes notes</option>${[5,4,3,2,1,0].map(n=>`<option value="${n}" ${fRating===String(n)?'selected':''}>${'★'.repeat(n)}${'☆'.repeat(5-n)}</option>`).join('')}<option value="-1" ${fRating==='-1'?'selected':''}>Non notée</option></select>
+    <select class="lsel" onchange="fCommercial=this.value;renderList()"><option value="">Tous commerciaux</option>${COMMERCIALS.map(c=>`<option value="${c.id}" ${fCommercial===c.id?'selected':''}>${esc(c.name||c.email)}</option>`).join('')}<option value="__none__" ${fCommercial==='__none__'?'selected':''}>Non assigné</option></select>
     <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--mu);white-space:nowrap"><input type="checkbox" ${fNoEmail?'checked':''} onchange="fNoEmail=this.checked;renderList()"> Sans email</label>
     <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--mu);white-space:nowrap"><input type="checkbox" ${fNoPhone?'checked':''} onchange="fNoPhone=this.checked;renderList()"> Sans téléphone</label>
     <span class="count-lbl">${data.length} résultat${data.length>1?'s':''}</span>
