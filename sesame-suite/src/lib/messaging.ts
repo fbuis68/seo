@@ -136,6 +136,18 @@ export async function sendMessage(opts: {
    * sans lui, un destinataire sans RCS ne reçoit simplement rien.
    */
   rcsFailover?: { sender: string; message: string };
+  /**
+   * Email uniquement — remplace le sujet/corps rendus du modèle par un
+   * texte modifié à la main (10/11/2026, "charger le modèle... avoir la
+   * possibilité de modifier le corps" depuis la fiche client) — le modèle
+   * reste la base de départ (chargée côté front via renderMessagePreview
+   * ci-dessous), {{var}} déjà résolues avant modification, donc jamais
+   * re-rendues ici. bodyOverride est du texte brut (même convention que
+   * routes/crmTicket.ts reply) : "\n" devient "<br>" avant envoi. Pixel de
+   * suivi et pied de page de campagne restent ajoutés normalement après.
+   */
+  subjectOverride?: string;
+  bodyOverride?: string;
 }) {
   const template = await prisma.messageTemplate.findFirst({
     where: { entityId: opts.entityId, channel: opts.channel, key: opts.templateKey },
@@ -252,8 +264,11 @@ export async function sendMessage(opts: {
   if (opts.channel === "email" && qrSource && !vars.qrCode) {
     vars = { ...vars, qrCode: await QRCode.toDataURL(qrSource, { margin: 1, width: 320 }) };
   }
-  const subject = renderTemplate(template.subject, vars);
-  let body = renderTemplate(template.bodyHtml, vars);
+  const subject = opts.channel === "email" && opts.subjectOverride !== undefined ? opts.subjectOverride : renderTemplate(template.subject, vars);
+  let body =
+    opts.channel === "email" && opts.bodyOverride !== undefined
+      ? opts.bodyOverride.replace(/\n/g, "<br>")
+      : renderTemplate(template.bodyHtml, vars);
 
   // template.category === "support" exclu du score d'intérêt (30/09/2026,
   // demande client) : un échange support (ex: réponse à une question
@@ -328,4 +343,40 @@ export async function sendMessage(opts: {
     await sendChannelRaw(opts.entityId, opts.channel, opts.to, body);
   }
   return { subject, body };
+}
+
+/**
+ * Sujet/corps RENDUS d'un modèle, sans envoyer quoi que ce soit — sert à
+ * pré-remplir un champ modifiable dans le modal "Envoyer un message" de la
+ * fiche client (10/11/2026, "charger le modèle... pouvoir modifier le
+ * corps") avant que l'utilisateur ne l'édite et clique Envoyer (qui repasse
+ * alors par sendMessage ci-dessus avec bodyOverride/subjectOverride). Même
+ * résolution de {{lienQuestionnaire}}/{{lienDesabonnement}} que sendMessage,
+ * mais SANS {{codeAcces}}/{{qrCode}} (réservés aux envois en portée hôtel,
+ * jamais utilisés depuis ce modal en portée CRM) ni pixel de suivi
+ * d'ouverture (pas un vrai envoi).
+ */
+export async function renderMessagePreview(opts: {
+  entityId: string | null;
+  channel: Channel;
+  templateKey: string;
+  to?: string;
+  variables?: Record<string, string>;
+  trackOpenProspectId?: string;
+  baseUrl?: string;
+}): Promise<{ subject: string; bodyHtml: string }> {
+  const template = await prisma.messageTemplate.findFirst({
+    where: { entityId: opts.entityId, channel: opts.channel, key: opts.templateKey },
+  });
+  if (!template) throw new HttpError(404, "Modèle introuvable pour ce canal");
+  let vars = opts.variables || {};
+  if (template.questionnaireId && opts.entityId === null && opts.trackOpenProspectId && !vars.lienQuestionnaire) {
+    vars = await attachQuestionnaireLink(template.questionnaireId, "crmProspect", opts.trackOpenProspectId, vars);
+  }
+  if (opts.channel === "email" && opts.entityId === null && !vars.lienDesabonnement) {
+    const base = opts.baseUrl || config.publicBaseUrl;
+    const token = createUnsubscribeToken({ entityId: null, target: opts.to || "" });
+    vars = { ...vars, lienDesabonnement: `${base}/wa/unsubscribe?token=${encodeURIComponent(token)}` };
+  }
+  return { subject: renderTemplate(template.subject, vars), bodyHtml: renderTemplate(template.bodyHtml, vars) };
 }

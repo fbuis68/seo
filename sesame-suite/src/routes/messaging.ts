@@ -5,7 +5,7 @@ import { requireAdmin } from "../middleware/requireAdmin";
 import { resolveScope } from "../lib/scope";
 import { getChannelConfig, upsertChannelConfig, sendTestMessage, fetchSmsPartnerCredit, SmsChannel } from "../lib/sms";
 import { listMessageTemplates, upsertMessageTemplate, deleteMessageTemplate, isChannel, isTemplateCategory, TemplateCategory } from "../lib/messageTemplate";
-import { sendMessage } from "../lib/messaging";
+import { sendMessage, renderMessagePreview } from "../lib/messaging";
 import { createMetaMessageTemplate, listMetaMessageTemplates } from "../lib/metaTemplates";
 
 /**
@@ -442,6 +442,13 @@ interface SendBody {
    * contenu binaire) ou un id introuvable est silencieusement ignoré.
    */
   documentIds?: string[];
+  /**
+   * Email uniquement — sujet/corps édités à la main depuis l'aperçu chargé
+   * par GET .../message/preview ci-dessous (10/11/2026, "pouvoir modifier
+   * le corps" avant envoi) — cf. sendMessage() subjectOverride/bodyOverride.
+   */
+  subjectOverride?: string;
+  bodyOverride?: string;
 }
 
 messagingRouter.post(
@@ -473,7 +480,39 @@ messagingRouter.post(
       baseUrl: `${req.protocol}://${req.get("host")}`,
       rcsFailover: b.channel === "rcs" ? b.rcsFailover : undefined,
       extraAttachments,
+      subjectOverride: b.channel === "email" ? b.subjectOverride : undefined,
+      bodyOverride: b.channel === "email" ? b.bodyOverride : undefined,
     });
     res.json({ ok: true, ...sent });
+  })
+);
+
+interface PreviewBody {
+  channel: string;
+  templateKey: string;
+  to?: string;
+  variables?: Record<string, string>;
+  prospectId?: string;
+}
+
+/** POST /wa/message/preview — rendu sujet/corps SANS envoyer, pour pré-remplir le modal "Envoyer un message" (fiche client) avant édition. */
+messagingRouter.post(
+  "/message/preview",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const b = req.body as PreviewBody;
+    if (!isChannel(b.channel)) throw new HttpError(400, "channel doit être email, sms, whatsapp ou rcs");
+    if (!b.templateKey) throw new HttpError(400, "Modèle requis");
+    const preview = await renderMessagePreview({
+      entityId,
+      channel: b.channel,
+      templateKey: b.templateKey,
+      to: b.to,
+      variables: b.variables,
+      trackOpenProspectId: entityId === null ? b.prospectId : undefined,
+      baseUrl: `${req.protocol}://${req.get("host")}`,
+    });
+    res.json(preview);
   })
 );

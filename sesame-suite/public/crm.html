@@ -11744,7 +11744,8 @@ async function openSendEmailModal(id){
       <div class="modal-head"><div style="font-size:16px;font-weight:500">Envoyer un message à ${esc(c.nom)}</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
       <div class="ff"><label>Canal</label><select id="send-channel" onchange="renderSendTplOptions('${id}')">${available.map(ch=>`<option value="${ch}" ${ch===chan?'selected':''}>${CHANNEL_LABEL[ch]}</option>`).join('')}</select></div>
       <div class="ff" style="margin-top:8px"><label>Destinataire</label><input id="send-to" list="send-to-datalist" value="${esc(sendModalDefaultTo(c,chan))}"><datalist id="send-to-datalist">${sendModalDatalistOptions(c)}</datalist></div>
-      <div class="ff" style="margin-top:8px"><label>Modèle</label><select id="send-tpl"></select></div>
+      <div class="ff" style="margin-top:8px"><label>Modèle</label><select id="send-tpl" onchange="renderSendBodySection('${id}')"></select></div>
+      <div id="send-body-section"></div>
       <div id="send-doc-section"></div>
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="sendClientEmail('${id}')">Envoyer</button>
@@ -11764,7 +11765,39 @@ function renderSendTplOptions(id){
   if(!sel)return;
   const opts=MSG_TEMPLATES.filter(t=>t.channel===chan);
   sel.innerHTML = opts.length ? opts.map(t=>`<option value="${esc(t.key)}">${esc(t.name)}</option>`).join('') : '<option value="">— aucun modèle —</option>';
+  renderSendBodySection(id);
   renderSendDocSection();
+}
+
+// Sujet/corps éditables, pré-remplis depuis le modèle choisi (10/11/2026,
+// "charger le modèle... pouvoir modifier le corps") — email uniquement
+// (sms/whatsapp restent au modèle brut, pas de corps libre). Rendu serveur
+// (GET .../message/preview) pour que {{lienQuestionnaire}}/
+// {{lienDesabonnement}} soient déjà résolues, comme à l'envoi réel — le
+// texte édité ici repart ensuite en subjectOverride/bodyOverride (cf.
+// sendClientEmail), jamais ré-interprété comme un modèle (pas de {{var}}
+// attendu dans le texte modifié à la main).
+async function renderSendBodySection(id){
+  const el = document.getElementById('send-body-section');
+  if(!el) return;
+  const chan=(document.getElementById('send-channel')||{value:'email'}).value;
+  if(chan!=='email'){ el.innerHTML=''; return; }
+  const key=(document.getElementById('send-tpl')||{value:''}).value;
+  if(!key){ el.innerHTML=''; return; }
+  const c=clients.find(c=>c.id===id);
+  if(!c) return;
+  el.innerHTML = '<div class="ff" style="margin-top:8px"><small style="color:var(--mu)">Chargement du modèle…</small></div>';
+  const to=(document.getElementById('send-to')||{value:''}).value.trim();
+  try{
+    const r = await apiFetch('/wa/message/preview', {method:'POST', body:JSON.stringify({
+      scope:'crm', channel:chan, templateKey:key, to, prospectId:id,
+      variables:{nom:c.nom, secteur:c.secteur||'', referent:c.referent||'', ville:c.ville||''}
+    })});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    el.innerHTML = `<div class="ff" style="margin-top:8px"><label>Sujet</label><input id="send-subject" value="${esc(data.subject)}"></div>
+      <div class="ff" style="margin-top:8px"><label>Corps</label><textarea id="send-body" style="height:160px">${esc(htmlToPlainText(data.bodyHtml))}</textarea></div>`;
+  }catch(e){ el.innerHTML=''; flash('Échec du chargement du modèle'); }
 }
 
 // Section "Documents de la bibliothèque à joindre" du modal d'envoi
@@ -11808,9 +11841,13 @@ async function sendClientEmail(id){
   if(!to){flash('Destinataire requis');return;}
   if(!key){flash('Sélectionnez un modèle');return;}
   try{
+    const subjectEl = document.getElementById('send-subject');
+    const bodyEl = document.getElementById('send-body');
     var r = await apiFetch('/wa/message/send', {method:'POST', body:JSON.stringify({
       scope:'crm', channel:channel, templateKey:key, to:to, prospectId:id,
       documentIds: channel==='email' ? SEND_MODAL_DOC_IDS : undefined,
+      subjectOverride: channel==='email'&&subjectEl ? subjectEl.value : undefined,
+      bodyOverride: channel==='email'&&bodyEl ? bodyEl.value : undefined,
       variables:{nom:c.nom, secteur:c.secteur||'', referent:c.referent||'', ville:c.ville||''}
     })});
     var data = await r.json();
