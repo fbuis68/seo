@@ -925,22 +925,22 @@ crmQuoteRouter.get(
         select: { id: true, fileName: true, fileMimeType: true, createdAt: true },
         orderBy: { createdAt: "desc" },
       }),
-      // Questionnaires choisis pour CE devis (06/11/2026, puis restreint le
-      // 06/11/2026 "rajouter un questionnaire sur un devis... qui puisse
-      // apparaitre sur son espace" — cf. attachedQuestionnaireIds, même
-      // principe qu'attachedDocumentIds/attachedMeetingIds : l'envoi
-      // QuestionnaireSend reste rattaché au PROSPECT, mais ne s'affiche ici
-      // que si ce devis précis le référence). Réutilise le token déjà
+      // Tous les questionnaires envoyés à ce prospect/client (10/11/2026,
+      // "quand un questionnaire a été envoyé à un prospect ou client le
+      // faire figurer dans l'espace client") — plus seulement ceux
+      // explicitement attachés à CE devis (attachedQuestionnaireIds ne sert
+      // plus qu'à déclencher l'envoi depuis l'onglet "Document devis", cf.
+      // ensureQuestionnaireSends ci-dessus). Tout QuestionnaireSend du
+      // prospect s'affiche ici, qu'il vienne d'un devis, d'une règle
+      // d'automatisation ou d'un envoi manuel. Réutilise le token déjà
       // généré par QuestionnaireSend (pas celui du devis) : rendu via une
       // iframe sur /questionnaire.html, même principe que l'onglet "Prendre
       // rendez-vous" (iframe Microsoft Bookings).
-      quote.attachedQuestionnaireIds.length
-        ? prisma.questionnaireSend.findMany({
-            where: { targetType: "crmProspect", targetId: quote.prospectId, questionnaireId: { in: quote.attachedQuestionnaireIds } },
-            select: { token: true, completedAt: true, questionnaire: { select: { name: true } } },
-            orderBy: { createdAt: "desc" },
-          })
-        : Promise.resolve([]),
+      prisma.questionnaireSend.findMany({
+        where: { targetType: "crmProspect", targetId: quote.prospectId },
+        select: { token: true, completedAt: true, questionnaire: { select: { name: true } } },
+        orderBy: { createdAt: "desc" },
+      }),
     ]);
     const selectedModuleKeys = new Set(lines.filter((l) => l.category === "logiciel" && l.moduleKey).map((l) => l.moduleKey));
     const promotedLicenses = promotableProducts
