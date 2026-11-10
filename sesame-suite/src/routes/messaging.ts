@@ -3,7 +3,7 @@ import { prisma } from "../db";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { resolveScope } from "../lib/scope";
-import { getChannelConfig, upsertChannelConfig, sendTestMessage, SmsChannel } from "../lib/sms";
+import { getChannelConfig, upsertChannelConfig, sendTestMessage, fetchSmsPartnerCredit, SmsChannel } from "../lib/sms";
 import { listMessageTemplates, upsertMessageTemplate, deleteMessageTemplate, isChannel, isTemplateCategory, TemplateCategory } from "../lib/messageTemplate";
 import { sendMessage } from "../lib/messaging";
 import { createMetaMessageTemplate, listMetaMessageTemplates } from "../lib/metaTemplates";
@@ -141,6 +141,30 @@ messagingRouter.post(
       fromNumber: b.fromNumber.trim(),
     });
     res.json(shapeChannelConfig(row));
+  })
+);
+
+/**
+ * GET /wa/channelConfig/smsCredit — crédit SMS restant du compte DocPartner/
+ * SMSPartner CONFIGURÉ SUR CE CANAL (10/11/2026, "cela existe egalement dans
+ * la partie admin de Sesame" — même fonctionnalité que
+ * POST /crmProspect/smsCredit côté CRM, cf. routes/crmProspect.ts, mais
+ * accessible depuis le back-office de CHAQUE client directement (pas
+ * réservé aux comptes Sesame : chaque hôtel doit pouvoir vérifier son
+ * propre crédit).
+ */
+messagingRouter.get(
+  "/channelConfig/smsCredit",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const cfg = await getChannelConfig(entityId, "sms");
+    if (!cfg || cfg.provider !== "smspartner" || !cfg.apiKey) {
+      throw new HttpError(400, "Ce canal n'utilise pas DocPartner/SMSPartner pour les SMS (ou clé API non renseignée)");
+    }
+    const result = await fetchSmsPartnerCredit(cfg.apiKey, cfg.baseUrl);
+    if (result.credit === null) throw new HttpError(502, result.error || "Crédit SMS indisponible");
+    res.json({ credit: result.credit });
   })
 );
 

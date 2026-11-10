@@ -2844,6 +2844,7 @@ overflow:hidden
       <div id="sms-fields-smspartner" style="display:none">
         <div class="fi"><label class="lb">Clé API</label><input type="password" id="sms-apikey" autocomplete="off"></div>
         <div class="fi"><label class="lb">Token sous-compte (optionnel)</label><input type="text" id="sms-subaccount" placeholder="Laissez vide si compte DocPartner dédié"></div>
+        <div class="fi"><label class="lb">Crédit SMS restant</label><div id="sms-credit-check"><button class="btn btn-s" type="button" onclick="chanCheckSmsCredit()">Vérifier</button></div></div>
       </div>
       <div id="sms-fields-infobip" style="display:none">
         <div class="fi"><label class="lb">Clé API</label><input type="password" id="sms-apikey-ib" autocomplete="off"></div>
@@ -9980,6 +9981,24 @@ async function chanLoadConfig(channel){
     if(metaWabaEl) metaWabaEl.value = cfg.provider==='meta' ? (cfg.baseUrl||'') : '';
     chanProviderChanged(p);
   }catch(e){ toast('Erreur de chargement de la configuration '+CHAN_LABEL[channel]); }
+}
+
+/** Crédit SMS restant du compte DocPartner/SMSPartner de CET établissement
+ * (10/11/2026, même fonctionnalité que ficheCheckSmsCredit côté CRM) — lit
+ * la config déjà enregistrée en base (pas les champs du formulaire encore
+ * non sauvegardés), donc n'a de sens qu'une fois "Enregistrer" cliqué. */
+async function chanCheckSmsCredit(){
+  var el = document.getElementById('sms-credit-check');
+  if(!el) return;
+  el.innerHTML = '<span style="color:var(--mu);font-size:12px">Vérification…</span>';
+  try{
+    var r = await adminFetch('/wa/channelConfig/smsCredit');
+    var data = await r.json();
+    if(!r.ok) throw new Error(data.error||'Indisponible');
+    el.innerHTML = '<strong>'+Number(data.credit).toLocaleString('fr-FR')+'</strong> SMS <button class="btn btn-s" type="button" onclick="chanCheckSmsCredit()" style="padding:2px 8px;font-size:11px">↻</button>';
+  }catch(e){
+    el.innerHTML = '<span style="color:var(--re,#a32d2d);font-size:12px">'+esc(e.message||'Indisponible')+'</span> <button class="btn btn-s" type="button" onclick="chanCheckSmsCredit()" style="padding:2px 8px;font-size:11px">Réessayer</button>';
+  }
 }
 
 async function chanSaveConfig(channel){
