@@ -55,6 +55,7 @@ model Entity {
   vendorCommissions     VendorCommission[]
   walletConfig          WalletConfig?
   questionnaires        Questionnaire[]
+  questions             Question[]
   passes                Pass[]
   bookingEngineConfig   BookingEngineConfig?
   nayaxConfig           NayaxConfig?
@@ -3235,12 +3236,22 @@ model Questionnaire {
   @@index([entityId])
 }
 
-model QuestionnaireQuestion {
-  id              String        @id @default(cuid())
-  questionnaireId String
-  questionnaire   Questionnaire @relation(fields: [questionnaireId], references: [id], onDelete: Cascade)
+// Bibliothèque de questions (10/11/2026, "faire en sorte que les questions
+// soient exploitable d'un questionnaire à l'autre avec une separation entre
+// question et questionnaire") — le CONTENU d'une question (type, intitulé,
+// options, lien) vit ici, indépendamment de son usage dans tel ou tel
+// questionnaire. QuestionnaireQuestion ci-dessous devient un simple
+// PLACEMENT (position + branchement, propres à CE questionnaire) qui
+// référence une Question — la même Question peut donc être placée dans
+// plusieurs questionnaires à la fois ; modifier son contenu la modifie
+// partout où elle est utilisée. onDelete: Restrict côté placement (pas
+// Cascade) : supprimer une Question encore utilisée quelque part doit être
+// un refus explicite, jamais un trou silencieux dans un questionnaire actif.
+model Question {
+  id       String  @id @default(cuid())
+  entityId String? // null = portée CRM/Sesame, même portée que Questionnaire
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  order    Int
   type     String // single | multi | boolean | text | shorttext | number | checkbox | select | rating | file
   label    String
   required Boolean @default(false)
@@ -3261,19 +3272,43 @@ model QuestionnaireQuestion {
   linkUrl   String?
   linkLabel String?
 
+  placements QuestionnaireQuestion[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([entityId])
+}
+
+model QuestionnaireQuestion {
+  id              String        @id @default(cuid())
+  questionnaireId String
+  questionnaire   Questionnaire @relation(fields: [questionnaireId], references: [id], onDelete: Cascade)
+
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  // Position DANS CE questionnaire — propre au placement, pas à la Question
+  // (la même Question peut être en position 1 ici et position 4 ailleurs).
+  order Int
+
   // Branchement conditionnel (22/10/2026, demande client) — évalué juste
   // après que CETTE question a reçu une réponse, pour décider quelle
   // question montrer ensuite (saute celles entre les deux dans `order`).
-  // Un seul niveau de condition par branche (la réponse à CETTE question),
-  // pas de combinaison multi-questions — volontairement simple, cf.
-  // lib/questionnaireBranching.ts pour le format exact et la logique
-  // d'évaluation (partagée avec public/questionnaireFlow.js, qui doit
-  // rester synchro à la main — pas de build step JS commun ici).
-  // Forme : {branches:[{id,label?,operator,value,targetQuestionId}],
+  // Propre au placement (pas à la Question partagée) : le MÊME branchement
+  // n'aurait aucun sens dans un autre questionnaire, dont les questions
+  // voisines/ids diffèrent. Un seul niveau de condition par branche (la
+  // réponse à CETTE question), pas de combinaison multi-questions —
+  // volontairement simple, cf. lib/questionnaireBranching.ts pour le
+  // format exact et la logique d'évaluation (partagée avec
+  // public/questionnaireFlow.js, qui doit rester synchro à la main — pas
+  // de build step JS commun ici). Forme :
+  // {branches:[{id,label?,operator,value,targetQuestionId}],
   // elseTargetQuestionId}. null = pas de branchement, suite normale
   // (question suivante dans `order`). targetQuestionId/elseTargetQuestionId
-  // valent soit l'id d'une question, soit "END" (fin du questionnaire),
-  // soit null (= suite normale, seulement valable pour elseTargetQuestionId).
+  // valent soit l'id d'un PLACEMENT (QuestionnaireQuestion.id) de ce même
+  // questionnaire, soit "END" (fin du questionnaire), soit null (= suite
+  // normale, seulement valable pour elseTargetQuestionId).
   branching Json?
 
   answers QuestionnaireAnswer[]
@@ -3282,6 +3317,7 @@ model QuestionnaireQuestion {
   updatedAt DateTime @updatedAt
 
   @@index([questionnaireId])
+  @@index([questionId])
 }
 
 // Un envoi = un lien public token pour UNE cible (prospect CRM ou

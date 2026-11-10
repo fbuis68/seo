@@ -3973,7 +3973,10 @@ Accès au salon Premium</textarea>
           <div class="fi"><label class="lb">Lien cliquable (optionnel)</label><input type="text" id="qn-new-linkLabel" placeholder="Ex : Calculer le retour sur investissement"></div>
           <div class="fi"><label class="lb">URL du lien</label><input type="text" id="qn-new-linkUrl" placeholder="https://…"></div>
         </div>
-        <button class="btn btn-p" onclick="qnAddQuestion()"><i class="ti ti-plus"></i> Ajouter la question</button>
+        <div class="brow">
+          <button class="btn btn-p" onclick="qnAddQuestion()"><i class="ti ti-plus"></i> Ajouter la question</button>
+          <button class="btn btn-s" style="border-style:dashed" onclick="qnOpenLibraryPicker()"><i class="ti ti-books"></i> Depuis la bibliothèque…</button>
+        </div>
       </div>
     </div>
 
@@ -4001,6 +4004,8 @@ Accès au salon Premium</textarea>
     </div>
   </div>
 </div>
+
+<div id="qn-library-modal"></div>
 
 <!-- ════ MODAL BRANCHEMENT D'UNE QUESTION (22/10/2026) ════
      Simplification assumée : une branche ne teste QUE la réponse à la
@@ -14214,6 +14219,7 @@ function qnRenderQuestions(){
  * (déjà prévu par qnRerenderOptionsEditor, jamais câblé jusqu'ici). */
 function qnEditRowHtml(q){
   return '<div class="alt alt-b" id="qn-q-row-'+q.id+'" style="align-items:flex-start;flex-direction:column;gap:10px">'
+    + (q.usageCount>1 ? '<div style="font-size:11px;color:#8a5cf6">⚠ Cette question est utilisée dans '+q.usageCount+' questionnaires — la modifier la change partout où elle apparaît.</div>' : '')
     + '<div class="g2" style="width:100%">'
       + '<div class="fi"><label class="lb">Type</label>'
         + '<select id="qn-edit-type-'+q.id+'" onchange="qnEditTypeChanged(\''+q.id+'\')">'
@@ -14383,8 +14389,50 @@ async function qnAddQuestion(){
   }catch(e){ toast('Erreur de connexion au serveur'); }
 }
 
+/** Réutiliser une question existante (10/11/2026, "exploitable d'un
+ * questionnaire à l'autre") — liste les questions de la bibliothèque pas
+ * déjà présentes dans CE questionnaire, clic pour l'attacher (simple
+ * placement, aucune copie — modifier son contenu la changera partout). */
+async function qnOpenLibraryPicker(){
+  if(!QNP_CURRENT) return;
+  var lib;
+  try{ var r0 = await adminFetch('/wa/question/list'); lib = r0.ok ? await r0.json() : []; }
+  catch(e){ lib = []; }
+  var alreadyHere = {};
+  (QNP_CURRENT.questions||[]).forEach(function(q){ alreadyHere[q.questionId] = true; });
+  var available = lib.filter(function(q){ return !alreadyHere[q.id]; });
+  var rows = available.map(function(q){
+    return '<div class="alt alt-b" style="cursor:pointer" onclick="qnAttachFromLibrary(\''+q.id+'\')">'
+      + '<div><div style="font-weight:600">'+esc(q.label)+' <span class="tag" style="font-size:10px">'+(QN_TYPE_LABEL[q.type]||q.type)+'</span></div>'
+      + '<div style="font-size:11px;color:var(--mu)">'+(q.usageCount?('Déjà utilisée dans '+q.usageCount+' questionnaire'+(q.usageCount>1?'s':'')):'Jamais utilisée')+'</div></div>'
+      + '</div>';
+  }).join('');
+  document.getElementById('qn-library-modal').innerHTML =
+    '<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:400;display:flex;align-items:center;justify-content:center;padding:16px" onmousedown="this._down=(event.target===this)" onclick="if(event.target===this&&this._down)qnCloseLibraryPicker()">'
+    + '<div style="background:var(--card);border-radius:var(--r);width:100%;max-width:480px;max-height:80vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.3)">'
+      + '<div class="ch">Depuis la bibliothèque<button class="btn btn-g" style="margin-left:auto" onclick="qnCloseLibraryPicker()"><i class="ti ti-x"></i></button></div>'
+      + '<div style="padding:0 20px 20px">'+(rows || '<div style="font-size:13px;color:var(--mu)">Aucune autre question disponible dans la bibliothèque.</div>')+'</div>'
+    + '</div></div>';
+}
+function qnCloseLibraryPicker(){ document.getElementById('qn-library-modal').innerHTML=''; }
+async function qnAttachFromLibrary(questionId){
+  qnCloseLibraryPicker();
+  try{
+    var r = await adminFetch('/wa/questionnaire/question/create', {method:'POST', body:JSON.stringify({questionnaireId:QNP_CURRENT.id, questionId:questionId})});
+    var data = await r.json();
+    if(!r.ok){ toast(data.error||'Erreur'); return; }
+    QNP_CURRENT.questions.push(data);
+    qnRenderQuestions();
+    var i = QNP_LIST.findIndex(function(q){return q.id===QNP_CURRENT.id;});
+    if(i>-1) QNP_LIST[i].questionCount = QNP_CURRENT.questions.length;
+    toast('Question ajoutée depuis la bibliothèque ✓');
+  }catch(e){ toast('Erreur de connexion au serveur'); }
+}
+
 async function qnDeleteQuestion(id){
-  if(!confirm('Supprimer cette question ?')) return;
+  var q = (QNP_CURRENT.questions||[]).find(function(x){return x.id===id;});
+  var msg = q && q.usageCount>1 ? 'Retirer cette question de ce questionnaire ? (reste disponible dans les autres où elle est utilisée)' : 'Retirer cette question de ce questionnaire ?';
+  if(!confirm(msg)) return;
   try{
     var r = await adminFetch('/wa/questionnaire/question/delete', {method:'POST', body:JSON.stringify({id:id})});
     if(!r.ok){ toast('Erreur lors de la suppression'); return; }

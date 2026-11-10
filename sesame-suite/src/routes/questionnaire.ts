@@ -34,29 +34,54 @@ function targetTypeForScope(entityId: string | null): "crmProspect" | "booking" 
   return entityId === null ? "crmProspect" : "booking";
 }
 
+/**
+ * Un "placement" (QuestionnaireQuestion) + son contenu partagé (Question,
+ * cf. prisma/schema.prisma, 10/11/2026) — shapeQuestion aplatit les deux en
+ * un seul objet pour le front, qui n'a pas besoin de connaître la
+ * séparation interne : `id` reste l'id du PLACEMENT (celui que
+ * branching/réponses référencent), `questionId` est l'id de la Question
+ * partagée (celui qu'on réutilise d'un questionnaire à l'autre via
+ * /question/list + /questionnaire/question/create avec questionId fourni).
+ * `usageCount` (nombre de placements de cette Question, tous questionnaires
+ * confondus) n'est renseigné que si la requête l'a chargé (_count) — sert à
+ * avertir l'utilisateur avant une modification qui impacterait d'autres
+ * questionnaires.
+ */
 function shapeQuestion(q: {
   id: string;
   order: number;
-  type: string;
-  label: string;
-  required: boolean;
-  options: unknown;
-  linkUrl: string | null;
-  linkLabel: string | null;
   branching?: unknown;
+  question: {
+    id: string;
+    type: string;
+    label: string;
+    required: boolean;
+    options: unknown;
+    linkUrl: string | null;
+    linkLabel: string | null;
+    _count?: { placements: number };
+  };
 }) {
   return {
     id: q.id,
+    questionId: q.question.id,
     order: q.order,
-    type: q.type,
-    label: q.label,
-    required: q.required,
-    options: q.options ?? null,
-    linkUrl: q.linkUrl || "",
-    linkLabel: q.linkLabel || "",
+    type: q.question.type,
+    label: q.question.label,
+    required: q.question.required,
+    options: q.question.options ?? null,
+    linkUrl: q.question.linkUrl || "",
+    linkLabel: q.question.linkLabel || "",
     branching: q.branching ?? null,
+    usageCount: q.question._count ? q.question._count.placements : undefined,
   };
 }
+
+/** Fragment Prisma réutilisé partout où un placement doit être rendu via
+ * shapeQuestion (avec le nombre d'usages de la Question partagée). */
+const QUESTION_PLACEMENT_INCLUDE = {
+  question: { include: { _count: { select: { placements: true } } } },
+} as const;
 
 const BRANCH_OPERATORS = new Set(["equals", "not_equals", "includes", "not_includes", "gt", "lt", "gte", "lte", "contains"]);
 
@@ -119,7 +144,16 @@ questionnaireRouter.get(
     const rows = await prisma.questionnaire.findMany({
       where: { entityId },
       orderBy: { createdAt: "asc" },
-      include: { questions: { select: { id: true, order: true, type: true, label: true, required: true, options: true, linkUrl: true, linkLabel: true } }, _count: { select: { sends: true } } },
+      include: {
+        questions: {
+          select: {
+            id: true,
+            order: true,
+            question: { select: { id: true, type: true, label: true, required: true, options: true, linkUrl: true, linkLabel: true } },
+          },
+        },
+        _count: { select: { sends: true } },
+      },
     });
     res.json(rows.map(shapeQuestionnaire));
   })
@@ -134,7 +168,7 @@ questionnaireRouter.get(
     const id = (req.query.id as string) || "";
     const row = await prisma.questionnaire.findFirst({
       where: { id, entityId },
-      include: { questions: { orderBy: { order: "asc" } }, _count: { select: { sends: true } } },
+      include: { questions: { orderBy: { order: "asc" }, include: QUESTION_PLACEMENT_INCLUDE }, _count: { select: { sends: true } } },
     });
     if (!row) throw new HttpError(404, "Questionnaire introuvable");
     res.json(shapeQuestionnaire(row));
@@ -209,18 +243,37 @@ questionnaireRouter.post(
   asyncHandler(async (req, res) => {
     const entityId = await resolveScope(req);
     const id = (req.body.id as string) || "";
-    const existing = await prisma.questionnaire.findFirst({ where: { id, entityId }, include: { questions: { orderBy: { order: "asc" } } } });
+    const existing = await prisma.questionnaire.findFirst({ where: { id, entityId }, include: { questions: { orderBy: { order: "asc" }, include: QUESTION_PLACEMENT_INCLUDE } } });
     if (!existing) throw new HttpError(404, "Questionnaire introuvable");
+    // Copie INDÉPENDANTE (10/11/2026) : chaque placement obtient sa PROPRE
+    // Question (clone du contenu), jamais une référence partagée vers les
+    // Questions de l'original — /duplicate reste "copie complète éditable
+    // sans rien affecter ailleurs", la réutilisation explicite entre
+    // questionnaires passe par /questionnaire/question/create avec
+    // questionId (cf. plus bas), jamais un effet de bord de la duplication.
     let copy = await prisma.questionnaire.create({
       data: {
         entityId,
         name: `${existing.name} (copie)`,
         description: existing.description,
         questions: {
-          create: existing.questions.map((q) => ({ order: q.order, type: q.type, label: q.label, required: q.required, options: q.options ?? undefined })),
+          create: existing.questions.map((q) => ({
+            order: q.order,
+            question: {
+              create: {
+                entityId,
+                type: q.question.type,
+                label: q.question.label,
+                required: q.question.required,
+                options: q.question.options ?? undefined,
+                linkUrl: q.question.linkUrl,
+                linkLabel: q.question.linkLabel,
+              },
+            },
+          })),
         },
       },
-      include: { questions: { orderBy: { order: "asc" } } },
+      include: { questions: { orderBy: { order: "asc" }, include: QUESTION_PLACEMENT_INCLUDE } },
     });
     // Les cibles de branchement pointent vers des ids de l'ORIGINAL — on les
     // réécrit vers les ids nouvellement créés (même position dans `order`),
@@ -241,7 +294,7 @@ questionnaireRouter.post(
       .filter((u): u is NonNullable<typeof u> => u !== null);
     if (updates.length) {
       await prisma.$transaction(updates);
-      copy = (await prisma.questionnaire.findUnique({ where: { id: copy.id }, include: { questions: { orderBy: { order: "asc" } }, _count: { select: { sends: true } } } }))!;
+      copy = (await prisma.questionnaire.findUnique({ where: { id: copy.id }, include: { questions: { orderBy: { order: "asc" }, include: QUESTION_PLACEMENT_INCLUDE }, _count: { select: { sends: true } } } }))!;
     }
     res.status(201).json(shapeQuestionnaire(copy));
   })
@@ -287,33 +340,57 @@ async function validateBranchingTargets(questionnaireId: string, branching: Bran
   if (targets.some((t) => !found.has(t))) throw new HttpError(400, "Branchement : destination hors de ce questionnaire");
 }
 
+/**
+ * Ajoute une question à CE questionnaire (10/11/2026) — deux modes :
+ * - `questionId` fourni : RÉUTILISE une Question existante de la
+ *   bibliothèque (même portée), crée seulement le placement. C'est le
+ *   mécanisme de réutilisation "d'un questionnaire à l'autre" demandé.
+ * - sinon : crée une Question (type/label/…) ET son placement en une fois,
+ *   comme avant — le formulaire "+ Nouvelle question" continue de marcher
+ *   à l'identique sans que l'utilisateur ait besoin de connaître la
+ *   bibliothèque.
+ */
 questionnaireRouter.post(
   "/questionnaire/question/create",
   requireAdmin,
   asyncHandler(async (req, res) => {
     const entityId = await resolveScope(req);
-    const b = req.body as QuestionBody;
+    const b = req.body as QuestionBody & { questionId?: string };
     if (!b.questionnaireId) throw new HttpError(400, "questionnaireId requis");
     await ownedQuestionnaire(entityId, b.questionnaireId);
-    if (!QUESTION_TYPES.has(b.type)) throw new HttpError(400, "Type de question invalide");
-    if (!b.label || !b.label.trim()) throw new HttpError(400, "Intitulé requis");
-    const linkUrl = validateLink(b.linkUrl);
     const branching = validateBranchingShape(b.branching);
     await validateBranchingTargets(b.questionnaireId, branching);
     const agg = await prisma.questionnaireQuestion.aggregate({ where: { questionnaireId: b.questionnaireId }, _max: { order: true } });
-    const row = await prisma.questionnaireQuestion.create({
-      data: {
-        questionnaireId: b.questionnaireId,
-        order: (agg._max.order ?? -1) + 1,
-        type: b.type,
-        label: b.label.trim(),
-        required: !!b.required,
-        options: (b.options as never) ?? undefined,
-        linkUrl,
-        linkLabel: linkUrl ? (b.linkLabel || "").trim() || null : null,
-        branching: (branching as never) ?? undefined,
-      },
-    });
+    const order = (agg._max.order ?? -1) + 1;
+
+    let row;
+    if (b.questionId) {
+      const question = await prisma.question.findFirst({ where: { id: b.questionId, entityId } });
+      if (!question) throw new HttpError(404, "Question introuvable dans la bibliothèque");
+      row = await prisma.questionnaireQuestion.create({
+        data: { questionnaireId: b.questionnaireId, questionId: b.questionId, order, branching: (branching as never) ?? undefined },
+        include: QUESTION_PLACEMENT_INCLUDE,
+      });
+    } else {
+      if (!QUESTION_TYPES.has(b.type)) throw new HttpError(400, "Type de question invalide");
+      if (!b.label || !b.label.trim()) throw new HttpError(400, "Intitulé requis");
+      const linkUrl = validateLink(b.linkUrl);
+      const newQuestion = await prisma.question.create({
+        data: {
+          entityId,
+          type: b.type,
+          label: b.label.trim(),
+          required: !!b.required,
+          options: (b.options as never) ?? undefined,
+          linkUrl,
+          linkLabel: linkUrl ? (b.linkLabel || "").trim() || null : null,
+        },
+      });
+      row = await prisma.questionnaireQuestion.create({
+        data: { questionnaireId: b.questionnaireId, questionId: newQuestion.id, order, branching: (branching as never) ?? undefined },
+        include: QUESTION_PLACEMENT_INCLUDE,
+      });
+    }
     res.status(201).json(shapeQuestion(row));
   })
 );
@@ -329,6 +406,15 @@ interface QuestionUpdateBody {
   branching?: unknown;
 }
 
+/**
+ * Modifie le placement ET/OU le contenu partagé en un seul appel (10/11/2026)
+ * — garde l'UX d'avant (un seul formulaire d'édition) tout en routant
+ * chaque champ vers la bonne table : `branching` sur le placement (propre à
+ * CE questionnaire), le reste (type/label/…) sur la Question partagée, donc
+ * répercuté PARTOUT où elle est utilisée — cf. `usageCount` dans la réponse
+ * de GET .../get pour avertir l'utilisateur avant de modifier une question
+ * utilisée ailleurs.
+ */
 questionnaireRouter.post(
   "/questionnaire/question/update",
   requireAdmin,
@@ -347,19 +433,31 @@ questionnaireRouter.post(
     const row = await prisma.questionnaireQuestion.update({
       where: { id: b.id },
       data: {
-        type: b.type,
-        label: b.label !== undefined ? b.label.trim() : undefined,
-        required: b.required,
-        options: (b.options as never) ?? undefined,
-        linkUrl,
-        linkLabel: linkUrl !== undefined ? (linkUrl ? (b.linkLabel || "").trim() || null : null) : undefined,
         branching: branchingProvided ? ((branching as never) ?? Prisma.JsonNull) : undefined,
+        question: {
+          update: {
+            type: b.type,
+            label: b.label !== undefined ? b.label.trim() : undefined,
+            required: b.required,
+            options: (b.options as never) ?? undefined,
+            linkUrl,
+            linkLabel: linkUrl !== undefined ? (linkUrl ? (b.linkLabel || "").trim() || null : null) : undefined,
+          },
+        },
       },
+      include: QUESTION_PLACEMENT_INCLUDE,
     });
     res.json(shapeQuestion(row));
   })
 );
 
+/**
+ * Retire cette question DE CE QUESTIONNAIRE uniquement (10/11/2026) — ne
+ * supprime JAMAIS la Question partagée elle-même (cf. POST /question/delete
+ * ci-dessous pour ça, bloqué tant qu'elle est encore placée quelque part) :
+ * reste utilisable/visible dans les autres questionnaires qui la
+ * référencent déjà.
+ */
 questionnaireRouter.post(
   "/questionnaire/question/delete",
   requireAdmin,
@@ -387,7 +485,164 @@ questionnaireRouter.post(
         return prisma.questionnaireQuestion.update({ where: { id: s.id }, data: { branching: fixed as never } });
       })
       .filter((u): u is NonNullable<typeof u> => u !== null);
+    // Place JAMAIS la Question elle-même — uniquement ce placement (cf.
+    // commentaire de la route).
     await prisma.$transaction([...clears, prisma.questionnaireQuestion.delete({ where: { id } })]);
+    res.json({ ok: true });
+  })
+);
+
+// ── Bibliothèque de questions (10/11/2026) — gestion indépendante des
+// Question partagées, hors du contexte d'un questionnaire précis. ──
+
+function shapeLibraryQuestion(q: {
+  id: string;
+  type: string;
+  label: string;
+  required: boolean;
+  options: unknown;
+  linkUrl: string | null;
+  linkLabel: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  _count?: { placements: number };
+  placements?: { questionnaire: { id: string; name: string } }[];
+}) {
+  return {
+    id: q.id,
+    type: q.type,
+    label: q.label,
+    required: q.required,
+    options: q.options ?? null,
+    linkUrl: q.linkUrl || "",
+    linkLabel: q.linkLabel || "",
+    createdAt: q.createdAt,
+    updatedAt: q.updatedAt,
+    usageCount: q._count ? q._count.placements : q.placements?.length,
+    usedIn: q.placements ? q.placements.map((p) => ({ id: p.questionnaire.id, name: p.questionnaire.name })) : undefined,
+  };
+}
+
+/** GET /wa/question/list?scope=crm — bibliothèque de questions de la portée, avec leur usage. */
+questionnaireRouter.get(
+  "/question/list",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const rows = await prisma.question.findMany({
+      where: { entityId },
+      orderBy: { createdAt: "desc" },
+      include: { _count: { select: { placements: true } } },
+    });
+    res.json(rows.map(shapeLibraryQuestion));
+  })
+);
+
+/** GET /wa/question/get?id=... — détail d'une question de la bibliothèque, avec la liste des questionnaires qui l'utilisent. */
+questionnaireRouter.get(
+  "/question/get",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const id = (req.query.id as string) || "";
+    const row = await prisma.question.findFirst({
+      where: { id, entityId },
+      include: { placements: { include: { questionnaire: { select: { id: true, name: true } } } } },
+    });
+    if (!row) throw new HttpError(404, "Question introuvable");
+    res.json(shapeLibraryQuestion(row));
+  })
+);
+
+interface LibraryQuestionBody {
+  type: string;
+  label: string;
+  required?: boolean;
+  options?: unknown;
+  linkUrl?: string;
+  linkLabel?: string;
+}
+
+/** POST /wa/question/create — crée une question DANS LA BIBLIOTHÈQUE, sans l'attacher à aucun questionnaire (attachée ensuite via .../question/create avec questionId). */
+questionnaireRouter.post(
+  "/question/create",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const b = req.body as LibraryQuestionBody;
+    if (!QUESTION_TYPES.has(b.type)) throw new HttpError(400, "Type de question invalide");
+    if (!b.label || !b.label.trim()) throw new HttpError(400, "Intitulé requis");
+    const linkUrl = validateLink(b.linkUrl);
+    const row = await prisma.question.create({
+      data: {
+        entityId,
+        type: b.type,
+        label: b.label.trim(),
+        required: !!b.required,
+        options: (b.options as never) ?? undefined,
+        linkUrl,
+        linkLabel: linkUrl ? (b.linkLabel || "").trim() || null : null,
+      },
+    });
+    res.status(201).json(shapeLibraryQuestion(row));
+  })
+);
+
+interface LibraryQuestionUpdateBody {
+  id: string;
+  type?: string;
+  label?: string;
+  required?: boolean;
+  options?: unknown;
+  linkUrl?: string;
+  linkLabel?: string;
+}
+
+/** POST /wa/question/update — modifie le contenu partagé, répercuté PARTOUT où cette question est placée. */
+questionnaireRouter.post(
+  "/question/update",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const b = req.body as LibraryQuestionUpdateBody;
+    if (!b.id) throw new HttpError(400, "id requis");
+    const existing = await prisma.question.findFirst({ where: { id: b.id, entityId } });
+    if (!existing) throw new HttpError(404, "Question introuvable");
+    if (b.type !== undefined && !QUESTION_TYPES.has(b.type)) throw new HttpError(400, "Type de question invalide");
+    if (b.label !== undefined && !b.label.trim()) throw new HttpError(400, "Intitulé requis");
+    const linkUrl = b.linkUrl !== undefined ? validateLink(b.linkUrl) : undefined;
+    const row = await prisma.question.update({
+      where: { id: b.id },
+      data: {
+        type: b.type,
+        label: b.label !== undefined ? b.label.trim() : undefined,
+        required: b.required,
+        options: (b.options as never) ?? undefined,
+        linkUrl,
+        linkLabel: linkUrl !== undefined ? (linkUrl ? (b.linkLabel || "").trim() || null : null) : undefined,
+      },
+    });
+    res.json(shapeLibraryQuestion(row));
+  })
+);
+
+/** POST /wa/question/delete — refuse tant que la question est encore placée dans au moins un questionnaire (jamais de trou silencieux). */
+questionnaireRouter.post(
+  "/question/delete",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entityId = await resolveScope(req);
+    const id = (req.body.id as string) || "";
+    const existing = await prisma.question.findFirst({
+      where: { id, entityId },
+      include: { placements: { include: { questionnaire: { select: { name: true } } } } },
+    });
+    if (!existing) throw new HttpError(404, "Question introuvable");
+    if (existing.placements.length) {
+      const names = [...new Set(existing.placements.map((p) => p.questionnaire.name))].join(", ");
+      throw new HttpError(409, `Encore utilisée dans : ${names}. Retirez-la de ces questionnaires avant de la supprimer de la bibliothèque.`);
+    }
+    await prisma.question.delete({ where: { id } });
     res.json({ ok: true });
   })
 );
@@ -555,12 +810,14 @@ questionnaireRouter.get(
     const targetType = targetTypeForScope(entityId);
     const sends = await prisma.questionnaireSend.findMany({
       where: { targetType, targetId, questionnaire: { entityId } },
-      include: { answers: true, questionnaire: { include: { questions: true } } },
+      include: { answers: true, questionnaire: { include: { questions: { include: { question: true } } } } },
       orderBy: { createdAt: "desc" },
     });
     res.json(
       sends.map((s) => {
-        const questionById = new Map(s.questionnaire.questions.map((q) => [q.id, q]));
+        const questionById = new Map(
+          s.questionnaire.questions.map((q) => [q.id, { label: q.question.label, type: q.question.type, options: q.question.options }])
+        );
         return {
           id: s.id,
           questionnaireName: s.questionnaire.name,
@@ -591,7 +848,7 @@ questionnaireRouter.get(
     const send = await prisma.questionnaireSend.findUnique({
       where: { token },
       include: {
-        questionnaire: { include: { questions: { orderBy: { order: "asc" } } } },
+        questionnaire: { include: { questions: { orderBy: { order: "asc" }, include: QUESTION_PLACEMENT_INCLUDE } } },
         answers: true,
       },
     });
@@ -637,7 +894,7 @@ questionnaireRouter.get(
 
     const questionnaire = await prisma.questionnaire.findFirst({
       where: { id: questionnaireId, entityId: entity.id, active: true },
-      include: { questions: { orderBy: { order: "asc" } } },
+      include: { questions: { orderBy: { order: "asc" }, include: QUESTION_PLACEMENT_INCLUDE } },
     });
     if (!questionnaire) {
       res.json({ configured: false });
@@ -678,15 +935,18 @@ questionnaireRouter.get(
     if (!token || !questionId) throw new HttpError(400, "Lien invalide");
     const send = await prisma.questionnaireSend.findUnique({ where: { token } });
     if (!send) throw new HttpError(404, "Lien invalide ou expiré");
-    const question = await prisma.questionnaireQuestion.findFirst({ where: { id: questionId, questionnaireId: send.questionnaireId } });
-    if (!question || !question.linkUrl) throw new HttpError(404, "Lien introuvable");
+    const placement = await prisma.questionnaireQuestion.findFirst({
+      where: { id: questionId, questionnaireId: send.questionnaireId },
+      include: { question: true },
+    });
+    if (!placement || !placement.question.linkUrl) throw new HttpError(404, "Lien introuvable");
 
     if (send.targetType === "crmProspect") {
-      await recordScoreEvent(send.targetId, "module_click", question.linkLabel || question.label, "internal").catch((e) =>
+      await recordScoreEvent(send.targetId, "module_click", placement.question.linkLabel || placement.question.label, "internal").catch((e) =>
         console.error("[crmScoring] linkClick:", e)
       );
     }
-    res.redirect(302, question.linkUrl);
+    res.redirect(302, placement.question.linkUrl);
   })
 );
 
@@ -787,11 +1047,25 @@ questionnaireRouter.post(
 
     const send = await prisma.questionnaireSend.findUnique({
       where: { token: b.token },
-      include: { questionnaire: { include: { questions: true } } },
+      include: { questionnaire: { include: { questions: { include: { question: true } } } } },
     });
     if (!send || !send.questionnaire.active) throw new HttpError(404, "Lien invalide ou expiré");
 
-    const questionsById = new Map(send.questionnaire.questions.map((q) => [q.id, q]));
+    // Aplatit placement + contenu partagé — cleanAnswerValue/
+    // walkQuestionnairePath attendent {id, order, branching, type, options,
+    // required} sur un seul objet, peu importe que `type`/`options` vivent
+    // désormais sur la Question partagée plutôt que sur le placement.
+    const flatQuestions = send.questionnaire.questions.map((q) => ({
+      id: q.id,
+      order: q.order,
+      branching: q.branching,
+      type: q.question.type,
+      label: q.question.label,
+      required: q.question.required,
+      options: q.question.options,
+    }));
+
+    const questionsById = new Map(flatQuestions.map((q) => [q.id, q]));
     const clean = b.answers
       .filter((a) => questionsById.has(a.questionId))
       .map((a) => ({ questionId: a.questionId, value: cleanAnswerValue(questionsById.get(a.questionId)!, a.value) }))
@@ -801,9 +1075,9 @@ questionnaireRouter.post(
     // branchement peut en sauter certaines (y compris required), cf.
     // walkQuestionnairePath (lib/questionnaireBranching.ts).
     const cleanByQuestionId = new Map(clean.map((a) => [a.questionId, a.value]));
-    const path = walkQuestionnairePath(send.questionnaire.questions, cleanByQuestionId);
+    const path = walkQuestionnairePath(flatQuestions, cleanByQuestionId);
     const pathSet = new Set(path);
-    const missingRequired = send.questionnaire.questions.some(
+    const missingRequired = flatQuestions.some(
       (q) => pathSet.has(q.id) && q.required && !clean.some((a) => a.questionId === q.id && isNonEmptyAnswer(q.type, a.value))
     );
     if (missingRequired) throw new HttpError(400, "Merci de répondre à toutes les questions obligatoires");

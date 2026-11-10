@@ -2514,7 +2514,10 @@ function renderQnDetail(){
           <div class="ff"><label>Lien cliquable (optionnel)</label><input id="qn-new-linkLabel" placeholder="Ex : Calculer le retour sur investissement"></div>
           <div class="ff"><label>URL du lien</label><input id="qn-new-linkUrl" placeholder="https://…"></div>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="qnAddQuestion()">+ Ajouter la question</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" onclick="qnAddQuestion()">+ Ajouter la question</button>
+          <button class="btn btn-ghost btn-sm" style="border-style:dashed" onclick="qnOpenLibraryPicker()">📚 Depuis la bibliothèque…</button>
+        </div>
       </div>
     </div>
 
@@ -2601,6 +2604,7 @@ function qnRenderQuestions(){
  * "Ajouter une question", pré-rempli, avec ctx=q.id pour QN_OPT_ROWS/QN_RATING. */
 function qnEditRowHtml(q){
   return `<div style="display:flex;flex-direction:column;gap:8px;padding:10px;background:var(--bg2,#f5f3ee);border-radius:8px">
+    ${q.usageCount>1?`<div style="font-size:11px;color:#8a5cf6">⚠ Cette question est utilisée dans ${q.usageCount} questionnaires — la modifier la change partout où elle apparaît.</div>`:''}
     <div class="form-grid">
       <div class="ff"><label>Type</label><select id="qn-edit-type-${q.id}" onchange="qnEditTypeChanged('${q.id}')">
         ${Object.keys(QN_TYPE_LABEL).map(t=>`<option value="${t}"${t===q.type?' selected':''}>${QN_TYPE_LABEL[t]}</option>`).join('')}
@@ -2770,8 +2774,51 @@ async function qnAddQuestion(){
   }catch(e){ flash('Erreur de connexion au serveur'); }
 }
 
+/** Réutiliser une question existante (10/11/2026, "exploitable d'un
+ * questionnaire à l'autre") — liste les questions de la bibliothèque pas
+ * déjà présentes dans CE questionnaire, clic pour l'attacher (simple
+ * placement, aucune copie — modifier son contenu la changera partout). */
+async function qnOpenLibraryPicker(){
+  if(!QNP_CURRENT) return;
+  let lib;
+  try{ const r = await apiFetch('/wa/question/list?scope=crm'); lib = r.ok ? await r.json() : []; }
+  catch(e){ lib = []; }
+  const alreadyHere = new Set((QNP_CURRENT.questions||[]).map(q=>q.questionId));
+  const available = lib.filter(q=>!alreadyHere.has(q.id));
+  const rows = available.map(q=>`
+    <div class="log-item" style="cursor:pointer" onclick="qnAttachFromLibrary('${q.id}')">
+      <div class="log-dot ld-b"></div>
+      <div class="log-body">
+        <div><strong>${esc(q.label)}</strong> <span class="tag t-gray" style="font-size:10px">${QN_TYPE_LABEL[q.type]||q.type}</span></div>
+        <div style="font-size:11px;color:var(--mu)">${q.usageCount?('Déjà utilisée dans '+q.usageCount+' questionnaire'+(q.usageCount>1?'s':'')):'Jamais utilisée'}</div>
+      </div>
+    </div>`).join('');
+  document.getElementById('modal-ct').innerHTML = `
+  <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
+    <div class="modal-box" style="max-width:480px;width:92vw">
+      <div class="modal-head"><div style="font-size:16px;font-weight:600">Depuis la bibliothèque</div><button class="btn btn-ghost btn-icon" onclick="closeModal()">✕</button></div>
+      <div style="padding:0 20px 20px">${rows || '<div class="log-empty">Aucune autre question disponible dans la bibliothèque.</div>'}</div>
+    </div>
+  </div>`;
+}
+async function qnAttachFromLibrary(questionId){
+  closeModal();
+  try{
+    const r = await apiFetch('/wa/questionnaire/question/create', {method:'POST', body:JSON.stringify({scope:'crm', questionnaireId:QNP_CURRENT.id, questionId})});
+    const data = await r.json();
+    if(!r.ok){ flash(data.error||'Erreur'); return; }
+    QNP_CURRENT.questions.push(data);
+    qnRenderQuestions();
+    const i = QNP_LIST.findIndex(x=>x.id===QNP_CURRENT.id);
+    if(i>-1) QNP_LIST[i].questionCount = QNP_CURRENT.questions.length;
+    flash('Question ajoutée depuis la bibliothèque ✓');
+  }catch(e){ flash('Erreur de connexion au serveur'); }
+}
+
 async function qnDeleteQuestion(id){
-  if(!confirm('Supprimer cette question ?')) return;
+  const q = (QNP_CURRENT.questions||[]).find(x=>x.id===id);
+  const msg = q && q.usageCount>1 ? 'Retirer cette question de ce questionnaire ? (reste disponible dans les autres où elle est utilisée)' : 'Retirer cette question de ce questionnaire ?';
+  if(!confirm(msg)) return;
   try{
     const r = await apiFetch('/wa/questionnaire/question/delete', {method:'POST', body:JSON.stringify({scope:'crm', id})});
     if(!r.ok){ flash('Erreur lors de la suppression'); return; }
