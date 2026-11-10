@@ -1,27 +1,35 @@
 /**
  * Migration d'un premier client depuis l'ancienne guest app (10/11/2026,
  * "des e-mails de checkin qui sont déjà en base avec l'ancienne url... qui
- * feront doublon avec les nouveaux") — l'ancienne app n'a qu'une règle
- * H-8 (8h avant l'arrivée) : toute résa dont l'arrivée tombe dans les 8h
- * depuis maintenant a donc déjà reçu (ou est en train de recevoir) le mail
- * de check-in côté ancienne app. Au-delà de 8h, l'ancienne app n'a encore
- * rien envoyé — ces résas-là n'ont pas besoin d'être touchées.
+ * feront doublon avec les nouveaux") — l'ANCIEN SERVEUR RESTE EN LIGNE
+ * après la bascule (confirmé par le client) : il continuera de tirer SA
+ * propre règle H-8 pour CHAQUE résa déjà présente dans sa base, quelle que
+ * soit sa date d'arrivée — une résa saisie il y a 6 mois avec arrivée dans
+ * 8 mois recevra quand même le mail de l'ancienne app le moment venu.
  *
- * Ce script pré-remplit AutomationRuleLog pour chaque règle "stay.start"
- * ACTIVE de l'entité ciblée, sur les résas dans la fenêtre de risque — le
- * balayage périodique de lib/automation.ts (sweepDateRule) les verra comme
- * "déjà notifiées" et les sautera, sans toucher aux résas plus lointaines
- * ni désactiver la règle elle-même (les vrais nouveaux arrivants au-delà
- * de 8h sont gérés normalement dès l'import).
+ * Le critère n'est donc PAS la date d'arrivée (version précédente de ce
+ * script, erronée) mais la SAISIE : toute résa qui existait déjà dans
+ * l'ancien système au moment de l'import doit être suppressed côté Sesame
+ * — POUR TOUJOURS, peu importe quand elle arrive — puisque l'ancienne app
+ * s'en charge de toute façon. Seules les résas créées APRÈS la bascule
+ * (jamais passées par l'ancien système) doivent recevoir le mail Sesame.
+ *
+ * Ce script suppresse donc TOUT le backlog d'un coup : toutes les résas de
+ * l'entité présentes au moment où on le lance (= tout ce qui vient de
+ * l'import initial), pour chaque règle "stay.start" ACTIVE. Lancé une
+ * seule fois, juste après l'import initial, avant que de nouvelles résas
+ * "natives Sesame" ne commencent à arriver — --before permet de fixer une
+ * limite de sécurité (ne suppresse que les résas créées avant cette date)
+ * si le script est relancé plus tard et qu'il ne faut pas toucher les
+ * résas entre-temps saisies nativement dans Sesame.
  *
  * Dry-run par défaut (liste ce qui SERAIT supprimé) ; --apply pour écrire
- * réellement. Jamais exécuté deux fois par erreur : AutomationRuleLog a une
- * contrainte unique (ruleId, targetType, targetId), un doublon est ignoré
- * silencieusement (skipDuplicates) plutôt que de planter.
+ * réellement. Jamais de doublon si relancé par erreur : AutomationRuleLog a
+ * une contrainte unique (ruleId, targetType, targetId), skipDuplicates.
  *
  * Usage :
  *   tsx scripts/suppress-stay-start-duplicates.ts --entityCode=XXXX
- *   tsx scripts/suppress-stay-start-duplicates.ts --entityCode=XXXX --hours=8 --apply
+ *   tsx scripts/suppress-stay-start-duplicates.ts --entityCode=XXXX --before=2026-11-10T00:00:00Z --apply
  */
 import { PrismaClient } from "@prisma/client";
 
@@ -33,17 +41,21 @@ function argValue(name: string): string | null {
 }
 
 const ENTITY_CODE = argValue("entityCode");
-const HOURS = Number(argValue("hours") || "8");
+const BEFORE_RAW = argValue("before");
 const APPLY = process.argv.includes("--apply");
 
 async function main() {
   if (!ENTITY_CODE) {
-    console.error("Usage: tsx scripts/suppress-stay-start-duplicates.ts --entityCode=XXXX [--hours=8] [--apply]");
+    console.error("Usage: tsx scripts/suppress-stay-start-duplicates.ts --entityCode=XXXX [--before=2026-11-10T00:00:00Z] [--apply]");
     process.exit(1);
   }
-  if (!Number.isFinite(HOURS) || HOURS <= 0) {
-    console.error("--hours doit être un nombre positif");
-    process.exit(1);
+  let before: Date | null = null;
+  if (BEFORE_RAW) {
+    before = new Date(BEFORE_RAW);
+    if (Number.isNaN(before.getTime())) {
+      console.error(`--before invalide : "${BEFORE_RAW}" (attendu : date ISO, ex. 2026-11-10T00:00:00Z)`);
+      process.exit(1);
+    }
   }
 
   const entity = await prisma.entity.findUnique({ where: { code: ENTITY_CODE } });
@@ -60,35 +72,39 @@ async function main() {
     return;
   }
 
-  const now = new Date();
-  const cutoff = new Date(now.getTime() + HOURS * 3_600_000);
-  const atRiskBookings = await prisma.booking.findMany({
-    where: { entityId: entity.id, startDate: { gte: now, lte: cutoff } },
-    select: { id: true, code: true, personEmail: true, startDate: true },
+  // Tout le backlog (toute résa déjà en base) sauf si --before fixe une
+  // limite plus stricte — jamais filtré sur la date d'ARRIVÉE, l'ancienne
+  // app enverra son H-8 quelle que soit cette date tant qu'elle reste en
+  // ligne.
+  const backlogBookings = await prisma.booking.findMany({
+    where: { entityId: entity.id, ...(before ? { createdAt: { lt: before } } : {}) },
+    select: { id: true, code: true, personEmail: true, startDate: true, createdAt: true },
     orderBy: { startDate: "asc" },
   });
 
-  console.log(`${ENTITY_CODE} — ${rules.length} règle(s) "Début de séjour" active(s), ${atRiskBookings.length} résa(s) arrivant dans les ${HOURS}h (déjà notifiées côté ancienne app H-${HOURS}) :`);
-  for (const b of atRiskBookings) {
-    console.log(`  - ${b.code} · ${b.personEmail || "(pas d'email)"} · arrivée ${b.startDate.toLocaleString("fr-FR")}`);
+  console.log(
+    `${ENTITY_CODE} — ${rules.length} règle(s) "Début de séjour" active(s), ${backlogBookings.length} résa(s) du backlog (ancienne app, H-8 à venir quelle que soit la date d'arrivée) :`
+  );
+  for (const b of backlogBookings) {
+    console.log(`  - ${b.code} · ${b.personEmail || "(pas d'email)"} · arrivée ${b.startDate.toLocaleString("fr-FR")} · saisie ${b.createdAt.toLocaleString("fr-FR")}`);
   }
 
-  if (!atRiskBookings.length) {
+  if (!backlogBookings.length) {
     console.log("Rien à supprimer.");
     return;
   }
 
   const rows = rules.flatMap((rule) =>
-    atRiskBookings.map((b) => ({ ruleId: rule.id, targetType: "booking", targetId: b.id }))
+    backlogBookings.map((b) => ({ ruleId: rule.id, targetType: "booking", targetId: b.id }))
   );
 
   if (!APPLY) {
-    console.log(`\n${rows.length} ligne(s) AutomationRuleLog seraient créées (${rules.length} règle(s) × ${atRiskBookings.length} résa(s)). Relancer avec --apply pour écrire réellement.`);
+    console.log(`\n${rows.length} ligne(s) AutomationRuleLog seraient créées (${rules.length} règle(s) × ${backlogBookings.length} résa(s)). Relancer avec --apply pour écrire réellement.`);
     return;
   }
 
   const result = await prisma.automationRuleLog.createMany({ data: rows, skipDuplicates: true });
-  console.log(`\n✓ ${result.count} ligne(s) créées — ces résas ne recevront pas le mail de check-in Sesame (déjà couvertes par l'ancienne app).`);
+  console.log(`\n✓ ${result.count} ligne(s) créées — ces résas ne recevront jamais le mail de check-in Sesame (prises en charge par l'ancienne app). Toute résa saisie ensuite directement dans Sesame sera gérée normalement.`);
 }
 
 main()
