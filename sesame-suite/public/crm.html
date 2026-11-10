@@ -11700,6 +11700,12 @@ async function ensureTemplatesLoaded(){
 // proposait que CrmProspect.email/tel, resté vide sur une fiche dont
 // l'email n'est renseigné QUE sur un contact secondaire (ex. DG, compta…).
 var SEND_MODAL_CONTACTS = [];
+// Documents de la bibliothèque à joindre à CET envoi (10/11/2026, "permettre
+// d'insérer des documents issus de la bibliothèque documentaire" depuis la
+// fiche client) — même bibliothèque (CRM_DOCUMENTS) que l'onglet Document
+// d'un devis, cf. dqDocumentLibrarySectionHtml ci-dessus ; sans effet hors
+// canal email (ignoré côté serveur, cf. routes/messaging.ts).
+var SEND_MODAL_DOC_IDS = [];
 function sendModalDefaultTo(c, chan){
   if(chan==='email'){
     if(c.email) return c.email;
@@ -11731,6 +11737,7 @@ async function openSendEmailModal(id){
     const cr = await apiFetch('/wa/crmContact/list?prospectId='+encodeURIComponent(id));
     SEND_MODAL_CONTACTS = cr.ok ? await cr.json() : [];
   }catch(e){ SEND_MODAL_CONTACTS = []; }
+  SEND_MODAL_DOC_IDS = [];
   document.getElementById('modal-ct').innerHTML=`
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box" style="max-width:480px">
@@ -11738,6 +11745,7 @@ async function openSendEmailModal(id){
       <div class="ff"><label>Canal</label><select id="send-channel" onchange="renderSendTplOptions('${id}')">${available.map(ch=>`<option value="${ch}" ${ch===chan?'selected':''}>${CHANNEL_LABEL[ch]}</option>`).join('')}</select></div>
       <div class="ff" style="margin-top:8px"><label>Destinataire</label><input id="send-to" list="send-to-datalist" value="${esc(sendModalDefaultTo(c,chan))}"><datalist id="send-to-datalist">${sendModalDatalistOptions(c)}</datalist></div>
       <div class="ff" style="margin-top:8px"><label>Modèle</label><select id="send-tpl"></select></div>
+      <div id="send-doc-section"></div>
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="sendClientEmail('${id}')">Envoyer</button>
         <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
@@ -11756,6 +11764,40 @@ function renderSendTplOptions(id){
   if(!sel)return;
   const opts=MSG_TEMPLATES.filter(t=>t.channel===chan);
   sel.innerHTML = opts.length ? opts.map(t=>`<option value="${esc(t.key)}">${esc(t.name)}</option>`).join('') : '<option value="">— aucun modèle —</option>';
+  renderSendDocSection();
+}
+
+// Section "Documents de la bibliothèque à joindre" du modal d'envoi
+// (10/11/2026) — email uniquement (pièce jointe = notion email, ignorée
+// côté serveur pour sms/whatsapp). Réutilise la même bibliothèque
+// (CRM_DOCUMENTS) que l'onglet Document d'un devis, chargée une seule fois.
+function renderSendDocSection(){
+  const el = document.getElementById('send-doc-section');
+  if(!el) return;
+  const chan=(document.getElementById('send-channel')||{value:'email'}).value;
+  if(chan!=='email'){ el.innerHTML=''; return; }
+  if(CRM_DOCUMENTS===null){
+    el.innerHTML = '<div class="ff" style="margin-top:8px"><small style="color:var(--mu)">Chargement de la bibliothèque…</small></div>';
+    dqLoadDocumentLibraryIfNeeded().then(renderSendDocSection);
+    return;
+  }
+  const docs = (CRM_DOCUMENTS||[]).filter(d=>d.active&&d.fileName);
+  const rows = docs.map(d=>{
+    const checked = SEND_MODAL_DOC_IDS.includes(d.id);
+    return `<label style="display:flex;align-items:flex-start;gap:8px;padding:4px 0;cursor:pointer">
+      <input type="checkbox" ${checked?'checked':''} style="margin-top:2px" onchange="sendModalToggleDoc('${d.id}',this.checked)">
+      <span><strong>${esc(d.title)}</strong>${d.description?'<div style="font-size:11px;color:var(--mu)">'+esc(d.description)+'</div>':''}</span>
+    </label>`;
+  }).join('');
+  const n = SEND_MODAL_DOC_IDS.length;
+  el.innerHTML = `<div class="ff" style="margin-top:8px"><label>Documents de la bibliothèque à joindre${n?' ('+n+')':''}</label>
+    <div style="border:1px solid var(--bdr2,#e2dfd9);border-radius:10px;padding:8px;max-height:180px;overflow-y:auto">${rows || '<div class="log-empty">Aucun document dans la bibliothèque.</div>'}</div>
+  </div>`;
+}
+function sendModalToggleDoc(id, checked){
+  const set = new Set(SEND_MODAL_DOC_IDS);
+  if(checked) set.add(id); else set.delete(id);
+  SEND_MODAL_DOC_IDS = [...set];
 }
 
 async function sendClientEmail(id){
@@ -11768,6 +11810,7 @@ async function sendClientEmail(id){
   try{
     var r = await apiFetch('/wa/message/send', {method:'POST', body:JSON.stringify({
       scope:'crm', channel:channel, templateKey:key, to:to, prospectId:id,
+      documentIds: channel==='email' ? SEND_MODAL_DOC_IDS : undefined,
       variables:{nom:c.nom, secteur:c.secteur||'', referent:c.referent||'', ville:c.ville||''}
     })});
     var data = await r.json();

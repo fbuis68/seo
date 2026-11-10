@@ -432,6 +432,16 @@ interface SendBody {
   prospectId?: string;
   /** RCS uniquement — cf. sendMessage() rcsFailover. */
   rcsFailover?: { sender: string; message: string };
+  /**
+   * Email uniquement — documents de la bibliothèque (CrmDocument) choisis
+   * au cas par cas pour CET envoi, en plus des pièces jointes fixes du
+   * modèle (10/11/2026, "permettre d'insérer des documents issus de la
+   * bibliothèque documentaire" depuis la fiche client) — même principe que
+   * CrmQuote.attachedDocumentIds (cf. routes/crmQuote.ts, POST
+   * /crmQuote/sendEmail). Un document "lien URL" (CrmDocument.url, pas de
+   * contenu binaire) ou un id introuvable est silencieusement ignoré.
+   */
+  documentIds?: string[];
 }
 
 messagingRouter.post(
@@ -443,6 +453,16 @@ messagingRouter.post(
     if (!isChannel(b.channel)) throw new HttpError(400, "channel doit être email, sms, whatsapp ou rcs");
     if (!b.to) throw new HttpError(400, "Destinataire requis");
     if (!b.templateKey) throw new HttpError(400, "Modèle requis");
+    const extraAttachments = Array.isArray(b.documentIds) && b.documentIds.length
+      ? (
+          await prisma.crmDocument.findMany({
+            where: { id: { in: b.documentIds } },
+            select: { fileName: true, fileMimeType: true, fileContentBase64: true },
+          })
+        )
+          .filter((d) => d.fileContentBase64)
+          .map((d) => ({ fileName: d.fileName!, dataUrl: `data:${d.fileMimeType};base64,${d.fileContentBase64}` }))
+      : [];
     const sent = await sendMessage({
       entityId,
       channel: b.channel,
@@ -452,6 +472,7 @@ messagingRouter.post(
       trackOpenProspectId: entityId === null ? b.prospectId : undefined,
       baseUrl: `${req.protocol}://${req.get("host")}`,
       rcsFailover: b.channel === "rcs" ? b.rcsFailover : undefined,
+      extraAttachments,
     });
     res.json({ ok: true, ...sent });
   })
