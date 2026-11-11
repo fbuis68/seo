@@ -9,18 +9,29 @@ import { MatchRow, STATUS_LABELS, TournamentState } from './state';
 
 const ordinal = (n: number) => (n === 1 ? '1er' : `${n}e`);
 
+/** Index de l'état (évite les recherches linéaires pour chaque rencontre). */
+const indexes = new WeakMap<TournamentState, { names: Map<string, string>; byKey: Map<string, MatchRow> }>();
+function idx(s: TournamentState) {
+  let i = indexes.get(s);
+  if (!i) {
+    i = { names: new Map(s.participants.map((p) => [p.id, p.name])), byKey: new Map(s.matches.map((m) => [`${m.stage_id}:${m.key}`, m])) };
+    indexes.set(s, i);
+  }
+  return i;
+}
+
 export function placeholder(src: any, s: TournamentState, m: MatchRow): string {
   if (!src) return 'À déterminer';
   if (src.kind === 'bye') return 'Exempt';
   if (src.kind === 'group') return `${ordinal(src.rank)} poule ${src.group}`;
   const rounds = s.stages.find((x) => x.id === m.stage_id)?.config?.rounds ?? 1;
-  const ref = s.matches.find((x) => x.stage_id === m.stage_id && x.key === src.match);
+  const ref = idx(s).byKey.get(`${m.stage_id}:${src.match}`);
   const label = ref ? `${roundLabel(ref.round, rounds, ref.key)} ${ref.position}` : src.match;
   return `${src.kind === 'winner' ? 'Vainqueur' : 'Perdant'} ${label}`;
 }
 
 export function matchView(s: TournamentState, m: MatchRow) {
-  const names = new Map(s.participants.map((p) => [p.id, p.name]));
+  const names = idx(s).names;
   const stage = s.stages.find((x) => x.id === m.stage_id);
   const group = s.groups.find((g) => g.id === m.group_id);
   const rounds = stage?.config?.rounds ?? 1;

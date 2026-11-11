@@ -25,9 +25,12 @@ export function groupTables(s: TournamentState, stage: StageRow): GroupTable[] {
   const seeds = new Map(s.participants.map((p, i) => [p.id, p.seed ?? i + 1]));
   const qualifiers = s.t.format === 'groups_knockout' ? Number(s.t.format_config?.groups?.qualifiers ?? 2) : 0;
   const manual: Record<string, string[]> = stage.config?.manualOrder ?? {};
+  const membersBy = new Map<string, string[]>(), matchesBy = new Map<string, MatchRow[]>();
+  for (const x of s.groupMembers) membersBy.set(x.group_id, [...(membersBy.get(x.group_id) ?? []), x.participant_id]);
+  for (const m of s.matches) if (m.group_id) matchesBy.set(m.group_id, [...(matchesBy.get(m.group_id) ?? []), m]);
   return s.groups.filter((g) => g.stage_id === stage.id).map((g) => {
-    const ids = s.groupMembers.filter((x) => x.group_id === g.id).map((x) => x.participant_id);
-    const ms = s.matches.filter((m) => m.group_id === g.id);
+    const ids = membersBy.get(g.id) ?? [];
+    const ms = matchesBy.get(g.id) ?? [];
     const played = ms.map(toPlayed).filter((x): x is PlayedMatch => !!x);
     const pending = ms.filter((m) => !CLOSED.has(m.status)).length;
     let rows: GroupStanding[] = computeStandings(ids, played, {

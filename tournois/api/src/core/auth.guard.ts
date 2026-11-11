@@ -16,7 +16,8 @@ export class AuthGuard implements CanActivate {
     const isPublic = meta(IS_PUBLIC), optional = meta(OPTIONAL_AUTH);
     const req = ec.switchToHttp().getRequest();
     const auth = String(req.headers.authorization ?? '');
-    const token = auth.startsWith('Bearer ') ? auth.slice(7) : String(req.query?.access_token ?? '');
+    // EventSource ne transmet pas d'en-tête : jeton en paramètre accepté uniquement pour les flux temps réel.
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : req.path.endsWith('/stream') ? String(req.query?.access_token ?? '') : '';
     if (!token) {
       if (isPublic || optional) return true;
       throw new AppError(401, 'unauthenticated', 'Authentification requise');

@@ -266,13 +266,39 @@ export class JoinController {
 /** API de consultation publique (§10.4, §15) : tournois publiés et publics, sans aucune donnée de contact. */
 @Controller('api/public')
 export class PublicController {
-  constructor(private access: AccessService, private db: Db, private live: LiveEvents) {}
+  /**
+   * Cache des vues publiques (forte affluence de spectateurs) : invalidé par chaque événement temps réel
+   * du tournoi (diffusé à toutes les instances par NOTIFY), avec une durée de vie courte par sécurité.
+   */
+  private cache = new Map<string, { at: number; data: Promise<ReturnType<typeof tournamentView>>; json?: string }>();
+  constructor(private access: AccessService, private db: Db, private live: LiveEvents) {
+    live.all().subscribe((e) => { for (const k of this.cache.keys()) if (k.endsWith(`:${e.tournamentId}`)) this.cache.delete(k); });
+  }
   private async load(slug: string) {
     const r = await this.access.routeSlug(slug);
     if (!r.published || r.visibility !== 'public') throw notFound('Tournoi');
-    return this.db.orgTx(r.orgId, async (tx) => tournamentView(await loadState(tx, r.id), { public: true }));
+    const key = `${slug}:${r.id}`;
+    const hit = this.cache.get(key);
+    if (hit && Date.now() - hit.at < 30_000) return hit.data;
+    const data = this.db.orgTx(r.orgId, async (tx) => tournamentView(await loadState(tx, r.id), { public: true }));
+    this.cache.set(key, { at: Date.now(), data });
+    data.catch(() => this.cache.delete(key));
+    if (this.cache.size > 500) this.cache.delete(this.cache.keys().next().value!);
+    return data;
   }
-  @Public() @Get('tournaments/:slug') get(@Param('slug') slug: string) { return this.load(slug); }
+  @Public() @Get('tournaments/:slug') async get(@Param('slug') slug: string, @Req() req: any, @Res() res: any) {
+    const data = await this.load(slug);
+    const entry = [...this.cache.entries()].find(([k]) => k.startsWith(`${slug}:`))?.[1];
+    const json = entry?.json ?? JSON.stringify(data);
+    if (entry && !entry.json) entry.json = json; // sérialisation mise en cache avec la vue
+    // Empreinte calculée une fois par version de la vue : 304 pour les clients en rafraîchissement périodique.
+    const etag = `W/"${entry?.at ?? Date.now()}-${json.length}"`;
+    res.setHeader('ETag', etag);
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.send(json);
+  }
   @Public() @Get('tournaments/:slug/matches') async matches(@Param('slug') slug: string) { return (await this.load(slug)).matches; }
   @Public() @Get('tournaments/:slug/rankings') async rankings(@Param('slug') slug: string) {
     const v = await this.load(slug);

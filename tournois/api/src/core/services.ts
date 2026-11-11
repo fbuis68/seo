@@ -41,6 +41,8 @@ export class LiveEvents implements OnModuleInit, OnModuleDestroy {
     await tx.query('SELECT pg_notify($1, $2)', ['tn_events', JSON.stringify(e)]);
   }
 
+  all(): Observable<LiveEvent> { return this.bus.asObservable(); }
+
   stream(tournamentIds: string[]): Observable<{ data: LiveEvent; type: string }> {
     const set = new Set(tournamentIds);
     return this.bus.pipe(filter((e) => set.has(e.tournamentId)), map((e) => ({ data: e, type: 'update' })));
