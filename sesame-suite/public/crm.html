@@ -3323,8 +3323,17 @@ async function ficheUnlinkEntity(id){
     showFiche(id);
   }catch(e){ flash(e.message||'Erreur'); }
 }
+// Onglet actif de la fiche (12/11/2026, "la récupération du compte rendu
+// Teams ne génère plus de tâche" — en fait créées normalement, mais
+// invisibles : chaque appel à showFiche() pour rafraîchir la fiche après une
+// action (créer une tâche, ajouter une note...) repartait sur l'onglet "Vue
+// d'ensemble", masquant le Journal d'activité où elles atterrissent).
+// Remis à "overview" uniquement en changeant RÉELLEMENT de client, jamais
+// lors d'un simple rafraîchissement de la même fiche.
+let FICHE_ACTIVE_TAB = 'overview';
 function showFiche(id){
   const c=clients.find(c=>c.id===id);if(!c)return;
+  if(curId!==id) FICHE_ACTIVE_TAB='overview';
   curId=id;view='fiche';setNav('n-fiche');
   TICKETS_CARD_SHOW_RESOLVED = false;
   bc([{label:'Clients',fn:'showList()'},{label:c.nom}]);
@@ -3504,13 +3513,13 @@ function renderFiche(c){
 
       <main>
         <nav class="sc-tabs" role="tablist" aria-label="Rubriques fiche client">
-          <button type="button" class="sc-tab" aria-selected="true" data-tab="overview" onclick="ficheShowTab(this,'overview')">Vue d'ensemble</button>
-          <button type="button" class="sc-tab" aria-selected="false" data-tab="activity" onclick="ficheShowTab(this,'activity')">Activité</button>
-          <button type="button" class="sc-tab" aria-selected="false" data-tab="sales" onclick="ficheShowTab(this,'sales')">Commercial</button>
-          <button type="button" class="sc-tab" aria-selected="false" data-tab="services" onclick="ficheShowTab(this,'services')">Services</button>
+          <button type="button" class="sc-tab" aria-selected="${FICHE_ACTIVE_TAB==='overview'}" data-tab="overview" onclick="ficheShowTab(this,'overview')">Vue d'ensemble</button>
+          <button type="button" class="sc-tab" aria-selected="${FICHE_ACTIVE_TAB==='activity'}" data-tab="activity" onclick="ficheShowTab(this,'activity')">Activité</button>
+          <button type="button" class="sc-tab" aria-selected="${FICHE_ACTIVE_TAB==='sales'}" data-tab="sales" onclick="ficheShowTab(this,'sales')">Commercial</button>
+          <button type="button" class="sc-tab" aria-selected="${FICHE_ACTIVE_TAB==='services'}" data-tab="services" onclick="ficheShowTab(this,'services')">Services</button>
         </nav>
 
-        <div class="sc-pane" data-pane="overview">
+        <div class="sc-pane" data-pane="overview" ${FICHE_ACTIVE_TAB==='overview'?'':'hidden'}>
           ${c.contrat==='non'?'<div class="sc-alert"><div><b>Contrat non localisé</b>Retrouver le contrat signé pour compléter le dossier client.</div></div>':''}
           <div class="sc-grid" style="grid-template-columns:repeat(4,1fr)">
             <div class="sc-box" style="margin:0"><div class="sc-score" style="font-size:20px">${c.mrr?fmtEUR(c.mrr):'—'}</div><div class="sc-muted">MRR / mois</div></div>
@@ -3540,7 +3549,7 @@ function renderFiche(c){
           </div>
         </div>
 
-        <div class="sc-pane" data-pane="activity" hidden>
+        <div class="sc-pane" data-pane="activity" ${FICHE_ACTIVE_TAB==='activity'?'':'hidden'}>
           <div class="card" id="journal-card">
             <div class="card-head">
               <div class="ch-ico">◈</div>
@@ -3562,7 +3571,7 @@ function renderFiche(c){
           </div>
         </div>
 
-        <div class="sc-pane" data-pane="sales" hidden>
+        <div class="sc-pane" data-pane="sales" ${FICHE_ACTIVE_TAB==='sales'?'':'hidden'}>
           <div class="card" id="deals-card">
             <div class="card-head"><div class="ch-ico">◆</div><span class="ch-title">Affaires</span><button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="openNewDealModal('${c.id}')">+ Nouvelle affaire</button></div>
             ${(deals.filter(d=>d.prospectId===c.id)).length===0?'<div class="log-empty">Aucune affaire en cours pour ce client.</div>':deals.filter(d=>d.prospectId===c.id).map(d=>`
@@ -3602,7 +3611,7 @@ function renderFiche(c){
           ${questionnaireSendsCardHtml(c)}
         </div>
 
-        <div class="sc-pane" data-pane="services" hidden>
+        <div class="sc-pane" data-pane="services" ${FICHE_ACTIVE_TAB==='services'?'':'hidden'}>
           ${ticketsCardHtml(c)}
           <h2 class="sc-sectionlabel">Usage des accès</h2>
           <div class="card" id="access-usage-card">
@@ -3641,6 +3650,7 @@ function renderFiche(c){
 function ficheShowTab(btn, name){
   const root = btn.closest('#sesame-client');
   if(!root) return;
+  FICHE_ACTIVE_TAB = name;
   root.querySelectorAll('.sc-tab').forEach(t=>t.setAttribute('aria-selected', String(t===btn)));
   root.querySelectorAll('[data-pane]').forEach(p=>{ p.hidden = p.dataset.pane!==name; });
 }
@@ -4117,7 +4127,7 @@ async function meetingMaterializeTasks(id, prospectId){
     }catch(e){ /* on continue avec les suivantes */ }
   }
   flash(created+' tâche(s) créée(s) dans le journal d\'activité');
-  if(curId===prospectId) showFiche(prospectId);
+  if(curId===prospectId){ FICHE_ACTIVE_TAB='activity'; showFiche(prospectId); }
 }
 
 function openSendMeetingSummaryModal(id){
