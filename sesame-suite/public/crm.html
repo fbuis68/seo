@@ -3625,7 +3625,6 @@ function renderFiche(c){
           <div class="card" id="meetings-card">
             <div class="log-empty">Chargement…</div>
           </div>
-          ${clientDocumentsCardHtml(c)}
           ${clientUploadsCardHtml(c)}
         </div>
       </main>
@@ -3700,59 +3699,17 @@ function ticketsCardHtml(c){
  * n'importe quel questionnaire (portée CRM) reçus par ce contact, chargée à
  * part (async, cf. loadQuestionnaireSendsCard) car ce n'est plus une donnée
  * statique de la fiche comme l'ancien mécanisme figé. */
-// Documents de la bibliothèque (CrmDocument) attachés au CLIENT lui-même
-// (12/11/2026, "rattacher des documents au niveau du devis ou client... se
-// retrouver dans l'espace client") — distinct des documents attachés à UN
-// devis précis (onglet Document du constructeur, cf.
-// dqDocumentLibrarySectionHtml) : ceux-ci s'affichent dans l'espace client
-// de TOUS les devis de ce prospect. Même bibliothèque (CRM_DOCUMENTS),
-// chargement paresseux identique.
-function clientDocumentsCardHtml(c){
-  if(CRM_DOCUMENTS===null){
-    dqLoadDocumentLibraryIfNeeded().then(()=>{
-      if(view==='fiche'&&curId===c.id){
-        const el=document.getElementById('client-docs-card');
-        if(el) el.outerHTML = clientDocumentsCardHtml(c);
-      }
-    });
-    return `<div class="card" id="client-docs-card"><div class="card-head"><div class="ch-ico">📚</div><span class="ch-title">Documents attachés au client</span></div><div class="log-empty">Chargement…</div></div>`;
-  }
-  const allActive = (CRM_DOCUMENTS||[]).filter(d=>d.active);
-  const selected = new Set(c.attachedDocumentIds||[]);
-  const rows = allActive.map(d=>`
-    <label style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;cursor:pointer">
-      <input type="checkbox" ${selected.has(d.id)?'checked':''} style="margin-top:2px" onchange="ficheToggleAttachedDocument('${c.id}','${d.id}',this.checked)">
-      <span><strong>${esc(d.title)}</strong> <span class="tag ${DOC_CATEGORY_TAG[d.category]||'t-gray'}" style="font-size:10px">${DOC_CATEGORY_LABEL[d.category]||'Non classé'}</span>${d.description?'<div style="font-size:11px;color:var(--mu)">'+esc(d.description)+'</div>':''}</span>
-    </label>`).join('');
-  const n = selected.size;
-  return `<div class="card" id="client-docs-card">
-    <div class="card-head"><div class="ch-ico">📚</div><span class="ch-title">Documents attachés au client</span>
-      <span style="font-size:12px;color:#aaa;margin-left:8px">${n?n+' sélectionné'+(n>1?'s':''):'aucun'}</span>
-      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="showDocumentLibrary()">⚙ Gérer la bibliothèque</button>
-    </div>
-    <small style="color:var(--mu);display:block;margin-bottom:6px">Visibles dans l'espace client de TOUS les devis de ce prospect — contrairement aux documents attachés à un devis précis (onglet Document du constructeur de devis).</small>
-    <div style="max-height:260px;overflow-y:auto">${rows || '<div class="log-empty">Aucun document dans la bibliothèque.</div>'}</div>
-  </div>`;
-}
-async function ficheToggleAttachedDocument(prospectId, docId, checked){
-  const c = clients.find(x=>x.id===prospectId);
-  if(!c) return;
-  const set = new Set(c.attachedDocumentIds||[]);
-  if(checked) set.add(docId); else set.delete(docId);
-  c.attachedDocumentIds = [...set];
-  try{
-    const r = await apiFetch('/wa/crmProspect/update', {method:'POST', body:JSON.stringify({id:prospectId, attachedDocumentIds:c.attachedDocumentIds})});
-    if(!r.ok) throw new Error('http');
-    flash('Documents mis à jour');
-  }catch(e){ flash("Erreur d'enregistrement"); }
-}
-
-// Documents déposés PAR LE CLIENT depuis l'espace public (06/11/2026,
-// CrmClientUpload) — déjà inclus dans la fiche (c.clientUploads), rendu
-// synchrone, pas de fetch séparé comme pour questionnaireSendsCardHtml.
+// Documents propres à CE client (06/11/2026, puis 12/11/2026 "sur l'import
+// de document dans la fiche client, ne pas l'intégrer dans la bibliothèque
+// documentaire qui sert exclusivement à gérer des documents de référence
+// pour les devis/projet") — CrmClientUpload, SANS rapport avec CrmDocument
+// (la bibliothèque, réutilisable, qui elle ne se rattache qu'à un devis).
+// Un document ici peut venir du client lui-même (dépôt espace public,
+// quoteId renseigné) OU du commercial (dépôt direct depuis la fiche,
+// quoteId null, cf. ficheUploadClientDocument). Toujours affichée (même
+// vide) : le bouton de dépôt doit rester accessible.
 function clientUploadsCardHtml(c){
   const uploads = c.clientUploads||[];
-  if(!uploads.length) return '';
   const rows = uploads.map(u=>`
     <div class="log-item">
       <div class="log-dot ld-b"></div>
@@ -3760,22 +3717,61 @@ function clientUploadsCardHtml(c){
         <a href="#" onclick="openClientUpload('${u.id}');return false" class="log-text">📎 ${esc(u.fileName)}</a>
         <div style="font-size:11px;color:#aaa;margin-top:2px">${new Date(u.createdAt).toLocaleString('fr-FR')}</div>
       </div>
+      <button class="btn btn-ghost btn-sm" style="color:#a32d2d" onclick="ficheDeleteClientUpload('${c.id}','${u.id}')" title="Supprimer">✕</button>
     </div>`).join('');
   return `<div class="card" id="client-uploads-card">
     <div class="card-head">
       <div class="ch-ico">📎</div>
-      <span class="ch-title">Documents déposés par le client</span>
+      <span class="ch-title">Documents du client</span>
       <span style="font-size:12px;color:#aaa;margin-left:8px">${uploads.length} document${uploads.length>1?'s':''}</span>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="document.getElementById('client-upload-file-${c.id}').click()">+ Déposer un document</button>
+      <input type="file" id="client-upload-file-${c.id}" style="display:none" onchange="ficheUploadClientDocument('${c.id}',this)">
     </div>
-    <div>${rows}</div>
+    <div>${rows || '<div class="log-empty">Aucun document pour ce client.</div>'}</div>
   </div>`;
+}
+async function ficheUploadClientDocument(prospectId, input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  if(file.size > 7*1024*1024){ flash('Fichier trop volumineux (7 Mo max)'); input.value=''; return; }
+  const dataUrl = await new Promise((resolve,reject)=>{
+    const r = new FileReader();
+    r.onload = ()=>resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+  try{
+    const r = await apiFetch('/wa/crmProspect/uploadDocument', {method:'POST', body:JSON.stringify({
+      prospectId, fileName:file.name, fileMimeType:file.type||'application/octet-stream', dataUrl
+    })});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    const c = clients.find(x=>x.id===prospectId);
+    if(c){ c.clientUploads = c.clientUploads||[]; c.clientUploads.push(data); }
+    const el = document.getElementById('client-uploads-card');
+    if(el && c) el.outerHTML = clientUploadsCardHtml(c);
+    flash('Document ajouté ✓');
+  }catch(e){ flash(e.message||"Erreur de dépôt du document"); }
+  input.value = '';
+}
+async function ficheDeleteClientUpload(prospectId, id){
+  if(!confirm('Supprimer ce document ?')) return;
+  try{
+    const r = await apiFetch('/wa/crmProspect/deleteClientUpload', {method:'POST', body:JSON.stringify({id})});
+    if(!r.ok) throw new Error('http');
+    const c = clients.find(x=>x.id===prospectId);
+    if(c){ c.clientUploads = (c.clientUploads||[]).filter(u=>u.id!==id); }
+    const el = document.getElementById('client-uploads-card');
+    if(el && c) el.outerHTML = clientUploadsCardHtml(c);
+    flash('Document supprimé');
+  }catch(e){ flash('Erreur de suppression'); }
 }
 
 /** Même raison que openMeetingRecording ci-dessus : route Bearer admin,
  * pas de <a href> direct. */
 async function openClientUpload(id){
   try{
-    const r = await apiFetch('/crmProspect/clientUpload/'+id);
+    const r = await apiFetch('/wa/crmProspect/clientUpload/'+id);
     if(!r.ok){ flash('Document indisponible'); return; }
     const blob = await r.blob();
     window.open(URL.createObjectURL(blob), '_blank');

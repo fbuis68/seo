@@ -860,7 +860,7 @@ crmQuoteRouter.get(
     if (!token) throw new HttpError(400, "Lien invalide");
     const quote = await prisma.crmQuote.findUnique({
       where: { signToken: token },
-      include: { prospect: { select: { nom: true, secteur: true, logo: true, brandColor: true, attachedDocumentIds: true, commercial: { select: { name: true, bookingUrl: true } } } }, signature: true },
+      include: { prospect: { select: { nom: true, secteur: true, logo: true, brandColor: true, commercial: { select: { name: true, bookingUrl: true } } } }, signature: true },
     });
     if (!quote) throw new HttpError(404, "Lien de signature invalide ou expiré");
     const storedLines = (quote.lines as unknown as QuoteLine[]) || [];
@@ -891,19 +891,18 @@ crmQuoteRouter.get(
     // Espace client (29/10/2026, demande "créer un vrai espace client à
     // onglets") : en plus du devis, on expose les documents de la
     // bibliothèque attachés à CE devis (sans le contenu base64, cf. routes
-    // de téléchargement dédiées ci-dessous) ET ceux attachés au CLIENT
-    // lui-même (12/11/2026, "rattacher des documents au niveau du devis ou
-    // client" — cf. CrmProspect.attachedDocumentIds) — union des deux
-    // listes d'ids, dédupliquée — et les réunions Teams choisies pour CE
-    // devis (30/10/2026, "en option" — cf. attachedMeetingIds, onglet
-    // Document du constructeur) — plus d'exposition automatique de toutes
-    // les réunions du prospect, le commercial choisit lesquelles montrer au
-    // client.
-    const allAttachedDocIds = [...new Set([...quote.attachedDocumentIds, ...quote.prospect.attachedDocumentIds])];
+    // de téléchargement dédiées ci-dessous) et les réunions Teams choisies
+    // pour CE devis (30/10/2026, "en option" — cf. attachedMeetingIds,
+    // onglet Document du constructeur) — plus d'exposition automatique de
+    // toutes les réunions du prospect, le commercial choisit lesquelles
+    // montrer au client. La bibliothèque documentaire ne se rattache QUE
+    // par devis (12/11/2026, "ne pas l'intégrer... sert exclusivement à
+    // gérer des documents de référence pour les devis/projet") — jamais
+    // directement au client, revert de la tentative du même jour.
     const [documents, meetings, promotableProducts, clientUploads, questionnaireSends] = await Promise.all([
-      allAttachedDocIds.length
+      quote.attachedDocumentIds.length
         ? prisma.crmDocument.findMany({
-            where: { id: { in: allAttachedDocIds }, active: true },
+            where: { id: { in: quote.attachedDocumentIds }, active: true },
             select: { id: true, title: true, description: true, fileName: true, fileMimeType: true, url: true, category: true },
             orderBy: { order: "asc" },
           })
@@ -1061,11 +1060,10 @@ crmQuoteRouter.get(
     if (!token) throw new HttpError(400, "Lien invalide");
     const quote = await prisma.crmQuote.findUnique({
       where: { signToken: token },
-      select: { attachedDocumentIds: true, lines: true, prospect: { select: { secteur: true, attachedDocumentIds: true } } },
+      select: { attachedDocumentIds: true, lines: true, prospect: { select: { secteur: true } } },
     });
     if (!quote) throw new HttpError(404, "Document introuvable");
-    // Attaché au devis OU au client (12/11/2026, cf. CrmProspect.attachedDocumentIds) — même garde-fou, deux sources possibles.
-    let authorized = quote.attachedDocumentIds.includes(req.params.docId) || quote.prospect.attachedDocumentIds.includes(req.params.docId);
+    let authorized = quote.attachedDocumentIds.includes(req.params.docId);
     if (!authorized) {
       // Document rattaché à un PRODUIT d'une ligne du devis (cf.
       // CrmProduct.documentId) plutôt qu'à la liste attachedDocumentIds —

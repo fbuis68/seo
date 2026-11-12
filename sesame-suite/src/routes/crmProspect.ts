@@ -148,7 +148,6 @@ function shapeProspect(p: {
   activities?: Parameters<typeof shapeActivity>[0][];
   contacts?: { email: string | null; phone: string | null }[];
   clientUploads?: { id: string; fileName: string; fileMimeType: string; createdAt: Date }[];
-  attachedDocumentIds: string[];
 }) {
   return {
     id: p.id,
@@ -245,10 +244,6 @@ function shapeProspect(p: {
     // Documents déposés PAR LE CLIENT depuis l'espace public (06/11/2026) —
     // jamais le contenu base64 ici, téléchargement via route dédiée.
     clientUploads: (p.clientUploads || []).map((u) => ({ id: u.id, fileName: u.fileName, fileMimeType: u.fileMimeType, createdAt: u.createdAt })),
-    // Documents de la bibliothèque (CrmDocument) attachés au CLIENT
-    // lui-même (12/11/2026) — cf. prisma/schema.prisma, affichés dans
-    // l'espace client de TOUS les devis du prospect.
-    attachedDocumentIds: p.attachedDocumentIds || [],
   };
 }
 
@@ -331,6 +326,54 @@ crmProspectRouter.get(
     res.setHeader("Content-Type", upload.fileMimeType);
     res.setHeader("Content-Disposition", `inline; filename="${upload.fileName.replace(/"/g, "")}"`);
     res.send(Buffer.from(upload.fileContentBase64, "base64"));
+  })
+);
+
+// Même limite que le dépôt public (cf. routes/crmQuote.ts publicUpload).
+const MAX_STAFF_UPLOAD_DATA_URL_LENGTH = 10_000_000;
+
+/**
+ * POST /crmProspect/uploadDocument — dépôt d'un document propre à CE client
+ * depuis la fiche (12/11/2026, "sur l'import de document dans la fiche
+ * client ne pas l'intégrer dans la bibliothèque documentaire") — même
+ * modèle CrmClientUpload que le dépôt public (06/11/2026), quoteId null ici
+ * (pas rattaché à un devis précis), juste à l'initiative du commercial
+ * plutôt que du client.
+ */
+crmProspectRouter.post(
+  "/crmProspect/uploadDocument",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const b = req.body as { prospectId?: string; fileName?: string; fileMimeType?: string; dataUrl?: string };
+    const prospectId = b.prospectId || "";
+    if (!prospectId) throw new HttpError(400, "prospectId requis");
+    const prospect = await prisma.crmProspect.findUnique({ where: { id: prospectId }, select: { id: true } });
+    if (!prospect) throw new HttpError(404, "Prospect introuvable");
+    const dataUrl = typeof b.dataUrl === "string" ? b.dataUrl : "";
+    if (!dataUrl || !/^data:[^;]+;base64,/.test(dataUrl)) throw new HttpError(400, "Fichier invalide");
+    if (dataUrl.length > MAX_STAFF_UPLOAD_DATA_URL_LENGTH) throw new HttpError(400, "Fichier trop volumineux (7 Mo max)");
+    const fileName = (b.fileName || "document").slice(0, 200);
+    const fileMimeType = (b.fileMimeType || "application/octet-stream").slice(0, 150);
+    const fileContentBase64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+    const upload = await prisma.crmClientUpload.create({
+      data: { prospectId, fileName, fileMimeType, fileContentBase64 },
+    });
+    res.status(201).json({ id: upload.id, fileName: upload.fileName, fileMimeType: upload.fileMimeType, createdAt: upload.createdAt });
+  })
+);
+
+/** POST /crmProspect/deleteClientUpload — retire un document (déposé par le client ou le commercial) de la fiche. */
+crmProspectRouter.post(
+  "/crmProspect/deleteClientUpload",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const id = (req.body.id as string) || "";
+    const existing = await prisma.crmClientUpload.findUnique({ where: { id } });
+    if (!existing) throw new HttpError(404, "Document introuvable");
+    await prisma.crmClientUpload.delete({ where: { id } });
+    res.json({ ok: true });
   })
 );
 
@@ -502,11 +545,6 @@ interface ProspectBody {
   signe?: number | null;
   previsionnel?: number | null;
   commercialId?: string | null;
-  // Documents de la bibliothèque (CrmDocument) attachés au CLIENT lui-même
-  // (12/11/2026, "rattacher des documents au niveau du devis OU client") —
-  // s'affichent dans l'espace client de TOUS les devis de ce prospect, cf.
-  // routes/crmQuote.ts GET /crmQuote/public.
-  attachedDocumentIds?: string[];
 }
 
 crmProspectRouter.post(
@@ -836,7 +874,6 @@ crmProspectRouter.post(
         signe: b.signe,
         previsionnel: b.previsionnel,
         commercialId: b.commercialId === undefined ? undefined : b.commercialId || null,
-        attachedDocumentIds: Array.isArray(b.attachedDocumentIds) ? b.attachedDocumentIds : undefined,
         // Bascule manuelle depuis la fiche (en plus du clic sur le lien de
         // désabonnement signé, cf. routes/unsubscribe.ts) — emailOptOutAt
         // tracé uniquement au moment du changement réel, pas réécrit si la
