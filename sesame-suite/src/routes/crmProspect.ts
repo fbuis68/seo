@@ -148,6 +148,7 @@ function shapeProspect(p: {
   activities?: Parameters<typeof shapeActivity>[0][];
   contacts?: { email: string | null; phone: string | null }[];
   clientUploads?: { id: string; fileName: string; fileMimeType: string; createdAt: Date }[];
+  attachedDocumentIds: string[];
 }) {
   return {
     id: p.id,
@@ -244,6 +245,10 @@ function shapeProspect(p: {
     // Documents déposés PAR LE CLIENT depuis l'espace public (06/11/2026) —
     // jamais le contenu base64 ici, téléchargement via route dédiée.
     clientUploads: (p.clientUploads || []).map((u) => ({ id: u.id, fileName: u.fileName, fileMimeType: u.fileMimeType, createdAt: u.createdAt })),
+    // Documents de la bibliothèque (CrmDocument) attachés au CLIENT
+    // lui-même (12/11/2026) — cf. prisma/schema.prisma, affichés dans
+    // l'espace client de TOUS les devis du prospect.
+    attachedDocumentIds: p.attachedDocumentIds || [],
   };
 }
 
@@ -497,6 +502,11 @@ interface ProspectBody {
   signe?: number | null;
   previsionnel?: number | null;
   commercialId?: string | null;
+  // Documents de la bibliothèque (CrmDocument) attachés au CLIENT lui-même
+  // (12/11/2026, "rattacher des documents au niveau du devis OU client") —
+  // s'affichent dans l'espace client de TOUS les devis de ce prospect, cf.
+  // routes/crmQuote.ts GET /crmQuote/public.
+  attachedDocumentIds?: string[];
 }
 
 crmProspectRouter.post(
@@ -826,6 +836,7 @@ crmProspectRouter.post(
         signe: b.signe,
         previsionnel: b.previsionnel,
         commercialId: b.commercialId === undefined ? undefined : b.commercialId || null,
+        attachedDocumentIds: Array.isArray(b.attachedDocumentIds) ? b.attachedDocumentIds : undefined,
         // Bascule manuelle depuis la fiche (en plus du clic sur le lien de
         // désabonnement signé, cf. routes/unsubscribe.ts) — emailOptOutAt
         // tracé uniquement au moment du changement réel, pas réécrit si la

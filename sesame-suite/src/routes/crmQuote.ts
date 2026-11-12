@@ -648,6 +648,10 @@ crmQuoteRouter.post(
 // POST /crmQuote/sendEmail ci-dessous). Liste renvoyée SANS le contenu
 // base64 (lourd, inutile pour l'affichage/la sélection côté client) — cf.
 // /crmDocument/get pour le contenu complet d'un document précis.
+// Classification pour la lisibilité de la bibliothèque (12/11/2026,
+// demande client) — purement indicatif, cf. CrmDocument.category.
+const DOCUMENT_CATEGORIES = new Set(["technique", "commercial", "marketing"]);
+
 function shapeDocumentMeta(d: {
   id: string;
   title: string;
@@ -655,6 +659,7 @@ function shapeDocumentMeta(d: {
   fileName: string | null;
   fileMimeType: string | null;
   url: string | null;
+  category: string | null;
   secteurs: string[];
   active: boolean;
   order: number;
@@ -668,6 +673,7 @@ function shapeDocumentMeta(d: {
     fileName: d.fileName,
     fileMimeType: d.fileMimeType,
     url: d.url,
+    category: d.category,
     secteurs: d.secteurs,
     active: d.active,
     order: d.order,
@@ -683,7 +689,7 @@ crmQuoteRouter.get(
   asyncHandler(async (_req, res) => {
     const rows = await prisma.crmDocument.findMany({
       orderBy: { order: "asc" },
-      select: { id: true, title: true, description: true, fileName: true, fileMimeType: true, url: true, secteurs: true, active: true, order: true, createdAt: true, updatedAt: true },
+      select: { id: true, title: true, description: true, fileName: true, fileMimeType: true, url: true, category: true, secteurs: true, active: true, order: true, createdAt: true, updatedAt: true },
     });
     res.json(rows.map(shapeDocumentMeta));
   })
@@ -696,6 +702,7 @@ interface DocumentCreateBody {
   fileMimeType?: string;
   fileContentBase64?: string; // data URL complète ou base64 nu, nettoyé ci-dessous
   url?: string;
+  category?: string;
   secteurs?: string[];
 }
 
@@ -710,6 +717,7 @@ crmQuoteRouter.post(
     const url = (b.url || "").trim();
     if (!raw && !url) throw new HttpError(400, "Fichier ou lien URL requis");
     if (raw && url) throw new HttpError(400, "Choisissez soit un fichier, soit un lien URL, pas les deux");
+    const category = b.category && DOCUMENT_CATEGORIES.has(b.category) ? b.category : null;
     const agg = await prisma.crmDocument.aggregate({ _max: { order: true } });
     const row = await prisma.crmDocument.create({
       data: raw
@@ -719,6 +727,7 @@ crmQuoteRouter.post(
             fileName: b.fileName || b.title.trim(),
             fileMimeType: b.fileMimeType || "application/octet-stream",
             fileContentBase64: raw.includes(",") ? raw.slice(raw.indexOf(",") + 1) : raw,
+            category,
             secteurs: Array.isArray(b.secteurs) ? b.secteurs : [],
             order: (agg._max.order ?? -1) + 1,
           }
@@ -726,6 +735,7 @@ crmQuoteRouter.post(
             title: b.title.trim(),
             description: b.description?.trim() || undefined,
             url,
+            category,
             secteurs: Array.isArray(b.secteurs) ? b.secteurs : [],
             order: (agg._max.order ?? -1) + 1,
           },
@@ -738,6 +748,7 @@ interface DocumentUpdateBody {
   id: string;
   title?: string;
   description?: string;
+  category?: string | null;
   secteurs?: string[];
   active?: boolean;
   order?: number;
@@ -758,6 +769,7 @@ crmQuoteRouter.post(
       data: {
         title: b.title?.trim(),
         description: b.description === undefined ? undefined : b.description.trim() || null,
+        category: b.category === undefined ? undefined : b.category && DOCUMENT_CATEGORIES.has(b.category) ? b.category : null,
         secteurs: Array.isArray(b.secteurs) ? b.secteurs : undefined,
         active: typeof b.active === "boolean" ? b.active : undefined,
         order: typeof b.order === "number" ? b.order : undefined,
@@ -848,7 +860,7 @@ crmQuoteRouter.get(
     if (!token) throw new HttpError(400, "Lien invalide");
     const quote = await prisma.crmQuote.findUnique({
       where: { signToken: token },
-      include: { prospect: { select: { nom: true, secteur: true, logo: true, brandColor: true, commercial: { select: { name: true, bookingUrl: true } } } }, signature: true },
+      include: { prospect: { select: { nom: true, secteur: true, logo: true, brandColor: true, attachedDocumentIds: true, commercial: { select: { name: true, bookingUrl: true } } } }, signature: true },
     });
     if (!quote) throw new HttpError(404, "Lien de signature invalide ou expiré");
     const storedLines = (quote.lines as unknown as QuoteLine[]) || [];
@@ -879,16 +891,20 @@ crmQuoteRouter.get(
     // Espace client (29/10/2026, demande "créer un vrai espace client à
     // onglets") : en plus du devis, on expose les documents de la
     // bibliothèque attachés à CE devis (sans le contenu base64, cf. routes
-    // de téléchargement dédiées ci-dessous) et les réunions Teams choisies
-    // pour CE devis (30/10/2026, "en option" — cf. attachedMeetingIds,
-    // onglet Document du constructeur) — plus d'exposition automatique de
-    // toutes les réunions du prospect, le commercial choisit lesquelles
-    // montrer au client.
+    // de téléchargement dédiées ci-dessous) ET ceux attachés au CLIENT
+    // lui-même (12/11/2026, "rattacher des documents au niveau du devis ou
+    // client" — cf. CrmProspect.attachedDocumentIds) — union des deux
+    // listes d'ids, dédupliquée — et les réunions Teams choisies pour CE
+    // devis (30/10/2026, "en option" — cf. attachedMeetingIds, onglet
+    // Document du constructeur) — plus d'exposition automatique de toutes
+    // les réunions du prospect, le commercial choisit lesquelles montrer au
+    // client.
+    const allAttachedDocIds = [...new Set([...quote.attachedDocumentIds, ...quote.prospect.attachedDocumentIds])];
     const [documents, meetings, promotableProducts, clientUploads, questionnaireSends] = await Promise.all([
-      quote.attachedDocumentIds.length
+      allAttachedDocIds.length
         ? prisma.crmDocument.findMany({
-            where: { id: { in: quote.attachedDocumentIds }, active: true },
-            select: { id: true, title: true, description: true, fileName: true, fileMimeType: true, url: true },
+            where: { id: { in: allAttachedDocIds }, active: true },
+            select: { id: true, title: true, description: true, fileName: true, fileMimeType: true, url: true, category: true },
             orderBy: { order: "asc" },
           })
         : Promise.resolve([]),
@@ -1045,10 +1061,11 @@ crmQuoteRouter.get(
     if (!token) throw new HttpError(400, "Lien invalide");
     const quote = await prisma.crmQuote.findUnique({
       where: { signToken: token },
-      select: { attachedDocumentIds: true, lines: true, prospect: { select: { secteur: true } } },
+      select: { attachedDocumentIds: true, lines: true, prospect: { select: { secteur: true, attachedDocumentIds: true } } },
     });
     if (!quote) throw new HttpError(404, "Document introuvable");
-    let authorized = quote.attachedDocumentIds.includes(req.params.docId);
+    // Attaché au devis OU au client (12/11/2026, cf. CrmProspect.attachedDocumentIds) — même garde-fou, deux sources possibles.
+    let authorized = quote.attachedDocumentIds.includes(req.params.docId) || quote.prospect.attachedDocumentIds.includes(req.params.docId);
     if (!authorized) {
       // Document rattaché à un PRODUIT d'une ligne du devis (cf.
       // CrmProduct.documentId) plutôt qu'à la liste attachedDocumentIds —

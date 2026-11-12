@@ -3494,6 +3494,8 @@ function renderFiche(c){
     <div class="log-empty">Chargement…</div>
   </div>
 
+  ${clientDocumentsCardHtml(c)}
+
   ${clientUploadsCardHtml(c)}
 
   <div class="card" id="journal-card">
@@ -3566,6 +3568,53 @@ function ticketsCardHtml(c){
  * n'importe quel questionnaire (portée CRM) reçus par ce contact, chargée à
  * part (async, cf. loadQuestionnaireSendsCard) car ce n'est plus une donnée
  * statique de la fiche comme l'ancien mécanisme figé. */
+// Documents de la bibliothèque (CrmDocument) attachés au CLIENT lui-même
+// (12/11/2026, "rattacher des documents au niveau du devis ou client... se
+// retrouver dans l'espace client") — distinct des documents attachés à UN
+// devis précis (onglet Document du constructeur, cf.
+// dqDocumentLibrarySectionHtml) : ceux-ci s'affichent dans l'espace client
+// de TOUS les devis de ce prospect. Même bibliothèque (CRM_DOCUMENTS),
+// chargement paresseux identique.
+function clientDocumentsCardHtml(c){
+  if(CRM_DOCUMENTS===null){
+    dqLoadDocumentLibraryIfNeeded().then(()=>{
+      if(view==='fiche'&&curId===c.id){
+        const el=document.getElementById('client-docs-card');
+        if(el) el.outerHTML = clientDocumentsCardHtml(c);
+      }
+    });
+    return `<div class="card" id="client-docs-card"><div class="card-head"><div class="ch-ico">📚</div><span class="ch-title">Documents attachés au client</span></div><div class="log-empty">Chargement…</div></div>`;
+  }
+  const allActive = (CRM_DOCUMENTS||[]).filter(d=>d.active);
+  const selected = new Set(c.attachedDocumentIds||[]);
+  const rows = allActive.map(d=>`
+    <label style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;cursor:pointer">
+      <input type="checkbox" ${selected.has(d.id)?'checked':''} style="margin-top:2px" onchange="ficheToggleAttachedDocument('${c.id}','${d.id}',this.checked)">
+      <span><strong>${esc(d.title)}</strong> <span class="tag ${DOC_CATEGORY_TAG[d.category]||'t-gray'}" style="font-size:10px">${DOC_CATEGORY_LABEL[d.category]||'Non classé'}</span>${d.description?'<div style="font-size:11px;color:var(--mu)">'+esc(d.description)+'</div>':''}</span>
+    </label>`).join('');
+  const n = selected.size;
+  return `<div class="card" id="client-docs-card">
+    <div class="card-head"><div class="ch-ico">📚</div><span class="ch-title">Documents attachés au client</span>
+      <span style="font-size:12px;color:#aaa;margin-left:8px">${n?n+' sélectionné'+(n>1?'s':''):'aucun'}</span>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="showDocumentLibrary()">⚙ Gérer la bibliothèque</button>
+    </div>
+    <small style="color:var(--mu);display:block;margin-bottom:6px">Visibles dans l'espace client de TOUS les devis de ce prospect — contrairement aux documents attachés à un devis précis (onglet Document du constructeur de devis).</small>
+    <div style="max-height:260px;overflow-y:auto">${rows || '<div class="log-empty">Aucun document dans la bibliothèque.</div>'}</div>
+  </div>`;
+}
+async function ficheToggleAttachedDocument(prospectId, docId, checked){
+  const c = clients.find(x=>x.id===prospectId);
+  if(!c) return;
+  const set = new Set(c.attachedDocumentIds||[]);
+  if(checked) set.add(docId); else set.delete(docId);
+  c.attachedDocumentIds = [...set];
+  try{
+    const r = await apiFetch('/wa/crmProspect/update', {method:'POST', body:JSON.stringify({id:prospectId, attachedDocumentIds:c.attachedDocumentIds})});
+    if(!r.ok) throw new Error('http');
+    flash('Documents mis à jour');
+  }catch(e){ flash("Erreur d'enregistrement"); }
+}
+
 // Documents déposés PAR LE CLIENT depuis l'espace public (06/11/2026,
 // CrmClientUpload) — déjà inclus dans la fiche (c.clientUploads), rendu
 // synchrone, pas de fetch séparé comme pour questionnaireSendsCardHtml.
@@ -7866,6 +7915,10 @@ async function dqLoadDocumentLibraryIfNeeded(){
 // changement de devis/prospect (pas conservé d'un devis à l'autre).
 let DQ_DOC_FILTER_SECTEUR = undefined;
 let DQ_DOC_FILTER_PROSPECT_ID = null;
+// Filtre catégorie (12/11/2026, "classification... pour une meilleure
+// lisibilité") — même principe que le filtre secteur ci-dessus, mais
+// jamais réinitialisé automatiquement (pas de "catégorie du client").
+let DQ_DOC_FILTER_CATEGORY = '';
 // Liste déroulante à cocher (04/11/2026, demande client) — la liste des
 // documents restait toujours dépliée dans l'onglet Document, prenant de la
 // place même repliée sur aucun document ; repliée par défaut désormais,
@@ -7874,6 +7927,7 @@ let DQ_DOC_FILTER_PROSPECT_ID = null;
 let DQ_DOC_PICKER_OPEN = false;
 function dqToggleDocPicker(){ DQ_DOC_PICKER_OPEN = !DQ_DOC_PICKER_OPEN; renderQuoteBuilder(); }
 function dqSetDocFilterSecteur(v){ DQ_DOC_FILTER_SECTEUR = v; renderQuoteBuilder(); }
+function dqSetDocFilterCategory(v){ DQ_DOC_FILTER_CATEGORY = v; renderQuoteBuilder(); }
 function dqDocumentLibrarySectionHtml(q, clientSecteur){
   if(CRM_DOCUMENTS===null){
     dqLoadDocumentLibraryIfNeeded().then(()=>{ if(QUOTE_TAB==='document') renderQuoteBuilder(); });
@@ -7886,19 +7940,25 @@ function dqDocumentLibrarySectionHtml(q, clientSecteur){
   const allActive = (CRM_DOCUMENTS||[]).filter(d=>d.active);
   // Universel (secteurs vide) toujours visible, quel que soit le filtre —
   // même règle que le badge "recommandé" ci-dessous.
-  const docs = allActive.filter(d=> !DQ_DOC_FILTER_SECTEUR || !d.secteurs.length || d.secteurs.includes(DQ_DOC_FILTER_SECTEUR));
+  const docs = allActive
+    .filter(d=> !DQ_DOC_FILTER_SECTEUR || !d.secteurs.length || d.secteurs.includes(DQ_DOC_FILTER_SECTEUR))
+    .filter(d=> !DQ_DOC_FILTER_CATEGORY || (d.category||'')===DQ_DOC_FILTER_CATEGORY);
   const rows = docs.map(d=>{
     const checked = (q.attachedDocumentIds||[]).includes(d.id);
     const matches = clientSecteur && d.secteurs.includes(clientSecteur);
     return `<label style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;cursor:pointer">
       <input type="checkbox" ${checked?'checked':''} style="margin-top:2px" onchange="dqToggleAttachedDocument('${d.id}',this.checked)">
-      <span><strong>${esc(d.title)}</strong>${matches?' <span class="tag t-green" style="font-size:10px">recommandé '+esc(clientSecteur)+'</span>':''}${d.description?'<div style="font-size:11px;color:var(--mu)">'+esc(d.description)+'</div>':''}</span>
+      <span><strong>${esc(d.title)}</strong> <span class="tag ${DOC_CATEGORY_TAG[d.category]||'t-gray'}" style="font-size:10px">${DOC_CATEGORY_LABEL[d.category]||'Non classé'}</span>${matches?' <span class="tag t-green" style="font-size:10px">recommandé '+esc(clientSecteur)+'</span>':''}${d.description?'<div style="font-size:11px;color:var(--mu)">'+esc(d.description)+'</div>':''}</span>
     </label>`;
   }).join('');
   const secteursPresent = [...new Set(allActive.flatMap(d=>d.secteurs))].sort();
   const filterSelect = `<select style="width:auto;font-size:12px" onchange="dqSetDocFilterSecteur(this.value)">
       <option value="">Tous secteurs</option>
       ${secteursPresent.map(s=>`<option value="${esc(s)}" ${DQ_DOC_FILTER_SECTEUR===s?'selected':''}>${esc(s)}</option>`).join('')}
+    </select>`;
+  const categoryFilterSelect = `<select style="width:auto;font-size:12px" onchange="dqSetDocFilterCategory(this.value)">
+      <option value="">Toutes catégories</option>
+      ${DOC_CATEGORIES.map(c=>`<option value="${c}" ${DQ_DOC_FILTER_CATEGORY===c?'selected':''}>${DOC_CATEGORY_LABEL[c]}</option>`).join('')}
     </select>`;
   const selectedCount = (q.attachedDocumentIds||[]).length;
   const summaryLabel = selectedCount
@@ -7910,6 +7970,7 @@ function dqDocumentLibrarySectionHtml(q, clientSecteur){
     ${DQ_DOC_PICKER_OPEN?`<div style="border:1px solid var(--bdr2,#e2dfd9);border-radius:10px;padding:10px;margin-top:2px">
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
         ${filterSelect}
+        ${categoryFilterSelect}
         <button class="sq-clause" type="button" style="border-style:dashed" onclick="showDocumentLibrary()">⚙ Gérer la bibliothèque</button>
       </div>
       <small style="color:var(--mu)">Joints à l'email lors de l'envoi du devis — rien n'est ajouté automatiquement. Filtre pré-réglé sur le secteur du client (${esc(clientSecteur||'non renseigné')}).</small>
@@ -8985,6 +9046,15 @@ function dqRenderDocumentTab(q, lines){
 // d'un devis précis (cf. dqDocumentLibrarySectionHtml dans l'onglet
 // Document). Stockage base64 en base, même convention que les PDF de
 // signature électronique (crmSignature.ts).
+// Classification (12/11/2026, "permettre la classification de ces
+// documents en document techniques, commerciaux, marketing pour une
+// meilleure lisibilité") — purement indicative (cf. CrmDocument.category),
+// réutilisée partout où la bibliothèque est listée (panneau de gestion,
+// pickers devis/fiche client).
+const DOC_CATEGORIES = ['technique','commercial','marketing'];
+const DOC_CATEGORY_LABEL = { technique:'Technique', commercial:'Commercial', marketing:'Marketing' };
+const DOC_CATEGORY_TAG = { technique:'t-blue', commercial:'t-green', marketing:'t-amber' };
+let DOC_LIB_FILTER_CATEGORY = '';
 async function showDocumentLibrary(){
   view='documents'; setNav('n-documents'); bc([{label:'Bibliothèque documentaire'}]);
   tba('<button class="btn btn-primary btn-sm" onclick="docOpenModal(null)">+ Ajouter un document</button>');
@@ -8993,8 +9063,10 @@ async function showDocumentLibrary(){
   await dqLoadDocumentLibraryIfNeeded();
   renderDocumentLibrary();
 }
+function docLibSetFilterCategory(v){ DOC_LIB_FILTER_CATEGORY = v; renderDocumentLibrary(); }
 function renderDocumentLibrary(){
-  const docs = (CRM_DOCUMENTS||[]).slice().sort((a,b)=>a.order-b.order);
+  const all = (CRM_DOCUMENTS||[]).slice().sort((a,b)=>a.order-b.order);
+  const docs = DOC_LIB_FILTER_CATEGORY ? all.filter(d=>(d.category||'')===DOC_LIB_FILTER_CATEGORY) : all;
   const rows = docs.map((d,i)=>`
     <div class="card" style="margin-bottom:10px;opacity:${d.active?1:.5}">
       <div class="db-row-between">
@@ -9008,13 +9080,21 @@ function renderDocumentLibrary(){
       </div>
       ${d.description?'<div style="font-size:12px;color:var(--mu);margin-top:4px">'+esc(d.description)+'</div>':''}
       <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+        <span class="tag ${DOC_CATEGORY_TAG[d.category]||'t-gray'}" style="font-size:10px">${DOC_CATEGORY_LABEL[d.category]||'Non classé'}</span>
         ${d.secteurs.length?d.secteurs.map(s=>'<span class="tag t-gray" style="font-size:10px">'+esc(s)+'</span>').join(''):'<span class="tag t-gray" style="font-size:10px">Tous secteurs</span>'}
         <label style="margin-left:auto;display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer"><input type="checkbox" ${d.active?'checked':''} onchange="docSaveField('${d.id}','active',this.checked)">Actif</label>
       </div>
     </div>`).join('');
+  const filterSelect = `<select style="width:auto;font-size:12px" onchange="docLibSetFilterCategory(this.value)">
+      <option value="">Toutes catégories</option>
+      ${DOC_CATEGORIES.map(c=>`<option value="${c}" ${DOC_LIB_FILTER_CATEGORY===c?'selected':''}>${DOC_CATEGORY_LABEL[c]}</option>`).join('')}
+    </select>`;
   document.getElementById('main').innerHTML = `
-    <div class="log-empty" style="font-style:normal;margin-bottom:10px">Documents disponibles pour joindre à l'envoi d'un devis (onglet Document du constructeur de devis → "Documents à joindre"). Jamais ajoutés automatiquement.</div>
-    ${rows || '<div class="card"><div class="log-empty">Aucun document — ajoutez-en un.</div></div>'}`;
+    <div class="log-empty" style="font-style:normal;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span>Documents disponibles pour joindre à l'envoi d'un devis ou d'une fiche client. Jamais ajoutés automatiquement.</span>
+      ${filterSelect}
+    </div>
+    ${rows || '<div class="card"><div class="log-empty">Aucun document pour ce filtre.</div></div>'}`;
 }
 // Journal d'audit des agents IA (§7 conformité brief Sesame AI Sales Agent)
 // — lecture seule, jamais d'édition : une entrée doit rester consultable
@@ -9496,6 +9576,9 @@ function docOpenModal(id){
         <div class="ff" style="grid-column:1/-1"><label>Titre *</label><input id="doc-title" value="${d?esc(d.title):''}"></div>
         <div class="ff" style="grid-column:1/-1"><label>Description (optionnel)</label><textarea id="doc-desc" rows="6" style="resize:vertical;min-height:90px">${d?esc(d.description):''}</textarea></div>
         ${d?(d.url?`<div class="ff" style="grid-column:1/-1"><label>Lien URL</label><div style="font-size:12px;word-break:break-all">🔗 <a href="${esc(d.url)}" target="_blank" rel="noopener">${esc(d.url)}</a></div></div>`:''):docSourceModeHtml('file')}
+        <div class="ff" style="grid-column:1/-1"><label>Catégorie (optionnel, pour la lisibilité de la bibliothèque)</label>
+          <select id="doc-category"><option value="">Non classé</option>${DOC_CATEGORIES.map(c=>`<option value="${c}" ${d&&d.category===c?'selected':''}>${DOC_CATEGORY_LABEL[c]}</option>`).join('')}</select>
+        </div>
         <div class="ff" style="grid-column:1/-1"><label>Secteurs recommandés (optionnel, vide = universel)</label>
           <div style="display:flex;flex-wrap:wrap;gap:6px">${SECTEURS.map(s=>`<label style="display:flex;align-items:center;gap:4px;font-size:11px;border:1px solid var(--bdr2,#e2dfd9);border-radius:12px;padding:2px 8px;cursor:pointer"><input type="checkbox" class="doc-secteur" value="${esc(s)}" ${d&&d.secteurs.includes(s)?'checked':''}>${esc(s)}</label>`).join('')}</div>
         </div>
@@ -9521,7 +9604,8 @@ async function docSubmitCreate(){
   const mode = (document.querySelector('input[name="doc-mode"]:checked')||{value:'file'}).value;
   const secteurs = [...document.querySelectorAll('.doc-secteur:checked')].map(c=>c.value);
   const description = (document.getElementById('doc-desc')||{value:''}).value.trim();
-  let body = { title, description, secteurs };
+  const category = (document.getElementById('doc-category')||{value:''}).value;
+  let body = { title, description, category, secteurs };
   if(mode==='url'){
     const url = (document.getElementById('doc-url')||{value:''}).value.trim();
     if(!url){ flash('Lien URL requis'); return; }
@@ -9546,9 +9630,10 @@ async function docSubmitEdit(id){
   const title = (document.getElementById('doc-title')||{value:''}).value.trim();
   if(!title){ flash('Titre requis'); return; }
   const description = (document.getElementById('doc-desc')||{value:''}).value.trim();
+  const category = (document.getElementById('doc-category')||{value:''}).value;
   const secteurs = [...document.querySelectorAll('.doc-secteur:checked')].map(c=>c.value);
   try{
-    const r = await apiFetch('/wa/crmDocument/update', {method:'POST', body:JSON.stringify({id, title, description, secteurs})});
+    const r = await apiFetch('/wa/crmDocument/update', {method:'POST', body:JSON.stringify({id, title, description, category: category||null, secteurs})});
     if(!r.ok) throw new Error('http');
     const updated = await r.json();
     CRM_DOCUMENTS = (CRM_DOCUMENTS||[]).map(d=>d.id===id?updated:d);

@@ -2192,6 +2192,15 @@ model CrmProspect {
   outreachReplies   OutreachReply[]
   meetingProposals  MeetingProposal[]
   clientUploads     CrmClientUpload[]
+
+  // Documents de la bibliothèque (CrmDocument) attachés au CLIENT lui-même
+  // (12/11/2026, demande client "rattacher des documents au niveau du
+  // devis OU client") — distinct de CrmQuote.attachedDocumentIds (choix
+  // propre à UN devis précis) : ceux-ci s'affichent dans l'espace client
+  // de TOUS les devis de ce prospect (cf. GET /crmQuote/public, routes/
+  // crmQuote.ts), peu importe lequel est ouvert. Mêmes ids CrmDocument,
+  // juste une portée différente.
+  attachedDocumentIds String[] @default([])
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -3013,6 +3022,13 @@ model CrmDocument {
   fileMimeType      String?
   fileContentBase64 String? @db.Text
   url               String?
+
+  // Classification pour la lisibilité de la bibliothèque (12/11/2026,
+  // demande client) — technique | commercial | marketing, ou null = non
+  // classé (documents créés avant cette date, ou volontairement laissés
+  // libres). Purement indicatif (filtre/regroupement d'affichage), aucune
+  // logique métier ne s'appuie dessus.
+  category String?
 
   secteurs String[] @default([])
   active   Boolean  @default(true)

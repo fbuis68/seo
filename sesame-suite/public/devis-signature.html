@@ -342,8 +342,14 @@ function trackQuoteDocument(docId){
   const d = (QUOTE.documents||[]).find(x=>x.id===docId);
   trackQuoteEvent('quote_document_opened', d?d.title:docId);
 }
+// Classification (12/11/2026, "permettre la classification... pour une
+// meilleure lisibilité") — regroupe par catégorie quand au moins deux sont
+// présentes parmi les documents de CE devis/client, sinon liste à plat
+// (un seul en-tête de groupe n'apporte rien).
+const DOC_CATEGORY_LABEL = { technique: 'Documents techniques', commercial: 'Documents commerciaux', marketing: 'Documents marketing' };
 function documentsTabHtml(){
-  const libraryHtml = QUOTE.documents.map(d=>`
+  const docs = QUOTE.documents||[];
+  const docItemHtml = d => `
     <div class="doc-item">
       <div class="doc-left">
         ${docThumbHtml(d)}
@@ -353,7 +359,16 @@ function documentsTabHtml(){
         </div>
       </div>
       <a class="btn btn-ghost doc-dl" style="width:auto" href="/wa/crmQuote/publicDocument/${encodeURIComponent(d.id)}?token=${encodeURIComponent(TOKEN)}" target="_blank" rel="noopener" onclick="trackQuoteDocument('${d.id}')">${d.fileMimeType?'Télécharger':'Ouvrir'}</a>
-    </div>`).join('');
+    </div>`;
+  const groups = {};
+  docs.forEach(d=>{ const k = d.category||'autre'; (groups[k]=groups[k]||[]).push(d); });
+  const multiCategory = Object.keys(groups).length>1;
+  const libraryHtml = ['technique','commercial','marketing','autre'].filter(k=>groups[k]).map(k=>{
+    const items = groups[k].map(docItemHtml).join('');
+    return multiCategory
+      ? `<div style="margin-top:10px"><div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.02em;margin-bottom:4px">${DOC_CATEGORY_LABEL[k]||'Autres documents'}</div>${items}</div>`
+      : items;
+  }).join('');
   return `${libraryHtml}${libraryHtml && (QUOTE.clientUploads||[]).length ? '<div style="height:8px"></div>' : ''}${clientUploadSectionHtml()}`;
 }
 
