@@ -1332,6 +1332,11 @@ let PLANNER_ONLY_MINE = false; // n'affiche que les tâches assignées au compte
 // sans jouer avec les filtres génériques ci-dessus.
 let PLANNER_SELECTED_IDS = new Set();
 let PLANNER_SHOW_SELECTED_ONLY = false;
+// Recherche par nom (12/11/2026, "permettre la recherche d'un client ou
+// prospect par son nom") — filtre les colonnes déjà construites, même
+// principe que les autres filtres ci-dessus.
+let PLANNER_SEARCH = '';
+function plannerSetSearch(v){ PLANNER_SEARCH = v; withFocusKept('#planner-search', ()=>{ document.getElementById('main').innerHTML = renderPlannerBoard(); }); }
 let PLANNER_ADD_OPEN = new Set(); // prospectId dont le formulaire "+ Ajouter une tâche" est ouvert
 // Les colonnes du planner ne sont générées QUE pour les clients ayant déjà
 // au moins une tâche (cf. renderPlannerBoard, byProspect dérivé de
@@ -1442,7 +1447,9 @@ function renderPlannerBoard(){
   if(PLANNER_HIDE_EMPTY) columns = columns.filter(c=>byProspect.get(c.id).some(t=>!t.done));
   if(PLANNER_HIDE_PROSPECT) columns = columns.filter(c=>c.type!=='Prospect'&&c.type!=='Suspect');
   if(PLANNER_SHOW_SELECTED_ONLY) columns = columns.filter(c=>PLANNER_SELECTED_IDS.has(c.id));
+  if(PLANNER_SEARCH.trim()) columns = columns.filter(c=>c.nom.toLowerCase().includes(PLANNER_SEARCH.trim().toLowerCase()));
   const toolbar = `<div style="margin-bottom:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <div class="srch-wrap" style="flex-basis:220px"><span class="srch-ico">⌕</span><input type="text" id="planner-search" placeholder="Client, prospect…" value="${esc(PLANNER_SEARCH)}" oninput="plannerSetSearch(this.value)"></div>
     <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);cursor:pointer;margin:0">
       <input type="checkbox" ${PLANNER_HIDE_EMPTY?'checked':''} onchange="plannerToggleHideEmpty(this.checked)">Masquer les clients sans tâche à faire
     </label>
