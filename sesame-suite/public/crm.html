@@ -3887,7 +3887,7 @@ async function submitScheduleMeeting(prospectId){
     flash('Réunion Teams créée ✓');
     renderMeetingsCard(prospectId);
   }catch(e){
-    flash(e.message||'Erreur de création de la réunion');
+    flash(e.message||'Erreur de création de la réunion', true);
     btn.disabled = false; btn.textContent = 'Créer la réunion';
   }
 }
@@ -15502,8 +15502,11 @@ function exportCSV(){
 // ════════════════════════════════════════
 // TOAST
 // ════════════════════════════════════════
-function flash(msg='Sauvegardé'){
-  const t=document.getElementById('toast');t.textContent='✓ '+msg;t.style.display='block';
+function flash(msg='Sauvegardé', isError=false){
+  const t=document.getElementById('toast');
+  t.textContent=(isError?'⚠ ':'✓ ')+msg;
+  t.style.background = isError ? '#A32D2D' : '';
+  t.style.display='block';
   clearTimeout(toastT);toastT=setTimeout(()=>{t.style.display='none';},2400);
 }
 </script>
