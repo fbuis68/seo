@@ -8997,7 +8997,7 @@ function bsRenderStatusBanner(){
   // après un rechargement de page pendant qu'un gros import tourne encore
   // en arrière-plan côté serveur. Distinct de success/error, pas un warning.
   if(BS_CONFIG.lastSyncStatus === 'running'){
-    el.innerHTML = '<div class="alt alt-b"><i class="ti ti-loader-2"></i><span>Import en cours depuis <strong>'+when+'</strong> — actualisez cette page dans quelques minutes.</span></div>';
+    el.innerHTML = '<div class="alt alt-b"><i class="ti ti-loader-2"></i><span>Import en cours depuis <strong>'+when+'</strong>'+(BS_CONFIG.lastSyncMessage?' — '+esc(BS_CONFIG.lastSyncMessage):'')+' — actualisez cette page dans quelques minutes.</span></div>';
     return;
   }
   var ok = BS_CONFIG.lastSyncStatus==='success';
@@ -10994,7 +10994,16 @@ async function bsPollImportResult(){
     await new Promise(function(resolve){ setTimeout(resolve, 3000); });
     var cfg;
     try{ cfg = await bsFetchConfig(); }catch(e){ continue; }
-    if(!cfg || cfg.lastSyncStatus === 'running') continue;
+    if(!cfg || cfg.lastSyncStatus === 'running'){
+      // Progression en direct (13/11/2026, "ne fonctionne pas sur volume
+      // important ?" — en réalité tournait toujours, mais sans aucun signe
+      // de vie visible pendant plusieurs minutes) — runImport écrit
+      // maintenant "X/Y traités" dans lastSyncMessage pendant l'import.
+      if(cfg && cfg.lastSyncMessage){
+        bsShowResult('Import en cours…', '<div style="color:var(--mu);font-size:13px">'+esc(cfg.lastSyncMessage)+'</div>');
+      }
+      continue;
+    }
     bsRenderStatusBanner();
     if(cfg.lastSyncStatus === 'success'){
       bsShowResult('Import terminé', '<div class="alt alt-g"><i class="ti ti-check-circle"></i><span>'+esc(cfg.lastSyncMessage||'')+'</span></div>');

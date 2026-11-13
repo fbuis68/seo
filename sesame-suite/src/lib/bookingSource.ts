@@ -33,7 +33,7 @@ async function fetchWithTimeout(url: string, opts: RequestInit = {}): Promise<Re
  * est traitée séparément, pas de dépendance entre elles) réduit le temps
  * total d'un facteur proche de `concurrency` sans changer le résultat.
  */
-async function mapWithConcurrency<T, R>(items: T[], concurrency: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+async function mapWithConcurrency<T, R>(items: T[], concurrency: number, fn: (item: T) => Promise<R>, onProgress?: () => void): Promise<R[]> {
   const results: R[] = new Array(items.length);
   let next = 0;
   async function worker() {
@@ -41,10 +41,35 @@ async function mapWithConcurrency<T, R>(items: T[], concurrency: number, fn: (it
       const i = next++;
       if (i >= items.length) return;
       results[i] = await fn(items[i]);
+      onProgress?.();
     }
   }
   await Promise.all(Array.from({ length: Math.max(1, Math.min(concurrency, items.length)) }, worker));
   return results;
+}
+
+/**
+ * Écrit une progression visible pendant un import long (13/11/2026, "import
+ * ne fonctionne pas sur volume important ?" — en réalité tournait, mais
+ * sans aucun signe de vie pendant plusieurs minutes, impossible à
+ * distinguer d'un blocage réel). Throttlée (au plus 1 écriture / 2s) pour
+ * ne pas ajouter des centaines de requêtes DB à l'import lui-même.
+ */
+function makeProgressReporter(configId: string, label: string, total: number) {
+  let done = 0;
+  let lastWriteAt = 0;
+  let writing = Promise.resolve();
+  return () => {
+    done++;
+    const now = Date.now();
+    if (done < total && now - lastWriteAt < 2000) return;
+    lastWriteAt = now;
+    writing = writing.then(() =>
+      prisma.bookingSourceConfig
+        .update({ where: { id: configId }, data: { lastSyncMessage: `Import en cours — ${label} : ${done}/${total}` } })
+        .catch(() => {})
+    ) as Promise<void>;
+  };
 }
 
 /** Champs Booking que le mapping peut renseigner — valeur = dot-path dans
@@ -774,13 +799,17 @@ export async function upsertMappedFacilities(entity: Entity, mapped: MappedFacil
  * Renvoie aussi `synced` (id interne + externalId de chaque réservation
  * traitée) — utilisé par runImport pour enchaîner la synchronisation des
  * Pass de chacune, qui a besoin de l'externalId (pas notre id ni le code). */
-export async function upsertMappedBookings(entity: Entity, mapped: MappedBooking[], sourceName: string) {
+export async function upsertMappedBookings(entity: Entity, mapped: MappedBooking[], sourceName: string, configId?: string) {
   // Chaque réservation touche une ligne Booking distincte (code unique par
   // source) — indépendantes entre elles, donc traitées par lots parallèles
   // (cf. mapWithConcurrency) plutôt que strictement séquentiellement : sur
   // plusieurs centaines de réservations, le gain sur le temps total est
   // proche du facteur de concurrence choisi.
-  const perBooking = await mapWithConcurrency(mapped, 6, async (b) => {
+  const onProgress = configId ? makeProgressReporter(configId, "réservations", mapped.length) : undefined;
+  const perBooking = await mapWithConcurrency(
+    mapped,
+    6,
+    async (b) => {
     // b.facilityCode peut désormais lister plusieurs accès ("201,203") — Room
     // reste à une seule chambre, donc on ne cherche que sur le premier code
     // (celui affiché comme chambre principale de la réservation).
@@ -829,7 +858,9 @@ export async function upsertMappedBookings(entity: Entity, mapped: MappedBooking
     }
     const externalId = b.externalId || existing?.externalId || "";
     return { wasCreated, rowId, externalId };
-  });
+    },
+    onProgress
+  );
 
   let created = 0;
   let updated = 0;
@@ -956,7 +987,8 @@ export async function runImport(entity: Entity, config: BookingSourceConfig) {
   try {
     const raw = await fetchExternalBookings(config);
     const { mapped, errors } = mapBookings(raw, mapping);
-    const { created, updated, synced } = await upsertMappedBookings(entity, mapped, sourceName);
+    await prisma.bookingSourceConfig.update({ where: { id: config.id }, data: { lastSyncMessage: `Import en cours — ${mapped.length} réservation(s) reçue(s)` } }).catch(() => {});
+    const { created, updated, synced } = await upsertMappedBookings(entity, mapped, sourceName, config.id);
     let message = `${created} créée(s), ${updated} mise(s) à jour${errors.length ? `, ${errors.length} ignorée(s)` : ""}`;
 
     // Pass (invitations) — un appel PAR réservation, best-effort : inerte
@@ -971,7 +1003,8 @@ export async function runImport(entity: Entity, config: BookingSourceConfig) {
       // appel externe peut attendre jusqu'à CONNECTOR_TIMEOUT_MS (15s), un
       // par réservation strictement séquentiel faisait dépasser 20-30
       // minutes sur plusieurs centaines de réservations.
-      const passResults = await mapWithConcurrency(synced, 6, (b) => syncPassesForBooking(entity, config, b));
+      const passProgress = makeProgressReporter(config.id, "Pass synchronisés", synced.length);
+      const passResults = await mapWithConcurrency(synced, 6, (b) => syncPassesForBooking(entity, config, b), passProgress);
       for (const result of passResults) {
         if (result.ok) {
           passCreated += result.created;
