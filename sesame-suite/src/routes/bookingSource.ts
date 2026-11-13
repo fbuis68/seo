@@ -711,7 +711,19 @@ bookingSourceRouter.post(
   })
 );
 
-/** POST /wa/bookingSource/import — synchronisation réelle (upsert en base) à partir des réglages enregistrés. */
+/**
+ * POST /wa/bookingSource/import — synchronisation réelle (upsert en base) à
+ * partir des réglages enregistrés. Lancée en arrière-plan (13/11/2026,
+ * "erreur de connexion au serveur" lors de l'import réel alors que le test
+ * passait) — un import de plusieurs centaines de réservations fait autant
+ * d'allers-retours DB (+ un appel externe par réservation si les Pass sont
+ * synchronisés), largement au-delà du timeout du reverse proxy ; le client
+ * voyait une erreur de connexion alors que l'import continuait/réussissait
+ * côté serveur. On répond immédiatement, runImport tourne en tâche de fond
+ * et écrit son résultat (lastSyncStatus/lastSyncMessage) comme avant — le
+ * front-end n'a qu'à repasser par GET /bookingSource/config (déjà utilisé)
+ * pour savoir quand c'est fini et afficher le résultat.
+ */
 bookingSourceRouter.post(
   "/bookingSource/import",
   requireAdmin,
@@ -719,9 +731,10 @@ bookingSourceRouter.post(
     const entity = await resolveEntity(req);
     const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
     if (!config || !config.baseUrl) throw new HttpError(400, "Connecteur non configuré — enregistrez d'abord les réglages");
-    const result = await runImport(entity, config);
-    if (!result.ok) throw new HttpError(400, result.message);
-    res.json(result);
+    if (config.lastSyncStatus === "running") throw new HttpError(409, "Un import est déjà en cours pour cet établissement — attendez qu'il se termine.");
+    await prisma.bookingSourceConfig.update({ where: { id: config.id }, data: { lastSyncStatus: "running", lastSyncMessage: null } });
+    runImport(entity, config).catch(() => {});
+    res.json({ started: true });
   })
 );
 

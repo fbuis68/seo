@@ -10950,26 +10950,47 @@ async function bsListMewsProducts(){
   }
 }
 
+/**
+ * 13/11/2026, "erreur de connexion au serveur" lors de l'import réel (568
+ * réservations) alors que le test passait — l'import tourne maintenant en
+ * arrière-plan côté serveur (POST /bookingSource/import répond tout de
+ * suite), donc plus de risque de timeout du reverse proxy sur une grosse
+ * volumétrie. On sonde GET /bookingSource/config jusqu'à ce que
+ * lastSyncStatus ne soit plus "running" pour afficher le résultat final
+ * (déjà calculé et stocké par runImport, cf. lib/bookingSource.ts).
+ */
 async function bsImportNow(){
-  bsShowResult('Import en cours…', '<div style="color:var(--mu);font-size:13px">Récupération et enregistrement des réservations…</div>');
+  bsShowResult('Import en cours…', '<div style="color:var(--mu);font-size:13px">Récupération et enregistrement des réservations — peut prendre une ou deux minutes sur un gros volume…</div>');
   try{
     var r = await adminFetch('/wa/bookingSource/import', {method:'POST', body:JSON.stringify({})});
-    var data = await r.json();
+    var data = await r.json().catch(function(){ return {}; });
     if(!r.ok){
       bsShowResult('Échec de l\'import', '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>'+esc(data.error||'Erreur inconnue')+'</span></div>');
       await bsFetchConfig(); bsRenderStatusBanner();
       return;
     }
-    var h = '<div class="alt alt-g"><i class="ti ti-check-circle"></i><span>'
-      +data.created+' réservation(s) créée(s), '+data.updated+' mise(s) à jour'
-      +(data.errors.length?', '+data.errors.length+' ignorée(s)':'')+' sur '+data.total+' reçue(s).</span></div>';
-    bsShowResult('Import terminé', h);
-    await bsFetchConfig();
-    bsRenderStatusBanner();
-    toast('Import terminé ✓');
+    await bsPollImportResult();
   }catch(e){
     bsShowResult('Échec de l\'import', '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Erreur de connexion au serveur</span></div>');
   }
+}
+
+async function bsPollImportResult(){
+  for(var i=0; i<60; i++){
+    await new Promise(function(resolve){ setTimeout(resolve, 3000); });
+    var cfg;
+    try{ cfg = await bsFetchConfig(); }catch(e){ continue; }
+    if(!cfg || cfg.lastSyncStatus === 'running') continue;
+    bsRenderStatusBanner();
+    if(cfg.lastSyncStatus === 'success'){
+      bsShowResult('Import terminé', '<div class="alt alt-g"><i class="ti ti-check-circle"></i><span>'+esc(cfg.lastSyncMessage||'')+'</span></div>');
+      toast('Import terminé ✓');
+    }else{
+      bsShowResult('Échec de l\'import', '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>'+esc(cfg.lastSyncMessage||'Erreur inconnue')+'</span></div>');
+    }
+    return;
+  }
+  bsShowResult('Import toujours en cours', '<div style="color:var(--mu);font-size:13px">L\'import prend plus de temps que prévu — rechargez cette page dans quelques minutes, le résultat sera affiché dans le bandeau de statut ci-dessus.</div>');
 }
 
 async function bsTestFacilities(){
