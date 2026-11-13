@@ -4041,6 +4041,25 @@ function openScheduleMeetingModal(prospectId){
   </div>`;
 }
 
+// Interprète une date+heure saisie comme heure LOCALE Europe/Paris (DST
+// géré), peu importe le fuseau du navigateur/OS de l'ordinateur qui remplit
+// le formulaire (13/11/2026, "les réunions Teams sont affichées avec un
+// GMT+0 alors que nous sommes à +1" — `new Date(date+'T'+time+':00')`
+// dépendait du fuseau LOCAL DU NAVIGATEUR pour interpréter la saisie, pas de
+// celui de l'entreprise ; un poste/VM dont l'horloge système n'est pas
+// réglée sur Europe/Paris envoyait alors la mauvaise heure à Microsoft
+// Graph). Même principe que src/lib/timezone.ts côté serveur, en sens
+// inverse (heure locale → instant UTC).
+function parisLocalToUtcDate(dateStr, timeStr){
+  const asIfUtc = new Date(dateStr+'T'+timeStr+':00Z');
+  const fmt = new Intl.DateTimeFormat('en-US', {timeZone:'Europe/Paris', hour12:false, year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const parts = {};
+  fmt.formatToParts(asIfUtc).forEach(p=>{ if(p.type!=='literal') parts[p.type]=p.value; });
+  const asParisWallClock = Date.UTC(+parts.year, +parts.month-1, +parts.day, (+parts.hour===24?0:+parts.hour), +parts.minute, +parts.second);
+  const offsetMs = asParisWallClock - asIfUtc.getTime();
+  return new Date(asIfUtc.getTime() - offsetMs);
+}
+
 async function submitScheduleMeeting(prospectId){
   const subject = (document.getElementById('mtg-subject').value||'').trim();
   const date = document.getElementById('mtg-date').value;
@@ -4048,7 +4067,7 @@ async function submitScheduleMeeting(prospectId){
   const duration = +document.getElementById('mtg-duration').value||60;
   if(!subject){ flash('Objet requis'); return; }
   if(!date || !time){ flash('Date et heure requises'); return; }
-  const start = new Date(date+'T'+time+':00');
+  const start = parisLocalToUtcDate(date, time);
   const end = new Date(start.getTime()+duration*60000);
   const ccEmails = (document.getElementById('mtg-cc').value||'').split(',').map(s=>s.trim()).filter(Boolean);
   const btn = document.getElementById('mtg-create-btn');
