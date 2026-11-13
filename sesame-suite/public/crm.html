@@ -3922,6 +3922,40 @@ function fmtMeetingDate(iso){
 
 const MEETING_STATUS_TAG = {scheduled:['t-gray','Planifiée'], fetched:['t-green','Compte-rendu récupéré'], failed:['t-amber','À réessayer']};
 
+// Formulaire "Charger un transcript" (13/11/2026, "permettre de charger
+// également un transcript et d'en faire la synthèse") — ouvert/fermé par
+// réunion, état gardé en mémoire le temps de la consultation de la fiche
+// (pas persisté), même principe que TICKETS_CARD_SHOW_RESOLVED.
+const MTG_TRANSCRIPT_FORM_OPEN = new Set();
+function meetingToggleTranscriptForm(id, prospectId){
+  if(MTG_TRANSCRIPT_FORM_OPEN.has(id)) MTG_TRANSCRIPT_FORM_OPEN.delete(id); else MTG_TRANSCRIPT_FORM_OPEN.add(id);
+  renderMeetingsCard(prospectId);
+}
+function meetingTranscriptFileLoaded(id, input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  const r = new FileReader();
+  r.onload = ()=>{ const ta=document.getElementById('mtg-transcript-input-'+id); if(ta) ta.value = r.result; };
+  r.readAsText(file);
+}
+async function meetingSubmitTranscript(id, prospectId){
+  const ta = document.getElementById('mtg-transcript-input-'+id);
+  const text = (ta?ta.value:'').trim();
+  if(!text){ flash('Collez ou importez un transcript'); return; }
+  const btn = document.getElementById('mtg-transcript-submit-'+id);
+  if(btn){ btn.disabled = true; btn.textContent = 'Analyse en cours…'; }
+  try{
+    const r = await apiFetch('/wa/crmMeeting/uploadTranscript', {method:'POST', body:JSON.stringify({id, transcriptText:text})});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'http '+r.status);
+    const idx = CRM_MEETINGS.findIndex(m=>m.id===id);
+    if(idx!==-1) CRM_MEETINGS[idx] = data; else CRM_MEETINGS.unshift(data);
+    MTG_TRANSCRIPT_FORM_OPEN.delete(id);
+    flash('Compte-rendu généré depuis le transcript ✓');
+  }catch(e){ flash(e.message||'Erreur de génération du compte-rendu'); }
+  renderMeetingsCard(prospectId);
+}
+
 function renderMeetingsCard(prospectId){
   const el = document.getElementById('meetings-card');
   if(!el) return;
@@ -3932,6 +3966,16 @@ function renderMeetingsCard(prospectId){
               <input type="checkbox" id="mtg-action-${m.id}-${i}" checked style="margin-top:3px">
               <span>${esc(a)}</span>
             </label>`).join('');
+    const transcriptFormHtml = MTG_TRANSCRIPT_FORM_OPEN.has(m.id) ? `
+      <div style="margin-top:8px;border:1px solid var(--bdr,#eee);border-radius:8px;padding:10px 12px">
+        <div style="font-size:11px;font-weight:600;color:var(--mu,#888);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Transcript (collé ou importé .txt/.vtt)</div>
+        <input type="file" accept=".txt,.vtt,text/plain,text/vtt" onchange="meetingTranscriptFileLoaded('${m.id}',this)" style="margin-bottom:6px">
+        <textarea id="mtg-transcript-input-${m.id}" rows="6" placeholder="Collez ici le texte du transcript, ou importez un fichier ci-dessus…" style="font-size:13px;width:100%;resize:vertical"></textarea>
+        <div class="log-acts" style="margin-top:6px">
+          <button class="btn btn-sm btn-primary" id="mtg-transcript-submit-${m.id}" onclick="meetingSubmitTranscript('${m.id}','${prospectId}')">Générer le compte-rendu</button>
+          <button class="btn btn-sm btn-ghost" onclick="meetingToggleTranscriptForm('${m.id}','${prospectId}')">Annuler</button>
+        </div>
+      </div>` : '';
     return `
     <div class="log-item" style="border:none;padding:10px 0;border-bottom:1px solid var(--bdr,#eee)">
       <div class="log-dot ld-b"></div>
@@ -3942,8 +3986,10 @@ function renderMeetingsCard(prospectId){
           <button class="btn btn-sm btn-ghost" onclick="navigator.clipboard&&navigator.clipboard.writeText('${esc(m.joinUrl)}');flash('Lien copié')">Copier le lien</button>
           <a class="btn btn-sm btn-ghost" href="${esc(m.joinUrl)}" target="_blank" rel="noopener">Ouvrir dans Teams</a>
           <button class="btn btn-sm btn-ghost" id="mtg-fetch-${m.id}" onclick="meetingFetchRecap('${m.id}','${prospectId}')">${m.status==='fetched'?'Actualiser le compte-rendu':'Récupérer le compte-rendu'}</button>
+          <button class="btn btn-sm btn-ghost" onclick="meetingToggleTranscriptForm('${m.id}','${prospectId}')">Charger un transcript</button>
           ${m.hasRecording?`<button type="button" class="btn btn-sm btn-ghost" onclick="openMeetingRecording('${m.id}')">▶ Enregistrement</button>`:''}
         </div>
+        ${transcriptFormHtml}
         ${m.status==='fetched'?`
         <div style="margin-top:8px;background:var(--bg,#f7f7f5);border-radius:8px;padding:10px 12px">
           <div style="font-size:11px;font-weight:600;color:var(--mu,#888);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Résumé <span style="font-weight:400;text-transform:none;letter-spacing:0">— retouchable avant envoi</span></div>

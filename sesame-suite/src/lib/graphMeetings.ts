@@ -281,7 +281,7 @@ export async function getTranscriptText(organizerUserId: string, meetingId: stri
  * horodatages ("00:00:01.000 --> 00:00:03.500"), ne garde que le texte
  * parlé, une ligne par réplique — suffisant pour un résumé IA, inutile d'y
  * faire apparaître le minutage. */
-function vttToPlainText(vtt: string): string {
+export function vttToPlainText(vtt: string): string {
   return vtt
     .split("\n")
     .filter((line) => line.trim() && !/^WEBVTT/.test(line) && !/-->/i.test(line) && !/^\d+$/.test(line.trim()))

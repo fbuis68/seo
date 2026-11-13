@@ -13,6 +13,7 @@ import {
   listCalendarMeetings,
   resolveOnlineMeetingId,
   extractOidFromJoinUrl,
+  vttToPlainText,
 } from "../lib/graphMeetings";
 import { generateMeetingSummary } from "../lib/aiClaude";
 import { getSmtpConfig, sendEmailRaw } from "../lib/email";
@@ -183,6 +184,59 @@ crmMeetingRouter.post(
           summaryText: recap.summary,
           actionItems: recap.actionItems,
           recordingGraphId,
+          fetchedAt: new Date(),
+        },
+      });
+      res.json(shapeMeeting(updated));
+    } catch (e) {
+      if (e instanceof HttpError) throw e;
+      await prisma.crmMeeting.update({ where: { id }, data: { status: "failed" } }).catch(() => {});
+      throw e;
+    }
+  })
+);
+
+// Même plafond que les autres champs texte libre volumineux de l'app (cf.
+// MAX_FILE_DATA_URL_LENGTH côté questionnaire) — un transcript collé/
+// importé à la main reste du texte, pas un fichier encodé en base64, donc
+// une limite nettement plus généreuse suffit (quelques Mo de texte brut
+// représentent déjà plusieurs heures de réunion retranscrite).
+const MAX_MANUAL_TRANSCRIPT_LENGTH = 2_000_000;
+
+/**
+ * POST /wa/crmMeeting/uploadTranscript — synthèse à partir d'un transcript
+ * chargé à la main (13/11/2026, "permettre de charger également un
+ * transcript et d'en faire la synthèse") — complète fetchRecap ci-dessus
+ * (qui va chercher le transcript automatiquement via Microsoft Graph) pour
+ * les cas où ce transcript n'est pas récupérable (transcription non
+ * activée pendant la réunion, réunion externe non organisée par ce
+ * tenant...) : le commercial colle ou importe lui-même le texte (brut ou
+ * export WebVTT Teams, détecté et nettoyé comme getTranscriptText
+ * ci-dessus), le reste du traitement (résumé + points d'action via Claude)
+ * est identique à fetchRecap.
+ */
+crmMeetingRouter.post(
+  "/crmMeeting/uploadTranscript",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const id = (req.body.id as string) || "";
+    const raw = (req.body.transcriptText as string) || "";
+    const row = await prisma.crmMeeting.findUnique({ where: { id } });
+    if (!row) throw new HttpError(404, "Réunion introuvable");
+    if (raw.length > MAX_MANUAL_TRANSCRIPT_LENGTH) throw new HttpError(400, "Transcript trop volumineux");
+    const transcriptText = /^WEBVTT/i.test(raw.trim()) ? vttToPlainText(raw) : raw.trim();
+    if (!transcriptText) throw new HttpError(400, "Transcript vide — rien à résumer.");
+
+    try {
+      const recap = await generateMeetingSummary(transcriptText);
+      const updated = await prisma.crmMeeting.update({
+        where: { id },
+        data: {
+          status: "fetched",
+          transcriptText,
+          summaryText: recap.summary,
+          actionItems: recap.actionItems,
           fetchedAt: new Date(),
         },
       });
