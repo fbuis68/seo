@@ -41,7 +41,15 @@
      (+ un peu de confort via white-space:nowrap sur les 3 colonnes
      chiffrées), les 4 colonnes se suivent directement ; le vide résiduel
      part à droite du tableau plutôt qu'au milieu d'une ligne. */
-  table{width:auto;max-width:100%;border-collapse:collapse;margin:0}
+  /* 13/11/2026, "toujours pas aligné" — chaque <table> (Matériel/Service/
+     Licence) est un bloc indépendant en width:auto, dimensionné sur son
+     propre contenu : leurs colonnes Total n'avaient aucune raison de
+     tomber à la même position horizontale d'un bloc à l'autre. margin-left:
+     auto plaque chaque tableau sur le bord droit de .devis-dock (même
+     largeur pour tous les blocs), donc leurs colonnes Total s'alignent
+     verticalement entre elles, sans revenir au width:100% qui recréait le
+     grand vide au milieu de chaque ligne (cf. commentaire ci-dessus). */
+  table{width:auto;max-width:100%;margin:0 0 0 auto;border-collapse:collapse}
   th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--mu);font-weight:600;border-bottom:1px solid var(--bdr);padding:0 10px 8px}
   td{padding:9px 10px;border-bottom:1px solid #f2f1ee;font-size:13.5px;vertical-align:top}
   th:not(:first-child),td:not(:first-child){white-space:nowrap}
@@ -212,11 +220,14 @@ function quoteBlocksHtml(){
 function quoteSummaryHtml(){
   const t = QUOTE.totals;
   // Totaux réduits à l'essentiel (30/10/2026, demande client "ne garde que
-  // le montant HT... et le montant de la licence") — montant HT global et
-  // mensuel récurrent (licence) uniquement, plus de TVA/TTC/remise/acompte
-  // affichés ici.
+  // le montant HT... et le montant de la licence") — montant HT ponctuel
+  // (matériel/service, hors licence) et mensuel récurrent (licence) séparés,
+  // plus de TVA/TTC/remise/acompte affichés ici. 13/11/2026, "dans le
+  // montant HT ne pas inclure la licence" : t.totalHT (= oneoffNet + mrrNet,
+  // cf. quoteTotals côté serveur) mélangeait ponctuel et récurrent — on
+  // utilise ici t.oneoffNet seul, qui exclut déjà mrrNet.
   const stats = [
-    {lbl:'Montant HT', val:fmtEUR(t.totalHT), grand:true},
+    {lbl:'Montant HT', val:fmtEUR(t.oneoffNet), grand:true},
     {lbl:'Licence (mensuel)', val:fmtEUR(t.mrrNet)},
   ];
   return `
