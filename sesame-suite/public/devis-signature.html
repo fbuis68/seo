@@ -47,7 +47,7 @@
   th:not(:first-child),td:not(:first-child){white-space:nowrap}
   td:first-child{max-width:360px}
   tbody tr:last-child td{border-bottom:none}
-  .blk-sub{display:flex;justify-content:space-between;gap:24px;max-width:360px;font-weight:600;font-size:12.5px;padding:8px 10px 0;color:var(--tx)}
+  .blk-sub-row td{font-weight:600;font-size:12.5px;padding:8px 10px 0;border-bottom:none;color:var(--tx)}
   .desc{color:var(--mu);font-size:12px;margin-top:3px;line-height:1.4}
   .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:14px}
   .stat-card{background:var(--bg);border-radius:12px;padding:12px 16px;text-align:center}
@@ -203,8 +203,8 @@ function quoteBlocksHtml(){
       <table>
         <thead><tr><th>Prestation</th><th style="text-align:center">Qté</th><th style="text-align:right">Prix unitaire</th><th style="text-align:right">Total</th></tr></thead>
         <tbody>${rows.map(quoteRowHtml).join('')}</tbody>
+        <tfoot><tr class="blk-sub-row"><td colspan="3">Sous-total ${esc(b.label)}</td><td style="text-align:right">${fmtEUR(subtotal)}</td></tr></tfoot>
       </table>
-      <div class="blk-sub"><span>Sous-total ${esc(b.label)}</span><span>${fmtEUR(subtotal)}</span></div>
     </div>`;
   }).join('');
 }
