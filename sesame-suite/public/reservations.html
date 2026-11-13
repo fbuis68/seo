@@ -260,6 +260,10 @@ header.top .spacer{flex:1}
 .searchrow{padding:12px 18px 0;display:flex;gap:8px;align-items:center}
 .searchrow input{flex:1;font-size:16px;padding:11px 14px;border:1.5px solid var(--bdr);border-radius:var(--rs);background:#fff}
 .searchrow input:focus{outline:none;border-color:var(--wine)}
+.searchrow input[type=date]{flex:1;min-width:0;font-size:14px;padding:11px 8px}
+.datesep{color:var(--mu);font-size:13px;flex-shrink:0}
+.datefilter-clear{flex-shrink:0;width:38px;height:38px;border-radius:var(--rs);border:1.5px solid var(--bdr);background:#fff;color:var(--mu);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.datefilter-clear:active{background:var(--bg)}
 
 main{flex:1;padding:12px 18px 60px}
 .daysum{font-size:13px;color:var(--mu);padding:2px 2px 12px}
@@ -420,6 +424,12 @@ main{flex:1;padding:12px 18px 60px}
 
   <div class="searchrow">
     <input type="text" id="rs-search" placeholder="Rechercher un nom…" oninput="rsRender()">
+  </div>
+  <div class="searchrow" id="dateFilterRow">
+    <input type="date" id="rs-date-from" aria-label="Du" onchange="rsRender()">
+    <span class="datesep">→</span>
+    <input type="date" id="rs-date-to" aria-label="Au" onchange="rsRender()">
+    <button type="button" class="datefilter-clear" onclick="rsClearDateFilter()" aria-label="Effacer le filtre de dates" title="Effacer le filtre de dates"><i class="ti ti-x"></i></button>
   </div>
 
   <main>
@@ -630,7 +640,14 @@ function rsSetView(v){
   RS_VIEW = v;
   document.querySelectorAll('#viewTabs .tab').forEach(function(el){ el.classList.toggle('on', el.getAttribute('data-v')===v); });
   document.getElementById('tabs').style.display = v === 'bookings' ? 'flex' : 'none';
+  document.getElementById('dateFilterRow').style.display = v === 'bookings' ? 'flex' : 'none';
   document.getElementById('rs-search').placeholder = v === 'bookings' ? 'Rechercher un nom…' : 'Rechercher un accès…';
+  rsRender();
+}
+
+function rsClearDateFilter(){
+  document.getElementById('rs-date-from').value = '';
+  document.getElementById('rs-date-to').value = '';
   rsRender();
 }
 
@@ -705,12 +722,21 @@ function rsRender(){
   var todayStr = hotelToday();
   var q = (document.getElementById('rs-search').value||'').trim().toLowerCase();
 
+  var dateFrom = (document.getElementById('rs-date-from').value||'');
+  var dateTo = (document.getElementById('rs-date-to').value||'');
+
   var list = RS_BOOKINGS.filter(function(b){
     if(!rsMatchesTab(b, todayStr)) return false;
     if(q){
       var hay = ((b.personFirstname||'')+' '+(b.personLastname||'')+' '+(b.code||'')).toLowerCase();
       if(hay.indexOf(q) === -1) return false;
     }
+    // Sélection par date (13/11/2026, "faire une sélection par date dans
+    // les réservations") — chevauchement du séjour avec la plage choisie,
+    // pas juste la date d'arrivée : un séjour en cours pendant la période
+    // doit remonter même s'il a commencé avant.
+    if(dateFrom && (b.endDate||'').slice(0,10) < dateFrom) return false;
+    if(dateTo && (b.startDate||'').slice(0,10) > dateTo) return false;
     return true;
   }).slice().sort(function(a,b){ return (b.startDate||'').localeCompare(a.startDate||''); });
 
