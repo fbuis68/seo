@@ -2504,15 +2504,25 @@ model CrmMeeting {
   organizerEmail String
   startDateTime  DateTime
   endDateTime    DateTime
-  joinUrl        String
+
+  // teams : réunion Teams créée via Microsoft Graph (joinUrl/graphMeetingId/
+  // graphOrganizerUserId renseignés). manual : réunion hors Teams (téléphone,
+  // présentiel, visio externe type Zoom/Meet — 13/11/2026, demande client) —
+  // aucun appel Graph, seul un transcript chargé à la main permet d'obtenir
+  // un compte-rendu (cf. POST /crmMeeting/uploadTranscript, déjà compatible
+  // avec n'importe quel kind).
+  kind     String  @default("teams")
+  location String?
+
+  joinUrl String?
 
   // Identifiants Microsoft Graph nécessaires pour retrouver transcript et
   // enregistrement après la réunion (GET /users/{graphOrganizerUserId}/
   // onlineMeetings/{graphMeetingId}/transcripts|recordings) — graphMeetingId
   // seul ne suffit pas, Graph exige aussi l'id utilisateur (pas l'email) du
-  // propriétaire de la boîte.
-  graphMeetingId       String
-  graphOrganizerUserId String
+  // propriétaire de la boîte. Absents pour une réunion kind="manual".
+  graphMeetingId       String?
+  graphOrganizerUserId String?
 
   // scheduled : réunion créée, pas encore de compte-rendu récupéré.
   // fetched : transcript/résumé récupérés avec succès au moins une fois.

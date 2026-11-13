@@ -1171,6 +1171,7 @@ crmQuoteRouter.get(
     if (!quote) throw new HttpError(404, "Lien invalide");
     const row = await prisma.crmMeeting.findUnique({ where: { id: req.params.meetingId } });
     if (!row || row.prospectId !== quote.prospectId || !row.recordingGraphId) throw new HttpError(404, "Aucun enregistrement disponible");
+    if (!row.graphOrganizerUserId || !row.graphMeetingId) throw new HttpError(404, "Aucun enregistrement disponible");
     const upstream = await getRecordingStream(row.graphOrganizerUserId, row.graphMeetingId, row.recordingGraphId);
     res.setHeader("Content-Type", upstream.headers.get("content-type") || "video/mp4");
     const contentLength = upstream.headers.get("content-length");

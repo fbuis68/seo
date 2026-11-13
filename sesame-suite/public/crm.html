@@ -3630,7 +3630,7 @@ function renderFiche(c){
           <div class="card" id="admin-access-card">
             <div class="log-empty">Chargement…</div>
           </div>
-          <h2 class="sc-sectionlabel">Réunions Teams</h2>
+          <h2 class="sc-sectionlabel">Réunions</h2>
           <div class="card" id="meetings-card">
             <div class="log-empty">Chargement…</div>
           </div>
@@ -3980,14 +3980,15 @@ function renderMeetingsCard(prospectId){
     <div class="log-item" style="border:none;padding:10px 0;border-bottom:1px solid var(--bdr,#eee)">
       <div class="log-dot ld-b"></div>
       <div class="log-body" style="width:100%">
-        <div class="log-text"><strong>${esc(m.subject)}</strong> <span class="tag ${st[0]}" style="font-size:10px;margin-left:6px">${st[1]}</span></div>
+        <div class="log-text"><strong>${esc(m.subject)}</strong> <span class="tag ${st[0]}" style="font-size:10px;margin-left:6px">${st[1]}</span>${m.kind!=='teams'?` <span class="tag" style="font-size:10px;margin-left:4px">${esc(m.location||'Hors Teams')}</span>`:''}</div>
         <div class="log-meta">${fmtMeetingDate(m.startDateTime)} · organisée par ${esc(m.organizerEmail)}</div>
         <div class="log-acts" style="flex-wrap:wrap">
+          ${m.kind==='teams'?`
           <button class="btn btn-sm btn-ghost" onclick="navigator.clipboard&&navigator.clipboard.writeText('${esc(m.joinUrl)}');flash('Lien copié')">Copier le lien</button>
           <a class="btn btn-sm btn-ghost" href="${esc(m.joinUrl)}" target="_blank" rel="noopener">Ouvrir dans Teams</a>
           <button class="btn btn-sm btn-ghost" id="mtg-fetch-${m.id}" onclick="meetingFetchRecap('${m.id}','${prospectId}')">${m.status==='fetched'?'Actualiser le compte-rendu':'Récupérer le compte-rendu'}</button>
+          ${m.hasRecording?`<button type="button" class="btn btn-sm btn-ghost" onclick="openMeetingRecording('${m.id}')">▶ Enregistrement</button>`:''}`:''}
           <button class="btn btn-sm btn-ghost" onclick="meetingToggleTranscriptForm('${m.id}','${prospectId}')">Charger un transcript</button>
-          ${m.hasRecording?`<button type="button" class="btn btn-sm btn-ghost" onclick="openMeetingRecording('${m.id}')">▶ Enregistrement</button>`:''}
         </div>
         ${transcriptFormHtml}
         ${m.status==='fetched'?`
@@ -4007,7 +4008,7 @@ function renderMeetingsCard(prospectId){
     </div>`;
   }).join('');
   el.innerHTML = `
-    <div class="card-head"><div class="ch-ico">◷</div><span class="ch-title">Réunions Teams</span><button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="openScheduleMeetingModal('${prospectId}')">+ Planifier</button></div>
+    <div class="card-head"><div class="ch-ico">◷</div><span class="ch-title">Réunions</span><button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="openScheduleMeetingModal('${prospectId}')">+ Planifier</button></div>
     ${rows || '<div class="log-empty">Aucune réunion planifiée.</div>'}`;
   ficheCollapsible('meetings-card');
 }
@@ -4019,7 +4020,14 @@ function openScheduleMeetingModal(prospectId){
   document.getElementById('modal-ct').innerHTML = `
   <div class="modal-bg" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)closeModal()">
     <div class="modal-box" style="max-width:440px">
-      <div class="modal-head"><div style="font-size:16px;font-weight:500">Planifier une réunion Teams</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div class="modal-head"><div style="font-size:16px;font-weight:500">Planifier une réunion</div><button class="btn btn-ghost btn-icon" onclick="closeModal()" style="margin-left:auto">✕</button></div>
+      <div class="ff" style="margin-bottom:10px">
+        <label>Type de réunion</label>
+        <select id="mtg-kind" onchange="mtgKindChanged()">
+          <option value="teams">Teams (créée via Microsoft Graph, lien envoyé aux invités)</option>
+          <option value="manual">Autre (téléphone, présentiel, visio externe…)</option>
+        </select>
+      </div>
       <div class="form-grid">
         <div class="ff" style="grid-column:1/-1"><label>Objet</label><input id="mtg-subject" placeholder="Ex : Point avancement projet"></div>
         <div class="ff"><label>Date</label><input type="date" id="mtg-date" value="${dateStr}"></div>
@@ -4030,15 +4038,23 @@ function openScheduleMeetingModal(prospectId){
           <option value="90">1 h 30</option>
           <option value="120">2 h</option>
         </select></div>
-        <div class="ff" style="grid-column:1/-1"><label>En copie (CC)</label><input id="mtg-cc" placeholder="collegue@sesame.technology, autre@client.fr"></div>
+        <div class="ff" id="mtg-cc-row" style="grid-column:1/-1"><label>En copie (CC)</label><input id="mtg-cc" placeholder="collegue@sesame.technology, autre@client.fr"></div>
+        <div class="ff" id="mtg-location-row" style="grid-column:1/-1;display:none"><label>Lieu / type</label><input id="mtg-location" placeholder="Ex : Téléphone, visio Zoom, présentiel…"></div>
       </div>
-      <div style="font-size:11px;color:var(--mu,#888);margin-top:8px">Vous serez l'organisateur. L'enregistrement est autorisé mais pas démarré automatiquement — pensez à cliquer "Démarrer l'enregistrement" en réunion, sauf si votre organisation a déjà une politique d'enregistrement automatique.</div>
+      <div id="mtg-recording-hint" style="font-size:11px;color:var(--mu,#888);margin-top:8px">Vous serez l'organisateur. L'enregistrement est autorisé mais pas démarré automatiquement — pensez à cliquer "Démarrer l'enregistrement" en réunion, sauf si votre organisation a déjà une politique d'enregistrement automatique.</div>
       <div class="modal-footer">
         <button class="btn btn-primary" id="mtg-create-btn" onclick="submitScheduleMeeting('${prospectId}')">Créer la réunion</button>
         <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
       </div>
     </div>
   </div>`;
+}
+
+function mtgKindChanged(){
+  const manual = document.getElementById('mtg-kind').value==='manual';
+  document.getElementById('mtg-cc-row').style.display = manual?'none':'';
+  document.getElementById('mtg-location-row').style.display = manual?'':'none';
+  document.getElementById('mtg-recording-hint').style.display = manual?'none':'';
 }
 
 // Interprète une date+heure saisie comme heure LOCALE Europe/Paris (DST
@@ -4061,6 +4077,7 @@ function parisLocalToUtcDate(dateStr, timeStr){
 }
 
 async function submitScheduleMeeting(prospectId){
+  const kind = document.getElementById('mtg-kind').value;
   const subject = (document.getElementById('mtg-subject').value||'').trim();
   const date = document.getElementById('mtg-date').value;
   const time = document.getElementById('mtg-time').value;
@@ -4069,18 +4086,18 @@ async function submitScheduleMeeting(prospectId){
   if(!date || !time){ flash('Date et heure requises'); return; }
   const start = parisLocalToUtcDate(date, time);
   const end = new Date(start.getTime()+duration*60000);
-  const ccEmails = (document.getElementById('mtg-cc').value||'').split(',').map(s=>s.trim()).filter(Boolean);
   const btn = document.getElementById('mtg-create-btn');
   btn.disabled = true; btn.textContent = 'Création en cours…';
   try{
-    const r = await apiFetch('/wa/crmMeeting/create', {method:'POST', body:JSON.stringify({
-      prospectId, subject, startDateTime:start.toISOString(), endDateTime:end.toISOString(), ccEmails,
-    })});
+    const body = kind==='manual'
+      ? {prospectId, subject, startDateTime:start.toISOString(), endDateTime:end.toISOString(), location:(document.getElementById('mtg-location').value||'').trim()}
+      : {prospectId, subject, startDateTime:start.toISOString(), endDateTime:end.toISOString(), ccEmails:(document.getElementById('mtg-cc').value||'').split(',').map(s=>s.trim()).filter(Boolean)};
+    const r = await apiFetch(kind==='manual'?'/wa/crmMeeting/createManual':'/wa/crmMeeting/create', {method:'POST', body:JSON.stringify(body)});
     const data = await r.json();
     if(!r.ok) throw new Error(data.error||'http '+r.status);
     CRM_MEETINGS.unshift(data);
     closeModal();
-    flash('Réunion Teams créée ✓');
+    flash(kind==='manual'?'Réunion créée ✓':'Réunion Teams créée ✓');
     renderMeetingsCard(prospectId);
   }catch(e){
     flash(e.message||'Erreur de création de la réunion', true);

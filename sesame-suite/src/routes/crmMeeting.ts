@@ -34,7 +34,9 @@ function shapeMeeting(m: {
   organizerEmail: string;
   startDateTime: Date;
   endDateTime: Date;
-  joinUrl: string;
+  kind: string;
+  location: string | null;
+  joinUrl: string | null;
   status: string;
   recordingGraphId: string | null;
   summaryText: string | null;
@@ -49,6 +51,8 @@ function shapeMeeting(m: {
     organizerEmail: m.organizerEmail,
     startDateTime: m.startDateTime,
     endDateTime: m.endDateTime,
+    kind: m.kind,
+    location: m.location,
     joinUrl: m.joinUrl,
     status: m.status,
     hasRecording: !!m.recordingGraphId,
@@ -125,9 +129,55 @@ crmMeetingRouter.post(
         organizerEmail,
         startDateTime: start,
         endDateTime: end,
+        kind: "teams",
         joinUrl: meeting.joinWebUrl,
         graphMeetingId: meeting.id,
         graphOrganizerUserId: organizerUserId,
+      },
+    });
+    res.status(201).json(shapeMeeting(row));
+  })
+);
+
+interface CreateManualBody {
+  prospectId: string;
+  subject: string;
+  startDateTime: string;
+  endDateTime: string;
+  location?: string;
+}
+
+/**
+ * POST /wa/crmMeeting/createManual — réunion hors Teams (téléphone,
+ * présentiel, visio externe — 13/11/2026, demande client). Aucun appel
+ * Microsoft Graph : juste un enregistrement local, le compte-rendu se fait
+ * ensuite via POST /crmMeeting/uploadTranscript (déjà compatible avec tout
+ * kind de réunion).
+ */
+crmMeetingRouter.post(
+  "/crmMeeting/createManual",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const b = req.body as CreateManualBody;
+    if (!b.prospectId) throw new HttpError(400, "prospectId requis");
+    if (!b.subject || !b.subject.trim()) throw new HttpError(400, "Objet de la réunion requis");
+    const start = new Date(b.startDateTime);
+    const end = new Date(b.endDateTime);
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) throw new HttpError(400, "Dates de réunion invalides");
+
+    const prospect = await prisma.crmProspect.findUnique({ where: { id: b.prospectId } });
+    if (!prospect) throw new HttpError(404, "Prospect introuvable");
+
+    const row = await prisma.crmMeeting.create({
+      data: {
+        prospectId: b.prospectId,
+        subject: b.subject.trim(),
+        organizerEmail: req.admin!.email,
+        startDateTime: start,
+        endDateTime: end,
+        kind: "manual",
+        location: (b.location || "").trim() || null,
       },
     });
     res.status(201).json(shapeMeeting(row));
@@ -150,6 +200,8 @@ crmMeetingRouter.post(
     const id = (req.body.id as string) || "";
     const row = await prisma.crmMeeting.findUnique({ where: { id } });
     if (!row) throw new HttpError(404, "Réunion introuvable");
+    if (row.kind !== "teams" || !row.graphOrganizerUserId || !row.graphMeetingId)
+      throw new HttpError(400, "Compte-rendu automatique indisponible pour une réunion non-Teams — chargez un transcript manuellement.");
 
     try {
       const transcripts = await listTranscripts(row.graphOrganizerUserId, row.graphMeetingId);
@@ -281,6 +333,7 @@ crmMeetingRouter.get(
   asyncHandler(async (req, res) => {
     const row = await prisma.crmMeeting.findUnique({ where: { id: req.params.id } });
     if (!row || !row.recordingGraphId) throw new HttpError(404, "Aucun enregistrement disponible pour cette réunion");
+    if (!row.graphOrganizerUserId || !row.graphMeetingId) throw new HttpError(404, "Aucun enregistrement disponible pour cette réunion");
     const upstream = await getRecordingStream(row.graphOrganizerUserId, row.graphMeetingId, row.recordingGraphId);
     res.setHeader("Content-Type", upstream.headers.get("content-type") || "video/mp4");
     const contentLength = upstream.headers.get("content-length");
