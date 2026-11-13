@@ -989,6 +989,13 @@ overflow:hidden
         <i class="ti ti-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--mu);font-size:13px"></i>
         <input type="text" id="resa-search-name" placeholder="Rechercher un nom…" oninput="renderReservations()" style="padding-left:30px">
       </div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu)">
+        Arrivée
+        <input type="date" id="resa-f-datefrom" onchange="renderReservations()" style="max-width:150px">
+        <span>→</span>
+        <input type="date" id="resa-f-dateto" onchange="renderReservations()" style="max-width:150px">
+        <button type="button" class="btn btn-s" onclick="resaClearDateFilter()" title="Effacer le filtre de dates" style="padding:6px 9px;width:auto"><i class="ti ti-x"></i></button>
+      </div>
     </div>
     <div id="resa-subfilters" style="display:none;gap:8px;flex-wrap:wrap;margin-bottom:12px;padding:10px;background:var(--bg);border-radius:var(--rs)">
       <select id="resa-f-room" onchange="renderReservations()" style="max-width:180px"><option value="">Toutes les chambres</option></select>
@@ -16763,6 +16770,12 @@ var RESA_PASSES_CACHE = [];
 var RESA_NFC_TARGET_PASS_ID = null;
 var RESA_NFC_TARGET_BTN_ID = 'resa-detail-nfc-btn';
 
+function resaClearDateFilter(){
+  document.getElementById('resa-f-datefrom').value = '';
+  document.getElementById('resa-f-dateto').value = '';
+  renderReservations();
+}
+
 function resaSetTab(tab){
   RESA_TAB = tab;
   document.querySelectorAll('#resa-tabs .ptab').forEach(function(el){ el.classList.toggle('on', el.getAttribute('data-filter')===tab); });
@@ -16820,6 +16833,13 @@ function renderReservations(){
   // sous-filtre "En arrivées"), s'applique à TOUS les onglets et cherche
   // dans le nom ET le prénom.
   var nameQ = ((document.getElementById('resa-search-name')||{}).value || '').trim().toLowerCase();
+  // Sélection par date d'arrivée (13/11/2026, "pas de sélection par date
+  // d'arrivée dans les réservations dans l'admin") — comme nameQ, s'applique
+  // à TOUS les onglets, pas seulement "En arrivées" (sur startDate, pas un
+  // chevauchement de séjour : l'utilisateur veut précisément la date
+  // d'arrivée ici).
+  var dateFromF = (document.getElementById('resa-f-datefrom')||{}).value || '';
+  var dateToF = (document.getElementById('resa-f-dateto')||{}).value || '';
 
   var list = RESA_CACHE.filter(function(r){
     var b = r.booking;
@@ -16828,6 +16848,8 @@ function renderReservations(){
       var full = ((b.personFirstname||'')+' '+(b.personLastname||'')).toLowerCase();
       if(full.indexOf(nameQ) === -1) return false;
     }
+    if(dateFromF && (b.startDate||'').slice(0,10) < dateFromF) return false;
+    if(dateToF && (b.startDate||'').slice(0,10) > dateToF) return false;
     if(applySubfilters){
       var roomCode = b.selectedRoomCode || b.facilityCode || '';
       if(roomF && roomCode !== roomF) return false;
