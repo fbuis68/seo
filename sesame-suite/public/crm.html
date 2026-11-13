@@ -582,6 +582,9 @@ svg.tr-chart{display:block;width:100%;height:auto;min-width:640px}
 #sesame-client a:not(.btn){color:var(--sc-blue)}
 #sesame-client a.btn{text-decoration:none}
 #sesame-client [hidden]{display:none!important}
+/* Zone de dépôt par glisser-déposer (13/11/2026, "rajouts de documents...
+   drag and drop") — surbrillance pendant le survol avec un fichier. */
+#sesame-client #client-uploads-card.drop-hover{outline:2px dashed var(--sc-blue);outline-offset:-2px;background:var(--sc-soft)}
 #sesame-client h1,#sesame-client h2,#sesame-client h3{font-family:inherit;margin:0}
 #sesame-client .sc-top{display:flex;align-items:center;gap:18px;padding:14px 22px;background:var(--sc-panel);border-bottom:1px solid var(--sc-line);flex-wrap:wrap}
 #sesame-client .sc-logo{font-size:18px;font-weight:700;letter-spacing:-.5px;color:var(--sc-blue)}
@@ -3729,21 +3732,28 @@ function clientUploadsCardHtml(c){
       </div>
       <button class="btn btn-ghost btn-sm" style="color:#a32d2d" onclick="ficheDeleteClientUpload('${c.id}','${u.id}')" title="Supprimer">✕</button>
     </div>`).join('');
-  return `<div class="card" id="client-uploads-card">
+  return `<div class="card" id="client-uploads-card"
+      ondragover="event.preventDefault();this.classList.add('drop-hover')"
+      ondragleave="this.classList.remove('drop-hover')"
+      ondrop="event.preventDefault();this.classList.remove('drop-hover');ficheClientUploadFiles('${c.id}',event.dataTransfer.files)">
     <div class="card-head">
       <div class="ch-ico">📎</div>
       <span class="ch-title">Documents du client</span>
       <span style="font-size:12px;color:#aaa;margin-left:8px">${uploads.length} document${uploads.length>1?'s':''}</span>
       <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="document.getElementById('client-upload-file-${c.id}').click()">+ Déposer un document</button>
-      <input type="file" id="client-upload-file-${c.id}" style="display:none" onchange="ficheUploadClientDocument('${c.id}',this)">
+      <input type="file" id="client-upload-file-${c.id}" multiple style="display:none" onchange="ficheClientUploadFiles('${c.id}',this.files);this.value=''">
     </div>
-    <div>${rows || '<div class="log-empty">Aucun document pour ce client.</div>'}</div>
+    <div>${rows || '<div class="log-empty">Aucun document pour ce client — glissez-déposez un fichier ici, ou utilisez le bouton ci-dessus.</div>'}</div>
   </div>`;
 }
-async function ficheUploadClientDocument(prospectId, input){
-  const file = input.files && input.files[0];
+function ficheClientUploadFiles(prospectId, fileList){
+  const files = Array.from(fileList||[]);
+  if(!files.length) return;
+  (async()=>{ for(const f of files) await ficheUploadClientDocument(prospectId, f); })();
+}
+async function ficheUploadClientDocument(prospectId, file){
   if(!file) return;
-  if(file.size > 7*1024*1024){ flash('Fichier trop volumineux (7 Mo max)'); input.value=''; return; }
+  if(file.size > 7*1024*1024){ flash('Fichier trop volumineux (7 Mo max) : '+file.name); return; }
   const dataUrl = await new Promise((resolve,reject)=>{
     const r = new FileReader();
     r.onload = ()=>resolve(r.result);
@@ -3762,7 +3772,6 @@ async function ficheUploadClientDocument(prospectId, input){
     if(el && c) el.outerHTML = clientUploadsCardHtml(c);
     flash('Document ajouté ✓');
   }catch(e){ flash(e.message||"Erreur de dépôt du document"); }
-  input.value = '';
 }
 async function ficheDeleteClientUpload(prospectId, id){
   if(!confirm('Supprimer ce document ?')) return;
