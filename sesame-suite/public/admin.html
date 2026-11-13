@@ -8992,8 +8992,15 @@ function bsRenderStatusBanner(){
   var el = document.getElementById('bs-status-banner');
   if(!BS_CONFIG || !BS_CONFIG.lastSyncAt){ el.style.display='none'; return; }
   el.style.display='block';
-  var ok = BS_CONFIG.lastSyncStatus==='success';
   var when = new Date(BS_CONFIG.lastSyncAt).toLocaleString('fr-FR');
+  // "running" (13/11/2026) : import lancé mais pas encore terminé — ex.
+  // après un rechargement de page pendant qu'un gros import tourne encore
+  // en arrière-plan côté serveur. Distinct de success/error, pas un warning.
+  if(BS_CONFIG.lastSyncStatus === 'running'){
+    el.innerHTML = '<div class="alt alt-b"><i class="ti ti-loader-2"></i><span>Import en cours depuis <strong>'+when+'</strong> — actualisez cette page dans quelques minutes.</span></div>';
+    return;
+  }
+  var ok = BS_CONFIG.lastSyncStatus==='success';
   el.innerHTML = '<div class="alt '+(ok?'alt-g':'alt-w')+'"><i class="ti '+(ok?'ti-check-circle':'ti-alert-triangle')+'"></i>'
     +'<span>Dernière synchronisation : <strong>'+when+'</strong> — '+esc(BS_CONFIG.lastSyncMessage||'')+'</span></div>';
 }

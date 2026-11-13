@@ -724,6 +724,12 @@ bookingSourceRouter.post(
  * front-end n'a qu'à repasser par GET /bookingSource/config (déjà utilisé)
  * pour savoir quand c'est fini et afficher le résultat.
  */
+// Au-delà de ce délai, un statut "running" est traité comme bloqué (process
+// tué en plein import — redéploiement, crash…) plutôt que comme un import
+// réellement en cours : sans ça, un seul import interrompu verrouillerait
+// "Importer maintenant" indéfiniment (409 à chaque tentative, cf. ci-dessous).
+const RUNNING_STALE_MS = 30 * 60 * 1000;
+
 bookingSourceRouter.post(
   "/bookingSource/import",
   requireAdmin,
@@ -731,8 +737,11 @@ bookingSourceRouter.post(
     const entity = await resolveEntity(req);
     const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
     if (!config || !config.baseUrl) throw new HttpError(400, "Connecteur non configuré — enregistrez d'abord les réglages");
-    if (config.lastSyncStatus === "running") throw new HttpError(409, "Un import est déjà en cours pour cet établissement — attendez qu'il se termine.");
-    await prisma.bookingSourceConfig.update({ where: { id: config.id }, data: { lastSyncStatus: "running", lastSyncMessage: null } });
+    const runningStale = config.lastSyncStatus === "running" && (!config.lastSyncAt || Date.now() - config.lastSyncAt.getTime() > RUNNING_STALE_MS);
+    if (config.lastSyncStatus === "running" && !runningStale) {
+      throw new HttpError(409, "Un import est déjà en cours pour cet établissement — attendez qu'il se termine.");
+    }
+    await prisma.bookingSourceConfig.update({ where: { id: config.id }, data: { lastSyncStatus: "running", lastSyncMessage: null, lastSyncAt: new Date() } });
     runImport(entity, config).catch(() => {});
     res.json({ started: true });
   })

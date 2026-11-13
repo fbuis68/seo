@@ -22,6 +22,31 @@ async function fetchWithTimeout(url: string, opts: RequestInit = {}): Promise<Re
   return fetch(url, { ...opts, signal: AbortSignal.timeout(CONNECTOR_TIMEOUT_MS) });
 }
 
+/**
+ * Traite `items` avec au plus `concurrency` appels de `fn` en vol en même
+ * temps, dans l'ordre d'entrée (13/11/2026, "près de 25 minutes d'import et
+ * toujours rien") — upsertMappedBookings et la synchronisation des Pass
+ * faisaient un appel PAR réservation STRICTEMENT séquentiel (chacun pouvant
+ * attendre jusqu'à CONNECTOR_TIMEOUT_MS=15s pour les appels externes) :
+ * sur plusieurs centaines de réservations, le pire cas dépasse largement
+ * les 20-30 minutes. Paralléliser par lots indépendants (chaque réservation
+ * est traitée séparément, pas de dépendance entre elles) réduit le temps
+ * total d'un facteur proche de `concurrency` sans changer le résultat.
+ */
+async function mapWithConcurrency<T, R>(items: T[], concurrency: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) return;
+      results[i] = await fn(items[i]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(concurrency, items.length)) }, worker));
+  return results;
+}
+
 /** Champs Booking que le mapping peut renseigner — valeur = dot-path dans
  * chaque élément du tableau JSON retourné par la source externe. */
 export interface FieldMapping {
@@ -750,10 +775,12 @@ export async function upsertMappedFacilities(entity: Entity, mapped: MappedFacil
  * traitée) — utilisé par runImport pour enchaîner la synchronisation des
  * Pass de chacune, qui a besoin de l'externalId (pas notre id ni le code). */
 export async function upsertMappedBookings(entity: Entity, mapped: MappedBooking[], sourceName: string) {
-  let created = 0;
-  let updated = 0;
-  const synced: { id: string; externalId: string }[] = [];
-  for (const b of mapped) {
+  // Chaque réservation touche une ligne Booking distincte (code unique par
+  // source) — indépendantes entre elles, donc traitées par lots parallèles
+  // (cf. mapWithConcurrency) plutôt que strictement séquentiellement : sur
+  // plusieurs centaines de réservations, le gain sur le temps total est
+  // proche du facteur de concurrence choisi.
+  const perBooking = await mapWithConcurrency(mapped, 6, async (b) => {
     // b.facilityCode peut désormais lister plusieurs accès ("201,203") — Room
     // reste à une seule chambre, donc on ne cherche que sur le premier code
     // (celui affiché comme chambre principale de la réservation).
@@ -783,13 +810,14 @@ export async function upsertMappedBookings(entity: Entity, mapped: MappedBooking
       importedFrom: sourceName,
     };
     let rowId: string;
+    let wasCreated: boolean;
     if (existing) {
       await prisma.booking.update({ where: { id: existing.id }, data });
-      updated++;
+      wasCreated = false;
       rowId = existing.id;
     } else {
       const row = await prisma.booking.create({ data: { entityId: entity.id, code: b.code, ...data } });
-      created++;
+      wasCreated = true;
       rowId = row.id;
       fireTrigger("booking.created", {
         entityId: entity.id,
@@ -800,7 +828,16 @@ export async function upsertMappedBookings(entity: Entity, mapped: MappedBooking
       }).catch((e) => console.error("[automation] booking.created:", e));
     }
     const externalId = b.externalId || existing?.externalId || "";
-    if (externalId) synced.push({ id: rowId, externalId });
+    return { wasCreated, rowId, externalId };
+  });
+
+  let created = 0;
+  let updated = 0;
+  const synced: { id: string; externalId: string }[] = [];
+  for (const r of perBooking) {
+    if (r.wasCreated) created++;
+    else updated++;
+    if (r.externalId) synced.push({ id: r.rowId, externalId: r.externalId });
   }
   return { created, updated, synced };
 }
@@ -930,8 +967,12 @@ export async function runImport(entity: Entity, config: BookingSourceConfig) {
       let passCreated = 0;
       let passUpdated = 0;
       let passFailed = 0;
-      for (const b of synced) {
-        const result = await syncPassesForBooking(entity, config, b);
+      // Même parallélisation que upsertMappedBookings ci-dessus — chaque
+      // appel externe peut attendre jusqu'à CONNECTOR_TIMEOUT_MS (15s), un
+      // par réservation strictement séquentiel faisait dépasser 20-30
+      // minutes sur plusieurs centaines de réservations.
+      const passResults = await mapWithConcurrency(synced, 6, (b) => syncPassesForBooking(entity, config, b));
+      for (const result of passResults) {
         if (result.ok) {
           passCreated += result.created;
           passUpdated += result.updated;
