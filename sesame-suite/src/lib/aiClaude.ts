@@ -17,29 +17,47 @@ import { HttpError } from "./asyncHandler";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 
+// 13/11/2026, "la génération d'un compte-rendu ne fait rien" — ce fetch
+// n'avait AUCUNE limite de temps (contrairement à CONNECTOR_TIMEOUT_MS dans
+// lib/bookingSource.ts) : un souci réseau vers api.anthropic.com (coupure
+// silencieuse, pas de RST) laissait la requête en l'air indéfiniment, et
+// avec elle le bouton "Analyse en cours…" côté client — sans jamais
+// atteindre le catch qui aurait affiché une erreur.
+const CLAUDE_CALL_TIMEOUT_MS = 90_000;
+// Recherche web (findCompanyNews, huntMarket) : plusieurs allers-retours
+// outil/modèle côté Anthropic, légitimement plus long qu'un simple appel.
+const CLAUDE_SEARCH_TIMEOUT_MS = 150_000;
+
 export function aiClaudeConfigured(): boolean {
   return !!config.anthropicApiKey;
 }
 
 async function callClaude(params: { system: string; messages: { role: "user" | "assistant"; content: string }[]; tool: AnthropicTool; maxTokens?: number }): Promise<Record<string, unknown>> {
   if (!config.anthropicApiKey) throw new HttpError(503, "Assistant IA non configuré (ANTHROPIC_API_KEY manquant)");
-  const r = await fetch(ANTHROPIC_URL, {
-    method: "POST",
-    headers: {
-      "x-api-key": config.anthropicApiKey,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-      ...(config.anthropicWorkspaceId ? { "anthropic-workspace-id": config.anthropicWorkspaceId } : {}),
-    },
-    body: JSON.stringify({
-      model: config.anthropicModel,
-      max_tokens: params.maxTokens || 1500,
-      system: [{ type: "text", text: params.system, cache_control: { type: "ephemeral" } }],
-      messages: params.messages,
-      tools: [params.tool],
-      tool_choice: { type: "tool", name: params.tool.name },
-    }),
-  });
+  let r: Response;
+  try {
+    r = await fetch(ANTHROPIC_URL, {
+      method: "POST",
+      headers: {
+        "x-api-key": config.anthropicApiKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+        ...(config.anthropicWorkspaceId ? { "anthropic-workspace-id": config.anthropicWorkspaceId } : {}),
+      },
+      body: JSON.stringify({
+        model: config.anthropicModel,
+        max_tokens: params.maxTokens || 1500,
+        system: [{ type: "text", text: params.system, cache_control: { type: "ephemeral" } }],
+        messages: params.messages,
+        tools: [params.tool],
+        tool_choice: { type: "tool", name: params.tool.name },
+      }),
+      signal: AbortSignal.timeout(CLAUDE_CALL_TIMEOUT_MS),
+    });
+  } catch (e) {
+    if (e instanceof Error && e.name === "TimeoutError") throw new HttpError(504, `Pas de réponse de Claude après ${CLAUDE_CALL_TIMEOUT_MS / 1000}s — réessayez.`);
+    throw new HttpError(502, `Échec de connexion à Claude : ${e instanceof Error ? e.message : "erreur inconnue"}`);
+  }
   if (!r.ok) {
     const body = await r.text().catch(() => "");
     throw new HttpError(502, `Échec de l'appel Claude (${r.status}) : ${body.slice(0, 300)}`);
@@ -370,22 +388,29 @@ export async function findCompanyNews(companyName: string, secteur?: string): Pr
   if (!config.anthropicApiKey) return [];
   const system = `Tu es un analyste qui recherche de l'actualité récente (3 derniers mois si possible) et vérifiable sur UNE entreprise précise, pour un commercial B2B. Utilise l'outil de recherche web disponible. Ne retiens que des résultats qui parlent RÉELLEMENT de cette entreprise (attention aux homonymes) — ignore les annuaires/pages publicitaires sans contenu informatif. Termine ta réponse par UNIQUEMENT un bloc JSON (aucun texte avant ou après), au format exact : {"items":[{"title":"...","url":"...","publishedAt":"AAAA-MM-JJ ou null","summary":"1-2 phrases en français"}]}. Maximum 3 items, liste vide si rien de pertinent. N'invente jamais une url : chaque url doit provenir d'un résultat de recherche réel obtenu via l'outil.`;
   const query = secteur ? `${companyName} (secteur : ${secteur})` : companyName;
-  const r = await fetch(ANTHROPIC_URL, {
-    method: "POST",
-    headers: {
-      "x-api-key": config.anthropicApiKey,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-      ...(config.anthropicWorkspaceId ? { "anthropic-workspace-id": config.anthropicWorkspaceId } : {}),
-    },
-    body: JSON.stringify({
-      model: config.anthropicModel,
-      max_tokens: 1200,
-      system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
-      messages: [{ role: "user", content: `Entreprise à rechercher : ${query}` }],
-      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
-    }),
-  });
+  let r: Response;
+  try {
+    r = await fetch(ANTHROPIC_URL, {
+      method: "POST",
+      headers: {
+        "x-api-key": config.anthropicApiKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+        ...(config.anthropicWorkspaceId ? { "anthropic-workspace-id": config.anthropicWorkspaceId } : {}),
+      },
+      body: JSON.stringify({
+        model: config.anthropicModel,
+        max_tokens: 1200,
+        system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+        messages: [{ role: "user", content: `Entreprise à rechercher : ${query}` }],
+        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
+      }),
+      signal: AbortSignal.timeout(CLAUDE_SEARCH_TIMEOUT_MS),
+    });
+  } catch (e) {
+    if (e instanceof Error && e.name === "TimeoutError") throw new HttpError(504, `Pas de réponse de Claude (recherche web) après ${CLAUDE_SEARCH_TIMEOUT_MS / 1000}s — réessayez.`);
+    throw new HttpError(502, `Échec de connexion à Claude : ${e instanceof Error ? e.message : "erreur inconnue"}`);
+  }
   if (!r.ok) {
     const body = await r.text().catch(() => "");
     throw new HttpError(502, `Échec recherche web Claude (${r.status}) : ${body.slice(0, 300)}`);
@@ -440,22 +465,29 @@ export async function huntMarket(params: { marcheLabel: string; icp: string; exc
     : "Aucune entreprise déjà connue à exclure.";
   const system = `Tu es un analyste qui identifie des entreprises françaises RÉELLES et DISTINCTES correspondant précisément au profil cible ci-dessous, pour un commercial B2B (Sesame Technology, contrôle d'accès connecté/hôtellerie). Utilise l'outil de recherche web. Ne retiens une entreprise QUE si tu peux citer un signal d'achat concret et récent (ouverture, rénovation, agrandissement, recrutement lié, changement de prestataire...) appuyé par une source réellement consultable — jamais une supposition, jamais une entreprise simplement listée dans un annuaire sans actualité associée. Ignore toute entreprise de la liste d'exclusion ci-dessous (même sous un nom légèrement différent). Termine ta réponse par UNIQUEMENT un bloc JSON (aucun texte avant ou après), au format exact : {"items":[{"name":"...","ville":"... ou null","site_web":"https://... ou null","taille_hint":"ex: '80 chambres' ou '3 courts' ou null si inconnu","signal_type":"ouverture|renovation|recrutement|agrandissement|autre","signal_summary":"1-2 phrases en français","signal_url":"url réelle de la source","signal_date":"AAAA-MM-JJ ou null","confidence":0.0-1.0,"decision_maker_name":"nom trouvé ou null","decision_maker_title":"fonction trouvée ou null"}]}. Maximum ${params.limit} items, liste vide si rien de pertinent et vérifiable. N'invente jamais un nom d'entreprise ni une url : chaque entrée doit provenir d'un résultat de recherche réel obtenu via l'outil.`;
   const userMsg = `Profil cible (marché "${params.marcheLabel}") : ${params.icp}\nTerritoire : France\n\n${excludeBlock}`;
-  const r = await fetch(ANTHROPIC_URL, {
-    method: "POST",
-    headers: {
-      "x-api-key": config.anthropicApiKey,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-      ...(config.anthropicWorkspaceId ? { "anthropic-workspace-id": config.anthropicWorkspaceId } : {}),
-    },
-    body: JSON.stringify({
-      model: config.anthropicModel,
-      max_tokens: 2500,
-      system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
-      messages: [{ role: "user", content: userMsg }],
-      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 6 }],
-    }),
-  });
+  let r: Response;
+  try {
+    r = await fetch(ANTHROPIC_URL, {
+      method: "POST",
+      headers: {
+        "x-api-key": config.anthropicApiKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+        ...(config.anthropicWorkspaceId ? { "anthropic-workspace-id": config.anthropicWorkspaceId } : {}),
+      },
+      body: JSON.stringify({
+        model: config.anthropicModel,
+        max_tokens: 2500,
+        system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+        messages: [{ role: "user", content: userMsg }],
+        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 6 }],
+      }),
+      signal: AbortSignal.timeout(CLAUDE_SEARCH_TIMEOUT_MS),
+    });
+  } catch (e) {
+    if (e instanceof Error && e.name === "TimeoutError") throw new HttpError(504, `Pas de réponse de Claude (Market Hunter) après ${CLAUDE_SEARCH_TIMEOUT_MS / 1000}s — réessayez.`);
+    throw new HttpError(502, `Échec de connexion à Claude : ${e instanceof Error ? e.message : "erreur inconnue"}`);
+  }
   if (!r.ok) {
     const body = await r.text().catch(() => "");
     throw new HttpError(502, `Échec recherche web Market Hunter (${r.status}) : ${body.slice(0, 300)}`);
