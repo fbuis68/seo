@@ -8398,11 +8398,11 @@ function renderDevisList(){
     const t = q.totals || {totalTTC:0, mrrNet:0};
     return `<tr style="cursor:pointer" onclick="openQuoteBuilder('${q.id}')">
       <td><strong>${esc(q.number)}</strong></td>
-      <td>${esc(q.prospectNom)}</td>
+      <td><span class="bc-link" onclick="event.stopPropagation();showFiche('${q.prospectId}')" title="Voir la fiche client">${esc(q.prospectNom)}</span></td>
       <td>${esc(q.title)||'<span class="log-empty">—</span>'}</td>
       <td><span class="tpill ${q.status==='accepté'?'bg':q.status==='refusé'?'bd':q.status==='envoyé'?'bi':'bn'}">${esc(q.status)}</span></td>
       <td style="text-align:right">${fmtEUR(t.totalTTC)}${t.mrrNet?' + '+fmtEUR(t.mrrNet)+'/mois':''}</td>
-      <td style="font-size:12px;color:var(--mu)">${q.dealTitle?esc(q.dealTitle):'<span class="log-empty">Non rattaché</span>'}</td>
+      <td style="font-size:12px;color:var(--mu)">${q.dealTitle?`<span class="bc-link" onclick="event.stopPropagation();openDealModal('${q.dealId}')" title="Voir l'affaire">${esc(q.dealTitle)}</span>`:'<span class="log-empty">Non rattaché</span>'}</td>
       <td style="font-size:12px;color:var(--mu)">${new Date(q.createdAt).toLocaleDateString('fr-FR')}</td>
     </tr>`;
   }).join('');
@@ -9067,6 +9067,7 @@ function renderQuoteBuilder(){
             <option value="">— Sélectionner un client —</option>
             ${prospectOptions.map(c=>`<option value="${c.id}" ${q.prospectId===c.id?'selected':''}>${esc(c.nom)}</option>`).join('')}
           </select>
+          ${q.prospectId?`<a href="#" onclick="event.preventDefault();showFiche('${q.prospectId}')" style="font-size:12px;display:inline-block;margin-top:4px">→ Voir la fiche client</a>`:''}
         </div>
         <div class="ff"><label>Objet du devis</label><input id="dq-title" value="${esc(q.title)}" placeholder="Ex : Équipement de 20 accès connectés" onchange="captureQuoteHead()"></div>
         <div class="ff db-status"><label>Statut</label>
@@ -9265,7 +9266,7 @@ function dqRenderDocumentTab(q, lines){
     <div class="ff" style="margin-top:16px"><label>Statut</label><select id="dq-status" onchange="dqRerender()">${['brouillon','envoyé','accepté','refusé'].map(s=>`<option value="${s}" ${q.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
 
     <h4 style="margin-top:16px">Affaire liée</h4>
-    ${q.dealId?`<div class="db-row" style="align-items:center;gap:8px"><span class="tpill bn">${esc(q.dealTitle||'')}</span><button class="btn btn-ghost btn-sm" onclick="dqDetachDeal()">Détacher</button></div>`
+    ${q.dealId?`<div class="db-row" style="align-items:center;gap:8px"><span class="tpill bn bc-link" onclick="openDealModal('${q.dealId}')" title="Voir l'affaire">${esc(q.dealTitle||'')}</span><button class="btn btn-ghost btn-sm" onclick="dqDetachDeal()">Détacher</button></div>`
       :`<div class="db-row" style="gap:8px;flex-wrap:wrap">
           <button class="btn btn-ghost btn-sm" ${q.id?'':'disabled title="Enregistrez d\'abord le devis"'} onclick="dqOpenAttachDeal()">Lier à une affaire existante</button>
           <button class="btn btn-ghost btn-sm" ${q.id?'':'disabled title="Enregistrez d\'abord le devis"'} onclick="dqCreateDealFromQuote()">+ Créer une affaire depuis ce devis</button>
