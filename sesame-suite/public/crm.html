@@ -8028,7 +8028,7 @@ function renderDealModal(){
           <div class="log-item" style="cursor:pointer" onclick="closeModal();openQuoteBuilder('${q.id}')">
             <div class="log-dot ld-b"></div>
             <div class="log-body">
-              <div class="log-text"><strong>${q.number}</strong> <span class="tpill ${q.status==='accepté'?'bg':q.status==='refusé'?'bd':q.status==='envoyé'?'bi':'bn'}" style="margin-left:6px">${q.status}</span></div>
+              <div class="log-text"><strong>${q.number}</strong> <span class="tpill ${q.status==='accepté'?'bg':q.status==='refusé'?'bd':q.status==='envoyé'?'bi':'bn'}" style="margin-left:6px">${q.status}</span>${q.sentAt?` <span style="font-size:11px;color:var(--mu)">✉ ${new Date(q.sentAt).toLocaleDateString('fr-FR')}</span>`:''}</div>
             </div>
           </div>`).join('')}
       </div>
@@ -8435,7 +8435,7 @@ function renderDevisList(){
       <td><strong>${esc(q.number)}</strong></td>
       <td><span class="bc-link" onclick="event.stopPropagation();showFiche('${q.prospectId}')" title="Voir la fiche client">${esc(q.prospectNom)}</span></td>
       <td>${esc(q.title)||'<span class="log-empty">—</span>'}</td>
-      <td><span class="tpill ${q.status==='accepté'?'bg':q.status==='refusé'?'bd':q.status==='envoyé'?'bi':'bn'}">${esc(q.status)}</span></td>
+      <td><span class="tpill ${q.status==='accepté'?'bg':q.status==='refusé'?'bd':q.status==='envoyé'?'bi':'bn'}">${esc(q.status)}</span>${q.sentAt?` <span title="Envoyé le ${new Date(q.sentAt).toLocaleDateString('fr-FR')}" style="font-size:11px;color:var(--mu)">✉ ${new Date(q.sentAt).toLocaleDateString('fr-FR')}</span>`:''}</td>
       <td style="text-align:right">${fmtEUR(t.totalTTC)}${t.mrrNet?' + '+fmtEUR(t.mrrNet)+'/mois':''}</td>
       <td style="font-size:12px;color:var(--mu)">${q.dealTitle?`<span class="bc-link" onclick="event.stopPropagation();openDealModal('${q.dealId}')" title="Voir l'affaire">${esc(q.dealTitle)}</span>`:'<span class="log-empty">Non rattaché</span>'}</td>
       <td style="font-size:12px;color:var(--mu)">${new Date(q.createdAt).toLocaleDateString('fr-FR')}</td>
@@ -9107,6 +9107,7 @@ function renderQuoteBuilder(){
         <div class="ff"><label>Objet du devis</label><input id="dq-title" value="${esc(q.title)}" placeholder="Ex : Équipement de 20 accès connectés" onchange="captureQuoteHead()"></div>
         <div class="ff db-status"><label>Statut</label>
           <span class="tpill ${q.status==='accepté'?'bg':q.status==='refusé'?'bd':q.status==='envoyé'?'bi':'bn'}">${q._new?'Nouveau':q.status}</span>
+          ${q.sentAt?`<div style="font-size:11px;color:var(--mu);margin-top:4px">✉ Envoyé le ${new Date(q.sentAt).toLocaleDateString('fr-FR')}</div>`:''}
           ${unpriced?`<div style="font-size:11px;color:#a67c00;margin-top:4px">${unpriced} tarif(s) à compléter</div>`:''}
         </div>
       </div>

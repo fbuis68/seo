@@ -31,7 +31,7 @@ function shapeDeal(d: {
   updatedAt: Date;
   prospect?: { nom: string } | null;
   commercial?: { id: string; name: string | null; email: string } | null;
-  quotes?: { id: string; number: string; status: string }[];
+  quotes?: { id: string; number: string; status: string; sentAt: Date | null }[];
 }) {
   return {
     id: d.id,
@@ -50,14 +50,14 @@ function shapeDeal(d: {
     anneeEncaissement: d.anneeEncaissement,
     createdAt: d.createdAt,
     updatedAt: d.updatedAt,
-    quotes: (d.quotes || []).map((q) => ({ id: q.id, number: q.number, status: q.status })),
+    quotes: (d.quotes || []).map((q) => ({ id: q.id, number: q.number, status: q.status, sentAt: q.sentAt })),
   };
 }
 
 const DEAL_INCLUDE = {
   prospect: { select: { nom: true } },
   commercial: { select: { id: true, name: true, email: true } },
-  quotes: { select: { id: true, number: true, status: true }, orderBy: { createdAt: "desc" as const } },
+  quotes: { select: { id: true, number: true, status: true, sentAt: true }, orderBy: { createdAt: "desc" as const } },
 };
 
 crmDealRouter.get(
