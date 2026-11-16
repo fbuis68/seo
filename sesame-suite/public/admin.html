@@ -207,9 +207,19 @@ input[type=checkbox]{accent-color:var(--am);width:15px;height:15px;cursor:pointe
 .htmled-btn:hover{background:var(--bg);border-color:var(--bdr)}
 .htmled-btn.on{background:var(--al);border-color:var(--a);color:var(--a)}
 .htmled-sep{width:1px;background:var(--bdr);margin:2px 4px}
-.htmled-ce{min-height:160px;max-height:340px;overflow-y:auto;padding:10px 12px;font-size:13px;line-height:1.5;background:var(--card);color:var(--tx)}
+.htmled-ce{min-height:160px;max-height:340px;overflow:auto;padding:10px 12px;font-size:13px;line-height:1.5;background:var(--card);color:var(--tx)}
 .htmled-ce:empty:before{content:attr(data-placeholder);color:var(--mu)}
 .htmled-ce a{color:var(--a)}
+/* 16/11/2026, "fenêtre d'édition du template pas dimensionnée correctement"
+   — un email collé/importé (table HTML large, bannière…) débordait de la
+   zone d'édition (560px) sans que rien ne se redimensionne : texte/images
+   coupés au bord plutôt que visibles via scroll ou réduits à la largeur
+   disponible. max-width:100% sur tables/images ramène le contenu dans la
+   largeur de l'éditeur (quitte à perdre la mise en page pixel-perfect du
+   HTML source, sans incidence : seul le HTML d'origine part à l'envoi,
+   cf. htmlEdSync/htmlEdSyncFromSrc). */
+.htmled-ce img,.htmled-ce table{max-width:100%!important}
+.htmled-ce table{width:auto!important}
 .htmled-src{display:block;width:100%;box-sizing:border-box;border:none;min-height:160px;max-height:340px;padding:10px 12px;font-family:ui-monospace,Menlo,monospace;font-size:12px;resize:vertical;background:var(--card);color:var(--tx)}
 .irow{display:flex;gap:10px}.irow .fi{flex:1;margin-bottom:0}
 /* TOGGLE */
@@ -10154,7 +10164,7 @@ function emlOpenTemplateModal(id){
   if(!t) return;
   document.getElementById('eml-template-modal').innerHTML =
     '<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:28px 20px;overflow-y:auto" onmousedown="this._downOnBackdrop=(event.target===this)" onclick="if(event.target===this&&this._downOnBackdrop)emlCloseTemplateModal()">'
-    + '<div class="ca" style="width:100%;max-width:560px">'
+    + '<div class="ca" style="width:100%;max-width:680px">'
     + '<div class="ch">'+(t.id?'Modifier le modèle':'Nouveau modèle')+'<button class="btn btn-g" style="margin-left:auto" onclick="emlCloseTemplateModal()"><i class="ti ti-x"></i></button></div>'
     + '<div class="g2">'
     + '<div class="fi"><label class="lb">Canal</label><select id="eml-tpl-channel" '+(t.id?'disabled':'')+' onchange="emlRenderTplSubjectVisibility()">'+['email','sms','whatsapp','rcs'].map(function(c){return '<option value="'+c+'" '+(t.channel===c?'selected':'')+'>'+CHAN_LABEL[c]+'</option>';}).join('')+'</select></div>'
