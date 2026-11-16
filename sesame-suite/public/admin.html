@@ -17158,14 +17158,13 @@ async function resaOpenDetail(code){
     ['Accès (chambre)', esc(room)],
   ];
   if(b.bookingType) rows.push(['Type de réservation', esc(b.bookingType)]);
-  // "Source" (16/11/2026, "mettre le champs source sur cet écran") = canal
+  // "Source" (16/11/2026, "remplacé ce champs par source") = canal
   // d'origine renvoyé par la source elle-même (booking/expedia/direct...,
-  // cf. Booking.source) — distinct de "Connecteur" ci-dessous, qui lui est
-  // toujours le même pour tout l'établissement (nom du connecteur Sesame
-  // Suite configuré, cf. BookingSourceConfig.sourceName).
-  if(b.source) rows.push(['Source', esc(b.source)]);
+  // cf. Booking.source) — remplace l'ancienne ligne "Connecteur"
+  // (Booking.importedFrom, toujours le même pour tout l'établissement,
+  // donc peu utile réservation par réservation).
   rows = rows.concat([
-    ['Connecteur', b.importedFrom ? esc(b.importedFrom) : 'Saisie manuelle / check-in éco'],
+    ['Source', b.source ? esc(b.source) : (b.importedFrom ? esc(b.importedFrom) : 'Saisie manuelle / check-in éco')],
     ['Arrivée', esc(fmtDMY(b.startDate))+' <span style="color:var(--mu);font-weight:400">à partir de '+esc(b.checkinTime||CFG.checkinTime||'15:00')+'</span>'
       +' <button type="button" title="Modifier l\'horaire de cette réservation" onclick="event.stopPropagation();resaOpenEdit(\''+esc(b.code)+'\')" style="background:none;border:none;cursor:pointer;color:var(--mu);font-size:13px;padding:0 0 0 4px;vertical-align:-2px"><i class="ti ti-settings"></i></button>'],
     ['Départ', esc(fmtDMY(b.endDate))+' <span style="color:var(--mu);font-weight:400">avant '+esc(b.checkoutTime||CFG.checkoutTime||'11:00')+'</span>'],
