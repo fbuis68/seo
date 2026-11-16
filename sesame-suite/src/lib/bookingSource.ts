@@ -115,6 +115,11 @@ export interface FieldMapping {
   // uniquement pour pousser une commande boutique/room-service vers le PMS
   // (cf. BookingSourceConfig.orderPushEnabled, pushOrderToPms).
   accountId?: string;
+  // Canal d'origine renvoyé par la source elle-même (ex : "source" de l'API
+  // Sesame Technology — "default"/"booking"/"expedia"...), 16/11/2026,
+  // "rajouter et afficher la donnée Source". Optionnel — distinct du nom du
+  // connecteur (sourceName), qui lui est fixe pour tout l'établissement.
+  source?: string;
 }
 
 export interface MappedBooking {
@@ -132,6 +137,7 @@ export interface MappedBooking {
   passId: string;
   externalId: string;
   accountId: string;
+  source: string;
 }
 
 export interface MapError {
@@ -719,6 +725,7 @@ export function mapBookings(items: unknown[], mapping: FieldMapping): { mapped: 
       passId: mapping.passId ? String(getPath(item, mapping.passId) ?? "").trim() : "",
       externalId: mapping.externalId ? String(getPath(item, mapping.externalId) ?? "").trim() : "",
       accountId: mapping.accountId ? String(getPath(item, mapping.accountId) ?? "").trim() : "",
+      source: mapping.source ? String(getPath(item, mapping.source) ?? "").trim() : "",
     });
   });
 
@@ -837,6 +844,7 @@ export async function upsertMappedBookings(entity: Entity, mapped: MappedBooking
       externalId: b.externalId || existing?.externalId || undefined,
       externalAccountId: b.accountId || existing?.externalAccountId || undefined,
       importedFrom: sourceName,
+      source: b.source || existing?.source || undefined,
     };
     let rowId: string;
     let wasCreated: boolean;
@@ -854,6 +862,7 @@ export async function upsertMappedBookings(entity: Entity, mapped: MappedBooking
         targetId: row.id,
         recipient: { email: row.personEmail, phone: row.personPhone },
         variables: { prenom: row.personFirstname, nom: row.personLastname, code: row.code },
+        matchData: { source: row.source },
       }).catch((e) => console.error("[automation] booking.created:", e));
     }
     const externalId = b.externalId || existing?.externalId || "";

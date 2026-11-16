@@ -89,6 +89,7 @@ bookingRouter.post(
         targetId: updated.id,
         recipient: { email: updated.personEmail, phone: updated.personPhone },
         variables: await bookingTemplateVars(updated, hotel),
+        matchData: { source: updated.source },
       })
     ).catch((e) => console.error("[automation] checkin.completed:", e));
 

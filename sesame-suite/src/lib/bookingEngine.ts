@@ -324,6 +324,7 @@ async function createBookingDirect(entity: Entity, draft: BookingDraft, opts: { 
       targetId: adopted.booking.id,
       recipient: { email: adopted.booking.personEmail, phone: adopted.booking.personPhone },
       variables: await bookingTemplateVars(adopted.booking, hotel),
+      matchData: { source: adopted.booking.source },
     })
   ).catch((e) => console.error("[automation] booking.created:", e));
 

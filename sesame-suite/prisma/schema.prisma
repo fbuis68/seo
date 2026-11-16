@@ -434,6 +434,17 @@ model Booking {
   checkinTime           String?
   checkoutTime          String?
   importedFrom          String? // nom de la source si créée par le connecteur externe (cf. BookingSourceConfig), sinon null
+  // Canal d'origine RENVOYÉ PAR LA SOURCE elle-même (ex : champ "source" de
+  // l'API Sesame Technology — "default" pour une réservation directe,
+  // "booking"/"expedia"/... pour une OTA) — 16/11/2026, "rajouter et
+  // afficher la donnée Source dans les api Sesame". Distinct d'importedFrom
+  // ci-dessus (le NOM DU CONNECTEUR Sesame Suite, ex. "Sesame Technology",
+  // toujours le même pour tout établissement) : ce champ-ci varie réservation
+  // par réservation. Importé via fieldMapping.source (BookingSourceConfig),
+  // utilisable comme critère de filtre sur les règles d'automatisation
+  // (AutomationRule.audienceFilter.source/sourceMode, cf. lib/automation.ts
+  // matchesAudienceFilter).
+  source                String?
   // Empreinte bancaire (BookingEngineConfig.cardOnFileMode) — référence
   // Stripe de la carte enregistrée SANS être débitée à la réservation, pour
   // un débit manuel ultérieur si besoin (ex: dégât, non-restitution) depuis

@@ -128,13 +128,32 @@ interface FireContext {
  * matchData/audienceFilter des autres, donc sans effet pour eux.
  */
 function matchesAudienceFilter(filter: unknown, matchData: Record<string, unknown>): boolean {
-  const f = (filter || {}) as { direction?: string; bankAccountId?: string; minAmount?: number; maxCredit?: number };
+  const f = (filter || {}) as {
+    direction?: string;
+    bankAccountId?: string;
+    minAmount?: number;
+    maxCredit?: number;
+    // Canal d'origine de la réservation (cf. Booking.source, 16/11/2026,
+    // "rajouter ce critère des règles... si Source <> booking alors règle
+    // A sinon règle B") — "equals"/"not_equals" contre la valeur saisie
+    // (comparaison insensible à la casse, une source vide côté réservation
+    // ne correspond jamais à "equals" mais correspond toujours à
+    // "not_equals" puisqu'elle diffère bien de la valeur attendue).
+    source?: string;
+    sourceMode?: "equals" | "not_equals";
+  };
   if (f.direction && f.direction !== matchData.direction) return false;
   if (f.bankAccountId && f.bankAccountId !== matchData.bankAccountId) return false;
   if (f.minAmount != null && Number(matchData.amount ?? 0) < Number(f.minAmount)) return false;
   // Sens inverse des deux filtres ci-dessus : on ne GARDE la règle que si le
   // crédit est bien PASSÉ SOUS le seuil réglé (jamais au-dessus).
   if (f.maxCredit != null && matchData.credit != null && Number(matchData.credit) > Number(f.maxCredit)) return false;
+  if (f.source) {
+    const actual = String(matchData.source ?? "").toLowerCase();
+    const expected = f.source.toLowerCase();
+    const equals = actual === expected;
+    if ((f.sourceMode || "equals") === "equals" ? !equals : equals) return false;
+  }
   return true;
 }
 
@@ -381,6 +400,7 @@ async function sweepDateRule(rule: {
   repeatIntervalValue: number | null;
   repeatIntervalUnit: string | null;
   repeatStopCondition: string | null;
+  audienceFilter: unknown;
 }) {
   const trigger = getTrigger(rule.trigger);
   if (!trigger?.dateField) return;
@@ -436,6 +456,7 @@ async function sweepDateRule(rule: {
   const hotel = rule.entityId ? await hotelContactInfo(rule.entityId) : { name: "", entityCode: "" };
 
   for (const b of bookings) {
+    if (!matchesAudienceFilter(rule.audienceFilter, { source: b.source })) continue;
     const to = resolveRecipient(rule, b.personEmail, b.personPhone);
     if (!to) continue;
     try {

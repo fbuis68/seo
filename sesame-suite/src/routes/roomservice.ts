@@ -159,6 +159,7 @@ export async function finalizeOrder(
     personLastname: string;
     lockerAccess: unknown;
     externalAccountId: string | null;
+    source?: string | null;
   } | null,
   items: CartItem[],
   note?: string
@@ -175,6 +176,7 @@ export async function finalizeOrder(
           nom: booking.personLastname,
           ...orderTemplateVars(order, items, hotel),
         },
+        matchData: { source: booking.source },
       })
     ).catch((e) => console.error("[automation] order.created:", e));
   }

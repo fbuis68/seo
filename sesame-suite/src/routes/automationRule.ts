@@ -130,6 +130,11 @@ function validateRuleBody(b: RuleBody) {
     if (!b.offsetValue) throw new HttpError(400, "Une durée non nulle est requise pour ce mode (ex. J-5, H-10, M+1)");
     if (b.offsetUnit && !OFFSET_UNITS.includes(b.offsetUnit)) throw new HttpError(400, "Unité de durée invalide");
   }
+  const af = (b.audienceFilter || {}) as { sourceMode?: string; source?: string };
+  if (af.sourceMode) {
+    if (!["equals", "not_equals"].includes(af.sourceMode)) throw new HttpError(400, "Mode de critère Source invalide");
+    if (!af.source || !af.source.trim()) throw new HttpError(400, "Valeur du critère Source requise");
+  }
   if (b.timingMode === "recurring" && !b.recurrence) {
     throw new HttpError(400, "Une récurrence (daily/weekly/monthly) est requise pour ce mode");
   }

@@ -7954,6 +7954,12 @@ var BS_MAPPING_FIELDS = [
   // pour pousser une commande boutique/room-service vers le PMS, cf. carte
   // "Push des commandes vers le PMS" plus bas.
   {k:'accountId', label:'Identifiant de compte PMS (push des commandes)', required:false},
+  // Canal d'origine renvoyé par la source elle-même (ex : "source" de l'API
+  // Sesame Technology — "default"/"booking"/"expedia"...), 16/11/2026,
+  // "rajouter et afficher la donnée Source" — utilisable comme critère de
+  // filtre sur les règles d'automatisation (cf. section "Règles
+  // d'automatisation" plus bas, filtre "Source").
+  {k:'source', label:"Source (canal d'origine : direct, booking, expedia…)", required:false},
 ];
 
 var BS_FACILITY_MAPPING_FIELDS = [
@@ -8234,7 +8240,7 @@ var PMS_PRESETS = {
       document.getElementById('bs-resultEntityProfileField').value = 'entityId';
       document.getElementById('bs-skipEntityFilter').checked = false;
       document.getElementById('bs-responseListPath').value = 'root';
-      bsRenderMappingFields({code:'code', personEmail:'personEmail', personFirstname:'personFirstname', personLastname:'personLastname', personPhone:'', startDate:'startDate', endDate:'endDate', facilityCode:'facilityCode', facilityName:'facilityName', status:'status', bookingType:'typeCode', passId:'personId', externalId:'id'});
+      bsRenderMappingFields({code:'code', personEmail:'personEmail', personFirstname:'personFirstname', personLastname:'personLastname', personPhone:'', startDate:'startDate', endDate:'endDate', facilityCode:'facilityCode', facilityName:'facilityName', status:'status', bookingType:'typeCode', passId:'personId', externalId:'id', source:'source'});
       // Encodage NFC — flux en 3 appels, confirmé le 08/09/2026 via capture
       // réseau du back-office Sesame lui-même (associable de bout en bout,
       // absent de la documentation officielle) — corrige une capture du
@@ -10674,10 +10680,11 @@ function autoOpenRuleModal(id){
     + '<div class="ch">'+(r.id?'Modifier la règle':'Nouvelle règle')+'<button class="btn btn-g" style="margin-left:auto" onclick="autoCloseRuleModal()"><i class="ti ti-x"></i></button></div>'
     + '<div class="fi"><label class="lb">Nom</label><input type="text" id="auto-name" value="'+esc(r.name)+'" placeholder="Ex. Rappel avant départ"></div>'
     + '<div class="g2">'
-    + '<div class="fi"><label class="lb">Déclencheur</label><select id="auto-trigger" onchange="autoRenderTimingFields()">'+TRIGGERS_HOTEL.map(function(t){return '<option value="'+t.key+'" '+(r.trigger===t.key?'selected':'')+'>'+t.label+'</option>';}).join('')+'</select></div>'
+    + '<div class="fi"><label class="lb">Déclencheur</label><select id="auto-trigger" onchange="autoRenderTimingFields();autoRenderSourceFilterFields()">'+TRIGGERS_HOTEL.map(function(t){return '<option value="'+t.key+'" '+(r.trigger===t.key?'selected':'')+'>'+t.label+'</option>';}).join('')+'</select></div>'
     + '<div class="fi"><label class="lb">Canal</label><select id="auto-channel" onchange="autoRenderTplOptions();autoRenderRecipientFields();autoRenderSenderField()">'+['email','sms','whatsapp','rcs'].map(function(c){return '<option value="'+c+'" '+(r.channel===c?'selected':'')+'>'+CHAN_LABEL[c]+'</option>';}).join('')+'</select></div>'
     + '</div>'
     + '<div id="auto-timing-fields"></div>'
+    + '<div id="auto-source-filter-fields"></div>'
     + '<div class="g2">'
     + '<div class="fi"><label class="lb">Modèle</label><select id="auto-template"></select></div>'
     + '<div class="fi"><label class="lb">Actif</label><select id="auto-enabled"><option value="1" '+(r.enabled!==false?'selected':'')+'>Oui</option><option value="0" '+(r.enabled===false?'selected':'')+'>Non</option></select></div>'
@@ -10694,9 +10701,37 @@ function autoOpenRuleModal(id){
     + '<button class="btn btn-s" onclick="autoCloseRuleModal()">Annuler</button></div>'
     + '</div></div>';
   autoRenderTimingFields();
+  autoRenderSourceFilterFields();
   autoRenderTplOptions();
   autoRenderRecipientFields();
   autoRenderSenderField();
+}
+
+// Critère "Source" (16/11/2026, "rajouter et afficher la donnée Source
+// dans les api Sesame... rajoute ce critère des règles") — disponible sur
+// tout déclencheur portant sur une réservation (le champ n'existe que là).
+// Pas un arbre de règles à proprement parler : "si Source <> booking alors
+// règle A sinon règle B" se fait avec DEUX règles aux filtres opposés
+// (Différent de / Égal à "booking"), même principe que les filtres
+// existants (ex. bank.transaction.created) — cf. matchesAudienceFilter.
+var AUTO_SOURCE_FILTER_TRIGGERS = ['booking.created','checkin.completed','order.created','housekeeping.completed','stay.start','stay.end'];
+function autoRenderSourceFilterFields(){
+  var r = AUTO_RULE_EDITING || {};
+  var el = document.getElementById('auto-source-filter-fields');
+  if(!el) return;
+  var triggerKey = (document.getElementById('auto-trigger')||{value:r.trigger}).value;
+  if(AUTO_SOURCE_FILTER_TRIGGERS.indexOf(triggerKey)===-1){ el.innerHTML=''; return; }
+  var f = (r.audienceFilter && r.trigger===triggerKey) ? r.audienceFilter : {};
+  el.innerHTML = '<div class="fi" style="margin-top:4px"><label class="lb">Critère Source (optionnel)</label>'
+    + '<div class="g2">'
+    + '<select id="auto-sourceMode">'
+    + '<option value="">N\'importe quelle source</option>'
+    + '<option value="equals" '+(f.sourceMode==='equals'?'selected':'')+'>Égale à</option>'
+    + '<option value="not_equals" '+(f.sourceMode==='not_equals'?'selected':'')+'>Différente de</option>'
+    + '</select>'
+    + '<input type="text" id="auto-sourceValue" value="'+esc(f.source||'')+'" placeholder="Ex : booking, expedia, default…">'
+    + '</div>'
+    + '<div style="font-size:11px;color:var(--mu);margin-top:4px">Comparé au champ "Source" de la réservation (mappé dans les réglages du connecteur réservations, onglet Canaux). Pour "si Source ≠ booking alors règle A sinon règle B" : créez deux règles, l\'une avec "Différente de booking", l\'autre avec "Égale à booking".</div></div>';
 }
 
 function autoRenderRecipientFields(){
@@ -10844,6 +10879,12 @@ async function autoSaveRule(id){
     repeatIntervalValue: document.getElementById('auto-repeatIntervalValue') ? +document.getElementById('auto-repeatIntervalValue').value : null,
     repeatIntervalUnit: document.getElementById('auto-repeatIntervalUnit') ? document.getElementById('auto-repeatIntervalUnit').value : null,
     repeatStopCondition: document.getElementById('auto-repeatEnabled') ? 'checkin_done' : null,
+    audienceFilter: (function(){
+      var modeEl = document.getElementById('auto-sourceMode');
+      var valEl = document.getElementById('auto-sourceValue');
+      if(!modeEl || !modeEl.value || !valEl || !valEl.value.trim()) return null;
+      return { sourceMode: modeEl.value, source: valEl.value.trim() };
+    })(),
   };
   if(!body.name){ toast('Le nom est requis'); return; }
   if(body.repeatEnabled && (!body.repeatMaxCount || body.repeatMaxCount<2)){ toast('Nombre d\'envois invalide pour la relance (au moins 2)'); return; }
@@ -16979,7 +17020,7 @@ function renderReservations(){
       + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">'
       + '<div>'
       + '<div style="font-size:15px;font-weight:700">'+esc(b.personFirstname)+' '+esc(b.personLastname)+' <span style="font-weight:400;color:var(--mu);font-size:12px">— Chambre '+esc(room)+'</span></div>'
-      + '<div style="font-size:12px;color:var(--mu);margin-top:2px"><i class="ti ti-ticket" style="font-size:11px"></i> '+esc(b.code)+' &nbsp;·&nbsp; <i class="ti ti-mail" style="font-size:11px"></i> '+esc(b.personEmail)+(b.personPhone?' &nbsp;·&nbsp; <i class="ti ti-phone" style="font-size:11px"></i> '+esc(b.personPhone):'')+'</div>'
+      + '<div style="font-size:12px;color:var(--mu);margin-top:2px"><i class="ti ti-ticket" style="font-size:11px"></i> '+esc(b.code)+(b.source?' &nbsp;·&nbsp; <i class="ti ti-plug" style="font-size:11px"></i> '+esc(b.source):'')+' &nbsp;·&nbsp; <i class="ti ti-mail" style="font-size:11px"></i> '+esc(b.personEmail)+(b.personPhone?' &nbsp;·&nbsp; <i class="ti ti-phone" style="font-size:11px"></i> '+esc(b.personPhone):'')+'</div>'
       + '<div style="font-size:12px;color:var(--mu);margin-top:2px"><i class="ti ti-calendar" style="font-size:11px"></i> '+esc(dates)+'</div>'
       + '</div>'
       + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">'

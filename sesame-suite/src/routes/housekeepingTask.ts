@@ -256,6 +256,7 @@ housekeepingTaskRouter.post(
             targetId: updated.id,
             recipient: { email: booking.personEmail, phone: booking.personPhone },
             variables: await bookingTemplateVars(booking, hotel),
+            matchData: { source: booking.source },
           })
         ).catch((e) => console.error("[automation] housekeeping.completed:", e));
       }

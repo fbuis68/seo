@@ -32,6 +32,7 @@ export function normaliseBooking(b: Booking) {
     checkinTime: b.checkinTime || null,
     checkoutTime: b.checkoutTime || null,
     importedFrom: b.importedFrom || "",
+    source: b.source || "",
     nfcCount: b.nfcCount,
     nfcEncodedAt: b.nfcEncodedAt ? iso(b.nfcEncodedAt) : null,
     doorLastOpenedAt: b.doorLastOpenedAt ? iso(b.doorLastOpenedAt) : null,
