@@ -10660,6 +10660,7 @@ function autoRenderRulesList(){
       + '<span class="nibadge" style="background:var(--mu)">'+autoTriggerLabel(r.trigger)+'</span> '
       + '<span class="nibadge" style="background:var(--a)">'+CHAN_LABEL[r.channel]+'</span>'
       + '<div style="font-size:12px;color:var(--mu);margin-top:2px">'+autoTimingSummary(r)+' — modèle : '+esc(r.templateKey)+' — destinataire : '+(r.recipientMode==='custom'?esc(r.recipientOverride):'automatique')+(r.senderName?' — expéditeur : '+esc(r.senderName):'')+(r.lastRunAt?' — dernier envoi : '+new Date(r.lastRunAt).toLocaleString('fr-FR'):'')+'</div>'
+      + (autoAudienceFilterSummary(r.audienceFilter)?'<div style="font-size:12px;color:var(--mu);margin-top:2px">🔎 '+autoAudienceFilterSummary(r.audienceFilter)+'</div>':'')
       + (r.lastError?'<div style="font-size:12px;color:#a32d2d;margin-top:2px">⚠ Problème lors du dernier déclenchement ('+(r.lastErrorAt?new Date(r.lastErrorAt).toLocaleString('fr-FR'):'')+') : '+esc(r.lastError)+'</div>':'')
       + '</div>'
       + '<button class="btn btn-s" onclick="autoOpenRuleModal(\''+r.id+'\')"><i class="ti ti-edit"></i></button>'
@@ -10668,6 +10669,17 @@ function autoRenderRulesList(){
       + '<button class="btn btn-s btn-d" onclick="autoDeleteRule(\''+r.id+'\')"><i class="ti ti-trash"></i></button>'
       + '</div>';
   }).join('');
+}
+
+function autoAudienceFilterSummary(af){
+  if(!af) return '';
+  var modeLbl = {equals:'=', not_equals:'≠'};
+  var parts = [];
+  [['source','Source'],['bookingType','Type résa'],['roomType','Type chambre']].forEach(function(pair){
+    var key = pair[0], label = pair[1];
+    if(af[key+'Mode'] && af[key]) parts.push(label+' '+(modeLbl[af[key+'Mode']]||'')+' '+esc(af[key]));
+  });
+  return parts.join(' ET ');
 }
 
 function autoOpenRuleModal(id){
@@ -10715,6 +10727,24 @@ function autoOpenRuleModal(id){
 // (Différent de / Égal à "booking"), même principe que les filtres
 // existants (ex. bank.transaction.created) — cf. matchesAudienceFilter.
 var AUTO_SOURCE_FILTER_TRIGGERS = ['booking.created','checkin.completed','order.created','housekeeping.completed','stay.start','stay.end'];
+// Trois critères combinés en ET (16/11/2026, "un vrai arbre de décision" —
+// ramené, après discussion, à plusieurs critères en ET + une 2e règle aux
+// critères inversés pour le "sinon", plutôt qu'une arborescence ET/OU
+// imbriquée). Chaque critère reste optionnel et indépendant.
+function autoCriterionFieldHtml(key, label, noneLabel, placeholder, valueOptions, f){
+  var valueInput = valueOptions && valueOptions.length
+    ? '<select id="auto-'+key+'Value">'+valueOptions.map(function(v){return '<option value="'+esc(v)+'" '+(f[key]===v?'selected':'')+'>'+esc(v)+'</option>';}).join('')+'</select>'
+    : '<input type="text" id="auto-'+key+'Value" value="'+esc(f[key]||'')+'" placeholder="'+placeholder+'">';
+  return '<div class="fi" style="margin-top:4px"><label class="lb">Critère '+label+' (optionnel)</label>'
+    + '<div class="g2">'
+    + '<select id="auto-'+key+'Mode">'
+    + '<option value="">'+noneLabel+'</option>'
+    + '<option value="equals" '+(f[key+'Mode']==='equals'?'selected':'')+'>Égal à</option>'
+    + '<option value="not_equals" '+(f[key+'Mode']==='not_equals'?'selected':'')+'>Différent de</option>'
+    + '</select>'
+    + valueInput
+    + '</div></div>';
+}
 function autoRenderSourceFilterFields(){
   var r = AUTO_RULE_EDITING || {};
   var el = document.getElementById('auto-source-filter-fields');
@@ -10722,16 +10752,11 @@ function autoRenderSourceFilterFields(){
   var triggerKey = (document.getElementById('auto-trigger')||{value:r.trigger}).value;
   if(AUTO_SOURCE_FILTER_TRIGGERS.indexOf(triggerKey)===-1){ el.innerHTML=''; return; }
   var f = (r.audienceFilter && r.trigger===triggerKey) ? r.audienceFilter : {};
-  el.innerHTML = '<div class="fi" style="margin-top:4px"><label class="lb">Critère Source (optionnel)</label>'
-    + '<div class="g2">'
-    + '<select id="auto-sourceMode">'
-    + '<option value="">N\'importe quelle source</option>'
-    + '<option value="equals" '+(f.sourceMode==='equals'?'selected':'')+'>Égale à</option>'
-    + '<option value="not_equals" '+(f.sourceMode==='not_equals'?'selected':'')+'>Différente de</option>'
-    + '</select>'
-    + '<input type="text" id="auto-sourceValue" value="'+esc(f.source||'')+'" placeholder="Ex : booking, expedia, default…">'
-    + '</div>'
-    + '<div style="font-size:11px;color:var(--mu);margin-top:4px">Comparé au champ "Source" de la réservation (mappé dans les réglages du connecteur réservations, onglet Canaux). Pour "si Source ≠ booking alors règle A sinon règle B" : créez deux règles, l\'une avec "Différente de booking", l\'autre avec "Égale à booking".</div></div>';
+  var roomTypes = Array.from(new Set((CFG.rooms||[]).map(function(rm){return rm.category||'';}).filter(Boolean)));
+  el.innerHTML = autoCriterionFieldHtml('source', 'Source', "N'importe quelle source", 'Ex : booking, expedia, default…', null, f)
+    + autoCriterionFieldHtml('bookingType', 'Type de réservation', "N'importe quel type", 'Ex : Standard, Groupe…', null, f)
+    + autoCriterionFieldHtml('roomType', 'Type de chambre', "N'importe quel type de chambre", '', roomTypes, f)
+    + '<div style="font-size:11px;color:var(--mu);margin-top:4px">Les critères remplis sont combinés en ET. Pour "si X alors règle A sinon règle B" : créez deux règles, aux critères inversés (ex. "Différent de" / "Égal à" la même valeur).</div>';
 }
 
 function autoRenderRecipientFields(){
@@ -10880,10 +10905,16 @@ async function autoSaveRule(id){
     repeatIntervalUnit: document.getElementById('auto-repeatIntervalUnit') ? document.getElementById('auto-repeatIntervalUnit').value : null,
     repeatStopCondition: document.getElementById('auto-repeatEnabled') ? 'checkin_done' : null,
     audienceFilter: (function(){
-      var modeEl = document.getElementById('auto-sourceMode');
-      var valEl = document.getElementById('auto-sourceValue');
-      if(!modeEl || !modeEl.value || !valEl || !valEl.value.trim()) return null;
-      return { sourceMode: modeEl.value, source: valEl.value.trim() };
+      var out = {};
+      ['source','bookingType','roomType'].forEach(function(key){
+        var modeEl = document.getElementById('auto-'+key+'Mode');
+        var valEl = document.getElementById('auto-'+key+'Value');
+        if(modeEl && modeEl.value && valEl && valEl.value.trim()){
+          out[key+'Mode'] = modeEl.value;
+          out[key] = valEl.value.trim();
+        }
+      });
+      return Object.keys(out).length ? out : null;
     })(),
   };
   if(!body.name){ toast('Le nom est requis'); return; }

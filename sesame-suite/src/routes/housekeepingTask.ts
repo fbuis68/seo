@@ -3,7 +3,7 @@ import { prisma } from "../db";
 import { resolveEntity } from "../lib/entity";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
-import { fireTrigger } from "../lib/automation";
+import { fireTrigger, resolveRoomType } from "../lib/automation";
 import { bookingTemplateVars, hotelContactInfo } from "../lib/templateVars";
 
 export const housekeepingTaskRouter = Router();
@@ -256,7 +256,7 @@ housekeepingTaskRouter.post(
             targetId: updated.id,
             recipient: { email: booking.personEmail, phone: booking.personPhone },
             variables: await bookingTemplateVars(booking, hotel),
-            matchData: { source: booking.source },
+            matchData: { source: booking.source, bookingType: booking.bookingType, roomType: await resolveRoomType(booking.roomId) },
           })
         ).catch((e) => console.error("[automation] housekeeping.completed:", e));
       }

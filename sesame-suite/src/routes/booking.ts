@@ -4,7 +4,7 @@ import { prisma } from "../db";
 import { resolveEntity } from "../lib/entity";
 import { normaliseBooking } from "../lib/normalize";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
-import { fireTrigger } from "../lib/automation";
+import { fireTrigger, resolveRoomType } from "../lib/automation";
 import { bookingTemplateVars, hotelContactInfo, buildAutologinUrl, buildAutologinCheckinUrl } from "../lib/templateVars";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { encodeNfc, listNfcDevices, fetchAccessQr, openDoor, pushBookingUpdate, adoptBookingIntoSource, BookingSourceError } from "../lib/bookingSource";
@@ -89,7 +89,7 @@ bookingRouter.post(
         targetId: updated.id,
         recipient: { email: updated.personEmail, phone: updated.personPhone },
         variables: await bookingTemplateVars(updated, hotel),
-        matchData: { source: updated.source },
+        matchData: { source: updated.source, bookingType: updated.bookingType, roomType: await resolveRoomType(updated.roomId) },
       })
     ).catch((e) => console.error("[automation] checkin.completed:", e));
 

@@ -127,20 +127,40 @@ interface FireContext {
  * déclencheur : les clés propres à un trigger sont simplement absentes du
  * matchData/audienceFilter des autres, donc sans effet pour eux.
  */
+type EqualityMode = "equals" | "not_equals";
+
+/** Un seul critère générique "valeur attendue" + "equals/not_equals" contre
+ * matchData[key] — comparaison insensible à la casse. Valeur absente côté
+ * filtre = pas de restriction sur ce critère (ne bloque jamais). */
+function checkEqualityField(value: string | undefined, mode: EqualityMode | undefined, actual: unknown): boolean {
+  if (!value) return true;
+  const equals = String(actual ?? "").toLowerCase() === value.toLowerCase();
+  return (mode || "equals") === "equals" ? equals : !equals;
+}
+
+/**
+ * Filtre générique — tous les critères sont combinés en ET (16/11/2026,
+ * "un vrai arbre de décision" demandé puis ramené, après discussion avec le
+ * client, à plusieurs critères combinés en ET sur une même règle, le
+ * "sinon" se faisant via une règle complémentaire aux critères inversés —
+ * pas d'arborescence ET/OU imbriquée). Source/Type de réservation/Type de
+ * chambre ne concernent que les déclencheurs portant sur une réservation
+ * (cf. Booking.source/bookingType/Room.category) — absent de matchData
+ * pour tout autre déclencheur, donc jamais restrictif là où ça n'a pas de
+ * sens.
+ */
 function matchesAudienceFilter(filter: unknown, matchData: Record<string, unknown>): boolean {
   const f = (filter || {}) as {
     direction?: string;
     bankAccountId?: string;
     minAmount?: number;
     maxCredit?: number;
-    // Canal d'origine de la réservation (cf. Booking.source, 16/11/2026,
-    // "rajouter ce critère des règles... si Source <> booking alors règle
-    // A sinon règle B") — "equals"/"not_equals" contre la valeur saisie
-    // (comparaison insensible à la casse, une source vide côté réservation
-    // ne correspond jamais à "equals" mais correspond toujours à
-    // "not_equals" puisqu'elle diffère bien de la valeur attendue).
     source?: string;
-    sourceMode?: "equals" | "not_equals";
+    sourceMode?: EqualityMode;
+    bookingType?: string;
+    bookingTypeMode?: EqualityMode;
+    roomType?: string;
+    roomTypeMode?: EqualityMode;
   };
   if (f.direction && f.direction !== matchData.direction) return false;
   if (f.bankAccountId && f.bankAccountId !== matchData.bankAccountId) return false;
@@ -148,13 +168,18 @@ function matchesAudienceFilter(filter: unknown, matchData: Record<string, unknow
   // Sens inverse des deux filtres ci-dessus : on ne GARDE la règle que si le
   // crédit est bien PASSÉ SOUS le seuil réglé (jamais au-dessus).
   if (f.maxCredit != null && matchData.credit != null && Number(matchData.credit) > Number(f.maxCredit)) return false;
-  if (f.source) {
-    const actual = String(matchData.source ?? "").toLowerCase();
-    const expected = f.source.toLowerCase();
-    const equals = actual === expected;
-    if ((f.sourceMode || "equals") === "equals" ? !equals : equals) return false;
-  }
+  if (!checkEqualityField(f.source, f.sourceMode, matchData.source)) return false;
+  if (!checkEqualityField(f.bookingType, f.bookingTypeMode, matchData.bookingType)) return false;
+  if (!checkEqualityField(f.roomType, f.roomTypeMode, matchData.roomType)) return false;
   return true;
+}
+
+/** Type de chambre (Room.category) de la réservation — résolu via roomId
+ * quand disponible (16/11/2026, critère "Type de chambre" des règles). */
+export async function resolveRoomType(roomId: string | null | undefined): Promise<string | null> {
+  if (!roomId) return null;
+  const room = await prisma.room.findUnique({ where: { id: roomId }, select: { category: true } });
+  return room?.category || null;
 }
 
 /**
@@ -456,7 +481,8 @@ async function sweepDateRule(rule: {
   const hotel = rule.entityId ? await hotelContactInfo(rule.entityId) : { name: "", entityCode: "" };
 
   for (const b of bookings) {
-    if (!matchesAudienceFilter(rule.audienceFilter, { source: b.source })) continue;
+    const roomType = await resolveRoomType(b.roomId);
+    if (!matchesAudienceFilter(rule.audienceFilter, { source: b.source, bookingType: b.bookingType, roomType })) continue;
     const to = resolveRecipient(rule, b.personEmail, b.personPhone);
     if (!to) continue;
     try {

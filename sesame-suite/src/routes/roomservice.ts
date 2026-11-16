@@ -3,7 +3,7 @@ import { prisma } from "../db";
 import { resolveEntity } from "../lib/entity";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
-import { fireTrigger } from "../lib/automation";
+import { fireTrigger, resolveRoomType } from "../lib/automation";
 import { orderTemplateVars, hotelContactInfo } from "../lib/templateVars";
 import { reserveLockersForOrder, cancelLockerReservation, LockerReservationItem } from "../lib/lockerSource";
 import { recordVendorCommissions, resolveInternalVendorIds } from "../lib/vendor";
@@ -160,12 +160,14 @@ export async function finalizeOrder(
     lockerAccess: unknown;
     externalAccountId: string | null;
     source?: string | null;
+    bookingType?: string | null;
+    roomId?: string | null;
   } | null,
   items: CartItem[],
   note?: string
 ) {
   if (booking) {
-    hotelContactInfo(entity.id).then((hotel) =>
+    hotelContactInfo(entity.id).then(async (hotel) =>
       fireTrigger("order.created", {
         entityId: entity.id,
         targetType: "order",
@@ -176,7 +178,7 @@ export async function finalizeOrder(
           nom: booking.personLastname,
           ...orderTemplateVars(order, items, hotel),
         },
-        matchData: { source: booking.source },
+        matchData: { source: booking.source, bookingType: booking.bookingType, roomType: await resolveRoomType(booking.roomId) },
       })
     ).catch((e) => console.error("[automation] order.created:", e));
   }

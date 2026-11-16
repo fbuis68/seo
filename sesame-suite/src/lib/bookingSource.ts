@@ -862,7 +862,7 @@ export async function upsertMappedBookings(entity: Entity, mapped: MappedBooking
         targetId: row.id,
         recipient: { email: row.personEmail, phone: row.personPhone },
         variables: { prenom: row.personFirstname, nom: row.personLastname, code: row.code },
-        matchData: { source: row.source },
+        matchData: { source: row.source, bookingType: row.bookingType, roomType: room?.category || null },
       }).catch((e) => console.error("[automation] booking.created:", e));
     }
     const externalId = b.externalId || existing?.externalId || "";

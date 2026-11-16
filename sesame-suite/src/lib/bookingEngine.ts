@@ -1,6 +1,6 @@
 import type { Entity, Order } from "@prisma/client";
 import { prisma } from "../db";
-import { fireTrigger } from "./automation";
+import { fireTrigger, resolveRoomType } from "./automation";
 import { computeTaxeSejourAmount } from "./payment";
 import { bookingTemplateVars, hotelContactInfo } from "./templateVars";
 import { adoptBookingIntoSource } from "./bookingSource";
@@ -324,7 +324,7 @@ async function createBookingDirect(entity: Entity, draft: BookingDraft, opts: { 
       targetId: adopted.booking.id,
       recipient: { email: adopted.booking.personEmail, phone: adopted.booking.personPhone },
       variables: await bookingTemplateVars(adopted.booking, hotel),
-      matchData: { source: adopted.booking.source },
+      matchData: { source: adopted.booking.source, bookingType: adopted.booking.bookingType, roomType: await resolveRoomType(adopted.booking.roomId) },
     })
   ).catch((e) => console.error("[automation] booking.created:", e));
 
