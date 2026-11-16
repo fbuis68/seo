@@ -342,6 +342,9 @@ tr.erow td{background:var(--al)}
 /* ── MODAL ── */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:28px 20px;overflow-y:auto}
 .modal-box{background:var(--card);border-radius:14px;width:100%;max-width:640px;padding:1.4rem}
+/* Glisser-déposer générique (16/11/2026) — surbrillance pendant le survol
+   d'une zone de dépôt de fichier dans un modal. */
+.drop-hover{outline:2px dashed var(--a);outline-offset:-2px;background:var(--al)}
 /* Barre de défilement masquée dans les fenêtres modales (§ demande client)
    — scroll toujours fonctionnel, seule la barre visible disparaît. Ne
    touche pas .main ci-dessus, dont le scrollbar fin/thémé reste volontaire
@@ -1883,6 +1886,24 @@ function chk(v){return v?'<span class="tpill bg">oui</span>':'<span class="tpill
 // visiteur anonyme via le widget public, affiché tel quel ici à l'ouverture
 // du panneau Support par un agent) — cf. audit sécurité du 15/09/2026.
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+/**
+ * Glisser-déposer générique pour un <input type="file"> existant
+ * (16/11/2026, "sur tous les points d'import de document permettre le
+ * glisser-déposer") — assigne directement la FileList du drop à l'input
+ * (pattern standard, fonctionne nativement) puis redéclenche "change" pour
+ * que tout onchange déjà câblé sur cet input s'exécute comme si l'utilisateur
+ * avait choisi les fichiers via le sélecteur — aucune logique de traitement
+ * dupliquée, zéro risque de divergence avec le chemin "cliquer pour parcourir".
+ */
+function dropFilesIntoInput(event, inputId, zoneEl){
+  event.preventDefault();
+  if(zoneEl) zoneEl.classList.remove('drop-hover');
+  const input = document.getElementById(inputId);
+  if(!input || !event.dataTransfer || !event.dataTransfer.files || !event.dataTransfer.files.length) return;
+  input.files = event.dataTransfer.files;
+  input.dispatchEvent(new Event('change', {bubbles:true}));
+}
 // Échappement pour une chaîne interpolée dans un argument JS entre quotes
 // simples au sein d'un attribut onclick="..." — distinct de esc() qui
 // n'échappe que pour l'HTML. Nécessaire dès qu'un libellé/nom contient une
@@ -5070,7 +5091,12 @@ function sigOpenCreate(){
         </select>
       </div>
       <div class="ff"><label>Titre</label><input type="text" id="sig-title" placeholder="Ex : Contrat d'abonnement — ${esc(c.nom||'')}"></div>
-      <div class="ff"><label>Document (PDF)</label><input type="file" id="sig-file" accept="application/pdf"></div>
+      <div class="ff"><label>Document (PDF)</label>
+        <div ondragover="event.preventDefault();this.classList.add('drop-hover')" ondragleave="this.classList.remove('drop-hover')" ondrop="dropFilesIntoInput(event,'sig-file',this)" style="border:2px dashed var(--bdr2);border-radius:8px;padding:10px">
+          <input type="file" id="sig-file" accept="application/pdf">
+          <div style="font-size:11px;color:var(--mu);margin-top:4px">ou glissez-déposez un fichier ici</div>
+        </div>
+      </div>
       <div class="ff"><label style="display:flex;align-items:center;gap:8px;font-size:13px;color:inherit"><input type="checkbox" id="sig-bank-mandate" style="width:auto;margin:0" onchange="document.getElementById('sig-auto-mandate-row').style.display=this.checked?'block':'none'"> Demander aussi au signataire ses coordonnées bancaires (mandat de prélèvement SEPA)</label></div>
       <div class="ff" id="sig-auto-mandate-row" style="display:none;margin-left:22px"><label style="display:flex;align-items:center;gap:8px;font-size:13px;color:inherit"><input type="checkbox" id="sig-auto-create-mandate" checked style="width:auto;margin:0"> Créer automatiquement le mandat GoCardless à la signature</label><div style="font-size:11px;color:var(--mu,#888);margin-top:3px">Décoché : les coordonnées sont collectées (chiffrées) et le PDF signé tout de même, le mandat sera créé plus tard via le bouton "Créer le mandat" — utile si GoCardless est temporairement indisponible.</div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -5575,7 +5601,10 @@ function openImportModal(){
         <div class="alt alt-b" style="margin-bottom:14px"><i class="ti ti-info-circle"></i>
           <span>Fichier .xlsx ou .csv — une ligne par contact (ex : export de badges scannés sur un salon). Les fiches créées seront de type <b>Suspect</b> : l'adresse n'est pas obligatoire, contrairement à un Prospect/Client.</span>
         </div>
-        <input type="file" id="imp-file" accept=".xlsx,.xls,.csv" onchange="impHandleFile(this)">
+        <div ondragover="event.preventDefault();this.classList.add('drop-hover')" ondragleave="this.classList.remove('drop-hover')" ondrop="dropFilesIntoInput(event,'imp-file',this)" style="border:2px dashed var(--bdr2);border-radius:8px;padding:10px">
+          <input type="file" id="imp-file" accept=".xlsx,.xls,.csv" onchange="impHandleFile(this)">
+          <div style="font-size:11px;color:var(--mu);margin-top:4px">ou glissez-déposez un fichier ici</div>
+        </div>
       </div>
     </div>
   </div>`;
@@ -9804,7 +9833,11 @@ function docSourceModeHtml(mode){
     </div>
   </div>
   <div class="ff" id="doc-mode-file" style="grid-column:1/-1;${mode==='file'?'':'display:none'}">
-    <label>Fichier (PDF recommandé) *</label><input type="file" id="doc-file" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.png">
+    <label>Fichier (PDF recommandé) *</label>
+    <div ondragover="event.preventDefault();this.classList.add('drop-hover')" ondragleave="this.classList.remove('drop-hover')" ondrop="dropFilesIntoInput(event,'doc-file',this)" style="border:2px dashed var(--bdr2);border-radius:8px;padding:10px">
+      <input type="file" id="doc-file" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.png">
+      <div style="font-size:11px;color:var(--mu);margin-top:4px">ou glissez-déposez un fichier ici</div>
+    </div>
   </div>
   <div class="ff" style="grid-column:1/-1;${mode==='url'?'':'display:none'}" id="doc-mode-url">
     <label>Lien URL *</label><input id="doc-url" type="url" placeholder="https://...">
@@ -11690,7 +11723,10 @@ async function openTemplateModal(id){
       <div style="font-size:11px;color:var(--mu,#888);margin-top:4px">Génère un lien vers ce questionnaire à chaque envoi (manuel ou automatique) utilisant ce modèle et l'insère via la variable <code>{{lienQuestionnaire}}</code>.</div></div>
       <div class="ff" id="tpl-attachments-wrap" style="margin-top:8px"><label>Pièces jointes par défaut (email uniquement)</label>
         <div id="tpl-attachments-list"></div>
-        <input type="file" id="tpl-attachment-file" multiple onchange="handleTplAttachmentFiles(event)">
+        <div ondragover="event.preventDefault();this.classList.add('drop-hover')" ondragleave="this.classList.remove('drop-hover')" ondrop="dropFilesIntoInput(event,'tpl-attachment-file',this)" style="border:2px dashed var(--bdr2);border-radius:8px;padding:10px">
+          <input type="file" id="tpl-attachment-file" multiple onchange="handleTplAttachmentFiles(event)">
+          <div style="font-size:11px;color:var(--mu);margin-top:4px">ou glissez-déposez un ou plusieurs fichiers ici</div>
+        </div>
         <div id="tpl-attachment-err" style="font-size:11px;color:#a32d2d;margin-top:4px;display:none"></div>
         <div style="font-size:11px;color:var(--mu,#888);margin-top:4px">Jointes automatiquement à chaque email envoyé avec ce modèle (ex. plaquette PDF, CGV) — 5 fichiers max, 7 Mo max chacun.</div>
       </div>
@@ -15549,7 +15585,12 @@ function openAccBankImportModal(bankAccountId){
         <option value="mt940">MT940 (SWIFT)</option>
         <option value="cfonb">CFONB</option>
       </select></div>
-      <div class="ff" style="margin-top:8px"><label>Fichier</label><input type="file" id="bi-file" accept=".csv,.xml,.txt,.sta" onchange="accBankImportFileChange(event)"></div>
+      <div class="ff" style="margin-top:8px"><label>Fichier</label>
+        <div ondragover="event.preventDefault();this.classList.add('drop-hover')" ondragleave="this.classList.remove('drop-hover')" ondrop="dropFilesIntoInput(event,'bi-file',this)" style="border:2px dashed var(--bdr2);border-radius:8px;padding:10px">
+          <input type="file" id="bi-file" accept=".csv,.xml,.txt,.sta" onchange="accBankImportFileChange(event)">
+          <div style="font-size:11px;color:var(--mu);margin-top:4px">ou glissez-déposez un fichier ici</div>
+        </div>
+      </div>
       <div class="ff" style="margin-top:8px"><label>Ou contenu collé</label><textarea id="bi-content" rows="8" style="width:100%;font-family:monospace;font-size:12px" placeholder="Collez le contenu du relevé ici si vous n'utilisez pas de fichier"></textarea></div>
       <div id="bi-status" style="font-size:12px;color:var(--mu);margin-top:6px"></div>
       <div class="modal-footer">
