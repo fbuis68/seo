@@ -751,7 +751,10 @@ function switchTab(key){
 // le 06/11/2026 (le client doit pouvoir y déposer ses propres documents
 // même sans document de bibliothèque attaché au devis).
 function render(){
-  const showRoi = !ROI_EXCLUDED_SECTEURS.includes(QUOTE.prospectSecteur);
+  // 16/11/2026, "option pour afficher l'onglet de ROI par tick box" —
+  // réglage explicite par devis (QuoteConfig.showRoiTab) prioritaire sur
+  // le calcul automatique par secteur, cf. routes/crmQuote.ts.
+  const showRoi = QUOTE.showRoiTab != null ? !!QUOTE.showRoiTab : !ROI_EXCLUDED_SECTEURS.includes(QUOTE.prospectSecteur);
   const tabs = [{key:'devis', label:'Devis'}];
   if(showRoi) tabs.push({key:'roi', label:'Rentabilité'});
   // Onglet Documents toujours visible (06/11/2026, "permettre au

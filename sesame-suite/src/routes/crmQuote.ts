@@ -80,6 +80,12 @@ interface QuoteConfig {
   devRate?: number;
   specificScope?: string;
   overrides?: Record<string, Partial<Pick<QuoteLine, "label" | "qty" | "unitPrice">>>;
+  // Affichage de l'onglet "Rentabilité" sur l'espace client (16/11/2026,
+  // "mettre une option pour afficher l'onglet de ROI par tick box") —
+  // undefined/null = comportement par défaut (selon le secteur du
+  // prospect, cf. public/devis-signature.html ROI_EXCLUDED_SECTEURS) ;
+  // true/false = forcé pour CE devis précis, quel que soit le secteur.
+  showRoiTab?: boolean | null;
   [k: string]: unknown;
 }
 
@@ -981,6 +987,7 @@ crmQuoteRouter.get(
       mentionsText: quote.mentionsText || "",
       termsText: quote.termsText || "",
       totals: quoteTotals(lines, quote.discountPct, quote.vatPct, quote.depositPct),
+      showRoiTab: config.showRoiTab ?? null,
       prospectNom: quote.prospect.nom,
       prospectSecteur: quote.prospect.secteur || null,
       // Logo + couleur de marque du client (02/11/2026, "reprendre la

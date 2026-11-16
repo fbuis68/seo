@@ -8396,6 +8396,13 @@ const DQ_DEFAULT_INTRO = "Nous vous proposons une solution de gestion des accès
 const DQ_DEFAULT_TERMS = "Validité : 30 jours. Solde à la livraison. Intervention sous réserve de validation technique et des prérequis chantier. CGV Sesame Technology à joindre dans leur version validée.";
 const DQ_PMS_OPTIONS = ['Misterbooking','Sans interface PMS','Mews','Opera Cloud','Thais','Autre / à étudier'];
 const DQ_START_OPTIONS = ['À la mise en service','À la livraison','À la signature'];
+// Même liste que public/devis-signature.html (ROI_EXCLUDED_SECTEURS) — sert
+// uniquement à calculer la case par défaut de "Afficher l'onglet
+// Rentabilité (ROI)" ci-dessous quand l'admin n'a jamais touché ce réglage
+// pour ce devis (q.config.showRoiTab alors undefined) : reproduit le même
+// calcul automatique par secteur, pour ne rien changer au comportement
+// existant tant que la case n'est pas explicitement cochée/décochée.
+const DQ_ROI_EXCLUDED_SECTEURS = ['Garde meuble','Sport','Agence gestion patrimoine','Bureaux','Padel'];
 
 function dqDefaultConfig(){
   return {
@@ -8613,11 +8620,12 @@ function captureDocumentTab(){
   if(intro) q.introText = intro.textContent;
   if(mentions) q.mentionsText = mentions.textContent;
   if(terms) q.termsText = terms.textContent;
-  const gd=document.getElementById('dq-discount'), gv=document.getElementById('dq-vat'), gdep=document.getElementById('dq-deposit'), gs=document.getElementById('dq-status');
+  const gd=document.getElementById('dq-discount'), gv=document.getElementById('dq-vat'), gdep=document.getElementById('dq-deposit'), gs=document.getElementById('dq-status'), groi=document.getElementById('dq-showRoiTab');
   if(gd) q.discountPct = +gd.value||0;
   if(gv) q.vatPct = +gv.value||0;
   if(gdep) q.depositPct = +gdep.value||0;
   if(gs) q.status = gs.value;
+  if(groi) q.config.showRoiTab = groi.checked;
   dqAllLines(q).forEach(r=>{
     const gn=document.getElementById('dl-name-'+r.id), gq=document.getElementById('dl-qty-'+r.id), gp=document.getElementById('dl-price-'+r.id);
     if(!gn && !gq && !gp) return;
@@ -9300,6 +9308,11 @@ function dqRenderDocumentTab(q, lines){
     <div class="sq-edit" style="background:var(--bg)">Date, nom, qualité et signature du client :</div>
 
     <div class="ff" style="margin-top:16px"><label>Statut</label><select id="dq-status" onchange="dqRerender()">${['brouillon','envoyé','accepté','refusé'].map(s=>`<option value="${s}" ${q.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+
+    <div class="ff" style="margin-top:12px">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="dq-showRoiTab" ${(q.config.showRoiTab!=null?!!q.config.showRoiTab:!(()=>{const p=clients.find(c=>c.id===q.prospectId);return p&&DQ_ROI_EXCLUDED_SECTEURS.includes(p.secteur);})())?'checked':''} style="width:auto"> Afficher l'onglet Rentabilité (ROI) sur l'espace client</label>
+      <div style="font-size:11px;color:var(--mu);margin-top:4px">Par défaut selon le secteur du client — cette case force l'affichage ou le masquage pour ce devis précis.</div>
+    </div>
 
     <h4 style="margin-top:16px">Affaire liée</h4>
     ${q.dealId?`<div class="db-row" style="align-items:center;gap:8px"><span class="tpill bn bc-link" onclick="openDealModal('${q.dealId}')" title="Voir l'affaire">${esc(q.dealTitle||'')}</span><button class="btn btn-ghost btn-sm" onclick="dqDetachDeal()">Détacher</button></div>`
