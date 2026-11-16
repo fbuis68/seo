@@ -457,6 +457,16 @@ var RS_NFC_TARGET_BTN_ID = 'rs-nfc-btn';
 var RS_TZ = 'Europe/Paris';
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+// Logos des canaux OTA reconnus (16/11/2026) — même correspondance par
+// sous-chaîne que public/admin.html (sourceBadgeHtml).
+var SOURCE_LOGOS = { airbnb: '/icons/sources/airbnb.png', expedia: '/icons/sources/expedia.png', booking: '/icons/sources/booking.png' };
+function sourceBadgeHtml(source){
+  if(!source) return '';
+  var s = source.toLowerCase();
+  var key = Object.keys(SOURCE_LOGOS).filter(function(k){ return s.indexOf(k)!==-1; })[0];
+  if(key) return '<img src="'+SOURCE_LOGOS[key]+'" alt="'+esc(source)+'" title="'+esc(source)+'" style="height:14px;vertical-align:-3px">';
+  return '<i class="ti ti-plug"></i> '+esc(source);
+}
 function fmtDMY(iso){
   if(!iso) return '—';
   var d = new Date(iso);
@@ -764,7 +774,7 @@ function rsRender(){
 
     return '<div class="rescard" onclick="rsOpenDetail(\''+esc(b.code)+'\')">'
       + '<div class="rname">'+esc(b.personFirstname)+' '+esc(b.personLastname)+' <span class="rroom">— Chambre '+esc(room)+'</span></div>'
-      + '<div class="rmeta"><span><i class="ti ti-ticket"></i> '+esc(b.code)+'</span><span><i class="ti ti-calendar"></i> '+esc(dates)+'</span>'+(b.source?'<span><i class="ti ti-plug"></i> '+esc(b.source)+'</span>':'')+'</div>'
+      + '<div class="rmeta"><span><i class="ti ti-ticket"></i> '+esc(b.code)+'</span><span><i class="ti ti-calendar"></i> '+esc(dates)+'</span>'+(b.source?'<span>'+sourceBadgeHtml(b.source)+'</span>':'')+'</div>'
       + '<div class="badges">'+checkinBadge+nfcBadge+'</div>'
       + '</div>';
   }).join('');

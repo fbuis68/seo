@@ -16935,6 +16935,20 @@ function resaPopulateFilters(){
     + types.map(function(t){ return '<option value="'+esc(t)+'">'+esc(t)+'</option>'; }).join('');
 }
 
+// Logos des canaux OTA reconnus (16/11/2026, "mettre le champs source...
+// avec les logos ci joint") — simple correspondance par sous-chaîne
+// (insensible à la casse) sur Booking.source, pour couvrir aussi bien
+// "booking" que "booking.com" ou "Booking.com - Partner". Repli sur
+// l'ancien badge texte pour toute source non reconnue (ex : "default").
+var SOURCE_LOGOS = { airbnb: '/icons/sources/airbnb.png', expedia: '/icons/sources/expedia.png', booking: '/icons/sources/booking.png' };
+function sourceBadgeHtml(source){
+  if(!source) return '';
+  var s = source.toLowerCase();
+  var key = Object.keys(SOURCE_LOGOS).filter(function(k){ return s.indexOf(k)!==-1; })[0];
+  if(key) return '<img src="'+SOURCE_LOGOS[key]+'" alt="'+esc(source)+'" title="'+esc(source)+'" style="height:14px;vertical-align:-3px">';
+  return '<i class="ti ti-plug" style="font-size:11px"></i> '+esc(source);
+}
+
 function renderReservations(){
   var listEl = document.getElementById('resa-list');
   var countEl = document.getElementById('resa-count');
@@ -17051,7 +17065,7 @@ function renderReservations(){
       + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">'
       + '<div>'
       + '<div style="font-size:15px;font-weight:700">'+esc(b.personFirstname)+' '+esc(b.personLastname)+' <span style="font-weight:400;color:var(--mu);font-size:12px">— Chambre '+esc(room)+'</span></div>'
-      + '<div style="font-size:12px;color:var(--mu);margin-top:2px"><i class="ti ti-ticket" style="font-size:11px"></i> '+esc(b.code)+(b.source?' &nbsp;·&nbsp; <i class="ti ti-plug" style="font-size:11px"></i> '+esc(b.source):'')+' &nbsp;·&nbsp; <i class="ti ti-mail" style="font-size:11px"></i> '+esc(b.personEmail)+(b.personPhone?' &nbsp;·&nbsp; <i class="ti ti-phone" style="font-size:11px"></i> '+esc(b.personPhone):'')+'</div>'
+      + '<div style="font-size:12px;color:var(--mu);margin-top:2px"><i class="ti ti-ticket" style="font-size:11px"></i> '+esc(b.code)+(b.source?' &nbsp;·&nbsp; '+sourceBadgeHtml(b.source):'')+' &nbsp;·&nbsp; <i class="ti ti-mail" style="font-size:11px"></i> '+esc(b.personEmail)+(b.personPhone?' &nbsp;·&nbsp; <i class="ti ti-phone" style="font-size:11px"></i> '+esc(b.personPhone):'')+'</div>'
       + '<div style="font-size:12px;color:var(--mu);margin-top:2px"><i class="ti ti-calendar" style="font-size:11px"></i> '+esc(dates)+'</div>'
       + '</div>'
       + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">'
@@ -17164,7 +17178,7 @@ async function resaOpenDetail(code){
   // (Booking.importedFrom, toujours le même pour tout l'établissement,
   // donc peu utile réservation par réservation).
   rows = rows.concat([
-    ['Source', b.source ? esc(b.source) : (b.importedFrom ? esc(b.importedFrom) : 'Saisie manuelle / check-in éco')],
+    ['Source', b.source ? sourceBadgeHtml(b.source)+' '+esc(b.source) : (b.importedFrom ? esc(b.importedFrom) : 'Saisie manuelle / check-in éco')],
     ['Arrivée', esc(fmtDMY(b.startDate))+' <span style="color:var(--mu);font-weight:400">à partir de '+esc(b.checkinTime||CFG.checkinTime||'15:00')+'</span>'
       +' <button type="button" title="Modifier l\'horaire de cette réservation" onclick="event.stopPropagation();resaOpenEdit(\''+esc(b.code)+'\')" style="background:none;border:none;cursor:pointer;color:var(--mu);font-size:13px;padding:0 0 0 4px;vertical-align:-2px"><i class="ti ti-settings"></i></button>'],
     ['Départ', esc(fmtDMY(b.endDate))+' <span style="color:var(--mu);font-weight:400">avant '+esc(b.checkoutTime||CFG.checkoutTime||'11:00')+'</span>'],
