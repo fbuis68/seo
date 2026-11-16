@@ -10554,7 +10554,9 @@ function autoTimingSummary(r){
   if(r.timingMode==='immediate') return 'Immédiat';
   if(r.timingMode==='offset'){
     var v=r.offsetValue||0;
-    return Math.abs(v)+' '+autoUnitLabel(r.offsetUnit)+' '+(v<0?'avant':'après');
+    var base = Math.abs(v)+' '+autoUnitLabel(r.offsetUnit)+' '+(v<0?'avant':'après');
+    if(r.repeatEnabled) base += ' · relance ×'+(r.repeatMaxCount||1)+' ('+(r.repeatIntervalValue||1)+' '+autoUnitLabel(r.repeatIntervalUnit)+') tant que check-in web non fait';
+    return base;
   }
   // Rétro-compatibilité d'affichage pour d'éventuelles règles créées sous
   // l'ancien système à deux modes séparés (avant remplacement par "offset").
@@ -10771,6 +10773,36 @@ function autoRenderTimingSubfields(){
       + '</select></div>'
       + '<div style="font-size:11px;color:var(--mu);margin-top:4px">'+hint+'</div>';
   }
+  // Relance répétée (16/11/2026, "renvoyer x fois le message tous les y
+  // min/jour si le web check-in n'est pas passé") — seulement pour "Début
+  // de séjour" en mode Décalage : c'est le seul cas où renvoyer un rappel
+  // tant qu'une réservation n'a pas fait son check-in web a un sens.
+  var triggerKey = (document.getElementById('auto-trigger')||{value:r.trigger}).value;
+  if(mode==='offset' && triggerKey==='stay.start'){
+    el.innerHTML += '<div class="fi" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bdr)">'
+      + '<label class="lb" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="auto-repeatEnabled" '+(r.repeatEnabled?'checked':'')+' onchange="autoRenderRepeatFields()" style="width:auto"> Relancer tant que le web check-in n\'est pas fait</label>'
+      + '</div>'
+      + '<div id="auto-repeat-fields"></div>';
+    autoRenderRepeatFields();
+  }
+}
+
+function autoRenderRepeatFields(){
+  var r = AUTO_RULE_EDITING || {};
+  var el = document.getElementById('auto-repeat-fields');
+  if(!el) return;
+  var on = document.getElementById('auto-repeatEnabled') && document.getElementById('auto-repeatEnabled').checked;
+  if(!on){ el.innerHTML=''; return; }
+  el.innerHTML = '<div class="g2">'
+    + '<div class="fi"><label class="lb">Nombre d\'envois au total</label><input type="number" id="auto-repeatMaxCount" value="'+(r.repeatMaxCount||3)+'" min="2"></div>'
+    + '<div class="fi"><label class="lb">Intervalle entre deux relances</label><div class="g2" style="gap:6px"><input type="number" id="auto-repeatIntervalValue" value="'+(r.repeatIntervalValue||1)+'" min="1" style="width:70px">'
+    + '<select id="auto-repeatIntervalUnit">'
+    + '<option value="minutes" '+(r.repeatIntervalUnit==='minutes'?'selected':'')+'>Minutes</option>'
+    + '<option value="hours" '+(r.repeatIntervalUnit==='hours'?'selected':'')+'>Heures</option>'
+    + '<option value="days" '+(!r.repeatIntervalUnit||r.repeatIntervalUnit==='days'?'selected':'')+'>Jours</option>'
+    + '</select></div></div>'
+    + '</div>'
+    + '<div style="font-size:11px;color:var(--mu);margin-top:4px">Le premier envoi reste celui réglé ci-dessus (ex. J-1). S\'il n\'a pas fait son check-in web à ce moment-là, le message est renvoyé selon cet intervalle, jusqu\'à ce nombre d\'envois au total — s\'arrête dès que le check-in web est fait.</div>';
 }
 
 function autoRenderTplOptions(){
@@ -10807,8 +10839,15 @@ async function autoSaveRule(id){
     recipientOverride: document.getElementById('auto-recipientOverride') ? document.getElementById('auto-recipientOverride').value.trim() : null,
     senderName: document.getElementById('auto-senderName') ? document.getElementById('auto-senderName').value.trim() : null,
     questionnaireId: document.getElementById('auto-questionnaire') ? (document.getElementById('auto-questionnaire').value || null) : null,
+    repeatEnabled: document.getElementById('auto-repeatEnabled') ? document.getElementById('auto-repeatEnabled').checked : false,
+    repeatMaxCount: document.getElementById('auto-repeatMaxCount') ? +document.getElementById('auto-repeatMaxCount').value : null,
+    repeatIntervalValue: document.getElementById('auto-repeatIntervalValue') ? +document.getElementById('auto-repeatIntervalValue').value : null,
+    repeatIntervalUnit: document.getElementById('auto-repeatIntervalUnit') ? document.getElementById('auto-repeatIntervalUnit').value : null,
+    repeatStopCondition: document.getElementById('auto-repeatEnabled') ? 'checkin_done' : null,
   };
   if(!body.name){ toast('Le nom est requis'); return; }
+  if(body.repeatEnabled && (!body.repeatMaxCount || body.repeatMaxCount<2)){ toast('Nombre d\'envois invalide pour la relance (au moins 2)'); return; }
+  if(body.repeatEnabled && (!body.repeatIntervalValue || body.repeatIntervalValue<1)){ toast('Intervalle de relance invalide'); return; }
   if(!body.templateKey){ toast('Sélectionnez un modèle pour ce canal'); return; }
   if(recipientMode==='custom' && !body.recipientOverride){ toast('Indiquez le destinataire personnalisé'); return; }
   try{

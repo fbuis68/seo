@@ -33,6 +33,11 @@ function shapeRule(r: {
   senderName: string | null;
   audienceFilter: unknown;
   questionnaireId: string | null;
+  repeatEnabled: boolean;
+  repeatMaxCount: number | null;
+  repeatIntervalValue: number | null;
+  repeatIntervalUnit: string | null;
+  repeatStopCondition: string | null;
   lastRunAt: Date | null;
   lastError: string | null;
   lastErrorAt: Date | null;
@@ -57,6 +62,11 @@ function shapeRule(r: {
     senderName: r.senderName || "",
     audienceFilter: r.audienceFilter || null,
     questionnaireId: r.questionnaireId,
+    repeatEnabled: r.repeatEnabled,
+    repeatMaxCount: r.repeatMaxCount,
+    repeatIntervalValue: r.repeatIntervalValue,
+    repeatIntervalUnit: r.repeatIntervalUnit,
+    repeatStopCondition: r.repeatStopCondition,
     lastRunAt: r.lastRunAt,
     lastError: r.lastError,
     lastErrorAt: r.lastErrorAt,
@@ -92,10 +102,17 @@ interface RuleBody {
   senderName?: string | null;
   audienceFilter?: unknown;
   questionnaireId?: string | null;
+  repeatEnabled?: boolean;
+  repeatMaxCount?: number | null;
+  repeatIntervalValue?: number | null;
+  repeatIntervalUnit?: string | null;
+  repeatStopCondition?: string | null;
 }
 
 const TIMING_MODES = ["immediate", "offset", "delay", "recurring"];
 const OFFSET_UNITS = ["minutes", "hours", "days", "months"];
+const REPEAT_INTERVAL_UNITS = ["minutes", "hours", "days"];
+const REPEAT_STOP_CONDITIONS = ["checkin_done"];
 const CHANNELS = ["email", "sms", "whatsapp"];
 const RECIPIENT_MODES = ["event", "custom"];
 
@@ -115,6 +132,13 @@ function validateRuleBody(b: RuleBody) {
   }
   if (b.timingMode === "recurring" && !b.recurrence) {
     throw new HttpError(400, "Une récurrence (daily/weekly/monthly) est requise pour ce mode");
+  }
+  if (b.repeatEnabled) {
+    if (b.timingMode !== "offset") throw new HttpError(400, "La relance répétée n'est disponible que pour le mode \"Décalage (date précise)\"");
+    if (!b.repeatMaxCount || b.repeatMaxCount < 1) throw new HttpError(400, "Nombre d'envois invalide pour la relance répétée");
+    if (!b.repeatIntervalValue || b.repeatIntervalValue < 1) throw new HttpError(400, "Intervalle de relance invalide");
+    if (!b.repeatIntervalUnit || !REPEAT_INTERVAL_UNITS.includes(b.repeatIntervalUnit)) throw new HttpError(400, "Unité d'intervalle de relance invalide");
+    if (!b.repeatStopCondition || !REPEAT_STOP_CONDITIONS.includes(b.repeatStopCondition)) throw new HttpError(400, "Condition d'arrêt de la relance invalide");
   }
   if (!CHANNELS.includes(b.channel)) throw new HttpError(400, "Canal invalide");
   if (!b.templateKey) throw new HttpError(400, "Modèle requis");
@@ -169,6 +193,11 @@ automationRuleRouter.post(
         senderName: b.senderName?.trim() || null,
         audienceFilter: b.audienceFilter ?? undefined,
         questionnaireId: b.questionnaireId || null,
+        repeatEnabled: !!b.repeatEnabled,
+        repeatMaxCount: b.repeatEnabled ? b.repeatMaxCount ?? null : null,
+        repeatIntervalValue: b.repeatEnabled ? b.repeatIntervalValue ?? null : null,
+        repeatIntervalUnit: b.repeatEnabled ? b.repeatIntervalUnit ?? null : null,
+        repeatStopCondition: b.repeatEnabled ? b.repeatStopCondition ?? null : null,
       },
     });
     res.status(201).json(shapeRule(row));
@@ -207,6 +236,11 @@ automationRuleRouter.post(
         senderName: b.senderName?.trim() || null,
         questionnaireId: b.questionnaireId || null,
         audienceFilter: b.audienceFilter ?? undefined,
+        repeatEnabled: !!b.repeatEnabled,
+        repeatMaxCount: b.repeatEnabled ? b.repeatMaxCount ?? null : null,
+        repeatIntervalValue: b.repeatEnabled ? b.repeatIntervalValue ?? null : null,
+        repeatIntervalUnit: b.repeatEnabled ? b.repeatIntervalUnit ?? null : null,
+        repeatStopCondition: b.repeatEnabled ? b.repeatStopCondition ?? null : null,
       },
     });
     res.json(shapeRule(row));

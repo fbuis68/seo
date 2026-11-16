@@ -376,6 +376,11 @@ async function sweepDateRule(rule: {
   recipientOverride: string | null;
   senderName: string | null;
   questionnaireId: string | null;
+  repeatEnabled: boolean;
+  repeatMaxCount: number | null;
+  repeatIntervalValue: number | null;
+  repeatIntervalUnit: string | null;
+  repeatStopCondition: string | null;
 }) {
   const trigger = getTrigger(rule.trigger);
   if (!trigger?.dateField) return;
@@ -401,6 +406,33 @@ async function sweepDateRule(rule: {
     console.error(`[automation] lecture des réservations échouée pour la règle "${rule.name}":`, err);
     return;
   }
+
+  // Relance répétée (cf. AutomationRule.repeatEnabled) : une réservation déjà
+  // envoyée une fois ne retombe plus jamais dans la fenêtre `range` ci-dessus
+  // (sa date d'arrivée/départ ne bouge pas) — sans ce second lot, les envois
+  // suivants ne se déclencheraient jamais. On rajoute donc toute réservation
+  // qui a déjà un log pour cette règle, pas encore au nombre maximal
+  // d'envois, indépendamment de la fenêtre temporelle d'origine.
+  if (rule.repeatEnabled) {
+    const maxCount = rule.repeatMaxCount || 1;
+    let pendingLogs: { targetId: string }[] = [];
+    try {
+      pendingLogs = await prisma.automationRuleLog.findMany({
+        where: { ruleId: rule.id, targetType: "booking", count: { lt: maxCount } },
+      });
+    } catch (err) {
+      console.error(`[automation] lecture des relances échouée pour la règle "${rule.name}":`, err);
+    }
+    if (pendingLogs.length) {
+      const knownIds = new Set(bookings.map((b) => b.id));
+      const missingIds = pendingLogs.map((l) => l.targetId).filter((id) => !knownIds.has(id));
+      if (missingIds.length) {
+        const extra = await prisma.booking.findMany({ where: { id: { in: missingIds } } });
+        bookings = [...bookings, ...extra];
+      }
+    }
+  }
+
   const hotel = rule.entityId ? await hotelContactInfo(rule.entityId) : { name: "", entityCode: "" };
 
   for (const b of bookings) {
@@ -410,7 +442,14 @@ async function sweepDateRule(rule: {
       const already = await prisma.automationRuleLog.findUnique({
         where: { ruleId_targetType_targetId: { ruleId: rule.id, targetType: "booking", targetId: b.id } },
       });
-      if (already) continue;
+      if (already) {
+        if (!rule.repeatEnabled) continue;
+        if (rule.repeatStopCondition === "checkin_done" && b.checkinDone) continue;
+        const maxCount = rule.repeatMaxCount || 1;
+        if (already.count >= maxCount) continue;
+        const intervalMs = (MS[(rule.repeatIntervalUnit as keyof typeof MS) || "days"] ?? MS.days) * (rule.repeatIntervalValue || 1);
+        if (Date.now() - already.sentAt.getTime() < intervalMs) continue;
+      }
       const variables = await attachQuestionnaireLink(
         rule.questionnaireId,
         "booking",
@@ -425,7 +464,11 @@ async function sweepDateRule(rule: {
         variables,
         fromNameOverride: rule.senderName || undefined,
       });
-      await prisma.automationRuleLog.create({ data: { ruleId: rule.id, targetType: "booking", targetId: b.id } });
+      if (already) {
+        await prisma.automationRuleLog.update({ where: { id: already.id }, data: { sentAt: new Date(), count: { increment: 1 } } });
+      } else {
+        await prisma.automationRuleLog.create({ data: { ruleId: rule.id, targetType: "booking", targetId: b.id } });
+      }
       await recordRuleSuccess(rule.id);
     } catch (err) {
       console.error(`[automation] échec de la règle "${rule.name}" pour la réservation ${b.code}:`, err);

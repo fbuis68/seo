@@ -3816,6 +3816,21 @@ model AutomationRule {
   questionnaireId String?
   questionnaire   Questionnaire? @relation(fields: [questionnaireId], references: [id], onDelete: SetNull)
 
+  // Relance répétée (16/11/2026, "renvoyer x fois le message tous les y
+  // min/jour si le web check-in n'est pas passé") — réservé aux règles
+  // timingMode="offset" (ex. "Début de séjour" J-1) : au lieu de s'arrêter
+  // après le premier envoi (comportement normal, cf. AutomationRuleLog),
+  // continue à renvoyer toutes les repeatIntervalValue/repeatIntervalUnit
+  // tant que repeatStopCondition n'est pas vérifiée, jusqu'à repeatMaxCount
+  // envois au total (premier envoi inclus). repeatStopCondition="checkin_done"
+  // est la seule valeur gérée pour l'instant (Booking.checkinDone) — n'a de
+  // sens que pour un déclencheur portant sur une réservation.
+  repeatEnabled       Boolean @default(false)
+  repeatMaxCount      Int?
+  repeatIntervalValue Int?
+  repeatIntervalUnit  String? // minutes | hours | days
+  repeatStopCondition String? // checkin_done
+
   lastRunAt DateTime?
 
   // Visibilité des échecs — sans ça, un envoi qui échoue (SMTP mal
@@ -3873,7 +3888,11 @@ model AutomationRuleLog {
   rule       AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
   targetType String // "booking" | "order" | "crmProspect" | "period" (newsletter)…
   targetId   String
+  // sentAt = date du DERNIER envoi (plus seulement le premier, depuis la
+  // relance répétée ci-dessus — cf. AutomationRule.repeatEnabled) ; count =
+  // nombre total d'envois déjà effectués pour cette cible par cette règle.
   sentAt     DateTime       @default(now())
+  count      Int            @default(1)
 
   @@unique([ruleId, targetType, targetId])
 }
