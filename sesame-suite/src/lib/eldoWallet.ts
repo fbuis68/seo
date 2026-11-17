@@ -181,14 +181,20 @@ export interface HotelPassResult {
 export async function createHotelPass(
   config: WalletConfig,
   booking: Booking,
-  opts: { roomNumber?: string; roomCode?: string } = {}
+  opts: { roomNumber?: string; roomCode?: string; barcode?: string } = {}
 ): Promise<HotelPassResult> {
   const body: Record<string, unknown> = {
     checkin: booking.startDate.toISOString(),
     checkout: booking.endDate.toISOString(),
     firstName: booking.personFirstname,
     lastName: booking.personLastname,
-    barcode: booking.code,
+    // Notre QR code d'accès réel (17/11/2026, "envoyer notre QR code dans
+    // le champ barcode") quand il a pu être récupéré côté intégration
+    // réservations (cf. routes/wallet.ts getOrCreateWalletPass, qui
+    // interroge lib/bookingSource.ts fetchAccessQr avant cet appel) —
+    // repli sur le code de réservation sinon (comportement d'origine,
+    // ex : intégration réservations non configurée pour cet établissement).
+    barcode: opts.barcode || booking.code,
   };
   if (booking.personEmail) body.email = booking.personEmail;
   if (booking.personPhone) body.phoneNumber = booking.personPhone;

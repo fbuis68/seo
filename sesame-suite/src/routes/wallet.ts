@@ -4,6 +4,7 @@ import { resolveEntity } from "../lib/entity";
 import { asyncHandler, HttpError } from "../lib/asyncHandler";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { createHotelPass, getHotelInfo, WalletError } from "../lib/eldoWallet";
+import { fetchAccessQr } from "../lib/bookingSource";
 import type { Booking, WalletConfig } from "@prisma/client";
 
 export const walletRouter = Router();
@@ -35,7 +36,23 @@ async function getOrCreateWalletPass(config: WalletConfig, booking: Booking, opt
   if (booking.walletPassId) {
     return { id: booking.walletPassId, shortLink: booking.walletShortLink, status: booking.walletStatus };
   }
-  const pass = await createHotelPass(config, booking, opts);
+  // Notre QR code d'accès réel dans le champ barcode du pass (17/11/2026)
+  // plutôt que le simple code de réservation — best-effort : une
+  // intégration réservations non configurée, ou sans QR configuré pour
+  // cet établissement, ne doit jamais bloquer la génération du pass
+  // Wallet (fonctionnalité indépendante), juste retomber sur le code de
+  // réservation comme avant.
+  let barcode: string | undefined;
+  try {
+    const bsConfig = await prisma.bookingSourceConfig.findUnique({ where: { entityId: booking.entityId } });
+    if (bsConfig) {
+      const qr = await fetchAccessQr(bsConfig, booking.code, booking.personEmail);
+      barcode = qr.qrValue || qr.accessCode || undefined;
+    }
+  } catch (e) {
+    console.error("[wallet] récupération du QR code échouée, repli sur le code de réservation :", e);
+  }
+  const pass = await createHotelPass(config, booking, { ...opts, barcode });
   await prisma.booking.update({
     where: { id: booking.id },
     data: {
