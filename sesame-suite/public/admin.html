@@ -4585,6 +4585,13 @@ Accès au salon Premium</textarea>
       </label>
     </div>
     <div class="fi">
+      <label class="lb">Réservation immédiate</label>
+      <label style="display:flex;align-items:center;gap:8px;height:38px;cursor:pointer">
+        <input type="checkbox" id="bke-immediate" style="accent-color:var(--am)">
+        <span style="font-size:13px">Masque les dates d'arrivée/départ — arrivée fixée à maintenant, départ calculé automatiquement (1re durée prédéfinie ci-dessus, sinon +1 jour). Pour un accès consommé tout de suite (magasin, casier), sans séjour à dates choisies.</span>
+      </label>
+    </div>
+    <div class="fi">
       <label class="lb">Paiement par empreinte bancaire</label>
       <label style="display:flex;align-items:center;gap:8px;height:38px;cursor:pointer">
         <input type="checkbox" id="bke-card-on-file" style="accent-color:var(--am)">
@@ -9688,6 +9695,7 @@ async function bkeInit(){
     document.getElementById('bke-hide-occupants').checked = !!(cfg && cfg.hideOccupants);
     document.getElementById('bke-skip-availability').checked = !!(cfg && cfg.skipAvailabilityCheck);
     document.getElementById('bke-card-on-file').checked = !!(cfg && cfg.cardOnFileMode);
+    document.getElementById('bke-immediate').checked = !!(cfg && cfg.immediateBooking);
     document.getElementById('bke-page-title').value = (cfg && cfg.pageTitle) || '';
     document.getElementById('bke-page-intro').value = (cfg && cfg.pageIntro) || '';
     document.getElementById('bke-confirm-title').value = (cfg && cfg.confirmationTitle) || '';
@@ -9721,6 +9729,7 @@ async function bkeSave(){
     hideOccupants: document.getElementById('bke-hide-occupants').checked,
     skipAvailabilityCheck: document.getElementById('bke-skip-availability').checked,
     cardOnFileMode: document.getElementById('bke-card-on-file').checked,
+    immediateBooking: document.getElementById('bke-immediate').checked,
     pageTitle: document.getElementById('bke-page-title').value.trim(),
     pageIntro: document.getElementById('bke-page-intro').value.trim(),
     confirmationTitle: document.getElementById('bke-confirm-title').value.trim(),

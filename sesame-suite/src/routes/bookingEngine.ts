@@ -50,6 +50,7 @@ bookingEngineRouter.get(
       hideOccupants: config.hideOccupants,
       skipAvailabilityCheck: config.skipAvailabilityCheck,
       cardOnFileMode: config.cardOnFileMode,
+      immediateBooking: config.immediateBooking,
       pageTitle: config.pageTitle || "",
       pageIntro: config.pageIntro || "",
       confirmationTitle: config.confirmationTitle || "",
@@ -73,6 +74,7 @@ bookingEngineRouter.post(
     const hideOccupants = req.body.hideOccupants !== undefined ? !!req.body.hideOccupants : undefined;
     const skipAvailabilityCheck = req.body.skipAvailabilityCheck !== undefined ? !!req.body.skipAvailabilityCheck : undefined;
     const cardOnFileMode = req.body.cardOnFileMode !== undefined ? !!req.body.cardOnFileMode : undefined;
+    const immediateBooking = req.body.immediateBooking !== undefined ? !!req.body.immediateBooking : undefined;
     let pageTitle: string | undefined;
     if (req.body.pageTitle !== undefined) {
       pageTitle = String(req.body.pageTitle).trim();
@@ -101,6 +103,7 @@ bookingEngineRouter.post(
       ...(hideOccupants !== undefined ? { hideOccupants } : {}),
       ...(skipAvailabilityCheck !== undefined ? { skipAvailabilityCheck } : {}),
       ...(cardOnFileMode !== undefined ? { cardOnFileMode } : {}),
+      ...(immediateBooking !== undefined ? { immediateBooking } : {}),
       ...(pageTitle !== undefined ? { pageTitle } : {}),
       ...(pageIntro !== undefined ? { pageIntro } : {}),
       ...(confirmationTitle !== undefined ? { confirmationTitle } : {}),
@@ -119,6 +122,7 @@ bookingEngineRouter.post(
       hideOccupants: config.hideOccupants,
       skipAvailabilityCheck: config.skipAvailabilityCheck,
       cardOnFileMode: config.cardOnFileMode,
+      immediateBooking: config.immediateBooking,
       pageTitle: config.pageTitle || "",
       pageIntro: config.pageIntro || "",
       confirmationTitle: config.confirmationTitle || "",
@@ -162,6 +166,7 @@ bookingEngineRouter.get(
       durationOptions,
       hideRoomSelection: !!engineConfig?.hideRoomSelection,
       hideOccupants: !!engineConfig?.hideOccupants,
+      immediateBooking: !!engineConfig?.immediateBooking,
       cardOnFileMode,
       stripePublishableKey: cardOnFileMode && cardOnFileReady ? paymentConfig?.publishableKey : "",
       pageTitle: engineConfig?.pageTitle || "",

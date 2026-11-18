@@ -1379,6 +1379,15 @@ model BookingEngineConfig {
   // qu'un seul client occupe à la fois).
   skipAvailabilityCheck Boolean @default(false)
 
+  // 18/11/2026, "mettre un paramètre fait que la réservation est
+  // immédiate" — pour un accès réservé/consommé tout de suite (magasin,
+  // casier) plutôt qu'un séjour à dates choisies à l'avance : masque les
+  // champs date d'arrivée/départ sur booking.html, arrivée fixée à
+  // maintenant et départ calculé automatiquement (premier
+  // durationOptions, sinon +1 jour) — le client n'a plus qu'à cliquer,
+  // sans jamais toucher de date.
+  immediateBooking Boolean @default(false)
+
   // Paiement embarqué par empreinte bancaire (Stripe SetupIntent + Elements,
   // carte enregistrée SANS être débitée) plutôt que Stripe Checkout
   // (redirection, paiement immédiat) — remplace l'écran coordonnées
