@@ -1585,7 +1585,7 @@ function apiFetch(url, opts){
   return fetch(url, opts);
 }
 var DEFAULT_CFG={
-  hotelName:'Éco-Séjour',hotelSlogan:'',entityId:'E00000001',stars:3,termsUrl:'',cguRequired:true,newsletterEnabled:true,livretEnabled:true,
+  hotelName:'Éco-Séjour',hotelSlogan:'',entityId:'E00000001',stars:3,termsUrl:'',cguRequired:true,newsletterEnabled:true,
   accessMethods:{qr:true,code:true,face:false},
   colors:{primary:'#8B1A2E',primaryLight:'#FDEDF0',accent:'#8B1A2E',headerBg:'#8B1A2E',
     headerText:'#FFFFFF',bg:'#F5F3F0',cardBg:'#FFFFFF',border:'#E3DED8',text:'#14121E',btnNav:'#8B1A2E'},
@@ -4094,12 +4094,14 @@ function renderEspace(){
   if(rsPill) rsPill.style.display = isModuleActive('roomservice') ? '' : 'none';
   if(!isModuleActive('roomservice') && ESP_ACTIVE_TAB==='rs') ESP_ACTIVE_TAB='key';
 
-  // Onglet Livret — pas d'étape dans le parcours check-in (pas de
-  // checkinModules.livret), toggle dédié CFG.livretEnabled (cf. admin.html
-  // panneau "Livret digital", case "Livret visible dans l'espace client").
+  // Onglet Livret — 18/11/2026, "même comportement que les autres
+  // modules" : même mécanisme checkinModules/isModuleActive que
+  // boutique/loyalty/menage ci-dessus (remplace l'ancien toggle dédié
+  // CFG.livretEnabled), bien qu'il n'y ait pas d'étape "livret" dans le
+  // parcours check-in lui-même (juste cet onglet espace client).
   var livretPill = document.querySelector('#espTabs .pill[data-tab="livret"]');
-  if(livretPill) livretPill.style.display = (CFG.livretEnabled===false) ? 'none' : '';
-  if(CFG.livretEnabled===false && ESP_ACTIVE_TAB==='livret') ESP_ACTIVE_TAB='key';
+  if(livretPill) livretPill.style.display = isModuleActive('livret') ? '' : 'none';
+  if(!isModuleActive('livret') && ESP_ACTIVE_TAB==='livret') ESP_ACTIVE_TAB='key';
 
   // Onglet Points (récompenses) — masqué si le module "rewards" est
   // désactivé (ou auto-désactivé via "eco", cf. toggleModule côté admin) :
@@ -4320,8 +4322,10 @@ function espKeyActionHtml(ap, passcode, simulated){
   var methods = espEffectiveAccessMethods(ap && ap.facilityCode);
   var html = '<button class="btn btn-p" style="display:flex;justify-content:center;margin-bottom:10px;padding:22px;font-size:18px;font-weight:700;gap:10px" onclick="espOpenAccessConfirm(this)"><i class="ti ti-lock-open" style="font-size:24px"></i> '+t(simulated?'esp_open_btn':'esp_key_open_real')+'</button>';
   if(methods.code){
+    // 18/11/2026, "ouverture par Code rajouter # apres le code" — même
+    // convention digicode qu'espRenderQr, affichage uniquement.
     html += '<div style="font-size:11px;color:var(--mu);margin-bottom:4px">'+t(simulated?'esp_backup_code_label':'esp_key_present')+'</div>'
-      + '<div style="font-size:28px;font-weight:700;letter-spacing:4px;font-family:monospace">'+esc(passcode)+'</div>';
+      + '<div style="font-size:28px;font-weight:700;letter-spacing:4px;font-family:monospace">'+esc(passcode)+'#</div>';
   } else if(!methods.qr){
     html += '<div class="alt alt-b" style="margin-top:4px"><i class="ti ti-face-id"></i><span>'+t('esp_key_face_only')+'</span></div>';
   }
@@ -4527,7 +4531,10 @@ async function espRenderQr(){
   ESP_QR_STATE = { simulated: true };
   espHideQrError();
   espRenderQrSimulatedPattern(code);
-  if(codeEl) codeEl.textContent = code;
+  // 18/11/2026, "ouverture par Code rajouter # apres le code" — convention
+  // digicode (terminateur de saisie), uniquement sur l'affichage : la
+  // valeur transmise au serveur pour l'ouverture reste inchangée.
+  if(codeEl) codeEl.textContent = code + '#';
   if(validEl){
     var endDate = b.endDate ? new Date(b.endDate).toLocaleDateString(localeForLang()) : null;
     validEl.textContent = endDate ? tf('esp_valid_until',{date:endDate}) : t('esp_valid_whole_stay');
@@ -4548,7 +4555,7 @@ async function espRenderQr(){
       img.style.display = 'block';
       svg.style.display = 'none';
     }
-    if(data.accessCode && codeEl) codeEl.textContent = data.accessCode;
+    if(data.accessCode && codeEl) codeEl.textContent = data.accessCode + '#';
     if(data.validUntil && validEl){
       var vDate = new Date(data.validUntil);
       validEl.textContent = isNaN(vDate.getTime()) ? data.validUntil : tf('esp_valid_until',{date:vDate.toLocaleDateString(localeForLang())});

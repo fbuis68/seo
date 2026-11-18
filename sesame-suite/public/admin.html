@@ -4763,16 +4763,12 @@ Accès au salon Premium</textarea>
     <p>Créez et organisez les rubriques du livret d'accueil digital affiché dans l'application client.</p>
   </div>
 
-  <!-- 18/11/2026, "les options non activées dans l'entité (boutique,
-       livret) ne doivent pas apparaître du tout dans l'espace client" —
-       le livret n'a pas d'équivalent dans la grille "Modules" (ce n'est pas
-       une étape du parcours check-in), toggle dédié ici (CFG.livretEnabled,
-       cf. initContactStep-like gating côté checkin.html espRenderEspace). -->
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;margin-bottom:16px;border:1px solid var(--bdr);border-radius:var(--rs);background:var(--bg)">
-    <div style="font-size:12px"><strong>Livret visible dans l'espace client</strong>
-      <div style="font-size:10px;color:var(--mu)">Désactivé, l'onglet "Livret" disparaît entièrement de l'application client</div></div>
-    <label class="tg" style="flex-shrink:0"><input type="checkbox" id="livret-enabled" checked onchange="livretToggleEnabled(this.checked)"><span class="tgl"></span></label>
-  </div>
+  <!-- 18/11/2026, "faire en sorte que l'option livret apparaisse comme une
+       option dans entité et ait le même comportement que les autres
+       modules" — l'activation/désactivation se fait désormais depuis la
+       grille "Modules" du panneau "Entité & Catégorie" (MODULE_DEFS, clé
+       'livret'), comme toutes les autres étapes/fonctionnalités, plutôt
+       que par un toggle dédié ici. -->
 
   <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
     <button class="btn btn-p btn-s" onclick="livretNewSection()"><i class="ti ti-plus"></i> Nouvelle rubrique</button>
@@ -5917,6 +5913,14 @@ var MODULE_DEFS = [
   {k:'roomservice', ico:'ti-bell',     label:'Boutique',               desc:'Commande de produits depuis la chambre', required:false},
   {k:'questionnaire', ico:'ti-list-check', label:'Questionnaire',      desc:'Questionnaire personnalisé à compléter pendant le check-in', required:false},
   {k:'sharing', ico:'ti-users', label:'Partage entre clients', desc:"Le client choisit de partager nom/contact/photo/centres d'intérêt avec les autres clients présents", required:false},
+  // 18/11/2026, "faire en sorte que l'option livret apparaisse comme une
+  // option dans entité et ait le même comportement que les autres
+  // modules" — même mécanisme checkinModules/isModuleActive que les
+  // autres (remplace l'ancien toggle dédié CFG.livretEnabled du panneau
+  // "Livret digital"), même si le livret n'est pas une étape du parcours
+  // check-in lui-même (juste un onglet espace client) : le réglage
+  // Obligatoire/Facultatif affiché ici n'a alors simplement aucun effet.
+  {k:'livret', ico:'ti-book', label:'Livret digital', desc:"Guide d'accueil numérique (infos pratiques, recommandations)", required:false},
 ];
 
 function renderModuleCards(){
@@ -11419,20 +11423,7 @@ function livretLoad(){
   return LIVRET_CACHE;
 }
 
-/** Toggle "Livret visible dans l'espace client" — enregistré immédiatement
- * (pas de bouton "Enregistrer" global sur ce panneau, contrairement à
- * "Entité & Catégorie"). Gating côté client dans checkin.html espRenderEspace,
- * directement sur CFG.livretEnabled (pas via checkinModules/isModuleActive :
- * le livret n'est pas une étape du parcours check-in). */
-async function livretToggleEnabled(enabled){
-  CFG.livretEnabled = enabled;
-  var ok = await saveCfg();
-  toast(ok ? (enabled ? 'Livret visible dans l\'espace client ✓' : 'Livret masqué dans l\'espace client ✓') : 'Erreur d\'enregistrement');
-}
-
 async function livretRender(){
-  var enabledChk = document.getElementById('livret-enabled');
-  if(enabledChk) enabledChk.checked = CFG.livretEnabled !== false;
   await livretFetch();
   var sections = livretLoad().slice().sort(function(a,b){return (a.order||0)-(b.order||0);});
 

@@ -17,7 +17,6 @@ const UPDATABLE_FIELDS = [
   "termsUrl",
   "cguRequired",
   "newsletterEnabled",
-  "livretEnabled",
   "accessMethods",
   "checkinTime",
   "checkoutTime",
@@ -103,7 +102,6 @@ configRouter.get(
       termsUrl: cfg.termsUrl || "",
       cguRequired: cfg.cguRequired !== false,
       newsletterEnabled: cfg.newsletterEnabled !== false,
-      livretEnabled: cfg.livretEnabled !== false,
       // Objet toujours complet (jamais partiel) — le front fait un merge
       // superficiel (Object.assign) sur CFG, un objet partiel écraserait
       // silencieusement les clés absentes au lieu d'hériter du défaut.
