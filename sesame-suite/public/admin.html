@@ -17697,7 +17697,11 @@ async function resaSendMsg(code){
   try{
     var res = await adminFetch('/wa/message/send', {method:'POST', body:JSON.stringify({
       channel:channel, templateKey:key, to:to,
-      variables:{prenom:b.personFirstname||'', nom:b.personLastname||'', code:b.code||''}
+      // bookingCode (18/11/2026, "le lien d'autologin saute") — le serveur
+      // construit désormais lui-même les variables complètes (hotel,
+      // chambre, dates, lienAutologin...) depuis cette réservation, plus
+      // seulement prenom/nom/code envoyés en dur ici.
+      bookingCode: b.code||''
     })});
     var data = await res.json();
     if(!res.ok){

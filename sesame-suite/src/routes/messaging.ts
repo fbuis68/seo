@@ -7,6 +7,7 @@ import { getChannelConfig, upsertChannelConfig, sendTestMessage, fetchSmsPartner
 import { listMessageTemplates, upsertMessageTemplate, deleteMessageTemplate, isChannel, isTemplateCategory, TemplateCategory } from "../lib/messageTemplate";
 import { sendMessage, renderMessagePreview } from "../lib/messaging";
 import { createMetaMessageTemplate, listMetaMessageTemplates } from "../lib/metaTemplates";
+import { bookingTemplateVars, hotelContactInfo } from "../lib/templateVars";
 
 /**
  * Config des canaux SMS/WhatsApp (Twilio), modèles de message multi-canal,
@@ -428,6 +429,17 @@ interface SendBody {
   templateKey: string;
   to: string;
   variables?: Record<string, string>;
+  /**
+   * Portée hôtel uniquement — code d'une réservation dont les variables
+   * standard (hotel, chambre, dates, {{lienAutologin}}/
+   * {{lienAutologinCheckin}}…) servent de BASE, `variables` ci-dessus
+   * restant prioritaire sur toute clé qu'il fournit déjà (18/11/2026,
+   * "quand on envoie un message manuellement à partir de la réservation,
+   * le lien d'autologin saute" — le bouton "Envoyer un message" de la
+   * fiche réservation n'envoyait jusqu'ici que {prenom,nom,code}, sans
+   * passer par bookingTemplateVars comme le fait l'envoi automatique).
+   */
+  bookingCode?: string;
   /** Portée CRM uniquement — cf. sendMessage() trackOpenProspectId (score d'intérêt, +1 à l'ouverture) ET questionnaire du modèle (MessageTemplate.questionnaireId), attaché automatiquement si réglé. */
   prospectId?: string;
   /** RCS uniquement — cf. sendMessage() rcsFailover. */
@@ -470,12 +482,20 @@ messagingRouter.post(
           .filter((d) => d.fileContentBase64)
           .map((d) => ({ fileName: d.fileName!, dataUrl: `data:${d.fileMimeType};base64,${d.fileContentBase64}` }))
       : [];
+    let variables = b.variables;
+    if (b.bookingCode && entityId) {
+      const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId, code: b.bookingCode } } });
+      if (booking) {
+        const hotel = await hotelContactInfo(entityId);
+        variables = { ...(await bookingTemplateVars(booking, hotel)), ...(b.variables || {}) };
+      }
+    }
     const sent = await sendMessage({
       entityId,
       channel: b.channel,
       templateKey: b.templateKey,
       to: b.to,
-      variables: b.variables,
+      variables,
       trackOpenProspectId: entityId === null ? b.prospectId : undefined,
       baseUrl: `${req.protocol}://${req.get("host")}`,
       rcsFailover: b.channel === "rcs" ? b.rcsFailover : undefined,
