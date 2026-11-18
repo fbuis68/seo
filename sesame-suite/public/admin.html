@@ -12566,7 +12566,15 @@ async function hmRenderGrid(){
         ?('<button class="btn btn-s" style="flex:1;background:var(--al);color:'+color+';border-color:'+color+'" onclick="showPan(\'hotel\')">' + '<i class="ti ti-settings"></i> Configurer</button>')
         :('<button class="btn btn-p btn-s" style="flex:1;background:'+color+';border-color:'+color+'" onclick="hmActivate(\'' + hotel.code + '\')">' + '<i class="ti ti-toggle-right"></i> Activer</button>')
        )
-      +('<button class="btn btn-s" onclick="hmOpenEdit(\'' + hotel.code + '\')" style="width:auto;padding:6px 10px" title="Modifier"><i class="ti ti-pencil"></i></button>')
+      // 18/11/2026, "deux boutons l'un à côté de l'autre qui ont des
+      // comportements différents" — le crayon "Modifier" ouvrait TOUJOURS
+      // la modale rapide hmOpenEdit, y compris sur l'entité déjà active, où
+      // "Configurer" juste à côté mène désormais directement au panneau
+      // complet : deux chemins différents pour la même entité, l'un avec le
+      // champ entityId Sesame (panneau complet), l'autre sans. Sur l'entité
+      // active, le crayon fait maintenant la même chose que "Configurer" —
+      // la modale rapide reste réservée à l'édition d'une AUTRE entité.
+      +('<button class="btn btn-s" onclick="'+(isActive?'showPan(\'hotel\')':('hmOpenEdit(\'' + hotel.code + '\')'))+'" style="width:auto;padding:6px 10px" title="Modifier"><i class="ti ti-pencil"></i></button>')
       +(isActive?'':('<button class="btn btn-s" onclick="hmDelete(\'' + hotel.code + '\')" style="width:auto;padding:6px 10px;color:var(--re)" title="Supprimer"><i class="ti ti-trash"></i></button>'))
       +'</div>'
       +'</div>'
