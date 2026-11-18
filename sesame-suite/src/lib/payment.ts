@@ -161,10 +161,18 @@ export async function createSetupIntent(
   config: { secretKey: string | null },
   opts: { customerId: string }
 ): Promise<{ id: string; clientSecret: string }> {
+  // Carte uniquement (18/11/2026, "on voit toujours les paiements autres
+  // alors que je cherche juste à avoir une empreinte") — automatic_payment_
+  // methods propose TOUS les moyens de paiement activés sur le dashboard
+  // Stripe (BLIK, Pix, Klarna…), pertinents pour un paiement réel immédiat
+  // mais pas pour une simple empreinte bancaire (SetupIntent jamais
+  // débité) : payment_method_types restreint explicitement à la carte, le
+  // seul moyen que Stripe sait enregistrer "off_session" pour un débit
+  // manuel ultérieur de toute façon.
   const json = await stripeRequest(config, "POST", "/setup_intents", {
     customer: opts.customerId,
     usage: "off_session",
-    "automatic_payment_methods[enabled]": "true",
+    payment_method_types: ["card"],
   });
   return { id: json.id, clientSecret: json.client_secret };
 }
