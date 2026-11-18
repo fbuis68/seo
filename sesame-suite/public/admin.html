@@ -2083,6 +2083,28 @@ overflow:hidden
           </div>
         </div>
 
+        <!-- 18/11/2026, "localiser la personne à partir du navigateur pour
+             éviter les ouvertures à distance avec le bouton" — géorepère
+             optionnel sur CET accès précis (hérite d'aucun réglage global,
+             désactivé par défaut). "Utiliser ma position actuelle" capture
+             les coordonnées du navigateur de l'admin EN SE TENANT devant le
+             lecteur, plutôt que de les chercher/taper à la main. -->
+        <div class="fi" style="margin-top:10px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:6px">
+            <input type="checkbox" id="rm-geofence" onchange="document.getElementById('rm-geofence-wrap').style.display=this.checked?'':'none'" style="accent-color:var(--am)">
+            <span style="font-size:13px">Localisation requise pour ouvrir CET accès (empêche l'ouverture à distance)</span>
+          </label>
+          <div id="rm-geofence-wrap" style="display:none;margin-left:24px">
+            <div class="g2">
+              <div class="fi"><label class="lb">Latitude</label><input type="number" id="rm-geoLat" step="any" placeholder="Ex : 48.8566"></div>
+              <div class="fi"><label class="lb">Longitude</label><input type="number" id="rm-geoLng" step="any" placeholder="Ex : 2.3522"></div>
+            </div>
+            <div class="fi"><label class="lb">Rayon toléré (mètres)</label><input type="number" id="rm-geoRadius" min="5" step="5" value="50" style="max-width:120px"></div>
+            <button class="btn btn-s" type="button" onclick="rmCaptureGeoPosition(this)" style="margin-top:4px"><i class="ti ti-map-pin"></i> Utiliser ma position actuelle</button>
+            <div id="rm-geo-status" style="font-size:11px;color:var(--mu);margin-top:4px"></div>
+          </div>
+        </div>
+
         <div class="fi" id="rm-nayax-qr-btn" style="margin-top:10px;display:none">
           <label class="lb">QR Code d'accès Nayax</label>
           <button class="btn btn-s" type="button" onclick="nyShowQr()"><i class="ti ti-qrcode"></i> Générer / afficher le QR Code</button>
@@ -6646,6 +6668,12 @@ function rmOpenCreate(){
   document.getElementById('rm-antiPassback').checked = false;
   document.getElementById('rm-antiPassback-hours').value = '1';
   document.getElementById('rm-antiPassback-delay-wrap').style.display = 'none';
+  document.getElementById('rm-geofence').checked = false;
+  document.getElementById('rm-geoLat').value = '';
+  document.getElementById('rm-geoLng').value = '';
+  document.getElementById('rm-geoRadius').value = '50';
+  document.getElementById('rm-geofence-wrap').style.display = 'none';
+  document.getElementById('rm-geo-status').textContent = '';
   document.getElementById('rm-showOnPlan').checked = true;
   document.getElementById('rm-planPosition-wrap').style.display = 'none';
   document.getElementById('rm-deviceId').value = '';
@@ -6658,6 +6686,30 @@ function rmOpenCreate(){
   rmToggleCasierFields();
   document.getElementById('rmModal').style.display='flex';
   setTimeout(function(){ document.getElementById('rm-code').focus(); }, 100);
+}
+
+/** "Utiliser ma position actuelle" — capture la géolocalisation du
+ * navigateur de L'ADMIN (en se tenant devant le lecteur/la porte) plutôt
+ * que de chercher/taper les coordonnées GPS à la main. */
+function rmCaptureGeoPosition(btn){
+  var statusEl = document.getElementById('rm-geo-status');
+  if(!('geolocation' in navigator)){ statusEl.textContent = 'Géolocalisation non supportée par ce navigateur.'; return; }
+  var orig = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = '<div class="spin"></div> Localisation…';
+  statusEl.textContent = '';
+  navigator.geolocation.getCurrentPosition(
+    function(pos){
+      document.getElementById('rm-geoLat').value = pos.coords.latitude.toFixed(6);
+      document.getElementById('rm-geoLng').value = pos.coords.longitude.toFixed(6);
+      statusEl.textContent = 'Position capturée (précision ~'+Math.round(pos.coords.accuracy)+' m) ✓';
+      btn.disabled = false; btn.innerHTML = orig;
+    },
+    function(err){
+      statusEl.textContent = 'Échec de la localisation : ' + (err && err.message ? err.message : 'accès refusé ou indisponible');
+      btn.disabled = false; btn.innerHTML = orig;
+    },
+    {enableHighAccuracy:true, timeout:10000, maximumAge:0}
+  );
 }
 
 // ── Ouvrir le modal édition ──
@@ -6690,6 +6742,13 @@ function rmOpenEdit(code){
   document.getElementById('rm-antiPassback').checked = apbMin > 0;
   document.getElementById('rm-antiPassback-hours').value = apbMin > 0 ? (apbMin/60) : 1;
   document.getElementById('rm-antiPassback-delay-wrap').style.display = apbMin > 0 ? '' : 'none';
+  var hasGeofence = r.geoLat!=null && r.geoLng!=null && r.geoRadiusMeters!=null;
+  document.getElementById('rm-geofence').checked = hasGeofence;
+  document.getElementById('rm-geoLat').value = hasGeofence ? r.geoLat : '';
+  document.getElementById('rm-geoLng').value = hasGeofence ? r.geoLng : '';
+  document.getElementById('rm-geoRadius').value = hasGeofence ? r.geoRadiusMeters : 50;
+  document.getElementById('rm-geofence-wrap').style.display = hasGeofence ? '' : 'none';
+  document.getElementById('rm-geo-status').textContent = '';
   document.getElementById('rmDeleteBtn').style.display='';
   document.getElementById('rm-currency-sym').textContent = getCurrSym();
   document.getElementById('rm-history-wrap').style.display = '';
@@ -6803,6 +6862,9 @@ async function rmSaveRoom(){
     deviceId:    document.getElementById('rm-deviceId').value.trim(),
     accessMethod: document.getElementById('rm-accessMethod').value,
     antiPassbackMinutes: document.getElementById('rm-antiPassback').checked ? Math.round((parseFloat(document.getElementById('rm-antiPassback-hours').value)||1)*60) : null,
+    geoLat: document.getElementById('rm-geofence').checked ? (parseFloat(document.getElementById('rm-geoLat').value)||null) : null,
+    geoLng: document.getElementById('rm-geofence').checked ? (parseFloat(document.getElementById('rm-geoLng').value)||null) : null,
+    geoRadiusMeters: document.getElementById('rm-geofence').checked ? (parseInt(document.getElementById('rm-geoRadius').value)||50) : null,
   };
   try{
     if(RM_EDITING){

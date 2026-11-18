@@ -74,5 +74,8 @@ export function normaliseRoom(r: Room) {
     showOnPlan: r.showOnPlan,
     accessMethod: r.accessMethod || "",
     antiPassbackMinutes: r.antiPassbackMinutes || null,
+    geoLat: r.geoLat ?? null,
+    geoLng: r.geoLng ?? null,
+    geoRadiusMeters: r.geoRadiusMeters ?? null,
   };
 }

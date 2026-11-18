@@ -59,6 +59,23 @@ interface RoomBody {
   showOnPlan?: boolean;
   accessMethod?: string | null;
   antiPassbackMinutes?: number | null;
+  geoLat?: number | null;
+  geoLng?: number | null;
+  geoRadiusMeters?: number | null;
+}
+
+/**
+ * Les trois champs géorepère vont ensemble ou pas du tout (lat/lng/rayon) —
+ * un sous-ensemble ne vérifierait rien de cohérent côté openDoor. Pas de
+ * validation de plage ici (lat/lng valides laissées à la saisie admin, qui
+ * les capture via sa propre géolocalisation plutôt que de les taper à la
+ * main dans l'immense majorité des cas).
+ */
+function parseGeofence(b: RoomBody): { geoLat: number | null; geoLng: number | null; geoRadiusMeters: number | null } {
+  if (b.geoLat != null && b.geoLng != null && b.geoRadiusMeters != null && b.geoRadiusMeters > 0) {
+    return { geoLat: b.geoLat, geoLng: b.geoLng, geoRadiusMeters: Math.round(b.geoRadiusMeters) };
+  }
+  return { geoLat: null, geoLng: null, geoRadiusMeters: null };
 }
 
 /** POST /wa/facility/create — CRUD chambres (back-office, panneau "Gestion des chambres"). */
@@ -98,6 +115,7 @@ facilityRouter.post(
         isNfcEncoder: b.isNfcEncoder || false,
         accessMethod: b.accessMethod || null,
         antiPassbackMinutes: b.antiPassbackMinutes && b.antiPassbackMinutes > 0 ? Math.round(b.antiPassbackMinutes) : null,
+        ...parseGeofence(b),
         // Un casier n'a normalement pas sa place sur le plan de l'hôtel
         // (cf. Room.showOnPlan) — décoché par défaut à la création, mais
         // reste un critère explicite que l'admin peut inverser au besoin.
@@ -147,6 +165,7 @@ facilityRouter.post(
         showOnPlan: b.showOnPlan,
         accessMethod: b.accessMethod || null,
         antiPassbackMinutes: b.antiPassbackMinutes && b.antiPassbackMinutes > 0 ? Math.round(b.antiPassbackMinutes) : null,
+        ...parseGeofence(b),
       },
     });
     res.json(normaliseRoom(updated));

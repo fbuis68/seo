@@ -706,6 +706,51 @@ async function checkAntiPassback(entityId: string, bookingCode: string, roomCode
   return null;
 }
 
+/** Distance entre deux points GPS, en mètres (formule de Haversine). */
+function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6_371_000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/**
+ * Géorepère (18/11/2026, "localiser la personne... pour éviter les
+ * ouvertures à distance avec le bouton") — exige que le client soit à
+ * moins de Room.geoRadiusMeters du point GPS de cet accès pour pouvoir
+ * l'ouvrir, quand ces trois champs sont réglés sur la chambre (sinon
+ * aucune vérification, comportement historique). lat/lng viennent de
+ * navigator.geolocation côté client (checkin.html) — absents si le client
+ * les a refusés ou si son navigateur ne les supporte pas, auquel cas
+ * l'ouverture est bloquée plutôt que silencieusement acceptée (une
+ * position qu'on ne peut pas vérifier n'est pas différente d'une position
+ * hors zone). Même repli "premier qui bloque arrête tout" que
+ * checkAntiPassback ci-dessus pour une liste de plusieurs accès.
+ */
+async function checkGeofence(entityId: string, roomCode: string | null, lat: number | null, lng: number | null): Promise<string | null> {
+  if (!roomCode) return null;
+  const codes = roomCode
+    .split(",")
+    .map((c) => c.trim())
+    .filter(Boolean);
+  if (!codes.length) return null;
+  const rooms = await prisma.room.findMany({
+    where: { entityId, code: { in: codes }, geoLat: { not: null }, geoLng: { not: null }, geoRadiusMeters: { not: null } },
+  });
+  for (const room of rooms) {
+    if (lat == null || lng == null) {
+      return `Localisation requise pour ouvrir l'accès ${room.code} — activez la géolocalisation de votre navigateur et réessayez.`;
+    }
+    const distance = haversineMeters(lat, lng, room.geoLat!, room.geoLng!);
+    if (distance > room.geoRadiusMeters!) {
+      return `Vous êtes trop loin de l'accès ${room.code} (${Math.round(distance)} m, maximum ${room.geoRadiusMeters} m) pour l'ouvrir à distance.`;
+    }
+  }
+  return null;
+}
+
 /**
  * POST /wa/booking/openDoor — body: { code, facilityCode? } — déclenche
  * l'ouverture à distance de la porte pour cette réservation (source
@@ -734,6 +779,11 @@ bookingRouter.post(
     const entity = await resolveEntity(req);
     const code = (req.body.code as string) || "";
     const facilityCodeOverride = (req.body.facilityCode as string) || "";
+    // Position du navigateur (checkin.html navigator.geolocation) — cf.
+    // checkGeofence ci-dessus. Absents si non envoyés (compte staff, client
+    // ayant refusé la géolocalisation, accès sans géorepère configuré).
+    const lat = typeof req.body.lat === "number" ? req.body.lat : null;
+    const lng = typeof req.body.lng === "number" ? req.body.lng : null;
     if (!code) throw new HttpError(400, "code requis");
 
     const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code } } });
@@ -782,6 +832,11 @@ bookingRouter.post(
       if (blockedReason) {
         await logAccessActivity(req, { entityId: entity.id, method: "booking", bookingCode: booking.code, guestName, roomCode, success: false, errorMessage: blockedReason });
         throw new HttpError(429, blockedReason);
+      }
+      const geoBlockedReason = await checkGeofence(entity.id, roomCode, lat, lng);
+      if (geoBlockedReason) {
+        await logAccessActivity(req, { entityId: entity.id, method: "booking", bookingCode: booking.code, guestName, roomCode, success: false, errorMessage: geoBlockedReason });
+        throw new HttpError(403, geoBlockedReason);
       }
     }
 

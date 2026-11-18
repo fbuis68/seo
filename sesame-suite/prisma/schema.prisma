@@ -377,6 +377,17 @@ model Room {
   // POST /booking/openDoor.
   antiPassbackMinutes Int?
 
+  // 18/11/2026, "localiser la personne... pour éviter les ouvertures à
+  // distance" — géorepère optionnel PAR ACCÈS (comme antiPassbackMinutes
+  // ci-dessus) : null (l'un des trois) = désactivé, aucune vérification.
+  // Les trois réglés ensemble = le client doit être à moins de
+  // geoRadiusMeters de ce point GPS (coordonnées du lecteur/porte,
+  // capturées depuis le panneau admin en se tenant devant) pour pouvoir
+  // ouvrir — cf. routes/booking.ts POST /booking/openDoor.
+  geoLat          Float?
+  geoLng          Float?
+  geoRadiusMeters Int?
+
   // Identifiant du lecteur/module Sesame associé à cet accès (ex :
   // "D00005605") — importé automatiquement si mappé (cf.
   // FacilityMapping.deviceId dans bookingSource.ts), sinon saisissable à la

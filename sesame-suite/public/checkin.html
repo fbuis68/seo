@@ -4327,13 +4327,36 @@ function espKeyActionHtml(ap, passcode, simulated){
   }
   return html;
 }
+/**
+ * Position du navigateur (18/11/2026, "localiser la personne... pour
+ * éviter les ouvertures à distance avec le bouton") — envoyée avec CHAQUE
+ * demande d'ouverture ; le serveur décide s'il en a besoin (accès avec
+ * géorepère configuré, cf. Room.geoLat/geoLng/geoRadiusMeters) et bloque
+ * lui-même si absente ou hors zone (checkAntiPassback/checkGeofence,
+ * routes/booking.ts) — rien à savoir ici sur QUEL accès l'exige. Résolue
+ * à null (jamais rejetée) si la géolocalisation échoue/est refusée/n'est
+ * pas supportée : l'ouverture part quand même, un accès sans géorepère
+ * n'en a simplement pas besoin, et un accès qui en a besoin sera alors
+ * refusé côté serveur avec un message explicite plutôt que de planter ici.
+ */
+function espGetGeoPosition(){
+  return new Promise(function(resolve){
+    if(!('geolocation' in navigator)){ resolve(null); return; }
+    navigator.geolocation.getCurrentPosition(
+      function(pos){ resolve({lat: pos.coords.latitude, lng: pos.coords.longitude}); },
+      function(){ resolve(null); },
+      {enableHighAccuracy:true, timeout:8000, maximumAge:30000}
+    );
+  });
+}
 async function espOpenAccessConfirm(btn){
   var ap = ESP_ACCESS_CURRENT, b = S.booking; if(!b) return;
   btn.disabled = true;
   try{
+    var geo = await espGetGeoPosition();
     var r = await apiFetch(API_BASE+'/wa/booking/openDoor', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({code:b.code, facilityCode:(ap&&ap.facilityCode)||undefined})
+      body: JSON.stringify({code:b.code, facilityCode:(ap&&ap.facilityCode)||undefined, lat:geo&&geo.lat, lng:geo&&geo.lng})
     });
     var data = await r.json().catch(function(){ return {}; });
     if(!r.ok) throw new Error(data.error || ('HTTP '+r.status));
@@ -4587,8 +4610,9 @@ async function espOpenDoor(){
   var resLabel = document.getElementById('espQrOpenResultLabel');
   if(btn) btn.disabled = true;
   try {
+    var geo = await espGetGeoPosition();
     var r = await apiFetch(API_BASE+'/wa/booking/openDoor', {
-      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({code:b.code})
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({code:b.code, lat:geo&&geo.lat, lng:geo&&geo.lng})
     });
     var data = await r.json().catch(function(){ return {}; });
     if(!r.ok) throw new Error(data.error || ('HTTP '+r.status));
