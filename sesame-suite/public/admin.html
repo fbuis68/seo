@@ -5311,7 +5311,16 @@ function deepMerge(target,src){
 }
 
 // ═══════════════════════════════════════════════ PANEL NAV
-var SECTOR_HOTEL_ONLY_PANS = ['hotel', 'gains', 'planning'];
+// 18/11/2026, "fusion Entités/Entité & Catégorie a sauté, je ne peux plus
+// changer le code de l'entité" — 'hotel' RETIRÉ d'ici : ce panneau porte
+// aussi des réglages génériques (nom, adresse, entityId Sesame, CGU,
+// devise, langue...) valables pour N'IMPORTE QUEL secteur, pas seulement
+// hôtelier. Avant la fusion des menus, ce redirect ne se voyait jamais
+// pour un compte Sesame car le bouton "Configurer" ouvrait une modale à
+// part (jamais showPan('hotel')) — désormais qu'il y mène directement, un
+// secteur non-hôtelier (ex: restaurant/boutique) se retrouvait renvoyé
+// silencieusement sur le Dashboard, sans aucun accès à ces réglages.
+var SECTOR_HOTEL_ONLY_PANS = ['gains', 'planning'];
 function showPan(id){
   if(!id) return;
   // Blocage du clic (déplacé ici depuis applyMenuRights — cf. son
