@@ -188,17 +188,12 @@ export async function generateQuotePdf(data: QuotePdfData): Promise<Buffer> {
   }
 
   // ─── Bloc contact commercial (18/11/2026, "coordonnées du commercial en
-  // entête avec téléphone et email et photo") ─────────────────────────────
-  const commercialPhoto = await embedDataUrlImage(data.commercialPhoto);
+  // entête avec téléphone et email et photo" côté page HTML — "ne pas
+  // mettre la photo sur le pdf" : photo exclue ici, seulement nom/tél/email). ─
   if (data.commercialName) {
     const boxW = 230;
-    const boxX = PAGE_WIDTH - MARGIN_X - boxW;
+    const textX = PAGE_WIDTH - MARGIN_X - boxW;
     let by = c.y;
-    const photoSize = 36;
-    if (commercialPhoto) {
-      c.page.drawImage(commercialPhoto, { x: boxX, y: by - photoSize, width: photoSize, height: photoSize });
-    }
-    const textX = boxX + (commercialPhoto ? photoSize + 10 : 0);
     safeDrawText(c.page, "Votre contact", { x: textX, y: by - 10, size: 8, font, color: rgb(0.5, 0.5, 0.5) });
     safeDrawText(c.page, data.commercialName || "", { x: textX, y: by - 22, size: 10.5, font: boldFont });
     let detailY = by - 34;
