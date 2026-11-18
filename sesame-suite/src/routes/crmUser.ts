@@ -16,8 +16,44 @@ export const crmUserRouter = Router();
 
 const CRM_ROLES = ["admin", "commercial"];
 
-function shapeCrmUser(u: { id: string; email: string; name: string | null; crmRole: string; active: boolean; altEmails: string[]; bookingUrl: string | null; createdAt: Date }) {
-  return { id: u.id, email: u.email, name: u.name || "", crmRole: u.crmRole, active: u.active, altEmails: u.altEmails, bookingUrl: u.bookingUrl || "", createdAt: u.createdAt };
+// Data URL base64 (même convention que CrmProspect.logo) — 2 Mo en clair
+// largement suffisant pour une photo de profil déjà redimensionnée côté
+// navigateur avant envoi, évite qu'un fichier non compressé gonfle la ligne
+// AdminUser indéfiniment.
+const PHOTO_MAX_BASE64_CHARS = 2 * 1024 * 1024;
+function parsePhotoUrl(raw: unknown): string | null | undefined {
+  if (raw === undefined) return undefined;
+  const v = String(raw || "").trim();
+  if (!v) return null;
+  if (!/^data:image\//.test(v)) throw new HttpError(400, "Photo invalide (format attendu : image)");
+  if (v.length > PHOTO_MAX_BASE64_CHARS) throw new HttpError(400, "Photo trop volumineuse");
+  return v;
+}
+
+function shapeCrmUser(u: {
+  id: string;
+  email: string;
+  name: string | null;
+  crmRole: string;
+  active: boolean;
+  altEmails: string[];
+  bookingUrl: string | null;
+  phone: string | null;
+  photoUrl: string | null;
+  createdAt: Date;
+}) {
+  return {
+    id: u.id,
+    email: u.email,
+    name: u.name || "",
+    crmRole: u.crmRole,
+    active: u.active,
+    altEmails: u.altEmails,
+    bookingUrl: u.bookingUrl || "",
+    phone: u.phone || "",
+    photoUrl: u.photoUrl || "",
+    createdAt: u.createdAt,
+  };
 }
 
 function parseAltEmails(raw: unknown): string[] {
@@ -48,6 +84,8 @@ interface CreateBody {
   password?: string;
   altEmails?: string[];
   bookingUrl?: string;
+  phone?: string;
+  photoUrl?: string;
 }
 
 crmUserRouter.post(
@@ -71,7 +109,18 @@ crmUserRouter.post(
     const password = b.password || randomPassword();
     const passwordHash = await bcrypt.hash(password, 10);
     const row = await prisma.adminUser.create({
-      data: { entityId: sesameHq.id, email, name: b.name?.trim() || null, role: "sesame", crmRole, passwordHash, altEmails: parseAltEmails(b.altEmails), bookingUrl: b.bookingUrl?.trim() || null },
+      data: {
+        entityId: sesameHq.id,
+        email,
+        name: b.name?.trim() || null,
+        role: "sesame",
+        crmRole,
+        passwordHash,
+        altEmails: parseAltEmails(b.altEmails),
+        bookingUrl: b.bookingUrl?.trim() || null,
+        phone: b.phone?.trim() || null,
+        photoUrl: parsePhotoUrl(b.photoUrl) || null,
+      },
     });
     // Le mot de passe généré n'est retourné qu'une fois, en clair — jamais relu ensuite.
     res.status(201).json({ ...shapeCrmUser(row), password });
@@ -85,6 +134,8 @@ interface UpdateBody {
   active?: boolean;
   altEmails?: string[];
   bookingUrl?: string;
+  phone?: string;
+  photoUrl?: string;
 }
 
 crmUserRouter.post(
@@ -109,6 +160,8 @@ crmUserRouter.post(
         active: b.active,
         altEmails: b.altEmails !== undefined ? parseAltEmails(b.altEmails) : undefined,
         bookingUrl: b.bookingUrl !== undefined ? b.bookingUrl.trim() || null : undefined,
+        phone: b.phone !== undefined ? b.phone.trim() || null : undefined,
+        photoUrl: parsePhotoUrl(b.photoUrl),
       },
     });
     res.json(shapeCrmUser(row));

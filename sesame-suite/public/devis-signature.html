@@ -22,7 +22,25 @@
   .band img{height:44px;display:block}
   .band-sep{color:var(--mu);font-size:18px}
   @media(max-width:480px){.band{padding:16px 16px}.band img{height:34px}}
-  .wrap{max-width:960px;margin:0 auto;padding:16px 20px 40px}
+  .wrap{max-width:960px;margin:0 auto;padding:16px 20px 40px;transition:max-width .15s}
+  /* 18/11/2026, "presentation plus large sur l'ecran mais qui s'adapte à un
+     telephone" — élargie seulement en vue PDF (desktop), capée par le
+     @media(max-width:720px) ci-dessous sur mobile comme le reste de la page. */
+  .wrap.wide{max-width:1180px}
+  .contact-bar{display:flex;align-items:center;gap:14px;background:var(--card);border:1px solid var(--bdr);box-shadow:var(--shadow);border-radius:16px;padding:14px 20px;margin-top:14px}
+  .contact-bar img{width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0}
+  .contact-bar .ph{width:44px;height:44px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--mu);flex-shrink:0}
+  .contact-bar .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;color:var(--mu);font-weight:600}
+  .contact-bar .nm{font-weight:700;font-size:14px}
+  .contact-bar .dt{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:#55504c;margin-top:2px}
+  .contact-bar .dt a{color:inherit;text-decoration:none}
+  .view-toggle{display:inline-flex;gap:2px;background:var(--bg);border-radius:10px;padding:3px;margin-bottom:16px}
+  .view-toggle button{font-family:inherit;font-size:12px;font-weight:600;padding:7px 14px;border:none;border-radius:8px;background:transparent;color:var(--mu);cursor:pointer}
+  .view-toggle button.active{background:var(--card);color:var(--tx);box-shadow:var(--shadow)}
+  .pdf-frame{width:100%;height:75vh;min-height:420px;border:1px solid var(--bdr);border-radius:12px;background:var(--bg)}
+  .pdf-actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+  .pdf-actions .btn{width:auto;flex:1;min-width:180px;text-decoration:none;display:flex;align-items:center;justify-content:center}
+  @media(max-width:480px){.contact-bar{flex-wrap:wrap}.pdf-frame{height:60vh}}
   .card{background:var(--card);border:1px solid var(--bdr);box-shadow:var(--shadow);border-radius:16px;padding:24px;margin-top:14px}
   h1{font-size:18px;margin:0 0 3px;font-weight:700;letter-spacing:-.2px}
   .sub{color:var(--mu);font-size:13px;margin:0 0 16px}
@@ -120,7 +138,7 @@
   <span class="band-sep" id="band-sep" style="display:none">×</span>
   <img id="client-logo" style="display:none" alt="">
 </div>
-<div class="wrap">
+<div class="wrap" id="wrap">
   <div id="app"><div class="card">Chargement…</div></div>
 </div>
 
@@ -220,6 +238,52 @@ function quoteBlocksHtml(){
   }).join('');
 }
 
+// Coordonnées du commercial en en-tête (18/11/2026, "rajouter les
+// coordonnées du commercial en entête avec telephone et email et photo") —
+// visible quel que soit l'onglet/la vue, juste au-dessus des onglets.
+function contactBarHtml(){
+  if(!QUOTE.commercialName) return '';
+  const photoHtml = QUOTE.commercialPhoto ? `<img src="${esc(QUOTE.commercialPhoto)}" alt="">` : `<div class="ph">👤</div>`;
+  const details = [
+    QUOTE.commercialPhone ? `<a href="tel:${esc(QUOTE.commercialPhone.replace(/\s+/g,''))}">📞 ${esc(QUOTE.commercialPhone)}</a>` : '',
+    QUOTE.commercialEmail ? `<a href="mailto:${esc(QUOTE.commercialEmail)}">✉️ ${esc(QUOTE.commercialEmail)}</a>` : '',
+  ].filter(Boolean).join('');
+  return `<div class="contact-bar">
+    ${photoHtml}
+    <div>
+      <div class="lbl">Votre contact chez Sesame Technology</div>
+      <div class="nm">${esc(QUOTE.commercialName)}</div>
+      <div class="dt">${details}</div>
+    </div>
+  </div>`;
+}
+
+// Vue PDF (18/11/2026, "présentation... avec de présentation de ce type" —
+// exemple fourni par le client : document PDF encadré + boutons Ouvrir/
+// Télécharger) — en option à côté de la vue classique (quoteSummaryHtml),
+// générée réellement côté serveur (GET /crmQuote/publicPdf), jamais
+// recalculée ici : le client bascule librement entre les deux, cf.
+// setDevisView.
+let DEVIS_VIEW = 'classic';
+function setDevisView(view){
+  DEVIS_VIEW = view;
+  render();
+  trackQuoteEvent('quote_tab_viewed', view==='pdf' ? 'Devis (vue PDF)' : 'Devis (vue classique)');
+}
+function pdfUrl(dl){ return '/wa/crmQuote/publicPdf?token='+encodeURIComponent(TOKEN)+(dl?'&dl=1':''); }
+function pdfViewHtml(){
+  return `<iframe class="pdf-frame" src="${pdfUrl(false)}" title="Devis ${esc(QUOTE.number)}"></iframe>
+    <div class="pdf-actions">
+      <a class="btn btn-ghost" style="border:1px solid var(--bdr)" href="${pdfUrl(false)}" target="_blank" rel="noopener">Ouvrir le PDF dans un nouvel onglet</a>
+      <a class="btn" href="${pdfUrl(true)}">Télécharger le PDF</a>
+    </div>`;
+}
+function viewToggleHtml(){
+  return `<div class="view-toggle">
+    <button class="${DEVIS_VIEW==='classic'?'active':''}" onclick="setDevisView('classic')">Vue classique</button>
+    <button class="${DEVIS_VIEW==='pdf'?'active':''}" onclick="setDevisView('pdf')">Vue PDF</button>
+  </div>`;
+}
 function quoteSummaryHtml(){
   const t = QUOTE.totals;
   // Totaux réduits à l'essentiel (30/10/2026, demande client "ne garde que
@@ -771,7 +835,8 @@ function render(){
     : '';
 
   const devisPanel = `<div class="tab-panel active" data-panel="devis">
-    <div class="card">${quoteSummaryHtml()}</div>
+    ${viewToggleHtml()}
+    <div class="card">${DEVIS_VIEW==='pdf' ? pdfViewHtml() : quoteSummaryHtml()}</div>
     ${QUOTE.alreadySigned?'':transmitSectionHtml()}
     ${signatureSectionHtml()}
   </div>`;
@@ -783,7 +848,8 @@ function render(){
     ? `<div class="tab-panel" data-panel="questionnaires"><div class="card"><h1 style="font-size:15px">Questionnaires</h1>${questionnairesTabHtml()}</div></div>` : '';
   const bookingPanel = `<div class="tab-panel" data-panel="booking"><div class="card"><h1 style="font-size:15px">Prendre rendez-vous</h1>${bookingTabHtml()}</div></div>`;
 
-  document.getElementById('app').innerHTML = tabNav + devisPanel + roiPanel + documentsPanel + meetingsPanel + questionnairesPanel + bookingPanel;
+  document.getElementById('wrap').classList.toggle('wide', DEVIS_VIEW==='pdf');
+  document.getElementById('app').innerHTML = contactBarHtml() + tabNav + devisPanel + roiPanel + documentsPanel + meetingsPanel + questionnairesPanel + bookingPanel;
   if(!QUOTE.alreadySigned) setupCanvas();
   enhanceVimeoThumbs();
   if(showRoi){

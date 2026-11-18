@@ -146,6 +146,14 @@ model AdminUser {
   // partagée : chaque commercial colle donc ICI son propre lien personnel.
   // Vide = repli sur le lien générique Sesame Technology.
   bookingUrl   String?
+  // Téléphone + photo du commercial (18/11/2026, "rajouter les coordonnées
+  // du commercial en entête avec téléphone et email et photo" — espace
+  // client des devis, public/devis-signature.html) — email déjà disponible
+  // via AdminUser.email (login), pas de champ dédié. photoUrl en data URL
+  // base64 (même convention que CrmProspect.logo), jamais de stockage
+  // fichier séparé pour une simple photo de profil.
+  phone        String?
+  photoUrl     String?  @db.Text
   active       Boolean  @default(true) // désactivation (départ, etc.) sans perdre l'historique — pas de suppression physique
   // Portée du rôle pour un compte hôtel (role="hotel"|"housekeeping") : par
   // défaut limité à son propre établissement (entityId). Si true ET que cet

@@ -10,6 +10,7 @@ import { getSmtpConfig } from "../lib/email";
 import { getRecordingStream } from "../lib/graphMeetings";
 import { getOrCreateQuestionnaireSend } from "../lib/questionnaire";
 import { recordScoreEvent, ScoreEventType } from "../lib/crmScoring";
+import { generateQuotePdf } from "../lib/quotePdf";
 
 /**
  * Devis — écran CRM à part entière (refonte du 22/10/2026, reprend
@@ -866,7 +867,7 @@ crmQuoteRouter.get(
     if (!token) throw new HttpError(400, "Lien invalide");
     const quote = await prisma.crmQuote.findUnique({
       where: { signToken: token },
-      include: { prospect: { select: { nom: true, secteur: true, logo: true, brandColor: true, commercial: { select: { name: true, bookingUrl: true } } } }, signature: true },
+      include: { prospect: { select: { nom: true, secteur: true, logo: true, brandColor: true, commercial: { select: { name: true, email: true, phone: true, photoUrl: true, bookingUrl: true } } } }, signature: true },
     });
     if (!quote) throw new HttpError(404, "Lien de signature invalide ou expiré");
     const storedLines = (quote.lines as unknown as QuoteLine[]) || [];
@@ -1001,6 +1002,11 @@ crmQuoteRouter.get(
       // AdminUser.bookingUrl), repli sur null = lien générique côté front.
       commercialName: quote.prospect.commercial?.name || "",
       commercialBookingUrl: quote.prospect.commercial?.bookingUrl || null,
+      // Coordonnées en en-tête de l'espace client (18/11/2026, "rajouter les
+      // coordonnées du commercial... téléphone et email et photo").
+      commercialEmail: quote.prospect.commercial?.email || "",
+      commercialPhone: quote.prospect.commercial?.phone || "",
+      commercialPhoto: quote.prospect.commercial?.photoUrl || "",
       alreadySigned: !!quote.signature,
       signedAt: quote.signature?.signedAt || null,
       signerName: quote.signature?.signerName || null,
@@ -1050,6 +1056,60 @@ crmQuoteRouter.post(
     }
     await recordScoreEvent(quote.prospectId, eventType as ScoreEventType, module, "internal");
     res.json({ ok: true, matched: true });
+  })
+);
+
+/**
+ * GET /wa/crmQuote/publicPdf?token=...&dl=1 — même jeton que
+ * /crmQuote/public, génère un vrai PDF du devis (18/11/2026, "prévoir une
+ * présentation sur option avec de présentation de ce type" — exemple fourni
+ * par le client : un document PDF encadré avec boutons Ouvrir/
+ * Télécharger). ?dl=1 force le téléchargement (Content-Disposition
+ * attachment), sans le paramètre le PDF s'affiche inline (nouvel onglet /
+ * iframe) — même fichier dans les deux cas.
+ */
+crmQuoteRouter.get(
+  "/crmQuote/publicPdf",
+  asyncHandler(async (req, res) => {
+    const token = (req.query.token as string) || "";
+    if (!token) throw new HttpError(400, "Lien invalide");
+    const quote = await prisma.crmQuote.findUnique({
+      where: { signToken: token },
+      include: {
+        prospect: { select: { nom: true, logo: true, commercial: { select: { name: true, email: true, phone: true, photoUrl: true } } } },
+        signature: true,
+      },
+    });
+    if (!quote) throw new HttpError(404, "Lien de signature invalide ou expiré");
+    const storedLines = (quote.lines as unknown as QuoteLine[]) || [];
+    const config = (quote.config as QuoteConfig) || {};
+    const hardwareLines = storedLines.filter((l) => l.category === "materiel" && l.group !== "accessory");
+    const lines = expandQuoteLines(storedLines, hardwareLines, config);
+    const totals = quoteTotals(lines, quote.discountPct, quote.vatPct, quote.depositPct);
+
+    const pdfBytes = await generateQuotePdf({
+      number: quote.number,
+      title: quote.title,
+      prospectNom: quote.prospect.nom,
+      introText: quote.introText || "",
+      mentionsText: quote.mentionsText || "",
+      termsText: quote.termsText || "",
+      lines,
+      totals,
+      prospectLogo: quote.prospect.logo || null,
+      commercialName: quote.prospect.commercial?.name || "",
+      commercialEmail: quote.prospect.commercial?.email || "",
+      commercialPhone: quote.prospect.commercial?.phone || "",
+      commercialPhoto: quote.prospect.commercial?.photoUrl || null,
+      alreadySigned: !!quote.signature,
+      signerName: quote.signature?.signerName || null,
+      signedAt: quote.signature?.signedAt || null,
+    });
+
+    res.setHeader("Content-Type", "application/pdf");
+    const fileName = `Devis-${quote.number}.pdf`;
+    res.setHeader("Content-Disposition", `${req.query.dl ? "attachment" : "inline"}; filename="${fileName}"`);
+    res.send(pdfBytes);
   })
 );
 
