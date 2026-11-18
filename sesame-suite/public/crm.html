@@ -9001,6 +9001,22 @@ async function sendQuoteEmail(){
   }catch(e){ flash('Erreur de connexion au serveur'); return; }
   renderQuoteBuilder();
 }
+// 18/11/2026, "une option a partir de l'affaire ou du devis d'envoyer un
+// email explicatif avec un lien d'autologin pour le prospect sur cette
+// application" — même bouton accessible depuis l'affaire liée (qui ouvre
+// ce même constructeur de devis, cf. openDealModal -> ouvre ses devis).
+async function sendReleveEmail(){
+  const q = QUOTE_DRAFT; if(!q || !q.id) return;
+  if(!confirm("Envoyer l'email « Relever mes accès » au client ?")) return;
+  try{
+    const r = await apiFetch('/wa/crmQuote/sendReleveEmail', {method:'POST', body:JSON.stringify({id:q.id})});
+    const data = await r.json();
+    if(!r.ok){ flash(data.error||'Erreur lors de l’envoi'); return; }
+    if(data.signToken) q.signToken = data.signToken;
+    flash('Email « Relever mes accès » envoyé ✓');
+  }catch(e){ flash('Erreur de connexion au serveur'); return; }
+  renderQuoteBuilder();
+}
 
 const DQ_BRAND_RED = '#a32d2d';
 const DQ_CAT_DOT = {materiel:'#0c76d9', service:'#c9860a', logiciel:'#7a5cf0', autre:'#5a8a2e'};
@@ -9329,6 +9345,14 @@ function dqRenderDocumentTab(q, lines){
       ${q.signToken?`<button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText('${esc(location.origin+'/devis-signature.html?token='+q.signToken)}');flash('Lien copié')">Copier le lien de signature</button>`:`<button class="btn btn-ghost btn-sm" onclick="requestQuoteSignature()">✎ Générer le lien sans l'envoyer</button>`}
     </div>` : ''}
     ${q.status==='accepté'?`<div class="tag t-green" style="margin-top:8px;display:inline-flex">✓ Devis signé électroniquement.</div>`:''}
+
+    ${!q._new ? `
+    <h4 style="margin-top:16px">Relevé des accès</h4>
+    <div style="font-size:11px;color:var(--mu);font-style:italic;margin-bottom:8px">Le client prend lui-même les photos et les mesures de ses accès depuis son téléphone, avec un lien d'autologin vers ce devis.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <button class="btn btn-ghost btn-sm" onclick="sendReleveEmail()">📋 Envoyer le relevé des accès par email</button>
+      ${q.signToken?`<button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText('${esc(location.origin+'/releve-acces.html?token='+q.signToken)}');flash('Lien copié')">Copier le lien</button>`:''}
+    </div>` : ''}
     <p style="font-size:11px;color:var(--mu);margin-top:16px">Document généré depuis des données réelles du CRM (client, catalogue, abonnement) — aucune simulation.</p>`;
 }
 
@@ -11247,7 +11271,8 @@ const TPL_CATEGORY_VARS = {
   relance: `Relance de facture (une facture) : {{numero}} {{tiers}} {{montant}} (reste dû) {{echeance}} — voir aussi la catégorie "Comptabilité" pour relancer plusieurs factures d'un même client en un seul envoi.`,
   compta: `<b>Alerte mouvement bancaire</b> (règle "Nouveau mouvement bancaire") : {{nomClient}} (ou {{contrepartie}}) {{montant}} {{sens}} {{date}} {{libelle}} {{compte}}.<br>
     <b>Relance de facture(s)</b> (une ou plusieurs factures en retard d'un même client, sélection multiple dans Comptabilité → Factures) : {{numero}} {{tiers}} {{montant}} {{echeance}} (facture unique) · {{nombreFactures}} {{montantTotal}} {{listeFactures}} (dès 2 factures sélectionnées pour le même client — liste une facture par ligne).`,
-  devis: `Envoi d'un devis au client (bouton "Envoyer le devis par email", onglet Document du constructeur de devis — clé de modèle attendue : <code>devis-envoi</code>) : {{numeroDevis}} {{nomClient}} {{montantInitial}} (frais ponctuels, après remise) {{montantMensuel}} (récurrent, après remise) {{montantTotalTTC}} {{lienSignature}} (lien vers la page publique de signature électronique).`,
+  devis: `Envoi d'un devis au client (bouton "Envoyer le devis par email", onglet Document du constructeur de devis — clé de modèle attendue : <code>devis-envoi</code>) : {{numeroDevis}} {{nomClient}} {{montantInitial}} (frais ponctuels, après remise) {{montantMensuel}} (récurrent, après remise) {{montantTotalTTC}} {{lienSignature}} (lien vers la page publique de signature électronique).<br>
+    <b>Relevé des accès</b> (bouton "Envoyer le relevé des accès par email", onglet Document du constructeur de devis — clé de modèle attendue : <code>releve-acces-envoi</code>) : {{numeroDevis}} {{nomClient}} {{commercialNom}} {{commercialEmail}} <code>{{lienAutologin}}</code> (lien d'autologin direct vers l'application de relevé, public/releve-acces.html).`,
 };
 
 /** Filtre le pavé "Variables" de l'éditeur de modèle à la catégorie

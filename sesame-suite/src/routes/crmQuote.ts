@@ -1384,6 +1384,110 @@ crmQuoteRouter.post(
 );
 
 /**
+ * Envoi de l'email "Relever mes accès" — 18/11/2026, "une option a partir
+ * de l'affaire ou du devis d'envoyer un email explicatif avec un lien
+ * d'autologin pour le prospect sur cette application". Réutilise le MÊME
+ * signToken que l'espace de partage du devis (cf. sendQuoteEmailCore
+ * ci-dessus — "réutilise l'accès du client à son devis", cahier des
+ * charges) : le lien pointe directement sur public/releve-acces.html, qui
+ * authentifie avec ce jeton via GET /crmQuote/public comme
+ * devis-signature.html. Même convergence que tout envoi CRM : passe par
+ * sendMessage() (lib/messaging.ts) avec le modèle email de catégorie
+ * "Devis" (clé "releve-acces-envoi") — modèle à créer une fois dans
+ * Messages > Modèles si absent, pas de contenu codé en dur ici.
+ */
+async function sendReleveEmailCore(quoteId: string, baseUrl: string) {
+  const existing = await prisma.crmQuote.findUnique({
+    where: { id: quoteId },
+    include: { prospect: { select: { id: true, nom: true, email: true, commercial: { select: { name: true, email: true } } } } },
+  });
+  if (!existing) throw new HttpError(404, "Devis introuvable");
+  const prospect = existing.prospect;
+  const toEmail = prospect.email;
+  if (!toEmail) throw new HttpError(400, "Aucune adresse email de destinataire sur la fiche client");
+
+  const signToken = existing.signToken || crypto.randomBytes(24).toString("hex");
+  const lienAutologin = `${baseUrl}/releve-acces.html?token=${signToken}`;
+
+  let commercialNom = prospect.commercial?.name || "";
+  let commercialEmail = prospect.commercial?.email || "";
+  if (!commercialNom || !commercialEmail) {
+    const smtp = await getSmtpConfig(null);
+    commercialNom = commercialNom || "L'équipe Sesame Technology";
+    commercialEmail = commercialEmail || smtp?.supportFromEmail || smtp?.fromEmail || "";
+  }
+
+  try {
+    await sendMessage({
+      entityId: null,
+      channel: "email",
+      templateKey: "releve-acces-envoi",
+      to: toEmail,
+      trackOpenProspectId: prospect.id,
+      variables: {
+        numeroDevis: existing.number,
+        nomClient: prospect.nom,
+        lienAutologin,
+        commercialNom,
+        commercialEmail,
+      },
+    });
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 404) {
+      throw new HttpError(404, 'Aucun modèle email "releve-acces-envoi" (catégorie Devis) — créez-le dans Messages > Modèles avant d\'envoyer.');
+    }
+    throw e;
+  }
+
+  if (!existing.signToken) {
+    await prisma.crmQuote.update({ where: { id: quoteId }, data: { signToken } });
+  }
+  return signToken;
+}
+
+crmQuoteRouter.post(
+  "/crmQuote/sendReleveEmail",
+  requireAdmin,
+  requireSesame,
+  asyncHandler(async (req, res) => {
+    const id = (req.body.id as string) || "";
+    if (!id) throw new HttpError(400, "id requis");
+    const signToken = await sendReleveEmailCore(id, `${req.protocol}://${req.get("host")}`);
+    res.json({ ok: true, signToken });
+  })
+);
+
+/**
+ * POST /wa/crmQuote/releveSubmit — transmission du dossier de relevé des
+ * accès, depuis public/releve-acces.html lui-même (sans authentification
+ * admin, sécurisée par le seul fait de connaître le signToken, même
+ * garde-fou que les autres routes publicXxx de ce fichier). La saisie
+ * (fiches/photos/cotes) reste gérée côté navigateur en V1 — seul un résumé
+ * est journalisé ici en CrmActivity, même principe que publicUpload
+ * ci-dessous, pour que le commercial voie réellement le dépôt dans le
+ * journal CRM du prospect sans attendre une persistance serveur complète.
+ */
+interface ReleveSubmitBody {
+  token: string;
+  fiches: { repere: string; famille: string; quantite: number; complet: boolean }[];
+  partiel: boolean;
+}
+crmQuoteRouter.post(
+  "/crmQuote/releveSubmit",
+  asyncHandler(async (req, res) => {
+    const b = req.body as ReleveSubmitBody;
+    if (!b.token) throw new HttpError(400, "Lien invalide");
+    const quote = await prisma.crmQuote.findUnique({ where: { signToken: b.token }, select: { id: true, number: true, prospectId: true } });
+    if (!quote) throw new HttpError(404, "Lien invalide");
+    const fiches = Array.isArray(b.fiches) ? b.fiches : [];
+    const lines = fiches.map((f) => `• ${f.repere || "Sans repère"} (${f.famille}) × ${f.quantite}${f.complet ? "" : " — à compléter"}`);
+    const text = `Relevé des accès transmis${b.partiel ? " (dossier partiel)" : ""} — devis ${quote.number} :\n${lines.join("\n") || "aucune fiche"}`;
+    await prisma.crmActivity.create({ data: { prospectId: quote.prospectId, type: "Note interne", text } });
+    res.json({ ok: true });
+  })
+);
+
+/**
  * POST /wa/crmQuote/publicTransmit?... — sans authentification admin,
  * appelée depuis l'espace client (devis-signature.html) lui-même : le
  * bouton "Transmettre ce devis au signataire" y vit, pas dans le CRM (cf.

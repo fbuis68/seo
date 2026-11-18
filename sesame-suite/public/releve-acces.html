@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Relevé des accès — Sesame Technology</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/favicon-192.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout : coque téléphone centrée sur grand écran (contexte du devis
+   partagé en arrière-plan), pleine largeur sans décor dès la largeur
+   téléphone — l'app elle-même reste un unique écran défilant par étape. */
+:root{
+  --bg:#f3f1ee; --ground:#e7e3dc; --card:#ffffff; --card-2:#faf8f5;
+  --ink:#201a1d; --ink-soft:#6b6066; --line:#e4dfd9;
+  --accent:#8b1040; --accent-soft:#fbeeef; --accent-ink:#5c0a2b;
+  --good:#1a6b47; --good-soft:#e6f3ec; --warn:#a06a00; --warn-soft:#fff4e0;
+  --shadow:0 1px 2px rgba(30,20,20,.05),0 10px 30px -12px rgba(30,20,20,.18);
+  color-scheme:light;
+  padding-top: max(env(safe-area-inset-top, 0px), 0px);
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#15121a; --ground:#0e0c11; --card:#201c26; --card-2:#262130;
+    --ink:#f1ece8; --ink-soft:#a69eac; --line:#352f3d;
+    --accent:#ef5c8f; --accent-soft:#3a1826; --accent-ink:#ffb3cd;
+    --good:#6fd8a8; --good-soft:#163024; --warn:#f0c04e; --warn-soft:#332706;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#15121a; --ground:#0e0c11; --card:#201c26; --card-2:#262130;
+  --ink:#f1ece8; --ink-soft:#a69eac; --line:#352f3d;
+  --accent:#ef5c8f; --accent-soft:#3a1826; --accent-ink:#ffb3cd;
+  --good:#6fd8a8; --good-soft:#163024; --warn:#f0c04e; --warn-soft:#332706;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+  font-size:14.5px; line-height:1.45;
+  display:flex; justify-content:center;
+  padding-block:28px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+}
+h1,h2,h3,.disp{font-family:'Space Grotesk',sans-serif; letter-spacing:-.01em; text-wrap:balance}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace; font-variant-numeric:tabular-nums}
+
+/* ---- Coque "téléphone" ---- */
+.phone-shell{
+  width:100%; max-width:402px; background:var(--bg);
+  border-radius:38px; box-shadow:var(--shadow); border:1px solid var(--line);
+  overflow:hidden; position:relative; height:844px; max-height:90vh;
+  display:flex; flex-direction:column;
+}
+@media (max-width:480px){
+  body{padding:0}
+  .phone-shell{border-radius:0; box-shadow:none; border:none; height:100dvh; max-height:none; max-width:none}
+}
+.notch{
+  flex:0 0 auto; height:30px; background:var(--bg); position:relative;
+  display:flex; align-items:center; justify-content:center;
+}
+.notch::after{content:'';width:84px;height:18px;background:var(--ground);border-radius:0 0 14px 14px}
+
+.screen{flex:1 1 auto; min-height:0; display:flex; flex-direction:column; position:relative}
+.scroll{flex:1 1 auto; overflow-y:auto; overflow-x:hidden; padding:0 18px 18px}
+.scroll.pad-top{padding-top:4px}
+
+/* ---- Barre de contexte (repère + progression) ---- */
+.ctx-bar{
+  flex:0 0 auto; padding:10px 18px 12px; display:flex; align-items:center; gap:10px;
+  border-bottom:1px solid var(--line); background:var(--bg);
+}
+.ctx-back{
+  width:32px;height:32px;border-radius:10px;border:1px solid var(--line);background:var(--card);
+  display:flex;align-items:center;justify-content:center;color:var(--ink);cursor:pointer;flex-shrink:0;
+}
+.ctx-back svg{width:16px;height:16px}
+.ctx-text{min-width:0;flex:1}
+.ctx-repere{font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ctx-step{font-size:11px;color:var(--ink-soft)}
+.ctx-save{
+  flex-shrink:0; border:none; background:transparent; color:var(--accent); font-weight:600;
+  font-size:11.5px; font-family:inherit; cursor:pointer; padding:6px 4px; white-space:nowrap;
+}
+
+/* ---- Barre de progression fine ---- */
+.progress-track{height:3px;background:var(--line);flex:0 0 auto}
+.progress-fill{height:100%;background:var(--accent);transition:width .25s ease}
+
+/* ---- Cartes & listes ---- */
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:var(--shadow)}
+.stack{display:flex;flex-direction:column;gap:12px}
+.row{display:flex;align-items:center;gap:10px}
+.sub{color:var(--ink-soft);font-size:12.5px}
+.pill{
+  display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:600;
+  padding:3px 9px; border-radius:20px; text-transform:uppercase; letter-spacing:.03em; white-space:nowrap;
+}
+.pill-brouillon{background:var(--accent-soft);color:var(--accent-ink)}
+.pill-transmis{background:var(--good-soft);color:var(--good)}
+.pill-a_completer{background:var(--warn-soft);color:var(--warn)}
+.pill-transmis_complement{background:var(--good-soft);color:var(--good)}
+.pill-a-completer-mini{background:var(--warn-soft);color:var(--warn)}
+.pill-ok-mini{background:var(--good-soft);color:var(--good)}
+
+/* ---- Boutons ---- */
+.btn{
+  font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:14px;
+  padding:13px 18px; border-radius:13px; border:none; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; gap:8px; width:100%;
+}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed}
+.btn-ghost{background:var(--card);color:var(--ink);border:1px solid var(--line)}
+.btn-text{background:transparent;color:var(--accent);padding:10px 6px;width:auto;border:none;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:13px;cursor:pointer;text-align:left}
+.btn-sm{padding:9px 14px;font-size:12.5px;width:auto}
+.btn-danger-text{background:transparent;color:var(--warn);width:auto;padding:10px 6px;font-size:12.5px;border:none;font-family:'Space Grotesk',sans-serif;font-weight:600;cursor:pointer;text-align:left}
+
+/* ---- Barre de navigation basse (Précédent/Suivant) ---- */
+.nav-bar{
+  flex:0 0 auto; display:flex; gap:10px; padding:12px 18px;
+  padding-bottom:max(12px, env(safe-area-inset-bottom, 0px));
+  border-top:1px solid var(--line); background:var(--bg);
+}
+.nav-bar .btn{flex:1}
+.nav-bar .btn-ghost{flex:0 0 auto; width:48px; padding:13px}
+
+/* ---- Fiches (accueil) ---- */
+.fiche-row{
+  display:flex; align-items:center; gap:12px; padding:12px; border:1px solid var(--line);
+  border-radius:14px; background:var(--card); cursor:pointer;
+}
+.fiche-ico{
+  width:42px;height:42px;border-radius:11px;background:var(--accent-soft);color:var(--accent-ink);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.fiche-ico svg{width:20px;height:20px}
+.fiche-main{flex:1;min-width:0}
+.fiche-repere{font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fiche-meta{font-size:11.5px;color:var(--ink-soft);margin-top:1px}
+.fiche-chevron{color:var(--ink-soft);flex-shrink:0}
+.fiche-chevron svg{width:16px;height:16px}
+
+/* ---- Choix famille ---- */
+.fam-card{
+  display:flex; align-items:center; gap:12px; padding:14px; border:1.5px solid var(--line);
+  border-radius:15px; cursor:pointer; background:var(--card); text-align:left;
+}
+.fam-card.active{border-color:var(--accent); background:var(--accent-soft)}
+.fam-ico{width:40px;height:40px;border-radius:11px;background:var(--card-2);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--ink)}
+.fam-card.active .fam-ico{background:var(--accent);color:#fff}
+.fam-ico svg{width:20px;height:20px}
+.fam-label{font-weight:600;font-size:13.5px}
+.fam-desc{font-size:11.5px;color:var(--ink-soft);margin-top:1px}
+
+label.field-label{display:block;font-size:11.5px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px}
+input[type=text],input[type=number],textarea{
+  width:100%; font-family:'Inter',sans-serif; font-size:14.5px; padding:11px 13px;
+  border:1px solid var(--line); border-radius:11px; background:var(--card); color:var(--ink);
+}
+textarea{resize:vertical;min-height:72px;font-family:inherit}
+.qty-stepper{display:flex;align-items:center;gap:0;border:1px solid var(--line);border-radius:11px;overflow:hidden;width:fit-content}
+.qty-stepper button{width:38px;height:38px;border:none;background:var(--card-2);color:var(--ink);font-size:17px;cursor:pointer;font-family:'Space Grotesk',sans-serif}
+.qty-stepper input{width:54px;text-align:center;border:none;border-left:1px solid var(--line);border-right:1px solid var(--line);border-radius:0;height:38px;padding:0;font-family:'IBM Plex Mono',monospace;font-weight:600}
+
+/* ---- Photos guidées ---- */
+.photo-instruction{font-size:13.5px;line-height:1.5}
+.photo-frame{
+  aspect-ratio:4/3; border-radius:16px; background:var(--card-2); border:1.5px dashed var(--line);
+  display:flex; align-items:center; justify-content:center; position:relative; overflow:hidden;
+}
+.photo-frame img{width:100%;height:100%;object-fit:cover}
+.photo-frame .ghost{color:var(--ink-soft); display:flex; flex-direction:column; align-items:center; gap:8px; font-size:12px}
+.photo-frame .ghost svg{width:34px;height:34px;opacity:.6}
+.photo-status{
+  position:absolute; top:10px; left:10px; font-size:10.5px; font-weight:600; padding:4px 9px;
+  border-radius:20px; backdrop-filter:blur(6px);
+}
+.photo-status.uploading{background:rgba(160,106,0,.85);color:#fff}
+.photo-status.done{background:rgba(26,107,71,.88);color:#fff}
+.photo-status.fail{background:rgba(160,30,30,.88);color:#fff}
+.photo-actions{display:flex;gap:8px}
+.example-toggle{font-size:11.5px;color:var(--accent);background:none;border:none;font-family:inherit;cursor:pointer;padding:4px 0;text-align:left}
+.example-box{border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--card-2);font-size:11.5px;color:var(--ink-soft);gap:10px;align-items:center}
+.example-box:not([hidden]){display:flex}
+.example-box svg{width:40px;height:40px;flex-shrink:0;color:var(--ink-soft)}
+
+.detail-thumbs{display:flex;gap:8px;flex-wrap:wrap}
+.detail-thumb{width:64px;height:64px;border-radius:10px;overflow:hidden;position:relative;border:1px solid var(--line)}
+.detail-thumb img{width:100%;height:100%;object-fit:cover}
+.detail-thumb .rm{position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;border:none;font-size:11px;line-height:1;cursor:pointer}
+.detail-add{
+  width:64px;height:64px;border-radius:10px;border:1.5px dashed var(--line);background:none;color:var(--ink-soft);
+  display:flex;align-items:center;justify-content:center;font-size:22px;cursor:pointer;flex-shrink:0;
+}
+
+/* ---- Mesures ---- */
+.cote-diagram{background:var(--card-2);border:1px solid var(--line);border-radius:16px;padding:10px}
+.cote-value-row{display:flex;align-items:stretch;gap:10px}
+.cote-input{flex:1;position:relative}
+.cote-input input{font-family:'IBM Plex Mono',monospace;font-size:19px;font-weight:600;padding:13px 40px 13px 13px;text-align:right}
+.cote-unit{position:absolute;right:13px;top:50%;transform:translateY(-50%);color:var(--ink-soft);font-size:12.5px;font-weight:600;pointer-events:none}
+.cote-flags{display:flex;gap:8px}
+.chip-toggle{
+  flex:1; padding:12px 8px; border-radius:11px; border:1px solid var(--line); background:var(--card);
+  font-family:'Space Grotesk',sans-serif; font-size:12px; font-weight:600; color:var(--ink-soft); cursor:pointer;
+}
+.chip-toggle.active{border-color:var(--warn); background:var(--warn-soft); color:var(--warn)}
+.inaccessible-hint{
+  display:flex; gap:10px; align-items:flex-start; background:var(--warn-soft); border-radius:12px;
+  padding:11px 13px; font-size:12px; color:var(--warn);
+}
+.inaccessible-hint svg{width:16px;height:16px;flex-shrink:0;margin-top:1px}
+
+/* ---- Récap / fiche ---- */
+.summary-line{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}
+.summary-line:last-child{border-bottom:none}
+.summary-line .k{color:var(--ink-soft)}
+.summary-line .v{font-weight:600;text-align:right}
+.missing-item{display:flex;align-items:center;gap:9px;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px}
+.missing-item:last-child{border-bottom:none}
+.missing-dot{width:7px;height:7px;border-radius:50%;background:var(--warn);flex-shrink:0}
+.missing-item button{margin-left:auto}
+
+.toast-wrap{position:absolute;left:18px;right:18px;bottom:88px;display:flex;flex-direction:column;gap:8px;pointer-events:none;z-index:40}
+.toast{
+  background:var(--ink); color:var(--bg); font-size:12.5px; font-weight:500; padding:10px 14px;
+  border-radius:11px; box-shadow:var(--shadow); opacity:0; transform:translateY(6px);
+  transition:opacity .2s, transform .2s; display:flex; align-items:center; gap:8px;
+}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.warn{background:var(--warn)}
+.toast.good{background:var(--good)}
+
+/* ---- Lanceur (entrée depuis le devis) ---- */
+.launch{padding:20px 18px;display:flex;flex-direction:column;gap:18px;height:100%;overflow-y:auto}
+.launch-brand{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--ink-soft);font-weight:600}
+.launch-brand .dot{width:7px;height:7px;border-radius:50%;background:var(--accent)}
+.quote-card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px;box-shadow:var(--shadow)}
+.quote-num{font-size:11.5px;color:var(--ink-soft);font-family:'IBM Plex Mono',monospace}
+
+svg{flex-shrink:0}
+.btn svg{width:18px;height:18px}
+.hidden-input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+::-webkit-scrollbar{width:0;height:0}
+</style>
+</head>
+<body>
+
+<div class="phone-shell" id="shell">
+  <div class="notch"></div>
+  <div class="screen" id="screen"></div>
+</div>
+
+<input type="file" accept="image/*" capture="environment" class="hidden-input" id="file-input">
+
+<script>
+/* ============================= DONNÉES ============================= */
+
+// Authentification par lien d'autologin (même jeton que l'espace client du
+// devis, cf. public/devis-signature.html) — réutilise l'accès du client à
+// son devis comme demandé au cahier des charges ("Accès depuis le devis").
+const params = new URLSearchParams(location.search);
+const TOKEN = params.get('token') || '';
+let QUOTE = null;
+
+/* Chaque icône porte sa propre taille par défaut (20x20) directement en
+   attribut — les emplacements qui en ont besoin la surchargent par CSS
+   (ex. .fiche-ico svg{width:20px...}), les autres (boutons, cercles de
+   statut) héritent de cette taille raisonnable au lieu de la taille
+   intrinsèque du SVG (300×150 par défaut, sans quoi l'icône explose). */
+const ICONS = {
+  back:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
+  chevron:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>',
+  door:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="1"/><circle cx="14.5" cy="12" r="1"/></svg>',
+  building:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V7l8-4 8 4v14"/><path d="M9 21v-6h6v6"/><path d="M9 11h.01M15 11h.01M9 7h.01M15 7h.01"/></svg>',
+  gate:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V9l9-6 9 6v12"/><path d="M3 21h18M8 21v-7M16 21v-7M8 14h8"/></svg>',
+  camera:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h2l1.5-2h5L16 6h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.4"/></svg>',
+  warn:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01"/><path d="M10.3 3.9 1.9 18a2 2 0 0 0 1.7 3h16.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>',
+  check:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+};
+
+/* Trois familles — séquences de vues conformes au cahier des charges. */
+const FAMILLES = [
+  {
+    key:'f1', label:'Chambre ou appartement', ico:ICONS.door,
+    desc:'Porte avec serrure électronique en intérieur',
+    cotes:true,
+    views:[
+      {key:'int', label:'Photo intérieure', instruction:"Reculez pour cadrer toute la porte, vue depuis l'intérieur de la pièce."},
+      {key:'ext', label:'Photo extérieure', instruction:'Même porte, vue depuis le couloir ou l\'extérieur de la pièce.'},
+      {key:'tranche', label:'Tranche, porte ouverte côté serrure', instruction:"Ouvrez la porte à 90°, cadrez la tranche du côté de la serrure."},
+    ],
+  },
+  {
+    key:'f2', label:'Entrée ou parties communes', ico:ICONS.building,
+    desc:'Accès collectif, hall, local commun',
+    cotes:false,
+    views:[
+      {key:'int', label:'Photo intérieure', instruction:'Cadrez la porte vue du côté intérieur des parties communes.'},
+      {key:'ext', label:'Photo extérieure', instruction:'Même porte, vue depuis l\'extérieur du bâtiment.'},
+      {key:'tranche', label:'Tranche côté serrure', instruction:'Porte ouverte, cadrez la tranche du côté de la serrure.'},
+      {key:'equip', label:'Détail (gâche, ventouse, interphone)', instruction:"Si visible : gâche électrique, ventouse ou platine d'interphone.", optional:true},
+    ],
+  },
+  {
+    key:'f3', label:'Accès extérieur', ico:ICONS.gate,
+    desc:'Portillon, barrière, portail motorisé',
+    cotes:false,
+    views:[
+      {key:'site', label:'Photo côté site', instruction:'Cadrez l\'accès vu depuis l\'intérieur du site.'},
+      {key:'rue', label:'Photo côté rue ou arrivée', instruction:'Même accès, vu depuis la rue ou le sens d\'arrivée.'},
+      {key:'equip', label:'Serrure et tranche, ou coffret visible', instruction:'Portillon/commande/motorisation : serrure et tranche. Barrière/portail motorisé : coffret visible.'},
+    ],
+  },
+];
+
+/* Les 8 cotes ne concernent que la famille 1 (portes de chambre/appartement). */
+const COTES_DEF = [
+  {key:'h', label:'Hauteur du coffre', desc:"Du haut au bas du boîtier, hors têtière.", dim:'h'},
+  {key:'p', label:'Profondeur du coffre', desc:"Du dos de la têtière à l'arrière du boîtier.", dim:'p'},
+  {key:'e', label:'Épaisseur du coffre', desc:"Largeur du boîtier dans l'épaisseur de la porte.", dim:'e'},
+  {key:'axe', label:'Axe de poignée', desc:"De la face avant de la têtière au centre du carré de poignée.", dim:'axe'},
+  {key:'entraxe', label:'Entraxe', desc:"Du centre du carré de poignée au centre du cylindre, si présent.", dim:'entraxe'},
+  {key:'lt', label:'Longueur de têtière', desc:"Dimension verticale de la plaque visible sur la tranche.", dim:'lt'},
+  {key:'wt', label:'Largeur de têtière', desc:"Dimension horizontale de la plaque visible sur la tranche.", dim:'wt'},
+  {key:'ep', label:'Épaisseur de la porte', desc:"Sur le chant, au niveau de la serrure.", dim:'ep'},
+];
+
+/* ============================= ÉTAT ============================= */
+
+// Brouillon conservé sur CET appareil tant que non transmis (18/11/2026,
+// "Sauvegarder les champs à chaque changement d'étape") — clé scopée par
+// devis (TOKEN) pour ne jamais mélanger deux devis ouverts dans le même
+// navigateur. La persistance SERVEUR des fiches/photos (reprise depuis un
+// autre appareil, cf. cahier des charges) reste une évolution à venir :
+// cette V1 réutilise l'accès réel au devis et notifie réellement Sesame à
+// la transmission (POST /wa/crmQuote/releveSubmit ci-dessous), mais la
+// saisie elle-même n'est confirmée que par le serveur au moment de l'envoi.
+let STATE = null;
+function defaultState(){
+  return {
+    screen:'launch', // launch | accueil | famille | fiche-wizard | fiche-detail | famille-pick | recap | transmis
+    dossierStatus:'brouillon', // brouillon | transmis
+    fiches:[],
+    currentFicheId:null,
+    stepIndex:0,
+  };
+}
+function saveState(){
+  try{ localStorage.setItem('releve-acces:'+TOKEN, JSON.stringify(STATE)); }catch(e){}
+}
+function loadState(){
+  try{ const raw = localStorage.getItem('releve-acces:'+TOKEN); return raw ? JSON.parse(raw) : null; }catch(e){ return null; }
+}
+function uid(){ return 'f' + Math.random().toString(36).slice(2,9); }
+
+async function init(){
+  if(!TOKEN){ renderInvalid('Lien invalide.'); return; }
+  try{
+    const r = await fetch('/wa/crmQuote/public?token='+encodeURIComponent(TOKEN));
+    const data = await r.json();
+    if(!r.ok){ renderInvalid(data.error || 'Lien invalide ou expiré.'); return; }
+    QUOTE = data;
+  }catch(e){ renderInvalid('Erreur de connexion au serveur.'); return; }
+  STATE = loadState() || defaultState();
+  render();
+}
+function renderInvalid(msg){
+  document.getElementById('screen').innerHTML = `<div class="launch"><h2 style="font-size:17px">Relevé des accès</h2><div class="sub">${esc(msg)}</div></div>`;
+}
+
+function currentFiche(){ return STATE.fiches.find(f=>f.id===STATE.currentFicheId) || null; }
+function familleOf(fiche){ return FAMILLES.find(f=>f.key===fiche.famille); }
+
+function ficheSteps(fiche){
+  const fam = familleOf(fiche);
+  const steps = [];
+  fam.views.forEach(v => steps.push({type:'photo', ...v}));
+  steps.push({type:'details'});
+  if(fam.cotes) COTES_DEF.forEach(c => steps.push({type:'cote', ...c}));
+  steps.push({type:'remarque'});
+  return steps;
+}
+
+function ficheIsComplete(fiche){
+  const steps = ficheSteps(fiche);
+  return steps.every(s=>{
+    if(s.type==='photo') return s.optional || (fiche.photos[s.key] && fiche.photos[s.key].status==='done');
+    if(s.type==='cote') return !!(fiche.cotes[s.key] && fiche.cotes[s.key].value);
+    return true;
+  });
+}
+
+function ficheMissing(fiche){
+  const steps = ficheSteps(fiche);
+  const missing = [];
+  steps.forEach(s=>{
+    if(s.type==='photo' && !s.optional){
+      const p = fiche.photos[s.key];
+      if(!p || p.status!=='done') missing.push({fiche, label: fiche.repere + ' — ' + s.label, stepKey:s.key, kind:'photo'});
+    }
+    if(s.type==='cote'){
+      const c = fiche.cotes[s.key];
+      if(!c || !c.value) missing.push({fiche, label: fiche.repere + ' — ' + s.label, stepKey:s.key, kind:'cote'});
+    }
+  });
+  return missing;
+}
+
+/* ============================= NAVIGATION ============================= */
+
+function goto(screen, extra){
+  STATE.screen = screen;
+  if(extra) Object.assign(STATE, extra);
+  saveState();
+  render();
+}
+
+function startFiche(famille){
+  const fiche = {
+    id:uid(), famille, repere:'', quantite:1,
+    photos:{}, details:[], cotes:{}, remarque:'',
+  };
+  STATE.fiches.push(fiche);
+  STATE.currentFicheId = fiche.id;
+  STATE.stepIndex = -1; // -1 = écran "famille et repère"
+  goto('famille');
+}
+
+function continueFiche(id){
+  STATE.currentFicheId = id;
+  const fiche = currentFiche();
+  const steps = ficheSteps(fiche);
+  let idx = steps.findIndex(s=>{
+    if(s.type==='photo') return !s.optional && (!fiche.photos[s.key] || fiche.photos[s.key].status!=='done');
+    if(s.type==='cote') return !(fiche.cotes[s.key] && fiche.cotes[s.key].value);
+    return false;
+  });
+  if(idx===-1) idx = steps.length - 1;
+  STATE.stepIndex = idx;
+  goto('fiche-wizard');
+}
+
+function openFicheDetail(id){
+  STATE.currentFicheId = id;
+  goto('fiche-detail');
+}
+
+function nextStep(){
+  const fiche = currentFiche();
+  if(STATE.screen==='famille'){
+    if(!fiche.repere.trim()){ toast('Donnez un repère pour cet accès', 'warn'); return; }
+    STATE.stepIndex = 0;
+    goto('fiche-wizard');
+    return;
+  }
+  const steps = ficheSteps(fiche);
+  if(STATE.stepIndex < steps.length - 1){
+    STATE.stepIndex++;
+    saveState(); render();
+  } else {
+    openFicheDetail(fiche.id);
+  }
+}
+function prevStep(){
+  const fiche = currentFiche();
+  if(STATE.screen==='famille'){ goto('accueil'); return; }
+  if(STATE.stepIndex<=0){ goto('famille'); STATE.stepIndex=-1; return; }
+  STATE.stepIndex--;
+  saveState(); render();
+}
+
+/* ============================= TOASTS ============================= */
+let toastTimer=null;
+function toast(msg, kind){
+  const wrap = document.getElementById('toast-wrap');
+  if(!wrap) return;
+  const el = document.createElement('div');
+  el.className = 'toast' + (kind?(' '+kind):'');
+  el.textContent = msg;
+  wrap.appendChild(el);
+  requestAnimationFrame(()=>el.classList.add('show'));
+  setTimeout(()=>{ el.classList.remove('show'); setTimeout(()=>el.remove(), 250); }, 2200);
+}
+
+/* ============================= PHOTO (simulation caméra/galerie) ============================= */
+let PENDING_PHOTO_TARGET = null; // {kind:'view', key} | {kind:'detail'}
+let SIMULATE_NETWORK_FAIL = false;
+
+function requestPhoto(target){
+  PENDING_PHOTO_TARGET = target;
+  document.getElementById('file-input').click();
+}
+document.getElementById('file-input').addEventListener('change', function(e){
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if(!file || !PENDING_PHOTO_TARGET) return;
+  const reader = new FileReader();
+  reader.onload = function(){
+    const dataUrl = reader.result;
+    const target = PENDING_PHOTO_TARGET;
+    const fiche = currentFiche();
+    if(target.kind==='view'){
+      fiche.photos[target.key] = { dataUrl, status:'uploading' };
+      saveState(); render();
+      simulateUpload(()=>{
+        fiche.photos[target.key].status = 'done';
+        saveState(); render();
+      }, ()=>{
+        fiche.photos[target.key].status = 'fail';
+        saveState(); render();
+      });
+    } else if(target.kind==='detail'){
+      fiche.details.push({ id:uid(), dataUrl, status:'uploading' });
+      saveState(); render();
+      const added = fiche.details[fiche.details.length-1];
+      simulateUpload(()=>{ added.status='done'; saveState(); render(); },
+                      ()=>{ added.status='fail'; saveState(); render(); });
+    }
+  };
+  reader.readAsDataURL(file);
+});
+function simulateUpload(onDone, onFail){
+  const shouldFail = SIMULATE_NETWORK_FAIL;
+  SIMULATE_NETWORK_FAIL = false;
+  setTimeout(()=>{ shouldFail ? onFail() : onDone(); }, 900);
+}
+function retryPhoto(key){
+  const fiche = currentFiche();
+  const p = fiche.photos[key];
+  if(!p) return;
+  p.status = 'uploading'; saveState(); render();
+  simulateUpload(()=>{ p.status='done'; saveState(); render(); toast('Photo envoyée','good'); },
+                  ()=>{ p.status='fail'; saveState(); render(); });
+}
+function retryDetail(id){
+  const fiche = currentFiche();
+  const d = fiche.details.find(x=>x.id===id);
+  if(!d) return;
+  d.status='uploading'; saveState(); render();
+  simulateUpload(()=>{ d.status='done'; saveState(); render(); }, ()=>{ d.status='fail'; saveState(); render(); });
+}
+function removeDetail(id){
+  const fiche = currentFiche();
+  fiche.details = fiche.details.filter(d=>d.id!==id);
+  saveState(); render();
+}
+function markViewLater(key){
+  const fiche = currentFiche();
+  fiche.photos[key] = fiche.photos[key] || {};
+  fiche.photos[key].status = 'later';
+  toast('Marqué « à compléter »', 'warn');
+  nextStep();
+}
+
+/* ============================= RENDER ============================= */
+
+function render(){
+  const el = document.getElementById('screen');
+  let html = '';
+  switch(STATE.screen){
+    case 'launch': html = screenLaunch(); break;
+    case 'accueil': html = screenAccueil(); break;
+    case 'famille': html = screenFamille(); break;
+    case 'fiche-wizard': html = screenWizard(); break;
+    case 'fiche-detail': html = screenFicheDetail(); break;
+    case 'recap': html = screenRecap(); break;
+    case 'transmis': html = screenTransmis(); break;
+    default: html = screenAccueil();
+  }
+  el.innerHTML = html + '<div class="toast-wrap" id="toast-wrap"></div>';
+  afterRender();
+}
+
+// backFn absent (écrans avec une barre de navigation Précédent/Suivant en
+// bas) : pas de second chevron qui ferait doublon avec « Précédent ».
+function ctxBar(backFn, repereLabel, stepLabel){
+  return `<div class="ctx-bar">
+    ${backFn ? `<button class="ctx-back" onclick="${backFn}">${ICONS.back}</button>` : ''}
+    <div class="ctx-text">
+      <div class="ctx-repere">${esc(repereLabel)}</div>
+      ${stepLabel?`<div class="ctx-step">${esc(stepLabel)}</div>`:''}
+    </div>
+    <button class="ctx-save" onclick="saveAndQuit()">Enregistrer et quitter</button>
+  </div>`;
+}
+function progressBar(pct){ return `<div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>`; }
+function navBar({ prevLabel, nextLabel, nextDisabled, onPrev, onNext }){
+  return `<div class="nav-bar">
+    <button class="btn btn-ghost" onclick="${onPrev||'prevStep()'}">${ICONS.back}</button>
+    <button class="btn btn-primary" ${nextDisabled?'disabled':''} onclick="${onNext||'nextStep()'}">${esc(nextLabel||'Suivant')}</button>
+  </div>`;
+}
+function saveAndQuit(){ toast('Enregistré', 'good'); goto('accueil'); }
+
+/* ---- Lanceur (entrée depuis l'espace de partage du devis) ---- */
+function screenLaunch(){
+  return `<div class="launch">
+    <div class="launch-brand"><span class="dot"></span>Espace de partage du devis</div>
+    <div class="quote-card stack">
+      <div>
+        <div class="quote-num">${esc(QUOTE.number)}</div>
+        <h2 style="margin:4px 0 2px;font-size:18px">${esc(QUOTE.prospectNom)}</h2>
+      </div>
+      <button class="btn btn-primary" onclick="goto('accueil')">${ICONS.camera} Relever mes accès</button>
+      <div class="sub" style="font-size:11.5px">Prenez des photos et des mesures de vos accès directement depuis votre téléphone — le dossier sera joint à ce devis.</div>
+    </div>
+  </div>`;
+}
+
+/* ---- Accueil du relevé ---- */
+function screenAccueil(){
+  const fiches = STATE.fiches;
+  const missing = fiches.flatMap(ficheMissing);
+  const status = STATE.dossierStatus;
+
+  if(status==='transmis'){
+    return screenAccueilTransmis();
+  }
+
+  const ficheRows = fiches.map(f=>{
+    const complete = ficheIsComplete(f);
+    const fam = familleOf(f);
+    return `<div class="fiche-row" onclick="${complete?`openFicheDetail('${f.id}')`:`continueFiche('${f.id}')`}">
+      <div class="fiche-ico">${fam.ico}</div>
+      <div class="fiche-main">
+        <div class="fiche-repere">${esc(f.repere || 'Sans repère')} <span class="sub">× ${f.quantite}</span></div>
+        <div class="fiche-meta">${esc(fam.label)} · ${complete?'<span class="pill pill-ok-mini" style="padding:1px 7px">Complet</span>':'<span class="pill pill-a-completer-mini" style="padding:1px 7px">À compléter</span>'}</div>
+      </div>
+      <div class="fiche-chevron">${ICONS.chevron}</div>
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="scroll pad-top stack" style="padding-top:18px">
+      <div>
+        <div class="quote-num">${esc(QUOTE.number)} · ${esc(QUOTE.prospectNom)}</div>
+        <h1 style="margin:4px 0 2px;font-size:20px">Relevé des accès</h1>
+        <span class="pill pill-${status}">${statusLabel(status)}</span>
+      </div>
+      ${fiches.length===0 ? `<div class="card" style="text-align:center;padding:28px 16px">
+          <div class="sub">Aucun accès relevé pour le moment.</div>
+        </div>` : `<div class="stack" style="gap:10px">${ficheRows}</div>`}
+
+      ${missing.length ? `<div class="sub" style="font-size:12px">${missing.length} élément${missing.length>1?'s':''} à compléter au total.</div>` : ''}
+
+      <button class="btn btn-ghost" onclick="goto('famille-pick')" style="margin-top:4px">+ Ajouter un accès</button>
+    </div>
+    <div class="nav-bar" style="border-top:1px solid var(--line)">
+      <button class="btn btn-primary" ${fiches.length===0?'disabled':''} onclick="goto('recap')">Voir le récapitulatif</button>
+    </div>`;
+}
+function statusLabel(s){
+  return { brouillon:'Brouillon', transmis:'Transmis' }[s] || s;
+}
+function screenAccueilTransmis(){
+  const fiches = STATE.fiches;
+  const ficheRows = fiches.map(f=>{
+    const fam = familleOf(f);
+    return `<div class="fiche-row" style="cursor:default">
+      <div class="fiche-ico">${fam.ico}</div>
+      <div class="fiche-main">
+        <div class="fiche-repere">${esc(f.repere || 'Sans repère')} <span class="sub">× ${f.quantite}</span></div>
+        <div class="fiche-meta">${esc(fam.label)} · ${ficheIsComplete(f)?'<span class="pill pill-ok-mini" style="padding:1px 7px">Complet</span>':'<span class="pill pill-a-completer-mini" style="padding:1px 7px">Partiel</span>'}</div>
+      </div>
+    </div>`;
+  }).join('');
+  const dateLabel = STATE.transmittedAt ? new Date(STATE.transmittedAt).toLocaleString('fr-FR', {dateStyle:'long', timeStyle:'short'}) : '';
+  return `
+    <div class="scroll pad-top stack" style="padding-top:18px">
+      <div>
+        <div class="quote-num">${esc(QUOTE.number)} · ${esc(QUOTE.prospectNom)}</div>
+        <h1 style="margin:4px 0 2px;font-size:20px">Relevé des accès</h1>
+        <span class="pill pill-transmis">Transmis</span>
+      </div>
+      <div class="card stack" style="text-align:center;padding:26px 16px">
+        <div style="width:46px;height:46px;border-radius:50%;background:var(--good-soft);color:var(--good);display:flex;align-items:center;justify-content:center;margin:0 auto">${ICONS.check}</div>
+        <div style="font-weight:600;font-size:14.5px">Dossier transmis à Sesame Technology</div>
+        ${dateLabel?`<div class="sub">${esc(dateLabel)}</div>`:''}
+      </div>
+      <div class="sub" style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.03em">Contenu du dossier</div>
+      <div class="stack" style="gap:10px">${ficheRows}</div>
+    </div>`;
+}
+
+/* ---- Famille et repère ---- */
+function screenFamille(){
+  const fiche = currentFiche();
+  const famCards = FAMILLES.map(f=>`
+    <button class="fam-card${fiche.famille===f.key?' active':''}" style="width:100%" onclick="pickFamille('${f.key}')">
+      <div class="fam-ico">${f.ico}</div>
+      <div>
+        <div class="fam-label">${esc(f.label)}</div>
+        <div class="fam-desc">${esc(f.desc)}</div>
+      </div>
+    </button>`).join('');
+
+  return `
+    ${ctxBar(null, fiche.repere || 'Nouvel accès', 'Famille et repère')}
+    <div class="scroll pad-top stack">
+      <div>
+        <label class="field-label">Famille</label>
+        <div class="stack" style="gap:8px">${famCards}</div>
+      </div>
+      <div>
+        <label class="field-label">Repère</label>
+        <input type="text" id="input-repere" placeholder="ex. Chambres étage 1" value="${esc(fiche.repere)}" oninput="setRepere(this.value)">
+        <div class="sub" style="margin-top:6px">Un nom reconnaissable pour retrouver ce modèle d'accès.</div>
+      </div>
+      <div>
+        <label class="field-label">Quantité d'accès identiques</label>
+        <div class="qty-stepper">
+          <button onclick="changeQty(-1)">−</button>
+          <input type="number" id="input-qty" value="${fiche.quantite}" oninput="setQuantite(this.value)">
+          <button onclick="changeQty(1)">+</button>
+        </div>
+      </div>
+    </div>
+    ${navBar({ nextDisabled: !fiche.famille })}
+  `;
+}
+function pickFamille(key){ currentFiche().famille = key; render(); }
+function changeQty(delta){ const f = currentFiche(); f.quantite = Math.max(1, f.quantite + delta); render(); }
+function setRepere(v){ currentFiche().repere = v; }
+function setQuantite(v){ currentFiche().quantite = Math.max(1, parseInt(v)||1); }
+
+/* ---- Parcours guidé (photos / détails / cotes / remarque) ---- */
+function screenWizard(){
+  const fic = currentFiche();
+  const steps = ficheSteps(fic);
+  const step = steps[STATE.stepIndex];
+  const pct = Math.round(((STATE.stepIndex+1) / steps.length) * 100);
+  const stepLabel = `Étape ${STATE.stepIndex+1}/${steps.length}`;
+
+  let body = '';
+  if(step.type==='photo') body = stepPhotoHtml(fic, step);
+  else if(step.type==='details') body = stepDetailsHtml(fic);
+  else if(step.type==='cote') body = stepCoteHtml(fic, step);
+  else if(step.type==='remarque') body = stepRemarqueHtml(fic);
+
+  const nav = step.type==='photo' && !step.optional
+    ? navBar({ nextDisabled: !(fic.photos[step.key] && fic.photos[step.key].status==='done') && !(fic.photos[step.key]&&fic.photos[step.key].status==='later') })
+    : navBar({});
+
+  return `
+    ${ctxBar(null, fic.repere, stepLabel)}
+    ${progressBar(pct)}
+    <div class="scroll pad-top stack">${body}</div>
+    ${nav}
+  `;
+}
+
+function stepPhotoHtml(fic, step){
+  const p = fic.photos[step.key];
+  return `
+    <div>
+      <h2 style="margin:0 0 4px;font-size:16px">${esc(step.label)}</h2>
+      <div class="photo-instruction sub">${esc(step.instruction)}</div>
+    </div>
+    <div class="photo-frame">
+      ${p && p.dataUrl ? `<img src="${p.dataUrl}" alt="">` : `<div class="ghost">${ICONS.camera}<span>Aucune photo</span></div>`}
+      ${p && p.status==='uploading' ? `<span class="photo-status uploading">Envoi en cours…</span>` : ''}
+      ${p && p.status==='done' ? `<span class="photo-status done">Envoyée ✓</span>` : ''}
+      ${p && p.status==='fail' ? `<span class="photo-status fail">Échec — à réessayer</span>` : ''}
+    </div>
+    <div class="photo-actions">
+      <button class="btn btn-ghost" style="flex:1" onclick="requestPhoto({kind:'view',key:'${step.key}'})">${p?.dataUrl ? 'Reprendre la photo' : 'Ouvrir la caméra'}</button>
+      ${p && p.status==='fail' ? `<button class="btn btn-primary" style="flex:1" onclick="retryPhoto('${step.key}')">Réessayer</button>` : ''}
+    </div>
+    <button class="example-toggle" onclick="toggleExample(this)">Voir un exemple de cadrage</button>
+    <div class="example-box" hidden>
+      ${ICONS.camera}
+      <div>Cadrez l'accès dans son ensemble, sans visage, code ni badge lisible — gardez une distance d'1 à 1,5 m.</div>
+    </div>
+    ${step.optional ? `<button class="btn-text" style="padding:0" onclick="skipOptionalPhoto('${step.key}')">Facultatif — passer cette vue</button>` : ''}
+    ${!step.optional ? `<button class="btn-danger-text" style="padding:0" onclick="markViewLater('${step.key}')">Reprendre plus tard</button>` : ''}
+  `;
+}
+function toggleExample(btn){
+  const box = btn.nextElementSibling;
+  box.hidden = !box.hidden;
+}
+function skipOptionalPhoto(key){ nextStep(); }
+
+function stepDetailsHtml(fic){
+  const thumbs = fic.details.map(d=>`
+    <div class="detail-thumb">
+      <img src="${d.dataUrl}" alt="">
+      ${d.status==='uploading'?'<span class="photo-status uploading" style="font-size:9px;padding:2px 6px;top:3px;left:3px">…</span>':''}
+      ${d.status==='fail'?`<button class="rm" onclick="retryDetail('${d.id}')" title="Réessayer">↻</button>`:`<button class="rm" onclick="removeDetail('${d.id}')">✕</button>`}
+    </div>`).join('');
+  return `
+    <div>
+      <h2 style="margin:0 0 4px;font-size:16px">Détails (facultatif)</h2>
+      <div class="sub">Ajoutez d'autres photos utiles — par exemple une cote photographiée avec une règle.</div>
+    </div>
+    <div class="detail-thumbs">
+      ${thumbs}
+      <button class="detail-add" onclick="requestPhoto({kind:'detail'})">+</button>
+    </div>
+    <div>
+      <label class="field-label">Légende</label>
+      <input type="text" placeholder="ex. Cote relevée à la règle" value="${esc(fic.detailLegende||'')}" oninput="fic_setLegende(this.value)">
+    </div>
+  `;
+}
+function fic_setLegende(v){ currentFiche().detailLegende = v; }
+
+function stepCoteHtml(fic, step){
+  const c = fic.cotes[step.key] || { value:'', flag:null };
+  fic.cotes[step.key] = c;
+  return `
+    <div>
+      <h2 style="margin:0 0 4px;font-size:16px">${esc(step.label)}</h2>
+      <div class="sub">${esc(step.desc)}</div>
+    </div>
+    <div class="cote-diagram">${coteDiagramSvg(step.dim)}</div>
+    <div class="sub" style="font-size:11px;text-align:center">Schéma indicatif — aucun démontage requis.</div>
+    <div class="cote-value-row">
+      <div class="cote-input">
+        <input type="number" inputmode="decimal" placeholder="0" value="${c.value||''}" ${c.flag?'disabled':''}
+          oninput="currentFiche().cotes['${step.key}'].value=this.value">
+        <span class="cote-unit">mm</span>
+      </div>
+    </div>
+    <div class="cote-flags">
+      <button class="chip-toggle${c.flag==='inaccessible'?' active':''}" onclick="toggleCoteFlag('${step.key}','inaccessible')">Inaccessible</button>
+      <button class="chip-toggle${c.flag==='sans_objet'?' active':''}" onclick="toggleCoteFlag('${step.key}','sans_objet')">Sans objet</button>
+    </div>
+    ${c.flag==='inaccessible' ? `
+      <div class="inaccessible-hint">${ICONS.warn}<div>Ajoutez une photo de la tranche avec une règle dans « Détails » pour documenter cette cote.</div></div>
+    ` : ''}
+  `;
+}
+function toggleCoteFlag(key, flag){
+  const c = currentFiche().cotes[key];
+  c.flag = c.flag===flag ? null : flag;
+  if(c.flag) c.value = flag==='sans_objet' ? 'Sans objet' : 'Inaccessible';
+  else c.value = '';
+  render();
+}
+function coteDiagramSvg(dim){
+  const on = (id) => id===dim ? 'var(--accent)' : 'var(--line)';
+  const onW = (id) => id===dim ? 2.4 : 1.4;
+  return `<svg viewBox="0 0 220 150" style="width:100%;height:auto" aria-hidden="true">
+    <rect x="150" y="10" width="14" height="130" fill="none" stroke="var(--ink-soft)" stroke-width="1.4"/>
+    <rect x="96" y="40" width="54" height="56" rx="3" fill="none" stroke="var(--ink-soft)" stroke-width="1.4"/>
+    <circle cx="150" cy="68" r="4.5" fill="none" stroke="var(--ink-soft)" stroke-width="1.4"/>
+    <circle cx="150" cy="90" r="3.2" fill="none" stroke="var(--ink-soft)" stroke-width="1.4"/>
+    <line x1="84" y1="40" x2="84" y2="96" stroke="${on('h')}" stroke-width="${onW('h')}"/>
+    <line x1="80" y1="40" x2="88" y2="40" stroke="${on('h')}" stroke-width="${onW('h')}"/>
+    <line x1="80" y1="96" x2="88" y2="96" stroke="${on('h')}" stroke-width="${onW('h')}"/>
+    <line x1="96" y1="106" x2="150" y2="106" stroke="${on('p')}" stroke-width="${onW('p')}"/>
+    <line x1="96" y1="33" x2="150" y2="33" stroke="${on('wt')}" stroke-width="${onW('wt')}"/>
+    <line x1="166" y1="20" x2="178" y2="20" stroke="${on('e')}" stroke-width="${onW('e')}"/>
+    <line x1="166" y1="10" x2="166" y2="30" stroke="${on('e')}" stroke-width="${onW('e')}"/>
+    <line x1="178" y1="10" x2="178" y2="30" stroke="${on('e')}" stroke-width="${onW('e')}"/>
+    <line x1="150" y1="68" x2="186" y2="68" stroke="${on('axe')}" stroke-width="${onW('axe')}"/>
+    <line x1="150" y1="90" x2="186" y2="90" stroke="${on('entraxe')}" stroke-width="${onW('entraxe')}"/>
+    <line x1="148" y1="120" x2="166" y2="120" stroke="${on('lt')}" stroke-width="${onW('lt')}"/>
+    <line x1="150" y1="130" x2="150" y2="10" stroke="${on('ep')}" stroke-width="${onW('ep')}" stroke-dasharray="2 3" opacity="${dim==='ep'?1:0}"/>
+  </svg>`;
+}
+
+function stepRemarqueHtml(fic){
+  return `
+    <div>
+      <h2 style="margin:0 0 4px;font-size:16px">Remarque</h2>
+      <div class="sub">Facultatif — toute information utile sur cette fiche.</div>
+    </div>
+    <textarea placeholder="ex. Porte coupe-feu, accès prioritaire…" oninput="currentFiche().remarque=this.value">${esc(fic.remarque||'')}</textarea>
+  `;
+}
+
+/* ---- Retour au dossier (détail d'une fiche) ---- */
+function screenFicheDetail(){
+  const fic = currentFiche();
+  const fam = familleOf(fic);
+  const steps = ficheSteps(fic);
+  const missing = ficheMissing(fic);
+
+  const photoRows = fam.views.map(v=>{
+    const p = fic.photos[v.key];
+    return `<div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)" onclick="jumpToStep('${v.key}')">
+      <div class="row" style="gap:10px">
+        <div style="width:30px;height:30px;border-radius:8px;overflow:hidden;background:var(--card-2);flex-shrink:0">${p&&p.dataUrl?`<img src="${p.dataUrl}" style="width:100%;height:100%;object-fit:cover">`:''}</div>
+        <span style="font-size:12.5px">${esc(v.label)}</span>
+      </div>
+      ${p&&p.status==='done' ? '<span class="pill pill-ok-mini">OK</span>' : `<span class="pill pill-a-completer-mini">${v.optional?'Facultatif':'À faire'}</span>`}
+    </div>`;
+  }).join('');
+
+  const coteRows = fam.cotes ? COTES_DEF.map(c=>{
+    const v = fic.cotes[c.key];
+    return `<div class="summary-line" onclick="jumpToStep('${c.key}')" style="cursor:pointer">
+      <span class="k">${esc(c.label)}</span>
+      <span class="v mono">${v&&v.value ? esc(String(v.value)) + (v.flag?'':' mm') : '—'}</span>
+    </div>`;
+  }).join('') : '';
+
+  return `
+    ${ctxBar("goto('accueil')", fic.repere, 'Retour au dossier')}
+    <div class="scroll pad-top stack">
+      <div class="row" style="justify-content:space-between">
+        <span class="pill pill-${ficheIsComplete(fic)?'transmis':'a_completer'}">${ficheIsComplete(fic)?'Complet':'À compléter'}</span>
+        <span class="sub">× ${fic.quantite} accès identiques</span>
+      </div>
+      <div class="card stack">
+        <div class="sub" style="font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:.03em">Photos</div>
+        ${photoRows}
+        ${fic.details.length ? `<div class="detail-thumbs" style="margin-top:4px">${fic.details.map(d=>`<div class="detail-thumb"><img src="${d.dataUrl}"></div>`).join('')}</div>` : ''}
+      </div>
+      ${fam.cotes ? `<div class="card stack">
+        <div class="sub" style="font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:.03em">Cotes</div>
+        ${coteRows}
+      </div>` : ''}
+      ${fic.remarque ? `<div class="card"><div class="sub" style="font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:.03em;margin-bottom:6px">Remarque</div>${esc(fic.remarque)}</div>` : ''}
+      ${missing.length ? `<div class="sub" style="color:var(--warn);font-size:12px">${missing.length} élément${missing.length>1?'s':''} à compléter sur cette fiche.</div>` : ''}
+      <button class="btn btn-ghost" onclick="continueFiche('${fic.id}')">Modifier une étape</button>
+      <button class="btn btn-ghost" onclick="goto('famille-pick')">+ Ajouter un autre modèle</button>
+    </div>`;
+}
+function jumpToStep(key){
+  const fic = currentFiche();
+  const steps = ficheSteps(fic);
+  const idx = steps.findIndex(s=>s.key===key);
+  STATE.stepIndex = idx===-1 ? 0 : idx;
+  goto('fiche-wizard');
+}
+
+/* ---- Choix de famille (depuis l'accueil, sans fiche existante) ---- */
+function screenFamillePick(){
+  const famCards = FAMILLES.map(f=>`
+    <button class="fam-card" style="width:100%" onclick="startFiche('${f.key}')">
+      <div class="fam-ico">${f.ico}</div>
+      <div>
+        <div class="fam-label">${esc(f.label)}</div>
+        <div class="fam-desc">${esc(f.desc)}</div>
+      </div>
+    </button>`).join('');
+  return `
+    ${ctxBar("goto('accueil')", 'Ajouter un accès', '')}
+    <div class="scroll pad-top stack">
+      <div class="sub">Un modèle différent de porte, de serrure ou de commande a sa propre fiche.</div>
+      ${famCards}
+    </div>`;
+}
+
+/* ---- Récapitulatif et envoi ---- */
+function screenRecap(){
+  const fiches = STATE.fiches;
+  const totalQty = fiches.reduce((s,f)=>s+f.quantite,0);
+  const totalPhotos = fiches.reduce((s,f)=>s + Object.values(f.photos).filter(p=>p.status==='done').length + f.details.filter(d=>d.status==='done').length, 0);
+  const missing = fiches.flatMap(ficheMissing);
+  const canSend = fiches.length>0 && fiches.every(f=>f.famille && f.repere.trim() && f.quantite>0);
+
+  const ficheLines = fiches.map(f=>{
+    const fam = familleOf(f);
+    return `<div class="summary-line" style="cursor:pointer" onclick="openFicheDetail('${f.id}')">
+      <span class="k">${esc(f.repere)} <span class="sub">(${esc(fam.label)})</span></span>
+      <span class="v">${ficheIsComplete(f) ? '<span class="pill pill-ok-mini">Complet</span>' : '<span class="pill pill-a-completer-mini">À compléter</span>'}</span>
+    </div>`;
+  }).join('');
+
+  const missingLines = missing.map(m=>`
+    <div class="missing-item">
+      <span class="missing-dot"></span>
+      <span>${esc(m.label)}</span>
+      <button class="btn-text btn-sm" onclick="openFicheDetail('${m.fiche.id}')">Ouvrir</button>
+    </div>`).join('');
+
+  return `
+    ${ctxBar(null, 'Récapitulatif', QUOTE.number)}
+    <div class="scroll pad-top stack">
+      <div class="card stack">
+        <div class="summary-line"><span class="k">Fiches</span><span class="v">${fiches.length}</span></div>
+        <div class="summary-line"><span class="k">Accès au total</span><span class="v">${totalQty}</span></div>
+        <div class="summary-line"><span class="k">Photos envoyées</span><span class="v">${totalPhotos}</span></div>
+      </div>
+      <div class="card stack">
+        <div class="sub" style="font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:.03em">Fiches</div>
+        ${ficheLines || '<div class="sub">Aucune fiche.</div>'}
+      </div>
+      ${missing.length ? `<div class="card stack">
+        <div class="sub" style="font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:.03em;color:var(--warn)">À compléter</div>
+        ${missingLines}
+        <div class="sub" style="font-size:11.5px">Vous pouvez transmettre un dossier partiel après confirmation.</div>
+      </div>` : ''}
+    </div>
+    ${navBar({ onPrev:"goto('accueil')", nextLabel: missing.length ? 'Transmettre (dossier partiel)' : 'Transmettre le dossier', nextDisabled: !canSend, onNext:'confirmSend()' })}
+  `;
+}
+// Transmission réelle (18/11/2026) — POST /wa/crmQuote/releveSubmit
+// journalise un CrmActivity sur la fiche prospect (même convention que
+// publicUpload, cf. routes/crmQuote.ts) : le commercial voit vraiment le
+// dépôt dans le journal CRM. La saisie (fiches/photos/cotes) reste côté
+// navigateur en V1 — seul le résumé (repères/familles/quantités/complet
+// ou non) est transmis au serveur, pas les photos elles-mêmes.
+async function confirmSend(){
+  const missing = STATE.fiches.flatMap(ficheMissing);
+  if(missing.length){
+    if(!window.__confirmedPartial){
+      toast('Appuyez à nouveau pour confirmer un envoi partiel', 'warn');
+      window.__confirmedPartial = true;
+      setTimeout(()=>window.__confirmedPartial=false, 4000);
+      return;
+    }
+  }
+  const resume = STATE.fiches.map(f=>({
+    repere: f.repere, famille: (familleOf(f)||{}).label || f.famille,
+    quantite: f.quantite, complet: ficheIsComplete(f),
+  }));
+  try{
+    await fetch('/wa/crmQuote/releveSubmit', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ token: TOKEN, fiches: resume, partiel: missing.length>0 }),
+    });
+  }catch(e){ /* dossier conservé localement — l'envoi sera rejoué au prochain essai */ }
+  STATE.dossierStatus = 'transmis';
+  STATE.transmittedAt = new Date().toISOString();
+  saveState();
+  goto('transmis');
+}
+function screenTransmis(){
+  return `
+    <div class="scroll pad-top stack" style="justify-content:center;flex:1;text-align:center;padding-top:40px">
+      <div style="width:56px;height:56px;border-radius:50%;background:var(--good-soft);color:var(--good);display:flex;align-items:center;justify-content:center;margin:0 auto">${ICONS.check}</div>
+      <h2 style="margin:4px 0 2px">Dossier transmis</h2>
+      <div class="sub">Sesame Technology a été notifié.</div>
+      <button class="btn btn-ghost" style="margin-top:18px" onclick="goto('accueil')">Retour au dossier</button>
+    </div>`;
+}
+
+/* ============================= UTILS ============================= */
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function afterRender(){}
+
+/* Petit raccordement pour le bouton "+ Ajouter un accès" de l'accueil,
+   qui doit afficher l'écran de choix de famille SANS fiche déjà créée. */
+const _origGoto = goto;
+goto = function(screen, extra){
+  if(screen==='famille-pick'){ STATE.screen='famille-pick'; saveState(); render(); return; }
+  _origGoto(screen, extra);
+};
+const _origRender = render;
+render = function(){
+  if(STATE.screen==='famille-pick'){
+    const el = document.getElementById('screen');
+    el.innerHTML = screenFamillePick() + '<div class="toast-wrap" id="toast-wrap"></div>';
+    return;
+  }
+  _origRender();
+};
+
+init();
+</script>
+</body>
+</html>
