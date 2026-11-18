@@ -254,6 +254,19 @@ export async function sendMessage(opts: {
       console.error("[messaging] Échec de récupération de {{codeAcces}} :", e);
     }
   }
+  // Repli simulé (18/11/2026, "le code envoyé par email comme sms
+  // n'apparaît pas" pour une réservation créée via le formulaire de
+  // réservation en ligne) — {{codeAcces}} restait VIDE dès que le vrai code
+  // n'était pas disponible (connecteur sans endpoint de création configuré,
+  // ou réservation pas encore adoptée par la source), contrairement au
+  // panneau staff ET à l'espace client (checkin.html espRenderQr), qui
+  // retombent déjà sur le code de réservation lui-même comme démo/simulation
+  // plutôt que de rien afficher. Même repli ici, pour la même raison : un
+  // email/SMS de confirmation avec un champ vide est pire qu'un code de
+  // démonstration cohérent avec ce que montrera ensuite l'app.
+  if (wantsAccessCode && vars.code && !vars.codeAcces) {
+    vars = { ...vars, codeAcces: vars.code };
+  }
   // {{qrCode}} — image QR (data URL PNG) encodant {{codeAcces}} (le vrai
   // code d'ouverture de porte) quand disponible, sinon {{code}} (code de
   // réservation, à défaut — ex : modèle commercial hors contexte
