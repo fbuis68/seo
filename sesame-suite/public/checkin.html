@@ -96,6 +96,13 @@ div[style*="position:fixed"][style*="inset:0"]:has(>[style*="max-height:88dvh"])
 .sline.done{background:var(--accent)}
 .slbl{font-family:var(--font-title,'Fraunces',serif);font-size:20px;font-weight:300;margin-bottom:16px;color:var(--tx)}
 
+/* ── CLÉ DIGITALE — compte à rebours d'activation ── */
+.espcd-row{display:flex;justify-content:center;align-items:center;gap:8px}
+.espcd-box{min-width:54px;display:flex;flex-direction:column;align-items:center}
+.espcd-num{font-family:monospace;font-size:30px;font-weight:800;line-height:1;background:rgba(255,255,255,.16);border-radius:10px;padding:10px 6px;min-width:54px;font-variant-numeric:tabular-nums}
+.espcd-lbl{font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;margin-top:6px;opacity:.85}
+.espcd-sep{font-size:24px;font-weight:700;opacity:.5;align-self:flex-start;margin-top:8px}
+
 /* ── CARDS ── */
 .card{background:var(--card);border-radius:var(--r);padding:16px;margin-bottom:12px;border:1px solid var(--bdr)}
 .card-sh{box-shadow:0 2px 10px rgba(0,0,0,.06)}
@@ -701,7 +708,7 @@ input:focus,select:focus{border-color:var(--accent)}
 
     <div class="card">
       <div class="ch"><i class="ti ti-map-pin"></i><span data-i18n="contact_address_hdr">Adresse</span></div>
-      <div class="fi"><label class="lb" data-i18n="kyc_field_address">Adresse</label><input type="text" id="contact-adresse" placeholder="12 Rue de la Paix"></div>
+      <div class="fi"><label class="lb" data-i18n="contact_address_label">Adresse <span style="color:var(--re)">*</span></label><input type="text" id="contact-adresse" placeholder="12 Rue de la Paix" required></div>
       <div class="kyc-field-row">
         <div class="fi"><label class="lb" data-i18n="kyc_field_zip">Code postal</label><input type="text" id="contact-cp" placeholder="75001"></div>
         <div class="fi"><label class="lb" data-i18n="kyc_field_city">Ville</label><input type="text" id="contact-ville" placeholder="Paris"></div>
@@ -713,7 +720,7 @@ input:focus,select:focus{border-color:var(--accent)}
         <input type="checkbox" id="contact-cgu" style="margin-top:3px;width:18px;height:18px;flex-shrink:0;accent-color:var(--primary)">
         <span style="font-size:13px;line-height:1.5" id="contact-cgu-label"></span>
       </label>
-      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+      <label id="contact-newsletter-row" style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
         <input type="checkbox" id="contact-newsletter" style="margin-top:3px;width:18px;height:18px;flex-shrink:0;accent-color:var(--primary)">
         <span style="font-size:13px;line-height:1.5" data-i18n="esp_newsletter_checkbox_label">Je m'abonne à la newsletter de l'hôtel</span>
       </label>
@@ -1154,6 +1161,22 @@ input:focus,select:focus{border-color:var(--accent)}
 
     <!-- ═══ TAB: CLÉ DIGITALE ═══ -->
     <div id="espTabKey" class="esp-tab">
+      <!-- Compte à rebours avant l'heure d'activation de la clé (date
+           d'arrivée + horaire de check-in) — purement informatif, cf.
+           espRenderKeyCountdown. Masqué dès que l'heure est passée. -->
+      <div class="card" id="espKeyCountdownCard" style="display:none;text-align:center;padding:22px 16px;margin-bottom:12px;background:linear-gradient(135deg,var(--primary),var(--accent));color:#fff;border:none">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;opacity:.9;margin-bottom:14px" data-i18n="esp_key_countdown_title">Votre clé s'active dans</div>
+        <div class="espcd-row">
+          <div class="espcd-box"><div class="espcd-num" id="espCdDays">00</div><div class="espcd-lbl" data-i18n="esp_key_countdown_days">Jours</div></div>
+          <div class="espcd-sep">:</div>
+          <div class="espcd-box"><div class="espcd-num" id="espCdHours">00</div><div class="espcd-lbl" data-i18n="esp_key_countdown_hours">Heures</div></div>
+          <div class="espcd-sep">:</div>
+          <div class="espcd-box"><div class="espcd-num" id="espCdMin">00</div><div class="espcd-lbl" data-i18n="esp_key_countdown_min">Min</div></div>
+          <div class="espcd-sep">:</div>
+          <div class="espcd-box"><div class="espcd-num" id="espCdSec">00</div><div class="espcd-lbl" data-i18n="esp_key_countdown_sec">Sec</div></div>
+        </div>
+        <div style="font-size:12px;margin-top:14px;opacity:.9" id="espKeyCountdownDate">—</div>
+      </div>
       <!-- QR Code — récupéré de la source PMS réelle si configurée (cf.
            espRenderQr), sinon pattern de démonstration local -->
       <div class="card" style="text-align:center;padding:24px 16px;margin-bottom:12px">
@@ -1554,7 +1577,7 @@ function apiFetch(url, opts){
   return fetch(url, opts);
 }
 var DEFAULT_CFG={
-  hotelName:'Éco-Séjour',hotelSlogan:'',entityId:'E00000001',stars:3,termsUrl:'',
+  hotelName:'Éco-Séjour',hotelSlogan:'',entityId:'E00000001',stars:3,termsUrl:'',cguRequired:true,newsletterEnabled:true,
   colors:{primary:'#8B1A2E',primaryLight:'#FDEDF0',accent:'#8B1A2E',headerBg:'#8B1A2E',
     headerText:'#FFFFFF',bg:'#F5F3F0',cardBg:'#FFFFFF',border:'#E3DED8',text:'#14121E',btnNav:'#8B1A2E'},
   radius:14,radiusBtn:8,shadow:true,fontTitle:"'Fraunces',serif",fontBody:"'Sora',sans-serif",
@@ -1891,10 +1914,11 @@ var I18N_FR = {
   step_dot_kyc_title:'Vérification identité',step_dot_contact_title:'Mes coordonnées',step_dot_boutique_title:'Boutique',step_dot_sharing_title:'Partage entre clients',
   // Étape 5 — mes coordonnées (nom, email, téléphone, adresse, CGU, newsletter)
   contact_title:'Mes coordonnées',contact_hdr:'Vérifiez vos informations',
-  contact_email_label:'Email',contact_phone_label:'Téléphone',contact_address_hdr:'Adresse',
+  contact_email_label:'Email',contact_phone_label:'Téléphone',contact_address_hdr:'Adresse',contact_address_label:'Adresse',
   contact_cgu_label_tpl:"J'ai lu et j'accepte les {link}.",contact_cgu_link_text:'conditions générales',
   contact_err_email:'Merci de renseigner une adresse email valide',
   contact_err_phone:'Merci de renseigner votre numéro de téléphone',
+  contact_err_address:'Merci de renseigner votre adresse',
   contact_err_cgu:"Merci d'accepter les conditions générales pour continuer",
   // Étape 7 — partage de profil entre clients
   shr_title:'Partage de profil',
@@ -2075,6 +2099,8 @@ var I18N_FR = {
   esp_tab_histo:'Historique',esp_tab_livret:'Livret',esp_tab_boutique:'Boutique',
   esp_tab_rs:'Room Service',
   esp_key_title:'Votre clé digitale',esp_key_present:'Présentez ce code au lecteur Sesame',
+  esp_key_countdown_title:"Votre clé s'active dans",esp_key_countdown_days:'Jours',esp_key_countdown_hours:'Heures',esp_key_countdown_min:'Min',esp_key_countdown_sec:'Sec',
+  esp_key_countdown_at:'Activation le {date} à {time}',
   esp_key_simulate_open:"Simuler l'ouverture",esp_key_unlocked:'Accès déverrouillé ✓',esp_key_pick_access:'Choisissez un accès précis ci-dessous.',
   esp_key_info:'Approchez votre téléphone du lecteur ou présentez ce QR code pour chaque accès.',
   esp_guests_title:'Invités',esp_guests_master:'Principal',
@@ -2161,10 +2187,11 @@ var I18N_EN = {
   step_dot_kyc_title:'Identity verification',step_dot_contact_title:'My details',step_dot_boutique_title:'Shop',step_dot_sharing_title:'Sharing with other guests',
   // Step 5 — my details (name, email, phone, address, terms, newsletter)
   contact_title:'My details',contact_hdr:'Check your information',
-  contact_email_label:'Email',contact_phone_label:'Phone',contact_address_hdr:'Address',
+  contact_email_label:'Email',contact_phone_label:'Phone',contact_address_hdr:'Address',contact_address_label:'Address',
   contact_cgu_label_tpl:'I have read and accept the {link}.',contact_cgu_link_text:'terms and conditions',
   contact_err_email:'Please enter a valid email address',
   contact_err_phone:'Please enter your phone number',
+  contact_err_address:'Please enter your address',
   contact_err_cgu:'Please accept the terms and conditions to continue',
   shr_title:'Profile sharing',
   shr_intro:'Share your name, contact details, photo and interests with other guests staying at the property at the same time. Only visible for the duration of your reservation — can be turned off anytime from your space.',
@@ -2333,6 +2360,8 @@ var I18N_EN = {
   esp_tab_histo:'History',esp_tab_livret:'Guidebook',esp_tab_boutique:'Shop',
   esp_tab_rs:'Room Service',
   esp_key_title:'Your digital key',esp_key_present:'Present this code to the Sesame reader',
+  esp_key_countdown_title:'Your key activates in',esp_key_countdown_days:'Days',esp_key_countdown_hours:'Hours',esp_key_countdown_min:'Min',esp_key_countdown_sec:'Sec',
+  esp_key_countdown_at:'Activates on {date} at {time}',
   esp_key_simulate_open:'Simulate unlocking',esp_key_unlocked:'Access unlocked ✓',esp_key_pick_access:'Pick a specific access point below.',
   esp_key_info:'Hold your phone near the reader or show this QR code for each access point.',
   esp_guests_title:'Guests',esp_guests_master:'Primary',
@@ -2419,10 +2448,11 @@ var I18N_ES = {
   step_dot_kyc_title:'Verificación de identidad',step_dot_contact_title:'Mis datos',step_dot_boutique_title:'Tienda',step_dot_sharing_title:'Compartir con otros clientes',
   // Etapa 5 — mis datos (nombre, email, teléfono, dirección, términos, newsletter)
   contact_title:'Mis datos',contact_hdr:'Verifique su información',
-  contact_email_label:'Email',contact_phone_label:'Teléfono',contact_address_hdr:'Dirección',
+  contact_email_label:'Email',contact_phone_label:'Teléfono',contact_address_hdr:'Dirección',contact_address_label:'Dirección',
   contact_cgu_label_tpl:'He leído y acepto los {link}.',contact_cgu_link_text:'términos y condiciones',
   contact_err_email:'Introduzca una dirección de email válida',
   contact_err_phone:'Introduzca su número de teléfono',
+  contact_err_address:'Introduzca su dirección',
   contact_err_cgu:'Acepte los términos y condiciones para continuar',
   shr_title:'Compartir perfil',
   shr_intro:'Comparta su nombre, sus datos de contacto, su foto y sus intereses con los demás clientes presentes en el establecimiento durante su estancia. Visible solo durante la validez de su reserva — se puede desactivar en cualquier momento desde su espacio.',
@@ -2593,6 +2623,8 @@ var I18N_ES = {
   esp_tab_histo:'Historial',esp_tab_livret:'Guía',esp_tab_boutique:'Tienda',
   esp_tab_rs:'Servicio de habitaciones',
   esp_key_title:'Su llave digital',esp_key_present:'Presente este código en el lector Sesame',
+  esp_key_countdown_title:'Su llave se activa en',esp_key_countdown_days:'Días',esp_key_countdown_hours:'Horas',esp_key_countdown_min:'Min',esp_key_countdown_sec:'Seg',
+  esp_key_countdown_at:'Activación el {date} a las {time}',
   esp_key_simulate_open:'Simular apertura',esp_key_unlocked:'Acceso desbloqueado ✓',esp_key_pick_access:'Elige un acceso concreto abajo.',
   esp_key_info:'Acerque su teléfono al lector o muestre este código QR en cada acceso.',
   esp_guests_title:'Invitados',esp_guests_master:'Principal',
@@ -4061,7 +4093,7 @@ function espSetTab(tab){
     var el = document.getElementById(id);
     if(el) el.style.display = (t===tab) ? 'block' : 'none';
   });
-  if(tab==='key')      { espRenderKey(); espRenderQr(); espRenderWallet(); espRenderGuests(); }
+  if(tab==='key')      { espRenderKey(); espRenderQr(); espRenderWallet(); espRenderGuests(); espRenderKeyCountdown(); }
   if(tab==='rs')       renderRoomService();
   if(tab==='loyalty')  espRenderLoyalty();
   if(tab==='menage')   espRenderMenage();
@@ -4289,6 +4321,59 @@ function espHideQrError(){
   var okBlock = document.getElementById('espQrOkBlock');
   if(errBox) errBox.style.display = 'none';
   if(okBlock) okBlock.style.display = 'block';
+}
+
+/**
+ * Heure d'activation de la clé = date d'arrivée (booking.startDate) +
+ * horaire de check-in (booking.checkinTime, sinon CFG.checkinTime, sinon
+ * 15:00 par défaut — même source que l'affichage "à partir de HH:mm" côté
+ * admin, cf. admin.html resaOpenDetail). Purement informatif ici : n'est
+ * utilisé QUE par le compte à rebours ci-dessous, ne bloque jamais
+ * l'ouverture réelle de la clé (espOpenAccess reste inchangé).
+ */
+function espKeyActivationDate(){
+  var b = S.booking;
+  if(!b || !b.startDate) return null;
+  var time = b.checkinTime || CFG.checkinTime || '15:00';
+  var m = /^(\d{1,2}):(\d{2})/.exec(time);
+  var d = new Date(b.startDate);
+  if(isNaN(d.getTime())) return null;
+  d.setHours(m ? parseInt(m[1],10) : 15, m ? parseInt(m[2],10) : 0, 0, 0);
+  return d;
+}
+var ESP_KEY_COUNTDOWN_TIMER = null;
+function espRenderKeyCountdown(){
+  var card = document.getElementById('espKeyCountdownCard');
+  if(!card) return;
+  if(ESP_KEY_COUNTDOWN_TIMER){ clearInterval(ESP_KEY_COUNTDOWN_TIMER); ESP_KEY_COUNTDOWN_TIMER = null; }
+  var target = espKeyActivationDate();
+  var dateEl = document.getElementById('espKeyCountdownDate');
+  if(dateEl && target){
+    dateEl.textContent = tf('esp_key_countdown_at', {
+      date: target.toLocaleDateString(localeForLang()),
+      time: target.toLocaleTimeString(localeForLang(), {hour:'2-digit', minute:'2-digit'})
+    });
+  }
+  function tick(){
+    var ms = target ? target.getTime() - Date.now() : -1;
+    if(!target || ms <= 0){
+      card.style.display = 'none';
+      if(ESP_KEY_COUNTDOWN_TIMER){ clearInterval(ESP_KEY_COUNTDOWN_TIMER); ESP_KEY_COUNTDOWN_TIMER = null; }
+      return;
+    }
+    card.style.display = 'block';
+    var s = Math.floor(ms/1000);
+    var days = Math.floor(s/86400); s -= days*86400;
+    var hours = Math.floor(s/3600); s -= hours*3600;
+    var min = Math.floor(s/60); s -= min*60;
+    var sec = s;
+    document.getElementById('espCdDays').textContent = String(days).padStart(2,'0');
+    document.getElementById('espCdHours').textContent = String(hours).padStart(2,'0');
+    document.getElementById('espCdMin').textContent = String(min).padStart(2,'0');
+    document.getElementById('espCdSec').textContent = String(sec).padStart(2,'0');
+  }
+  tick();
+  if(target && target.getTime() > Date.now()) ESP_KEY_COUNTDOWN_TIMER = setInterval(tick, 1000);
 }
 
 async function espRenderQr(){
@@ -5955,6 +6040,15 @@ function initContactStep(){
     cguLabel.innerHTML = tf('contact_cgu_label_tpl', {link: linkHtml});
   }
 
+  // 18/11/2026, "permettre que l'activation des tick box cgv et newsletter
+  // soient optionnel" — réglages hôtel (CFG.cguRequired/newsletterEnabled,
+  // cf. admin.html panneau "Entité & Configuration générale"). La case CGU
+  // reste toujours affichée (information légale), seule son obligation de
+  // cochage dépend du réglage ; la case newsletter est masquée purement et
+  // simplement si désactivée.
+  var newsletterRow = document.getElementById('contact-newsletter-row');
+  if(newsletterRow) newsletterRow.style.display = (CFG.newsletterEnabled===false) ? 'none' : 'flex';
+
   var errEl = document.getElementById('contact-err');
   if(errEl) errEl.style.display = 'none';
 }
@@ -5967,15 +6061,16 @@ function contactStepNext(){
   var errTextEl = document.getElementById('contact-err-text');
   var email = (emailEl.value||'').trim();
   var phone = (phoneEl.value||'').trim();
+  var adresse = (document.getElementById('contact-adresse').value||'').trim();
 
   if(!email || !email.includes('@')){ errTextEl.textContent = t('contact_err_email'); errEl.style.display='block'; return; }
   if(!phone){ errTextEl.textContent = t('contact_err_phone'); errEl.style.display='block'; return; }
-  if(!cguEl.checked){ errTextEl.textContent = t('contact_err_cgu'); errEl.style.display='block'; return; }
+  if(!adresse){ errTextEl.textContent = t('contact_err_address'); errEl.style.display='block'; return; }
+  if(CFG.cguRequired!==false && !cguEl.checked){ errTextEl.textContent = t('contact_err_cgu'); errEl.style.display='block'; return; }
   errEl.style.display='none';
 
   var firstname = (document.getElementById('contact-firstname').value||'').trim();
   var lastname  = (document.getElementById('contact-lastname').value||'').trim();
-  var adresse   = (document.getElementById('contact-adresse').value||'').trim();
   var cp        = (document.getElementById('contact-cp').value||'').trim();
   var ville     = (document.getElementById('contact-ville').value||'').trim();
   var newsletter = document.getElementById('contact-newsletter').checked;

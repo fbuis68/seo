@@ -282,7 +282,13 @@ bookingRouter.post(
     if (!email || !email.includes("@")) throw new HttpError(400, "Email requis");
     const phone = (b.personPhone || "").trim();
     if (!phone) throw new HttpError(400, "Téléphone requis");
-    if (!b.cguAccepted) throw new HttpError(400, "Acceptation des conditions générales requise");
+    const address = (b.personAddress || "").trim();
+    if (!address) throw new HttpError(400, "Adresse requise");
+    // Acceptation CGU — obligatoire par défaut, désactivable par l'hôtel
+    // (EntityModuleConfig.cguRequired, cf. admin.html "Case CGU obligatoire").
+    const moduleConfig = await prisma.entityModuleConfig.findUnique({ where: { entityId: entity.id } });
+    const cguRequired = moduleConfig?.cguRequired !== false;
+    if (cguRequired && !b.cguAccepted) throw new HttpError(400, "Acceptation des conditions générales requise");
 
     const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code: b.code } } });
     if (!booking) throw new HttpError(404, "Réservation introuvable");
@@ -294,8 +300,10 @@ bookingRouter.post(
     if (b.personZip !== undefined) data.personZip = b.personZip.trim() || null;
     if (b.personCity !== undefined) data.personCity = b.personCity.trim() || null;
     // Idempotent — même logique que checkinStartedAt plus haut : horodatage
-    // de la PREMIÈRE acceptation, jamais réécrit ensuite.
-    if (!booking.cguAcceptedAt) data.cguAcceptedAt = new Date();
+    // de la PREMIÈRE acceptation, jamais réécrit ensuite. Seulement si
+    // réellement cochée (cguRequired désactivé n'implique pas une
+    // acceptation silencieuse).
+    if (!booking.cguAcceptedAt && b.cguAccepted) data.cguAcceptedAt = new Date();
 
     const updated = await prisma.booking.update({ where: { id: booking.id }, data });
     res.json(normaliseBooking(updated));
