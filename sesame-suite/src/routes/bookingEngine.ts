@@ -232,6 +232,12 @@ function parseDraft(b: CheckoutBody): BookingDraft {
   if (!b.roomId) throw new HttpError(400, "Chambre requise");
   if (!b.firstName?.trim() || !b.lastName?.trim()) throw new HttpError(400, "Nom et prénom requis");
   if (!b.email?.trim() || !b.email.includes("@")) throw new HttpError(400, "Email valide requis");
+  // 18/11/2026, "mettre le mail et le téléphone obligatoire" — vérifié
+  // serveur (pas seulement côté formulaire, cf. booking.html readGuestForm)
+  // pour les deux routes qui partagent ce parseDraft (/checkout et
+  // /bookDirect) ; le flux empreinte bancaire (parseCardOnFileDraft, plus
+  // bas) reste séparé — il accepte déjà téléphone OU email, volontairement.
+  if (!b.phone?.trim()) throw new HttpError(400, "Téléphone requis");
   const occupants = parseOccupants(b.occupants);
   if (!Object.values(occupants).reduce((s, n) => s + n, 0)) throw new HttpError(400, "Au moins un occupant requis");
   return {

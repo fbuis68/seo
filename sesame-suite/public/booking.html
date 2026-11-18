@@ -117,8 +117,8 @@ h1{font-family:var(--font-title);font-size:26px;font-weight:500;margin-bottom:6p
         <div class="ff"><label>Nom</label><input type="text" id="f-lastname"></div>
       </div>
       <div class="grid2">
-        <div class="ff"><label>Email</label><input type="email" id="f-email"></div>
-        <div class="ff"><label>Téléphone (optionnel)</label><input type="tel" id="f-phone"></div>
+        <div class="ff"><label>Email</label><input type="email" id="f-email" required></div>
+        <div class="ff"><label>Téléphone</label><input type="tel" id="f-phone" required></div>
       </div>
     </div>
     <!-- Empreinte bancaire (BookingEngineConfig.cardOnFileMode) : formulaire
@@ -632,6 +632,7 @@ function readGuestForm(errEl){
   var phone = document.getElementById('f-phone').value.trim();
   if(!firstName || !lastName){ errEl.textContent='Merci de renseigner votre nom et prénom.'; errEl.style.display='block'; return null; }
   if(!email || email.indexOf('@')===-1){ errEl.textContent='Merci de renseigner un email valide.'; errEl.style.display='block'; return null; }
+  if(!phone){ errEl.textContent='Merci de renseigner votre numéro de téléphone.'; errEl.style.display='block'; return null; }
   return {firstName:firstName, lastName:lastName, email:email, phone:phone};
 }
 
