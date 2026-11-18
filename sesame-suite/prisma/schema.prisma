@@ -259,6 +259,15 @@ model EntityModuleConfig {
   // ce JSON. true par défaut (comportement historique préservé — toujours
   // affiché jusqu'ici).
   livretEnabled Boolean @default(true)
+  // 18/11/2026, "tick box qui indique si nous sommes sur des modules QR
+  // Code, Code, Reconnaissance faciale" — technologie(s) de lecteur
+  // utilisée(s) par l'établissement pour la clé numérique (public/
+  // checkin.html, onglet "Clé digitale") : {qr,code,face} (toutes
+  // indépendantes, un établissement peut en annoncer plusieurs). Surchargeable
+  // par accès via Room.accessMethod ci-dessous. Nullable — null = réglage
+  // historique {qr:true,code:true,face:false} (comportement d'avant ce
+  // champ, où QR et code étaient toujours affichés tous les deux).
+  accessMethods Json?
   // Horaires standards affichés sur les réservations (§ demande client
   // 21/10/2026) — "HH:MM", pas un DateTime : identiques pour tout
   // l'établissement, pas une heure propre à chaque réservation.
@@ -348,6 +357,14 @@ model Room {
   // N'affecte pas la disponibilité générale de l'accès (réservations,
   // panneau "Gestion des Accès").
   housekeepingExempt Boolean @default(false)
+
+  // Surcharge ponctuelle de EntityModuleConfig.accessMethods POUR CET ACCÈS
+  // (18/11/2026, "paramétrage plus fin sur les accès pour le spécifier au
+  // cas où") — 'qr' | 'code' | 'face', null = hérite du réglage par défaut
+  // de l'établissement. Utile pour un accès isolé équipé d'un lecteur
+  // différent du reste de l'hôtel (ex : porte principale en reconnaissance
+  // faciale alors que les chambres restent en QR/code).
+  accessMethod String?
 
   // Identifiant du lecteur/module Sesame associé à cet accès (ex :
   // "D00005605") — importé automatiquement si mappé (cf.

@@ -1187,8 +1187,16 @@ input:focus,select:focus{border-color:var(--accent)}
         </div>
         <div id="espQrErrorBox" style="display:none;margin-bottom:10px" class="alt alt-w"><i class="ti ti-alert-triangle"></i><span id="espQrErrorText"></span></div>
         <div id="espQrOkBlock">
-          <div style="font-size:11px;color:var(--mu);margin-bottom:4px" data-i18n="esp_key_present">Présentez ce code au lecteur Sesame</div>
-          <div id="espQrCode" style="font-family:monospace;font-size:15px;font-weight:700;letter-spacing:3px;color:var(--primary)">—</div>
+          <!-- 18/11/2026, "en fonction ne pas afficher le code ou le QR
+               Code" — bloc QR (#espQrWrap) et code (#espQrCodeDisplay)
+               masqués indépendamment selon CFG.accessMethods (entité) ou
+               Room.accessMethod (surcharge par accès), cf.
+               espApplyAccessMethodVisibility. -->
+          <div id="espQrCodeDisplay">
+            <div style="font-size:11px;color:var(--mu);margin-bottom:4px" data-i18n="esp_key_present">Présentez ce code au lecteur Sesame</div>
+            <div id="espQrCode" style="font-family:monospace;font-size:15px;font-weight:700;letter-spacing:3px;color:var(--primary)">—</div>
+          </div>
+          <div id="espFaceOnlyInfo" style="display:none" class="alt alt-b"><i class="ti ti-face-id"></i><span data-i18n="esp_key_face_only">Accès par reconnaissance faciale — approchez-vous du lecteur.</span></div>
           <div id="espQrValidity" style="font-size:11px;color:var(--mu);margin-top:6px">—</div>
           <button class="btn btn-p" style="margin-top:14px;width:100%;justify-content:center;padding:22px;font-size:18px;font-weight:700;gap:10px" id="espQrOpenBtn" onclick="espOpenDoor()">
             <i class="ti ti-lock-open" style="font-size:24px"></i> <span id="espQrOpenBtnLabel" data-i18n="esp_key_simulate_open">Simuler l'ouverture</span>
@@ -1209,7 +1217,7 @@ input:focus,select:focus{border-color:var(--accent)}
       <div id="espWalletErrorBox" style="display:none;margin-bottom:12px" class="alt alt-w"><i class="ti ti-alert-triangle"></i><span id="espWalletErrorText"></span></div>
 
       <div class="alt alt-g" style="margin-bottom:12px"><i class="ti ti-info-circle"></i>
-        <span data-i18n="esp_key_info">Approchez votre téléphone du lecteur ou présentez ce QR code pour chaque accès.</span>
+        <span id="espKeyInfoText" data-i18n="esp_key_info">Approchez votre téléphone du lecteur ou présentez ce QR code pour chaque accès.</span>
       </div>
       <div id="espAccessList"></div>
       <!-- Invités de cette réservation (Pass Sesame) — lecture seule pour
@@ -1578,6 +1586,7 @@ function apiFetch(url, opts){
 }
 var DEFAULT_CFG={
   hotelName:'Éco-Séjour',hotelSlogan:'',entityId:'E00000001',stars:3,termsUrl:'',cguRequired:true,newsletterEnabled:true,livretEnabled:true,
+  accessMethods:{qr:true,code:true,face:false},
   colors:{primary:'#8B1A2E',primaryLight:'#FDEDF0',accent:'#8B1A2E',headerBg:'#8B1A2E',
     headerText:'#FFFFFF',bg:'#F5F3F0',cardBg:'#FFFFFF',border:'#E3DED8',text:'#14121E',btnNav:'#8B1A2E'},
   radius:14,radiusBtn:8,shadow:true,fontTitle:"'Fraunces',serif",fontBody:"'Sora',sans-serif",
@@ -2099,10 +2108,14 @@ var I18N_FR = {
   esp_tab_histo:'Historique',esp_tab_livret:'Livret',esp_tab_boutique:'Boutique',
   esp_tab_rs:'Room Service',
   esp_key_title:'Votre clé digitale',esp_key_present:'Présentez ce code au lecteur Sesame',
+  esp_key_face_only:'Accès par reconnaissance faciale — approchez-vous du lecteur.',
   esp_key_countdown_title:"Votre clé s'active dans",esp_key_countdown_days:'Jours',esp_key_countdown_hours:'Heures',esp_key_countdown_min:'Min',esp_key_countdown_sec:'Sec',
   esp_key_countdown_at:'Activation le {date} à {time}',
   esp_key_simulate_open:"Simuler l'ouverture",esp_key_unlocked:'Accès déverrouillé ✓',esp_key_pick_access:'Choisissez un accès précis ci-dessous.',
   esp_key_info:'Approchez votre téléphone du lecteur ou présentez ce QR code pour chaque accès.',
+  esp_key_info_qr:'Présentez ce QR code au lecteur pour chaque accès.',
+  esp_key_info_code:'Saisissez ce code sur le lecteur pour chaque accès.',
+  esp_key_info_face:'Approchez-vous du lecteur — reconnaissance faciale pour chaque accès.',
   esp_guests_title:'Invités',esp_guests_master:'Principal',
   esp_wallet_add:'Ajouter à mon Wallet',esp_wallet_error:"Impossible de générer le pass Wallet pour l'instant.",
   esp_access_dedicated:'Accès dédié',esp_access_simulation:'Mode simulation',
@@ -2360,10 +2373,14 @@ var I18N_EN = {
   esp_tab_histo:'History',esp_tab_livret:'Guidebook',esp_tab_boutique:'Shop',
   esp_tab_rs:'Room Service',
   esp_key_title:'Your digital key',esp_key_present:'Present this code to the Sesame reader',
+  esp_key_face_only:'Facial recognition access — approach the reader.',
   esp_key_countdown_title:'Your key activates in',esp_key_countdown_days:'Days',esp_key_countdown_hours:'Hours',esp_key_countdown_min:'Min',esp_key_countdown_sec:'Sec',
   esp_key_countdown_at:'Activates on {date} at {time}',
   esp_key_simulate_open:'Simulate unlocking',esp_key_unlocked:'Access unlocked ✓',esp_key_pick_access:'Pick a specific access point below.',
   esp_key_info:'Hold your phone near the reader or show this QR code for each access point.',
+  esp_key_info_qr:'Show this QR code to the reader for each access point.',
+  esp_key_info_code:'Enter this code on the reader for each access point.',
+  esp_key_info_face:'Approach the reader — facial recognition for each access point.',
   esp_guests_title:'Guests',esp_guests_master:'Primary',
   esp_wallet_add:'Add to my Wallet',esp_wallet_error:'Unable to generate the Wallet pass right now.',
   esp_access_dedicated:'Dedicated access',esp_access_simulation:'Simulation mode',
@@ -2623,10 +2640,14 @@ var I18N_ES = {
   esp_tab_histo:'Historial',esp_tab_livret:'Guía',esp_tab_boutique:'Tienda',
   esp_tab_rs:'Servicio de habitaciones',
   esp_key_title:'Su llave digital',esp_key_present:'Presente este código en el lector Sesame',
+  esp_key_face_only:'Acceso por reconocimiento facial — acérquese al lector.',
   esp_key_countdown_title:'Su llave se activa en',esp_key_countdown_days:'Días',esp_key_countdown_hours:'Horas',esp_key_countdown_min:'Min',esp_key_countdown_sec:'Seg',
   esp_key_countdown_at:'Activación el {date} a las {time}',
   esp_key_simulate_open:'Simular apertura',esp_key_unlocked:'Acceso desbloqueado ✓',esp_key_pick_access:'Elige un acceso concreto abajo.',
   esp_key_info:'Acerque su teléfono al lector o muestre este código QR en cada acceso.',
+  esp_key_info_qr:'Muestre este código QR al lector en cada acceso.',
+  esp_key_info_code:'Introduzca este código en el lector en cada acceso.',
+  esp_key_info_face:'Acérquese al lector — reconocimiento facial en cada acceso.',
   esp_guests_title:'Invitados',esp_guests_master:'Principal',
   esp_wallet_add:'Añadir a mi Wallet',esp_wallet_error:'No se ha podido generar el pase Wallet por ahora.',
   esp_access_dedicated:'Acceso dedicado',esp_access_simulation:'Modo simulación',
@@ -4112,6 +4133,40 @@ function espSetTab(tab){
 }
 
 // ── CLÉ DIGITALE / ACCÈS NUMÉRIQUES ──
+/**
+ * Méthode(s) d'accès effective(s) pour un point d'accès donné (18/11/2026,
+ * "tick box qui indique si nous sommes sur des modules QR Code, Code,
+ * Reconnaissance faciale... paramétrage plus fin sur les accès") —
+ * CFG.accessMethods {qr,code,face} est le réglage par défaut de
+ * l'établissement (panneau "Entité & Catégorie"), Room.accessMethod une
+ * surcharge ponctuelle PAR accès ('qr'|'code'|'face', null = hérite du
+ * réglage établissement) quand ce point précis utilise une technologie
+ * différente du reste de l'hôtel (cf. panneau "Gestion des chambres").
+ */
+function espEffectiveAccessMethods(facilityCode){
+  var def = Object.assign({qr:true, code:true, face:false}, CFG.accessMethods||{});
+  var room = facilityCode ? (CFG.rooms||[]).find(function(r){ return r.code===facilityCode; }) : null;
+  if(room && room.accessMethod){
+    return {qr: room.accessMethod==='qr', code: room.accessMethod==='code', face: room.accessMethod==='face'};
+  }
+  return def;
+}
+/** Applique la visibilité QR/code/"reconnaissance faciale" sur le bloc
+ * principal "Clé numérique" (#espTabKey) pour l'accès principal de la
+ * réservation. Le bouton d'ouverture (réel ou simulé) reste TOUJOURS
+ * affiché — ce réglage ne masque que l'AFFICHAGE du QR/code, jamais le
+ * mécanisme d'ouverture lui-même. */
+function espApplyAccessMethodVisibility(facilityCode){
+  var methods = espEffectiveAccessMethods(facilityCode);
+  var qrWrap = document.getElementById('espQrWrap');
+  var codeDisplay = document.getElementById('espQrCodeDisplay');
+  var faceInfo = document.getElementById('espFaceOnlyInfo');
+  if(qrWrap) qrWrap.style.display = methods.qr ? 'inline-block' : 'none';
+  if(codeDisplay) codeDisplay.style.display = methods.code ? 'block' : 'none';
+  if(faceInfo) faceInfo.style.display = (!methods.qr && !methods.code) ? 'flex' : 'none';
+  return methods;
+}
+
 function espGetAccessPoints(){
   // Une réservation peut être associée à PLUSIEURS serrures côté Sesame —
   // booking.facilityCode peut déjà être une liste séparée par des virgules
@@ -4153,6 +4208,16 @@ function espGetAccessPoints(){
 function espRenderKey(){
   var list = document.getElementById('espAccessList');
   var pts = espGetAccessPoints();
+
+  // Bandeau générique (liste des accès ci-dessous) — reflète la méthode
+  // d'accès PAR DÉFAUT de l'établissement (pas de surcharge par accès ici,
+  // la liste peut mélanger plusieurs accès).
+  var infoEl = document.getElementById('espKeyInfoText');
+  if(infoEl){
+    var em = Object.assign({qr:true,code:true,face:false}, CFG.accessMethods||{});
+    var infoKey = (em.qr && em.code) ? 'esp_key_info' : (em.face ? 'esp_key_info_face' : (em.qr ? 'esp_key_info_qr' : 'esp_key_info_code'));
+    infoEl.textContent = t(infoKey);
+  }
 
   // ap.label est déjà le nom résolu de CE point précis (nom de la chambre
   // trouvée dans CFG.rooms, ou le code Sesame brut si aucune correspondance)
@@ -4240,9 +4305,19 @@ async function espOpenAccess(idx){
   if(ESP_ACCESS_CURRENT === ap) actionEl.innerHTML = espKeyActionHtml(ap, passcode, simulated);
 }
 function espKeyActionHtml(ap, passcode, simulated){
-  return '<button class="btn btn-p" style="display:flex;justify-content:center;margin-bottom:10px;padding:22px;font-size:18px;font-weight:700;gap:10px" onclick="espOpenAccessConfirm(this)"><i class="ti ti-lock-open" style="font-size:24px"></i> '+t(simulated?'esp_open_btn':'esp_key_open_real')+'</button>'
-    + '<div style="font-size:11px;color:var(--mu);margin-bottom:4px">'+t(simulated?'esp_backup_code_label':'esp_key_present')+'</div>'
-    + '<div style="font-size:28px;font-weight:700;letter-spacing:4px;font-family:monospace">'+esc(passcode)+'</div>';
+  // 18/11/2026, "ne pas afficher le code ou le QR Code" — pas de QR dans
+  // cette modale (un seul code par réservation, cf. commentaire ci-dessus),
+  // seul le texte du code est concerné ici ; le bouton d'ouverture reste
+  // toujours affiché, indépendant de ce réglage d'affichage.
+  var methods = espEffectiveAccessMethods(ap && ap.facilityCode);
+  var html = '<button class="btn btn-p" style="display:flex;justify-content:center;margin-bottom:10px;padding:22px;font-size:18px;font-weight:700;gap:10px" onclick="espOpenAccessConfirm(this)"><i class="ti ti-lock-open" style="font-size:24px"></i> '+t(simulated?'esp_open_btn':'esp_key_open_real')+'</button>';
+  if(methods.code){
+    html += '<div style="font-size:11px;color:var(--mu);margin-bottom:4px">'+t(simulated?'esp_backup_code_label':'esp_key_present')+'</div>'
+      + '<div style="font-size:28px;font-weight:700;letter-spacing:4px;font-family:monospace">'+esc(passcode)+'</div>';
+  } else if(!methods.qr){
+    html += '<div class="alt alt-b" style="margin-top:4px"><i class="ti ti-face-id"></i><span>'+t('esp_key_face_only')+'</span></div>';
+  }
+  return html;
 }
 async function espOpenAccessConfirm(btn){
   var ap = ESP_ACCESS_CURRENT, b = S.booking; if(!b) return;
@@ -4397,9 +4472,11 @@ async function espRenderQr(){
   // "Accès" ci-dessous, où chaque entrée cible une seule serrure identifiée.
   var openBtn = document.getElementById('espQrOpenBtn');
   var openBtnMulti = document.getElementById('espQrOpenBtnMulti');
-  var isMulti = espGetAccessPoints().length > 1;
+  var pts = espGetAccessPoints();
+  var isMulti = pts.length > 1;
   if(openBtn) openBtn.style.display = isMulti ? 'none' : 'inline-flex';
   if(openBtnMulti) openBtnMulti.style.display = isMulti ? 'block' : 'none';
+  espApplyAccessMethodVisibility(pts[0] && pts[0].facilityCode);
 
   // Affichage immédiat de la démo pendant l'appel réseau, pour ne pas
   // laisser un cadre vide le temps de la réponse.

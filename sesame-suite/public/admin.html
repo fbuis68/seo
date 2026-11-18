@@ -1321,6 +1321,21 @@ overflow:hidden
           <div style="font-size:10px;color:var(--mu)">Afficher la case d'abonnement à la newsletter à l'étape "Mes coordonnées"</div></div>
         <label class="tg" style="flex-shrink:0"><input type="checkbox" id="h-newsletterEnabled" onchange="liveSync()"><span class="tgl"></span></label>
       </div>
+      <!-- 18/11/2026, "tick box qui indique si nous sommes sur des modules
+           QR Code, Code, Reconnaissance faciale... ne pas afficher le code
+           ou le QR Code" — pilote l'affichage de la "Clé numérique" côté
+           espace client (public/checkin.html espApplyAccessMethodVisibility).
+           Surchargeable par accès : panneau "Gestion des chambres", fiche
+           d'une chambre. -->
+      <div style="padding:10px 0;border-top:1px solid var(--bdr)">
+        <div style="font-size:12px;margin-bottom:8px"><strong>Méthode(s) d'accès (clé numérique)</strong>
+          <div style="font-size:10px;color:var(--mu)">Technologie(s) de lecteur utilisée(s) par l'établissement — pilote l'affichage du QR code et/ou du code numérique dans l'espace client</div></div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="h-accessMethod-qr" onchange="liveSync()" style="accent-color:var(--am)"> QR Code</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="h-accessMethod-code" onchange="liveSync()" style="accent-color:var(--am)"> Code</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="h-accessMethod-face" onchange="liveSync()" style="accent-color:var(--am)"> Reconnaissance faciale</label>
+        </div>
+      </div>
       <div class="g2">
         <div class="fi"><label class="lb">Devise</label>
           <select id="h-currency" onchange="liveSync()">
@@ -2037,6 +2052,20 @@ overflow:hidden
         <div class="fi" id="rm-deviceId-wrap" style="margin-top:10px">
           <label class="lb">Identifiant du lecteur (device)</label>
           <input type="text" id="rm-deviceId" placeholder="Ex : D00005605 — importé automatiquement si mappé, sinon à saisir">
+        </div>
+
+        <!-- 18/11/2026, "paramétrage plus fin sur les accès pour le
+             spécifier au cas où" — surcharge ponctuelle de la méthode
+             d'accès pour CET accès précis (hérite du réglage établissement,
+             cf. "Entité & Catégorie", par défaut). -->
+        <div class="fi" style="margin-top:10px">
+          <label class="lb">Méthode d'accès pour CET accès</label>
+          <select id="rm-accessMethod">
+            <option value="">Hériter du réglage établissement</option>
+            <option value="qr">QR Code</option>
+            <option value="code">Code</option>
+            <option value="face">Reconnaissance faciale</option>
+          </select>
         </div>
 
         <div class="fi" id="rm-nayax-qr-btn" style="margin-top:10px;display:none">
@@ -5360,6 +5389,8 @@ function populateAll(){
   setVal('h-checkinUrl', checkinCode ? (window.location.origin+'/?entityCode='+checkinCode) : '');
   setVal('h-addr',CFG.hotelAddr||'');setVal('h-email',CFG.hotelEmail||'');setVal('h-phone',CFG.hotelPhone||'');setVal('h-termsUrl',CFG.termsUrl||'');
   setChk('h-cguRequired',CFG.cguRequired!==false);setChk('h-newsletterEnabled',CFG.newsletterEnabled!==false);
+  var accM = Object.assign({qr:true,code:true,face:false}, CFG.accessMethods||{});
+  setChk('h-accessMethod-qr',accM.qr!==false);setChk('h-accessMethod-code',accM.code!==false);setChk('h-accessMethod-face',!!accM.face);
   setVal('h-checkinTime',CFG.checkinTime||'15:00');setVal('h-checkoutTime',CFG.checkoutTime||'11:00');
   setVal('h-stars',CFG.stars);
   setVal('h-currency',CFG.currency||'EUR');
@@ -5429,6 +5460,7 @@ function collectAll(){
   var ei=getVal('h-entityId');if(ei)CFG.entityId=ei;
   CFG.hotelAddr=getVal('h-addr')||'';CFG.hotelEmail=getVal('h-email')||'';CFG.hotelPhone=getVal('h-phone')||'';CFG.termsUrl=getVal('h-termsUrl')||'';
   CFG.cguRequired=getChk('h-cguRequired');CFG.newsletterEnabled=getChk('h-newsletterEnabled');
+  CFG.accessMethods={qr:getChk('h-accessMethod-qr'), code:getChk('h-accessMethod-code'), face:getChk('h-accessMethod-face')};
   CFG.checkinTime=getVal('h-checkinTime')||'15:00';CFG.checkoutTime=getVal('h-checkoutTime')||'11:00';
   CFG.stars=parseInt(getVal('h-stars'))||3;
   CFG.currency=getVal('h-currency')||'EUR';
@@ -6575,6 +6607,7 @@ function rmOpenCreate(){
   document.getElementById('rm-connected').checked= false;
   document.getElementById('rm-housekeepingExempt').checked = false;
   document.getElementById('rm-isNfcEncoder').checked = false;
+  document.getElementById('rm-accessMethod').value = '';
   document.getElementById('rm-showOnPlan').checked = true;
   document.getElementById('rm-planPosition-wrap').style.display = 'none';
   document.getElementById('rm-deviceId').value = '';
@@ -6614,6 +6647,7 @@ function rmOpenEdit(code){
   document.getElementById('rm-showOnPlan').checked = r.showOnPlan!==false;
   document.getElementById('rm-planPosition-wrap').style.display = (r.x!=null&&r.y!=null) ? 'block' : 'none';
   document.getElementById('rm-deviceId').value = r.deviceId||'';
+  document.getElementById('rm-accessMethod').value = r.accessMethod||'';
   document.getElementById('rmDeleteBtn').style.display='';
   document.getElementById('rm-currency-sym').textContent = getCurrSym();
   document.getElementById('rm-history-wrap').style.display = '';
@@ -6725,6 +6759,7 @@ async function rmSaveRoom(){
     isNfcEncoder: document.getElementById('rm-isNfcEncoder').checked,
     showOnPlan:  document.getElementById('rm-showOnPlan').checked,
     deviceId:    document.getElementById('rm-deviceId').value.trim(),
+    accessMethod: document.getElementById('rm-accessMethod').value,
   };
   try{
     if(RM_EDITING){

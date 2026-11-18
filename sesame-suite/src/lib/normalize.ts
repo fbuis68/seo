@@ -72,5 +72,6 @@ export function normaliseRoom(r: Room) {
     deviceId: r.deviceId || "",
     isNfcEncoder: r.isNfcEncoder,
     showOnPlan: r.showOnPlan,
+    accessMethod: r.accessMethod || "",
   };
 }

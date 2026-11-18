@@ -18,6 +18,7 @@ const UPDATABLE_FIELDS = [
   "cguRequired",
   "newsletterEnabled",
   "livretEnabled",
+  "accessMethods",
   "checkinTime",
   "checkoutTime",
   "stars",
@@ -103,6 +104,14 @@ configRouter.get(
       cguRequired: cfg.cguRequired !== false,
       newsletterEnabled: cfg.newsletterEnabled !== false,
       livretEnabled: cfg.livretEnabled !== false,
+      // Objet toujours complet (jamais partiel) — le front fait un merge
+      // superficiel (Object.assign) sur CFG, un objet partiel écraserait
+      // silencieusement les clés absentes au lieu d'hériter du défaut.
+      accessMethods: {
+        qr: (cfg.accessMethods as { qr?: boolean } | null)?.qr !== false,
+        code: (cfg.accessMethods as { code?: boolean } | null)?.code !== false,
+        face: !!(cfg.accessMethods as { face?: boolean } | null)?.face,
+      },
       checkinTime: cfg.checkinTime || "15:00",
       checkoutTime: cfg.checkoutTime || "11:00",
       stars: cfg.stars,
