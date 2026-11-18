@@ -198,8 +198,15 @@ configRouter.get(
     // d'un premier test sans entityCode, ou d'un autre établissement, reste
     // servi tel quel malgré <link rel="manifest"> mis à jour côté client,
     // "Sur l'écran d'accueil" installant alors l'ancien établissement/la
-    // démo) — demande client 17/10/2026.
-    res.setHeader("Cache-Control", "no-store");
+    // démo) — demande client 17/10/2026. Pragma/Expires ajoutés en renfort
+    // (18/11/2026, même symptôme reproduit sur nouvelle installation iOS
+    // Safari depuis un lien d'autologin) : certaines versions de WebKit
+    // honorent Pragma: no-cache plus fiablement que Cache-Control seul pour
+    // une requête déclenchée par "Partager → Sur l'écran d'accueil" plutôt
+    // qu'une navigation normale.
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
     res.setHeader("Content-Type", "application/manifest+json");
     res.json({
       name: `${name} · Éco-Séjour`,

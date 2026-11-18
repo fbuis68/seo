@@ -4085,6 +4085,14 @@ function renderEspace(){
   var boutiquePill = document.querySelector('#espTabs .pill[data-tab="boutique"]');
   if(boutiquePill) boutiquePill.style.display = isModuleActive('roomservice') ? '' : 'none';
   if(!isModuleActive('roomservice') && ESP_ACTIVE_TAB==='boutique') ESP_ACTIVE_TAB='key';
+  // Onglet Room Service — même module "roomservice" que Boutique ci-dessus
+  // (renderRoomService affiche déjà "Le room service n'est pas proposé par
+  // cet établissement" en interne quand le module est inactif, mais
+  // l'onglet lui-même restait toujours visible dans le menu : même bug que
+  // boutique/loyalty/menage ci-dessus, juste raté sur celui-ci) — 18/11/2026.
+  var rsPill = document.querySelector('#espTabs .pill[data-tab="rs"]');
+  if(rsPill) rsPill.style.display = isModuleActive('roomservice') ? '' : 'none';
+  if(!isModuleActive('roomservice') && ESP_ACTIVE_TAB==='rs') ESP_ACTIVE_TAB='key';
 
   // Onglet Livret — pas d'étape dans le parcours check-in (pas de
   // checkinModules.livret), toggle dédié CFG.livretEnabled (cf. admin.html
