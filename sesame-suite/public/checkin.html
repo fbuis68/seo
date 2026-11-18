@@ -4339,7 +4339,10 @@ async function espOpenAccessConfirm(btn){
     if(!r.ok) throw new Error(data.error || ('HTTP '+r.status));
     toast(tf(data.simulated ? 'esp_key_unlocked_sim' : 'esp_key_unlocked_real_label', {label: ap?ap.label:t('word_access')}));
   }catch(e){
-    toast(t('esp_door_open_error'));
+    // Message serveur affiché tel quel quand disponible (ex: anti-passback
+    // "attendez encore Xmin") plutôt que le message générique — 18/11/2026,
+    // sans quoi le client ne comprend jamais pourquoi l'accès est refusé.
+    toast((e && e.message) || t('esp_door_open_error'));
   }finally{
     btn.disabled = false;
   }
@@ -4597,7 +4600,9 @@ async function espOpenDoor(){
     }
     toast(t(data.simulated ? 'toast_access_unlocked_sim' : 'toast_access_unlocked_real'));
   } catch(e) {
-    toast(t('esp_door_open_error'));
+    // Cf. espOpenAccessConfirm — message serveur affiché tel quel quand
+    // disponible (ex: anti-passback) plutôt que le message générique.
+    toast((e && e.message) || t('esp_door_open_error'));
   } finally {
     if(btn) btn.disabled = false;
   }

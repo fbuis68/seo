@@ -58,6 +58,7 @@ interface RoomBody {
   isNfcEncoder?: boolean;
   showOnPlan?: boolean;
   accessMethod?: string | null;
+  antiPassbackMinutes?: number | null;
 }
 
 /** POST /wa/facility/create — CRUD chambres (back-office, panneau "Gestion des chambres"). */
@@ -96,6 +97,7 @@ facilityRouter.post(
         deviceId: b.deviceId || undefined,
         isNfcEncoder: b.isNfcEncoder || false,
         accessMethod: b.accessMethod || null,
+        antiPassbackMinutes: b.antiPassbackMinutes && b.antiPassbackMinutes > 0 ? Math.round(b.antiPassbackMinutes) : null,
         // Un casier n'a normalement pas sa place sur le plan de l'hôtel
         // (cf. Room.showOnPlan) — décoché par défaut à la création, mais
         // reste un critère explicite que l'admin peut inverser au besoin.
@@ -144,6 +146,7 @@ facilityRouter.post(
         isNfcEncoder: b.isNfcEncoder,
         showOnPlan: b.showOnPlan,
         accessMethod: b.accessMethod || null,
+        antiPassbackMinutes: b.antiPassbackMinutes && b.antiPassbackMinutes > 0 ? Math.round(b.antiPassbackMinutes) : null,
       },
     });
     res.json(normaliseRoom(updated));

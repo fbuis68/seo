@@ -73,5 +73,6 @@ export function normaliseRoom(r: Room) {
     isNfcEncoder: r.isNfcEncoder,
     showOnPlan: r.showOnPlan,
     accessMethod: r.accessMethod || "",
+    antiPassbackMinutes: r.antiPassbackMinutes || null,
   };
 }

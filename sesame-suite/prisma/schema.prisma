@@ -366,6 +366,17 @@ model Room {
   // faciale alors que les chambres restent en QR/code).
   accessMethod String?
 
+  // 18/11/2026, "fonction d'anti pass back... activé sur certain accès de
+  // manière sélective... paramétré en terme de temps" — délai (minutes)
+  // pendant lequel CE même accès (bookingCode+roomCode) ne peut pas être
+  // rouvert une fois ouvert avec succès, pour empêcher qu'un client
+  // transmette son code/QR à quelqu'un d'autre juste après être passé.
+  // null/0 = désactivé (comportement historique, aucune limite). Jamais
+  // appliqué à une ouverture déclenchée par le personnel (req.admin), ni
+  // à une ouverture simulée (pas de vraie porte) — cf. routes/booking.ts
+  // POST /booking/openDoor.
+  antiPassbackMinutes Int?
+
   // Identifiant du lecteur/module Sesame associé à cet accès (ex :
   // "D00005605") — importé automatiquement si mappé (cf.
   // FacilityMapping.deviceId dans bookingSource.ts), sinon saisissable à la

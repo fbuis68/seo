@@ -2068,6 +2068,21 @@ overflow:hidden
           </select>
         </div>
 
+        <!-- 18/11/2026, "fonction d'anti pass back... activé sur certains
+             accès de manière sélective... paramétré en terme de temps" —
+             active sur CET accès précis uniquement (jamais global), délai
+             exprimé en heures côté admin (converti en minutes en base). -->
+        <div class="fi" style="margin-top:10px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:6px">
+            <input type="checkbox" id="rm-antiPassback" onchange="document.getElementById('rm-antiPassback-delay-wrap').style.display=this.checked?'':'none'" style="accent-color:var(--am)">
+            <span style="font-size:13px">Anti-passback — empêcher de rouvrir CET accès avec le même code de réservation avant un délai</span>
+          </label>
+          <div id="rm-antiPassback-delay-wrap" style="display:none;margin-left:24px">
+            <label class="lb">Délai avant de pouvoir rouvrir (heures)</label>
+            <input type="number" id="rm-antiPassback-hours" min="0.25" step="0.25" value="1" style="max-width:120px">
+          </div>
+        </div>
+
         <div class="fi" id="rm-nayax-qr-btn" style="margin-top:10px;display:none">
           <label class="lb">QR Code d'accès Nayax</label>
           <button class="btn btn-s" type="button" onclick="nyShowQr()"><i class="ti ti-qrcode"></i> Générer / afficher le QR Code</button>
@@ -6628,6 +6643,9 @@ function rmOpenCreate(){
   document.getElementById('rm-housekeepingExempt').checked = false;
   document.getElementById('rm-isNfcEncoder').checked = false;
   document.getElementById('rm-accessMethod').value = '';
+  document.getElementById('rm-antiPassback').checked = false;
+  document.getElementById('rm-antiPassback-hours').value = '1';
+  document.getElementById('rm-antiPassback-delay-wrap').style.display = 'none';
   document.getElementById('rm-showOnPlan').checked = true;
   document.getElementById('rm-planPosition-wrap').style.display = 'none';
   document.getElementById('rm-deviceId').value = '';
@@ -6668,6 +6686,10 @@ function rmOpenEdit(code){
   document.getElementById('rm-planPosition-wrap').style.display = (r.x!=null&&r.y!=null) ? 'block' : 'none';
   document.getElementById('rm-deviceId').value = r.deviceId||'';
   document.getElementById('rm-accessMethod').value = r.accessMethod||'';
+  var apbMin = r.antiPassbackMinutes || 0;
+  document.getElementById('rm-antiPassback').checked = apbMin > 0;
+  document.getElementById('rm-antiPassback-hours').value = apbMin > 0 ? (apbMin/60) : 1;
+  document.getElementById('rm-antiPassback-delay-wrap').style.display = apbMin > 0 ? '' : 'none';
   document.getElementById('rmDeleteBtn').style.display='';
   document.getElementById('rm-currency-sym').textContent = getCurrSym();
   document.getElementById('rm-history-wrap').style.display = '';
@@ -6780,6 +6802,7 @@ async function rmSaveRoom(){
     showOnPlan:  document.getElementById('rm-showOnPlan').checked,
     deviceId:    document.getElementById('rm-deviceId').value.trim(),
     accessMethod: document.getElementById('rm-accessMethod').value,
+    antiPassbackMinutes: document.getElementById('rm-antiPassback').checked ? Math.round((parseFloat(document.getElementById('rm-antiPassback-hours').value)||1)*60) : null,
   };
   try{
     if(RM_EDITING){

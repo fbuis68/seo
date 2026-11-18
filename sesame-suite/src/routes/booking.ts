@@ -669,6 +669,44 @@ bookingRouter.get(
 );
 
 /**
+ * Anti-passback (18/11/2026, "fonction d'anti pass back... activé sur
+ * certains accès de manière sélective... paramétré en terme de temps") —
+ * empêche de rouvrir le MÊME accès avec le MÊME code de réservation avant
+ * la fin du délai configuré sur cette chambre (Room.antiPassbackMinutes,
+ * null = désactivé), pour limiter le risque qu'un client transmette son
+ * QR/code à quelqu'un d'autre juste après être passé. S'appuie sur
+ * AccessActivityLog (déjà écrit à chaque ouverture réelle réussie, cf.
+ * logAccessActivity) plutôt qu'une table dédiée. roomCode peut lister
+ * plusieurs accès séparés par des virgules (plusieurs serrures sur une
+ * même réservation) — chacun avec son propre délai, le premier qui bloque
+ * arrête l'ouverture entière plutôt que d'en ouvrir une partie seulement.
+ * Renvoie un message explicite si bloqué, null sinon.
+ */
+async function checkAntiPassback(entityId: string, bookingCode: string, roomCode: string | null): Promise<string | null> {
+  if (!roomCode) return null;
+  const codes = roomCode
+    .split(",")
+    .map((c) => c.trim())
+    .filter(Boolean);
+  if (!codes.length) return null;
+  const rooms = await prisma.room.findMany({
+    where: { entityId, code: { in: codes }, antiPassbackMinutes: { not: null } },
+  });
+  for (const room of rooms) {
+    const minutes = room.antiPassbackMinutes!;
+    const lastOpen = await prisma.accessActivityLog.findFirst({
+      where: { entityId, bookingCode, roomCode: room.code, success: true, createdAt: { gte: new Date(Date.now() - minutes * 60_000) } },
+      orderBy: { createdAt: "desc" },
+    });
+    if (lastOpen) {
+      const remainingMin = Math.max(1, Math.ceil((minutes * 60_000 - (Date.now() - lastOpen.createdAt.getTime())) / 60_000));
+      return `Anti-passback actif sur l'accès ${room.code} — merci d'attendre encore ${remainingMin} min avant de le rouvrir.`;
+    }
+  }
+  return null;
+}
+
+/**
  * POST /wa/booking/openDoor — body: { code, facilityCode? } — déclenche
  * l'ouverture à distance de la porte pour cette réservation (source
  * externe, même connexion que la synchronisation). `facilityCode` est
@@ -733,6 +771,18 @@ bookingRouter.post(
       });
       res.json({ simulated: true, simulatedReason });
       return;
+    }
+
+    // Jamais appliqué à une ouverture déclenchée par le personnel
+    // (req.admin, cf. middleware/attachAdmin) — le client est le seul
+    // concerné par le risque de transmission du code à un tiers ; le
+    // personnel doit toujours pouvoir rouvrir manuellement si besoin.
+    if (!req.admin) {
+      const blockedReason = await checkAntiPassback(entity.id, booking.code, roomCode);
+      if (blockedReason) {
+        await logAccessActivity(req, { entityId: entity.id, method: "booking", bookingCode: booking.code, guestName, roomCode, success: false, errorMessage: blockedReason });
+        throw new HttpError(429, blockedReason);
+      }
     }
 
     try {
