@@ -299,13 +299,18 @@ function applyDurationPreset(i){
   var opts = (BOOK_STATUS.durationOptions||[]);
   var o = opts[i]; if(!o) return;
   ACTIVE_DURATION = i;
-  var start = document.getElementById('in-start').value;
-  document.getElementById('in-end').value = addDuration(start, o.amount, o.unit);
+  // En mode "effet immédiat à l'heure/minute/seconde près", in-start/in-end
+  // sont masqués et ignorés par searchRooms (qui recalcule depuis l'instant
+  // présent) — rien à y écrire ici, searchRooms relit ACTIVE_DURATION.
+  if(!(BOOK_STATUS.immediateBooking && BOOK_STATUS.immediateBookingExactTime)){
+    var start = document.getElementById('in-start').value;
+    document.getElementById('in-end').value = addDuration(start, o.amount, o.unit);
+  }
   renderDurationPresets();
-  // Ressource unique (hideRoomSelection) : pas de bouton "Voir les chambres
-  // disponibles" à cliquer ensuite — la durée choisie déclenche directement
-  // la recherche.
-  if(BOOK_STATUS.hideRoomSelection) searchRooms();
+  // Ressource unique (hideRoomSelection) OU réservation immédiate
+  // (immediateBooking) : pas de bouton "Voir les accès disponibles" à
+  // cliquer ensuite — la durée choisie déclenche directement la recherche.
+  if(BOOK_STATUS.hideRoomSelection || BOOK_STATUS.immediateBooking) searchRooms();
 }
 
 function onDurationDateChange(){
@@ -328,9 +333,13 @@ async function searchRooms(){
   var start, end;
   if(BOOK_STATUS.immediateBooking && BOOK_STATUS.immediateBookingExactTime){
     // Instant exact de la demande (H:M:S), pas la date seule des champs
-    // (de toute façon masqués dans ce mode) — cf. addDurationExact.
+    // (de toute façon masqués dans ce mode) — cf. addDurationExact. Durée
+    // choisie par le client via les boutons (ACTIVE_DURATION, cf.
+    // applyDurationPreset) — 1re durée en repli si aucune n'a encore été
+    // cliquée (ex: aucune durée configurée du tout).
     start = new Date().toISOString();
-    var dur = (BOOK_STATUS.durationOptions && BOOK_STATUS.durationOptions[0]) || {amount:1, unit:'jour'};
+    var opts = BOOK_STATUS.durationOptions || [];
+    var dur = opts[ACTIVE_DURATION!=null ? ACTIVE_DURATION : 0] || {amount:1, unit:'jour'};
     end = addDurationExact(start, dur.amount, dur.unit);
   } else {
     start = document.getElementById('in-start').value;
@@ -778,22 +787,19 @@ window.addEventListener('DOMContentLoaded', async function(){
 
   // Réservation immédiate (BookingEngineConfig.immediateBooking, 18/11/2026)
   // — pour un accès consommé tout de suite (magasin, casier) : le client ne
-  // choisit aucune date, arrivée = maintenant. Masque les champs date,
-  // calcule le départ depuis la 1re durée prédéfinie si réglée (sinon +1
-  // jour, déjà la valeur par défaut posée plus haut), puis lance la
-  // recherche directement — même principe que hideRoomSelection ci-dessus,
-  // qui lance la recherche au changement de date plutôt qu'à un clic.
+  // choisit aucune DATE, arrivée = maintenant. Masque uniquement les champs
+  // date et le bouton de recherche — les boutons de durée prédéfinie
+  // (3 jours/3 mois…) restent proposés tels quels (18/11/2026, "toujours
+  // proposer les options du nombre de jours prédéfinies" — ne pas
+  // présélectionner silencieusement la 1re à la place du client) : le clic
+  // sur une durée déclenche directement la recherche (cf.
+  // applyDurationPreset ci-dessus). S'il n'y a aucune durée configurée du
+  // tout, rien à choisir : recherche lancée immédiatement, comme avant.
   if(BOOK_STATUS.immediateBooking){
-    var startEl = document.getElementById('in-start');
     document.querySelectorAll('#scr-search .grid2').forEach(function(el){ el.style.display='none'; });
-    document.getElementById('duration-presets').style.display = 'none';
     document.getElementById('search-btn').style.display = 'none';
-    if(BOOK_STATUS.durationOptions && BOOK_STATUS.durationOptions.length){
-      var o = BOOK_STATUS.durationOptions[0];
-      document.getElementById('in-end').value = addDuration(startEl.value, o.amount, o.unit);
-    }
     if(!BOOK_STATUS.pageIntro) document.getElementById('search-sub').textContent = 'Accès immédiat — cliquez pour continuer.';
-    searchRooms();
+    if(!(BOOK_STATUS.durationOptions && BOOK_STATUS.durationOptions.length)) searchRooms();
   }
 
   gotoScr('search');
