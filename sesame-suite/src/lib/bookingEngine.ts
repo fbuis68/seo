@@ -261,11 +261,23 @@ async function createBookingDirect(entity: Entity, draft: BookingDraft, opts: { 
   }
 
   const code = await generateBookingCode(entity.id);
+  // Email jamais vide (18/11/2026, "le code n'arrive pas" — réservation
+  // créée téléphone seul via le formulaire en ligne, ex: empreinte bancaire,
+  // cf. routes/bookingEngine.ts parseCardOnFileDraft, qui laisse
+  // draft.email="") : adoptBookingIntoSource envoie cette valeur telle
+  // quelle à la source externe (updateEmailParam) — vide, certaines sources
+  // (confirmé : API Sesame Technology) répondent 400 et la réservation
+  // n'est JAMAIS adoptée, {{codeAcces}} restant alors vide pour de bon.
+  // Même repli que routes/booking.ts createManual (15/10/2026, "générer un
+  // no mail comme côté serveur"), centralisé ici pour couvrir aussi les
+  // chemins publics (bookDirect, empreinte bancaire, paiement Stripe) qui
+  // ne le faisaient pas.
+  const personEmail = draft.email || `sans-email-${(draft.phone || "").replace(/[^0-9]/g, "") || Date.now().toString(36)}@sesame.technology`;
   const booking = await prisma.booking.create({
     data: {
       entityId: entity.id,
       code,
-      personEmail: draft.email,
+      personEmail,
       personFirstname: draft.firstName,
       personLastname: draft.lastName,
       personPhone: draft.phone || null,

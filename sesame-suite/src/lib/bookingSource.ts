@@ -1762,7 +1762,15 @@ export async function pushBookingUpsert(
   } catch (e) {
     return { ok: false, error: `Connexion à la source externe impossible : ${describeFetchError(e)}` };
   }
-  if (!res.ok) return { ok: false, error: `La source externe a répondu ${res.status} ${res.statusText}` };
+  if (!res.ok) {
+    // Corps de la réponse ajouté au message (18/11/2026) — un simple "a
+    // répondu 400" sans détail ne dit jamais QUEL champ la source a refusé
+    // (ex: personEmail vide pour une réservation créée téléphone seul),
+    // obligeant à deviner en boucle. Même troncature que les autres erreurs
+    // HTTP de ce fichier (cf. ligne ~503).
+    const text = await res.text().catch(() => "");
+    return { ok: false, error: `La source externe a répondu ${res.status} ${res.statusText}${text ? " — " + text.trim().slice(0, 300) : ""}` };
+  }
   return { ok: true };
 }
 
