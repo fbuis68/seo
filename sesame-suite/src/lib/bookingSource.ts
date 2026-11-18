@@ -2,6 +2,7 @@ import { prisma } from "../db";
 import type { BookingSourceConfig, Booking, Entity } from "@prisma/client";
 import { fireTrigger } from "./automation";
 import { assertSafeUrl } from "./ssrfGuard";
+import { bookingTemplateVars, hotelContactInfo } from "./templateVars";
 
 /** L'admin accepte de saisir "sesame.technology" sans schéma — `fetch()`
  * échoue alors avec "Failed to parse URL … Invalid URL", un message qui ne
@@ -813,6 +814,10 @@ export async function upsertMappedBookings(entity: Entity, mapped: MappedBooking
   // plusieurs centaines de réservations, le gain sur le temps total est
   // proche du facteur de concurrence choisi.
   const onProgress = configId ? makeProgressReporter(configId, "réservations", mapped.length) : undefined;
+  // Une seule requête pour TOUT le lot (pas une par réservation, cf.
+  // bookingTemplateVars ci-dessous appelé dans la boucle) — même anti-motif
+  // N+1 déjà corrigé ailleurs dans ce fichier (cf. commentaire listRoomsForStaff).
+  const hotel = await hotelContactInfo(entity.id);
   const perBooking = await mapWithConcurrency(
     mapped,
     6,
@@ -856,12 +861,22 @@ export async function upsertMappedBookings(entity: Entity, mapped: MappedBooking
       const row = await prisma.booking.create({ data: { entityId: entity.id, code: b.code, ...data } });
       wasCreated = true;
       rowId = row.id;
+      // Variables complètes (18/11/2026, "sms arrive bien mais pas de champ
+      // d'autologin") — ce site de déclenchement (réservation importée
+      // DEPUIS la source externe, contrairement à lib/bookingEngine.ts
+      // createBookingDirect qui pousse VERS elle) utilisait un objet minimal
+      // {prenom,nom,code} sans hotel/chambre/dates ni {{lienAutologin}}/
+      // {{lienAutologinCheckin}} — le modèle "Réservation créée" rendait
+      // alors ces variables silencieusement vides (renderTemplate ne lève
+      // jamais d'erreur sur une clé absente), sans que rien ne le signale.
+      // Même construction que bookingEngine.ts désormais, pour que les deux
+      // sites de "booking.created" exposent exactement les mêmes variables.
       fireTrigger("booking.created", {
         entityId: entity.id,
         targetType: "booking",
         targetId: row.id,
         recipient: { email: row.personEmail, phone: row.personPhone },
-        variables: { prenom: row.personFirstname, nom: row.personLastname, code: row.code },
+        variables: await bookingTemplateVars(row, hotel),
         matchData: { source: row.source, bookingType: row.bookingType, roomType: room?.category || null },
       }).catch((e) => console.error("[automation] booking.created:", e));
     }
