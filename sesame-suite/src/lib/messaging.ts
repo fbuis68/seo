@@ -59,6 +59,34 @@ function renderTemplate(str: string, vars: Record<string, string>): string {
 }
 
 /**
+ * Transforme en lien cliquable toute URL http(s) laissée en texte brut dans
+ * un corps d'email (18/11/2026, "ce n'est pas un lien cliquable qui arrive
+ * sur l'email") — un modèle où {{lienAutologin}} a été inséré tel quel
+ * (sans le passer par le bouton "lien" de l'éditeur) rend une URL en texte
+ * simple une fois substituée, que certains clients mail n'auto-détectent
+ * pas. Les URL déjà dans un <a>...</a> existant (ex : un modèle qui a bien
+ * fait le lien correctement) sont laissées intactes — découpage par blocs
+ * <a> plutôt qu'un simple remplacement global, pour ne jamais imbriquer un
+ * <a> dans un <a> si le modèle contient aussi la même URL comme texte visible
+ * à l'intérieur d'un lien déjà correct. À l'intérieur des segments restants,
+ * une URL déjà valeur d'un attribut (href="...", src="...") est elle aussi
+ * ignorée (exclusion du caractère précédent immédiat ' ou " ou =).
+ */
+function autoLinkifyEmailBody(html: string): string {
+  const parts = html.split(/(<a\b[^>]*>[\s\S]*?<\/a>)/i);
+  return parts
+    .map((part, i) =>
+      i % 2 === 1
+        ? part
+        : part.replace(
+            /(^|[^"'=])(https?:\/\/[^\s<>"']+)/g,
+            (_match, pre, url) => `${pre}<a href="${url}" target="_blank" rel="noopener">${url}</a>`
+          )
+    )
+    .join("");
+}
+
+/**
  * Détecte si un modèle référence une variable {{key}} donnée — mêmes
  * espaces tolérés à l'intérieur des accolades que renderTemplate ci-dessus
  * (ex : "{{ codeAcces }}"). Un simple `str.includes("{{key}}")` (version
@@ -282,6 +310,7 @@ export async function sendMessage(opts: {
     opts.channel === "email" && opts.bodyOverride !== undefined
       ? opts.bodyOverride.replace(/\n/g, "<br>")
       : renderTemplate(template.bodyHtml, vars);
+  if (opts.channel === "email") body = autoLinkifyEmailBody(body);
 
   // template.category === "support" exclu du score d'intérêt (30/09/2026,
   // demande client) : un échange support (ex: réponse à une question
