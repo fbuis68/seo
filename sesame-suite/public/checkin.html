@@ -1577,7 +1577,7 @@ function apiFetch(url, opts){
   return fetch(url, opts);
 }
 var DEFAULT_CFG={
-  hotelName:'Éco-Séjour',hotelSlogan:'',entityId:'E00000001',stars:3,termsUrl:'',cguRequired:true,newsletterEnabled:true,
+  hotelName:'Éco-Séjour',hotelSlogan:'',entityId:'E00000001',stars:3,termsUrl:'',cguRequired:true,newsletterEnabled:true,livretEnabled:true,
   colors:{primary:'#8B1A2E',primaryLight:'#FDEDF0',accent:'#8B1A2E',headerBg:'#8B1A2E',
     headerText:'#FFFFFF',bg:'#F5F3F0',cardBg:'#FFFFFF',border:'#E3DED8',text:'#14121E',btnNav:'#8B1A2E'},
   radius:14,radiusBtn:8,shadow:true,fontTitle:"'Fraunces',serif",fontBody:"'Sora',sans-serif",
@@ -4064,6 +4064,13 @@ function renderEspace(){
   var boutiquePill = document.querySelector('#espTabs .pill[data-tab="boutique"]');
   if(boutiquePill) boutiquePill.style.display = isModuleActive('roomservice') ? '' : 'none';
   if(!isModuleActive('roomservice') && ESP_ACTIVE_TAB==='boutique') ESP_ACTIVE_TAB='key';
+
+  // Onglet Livret — pas d'étape dans le parcours check-in (pas de
+  // checkinModules.livret), toggle dédié CFG.livretEnabled (cf. admin.html
+  // panneau "Livret digital", case "Livret visible dans l'espace client").
+  var livretPill = document.querySelector('#espTabs .pill[data-tab="livret"]');
+  if(livretPill) livretPill.style.display = (CFG.livretEnabled===false) ? 'none' : '';
+  if(CFG.livretEnabled===false && ESP_ACTIVE_TAB==='livret') ESP_ACTIVE_TAB='key';
 
   // Onglet Points (récompenses) — masqué si le module "rewards" est
   // désactivé (ou auto-désactivé via "eco", cf. toggleModule côté admin) :

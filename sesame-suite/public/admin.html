@@ -4686,6 +4686,17 @@ Accès au salon Premium</textarea>
     <p>Créez et organisez les rubriques du livret d'accueil digital affiché dans l'application client.</p>
   </div>
 
+  <!-- 18/11/2026, "les options non activées dans l'entité (boutique,
+       livret) ne doivent pas apparaître du tout dans l'espace client" —
+       le livret n'a pas d'équivalent dans la grille "Modules" (ce n'est pas
+       une étape du parcours check-in), toggle dédié ici (CFG.livretEnabled,
+       cf. initContactStep-like gating côté checkin.html espRenderEspace). -->
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;margin-bottom:16px;border:1px solid var(--bdr);border-radius:var(--rs);background:var(--bg)">
+    <div style="font-size:12px"><strong>Livret visible dans l'espace client</strong>
+      <div style="font-size:10px;color:var(--mu)">Désactivé, l'onglet "Livret" disparaît entièrement de l'application client</div></div>
+    <label class="tg" style="flex-shrink:0"><input type="checkbox" id="livret-enabled" checked onchange="livretToggleEnabled(this.checked)"><span class="tgl"></span></label>
+  </div>
+
   <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
     <button class="btn btn-p btn-s" onclick="livretNewSection()"><i class="ti ti-plus"></i> Nouvelle rubrique</button>
     <button class="btn btn-s" onclick="livretPublish()"><i class="ti ti-cloud-upload"></i> Publier</button>
@@ -11263,7 +11274,20 @@ function livretLoad(){
   return LIVRET_CACHE;
 }
 
+/** Toggle "Livret visible dans l'espace client" — enregistré immédiatement
+ * (pas de bouton "Enregistrer" global sur ce panneau, contrairement à
+ * "Entité & Catégorie"). Gating côté client dans checkin.html espRenderEspace,
+ * directement sur CFG.livretEnabled (pas via checkinModules/isModuleActive :
+ * le livret n'est pas une étape du parcours check-in). */
+async function livretToggleEnabled(enabled){
+  CFG.livretEnabled = enabled;
+  var ok = await saveCfg();
+  toast(ok ? (enabled ? 'Livret visible dans l\'espace client ✓' : 'Livret masqué dans l\'espace client ✓') : 'Erreur d\'enregistrement');
+}
+
 async function livretRender(){
+  var enabledChk = document.getElementById('livret-enabled');
+  if(enabledChk) enabledChk.checked = CFG.livretEnabled !== false;
   await livretFetch();
   var sections = livretLoad().slice().sort(function(a,b){return (a.order||0)-(b.order||0);});
 
@@ -11465,7 +11489,16 @@ var SECTEURS_HOTELIER = ['hotellerie', 'camping'];
 function applySectorVisibility(){
   var isHotelier = SECTEURS_HOTELIER.indexOf(CFG.secteur || 'hotellerie') !== -1;
   document.querySelectorAll('.sector-hotel-only').forEach(function(el){
-    el.style.display = isHotelier ? '' : 'none';
+    // Fusion avec "Entités" (18/11/2026, "fusionner les menus entités et
+    // entités et catégorie qui sont redondant") : pour un compte Sesame,
+    // "Entité & Catégorie" fait doublon avec "Entités" (déjà visible,
+    // sesame-only) — configuration de l'entité active accessible depuis son
+    // bouton "Configurer" (cf. hmRenderGrid) plutôt que par un second menu.
+    // Les comptes hôtel (non-sesame) n'ont jamais "Entités" : rien ne change
+    // pour eux, "Entité & Catégorie" reste leur seul point d'entrée.
+    var isHotelNav = el.getAttribute('data-pan') === 'hotel';
+    var hide = !isHotelier || (isHotelNav && ADMIN_ROLE==='sesame');
+    el.style.display = hide ? 'none' : '';
   });
 }
 function applyRoleVisibility(){
@@ -12481,7 +12514,12 @@ async function hmRenderGrid(){
       +'</div>'
       +'<div style="display:flex;gap:6px">'
       +(isActive
-        ?('<button class="btn btn-s" style="flex:1;background:var(--al);color:'+color+';border-color:'+color+'" onclick="hmOpenEdit(\'' + hotel.code + '\')">' + '<i class="ti ti-settings"></i> Configurer</button>')
+        // Entité déjà active : direction le panneau complet "Entité &
+        // Catégorie" (plus besoin du détour par la modale rapide ci-dessous,
+        // réservée à l'édition d'une AUTRE entité sans l'activer) — cf.
+        // applySectorVisibility, qui masque ce menu pour un compte Sesame
+        // précisément parce que ce bouton y mène désormais directement.
+        ?('<button class="btn btn-s" style="flex:1;background:var(--al);color:'+color+';border-color:'+color+'" onclick="showPan(\'hotel\')">' + '<i class="ti ti-settings"></i> Configurer</button>')
         :('<button class="btn btn-p btn-s" style="flex:1;background:'+color+';border-color:'+color+'" onclick="hmActivate(\'' + hotel.code + '\')">' + '<i class="ti ti-toggle-right"></i> Activer</button>')
        )
       +('<button class="btn btn-s" onclick="hmOpenEdit(\'' + hotel.code + '\')" style="width:auto;padding:6px 10px" title="Modifier"><i class="ti ti-pencil"></i></button>')
