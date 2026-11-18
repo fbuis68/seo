@@ -349,10 +349,13 @@ interface CardOnFileBody {
   roomId: string;
   startDate: string;
   endDate: string;
-  // Contact minimal — téléphone OU email, au choix (BookingEngineConfig.
+  // Coordonnées minimales — pas de nom/prénom (BookingEngineConfig.
   // cardOnFileMode simplifie le formulaire par rapport à /checkout et
-  // /bookDirect, qui exigent nom+prénom+email).
-  contact: string;
+  // /bookDirect) mais email ET téléphone tous les deux requis, 18/11/2026
+  // "toujours qu'un champs email ou telephone possible... mettre deux
+  // champs" (même règle que le formulaire classique, cf. readGuestForm).
+  email: string;
+  phone: string;
   cardholderName?: string;
   occupants?: Record<string, number>;
 }
@@ -369,10 +372,11 @@ function splitCardholderName(name: string | undefined): { firstName: string; las
 
 function parseCardOnFileDraft(b: CardOnFileBody): BookingDraft {
   if (!b.roomId) throw new HttpError(400, "Chambre requise");
-  const contact = (b.contact || "").trim();
-  if (!contact) throw new HttpError(400, "Téléphone ou email requis");
-  const isEmail = contact.includes("@");
-  if (isEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact)) throw new HttpError(400, "Email invalide");
+  const email = (b.email || "").trim();
+  const phone = (b.phone || "").trim();
+  if (!email) throw new HttpError(400, "Email requis");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, "Email invalide");
+  if (!phone) throw new HttpError(400, "Téléphone requis");
   const { firstName, lastName } = splitCardholderName(b.cardholderName);
   const occupants = Object.keys(b.occupants || {}).length ? parseOccupants(b.occupants) : { adulte: 1 };
   return {
@@ -381,8 +385,8 @@ function parseCardOnFileDraft(b: CardOnFileBody): BookingDraft {
     endDate: b.endDate,
     firstName,
     lastName,
-    email: isEmail ? contact.toLowerCase() : "",
-    phone: isEmail ? undefined : contact,
+    email: email.toLowerCase(),
+    phone,
     occupants,
   };
 }
@@ -416,14 +420,16 @@ bookingEngineRouter.post(
     const entity = await resolveEntity(req);
     const { paymentConfig } = await requireCardOnFileReady(entity.id);
 
-    const contact = String(req.body.contact || "").trim();
-    if (!contact) throw new HttpError(400, "Téléphone ou email requis");
-    const isEmail = contact.includes("@");
+    const email = String(req.body.email || "").trim();
+    const phone = String(req.body.phone || "").trim();
+    if (!email) throw new HttpError(400, "Email requis");
+    if (!phone) throw new HttpError(400, "Téléphone requis");
     const cardholderName = req.body.cardholderName ? String(req.body.cardholderName).trim() : undefined;
 
     try {
       const { customerId } = await createSetupIntentCustomer(paymentConfig, {
-        ...(isEmail ? { email: contact } : { phone: contact }),
+        email,
+        phone,
         ...(cardholderName ? { name: cardholderName } : {}),
       });
       const { id, clientSecret } = await createSetupIntent(paymentConfig, { customerId });

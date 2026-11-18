@@ -125,7 +125,10 @@ h1{font-family:var(--font-title);font-size:26px;font-weight:500;margin-bottom:6p
          minimal — contact seul, carte via Stripe Elements, jamais de numéro
          de carte manipulé par ce code (conformité PCI). -->
     <div class="card" id="cof-form" style="display:none">
-      <div class="ff"><label>Téléphone ou email</label><input type="text" id="cof-contact" placeholder="06 12 34 56 78 ou vous@exemple.fr"></div>
+      <div class="grid2">
+        <div class="ff"><label>Email</label><input type="email" id="cof-email" required></div>
+        <div class="ff"><label>Téléphone</label><input type="tel" id="cof-phone" required></div>
+      </div>
       <div class="ff">
         <label>Nom sur la carte (optionnel)</label>
         <input type="text" id="cof-name" placeholder="Rempli automatiquement par Apple Pay/Google Pay, ou saisissez-le">
@@ -474,7 +477,8 @@ function loadScriptOnce(url){
 
 function cofReset(){
   COF = { stripe:null, elements:null, clientSecret:null };
-  var contactEl = document.getElementById('cof-contact'); if(contactEl) contactEl.value = '';
+  var emailEl = document.getElementById('cof-email'); if(emailEl) emailEl.value = '';
+  var phoneEl = document.getElementById('cof-phone'); if(phoneEl) phoneEl.value = '';
   var nameEl = document.getElementById('cof-name'); if(nameEl) nameEl.value = '';
   var cardEl = document.getElementById('cof-card-element'); if(cardEl) cardEl.innerHTML = '';
   var contBtn = document.getElementById('cof-continue-btn');
@@ -486,8 +490,9 @@ function cofReset(){
 async function cofContinue(btn){
   var errEl = document.getElementById('form-err');
   errEl.style.display='none';
-  var contact = document.getElementById('cof-contact').value.trim();
-  if(!contact){ errEl.textContent='Merci de renseigner un téléphone ou un email.'; errEl.style.display='block'; return; }
+  var email = document.getElementById('cof-email').value.trim();
+  var phone = document.getElementById('cof-phone').value.trim();
+  if(!email || !phone){ errEl.textContent='Merci de renseigner un email et un téléphone.'; errEl.style.display='block'; return; }
   var cardholderName = document.getElementById('cof-name').value.trim();
 
   var origLabel = btn.textContent;
@@ -495,7 +500,7 @@ async function cofContinue(btn){
   try{
     var r = await apiFetch('/wa/bookingEngine/cardSetupIntent', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({contact:contact, cardholderName:cardholderName||undefined})
+      body: JSON.stringify({email:email, phone:phone, cardholderName:cardholderName||undefined})
     });
     var data = await r.json();
     if(!r.ok) throw new Error(data.error||'Erreur');
@@ -517,7 +522,8 @@ async function cofContinue(btn){
 async function cofSubmit(btn){
   var errEl = document.getElementById('form-err');
   errEl.style.display='none';
-  var contact = document.getElementById('cof-contact').value.trim();
+  var email = document.getElementById('cof-email').value.trim();
+  var phone = document.getElementById('cof-phone').value.trim();
   var cardholderName = document.getElementById('cof-name').value.trim();
 
   var origLabel = btn.textContent;
@@ -532,7 +538,7 @@ async function cofSubmit(btn){
       body: JSON.stringify({
         setupIntentId: setupIntentId,
         roomId: STATE.selectedRoom.id, startDate: STATE.start, endDate: STATE.end,
-        contact: contact, cardholderName: cardholderName||undefined, occupants: OCC
+        email: email, phone: phone, cardholderName: cardholderName||undefined, occupants: OCC
       })
     });
     var data = await r.json();
