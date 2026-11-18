@@ -4424,11 +4424,21 @@ function espHideQrError(){
 function espKeyActivationDate(){
   var b = S.booking;
   if(!b || !b.startDate) return null;
-  var time = b.checkinTime || CFG.checkinTime || '15:00';
-  var m = /^(\d{1,2}):(\d{2})/.exec(time);
   var d = new Date(b.startDate);
   if(isNaN(d.getTime())) return null;
-  d.setHours(m ? parseInt(m[1],10) : 15, m ? parseInt(m[2],10) : 0, 0, 0);
+  // Heure déjà précise sur startDate (réservation "effet immédiat à
+  // l'heure/minute/seconde près", cf. BookingEngineConfig.
+  // immediateBookingExactTime) — ne JAMAIS l'écraser par l'horaire de
+  // check-in standard : ce serait annuler tout le sens d'une arrivée
+  // "maintenant". Repli sur l'horaire de check-in UNIQUEMENT quand
+  // startDate ne porte qu'une date (minuit UTC — toute réservation à
+  // dates choisies à l'avance, cas normal/historique).
+  var isMidnightUTC = d.getUTCHours()===0 && d.getUTCMinutes()===0 && d.getUTCSeconds()===0;
+  if(isMidnightUTC){
+    var time = b.checkinTime || CFG.checkinTime || '15:00';
+    var m = /^(\d{1,2}):(\d{2})/.exec(time);
+    d.setHours(m ? parseInt(m[1],10) : 15, m ? parseInt(m[2],10) : 0, 0, 0);
+  }
   return d;
 }
 var ESP_KEY_COUNTDOWN_TIMER = null;

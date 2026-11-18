@@ -260,6 +260,26 @@ function addDuration(dateStr, amount, unit){
   return d.toISOString().slice(0,10);
 }
 
+/**
+ * Même calcul qu'addDuration ci-dessus, mais sur un instant PRÉCIS
+ * (heure/minute/seconde conservées) plutôt qu'une date seule forcée à
+ * minuit — BookingEngineConfig.immediateBookingExactTime (18/11/2026,
+ * "demande à effet immédiat en terme de heure minute seconde"). isoStr est
+ * un ISO complet (ex: new Date().toISOString()), pas juste "YYYY-MM-DD".
+ */
+function addDurationExact(isoStr, amount, unit){
+  var d = new Date(isoStr);
+  if(unit==='jour'){ d.setDate(d.getDate()+amount); return d.toISOString(); }
+  var hh=d.getHours(), mi=d.getMinutes(), ss=d.getSeconds();
+  var day = d.getDate();
+  var y = d.getFullYear(), m = d.getMonth();
+  if(unit==='mois') m += amount;
+  else if(unit==='an') y += amount;
+  var lastDayOfTargetMonth = new Date(y, m+1, 0).getDate();
+  d = new Date(y, m, Math.min(day, lastDayOfTargetMonth), hh, mi, ss);
+  return d.toISOString();
+}
+
 function durationLabel(o){
   var lbl = DUR_UNIT_LABEL[o.unit] || DUR_UNIT_LABEL.jour;
   return o.amount+' '+(o.amount>1?lbl.p:lbl.s);
@@ -305,8 +325,17 @@ var STATE = { start:null, end:null, nights:0, rooms:[], selectedRoom:null };
 async function searchRooms(){
   var errEl = document.getElementById('search-err');
   errEl.style.display='none';
-  var start = document.getElementById('in-start').value;
-  var end = document.getElementById('in-end').value;
+  var start, end;
+  if(BOOK_STATUS.immediateBooking && BOOK_STATUS.immediateBookingExactTime){
+    // Instant exact de la demande (H:M:S), pas la date seule des champs
+    // (de toute façon masqués dans ce mode) — cf. addDurationExact.
+    start = new Date().toISOString();
+    var dur = (BOOK_STATUS.durationOptions && BOOK_STATUS.durationOptions[0]) || {amount:1, unit:'jour'};
+    end = addDurationExact(start, dur.amount, dur.unit);
+  } else {
+    start = document.getElementById('in-start').value;
+    end = document.getElementById('in-end').value;
+  }
   if(!start || !end || end<=start){ errEl.textContent='Merci de choisir des dates valides (départ après arrivée).'; errEl.style.display='block'; return; }
   STATE.start = start; STATE.end = end;
   STATE.nights = Math.round((new Date(end)-new Date(start))/86400000);
@@ -690,7 +719,7 @@ function handleBookingReturn(){
 }
 
 // ═══════════════════ BOOT ═══════════════════
-var BOOK_STATUS = { enabled:false, requirePayment:true, paymentAvailable:false, durationOptions:[], hideRoomSelection:false, hideOccupants:false, immediateBooking:false, cardOnFileMode:false, stripePublishableKey:'' };
+var BOOK_STATUS = { enabled:false, requirePayment:true, paymentAvailable:false, durationOptions:[], hideRoomSelection:false, hideOccupants:false, immediateBooking:false, immediateBookingExactTime:false, cardOnFileMode:false, stripePublishableKey:'' };
 window.addEventListener('DOMContentLoaded', async function(){
   var today = new Date();
   var tomorrow = new Date(today.getTime()+86400000);

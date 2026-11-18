@@ -1387,6 +1387,13 @@ model BookingEngineConfig {
   // durationOptions, sinon +1 jour) — le client n'a plus qu'à cliquer,
   // sans jamais toucher de date.
   immediateBooking Boolean @default(false)
+  // 18/11/2026, "permettre que la demande soit à effet immédiat en terme
+  // de heure minute seconde" — affiné par rapport à immediateBooking
+  // ci-dessus, qui ne posait qu'une DATE (minuit) : avec ce réglage en
+  // plus, l'arrivée envoyée au serveur est l'instant exact de la demande
+  // (heure/minute/seconde), pas seulement le jour. Sans effet si
+  // immediateBooking est désactivé (les dates restent saisies à la main).
+  immediateBookingExactTime Boolean @default(false)
 
   // Paiement embarqué par empreinte bancaire (Stripe SetupIntent + Elements,
   // carte enregistrée SANS être débitée) plutôt que Stripe Checkout

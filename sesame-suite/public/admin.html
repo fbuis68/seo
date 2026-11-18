@@ -4587,8 +4587,12 @@ Accès au salon Premium</textarea>
     <div class="fi">
       <label class="lb">Réservation immédiate</label>
       <label style="display:flex;align-items:center;gap:8px;height:38px;cursor:pointer">
-        <input type="checkbox" id="bke-immediate" style="accent-color:var(--am)">
+        <input type="checkbox" id="bke-immediate" onchange="document.getElementById('bke-immediate-exact-wrap').style.display=this.checked?'':'none'" style="accent-color:var(--am)">
         <span style="font-size:13px">Masque les dates d'arrivée/départ — arrivée fixée à maintenant, départ calculé automatiquement (1re durée prédéfinie ci-dessus, sinon +1 jour). Pour un accès consommé tout de suite (magasin, casier), sans séjour à dates choisies.</span>
+      </label>
+      <label id="bke-immediate-exact-wrap" style="display:none;align-items:center;gap:8px;height:38px;cursor:pointer;margin-left:24px;margin-top:4px">
+        <input type="checkbox" id="bke-immediate-exact" style="accent-color:var(--am)">
+        <span style="font-size:13px">À l'heure/minute/seconde près — l'arrivée envoyée est l'instant exact de la demande, pas seulement le jour (sans quoi la clé numérique n'activerait qu'à l'horaire de check-in standard de l'étape suivante, pas tout de suite)</span>
       </label>
     </div>
     <div class="fi">
@@ -9696,6 +9700,8 @@ async function bkeInit(){
     document.getElementById('bke-skip-availability').checked = !!(cfg && cfg.skipAvailabilityCheck);
     document.getElementById('bke-card-on-file').checked = !!(cfg && cfg.cardOnFileMode);
     document.getElementById('bke-immediate').checked = !!(cfg && cfg.immediateBooking);
+    document.getElementById('bke-immediate-exact').checked = !!(cfg && cfg.immediateBookingExactTime);
+    document.getElementById('bke-immediate-exact-wrap').style.display = (cfg && cfg.immediateBooking) ? '' : 'none';
     document.getElementById('bke-page-title').value = (cfg && cfg.pageTitle) || '';
     document.getElementById('bke-page-intro').value = (cfg && cfg.pageIntro) || '';
     document.getElementById('bke-confirm-title').value = (cfg && cfg.confirmationTitle) || '';
@@ -9730,6 +9736,7 @@ async function bkeSave(){
     skipAvailabilityCheck: document.getElementById('bke-skip-availability').checked,
     cardOnFileMode: document.getElementById('bke-card-on-file').checked,
     immediateBooking: document.getElementById('bke-immediate').checked,
+    immediateBookingExactTime: document.getElementById('bke-immediate-exact').checked,
     pageTitle: document.getElementById('bke-page-title').value.trim(),
     pageIntro: document.getElementById('bke-page-intro').value.trim(),
     confirmationTitle: document.getElementById('bke-confirm-title').value.trim(),

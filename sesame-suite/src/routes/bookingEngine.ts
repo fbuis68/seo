@@ -51,6 +51,7 @@ bookingEngineRouter.get(
       skipAvailabilityCheck: config.skipAvailabilityCheck,
       cardOnFileMode: config.cardOnFileMode,
       immediateBooking: config.immediateBooking,
+      immediateBookingExactTime: config.immediateBookingExactTime,
       pageTitle: config.pageTitle || "",
       pageIntro: config.pageIntro || "",
       confirmationTitle: config.confirmationTitle || "",
@@ -75,6 +76,7 @@ bookingEngineRouter.post(
     const skipAvailabilityCheck = req.body.skipAvailabilityCheck !== undefined ? !!req.body.skipAvailabilityCheck : undefined;
     const cardOnFileMode = req.body.cardOnFileMode !== undefined ? !!req.body.cardOnFileMode : undefined;
     const immediateBooking = req.body.immediateBooking !== undefined ? !!req.body.immediateBooking : undefined;
+    const immediateBookingExactTime = req.body.immediateBookingExactTime !== undefined ? !!req.body.immediateBookingExactTime : undefined;
     let pageTitle: string | undefined;
     if (req.body.pageTitle !== undefined) {
       pageTitle = String(req.body.pageTitle).trim();
@@ -104,6 +106,7 @@ bookingEngineRouter.post(
       ...(skipAvailabilityCheck !== undefined ? { skipAvailabilityCheck } : {}),
       ...(cardOnFileMode !== undefined ? { cardOnFileMode } : {}),
       ...(immediateBooking !== undefined ? { immediateBooking } : {}),
+      ...(immediateBookingExactTime !== undefined ? { immediateBookingExactTime } : {}),
       ...(pageTitle !== undefined ? { pageTitle } : {}),
       ...(pageIntro !== undefined ? { pageIntro } : {}),
       ...(confirmationTitle !== undefined ? { confirmationTitle } : {}),
@@ -123,6 +126,7 @@ bookingEngineRouter.post(
       skipAvailabilityCheck: config.skipAvailabilityCheck,
       cardOnFileMode: config.cardOnFileMode,
       immediateBooking: config.immediateBooking,
+      immediateBookingExactTime: config.immediateBookingExactTime,
       pageTitle: config.pageTitle || "",
       pageIntro: config.pageIntro || "",
       confirmationTitle: config.confirmationTitle || "",
@@ -167,6 +171,7 @@ bookingEngineRouter.get(
       hideRoomSelection: !!engineConfig?.hideRoomSelection,
       hideOccupants: !!engineConfig?.hideOccupants,
       immediateBooking: !!engineConfig?.immediateBooking,
+      immediateBookingExactTime: !!engineConfig?.immediateBookingExactTime,
       cardOnFileMode,
       stripePublishableKey: cardOnFileMode && cardOnFileReady ? paymentConfig?.publishableKey : "",
       pageTitle: engineConfig?.pageTitle || "",
