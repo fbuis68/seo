@@ -6155,7 +6155,15 @@ function initContactStep(){
 
   var emailEl = document.getElementById('contact-email');
   var phoneEl = document.getElementById('contact-phone');
-  if(emailEl && !emailEl.value) emailEl.value = b.personEmail || '';
+  // 19/11/2026, "lorsque le type de Booking ou Expedia rendre le champs
+  // email obligatoire et ne pas mettre l'alias proposé par ces
+  // plateformes" — Booking.com/Expedia transmettent un email de
+  // messagerie temporaire (ex. ...@guest.booking.com), injoignable après
+  // le séjour : jamais pré-rempli pour ces sources, le client doit saisir
+  // une adresse réelle pour continuer (contactStepNext exige déjà un
+  // champ non vide contenant un "@" — donc de fait obligatoire ici).
+  var otaNoPrefillEmail = /booking|expedia/i.test(b.source||'');
+  if(emailEl && !emailEl.value && !otaNoPrefillEmail) emailEl.value = b.personEmail || '';
   if(phoneEl && !phoneEl.value) phoneEl.value = b.personPhone || '';
 
   var kycAdr = document.getElementById('kyc-adresse');
