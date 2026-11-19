@@ -9,6 +9,11 @@
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<!-- 19/11/2026, "genere un pdf que tu envoies dans le CRM" — jsPDF
+     construit le PDF du relevé (photos + cotes) côté navigateur, seul
+     endroit où les photos existent encore à la transmission du dossier
+     (cf. confirmSend ci-dessous), avant envoi au serveur. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 /* Layout : coque téléphone centrée sur grand écran (contexte du devis
    partagé en arrière-plan), pleine largeur sans décor dès la largeur
@@ -1006,6 +1011,110 @@ function screenRecap(){
 // dépôt dans le journal CRM. La saisie (fiches/photos/cotes) reste côté
 // navigateur en V1 — seul le résumé (repères/familles/quantités/complet
 // ou non) est transmis au serveur, pas les photos elles-mêmes.
+// Redimensionne/recompresse une photo avant de l'inclure dans le PDF —
+// une photo de téléphone brute (3-5 Mo) ferait exploser la taille du PDF
+// bien avant d'avoir couvert toutes les fiches ; 1000 px de long côté +
+// JPEG qualité 0.6 ramène chaque photo à ~80-200 Ko tout en restant
+// lisible sur la page imprimée.
+function resizeImageForPdf(dataUrl, maxDim, quality){
+  return new Promise(resolve=>{
+    const img = new Image();
+    img.onload = function(){
+      var w = img.naturalWidth||1, h = img.naturalHeight||1;
+      var scale = Math.min(1, maxDim/Math.max(w,h));
+      w = Math.max(1, Math.round(w*scale)); h = Math.max(1, Math.round(h*scale));
+      var canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      var ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0,0,w,h);
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve({ dataUrl: canvas.toDataURL('image/jpeg', quality||0.6), w:w, h:h });
+    };
+    img.onerror = function(){ resolve(null); };
+    img.src = dataUrl;
+  });
+}
+
+/** Construit le PDF du dossier (une section par fiche : photos, détails,
+ * cotes, remarque) — renvoie une data URL "data:application/pdf;base64,..."
+ * ou null si jsPDF n'a pas pu charger ou si la génération échoue (jamais
+ * bloquant pour la transmission, cf. confirmSend). */
+async function buildRelevePdf(){
+  if(!window.jspdf || !window.jspdf.jsPDF) return null;
+  const doc = new window.jspdf.jsPDF({ unit:'mm', format:'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const marginX = 16;
+  let y = 20;
+  function ensureSpace(h){ if(y + h > pageH - 16){ doc.addPage(); y = 20; } }
+  function heading(text, size, color){
+    ensureSpace(size*0.6 + 2);
+    doc.setFont(undefined,'bold'); doc.setFontSize(size);
+    if(color) doc.setTextColor(color[0],color[1],color[2]); else doc.setTextColor(20,20,20);
+    doc.text(text, marginX, y); y += size*0.6 + 2;
+    doc.setFont(undefined,'normal'); doc.setTextColor(20,20,20);
+  }
+  function body(text, size){
+    doc.setFontSize(size||10);
+    const lines = doc.splitTextToSize(String(text||''), pageW - 2*marginX);
+    ensureSpace(lines.length*5);
+    doc.text(lines, marginX, y); y += lines.length*5 + 2;
+  }
+
+  heading('Relevé des accès', 17);
+  body(`${QUOTE.number} — ${QUOTE.prospectNom}`, 10);
+  y += 2;
+
+  for(const f of STATE.fiches){
+    const fam = familleOf(f);
+    heading(`${f.repere || 'Sans repère'} (${fam.label}) × ${f.quantite}`, 13, [139,16,64]);
+
+    for(const v of fam.views){
+      const p = f.photos[v.key];
+      if(!p || !p.dataUrl) continue;
+      const resized = await resizeImageForPdf(p.dataUrl, 1000, 0.6);
+      if(!resized) continue;
+      body(v.label, 9.5);
+      const maxW = 85, maxH = 60;
+      let w = maxW, h = w * resized.h/resized.w;
+      if(h > maxH){ h = maxH; w = h * resized.w/resized.h; }
+      ensureSpace(h + 4);
+      doc.addImage(resized.dataUrl, 'JPEG', marginX, y, w, h);
+      y += h + 5;
+    }
+
+    if(f.details && f.details.length){
+      body('Détails', 9.5);
+      for(const d of f.details){
+        if(!d.dataUrl) continue;
+        const resized = await resizeImageForPdf(d.dataUrl, 800, 0.6);
+        if(!resized) continue;
+        const maxW = 55, maxH = 42;
+        let w = maxW, h = w * resized.h/resized.w;
+        if(h > maxH){ h = maxH; w = h * resized.w/resized.h; }
+        ensureSpace(h + 3);
+        doc.addImage(resized.dataUrl, 'JPEG', marginX, y, w, h);
+        y += h + 3;
+      }
+      if(f.detailLegende) body('Légende : ' + f.detailLegende, 9);
+    }
+
+    if(fam.cotes){
+      heading('Cotes', 10.5);
+      for(const c of COTES_DEF){
+        const cv = f.cotes[c.key];
+        const val = (cv && cv.value) ? (cv.value + (cv.flag ? '' : ' mm')) : '—';
+        body(`${c.label} : ${val}`, 9.5);
+      }
+    }
+
+    if(f.remarque) { heading('Remarque', 10.5); body(f.remarque, 9.5); }
+    y += 5;
+  }
+
+  return doc.output('datauristring');
+}
+
 async function confirmSend(){
   const missing = STATE.fiches.flatMap(ficheMissing);
   if(missing.length){
@@ -1020,10 +1129,21 @@ async function confirmSend(){
     repere: f.repere, famille: (familleOf(f)||{}).label || f.famille,
     quantite: f.quantite, complet: ficheIsComplete(f),
   }));
+  let pdfDataUrl = null;
+  try{
+    pdfDataUrl = await buildRelevePdf();
+    // Garde-fou client, cohérent avec la limite serveur (14 Mo, cf.
+    // RELEVE_PDF_MAX_BASE64_CHARS côté routes/crmQuote.ts) — un dossier
+    // avec énormément de photos reste transmis, juste sans PDF joint.
+    if(pdfDataUrl && pdfDataUrl.length > 13 * 1024 * 1024) pdfDataUrl = null;
+  }catch(e){ pdfDataUrl = null; }
   try{
     await fetch('/wa/crmQuote/releveSubmit', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ token: TOKEN, fiches: resume, partiel: missing.length>0 }),
+      body: JSON.stringify({
+        token: TOKEN, fiches: resume, partiel: missing.length>0,
+        pdfDataUrl: pdfDataUrl, pdfFileName: `Relevé des accès - ${QUOTE.number}.pdf`,
+      }),
     });
   }catch(e){ /* dossier conservé localement — l'envoi sera rejoué au prochain essai */ }
   STATE.dossierStatus = 'transmis';

@@ -1467,10 +1467,23 @@ crmQuoteRouter.post(
  * ci-dessous, pour que le commercial voie réellement le dépôt dans le
  * journal CRM du prospect sans attendre une persistance serveur complète.
  */
+// Data URL base64 — 14 Mo en clair, sous la limite globale express.json
+// (15 Mo, cf. src/app.ts) avec un peu de marge pour le reste du corps JSON.
+const RELEVE_PDF_MAX_BASE64_CHARS = 14 * 1024 * 1024;
+
 interface ReleveSubmitBody {
   token: string;
   fiches: { repere: string; famille: string; quantite: number; complet: boolean }[];
   partiel: boolean;
+  // 19/11/2026, "genere un pdf que tu envoies dans le CRM" — PDF du relevé
+  // (photos + cotes) généré CÔTÉ CLIENT (jsPDF, public/releve-acces.html —
+  // seul endroit où les photos existent encore, jamais remontées au
+  // serveur telles quelles) puis déposé ici comme un CrmClientUpload,
+  // même mécanisme que le dépôt de document client sur l'espace devis
+  // (cf. POST /crmQuote/publicUpload ci-dessous). Facultatif : un échec de
+  // génération côté client ne bloque jamais la transmission du résumé.
+  pdfDataUrl?: string;
+  pdfFileName?: string;
 }
 crmQuoteRouter.post(
   "/crmQuote/releveSubmit",
@@ -1481,9 +1494,33 @@ crmQuoteRouter.post(
     if (!quote) throw new HttpError(404, "Lien invalide");
     const fiches = Array.isArray(b.fiches) ? b.fiches : [];
     const lines = fiches.map((f) => `• ${f.repere || "Sans repère"} (${f.famille}) × ${f.quantite}${f.complet ? "" : " — à compléter"}`);
-    const text = `Relevé des accès transmis${b.partiel ? " (dossier partiel)" : ""} — devis ${quote.number} :\n${lines.join("\n") || "aucune fiche"}`;
+
+    let pdfAttached = false;
+    if (b.pdfDataUrl) {
+      // jsPDF's output("datauristring") peut insérer un segment
+      // ";filename=...;" entre le type MIME et "base64," selon la version
+      // — on isole la partie après "base64," plutôt que d'exiger un
+      // format exact de data URL.
+      const base64Marker = "base64,";
+      const base64Index = b.pdfDataUrl.startsWith("data:application/pdf") ? b.pdfDataUrl.indexOf(base64Marker) : -1;
+      const base64Data = base64Index !== -1 ? b.pdfDataUrl.slice(base64Index + base64Marker.length) : null;
+      if (base64Data && base64Data.length <= RELEVE_PDF_MAX_BASE64_CHARS) {
+        await prisma.crmClientUpload.create({
+          data: {
+            prospectId: quote.prospectId,
+            quoteId: quote.id,
+            fileName: (b.pdfFileName || `Relevé des accès - ${quote.number}.pdf`).slice(0, 200),
+            fileMimeType: "application/pdf",
+            fileContentBase64: base64Data,
+          },
+        });
+        pdfAttached = true;
+      }
+    }
+
+    const text = `Relevé des accès transmis${b.partiel ? " (dossier partiel)" : ""} — devis ${quote.number} :\n${lines.join("\n") || "aucune fiche"}${pdfAttached ? "\n→ PDF du relevé joint aux documents du client." : ""}`;
     await prisma.crmActivity.create({ data: { prospectId: quote.prospectId, type: "Note interne", text } });
-    res.json({ ok: true });
+    res.json({ ok: true, pdfAttached });
   })
 );
 
