@@ -381,6 +381,16 @@ function vimeoId(url){
   const m = String(url||'').match(/vimeo\.com\/(?:video\/)?(\d+)/);
   return m ? m[1] : null;
 }
+// Icône standard "document PDF" (page pliée + bandeau rouge "PDF") à la
+// place de l'émoji 📄 — 19/11/2026, "mettre les icones standard des
+// documents de type pdf". Réutilisée par docThumbHtml et
+// clientUploadThumbHtml (deux listes de documents distinctes).
+const PDF_ICON_SVG = `<svg viewBox="0 0 48 48" width="30" height="30" aria-hidden="true">
+  <path d="M10 2h18l10 10v32a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" fill="#e3e1e6"/>
+  <path d="M28 2v10h10z" fill="#c7c3cc"/>
+  <rect x="5" y="26" width="30" height="14" rx="2" fill="#d32f2f"/>
+  <text x="20" y="36" font-family="Arial,sans-serif" font-size="10" font-weight="700" fill="#fff" text-anchor="middle">PDF</text>
+</svg>`;
 function docThumbHtml(d){
   if(d.url){
     const yt = youtubeId(d.url);
@@ -396,7 +406,7 @@ function docThumbHtml(d){
   // AVANT la règle word/document générique, sinon un Excel ressortait avec
   // l'icône Word (📝) par erreur.
   if(/^image\//i.test(mime)) return `<img class="doc-thumb" src="/wa/crmQuote/publicDocument/${encodeURIComponent(d.id)}?token=${encodeURIComponent(TOKEN)}" alt="">`;
-  if(/pdf/i.test(mime)) return `<div class="doc-thumb">📄</div>`;
+  if(/pdf/i.test(mime)) return `<div class="doc-thumb" style="background:#fff">${PDF_ICON_SVG}</div>`;
   if(/spreadsheet|excel|csv/i.test(mime)) return `<div class="doc-thumb">📊</div>`;
   if(/presentation|powerpoint/i.test(mime)) return `<div class="doc-thumb">📽️</div>`;
   if(/zip|compressed|rar|7z-compressed|x-tar|gzip/i.test(mime)) return `<div class="doc-thumb">🗜️</div>`;
@@ -483,7 +493,7 @@ const CLIENT_UPLOAD_MAX_BYTES = 7 * 1024 * 1024;
 function clientUploadThumbHtml(u){
   const mime = u.fileMimeType||'';
   if(/^image\//i.test(mime)) return `<img class="doc-thumb" src="/wa/crmQuote/publicClientUpload/${encodeURIComponent(u.id)}?token=${encodeURIComponent(TOKEN)}" alt="">`;
-  if(/pdf/i.test(mime)) return `<div class="doc-thumb">📄</div>`;
+  if(/pdf/i.test(mime)) return `<div class="doc-thumb" style="background:#fff">${PDF_ICON_SVG}</div>`;
   if(/spreadsheet|excel|csv/i.test(mime)) return `<div class="doc-thumb">📊</div>`;
   if(/presentation|powerpoint/i.test(mime)) return `<div class="doc-thumb">📽️</div>`;
   if(/word|document/i.test(mime)) return `<div class="doc-thumb">📝</div>`;
