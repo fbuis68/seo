@@ -15,13 +15,35 @@
 <style>
   :root{--bg:#f6f6f4;--card:#fff;--bdr:#eae8e3;--tx:#1a1a1a;--mu:#8a8680;--a:#8b1040;--a-tint:#fbeeee;
     --c-materiel:#0c76d9;--c-service:#c9860a;--c-logiciel:#7a5cf0;--c-autre:#5a8a2e;
-    --shadow:0 1px 2px rgba(20,15,10,.04),0 6px 20px -8px rgba(20,15,10,.08)}
+    --shadow:0 1px 2px rgba(20,15,10,.04),0 6px 20px -8px rgba(20,15,10,.08);
+    /* 19/11/2026, "adapte la fonction devis a l'aide du fichier ci joint" —
+       jeton foncé + accent clair du kit sesame-devis-kit-dev (bloc de totaux
+       uniquement, cf. .sq-totalbox ci-dessous), à côté de --a/--a-tint déjà
+       en place pour tout le reste de la page. */
+    --dark:#302333;--pink:#f4a5bb}
   *{box-sizing:border-box}
   body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--tx);font-size:14.5px;line-height:1.5}
   .band{background:#fff;padding:22px 20px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:center;gap:18px;flex-wrap:wrap}
   .band img{height:44px;display:block}
   .band-sep{color:var(--mu);font-size:18px}
   @media(max-width:480px){.band{padding:16px 16px}.band img{height:34px}}
+  /* Bandeau "Made in France / Hébergé en France / Membre de Synapse" du kit
+     sesame-devis-kit-dev — repris tel quel (mêmes SVG inline). */
+  .band-badges{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .band-badge{display:flex;align-items:center;gap:8px;min-height:36px;padding:5px 9px;border:1px solid var(--bdr);border-radius:8px;background:#fff;font-size:10.5px;line-height:1.25;font-weight:700;color:var(--tx)}
+  .band-badge svg{width:19px;height:19px;flex:none}
+  .band-badge img{display:block;width:56px;height:auto}
+  .band-badge small{display:block;margin-bottom:1px;font-size:8.5px;color:var(--mu);font-weight:600}
+  @media(max-width:620px){.band-badges{display:none}}
+  /* Bloc de totaux foncé du kit (.sq-totalbox) — remplace le stat-grid clair
+     uniquement sur le récapitulatif du devis (ROI/autres stat-grid de la
+     page inchangés). */
+  .sq-totalbox{background:var(--dark);color:#fff;border-radius:12px;padding:16px 18px;margin-top:14px}
+  .sq-totalrow{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:6px 0;font-size:13px}
+  .sq-totalrow small{color:#f4dce6;font-weight:650;text-transform:uppercase;letter-spacing:.3px;font-size:11px}
+  .sq-money{font-size:24px;line-height:1.2;font-weight:750;letter-spacing:-.02px;font-variant-numeric:tabular-nums}
+  .sq-emphasis .sq-money{color:var(--pink)}
+  .sq-totalbox .sq-sep{border:0;border-top:1px solid #ffffff30;margin:10px 0}
   .wrap{max-width:960px;margin:0 auto;padding:16px 20px 40px;transition:max-width .15s}
   /* 18/11/2026, "presentation plus large sur l'ecran mais qui s'adapte à un
      telephone" — élargie seulement en vue PDF (desktop), capée par le
@@ -137,6 +159,11 @@
   <img src="/icons/sesame-logo.jpg" alt="Sesame Technology">
   <span class="band-sep" id="band-sep" style="display:none">×</span>
   <img id="client-logo" style="display:none" alt="">
+  <div class="band-badges" aria-label="Origine, hébergement et réseau">
+    <div class="band-badge"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#f6f5f7"/><path d="M5 8h5v8H5z" fill="#233b78"/><path d="M10 8h4v8h-4z" fill="white"/><path d="M14 8h5v8h-5z" fill="#c52d48"/><rect x="5" y="8" width="14" height="8" rx="1" fill="none" stroke="#302333" stroke-opacity=".18"/></svg><span>Made in France</span></div>
+    <div class="band-badge"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#f7eaf0"/><g stroke="#8c1c40" stroke-width="1.4"><rect x="6" y="6.5" width="12" height="4.5" rx="1"/><rect x="6" y="13" width="12" height="4.5" rx="1"/><path d="M8 8.75h1.5M8 15.25h1.5"/></g></svg><span>Hébergé en France</span></div>
+    <div class="band-badge"><div><small>Membre de</small><img src="/icons/logo-synapse.png" alt="Synapse"></div></div>
+  </div>
 </div>
 <div class="wrap" id="wrap">
   <div id="app"><div class="card">Chargement…</div></div>
@@ -293,18 +320,16 @@ function quoteSummaryHtml(){
   // montant HT ne pas inclure la licence" : t.totalHT (= oneoffNet + mrrNet,
   // cf. quoteTotals côté serveur) mélangeait ponctuel et récurrent — on
   // utilise ici t.oneoffNet seul, qui exclut déjà mrrNet.
-  const stats = [
-    {lbl:'Montant HT', val:fmtEUR(t.oneoffNet), grand:true},
-    {lbl:'Licence (mensuel)', val:fmtEUR(t.mrrNet)},
-  ];
   return `
     <h1>Devis ${esc(QUOTE.number)}</h1>
     <div class="sub">${esc(QUOTE.prospectNom)}${QUOTE.title?' — '+esc(QUOTE.title):''}</div>
     ${QUOTE.introText?`<p style="font-size:13.5px;color:var(--tx);line-height:1.6;margin:0 0 14px">${esc(QUOTE.introText)}</p>`:''}
     <div class="devis-dock">
       ${quoteBlocksHtml()}
-      <div class="stat-grid">
-        ${stats.map(s=>`<div class="stat-card${s.grand?' grand':''}"><div class="stat-lbl">${esc(s.lbl)}</div><div class="stat-val">${s.val}</div></div>`).join('')}
+      <div class="sq-totalbox">
+        <div class="sq-totalrow sq-emphasis"><small>Montant HT</small><span class="sq-money">${fmtEUR(t.oneoffNet)}</span></div>
+        <hr class="sq-sep">
+        <div class="sq-totalrow"><small>Licence (mensuel)</small><span class="sq-money" style="font-size:16px">${fmtEUR(t.mrrNet)}</span></div>
       </div>
     </div>
     ${promotedLicensesHtml()}
