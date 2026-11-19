@@ -1198,10 +1198,11 @@ input:focus,select:focus{border-color:var(--accent)}
           </div>
           <div id="espFaceOnlyInfo" style="display:none" class="alt alt-b"><i class="ti ti-face-id"></i><span data-i18n="esp_key_face_only">Accès par reconnaissance faciale — approchez-vous du lecteur.</span></div>
           <div id="espQrValidity" style="font-size:11px;color:var(--mu);margin-top:6px">—</div>
-          <button class="btn btn-p" style="margin-top:14px;width:100%;justify-content:center;padding:22px;font-size:18px;font-weight:700;gap:10px" id="espQrOpenBtn" onclick="espOpenDoor()">
+          <button class="btn btn-p" style="margin-top:14px;width:100%;justify-content:center;padding:22px;font-size:18px;font-weight:700;gap:10px" id="espQrOpenBtn" onclick="espOpenDoorOrChoose()">
             <i class="ti ti-lock-open" style="font-size:24px"></i> <span id="espQrOpenBtnLabel" data-i18n="esp_key_simulate_open">Simuler l'ouverture</span>
           </button>
-          <div id="espQrOpenBtnMulti" style="display:none;margin-top:14px;font-size:12px;color:var(--mu)" data-i18n="esp_key_pick_access">Choisissez un accès précis ci-dessous.</div>
+          <div id="espQrOpenBtnMulti" style="display:none;margin-top:10px;font-size:12px;color:var(--mu)" data-i18n="esp_key_pick_access">Choisissez l'accès à déverrouiller.</div>
+          <div id="espQrChoicePanel" style="display:none;margin-top:6px"></div>
           <div id="espQrOpenResult" style="display:none;margin-top:10px" class="alt alt-g">
             <i class="ti ti-check-circle"></i><span id="espQrOpenResultLabel" data-i18n="esp_key_unlocked">Accès déverrouillé ✓</span>
           </div>
@@ -4514,16 +4515,20 @@ async function espRenderQr(){
   var validEl = document.getElementById('espQrValidity');
   var btnLabel = document.getElementById('espQrOpenBtnLabel');
 
-  // Avec plusieurs serrures associées à la réservation, le bouton principal
-  // ouvrirait tout d'un coup (booking.facilityCode en entier) sans que le
-  // client sache ce qu'il vient d'ouvrir — masqué au profit de la liste
-  // "Accès" ci-dessous, où chaque entrée cible une seule serrure identifiée.
+  // Avec plusieurs serrures associées à la réservation, le bouton ouvrirait
+  // tout d'un coup (booking.facilityCode en entier) sans que le client sache
+  // ce qu'il vient d'ouvrir — 19/11/2026, "sur le bouton ouvrir... si
+  // plusieurs accès associé prévoir un choix de l'accès" : le bouton reste
+  // visible mais propose un choix (cf. espOpenDoorOrChoose) au lieu de
+  // n'ouvrir qu'un renvoi silencieux vers la liste "Accès" plus bas.
   var openBtn = document.getElementById('espQrOpenBtn');
   var openBtnMulti = document.getElementById('espQrOpenBtnMulti');
+  var choicePanel = document.getElementById('espQrChoicePanel');
   var pts = espGetAccessPoints();
   var isMulti = pts.length > 1;
-  if(openBtn) openBtn.style.display = isMulti ? 'none' : 'inline-flex';
+  if(openBtn) openBtn.style.display = 'inline-flex';
   if(openBtnMulti) openBtnMulti.style.display = isMulti ? 'block' : 'none';
+  if(choicePanel && !isMulti) choicePanel.style.display = 'none';
   espApplyAccessMethodVisibility(pts[0] && pts[0].facilityCode);
 
   // Affichage immédiat de la démo pendant l'appel réseau, pour ne pas
@@ -4608,6 +4613,30 @@ async function espRenderWallet(){
 function espAddToWallet(){
   if(!ESP_WALLET_STATE || !ESP_WALLET_STATE.shortLink) return;
   window.open(ESP_WALLET_STATE.shortLink, '_blank');
+}
+
+// 19/11/2026, "sur le bouton ouvrir... si plusieurs accès associé prévoir
+// un choix de l'accès" — avec un seul accès, comportement inchangé
+// (espOpenDoor, ouverture directe). Avec plusieurs, affiche/masque un
+// panneau de choix listant chaque accès (même ap.label/ico que la liste
+// "Accès" plus bas) ; le choix retenu passe par espOpenAccess(idx), qui
+// cible cette seule serrure (jamais booking.facilityCode en entier).
+function espOpenDoorOrChoose(){
+  var pts = espGetAccessPoints();
+  if(pts.length <= 1){ espOpenDoor(); return; }
+  var panel = document.getElementById('espQrChoicePanel');
+  if(!panel) return;
+  if(panel.style.display !== 'none'){ panel.style.display = 'none'; return; }
+  panel.innerHTML = pts.map(function(ap, idx){
+    return '<button type="button" class="btn btn-s" style="width:100%;justify-content:flex-start;gap:10px;margin-top:6px" onclick="espChooseAccess('+idx+')">'
+      +'<i class="ti '+(ap.ico||'ti-key')+'"></i> '+esc(ap.label)+'</button>';
+  }).join('');
+  panel.style.display = 'block';
+}
+function espChooseAccess(idx){
+  var panel = document.getElementById('espQrChoicePanel');
+  if(panel) panel.style.display = 'none';
+  espOpenAccess(idx);
 }
 
 async function espOpenDoor(){
