@@ -303,6 +303,21 @@ export async function generateQuotePdf(data: QuotePdfData): Promise<Buffer> {
     c.text(`Devis signe par ${data.signerName || ""}${d ? " le " + d : ""}`, { size: 9.5, font: boldFont, color: rgb(0.1, 0.42, 0.28) });
   }
 
+  // ─── Conditions générales (18/11/2026, "insérer les conditions générales
+  // dans le devis pdf") — pages fixes copiées telles quelles depuis
+  // public/legal/cgv-sesame-technology.pdf plutôt que redessinées ici :
+  // un contrat juridique de plusieurs pages se recopie fidèlement, il ne
+  // se retype pas à la main avec les primitives de dessin de pdf-lib.
+  // Jamais bloquant pour le reste du devis si le fichier est absent/abîmé.
+  try {
+    const cgvPath = path.join(__dirname, "..", "..", "public", "legal", "cgv-sesame-technology.pdf");
+    const cgvDoc = await PDFDocument.load(fs.readFileSync(cgvPath));
+    const cgvPages = await doc.copyPages(cgvDoc, cgvDoc.getPageIndices());
+    cgvPages.forEach((p) => doc.addPage(p));
+  } catch {
+    // CGV non jointes — le devis reste généré sans elles plutôt que d'échouer.
+  }
+
   const bytes = await doc.save();
   return Buffer.from(bytes);
 }
