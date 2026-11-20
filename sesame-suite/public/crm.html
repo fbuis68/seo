@@ -12805,7 +12805,7 @@ let ACC_BANK_ACCOUNTS=[], ACC_BANK_TX=[], ACC_BANK_SELECTED=null, ACC_RECURRING_
 // "Salaire" (ou pas de labels Qonto du tout, ex. compte importé par CSV) :
 // l'onglet Banque semblait vide/cassé alors que les données étaient
 // intactes, juste filtrées par un défaut trop restrictif.
-let ACC_BANK_FILTER={type:'all', label:'', excludeKinds:new Set(), dateFrom:'', dateTo:''};
+let ACC_BANK_FILTER={type:'all', label:'', excludeKinds:new Set(), dateFrom:'', dateTo:'', supplierId:'', customerId:''};
 let ACC_VAT_SUMMARY=null;
 let ACC_QONTO_CONFIG=null, ACC_QONTO_TEST_ACCOUNTS=null;
 let ACC_GOCARDLESS_CONFIG=null;
@@ -14729,7 +14729,10 @@ async function loadAccBankTab(){
   // "TVA du mois" par défaut au premier chargement de l'onglet — ne réinitialise
   // pas une plage déjà choisie par l'utilisateur lors d'un simple rafraîchissement.
   if(!ACC_BANK_FILTER.dateFrom && !ACC_BANK_FILTER.dateTo) Object.assign(ACC_BANK_FILTER, accBankMonthBounds());
-  await Promise.all([loadAccBankTransactions(), loadAccVatSummary(), loadAccRecurringRules()]);
+  // 20/11/2026, "filtre par fournisseur ou client" sur l'onglet Banque —
+  // réutilise les listes Fournisseurs/Clients déjà chargées ailleurs
+  // (lazy, ACC_LOADED) pour peupler les deux listes déroulantes du filtre.
+  await Promise.all([loadAccBankTransactions(), loadAccVatSummary(), loadAccRecurringRules(), ensureAccSuppliersLoaded(), ensureAccCustomersLoaded()]);
   renderAccBank();
 }
 
@@ -14747,10 +14750,21 @@ function accBankDateRangeParams(){
   return qs;
 }
 
+// 20/11/2026, "filtre par fournisseur ou client" — un fournisseur ou un
+// client à la fois (un mouvement de banque est soit un encaissement client
+// soit un décaissement fournisseur, jamais les deux), filtré côté serveur
+// (cf. GET /acc/bank/transactions) plutôt qu'après coup : le lien tiers
+// n'est pas présent sur chaque ligne renvoyée au client.
+function accBankTiersParams(){
+  if(ACC_BANK_FILTER.supplierId) return '&supplierId='+encodeURIComponent(ACC_BANK_FILTER.supplierId);
+  if(ACC_BANK_FILTER.customerId) return '&customerId='+encodeURIComponent(ACC_BANK_FILTER.customerId);
+  return '';
+}
+
 async function loadAccBankTransactions(){
   if(!ACC_BANK_SELECTED){ ACC_BANK_TX=[]; return; }
   try{
-    const r = await apiFetch('/wa/acc/bank/transactions?scope=crm&bankAccountId='+ACC_BANK_SELECTED+'&take=200'+accBankDateRangeParams());
+    const r = await apiFetch('/wa/acc/bank/transactions?scope=crm&bankAccountId='+ACC_BANK_SELECTED+'&take=200'+accBankDateRangeParams()+accBankTiersParams());
     ACC_BANK_TX = r.ok ? await r.json() : [];
   }catch(e){ ACC_BANK_TX=[]; }
 }
@@ -14885,6 +14899,14 @@ function renderAccBank(){
       <select id="abf-label" onchange="accBankFilterChange()" ${allLabels.length?'':'disabled'} title="${allLabels.length?'':'Aucun label analytique Qonto sur ce compte — étiquetez des transactions dans Qonto puis resynchronisez'}">
         <option value="">${allLabels.length?'Tous labels':'Aucun label Qonto sur ce compte'}</option>
         ${allLabels.map(l=>`<option value="${esc(l)}" ${ACC_BANK_FILTER.label===l?'selected':''}>${esc(l)}</option>`).join('')}
+      </select>
+      <select id="abf-supplier" onchange="accBankTiersFilterChange('supplier')">
+        <option value="">Tous fournisseurs</option>
+        ${ACC_SUPPLIERS.map(s=>`<option value="${esc(s.id)}" ${ACC_BANK_FILTER.supplierId===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}
+      </select>
+      <select id="abf-customer" onchange="accBankTiersFilterChange('customer')">
+        <option value="">Tous clients</option>
+        ${ACC_CUSTOMERS.map(c=>`<option value="${esc(c.id)}" ${ACC_BANK_FILTER.customerId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}
       </select>
     </div>
     ${ACC_VAT_SUMMARY?`
@@ -15198,6 +15220,22 @@ function accBankDateFilterChange(){
   const toEl = document.getElementById('abf-date-to');
   ACC_BANK_FILTER.dateFrom = fromEl?fromEl.value:'';
   ACC_BANK_FILTER.dateTo = toEl?toEl.value:'';
+  Promise.all([loadAccBankTransactions(), loadAccVatSummary()]).then(renderAccBank);
+}
+
+// 20/11/2026, "filtre par fournisseur ou client" — mutuellement exclusifs
+// (choisir un fournisseur efface le client choisi, et inversement) puisque
+// recherché par GET /acc/bank/transactions avec un seul des deux à la fois.
+function accBankTiersFilterChange(which){
+  const supplierEl = document.getElementById('abf-supplier');
+  const customerEl = document.getElementById('abf-customer');
+  if(which==='supplier'){
+    ACC_BANK_FILTER.supplierId = supplierEl?supplierEl.value:'';
+    ACC_BANK_FILTER.customerId = '';
+  } else {
+    ACC_BANK_FILTER.customerId = customerEl?customerEl.value:'';
+    ACC_BANK_FILTER.supplierId = '';
+  }
   Promise.all([loadAccBankTransactions(), loadAccVatSummary()]).then(renderAccBank);
 }
 

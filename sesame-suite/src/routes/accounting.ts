@@ -1999,6 +1999,23 @@ accountingRouter.get(
         ...(req.query.to ? { lte: endOfDay(req.query.to as string) } : {}),
       };
     }
+    // 20/11/2026, "filtre par fournisseur ou client" sur l'onglet Banque —
+    // une transaction rapprochée via facture (AccBankMatch -> AccInvoice)
+    // OU affectée directement sans facture (cf. createDirectEntryFromBank-
+    // Transaction, qui pose AccEntryLine.auxiliaryRef = supplierId côté
+    // fournisseur ; un encaissement client sans facture passe lui par un
+    // virement GoCardless groupé, AccGoCardlessPayout.payments[].customerId).
+    if (req.query.supplierId) {
+      where.OR = [
+        { matches: { some: { invoice: { supplierId: req.query.supplierId as string } } } },
+        { entry: { lines: { some: { auxiliaryRef: req.query.supplierId as string } } } },
+      ];
+    } else if (req.query.customerId) {
+      where.OR = [
+        { matches: { some: { invoice: { customerId: req.query.customerId as string } } } },
+        { gocardlessPayout: { payments: { some: { customerId: req.query.customerId as string } } } },
+      ];
+    }
     const take = Math.min(Number(req.query.take) || 100, 500);
     const rows = await prisma.accBankTransaction.findMany({
       where,
