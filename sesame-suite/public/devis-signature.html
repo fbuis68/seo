@@ -45,11 +45,11 @@
   .sq-money{font-size:27px;line-height:1.2;font-weight:750;letter-spacing:-.02px;font-variant-numeric:tabular-nums}
   .sq-emphasis .sq-money{color:var(--pink)}
   .sq-totalbox .sq-sep{border:0;border-top:1px solid #ffffff30;margin:10px 0}
-  .wrap{max-width:960px;margin:0 auto;padding:16px 20px 40px;transition:max-width .15s}
-  /* 18/11/2026, "presentation plus large sur l'ecran mais qui s'adapte à un
-     telephone" — élargie seulement en vue PDF (desktop), capée par le
+  /* 20/11/2026, "elargi la presentation pour un ecran de PC de 3 a 4 cm" —
+     +130px (~3,5cm) sur les deux largeurs, capées par le
      @media(max-width:720px) ci-dessous sur mobile comme le reste de la page. */
-  .wrap.wide{max-width:1180px}
+  .wrap{max-width:1090px;margin:0 auto;padding:16px 20px 40px;transition:max-width .15s}
+  .wrap.wide{max-width:1310px}
   /* 20/11/2026, "cartouche d'accueil identique avec la même disposition"
      (exemple fourni) — kicker/salutation/pills contact/validité, barre
      d'accent arrondie sur le bord droit façon onglet. */
@@ -121,6 +121,11 @@
   .notes strong{color:var(--a);text-transform:uppercase;font-size:10.5px;letter-spacing:.4px;display:block;margin-bottom:4px}
   label{font-size:12.5px;color:var(--mu);font-weight:600;display:block;margin-bottom:6px}
   input[type=text],input[type=email]{width:100%;font-family:inherit;font-size:14px;padding:10px 14px;border:1px solid var(--bdr);border-radius:10px;margin-bottom:12px;background:var(--bg)}
+  /* 20/11/2026, "cartouche signature sur une seule ligne avec les champs" —
+     Nom + Email côte à côte, empilés seulement si la place manque. */
+  .sig-fields-row{display:flex;gap:14px}
+  .sig-fields-row>div{flex:1;min-width:0}
+  @media(max-width:560px){.sig-fields-row{flex-direction:column;gap:0}}
   .sig-box{border:1px solid var(--bdr);border-radius:12px;background:#fcfcfa;touch-action:none}
   canvas{display:block;width:100%;height:130px;cursor:crosshair}
   .sig-actions{display:flex;justify-content:space-between;align-items:center;margin:8px 0 14px}
@@ -694,10 +699,10 @@ function signatureSectionHtml(){
   return `<div class="card">
     <h1 style="font-size:15px">Signature</h1>
     <div class="disclaimer">Signature électronique simple : nous enregistrons votre nom saisi, votre tracé, ainsi que la date et l'heure, à titre de preuve de votre consentement. Il ne s'agit pas d'une signature électronique qualifiée (eIDAS) certifiée par un tiers de confiance.</div>
-    <label>Nom complet du signataire</label>
-    <input type="text" id="signerName" placeholder="Prénom Nom">
-    <label>Email (optionnel)</label>
-    <input type="email" id="signerEmail" placeholder="vous@exemple.com">
+    <div class="sig-fields-row">
+      <div><label>Nom complet du signataire</label><input type="text" id="signerName" placeholder="Prénom Nom"></div>
+      <div><label>Email (optionnel)</label><input type="email" id="signerEmail" placeholder="vous@exemple.com"></div>
+    </div>
     <label>Votre signature (dessinez ci-dessous)</label>
     <div class="sig-box"><canvas id="sigCanvas"></canvas></div>
     <div class="sig-actions"><span></span><button type="button" class="btn-ghost" onclick="clearSignature()">Effacer</button></div>
@@ -896,7 +901,7 @@ function render(){
   const devisPanel = `<div class="tab-panel active" data-panel="devis">
     ${viewToggleHtml()}
     <div class="card">${DEVIS_VIEW==='pdf' ? pdfViewHtml() : quoteSummaryHtml()}</div>
-    ${QUOTE.alreadySigned?'':transmitSectionHtml()}
+    ${signatureSectionHtml()}
   </div>`;
   const roiPanel = showRoi ? `<div class="tab-panel" data-panel="roi"><div class="card"><h1 style="font-size:15px">Rentabilité</h1>${roiTabHtml()}</div></div>` : '';
   const documentsPanel = `<div class="tab-panel" data-panel="documents"><div class="card"><h1 style="font-size:15px">Documents</h1>${documentsTabHtml()}</div></div>`;
@@ -907,10 +912,10 @@ function render(){
   const bookingPanel = `<div class="tab-panel" data-panel="booking"><div class="card"><h1 style="font-size:15px">Prendre rendez-vous</h1>${bookingTabHtml()}</div></div>`;
 
   document.getElementById('wrap').classList.toggle('wide', DEVIS_VIEW==='pdf');
-  // 20/11/2026, "Remonte le cartouche signature en dessous du welcome" —
-  // signature toujours visible juste sous le cartouche d'accueil, plus
-  // tout en bas de l'onglet Devis.
-  document.getElementById('app').innerHTML = welcomeCartoucheHtml() + signatureSectionHtml() + tabNav + devisPanel + roiPanel + documentsPanel + meetingsPanel + questionnairesPanel + bookingPanel;
+  // 20/11/2026, "Met le pavé transferer ce devis en dessous du welcome" —
+  // transfert toujours visible juste sous le cartouche d'accueil ; la
+  // signature, elle, reste dans l'onglet Devis, sous le pavé financier.
+  document.getElementById('app').innerHTML = welcomeCartoucheHtml() + (QUOTE.alreadySigned?'':transmitSectionHtml()) + tabNav + devisPanel + roiPanel + documentsPanel + meetingsPanel + questionnairesPanel + bookingPanel;
   if(!QUOTE.alreadySigned) setupCanvas();
   enhanceVimeoThumbs();
   if(showRoi){
