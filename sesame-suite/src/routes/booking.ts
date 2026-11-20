@@ -11,6 +11,7 @@ import { encodeNfc, listNfcDevices, fetchAccessQr, openDoor, pushBookingUpdate, 
 import { sendEmailRaw } from "../lib/email";
 import { listRoomsForStaff, validateManualBookingDraft, createBookingDirectUnpaid, BookingDraft, OCCUPANT_AGE_CATEGORIES } from "../lib/bookingEngine";
 import { logAccessActivity } from "../lib/accessActivityLog";
+import { logBookingActivity } from "../lib/bookingActivityLog";
 
 export const bookingRouter = Router();
 
@@ -186,6 +187,19 @@ bookingRouter.post(
     const endDateChanged = b.endDate !== undefined ? endDate.toISOString().slice(0, 10) : undefined;
 
     let updated = await prisma.booking.update({ where: { id: booking.id }, data });
+
+    // 20/11/2026, "traçabilité des activités ... de changements de
+    // chambres" — comparé à l'ancien facilityCode (pas juste "une valeur a
+    // été envoyée") : le formulaire d'édition renvoie toujours
+    // facilityCode, même sans changement réel.
+    if (roomCodeChanged !== undefined && roomCodeChanged !== (booking.facilityCode || null)) {
+      await logBookingActivity(req, {
+        entityId: entity.id,
+        bookingId: booking.id,
+        type: "room_change",
+        detail: `${booking.facilityName || booking.facilityCode || "Aucun accès"} → ${updated.facilityName || updated.facilityCode || "Aucun accès"}`,
+      });
+    }
 
     // Répercussion best-effort vers la source externe — jamais bloquante.
     let pushWarning: string | undefined;
@@ -402,7 +416,7 @@ bookingRouter.post(
     const config = await prisma.bookingSourceConfig.findUnique({ where: { entityId: entity.id } });
     if (!config) throw new HttpError(400, "Connecteur non configuré pour cet établissement");
 
-    let pass: { id: string; externalId: string } | null = null;
+    let pass: { id: string; externalId: string; personFirstname: string; personLastname: string } | null = null;
     if (passId) {
       const row = await prisma.pass.findUnique({ where: { id: passId } });
       if (!row || row.bookingId !== booking.id) throw new HttpError(404, "Pass introuvable pour cette réservation");
@@ -420,6 +434,14 @@ bookingRouter.post(
       const updatedPass = pass
         ? await prisma.pass.update({ where: { id: pass.id }, data: { nfcCount: { increment: 1 }, nfcEncodedAt: new Date() } })
         : null;
+      // 20/11/2026, "traçabilité des activités ... d'encodage".
+      const guestLabel = pass ? `${pass.personFirstname} ${pass.personLastname}`.trim() : "";
+      await logBookingActivity(req, {
+        entityId: entity.id,
+        bookingId: booking.id,
+        type: "nfc_encode",
+        detail: `Carte NFC encodée${guestLabel ? ` pour ${guestLabel}` : ""} (lecteur ${deviceId})`,
+      });
       res.json({ ...normaliseBooking(updatedBooking), pass: updatedPass ? shapePass(updatedPass) : undefined });
     } catch (e) {
       if (e instanceof BookingSourceError) throw new HttpError(400, e.message);
@@ -459,6 +481,72 @@ function shapePass(p: {
     nfcEncodedAt: p.nfcEncodedAt ? p.nfcEncodedAt.toISOString() : null,
   };
 }
+
+/**
+ * GET /wa/booking/activityLog?code=... — historique complet d'une
+ * réservation (20/11/2026, "historique des emails, SMS envoyé avec la
+ * regle correspondante. Egalement la tracabilité des activités
+ * d'ouvertures, de changements de chambres d'encodage") — trois sources
+ * distinctes, jamais fusionnées en une seule table : AccessActivityLog
+ * (ouvertures de porte réelles, cf. lib/accessActivityLog.ts),
+ * AutomationRuleLog (chaque règle email/SMS/WhatsApp déjà déclenchée pour
+ * cette réservation, avec son nom et son canal), BookingActivityLog
+ * (changements de chambre, encodages NFC, cf. lib/bookingActivityLog.ts).
+ */
+bookingRouter.get(
+  "/booking/activityLog",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const entity = await resolveEntity(req);
+    const code = (req.query.code as string) || "";
+    if (!code) throw new HttpError(400, "code requis");
+    const booking = await prisma.booking.findUnique({ where: { entityId_code: { entityId: entity.id, code } } });
+    if (!booking) throw new HttpError(404, "Réservation introuvable");
+
+    const [accessLogs, messageLogs, activityLogs] = await Promise.all([
+      prisma.accessActivityLog.findMany({
+        where: { entityId: entity.id, bookingCode: code },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      }),
+      prisma.automationRuleLog.findMany({
+        where: { targetType: "booking", targetId: booking.id },
+        include: { rule: { select: { name: true, channel: true } } },
+        orderBy: { sentAt: "desc" },
+        take: 100,
+      }),
+      prisma.bookingActivityLog.findMany({
+        where: { entityId: entity.id, bookingId: booking.id },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      }),
+    ]);
+
+    res.json({
+      accessLogs: accessLogs.map((l) => ({
+        roomCode: l.roomCode,
+        actorType: l.actorType,
+        actorLabel: l.actorLabel,
+        success: l.success,
+        simulated: l.simulated,
+        errorMessage: l.errorMessage,
+        createdAt: l.createdAt,
+      })),
+      messageLogs: messageLogs.map((l) => ({
+        ruleName: l.rule.name,
+        channel: l.rule.channel,
+        sentAt: l.sentAt,
+        count: l.count,
+      })),
+      activityLogs: activityLogs.map((l) => ({
+        type: l.type,
+        detail: l.detail,
+        actorLabel: l.actorLabel,
+        createdAt: l.createdAt,
+      })),
+    });
+  })
+);
 
 /**
  * GET /wa/booking/passes?code= — liste les Pass (invitations) d'une

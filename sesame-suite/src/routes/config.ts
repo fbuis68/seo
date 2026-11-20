@@ -94,7 +94,13 @@ configRouter.get(
 
     res.json({
       entityId: entity.code,
-      hotelName: cfg.hotelName,
+      // 20/11/2026, "afficher le nom de l'entité en haut pour que l'on
+      // sache où on se trouve" — repli sur entity.name (même convention que
+      // routes/login.ts, routes/entity.ts) : cfg.hotelName est une chaîne
+      // vide tant que personne n'a rempli la charte graphique, ce qui
+      // affichait un générique "Sesame" à la place du nom réel partout où
+      // ce endpoint alimente l'en-tête (reservations.html, menage.html…).
+      hotelName: cfg.hotelName || entity.name,
       hotelSlogan: cfg.hotelSlogan || "",
       hotelAddr: cfg.hotelAddr || "",
       hotelEmail: cfg.hotelEmail || "",

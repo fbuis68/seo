@@ -335,6 +335,17 @@ main{flex:1;padding:12px 18px 60px}
 .linkfield{display:flex;gap:8px;align-items:center;margin-top:8px}
 .linkfield input{flex:1;font-family:monospace;font-size:12px;padding:9px 10px;border:1.5px solid var(--bdr);border-radius:var(--rs);background:var(--bg)}
 
+/* Historique de réservation (20/11/2026) — emails/SMS, ouvertures, chambre/encodage. */
+.rs-hist-group{margin-bottom:14px}
+.rs-hist-title{font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+.rs-hist-row{display:flex;align-items:flex-start;gap:9px;padding:9px 0;border-bottom:1px solid var(--bdr);font-size:12.5px}
+.rs-hist-row:last-child{border-bottom:none}
+.rs-hist-row i{margin-top:1px;flex-shrink:0;color:var(--mu)}
+.rs-hist-main{font-weight:600;flex:1}
+.rs-hist-sub{color:var(--mu);font-size:11px;white-space:nowrap}
+.rs-hist-row{flex-wrap:wrap}
+.rs-hist-empty{font-size:12.5px;color:var(--mu);padding:6px 0}
+
 @media (min-width:820px){
   main{padding-left:32px;padding-right:32px}
   .rescard{max-width:760px}
@@ -835,6 +846,13 @@ async function rsOpenDetail(code){
     html += '<div class="linkfield"><input type="text" id="rs-wallet-link" value="'+esc(b.walletShortLink)+'" readonly>'
       + '<a class="btn btn-ghost btn-sm" href="'+esc(b.walletShortLink)+'" target="_blank" rel="noopener"><i class="ti ti-external-link"></i></a></div>';
   }
+  // 20/11/2026, "historique des emails, SMS envoyé avec la regle
+  // correspondante. Egalement la tracabilité des activités d'ouvertures,
+  // de changements de chambres d'encodage" — chargé à part (GET
+  // /wa/booking/activityLog), jamais inclus dans la liste des réservations
+  // elle-même (coûterait une requête en plus par ligne de liste).
+  html += '<div class="sechead" style="margin-top:18px">Historique</div>'
+    + '<div id="rs-detail-history"><div class="spin" style="border-color:rgba(0,0,0,.15);border-top-color:var(--a,#8B1A2E)"></div></div>';
 
   document.getElementById('sheet').innerHTML = html;
   document.getElementById('sheetBg').classList.add('show');
@@ -843,6 +861,52 @@ async function rsOpenDetail(code){
   // avant plutôt que lancé en parallèle.
   await rsLoadPasses(code);
   rsLoadKey(code, b.facilityCode);
+  rsLoadHistory(code);
+}
+
+/** Historique d'une réservation (20/11/2026) — trois sources distinctes,
+ * affichées en sections séparées plutôt que fusionnées en une seule
+ * chronologie (natures trop différentes pour un tri utile par date seule) :
+ * emails/SMS envoyés par règle d'automatisation, ouvertures de porte
+ * réelles, changements de chambre et encodages NFC. */
+async function rsLoadHistory(code){
+  var el = document.getElementById('rs-detail-history');
+  if(!el) return;
+  try{
+    var r = await rsApiFetch('/wa/booking/activityLog?code='+encodeURIComponent(code));
+    var data = await r.json();
+    if(!r.ok){ el.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>'+esc(data.error||'Erreur de chargement')+'</span></div>'; return; }
+
+    var channelIcon = {email:'ti-mail', sms:'ti-message', whatsapp:'ti-brand-whatsapp'};
+    var messagesHtml = !data.messageLogs.length ? '<div class="rs-hist-empty">Aucun email/SMS envoyé.</div>'
+      : data.messageLogs.map(function(m){
+          return '<div class="rs-hist-row"><i class="ti '+(channelIcon[m.channel]||'ti-send')+'"></i>'
+            + '<span class="rs-hist-main">'+esc(m.ruleName)+'</span>'
+            + '<span class="rs-hist-sub">'+(m.count>1?m.count+'× — ':'')+'dernier le '+new Date(m.sentAt).toLocaleString('fr-FR')+'</span></div>';
+        }).join('');
+
+    var accessHtml = !data.accessLogs.length ? '<div class="rs-hist-empty">Aucune ouverture.</div>'
+      : data.accessLogs.map(function(a){
+          var who = a.actorType==='staff' ? (a.actorLabel||'Personnel') : 'Client';
+          return '<div class="rs-hist-row"><i class="ti ti-door" style="color:'+(a.success?'#1A6B47':'#B83030')+'"></i>'
+            + '<span class="rs-hist-main">'+esc(a.roomCode||'—')+' — '+(a.success?'Ouvert':'Échec')+(a.simulated?' (simulé)':'')+'</span>'
+            + '<span class="rs-hist-sub">'+esc(who)+' · '+new Date(a.createdAt).toLocaleString('fr-FR')+(a.errorMessage?' · '+esc(a.errorMessage):'')+'</span></div>';
+        }).join('');
+
+    var activityIcon = {room_change:'ti-arrows-exchange', nfc_encode:'ti-nfc'};
+    var activityHtml = !data.activityLogs.length ? '<div class="rs-hist-empty">Aucun changement de chambre ni encodage.</div>'
+      : data.activityLogs.map(function(a){
+          return '<div class="rs-hist-row"><i class="ti '+(activityIcon[a.type]||'ti-history')+'"></i>'
+            + '<span class="rs-hist-main">'+esc(a.detail)+'</span>'
+            + '<span class="rs-hist-sub">'+esc(a.actorLabel||'—')+' · '+new Date(a.createdAt).toLocaleString('fr-FR')+'</span></div>';
+        }).join('');
+
+    el.innerHTML = '<div class="rs-hist-group"><div class="rs-hist-title">Emails / SMS</div>'+messagesHtml+'</div>'
+      + '<div class="rs-hist-group"><div class="rs-hist-title">Ouvertures</div>'+accessHtml+'</div>'
+      + '<div class="rs-hist-group"><div class="rs-hist-title">Chambre / encodage</div>'+activityHtml+'</div>';
+  }catch(e){
+    el.innerHTML = '<div class="alt alt-w"><i class="ti ti-alert-triangle"></i><span>Erreur de connexion au serveur</span></div>';
+  }
 }
 function rsCloseSheet(){ document.getElementById('sheetBg').classList.remove('show'); }
 

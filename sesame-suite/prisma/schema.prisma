@@ -57,6 +57,7 @@ model Entity {
   questionnaires        Questionnaire[]
   questions             Question[]
   passes                Pass[]
+  bookingActivityLogs   BookingActivityLog[]
   bookingEngineConfig   BookingEngineConfig?
   nayaxConfig           NayaxConfig?
   nayaxAccessSessions   NayaxAccessSession[]
@@ -600,6 +601,7 @@ model Booking {
   passes              Pass[]
   guestSharingProfile GuestSharingProfile?
   autologinCodes      AutologinCode[]
+  activityLogs        BookingActivityLog[]
 
   @@unique([entityId, code])
   @@index([personEmail])
@@ -695,6 +697,34 @@ model AccessActivityLog {
   createdAt DateTime @default(now())
 
   @@index([entityId, createdAt])
+}
+
+// Historique d'une réservation — changements de chambre et encodages
+// NFC/code (20/11/2026, demande client "tracabilité des activités ...de
+// changements de chambres d'encodage") — distinct d'AccessActivityLog
+// ci-dessus (ouvertures de porte réelles) : ici, les ACTIONS DE GESTION
+// faites sur la réservation elle-même. `detail` est un texte déjà prêt à
+// afficher (pas de recalcul côté front) — plus simple qu'un couple
+// oldValue/newValue pour les deux types d'événements actuels, assez
+// hétérogènes (changement de chambre vs encodage).
+model BookingActivityLog {
+  id       String @id @default(cuid())
+  entityId String
+  entity   Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  type String // room_change | nfc_encode
+
+  detail String
+
+  // Email de l'agent admin ayant fait l'action (cf. AccessActivityLog.actorLabel, même convention) — toujours une action "staff" ici, jamais côté client.
+  actorLabel String?
+
+  createdAt DateTime @default(now())
+
+  @@index([entityId, bookingId, createdAt])
 }
 
 // Invité(e) d'une réservation, avec son propre badge/carte d'accès — un
