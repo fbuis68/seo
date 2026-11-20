@@ -11,6 +11,7 @@ import { getRecordingStream } from "../lib/graphMeetings";
 import { getOrCreateQuestionnaireSend } from "../lib/questionnaire";
 import { recordScoreEvent, ScoreEventType } from "../lib/crmScoring";
 import { generateQuotePdf } from "../lib/quotePdf";
+import { buildLicenseContractPdf } from "../lib/licenseContractPdf";
 
 /**
  * Devis — écran CRM à part entière (refonte du 22/10/2026, reprend
@@ -215,6 +216,13 @@ async function nextQuoteNumber(): Promise<string> {
   const year = new Date().getFullYear();
   const n = await nextSequenceValue(`quote-${year}`);
   return `DEV-${year}-${String(n).padStart(4, "0")}`;
+}
+
+/** Numéro de contrat de licence (ex : LIC-2026-0001) — cf. nextQuoteNumber ci-dessus, même principe, compteur séparé. */
+async function nextLicenseContractNumber(): Promise<string> {
+  const year = new Date().getFullYear();
+  const n = await nextSequenceValue(`license-contract-${year}`);
+  return `LIC-${year}-${String(n).padStart(4, "0")}`;
 }
 
 const QUOTE_INCLUDE = { deal: { select: { id: true, title: true } }, prospect: { select: { id: true, nom: true, email: true } } } as const;
@@ -867,7 +875,12 @@ crmQuoteRouter.get(
     if (!token) throw new HttpError(400, "Lien invalide");
     const quote = await prisma.crmQuote.findUnique({
       where: { signToken: token },
-      include: { prospect: { select: { nom: true, referent: true, secteur: true, logo: true, brandColor: true, commercial: { select: { name: true, email: true, phone: true, photoUrl: true, bookingUrl: true } } } }, signature: true },
+      include: {
+        prospect: {
+          select: { nom: true, referent: true, secteur: true, logo: true, brandColor: true, tel: true, commercial: { select: { name: true, email: true, phone: true, photoUrl: true, bookingUrl: true } } },
+        },
+        signature: true,
+      },
     });
     if (!quote) throw new HttpError(404, "Lien de signature invalide ou expiré");
     const storedLines = (quote.lines as unknown as QuoteLine[]) || [];
@@ -996,6 +1009,10 @@ crmQuoteRouter.get(
       // nom de la fiche (raison sociale) côté front.
       prospectReferent: quote.prospect.referent || null,
       prospectSecteur: quote.prospect.secteur || null,
+      // Téléphone du client (20/11/2026, "signature simultanée du contrat de
+      // licence") — pré-remplit le numéro de confirmation OTP de la page de
+      // signature du contrat, éditable avant envoi.
+      prospectPhone: quote.prospect.tel || "",
       // Logo + couleur de marque du client (02/11/2026, "reprendre la
       // charte graphique du site client" sur l'espace devis) — récupérés
       // au préalable depuis la fiche CRM (cf. routes/crmProspect.ts
@@ -1594,17 +1611,21 @@ crmQuoteRouter.post(
     if (!b.signerName || !b.signerName.trim()) throw new HttpError(400, "Nom du signataire requis");
     if (!b.signatureDataUrl) throw new HttpError(400, "Signature requise");
 
-    const quote = await prisma.crmQuote.findUnique({ where: { signToken: b.token }, include: { signature: true } });
+    const quote = await prisma.crmQuote.findUnique({
+      where: { signToken: b.token },
+      include: { signature: true, prospect: { select: { id: true, nom: true, referent: true, email: true, commercial: { select: { name: true, email: true } } } } },
+    });
     if (!quote) throw new HttpError(404, "Lien de signature invalide ou expiré");
     if (quote.signature) throw new HttpError(400, "Ce devis a déjà été signé");
 
     const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || undefined;
+    const signerName = b.signerName.trim();
 
     await prisma.$transaction([
       prisma.crmQuoteSignature.create({
         data: {
           quoteId: quote.id,
-          signerName: b.signerName.trim(),
+          signerName,
           signerEmail: b.signerEmail?.trim() || undefined,
           signatureDataUrl: b.signatureDataUrl,
           ip,
@@ -1613,8 +1634,146 @@ crmQuoteRouter.post(
       }),
       prisma.crmQuote.update({ where: { id: quote.id }, data: { status: "accepté" } }),
       ...(quote.dealId ? [prisma.crmDeal.update({ where: { id: quote.dealId }, data: { stage: "Gagné" } })] : []),
+      prisma.crmActivity.create({ data: { prospectId: quote.prospectId, type: "Note interne", text: `Devis ${quote.number} signé électroniquement par ${signerName}.` } }),
     ]);
 
+    // Règle de gestion (20/11/2026, demande client "etre alerté de la
+    // signature et de remercier le client pour sa signature et sa
+    // confiance") — deux emails distincts, chacun best-effort : un échec
+    // d'envoi ne doit jamais remettre en cause la signature déjà actée
+    // ci-dessus (même logique que la copie du document signé dans
+    // crmSignature.ts). Modèles à créer dans Messages > Modèles si absents
+    // (clés "devis-signe-alerte-commercial" et "devis-signe-remerciement"),
+    // comme tout autre modèle du CRM.
+    const commercialEmail = quote.prospect.commercial?.email;
+    if (commercialEmail) {
+      try {
+        await sendMessage({
+          entityId: null,
+          channel: "email",
+          templateKey: "devis-signe-alerte-commercial",
+          to: commercialEmail,
+          variables: {
+            numeroDevis: quote.number,
+            nomClient: quote.prospect.nom,
+            signataire: signerName,
+            dateSignature: new Date().toLocaleString("fr-FR"),
+          },
+        });
+      } catch (e) {
+        console.error(`[crmQuote.sign] échec alerte commercial pour devis ${quote.id}:`, e);
+      }
+    }
+    const clientEmail = b.signerEmail?.trim() || quote.prospect.email;
+    if (clientEmail) {
+      try {
+        await sendMessage({
+          entityId: null,
+          channel: "email",
+          templateKey: "devis-signe-remerciement",
+          to: clientEmail,
+          trackOpenProspectId: quote.prospectId || undefined,
+          variables: {
+            numeroDevis: quote.number,
+            nomClient: quote.prospect.referent || quote.prospect.nom,
+            signataire: signerName,
+            commercialNom: quote.prospect.commercial?.name || "L'équipe Sesame Technology",
+          },
+        });
+      } catch (e) {
+        console.error(`[crmQuote.sign] échec remerciement client pour devis ${quote.id}:`, e);
+      }
+    }
+
     res.json({ ok: true });
+  })
+);
+
+interface RequestLicenseSignatureBody {
+  token: string;
+  signerFirstname: string;
+  signerLastname: string;
+  signerEmail?: string;
+  signerPhone: string;
+}
+
+/**
+ * POST /wa/crmQuote/requestLicenseSignature — (20/11/2026, demande client
+ * "signature simultanée sur option du contrat de licence") déclenchée
+ * depuis l'espace client juste après la signature du devis, SI le client a
+ * coché l'option : génère le contrat de licence avec l'en-tête pré-rempli
+ * (identité client + montants de l'abonnement, cf. lib/licenseContractPdf)
+ * et crée une demande de signature électronique générique (même mécanisme
+ * que le CRM, cf. crmSignature.ts — SMS OTP puis, si coché là-bas,
+ * mandat de prélèvement SEPA GoCardless). Le client est ensuite redirigé
+ * vers /signature.html pour terminer : ni "nombre d'utilisateurs" ni
+ * "Valeur SYNTEC de réf." (modèle historique) ne sont déductibles des
+ * données du devis actuel, laissés vides plutôt qu'inventés.
+ */
+crmQuoteRouter.post(
+  "/crmQuote/requestLicenseSignature",
+  asyncHandler(async (req, res) => {
+    const b = req.body as RequestLicenseSignatureBody;
+    if (!b.token) throw new HttpError(400, "Lien invalide");
+    const firstname = (b.signerFirstname || "").trim();
+    const lastname = (b.signerLastname || "").trim();
+    const phone = (b.signerPhone || "").trim();
+    if (!firstname || !lastname) throw new HttpError(400, "Prénom et nom du signataire requis");
+    if (!phone) throw new HttpError(400, "Téléphone requis pour la confirmation du contrat par SMS");
+
+    const quote = await prisma.crmQuote.findUnique({ where: { signToken: b.token } });
+    if (!quote) throw new HttpError(404, "Lien de signature invalide ou expiré");
+    if (!quote.prospectId) throw new HttpError(400, "Devis non rattaché à une fiche client");
+    const prospect = await prisma.crmProspect.findUnique({ where: { id: quote.prospectId }, include: { commercial: { select: { name: true } } } });
+    if (!prospect) throw new HttpError(404, "Fiche client introuvable");
+
+    const storedLines = (quote.lines as unknown as QuoteLine[]) || [];
+    const config = (quote.config as QuoteConfig) || {};
+    const hardwareLines = storedLines.filter((l) => l.category === "materiel" && l.group !== "accessory");
+    const lines = expandQuoteLines(storedLines, hardwareLines, config);
+    const totals = quoteTotals(lines, quote.discountPct, quote.vatPct, quote.depositPct);
+
+    const vilAddr = prospect.ville || "";
+    const cpMatch = vilAddr.match(/^(\d{5})\s+(.*)$/);
+    const contractNumber = await nextLicenseContractNumber();
+    const fileContentBase64 = await buildLicenseContractPdf({
+      contractNumber,
+      companyName: prospect.denominationSociale || prospect.nom,
+      siret: prospect.siret || undefined,
+      contactName: prospect.referent || undefined,
+      address: prospect.adresse || undefined,
+      postalCode: cpMatch ? cpMatch[1] : undefined,
+      city: cpMatch ? cpMatch[2] : vilAddr || undefined,
+      phone: prospect.tel || undefined,
+      email: prospect.email || undefined,
+      licenceMensuelleHT: totals.mrrNet,
+      totalMensuelTTC: totals.mrrNet * (1 + (quote.vatPct || 0) / 100),
+      commercialName: prospect.commercial?.name || undefined,
+    });
+
+    const signToken = crypto.randomBytes(24).toString("hex");
+    await prisma.crmSignatureRequest.create({
+      data: {
+        prospectId: prospect.id,
+        documentType: "contract",
+        title: `Contrat de licence Sesame ${contractNumber} — ${prospect.nom}`,
+        fileName: `Contrat de licence ${contractNumber}.pdf`,
+        fileMimeType: "application/pdf",
+        fileContentBase64,
+        originalFileContentBase64: fileContentBase64,
+        signerFirstname: firstname,
+        signerLastname: lastname,
+        signerEmail: (b.signerEmail || prospect.email || "").trim().toLowerCase(),
+        signerPhone: phone,
+        signToken,
+        status: "sent",
+        sentAt: new Date(),
+        requiresBankMandate: true,
+        autoCreateMandate: true,
+        createdByAdminId: prospect.commercialId || undefined,
+      },
+    });
+
+    res.json({ redirectUrl: `/signature.html?token=${signToken}` });
   })
 );

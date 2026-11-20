@@ -706,12 +706,33 @@ function signatureSectionHtml(){
     <label>Votre signature (dessinez ci-dessous)</label>
     <div class="sig-box"><canvas id="sigCanvas"></canvas></div>
     <div class="sig-actions"><span></span><button type="button" class="btn-ghost" onclick="clearSignature()">Effacer</button></div>
+    ${licenseSignatureOptionHtml()}
     <div class="consent">
       <input type="checkbox" id="consent">
       <label for="consent" style="margin:0">Je reconnais avoir pris connaissance de ce devis et des <a href="https://sesame-technology.fr/cgv" target="_blank" rel="noopener" style="color:var(--a)">conditions générales de vente</a>, et je les accepte.</label>
     </div>
     <button class="btn" id="submitBtn" onclick="submitSignature()">Signer et accepter</button>
     <div class="err" id="err"></div>
+  </div>`;
+}
+
+// 20/11/2026, "signature simultanée sur option du contrat de licence" —
+// proposée uniquement si le devis comporte un montant mensuel (licence),
+// seul cas où un contrat de licence a un sens. Le contrat lui-même et le
+// mandat de prélèvement SEPA sont gérés par le circuit générique existant
+// (cf. POST /crmQuote/requestLicenseSignature puis /signature.html), pas
+// rejoué ici.
+function licenseSignatureOptionHtml(){
+  if(!(QUOTE.totals.mrrNet > 0)) return '';
+  return `<div class="consent" style="flex-direction:column;align-items:stretch;gap:8px;background:var(--bg);padding:12px 14px;border-radius:12px">
+    <div style="display:flex;gap:10px;align-items:flex-start">
+      <input type="checkbox" id="alsoSignLicense" onchange="document.getElementById('licensePhoneRow').style.display=this.checked?'block':'none'">
+      <label for="alsoSignLicense" style="margin:0">Signer également, dans la foulée, le <strong>contrat de licence Sesame</strong> (abonnement mensuel) et son mandat de prélèvement SEPA.</label>
+    </div>
+    <div id="licensePhoneRow" style="display:none;margin-left:28px">
+      <label>Téléphone (pour le code de confirmation SMS du contrat)</label>
+      <input type="text" id="licensePhone" placeholder="06 12 34 56 78" value="${esc(QUOTE.prospectPhone||'')}" style="margin-bottom:0">
+    </div>
   </div>`;
 }
 
@@ -982,6 +1003,24 @@ async function submitSignature(){
     const data = await r.json();
     if(!r.ok){ errEl.textContent = data.error || 'Erreur lors de la signature.'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Signer et accepter'; return; }
   }catch(e){ errEl.textContent = 'Erreur de connexion au serveur.'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Signer et accepter'; return; }
+
+  // 20/11/2026, "signature simultanée sur option du contrat de licence" —
+  // déclenchée juste après la signature du devis, uniquement si cochée ;
+  // un échec ici ne doit jamais annuler la signature du devis déjà actée.
+  const alsoSignLicenseEl = document.getElementById('alsoSignLicense');
+  if(alsoSignLicenseEl && alsoSignLicenseEl.checked){
+    const phone = (document.getElementById('licensePhone').value||'').trim();
+    const [firstname, ...rest] = signerName.split(/\s+/);
+    try{
+      const r2 = await fetch('/wa/crmQuote/requestLicenseSignature', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ token: TOKEN, signerFirstname: firstname, signerLastname: rest.join(' ')||firstname, signerEmail, signerPhone: phone })
+      });
+      const data2 = await r2.json();
+      if(r2.ok && data2.redirectUrl){ window.location.href = data2.redirectUrl; return; }
+    }catch(e){ /* le devis reste signé — simple absence de redirection vers le contrat */ }
+  }
+
   QUOTE.alreadySigned = true;
   QUOTE.signerName = signerName;
   QUOTE.signedAt = new Date().toISOString();
