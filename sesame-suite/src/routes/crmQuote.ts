@@ -867,7 +867,7 @@ crmQuoteRouter.get(
     if (!token) throw new HttpError(400, "Lien invalide");
     const quote = await prisma.crmQuote.findUnique({
       where: { signToken: token },
-      include: { prospect: { select: { nom: true, secteur: true, logo: true, brandColor: true, commercial: { select: { name: true, email: true, phone: true, photoUrl: true, bookingUrl: true } } } }, signature: true },
+      include: { prospect: { select: { nom: true, referent: true, secteur: true, logo: true, brandColor: true, commercial: { select: { name: true, email: true, phone: true, photoUrl: true, bookingUrl: true } } } }, signature: true },
     });
     if (!quote) throw new HttpError(404, "Lien de signature invalide ou expiré");
     const storedLines = (quote.lines as unknown as QuoteLine[]) || [];
@@ -990,6 +990,11 @@ crmQuoteRouter.get(
       totals: quoteTotals(lines, quote.discountPct, quote.vatPct, quote.depositPct),
       showRoiTab: config.showRoiTab ?? null,
       prospectNom: quote.prospect.nom,
+      // Contact principal du client (CrmProspect.referent) — 20/11/2026,
+      // "cartouche d'accueil identique" (exemple fourni, "Bonjour Monsieur
+      // Lods,") : prénom/nom de la personne à saluer, à défaut repli sur le
+      // nom de la fiche (raison sociale) côté front.
+      prospectReferent: quote.prospect.referent || null,
       prospectSecteur: quote.prospect.secteur || null,
       // Logo + couleur de marque du client (02/11/2026, "reprendre la
       // charte graphique du site client" sur l'espace devis) — récupérés
@@ -997,6 +1002,11 @@ crmQuoteRouter.get(
       // fetchLogo), jamais recalculés à la volée ici.
       prospectLogo: quote.prospect.logo || null,
       prospectBrandColor: quote.prospect.brandColor || null,
+      // Validité du devis (20/11/2026, cartouche d'accueil "Valable jusqu'au
+      // ...") — aucun champ dédié en base, convention CGV Sesame existante
+      // (30 jours, cf. public/legal/cgv-sesame-technology.pdf) appliquée à
+      // la date d'envoi, ou de création si jamais envoyé.
+      quoteValidUntil: new Date((quote.sentAt || quote.createdAt).getTime() + 30 * 86400000).toISOString(),
       // Prise de RDV filtrée sur le commercial en charge du dossier
       // (30/10/2026) — lien personnel s'il en a un de renseigné (cf.
       // AdminUser.bookingUrl), repli sur null = lien générique côté front.

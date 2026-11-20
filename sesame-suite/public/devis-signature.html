@@ -22,7 +22,8 @@
        en place pour tout le reste de la page. */
     --dark:#302333;--pink:#f4a5bb}
   *{box-sizing:border-box}
-  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--tx);font-size:14.5px;line-height:1.5}
+  /* 20/11/2026, "police plus grande" — 14.5px -> 16px sur toute la page. */
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--tx);font-size:16px;line-height:1.5}
   .band{background:#fff;padding:22px 20px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:center;gap:18px;flex-wrap:wrap}
   .band img{height:44px;display:block}
   .band-sep{color:var(--mu);font-size:18px}
@@ -49,22 +50,29 @@
      telephone" — élargie seulement en vue PDF (desktop), capée par le
      @media(max-width:720px) ci-dessous sur mobile comme le reste de la page. */
   .wrap.wide{max-width:1180px}
-  .contact-bar{display:flex;align-items:center;gap:14px;background:var(--card);border:1px solid var(--bdr);box-shadow:var(--shadow);border-radius:16px;padding:14px 20px;margin-top:14px}
-  .contact-bar img{width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0}
-  .contact-bar .ph{width:44px;height:44px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--mu);flex-shrink:0}
-  .contact-bar .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;color:var(--mu);font-weight:600}
-  .contact-bar .nm{font-weight:700;font-size:14px}
-  .contact-bar .dt{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:#55504c;margin-top:2px}
-  .contact-bar .dt a{color:inherit;text-decoration:none}
+  /* 20/11/2026, "cartouche d'accueil identique avec la même disposition"
+     (exemple fourni) — kicker/salutation/pills contact/validité, barre
+     d'accent arrondie sur le bord droit façon onglet. */
+  .welcome-card{position:relative;background:var(--card);border:1px solid var(--bdr);box-shadow:var(--shadow);border-radius:16px;padding:20px 26px 22px;margin-top:14px;overflow:hidden}
+  .welcome-card::after{content:'';position:absolute;top:10px;bottom:10px;right:0;width:6px;border-radius:6px 0 0 6px;background:var(--a)}
+  .welcome-kicker{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--a);margin-bottom:6px}
+  .welcome-greeting{font-size:28px;font-weight:800;letter-spacing:-.4px;margin:0 0 6px;color:var(--tx)}
+  .welcome-sub{color:var(--mu);font-size:14.5px;margin:0 0 16px}
+  .welcome-contact-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;background:var(--bg);border-radius:12px;padding:12px 16px;margin-bottom:14px}
+  .welcome-contact-row .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;color:var(--mu);font-weight:700}
+  .welcome-contact-row .nm{font-weight:700;font-size:15px;margin-top:1px}
+  .welcome-pills{display:flex;gap:8px;flex-wrap:wrap}
+  .welcome-pill{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--tx);background:var(--card);border:1px solid var(--bdr);border-radius:20px;padding:8px 14px;text-decoration:none;white-space:nowrap}
+  .welcome-validity{display:inline-flex;align-items:center;font-size:13px;font-weight:600;color:var(--a);background:var(--a-tint);border-radius:20px;padding:7px 14px}
   .view-toggle{display:inline-flex;gap:2px;background:var(--bg);border-radius:10px;padding:3px;margin-bottom:16px}
   .view-toggle button{font-family:inherit;font-size:12px;font-weight:600;padding:7px 14px;border:none;border-radius:8px;background:transparent;color:var(--mu);cursor:pointer}
   .view-toggle button.active{background:var(--card);color:var(--tx);box-shadow:var(--shadow)}
   .pdf-frame{width:100%;height:75vh;min-height:420px;border:1px solid var(--bdr);border-radius:12px;background:var(--bg)}
   .pdf-actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
   .pdf-actions .btn{width:auto;flex:1;min-width:180px;text-decoration:none;display:flex;align-items:center;justify-content:center}
-  @media(max-width:480px){.contact-bar{flex-wrap:wrap}.pdf-frame{height:60vh}}
+  @media(max-width:480px){.welcome-greeting{font-size:23px}.pdf-frame{height:60vh}}
   .card{background:var(--card);border:1px solid var(--bdr);box-shadow:var(--shadow);border-radius:16px;padding:24px;margin-top:14px}
-  h1{font-size:18px;margin:0 0 3px;font-weight:700;letter-spacing:-.2px}
+  h1{font-size:19px;margin:0 0 3px;font-weight:700;letter-spacing:-.2px}
   .sub{color:var(--mu);font-size:13px;margin:0 0 16px}
   /* 04/11/2026, "centre le devis à droite" — tableau + sous-totaux + totaux
      ramenés en bloc compact sur le côté droit de la carte plutôt que collés
@@ -268,20 +276,30 @@ function quoteBlocksHtml(){
 // Coordonnées du commercial en en-tête (18/11/2026, "rajouter les
 // coordonnées du commercial en entête avec telephone et email et photo") —
 // visible quel que soit l'onglet/la vue, juste au-dessus des onglets.
-function contactBarHtml(){
-  if(!QUOTE.commercialName) return '';
-  const photoHtml = QUOTE.commercialPhoto ? `<img src="${esc(QUOTE.commercialPhoto)}" alt="">` : `<div class="ph">👤</div>`;
-  const details = [
-    QUOTE.commercialPhone ? `<a href="tel:${esc(QUOTE.commercialPhone.replace(/\s+/g,''))}">📞 ${esc(QUOTE.commercialPhone)}</a>` : '',
-    QUOTE.commercialEmail ? `<a href="mailto:${esc(QUOTE.commercialEmail)}">✉️ ${esc(QUOTE.commercialEmail)}</a>` : '',
+// Cartouche d'accueil (20/11/2026, "cartouche d'accueil identique avec la
+// même disposition" — exemple fourni : kicker "DEVIS xxx", salutation
+// "Bonjour M. X,", sous-texte, pills contact, pastille de validité).
+// Remplace l'ancienne barre de contact simple, affichée dans tous les
+// onglets comme avant.
+function welcomeCartoucheHtml(){
+  const greetingName = QUOTE.prospectReferent || QUOTE.prospectNom;
+  const validLabel = QUOTE.quoteValidUntil ? new Date(QUOTE.quoteValidUntil).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}) : '';
+  const pills = [
+    QUOTE.commercialPhone ? `<a class="welcome-pill" href="tel:${esc(QUOTE.commercialPhone.replace(/\s+/g,''))}">📞 ${esc(QUOTE.commercialPhone)}</a>` : '',
+    QUOTE.commercialEmail ? `<a class="welcome-pill" href="mailto:${esc(QUOTE.commercialEmail)}">✉️ ${esc(QUOTE.commercialEmail)}</a>` : '',
   ].filter(Boolean).join('');
-  return `<div class="contact-bar">
-    ${photoHtml}
-    <div>
-      <div class="lbl">Votre contact chez Sesame Technology</div>
-      <div class="nm">${esc(QUOTE.commercialName)}</div>
-      <div class="dt">${details}</div>
-    </div>
+  return `<div class="welcome-card">
+    <div class="welcome-kicker">Devis ${esc(QUOTE.number)}</div>
+    <h1 class="welcome-greeting">Bonjour ${esc(greetingName)},</h1>
+    <p class="welcome-sub">Consultez le document, choisissez les éventuelles options puis signez votre bon pour accord.</p>
+    ${QUOTE.commercialName ? `<div class="welcome-contact-row">
+      <div>
+        <div class="lbl">Votre contact chez Sesame Technology</div>
+        <div class="nm">${esc(QUOTE.commercialName)}</div>
+      </div>
+      <div class="welcome-pills">${pills}</div>
+    </div>` : ''}
+    ${validLabel ? `<span class="welcome-validity">Valable jusqu'au ${esc(validLabel)}</span>` : ''}
   </div>`;
 }
 
@@ -621,9 +639,9 @@ function meetingsTabHtml(){
  * distraire de l'action principale (signer).
  */
 function transmitSectionHtml(){
-  return `<div class="card">
+  return `<div class="card" style="border-left:3px solid var(--a)">
     <div id="transmit-closed">
-      <a href="#" onclick="event.preventDefault();document.getElementById('transmit-closed').style.display='none';document.getElementById('transmit-open').style.display='block'" style="color:var(--a);font-size:13px;font-weight:600;text-decoration:none">↪ Ce n'est pas à vous de signer ? Transmettez ce devis</a>
+      <a href="#" onclick="event.preventDefault();document.getElementById('transmit-closed').style.display='none';document.getElementById('transmit-open').style.display='block'" style="color:var(--tx);font-size:14px;font-weight:500;text-decoration:none">Vous n'êtes pas habilité à signer ce devis ? <strong style="color:var(--a);text-decoration:underline">Transférer à une personne habilitée</strong></a>
     </div>
     <div id="transmit-open" style="display:none">
       <h1 style="font-size:15px">Transmettre ce devis</h1>
@@ -884,7 +902,7 @@ function render(){
   const bookingPanel = `<div class="tab-panel" data-panel="booking"><div class="card"><h1 style="font-size:15px">Prendre rendez-vous</h1>${bookingTabHtml()}</div></div>`;
 
   document.getElementById('wrap').classList.toggle('wide', DEVIS_VIEW==='pdf');
-  document.getElementById('app').innerHTML = contactBarHtml() + tabNav + devisPanel + roiPanel + documentsPanel + meetingsPanel + questionnairesPanel + bookingPanel;
+  document.getElementById('app').innerHTML = welcomeCartoucheHtml() + tabNav + devisPanel + roiPanel + documentsPanel + meetingsPanel + questionnairesPanel + bookingPanel;
   if(!QUOTE.alreadySigned) setupCanvas();
   enhanceVimeoThumbs();
   if(showRoi){
