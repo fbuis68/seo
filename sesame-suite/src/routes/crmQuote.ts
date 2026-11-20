@@ -152,6 +152,7 @@ function shapeQuote(q: {
   depositPct: number;
   notes: string | null;
   sentAt: Date | null;
+  viewedAt: Date | null;
   signToken: string | null;
   attachedDocumentIds: string[];
   attachedMeetingIds: string[];
@@ -189,6 +190,7 @@ function shapeQuote(q: {
     totals,
     notes: q.notes || "",
     sentAt: q.sentAt,
+    viewedAt: q.viewedAt,
     signToken: q.signToken,
     attachedDocumentIds: q.attachedDocumentIds,
     attachedMeetingIds: q.attachedMeetingIds,
@@ -890,6 +892,18 @@ crmQuoteRouter.get(
       },
     });
     if (!quote) throw new HttpError(404, "Lien de signature invalide ou expiré");
+
+    // 20/11/2026, "colonne qui identifie la lecture par le prospect en
+    // excluant l'usage par le lien direct" — ?preview=1 est le marqueur que
+    // le CRM ajoute quand le commercial ouvre/copie le lien pour se relire
+    // (cf. "Copier le lien de signature", public/crm.html) : cette visite-là
+    // ne compte jamais comme une lecture par le client. Posé une seule fois
+    // (la première vraie visite), jamais réécrit ensuite.
+    if (req.query.preview !== "1" && !quote.viewedAt) {
+      await prisma.crmQuote.update({ where: { id: quote.id }, data: { viewedAt: new Date() } });
+      quote.viewedAt = new Date();
+    }
+
     const storedLines = (quote.lines as unknown as QuoteLine[]) || [];
     const config = (quote.config as QuoteConfig) || {};
     const hardwareLines = storedLines.filter((l) => l.category === "materiel" && l.group !== "accessory");

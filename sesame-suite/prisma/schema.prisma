@@ -2830,6 +2830,14 @@ model CrmQuote {
   depositPct  Float     @default(0)
   notes       String? // ancien champ libre (pré-refonte) — conservé pour compat des devis existants, plus affiché par le nouvel écran
   sentAt      DateTime?
+  // Première visite RÉELLE de l'espace client public par le prospect
+  // (20/11/2026, "colonne qui identifie la lecture par le prospect en
+  // excluant l'usage par le lien direct") — posé par GET /crmQuote/public
+  // UNIQUEMENT quand la requête ne porte pas ?preview=1, le marqueur que le
+  // CRM ajoute quand le commercial ouvre/copie le lien pour se relire
+  // lui-même (cf. "Copier le lien de signature", public/crm.html) : cette
+  // visite-là ne doit jamais compter comme une lecture par le client.
+  viewedAt    DateTime?
 
   // Signature électronique simple (18/08/2026) — signToken donne accès à la
   // page publique de signature (public/devis-signature.html), sans compte

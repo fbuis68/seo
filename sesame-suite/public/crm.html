@@ -8446,6 +8446,7 @@ function renderDevisList(){
       <td style="text-align:right">${fmtEUR(t.totalTTC)}${t.mrrNet?' + '+fmtEUR(t.mrrNet)+'/mois':''}</td>
       <td style="font-size:12px;color:var(--mu)">${q.dealTitle?`<span class="bc-link" onclick="event.stopPropagation();openDealModal('${q.dealId}')" title="Voir l'affaire">${esc(q.dealTitle)}</span>`:'<span class="log-empty">Non rattaché</span>'}</td>
       <td style="font-size:12px;color:var(--mu)">${new Date(q.createdAt).toLocaleDateString('fr-FR')}</td>
+      <td>${q.viewedAt?`<span class="tag t-green" title="Lu le ${new Date(q.viewedAt).toLocaleString('fr-FR')}">✓ Lu</span>`:'<span class="log-empty">Non lu</span>'}</td>
     </tr>`;
   }).join('');
   document.getElementById('main').innerHTML = `
@@ -8460,8 +8461,8 @@ function renderDevisList(){
       </div>
     </div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th>N°</th><th>Client</th><th>Objet</th><th>Statut</th><th style="text-align:right">Montant</th><th>Affaire</th><th>Créé le</th></tr></thead>
-      <tbody>${rows||'<tr><td colspan="7" class="log-empty">Aucun devis — créez-en un.</td></tr>'}</tbody>
+      <thead><tr><th>N°</th><th>Client</th><th>Objet</th><th>Statut</th><th style="text-align:right">Montant</th><th>Affaire</th><th>Créé le</th><th title="Lu par le prospect — hors lien copié par le commercial pour se relire">Lu</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="8" class="log-empty">Aucun devis — créez-en un.</td></tr>'}</tbody>
     </table></div>`;
 }
 
@@ -9348,7 +9349,7 @@ function dqRenderDocumentTab(q, lines){
     <div style="font-size:11px;color:var(--mu);font-style:italic;margin-bottom:8px">⚠ Signature électronique simple (nom saisi + tracé + horodatage) — pas une signature qualifiée eIDAS certifiée par un tiers de confiance.</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
       <button class="btn btn-primary btn-sm" onclick="sendQuoteEmail()">✉ Envoyer le devis par email</button>
-      ${q.signToken?`<button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText('${esc(location.origin+'/devis-signature.html?token='+q.signToken)}');flash('Lien copié')">Copier le lien de signature</button>`:`<button class="btn btn-ghost btn-sm" onclick="requestQuoteSignature()">✎ Générer le lien sans l'envoyer</button>`}
+      ${q.signToken?`<button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText('${esc(location.origin+'/devis-signature.html?token='+q.signToken+'&preview=1')}');flash('Lien copié')">Copier le lien de signature</button>`:`<button class="btn btn-ghost btn-sm" onclick="requestQuoteSignature()">✎ Générer le lien sans l'envoyer</button>`}
     </div>` : ''}
     ${q.status==='accepté'?`<div class="tag t-green" style="margin-top:8px;display:inline-flex">✓ Devis signé électroniquement.</div>`:''}
 
