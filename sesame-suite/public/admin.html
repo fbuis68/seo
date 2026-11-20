@@ -17475,6 +17475,14 @@ async function resaOpenDetail(code){
     + '<div style="display:flex;gap:8px"><button class="btn btn-p" onclick="resaSendMsg(\''+esc(b.code)+'\')" id="resa-msg-send-btn"><i class="ti ti-send"></i> Envoyer</button>'
     + '<button class="btn btn-s" onclick="resaToggleMsgCompose(\''+esc(b.code)+'\')">Annuler</button></div>'
     + '</div>';
+  // 20/11/2026, "historique des emails, SMS envoyé avec la regle
+  // correspondante. Egalement la tracabilité des activités d'ouvertures, de
+  // changements de chambres d'encodage" — chargé à part (cf.
+  // resaLoadHistory), même principe que la clé numérique/autologin ci-dessus.
+  html += '<div id="resa-detail-history" style="margin-top:16px;border:1px solid var(--bdr);border-radius:var(--rs);padding:16px;background:var(--bg)">'
+    + '<div style="font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.03em;margin-bottom:10px">Historique</div>'
+    + '<div id="resa-detail-history-body"><div class="spin" style="margin:0 auto"></div></div>'
+    + '</div>';
 
   document.getElementById('resa-detail-body').innerHTML = html;
   document.getElementById('resaDetailModal').style.display = 'flex';
@@ -17482,6 +17490,55 @@ async function resaOpenDetail(code){
   resaLoadKey(b.code, b.facilityCode);
   resaLoadAutologinQr(b.code);
   resaLoadAutologinCheckinQr(b.code);
+  resaLoadHistory(b.code);
+}
+
+/**
+ * Historique d'une réservation (20/11/2026) — GET /wa/booking/activityLog,
+ * trois sources distinctes affichées en sous-sections séparées (natures
+ * trop différentes pour une seule chronologie triée par date) : emails/SMS
+ * envoyés par règle d'automatisation, ouvertures de porte réelles,
+ * changements de chambre et encodages NFC (cf. lib/bookingActivityLog.ts).
+ */
+async function resaLoadHistory(code){
+  var body = document.getElementById('resa-detail-history-body');
+  if(!body) return;
+  try{
+    var r = await adminFetch('/wa/booking/activityLog?code='+encodeURIComponent(code));
+    var data = await r.json();
+    if(RESA_DETAIL_CODE !== code) return;
+    if(!r.ok){ body.innerHTML = '<div style="font-size:12px;color:#b45309">⚠ '+esc(data.error||'Erreur de chargement')+'</div>'; return; }
+
+    var rowHtml = function(icon, iconColor, main, sub){
+      return '<div style="display:flex;align-items:flex-start;gap:9px;padding:8px 0;border-bottom:1px solid var(--bdr);font-size:12.5px">'
+        + '<i class="ti '+icon+'" style="margin-top:1px;flex-shrink:0;color:'+(iconColor||'var(--mu)')+'"></i>'
+        + '<div style="flex:1;min-width:0"><div style="font-weight:600">'+main+'</div><div style="color:var(--mu);font-size:11px;margin-top:2px">'+sub+'</div></div>'
+        + '</div>';
+    };
+    var groupHtml = function(title, rowsHtml, emptyLabel){
+      return '<div style="margin-bottom:14px"><div style="font-size:10.5px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px">'+title+'</div>'
+        + (rowsHtml.length ? rowsHtml.join('') : '<div style="font-size:12px;color:var(--mu);padding:4px 0">'+emptyLabel+'</div>')
+        + '</div>';
+    };
+    var channelIcon = {email:'ti-mail', sms:'ti-message', whatsapp:'ti-brand-whatsapp'};
+    var messagesHtml = data.messageLogs.map(function(m){
+      return rowHtml(channelIcon[m.channel]||'ti-send', null, esc(m.ruleName), (m.count>1?m.count+'× — ':'')+'dernier le '+new Date(m.sentAt).toLocaleString('fr-FR'));
+    });
+    var accessHtml = data.accessLogs.map(function(a){
+      var who = a.actorType==='staff' ? (a.actorLabel||'Personnel') : 'Client';
+      return rowHtml('ti-door', a.success?'#1A6B47':'#B83030', esc(a.roomCode||'—')+' — '+(a.success?'Ouvert':'Échec')+(a.simulated?' (simulé)':''), esc(who)+' · '+new Date(a.createdAt).toLocaleString('fr-FR')+(a.errorMessage?' · '+esc(a.errorMessage):''));
+    });
+    var activityIcon = {room_change:'ti-arrows-exchange', nfc_encode:'ti-nfc'};
+    var activityHtml = data.activityLogs.map(function(a){
+      return rowHtml(activityIcon[a.type]||'ti-history', null, esc(a.detail), esc(a.actorLabel||'—')+' · '+new Date(a.createdAt).toLocaleString('fr-FR'));
+    });
+
+    body.innerHTML = groupHtml('Emails / SMS', messagesHtml, 'Aucun email/SMS envoyé.')
+      + groupHtml('Ouvertures', accessHtml, 'Aucune ouverture.')
+      + groupHtml('Chambre / encodage', activityHtml, 'Aucun changement de chambre ni encodage.');
+  }catch(e){
+    body.innerHTML = '<div style="font-size:12px;color:var(--mu)">Erreur de connexion au serveur</div>';
+  }
 }
 
 /**
