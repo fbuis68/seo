@@ -717,13 +717,13 @@ function signatureSectionHtml(){
 }
 
 // 20/11/2026, "signature simultanée sur option du contrat de licence" —
-// proposée uniquement si le devis comporte un montant mensuel (licence),
-// seul cas où un contrat de licence a un sens. Le contrat lui-même et le
-// mandat de prélèvement SEPA sont gérés par le circuit générique existant
-// (cf. POST /crmQuote/requestLicenseSignature puis /signature.html), pas
-// rejoué ici.
+// puis "l'option de signature de licence doit s'activer coté gestionnaire
+// pas signataire" : affichée UNIQUEMENT si le commercial l'a activée pour
+// CE devis (public/crm.html, case "Proposer la signature du contrat de
+// licence"), jamais déduit côté client depuis le montant du devis.
+// Revérifié aussi côté serveur (POST /crmQuote/requestLicenseSignature).
 function licenseSignatureOptionHtml(){
-  if(!(QUOTE.totals.mrrNet > 0)) return '';
+  if(!QUOTE.offerLicenseSignature) return '';
   return `<div class="consent" style="flex-direction:column;align-items:stretch;gap:8px;background:var(--bg);padding:12px 14px;border-radius:12px">
     <div style="display:flex;gap:10px;align-items:flex-start">
       <input type="checkbox" id="alsoSignLicense" onchange="document.getElementById('licensePhoneRow').style.display=this.checked?'block':'none'">

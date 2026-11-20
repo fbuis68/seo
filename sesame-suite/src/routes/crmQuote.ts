@@ -88,6 +88,13 @@ interface QuoteConfig {
   // prospect, cf. public/devis-signature.html ROI_EXCLUDED_SECTEURS) ;
   // true/false = forcé pour CE devis précis, quel que soit le secteur.
   showRoiTab?: boolean | null;
+  // Proposer la signature du contrat de licence sur l'espace client
+  // (20/11/2026, "l'option de signature de licence doit s'activer côté
+  // gestionnaire pas signataire") — décoché par défaut, activé devis par
+  // devis par le commercial (cf. public/crm.html dq-offerLicenseSignature),
+  // jamais déduit côté client. Revérifié côté serveur dans
+  // POST /crmQuote/requestLicenseSignature, pas seulement à l'affichage.
+  offerLicenseSignature?: boolean;
   [k: string]: unknown;
 }
 
@@ -1002,6 +1009,7 @@ crmQuoteRouter.get(
       termsText: quote.termsText || "",
       totals: quoteTotals(lines, quote.discountPct, quote.vatPct, quote.depositPct),
       showRoiTab: config.showRoiTab ?? null,
+      offerLicenseSignature: !!config.offerLicenseSignature,
       prospectNom: quote.prospect.nom,
       // Contact principal du client (CrmProspect.referent) — 20/11/2026,
       // "cartouche d'accueil identique" (exemple fourni, "Bonjour Monsieur
@@ -1723,14 +1731,15 @@ crmQuoteRouter.post(
 
     const quote = await prisma.crmQuote.findUnique({ where: { signToken: b.token } });
     if (!quote) throw new HttpError(404, "Lien de signature invalide ou expiré");
+    const quoteConfig = (quote.config as QuoteConfig) || {};
+    if (!quoteConfig.offerLicenseSignature) throw new HttpError(403, "Signature du contrat de licence non activée pour ce devis — contactez votre interlocuteur Sesame Technology");
     if (!quote.prospectId) throw new HttpError(400, "Devis non rattaché à une fiche client");
     const prospect = await prisma.crmProspect.findUnique({ where: { id: quote.prospectId }, include: { commercial: { select: { name: true } } } });
     if (!prospect) throw new HttpError(404, "Fiche client introuvable");
 
     const storedLines = (quote.lines as unknown as QuoteLine[]) || [];
-    const config = (quote.config as QuoteConfig) || {};
     const hardwareLines = storedLines.filter((l) => l.category === "materiel" && l.group !== "accessory");
-    const lines = expandQuoteLines(storedLines, hardwareLines, config);
+    const lines = expandQuoteLines(storedLines, hardwareLines, quoteConfig);
     const totals = quoteTotals(lines, quote.discountPct, quote.vatPct, quote.depositPct);
 
     const vilAddr = prospect.ville || "";

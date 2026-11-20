@@ -8620,12 +8620,13 @@ function captureDocumentTab(){
   if(intro) q.introText = intro.textContent;
   if(mentions) q.mentionsText = mentions.textContent;
   if(terms) q.termsText = terms.textContent;
-  const gd=document.getElementById('dq-discount'), gv=document.getElementById('dq-vat'), gdep=document.getElementById('dq-deposit'), gs=document.getElementById('dq-status'), groi=document.getElementById('dq-showRoiTab');
+  const gd=document.getElementById('dq-discount'), gv=document.getElementById('dq-vat'), gdep=document.getElementById('dq-deposit'), gs=document.getElementById('dq-status'), groi=document.getElementById('dq-showRoiTab'), glic=document.getElementById('dq-offerLicenseSignature');
   if(gd) q.discountPct = +gd.value||0;
   if(gv) q.vatPct = +gv.value||0;
   if(gdep) q.depositPct = +gdep.value||0;
   if(gs) q.status = gs.value;
   if(groi) q.config.showRoiTab = groi.checked;
+  if(glic) q.config.offerLicenseSignature = glic.checked;
   dqAllLines(q).forEach(r=>{
     const gn=document.getElementById('dl-name-'+r.id), gq=document.getElementById('dl-qty-'+r.id), gp=document.getElementById('dl-price-'+r.id);
     if(!gn && !gq && !gp) return;
@@ -9328,6 +9329,11 @@ function dqRenderDocumentTab(q, lines){
     <div class="ff" style="margin-top:12px">
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="dq-showRoiTab" ${(q.config.showRoiTab!=null?!!q.config.showRoiTab:!(()=>{const p=clients.find(c=>c.id===q.prospectId);return p&&DQ_ROI_EXCLUDED_SECTEURS.includes(p.secteur);})())?'checked':''} style="width:auto"> Afficher l'onglet Rentabilité (ROI) sur l'espace client</label>
       <div style="font-size:11px;color:var(--mu);margin-top:4px">Par défaut selon le secteur du client — cette case force l'affichage ou le masquage pour ce devis précis.</div>
+    </div>
+
+    <div class="ff" style="margin-top:12px">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="dq-offerLicenseSignature" ${q.config.offerLicenseSignature?'checked':''} style="width:auto"> Proposer la signature du contrat de licence (+ mandat SEPA) sur l'espace client</label>
+      <div style="font-size:11px;color:var(--mu);margin-top:4px">20/11/2026, "l'option de signature de licence doit s'activer côté gestionnaire" — décoché par défaut, à activer devis par devis.</div>
     </div>
 
     <h4 style="margin-top:16px">Affaire liée</h4>
