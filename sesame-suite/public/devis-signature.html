@@ -421,12 +421,17 @@ function pdfIconSvg(size){
 }
 const PDF_ICON_SVG = pdfIconSvg(30);
 function docThumbHtml(d){
+  // 20/11/2026, "les icones pdf n'apparaissent pas" — un document avec un
+  // lien (url) ET un fileMimeType PDF (ex: lien direct vers un PDF hébergé
+  // ailleurs) ressortait toujours en icône lien générique, le court-circuit
+  // sur `d.url` empêchant d'atteindre le test PDF plus bas. YouTube/Vimeo
+  // restent prioritaires (vraie vignette vidéo), mais tout le reste passe
+  // désormais par les tests de mimetype ci-dessous avant le repli lien.
   if(d.url){
     const yt = youtubeId(d.url);
     if(yt) return `<img class="doc-thumb is-video" src="https://img.youtube.com/vi/${yt}/mqdefault.jpg" alt="">`;
     const vm = vimeoId(d.url);
     if(vm) return `<div class="doc-thumb is-video" id="vimeo-thumb-${d.id}" data-vimeo-url="${esc(d.url)}">🔗</div>`;
-    return `<div class="doc-thumb">🔗</div>`;
   }
   const mime = d.fileMimeType||'';
   // 04/11/2026, "icône sur les autres types de documents" — ordre important :
@@ -443,6 +448,7 @@ function docThumbHtml(d){
   if(/^audio\//i.test(mime)) return `<div class="doc-thumb">🎵</div>`;
   if(/word|document/i.test(mime)) return `<div class="doc-thumb">📝</div>`;
   if(/^text\//i.test(mime)) return `<div class="doc-thumb">📃</div>`;
+  if(d.url) return `<div class="doc-thumb">🔗</div>`;
   return `<div class="doc-thumb">📎</div>`;
 }
 // Vimeo n'expose pas d'URL de miniature statique (contrairement à YouTube)
