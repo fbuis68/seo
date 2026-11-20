@@ -509,7 +509,14 @@ async function cofContinue(btn){
     await loadScriptOnce('https://js.stripe.com/v3/');
     COF.stripe = Stripe(data.publishableKey);
     COF.elements = COF.stripe.elements({clientSecret: data.clientSecret});
-    COF.elements.create('payment').mount('#cof-card-element');
+    // 20/11/2026, "on demande l'email et le nom deux fois" — nom et email
+    // déjà saisis dans notre propre formulaire (cof-name/cof-email) juste
+    // au-dessus : masqués ici (fields:'never') et transmis via defaultValues
+    // plutôt que redemandés par le Payment Element de Stripe.
+    COF.elements.create('payment', {
+      fields: { billingDetails: { name: 'never', email: 'never', phone: 'never' } },
+      defaultValues: { billingDetails: { name: cardholderName || undefined, email: email, phone: phone } },
+    }).mount('#cof-card-element');
 
     btn.style.display = 'none';
     document.getElementById('cof-submit-btn').style.display = '';
