@@ -1499,9 +1499,23 @@ input:focus,select:focus{border-color:var(--accent)}
 var API_BASE = '';
 // Établissement ciblé par cette page — présent dans l'URL fournie à chaque
 // client (ex: https://.../?entityCode=E00000002) pour que le check-in
-// pointe vers le bon hôtel. Sans ce paramètre, le serveur applique son
-// tenant par défaut (comportement historique mono-tenant).
+// pointe vers le bon hôtel.
+//
+// 21/11/2026, "lien invalide" après réouverture depuis l'icône "Sur
+// l'écran d'accueil" (iOS) malgré un manifest dont le start_url porte bien
+// ?entityCode= : certaines versions de WebKit ne relancent pas la web app
+// installée sur le start_url du manifest mais sur l'URL brute capturée au
+// moment de "Ajouter à l'écran d'accueil", pas toujours fiable. Repli sur
+// le dernier entityCode mémorisé pour CET appareil/navigateur (même
+// principe que la session "Mon espace" persistée ci-dessous) plutôt que de
+// bloquer un client qui a pourtant déjà utilisé un vrai lien d'hôtel.
+var ESP_ENTITY_KEY = 'SESAME_GUEST_ENTITY';
 var ENTITY_CODE = new URLSearchParams(window.location.search).get('entityCode') || '';
+if(ENTITY_CODE){
+  try{ localStorage.setItem(ESP_ENTITY_KEY, ENTITY_CODE); }catch(e){}
+} else {
+  try{ ENTITY_CODE = localStorage.getItem(ESP_ENTITY_KEY) || ''; }catch(e){}
+}
 // Manifest PWA propre à CET établissement (nom, icône, couleurs — cf.
 // GET /wa/pwaManifest) — posé dès que possible plutôt qu'attendu dans
 // DOMContentLoaded, le manifest devant déjà pointer au bon endroit avant
