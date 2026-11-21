@@ -183,15 +183,53 @@ export function createApp() {
   // (WhatsApp, iMessage…), qui ne lit que le HTML brut, jamais le JS/CFG
   // chargé ensuite côté client. § demande client 20/10/2026.
   const escHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const GUEST_ENTITY_COOKIE = "sesame_guest_entity";
+  function readCookie(req: express.Request, name: string): string | undefined {
+    const header = req.headers.cookie;
+    if (!header) return undefined;
+    for (const part of header.split(";")) {
+      const eq = part.indexOf("=");
+      if (eq === -1) continue;
+      if (part.slice(0, eq).trim() === name) return decodeURIComponent(part.slice(eq + 1).trim());
+    }
+    return undefined;
+  }
   const serveCheckin = async (req: express.Request, res: express.Response) => {
+    // 21/11/2026, "lien invalide" après réouverture depuis l'icône "Sur
+    // l'écran d'accueil" (iOS) — confirmé : WebKit relance l'app installée
+    // sur l'URL brute d'origine, PAS sur le start_url du manifest (qui
+    // porte pourtant ?entityCode=). Repli serveur sur un cookie posé à
+    // chaque visite avec un entityCode valide (an 1, Path=/) — plus fiable
+    // qu'un repli en localStorage (webview standalone parfois isolée de
+    // l'onglet Safari d'origine) : redirige vers la même URL complétée de
+    // ?entityCode= AVANT même de servir la page, pour que ENTITY_CODE
+    // (client, cf. checkin.html) soit toujours renseigné depuis l'URL.
+    const urlEntityCode = (req.query.entityCode as string) || "";
+    if (!urlEntityCode) {
+      const cookieEntityCode = readCookie(req, GUEST_ENTITY_COOKIE);
+      if (cookieEntityCode) {
+        const qs = new URLSearchParams(req.query as Record<string, string>);
+        qs.set("entityCode", cookieEntityCode);
+        res.redirect(302, `${req.path}?${qs.toString()}`);
+        return;
+      }
+    }
+
     let title = "Check-in en ligne";
-    try {
-      const entity = await resolveEntity(req);
-      const cfg = await prisma.entityModuleConfig.findUnique({ where: { entityId: entity.id } });
-      if (cfg?.hotelName) title = `Check-in · ${cfg.hotelName}`;
-    } catch {
-      // entityCode absent/invalide (premier accès sans lien, démo…) — repli
-      // sur le titre générique ci-dessus plutôt que de faire échouer la page.
+    if (urlEntityCode) {
+      // resolveEntity() retombe sur l'entité par défaut du serveur
+      // (config.defaultEntityCode, l'entité de démo) quand entityCode est
+      // absent — jamais appelé ici sans entityCode pour ne jamais afficher
+      // le titre d'un autre établissement (même principe que GET
+      // /wa/pwaManifest, corrigé le 21/11/2026 pour la même raison).
+      try {
+        const entity = await resolveEntity(req);
+        const cfg = await prisma.entityModuleConfig.findUnique({ where: { entityId: entity.id } });
+        if (cfg?.hotelName) title = `Check-in · ${cfg.hotelName}`;
+        res.cookie(GUEST_ENTITY_COOKIE, entity.code, { maxAge: 365 * 86400000, path: "/", sameSite: "lax" });
+      } catch {
+        // entityCode présent mais invalide — repli sur le titre générique.
+      }
     }
     const html = await fs.readFile(path.join(publicDir, "checkin.html"), "utf8");
     res.setHeader("Cache-Control", "no-store");
