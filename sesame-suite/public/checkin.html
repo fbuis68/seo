@@ -3783,7 +3783,30 @@ async function espApplyLogin(data){
 // chargement, on redemande une version FRAÎCHE de la réservation au serveur
 // (espTryRestoreSession) plutôt que de rejouer des données figées — une
 // modification faite entretemps par l'hôtel (dates, chambre…) doit remonter.
+//
+// 21/11/2026, "mieux [l'établissement se résout bien] mais pas logué" après
+// réouverture depuis l'icône "Sur l'écran d'accueil" (iOS) : confirmé que
+// le localStorage de la webview standalone n'est pas fiablement partagé
+// avec celui de l'onglet Safari où la session avait été créée (même
+// symptôme de fond que pour entityCode, cf. GET /checkin.html côté
+// serveur, mais localStorage n'a pas d'équivalent "cookie" automatique).
+// Doublé ici d'un cookie (lui bien partagé, cf. le fix entityCode) —
+// entityCode+bookingCode uniquement, jamais faceIdCred (credential
+// WebAuthn, doit rester strictement local à CET appareil).
 var ESP_SESSION_KEY = 'SESAME_GUEST_SESSION';
+var ESP_SESSION_COOKIE = 'sesame_guest_session';
+function espSetCookie(name, value){
+  try{ document.cookie = name+'='+encodeURIComponent(value)+'; path=/; max-age=31536000; SameSite=Lax'; }catch(e){}
+}
+function espReadCookie(name){
+  try{
+    var m = document.cookie.match(new RegExp('(?:^|; )'+name+'=([^;]*)'));
+    return m ? decodeURIComponent(m[1]) : null;
+  }catch(e){ return null; }
+}
+function espClearCookie(name){
+  try{ document.cookie = name+'=; path=/; max-age=0'; }catch(e){}
+}
 function espPersistSession(){
   if(!S.booking) return;
   try{
@@ -3795,9 +3818,23 @@ function espPersistSession(){
     var faceIdCred = (prev && prev.bookingCode === S.booking.code) ? prev.faceIdCred : undefined;
     localStorage.setItem(ESP_SESSION_KEY, JSON.stringify({ entityCode: ENTITY_CODE, bookingCode: S.booking.code, faceIdCred: faceIdCred }));
   }catch(e){}
+  espSetCookie(ESP_SESSION_COOKIE, JSON.stringify({ entityCode: ENTITY_CODE, bookingCode: S.booking.code }));
 }
 function espClearSession(){
   try{ localStorage.removeItem(ESP_SESSION_KEY); }catch(e){}
+  espClearCookie(ESP_SESSION_COOKIE);
+}
+// Session persistée, localStorage d'abord, repli cookie sinon (cf.
+// commentaire ci-dessus) — réécrit dans localStorage dès que trouvée par
+// le cookie, pour que les prochaines lectures (espGetSessionObj,
+// espTryRestoreSession) n'aient plus besoin de ce repli.
+function espReadPersistedSession(){
+  var raw = null;
+  try{ raw = localStorage.getItem(ESP_SESSION_KEY); }catch(e){}
+  if(raw) return raw;
+  var fromCookie = espReadCookie(ESP_SESSION_COOKIE);
+  if(fromCookie){ try{ localStorage.setItem(ESP_SESSION_KEY, fromCookie); }catch(e){} }
+  return fromCookie;
 }
 
 // ═══════════════════ FACE ID — verrou LOCAL de l'appareil (pas une
@@ -3808,7 +3845,7 @@ function espClearSession(){
 // réservation (cf. espPersistSession) et disparaître avec elle (logout,
 // changement de séjour sur l'appareil).
 function espGetSessionObj(){
-  try{ var raw = localStorage.getItem(ESP_SESSION_KEY); return raw ? JSON.parse(raw) : null; }catch(e){ return null; }
+  try{ var raw = espReadPersistedSession(); return raw ? JSON.parse(raw) : null; }catch(e){ return null; }
 }
 function espFaceIdCred(){
   var o = espGetSessionObj();
@@ -3936,7 +3973,7 @@ function faceIdUseLinkInstead(){
 async function espTryRestoreSession(){
   if(AUTOLOGIN_TOKEN || S.checkinDone) return false;
   var raw;
-  try{ raw = localStorage.getItem(ESP_SESSION_KEY); }catch(e){ return false; }
+  try{ raw = espReadPersistedSession(); }catch(e){ return false; }
   if(!raw) return false;
   var saved;
   try{ saved = JSON.parse(raw); }catch(e){ espClearSession(); return false; }
@@ -7131,7 +7168,7 @@ window.addEventListener('DOMContentLoaded',async function(){
   // le paramètre.
   var hadUrlEntityCode = !!ENTITY_CODE;
   var hasPersistedSession = false;
-  try{ hasPersistedSession = !!localStorage.getItem(ESP_SESSION_KEY); }catch(e){}
+  try{ hasPersistedSession = !!espReadPersistedSession(); }catch(e){}
   if(!ENTITY_CODE && !DEMO_CODE && !AUTOLOGIN_TOKEN && !hasPersistedSession){
     document.getElementById('noEntityScreen').style.display = 'flex';
     document.querySelector('.app').style.display = 'none';
