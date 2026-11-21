@@ -31,7 +31,12 @@
 <script>
 (function(){
   var ec = new URLSearchParams(window.location.search).get('entityCode');
-  if(ec) document.getElementById('pwaManifestLink').href = '/wa/pwaManifest?entityCode=' + encodeURIComponent(ec);
+  // 21/11/2026 — chemin plutôt que query string (cf. commentaire de
+  // GET /wa/pwaManifest/:entityCode côté serveur) : certaines versions de
+  // WebKit mettent en cache cette requête sans tenir compte de la query
+  // string, ce qui laissait réapparaître un autre établissement malgré les
+  // en-têtes anti-cache déjà posés côté serveur.
+  if(ec) document.getElementById('pwaManifestLink').href = '/wa/pwaManifest/' + encodeURIComponent(ec);
 })();
 </script>
 <meta name="theme-color" id="pwaThemeColor" content="#8B1A2E">
@@ -1505,7 +1510,7 @@ var ENTITY_CODE = new URLSearchParams(window.location.search).get('entityCode') 
 // établissement que celui de l'URL, cf. espApplyLogin).
 function espSetPwaManifest(){
   var el = document.getElementById('pwaManifestLink');
-  if(el) el.href = '/wa/pwaManifest' + (ENTITY_CODE ? ('?entityCode='+encodeURIComponent(ENTITY_CODE)) : '');
+  if(el) el.href = ENTITY_CODE ? ('/wa/pwaManifest/'+encodeURIComponent(ENTITY_CODE)) : '/wa/pwaManifest';
 }
 espSetPwaManifest();
 

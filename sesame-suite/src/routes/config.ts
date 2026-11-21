@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, Response } from "express";
 import { prisma } from "../db";
 import { resolveEntity } from "../lib/entity";
 import { normaliseRoom } from "../lib/normalize";
@@ -174,54 +174,89 @@ configRouter.get(
 );
 
 /**
- * GET /wa/pwaManifest?entityCode=E00000001 — Web App Manifest (§ demande
- * client "faire de la page une app pwa") pour le parcours client
+ * GET /wa/pwaManifest/:entityCode (chemin — cf. pourquoi ci-dessous) ou
+ * GET /wa/pwaManifest?entityCode=E00000002 (compat, anciens liens déjà
+ * installés) — Web App Manifest pour le parcours client
  * (public/checkin.html), posé dynamiquement par <link rel="manifest"> côté
- * client (cf. espSetPwaManifest) plutôt qu'un fichier .json statique : la
- * même page sert tous les établissements, chacun avec son propre nom,
- * couleurs et logo — un manifest unique figé n'aurait pu refléter qu'un
- * seul hôtel à la fois. start_url conserve ?entityCode= pour qu'une
- * réouverture de l'app installée revienne bien sur CET établissement.
- * Repli sur hotelName/couleurs par défaut si la config n'existe pas encore
- * (plutôt qu'un 404 qui casserait l'installabilité), de la même façon que
- * DEFAULT_CFG côté client.
+ * client (cf. espSetPwaManifest) : la même page sert tous les
+ * établissements, chacun avec son propre nom, couleurs et logo.
+ *
+ * 21/11/2026, 3ᵉ symptôme identique remonté malgré deux correctifs
+ * précédents (17/10 : Cache-Control, 18/11 : Pragma/Expires en renfort) —
+ * "Sur l'écran d'accueil" propose encore l'établissement par défaut
+ * (Hôtel Churchill, entité de démo, cf. config.defaultEntityCode) au lieu
+ * du vrai établissement. Cause racine désormais corrigée ICI plutôt que
+ * contournée par des en-têtes anti-cache : resolveEntity() retombe
+ * SILENCIEUSEMENT sur defaultEntityCode dès que entityCode est absent/
+ * invalide (comportement voulu pour les routes internes à l'établissement,
+ * dangereux ici) — un entityCode manquant ou invalide sert donc désormais
+ * un manifest générique "Sesame" neutre plutôt que l'identité d'un autre
+ * client. Le chemin plutôt que la query string en complément : certaines
+ * versions de WebKit mettent en cache une requête de manifest déclenchée
+ * par "Partager → Sur l'écran d'accueil" sans tenir compte de la query
+ * string (ni des en-têtes anti-cache ci-dessous) — un chemin distinct par
+ * établissement échappe structurellement à ce problème.
  */
+const GENERIC_PWA_MANIFEST = {
+  name: "Sesame · Éco-Séjour",
+  short_name: "Sesame",
+  start_url: "/",
+  scope: "/",
+  display: "standalone",
+  background_color: "#F5F3F0",
+  theme_color: "#8B1A2E",
+  icons: [{ src: "/icons/favicon-192.png", sizes: "192x192", type: "image/png" }],
+};
+
+async function sendPwaManifest(entityCode: string | undefined, res: Response) {
+  // Jamais no-store/no-cache ici : sans ça, Safari iOS met en cache cette
+  // réponse JSON indépendamment de la query string (symptôme déjà observé
+  // deux fois, cf. commentaire ci-dessus) — conservés en renfort du chemin
+  // désormais distinct par établissement.
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("Content-Type", "application/manifest+json");
+
+  if (!entityCode) {
+    res.json(GENERIC_PWA_MANIFEST);
+    return;
+  }
+  const entity = await prisma.entity.findUnique({ where: { code: entityCode } });
+  if (!entity) {
+    res.json(GENERIC_PWA_MANIFEST);
+    return;
+  }
+  const cfg = await prisma.entityModuleConfig.findUnique({ where: { entityId: entity.id } });
+  const colors = (cfg?.colors as { headerBg?: string; bg?: string } | null) || {};
+  const name = cfg?.hotelName || "Éco-Séjour";
+  const startUrl = `/?entityCode=${encodeURIComponent(entity.code)}`;
+  const icons = [{ src: "/icons/favicon-192.png", sizes: "192x192", type: "image/png" }];
+  if (cfg?.logoMain) icons.unshift({ src: cfg.logoMain, sizes: "any", type: "image/png" });
+
+  res.json({
+    name: `${name} · Éco-Séjour`,
+    short_name: name.slice(0, 20),
+    start_url: startUrl,
+    scope: "/",
+    display: "standalone",
+    background_color: colors.bg || "#F5F3F0",
+    theme_color: colors.headerBg || "#8B1A2E",
+    icons,
+  });
+}
+
+configRouter.get(
+  "/pwaManifest/:entityCode",
+  asyncHandler(async (req, res) => {
+    await sendPwaManifest(req.params.entityCode, res);
+  })
+);
+
 configRouter.get(
   "/pwaManifest",
   asyncHandler(async (req, res) => {
-    const entity = await resolveEntity(req);
-    const cfg = await prisma.entityModuleConfig.findUnique({ where: { entityId: entity.id } });
-    const colors = (cfg?.colors as { headerBg?: string; bg?: string } | null) || {};
-    const name = cfg?.hotelName || "Éco-Séjour";
-    const startUrl = `/?entityCode=${encodeURIComponent(entity.code)}`;
-    const icons = [{ src: "/icons/favicon-192.png", sizes: "192x192", type: "image/png" }];
-    if (cfg?.logoMain) icons.unshift({ src: cfg.logoMain, sizes: "any", type: "image/png" });
-
-    // Cache-Control explicite — sans ça, Safari iOS met en cache cette
-    // réponse JSON indépendamment de la query string (observé : le manifest
-    // d'un premier test sans entityCode, ou d'un autre établissement, reste
-    // servi tel quel malgré <link rel="manifest"> mis à jour côté client,
-    // "Sur l'écran d'accueil" installant alors l'ancien établissement/la
-    // démo) — demande client 17/10/2026. Pragma/Expires ajoutés en renfort
-    // (18/11/2026, même symptôme reproduit sur nouvelle installation iOS
-    // Safari depuis un lien d'autologin) : certaines versions de WebKit
-    // honorent Pragma: no-cache plus fiablement que Cache-Control seul pour
-    // une requête déclenchée par "Partager → Sur l'écran d'accueil" plutôt
-    // qu'une navigation normale.
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-    res.setHeader("Pragma", "no-cache");
-    res.setHeader("Expires", "0");
-    res.setHeader("Content-Type", "application/manifest+json");
-    res.json({
-      name: `${name} · Éco-Séjour`,
-      short_name: name.slice(0, 20),
-      start_url: startUrl,
-      scope: "/",
-      display: "standalone",
-      background_color: colors.bg || "#F5F3F0",
-      theme_color: colors.headerBg || "#8B1A2E",
-      icons,
-    });
+    await sendPwaManifest((req.query.entityCode as string) || undefined, res);
   })
 );
 
